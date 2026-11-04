@@ -21714,6 +21714,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dl_path = None
         self._dl_history: list[dict[str, Any]] = []
         self._dl_last_run: tuple[Any, str, str, Any, str] | None = None
+        # round 189: the graph model + explain cards' shared state
+        self._dl_graph_model: Any = None
+        self._dl_graphs: list[Any] = []
+        self._dl_graph_y: Any = None
 
         data = make_card(
             page.grid,
@@ -22469,6 +22473,388 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             wraplength=560,
         )
         grid_append(express, self._dl_exp_summary, sticky="w", pady=(4, 0))
+
+        # -- round 189: the four rebuilt engines ------------------------ #
+        # hpo / pruning / quantization / harness (the rollback-lost
+        # quartet, rebuilt per scratch/round189_state_after_rollback.md)
+        # + the round-187 orphans that shipped without cards (gnn /
+        # gnnxai / the EBM) -- every engine now has an execution path.
+        hpo_card = make_card(
+            page.grid,
+            "Hyperparameter search",
+            span=2,
+            row=10,
+            column=0,
+            subtitle="The TPE / successive-halving / hyperband engine "
+            "(ml/hpo.py, the optuna lineage rebuilt offline): pick a "
+            "preset search space over one registry model, choose the "
+            "sampler, and watch the study's trial log -- the best "
+            "parameters and cross-validated score land at the top.",
+        )
+        self._dl_hpo_preset_combo = ttk.Combobox(
+            hpo_card,
+            state="readonly",
+            width=30,
+            values=[
+                "ridge: alpha (log 0.01-10)",
+                "random forest: trees + depth",
+                "knn: neighbours + weights",
+                "svm: C (log 0.01-100)",
+            ],
+        )
+        self._dl_hpo_preset_combo.set("ridge: alpha (log 0.01-10)")
+        Tooltip(
+            self._dl_hpo_preset_combo,
+            "The preset pairs a registry model with its search space "
+            "(FloatParam / IntParam / CategoricalParam, ml/hpo.py's "
+            "SearchSpace). The task follows the target column's "
+            "cardinality -- ridge picks ridge_classifier or ridge "
+            "itself.",
+        )
+        form_row(hpo_card, "preset", self._dl_hpo_preset_combo)
+        self._dl_hpo_sampler_combo = ttk.Combobox(
+            hpo_card, state="readonly", width=14, values=["tpe", "random"]
+        )
+        self._dl_hpo_sampler_combo.set("tpe")
+        Tooltip(
+            self._dl_hpo_sampler_combo,
+            "tpe: the Tree-structured Parzen Estimator -- trials split "
+            "by gamma=min(ceil(0.1n), 25), candidates drawn from the "
+            "good side's kernels, the best l/g ratio wins. random: the "
+            "uniform baseline every study should beat.",
+        )
+        form_row(hpo_card, "sampler", self._dl_hpo_sampler_combo)
+        hpo_row2 = ttk.Frame(hpo_card, style="Card.TFrame")
+        self._dl_hpo_trials = ttk.Spinbox(
+            hpo_row2, from_=4, to=120, increment=2, width=8
+        )
+        self._dl_hpo_trials.set("20")
+        ttk.Label(hpo_row2, text="trials", style="CardMuted.TLabel").grid(
+            row=0, column=0, sticky="w"
+        )
+        self._dl_hpo_trials.grid(row=0, column=1, padx=(6, 16))
+        self._dl_hpo_cv = ttk.Spinbox(hpo_row2, from_=2, to=5, increment=1, width=8)
+        self._dl_hpo_cv.set("3")
+        ttk.Label(hpo_row2, text="cv folds", style="CardMuted.TLabel").grid(
+            row=0, column=2, sticky="w"
+        )
+        self._dl_hpo_cv.grid(row=0, column=3, padx=(6, 0))
+        grid_append(hpo_card, hpo_row2, sticky="w", pady=(4, 0))
+        hpo_buttons = ttk.Frame(hpo_card, style="Card.TFrame")
+        hpo_buttons.grid(
+            row=hpo_card.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
+        hpo_btn = self._action_button(
+            hpo_buttons,
+            "Run study",
+            self._dl_hpo_run,
+            primary=True,
+            tooltip="Cross-validated study over this tab's loaded table "
+            "(same dataset/target as Train & evaluate); scores are "
+            "negated inside the study so smaller-is-better holds, then "
+            "restored for the report.",
+        )
+        hpo_btn.pack(side="left")
+        self._dl_hpo_text = _grid_text(hpo_card, height=9, mono=self._mono)
+        self._dl_hpo_text.insert(
+            "1.0", "the study's trial log appears here after a run"
+        )
+        grid_append(hpo_card, self._dl_hpo_text, sticky="ew", pady=(6, 0))
+
+        surgery = make_card(
+            page.grid,
+            "Model surgery: pruning & quantization",
+            span=2,
+            row=11,
+            column=0,
+            subtitle="The weight-level engines on the last trained "
+            "numpy network: magnitude or structured pruning (ml/"
+            "pruning.py, the torch.prune lineage -- local/global top-k "
+            "masks, channel cuts with their bias entries) and the NF4 "
+            "/ int8 / LLM.int8() report (ml/quantization.py, the "
+            "bitsandbytes lineage).",
+        )
+        self._dl_prune_sparsity = ttk.Spinbox(
+            surgery, from_=0.1, to=0.9, increment=0.05, width=8
+        )
+        self._dl_prune_sparsity.set("0.5")
+        form_row(surgery, "pruning sparsity", self._dl_prune_sparsity)
+        self._dl_prune_scope_combo = ttk.Combobox(
+            surgery, state="readonly", width=12, values=["local", "global"]
+        )
+        self._dl_prune_scope_combo.set("local")
+        form_row(surgery, "mask scope", self._dl_prune_scope_combo)
+        self._dl_prune_structured_var = tk.BooleanVar(value=False)
+        prune_check = ttk.Checkbutton(
+            surgery,
+            text="structured channel pruning (whole rows + their bias)",
+            variable=self._dl_prune_structured_var,
+        )
+        form_row(surgery, "structure", prune_check)
+        surgery_buttons = ttk.Frame(surgery, style="Card.TFrame")
+        surgery_buttons.grid(
+            row=surgery.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
+        prune_btn = self._action_button(
+            surgery_buttons,
+            "Prune weights",
+            self._dl_surgery_prune,
+            primary=True,
+            tooltip="Zero the smallest-|w| entries of every Linear in "
+            "the last trained numpy network (in place -- predictions "
+            "degrade honestly); the report names per-layer cuts.",
+        )
+        prune_btn.pack(side="left")
+        self._dl_quant_combo = ttk.Combobox(
+            surgery_buttons,
+            state="readonly",
+            width=14,
+            values=["nf4", "int8", "int8_channel"],
+        )
+        self._dl_quant_combo.set("nf4")
+        quant_btn = self._action_button(
+            surgery_buttons,
+            "Quantize (report)",
+            self._dl_surgery_quantize,
+            tooltip="The bits/RMSE/relative-error report per layer -- "
+            "NF4 with block-64 double-quantized scales, or symmetric "
+            "int8 absmax per tensor / per row. Analysis only: the "
+            "weights themselves stay float.",
+        )
+        quant_btn.pack(side="left", padx=(10, 0))
+        self._dl_quant_combo.pack(side="left", padx=(6, 0))
+        self._dl_surgery_text = _grid_text(surgery, height=9, mono=self._mono)
+        self._dl_surgery_text.insert(
+            "1.0", "prune or quantize the last trained numpy network -- its report appears here"
+        )
+        grid_append(surgery, self._dl_surgery_text, sticky="ew", pady=(6, 0))
+
+        harness = make_card(
+            page.grid,
+            "Training harness: ZeRO memory & early stopping",
+            span=2,
+            row=12,
+            column=0,
+            subtitle="ml/harness.py, the DeepSpeed ZeRO lineage offline: "
+            "the stage 0-3 per-rank memory arithmetic over this tab's "
+            "last network (or a size you name), and the EarlyStopping "
+            "five-branch contract replayed over the last run's "
+            "validation losses.",
+        )
+        self._dl_zero_stage_combo = ttk.Combobox(
+            harness, state="readonly", width=10, values=["0", "1", "2", "3"]
+        )
+        self._dl_zero_stage_combo.set("3")
+        Tooltip(
+            self._dl_zero_stage_combo,
+            "stage 0: replicate. 1: optimizer states partition (the "
+            "12-bytes-per-param bucket). 2: + gradients. 3: + "
+            "parameters (gather around forward, scatter after "
+            "backward) -- the paper's Table 3 arithmetic.",
+        )
+        form_row(harness, "ZeRO stage", self._dl_zero_stage_combo)
+        self._dl_zero_world = ttk.Spinbox(
+            harness, from_=1, to=64, increment=1, width=8
+        )
+        self._dl_zero_world.set("4")
+        form_row(harness, "world size", self._dl_zero_world)
+        harness_buttons = ttk.Frame(harness, style="Card.TFrame")
+        harness_buttons.grid(
+            row=harness.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
+        zero_btn = self._action_button(
+            harness_buttons,
+            "Compute memory plan",
+            self._dl_harness_zero,
+            tooltip="Per-rank bytes per bucket for the configured "
+            "stage + the shard-plan moves, honestly ceil-divided.",
+        )
+        zero_btn.pack(side="left")
+        self._dl_es_patience = ttk.Spinbox(
+            harness, from_=1, to=50, increment=1, width=8
+        )
+        self._dl_es_patience.set("10")
+        form_row(harness, "early-stop patience", self._dl_es_patience)
+        self._dl_es_min_delta = ttk.Entry(harness, width=10)
+        self._dl_es_min_delta.insert(0, "0.0")
+        form_row(harness, "min delta", self._dl_es_min_delta)
+        es_btn = self._action_button(
+            harness_buttons,
+            "Replay early stopping",
+            self._dl_harness_early,
+            tooltip="Walk the last run's per-epoch validation losses "
+            "through EarlyStopping with this patience and min_delta: "
+            "the stop epoch and the branch timeline (improve / tick / "
+            "restore / plateau / stop) land in the report.",
+        )
+        es_btn.pack(side="left", padx=(10, 0))
+        self._dl_harness_text = _grid_text(harness, height=9, mono=self._mono)
+        self._dl_harness_text.insert(
+            "1.0", "the ZeRO memory plan and the early-stopping replay appear here"
+        )
+        grid_append(harness, self._dl_harness_text, sticky="ew", pady=(6, 0))
+
+        graph = make_card(
+            page.grid,
+            "Graph model (GNN)",
+            span=2,
+            row=13,
+            column=0,
+            subtitle="ml/gnn.py + chem/featurize.py, the "
+            "pytorch_geometric absorption on the autograd tape: message "
+            "passing (gcn / sage / gin / gat / edge), graph readout "
+            "(mean / sum / max / topk / sag), a linear head -- trained "
+            "on the GNNExplainer paper's motif benchmark or your own "
+            "SMILES list.",
+        )
+        self._dl_graph_source_combo = ttk.Combobox(
+            graph,
+            state="readonly",
+            width=22,
+            values=["synthetic motifs (3 classes)", "SMILES + label list"],
+        )
+        self._dl_graph_source_combo.set("synthetic motifs (3 classes)")
+        form_row(graph, "dataset", self._dl_graph_source_combo)
+        self._dl_graph_conv_combo = ttk.Combobox(
+            graph, state="readonly", width=12, values=["gcn", "sage", "gin", "gat", "edge"]
+        )
+        self._dl_graph_conv_combo.set("gcn")
+        form_row(graph, "conv family", self._dl_graph_conv_combo)
+        self._dl_graph_pool_combo = ttk.Combobox(
+            graph,
+            state="readonly",
+            width=12,
+            values=["mean", "sum", "max", "topk", "sag"],
+        )
+        self._dl_graph_pool_combo.set("mean")
+        form_row(graph, "readout", self._dl_graph_pool_combo)
+        graph_row2 = ttk.Frame(graph, style="Card.TFrame")
+        self._dl_graph_epochs = ttk.Spinbox(graph_row2, from_=20, to=400, increment=10, width=8)
+        self._dl_graph_epochs.set("120")
+        ttk.Label(graph_row2, text="epochs", style="CardMuted.TLabel").grid(row=0, column=0)
+        self._dl_graph_epochs.grid(row=0, column=1, padx=(6, 16))
+        self._dl_graph_hidden = ttk.Spinbox(graph_row2, from_=4, to=64, increment=4, width=8)
+        self._dl_graph_hidden.set("8")
+        ttk.Label(graph_row2, text="hidden", style="CardMuted.TLabel").grid(row=0, column=2)
+        self._dl_graph_hidden.grid(row=0, column=3, padx=(6, 0))
+        grid_append(graph, graph_row2, sticky="w", pady=(4, 0))
+        ttk.Label(
+            graph,
+            text="SMILES + label lines (one per row: SMILES,label) -- used when the dataset combo says so",
+            style="CardMuted.TLabel",
+            wraplength=560,
+            justify="left",
+        ).grid(row=graph.grid_size()[1], column=0, columnspan=2, sticky="w")
+        self._dl_graph_smiles_text = _grid_text(graph, height=4, mono=self._mono)
+        self._dl_graph_smiles_text.insert(
+            "1.0", "CCO,0\nCCN,1\nCCCl,0\nCCBr,1"
+        )
+        grid_append(graph, self._dl_graph_smiles_text, sticky="ew", pady=(4, 0))
+        graph_buttons = ttk.Frame(graph, style="Card.TFrame")
+        graph_buttons.grid(
+            row=graph.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
+        graph_btn = self._action_button(
+            graph_buttons,
+            "Train graph classifier",
+            self._dl_graph_train,
+            primary=True,
+            tooltip="Fit GraphClassifier (the sklearn face of the "
+            "five conv families) with the chosen knobs; the fitted "
+            "model + its graphs stay on this tab for the Graph "
+            "explain card.",
+        )
+        graph_btn.pack(side="left")
+        self._dl_graph_text = _grid_text(graph, height=7, mono=self._mono)
+        self._dl_graph_text.insert("1.0", "train the graph classifier -- the run summary appears here")
+        grid_append(graph, self._dl_graph_text, sticky="ew", pady=(6, 0))
+
+        gexplain = make_card(
+            page.grid,
+            "Graph explain",
+            span=2,
+            row=14,
+            column=0,
+            subtitle="ml/gnnxai.py -- the DIG + PyG explainers over the "
+            "Graph model card's fitted classifier: edge masks by "
+            "GNNExplainer (gradient search), AttentionExplainer (the "
+            "GAT coefficients -- needs a gat model), SubgraphX "
+            "(Shapley-guided connected subgraphs) or PGExplainer (a "
+            "trained edge scorer), each with the fidelity / sparsity / "
+            "accuracy@k verdicts.",
+        )
+        self._dl_gx_method_combo = ttk.Combobox(
+            gexplain,
+            state="readonly",
+            width=20,
+            values=["gnn", "attention", "subgraphx", "pg"],
+        )
+        self._dl_gx_method_combo.set("gnn")
+        form_row(gexplain, "explainer", self._dl_gx_method_combo)
+        self._dl_gx_topk = ttk.Spinbox(gexplain, from_=2, to=32, increment=1, width=8)
+        self._dl_gx_topk.set("8")
+        form_row(gexplain, "top-k edges", self._dl_gx_topk)
+        gx_buttons = ttk.Frame(gexplain, style="Card.TFrame")
+        gx_buttons.grid(
+            row=gexplain.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
+        gx_btn = self._action_button(
+            gx_buttons,
+            "Explain first graph",
+            self._dl_graph_explain,
+            primary=True,
+            tooltip="The first graph of the Graph model card's dataset "
+            "(the motifs carry ground-truth edge labels, so "
+            "accuracy@k is honest); the mask statistics and the "
+            "fidelity numbers land in the report.",
+        )
+        gx_btn.pack(side="left")
+        self._dl_gx_text = _grid_text(gexplain, height=9, mono=self._mono)
+        self._dl_gx_text.insert("1.0", "explain the fitted graph model -- the mask report appears here")
+        grid_append(gexplain, self._dl_gx_text, sticky="ew", pady=(6, 0))
+
+        ebm = make_card(
+            page.grid,
+            "Glassbox EBM",
+            span=2,
+            row=15,
+            column=0,
+            subtitle="ml/interpret.py's ExplainableBoostingMachine (the "
+            "interpretml glassbox port): quantile-binned shape "
+            "functions boosted cyclically -- a model whose every term "
+            "is a plot. Mains only (pair interactions stay "
+            "programmatic; the CPU budget is stated honestly). Binary "
+            "targets of any two labels -- they are encoded for the "
+            "engine and decoded for the report.",
+        )
+        ebm_row = ttk.Frame(ebm, style="Card.TFrame")
+        self._dl_ebm_bags = ttk.Spinbox(ebm_row, from_=2, to=14, increment=1, width=8)
+        self._dl_ebm_bags.set("4")
+        ttk.Label(ebm_row, text="outer bags", style="CardMuted.TLabel").grid(row=0, column=0)
+        self._dl_ebm_bags.grid(row=0, column=1, padx=(6, 16))
+        self._dl_ebm_rounds = ttk.Spinbox(ebm_row, from_=10, to=500, increment=10, width=8)
+        self._dl_ebm_rounds.set("60")
+        ttk.Label(ebm_row, text="max rounds", style="CardMuted.TLabel").grid(row=0, column=2)
+        self._dl_ebm_rounds.grid(row=0, column=3, padx=(6, 0))
+        grid_append(ebm, ebm_row, sticky="w", pady=(4, 0))
+        ebm_buttons = ttk.Frame(ebm, style="Card.TFrame")
+        ebm_buttons.grid(
+            row=ebm.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
+        ebm_btn = self._action_button(
+            ebm_buttons,
+            "Train EBM",
+            self._dl_ebm_train,
+            primary=True,
+            tooltip="Fit EBMClassifier on this tab's loaded table (same "
+            "dataset/target as Train & evaluate; the interactions "
+            "setting stays the library default). The report shows "
+            "held-out accuracy and the strongest term importances.",
+        )
+        ebm_btn.pack(side="left")
+        self._dl_ebm_text = _grid_text(ebm, height=9, mono=self._mono)
+        self._dl_ebm_text.insert("1.0", "train the glassbox model -- the term report appears here")
+        grid_append(ebm, self._dl_ebm_text, sticky="ew", pady=(6, 0))
 
     # ------------------------------------------------------------- #
     # Round 186: the four absorbed cards' handlers
@@ -23978,6 +24364,699 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 f"{head_index}; strongest of {len(pairs)} shown):\n{digest}"
             )
         )
+
+    # ------------------------------------------------------------- #
+    # Round 189: the rebuilt engines' + round-187 orphans' handlers
+    # ------------------------------------------------------------- #
+
+    def _dl_hpo_run(self) -> None:
+        """The Hyperparameter search card: tune_model over this tab's CSV."""
+        if not self._require_pharmaml():
+            return
+        if not self._require("sklearn", "hyperparameter search"):
+            return
+        if self._dl_frame is None:
+            messagebox.showwarning("No dataset", "Open a CSV or load an example first.")
+            return
+        target = self._dl_target_combo.get()
+        if not target:
+            messagebox.showwarning("No target", "Pick the column to predict.")
+            return
+        numeric, _dropped = numeric_feature_columns(self._dl_frame, target)
+        if not numeric:
+            messagebox.showwarning(
+                "No numeric features",
+                "The study needs numeric feature columns -- compute "
+                "descriptors first (the Chemistry tab's feature factory).",
+            )
+            return
+        try:
+            n_trials = parse_int(self._dl_hpo_trials.get(), "trials", minimum=2)
+            cv = parse_int(self._dl_hpo_cv.get(), "cv folds", minimum=2)
+            seed = parse_int(self._dl_seed_entry.get(), "random seed", minimum=0)
+        except ValueError as exc:
+            messagebox.showwarning("Check the study settings", str(exc))
+            return
+        task = self._infer_task(target, self._dl_frame)
+        preset = self._dl_hpo_preset_combo.get()
+        sampler = self._dl_hpo_sampler_combo.get()
+        X = self._dl_frame[numeric].to_numpy(dtype=float)
+        y = self._dl_frame[target].to_numpy()
+
+        def work():
+            from pharmaml.ml.hpo import (
+                CategoricalParam,
+                IntParam,
+                SearchSpace,
+                tune_model,
+            )
+
+            if preset.startswith("ridge"):
+                model = "ridge_classifier" if task == "classification" else "ridge"
+                space = SearchSpace.uniform("alpha", 0.01, 10.0, log=True)
+            elif preset.startswith("random forest"):
+                model = "random_forest"
+                space = SearchSpace(
+                    IntParam("n_estimators", 20, 200)
+                ).add(IntParam("max_depth", 2, 16))
+            elif preset.startswith("knn"):
+                model = "knn"
+                space = SearchSpace(
+                    IntParam("n_neighbors", 1, 25)
+                ).add(CategoricalParam("weights", ("uniform", "distance")))
+            else:
+                model = "svm"
+                space = SearchSpace.uniform("C", 0.01, 100.0, log=True)
+            return tune_model(
+                model, space, X, y, task=task, cv=cv,
+                n_trials=n_trials, sampler=sampler, seed=seed,
+            )
+
+        def render(report):
+            lines = [
+                f"study: {preset}  |  sampler: {sampler}  |  task: {task}",
+                (
+                    f"best score (cv, {self._dl_hpo_cv.get()}-fold): "
+                    f"{report.best_score:.4f}"
+                ),
+                "best parameters:",
+            ]
+            for key, value in sorted(report.best_params.items()):
+                lines.append(f"    {key} = {value}")
+            lines.append("")
+            lines.append("trial log (value = the score, bigger is better):")
+            for trial in report.history:
+                params = ", ".join(f"{k}={v:.4g}" for k, v in trial.params.items())
+                lines.append(
+                    f"  #{trial.number:3d}  score {(-trial.value or 0.0):8.4f}  {params}"
+                )
+            self._dl_hpo_text.delete("1.0", "end")
+            self._dl_hpo_text.insert("1.0", "\n".join(lines))
+
+        self._start_job(f"HPO study: {n_trials} trials", work, render)
+
+    def _dl_surgery_target(self) -> tuple[Any, list[Any]] | None:
+        """The last trained numpy network's tape Linears (or a warning)."""
+        if self._dl_last_run is None:
+            messagebox.showwarning(
+                "No trained network",
+                "Train a network first (Train & evaluate) -- the surgery "
+                "engines act on its weights.",
+            )
+            return None
+        network, estimator_name = self._dl_last_run[0], self._dl_last_run[1]
+        inner = getattr(network, "_network", None)
+        linears = getattr(inner, "linears", None) if inner is not None else None
+        if not linears:
+            messagebox.showwarning(
+                "Not a numpy-engine network",
+                f"The last run trained {estimator_name} -- the surgery "
+                "engines walk the numpy autograd engine's Linear stack. "
+                "Pick a Numpy architecture (or let torch-absent machines "
+                "auto-select it) and retrain.",
+            )
+            return None
+        return network, list(linears)
+
+    def _dl_surgery_prune(self) -> None:
+        import numpy as np
+        """Magnitude / structured pruning over the trained Linears."""
+        if not self._require_pharmaml():
+            return
+        target = self._dl_surgery_target()
+        if target is None:
+            return
+        _network, linears = target
+        try:
+            sparsity = parse_float(
+                self._dl_prune_sparsity.get(), "sparsity", minimum=0.05, maximum=0.95
+            )
+        except ValueError as exc:
+            messagebox.showwarning("Check the pruning settings", str(exc))
+            return
+        scope = self._dl_prune_scope_combo.get()
+        structured = bool(self._dl_prune_structured_var.get())
+
+        def work():
+            from pharmaml.ml.pruning import (
+                LayerPruning,
+                prune_linear_layer,
+            )
+
+            rows: list[LayerPruning] = []
+            if structured:
+                for linear in linears:
+                    rows.append(prune_linear_layer(linear, sparsity, structured=True))
+            else:
+                for index, linear in enumerate(linears):
+                    from pharmaml.ml.pruning import magnitude_mask
+
+                    weights = np.asarray(linear.weight.data, dtype=float)
+                    mask = magnitude_mask(weights, sparsity, scope=scope)
+                    linear.weight.data = (weights * mask).astype(
+                        linear.weight.data.dtype
+                    )
+                    pruned = np.asarray(linear.weight.data)
+                    rows.append(
+                        LayerPruning(
+                            name=f"linear[{index}]",
+                            shape=tuple(weights.shape),
+                            n_weights=weights.size,
+                            n_zeroed=int(np.sum(pruned == 0.0)),
+                            sparsity=float(np.mean(pruned == 0.0)),
+                        )
+                    )
+            return rows, structured, sparsity, scope
+
+        def render(payload):
+            rows, structured, sparsity, scope = payload
+            total_w = sum(r.n_weights for r in rows)
+            total_z = sum(r.n_zeroed for r in rows)
+            lines = [
+                (
+                    f"pruning: {'structured channel' if structured else 'magnitude'} "
+                    f"@ sparsity {sparsity:.2f} "
+                    f"({'per-layer' if scope == 'local' and not structured else scope})"
+                ),
+                (
+                    f"weights: {total_w:,}  zeroed: {total_z:,}  "
+                    f"achieved sparsity: {total_z / max(total_w, 1):.3f}"
+                ),
+                "",
+                "layer            shape            zeroed/total   sparsity",
+            ]
+            for row in rows:
+                lines.append(
+                    f"{row.name:<16} {row.shape!s:<16} "
+                    f"{row.n_zeroed:>6}/{row.n_weights:<7} {row.sparsity:>8.3f}"
+                )
+            lines.append("")
+            lines.append(
+                "the masks are in place -- re-run Check CSV / predictions "
+                "to see the accuracy cost of the cut."
+            )
+            self._dl_surgery_text.delete("1.0", "end")
+            self._dl_surgery_text.insert("1.0", "\n".join(lines))
+
+        self._start_job("pruning the trained network", work, render)
+
+    def _dl_surgery_quantize(self) -> None:
+        import numpy as np
+        """The NF4 / int8 report over the trained Linears (analysis only)."""
+        if not self._require_pharmaml():
+            return
+        target = self._dl_surgery_target()
+        if target is None:
+            return
+        _network, linears = target
+        method = self._dl_quant_combo.get()
+
+        def work():
+            from pharmaml.ml.quantization import quantization_report
+
+            reports = []
+            for index, linear in enumerate(linears):
+                weights = np.asarray(linear.weight.data, dtype=float)
+                reports.append(
+                    (f"linear[{index}]", quantization_report(weights, method=method))
+                )
+            return reports, method
+
+        def render(payload):
+            reports, method = payload
+            lines = [f"quantization report -- method: {method}", ""]
+            total_weights = sum(r.n_weights for _n, r in reports)
+            total_rmse = 0.0
+            for name, report in reports:
+                total_rmse += report.rmse ** 2 * report.n_weights
+                lines.append(
+                    f"{name:<12} {tuple(report.shape)!s:<14} "
+                    f"bpw {report.bits_per_weight:5.2f}  "
+                    f"rmse {report.rmse:.4f}  rel {report.relative_error:.4f}"
+                )
+            import math as _math
+
+            overall = _math.sqrt(total_rmse / max(total_weights, 1))
+            lines.append("")
+            lines.append(
+                f"overall: {total_weights:,} weights, pooled rmse {overall:.4f} "
+                "(the floats themselves are untouched -- this is the "
+                "memory/accuracy tradeoff as a number)"
+            )
+            self._dl_surgery_text.delete("1.0", "end")
+            self._dl_surgery_text.insert("1.0", "\n".join(lines))
+
+        self._start_job("quantization report", work, render)
+
+    def _dl_harness_zero(self) -> None:
+        import numpy as np
+        """The ZeRO stage memory plan over the last network's size."""
+        if not self._require_pharmaml():
+            return
+        try:
+            world = parse_int(self._dl_zero_world.get(), "world size", minimum=1)
+        except ValueError as exc:
+            messagebox.showwarning("Check the harness settings", str(exc))
+            return
+        stage = int(self._dl_zero_stage_combo.get())
+        n_params = 1_000_000
+        if self._dl_last_run is not None:
+            inner = getattr(self._dl_last_run[0], "_network", None)
+            linears = getattr(inner, "linears", None) if inner is not None else None
+            if linears:
+                n_params = sum(
+                    int(np.asarray(linear.weight.data).size)
+                    + (
+                        int(np.asarray(linear.bias.data).size)
+                        if linear.bias is not None
+                        else 0
+                    )
+                    for linear in linears
+                )
+
+        def work():
+            from pharmaml.ml.harness import (
+                ZeROConfig,
+                zero_memory_model,
+                zero_stage_description,
+            )
+
+            config = ZeROConfig(stage=stage, world_size=world)
+            memory = zero_memory_model(n_params, world_size=world, stage=stage)
+            description = zero_stage_description(stage)
+            return memory, description, config, n_params
+
+        def render(payload):
+            memory, description, config, n_params = payload
+            lines = [
+                f"ZeRO {description}",
+                f"model: {n_params:,} parameters, {world} rank(s)",
+                "",
+                f"params bytes / rank   : {memory.params_bytes:>14,}",
+                f"grads bytes / rank    : {memory.grads_bytes:>14,}",
+                f"optimizer bytes / rank: {memory.optimizer_bytes:>14,}",
+                f"total per rank        : {memory.per_rank_bytes:>14,}",
+                f"total across ranks    : {memory.total_bytes:>14,}",
+                "",
+            ]
+            if stage > 0:
+                inner = getattr(
+                    self._dl_last_run[0], "_network", None
+                ) if self._dl_last_run is not None else None
+                linears = (
+                    getattr(inner, "linears", None) if inner is not None else None
+                )
+                if linears:
+                    from pharmaml.ml.harness import shard_plan as _plan
+
+                    plan = _plan(
+                        [linear.weight for linear in linears], config
+                    )
+                    lines.append("shard plan (the weight tensors' ownership):")
+                    for entry in plan[:6]:
+                        moves = ", ".join(entry["moves"]) if entry["moves"] else "-"
+                        lines.append(
+                            f"  tensor {entry['index']}: {entry['size']:>8} params  [{moves}]"
+                        )
+                    if len(plan) > 6:
+                        lines.append(f"  ... {len(plan) - 6} more tensors")
+                else:
+                    lines.append(
+                        "shard-plan detail needs a trained numpy network; "
+                        "the memory arithmetic above is size-based."
+                    )
+            self._dl_harness_text.delete("1.0", "end")
+            self._dl_harness_text.insert("1.0", "\n".join(lines))
+
+        self._start_job(f"ZeRO stage {stage} memory plan", work, render)
+
+    def _dl_harness_early(self) -> None:
+        """Replay the last run's validation losses through EarlyStopping."""
+        if not self._require_pharmaml():
+            return
+        if not self._dl_history:
+            messagebox.showwarning(
+                "No training history",
+                "Train a network first -- the replay walks its per-epoch "
+                "validation losses.",
+            )
+            return
+        try:
+            patience = parse_int(self._dl_es_patience.get(), "patience", minimum=1)
+            min_delta = parse_float(
+                self._dl_es_min_delta.get(), "min delta", minimum=0.0
+            )
+        except ValueError as exc:
+            messagebox.showwarning("Check the early-stopping settings", str(exc))
+            return
+        losses = [
+            entry.get("val_loss")
+            if entry.get("val_loss") is not None
+            else entry.get("train_loss")
+            for entry in self._dl_history
+        ]
+        if any(v is None for v in losses):
+            messagebox.showwarning(
+                "Incomplete history",
+                "The run's history has no losses to replay.",
+            )
+            return
+
+        def work():
+            from pharmaml.ml.harness import EarlyStopping
+
+            stop = EarlyStopping(patience=patience, min_delta=min_delta)
+            timeline: list[tuple[int, float, str, bool]] = []
+            for epoch, value in enumerate(losses):
+                keep_going = stop.step(float(value))
+                timeline.append((epoch, float(value), stop.last_branch, keep_going))
+                if not keep_going:
+                    timeline.extend(
+                        (e, float(v), "stop", False)
+                        for e, v in enumerate(losses[epoch + 1:], epoch + 1)
+                    )
+                    break
+            return timeline, stop, len(losses)
+
+        def render(payload):
+            timeline, stop, total = payload
+            stopped_at = next(
+                (e for e, _v, branch, keep in timeline if not keep), total
+            )
+            counts: dict[str, int] = {}
+            for _e, _v, branch, _keep in timeline:
+                counts[branch] = counts.get(branch, 0) + 1
+            lines = [
+                (
+                    f"EarlyStopping replay over {total} epochs "
+                    f"(patience {patience}, min_delta {min_delta:g})"
+                ),
+                f"best observed loss: {stop.best:.6f}",
+                (
+                    f"training would stop at epoch {stopped_at + 1} "
+                    f"({total - stopped_at - 1} epochs saved)"
+                )
+                if stopped_at + 1 < total
+                else "the run never tripped the stop -- full budget spent",
+                "",
+                "branch counts: "
+                + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())),
+                "",
+                "epoch  loss        branch",
+            ]
+            for epoch, value, branch, keep in timeline[: stopped_at + 8]:
+                lines.append(
+                    f"{epoch + 1:>5}  {value:>10.4f}  {branch}"
+                    + ("" if keep else "  <-- stop")
+                )
+            if len(timeline) > stopped_at + 8:
+                lines.append(f"  ... {len(timeline) - stopped_at - 8} more epochs")
+            self._dl_harness_text.delete("1.0", "end")
+            self._dl_harness_text.insert("1.0", "\n".join(lines))
+
+        self._start_job("early-stopping replay", work, render)
+
+    def _dl_graph_train(self) -> None:
+        import numpy as np
+        """Train GraphClassifier on motifs or the SMILES list."""
+        if not self._require_pharmaml():
+            return
+        source = self._dl_graph_source_combo.get()
+        conv = self._dl_graph_conv_combo.get()
+        pool = self._dl_graph_pool_combo.get()
+        try:
+            epochs = parse_int(self._dl_graph_epochs.get(), "epochs", minimum=10)
+            hidden = parse_int(self._dl_graph_hidden.get(), "hidden", minimum=2)
+        except ValueError as exc:
+            messagebox.showwarning("Check the graph settings", str(exc))
+            return
+        # widget reads happen on the MAIN thread only (the house job
+        # rule): the SMILES block is captured before the worker starts
+        smiles_block = str(self._dl_graph_smiles_text.get("1.0", "end"))
+
+        def work():
+            from pharmaml.ml.gnn import GraphClassifier, synthetic_motif_graphs
+
+            if source.startswith("synthetic"):
+                graphs, y = synthetic_motif_graphs(24, seed=11)
+            else:
+                from pharmaml.chem.featurize import smiles_to_graph
+
+                graphs, labels = [], []
+                for line in smiles_block.splitlines():
+                    line = line.strip()
+                    if not line or "," not in line:
+                        continue
+                    smiles, label = line.rsplit(",", 1)
+                    graphs.append(smiles_to_graph(smiles.strip(), y=float(label)))
+                    labels.append(int(float(label)))
+                y = np.asarray(labels, dtype=int)
+                if len(set(y.tolist())) < 2:
+                    raise ValueError(
+                        "the SMILES list needs at least two distinct labels"
+                    )
+            model = GraphClassifier(
+                hidden=hidden,
+                layers=2,
+                conv=conv,
+                pool=pool,
+                epochs=epochs,
+                lr=0.08,
+                seed=11,
+            )
+            model.fit(graphs, y)
+            score = float(model.score(graphs, y))
+            return model, graphs, y, score
+
+        def render(payload):
+            model, graphs, y, score = payload
+            self._dl_graph_model = model
+            self._dl_graphs = graphs
+            self._dl_graph_y = y
+            lines = [
+                (
+                    f"GraphClassifier: conv={conv}, pool={pool}, "
+                    f"hidden={hidden}, epochs={epochs}"
+                ),
+                f"graphs: {len(graphs)}  classes: {len(model.classes_)}",
+                f"train accuracy: {score:.3f}",
+                "last losses: "
+                + ", ".join(f"{v:.3f}" for v in model.loss_history_[-6:]),
+                "",
+                (
+                    "the fitted model is live -- the Graph explain card can "
+                    "now walk it (motif graphs carry ground-truth edge "
+                    "labels for accuracy@k)."
+                ),
+            ]
+            self._dl_graph_text.delete("1.0", "end")
+            self._dl_graph_text.insert("1.0", "\n".join(lines))
+
+        self._start_job(f"training the graph model ({conv}/{pool})", work, render)
+
+    def _dl_graph_explain(self) -> None:
+        import numpy as np
+        """The four explainers over the fitted graph model."""
+        if not self._require_pharmaml():
+            return
+        if self._dl_graph_model is None or not self._dl_graphs:
+            messagebox.showwarning(
+                "No graph model",
+                "Train the graph classifier first (the Graph model card).",
+            )
+            return
+        method = self._dl_gx_method_combo.get()
+        try:
+            top_k = parse_int(self._dl_gx_topk.get(), "top-k edges", minimum=1)
+        except ValueError as exc:
+            messagebox.showwarning("Check the explain settings", str(exc))
+            return
+        model, graphs, y = self._dl_graph_model, self._dl_graphs, self._dl_graph_y
+        graph = graphs[0]
+
+        def work():
+            from pharmaml.ml.gnnxai import (
+                GNNExplainer,
+                PGExplainer,
+                SubgraphX,
+                accuracy_at_k,
+                fidelity_minus,
+                fidelity_plus,
+                sparsity,
+            )
+
+            if method == "gnn":
+                explanation = GNNExplainer(iters=60, seed=0).explain(
+                    model, graph, top_k=top_k
+                )
+            elif method == "attention":
+                from pharmaml.ml.gnnxai import AttentionExplainer
+
+                explanation = AttentionExplainer().explain(
+                    model, graph, top_k=top_k
+                )
+            elif method == "subgraphx":
+                explanation = SubgraphX(n_subgraphs=24, n_shapley=8, seed=0).explain(
+                    model, graph
+                )
+            else:
+                explainer = PGExplainer(iters=30, seed=0)
+                explainer.fit(model, graphs, y)
+                explanation = explainer.explain(model, graph, top_k=top_k)
+            metrics = {
+                "sparsity": sparsity(explanation),
+                "fidelity+": fidelity_plus(model, graph, explanation),
+                "fidelity-": fidelity_minus(model, graph, explanation),
+                "accuracy@k": accuracy_at_k(explanation, graph, k=top_k),
+            }
+            return explanation, metrics
+
+        def render(payload):
+            explanation, metrics = payload
+            lines = [
+                (
+                    f"explainer: {method}  |  "
+                    f"target class: {explanation.target_class}"
+                ),
+                (
+                    f"edges scored: {explanation.scores.size}  "
+                    f"top-k selected: {explanation.top_edges.size}"
+                ),
+                "",
+                "verdicts:",
+                (
+                    f"  sparsity    : {metrics['sparsity']:.3f} "
+                    "(fraction of edges the top-k drops)"
+                ),
+                (
+                    f"  fidelity+   : {metrics['fidelity+']:+.4f} "
+                    "(probability drop when the top edges are removed)"
+                ),
+                (
+                    f"  fidelity-   : {metrics['fidelity-']:+.4f} "
+                    "(drop when ONLY the top edges remain)"
+                ),
+                (
+                    f"  accuracy@k  : {metrics['accuracy@k']:.3f} "
+                    "(of the top edges, the ground-truth motif fraction)"
+                ),
+                "",
+                "strongest edges (score: source -> destination):",
+            ]
+            order = np.argsort(-explanation.scores, kind="stable")[: min(8, top_k)]
+            edge_index = np.asarray(graph.edge_index)
+            for edge in order:
+                lines.append(
+                    f"  {explanation.scores[edge]:.3f}: "
+                    f"{int(edge_index[0, edge])} -> {int(edge_index[1, edge])}"
+                )
+            self._dl_gx_text.delete("1.0", "end")
+            self._dl_gx_text.insert("1.0", "\n".join(lines))
+
+        self._start_job(f"graph explanation ({method})", work, render)
+
+    def _dl_ebm_train(self) -> None:
+        """The glassbox EBM over this tab's table."""
+        import numpy as np
+        import pandas as pd
+        if not self._require_pharmaml():
+            return
+        if not self._require("sklearn", "the glassbox EBM"):
+            return
+        if self._dl_frame is None:
+            messagebox.showwarning("No dataset", "Open a CSV or load an example first.")
+            return
+        target = self._dl_target_combo.get()
+        if not target:
+            messagebox.showwarning("No target", "Pick the column to predict.")
+            return
+        y_series = self._dl_frame[target]
+        classes = list(pd.unique(y_series))
+        if len(classes) != 2:
+            messagebox.showwarning(
+                "Binary classification only",
+                f"The glassbox EBM is a binary classifier and this target "
+                f"has {len(classes)} classes -- pick a two-class column "
+                f"(the multiclass refusal is upstream's, recorded "
+                f"honestly).",
+            )
+            return
+        try:
+            outer_bags = parse_int(self._dl_ebm_bags.get(), "outer bags", minimum=2)
+            max_rounds = parse_int(self._dl_ebm_rounds.get(), "max rounds", minimum=10)
+        except ValueError as exc:
+            messagebox.showwarning("Check the EBM settings", str(exc))
+            return
+        numeric, _dropped = numeric_feature_columns(self._dl_frame, target)
+        if not numeric:
+            messagebox.showwarning(
+                "No numeric features",
+                "The EBM bins numeric columns -- compute descriptors first.",
+            )
+            return
+        X = self._dl_frame[numeric].to_numpy(dtype=float)
+        y = (self._dl_frame[target] == classes[1]).astype(int).to_numpy()
+
+        def work():
+            from sklearn.model_selection import train_test_split
+
+            from pharmaml.ml.interpret import EBMClassifier
+
+            x_train, x_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42, stratify=y
+            )
+            model = EBMClassifier(
+                outer_bags=outer_bags,
+                max_rounds=max_rounds,
+                interactions=0,
+                feature_names=list(numeric),
+            )
+            model.fit(x_train, y_train)
+            accuracy = float(np.mean(model.predict(x_test) == y_test))
+            return model, accuracy, list(numeric)
+
+        def render(payload):
+            model, accuracy, names = payload
+            importances = np.asarray(model.feature_importances_)
+            mains = [
+                (name, float(score))
+                for name, score in zip(names, importances.tolist())
+            ]
+            mains.sort(key=lambda pair: -abs(pair[1]))
+            pair_terms = sum(
+                1 for term in model.terms_ if len(term.features) == 2
+            )
+            lines = [
+                (
+                    f"EBMClassifier: outer_bags={outer_bags}, "
+                    f"max_rounds={max_rounds}, "
+                    f"classes {classes[0]!r} vs {classes[1]!r}"
+                ),
+                (
+                    f"held-out accuracy: {accuracy:.3f} "
+                    f"({round(accuracy * 100)}% of the test rows)"
+                ),
+                (
+                    f"terms fitted: {len(model.terms_)} "
+                    f"({pair_terms} pair interactions)"
+                ),
+                "",
+                (
+                    "strongest main-term importances "
+                    "(weighted mean |shape contribution|):"
+                ),
+            ]
+            for name, score in mains[:8]:
+                lines.append(f"  {name:<28} {score:>10.4f}")
+            lines.append("")
+            lines.append(
+                "every term is a binned shape function -- the honest "
+                "glassbox: read the boost, not just the verdict."
+            )
+            self._dl_ebm_text.delete("1.0", "end")
+            self._dl_ebm_text.insert("1.0", "\n".join(lines))
+
+        self._start_job("training the glassbox EBM", work, render)
 
     # ------------------------------------------------------------------ #
     # Generative tab

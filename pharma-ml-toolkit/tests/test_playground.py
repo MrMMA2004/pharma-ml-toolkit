@@ -3089,9 +3089,34 @@ class TestDeepLearningTab:
             first._dl_exp_template_combo.set("ggplot2")
             first._dl_exp_hover_entry.delete(0, "end")
             first._dl_exp_hover_entry.insert(0, "SMILES,compound_id")
+            # (round 189) the six new cards' twenty-one inputs: the HPO
+            # study, model surgery, training harness, graph model,
+            # graph explain and glassbox EBM cards
+            first._dl_hpo_preset_combo.set("random forest: trees + depth")
+            first._dl_hpo_sampler_combo.set("random")
+            first._dl_hpo_trials.set("14")
+            first._dl_hpo_cv.set("2")
+            first._dl_prune_sparsity.set("0.75")
+            first._dl_prune_scope_combo.set("global")
+            first._dl_prune_structured_var.set(True)
+            first._dl_quant_combo.set("int8_channel")
+            first._dl_zero_stage_combo.set("2")
+            first._dl_zero_world.set("8")
+            first._dl_es_patience.set("6")
+            first._dl_es_min_delta.delete(0, "end")
+            first._dl_es_min_delta.insert(0, "0.001")
+            first._dl_graph_source_combo.set("SMILES + label list")
+            first._dl_graph_conv_combo.set("gat")
+            first._dl_graph_pool_combo.set("sag")
+            first._dl_graph_epochs.set("200")
+            first._dl_graph_hidden.set("16")
+            first._dl_gx_method_combo.set("subgraphx")
+            first._dl_gx_topk.set("12")
+            first._dl_ebm_bags.set("6")
+            first._dl_ebm_rounds.set("120")
             payload = first._collect_session()
             saved = [key for key in payload["variables"] if key.startswith("_dl_")]
-            assert len(saved) == 37  # 18 + XAI's six + round-186's thirteen
+            assert len(saved) == 58  # 18 + 6 + 13 + round-189's 21
 
             second._session = payload
             second._restore_session()
@@ -3126,6 +3151,28 @@ class TestDeepLearningTab:
             assert second._dl_exp_kind_combo.get() == "histogram"
             assert second._dl_exp_template_combo.get() == "ggplot2"
             assert second._dl_exp_hover_entry.get() == "SMILES,compound_id"
+            # (round 189) the six new cards' inputs ride the same trip
+            assert second._dl_hpo_preset_combo.get() == "random forest: trees + depth"
+            assert second._dl_hpo_sampler_combo.get() == "random"
+            assert second._dl_hpo_trials.get() == "14"
+            assert second._dl_hpo_cv.get() == "2"
+            assert second._dl_prune_sparsity.get() == "0.75"
+            assert second._dl_prune_scope_combo.get() == "global"
+            assert bool(second._dl_prune_structured_var.get()) is True
+            assert second._dl_quant_combo.get() == "int8_channel"
+            assert second._dl_zero_stage_combo.get() == "2"
+            assert second._dl_zero_world.get() == "8"
+            assert second._dl_es_patience.get() == "6"
+            assert second._dl_es_min_delta.get() == "0.001"
+            assert second._dl_graph_source_combo.get() == "SMILES + label list"
+            assert second._dl_graph_conv_combo.get() == "gat"
+            assert second._dl_graph_pool_combo.get() == "sag"
+            assert second._dl_graph_epochs.get() == "200"
+            assert second._dl_graph_hidden.get() == "16"
+            assert second._dl_gx_method_combo.get() == "subgraphx"
+            assert second._dl_gx_topk.get() == "12"
+            assert second._dl_ebm_bags.get() == "6"
+            assert second._dl_ebm_rounds.get() == "120"
         finally:
             first.destroy()
             second.destroy()
@@ -16315,3 +16362,259 @@ class TestRound186Gui:
     def test_express_needs_a_dataset(self, app: Any, quiet_dialogs: list[Any]) -> None:
         app._dl_express_preview()
         assert [d[0] for d in quiet_dialogs] == ["showwarning"]
+
+
+def _parse_sparsity(report_text: str) -> float:
+    """Pull 'achieved sparsity: 0.487' out of a pruning report."""
+    import re as _re
+
+    match = _re.search(r"achieved sparsity:\s*([0-9.]+)", report_text)
+    return float(match.group(1)) if match else -1.0
+
+
+class TestRound189Cards:
+    """The rebuilt engines' + round-187 orphans' six Deep Learning cards
+    (G-1's and G-2's GUI half): every card gets an end-to-end exercise --
+    the job model runs, the report text lands, the guards warn."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 300.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    def _load_and_train_numpy_net(self, app: Any) -> None:
+        """Tiny numpy-engine network so the surgery cards have a target."""
+        import playground as _pg  # the module under test, same package dir
+
+        app._dl_arch_combo.set(
+            next(a for a in _pg._DL_ARCHITECTURES if a.startswith("Numpy"))
+        )
+        app._dl_hidden_entry.delete(0, "end")
+        app._dl_hidden_entry.insert(0, "8")
+        app._dl_epochs.set("25")
+        app._dl_patience.set("5")
+        app._dl_load_example()
+        app._dl_train()
+        assert self._drain(app), "the numpy training job hung"
+
+    # -- the Hyperparameter search card -------------------------------- #
+
+    def test_hpo_study_runs_and_reports(self, app: Any) -> None:
+        app._dl_load_example()
+        app._dl_hpo_preset_combo.set("ridge: alpha (log 0.01-10)")
+        app._dl_hpo_sampler_combo.set("random")
+        app._dl_hpo_trials.set("6")
+        app._dl_hpo_cv.set("2")
+        app._dl_hpo_run()
+        assert self._drain(app), "the HPO study hung"
+        text = app._dl_hpo_text.get("1.0", "end")
+        assert "best score" in text
+        assert "alpha = " in text
+        assert "#  0" in text and "#  5" in text  # six trials, 0-indexed
+
+    def test_hpo_needs_a_dataset(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._dl_hpo_run()
+        assert not app._busy
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "No dataset" in titles
+
+    # -- the Model surgery card ------------------------------------------ #
+
+    def test_surgery_guards_without_a_network(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_surgery_prune()
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "No trained network" in titles
+
+    def test_prune_and_quantize_after_training(self, app: Any) -> None:
+        self._load_and_train_numpy_net(app)
+        assert app._dl_last_run is not None
+        app._dl_prune_sparsity.set("0.5")
+        app._dl_prune_scope_combo.set("global")
+        app._dl_prune_structured_var.set(False)
+        app._dl_surgery_prune()
+        assert self._drain(app), "the pruning job hung"
+        text = app._dl_surgery_text.get("1.0", "end")
+        assert "achieved sparsity" in text
+        assert 0.4 <= _parse_sparsity(text) <= 0.6
+
+        app._dl_quant_combo.set("nf4")
+        app._dl_surgery_quantize()
+        assert self._drain(app), "the quantization job hung"
+        text = app._dl_surgery_text.get("1.0", "end")
+        assert "quantization report -- method: nf4" in text
+        assert "bpw" in text and "pooled rmse" in text
+
+    def test_structured_prune_zeroes_channels(self, app: Any) -> None:
+        self._load_and_train_numpy_net(app)
+        app._dl_prune_structured_var.set(True)
+        app._dl_prune_sparsity.set("0.5")
+        app._dl_surgery_prune()
+        assert self._drain(app), "the structured pruning job hung"
+        text = app._dl_surgery_text.get("1.0", "end")
+        assert "structured channel" in text
+
+    # -- the Training harness card ---------------------------------------- #
+
+    def test_zero_memory_plan_after_training(self, app: Any) -> None:
+        self._load_and_train_numpy_net(app)
+        app._dl_zero_stage_combo.set("3")
+        app._dl_zero_world.set("4")
+        app._dl_harness_zero()
+        assert self._drain(app), "the ZeRO plan hung"
+        text = app._dl_harness_text.get("1.0", "end")
+        assert "stage 3" in text
+        assert "total per rank" in text
+        assert "shard plan" in text
+
+    def test_early_stopping_replay(self, app: Any) -> None:
+        self._load_and_train_numpy_net(app)
+        assert app._dl_history, "the run kept no history"
+        app._dl_es_patience.set("3")
+        app._dl_es_min_delta.delete(0, "end")
+        app._dl_es_min_delta.insert(0, "0.0")
+        app._dl_harness_early()
+        assert self._drain(app), "the early-stopping replay hung"
+        text = app._dl_harness_text.get("1.0", "end")
+        assert "EarlyStopping replay" in text
+        assert "best observed loss" in text
+        assert "branch counts:" in text
+
+    def test_early_stopping_guards_without_history(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_harness_early()
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "No training history" in titles
+
+    # -- the Graph model + Graph explain cards ------------------------------ #
+
+    def test_graph_model_and_gnn_explainer(self, app: Any) -> None:
+        app._dl_graph_source_combo.set("synthetic motifs (3 classes)")
+        app._dl_graph_conv_combo.set("gcn")
+        app._dl_graph_pool_combo.set("mean")
+        app._dl_graph_epochs.set("40")
+        app._dl_graph_hidden.set("8")
+        app._dl_graph_train()
+        assert self._drain(app, timeout=400.0), "the graph training hung"
+        text = app._dl_graph_text.get("1.0", "end")
+        assert "train accuracy" in text
+        assert app._dl_graph_model is not None
+
+        app._dl_gx_method_combo.set("gnn")
+        app._dl_gx_topk.set("8")
+        app._dl_graph_explain()
+        assert self._drain(app, timeout=400.0), "the GNN explanation hung"
+        text = app._dl_gx_text.get("1.0", "end")
+        assert "explainer: gnn" in text
+        assert "verdicts:" in text
+        assert "accuracy@k" in text
+
+    def test_graph_attention_explainer_needs_gat(self, app: Any) -> None:
+        app._dl_graph_epochs.set("30")
+        app._dl_graph_conv_combo.set("gat")
+        app._dl_graph_train()
+        assert self._drain(app, timeout=400.0), "the GAT training hung"
+        app._dl_gx_method_combo.set("attention")
+        app._dl_graph_explain()
+        assert self._drain(app, timeout=400.0), "the attention explanation hung"
+        text = app._dl_gx_text.get("1.0", "end")
+        assert "explainer: attention" in text
+
+    def test_graph_explain_guards_without_model(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_graph_explain()
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "No graph model" in titles
+
+    def test_graph_model_smiles_list(self, app: Any) -> None:
+        app._dl_graph_source_combo.set("SMILES + label list")
+        app._dl_graph_smiles_text.delete("1.0", "end")
+        app._dl_graph_smiles_text.insert("1.0", "CCO,0\nCCN,1\nCCCl,0\nCCBr,1")
+        app._dl_graph_epochs.set("20")
+        app._dl_graph_conv_combo.set("sage")
+        app._dl_graph_train()
+        assert self._drain(app, timeout=400.0), "the SMILES graph training hung"
+        text = app._dl_graph_text.get("1.0", "end")
+        assert "graphs: 4" in text
+
+    # -- the Glassbox EBM card ------------------------------------------------- #
+
+    def test_ebm_binary_guard_on_regression_target(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_load_example()  # the default example is regression
+        app._dl_ebm_train()
+        assert not app._busy
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "Binary classification only" in titles
+
+    def test_ebm_trains_on_a_binary_frame(self, app: Any) -> None:
+        # a purpose-built binary frame (the shipped classification
+        # example is 3-class; the card's guard refuses that honestly)
+        import numpy as _np
+        import pandas as _pd
+
+        rng = _np.random.default_rng(0)
+        X = rng.normal(size=(80, 5))
+        frame = _pd.DataFrame(
+            {f"descr_{i}": X[:, i] for i in range(5)}
+            | {
+                "activity": _np.where(
+                    X[:, 0] + X[:, 1] > 0, "active", "inactive"
+                )
+            }
+        )
+        app._dl_load_frame(frame, "binary test frame")
+        app._dl_target_combo.set("activity")
+        app._dl_ebm_bags.set("2")
+        app._dl_ebm_rounds.set("30")
+        app._dl_ebm_train()
+        assert self._drain(app, timeout=400.0), "the EBM training hung"
+        text = app._dl_ebm_text.get("1.0", "end")
+        assert "held-out accuracy" in text
+        assert "'active'" in text and "'inactive'" in text  # class names ride the header
+        assert "pair interactions)\n" in text or "0 pair interactions" in text
+        assert "strongest main-term importances" in text
+
+    def test_ebm_refuses_three_class_target(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_load_example()  # the shipped example is 3-class activity
+        target = app._dl_target_combo.get()
+        if app._dl_frame[target].nunique() != 3:
+            pytest.skip("the example's target is not 3-class")
+        app._dl_ebm_train()
+        assert not app._busy
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "Binary classification only" in titles
