@@ -41,14 +41,22 @@ import numpy as np
 
 from pharmaml.ml.gnn import Data
 
-from .molgraph import ELEMENTS, MolAtom, MolBond, Molecule, find_rings, implicit_hydrogens, parse_smiles
+from .molgraph import (
+    ELEMENTS,
+    MolAtom,
+    MolBond,
+    Molecule,
+    find_rings,
+    implicit_hydrogens,
+    parse_smiles,
+)
 
 __all__ = [
-    "ELEMENT_ORDER",
-    "ATOM_WIDTH",
-    "BOND_WIDTH",
     "ATOM_FEATURE_NAMES",
+    "ATOM_WIDTH",
     "BOND_FEATURE_NAMES",
+    "BOND_WIDTH",
+    "ELEMENT_ORDER",
     "atom_features",
     "bond_features",
     "molecule_to_data",
