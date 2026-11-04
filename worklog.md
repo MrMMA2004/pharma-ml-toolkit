@@ -6399,3 +6399,73 @@ Stage Summary:
 - Deliverable: the golden download path restored — every visitor now gets the exact shipped v1.2.106 artifact bytes with cache revalidation, at 10x the speed and none of the fallback's risks.
 - Lesson pinned: content checks alone can pass a broken delivery path — assert on the delivery METADATA (source headers, content-length, etag) too; and when a ritual moves its artifact homes, grep every consumer of the old path.
 - Baselines for the next round: unchanged (v1.2.106 · 4020 passed + 12 skipped · 785 files / 262,615 lines · three homes + repo download/ · dev server healthy · cron guard 495807 + webDevReview 500162).
+
+---
+
+## Round 189 — the MASTER_PROMPT audit round (2026-11-04/05)
+
+**The commission:** execute `upload/Command.txt` (the 40KB MASTER_PROMPT: a
+comprehensive project audit, database reconciliation, playground integration,
+and GitHub backup) — ten phases, progress files as checkpoints, GitHub backup
+"throughout the project lifecycle, not only at the end."
+
+**P0 — the blocker dissolved.** The token arrived embedded in the re-uploaded
+MASTER_PROMPT.docx: extracted to `~/.github_token` (600, outside the repo),
+verified against the API (login MrMMA2004), and the empty private target
+`MrMMA2004/pharma-ml-toolkit` found waiting. The full 102 MiB history pushed
+as the FIRST act (1,683 files), verified by SHA parity, a clean test clone,
+and a zero-token grep of the clone — before any implementation, because a
+5th rollback had been detected (HEAD back at 2eb0ede; the venv reverted to
+numpy 2.1.3 with 8 packages gone; the round-189 state doc destroyed). The
+token-bearing upload files are `.gitignore`-guarded; auth runs through a
+GIT_ASKPASS helper (`.zscripts/gh_backup.sh`) that never writes the token
+into config, URLs, or logs.
+
+**P1-P6 — the audit.** Resource inventory (every upload item inspected and
+matched to its absorption), database audit (Prisma/SQLite = an empty
+User/Post scaffold, 0 rows — the data layer is file-based), and the
+evidence-based traceability matrix + gap report
+(`scratch/master_prompt_audit.md`): 23 feature rows, three gap classes —
+G-1 the four rollback-lost engines (hpo/pruning/quantization/harness),
+G-2 the round-187 engines that shipped orphaned (gnn/gnnxai/featurize with
+zero tests and zero GUI wiring; the EBM + geometric GNN without cards),
+G-3 the torchlens/alibi/Quantus fold-ins (documented as deferred with
+reasons).
+
+**P7 — the implementation.** Four engines rebuilt per the preserved specs
+(`scratch/round189_state_after_rollback.md` §3): TPE with the
+γ=min(⌈0.1n⌉,25) parzen split and the l/g argmax rule, successive halving
+and the honest hyperband bracket table; magnitude + structured channel
+pruning with the Zhu-Gupta cubic schedule and the iterative retrain loop;
+NF4's 16-level grid with block-64 double-quantized scales, symmetric int8
+absmax, and the LLM.int8() outlier-split matmul (threshold 6.0, whole-row
+routing); the ZeRO stage memory arithmetic with the ceil-division
+partitioner and EarlyStopping's five recorded branches. 225 tests across
+the four. The orphan trio got its first suite (55 tests) — which caught
+two GENUINE bugs shipped untested in 2eb0ede: pool="topk"/"sag" crashed
+on np.argsort over the tape Tensor, and PGExplainer.explain fancy-indexed
+the Tensor instead of the ndarray (fit did it right). Both fixed with
+regression tests. Then six Deep Learning cards wired every engine into
+playground.py (31,105 lines now): Hyperparameter search, Model surgery,
+Training harness (ZeRO plan + the early-stopping replay over the run's
+own val losses), Graph model, Graph explain, and the Glassbox EBM — 14
+end-to-end card tests, the session round-trip pin grown 37→58, and one
+thread-safety lesson (the SMILES block is read on the main thread before
+the job starts, the house rule my first draft broke).
+
+**P8 — the gates and the ship.** The full accounting run in chunks (the
+OOM discipline): **4496 collected = 4483 passed + 13 skipped, zero
+failures**, across 162 files (58 test files + 104 doctest modules). The
+notebook-variant gate caught the first zip carrying 1.2.106 outputs —
+notebooks re-executed, archive rebuilt. v1.2.107 shipped: 798 files,
+17,263,225 bytes, across the three homes. The web pins synced
+4020→4483 tests / 785→802 files / 262,615→277,550 lines (the live tree API
+is the source of truth; the fallbacks match it). E2E via agent-browser:
+pins render, the Code Explorer browses the new engines (hpo.py's symbol
+outline works), the download button streams the v1.2.107 zip, and the web
+twin's ML tab trains live through the python bridge.
+
+**The ledger:** 464 new tests (4032→4496), 13 new files, +5,700 lines of
+shipped source, four engines, six cards, two shipped bugs found and fixed,
+one version-consistency catch at the gate — and the whole history off-site
+on GitHub as it happened.
