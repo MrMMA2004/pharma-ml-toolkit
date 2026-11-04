@@ -53,3 +53,8 @@ server.log
 # Skills directory
 /skills/tool-results/
 tool-results/
+
+# Token-bearing prompt files (contain GitHub PATs) — never commit
+upload/Command.txt
+upload/Command.docx
+upload/MASTER_PROMPT.docx
