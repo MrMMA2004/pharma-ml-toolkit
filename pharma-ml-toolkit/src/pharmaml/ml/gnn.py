@@ -74,26 +74,26 @@ from .autograd import (
 )
 
 __all__ = [
-    "GnnError",
-    "Data",
-    "Batch",
-    "degree",
-    "add_self_loops",
-    "to_undirected",
-    "GCNConv",
-    "SAGEConv",
-    "GINConv",
-    "GATConv",
-    "EdgeConv",
-    "global_add_pool",
-    "global_mean_pool",
-    "global_max_pool",
-    "TopKPooling",
-    "SAGPooling",
-    "GraphClassifier",
-    "synthetic_motif_graphs",
     "CONV_NAMES",
     "POOL_NAMES",
+    "Batch",
+    "Data",
+    "EdgeConv",
+    "GATConv",
+    "GCNConv",
+    "GINConv",
+    "GnnError",
+    "GraphClassifier",
+    "SAGEConv",
+    "SAGPooling",
+    "TopKPooling",
+    "add_self_loops",
+    "degree",
+    "global_add_pool",
+    "global_max_pool",
+    "global_mean_pool",
+    "synthetic_motif_graphs",
+    "to_undirected",
 ]
 
 
@@ -146,7 +146,7 @@ class Data:
     def num_edges(self) -> int:
         return int(self.edge_index.shape[1])
 
-    def to_undirected(self) -> "Data":
+    def to_undirected(self) -> Data:
         """Both directions of every edge, duplicates collapsed.
 
         >>> import numpy as np
@@ -180,7 +180,7 @@ class Data:
             edge_label=pick(self.edge_label),
         )
 
-    def with_self_loops(self) -> "Data":
+    def with_self_loops(self) -> Data:
         """A copy whose edges include every self-loop (message passing's
         non-empty-neighbourhood guarantee)."""
         looped = add_self_loops(self.edge_index, self.num_nodes)
@@ -249,7 +249,7 @@ class Batch:
     edge_labels: list[np.ndarray | None]
 
     @classmethod
-    def from_data_list(cls, graphs: Sequence[Data]) -> "Batch":
+    def from_data_list(cls, graphs: Sequence[Data]) -> Batch:
         if not graphs:
             raise GnnError("Batch: no graphs to collate")
         xs: list[np.ndarray] = []
@@ -493,14 +493,19 @@ def global_max_pool(x: Tensor, batch: np.ndarray, size: int) -> Tensor:
 POOL_NAMES: tuple[str, ...] = ("mean", "sum", "max", "topk", "sag")
 
 
-def _topk_per_graph(score: np.ndarray, ptr: np.ndarray, ratio: float) -> np.ndarray:
-    """Row indices of the top ``ceil(ratio * n_g)`` scores per graph."""
+def _topk_per_graph(score: np.ndarray | Tensor, ptr: np.ndarray, ratio: float) -> np.ndarray:
+    """Row indices of the top ``ceil(ratio * n_g)`` scores per graph.
 
+    Accepts the score either as the tape's :class:`Tensor` or as a
+    plain ndarray (``np.argsort`` cannot consume the Tensor directly).
+    """
+
+    values = score.numpy() if hasattr(score, "numpy") else np.asarray(score, dtype=float)
     keep: list[np.ndarray] = []
     for g in range(ptr.size - 1):
         rows = np.arange(ptr[g], ptr[g + 1])
         k = max(1, int(np.ceil(ratio * rows.size)))
-        order = rows[np.argsort(-score[rows], kind="stable")]
+        order = rows[np.argsort(-values[rows], kind="stable")]
         keep.append(np.sort(order[:k]))
     return np.concatenate(keep)
 
@@ -604,7 +609,7 @@ class GraphClassifier(ClassifierMixin, BaseEstimator):
 
     # -- sklearn protocol ---------------------------------------------------
 
-    def fit(self, graphs: Sequence[Data], y: Iterable[int]) -> "GraphClassifier":
+    def fit(self, graphs: Sequence[Data], y: Iterable[int]) -> GraphClassifier:
         labels = np.asarray(list(y), dtype=int).reshape(-1)
         if len(graphs) != labels.size:
             raise GnnError("fit: one label per graph required")
