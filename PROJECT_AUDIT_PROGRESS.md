@@ -10,22 +10,22 @@ BLOCKED · VERIFICATION REQUIRED
 
 ---
 
-## Current session: 2026-11-05 (Asia/Tehran)
+## Current session: 2026-11-04/05 — CLOSED OUT (see Phase status below)
 
 ## Phase status
 
 | Phase | Name | Status | Notes |
 |---|---|---|---|
-| P1 | Resource discovery & inventory | **COMPLETED** | all top-level resources enumerated & verified (see Verified facts) |
-| P2 | Detailed resource inspection | **IN PROGRESS** (~70%) | upload items inspected at inventory level; notebooks vs toolkit absorption cross-check pending |
-| P3 | Database audit | NOT STARTED | Prisma schema = scaffold default (User/Post); `db/custom.db` 24 KB basically unused — to verify |
-| P4 | Cross-reference & traceability matrix | NOT STARTED | |
-| P5 | playground.py audit | NOT STARTED | 30,026 lines, v1.2.106, 53 test files |
-| P6 | Gap analysis | NOT STARTED | 4 lost engines confirmed (hpo/pruning/quantization/harness) |
-| P7 | Implementation | NOT STARTED | rebuild specs preserved in `scratch/round189_state_after_rollback.md` §3 |
-| P8 | Testing & verification | NOT STARTED | gates: doctests / ruff 0.17.1 / mypy 2.4.0 / pytest suite |
-| P9 | GitHub backup verification | **PARTIALLY COMPLETED** | initial full-history push DONE & verified; must re-push final state at end |
-| P10 | Final report (deliverables A–I) | NOT STARTED | |
+| P1 | Resource discovery & inventory | **COMPLETED** | every upload item + architecture enumerated with evidence |
+| P2 | Detailed resource inspection | **COMPLETED** | inventory table in this file + the audit matrix |
+| P3 | Database audit | **COMPLETED** | Prisma/SQLite = empty scaffold (User/Post, 0 rows); data layer is file-based; no migration (§3.4) |
+| P4 | Cross-reference & traceability matrix | **COMPLETED** | `scratch/master_prompt_audit.md` — 23 evidence-checked rows |
+| P5 | playground.py audit | **COMPLETED** | 113-card map, 13 tabs, module-import cross-check, orphan/zero-reference analysis |
+| P6 | Gap analysis | **COMPLETED** | G-1 critical (4 lost engines), G-2 high (orphan trio + card gaps), G-3 deferred |
+| P7 | Implementation | **COMPLETED** | 4 engines rebuilt (225 tests) + orphan trio adopted (55 tests, 2 shipped bugs fixed) + 6 GUI cards (14 card tests, pin 37→58) |
+| P8 | Testing & verification | **COMPLETED** | 4496 collected = 4483 passed + 13 skipped, 0 failures; ruff/mypy/doctests/gui self-test green; v1.2.107 shipped; web pins synced; E2E agent-browser green |
+| P9 | GitHub backup verification | **COMPLETED** | HEAD `c4034c0` == remote == clone; 1,701 files; zip sha-256 parity; zero tokens in clone |
+| P10 | Final report (deliverables A–I) | **COMPLETED** | delivered in the session close-out (this file + the audit matrix + the worklog) |
 
 ## Verified facts so far (with evidence)
 
@@ -100,13 +100,36 @@ ml/quantization.py, ml/harness.py (lost in rollbacks).**
 - `db/custom.db` is tracked in git (24 KB scaffold) — P3 decides whether that
   is appropriate to keep backing up.
 
+## Session close-out (P10)
+
+- **Deliverable A (resource inventory):** the P2 table above + the audit
+  matrix's 23 rows; every accessible upload/repo item has an inspection
+  status.
+- **Deliverable B (database reconciliation):** the DB is an unused scaffold
+  (0 rows); no external data was expected to live there — no missing/
+  duplicated/conflicting records exist by construction; documented, no
+  migration without authorization.
+- **Deliverable C (traceability matrix):** `scratch/master_prompt_audit.md`.
+- **Deliverable D (coverage gap report):** same file, D section — G-1/G-2
+  RESOLVED (rebuilt + adopted + wired); G-3 (torchlens/alibi/Quantus
+  fold-ins) DEFERRED with reasons recorded; G-4/5/6 documented.
+- **Deliverable E (updated playground.py):** v1.2.107 — six new cards,
+  every engine has an execution path; existing behavior preserved
+  (4483-passing suite).
+- **Deliverable F (verification report):** the chunked full-suite accounting
+  (4496 = 4483+13+0), all four ship gates green, the notebook-version catch
+  and re-ship, E2E agent-browser (pins/explorer/download/live-training).
+- **Deliverable G (coverage summary):** fully covered & verified — all
+  absorbed lineages; excluded — PyMOL tarballs (inventory-only), the
+  Windows exes (binary assets), unverified — none outstanding.
+- **Deliverable H (GitHub backup report):** `GITHUB_BACKUP_MANIFEST.md`
+  (final state: HEAD c4034c0, 1,701 files, clone-verified, sha-256 parity).
+- **Deliverable I (continuity report):** this file + the worklog entry;
+  next session resumes from "all phases CLOSED" — only G-3 and new
+  commissions remain.
+
 ## Exact next steps
 
-1. P3: audit Prisma schema + db/custom.db contents (read-only).
-2. P5: map playground.py tab/card structure; verify every ml/chem/viz module
-   has an execution path; check scripts/ bridges vs web routes.
-3. P4: build the traceability matrix from the module map + card map.
-4. P6: gap report — four lost engines + torchlens/alibi/Quantus fold-in + GUI
-   coverage gaps found in P5.
-5. P7: rebuild engines + GUI cards; P8 full gates; ship v1.2.107;
-   P9 final push + verification; P10 report.
+None for the MASTER_PROMPT — closed. Standing opportunities: the G-3
+torchlens/alibi/Quantus compact fold-ins (spec recorded), and the guard
+cron (495807) keeps the minimal-action protocol.

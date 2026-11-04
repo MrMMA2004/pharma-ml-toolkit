@@ -16,11 +16,11 @@ No credentials or sensitive values appear in this file (by design, §12.8).
 
 | Field | Value |
 |---|---|
-| Backup date/time | 2026-11-05 (session 2 of the MASTER_PROMPT audit) |
-| Milestone / version | Initial full-history backup; toolkit v1.2.106, audit P1 |
-| Local HEAD == remote HEAD | `17e76094689cd4a3a65a59fbe63cc5ec823f1f19` (VERIFIED) |
-| Tracked files uploaded | 1,683 (local `git ls-files` == clone `git ls-files`, parity VERIFIED) |
-| Pack size | ~102.64 MiB (2,312 objects) |
+| Backup date/time | 2026-11-04/05 — final close-out of the MASTER_PROMPT audit |
+| Milestone / version | **v1.2.107 shipped** (round 189: four engines rebuilt, orphan trio adopted, six GUI cards) |
+| Local HEAD == remote HEAD == clone HEAD | `c4034c0d066dab6c4b882b8e861b626bd55cad11` (VERIFIED) |
+| Tracked files uploaded | 1,701 (clone `git ls-files`, VERIFIED) |
+| Pack size | ~102 MiB (initial) + incremental pushes at every milestone |
 
 ## Backed-up components
 
@@ -60,8 +60,8 @@ No credentials or sensitive values appear in this file (by design, §12.8).
 
 1. Remote accessible: YES (API + git).
 2. Branch `main` exists on remote: YES.
-3. Remote SHA == local SHA: YES (`17e7609`).
-4. All tracked files uploaded: YES (1,683 == 1,683).
+3. Remote SHA == local SHA == clone SHA: YES (`c4034c0`).
+4. All tracked files uploaded: YES (1,701 recoverable from a fresh clone).
 5. No essential files accidentally excluded: token files excluded BY DESIGN;
    nothing else missing from the tracked set.
 6. Large files accessible: YES (zips present in clone).
@@ -72,7 +72,9 @@ No credentials or sensitive values appear in this file (by design, §12.8).
 
 ## Outstanding backup issues
 
-- Incremental pushes required after every audit milestone (§12.5) —
-  P1-checkpoint commit follows immediately after this manifest is written.
-- Final backup (P9) must re-verify SHA parity + fresh test clone after the
-  v1.2.107 implementation lands.
+- None. The incremental-push discipline held at every milestone (P1
+  checkpoint, each engine, the GUI half, both ship rituals, the finalize);
+  the final verification re-ran SHA parity + a fresh test clone + the
+  v1.2.107 zip's sha-256 comparison local-vs-clone (equal).
+- The token lives only in `~/.github_token` (600) + the docx uploads
+  (gitignored); the clone grep is clean.
