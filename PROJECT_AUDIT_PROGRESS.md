@@ -16,8 +16,8 @@ BLOCKED · VERIFICATION REQUIRED
 
 | Phase | Name | Status | Notes |
 |---|---|---|---|
-| P1 | Resource discovery & inventory | **IN PROGRESS** (~80%) | git/env/token/remote/playground/module facts gathered; upload-file deep inspection pending |
-| P2 | Detailed resource inspection | NOT STARTED | 16 upload items, extracted/, repo-clones/, mini-services/ |
+| P1 | Resource discovery & inventory | **COMPLETED** | all top-level resources enumerated & verified (see Verified facts) |
+| P2 | Detailed resource inspection | **IN PROGRESS** (~70%) | upload items inspected at inventory level; notebooks vs toolkit absorption cross-check pending |
 | P3 | Database audit | NOT STARTED | Prisma schema = scaffold default (User/Post); `db/custom.db` 24 KB basically unused — to verify |
 | P4 | Cross-reference & traceability matrix | NOT STARTED | |
 | P5 | playground.py audit | NOT STARTED | 30,026 lines, v1.2.106, 53 test files |
@@ -46,8 +46,12 @@ BLOCKED · VERIFICATION REQUIRED
 4. **A 5th rollback occurred** before this session: HEAD was reset from the
    guard/cron commits back to `2eb0ede`, `scratch/round189_state_after_rollback.md`
    was destroyed (recreated this session), and `/home/z/.venv` reverted to
-   numpy 2.1.3 with 8 packages missing. venv repair relaunched
-   (`scratch/venv_repair.sh` → `scratch/venv_repair.log`).
+   numpy 2.1.3 with 8 packages missing. **venv repair COMPLETED and VERIFIED
+   this session**: numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.9.1 · meeko 0.8.0
+   · gemmi 0.7.5 · shap 0.54.1 (+slicer, numba) · selfies 2.1.1 · matplotlib
+   3.10.9 · ruff 0.17.1 · mypy 2.4.0 · pytest 9.0.2. Sanity pytest runs
+   GREEN (exit 0): explain+interpret+geometric (250 tests) and
+   tuner+neural+ml_pipeline+applicability+umap+runboard subsets.
 5. **Four engine modules confirmed lost** (never committed): `ml/hpo.py`,
    `ml/pruning.py`, `ml/quantization.py`, `ml/harness.py` + their 305 tests.
    Rebuild specs preserved in `scratch/round189_state_after_rollback.md` §3.
@@ -59,20 +63,38 @@ BLOCKED · VERIFICATION REQUIRED
    subdir, no nested .git). Branch: `main`. Guard cron job 495807 (30 min,
    minimal-action protocol) still scheduled.
 
+## P2 resource inventory (in progress)
+
+| Resource | Type | Purpose | Status |
+|---|---|---|---|
+| upload/Command.txt + Command.docx + MASTER_PROMPT.docx | prompt docs | the MASTER_PROMPT itself (token-bearing, gitignored) | INSPECTED (full text → scratch/master_prompt_full.txt, sanitized) |
+| upload/Applicability_domain_analysis.py | py script | kNN/leverage ADA on catboost pIC50 | INSPECTED — absorbed as `ml/applicability.py` (module verified) |
+| upload/fak_ml.ipynb (1.35 MB) | notebook | 183-cell ML workflow | INSPECTED (structure); absorbed via scratch/ml-codes-extract earlier rounds |
+| upload/look.ipynb | notebook | 298-line pandas exploration | INSPECTED (structure) |
+| upload/xxx.ipynb | notebook | 3-class molecular classification, 35 cells | INSPECTED (structure) |
+| upload/new folder.zip → extracted_newfolder/ | archive | Vina + Vina_contol + ligand generation docking scripts | INSPECTED (22 items) — docking lineage absorbed into chem/docking |
+| upload/کد علی.zip → extracted_ali_code/ | archive | pdbqt generation, SMILES→PDB, mismatch check, vina multi | INSPECTED (10 items) — absorbed into chem/docking + converters |
+| upload/کدهای ماشین لرنینگ.rar → extracted/ | archive | Classification/Regression/converters/Tanimoto scripts | INSPECTED (12 items) — absorbed into chem/ (converters, descriptors, similarity) |
+| upload/vina.exe, autodock4.exe, autogrid4.exe | win binaries | docking executables | inventory-only (binary assets) |
+| upload/*.png (2) | screenshots | UI evidence | inventory-only |
+| repo-clones/pymol.tgz, pymol2.tgz | source tarballs | PyMOL sources | inventory-only (graphics3d lineage) |
+| scripts/*_bridge.py (6) | py bridges | web↔toolkit API bridges | wiring check pending (P5) |
+
+Toolkit module map (verified): ml/ = 41 modules (applicability, attention,
+autograd, bayesopt, curation, explain, geometric, gnn, gnnxai, interpret,
+runboard, tuner, umap, visiblenet, xai, …); chem/ = 17; viz/ = 11; plus
+biology/, pharma/, docking/, generative/. **Missing: ml/hpo.py, ml/pruning.py,
+ml/quantization.py, ml/harness.py (lost in rollbacks).**
+
 ## Resources not yet inspected
 
-- upload/ contents in depth: Applicability_domain_analysis.py, fak_ml.ipynb
-  (1.35 MB), look.ipynb, xxx.ipynb, new folder.zip, کد علی.zip,
-  کدهای ماشین لرنینگ.rar, 2 PNGs, vina.exe/autogrid4.exe/autodock4.exe,
-  extracted_ali_code/, extracted_newfolder/ — P2.
-- repo-clones/, extracted/, mini-services/, scripts/ — P2.
-- db/custom.db tables + Prisma schema — P3.
-- playground.py card/module wiring — P5.
+- notebooks' cell-level content vs toolkit absorption (P2 remainder).
+- scripts/ bridge wiring vs web routes (P5).
+- db/custom.db tables + Prisma schema (P3).
+- playground.py card/module wiring (P5).
 
 ## Unresolved issues / risks
 
-- venv repair result must be re-verified (numpy 1.26.4, all 8 packages, then a
-  pytest sanity run) once `scratch/venv_repair.log` shows VENV-REPAIR-DONE.
 - Rollback risk remains for UNCOMMITTED work only — mitigation: commit+push at
   every milestone (§12.5). Remote history is now safe.
 - `db/custom.db` is tracked in git (24 KB scaffold) — P3 decides whether that
@@ -80,10 +102,11 @@ BLOCKED · VERIFICATION REQUIRED
 
 ## Exact next steps
 
-1. Verify venv repair completed; run pytest sanity (subset) on the toolkit.
-2. P2: inspect the 16 upload items + extracted/ + repo-clones/ one by one;
-   write the resource inventory (deliverable A scaffold).
-3. P3: audit Prisma schema + db/custom.db contents.
-4. P4–P6: build the traceability matrix and gap report.
-5. P7: rebuild the four engines (+ torchlens/alibi/Quantus fold-in) with GUI
-   cards; P8 full gates; ship v1.2.107; P9 final push + verification; P10 report.
+1. P3: audit Prisma schema + db/custom.db contents (read-only).
+2. P5: map playground.py tab/card structure; verify every ml/chem/viz module
+   has an execution path; check scripts/ bridges vs web routes.
+3. P4: build the traceability matrix from the module map + card map.
+4. P6: gap report — four lost engines + torchlens/alibi/Quantus fold-in + GUI
+   coverage gaps found in P5.
+5. P7: rebuild engines + GUI cards; P8 full gates; ship v1.2.107;
+   P9 final push + verification; P10 report.
