@@ -1,80 +1,106 @@
 # GITHUB_BACKUP_MANIFEST.md
 
-No credentials or sensitive values appear in this file (by design, §12.8).
+No credentials or sensitive values appear in this file.
 
 ## Repository
 
 - **URL:** https://github.com/MrMMA2004/pharma-ml-toolkit
-- **Visibility:** private (default security policy, §12.2)
-- **Active branch:** `main`
-- **Remote name:** `origin` (clean HTTPS URL; token NEVER embedded)
-- **Authentication:** fine-grained PAT, stored at `~/.github_token`
-  (chmod 600, outside the repo). Used only at runtime via GIT_ASKPASS by
-  `.zscripts/gh_backup.sh`. Not in `.git/config`, URLs, logs, or history.
+- **Visibility:** private (verified through GitHub on 2026-11-05)
+- **Default branch:** `main` (unchanged)
+- **Active Arena branch:** `arena/c44913ab-pharma-ml-toolkit`
+- **Remote:** `origin`, clean HTTPS URL without embedded credentials
+- **Authentication:** Arena's configured `GH_TOKEN` session; no prompt-supplied
+  credential was used, copied, or stored
 
-## Latest verified backup
+## Latest verified implementation backup
 
 | Field | Value |
 |---|---|
-| Backup date/time | 2026-11-04/05 — final close-out of the MASTER_PROMPT audit |
-| Milestone / version | **v1.2.107 shipped** (round 189: four engines rebuilt, orphan trio adopted, six GUI cards) |
-| Local HEAD == remote HEAD == clone HEAD | `c4034c0d066dab6c4b882b8e861b626bd55cad11` (VERIFIED) |
-| Tracked files uploaded | 1,701 (clone `git ls-files`, VERIFIED) |
-| Pack size | ~102 MiB (initial) + incremental pushes at every milestone |
+| Backup date/time | 2026-11-05 09:25:02 UTC |
+| Milestone | v1.2.107 source + headless CLI, QA dependency, display-fixture, lint, and audit fixes |
+| Local implementation HEAD | `1718302a25efc94aba2c8056e74a599c43e5d6c5` |
+| Remote implementation HEAD | `1718302a25efc94aba2c8056e74a599c43e5d6c5` |
+| Fresh-clone HEAD | `1718302a25efc94aba2c8056e74a599c43e5d6c5` |
+| Tracked files, original and clone | 1,701 / 1,701 |
+| Recovery verification | **PASS** — single-branch test clone at `/tmp/pharmaml-backup-verify-1718302` |
+
+The manifest itself is committed as the following documentation-only milestone.
+The branch's final remote HEAD is verified after that push and reported in the
+session close-out; an embedded manifest cannot contain its own future commit
+SHA.
 
 ## Backed-up components
 
-- Full git history of `/home/z/my-project` (Next.js app + `pharma-ml-toolkit/`
-  inside one repo — the entire authorized project tree).
-- Python sources, playground.py (30,026 lines, v1.2.106), tests (53 files),
-  docs, notebooks, `requirements.txt` (pinned stack), `pyproject.toml`.
-- Release artifacts intentionally INCLUDED as milestone recoveries:
-  `dist-archive/` v1.2.105 + v1.2.106 zips, `download/` + `download_archive/`
-  + `pharma-ml-toolkit/download/` zips (~85 MB total; each ≤ 17 MB — no
-  Git LFS needed).
-- Prisma schema + tracked `db/custom.db` (24 KB scaffold — see P3 audit).
-- `PROJECT_AUDIT_PROGRESS.md` and this manifest.
+- Complete Next.js application, API routes, TypeScript utilities, UI components,
+  scripts, Prisma schema, configuration, and dependency specifications.
+- `pharma-ml-toolkit/playground.py` (31,111 lines) with the no-`tkinter` CLI fix.
+- Python package sources (117 files checked by mypy), 58 test modules, examples,
+  executed notebooks, documentation, requirements, and reproducible build files.
+- `PROJECT_AUDIT_PROGRESS.md` and `scratch/master_prompt_audit.md`, including
+  actual test results, exclusions, unresolved gaps, and resume instructions.
+- Historical release archives in `download/`, `download_archive/`, and
+  `pharma-ml-toolkit/dist-archive/`; no file requires Git LFS.
+- `db/custom.db` (empty SQLite scaffold), `prisma/schema.prisma`, and the safe
+  local-only `.env.example` recovery template.
 
-## Intentionally excluded (with reasons)
+**Release-scope note:** this milestone updates source and audit records, not the
+v1.2.107 version number or release ZIPs. Existing ZIPs are preserved byte for
+byte and do not contain the new post-v1.2.107 source fixes.
 
-- `upload/Command.txt`, `upload/Command.docx`, `upload/MASTER_PROMPT.docx` —
-  **contain GitHub PATs**; `.gitignore`-guarded; verified ABSENT from clone.
-- `.env*` (DATABASE_URL secret) — gitignored by the scaffold.
-- `node_modules/`, `.next/`, venvs, caches, `dev.log`, tool-results —
-  rebuildable environment state, gitignored.
-- `~/.github_token`, `~/.git_askpass_gh.sh` — credential material, lives
-  outside the repo.
+## Intentionally excluded
+
+- `.env` and other `.env*` files except `.env.example`: runtime configuration.
+  The former tracked `.env` contained only a local SQLite URL; it remains on
+  disk but was removed from the Git index. The recovery template is included.
+- Current attachment `/tmp/arena-coding-uploads/MASTER_PROMPT.pdf`: inspected in
+  full but contains credential material and is intentionally outside Git.
+- `upload/Command.txt`, `upload/Command.docx`, and `upload/MASTER_PROMPT.docx`:
+  credential-bearing prompt files guarded by `.gitignore`.
+- `node_modules/`, `.next/`, Python virtualenvs, caches, build output, test
+  output, logs, and editor state: rebuildable or machine-local artifacts.
+- Credential-manager files and tokens: never included in the repository, clone,
+  logs, remote URL, or this manifest.
 
 ## Database backup status
 
-- `db/custom.db` (SQLite, 24 KB) is tracked and pushed — effectively a schema
-  scaffold with negligible data. Full database audit (P3) will decide whether
-  any real data backup is required; no sensitive production data is present
-  so far. Backup class today: source + schema scaffold only.
+- **Class:** source + schema scaffold only, not a production data backup.
+- SQLite 3.40.1 read-only inspection: `integrity_check=ok`; `User` and `Post`
+  each contain zero rows; the unique User email index exists; no views/triggers
+  or foreign keys exist. `Post.authorId` is therefore only a scaffold column.
+- The 24 KB `db/custom.db` and Prisma schema are tracked and recoverable. No
+  migration, record overwrite, or destructive operation was performed.
+- No sensitive production database records were identified or uploaded.
 
-## Git LFS
+## Git LFS and archive integrity
 
-- Not used (no tracked file exceeds GitHub limits; largest single file ≈ 17 MB).
+- Git LFS is not used; the largest tracked files are approximately 17 MB.
+- Local and cloned `pharma-ml-toolkit-v1.2.107.zip` SHA-256 values match:
+  `152a51a533f54b6445e7dd3ed64fe93dbbefe83dec83d044f77db3bca2e71759`.
 
-## Verification results (§12.7)
+## Verification results
 
-1. Remote accessible: YES (API + git).
-2. Branch `main` exists on remote: YES.
-3. Remote SHA == local SHA == clone SHA: YES (`c4034c0`).
-4. All tracked files uploaded: YES (1,701 recoverable from a fresh clone).
-5. No essential files accidentally excluded: token files excluded BY DESIGN;
-   nothing else missing from the tracked set.
-6. Large files accessible: YES (zips present in clone).
-7. Test clone performed: YES → `/tmp/backup_verify_clone`, clean checkout.
-8. Token-leak scan on clone: CLEAN (`git grep github_pat_` → no matches).
-9. Project reconstructability: requirements.txt + pyproject.toml + docs
-   pushed; venv rebuild scripted in `scratch/venv_repair.sh`.
+1. Remote repository accessible and private: **YES**.
+2. Active branch exists remotely: **YES**.
+3. Local == remote == fresh-clone implementation SHA: **YES** (`1718302`).
+4. Complete tracked-file set recovered: **YES** (1,701 files).
+5. Updated `playground.py` and `nbformat` declaration present in clone: **YES**.
+6. `.env` absent and `.env.example` present in clone: **YES**.
+7. Credential-pattern scan across the clone: **0 matching files**.
+8. Release archive local/clone byte comparison and SHA-256 parity: **PASS**.
+9. Applicable Python regression suite: **3,840 passed, 634 skipped, 22
+   deselected, 0 failures/errors**. Exact limits are in the progress report.
+10. Python lint, package mypy, CLI probes, editable install, wheel/sdist build,
+    offline webpack compilation, and source-only TypeScript check: **PASS**.
 
-## Outstanding backup issues
+## Outstanding issues and limits
 
-- None. The incremental-push discipline held at every milestone (P1
-  checkpoint, each engine, the GUI half, both ship rituals, the finalize);
-  the final verification re-ran SHA parity + a fresh test clone + the
-  v1.2.107 zip's sha-256 comparison local-vs-clone (equal).
-- The token lives only in `~/.github_token` (600) + the docx uploads
-  (gitignored); the clone grep is clean.
+- Display-backed GUI and 21 native RDKit drawing behaviors are unverified in
+  this sandbox because Tk, Xvfb, and `libXrender.so.1` are unavailable.
+- Normal Turbopack `npm run build` cannot reach Google Fonts here. Offline
+  webpack compilation passed; real font retrieval was not verified.
+- G-3 torchlens/alibi/Quantus fold-ins remain deferred and documented.
+- G-11 web lint (12 errors + 1 warning) and G-12 dependency audit (12 moderate
+  + 5 high findings) remain open for targeted follow-up; no rules were disabled
+  and no broad force-upgrade was applied.
+- The normal whole-repository TypeScript check includes pre-existing scratch,
+  example, and skill errors; the application `src/` check passes.
