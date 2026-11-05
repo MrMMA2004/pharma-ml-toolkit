@@ -6723,3 +6723,12 @@ Stage Summary:
 - Deliverable: the ninth-rollback recovery (pure fast-forward, venv re-repaired, all suites green, the golden download path re-verified) plus the owner's 2-hour/100-run scheduled task with its counter-based self-sunset.
 - Lesson pinned: the rollback quartet is repo+venv+credentials+scheduler — check all four every session; and the venv repair script must be re-runnable against today's resolver (shap rides `--no-deps`, its deps installed separately) — the script's one-shot line is not idempotent, this round ran it hand-guided.
 - Baselines for the next round: unchanged (v1.2.112 · 5137 tests (4372 + 765 doctests) · 878 files / 331,626 lines · three homes + repo download/ · 19,155,891 bytes sha-256 b2bec19c… · dev server healthy · cron pair 507038 (2-hour 100x) + webDevReview 507040).
+
+Round 194 addendum: torch 2.14.1+cpu landed via a foreground retry
+(the background setsid attempt died silently — the second background
+pip loss this round; lesson: heavy wheels install foreground). The
+torch-dependent chunk re-verified fresh: generative + gnn 123/123
+green, bringing the post-ninth-rollback fresh verification to
+365/365 across seven suites (csv_standardize, xai_registry, explain,
+geometric, interpret, generative, gnn). The venv now matches the
+requirements.txt verified snapshot in full.
