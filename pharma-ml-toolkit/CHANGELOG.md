@@ -1,3 +1,62 @@
+## [1.2.112] — 2026-11-06
+
+### Added — round 193: the arena branch's orphaned round-189 fold-ins recovered, the (100x-174) report contract restored, and the eighth rollback survived by the push
+
+The owner's directive — *"Continue the MASTER_PROMPT. Update the GitHub
+repository more frequently"* — landed in the same hour as the **eighth
+sandbox rollback**, which proved the directive's worth: the fast-forward
+push minutes before the rollback was the only reason rounds 186-192
+survived at all (the remote held `08390e3` while the local HEAD snapped
+back to `2eb0ede`; the practiced drill — token re-extracted from
+`upload/Command.txt`, remote re-added, pure fast-forward, upload/
+restored byte-identical, venv re-pinned on numpy 1.26.4 · rdkit
+2026.09.1 · the 1.2.111 editable — recovered everything with zero
+local loss). From this round on, **every unit of work is committed and
+pushed as it lands**, not batched at a round's end.
+
+* **`ml/xai.py` — the arena branch's deferred trio, re-merged** (the
+  round-189 "XAI registry fold-ins" commit that only the arena backup
+  branch carried; its `main` twin was lost to the seventh rollback's
+  bulk restore, byte-for-byte from `origin/arena`):
+  * **johnmarktaylor91/torchlens** — `model_activation_trace`: input,
+    linear, activation and output nodes with parent links, input/output
+    widths, parameter counts, retained activation bytes, min/mean/max
+    and dead-unit share over the toolkit's numpy LayerStack (no
+    framework-operation interception pretence).
+  * **SeldonIO/alibi** — `tabular_anchor`: quantile-bin conditions
+    beam-searched for maximum coverage at the requested empirical
+    precision, with the readable rule, covered counts, candidate count
+    and an honest `success=False` (direct reference evaluation — no
+    PAC/KL-LUCB claim).
+  * **Quantus** — `attribution_complexity` (entropy, normalized
+    entropy, effective support, Gini, nonzero share),
+    `faithfulness_estimate` (grouped attribution mass vs actual
+    prediction drops) and `max_sensitivity` (seeded noisy-row
+    re-evaluation); `evaluate_attribution_metrics` bundles the trio.
+* **The Attribution & attention card grows the fold-in row** — Model
+  graph, Anchor rule (with the anchor τ spin) and Quantus metrics (with
+  the noise-n spin), all sharing the last-trained-run / held-out-row
+  selectors through the new `_dl_xai_current_row` helper; the shared
+  results table switches schemas safely via `_dl_xai_set_columns`
+  (graph nodes, anchor conditions, metric rows, attributions), and
+  **Explain now re-asserts its five columns** before inserting (the
+  latent schema-drift bug the arena tests pin: a metrics run followed
+  by an Explain used to leave mismatched headings).
+* **The (100x-174) report contract restored** — the round-192-era
+  `reference_census` flag had quietly contradicted the round-174
+  contract (its own comment confessed "a fresh app reports 'nothing
+  yet'" while six tests demanded the Attribution census page in every
+  picklist and report); the flag is gone, the 41-method census table
+  walks again, and the two red picklist tests are green.
+* **Tests** — 13 new: `tests/test_xai_registry.py` (11, the numerical
+  behavior of the trio) and `TestDeferredXaiHandlersHeadless` (2, the
+  handlers driven on stub widgets in display-less environments, pinning
+  the column restoration and the one-lookup output-index discipline).
+* **Hygiene** — `GITHUB_LINKS_REGISTRY.md` (the registry's markdown
+  twin, the one-by-one absorption evidence) folds in from the arena
+  branch; `.env` is untracked in favour of the committed
+  `.env.example` template (the local file survives on disk).
+
 ## [1.2.111] — 2026-11-06
 
 ### Added — round 192: the CSV → canonical SMILES standardization lab (five chains + the protonation enumerator, absorbed from the owner's seven links)

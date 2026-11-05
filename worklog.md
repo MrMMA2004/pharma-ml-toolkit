@@ -6581,3 +6581,67 @@ tab under Xvfb and the card was exercised end-to-end (the sodium
 salt collapses, the InChI agrees 6/6, the protonation enumerates).
 Shipped as v1.2.111 with the CHANGELOG entry, the rebuilt docs
 INDEX (739 symbols), and the GitHub backup pushed as usual.
+
+## Round 193 — the eighth rollback, the arena re-merge, and the push cadence (2026-11-06)
+
+The owner's directive, verbatim: *"Continue the MASTER_PROMPT. Update
+the GitHub repository more frequently"* — and the hour proved the
+point. The session opened on the round-192 aftermath: three commits
+stranded locally (the seventh rollback had also eaten the credential
+helper, so fetch had silently failed and the worklog's "pushed as
+usual" was premature). The helper was re-wired to the token file, the
+fetch told the truth (origin three behind), and the push went out —
+minutes before the **EIGHTH rollback** hit mid-chore: HEAD snapped back
+to 2eb0ede, the venv lost rdkit and the pharmaml editable, the token,
+the remote and the global config all wiped, /tmp included. The remote
+was the only thing standing — `08390e3` on GitHub held every round
+since November 3. The practiced drill ran again: token re-extracted
+from upload/Command.txt, remote re-added, upload/ moved aside for the
+pure fast-forward (every file verified byte-identical against the
+backup before the backup was discarded), venv re-pinned (numpy 1.26.4,
+rdkit 2026.09.1, the 1.2.111 editable). Zero local loss. **From this
+round on the push cadence is: every landed unit is committed and
+pushed before the next unit starts.** The round's work itself went out
+as 77b871a within the hour — the rollback never had a chance at it.
+
+The work the rollback interrupted: the arena branch's orphaned round-189
+fold-ins. `origin/arena/c44913ab-pharma-ml-toolkit` (the backup branch
+pushed during the seventh rollback) carried the deferred torchlens ·
+alibi · Quantus trio that the bulk restore had missed — `ml/xai.py`'s
+`model_activation_trace` (torchlens-style operation graph over the
+numpy LayerStack: parents, widths, parameters, retained bytes, dead
+units), `tabular_anchor` (alibi's quantile-bin beam search, empirical
+precision with an honest success=False) and the Quantus trio
+(`attribution_complexity`, `faithfulness_estimate`,
+`max_sensitivity`, bundled by `evaluate_attribution_metrics`). The
+diff was verified purely additive against main's blob (zero
+main-unique deletions), so the checkout is byte-for-byte from the
+arena ref. Its 11 registry tests came with it; the two headless
+handler tests (`TestDeferredXaiHandlersHeadless` — stub widgets, no
+display) ported alongside; the Attribution & attention card grew the
+fold-in row (Model graph · Anchor rule with the anchor τ spin ·
+Quantus metrics with the noise-n spin) over the new
+`_dl_xai_current_row` shared context helper, and the shared results
+table learned `_dl_xai_set_columns` — which exposed and fixed the
+latent Explain schema-drift bug: a metrics run followed by an Explain
+used to leave the five attribution columns mismatched; every Explain
+now re-asserts them.
+
+The round's second find: the (100x-174) report contract had been
+broken in the bulk restore — a `reference_census` flag (the
+round-185-era drift) made the table walk skip the 41-method
+Attribution census while six tests demanded it in every picklist and
+report. Two picklist tests were red in the full suite (the first
+full-suite run since the restore). The flag is gone (the concurrent
+15-minute webDevReview session had landed the walk-filter half from
+its own diagnosis minutes before; this round completed the fix and
+removed the dead assignment), and the two tests are green. 86 tests
+re-verified green post-recovery (15 fold-in + picklist, 57 csv
+standardize, 14 docs/chem guards).
+
+Shipped as v1.2.112 with the CHANGELOG entry, the README's fold-in
+usage section ported from the arena twin, the docs INDEX re-derived
+(739 symbols — the module-level trio rides xai.py's own surface, not
+the package re-exports), `GITHUB_LINKS_REGISTRY.md` folded in from
+the arena branch, and `.env` untracked in favour of the committed
+`.env.example` template (the local file survives on disk).
