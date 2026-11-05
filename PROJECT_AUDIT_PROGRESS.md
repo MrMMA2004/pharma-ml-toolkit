@@ -10,7 +10,45 @@ BLOCKED · VERIFICATION REQUIRED
 
 ---
 
-## Current session: 2026-11-04/05 — CLOSED OUT (see Phase status below)
+## Current session: 2026-11-05 — RECOVERY from the 6th rollback (see Recovery record below); all ten phases remain COMPLETED as closed out 2026-11-04/05
+
+## Recovery record — 2026-11-05 (6th rollback, restored from GitHub)
+
+A 6th rollback hit after the close-out: local HEAD was reset `2f7c5d9` →
+`2eb0ede`, `/home/z/.venv` reverted to numpy 2.1.3 (torch/rdkit/shap/meeko/
+gemmi/selfies/ruff missing), `~/.github_token` + `~/.git_askpass_gh.sh`
+destroyed, and the cron scheduler emptied (guard job 495807 gone).
+
+**Recovery executed and verified this session (evidence):**
+
+1. Token re-extracted from the re-uploaded `upload/Command.txt` →
+   `~/.github_token` (93 bytes, chmod 600, outside the repo). API auth
+   re-verified: login `MrMMA2004`, HTTP 200, 5000 req/hr.
+2. Remote set as `origin` (clean URL); fetch via GIT_ASKPASS — token never
+   in config/URLs/ps.
+3. `git merge --ff-only origin/main`: pure fast-forward `2eb0ede` →
+   `2f7c5d9` (merge-base = old HEAD, zero divergence, no local loss).
+   Working tree byte-identical to the shipped v1.2.107 (engines restored:
+   hpo 666L / pruning 433L / quantization 441L / harness 498L;
+   playground.py 31,105L; clean status, token files still gitignored).
+4. venv re-pinned to the contract: numpy 1.26.4 · torch 2.14.1+cpu ·
+   rdkit 2026.9.1 · shap 0.54.1 (`--no-deps`, resolver-vs-runtime note in
+   requirements.txt) + slicer · meeko 0.8.0 · gemmi 0.7.5 · selfies 2.1.1
+   · ruff 0.17.1 · mypy 2.4.0 · pytest 9.0.2 · pharmaml 1.2.107 editable.
+   All imports verified in one interpreter pass.
+5. Tests re-run green (exit 0): engines+graph+features **385 passed
+   +1 skip**; explain/interpret/geometric **250 passed**; round-189 GUI
+   cards **14 passed +1 skip**. Full-suite 4,496 accounting stands from
+   the close-out (identical tree SHA); no re-ship needed.
+6. Web verified: dev server HTTP 200, hero pins render 802 files /
+   277,550 lines / 4,483 tests under the v1.2.107 badge; agent-browser
+   confirmed navigation and the Code Explorer tab.
+7. Cron scheduler re-populated: webDevReview (15 min) + the guard
+   minimal-action protocol (30 min) recreated.
+
+**Conclusion:** the GitHub backup fulfilled its purpose — one catastrophic
+local loss, fully recovered from origin with SHA-verified parity. The
+phase table below is unchanged (all ten phases COMPLETED at the close-out).
 
 ## Phase status
 

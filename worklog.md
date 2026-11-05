@@ -6469,3 +6469,25 @@ twin's ML tab trains live through the python bridge.
 shipped source, four engines, six cards, two shipped bugs found and fixed,
 one version-consistency catch at the gate — and the whole history off-site
 on GitHub as it happened.
+
+## Round 190 — the sixth rollback recovery (2026-11-05)
+
+The environment rolled back again after the audit close-out: local HEAD
+reset from `2f7c5d9` to `2eb0ede`, the venv reverted to numpy 2.1.3 with
+torch/rdkit/shap/meeko/gemmi/selfies gone, `~/.github_token` destroyed,
+and the cron scheduler emptied. Nothing was lost this time — the GitHub
+backup held everything. Recovery: remote fetched over the askpass helper,
+local `main` fast-forwarded back to `2f7c5d9` (merge-base = the rolled-back
+HEAD, a pure fast-forward, working tree byte-identical to the shipped
+v1.2.107), the token file rebuilt from the re-uploaded prompt (chmod 600,
+outside the tree), and the venv re-pinned (numpy 1.26.4, torch 2.14.1+cpu,
+rdkit 2026.9.1, shap 0.54.1 via --no-deps per the requirements note,
+meeko/gemmi/selfies/ruff/mypy, pharmaml 1.2.107 editable). Verification:
+the four rebuilt engines + graph + features suites 385 green (exit 0),
+explain/interpret/geometric 250 green, the round-189 GUI cards 14 green,
+the web pins render 802 files / 277,550 lines / 4,483 tests under the
+v1.2.107 badge, dev server HTTP 200, and agent-browser confirmed the
+explorer and hero. The full-suite accounting stands from the close-out
+(the tree is the same SHA); this session's chunks re-proved the stack.
+The backup discipline is no longer theoretical: one catastrophic local
+loss already fully recovered from origin.

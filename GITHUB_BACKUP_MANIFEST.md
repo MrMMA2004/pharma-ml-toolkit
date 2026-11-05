@@ -70,6 +70,24 @@ No credentials or sensitive values appear in this file (by design, §12.8).
 9. Project reconstructability: requirements.txt + pyproject.toml + docs
    pushed; venv rebuild scripted in `scratch/venv_repair.sh`.
 
+## Restore-from-backup verification (2026-11-05 — the 6th rollback)
+
+The backup system was exercised for real: a catastrophic local rollback
+(HEAD reset to a day-old commit, venv reverted, credentials and cron wiped)
+was fully recovered from this remote.
+
+| Field | Value |
+|---|---|
+| Local HEAD before recovery | `2eb0ede` (round-187 state — engines lost again locally) |
+| Recovery method | `git fetch origin main` (GIT_ASKPASS) → `git merge --ff-only` |
+| Restored HEAD | `2f7c5d9` == remote HEAD (VERIFIED, pure fast-forward, zero divergence) |
+| Tree | byte-identical to shipped v1.2.107 (engines + cards + docs all back) |
+| Post-restore tests | 385 + 250 + 14 green chunks (exit 0); full-suite accounting stands |
+| Post-restore push | this recovery-record commit (incremental discipline, §12.5) |
+
+**Conclusion:** off-site history + milestone pushes = full reconstructability,
+proven under actual loss, not just test-clone drills.
+
 ## Outstanding backup issues
 
 - None. The incremental-push discipline held at every milestone (P1
