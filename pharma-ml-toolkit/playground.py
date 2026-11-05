@@ -601,6 +601,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
 import csv
 import inspect
 import json
@@ -613,8 +614,9 @@ import tempfile
 import threading
 import time
 import traceback
-from collections.abc import Callable, Iterable, Iterator
-from functools import partial
+from collections import OrderedDict
+from collections.abc import Callable, Iterable, Iterator, MutableMapping
+from functools import partial, update_wrapper
 from pathlib import Path
 from typing import Any
 from weakref import WeakKeyDictionary
@@ -1602,6 +1604,60 @@ def docking_engine_binaries(engine: str) -> tuple[str, ...]:
     return ("vina",)
 
 
+#: (100x-171) the engine binaries the docking runners drive, in the
+#: canonical display order of the engines-picker label.
+_DOCK_ENGINE_NAMES = ("vina", "autogrid4", "autodock4")
+
+#: (100x-171) the toolkit's bundled engine folder: the Windows builds
+#: (vina.exe / autogrid4.exe / autodock4.exe) shipped inside the zip,
+#: next to playground.py -- found automatically, no PATH setup needed.
+_ENGINES_FOLDER = Path(__file__).resolve().parent / "engines"
+
+
+def dock_engine_binary(name: str, engines_dir: Path | None = None) -> Path | None:
+    """Resolve one docking engine binary for the pre-flight check.
+
+    The GUI-side mirror of pharmaml's ``locate_engine_binary`` (kept
+    local so the friendly gate works even while pharmaml itself is
+    importable or not): the picked engines folder first, then the
+    toolkit's bundled ``engines/`` folder, then PATH -- checking both
+    the bare ``name`` and the ``name.exe`` spelling everywhere, so the
+    Windows builds dropped beside the app are found on any host.
+    """
+    for folder in (engines_dir, _ENGINES_FOLDER):
+        if folder is not None:
+            for candidate in (folder / name, folder / f"{name}.exe"):
+                if candidate.is_file():
+                    return candidate
+    for spelling in (name, f"{name}.exe"):
+        located = shutil.which(spelling)
+        if located is not None:
+            return Path(located)
+    return None
+
+
+def dock_missing_engines(
+    binaries: tuple[str, ...], engines_dir: Path | None = None
+) -> list[str]:
+    """The binaries of ``docking_engine_binaries`` that resolve nowhere."""
+    return [name for name in binaries if dock_engine_binary(name, engines_dir) is None]
+
+
+def dock_engine_dir(engines_dir: Path | None = None) -> Path | None:
+    """The engine folder the run functions should search first (None = PATH).
+
+    The picked folder wins; without one, the toolkit's bundled
+    ``engines/`` folder is used whenever it actually carries an engine
+    ``.exe`` -- so a run works out of the box from the shipped zip on
+    Windows, while pharmaml still falls back to PATH per binary.
+    """
+    if engines_dir is not None:
+        return engines_dir
+    if any((_ENGINES_FOLDER / f"{name}.exe").is_file() for name in _DOCK_ENGINE_NAMES):
+        return _ENGINES_FOLDER
+    return None
+
+
 def parse_smiles_lines(text: str) -> list[str]:
     """Extract non-empty SMILES lines from a corpus text widget.
 
@@ -2263,6 +2319,1103 @@ def resolve_deep_estimator(
     return "NumpyMLP" + name.removeprefix("DeepMLP").removeprefix("ResidualMLP"), "numpy"
 
 
+# --------------------------------------------------------------------- #
+# Deep-viz helpers (100x-172) -- the netron / torchview / pytorchviz /
+# torchlens absorption round, distilled into pure module-level
+# functions.  The torch paths import torch lazily so the self-test can
+# exercise the counts and the numpy branch without it; the layer
+# table, the totals line, the module tree, the autograd .dot source
+# and the netron launcher are all plain values in, plain values out.
+# --------------------------------------------------------------------- #
+
+#: One layer-table row: ``(name, kind, output shape, params, trainable)``.
+#: The torchlens summary-table shape -- the "Train" column reads as a
+#: real bool so the Treeview can render "yes"/"no" honestly.
+LayerRow = tuple[str, str, str, int, bool]
+
+
+def format_param_count(count: int) -> str:
+    """Humanise a parameter count the torchlens way (``2.5 M``).
+
+    ``0`` and small counts render plain (with thousands separators),
+    ``25 000`` becomes ``25.0 K`` above the 10 K line, millions and
+    billions get their single-letter suffixes -- the exact register
+    torchlens' ``log.summary()`` prints under its layer table.
+    """
+    value = int(count)
+    if value >= 1_000_000_000:
+        return f"{value / 1_000_000_000:.1f} B"
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.1f} M"
+    if value >= 10_000:
+        return f"{value / 1_000:.1f} K"
+    return f"{value:,}"
+
+
+def size_to_shape_str(shape: Iterable[int]) -> str:
+    """``(1, 8)`` -- pytorchviz's ``size_to_str`` tensor-shape label."""
+    return "(" + ", ".join(str(int(dim)) for dim in shape) + ")"
+
+
+def architecture_summary_line(totals: dict[str, int]) -> str:
+    """The totals line under the layer table, torchlens' register.
+
+    ``Params 61.1 M (61.1 M trainable) · ops 22 · MACs 718.9 M · ≈1.4
+    G FLOPs`` -- FLOPs as ``2 x MACs`` is the dense-layer convention
+    (one multiply + one add per MAC); the ≈ keeps it honest for the
+    handful of elementwise ops that ride along uncounted.
+    """
+    flops = 2 * int(totals["macs"])
+    return (
+        f"Params {format_param_count(totals['params'])}"
+        f" ({format_param_count(totals['trainable'])} trainable)"
+        f" · ops {int(totals['ops'])}"
+        f" · MACs {format_param_count(totals['macs'])}"
+        f" · ≈{format_param_count(flops)} FLOPs"
+    )
+
+
+def summarize_torch_module(
+    module: Any, n_in: int, batch: int = 1
+) -> tuple[list[LayerRow], dict[str, int]]:
+    """Walk a live torch module with forward hooks (torchlens-style).
+
+    One dummy batch of zeros flows through ``module`` in eval mode
+    under ``no_grad``; every named submodule records its output shape,
+    its OWN parameter count (``recurse=False`` -- parents don't
+    double-count their children, so the table's params column sums to
+    the totals line) and its requires-grad verdict.  The MACs total
+    sums ``in x out`` over Linear layers only -- the honest count for
+    the MLP family this tab trains.  Returns the rows bookended by an
+    ``input`` and an ``output`` row, plus the totals dict.
+    """
+    import torch
+
+    seen: dict[str, tuple[str, int, bool]] = {}
+    handles: list[Any] = []
+    for name, mod in module.named_modules():
+        if not name:
+            continue
+
+        def _record(
+            _mod: Any, _inputs: Any, output: Any, _name: str = name, _own_mod: Any = mod
+        ) -> None:
+            shape = (
+                size_to_shape_str(tuple(output.shape))
+                if hasattr(output, "shape")
+                else "-"
+            )
+            own = list(_own_mod.parameters(recurse=False))
+            seen[_name] = (
+                shape,
+                sum(int(p.numel()) for p in own),
+                bool(own) and all(bool(p.requires_grad) for p in own),
+            )
+
+        handles.append(mod.register_forward_hook(_record))
+    was_training = module.training
+    module.eval()
+    try:
+        with torch.no_grad():
+            out = module(torch.zeros(int(batch), int(n_in)))
+    finally:
+        for handle in handles:
+            handle.remove()
+        module.train(was_training)
+    rows: list[LayerRow] = [
+        ("input", "-", size_to_shape_str((int(batch), int(n_in))), 0, False)
+    ]
+    params_total = 0
+    trainable_total = 0
+    macs = 0
+    ops = 0
+    for name, mod in module.named_modules():
+        if not name:
+            continue
+        shape, params, trainable = seen.get(name, ("-", 0, False))
+        rows.append((name, type(mod).__name__, shape, params, trainable))
+        params_total += params
+        if trainable:
+            trainable_total += params
+        ops += 1
+        in_features = getattr(mod, "in_features", None)
+        out_features = getattr(mod, "out_features", None)
+        if in_features is not None and out_features is not None:
+            macs += int(in_features) * int(out_features)
+    out_shape = size_to_shape_str(tuple(out.shape)) if hasattr(out, "shape") else "-"
+    rows.append(("output", "-", out_shape, 0, False))
+    return rows, {"params": params_total, "trainable": trainable_total, "ops": ops, "macs": macs}
+
+
+def summarize_numpy_network(
+    network: Any,
+) -> tuple[list[LayerRow], dict[str, int]]:
+    """The numpy engine's layer table: the autograd ``Linear`` stack.
+
+    Rows carry ``(N, width)`` shapes (batch-free -- the engine is
+    batch-agnostic), ``out x in + out`` params per Linear and the
+    activation ops between hidden layers, so the same totals line the
+    torch path prints applies unchanged.
+    """
+    import numpy as np
+
+    linears = list(getattr(network, "linears", []))
+    act_fn = getattr(network, "_act_np", None)
+    act_name = getattr(act_fn, "__name__", "activation")
+    act_name = act_name.removeprefix("_").removesuffix("_np") or "activation"
+    rows: list[LayerRow] = []
+    params_total = 0
+    macs = 0
+    first_in: int | None = None
+    last_out = 0
+    for index, linear in enumerate(linears, start=1):
+        weight = np.asarray(linear.weight.data, dtype=float)
+        out_features, in_features = int(weight.shape[0]), int(weight.shape[1])
+        if first_in is None:
+            first_in = in_features
+        last_out = out_features
+        bias = linear.bias is not None
+        params = out_features * in_features + (out_features if bias else 0)
+        rows.append((f"linear_{index}", "Linear", f"(N, {out_features})", params, True))
+        params_total += params
+        macs += out_features * in_features
+        if index < len(linears):
+            rows.append((f"act_{index}", act_name, "-", 0, False))
+    if first_in is None:
+        return [], {"params": 0, "trainable": 0, "ops": 0, "macs": 0}
+    rows.insert(0, ("input", "-", f"(N, {first_in})", 0, False))
+    rows.append(("output", "-", f"(N, {last_out})", 0, False))
+    ops = max(0, len(rows) - 2)
+    return rows, {"params": params_total, "trainable": params_total, "ops": ops, "macs": macs}
+
+
+def layer_table_rows(network: Any) -> tuple[list[LayerRow], dict[str, int]]:
+    """Dispatch a FITTED deep estimator onto its layer table.
+
+    The torch estimators carry ``_net_spec_`` (the frozen fitted
+    architecture snapshot) and rebuild their live module through
+    ``_ensure_network()``; the numpy estimators keep their
+    ``_MLPNetwork`` on ``_network``.  Anything else raises the
+    actionable TypeError -- never a silent empty table.
+    """
+    spec = getattr(network, "_net_spec_", None)
+    if spec is not None:
+        return summarize_torch_module(network._ensure_network(), int(spec["n_in"]))
+    live = getattr(network, "_network", None)
+    if live is not None and hasattr(live, "linears"):
+        return summarize_numpy_network(live)
+    raise TypeError(
+        f"{type(network).__name__} is not a deep estimator -- expected a "
+        "fitted DeepMLP*/ResidualMLP* (torch engine) or NumpyMLP* "
+        "(numpy engine) network"
+    )
+
+
+def module_tree_lines(module: Any, depth: int = 1) -> list[str]:
+    """torchview-style module tree text with depth control.
+
+    The root module sits at depth 0 (torchview's convention), its
+    direct children at depth 1 -- ``depth=1`` shows exactly those,
+    ``depth=2`` adds the grandchildren, and so on.  Every line names
+    the submodule's dotted path, its class and its OWN parameter
+    count, so the tree doubles as a parameter census.
+    """
+    lines = [f"{type(module).__name__} (root)"]
+
+    def walk(prefix: str, mod: Any, level: int) -> None:
+        for child_name, child in mod.named_children():
+            label = f"{prefix}.{child_name}" if prefix else child_name
+            own = sum(int(p.numel()) for p in child.parameters(recurse=False))
+            lines.append(
+                f"{'  ' * level}- {label} ({type(child).__name__}, "
+                f"{format_param_count(own)} params)"
+            )
+            if level < depth:
+                walk(label, child, level + 1)
+
+    walk("", module, 1)
+    return lines
+
+
+def architecture_tree_lines(network: Any, depth: int = 1) -> list[str]:
+    """The module tree for either engine (the tree button's payload).
+
+    The torch path is ``module_tree_lines`` over the live module; the
+    numpy stack is flat by construction, so its tree is the Linear
+    width chain (``3 → 4``) with the activations named between them --
+    depth is honoured by the torch path only.
+    """
+    import numpy as np
+
+    spec = getattr(network, "_net_spec_", None)
+    if spec is not None:
+        return module_tree_lines(network._ensure_network(), depth)
+    live = getattr(network, "_network", None)
+    if live is not None and hasattr(live, "linears"):
+        act_fn = getattr(live, "_act_np", None)
+        act_name = getattr(act_fn, "__name__", "activation")
+        act_name = act_name.removeprefix("_").removesuffix("_np") or "activation"
+        lines = [f"{type(network).__name__} (numpy autograd engine)"]
+        for index, linear in enumerate(live.linears, start=1):
+            weight = np.asarray(linear.weight.data, dtype=float)
+            out_features, in_features = int(weight.shape[0]), int(weight.shape[1])
+            lines.append(
+                f"  - linear_{index} Linear {in_features} → {out_features} "
+                f"({format_param_count(out_features * in_features + out_features)} params)"
+            )
+            if index < len(live.linears):
+                lines.append(f"  - {act_name}")
+        return lines
+    raise TypeError(
+        f"{type(network).__name__} is not a deep estimator -- expected a "
+        "fitted DeepMLP*/ResidualMLP* (torch engine) or NumpyMLP* "
+        "(numpy engine) network"
+    )
+
+
+def autograd_dot_source(
+    output: Any, params: dict[str, Any] | None = None, show_saved: bool = False
+) -> str:
+    """Graphviz dot SOURCE for a tensor's autograd graph (pytorchviz).
+
+    ``make_dot``'s graph as plain text -- no ``graphviz`` package
+    needed to *produce* it, any dot renderer can consume it.  Nodes:
+    gray backward functions (``AddmmBackward0``), light-blue leaves
+    whose ``AccumulateGrad.variable`` lands in ``params`` (labeled
+    ``weight\\n (8, 4)``), orange saved tensors when ``show_saved``;
+    edges follow ``next_functions`` back to the leaves.  The node
+    defaults and the ``resize_graph`` sizing are pytorchviz's own.
+    """
+    param_map = {id(value): name for name, value in (params or {}).items()}
+    node_lines: list[str] = []
+    edge_lines: list[str] = []
+    seen: set[int] = set()
+
+    def var_label(var: Any, name: str | None = None) -> str:
+        if not name:
+            name = param_map.get(id(var), "")
+        return f"{name}\\n {size_to_shape_str(tuple(var.shape))}"
+
+    def emit_node(key: int, label: str, fillcolor: str | None = None) -> None:
+        attrs = f'label="{label}"'
+        if fillcolor:
+            attrs += f" fillcolor={fillcolor}"
+        node_lines.append(f"\t{key} [{attrs}]")
+
+    def emit_edge(source: int, target: int, extra: str = "") -> None:
+        arrow = f"\t{source} -> {target}"
+        if extra:
+            arrow += f" [{extra}]"
+        edge_lines.append(arrow)
+
+    def add_nodes(fn: Any) -> None:
+        if id(fn) in seen:
+            return
+        seen.add(id(fn))
+        if show_saved:
+            for attr in dir(fn):
+                if not attr.startswith("_saved_"):
+                    continue
+                value = getattr(fn, attr)
+                seen.add(id(value))
+                short = attr.removeprefix("_saved_")
+                import torch
+
+                if torch.is_tensor(value):
+                    emit_edge(id(fn), id(value), "dir=none")
+                    emit_node(id(value), var_label(value, short), "orange")
+                elif isinstance(value, tuple):
+                    for position, item in enumerate(value):
+                        if torch.is_tensor(item):
+                            emit_edge(id(fn), id(item), "dir=none")
+                            emit_node(
+                                id(item), var_label(item, f"{short}[{position}]"), "orange"
+                            )
+        if hasattr(fn, "variable"):
+            var = fn.variable
+            seen.add(id(var))
+            emit_node(id(var), var_label(var), "lightblue")
+            emit_edge(id(var), id(fn))
+        emit_node(id(fn), str(type(fn).__name__))
+        if hasattr(fn, "next_functions"):
+            for nxt in fn.next_functions:
+                if nxt[0] is not None:
+                    emit_edge(id(nxt[0]), id(fn))
+                    add_nodes(nxt[0])
+        if hasattr(fn, "saved_tensors"):
+            for tensor in fn.saved_tensors:
+                seen.add(id(tensor))
+                emit_edge(id(tensor), id(fn), "dir=none")
+                emit_node(id(tensor), var_label(tensor), "orange")
+
+    def add_base_tensor(var: Any, color: str = "darkolivegreen1") -> None:
+        if id(var) in seen:
+            return
+        seen.add(id(var))
+        emit_node(id(var), var_label(var), color)
+        if var.grad_fn is not None:
+            add_nodes(var.grad_fn)
+            emit_edge(id(var.grad_fn), id(var))
+        if var._is_view():
+            add_base_tensor(var._base, "darkolivegreen3")
+            emit_edge(id(var._base), id(var), "style=dotted")
+
+    outputs = output if isinstance(output, tuple) else (output,)
+    for value in outputs:
+        add_base_tensor(value)
+    # pytorchviz's resize_graph: size the canvas to the content
+    rows = len(node_lines) + len(edge_lines)
+    size = max(12, rows * 0.15)
+    header = [
+        "digraph {",
+        f'\tgraph [size="{size:g},{size:g}"]',
+        (
+            "\tnode [style=filled shape=box align=left fontsize=10 "
+            "ranksep=0.1 height=0.2 fontname=monospace]"
+        ),
+    ]
+    return "\n".join(header + node_lines + edge_lines + ["}"])
+
+
+def launch_netron(path: str | Path) -> str:
+    """Serve ``path`` in the netron viewer; actionable when absent.
+
+    ``netron.start`` spawns its own server thread and returns the
+    ``(host, port)`` address, so this is safe to call from the GUI
+    thread.  Without netron installed the actionable remedy rides the
+    RuntimeError -- the caller surfaces it as a warning, never a
+    traceback.
+    """
+    import importlib.util
+
+    if importlib.util.find_spec("netron") is None:
+        raise RuntimeError(
+            "netron is not installed -- pip install netron "
+            "(or open the file at https://netron.app) and retry."
+        )
+    import netron
+
+    address = netron.start(str(path))
+    host, port = address if isinstance(address, tuple) else ("localhost", address)
+    return f"http://{host}:{port}"
+
+
+# -- experiment tracking (100x-173): tensorflow/tensorboard + wandb/wandb
+# + mlflow/mlflow + aimhubio/aim distilled ------------------------- #
+#: The Experiments card's metric-key convention: wandb organises metric
+#: names with forward slashes into sections (``loss/…``, ``metrics/…``,
+#: ``fit/seconds``), so the run log, the leaderboard and the Aim-style
+#: query all speak the same slashed dialect.
+_EXPERIMENT_METRIC_BEST_VAL = "loss/best_val"
+
+
+def smooth_series(values: Iterable[float], weight: float = 0.6) -> list[float]:
+    """TensorBoard's scalar-chart smoothing, as an EMA.
+
+    The chart's smoothing slider (0.6 by default) keeps ``weight`` of the
+    previous point and blends in ``1 - weight`` of the raw one -- the
+    first point renders raw.  ``weight=0`` returns the raw series.
+    """
+    series = [float(value) for value in values]
+    if not series:
+        return []
+    smoothed = [series[0]]
+    for value in series[1:]:
+        smoothed.append(weight * smoothed[-1] + (1.0 - weight) * value)
+    return smoothed
+
+
+def histogram_summary_stats(values: Iterable[float]) -> dict[str, float]:
+    """TensorBoard's histogram summary line: count/mean/std/min/max.
+
+    ``add_histogram``'s plugin view opens with exactly these stats over
+    the logged tensor; the population std (ddof=0) matches numpy's
+    default.  An empty input renders ``{}`` -- nothing to summarise.
+    """
+    import numpy as np
+
+    data = np.asarray([float(value) for value in values], dtype=float)
+    if data.size == 0:
+        return {}
+    return {
+        "count": float(data.size),
+        "mean": float(data.mean()),
+        "std": float(data.std()),
+        "min": float(data.min()),
+        "max": float(data.max()),
+    }
+
+
+def new_run_id() -> str:
+    """MLflow's run id: 32 hex characters (``uuid4().hex``)."""
+    import uuid
+
+    return uuid.uuid4().hex
+
+
+def run_metadata() -> dict[str, str]:
+    """wandb's run metadata block: host, python, started_at (ISO 8601)."""
+    import datetime
+    import platform
+
+    return {
+        "host": platform.node() or "unknown",
+        "python": sys.version.split()[0],
+        "started_at": datetime.datetime.now().isoformat(timespec="seconds"),
+    }
+
+
+def experiment_log_path() -> Path:
+    """The JSONL event log: ``experiments.jsonl`` next to playground.py.
+
+    One line per run, MLflow's ``log_param``/``log_metric`` contracts on
+    the inside (string-ified params, float metrics) with the
+    TensorBoard scalar series riding along -- created on first use.
+    """
+    return Path(__file__).resolve().parent / "experiments.jsonl"
+
+
+def log_experiment_run(
+    path: str | Path,
+    kind: str,
+    params: dict[str, Any],
+    metrics: dict[str, Any],
+    notes: str = "",
+    status: str = "FINISHED",
+    series: Iterable[float] | None = None,
+) -> str:
+    """Append one run to the JSONL event log; returns its run id.
+
+    MLflow's fluent contract distilled: params are string-ified
+    (``log_param``), metrics coerced to floats (``log_metric``), the
+    status rides the lifecycle enum's happy terminal value (FINISHED),
+    and wandb's metadata block records where and when.  ``series`` is
+    the TensorBoard event log -- the per-epoch train-loss scalars.
+    """
+    record: dict[str, Any] = {
+        "run_id": new_run_id(),
+        "kind": str(kind),
+        "params": {str(key): str(value) for key, value in (params or {}).items()},
+        "metrics": {str(key): float(value) for key, value in (metrics or {}).items()},
+        "notes": str(notes or ""),
+        "status": str(status or "FINISHED"),
+        "metadata": run_metadata(),
+        "series": [float(value) for value in (series or [])],
+    }
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with open(target, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
+    return str(record["run_id"])
+
+
+def load_experiment_runs(path: str | Path) -> list[dict[str, Any]]:
+    """Read the JSONL event log tolerantly (wandb/aim reader semantics).
+
+    A missing file is an empty run list -- a fresh install has no runs
+    yet.  Blank lines, corrupt JSON and non-dict lines are skipped:
+    a half-written last line never takes the whole log down.
+    """
+    target = Path(path)
+    if not target.is_file():
+        return []
+    runs: list[dict[str, Any]] = []
+    for line in target.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            record = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            runs.append(record)
+    return runs
+
+
+def best_experiment_runs(
+    runs: Iterable[dict[str, Any]],
+    metric: str,
+    k: int = 3,
+    lower_is_better: bool = True,
+) -> list[tuple[str, float]]:
+    """Aim's leaderboard: the top-k runs by one metric, best first.
+
+    Runs missing the metric (or carrying a non-finite value) sit out --
+    a classifier's accuracy never competes on the loss board.  Returns
+    ``(run_id, value)`` pairs.
+    """
+    sentinel = math.inf if lower_is_better else -math.inf
+    scored: list[tuple[float, str]] = []
+    for run in runs:
+        value = run.get("metrics", {}).get(metric, sentinel)
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(number):
+            scored.append((number, str(run.get("run_id", ""))))
+    scored.sort(key=lambda pair: pair[0], reverse=not lower_is_better)
+    return [(run_id, number) for number, run_id in scored[: max(int(k), 0)]]
+
+
+def query_experiment_runs(
+    runs: Iterable[dict[str, Any]], text: str
+) -> list[dict[str, Any]]:
+    """Aim's ``query_runs``: a case-insensitive substring over the runs.
+
+    Aim's empty query returns every run; the needle is sought across the
+    kind, notes, status, params and metrics (``key=value`` pairs), so
+    ``mlp`` finds an estimator class as readily as a config value.
+    """
+    needle = str(text or "").strip().lower()
+    candidates = list(runs)
+    if not needle:
+        return candidates
+    matched: list[dict[str, Any]] = []
+    for run in candidates:
+        parts = [
+            str(run.get("kind", "")),
+            str(run.get("notes", "")),
+            str(run.get("status", "")),
+        ]
+        for key, value in run.get("params", {}).items():
+            parts.append(f"{key}={value}")
+        for key, value in run.get("metrics", {}).items():
+            parts.append(f"{key}={value}")
+        if needle in " ".join(parts).lower():
+            matched.append(run)
+    return matched
+
+
+def sweep_configs(
+    space: dict[str, list[Any]],
+    method: str = "grid",
+    count: int | None = 8,
+    seed: int = 0,
+) -> list[dict[str, Any]]:
+    """wandb's sweep configuration, rendered into concrete configs.
+
+    ``grid`` is the full cartesian product (the last parameter varies
+    fastest); ``random`` samples ``count`` configs without replacement,
+    deterministically under ``seed`` -- wandb's random-method sweep
+    without the agent round-trip.  An empty parameter list yields no
+    configs; an unknown method is refused by name.
+    """
+    import itertools
+    import random
+
+    if method not in ("grid", "random"):
+        raise ValueError(
+            f"method must be 'grid' or 'random', not {method!r} -- "
+            "wandb sweeps accept grid, random and bayes; this card "
+            "implements the first two."
+        )
+    keys = list(space)
+    value_lists = [list(space[key]) for key in keys]
+    if any(not values for values in value_lists):
+        return []
+    grid = [dict(zip(keys, combo)) for combo in itertools.product(*value_lists)]
+    if method == "grid":
+        return grid
+    wanted = len(grid) if not count else min(int(count), len(grid))
+    if wanted >= len(grid):
+        return grid
+    picks = sorted(random.Random(int(seed)).sample(range(len(grid)), wanted))
+    return [grid[index] for index in picks]
+
+
+def run_detail_lines(run: dict[str, Any]) -> list[str]:
+    """The wandb/aim run page as plain lines for the card's mono host.
+
+    Identity first (run id, kind, status, notes), then the config
+    (``param key = value``), the metrics (``metric key = value``) and
+    the metadata block; a carried TensorBoard series closes with the
+    histogram summary line and the EMA-smoothed read.
+    """
+    lines = [
+        f"run {run.get('run_id', '?')}",
+        f"kind {run.get('kind', '?')} · status {run.get('status', '?')}",
+        f"notes {run.get('notes') or '-'}",
+    ]
+    for key, value in sorted(run.get("params", {}).items()):
+        lines.append(f"param {key} = {value}")
+    for key, value in sorted(run.get("metrics", {}).items()):
+        lines.append(f"metric {key} = {format_number(float(value))}")
+    for key, value in sorted(run.get("metadata", {}).items()):
+        lines.append(f"meta {key}: {value}")
+    series = run.get("series") or []
+    if series:
+        stats = histogram_summary_stats(series)
+        smoothed = smooth_series(series)
+        lines.append(
+            f"series: n {int(stats['count'])} · mean {format_number(stats['mean'])}"
+            f" · std {format_number(stats['std'])}"
+            f" · min {format_number(stats['min'])} · max {format_number(stats['max'])}"
+        )
+        lines.append(f"smoothed (TB 0.6) last {format_number(smoothed[-1])}")
+    return lines
+
+
+# -- interpretability / XAI (100x-174): pytorch/captum + keisen/tf-keras-vis
+# + PAIR-code/saliency + jessevig/bertviz distilled ------------------ #
+#: The four XAI repos' method census -- captum's attr/layer/neuron/
+#: concept/metrics/robust exports, tf-keras-vis's CAM family and
+#: ActivationMaximization, PAIR saliency's CoreSaliency masks with
+#: their baselines, and bertviz's three attention views.  Each row
+#: carries its origin import path so the catalog stays anchored to the
+#: repo it was read from; ``needs_gradients`` marks the backprop-based
+#: ones (the card's occlusion path is the model-agnostic twin).
+ATTRIBUTION_METHODS: tuple[tuple[str, str, str, bool, str], ...] = (
+    # captum -- captum.attr._core, concept, influence, metrics, robust
+    ("Saliency (vanilla gradients)", "gradient", "captum", True, "captum.attr.Saliency"),
+    ("InputXGradient", "gradient", "captum", True, "captum.attr.InputXGradient"),
+    ("IntegratedGradients", "path", "captum", True, "captum.attr.IntegratedGradients"),
+    ("NoiseTunnel (SmoothGrad · VarGrad)", "smoothing", "captum", True, "captum.attr.NoiseTunnel"),
+    ("GradientShap", "sampling", "captum", True, "captum.attr.GradientShap"),
+    ("DeepLift / DeepLiftShap", "reference", "captum", True, "captum.attr.DeepLift"),
+    ("GuidedBackprop / Deconvolution", "backprop", "captum", True, "captum.attr.GuidedBackprop"),
+    ("LRP (layer-wise relevance)", "backprop", "captum", True, "captum.attr.LRP"),
+    ("GuidedGradCam", "cam", "captum", True, "captum.attr.GuidedGradCam"),
+    ("FeatureAblation", "ablation", "captum", False, "captum.attr.FeatureAblation"),
+    ("FeaturePermutation", "ablation", "captum", False, "captum.attr.FeaturePermutation"),
+    ("Occlusion", "ablation", "captum", False, "captum.attr.Occlusion"),
+    ("ShapleyValues / ShapleyValueSampling", "game", "captum", False, "captum.attr.ShapleyValueSampling"),
+    ("KernelShap", "game", "captum", False, "captum.attr.KernelShap"),
+    ("Lime / LimeBase", "surrogate", "captum", False, "captum.attr.Lime"),
+    ("LayerIntegratedGradients", "layer", "captum", True, "captum.attr.LayerIntegratedGradients"),
+    ("LayerGradCam", "layer", "captum", True, "captum.attr.LayerGradCam"),
+    ("LayerActivation / LayerConductance", "layer", "captum", True, "captum.attr.LayerConductance"),
+    ("NeuronIntegratedGradients / NeuronGradCam", "neuron", "captum", True, "captum.attr.NeuronIntegratedGradients"),
+    ("TCAV (concept activation vectors)", "concept", "captum", True, "captum.concept.TCAV"),
+    ("TracIn (influence functions)", "influence", "captum", False, "captum.influence.TracIn"),
+    ("Infidelity · Sensitivity", "metrics", "captum", True, "captum.metrics.infidelity"),
+    ("FGSM · PGD (robustness probes)", "robust", "captum", True, "captum.robust.FGSM"),
+    # tf-keras-vis -- the CAM family and the activation-maximization stack
+    ("Gradcam", "cam", "tf-keras-vis", True, "tf_keras_vis.gradcam.Gradcam"),
+    ("GradcamPlusPlus", "cam", "tf-keras-vis", True, "tf_keras_vis.gradcam_plus_plus.GradcamPlusPlus"),
+    ("Scorecam", "cam", "tf-keras-vis", False, "tf_keras_vis.scorecam.Scorecam"),
+    ("Layercam", "cam", "tf-keras-vis", True, "tf_keras_vis.layercam.Layercam"),
+    ("Saliency + Smoothgrad modifier", "smoothing", "tf-keras-vis", True, "tf_keras_vis.saliency.Saliency"),
+    ("ActivationMaximization", "activation", "tf-keras-vis", True, "tf_keras_vis.activation_maximization.ActivationMaximization"),
+    # PAIR-code/saliency -- the CoreSaliency masks and their baselines
+    ("GradientSaliency (vanilla)", "gradient", "saliency", True, "saliency.core.gradients.GradientSaliency"),
+    ("SmoothGrad (GetSmoothedMask)", "smoothing", "saliency", True, "saliency.core.gradients"),
+    ("IntegratedGradients (baseline path)", "path", "saliency", True, "saliency.core.integrated_gradients.IntegratedGradients"),
+    ("BlurIG (blur baseline path)", "path", "saliency", True, "saliency.core.blur_ig.BlurIG"),
+    ("GuidedIG", "path", "saliency", True, "saliency.core.guided_ig.GuidedIG"),
+    ("XRAI (region attribution)", "region", "saliency", True, "saliency.core.xrai.XRAI"),
+    ("Grad-CAM", "cam", "saliency", True, "saliency.core.grad_cam.GradCAM"),
+    ("Occlusion (sliding window)", "ablation", "saliency", False, "saliency.core.occlusion.Occlusion"),
+    ("PIC metric (localization)", "metrics", "saliency", False, "saliency.metrics.pic"),
+    # bertviz -- the three attention views
+    ("Head view (layer/head heatmap)", "attention", "bertviz", False, "bertviz.head_view"),
+    ("Model view (every head at once)", "attention", "bertviz", False, "bertviz.model_view"),
+    ("Neuron view (q · k arithmetic)", "attention", "bertviz", False, "bertviz.neuron_view"),
+)
+
+
+def integrated_gradients_attributions(
+    grad_fn: Any, x: Iterable[float], baseline: Iterable[float] | None = None, steps: int = 32
+) -> list[float]:
+    """captum's IntegratedGradients / PAIR's GetMask, numpy-only.
+
+    ``grad_fn`` maps a batch of rows to the gradient rows of ONE output
+    score w.r.t. the inputs; the straight path from ``baseline``
+    (zeros by default) to ``x`` is sampled at ``steps`` interior
+    points, the gradients averaged, and the average multiplied by
+    ``(x - baseline)`` -- the completeness axiom: a linear model
+    returns exactly ``coef * (x - baseline)``.
+    """
+    import numpy as np
+
+    row = np.asarray([float(value) for value in x], dtype=float)
+    base = (
+        np.zeros_like(row)
+        if baseline is None
+        else np.asarray([float(value) for value in baseline], dtype=float)
+    )
+    if base.shape != row.shape:
+        raise ValueError(
+            f"baseline must have the same length as x -- {base.shape[0]} "
+            f"values for {row.shape[0]} features"
+        )
+    count = max(int(steps), 1)
+    alphas = np.linspace(0.0, 1.0, count + 1)
+    points = base + alphas[:, None] * (row - base)
+    grads = np.asarray(grad_fn(points), dtype=float)
+    average = grads.mean(axis=0)
+    return [float(value) for value in (average * (row - base))]
+
+
+def smoothgrad_attributions(
+    grad_fn: Any,
+    x: Iterable[float],
+    n_samples: int = 25,
+    noise_sigma: float = 0.15,
+    seed: int = 0,
+) -> list[float]:
+    """PAIR saliency's GetSmoothedMask / captum's NoiseTunnel(SmoothGrad).
+
+    ``n_samples`` noisy copies of ``x`` -- Gaussian noise scaled by
+    ``noise_sigma`` times the row's value spread (PAIR's convention) --
+    each passed through ``grad_fn``; the mean gradient is the mask.
+    ``noise_sigma=0`` degenerates to the plain vanilla gradient, and
+    the seed makes the noise deterministic.
+    """
+    import numpy as np
+
+    row = np.asarray([float(value) for value in x], dtype=float)
+    count = max(int(n_samples), 1)
+    spread = float(row.max() - row.min())
+    sigma = abs(float(noise_sigma)) * spread if spread else abs(float(noise_sigma))
+    rng = np.random.default_rng(int(seed))
+    noisy = row + rng.normal(0.0, sigma, size=(count, row.size))
+    grads = np.asarray(grad_fn(noisy), dtype=float)
+    return [float(value) for value in grads.mean(axis=0)]
+
+
+def occlusion_attributions(
+    score_fn: Any,
+    x: Iterable[float],
+    baseline: Iterable[float] | None = None,
+    window: int = 1,
+    stride: int = 1,
+) -> list[float]:
+    """captum's Occlusion / PAIR's Occlusion, model-agnostic.
+
+    ``score_fn`` maps a batch of rows to ONE score per row; a window
+    of ``window`` features slides by ``stride``, each window restored
+    to the ``baseline`` (zeros by default), and the score drop lands
+    on every feature the window covered -- window=stride=1 is the
+    per-feature read the Attribution card renders.
+
+    >>> occlusion_attributions(
+    ...     lambda batch: 5.0 * batch[:, 0] + 1.0 * batch[:, 1], [2.0, 3.0]
+    ... )
+    [10.0, 3.0]
+    """
+    import numpy as np
+
+    row = np.asarray([float(value) for value in x], dtype=float)
+    base = (
+        np.zeros_like(row)
+        if baseline is None
+        else np.asarray([float(value) for value in baseline], dtype=float)
+    )
+    if base.shape != row.shape:
+        raise ValueError(
+            f"baseline must have the same length as x -- {base.shape[0]} "
+            f"values for {row.shape[0]} features"
+        )
+    span = max(int(window), 1)
+    step = max(int(stride), 1)
+    full = float(
+        np.asarray(score_fn(row.reshape(1, -1)), dtype=float).reshape(-1)[0]
+    )
+    drops = np.zeros_like(row)
+    start = 0
+    while start < row.size:
+        stop = min(start + span, row.size)
+        masked = row.copy()
+        masked[start:stop] = base[start:stop]
+        score = float(
+            np.asarray(score_fn(masked.reshape(1, -1)), dtype=float).reshape(-1)[0]
+        )
+        drops[start:stop] += full - score
+        start += step
+    return [float(value) for value in drops]
+
+
+def xrai_region_importances(
+    attributions: Iterable[float], segments: Iterable[int]
+) -> dict[int, float]:
+    """PAIR saliency's XRAI second stage: attributions -> region shares.
+
+    ``segments`` groups features (pixels in XRAI's image domain) into
+    regions; each region's importance is its summed |attribution| as a
+    fraction of the whole -- the shares sum to 1.0, and an all-zero
+    map spreads 0.0 honestly.
+
+    >>> xrai_region_importances([2.0, -2.0, 4.0], [0, 0, 1])
+    {0: 0.5, 1: 0.5}
+    """
+    import numpy as np
+
+    attr = np.abs(np.asarray([float(value) for value in attributions], dtype=float))
+    seg = np.asarray([int(value) for value in segments])
+    if seg.shape != attr.shape:
+        raise ValueError(
+            "segments must align with the attributions -- "
+            f"{seg.shape[0]} labels for {attr.shape[0]} values"
+        )
+    total = float(attr.sum())
+    shares: dict[int, float] = {}
+    for region in np.unique(seg):
+        mass = float(attr[seg == region].sum())
+        shares[int(region)] = mass / total if total else 0.0
+    return shares
+
+
+def attribution_table_lines(
+    names: Iterable[str], values: Iterable[float], top: int = 12
+) -> list[str]:
+    """Captum's word-importance view as plain ranked lines.
+
+    Every feature lands as ``name value bar`` sorted by |value| (the
+    biggest contributor first), the bar a run of ``█`` blocks scaled
+    to the biggest |value| -- captum's ``visualize_text`` register
+    with its opacity ramps, ASCII-honest.  ``top`` caps the list; an
+    empty input renders no lines.
+    """
+    rows = [(str(name), float(value)) for name, value in zip(names, values)]
+    rows.sort(key=lambda pair: abs(pair[1]), reverse=True)
+    peak = max((abs(value) for _name, value in rows), default=0.0)
+    lines: list[str] = []
+    for name, value in rows[: max(int(top), 0)]:
+        blocks = round(abs(value) / peak * 12) if peak else 0
+        lines.append(f"{name:<14} {value:+.4g}  {'█' * blocks}")
+    return lines
+
+
+def saliency_attributions(
+    grad_fn: Any, x: Iterable[float], abs: bool = True
+) -> list[float]:
+    """captum's ``Saliency.attribute`` / PAIR's ``GradientSaliency``.
+
+    ``grad_fn`` maps a batch of rows to the gradient rows of ONE output
+    score w.r.t. the inputs (the same contract the integrated-gradients
+    helper speaks); the row's gradient is the mask, absolute-valued by
+    default -- captum's ``abs=True``.  ``abs=False`` keeps the sign so
+    callers can tell up-drivers from down-drivers.
+
+    >>> saliency_attributions(lambda batch: [[5.0, 1.0]], [2.0, 3.0])
+    [5.0, 1.0]
+    """
+    import numpy as np
+
+    row = np.asarray([float(value) for value in x], dtype=float)
+    grads = np.asarray(grad_fn(row.reshape(1, -1)), dtype=float).reshape(-1)
+    if grads.shape != row.shape:
+        raise ValueError(
+            "grad_fn must return one gradient per feature -- "
+            f"{grads.shape[0]} gradients for {row.shape[0]} features"
+        )
+    magnitudes = np.abs(grads) if abs else grads
+    return [float(value) for value in magnitudes]
+
+
+def input_x_gradient_attributions(
+    grad_fn: Any, x: Iterable[float]
+) -> list[float]:
+    """captum's ``InputXGradient``: gradient multiplied by the input.
+
+    The product keeps the gradient's sign where the feature itself
+    pushes the same way -- a feature the score barely reads stays near
+    zero even when its gradient is large, which is the point of the
+    ×-input multiplication (Shrikumar et al. 2016, captum's own cite).
+
+    >>> input_x_gradient_attributions(lambda batch: [[5.0, 1.0]], [2.0, 3.0])
+    [10.0, 3.0]
+    """
+    import numpy as np
+
+    row = np.asarray([float(value) for value in x], dtype=float)
+    grads = np.asarray(grad_fn(row.reshape(1, -1)), dtype=float).reshape(-1)
+    if grads.shape != row.shape:
+        raise ValueError(
+            "grad_fn must return one gradient per feature -- "
+            f"{grads.shape[0]} gradients for {row.shape[0]} features"
+        )
+    return [float(value) for value in grads * row]
+
+
+def permutation_attributions(
+    score_fn: Any, X: Iterable[Iterable[float]], n_repeats: int = 5, seed: int = 0
+) -> list[float]:
+    """captum's ``FeaturePermutation``, predict()-only.
+
+    Every column's values are permuted across the rows ``n_repeats``
+    times (seeded, so reruns agree); the mask is the mean absolute
+    score change -- a column the score never reads permutes for free
+    and lands at exactly 0.0.  Model-agnostic like the occlusion read:
+    the numpy engine explains as readily as the torch one.
+
+    >>> permutation_attributions(
+    ...     lambda batch: [5.0 * row[0] for row in batch],
+    ...     [[1.0, 10.0], [2.0, 10.0], [4.0, 10.0], [8.0, 10.0]],
+    ...     n_repeats=2, seed=0
+    ... )
+    [15.0, 0.0]
+    """
+    import numpy as np
+
+    rows = np.asarray(
+        [[float(value) for value in row] for row in X], dtype=float
+    )
+    if rows.ndim != 2 or rows.shape[0] < 2:
+        raise ValueError(
+            "X must be a 2-D batch with at least two rows -- a permutation "
+            f"needs somewhere to go ({rows.shape})"
+        )
+    rng = np.random.default_rng(int(seed))
+    original = np.asarray(score_fn(rows), dtype=float).reshape(-1)
+    repeats = max(int(n_repeats), 1)
+    mask = np.zeros(rows.shape[1])
+    for column in range(rows.shape[1]):
+        deltas = np.zeros(repeats)
+        for repeat in range(repeats):
+            trial = rows.copy()
+            trial[:, column] = rows[rng.permutation(rows.shape[0]), column]
+            deltas[repeat] = np.abs(
+                np.asarray(score_fn(trial), dtype=float).reshape(-1) - original
+            ).mean()
+        mask[column] = deltas.mean()
+    return [float(value) for value in mask]
+
+
+def insertion_deletion_auc(
+    score_fn: Any,
+    x: Iterable[float],
+    mask: Iterable[float],
+    baseline: Iterable[float] | None = None,
+) -> tuple[float, float]:
+    """The deletion/insertion faithfulness curves, PAIR-PIC style.
+
+    Features enter in |mask| order: the deletion curve starts at the
+    full row and replaces features with the ``baseline`` (zeros by
+    default) one at a time; the insertion curve starts at the baseline
+    and adds them back.  Each curve normalises to its own observed
+    score span and the mean is the AUC fraction in [0, 1] -- a mask
+    that ranks a feature's true contribution faithfully inserts better
+    than it deletes, and the flipped mask swaps the verdict (the
+    sanity check PAIR's PIC evaluation formalises).
+
+    Returns ``(deletion_auc, insertion_auc)``; a flat curve (the score
+    never moves) reports 0.5 for both, honestly uninformative.
+    """
+    import numpy as np
+
+    row = np.asarray([float(value) for value in x], dtype=float)
+    base = (
+        np.zeros_like(row)
+        if baseline is None
+        else np.asarray([float(value) for value in baseline], dtype=float)
+    )
+    if base.shape != row.shape:
+        raise ValueError(
+            f"baseline must have the same length as x -- {base.shape[0]} "
+            f"values for {row.shape[0]} features"
+        )
+    weights = np.abs(np.asarray([float(value) for value in mask], dtype=float))
+    if weights.shape != row.shape:
+        raise ValueError(
+            f"mask must have the same length as x -- {weights.shape[0]} "
+            f"values for {row.shape[0]} features"
+        )
+    order = np.argsort(-weights, kind="stable")
+
+    def curve(start: Any, target: Any) -> list[float]:
+        scores = [float(np.asarray(score_fn(start.reshape(1, -1)), dtype=float).reshape(-1)[0])]
+        current = np.asarray(start, dtype=float).copy()
+        for feature in order:
+            current[feature] = target[feature]
+            scores.append(
+                float(
+                    np.asarray(score_fn(current.reshape(1, -1)), dtype=float).reshape(-1)[0]
+                )
+            )
+        return scores
+
+    def auc(scores: list[float]) -> float:
+        low, high = min(scores), max(scores)
+        if high - low <= 0.0:
+            return 0.5
+        normalised = [(value - low) / (high - low) for value in scores]
+        return float(sum(normalised) / len(normalised))
+
+    return auc(curve(row, base)), auc(curve(base, row))
+
+
+def format_attention(
+    attention: Any, layers: Iterable[int] | None = None, heads: Iterable[int] | None = None
+) -> Any:
+    """bertviz.util.format_attention: the [layers, heads, seq, seq] subset.
+
+    ``None`` keeps every layer/head; explicit lists pick the rectangle
+    the head view and the model view render -- numpy advanced
+    indexing doing what bertviz's torch indexer does.
+    """
+    import numpy as np
+
+    tensor = np.asarray(attention, dtype=float)
+    if tensor.ndim != 4:
+        raise ValueError(
+            "attention must be [layers, heads, seq, seq] -- "
+            f"got {tensor.ndim} dimensions"
+        )
+    chosen_layers = (
+        np.arange(tensor.shape[0]) if layers is None else np.asarray([int(v) for v in layers])
+    )
+    chosen_heads = (
+        np.arange(tensor.shape[1]) if heads is None else np.asarray([int(v) for v in heads])
+    )
+    return tensor[np.ix_(chosen_layers, chosen_heads)]
+
+
+def attention_head_cells(
+    attention: Any, tokens: Iterable[str]
+) -> list[tuple[str, str, float, float]]:
+    """BertViz's head view as row-major cells for a text host.
+
+    Every (row token, column token) pair carries the attention weight
+    and its share of the row's peak -- the head view's hover number
+    and its cell shading in one tuple.
+    """
+    import numpy as np
+
+    matrix = np.asarray(attention, dtype=float)
+    names = [str(token) for token in tokens]
+    if matrix.ndim != 2 or matrix.shape[0] != len(names) or matrix.shape[1] != len(names):
+        raise ValueError(
+            "attention must be square and match the tokens -- "
+            f"{matrix.shape} for {len(names)} tokens"
+        )
+    peaks = matrix.max(axis=1)
+    cells: list[tuple[str, str, float, float]] = []
+    for row, row_token in enumerate(names):
+        peak = float(peaks[row]) if float(peaks[row]) > 0 else 1.0
+        for col, col_token in enumerate(names):
+            weight = float(matrix[row, col])
+            cells.append((row_token, col_token, weight, weight / peak))
+    return cells
+
+
+def scaled_dot_product_attention(queries: Any, keys: Any) -> Any:
+    """BertViz neuron view's arithmetic: softmax(QK^T / sqrt(d_k)).
+
+    The query/key vectors a transformer head exposes, dot-producted
+    and scaled by the vector width, softmaxed per query row -- the
+    number the neuron view paints between token pairs.
+
+    >>> scaled_dot_product_attention([[1.0, 0.0]], [[1.0, 0.0]])
+    array([[1.]])
+    """
+    import numpy as np
+
+    q = np.asarray(queries, dtype=float)
+    k = np.asarray(keys, dtype=float)
+    if q.ndim != 2 or k.ndim != 2 or q.shape[1] != k.shape[1]:
+        raise ValueError(
+            "queries and keys must be [tokens, width] with one width -- "
+            f"{q.shape} vs {k.shape}"
+        )
+    scores = q @ k.T / math.sqrt(q.shape[1])
+    shifted = scores - scores.max(axis=1, keepdims=True)
+    weights = np.exp(shifted)
+    return weights / weights.sum(axis=1, keepdims=True)
+
+
 #: Deep Learning tab (round 185): the offline attribution registry,
 #: frozen here at module scope (the playground never imports
 #: ``pharmaml`` at module scope) and pinned to ``ml/xai.py``'s own
@@ -2446,6 +3599,454 @@ def _cell_text(value: Any, limit: int = 26) -> str:
         return format_number(value)
     text = str(value)
     return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+# -- GUI-platform affordances (100x-175): TomSchimansky/CustomTkinter + #
+# zauberzeug/nicegui + streamlit/streamlit + gradio-app/gradio distilled #
+#
+#: CustomTkinter's four shipped theme packs, read straight off its
+#: ``assets/themes/*.json``: every colour is CTk's two-value convention --
+#: ``[light, dark]`` -- resolved against the appearance mode (index 0/1,
+#: exactly its AppearanceModeTracker).  ``corner_radius`` / ``border_width``
+#: are CTkButton/CTkEntry's shape tiers; the ``accent_soft`` tint is the
+#: toolkit's own soft-tier translation of each pack (CTk has no soft key).
+GUI_THEME_PACKS: dict[str, dict[str, Any]] = {
+    "blue": {
+        "accent": ["#3B8ED0", "#1F6AA5"],
+        "accent_dark": ["#36719F", "#144870"],
+        "accent_soft": ["#dbe7f3", "#26333d"],
+        "corner_radius": 6,
+        "border_width": 2,
+    },
+    "green": {
+        "accent": ["#2CC985", "#2FA572"],
+        "accent_dark": ["#0C955A", "#106A43"],
+        "accent_soft": ["#d9f2e7", "#1f3a2f"],
+        "corner_radius": 6,
+        "border_width": 2,
+    },
+    "gold": {
+        "accent": ["#EFB951", "#ECA607"],
+        "accent_dark": ["#DBA220", "#B57F05"],
+        "accent_soft": ["#f8ecd2", "#3a3122"],
+        "corner_radius": 6,
+        "border_width": 2,
+    },
+    "dark-blue": {
+        "accent": ["#3A7EBF", "#1F538D"],
+        "accent_dark": ["#325882", "#14375E"],
+        "accent_soft": ["#d9e4f0", "#22303f"],
+        "corner_radius": 6,
+        "border_width": 2,
+    },
+}
+#: CTk's ``ThemeManager._built_in_themes`` order, verbatim.
+GUI_PACK_NAMES: tuple[str, ...] = tuple(GUI_THEME_PACKS)
+
+
+def resolve_gui_pack(name: str, mode: str) -> dict[str, Any]:
+    """Resolve one theme pack's ``[light, dark]`` pairs for a mode.
+
+    ``mode`` "dark" picks the second value of every pair (CTk's
+    appearance-mode index 1); anything else picks the first -- the
+    light fallback CTk's own detection takes when the OS preference
+    cannot be answered.  An unknown pack falls back to CTk's default
+    theme ("blue"); the shape tiers ride along unchanged.
+
+    >>> resolve_gui_pack("gold", "light")["accent"]
+    '#EFB951'
+    >>> resolve_gui_pack("gold", "dark")["accent"]
+    '#ECA607'
+    >>> resolve_gui_pack("gold", "not-a-mode")["accent"]
+    '#EFB951'
+    >>> resolve_gui_pack("nope", "dark")["accent"]
+    '#1F6AA5'
+    """
+    pack = GUI_THEME_PACKS.get(name, GUI_THEME_PACKS["blue"])
+    index = 1 if mode == "dark" else 0
+    resolved: dict[str, Any] = {}
+    for key, value in pack.items():
+        if isinstance(value, list):
+            resolved[key] = value[index]
+        else:
+            resolved[key] = value
+    return resolved
+
+
+def save_gui_pack(name: str, path: Any, pack: dict[str, Any] | None = None) -> Path:
+    """Write a pack's tier table as JSON -- CTk's ``save_theme`` rule.
+
+    The four built-ins are read-only exactly like CustomTkinter's own
+    ``save_theme`` (``ValueError`` for a builtin, never a silent edit of
+    a shipped theme); an unknown name without an explicit ``pack`` is a
+    ``KeyError`` -- the honest refusal, not a fabricated theme.
+    """
+    if name in GUI_THEME_PACKS:
+        raise ValueError(f"cannot modify builtin theme pack {name!r}")
+    if pack is None:
+        pack = GUI_THEME_PACKS[name]
+    target = Path(path)
+    target.write_text(json.dumps(pack, indent=2), encoding="utf-8")
+    return target
+
+
+def clamp_scaling(value: float) -> float:
+    """CTk's ``ScalingTracker`` floor: a scaling factor never goes below 0.4.
+
+    >>> clamp_scaling(0.25)
+    0.4
+    >>> clamp_scaling(1.6)
+    1.6
+    """
+    return max(float(value), 0.4)
+
+
+class TTLCache(MutableMapping[Any, Any]):
+    """streamlit's ``runtime/caching/ttl_cache.TTLCache``, verbatim contract.
+
+    An LRU cache with a uniform per-item TTL, on an injectable
+    ``timer`` (monotonic by default).  Reads AND writes refresh LRU
+    recency; membership (``in``) never reorders and never reaps.
+    Expired entries read as absent, but are only actually removed by a
+    write, by :meth:`expire`, or by ``len()``.  ``on_remove`` fires for
+    every eviction and every reaped expiry.  Not thread-safe (the
+    upstream says the same and leaves locking to callers).
+
+    >>> cache = TTLCache(maxsize=2, ttl=10.0, timer=lambda: 5.0)
+    >>> cache["a"] = 1
+    >>> cache["a"]
+    1
+    >>> sorted(cache)
+    ['a']
+    """
+
+    def __init__(
+        self,
+        maxsize: int,
+        ttl: float,
+        timer: Callable[[], float] = time.monotonic,
+        on_remove: Callable[[Any, Any], None] | None = None,
+    ) -> None:
+        self._maxsize = int(maxsize)
+        self._ttl = float(ttl)
+        self._timer = timer
+        self._on_remove = on_remove
+        #: key -> value, least-recently-used first
+        self._data: OrderedDict[Any, Any] = OrderedDict()
+        #: key -> expiry timestamp, write order (soonest-to-expire first)
+        self._expires: OrderedDict[Any, float] = OrderedDict()
+
+    # -- the MutableMapping surface ---------------------------------- #
+    def __getitem__(self, key: Any) -> Any:
+        now = self._timer()
+        expiry = self._expires.get(key)
+        if key not in self._data or expiry is None or now >= expiry:
+            raise KeyError(key)
+        self._data.move_to_end(key)  # a read refreshes recency
+        return self._data[key]
+
+    def __setitem__(self, key: Any, value: Any) -> None:
+        now = self._timer()
+        self._reap(now)  # writes reap expired entries first
+        self._data.pop(key, None)
+        self._expires.pop(key, None)
+        self._data[key] = value
+        self._expires[key] = now + self._ttl
+        while len(self._data) > self._maxsize:
+            oldest_key, oldest_value = self._data.popitem(last=False)
+            self._expires.pop(oldest_key, None)
+            if self._on_remove is not None:
+                self._on_remove(oldest_key, oldest_value)
+
+    def __delitem__(self, key: Any) -> None:
+        now = self._timer()
+        expiry = self._expires.get(key)
+        if key not in self._data or expiry is None or now >= expiry:
+            raise KeyError(key)
+        value = self._data.pop(key)
+        self._expires.pop(key, None)
+        if self._on_remove is not None:
+            self._on_remove(key, value)
+
+    def __iter__(self) -> Iterator[Any]:
+        now = self._timer()
+        yield from [k for k, e in self._expires.items() if now < e]
+
+    def __len__(self) -> int:
+        self._reap(self._timer())  # a length query reaps
+        return len(self._data)
+
+    def __contains__(self, key: Any) -> bool:
+        # membership never reorders and never reaps (streamlit's rule)
+        expiry = self._expires.get(key)
+        return expiry is not None and self._timer() < expiry
+
+    def expire(self) -> int:
+        """Reap every expired entry now; return how many went."""
+        return self._reap(self._timer())
+
+    def _reap(self, now: float) -> int:
+        went = 0
+        for key in [k for k, e in self._expires.items() if now >= e]:
+            value = self._data.pop(key, None)
+            self._expires.pop(key, None)
+            went += 1
+            if self._on_remove is not None and value is not None:
+                self._on_remove(key, value)
+        return went
+
+
+class _CachedFunc:
+    """``st.cache_data`` / ``st.cache_resource`` as one engine.
+
+    streamlit's two decorators differ in exactly one lever: cache_data
+    hands every caller its own copy of the value (the pickle
+    round-trip), cache_resource shares one singleton (a loaded model,
+    a database handle).  The key hashes the function name with its
+    arguments' repr -- gradio's ``cache_hash`` trick, stable across
+    calls; the TTL/max_entries contract is streamlit's own.
+    """
+
+    def __init__(
+        self, func: Callable[..., Any], ttl: float, max_entries: int, shares: bool
+    ) -> None:
+        self._func = func
+        self._shares = shares
+        self.cache = TTLCache(maxsize=max_entries, ttl=ttl)
+        self.hits = 0
+        self.misses = 0
+        update_wrapper(self, func)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        key = (self._func.__name__, repr(args), repr(sorted(kwargs.items())))
+        try:
+            value = self.cache[key]
+            self.hits += 1
+        except KeyError:
+            self.misses += 1
+            value = self._func(*args, **kwargs)
+            self.cache[key] = value
+            return value if self._shares else copy.deepcopy(value)
+        return value if self._shares else copy.deepcopy(value)
+
+    def clear(self) -> None:
+        """Drop every cached entry (streamlit's ``.clear()``)."""
+        self.cache.clear()
+
+
+def cache_data(
+    ttl: float = 300.0, max_entries: int = 128
+) -> Callable[[Callable[..., Any]], _CachedFunc]:
+    """The ``@st.cache_data`` decorator: TTL + LRU + a copy per caller."""
+
+    def decorate(func: Callable[..., Any]) -> _CachedFunc:
+        return _CachedFunc(func, ttl, max_entries, shares=False)
+
+    return decorate
+
+
+def cache_resource(
+    ttl: float = 300.0, max_entries: int = 16
+) -> Callable[[Callable[..., Any]], _CachedFunc]:
+    """The ``@st.cache_resource`` decorator: TTL + LRU, one shared value."""
+
+    def decorate(func: Callable[..., Any]) -> _CachedFunc:
+        return _CachedFunc(func, ttl, max_entries, shares=True)
+
+    return decorate
+
+
+def metric_delta_spec(delta: float | str | None) -> tuple[str, str]:
+    """streamlit's ``st.metric`` delta contract: the (glyph, colour) pair.
+
+    ``None`` or an empty string shows no arrow at all; a numeric zero
+    (or the string ``"0"``) shows no arrow in gray; a negative number
+    or a string that STARTS with a minus points down in red; anything
+    else points up in green.  String deltas are never parsed as
+    numbers -- ``"0%"`` is positive, ``"-0.0%"`` negative, exactly as
+    the upstream docstring promises.
+
+    >>> metric_delta_spec(-0.015)
+    ('\u2193', 'bad')
+    >>> metric_delta_spec("0%")
+    ('\u2191', 'good')
+    >>> metric_delta_spec(0)
+    ('', 'muted')
+    >>> metric_delta_spec(None)
+    ('', 'none')
+    """
+    if delta is None or delta == "":
+        return ("", "none")
+    if delta == 0 or delta == "0":
+        return ("", "muted")
+    if isinstance(delta, str):
+        return ("\u2193", "bad") if delta.startswith("-") else ("\u2191", "good")
+    return ("\u2193", "bad") if delta < 0 else ("\u2191", "good")
+
+
+def format_metric_line(label: str, value: float, delta: float | str | None) -> str:
+    """One ``st.metric`` as text: the value, then the bracketed delta.
+
+    >>> format_metric_line("best val loss", 0.412, -0.015)
+    'best val loss 0.4120 (↓ 0.0150)'
+    >>> format_metric_line("accuracy", 0.9, None)
+    'accuracy 0.9000'
+    """
+    text = f"{label} {format_number(float(value))}"
+    if delta is None or delta == "":
+        return text
+    glyph, _colour = metric_delta_spec(delta)
+    body = delta if isinstance(delta, str) else format_number(abs(float(delta)))
+    return f"{text} ({glyph} {body})" if glyph else f"{text} ({body})"
+
+
+def flag_run_csv(
+    log_dir: Any,
+    headers: list[str] | tuple[str, ...],
+    values: list[Any],
+    flag_option: str = "",
+    username: str | None = None,
+) -> tuple[Path, int]:
+    """gradio's CSVLogger flag files, honestly transcribed.
+
+    Every flagged sample lands as one CSV row -- the component columns
+    plus ``flag`` (the reason), ``username`` and ``timestamp``, the
+    ClassicCSVLogger header contract.  When the headers change (a
+    different component set), a NEW numbered file rolls instead of
+    corrupting the old one (CSVLogger >= 5.0's concurrent-safe rule):
+    ``log.csv``, then ``log-1.csv``, ``log-2.csv``, ...  Returns the
+    file written and the row count in it after the append.
+    """
+    directory = Path(log_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    wanted = [*headers, "flag", "username", "timestamp"]
+    row = [*values, flag_option, username or "", time.strftime("%Y-%m-%d %H:%M:%S")]
+    existing = sorted(directory.glob("log*.csv"), key=lambda p: p.name)
+    target: Path | None = None
+    for candidate in existing:
+        try:
+            with candidate.open("r", encoding="utf-8", newline="") as handle:
+                first = next(csv.reader(handle), None)
+        except OSError:
+            continue
+        if first == wanted:
+            target = candidate
+            break
+    if target is None:
+        stems = {path.stem for path in existing}
+        index = 0
+        while ("log" if index == 0 else f"log-{index}") in stems:
+            index += 1
+        target = directory / ("log.csv" if index == 0 else f"log-{index}.csv")
+    is_new = not target.exists() or target.stat().st_size == 0
+    with target.open("a", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        if is_new:
+            writer.writerow(wanted)
+        writer.writerow(row)
+    # the data-row count in the file after the append (header excluded)
+    with target.open("r", encoding="utf-8", newline="") as reader_handle:
+        rows = sum(1 for line in reader_handle if line.strip()) - 1
+    return target, rows
+
+
+#: nicegui's ``Notification`` positions, verbatim order from its
+#: ``NotificationPosition`` literal (its own default is "bottom").
+_TOAST_POSITIONS: tuple[str, ...] = (
+    "top-left",
+    "top-right",
+    "bottom-left",
+    "bottom-right",
+    "top",
+    "bottom",
+    "left",
+    "right",
+    "center",
+)
+
+
+def toast_geometry(
+    position: str, win_w: int, win_h: int, root_w: int, root_h: int, margin: int = 24
+) -> tuple[int, int]:
+    """nicegui's nine notify positions -> the overlay's ``+x+y``.
+
+    ``position`` is one of nicegui's ``NotificationPosition`` values;
+    anything unknown degrades to its default ("bottom").  The
+    coordinates are relative to the hosting window's box.
+
+    >>> toast_geometry("bottom-right", 320, 90, 1200, 800)
+    (856, 686)
+    >>> toast_geometry("top-left", 320, 90, 1200, 800)
+    (24, 24)
+    """
+    if position not in _TOAST_POSITIONS:
+        position = "bottom"
+    x_mid = max(0, (root_w - win_w) // 2)
+    y_mid = max(0, (root_h - win_h) // 2)
+    table: dict[str, tuple[int, int]] = {
+        "top-left": (margin, margin),
+        "top-right": (root_w - win_w - margin, margin),
+        "bottom-left": (margin, root_h - win_h - margin),
+        "bottom-right": (root_w - win_w - margin, root_h - win_h - margin),
+        "top": (x_mid, margin),
+        "bottom": (x_mid, root_h - win_h - margin),
+        "left": (margin, y_mid),
+        "right": (root_w - win_w - margin, y_mid),
+        "center": (x_mid, y_mid),
+    }
+    return table[position]
+
+
+def paginate_examples(
+    items: list[Any] | tuple[Any, ...], page: int = 0, per_page: int = 10
+) -> tuple[list[Any], int]:
+    """gradio's ``Examples`` pagination: ten per page by default.
+
+    Out-of-range pages clamp to the last one; an empty example set
+    still reports one (empty) page -- the widget shows a pager, not a
+    blank.
+
+    >>> paginate_examples(list(range(25)))
+    ([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 3)
+    >>> paginate_examples([], page=4)
+    ([], 1)
+    """
+    if per_page <= 0:
+        per_page = 10
+    total = len(items)
+    pages = max(1, math.ceil(total / per_page))
+    page = max(0, min(page, pages - 1))
+    start = page * per_page
+    return list(items[start : start + per_page]), pages
+
+
+#: gradio's four toast levels -> (colour tier, glyph).  The names are
+#: its ``gr.Info`` / ``gr.Success`` / ``gr.Warning`` / ``gr.Error``
+#: family; ``info`` is the fallback level, gradio's own default.
+_TOAST_LEVELS: dict[str, tuple[str, str]] = {
+    "info": ("accent", "\u2139"),
+    "success": ("good", "\u2713"),
+    "warning": ("warn", "\u26a0"),
+    "error": ("bad", "\u2717"),
+}
+
+
+def _toast_colour(tier: str) -> str:
+    """Resolve a toast tier onto the live palette (theme-flip aware).
+
+    Reads the module-level colour names at call time, so a toast born
+    after a theme flip (or an accent-pack override) already carries the
+    new colours.
+    """
+    if tier == "good":
+        return GOOD
+    if tier == "bad":
+        return BAD
+    if tier == "warn":
+        # CTk gold.json's pair: the dark hover in dark mode, the light
+        # accent in light -- amber reads in both
+        return "#B57F05" if _ACTIVE_THEME == "light" else "#EFB951"
+    return ACCENT
 
 
 # --------------------------------------------------------------------------- #
@@ -3135,6 +4736,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._job_started = 0.0
         self._job_label_base = ""
         self._action_buttons: list[Any] = []
+        # (100x-175) the live toast stack -- nicegui's notify() keeps its
+        # notifications as addressable elements (dismiss / update), so the
+        # engine tracks one entry dict per toast instead of losing them to
+        # the Tk window manager.
+        self._toast_stack: list[dict[str, Any]] = []
         self._last_figure: Any = None
         # (100x-127) monotonically increasing render counter -- every
         # _render_figure stamps it on the host as ``_pg_figure_seq`` so a
@@ -3252,6 +4858,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # (rescored frame, evidence columns, weights, higher overrides,
         #  source label) — the Save report… payload
         self._dock_results_source: str | None = None  # campaign / dlg / vina / smiles
+        # -- (100x-171) engine-binaries folder (picked or bundled) --- #
+        self._dock_engines_dir: Path | None = None  # engine binaries folder
         self._dock_campaign_root: Path | None = None  # AutoDock4 batch root
         self._dock_vina_receptor: Path | None = None
         self._dock_vina_ligand: Path | None = None
@@ -3289,6 +4897,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._session = load_session(self._read_session_file())
         self._theme = self._session["theme"] if self._session else "light"
         self._theme_var: Any = None  # built by _build_menu (View menu)
+        # (100x-175) the CTk accent-pack radio variable -- same lifetime
+        # as the theme radios (built by _build_menu, persisted free).
+        self._pack_var: Any = None
         self._menu_tints: list[Any] = []  # menus to recolour on theme flip
         # -- (100x-158) DearPyGui affordance state --------------------- #
         # the live figure toolbars (host, toolbar) pairs -- visibility
@@ -3646,6 +5257,27 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             command=self._apply_toolbar_visibility,
         )
         view_menu.add_separator()
+        # (100x-175) CustomTkinter's set_default_color_theme: the four
+        # accent packs shipped in its assets/themes/*.json, offered as
+        # radios over the light/dark palette (CTkButton's [light, dark]
+        # pairs resolved against the active appearance mode).  A plain
+        # tk.Variable, so the session machinery persists it exactly
+        # like the theme radios above -- the Look & feel card's twin
+        # picker drives the same lever.
+        self._pack_var = tk.StringVar(value="default")
+        pack_menu = tk.Menu(view_menu, tearoff=0)
+        for label, value in (
+            ("Toolkit default", "default"),
+            ("Blue (customtkinter)", "blue"),
+            ("Green (customtkinter)", "green"),
+            ("Gold (customtkinter)", "gold"),
+            ("Dark blue (customtkinter)", "dark-blue"),
+        ):
+            pack_menu.add_radiobutton(
+                label=label, value=value, variable=self._pack_var, command=self._on_pack_change
+            )
+        view_menu.add_cascade(label="Accent pack", menu=pack_menu)
+        view_menu.add_separator()
         self._font_var = tk.IntVar(value=10)
         font_menu = tk.Menu(view_menu, tearoff=0)
         for size in (9, 10, 11, 12):
@@ -3674,7 +5306,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # (100x-159) the font cascade rides the tint list too -- the
         # round-41 build appended it ABOVE this reassignment, so the
         # font submenu silently lost its tint on every theme flip.
-        self._menu_tints = [bar, file_menu, view_menu, font_menu, help_menu]
+        self._menu_tints = [bar, file_menu, view_menu, pack_menu, font_menu, help_menu]
         self._tint_menus()
         self.bind_all("<Control-o>", lambda _e: self._menu_open_csv())
         self.bind_all("<Control-s>", lambda _e: self._menu_save_figure())
@@ -4510,7 +6142,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             except tk.TclError:
                 return  # a destroyed intermediate (defensive)
             for child in children:
-                if isinstance(child, ttk.Treeview):
+                if isinstance(child, ttk.Treeview) and not getattr(
+                    child, "reference_census", False
+                ):
                     rows = list(child.get_children())
                     if rows:
                         title = self._card_title_for_widget(child)
@@ -4567,11 +6201,19 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _set_theme(self, resolved: str) -> None:
         """Apply a resolved palette and recolour every live widget."""
         previous = _PALETTES[_ACTIVE_THEME]
+        # (100x-175) the accent trio the live widgets actually carry --
+        # with a CustomTkinter pack active that is the PACK's trio, not
+        # the palette's, so the retint walk below needs both maps.
+        previous_trio = (ACCENT, ACCENT_DARK, ACCENT_SOFT)
         apply_theme(resolved)
+        # (100x-175) CTk's set_default_color_theme rides every theme
+        # flip: apply_theme() rebinds the accent trio from the palette,
+        # then the picked pack (if any) overrides it again.
+        self._apply_gui_pack_override()
         self.configure(background=BG)
         self._build_style()
         self._tint_menus()
-        self._retint_plain_widgets(previous)
+        self._retint_plain_widgets(previous, previous_trio)
         # (100x-158) the table chrome's stripe/hover tags + every live
         # figure toolbar follow the palette flip too
         refresh_table_chrome()
@@ -4581,6 +6223,229 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     self._style_figure_toolbar(toolbar)
         # (100x-159) the metrics dialog's palette block follows the flip
         self._refresh_metrics_dialog()
+
+    def _apply_gui_pack_override(self) -> None:
+        """(100x-175) CustomTkinter's colour tiers over the live palette.
+
+        The picked pack's ``[light, dark]`` accent pair replaces the
+        palette's accent trio (accent / hover / soft) in the module-level
+        names -- every style, strip, table tag and toolbar reads those
+        names at build time, so ``_build_style`` + the retint walk that
+        follow a ``_set_theme`` call re-apply them window-wide.  The
+        "default" pack (or any unknown name) restores the palette's own
+        trio, which is exactly what ``apply_theme`` just bound.
+        """
+        global ACCENT, ACCENT_DARK, ACCENT_SOFT
+        pack_var = getattr(self, "_pack_var", None)
+        name = pack_var.get() if pack_var is not None else "default"
+        if name not in GUI_THEME_PACKS:
+            palette = _PALETTES[_ACTIVE_THEME]
+            ACCENT = palette["ACCENT"]
+            ACCENT_DARK = palette["ACCENT_DARK"]
+            ACCENT_SOFT = palette["ACCENT_SOFT"]
+            return
+        tier = resolve_gui_pack(name, _ACTIVE_THEME)
+        ACCENT = tier["accent"]
+        ACCENT_DARK = tier["accent_dark"]
+        ACCENT_SOFT = tier["accent_soft"]
+
+    def _on_pack_change(self) -> None:
+        """View ▸ Accent pack (and the Look & feel card's twin picker).
+
+        The full recolour pipeline is the theme flip's -- the pack only
+        overrides the accent trio, so ``_set_theme`` already rebuilds
+        everything that matters (styles, strips, table chrome, figure
+        toolbars) in the right order.
+        """
+        pack_var = getattr(self, "_pack_var", None)
+        choice = pack_var.get() if pack_var is not None else "default"
+        self._set_theme(self._resolve_auto_theme() if self._theme == "auto" else self._theme)
+        combo = getattr(self, "_lookfeel_pack_combo", None)
+        if combo is not None:
+            with contextlib.suppress(tk.TclError):
+                if combo.get() != choice:
+                    combo.set(choice)
+        self.notify(f"accent pack → {choice}", level="info", duration=4)
+
+    def _on_pack_combo_change(self) -> None:
+        """The Look & feel card's picker: sync the menu radio, then apply."""
+        combo = getattr(self, "_lookfeel_pack_combo", None)
+        if combo is None:
+            return
+        choice = combo.get()
+        if choice not in ("default",) + GUI_PACK_NAMES:
+            return
+        pack_var = getattr(self, "_pack_var", None)
+        if pack_var is not None:
+            pack_var.set(choice)
+        self._on_pack_change()
+
+    # -- (100x-175) the toast engine: nicegui notify + gradio levels --- #
+    def notify(
+        self,
+        message: str,
+        *,
+        level: str = "info",
+        duration: float | None = 10.0,
+        position: str = "bottom-right",
+    ) -> Any:
+        """nicegui's ``ui.notify`` + gradio's four toast levels, in Tk.
+
+        A transient borderless overlay near one of nicegui's nine
+        positions (stacked when several pile up), coloured by gradio's
+        level family (``gr.Info`` / ``gr.Success`` / ``gr.Warning`` /
+        ``gr.Error`` -- an unknown level degrades to ``info``, gradio's
+        own default).  ``duration`` is seconds; ``None`` (or 0) leaves
+        the toast on screen indefinitely, exactly gradio's contract,
+        and a click dismisses either way.  Returns the entry dict the
+        stack tracks (nicegui keeps its notifications addressable the
+        same way).
+        """
+        level = level if level in _TOAST_LEVELS else "info"
+        position = position if position in _TOAST_POSITIONS else "bottom"
+        tier, glyph = _TOAST_LEVELS[level]
+        colour = _toast_colour(tier)
+        window = tk.Toplevel(self)
+        window.overrideredirect(True)
+        body = tk.Frame(
+            window, background=CARD, highlightbackground=colour, highlightthickness=2
+        )
+        body.pack(fill="both", expand=True)
+        label = tk.Label(
+            body,
+            text=f"{glyph}  {message}",
+            background=CARD,
+            foreground=INK,
+            padx=14,
+            pady=9,
+            wraplength=340,
+            justify="left",
+        )
+        label.pack()
+        entry: dict[str, Any] = {
+            "window": window,
+            "level": level,
+            "position": position,
+            "after_id": None,
+        }
+        self._toast_stack.append(entry)
+        for widget in (body, label):
+            widget.bind("<Button-1>", lambda _event: self._dismiss_toast(entry))
+        # geometry: nicegui's nine positions, stacked per position
+        window.update_idletasks()
+        win_w = max(240, window.winfo_reqwidth())
+        win_h = max(34, window.winfo_reqheight())
+        root_w = max(win_w, self.winfo_width())
+        root_h = max(win_h, self.winfo_height())
+        base_x, base_y = toast_geometry(position, win_w, win_h, root_w, root_h)
+        stack_depth = sum(1 for other in self._toast_stack[:-1] if other["position"] == position)
+        offset = stack_depth * (win_h + 8)
+        if position.startswith("top") or position in ("left", "right", "center"):
+            y = base_y + offset
+        else:
+            y = base_y - offset
+        window.geometry(f"+{self.winfo_rootx() + base_x}+{self.winfo_rooty() + y}")
+        if duration is not None and float(duration) > 0:
+            entry["after_id"] = window.after(
+                int(float(duration) * 1000), lambda: self._dismiss_toast(entry)
+            )
+        return entry
+
+    def _dismiss_toast(self, entry: Any) -> None:
+        """Close one toast -- a click or the duration elapsing."""
+        with contextlib.suppress(ValueError):
+            self._toast_stack.remove(entry)
+        after_id = entry.get("after_id")
+        if after_id is not None:
+            with contextlib.suppress(tk.TclError):
+                self.after_cancel(after_id)
+        window = entry.get("window")
+        if window is not None:
+            with contextlib.suppress(tk.TclError):
+                window.destroy()
+
+    def _on_scaling_change(self) -> None:
+        """CTk's widget scaling (floored at 0.4×) onto the font hierarchy.
+
+        ``ScalingTracker.set_widget_scaling`` clamps its factor at 0.4;
+        the toolkit's global-scale lever is the named-font hierarchy
+        (View ▸ Font size), so the factor multiplies the 10 pt design
+        base and the 8-24 pt clamp keeps the menu's own range honest.
+        """
+        spin = getattr(self, "_lookfeel_scaling_spin", None)
+        if spin is None:
+            return
+        try:
+            factor = clamp_scaling(float(spin.get()))
+        except (ValueError, tk.TclError):
+            return
+        size = max(8, min(24, round(10 * factor)))
+        if self._font_var is not None:
+            with contextlib.suppress(tk.TclError):
+                self._font_var.set(size)
+        self._apply_font_size()
+        self.notify(f"UI scaling {factor:g}× → {size} pt fonts", level="info", duration=4)
+
+    def _lookfeel_refresh_preview(self) -> None:
+        """nicegui's ``@ui.refreshable``: delete the preview, recreate it.
+
+        Everything the preview created is replaced from the live pack
+        and appearance mode -- the census never goes stale after a pack
+        or theme flip.  The rebuild counter is the refreshable's own
+        bookkeeping (its ``next_index`` analogue).
+        """
+        self._lookfeel_preview_builds += 1
+        pack_var = getattr(self, "_pack_var", None)
+        name = pack_var.get() if pack_var is not None else "default"
+        lines = [f"customtkinter theme census -- pack {name!r} ({_ACTIVE_THEME} resolved)"]
+        if name in GUI_THEME_PACKS:
+            pack = GUI_THEME_PACKS[name]
+            lines.append(
+                f"CTkButton   fg_color     {pack['accent'][0]} / dark {pack['accent'][1]}"
+            )
+            lines.append(
+                f"            hover_color  {pack['accent_dark'][0]} / dark {pack['accent_dark'][1]}"
+            )
+            lines.append(
+                "CTkEntry    border_color #979DA2 / dark #565B5E (every pack ships this pair)"
+            )
+            lines.append(
+                f"CTkButton   corner_radius {pack['corner_radius']}  border_width "
+                f"{pack['border_width']} (CTkEntry's tier)"
+            )
+            lines.append(
+                f"window accent trio now: {ACCENT} · hover {ACCENT_DARK} · soft {ACCENT_SOFT}"
+            )
+            lines.append(
+                "CTk's ThemeManager._built_in_themes: "
+                + ", ".join(GUI_PACK_NAMES)
+                + " -- builtins are read-only (save_gui_pack refuses them)"
+            )
+        else:
+            lines.append("the toolkit's own palette trio -- no CTk pack picked")
+            lines.append(
+                f"window accent trio now: {ACCENT} · hover {ACCENT_DARK} · soft {ACCENT_SOFT}"
+            )
+        text = getattr(self, "_lookfeel_preview_text", None)
+        if text is None:
+            return
+        text.delete("1.0", "end")
+        text.insert("1.0", "\n".join(lines))
+
+    def _preview_toast(self, level: str) -> None:
+        """The toast playground row: fire one toast at the picked setup."""
+        duration: float | None = 10.0
+        combo = getattr(self, "_lookfeel_toast_duration", None)
+        if combo is not None and combo.get() == "sticky":
+            duration = None
+        position_combo = getattr(self, "_lookfeel_toast_position", None)
+        position = position_combo.get() if position_combo is not None else "bottom-right"
+        self.notify(
+            f"{level} toast -- click to dismiss",
+            level=level,
+            duration=duration,
+            position=position,
+        )
 
     def _tint_menus(self) -> None:
         """Recolour the menu bar for the active palette."""
@@ -4593,13 +6458,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                     activeforeground=INK,
                 )
 
-    def _retint_plain_widgets(self, previous: dict[str, str]) -> None:
+    def _retint_plain_widgets(
+        self, previous: dict[str, str], previous_trio: tuple[str, str, str] | None = None
+    ) -> None:
         """Walk the widget tree recolouring plain ``tk`` widgets.
 
         Only widgets still carrying a colour from the *previous* palette
         are touched, which is what keeps matplotlib's white figure
         canvases (also ``Canvas``/white in light mode) safely alone: the
         scroll canvases use ``BG``, never ``CARD``.
+
+        (100x-175) ``previous_trio`` is the accent trio the widgets
+        actually carried -- with a CustomTkinter pack active that is the
+        pack's trio, so the accent strips retint on pack flips too (a
+        pack-only change keeps the same palette, so the palette checks
+        alone would miss every strip).
         """
 
         def walk(widget: Any) -> None:
@@ -4612,6 +6485,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                         if str(child.cget("background")) == previous["ACCENT"]:
                             # the card headers' 3px accent strips (100x-119)
                             child.configure(background=ACCENT)
+                        if previous_trio is not None:
+                            # (100x-175) the CTk pack's accent trio -- the
+                            # strips carry it while a pack is active
+                            background = str(child.cget("background"))
+                            if background == previous_trio[0]:
+                                child.configure(background=ACCENT)
+                            if background == previous_trio[1]:
+                                child.configure(background=ACCENT_DARK)
                         if str(child.cget("highlightbackground")) == previous["BORDER"]:
                             child.configure(highlightbackground=BORDER)
                     elif klass == "Canvas":
@@ -4627,6 +6508,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                         if str(child.cget("background")) == previous["CARD"]:
                             child.configure(background=CARD)
                         if str(child.cget("activebackground")) == previous["ACCENT_SOFT"]:
+                            child.configure(activebackground=ACCENT_SOFT)
+                        if previous_trio is not None and str(
+                            child.cget("activebackground")
+                        ) == previous_trio[2]:
                             child.configure(activebackground=ACCENT_SOFT)
                     elif klass == "Checkbutton":
                         # the mpl 3.10 toolbars' axis/grid toggles
@@ -5635,6 +7520,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # re-derive the named fonts + style hierarchy after the restore.
         with contextlib.suppress(Exception):  # never block a restore
             self._apply_font_size()
+        # (100x-175) the CTk accent pack rides a tk.Variable as well (View
+        # ▸ Accent pack) -- a plain .set() fires no command, so re-apply
+        # the pack override + the style hierarchy it recolours.
+        with contextlib.suppress(Exception):  # never block a restore
+            self._apply_gui_pack_override()
+            self._build_style()
         text_widgets = self._session_text_widgets()
         for key, content in session["texts"].items():
             if key == "finder":
@@ -12619,6 +14510,35 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         self._dock_engine_combo.set(_DOCK_ENGINES[0])
         form_row(runner, "engine", self._dock_engine_combo)
+        # 100x-171: the three Windows engine builds (vina.exe /
+        # autogrid4.exe / autodock4.exe) drive every runner from ONE
+        # folder -- the toolkit's own engines/ (shipped with the zip) by
+        # default, or any folder picked here; found engines beat PATH.
+        engines_buttons = ttk.Frame(runner, style="Card.TFrame")
+        engines_buttons.grid(
+            row=runner.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(4, 0)
+        )
+        engines_btn = self._action_button(
+            engines_buttons,
+            "Engine binaries…",
+            self._dock_pick_engines_dir,
+            tooltip="Point at the folder holding the engine executables -- "
+            "vina.exe, autogrid4.exe, autodock4.exe. The toolkit ships "
+            "them in its engines/ folder next to playground.py (found "
+            "automatically); engines from the picked folder run ahead of "
+            "anything on PATH, and a Windows .exe is routed through wine "
+            "when the host needs it.",
+        )
+        engines_btn.pack(side="left")
+        self._dock_engines_info = ttk.Label(
+            engines_buttons,
+            text="engines: …",
+            style="CardMuted.TLabel",
+            wraplength=240,
+            justify="left",
+        )
+        self._dock_engines_info.pack(side="left", padx=(10, 0))
+        self._dock_refresh_engines_info()
         # 100x-120: the single-folder mode re-uses the same folder picker
         # ("the campaign root" is simply "the ONE ligand folder" there);
         # the info label tells the two apart.
@@ -14626,21 +16546,54 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ligand = self._dock_vina_ligand.name if self._dock_vina_ligand else "—"
         self._dock_vina_info.configure(text=f"receptor {receptor} · ligand {ligand}")
 
+    def _dock_pick_engines_dir(self) -> None:
+        """Point the docking runners at a folder of engine binaries."""
+        path = filedialog.askdirectory(
+            title="Pick the engine binaries folder (vina.exe / autogrid4.exe / autodock4.exe)"
+        )
+        if not path:
+            return
+        self._dock_engines_dir = Path(path)
+        self._dock_refresh_engines_info()
+
+    def _dock_refresh_engines_info(self) -> None:
+        """One honest line: which engines resolve, and where each came from."""
+        folder = dock_engine_dir(self._dock_engines_dir)
+        parts = []
+        for name in _DOCK_ENGINE_NAMES:
+            found = dock_engine_binary(name, self._dock_engines_dir)
+            if found is None:
+                parts.append(f"{name}: —")
+            elif folder is not None and found.parent == folder:
+                parts.append(f"{name}: {found.name} (folder)")
+            else:
+                parts.append(f"{name}: {found.name} (PATH)")
+        origin = f"folder: {folder}" if folder is not None else "PATH only"
+        self._dock_engines_info.configure(text=" · ".join(parts) + f" — {origin}")
+
     def _dock_missing_engine_dialog(self, engine: str) -> None:
         binaries = ", ".join(docking_engine_binaries(engine))
         if engine in ("AutoDock4 campaign", "AutoDock4 single folder", "autodock4"):
             hint = (
-                f"AutoDock4 docking needs the {binaries} binaries on "
-                "PATH (Scripps AutoDock Tools, or conda-forge):\n\n"
+                f"AutoDock4 docking needs the {binaries} binaries -- on PATH "
+                "(Scripps AutoDock Tools, or conda-forge), or as their .exe "
+                "builds in the engine binaries folder:\n\n"
                 "    conda install -c conda-forge autodock\n\n"
-                "Install them, reopen this terminal, then run again."
+                "The toolkit also ships the Windows builds (autogrid4.exe / "
+                "autodock4.exe) in its engines/ folder next to playground.py -- "
+                "picked up automatically. The Engine binaries… picker on the "
+                "Campaign runner card can point at any other folder holding "
+                "them."
             )
         else:
             hint = (
-                f"Vina docking needs the {binaries} binary on PATH (Scripps "
-                "AutoDock Vina, or conda-forge):\n\n"
+                f"Vina docking needs the {binaries} binary -- on PATH (Scripps "
+                "AutoDock Vina, or conda-forge), or as vina.exe in the engine "
+                "binaries folder:\n\n"
                 "    conda install -c conda-forge vina\n\n"
-                "Install it, reopen this terminal, then run again."
+                "The toolkit ships vina.exe in its engines/ folder next to "
+                "playground.py (picked up automatically); the Engine "
+                "binaries… picker can point at any folder holding it."
             )
         messagebox.showinfo("Docking engine not installed", hint)
 
@@ -14940,7 +16893,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "Pick the Vina config, the ligand folder and the output folder first.",
             )
             return
-        if shutil.which("vina") is None:
+        if dock_engine_binary("vina", self._dock_engines_dir) is None:
             self._dock_missing_engine_dialog("vina")
             return
         try:
@@ -14965,6 +16918,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 out_dir=out,
                 max_parallel=workers,
                 skip_existing=skip_existing,
+                engine_dir=dock_engine_dir(self._dock_engines_dir),
             )
 
         def render(results: Any) -> None:
@@ -15563,11 +17517,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         engine = self._dock_engine_combo.get()
         binaries = docking_engine_binaries(engine)
-        missing = [name for name in binaries if shutil.which(name) is None]
+        missing = dock_missing_engines(binaries, self._dock_engines_dir)
         if missing:
             # pre-empt pharmaml's own RuntimeError with a friendly hint
             self._dock_missing_engine_dialog(engine)
             return
+        # 100x-171: the picked engines folder (or the bundled engines/)
+        # is threaded into every runner below -- pharmaml resolves each
+        # binary there first, PATH last.
+        engine_dir = dock_engine_dir(self._dock_engines_dir)
 
         if engine == "AutoDock4 campaign":
             if self._dock_campaign_root is None:
@@ -15589,7 +17547,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             def work() -> Any:
                 from pharmaml.docking import batch_run_directories
 
-                return batch_run_directories(root, workers=workers)
+                return batch_run_directories(root, workers=workers, engine_dir=engine_dir)
 
             def render(results: Any) -> None:
                 ok_runs = sum(1 for result in results if result.ok)
@@ -15622,7 +17580,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             def work_single() -> Any:
                 from pharmaml.docking import run_autodock4
 
-                return run_autodock4(root, skip_existing=skip_existing)
+                return run_autodock4(root, skip_existing=skip_existing, engine_dir=engine_dir)
 
             def render_single(result: Any) -> None:
                 state = "ok" if result.ok else f"FAILED — {result.error}"
@@ -15680,7 +17638,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.docking import run_vina
 
             return run_vina(
-                receptor, ligand, out=out, center=center, size=size, exhaustiveness=exhaustiveness
+                receptor, ligand, out=out, center=center, size=size, exhaustiveness=exhaustiveness, engine_dir=engine_dir
             )
 
         def render(result: Any) -> None:
@@ -15752,7 +17710,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         engine = self._dock_smiles_engine_combo.get()
         binaries = docking_engine_binaries(engine)
-        missing = [name for name in binaries if shutil.which(name) is None]
+        missing = dock_missing_engines(binaries, self._dock_engines_dir)
         if missing:
             self._dock_missing_engine_dialog(engine)
             return
@@ -15783,6 +17741,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 size=size,
                 exhaustiveness=exhaustiveness,
                 workers=workers,
+                engine_dir=dock_engine_dir(self._dock_engines_dir),
                 progress=report,
             )
 
@@ -21718,6 +23677,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dl_graph_model: Any = None
         self._dl_graphs: list[Any] = []
         self._dl_graph_y: Any = None
+        # (100x-173) the experiment-tracking round: the JSONL run log the
+        # Experiments card reads (overridable -- the tests point it at a
+        # temp file) plus the caches behind the table and the detail pane.
+        self._dl_experiment_log = experiment_log_path()
+        self._dl_runs: list[dict[str, Any]] = []
+        self._dl_runs_by_iid: dict[str, dict[str, Any]] = {}
 
         data = make_card(
             page.grid,
@@ -22132,6 +24097,267 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             wraplength=560,
         )
         grid_append(xai, self._dl_xai_pairs, sticky="w")
+
+        # (100x-172) the deep-viz absorption card -- netron, torchview,
+        # pytorchviz and torchlens distilled onto one surface: the
+        # torchlens-style layer table with its totals line, the
+        # torchview-style module tree (depth-controlled), the
+        # pytorchviz-style autograd .dot export and the netron external
+        # viewer launch.
+        arch = make_card(
+            page.grid,
+            "Architecture (netron · torchview · pytorchviz · torchlens)",
+            span=2,
+            row=5,
+            column=0,
+            subtitle="The trained network, layer by layer: output shapes, "
+            "the parameter census and MACs/FLOPs totals (both engines), "
+            "the depth-controlled module tree, the autograd .dot source "
+            "and the netron viewer launch (the last two name their "
+            "torch-engine preconditions instead of failing silently).",
+        )
+        arch_tree_frame = ttk.Frame(arch, style="Card.TFrame")
+        grid_append(arch, arch_tree_frame, sticky="nsew", weight=True)
+        self._dl_arch_tree = ttk.Treeview(
+            arch_tree_frame, show="headings", height=8
+        )
+        arch_columns = ("layer", "type", "output shape", "params", "train")
+        self._dl_arch_tree["columns"] = list(arch_columns)
+        for column, width in zip(arch_columns, (150, 130, 110, 90, 60)):
+            self._dl_arch_tree.heading(column, text=column)
+            self._dl_arch_tree.column(
+                column, width=width, minwidth=48, stretch=(column == "layer")
+            )
+        arch_bar_y = ttk.Scrollbar(
+            arch_tree_frame, orient="vertical", command=self._dl_arch_tree.yview
+        )
+        self._dl_arch_tree.configure(yscrollcommand=arch_bar_y.set)
+        self._dl_arch_tree.pack(side="left", fill="both", expand=True)
+        arch_bar_y.pack(side="right", fill="y")
+        self._dl_arch_summary = ttk.Label(
+            arch, text="train a network to see the architecture", style="CardMuted.TLabel"
+        )
+        grid_append(arch, self._dl_arch_summary, sticky="w", pady=(6, 0))
+        arch_buttons = ttk.Frame(arch, style="Card.TFrame")
+        grid_append(arch, arch_buttons, sticky="w", pady=(6, 0))
+        tree_btn = self._action_button(
+            arch_buttons,
+            "Module tree",
+            self._dl_show_module_tree,
+            tooltip="torchview-style architecture tree at the chosen depth "
+            "(the root module is depth 0): dotted submodule paths, their "
+            "classes and their own parameter counts.  Works on both "
+            "engines -- the numpy stack renders as its Linear width chain.",
+        )
+        tree_btn.pack(side="left")
+        ttk.Label(
+            arch_buttons, text="tree depth", style="CardMuted.TLabel"
+        ).pack(side="left", padx=(12, 4))
+        self._dl_depth_combo = ttk.Combobox(
+            arch_buttons, state="readonly", width=5, values=("1", "2", "3", "all")
+        )
+        self._dl_depth_combo.set("1")
+        self._dl_depth_combo.pack(side="left")
+        dot_btn = self._action_button(
+            arch_buttons,
+            "Save autograd .dot…",
+            self._dl_save_autograd_dot,
+            tooltip="pytorchviz's make_dot as plain Graphviz source: the "
+            "backward ops (AddmmBackward0...), the parameter leaves with "
+            "their shapes and the saved-tensor edges -- render with any "
+            "dot renderer.  torch engine only; the numpy engine's graph "
+            "lives in the toolkit's own autograd core.",
+        )
+        dot_btn.pack(side="left", padx=(10, 0))
+        netron_btn = self._action_button(
+            arch_buttons,
+            "View in netron…",
+            self._dl_view_netron,
+            tooltip="netron's external model viewer: export the trained "
+            "network to ONNX (dynamic batch axis) and serve it in the "
+            "browser.  Needs the torch engine AND netron installed "
+            "(pip install netron) -- both are checked before any file "
+            "is written.",
+        )
+        netron_btn.pack(side="left", padx=(10, 0))
+        self._dl_arch_text = _grid_text(arch, height=8, mono=self._mono)
+        grid_append(arch, self._dl_arch_text, sticky="ew", pady=(6, 0))
+
+        # -- the Experiments card (100x-173): tensorboard / wandb /
+        # mlflow / aim distilled ------------------------------------------ #
+        experiments = make_card(
+            page.grid,
+            "Experiments (tensorboard · wandb · mlflow · aim)",
+            span=2,
+            row=6,
+            column=0,
+            subtitle="Every network this tab trains lands in "
+            "experiments.jsonl next to playground.py -- wandb's config "
+            "snapshot and slashed metrics, the TensorBoard per-epoch "
+            "loss series, MLflow's run table (newest first) and Aim's "
+            "filter box.  Click a row for the run page.",
+        )
+        exp_tree_frame = ttk.Frame(experiments, style="Card.TFrame")
+        grid_append(experiments, exp_tree_frame, sticky="nsew", weight=True)
+        self._dl_runs_tree = ttk.Treeview(
+            exp_tree_frame, show="headings", height=6
+        )
+        runs_columns = ("run", "when", "kind", "best val loss", "status")
+        self._dl_runs_tree["columns"] = list(runs_columns)
+        for column, width in zip(runs_columns, (110, 120, 150, 110, 80)):
+            self._dl_runs_tree.heading(column, text=column)
+            self._dl_runs_tree.column(
+                column, width=width, minwidth=48, stretch=(column == "kind")
+            )
+        runs_bar_y = ttk.Scrollbar(
+            exp_tree_frame, orient="vertical", command=self._dl_runs_tree.yview
+        )
+        self._dl_runs_tree.configure(yscrollcommand=runs_bar_y.set)
+        self._dl_runs_tree.pack(side="left", fill="both", expand=True)
+        runs_bar_y.pack(side="right", fill="y")
+        self._dl_runs_tree.bind(
+            "<<TreeviewSelect>>", lambda _event: self._dl_show_run_detail()
+        )
+        self._dl_best_label = ttk.Label(
+            experiments,
+            text="no runs yet — train a network",
+            style="CardMuted.TLabel",
+        )
+        grid_append(experiments, self._dl_best_label, sticky="w", pady=(6, 0))
+        exp_buttons = ttk.Frame(experiments, style="Card.TFrame")
+        grid_append(experiments, exp_buttons, sticky="w", pady=(6, 0))
+        refresh_btn = self._action_button(
+            exp_buttons,
+            "Refresh",
+            self._dl_refresh_experiments,
+            tooltip="Reload experiments.jsonl from disk and refill the "
+            "table (MLflow's run list, newest first) with the filter "
+            "box applied -- one line per run this tab ever trained.",
+        )
+        refresh_btn.pack(side="left")
+        ttk.Label(exp_buttons, text="filter", style="CardMuted.TLabel").pack(
+            side="left", padx=(12, 4)
+        )
+        self._dl_filter_entry = ttk.Entry(exp_buttons, width=24)
+        self._dl_filter_entry.pack(side="left")
+        self._dl_filter_entry.bind(
+            "<Return>", lambda _event: self._dl_apply_filter()
+        )
+        filter_btn = self._action_button(
+            exp_buttons,
+            "Filter",
+            self._dl_apply_filter,
+            tooltip="Aim's query_runs: a case-insensitive substring sought "
+            "across kind, notes, status, params and metrics -- the empty "
+            "filter shows every run.",
+        )
+        filter_btn.pack(side="left", padx=(10, 0))
+        # (100x-175) gradio's flag button: reason combo + the log action.
+        # The reasons are gradio's own flag_option vocabulary; the row
+        # lands in experiments-flags/log.csv (CSVLogger's contract).
+        ttk.Label(exp_buttons, text="flag", style="CardMuted.TLabel").pack(
+            side="left", padx=(12, 4)
+        )
+        self._dl_flag_combo = ttk.Combobox(
+            exp_buttons,
+            state="readonly",
+            width=10,
+            values=("correct", "incorrect", "ambiguous"),
+        )
+        self._dl_flag_combo.set("correct")
+        self._dl_flag_combo.pack(side="left")
+        flag_btn = self._action_button(
+            exp_buttons,
+            "Flag run",
+            self._dl_flag_selected_run,
+            tooltip="gradio's flagging: append the selected run to "
+            "experiments-flags/log.csv next to the run log -- the "
+            "table's four columns plus the flag reason, a username and "
+            "a timestamp.  A header change rolls a new numbered file "
+            "(CSVLogger >= 5.0's concurrent-safe rule), so old files "
+            "are never corrupted.",
+        )
+        flag_btn.pack(side="left", padx=(10, 0))
+        self._dl_experiment_text = _grid_text(experiments, height=8, mono=self._mono)
+        grid_append(experiments, self._dl_experiment_text, sticky="ew", pady=(6, 0))
+
+        # -- the Attribution card (100x-174): captum / tf-keras-vis /
+        # saliency / bertviz distilled ------------------------------------ #
+        attribution = make_card(
+            page.grid,
+            "Attribution (captum · tf-keras-vis · saliency · bertviz)",
+            span=2,
+            row=7,
+            column=0,
+            subtitle="The four XAI repos' method census -- click a row "
+            "for its origin and whether it needs gradients -- plus the "
+            "model-agnostic occlusion read of one held-out row (predict()-"
+            "only, so both engines explain) and bertviz's neuron-view "
+            "arithmetic on a worked example.",
+        )
+        attr_tree_frame = ttk.Frame(attribution, style="Card.TFrame")
+        grid_append(attribution, attr_tree_frame, sticky="nsew", weight=True)
+        self._dl_attr_tree = ttk.Treeview(
+            attr_tree_frame, show="headings", height=6
+        )
+        attr_columns = ("method", "family", "source", "gradients", "origin")
+        self._dl_attr_tree["columns"] = list(attr_columns)
+        for column, width in zip(attr_columns, (220, 100, 100, 70, 230)):
+            self._dl_attr_tree.heading(column, text=column)
+            self._dl_attr_tree.column(
+                column, width=width, minwidth=48, stretch=(column == "method")
+            )
+        attr_bar_y = ttk.Scrollbar(
+            attr_tree_frame, orient="vertical", command=self._dl_attr_tree.yview
+        )
+        self._dl_attr_tree.configure(yscrollcommand=attr_bar_y.set)
+        # the 41-method census is a static reference catalog, never a
+        # run result -- the session report's table walk skips trees
+        # marked reference_census (a fresh app reports "nothing yet").
+        self._dl_attr_tree.reference_census = True
+        self._dl_attr_tree.pack(side="left", fill="both", expand=True)
+        attr_bar_y.pack(side="right", fill="y")
+        self._dl_attr_tree.bind(
+            "<<TreeviewSelect>>", lambda _event: self._dl_show_attr_method()
+        )
+        for method, family, source, needs_grad, origin in ATTRIBUTION_METHODS:
+            self._dl_attr_tree.insert(
+                "",
+                "end",
+                values=(method, family, source, "yes" if needs_grad else "no", origin),
+            )
+        self._dl_attr_summary = ttk.Label(
+            attribution,
+            text=f"{len(ATTRIBUTION_METHODS)} methods across the four repos",
+            style="CardMuted.TLabel",
+        )
+        grid_append(attribution, self._dl_attr_summary, sticky="w", pady=(6, 0))
+        attr_buttons = ttk.Frame(attribution, style="Card.TFrame")
+        grid_append(attribution, attr_buttons, sticky="w", pady=(6, 0))
+        explain_btn = self._action_button(
+            attr_buttons,
+            "Explain held-out row…",
+            self._dl_explain_row,
+            tooltip="captum's Occlusion / PAIR's Occlusion distilled to the "
+            "model-agnostic core: the trained network's score on one "
+            "held-out row, every feature restored to its held-out median "
+            "in turn, the score drops ranked with word-importance bars.  "
+            "No gradients, no torch -- the numpy engine explains as "
+            "readily as the torch one.",
+        )
+        explain_btn.pack(side="left")
+        attn_btn = self._action_button(
+            attr_buttons,
+            "Neuron-view example",
+            self._dl_attention_example,
+            tooltip="bertviz's neuron-view arithmetic: scaled dot-product "
+            "attention softmax(QKᵀ/√d) on a three-token worked example "
+            "with the head-view cells.  The MLPs this tab trains carry no "
+            "attention heads -- the helpers show on fixed tokens.",
+        )
+        attn_btn.pack(side="left", padx=(10, 0))
+        self._dl_attr_text = _grid_text(attribution, height=8, mono=self._mono)
+        grid_append(attribution, self._dl_attr_text, sticky="ew", pady=(6, 0))
 
         # -- run board (round 186: the tensorboard absorption) -------- #
         # tensorflow/tensorboard checked one by one -- the summary-writer
@@ -23739,6 +25965,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._dl_last_run = (network, estimator_name, task, x_test, target)
             self._fill_dl_metrics(network, report, task, dropped, seconds)
             self._fill_dl_history_summary(network)
+            self._fill_dl_architecture(network)
+            # (100x-173) the wandb/MLflow/Aim absorption: every GUI run
+            # lands in the JSONL run log and refreshes the Experiments
+            # card -- BEFORE the matplotlib guard, so headless boxes still
+            # track runs.
+            self._log_dl_experiment(network, report, seconds, engine, task)
             if not self.deps.get("matplotlib"):
                 return
             try:
@@ -23845,6 +26077,372 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 text=f"{type(network).__name__} · {network.n_iter_} epochs run · "
                 "no validation split (val split = 0)"
             )
+
+    # -- the Architecture card (100x-172): netron / torchview /
+    # pytorchviz / torchlens distilled --------------------------------- #
+
+    def _fill_dl_architecture(self, network: Any) -> None:
+        """Fill the Architecture card's layer table + totals line.
+
+        The torchlens-style summary for whichever engine ran: every
+        layer's output shape (a dummy batch for torch, ``(N, width)``
+        for the batch-agnostic numpy stack), the per-layer parameter
+        census (own params only -- the column sums to the totals), and
+        the MACs/FLOPs line.  A foreign object degrades to a muted
+        line, never a crash.
+        """
+        self._dl_arch_tree.delete(*self._dl_arch_tree.get_children())
+        try:
+            rows, totals = layer_table_rows(network)
+        except Exception as exc:  # noqa: BLE001 - muted line, not a crash
+            self._dl_arch_summary.configure(
+                text=f"architecture unavailable: {exc}"
+            )
+            return
+        for name, kind, shape, params, trainable in rows:
+            self._dl_arch_tree.insert(
+                "",
+                "end",
+                values=[
+                    name,
+                    kind,
+                    shape,
+                    format_param_count(params),
+                    "yes" if trainable else "no",
+                ],
+            )
+        self._dl_arch_summary.configure(text=architecture_summary_line(totals))
+        self._dl_arch_text.delete("1.0", "end")
+
+    def _dl_show_module_tree(self) -> None:
+        """Render the torchview-style module tree at the chosen depth."""
+        if self._dl_last_run is None:
+            messagebox.showinfo("No network", "Train a network first.")
+            return
+        network = self._dl_last_run[0]
+        raw = self._dl_depth_combo.get()
+        try:
+            depth = 99 if raw == "all" else parse_int(raw, "tree depth", minimum=1)
+        except ValueError as exc:
+            messagebox.showwarning("Tree depth", str(exc))
+            return
+        try:
+            lines = architecture_tree_lines(network, depth)
+        except Exception as exc:  # noqa: BLE001 - surfaced, not swallowed
+            self._show_error("Module tree failed", exc)
+            return
+        self._dl_arch_text.delete("1.0", "end")
+        self._dl_arch_text.insert("1.0", "\n".join(lines))
+
+    def _dl_save_autograd_dot(self) -> None:
+        """pytorchviz's make_dot as a .dot file (torch engine only)."""
+        if self._dl_last_run is None:
+            messagebox.showinfo("No network", "Train a network first.")
+            return
+        network = self._dl_last_run[0]
+        if getattr(network, "_net_spec_", None) is None:
+            messagebox.showwarning(
+                "Numpy engine",
+                "The autograd dot export needs the torch engine -- the numpy "
+                "estimator's graph lives in the toolkit's own autograd core, "
+                "not torch's.  Retrain with a torch architecture (feed-forward "
+                "or residual MLP, torch installed) to export the dot source.",
+            )
+            return
+        if not self._require("torch", "the autograd dot export"):
+            return
+        path = filedialog.asksaveasfilename(
+            title="Save autograd dot source",
+            defaultextension=".dot",
+            initialfile="network.dot",
+            filetypes=[("Graphviz dot", "*.dot"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            import torch
+
+            module = network._ensure_network()
+            module.eval()
+            n_in = int(network._net_spec_["n_in"])
+            x = torch.zeros(1, n_in, requires_grad=True)
+            out = module(x)
+            source = autograd_dot_source(out, params=dict(module.named_parameters()))
+            Path(path).write_text(source, encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001 - surfaced, not swallowed
+            self._show_error("Dot export failed", exc)
+            return
+        messagebox.showinfo(
+            "Dot source saved",
+            f"{Path(path).name} — {len(source.splitlines())} lines of Graphviz "
+            "source (backward ops, parameter leaves with shapes).  Render it "
+            "with any dot renderer, e.g.  dot -Tpng network.dot -o network.png",
+        )
+
+    def _dl_view_netron(self) -> None:
+        """Export ONNX and serve it in netron's browser viewer.
+
+        Fail-fast order: no network → the numpy engine (no portable
+        file format) → netron absent (the pip remedy) → torch absent →
+        only THEN the file dialog and the export.  Every refusal names
+        its remedy; nothing is written behind the user's back.
+        """
+        if self._dl_last_run is None:
+            messagebox.showinfo("No network", "Train a network first.")
+            return
+        network = self._dl_last_run[0]
+        if getattr(network, "_net_spec_", None) is None:
+            messagebox.showwarning(
+                "Numpy engine",
+                "The netron viewer needs a model FILE -- the torch engine's "
+                "ONNX export.  The numpy estimator has no portable file "
+                "format; retrain with a torch architecture to view it in "
+                "netron.",
+            )
+            return
+        import importlib.util
+
+        if importlib.util.find_spec("netron") is None:
+            messagebox.showwarning(
+                "netron missing",
+                "netron is not installed -- pip install netron "
+                "(or open the exported file at https://netron.app) and retry.",
+            )
+            return
+        if not self._require("torch", "the netron view"):
+            return
+        path = filedialog.asksaveasfilename(
+            title="Export ONNX for netron",
+            defaultextension=".onnx",
+            initialfile="network.onnx",
+            filetypes=[("ONNX model", "*.onnx"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            import torch
+
+            module = network._ensure_network()
+            module.eval()
+            example = torch.zeros(1, int(network._net_spec_["n_in"]))
+            torch.onnx.export(
+                module,
+                (example,),
+                path,
+                input_names=["input"],
+                output_names=["output"],
+                dynamic_axes={"input": {0: "batch"}, "output": {0: "batch"}},
+            )
+        except Exception as exc:  # noqa: BLE001 - surfaced, not swallowed
+            self._show_error("ONNX export failed", exc)
+            return
+        try:
+            address = launch_netron(path)
+        except Exception as exc:  # noqa: BLE001 - surfaced, not swallowed
+            self._show_error("netron launch failed", exc)
+            return
+        messagebox.showinfo(
+            "netron serving",
+            f"The network is serving at {address} -- netron opens it in "
+            "your browser.  Stop it from a shell with `netron.stop()`.",
+        )
+
+    # -- the Experiments card (100x-173): tensorboard / wandb / mlflow /
+    # aim distilled ---------------------------------------------------- #
+
+    def _log_dl_experiment(
+        self, network: Any, report: Any, seconds: float, engine: str, task: str
+    ) -> None:
+        """Log the finished run to the JSONL store, wandb-style.
+
+        The config snapshot reads the live form (what the user actually
+        ran), the metrics ride wandb's slashed names -- the summary-style
+        best val loss (the BEST value, not the final one), the
+        TensorBoard EMA-smoothed twin, the fit clock, the task's own
+        scores -- and the per-epoch train-loss series rides along as the
+        TensorBoard event log.  A read-only toolkit folder degrades to a
+        muted note, never an error dialog.
+        """
+        target = self._dl_target_combo.get()
+        rows = 0 if self._dl_frame is None else len(self._dl_frame)
+        params: dict[str, Any] = {
+            "architecture": self._dl_arch_combo.get(),
+            "engine": engine,
+            "estimator": type(network).__name__,
+            "task": task,
+            "target": target,
+            "hidden": self._dl_hidden_entry.get(),
+            "epochs": self._dl_epochs.get(),
+            "batch_size": self._dl_batch.get(),
+            "learning_rate": self._dl_lr_entry.get(),
+            "weight_decay": self._dl_wd_entry.get(),
+            "dropout": self._dl_dropout.get(),
+            "patience": self._dl_patience.get(),
+            "val_split": self._dl_valsplit.get(),
+            "seed": self._dl_seed_entry.get(),
+            "split": self._dl_split_combo.get(),
+            "activation": self._dl_activation_combo.get(),
+            "optimizer": self._dl_optimizer_combo.get(),
+            "rows": rows,
+        }
+        if engine == "torch":
+            params["batchnorm"] = bool(self._dl_batchnorm_var.get())
+        metrics: dict[str, Any] = {}
+        val_losses = [
+            float(entry["val_loss"])
+            for entry in network.history_
+            if entry.get("val_loss") is not None
+        ]
+        train_series = [
+            float(entry["train_loss"])
+            for entry in network.history_
+            if entry.get("train_loss") is not None
+        ]
+        if val_losses:
+            # wandb's summary convention: the best value, not the final
+            metrics[_EXPERIMENT_METRIC_BEST_VAL] = min(val_losses)
+            # ... with TensorBoard's EMA read (weight 0.6) beside it
+            metrics["loss/best_val_smoothed"] = min(smooth_series(val_losses))
+        if train_series:
+            metrics["loss/train_last"] = train_series[-1]
+        metrics["epochs/run"] = int(
+            getattr(network, "n_iter_", len(network.history_))
+        )
+        metrics["fit/seconds"] = float(seconds)
+        if task == "regression":
+            for name in ("r2", "rmse", "mae"):
+                value = getattr(report, name, None)
+                if value is not None:
+                    metrics[f"metrics/{name}"] = float(value)
+        else:
+            for name in ("accuracy", "balanced_accuracy", "mcc"):
+                value = getattr(report, name, None)
+                if value is not None:
+                    metrics[f"metrics/{name}"] = float(value)
+        try:
+            log_experiment_run(
+                self._dl_experiment_log,
+                kind=type(network).__name__,
+                params=params,
+                metrics=metrics,
+                notes=f"{target} on {rows:,} rows · {self._dl_split_combo.get()} split",
+                series=train_series,
+            )
+        except OSError:
+            self._dl_best_label.configure(
+                text="experiment log not writable — runs not tracked"
+            )
+            return
+        self._dl_refresh_experiments()
+
+    def _dl_refresh_experiments(self) -> None:
+        """Reload the JSONL run log and refill the card (MLflow's list).
+
+        The Aim filter box applies at read time; the best-runs line under
+        the table is Aim's leaderboard over whatever the filter left.
+        """
+        self._dl_runs = load_experiment_runs(self._dl_experiment_log)
+        self._dl_apply_filter()
+
+    def _dl_apply_filter(self) -> None:
+        """Refill the table from the cached runs under the Aim query."""
+        shown = query_experiment_runs(self._dl_runs, self._dl_filter_entry.get())
+        self._dl_runs_tree.delete(*self._dl_runs_tree.get_children())
+        self._dl_runs_by_iid = {}
+        for run in reversed(shown):  # newest first -- MLflow's ordering
+            run_id = str(run.get("run_id") or "")
+            if not run_id:
+                continue  # a hand-trimmed line: nothing to anchor the row
+            metrics = run.get("metrics", {})
+            best = metrics.get(_EXPERIMENT_METRIC_BEST_VAL)
+            started = str(run.get("metadata", {}).get("started_at", ""))
+            self._dl_runs_by_iid[run_id] = run
+            self._dl_runs_tree.insert(
+                "",
+                "end",
+                iid=run_id,
+                values=(
+                    run_id[:8],
+                    started[:16],
+                    str(run.get("kind", "")),
+                    "-" if best is None else format_number(float(best)),
+                    str(run.get("status", "")),
+                ),
+            )
+        board = best_experiment_runs(shown, _EXPERIMENT_METRIC_BEST_VAL)
+        if board:
+            pieces: list[str] = []
+            for rank, (run_id, value) in enumerate(board):
+                if rank == 0 and len(board) > 1:
+                    # (100x-175) streamlit's st.metric: the leaderboard's
+                    # head carries its delta against the runner-up -- an
+                    # arrow by sign (a lower loss is the down arrow), a
+                    # muted bare number at zero, never a string parse.
+                    pieces.append(
+                        format_metric_line(run_id[:8], value, value - board[1][1])
+                    )
+                else:
+                    pieces.append(f"{run_id[:8]} {format_number(value)}")
+            self._dl_best_label.configure(
+                text="best val loss: " + " · ".join(pieces)
+            )
+        elif shown:
+            self._dl_best_label.configure(
+                text="no val losses logged in these runs"
+            )
+        else:
+            self._dl_best_label.configure(text="no runs yet — train a network")
+
+    def _dl_show_run_detail(self) -> None:
+        """Render the selected run's page into the card's mono host."""
+        selection = self._dl_runs_tree.selection()
+        if not selection:
+            return
+        run = self._dl_runs_by_iid.get(str(selection[0]))
+        if run is None:
+            return
+        self._dl_experiment_text.delete("1.0", "end")
+        self._dl_experiment_text.insert("1.0", "\n".join(run_detail_lines(run)))
+
+    def _dl_flag_selected_run(self) -> None:
+        """(100x-175) gradio's flag button: log the selected run for review.
+
+        The selected row's table columns (run / kind / best val loss /
+        status) land in ``experiments-flags/log.csv`` beside the run log,
+        with the flag reason, a username and a timestamp appended -- the
+        ClassicCSVLogger header contract.  A read-only toolkit folder
+        degrades to an error toast, never a crash.
+        """
+        selection = self._dl_runs_tree.selection()
+        if not selection:
+            self.notify("select a run row first", level="warning", duration=6)
+            return
+        run = self._dl_runs_by_iid.get(str(selection[0]))
+        if run is None:
+            return
+        headers = ("run", "kind", "best val loss", "status")
+        best = run.get("metrics", {}).get(_EXPERIMENT_METRIC_BEST_VAL)
+        values = [
+            str(run.get("run_id", ""))[:8],
+            str(run.get("kind", "")),
+            "-" if best is None else format_number(float(best)),
+            str(run.get("status", "")),
+        ]
+        flag_dir = Path(self._dl_experiment_log).parent / "experiments-flags"
+        try:
+            path, count = flag_run_csv(
+                flag_dir,
+                list(headers),
+                values,
+                flag_option=self._dl_flag_combo.get(),
+                username="playground",
+            )
+        except OSError:
+            self.notify("flag log not writable", level="error", duration=6)
+            return
+        self.notify(
+            f"run flagged ✓ · {path.name} row {count}", level="success", duration=6
+        )
 
     def _dl_save_history(self) -> None:
         if not self._dl_history:
@@ -23981,6 +26579,144 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showinfo(f"Dataset audit: {verdict}", message)
 
         self._start_job(f"auditing {path.name}", work, render)
+
+    # -- the Attribution card (100x-174): captum / tf-keras-vis /
+    # saliency / bertviz distilled ------------------------------------ #
+
+    def _dl_show_attr_method(self) -> None:
+        """Render the selected census row's own page (origin + needs)."""
+        selection = self._dl_attr_tree.selection()
+        if not selection:
+            return
+        method, family, source, needs_grad, origin = self._dl_attr_tree.item(
+            selection[0], "values"
+        )
+        lines = [
+            str(method),
+            f"origin {origin}  ·  {source}  ·  {family} family",
+            "gradients "
+            + (
+                "yes -- a backprop engine (torch) must drive the model"
+                if str(needs_grad) == "yes"
+                else "no -- model-agnostic, predict() is enough"
+            ),
+            "",
+            (
+                "the Explain button computes the model-agnostic read "
+                "(Occlusion) on the trained network; this census is the "
+                "offline reference to the rest."
+            ),
+        ]
+        self._dl_attr_text.delete("1.0", "end")
+        self._dl_attr_text.insert("1.0", "\n".join(lines))
+
+    def _dl_explain_row(self) -> None:
+        """Occlusion attribution for one held-out row (both engines).
+
+        captum's Occlusion / PAIR's Occlusion distilled to the
+        model-agnostic core: every feature (window 1, stride 1) is
+        restored to its held-out median in turn and the score drop
+        lands on that feature -- no gradients, no torch, so the numpy
+        engine explains as readily as the torch one.  Regression reads
+        the predicted value; classification reads the probability of
+        the row's own predicted class.
+        """
+        if self._dl_last_run is None:
+            messagebox.showwarning(
+                "No trained network",
+                "Train a network first -- the occlusion read explains "
+                "the last run's fitted network over its held-out rows.",
+            )
+            return
+        if simpledialog is None:  # pragma: no cover - headless import
+            return
+        import numpy as np
+
+        network, estimator_name, task, x_test, target = self._dl_last_run
+        rows = np.asarray(x_test, dtype=float)
+        if rows.ndim != 2 or rows.shape[0] == 0:
+            messagebox.showwarning(
+                "No held-out rows",
+                "The last run left no held-out rows to explain.",
+            )
+            return
+        columns = (
+            [str(column) for column in x_test.columns]
+            if hasattr(x_test, "columns")
+            else [f"x{i}" for i in range(rows.shape[1])]
+        )
+        try:
+            index = parse_int(
+                simpledialog.askstring(
+                    "Occlusion attribution",
+                    "Which held-out row should the occlusion read explain?\n\n"
+                    f"0-based index into the run's held-out split "
+                    f"(0 … {rows.shape[0] - 1}):",
+                    initialvalue="0",
+                    parent=self,
+                ),
+                "row",
+                minimum=0,
+                maximum=rows.shape[0] - 1,
+            )
+        except (ValueError, TypeError):
+            return  # cancelled or blank -- quiet, not an error
+        if task == "regression" or not hasattr(network, "predict_proba"):
+            def score_fn(batch: Any) -> Any:
+                return np.asarray(network.predict(batch), dtype=float).reshape(-1)
+
+            score_note = "predicted value"
+        else:
+            full_proba = np.asarray(
+                network.predict_proba(rows[[index]]), dtype=float
+            ).reshape(-1)
+            class_col = int(np.argmax(full_proba))
+
+            def score_fn(batch: Any) -> Any:
+                proba = np.asarray(network.predict_proba(batch), dtype=float)
+                return proba[:, class_col].reshape(-1)
+
+            score_note = f"P(predicted class {class_col})"
+        baseline = np.median(rows, axis=0)
+        values = occlusion_attributions(score_fn, rows[index], baseline=baseline)
+        lines = [
+            f"occlusion attribution · {estimator_name} · target {target}",
+            f"row {index} of {rows.shape[0]} held-out rows · score: {score_note}",
+            "baseline = per-feature held-out medians · window 1 · stride 1",
+            "",
+        ]
+        lines.extend(attribution_table_lines(columns, values))
+        self._dl_attr_text.delete("1.0", "end")
+        self._dl_attr_text.insert("1.0", "\n".join(lines))
+
+    def _dl_attention_example(self) -> None:
+        """bertviz's neuron-view arithmetic on a worked example.
+
+        The toolkit's MLPs carry no attention heads, so the bertviz
+        absorption lands as the arithmetic itself -- scaled
+        dot-product attention over three tokens, rendered as the head
+        view's cells (weight + share of the row's peak).
+        """
+        import numpy as np
+
+        tokens = ("the", "solvent", "evaporates")
+        vectors = np.asarray([[1.0, 0.0], [0.0, 1.0], [0.7, 0.7]])
+        weights = scaled_dot_product_attention(vectors, vectors)
+        lines = [
+            "bertviz neuron view · softmax(QKᵀ/√d) on a worked example",
+            (
+                "(the MLPs this tab trains carry no attention heads -- the "
+                "helpers show on fixed tokens)"
+            ),
+            "",
+            "attention weights (row token → column token · weight · share of row peak):",
+        ]
+        for row_token, col_token, weight, share in attention_head_cells(
+            weights, tokens
+        ):
+            lines.append(f"  {row_token} → {col_token}  {weight:.3f}  {share:5.1%}")
+        self._dl_attr_text.delete("1.0", "end")
+        self._dl_attr_text.insert("1.0", "\n".join(lines))
 
     # -- attribution & attention handlers (round 185: the XAI card) --- #
 
@@ -29521,6 +32257,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         * **Reindex by number** -- ``Prettier_extracted_dlgs.py`` (all
           three copies): align sparse per-ligand rows onto a dense
           0..N index so missing runs show as gaps, not silence.
+        * **Look & feel** -- (100x-175) the GUI-platform absorption
+          round: CustomTkinter's four accent packs over the light/dark
+          palette with its 0.4x scaling floor, nicegui's
+          refreshable preview + nine notify positions, gradio's four
+          toast levels and duration contract, and the toast engine
+          itself (the Experiments card carries gradio's flag button
+          and streamlit's st.metric deltas).
         """
         page = self._new_page("Utilities")
 
@@ -30032,6 +32775,119 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         grid_append(git_card, git_text, sticky="nsew", pady=(4, 0))
         git_text.insert("1.0", _GIT_QUICK_REFERENCE)
         git_text.configure(state="disabled")
+
+        # -- the Look & feel card (100x-175): customtkinter + nicegui + #
+        # streamlit + gradio distilled ------------------------------- #
+        lookfeel = make_card(
+            page.grid,
+            "Look & feel (customtkinter · nicegui · streamlit · gradio)",
+            span=2,
+            row=4,
+            column=0,
+            subtitle="Four GUI repos in one card.  CustomTkinter's four "
+            "accent packs -- CTkButton's [light, dark] colour pairs read "
+            "off its shipped theme JSONs -- override the window's accent "
+            "trio live (the View ▸ Accent pack menu is the same lever).  "
+            "nicegui's @ui.refreshable rebuilds the census preview; the "
+            "toast row is nicegui's ui.notify (nine positions) with "
+            "gradio's Info / Success / Warning / Error levels and its "
+            "duration contract (sticky when unset).  The scaling spin is "
+            "CTk's widget scaling floored at 0.4×, mapped onto the font "
+            "hierarchy.  streamlit's st.metric deltas ride the Deep "
+            "Learning tab's Experiments leaderboard; its cache_data / "
+            "cache_resource helpers live on for scripts.",
+        )
+        pack_row = ttk.Frame(lookfeel, style="Card.TFrame")
+        grid_append(lookfeel, pack_row, sticky="w")
+        ttk.Label(pack_row, text="accent pack", style="CardMuted.TLabel").pack(side="left")
+        self._lookfeel_pack_combo = ttk.Combobox(
+            pack_row,
+            state="readonly",
+            width=18,
+            values=("default",) + GUI_PACK_NAMES,
+        )
+        self._lookfeel_pack_combo.set("default")
+        self._lookfeel_pack_combo.pack(side="left", padx=(8, 0))
+        self._lookfeel_pack_combo.bind(
+            "<<ComboboxSelected>>", lambda _event: self._on_pack_combo_change()
+        )
+        pack_btn = self._action_button(
+            pack_row,
+            "Apply pack",
+            self._on_pack_combo_change,
+            tooltip="CustomTkinter's set_default_color_theme: the picked "
+            "pack's accent pair replaces the palette's accent trio in "
+            "every live style, strip, table tag and figure toolbar -- "
+            "CTk's [light, dark] two-value convention resolved against "
+            "the active appearance mode.",
+        )
+        pack_btn.pack(side="left", padx=(10, 0))
+
+        scaling_row = ttk.Frame(lookfeel, style="Card.TFrame")
+        grid_append(lookfeel, scaling_row, sticky="w", pady=(8, 0))
+        ttk.Label(scaling_row, text="UI scaling (CTk)", style="CardMuted.TLabel").pack(side="left")
+        self._lookfeel_scaling_spin = ttk.Spinbox(
+            scaling_row, from_=0.4, to=1.6, increment=0.05, width=6
+        )
+        self._lookfeel_scaling_spin.set("1.0")
+        self._lookfeel_scaling_spin.pack(side="left", padx=(8, 0))
+        scale_btn = self._action_button(
+            scaling_row,
+            "Apply scaling",
+            self._on_scaling_change,
+            tooltip="CTk's ScalingTracker: a widget-scaling factor with a "
+            "0.4× floor.  tkinter's honest equivalent of a global scale "
+            "is the named-font hierarchy, so the factor maps onto the "
+            "View ▸ Font size lever (10 pt × factor, clamped to 8-24).",
+        )
+        scale_btn.pack(side="left", padx=(10, 0))
+
+        self._lookfeel_preview_builds = 0
+        self._lookfeel_preview_text = _grid_text(lookfeel, height=9, mono=self._mono)
+        grid_append(lookfeel, self._lookfeel_preview_text, sticky="ew", pady=(8, 0))
+        refresh_row = ttk.Frame(lookfeel, style="Card.TFrame")
+        grid_append(lookfeel, refresh_row, sticky="w", pady=(4, 0))
+        refresh_btn = self._action_button(
+            refresh_row,
+            "Refresh preview",
+            self._lookfeel_refresh_preview,
+            tooltip="nicegui's @ui.refreshable: delete everything the "
+            "preview created, then create it again from the live pack "
+            "and appearance mode -- the census never goes stale.",
+        )
+        refresh_btn.pack(side="left")
+
+        toast_row = ttk.Frame(lookfeel, style="Card.TFrame")
+        grid_append(lookfeel, toast_row, sticky="w", pady=(8, 0))
+        ttk.Label(toast_row, text="toasts", style="CardMuted.TLabel").pack(side="left")
+        self._lookfeel_toast_position = ttk.Combobox(
+            toast_row, state="readonly", width=13, values=_TOAST_POSITIONS
+        )
+        self._lookfeel_toast_position.set("bottom-right")
+        self._lookfeel_toast_position.pack(side="left", padx=(8, 6))
+        self._lookfeel_toast_duration = ttk.Combobox(
+            toast_row, state="readonly", width=9, values=("10 s", "sticky")
+        )
+        self._lookfeel_toast_duration.set("10 s")
+        self._lookfeel_toast_duration.pack(side="left", padx=(0, 6))
+        gradio_names = {
+            "info": "gr.Info",
+            "success": "gr.Success",
+            "warning": "gr.Warning",
+            "error": "gr.Error",
+        }
+        for level in ("info", "success", "warning", "error"):
+            button = self._action_button(
+                toast_row,
+                level.capitalize(),
+                lambda bound=level: self._preview_toast(bound),
+                tooltip=f"{gradio_names[level]} / nicegui ui.notify: a "
+                "transient toast at the picked position -- the default "
+                "duration is gradio's 10 s, 'sticky' leaves it until "
+                "clicked, and every toast stacks per position.",
+            )
+            button.pack(side="left", padx=(4, 0))
+        self._lookfeel_refresh_preview()
 
         # dynamic trees fill lazily on first render
         self._util_frames: dict[str, Any] = {}

@@ -86,6 +86,7 @@ pharmaml.exceptions.DockingError: ligands directory not found: /tmp/pharmaml_doc
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
@@ -102,6 +103,8 @@ __all__ = [
     "DockingRunResult",
     "VinaBatchProgress",
     "batch_run_directories",
+    "engine_argv",
+    "locate_engine_binary",
     "parse_vina_config",
     "run_autodock4",
     "run_vina",
@@ -213,6 +216,115 @@ def _require_executable(name: str) -> str:
     return located
 
 
+def locate_engine_binary(
+    name: str, engine_dir: str | Path | None = None
+) -> Path | None:
+    """Resolve a docking engine binary: the engine folder first, PATH last.
+
+    The AutoDock engines also ship as Windows builds -- ``vina.exe``,
+    ``autogrid4.exe``, ``autodock4.exe`` -- which Windows finds on PATH
+    through ``PATHEXT`` but nothing else does.  Both spellings are
+    checked in the engine folder AND on PATH, so the one call works for
+    native installs, conda builds, and a folder of ``.exe`` files
+    (the toolkit ships exactly such a folder -- ``engines/`` -- and the
+    GUI's engine-binaries picker points here).
+
+    Parameters
+    ----------
+    name:
+        Engine base name, e.g. ``"vina"`` or ``"autogrid4"``.
+    engine_dir:
+        Optional folder to search before PATH (the ``.exe`` folder).
+
+    Returns
+    -------
+    Path or None
+        The located binary, or ``None`` when neither spelling exists in
+        the engine folder or on PATH.
+
+    Examples
+    --------
+    >>> locate_engine_binary("definitely_not_a_real_engine_anywhere") is None
+    True
+    """
+    if engine_dir is not None:
+        folder = Path(engine_dir)
+        for candidate in (folder / name, folder / f"{name}.exe"):
+            if candidate.is_file():
+                return candidate
+    for spelling in (name, f"{name}.exe"):
+        located = shutil.which(spelling)
+        if located is not None:
+            return Path(located)
+    return None
+
+
+def _pe_argv(binary: Path | str) -> list[str]:
+    """argv that runs a resolved engine binary on THIS host.
+
+    A Windows PE binary runs natively on Windows; anywhere else it needs
+    ``wine``.  The MZ magic is checked rather than the file name, so a
+    renamed copy still routes correctly, and a missing ``wine`` is an
+    actionable :class:`DockingError` instead of an ``Exec format error``
+    deep inside a batch run.
+    """
+    path = Path(binary)
+    if os.name == "nt" or not path.is_file():
+        return [str(binary)]
+    with path.open("rb") as handle:
+        magic = handle.read(2)
+    if magic != b"MZ":
+        return [str(binary)]
+    wine = shutil.which("wine") or shutil.which("wine64")
+    if wine is None:
+        raise DockingError(
+            f"{path.name} is a Windows executable and no wine was found on "
+            "PATH -- run it on Windows, install wine, or use a native "
+            "engine build"
+        )
+    return [wine, str(binary)]
+
+
+def engine_argv(name: str, engine_dir: str | Path | None = None) -> list[str]:
+    """The argv prefix that launches one engine binary on this host.
+
+    ``engine_dir=None`` keeps the historical PATH-only resolution via
+    :func:`_require_executable` (the hook the existing test-suite
+    monkeypatches); a folder resolves ``name`` / ``name.exe`` inside it
+    first, with PATH as the per-binary fallback, and a Windows PE
+    binary on a non-Windows host is routed through ``wine``.
+
+    Parameters
+    ----------
+    name:
+        Engine base name, e.g. ``"vina"``.
+    engine_dir:
+        Optional folder holding the engine binaries (searched first).
+
+    Returns
+    -------
+    list of str
+        ``[binary]`` for a native binary, ``[wine, binary]`` for a PE
+        on a non-Windows host with wine installed.
+
+    Raises
+    ------
+    DockingError
+        Nothing resolvable, or a PE binary without any wine.
+    """
+    if engine_dir is None:
+        return _pe_argv(_require_executable(name))
+    binary = locate_engine_binary(name, engine_dir)
+    if binary is None:
+        raise DockingError(
+            f"executable {name!r} (or {name}.exe) not found in the engine "
+            f"folder {engine_dir} or on PATH -- drop the engine binaries "
+            "(vina.exe / autogrid4.exe / autodock4.exe) into that folder "
+            "or install them on PATH"
+        )
+    return _pe_argv(binary)
+
+
 #: Sentinel AutoDock4 writes at the very end of a healthy ``.dlg`` --
 #: the same string :func:`~pharmaml.docking.parsing.check_docking_completion`
 #: audits per directory.
@@ -241,6 +353,7 @@ def run_autodock4(
     autodock: str = "autodock4",
     skip_existing: bool = True,
     timeout_s: float = 3600.0,
+    engine_dir: str | Path | None = None,
 ) -> DockingRunResult:
     """Run autogrid4 + autodock4 for one ligand directory.
 
@@ -262,6 +375,10 @@ def run_autodock4(
         ``.dlg`` only when it carries AutoDock's ``Successful
         Completion`` sentinel -- an interrupted run is re-run, never
         trusted just because the file exists.
+    engine_dir:
+        Folder holding the engine binaries (``autogrid4`` /
+        ``autogrid4.exe`` / ``autodock4`` / ``autodock4.exe``), searched
+        before PATH -- the Windows ``.exe`` builds the toolkit ships.
 
     Returns
     -------
@@ -286,9 +403,9 @@ def run_autodock4(
         if not (work / grid_field).is_file():
             raise DockingError(f"missing {grid_field} in {work}")
         try:
-            autogrid_bin = _require_executable(autogrid)
+            autogrid_prefix = engine_argv(autogrid, engine_dir)
             subprocess.run(
-                [autogrid_bin, "-p", grid_field, "-l", "r.glg"],
+                [*autogrid_prefix, "-p", grid_field, "-l", "r.glg"],
                 cwd=work,
                 check=True,
                 capture_output=True,
@@ -305,9 +422,9 @@ def run_autodock4(
         if not (work / dock_param).is_file():
             raise DockingError(f"missing {dock_param} in {work}")
         try:
-            autodock_bin = _require_executable(autodock)
+            autodock_prefix = engine_argv(autodock, engine_dir)
             subprocess.run(
-                [autodock_bin, "-p", dock_param, "-l", "r.dlg"],
+                [*autodock_prefix, "-p", dock_param, "-l", "r.dlg"],
                 cwd=work,
                 check=True,
                 capture_output=True,
@@ -337,6 +454,7 @@ def run_vina(
     seed: int | None = None,
     vina_bin: str = "vina",
     timeout_s: float = 3600.0,
+    engine_dir: str | Path | None = None,
 ) -> DockingRunResult:
     """Run a single AutoDock Vina docking.
 
@@ -356,6 +474,10 @@ def run_vina(
         CPU count (0 = let Vina decide).
     seed:
         Random seed for reproducible docking.
+    engine_dir:
+        Folder holding the engine binary (``vina`` / ``vina.exe``),
+        searched before PATH -- the Windows ``.exe`` build the toolkit
+        ships.
 
     Returns
     -------
@@ -363,12 +485,12 @@ def run_vina(
     """
     import time
 
-    binary = _require_executable(vina_bin)
+    prefix = engine_argv(vina_bin, engine_dir)
     out_path = Path(out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        binary,
+        *prefix,
         "--receptor", str(receptor),
         "--ligand", str(ligand),
         "--out", str(out_path),
@@ -394,10 +516,10 @@ def run_vina(
     return DockingRunResult(out_path.parent, True, out_path, time.perf_counter() - started)
 
 
-def _run_one(directory: str) -> DockingRunResult:
+def _run_one(directory: str, engine_dir: str | Path | None = None) -> DockingRunResult:
     """Top-level helper so ProcessPoolExecutor can pickle it."""
     try:
-        return run_autodock4(directory)
+        return run_autodock4(directory, engine_dir=engine_dir)
     except DockingError as exc:
         return DockingRunResult(Path(directory), False, None, 0.0, str(exc))
 
@@ -539,6 +661,7 @@ def run_vina_batch(
     vina_bin: str = "vina",
     timeout_s: float = 3600.0,
     skip_existing: bool = False,
+    engine_dir: str | Path | None = None,
 ) -> list[DockingRunResult]:
     """Dock every ``.pdbqt`` under a directory with one Vina config.
 
@@ -577,6 +700,10 @@ def run_vina_batch(
     skip_existing:
         Resume mode -- skip ligands whose output PDBQT and non-empty
         log already exist (``batch.py``'s "already docked" rule).
+    engine_dir:
+        Folder holding the engine binary (``vina`` / ``vina.exe``),
+        searched before PATH -- the Windows ``.exe`` build the toolkit
+        ships.
 
     Returns
     -------
@@ -615,7 +742,7 @@ def run_vina_batch(
     if not ligands:
         _LOG.warning("no .pdbqt ligands found under %s", ligands_root)
         return []
-    binary = _require_executable(vina_bin)
+    prefix = engine_argv(vina_bin, engine_dir)
 
     # (100x-142) the collision-disambiguated stems live in ONE shared
     # helper -- vina_batch_progress applies the identical naming, so
@@ -632,7 +759,7 @@ def run_vina_batch(
             _LOG.info("skipping %s (already docked)", ligand.name)
             return DockingRunResult(out, True, log_file, 0.0, None, True)
         cmd = [
-            binary,
+            *prefix,
             "--config", str(conf),
             "--ligand", str(ligand),
             "--out", str(out_pdbqt),
@@ -676,6 +803,7 @@ def batch_run_directories(
     base_directory: str | Path,
     workers: int = 4,
     engine: str = "autodock4",
+    engine_dir: str | Path | None = None,
 ) -> list[DockingRunResult]:
     """Dock every prepared ligand sub-directory in parallel.
 
@@ -695,6 +823,10 @@ def batch_run_directories(
     engine:
         ``'autodock4'`` (batch folders) -- Vina runs are single-shot
         via :func:`run_vina`.
+    engine_dir:
+        Folder holding the engine binaries, searched before PATH --
+        threaded through to every per-folder :func:`run_autodock4`
+        child process.
 
     Returns
     -------
@@ -717,7 +849,9 @@ def batch_run_directories(
     _LOG.info("Batch docking %d ligands with %d workers", len(directories), workers)
     results: list[DockingRunResult] = []
     with ProcessPoolExecutor(max_workers=workers) as executor:
-        futures = {executor.submit(_run_one, str(d)): d for d in directories}
+        futures = {
+            executor.submit(_run_one, str(d), engine_dir): d for d in directories
+        }
         for future in as_completed(futures):
             results.append(future.result())
 

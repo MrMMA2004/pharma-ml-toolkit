@@ -74,7 +74,7 @@ The kNN half alone (no bootstrap fits) is the quick pass:
 False
 >>> quick.pred_mean is None and quick.reliable is None
 True
->>> quick.to_frame(names=["far-away compound"])["reliable"].isna().all()
+>>> bool(quick.to_frame(names=["far-away compound"])["reliable"].isna().all())
 True
 
 Classification models get their honest path too — the ensemble spread

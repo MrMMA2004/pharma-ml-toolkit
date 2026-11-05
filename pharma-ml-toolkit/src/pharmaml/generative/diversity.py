@@ -71,7 +71,7 @@ diversity (same scaffold, different molecules):
 >>> f2 = IdenticalMurckoScaffoldFilter(bucket_size=1, minscore=0.5)
 >>> benzene_kids = ["c1ccccc1O", "c1ccccc1N", "c1ccccc1C"]
 >>> updated = f2.update_score([0.9, 0.9, 0.9], benzene_kids)
->>> [round(v, 6) for v in updated]
+>>> [round(float(v), 6) for v in updated]
 [0.9, 0.0, 0.0]
 
 The factory -- REINVENT4's ``[diversity_filter] type = ...`` TOML key:

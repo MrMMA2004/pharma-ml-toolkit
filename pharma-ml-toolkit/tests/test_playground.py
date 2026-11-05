@@ -360,6 +360,65 @@ class TestDockingHelpers:
         )
         assert playground.docking_engine_binaries("Vina single ligand") == ("vina",)
 
+    # -- (100x-171) the .exe engine folder ------------------------------- #
+    def test_dock_engine_binary_prefers_picked_folder_then_bundled(
+        self, playground: Any, tmp_path: Any, monkeypatch: Any
+    ) -> None:
+        picked = tmp_path / "picked"
+        picked.mkdir()
+        (picked / "vina.exe").write_bytes(b"")
+        bundled = tmp_path / "bundled"
+        bundled.mkdir()
+        (bundled / "vina.exe").write_bytes(b"")
+        monkeypatch.setattr(playground, "_ENGINES_FOLDER", bundled)
+        monkeypatch.setattr(playground.shutil, "which", lambda _name: None)
+        assert playground.dock_engine_binary("vina", picked) == picked / "vina.exe"
+        assert playground.dock_engine_binary("vina") == bundled / "vina.exe"
+
+    def test_dock_engine_binary_falls_back_to_the_path_exe_spelling(
+        self, playground: Any, tmp_path: Any, monkeypatch: Any
+    ) -> None:
+        monkeypatch.setattr(playground, "_ENGINES_FOLDER", tmp_path / "nowhere")
+        monkeypatch.setattr(
+            playground.shutil,
+            "which",
+            lambda name: "/usr/local/bin/vina.exe" if name == "vina.exe" else None,
+        )
+        assert playground.dock_engine_binary("vina") == Path("/usr/local/bin/vina.exe")
+
+    def test_dock_missing_engines_reports_only_the_absent_names(
+        self, playground: Any, tmp_path: Any, monkeypatch: Any
+    ) -> None:
+        monkeypatch.setattr(playground, "_ENGINES_FOLDER", tmp_path / "nowhere")
+        monkeypatch.setattr(playground.shutil, "which", lambda _name: None)
+        folder = tmp_path / "engines"
+        folder.mkdir()
+        (folder / "autogrid4.exe").write_bytes(b"")
+        assert playground.dock_missing_engines(("autogrid4", "autodock4"), folder) == [
+            "autodock4"
+        ]
+        assert playground.dock_missing_engines(("autogrid4", "autodock4")) == [
+            "autogrid4",
+            "autodock4",
+        ]
+
+    def test_dock_engine_dir_prefers_picked_then_bundled_then_none(
+        self, playground: Any, tmp_path: Any, monkeypatch: Any
+    ) -> None:
+        picked = tmp_path / "picked"
+        picked.mkdir()
+        (picked / "vina.exe").write_bytes(b"")
+        bundled = tmp_path / "bundled"
+        bundled.mkdir()
+        (bundled / "autodock4.exe").write_bytes(b"")
+        monkeypatch.setattr(playground, "_ENGINES_FOLDER", bundled)
+        assert playground.dock_engine_dir(picked) == picked
+        assert playground.dock_engine_dir(None) == bundled
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        monkeypatch.setattr(playground, "_ENGINES_FOLDER", empty)
+        assert playground.dock_engine_dir(None) is None
+
 
 # --------------------------------------------------------------------- #
 # session persistence + themes (pure helpers -- no Tk required)
@@ -1367,6 +1426,9 @@ class TestDockingGuiUnderXvfb:
         tmp_path: Any,
     ) -> None:
         app._dock_campaign_root = tmp_path
+        # (100x-171) the bundled engines/ folder ships the .exe builds, so
+        # this gate test neutralises it: "no engine ANYWHERE -> dialog"
+        monkeypatch.setattr(playground, "_ENGINES_FOLDER", tmp_path / "no_engines")
         monkeypatch.setattr(playground.shutil, "which", lambda _name: None)
         app._dock_run()
         assert not app._busy  # the gate stopped before any job started
@@ -1392,6 +1454,9 @@ class TestDockingGuiUnderXvfb:
         (ligand_dir / "r.gpf").write_text("# stub\n", encoding="utf-8")
         (ligand_dir / "r.dpf").write_text("# stub\n", encoding="utf-8")
         app._dock_campaign_root = root
+        # keep the PATH-only route: without this the bundled engines/
+        # folder would win and the fake binary below never launches
+        monkeypatch.setattr(playground, "_ENGINES_FOLDER", tmp_path / "no_engines")
         monkeypatch.setattr(
             playground.shutil,
             "which",
@@ -1404,6 +1469,40 @@ class TestDockingGuiUnderXvfb:
         assert "1 folders docked" in summary  # one stub ligand directory
         assert "1 failed" in summary  # /usr/bin/true produces no .dlg
         assert quiet_dialogs == []
+
+    # -- (100x-171) the engine-binaries picker card ---------------------- #
+    def test_engine_binaries_picker_labels_resolution_per_engine(
+        self,
+        playground: Any,
+        app: Any,
+        quiet_dialogs: list[Any],
+        tmp_path: Any,
+        monkeypatch: Any,
+    ) -> None:
+        # the picker resolves every engine (vina / autogrid4 / autodock4)
+        # through: the picked folder, then the bundled engines/ folder,
+        # then PATH -- and confesses per engine where each one came from
+        monkeypatch.setattr(playground, "_ENGINES_FOLDER", tmp_path / "nowhere")
+        monkeypatch.setattr(playground.shutil, "which", lambda _name: None)
+        app._dock_engines_dir = None
+        app._dock_refresh_engines_info()
+        missing_text = str(app._dock_engines_info.cget("text"))
+        assert "vina: —" in missing_text, missing_text
+        assert "PATH only" in missing_text, missing_text
+
+        picked = tmp_path / "picked"
+        picked.mkdir()
+        (picked / "vina.exe").write_bytes(b"")
+        (picked / "autogrid4.exe").write_bytes(b"")
+        app._dock_engines_dir = picked
+        app._dock_refresh_engines_info()
+        text = str(app._dock_engines_info.cget("text"))
+        assert "vina: vina.exe (folder)" in text, text
+        assert "autogrid4: autogrid4.exe (folder)" in text, text
+        assert "autodock4: —" in text, text
+        assert str(picked) in text, text
+        assert quiet_dialogs == []
+        app._dock_engines_dir = None
 
     def test_docking_consensus_rescore_example_campaign(
         self, app: Any, quiet_dialogs: list[Any]
@@ -3114,9 +3213,15 @@ class TestDeepLearningTab:
             first._dl_gx_topk.set("12")
             first._dl_ebm_bags.set("6")
             first._dl_ebm_rounds.set("120")
+            # (the fork's rounds) the Architecture tree-depth combo, the
+            # Aim filter entry and the gradio flag combo ride the walk too
+            first._dl_depth_combo.set("3")
+            first._dl_filter_entry.delete(0, "end")
+            first._dl_filter_entry.insert(0, "mlp")
+            first._dl_flag_combo.set("ambiguous")
             payload = first._collect_session()
             saved = [key for key in payload["variables"] if key.startswith("_dl_")]
-            assert len(saved) == 58  # 18 + 6 + 13 + round-189's 21
+            assert len(saved) == 61  # 18 + 6 + 13 + round-189's 21 + the fork's three
 
             second._session = payload
             second._restore_session()
@@ -3173,14 +3278,14 @@ class TestDeepLearningTab:
             assert second._dl_gx_topk.get() == "12"
             assert second._dl_ebm_bags.get() == "6"
             assert second._dl_ebm_rounds.get() == "120"
+            assert second._dl_depth_combo.get() == "3"
+            assert second._dl_filter_entry.get() == "mlp"
+            assert second._dl_flag_combo.get() == "ambiguous"
         finally:
             first.destroy()
             second.destroy()
 
 
-# --------------------------------------------------------------------- #
-# the smart target-column default (100x-61) -- never train on row IDs
-# --------------------------------------------------------------------- #
 class TestDefaultTargetColumn:
     def test_bundled_examples_pick_their_real_targets(self, playground: Any) -> None:
         import pandas as pd
@@ -4753,10 +4858,14 @@ class TestDockingCoverageGui:
         quiet_dialogs: list[Any],
         tmp_path: Path,
         monkeypatch: Any,
+        playground: Any,
     ) -> None:
         import os
         import stat
 
+        # (100x-171) neutralise the bundled engines/ folder so the fake
+        # vina on PATH below is the engine this batch actually launches
+        monkeypatch.setattr(playground, "_ENGINES_FOLDER", tmp_path / "no_engines")
         binroot = tmp_path / "bin"
         binroot.mkdir()
         fake_vina = binroot / "vina"
@@ -8310,14 +8419,18 @@ class TestReview132Gui:
         captured = self._drive(app, action="cancel")
         app._menu_save_session_report_html()
         # every page was offered, numbered by axis, in walk order --
-        # (100x-133) the table pages ride FIRST (the walkers' own order)
+        # (100x-133) the table pages ride FIRST (the walkers' own order);
+        # (100x-174) the Attribution census table joined them, so the
+        # picklist now offers two tables + the two seeded figures.
         assert captured.get("error") is None, captured
-        assert len(captured["checks"]) == 3, captured
+        assert len(captured["checks"]) == 4, captured
         assert captured["checks"][0].startswith("table 1 · ")
         assert "SMILES inspector" in captured["checks"][0]
-        assert captured["checks"][1].startswith("figure 1 · ")
-        assert "alpha plot" in captured["checks"][1]
-        assert captured["checks"][2].startswith("figure 2 · ")
+        assert captured["checks"][1].startswith("table 2 · ")
+        assert "Attribution" in captured["checks"][1]
+        assert captured["checks"][2].startswith("figure 1 · ")
+        assert "alpha plot" in captured["checks"][2]
+        assert captured["checks"][3].startswith("figure 2 · ")
         # cancel aborted BEFORE the file dialog: nothing written, no job
         assert not target.is_file()
         assert not app._busy
@@ -8341,7 +8454,7 @@ class TestReview132Gui:
             playground.filedialog, "asksaveasfilename", lambda **_k: str(target)
         )
         self._seed_session(app)
-        captured = self._drive(app, flips=(1,))  # uncheck "alpha plot"
+        captured = self._drive(app, flips=(2,))  # uncheck "alpha plot" (row 3 -- the Attribution table rides row 2)
         app._menu_save_session_report_html()
         assert self._drain(app), "the HTML report job hung"
         # the dialog offered every page, alpha among them
@@ -8404,18 +8517,19 @@ class TestReview132Gui:
                 and str(widget.cget("text")).startswith("Save report")
             )
             bucket["enabled_at_start"] = not save.instate(("disabled",))
-            checks[0].invoke()  # one off -> 2 of 3
+            checks[0].invoke()  # one off -> 3 of 4
             app.update()
             labels = [
                 str(widget.cget("text"))
                 for widget in app._walk_widgets(dialog)
                 if widget.winfo_class() == "TLabel"
             ]
-            bucket["two_of_three"] = [
-                label for label in labels if "2 of 3 pages will ship" in label
+            bucket["three_of_four"] = [
+                label for label in labels if "3 of 4 pages will ship" in label
             ]
             checks[1].invoke()
-            checks[2].invoke()  # everything off
+            checks[2].invoke()
+            checks[3].invoke()  # everything off
             app.update()
             labels = [
                 str(widget.cget("text"))
@@ -8441,7 +8555,7 @@ class TestReview132Gui:
         app._menu_save_session_report_html()
         # the footer recounts on every flip and Save follows it
         assert bucket.get("enabled_at_start") is True, bucket
-        assert bucket.get("two_of_three"), "the census footer never recounted"
+        assert bucket.get("three_of_four"), "the census footer never recounted"
         assert bucket.get("nothing"), "the zero-page footer never appeared"
         assert bucket.get("disabled") is True, "Save stayed enabled at zero pages"
         assert bucket.get("still_open") is True, (
@@ -8702,8 +8816,8 @@ class TestReview133Gui:
             dialog = self._find_dialog(app)
             assert dialog is not None
             _ups, downs = self._arrow_buttons(app, dialog)
-            downs[0].invoke()  # the table's only arrow is disabled -- no-op
-            downs[1].invoke()  # alpha below beta
+            downs[0].invoke()  # table 1 below table 2 -- tables stay ahead of the figures either way
+            downs[2].invoke()  # alpha below beta (row 3 -- the Attribution table rides row 2)
             app.update()
             save = next(
                 widget
@@ -9125,7 +9239,7 @@ class TestReview134Gui:
             dialog = self._find_dialog(app)
             assert dialog is not None
             _ups, downs = self._arrow_buttons(app, dialog)
-            downs[1].invoke()  # alpha below beta -- the dialog's order
+            downs[2].invoke()  # alpha below beta -- the dialog's order (row 3: the Attribution table rides row 2)
             app.update()
             self._button(app, dialog, "Save report…").invoke()
 
@@ -9766,19 +9880,22 @@ class TestReview136Gui:
         text = target.read_text(encoding="utf-8")
         # the Contents nav: the heading, the list, the count-prefixed
         # lines in the walking order (the table first, then figures) --
-        # each line riding its anchor link (100x-137)
+        # each line riding its anchor link (100x-137); (100x-174) the
+        # Attribution census table joined the walk, so the tables take
+        # pg-1/pg-2 and the figures pg-3/pg-4
         assert "<nav class='contents'" in text
         assert "aria-label='Contents'" in text
         assert "<li><a href='#pg-1' title='Jump to this page in the report'>table 1 · SMILES inspector</a></li>" in text
-        assert "<li><a href='#pg-2' title='Jump to this page in the report'>figure 1 · alpha plot</a></li>" in text
-        assert "<li><a href='#pg-3' title='Jump to this page in the report'>figure 2 · beta plot</a></li>" in text
+        assert "<li><a href='#pg-2' title='Jump to this page in the report'>table 2 · Attribution" in text
+        assert "<li><a href='#pg-3' title='Jump to this page in the report'>figure 1 · alpha plot</a></li>" in text
+        assert "<li><a href='#pg-4' title='Jump to this page in the report'>figure 2 · beta plot</a></li>" in text
         assert (
             text.index("<li><a href='#pg-1' title='Jump to this page in the report'>table 1 · SMILES inspector</a></li>")
-            < text.index("<li><a href='#pg-2' title='Jump to this page in the report'>figure 1 · alpha plot</a></li>")
+            < text.index("<li><a href='#pg-3' title='Jump to this page in the report'>figure 1 · alpha plot</a></li>")
         )
         # the pages carry the anchor targets the lines link to
         assert "<section class='page' id='pg-1' tabindex='-1'>" in text
-        assert "<figure class='page' id='pg-2' tabindex='-1'>" in text
+        assert "<figure class='page' id='pg-3' tabindex='-1'>" in text
         # the page's own heading matches its Contents line (no drift)
         assert "<h2>table 1 · SMILES inspector</h2>" in text
         # the saved message confesses the new block
@@ -10640,15 +10757,17 @@ class TestReview139Gui:
             "title='Back to the contents block at the top of the report'>"
             "\u2191 Contents</a>"
         )
-        # one figure + one table -> exactly two page wrappers, each
-        # ending in the SAME tooltip-carrying link
-        assert html.count(link) == 2, html.count(link)
-        assert html.count("title='Back to the contents block at the top of the report'") == 2
+        # one figure + one table + the (100x-174) Attribution census
+        # table -> exactly three page wrappers, each ending in the
+        # SAME tooltip-carrying link
+        assert html.count(link) == 3, html.count(link)
+        assert html.count("title='Back to the contents block at the top of the report'") == 3
         # the anchors themselves are unchanged (the round only grew the
         # tooltip -- the round-trip navigation still holds)
         assert "<nav class='contents' id='contents' tabindex='-1'" in html
         assert "<li><a href='#pg-1' title='Jump to this page in the report'>table 1 · SMILES inspector</a></li>" in html
-        assert "<li><a href='#pg-2' title='Jump to this page in the report'>figure 1 · alpha plot</a></li>" in html
+        assert "<li><a href='#pg-2' title='Jump to this page in the report'>table 2 · Attribution" in html
+        assert "<li><a href='#pg-3' title='Jump to this page in the report'>figure 1 · alpha plot</a></li>" in html
         plt.close("all")
 
 
@@ -10769,25 +10888,27 @@ class TestReview140Gui:
         assert target.is_file(), "the save job never wrote the file"
 
         html = target.read_text(encoding="utf-8")
-        # one figure + one table -> exactly two Contents lines, EACH
-        # carrying the forward tooltip (a line without it would be a
-        # line a hovering pointer learns nothing from)
+        # one figure + one table + the (100x-174) Attribution census
+        # table -> exactly three Contents lines, EACH carrying the
+        # forward tooltip (a line without it would be a line a hovering
+        # pointer learns nothing from)
         tooltip = "title='Jump to this page in the report'"
-        assert html.count(tooltip) == 2, html.count(tooltip)
+        assert html.count(tooltip) == 3, html.count(tooltip)
         # the minted line form: href + title + the page's own name
         assert (
             "<li><a href='#pg-1' title='Jump to this page in the report'>"
             "table 1 · SMILES inspector</a></li>" in html
         )
+        assert "<li><a href='#pg-2' title='Jump to this page in the report'>table 2 · Attribution" in html
         assert (
-            "<li><a href='#pg-2' title='Jump to this page in the report'>"
+            "<li><a href='#pg-3' title='Jump to this page in the report'>"
             "figure 1 · alpha plot</a></li>" in html
         )
         # the return leg's tooltip still rides every wrapper too (the
         # round trip confesses in BOTH directions now)
         assert (
             html.count("title='Back to the contents block at the top of the report'")
-            == 2
+            == 3
         )
         # fragment links only -- the self-contained contract holds
         assert "href='http" not in html
@@ -10863,6 +10984,32 @@ class TestReview141Gui:
         assert signature.parameters["skip_existing"].default is False
         fields = {field.name for field in dataclasses.fields(DockingRunResult)}
         assert "skipped" in fields
+
+    def test_workflow_carries_the_engine_folder_parameter(self) -> None:
+        # (100x-171) every runner accepts engine_dir: the folder holding
+        # vina.exe / autogrid4.exe / autodock4.exe, searched before PATH
+        import inspect
+
+        from pharmaml.docking import locate_engine_binary
+        from pharmaml.docking.workflow import run_autodock4, run_vina, run_vina_batch
+
+        for runner in (run_autodock4, run_vina, run_vina_batch):
+            signature = inspect.signature(runner)
+            assert "engine_dir" in signature.parameters, runner.__name__
+            assert signature.parameters["engine_dir"].default is None
+        assert callable(locate_engine_binary)
+
+    def test_runners_thread_the_engine_folder_from_the_gui(self) -> None:
+        # the GUI's every docking run passes the resolved engine folder
+        # (picked folder, else the bundled engines/) down to pharmaml
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        for needle in (
+            "batch_run_directories(root, workers=workers, engine_dir=engine_dir)",
+            "run_autodock4(root, skip_existing=skip_existing, engine_dir=engine_dir)",
+            "engine_dir=dock_engine_dir(self._dock_engines_dir)",
+        ):
+            assert needle in source, needle
+        assert source.count("engine_dir=dock_engine_dir(self._dock_engines_dir)") >= 2
 
     # -- the source-level wiring -------------------------------------------- #
 
@@ -15198,13 +15345,19 @@ class TestDearPyGuiRoundTwo:
     def test_font_cascade_keeps_its_theme_tint(self, app: Any, playground: Any) -> None:
         # (100x-159) the round-41 build re-assigned _menu_tints AFTER the
         # font cascade's append -- the submenu lost its tint on every flip.
-        # The fix rides the list itself: [bar, file, view, FONT, help].
-        assert len(app._menu_tints) == 5
-        font_menu = app._menu_tints[3]
+        # The fix rides the list itself: [bar, file, view, PACK, FONT, help]
+        # -- (100x-175) the CTk accent-pack cascade slots in before the
+        # font cascade and rides the same list, so BOTH submenus keep
+        # their tint through a flip.
+        assert len(app._menu_tints) == 6
+        pack_menu = app._menu_tints[3]
+        font_menu = app._menu_tints[4]
         app._set_theme("dark")
         assert str(font_menu.cget("background")) == playground.HEADING
+        assert str(pack_menu.cget("background")) == playground.HEADING
         app._set_theme("light")
         assert str(font_menu.cget("background")) == playground.CARD
+        assert str(pack_menu.cget("background")) == playground.CARD
 
 
 class TestShapOptunaAbsorptionGui:
@@ -15742,10 +15895,6 @@ class TestReinvent4DiffDockAbsorptionGui:
         assert "closest ligand atom" in app._pocket_report_text.get("1.0", "end")
 
 
-# --------------------------------------------------------------------- #
-# round 185: the XAI absorption -- captum · tf-keras-vis ·
-# PAIR-code/saliency · bertviz, rebuilt offline on ml/xai.py
-# --------------------------------------------------------------------- #
 class TestXaiHelpers:
     """The offline attribution engine's pure contracts (no Tk needed)."""
 
@@ -16618,3 +16767,1443 @@ class TestRound189Cards:
         assert not app._busy
         titles = [call[1][0] for call in quiet_dialogs]
         assert "Binary classification only" in titles
+
+
+class TestDeepVizAbsorptionGui:
+    """(100x-172) The deep-learning visualisation absorption round --
+    lutzroeder/netron + mert-kurttutan/torchview + szagoruyko/pytorchviz
+    + johnmarktaylor91/torchlens distilled onto the Deep Learning tab:
+    a torchlens-style layer table (layer / type / output shape /
+    params / train, with the totals line), a torchview-style module
+    tree with depth control, a pytorchviz-style autograd .dot export,
+    and a netron-style "open the trained network in an external
+    viewer" launcher.  The numpy engine participates in the table and
+    tree; the dot export and the netron launch name their torch-only
+    preconditions instead of failing silently."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 180.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _configure_tiny(app: Any) -> None:
+        app._dl_hidden_entry.delete(0, "end")
+        app._dl_hidden_entry.insert(0, "4")
+        app._dl_epochs.set("5")
+        app._dl_patience.set("3")
+        app._dl_valsplit.set("0.2")
+
+    @staticmethod
+    def _force_numpy_engine(monkeypatch: Any) -> None:
+        """Pretend torch is absent for the engine resolution only."""
+        import importlib.util
+
+        real = importlib.util.find_spec
+
+        def fake(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == "torch":
+                return None
+            return real(name, *args, **kwargs)
+
+        monkeypatch.setattr(importlib.util, "find_spec", fake)
+
+    @staticmethod
+    def _train_tiny(app: Any) -> None:
+        app._dl_load_example()
+        app._dl_train()
+
+    # -- pure helpers: torchlens-style counts ------------------------------ #
+
+    def test_format_param_count_humanizes(self, playground: Any) -> None:
+        assert playground.format_param_count(0) == "0"
+        assert playground.format_param_count(780) == "780"
+        assert playground.format_param_count(25_000) == "25.0 K"
+        assert playground.format_param_count(2_500_000) == "2.5 M"
+        assert playground.format_param_count(1_200_000_000) == "1.2 B"
+
+    def test_size_to_shape_str_renders_pytorchviz_style(self, playground: Any) -> None:
+        assert playground.size_to_shape_str((1, 8)) == "(1, 8)"
+        assert playground.size_to_shape_str([2, 16, 4]) == "(2, 16, 4)"
+        assert playground.size_to_shape_str(()) == "()"
+
+    def test_architecture_summary_line_names_all_totals(self, playground: Any) -> None:
+        line = playground.architecture_summary_line(
+            {"params": 161, "trainable": 144, "ops": 7, "macs": 144}
+        )
+        assert "Params 161" in line
+        assert "144 trainable" in line
+        assert "ops 7" in line
+        assert "MACs 144" in line
+        assert "288 FLOPs" in line  # the MLP convention: 2 x MACs
+
+    # -- pure helpers: the torch module summariser -------------------------- #
+
+    def test_summarize_torch_module_rows_and_totals(self, playground: Any) -> None:
+        from torch import nn
+
+        module = nn.Sequential(nn.Linear(8, 16), nn.Tanh(), nn.Linear(16, 1))
+        rows, totals = playground.summarize_torch_module(module, n_in=8, batch=2)
+        names = [row[0] for row in rows]
+        assert names[0] == "input"
+        assert names[-1] == "output"
+        assert {"0", "1", "2"} <= {row[0] for row in rows}  # Sequential child names
+        by_name = {row[0]: row for row in rows}
+        first = by_name["0"]
+        assert first[1] == "Linear" and first[2] == "(2, 16)" and first[3] == 144
+        assert first[4] is True  # requires_grad
+        assert totals["params"] == 161  # 144 + 17
+        assert totals["trainable"] == 161
+        assert totals["macs"] == 8 * 16 + 16 * 1
+        assert totals["ops"] == len(rows) - 2  # module rows only
+
+    def test_layer_table_rows_dispatches_both_engines(self, playground: Any) -> None:
+        import numpy as np
+
+        x = np.asarray([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]])
+        y = np.asarray([1.0, 2.0, 1.5])
+        from pharmaml.ml.neural import DeepMLPRegressor
+        from pharmaml.ml.numpy_neural import NumpyMLPRegressor
+
+        torch_net = DeepMLPRegressor(
+            hidden_layers=(4,), epochs=2, patience=1, val_split=0.0
+        )
+        torch_net.fit(x, y)
+        rows, totals = playground.layer_table_rows(torch_net)
+        assert rows[0][0] == "input" and rows[0][2] == "(1, 3)"
+        assert totals["params"] > 0
+        assert any(row[1] == "Linear" for row in rows)
+
+        numpy_net = NumpyMLPRegressor(hidden_layers=(4,), epochs=2)
+        numpy_net.fit(x, y)
+        rows, totals = playground.layer_table_rows(numpy_net)
+        # 3 -> 4 -> 1: params = (3+1)*4 + (4+1)*1 = 21, macs = 12 + 4 = 16
+        assert totals["params"] == 21
+        assert totals["macs"] == 16
+        assert rows[0][0] == "input" and rows[0][2] == "(N, 3)"
+        assert rows[-1][0] == "output" and rows[-1][2] == "(N, 1)"
+        kinds = [row[1] for row in rows]
+        assert kinds.count("Linear") == 2
+
+    def test_layer_table_rows_rejects_foreign_objects(self, playground: Any) -> None:
+        with pytest.raises(TypeError, match="deep estimator"):
+            playground.layer_table_rows(object())
+
+    # -- pure helpers: the torchview-style module tree ---------------------- #
+
+    def test_module_tree_lines_depth_control(self, playground: Any) -> None:
+        from torch import nn
+
+        class Inner(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.fc = nn.Linear(4, 2)
+
+            def forward(self, x: Any) -> Any:
+                return self.fc(x)
+
+        class Outer(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.inner = Inner()
+
+            def forward(self, x: Any) -> Any:
+                return self.inner(x)
+
+        shallow = playground.module_tree_lines(Outer(), depth=1)
+        joined = "\n".join(shallow)
+        assert "Outer" in joined and "inner (Inner" in joined
+        assert "fc" not in joined  # depth 1 stops before the grandchild
+        deep = playground.module_tree_lines(Outer(), depth=2)
+        assert "fc (Linear" in "\n".join(deep)
+
+    def test_architecture_tree_lines_numpy_engine(self, playground: Any) -> None:
+        import numpy as np
+
+        from pharmaml.ml.numpy_neural import NumpyMLPRegressor
+
+        numpy_net = NumpyMLPRegressor(hidden_layers=(4,), epochs=1)
+        numpy_net.fit(np.asarray([[0.1, 0.2, 0.3]]), np.asarray([1.0]))
+        lines = playground.architecture_tree_lines(numpy_net, depth=1)
+        joined = "\n".join(lines)
+        assert "NumpyMLPRegressor" in joined
+        assert "3 → 4" in joined and "4 → 1" in joined
+        assert "Linear" in joined
+
+    # -- pure helpers: the pytorchviz-style dot source ---------------------- #
+
+    def test_autograd_dot_source_names_ops_and_params(self, playground: Any) -> None:
+        import torch
+        from torch import nn
+
+        model = nn.Linear(8, 4)
+        x = torch.randn(1, 8, requires_grad=True)
+        y = model(x)
+        dot = playground.autograd_dot_source(y, params=dict(model.named_parameters()))
+        assert dot.startswith("digraph")
+        assert "AddmmBackward" in dot
+        # the weight (out, in) = (4, 8) rides the light-blue param label,
+        # reached through TBackward0 -- Linear's x @ W.T transpose node
+        assert "weight\\n (4, 8)" in dot
+        assert "bias\\n (4)" in dot
+        assert "weight" in dot and "bias" in dot
+        assert "monospace" in dot and "ranksep" in dot  # pytorchviz's node defaults
+
+    # -- pure helpers: the netron launcher ---------------------------------- #
+
+    def test_launch_netron_missing_raises_actionable(self, playground: Any) -> None:
+        # netron is deliberately NOT installed in this venv: the
+        # launcher must refuse with the pip remedy, never a traceback.
+        pytest.importorskip("torch")  # only the message path is exercised
+        with pytest.raises(RuntimeError, match="pip install netron"):
+            playground.launch_netron("/tmp/whatever.onnx")
+
+    # -- the Architecture card ------------------------------------------------ #
+
+    def test_architecture_card_widgets_exist(self, app: Any) -> None:
+        columns = list(app._dl_arch_tree["columns"])
+        assert columns == ["layer", "type", "output shape", "params", "train"]
+        assert app._dl_arch_summary.cget("text").startswith("train a network")
+        assert list(app._dl_depth_combo["values"]) == ["1", "2", "3", "all"]
+        assert app._dl_depth_combo.get() == "1"
+        assert app._dl_arch_text.get("1.0", "end").strip() == ""
+
+    def test_architecture_card_fills_after_training(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        self._train_tiny(app)
+        assert self._drain_jobs(app), "network training hung"
+        assert quiet_dialogs == []
+        rows = app._dl_arch_tree.get_children()
+        assert len(rows) >= 3  # input + at least one layer + output
+        values = [app._dl_arch_tree.item(row, "values") for row in rows]
+        assert str(values[0][0]) == "input"
+        assert str(values[-1][0]) == "output"
+        summary = app._dl_arch_summary.cget("text")
+        assert "Params" in summary and "MACs" in summary and "FLOPs" in summary
+
+    def test_module_tree_button_renders_tree_into_card(
+        self, app: Any, monkeypatch: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        self._force_numpy_engine(monkeypatch)
+        self._train_tiny(app)
+        assert self._drain_jobs(app), "network training hung"
+        app._dl_show_module_tree()
+        text = app._dl_arch_text.get("1.0", "end")
+        assert "Linear" in text and "NumpyMLPRegressor" in text
+        # depth control (torchview): the combobox feeds the renderer
+        app._dl_depth_combo.set("all")
+        app._dl_show_module_tree()
+        assert "Linear" in app._dl_arch_text.get("1.0", "end")
+
+    def test_autograd_dot_save_writes_file(
+        self, playground: Any, app: Any, monkeypatch: Any, tmp_path: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        pytest.importorskip("torch")
+        dot_path = tmp_path / "network.dot"
+        monkeypatch.setattr(
+            playground.filedialog, "asksaveasfilename", lambda **kwargs: str(dot_path)
+        )
+        self._train_tiny(app)  # default arch + torch present -> torch engine
+        assert self._drain_jobs(app), "network training hung"
+        app._dl_save_autograd_dot()
+        # the success ride is an info dialog; errors/warnings are the
+        # failures this test exists to catch
+        problems = [d for d in quiet_dialogs if d[0] != "showinfo"]
+        assert problems == []
+        assert dot_path.is_file()
+        source = dot_path.read_text()
+        assert source.startswith("digraph")
+        assert "AddmmBackward" in source
+
+    def test_autograd_dot_numpy_engine_warns(
+        self, app: Any, monkeypatch: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        self._force_numpy_engine(monkeypatch)
+        self._train_tiny(app)
+        assert self._drain_jobs(app), "network training hung"
+        app._dl_save_autograd_dot()
+        assert quiet_dialogs and "numpy" in str(quiet_dialogs[0][1]).lower()
+
+    def test_view_netron_missing_warns_with_pip_hint(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        pytest.importorskip("torch")
+        self._train_tiny(app)  # torch engine
+        assert self._drain_jobs(app), "network training hung"
+        app._dl_view_netron()
+        # netron is not installed in this venv: the fail-fast warning
+        # names the remedy -- no export is attempted.
+        assert quiet_dialogs and "pip install netron" in str(quiet_dialogs[0][1])
+
+    def test_view_netron_without_network_warns(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_view_netron()
+        assert quiet_dialogs and "Train a network" in str(quiet_dialogs[0][1])
+        app._dl_save_autograd_dot()
+        assert "Train a network" in str(quiet_dialogs[1][1])
+        app._dl_show_module_tree()
+        assert "Train a network" in str(quiet_dialogs[2][1])
+
+
+class TestExperimentTrackingAbsorptionGui:
+    """(100x-173) The experiment-tracking absorption round --
+    tensorflow/tensorboard + wandb/wandb + mlflow/mlflow + aimhubio/aim
+    distilled onto the Deep Learning tab as one Experiments card: every
+    network the tab trains is logged wandb-style (config snapshot +
+    metrics + the TensorBoard scalar event series) into
+    ``experiments.jsonl`` next to playground.py; the card's table is
+    MLflow's run list (newest first, status column), the filter box is
+    Aim's ``query_runs`` substring query, the detail pane is the
+    wandb/aim run page (params, metrics, metadata, the TensorBoard
+    histogram-stats and EMA-smoothing read on the loss series), and the
+    best-runs line is Aim's leaderboard."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 180.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _configure_tiny(app: Any) -> None:
+        app._dl_hidden_entry.delete(0, "end")
+        app._dl_hidden_entry.insert(0, "4")
+        app._dl_epochs.set("5")
+        app._dl_patience.set("3")
+        app._dl_valsplit.set("0.2")
+
+    @staticmethod
+    def _train_tiny(app: Any) -> None:
+        app._dl_load_example()
+        app._dl_train()
+
+    @staticmethod
+    def _write_runs(playground: Any, path: Any, specs: list[dict]) -> list[str]:
+        ids = []
+        for spec in specs:
+            ids.append(
+                playground.log_experiment_run(
+                    path,
+                    kind=spec.get("kind", "NumpyMLPRegressor"),
+                    params=spec.get("params", {"lr": "0.01"}),
+                    metrics=spec.get("metrics", {}),
+                    notes=spec.get("notes", ""),
+                )
+            )
+        return ids
+
+    # -- pure helpers: TensorBoard's scalar smoothing + histogram stats ---- #
+
+    def test_smooth_series_matches_tensorboard_charts(self, playground: Any) -> None:
+        # TensorBoard's scalar chart: last = w*last + (1-w)*value, the
+        # first point rendered raw (w = the smoothing slider, 0.6 default).
+        assert playground.smooth_series([1.0, 2.0, 3.0], 0.6) == pytest.approx(
+            [1.0, 1.4, 2.04]
+        )
+        assert playground.smooth_series([1.0, 2.0, 3.0], 0.0) == pytest.approx(
+            [1.0, 2.0, 3.0]
+        )
+        assert playground.smooth_series([]) == []
+        assert playground.smooth_series([7.5]) == [7.5]
+
+    def test_histogram_summary_stats_tensorboard_line(self, playground: Any) -> None:
+        stats = playground.histogram_summary_stats([1.0, 2.0, 3.0, 4.0])
+        assert stats["count"] == 4
+        assert stats["mean"] == pytest.approx(2.5)
+        assert stats["std"] == pytest.approx(1.118033988749895)
+        assert stats["min"] == 1.0 and stats["max"] == 4.0
+        assert playground.histogram_summary_stats([]) == {}
+
+    # -- pure helpers: MLflow run ids + wandb run metadata ------------------ #
+
+    def test_new_run_id_is_mlflow_32_hex(self, playground: Any) -> None:
+        import re
+
+        first = playground.new_run_id()
+        second = playground.new_run_id()
+        assert re.fullmatch(r"[0-9a-f]{32}", first)
+        assert first != second
+
+    def test_run_metadata_wandb_style(self, playground: Any) -> None:
+        import datetime
+        import re
+
+        meta = playground.run_metadata()
+        assert set(meta) == {"host", "python", "started_at"}
+        assert re.match(r"\d+\.\d+", meta["python"])
+        datetime.datetime.fromisoformat(meta["started_at"])
+
+    # -- pure helpers: the JSONL run log (MLflow params, TB series) --------- #
+
+    def test_log_experiment_run_mlflow_stringifies_params(
+        self, playground: Any, tmp_path: Any
+    ) -> None:
+        import re
+
+        log = tmp_path / "experiments.jsonl"
+        run_id = playground.log_experiment_run(
+            log,
+            kind="DeepMLPRegressor",
+            params={"lr": 0.01, "layers": [8, 8], "flag": True},
+            metrics={"loss/best_val": 0.123, "epochs/run": 3},
+            notes="notebook figure 4",
+            series=[1.0, 0.5],
+        )
+        runs = playground.load_experiment_runs(log)
+        assert len(runs) == 1
+        run = runs[0]
+        assert run["run_id"] == run_id
+        assert re.fullmatch(r"[0-9a-f]{32}", run_id)
+        # MLflow's log_param contract: values are string-ified
+        assert run["params"] == {"lr": "0.01", "layers": "[8, 8]", "flag": "True"}
+        assert run["metrics"]["loss/best_val"] == pytest.approx(0.123)
+        assert run["metrics"]["epochs/run"] == pytest.approx(3.0)
+        assert run["series"] == [1.0, 0.5]
+        assert run["status"] == "FINISHED"
+        assert run["kind"] == "DeepMLPRegressor"
+        assert set(run["metadata"]) == {"host", "python", "started_at"}
+
+    def test_load_experiment_runs_tolerates_corrupt_lines(
+        self, playground: Any, tmp_path: Any
+    ) -> None:
+        assert playground.load_experiment_runs(tmp_path / "missing.jsonl") == []
+        log = tmp_path / "experiments.jsonl"
+        playground.log_experiment_run(log, kind="A", params={}, metrics={})
+        log.write_text(
+            "\n{not json at all}\n"
+            + log.read_text()
+            + '   \n[1, 2, 3]\n'  # valid JSON, but not a run record
+            + json.dumps({"run_id": "c" * 32, "kind": "B", "params": {}, "metrics": {}})
+            + "\n",
+            encoding="utf-8",
+        )
+        kinds = [run["kind"] for run in playground.load_experiment_runs(log)]
+        assert kinds == ["A", "B"]  # blank/corrupt/non-dict lines skipped
+
+    # -- pure helpers: Aim's leaderboard + query ----------------------------- #
+
+    def test_best_experiment_runs_leaderboard(self, playground: Any) -> None:
+        runs = [
+            {"run_id": "a" * 32, "metrics": {"loss/best_val": 0.5}},
+            {"run_id": "b" * 32, "metrics": {"loss/best_val": 0.2}},
+            {"run_id": "c" * 32, "metrics": {"loss/best_val": 0.3}},
+            {"run_id": "d" * 32, "metrics": {"metrics/accuracy": 0.9}},
+            {"run_id": "e" * 32, "metrics": {}},
+        ]
+        board = playground.best_experiment_runs(runs, "loss/best_val")
+        assert board == [
+            ("b" * 32, pytest.approx(0.2)),
+            ("c" * 32, pytest.approx(0.3)),
+            ("a" * 32, pytest.approx(0.5)),
+        ]
+        assert len(playground.best_experiment_runs(runs, "loss/best_val", k=2)) == 2
+        higher = playground.best_experiment_runs(
+            runs, "metrics/accuracy", lower_is_better=False
+        )
+        assert higher == [("d" * 32, pytest.approx(0.9))]
+
+    def test_query_experiment_runs_aim_substring(self, playground: Any) -> None:
+        runs = [
+            {
+                "run_id": "a" * 32,
+                "kind": "NumpyMLPRegressor",
+                "notes": "solubility sweep",
+                "params": {"architecture": "mlp-2x8"},
+                "metrics": {"loss/best_val": 0.4},
+                "status": "FINISHED",
+            },
+            {
+                "run_id": "b" * 32,
+                "kind": "DeepMLPRegressor",
+                "notes": "delaney",
+                "params": {"architecture": "mlp-4x16"},
+                "metrics": {},
+                "status": "FINISHED",
+            },
+        ]
+        # Aim semantics: the empty query returns every run
+        assert playground.query_experiment_runs(runs, "") == runs
+        assert len(playground.query_experiment_runs(runs, "mlp")) == 2
+        assert [r["run_id"] for r in playground.query_experiment_runs(runs, "solubility")] == [
+            "a" * 32
+        ]
+        # metric values are searchable too
+        assert [r["run_id"] for r in playground.query_experiment_runs(runs, "0.4")] == [
+            "a" * 32
+        ]
+        assert playground.query_experiment_runs(runs, "no-such-thing") == []
+
+    # -- pure helpers: wandb's sweep configuration --------------------------- #
+
+    def test_sweep_configs_grid_and_random(self, playground: Any) -> None:
+        space = {"lr": [0.1, 0.01], "hidden": [4, 8]}
+        grid = playground.sweep_configs(space, method="grid")
+        assert len(grid) == 4
+        assert grid[0] == {"lr": 0.1, "hidden": 4}
+        assert grid[-1] == {"lr": 0.01, "hidden": 8}
+        assert playground.sweep_configs({"lr": [0.1], "hidden": []}) == []
+        random_first = playground.sweep_configs(space, method="random", count=2, seed=0)
+        random_again = playground.sweep_configs(space, method="random", count=2, seed=0)
+        assert random_first == random_again  # deterministic under the seed
+        assert len(random_first) == 2
+        assert all(config in grid for config in random_first)
+        # over-sampling falls back to the whole grid
+        assert playground.sweep_configs(space, method="random", count=99, seed=1) == grid
+        with pytest.raises(ValueError, match="method"):
+            playground.sweep_configs(space, method="bogus")
+
+    # -- pure helpers: the wandb/aim run page -------------------------------- #
+
+    def test_run_detail_lines_wandb_run_page(self, playground: Any) -> None:
+        run = {
+            "run_id": "a" * 32,
+            "kind": "NumpyMLPRegressor",
+            "status": "FINISHED",
+            "notes": "notebook figure 4",
+            "params": {"lr": "0.01", "hidden": "8"},
+            "metrics": {"loss/best_val": 0.123},
+            "metadata": {"host": "box", "python": "3.12.1", "started_at": "2026-01-01T00:00:00"},
+            "series": [1.0, 0.5, 0.25],
+        }
+        lines = playground.run_detail_lines(run)
+        joined = "\n".join(lines)
+        assert f"run {'a' * 32}" in joined
+        assert "param lr = 0.01" in joined
+        assert "param hidden = 8" in joined
+        assert "metric loss/best_val" in joined
+        assert "meta host: box" in joined
+        assert "series: n 3" in joined
+        assert "smoothed" in joined  # the TB EMA read on the series
+        minimal = playground.run_detail_lines({"run_id": "b" * 32})
+        assert len(minimal) == 3  # run / kind+status / notes lines only
+
+    # -- the Experiments card ------------------------------------------------ #
+
+    def test_experiments_card_widgets_exist(self, app: Any) -> None:
+        columns = list(app._dl_runs_tree["columns"])
+        assert columns == ["run", "when", "kind", "best val loss", "status"]
+        assert app._dl_best_label.cget("text").startswith("no runs yet")
+        assert app._dl_experiment_text.get("1.0", "end").strip() == ""
+        assert app._dl_filter_entry.get() == ""
+
+    def test_refresh_lists_logged_runs_newest_first(
+        self, playground: Any, app: Any, tmp_path: Any
+    ) -> None:
+        log = tmp_path / "experiments.jsonl"
+        ids = self._write_runs(
+            playground,
+            log,
+            [
+                {"kind": "NumpyMLPRegressor", "metrics": {"loss/best_val": 0.5}},
+                {"kind": "DeepMLPRegressor", "metrics": {"loss/best_val": 0.2}},
+            ],
+        )
+        app._dl_experiment_log = log
+        app._dl_refresh_experiments()
+        rows = app._dl_runs_tree.get_children()
+        assert len(rows) == 2
+        values = [app._dl_runs_tree.item(row, "values") for row in rows]
+        assert str(values[0][2]) == "DeepMLPRegressor"  # newest first (MLflow)
+        assert abs(float(values[0][3]) - 0.2) < 1e-9
+        assert str(values[0][4]) == "FINISHED"
+        assert rows[0] == ids[1]  # the full run id rides as the item iid
+        best = app._dl_best_label.cget("text")
+        assert ids[1][:8] in best and "0.2" in best
+
+    def test_filter_narrows_the_table(
+        self, playground: Any, app: Any, tmp_path: Any
+    ) -> None:
+        log = tmp_path / "experiments.jsonl"
+        self._write_runs(
+            playground,
+            log,
+            [
+                {"kind": "NumpyMLPRegressor", "notes": "solubility sweep"},
+                {"kind": "DeepMLPRegressor", "notes": "delaney"},
+            ],
+        )
+        app._dl_experiment_log = log
+        app._dl_refresh_experiments()
+        assert len(app._dl_runs_tree.get_children()) == 2
+        app._dl_filter_entry.delete(0, "end")
+        app._dl_filter_entry.insert(0, "solubility")
+        app._dl_apply_filter()
+        rows = app._dl_runs_tree.get_children()
+        assert len(rows) == 1
+        assert str(app._dl_runs_tree.item(rows[0], "values")[2]) == "NumpyMLPRegressor"
+        app._dl_filter_entry.delete(0, "end")
+        app._dl_apply_filter()
+        assert len(app._dl_runs_tree.get_children()) == 2
+
+    def test_selecting_run_renders_detail_page(
+        self, playground: Any, app: Any, tmp_path: Any
+    ) -> None:
+        log = tmp_path / "experiments.jsonl"
+        self._write_runs(
+            playground, log, [{"params": {"lr": "0.01", "hidden": "4"}}]
+        )
+        app._dl_experiment_log = log
+        app._dl_refresh_experiments()
+        first = app._dl_runs_tree.get_children()[0]
+        app._dl_runs_tree.selection_set(first)
+        app._dl_show_run_detail()
+        text = app._dl_experiment_text.get("1.0", "end")
+        assert "param lr = 0.01" in text
+        assert "param hidden = 4" in text
+
+    def test_training_a_network_logs_a_run(
+        self, playground: Any, app: Any, monkeypatch: Any, tmp_path: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        log = tmp_path / "experiments.jsonl"
+        app._dl_experiment_log = log
+        self._configure_tiny(app)
+        self._train_tiny(app)
+        assert self._drain_jobs(app), "network training hung"
+        assert quiet_dialogs == []
+        runs = playground.load_experiment_runs(log)
+        assert len(runs) == 1
+        run = runs[0]
+        assert "MLP" in run["kind"]
+        assert run["status"] == "FINISHED"
+        # the wandb config snapshot: the form's own values
+        assert run["params"]["epochs"] == "5"
+        assert "architecture" in run["params"]
+        assert "engine" in run["params"]
+        # wandb's slashed metric names, summary-style best val loss
+        assert "loss/best_val" in run["metrics"]
+        assert run["metrics"]["fit/seconds"] > 0
+        assert run["metrics"]["epochs/run"] >= 1
+        assert "metrics/r2" in run["metrics"]  # the example is regression
+        # the TensorBoard scalar event series rides along
+        assert run["series"] and len(run["series"]) == run["metrics"]["epochs/run"]
+        # and the card refreshed itself
+        assert len(app._dl_runs_tree.get_children()) == 1
+
+    def test_best_runs_line_reports_the_leaderboard(
+        self, playground: Any, app: Any, tmp_path: Any
+    ) -> None:
+        log = tmp_path / "experiments.jsonl"
+        self._write_runs(
+            playground,
+            log,
+            [
+                {"metrics": {"loss/best_val": 0.9}},
+                {"metrics": {"loss/best_val": 0.1}},
+                {"metrics": {"loss/best_val": 0.5}},
+                {"metrics": {"loss/best_val": 0.3}},
+            ],
+        )
+        app._dl_experiment_log = log
+        app._dl_refresh_experiments()
+        best = app._dl_best_label.cget("text")
+        assert "0.1" in best
+        assert "0.5" in best
+        assert "0.3" in best
+        assert "0.9" not in best  # four runs, k=3: the worst sits out
+
+
+class TestInterpretabilityAbsorptionGui:
+    """(100x-174) The interpretability/XAI absorption round -- pytorch/captum
+    + keisen/tf-keras-vis + PAIR-code/saliency + jessevig/bertviz distilled
+    onto the Deep Learning tab: the four repos' method census (each row
+    carrying its origin import path), the model-agnostic occlusion
+    attribution of one held-out row (predict()-only, so both engines
+    explain as readily), the pure integrated-gradients / smoothgrad /
+    XRAI-region helpers, bertviz's attention arithmetic (the
+    format_attention subset, the head-view cells, the neuron view's
+    scaled dot-product softmax) and the captum word-importance-style bar
+    table that renders the ranking."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 180.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _configure_tiny(app: Any) -> None:
+        app._dl_hidden_entry.delete(0, "end")
+        app._dl_hidden_entry.insert(0, "4")
+        app._dl_epochs.set("5")
+        app._dl_patience.set("3")
+        app._dl_valsplit.set("0.2")
+
+    @staticmethod
+    def _force_numpy_engine(monkeypatch: Any) -> None:
+        """Pretend torch is absent for the engine resolution only."""
+        import importlib.util
+
+        real = importlib.util.find_spec
+
+        def fake(name: str, *args: Any, **kwargs: Any) -> Any:
+            if name == "torch":
+                return None
+            return real(name, *args, **kwargs)
+
+        monkeypatch.setattr(importlib.util, "find_spec", fake)
+
+    @staticmethod
+    def _train_tiny(app: Any) -> None:
+        app._dl_load_example()
+        app._dl_train()
+
+    # -- the census --------------------------------------------------------- #
+
+    def test_attribution_methods_census_covers_the_four_repos(
+        self, playground: Any
+    ) -> None:
+        rows = list(playground.ATTRIBUTION_METHODS)
+        assert {row[2] for row in rows} == {"captum", "tf-keras-vis", "saliency", "bertviz"}
+        counts: dict[str, int] = {}
+        for _method, _family, source, _needs_grad, _origin in rows:
+            counts[source] = counts.get(source, 0) + 1
+        assert counts["captum"] >= 20
+        assert counts["tf-keras-vis"] >= 5
+        assert counts["saliency"] >= 8
+        assert counts["bertviz"] == 3
+        names = [row[0] for row in rows]
+        assert len(names) == len(set(names))  # every census row is unique
+        # integrated gradients arrives from BOTH captum and saliency
+        ig_sources = {row[2] for row in rows if row[0].startswith("IntegratedGradients")}
+        assert ig_sources == {"captum", "saliency"}
+        # occlusion too -- the card's own compute path
+        occlusion_sources = {row[2] for row in rows if row[0].startswith("Occlusion")}
+        assert occlusion_sources == {"captum", "saliency"}
+        # Score-CAM is the gradient-free CAM (tf-keras-vis)
+        scorecam = next(row for row in rows if row[0] == "Scorecam")
+        assert scorecam[3] is False
+        # every origin names its own repo's package
+        prefixes = {
+            "captum": "captum.",
+            "tf-keras-vis": "tf_keras_vis.",
+            "saliency": "saliency.",
+            "bertviz": "bertviz.",
+        }
+        for _method, _family, source, _needs_grad, origin in rows:
+            assert origin.startswith(prefixes[source])
+        families = {row[1] for row in rows}
+        assert {"gradient", "path", "ablation", "cam", "attention"} <= families
+
+    # -- pure helpers: integrated gradients --------------------------------- #
+
+    def test_integrated_gradients_linear_completeness(self, playground: Any) -> None:
+        import numpy as np
+
+        coef = np.asarray([3.0, -2.0])
+        grad_fn = lambda points: np.tile(coef, (len(points), 1))
+
+        ig = playground.integrated_gradients_attributions(grad_fn, [2.0, 4.0])
+        assert ig == pytest.approx([6.0, -8.0])  # coef * (x - zeros)
+        shifted = playground.integrated_gradients_attributions(
+            grad_fn, [2.0, 4.0], baseline=[1.0, 1.0]
+        )
+        assert shifted == pytest.approx([3.0, -6.0])  # coef * (x - baseline)
+
+    def test_integrated_gradients_rejects_mismatched_baseline(
+        self, playground: Any
+    ) -> None:
+        grad_fn = lambda points: points * 0.0
+
+        with pytest.raises(ValueError, match="baseline"):
+            playground.integrated_gradients_attributions(
+                grad_fn, [1.0, 2.0], baseline=[0.0]
+            )
+
+    # -- pure helpers: smoothgrad ------------------------------------------- #
+
+    def test_smoothgrad_zero_noise_is_the_plain_gradient(self, playground: Any) -> None:
+        import numpy as np
+
+        coef = np.asarray([3.0, -2.0])
+        grad_fn = lambda points: np.tile(coef, (len(points), 1))
+
+        mask = playground.smoothgrad_attributions(
+            grad_fn, [0.5, -0.5], n_samples=8, noise_sigma=0.0
+        )
+        assert mask == pytest.approx([3.0, -2.0])
+        first = playground.smoothgrad_attributions(
+            grad_fn, [0.5, -0.5], n_samples=8, noise_sigma=0.2, seed=3
+        )
+        again = playground.smoothgrad_attributions(
+            grad_fn, [0.5, -0.5], n_samples=8, noise_sigma=0.2, seed=3
+        )
+        assert first == again  # deterministic under the seed
+
+    # -- pure helpers: occlusion -------------------------------------------- #
+
+    def test_occlusion_attributions_per_feature_and_window(self, playground: Any) -> None:
+        score_fn = lambda batch: 5.0 * batch[:, 0] + 1.0 * batch[:, 1]
+
+        per_feature = playground.occlusion_attributions(score_fn, [2.0, 3.0])
+        assert per_feature == pytest.approx([10.0, 3.0])
+        joint = playground.occlusion_attributions(
+            score_fn, [2.0, 3.0], window=2, stride=2
+        )
+        assert joint == pytest.approx([13.0, 13.0])  # the pair's drop lands on both
+        medians = playground.occlusion_attributions(
+            score_fn, [2.0, 3.0], baseline=[1.0, 1.0]
+        )
+        assert medians == pytest.approx([5.0, 2.0])  # 13-8 and 13-11
+
+    # -- pure helpers: XRAI region aggregation ------------------------------ #
+
+    def test_xrai_region_importances_share_out(self, playground: Any) -> None:
+        shares = playground.xrai_region_importances([2.0, -2.0, 4.0], [0, 0, 1])
+        assert shares == pytest.approx({0: 0.5, 1: 0.5})
+        assert sum(shares.values()) == pytest.approx(1.0)
+        zeroed = playground.xrai_region_importances([0.0, 0.0], [0, 1])
+        assert zeroed == {0: 0.0, 1: 0.0}
+        with pytest.raises(ValueError, match="align"):
+            playground.xrai_region_importances([1.0, 2.0], [0])
+
+    # -- pure helpers: bertviz arithmetic ----------------------------------- #
+
+    def test_format_attention_selects_layers_and_heads(self, playground: Any) -> None:
+        import numpy as np
+
+        tensor = np.arange(2 * 2 * 2 * 2, dtype=float).reshape(2, 2, 2, 2)
+        subset = playground.format_attention(tensor, layers=[1], heads=[0])
+        assert subset.shape == (1, 1, 2, 2)
+        assert subset.flatten().tolist() == tensor[1, 0].flatten().tolist()
+        full = playground.format_attention(tensor)
+        assert full.shape == (2, 2, 2, 2)
+        with pytest.raises(ValueError, match="layers"):
+            playground.format_attention(np.zeros((2, 2, 2)))
+
+    def test_attention_head_cells_report_row_peak_shares(self, playground: Any) -> None:
+        import numpy as np
+
+        matrix = np.asarray([[0.2, 0.8], [0.5, 0.0]])
+        cells = playground.attention_head_cells(matrix, ["a", "b"])
+        assert len(cells) == 4
+        by_pair = {(row, col): (weight, share) for row, col, weight, share in cells}
+        assert by_pair[("a", "b")] == pytest.approx((0.8, 1.0))
+        assert by_pair[("a", "a")] == pytest.approx((0.2, 0.25))
+        assert by_pair[("b", "a")] == pytest.approx((0.5, 1.0))
+        with pytest.raises(ValueError, match="tokens"):
+            playground.attention_head_cells(matrix, ["a"])
+
+    def test_scaled_dot_product_attention_rows(self, playground: Any) -> None:
+        aligned = playground.scaled_dot_product_attention(
+            [[1.0, 0.0]], [[1.0, 0.0]]
+        )
+        assert aligned.shape == (1, 1)
+        assert aligned[0, 0] == pytest.approx(1.0)
+        balanced = playground.scaled_dot_product_attention(
+            [[1.0, 0.0], [0.0, 1.0]], [[1.0, 0.0], [0.0, 1.0]]
+        )
+        assert balanced.shape == (2, 2)
+        assert balanced.sum(axis=1) == pytest.approx([1.0, 1.0])
+        assert balanced[0, 0] == pytest.approx(balanced[1, 1])  # symmetric in
+        assert balanced[0, 1] == pytest.approx(balanced[1, 0])  # and out
+        with pytest.raises(ValueError, match="width"):
+            playground.scaled_dot_product_attention([[1.0]], [[1.0, 0.0]])
+
+    # -- pure helpers: the ranked bar table --------------------------------- #
+
+    def test_attribution_table_lines_rank_and_bar(self, playground: Any) -> None:
+        lines = playground.attribution_table_lines(["a", "b", "c"], [0.1, -0.5, 0.25])
+        assert len(lines) == 3
+        assert lines[0].startswith("b")  # |−0.5| ranks first, the sign survives
+        assert "-0.5" in lines[0]
+        assert lines[1].startswith("c")
+        assert lines[2].startswith("a")
+        bars = [line.count("█") for line in lines]
+        assert bars == [12, 6, 2]  # the bar scales to the biggest |value|
+        capped = playground.attribution_table_lines(["a", "b", "c"], [0.1, -0.5, 0.25], top=2)
+        assert len(capped) == 2
+        assert playground.attribution_table_lines([], []) == []
+
+    # -- the Attribution card ------------------------------------------------ #
+
+    def test_attribution_card_lists_the_census(self, playground: Any, app: Any) -> None:
+        columns = list(app._dl_attr_tree["columns"])
+        assert columns == ["method", "family", "source", "gradients", "origin"]
+        rows = app._dl_attr_tree.get_children()
+        assert len(rows) == len(playground.ATTRIBUTION_METHODS)
+        first = app._dl_attr_tree.item(rows[0], "values")
+        assert str(first[0]).startswith("Saliency")
+        assert str(first[2]) == "captum"
+        assert str(first[4]) == "captum.attr.Saliency"
+        assert app._dl_attr_text.get("1.0", "end").strip() == ""
+
+    def test_selecting_a_census_row_renders_the_detail(self, app: Any) -> None:
+        rows = app._dl_attr_tree.get_children()
+        app._dl_attr_tree.selection_set(rows[2])  # IntegratedGradients (captum)
+        app._dl_show_attr_method()  # the event needs a mainloop -- call it directly
+        text = app._dl_attr_text.get("1.0", "end")
+        assert "IntegratedGradients" in text
+        assert "captum.attr.IntegratedGradients" in text
+        assert "gradients" in text
+
+    def test_explain_row_names_the_missing_network(self, app: Any, quiet_dialogs: list[Any]) -> None:
+        app._dl_explain_row()
+        assert any(name == "showwarning" for name, _args in quiet_dialogs)
+
+    def test_explain_held_out_row_renders_occlusion_table(
+        self,
+        playground: Any,
+        app: Any,
+        monkeypatch: Any,
+        quiet_dialogs: list[Any],
+    ) -> None:
+        monkeypatch.setattr(
+            playground.simpledialog, "askstring", lambda *a, **k: "0"
+        )
+        self._force_numpy_engine(monkeypatch)
+        self._configure_tiny(app)
+        self._train_tiny(app)
+        assert self._drain_jobs(app), "network training hung"
+        assert quiet_dialogs == []
+        app._dl_explain_row()
+        text = app._dl_attr_text.get("1.0", "end")
+        assert "occlusion" in text
+        assert "row 0 of" in text
+        assert "baseline" in text
+        assert "MLP" in text  # the estimator is named
+        assert text.count("█") > 0  # the word-importance bars ride along
+        assert quiet_dialogs == []
+
+    def test_attention_example_renders_neuron_view(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._dl_attention_example()
+        text = app._dl_attr_text.get("1.0", "end")
+        assert "softmax" in text.lower()
+        assert "evaporates" in text
+        assert "100.0%" in text  # every row's peak cell
+        assert quiet_dialogs == []
+
+    # -- the census's model-agnostic remainder: captum's Saliency and
+    # InputXGradient (grad_fn contracts like the IG/SmoothGrad helpers),
+    # captum's FeaturePermutation (predict()-only) and the
+    # deletion/insertion faithfulness curves behind PAIR's PIC ---------- #
+
+    def test_saliency_attributions_linear_abs(self, playground: Any) -> None:
+        def grad_fn(batch: Any) -> Any:
+            import numpy as np
+
+            return np.tile(np.asarray([5.0, 1.0]), (len(batch), 1))
+
+        plain = playground.saliency_attributions(grad_fn, [2.0, 3.0])
+        assert plain == [5.0, 1.0]  # |grad| -- captum's abs=True default
+        signed = playground.saliency_attributions(grad_fn, [2.0, 3.0], abs=False)
+        assert signed == [5.0, 1.0]
+
+    def test_saliency_attributions_abs_flips_negative_gradient(
+        self, playground: Any
+    ) -> None:
+        def grad_fn(batch: Any) -> Any:
+            import numpy as np
+
+            return np.tile(np.asarray([-2.0, 4.0]), (len(batch), 1))
+
+        assert playground.saliency_attributions(grad_fn, [1.0, 1.0]) == [2.0, 4.0]
+        assert playground.saliency_attributions(grad_fn, [1.0, 1.0], abs=False) == [
+            -2.0,
+            4.0,
+        ]
+
+    def test_input_x_gradient_attributions_linear(self, playground: Any) -> None:
+        def grad_fn(batch: Any) -> Any:
+            import numpy as np
+
+            return np.tile(np.asarray([5.0, 1.0]), (len(batch), 1))
+
+        assert playground.input_x_gradient_attributions(grad_fn, [2.0, 3.0]) == [
+            10.0,
+            3.0,
+        ]
+
+    def test_permutation_attributions_rank_the_informative_column(
+        self, playground: Any
+    ) -> None:
+        import numpy as np
+
+        rows = [[1.0, 9.0], [2.0, 9.1], [3.0, 8.9], [4.0, 9.05]]
+
+        def score_fn(batch: Any) -> Any:
+            return np.asarray(batch, dtype=float) @ np.asarray([5.0, 0.0])
+
+        mask = playground.permutation_attributions(
+            score_fn, rows, n_repeats=3, seed=0
+        )
+        assert mask[0] > 0.0  # the informative column takes the hit
+        assert mask[1] == pytest.approx(0.0)  # weight zero -- permuting is free
+
+    def test_insertion_deletion_auc_prefers_the_mask_order(
+        self, playground: Any
+    ) -> None:
+        import numpy as np
+
+        def score_fn(batch: Any) -> Any:
+            batch = np.asarray(batch, dtype=float).reshape(-1, 2)
+            return batch @ np.asarray([5.0, 1.0])
+
+        good = playground.insertion_deletion_auc(
+            score_fn, [2.0, 3.0], [5.0, 1.0], baseline=[0.0, 0.0]
+        )
+        flipped = playground.insertion_deletion_auc(
+            score_fn, [2.0, 3.0], [1.0, 5.0], baseline=[0.0, 0.0]
+        )
+        # a faithful mask inserts better than it deletes; the flipped one
+        # is the opposite -- and every curve stays inside [0, 1]
+        assert good[1] > good[0]
+        assert flipped[0] > flipped[1]
+        assert all(0.0 <= value <= 1.0 for value in (*good, *flipped))
+
+    def test_insertion_deletion_auc_rejects_mismatched_baseline(
+        self, playground: Any
+    ) -> None:
+        def score_fn(batch: Any) -> Any:
+            import numpy as np
+
+            batch = np.asarray(batch, dtype=float).reshape(-1, 2)
+            return batch @ np.asarray([1.0, 1.0])
+
+        with pytest.raises(ValueError, match="same length"):
+            playground.insertion_deletion_auc(
+                score_fn, [2.0, 3.0], [1.0, 0.0], baseline=[0.0, 0.0, 0.0]
+            )
+
+
+class TestGuiPlatformHelpers:
+    """(100x-175) The GUI-platform absorption round's pure helpers --
+    TomSchimansky/CustomTkinter + zauberzeug/nicegui + streamlit/streamlit
+    + gradio-app/gradio inspected one by one and distilled: CTk's four
+    theme packs (every colour a [light, dark] pair) with its 0.4x
+    scaling floor, streamlit's TTLCache (LRU recency refreshed by reads
+    and writes, uniform per-item TTL, reaped only on write/expire/len)
+    behind the cache_data / cache_resource decorators, streamlit's
+    st.metric delta-arrow contract, gradio's CSVLogger flag files and
+    examples pagination, and nicegui's nine notify positions."""
+
+    # -- customtkinter: the theme packs ----------------------------------- #
+
+    def test_gui_theme_pack_resolution(self, playground: Any) -> None:
+        packs = playground.GUI_THEME_PACKS
+        # CTk's _built_in_themes order, straight from the repo
+        assert tuple(packs) == ("blue", "green", "gold", "dark-blue")
+        blue_light = playground.resolve_gui_pack("blue", "light")
+        blue_dark = playground.resolve_gui_pack("blue", "dark")
+        # the authentic CTkButton fg_color pair from blue.json
+        assert blue_light["accent"] == "#3B8ED0"
+        assert blue_dark["accent"] == "#1F6AA5"
+        # the shape tiers ride along (CTkButton corner_radius 6,
+        # CTkEntry border_width 2)
+        assert blue_light["corner_radius"] == 6
+        assert blue_light["border_width"] == 2
+        # an unknown mode resolves like CTk's appearance tracker: light
+        assert playground.resolve_gui_pack("blue", "solarized")["accent"] == "#3B8ED0"
+        # an unknown pack falls back to CTk's default ("blue")
+        assert playground.resolve_gui_pack("nope", "dark")["accent"] == "#1F6AA5"
+
+    def test_save_gui_pack_rejects_builtins(self, playground: Any, tmp_path: Any) -> None:
+        with pytest.raises(ValueError, match="builtin"):
+            playground.save_gui_pack("gold", tmp_path / "gold.json")
+        with pytest.raises(KeyError):
+            playground.save_gui_pack("not-a-pack", tmp_path / "nope.json")
+
+    def test_clamp_scaling_floor(self, playground: Any) -> None:
+        # CTk's ScalingTracker: max(factor, 0.4)
+        assert playground.clamp_scaling(0.25) == 0.4
+        assert playground.clamp_scaling(0.4) == 0.4
+        assert playground.clamp_scaling(1.0) == 1.0
+        assert playground.clamp_scaling(1.6) == 1.6
+
+    # -- streamlit: TTLCache + the two cache decorators ------------------- #
+
+    def test_ttl_cache_lru_and_ttl(self, playground: Any) -> None:
+        clock = [0.0]
+        removed: list[Any] = []
+        cache = playground.TTLCache(maxsize=2, ttl=10.0, timer=lambda: clock[0], on_remove=lambda key, value: removed.append((key, value)))
+        cache["a"] = 1
+        cache["b"] = 2
+        clock[0] = 5.0
+        cache["a"]  # a read refreshes recency (streamlit's contract)
+        cache["c"] = 3  # maxsize 2 -> the LRU ("b") is evicted
+        assert "a" in cache and "c" in cache
+        assert "b" not in cache
+        assert removed == [("b", 2)]
+        # uniform TTL: "a" written at t=0 expires by t=11, "c" written
+        # at t=5 by t=16 -- len() reaps the expired entries
+        clock[0] = 16.0
+        assert len(cache) == 0
+        assert cache.get("a") is None  # expired reads report absent
+
+    def test_ttl_cache_membership_does_not_refresh(self, playground: Any) -> None:
+        clock = [0.0]
+        cache = playground.TTLCache(maxsize=2, ttl=100.0, timer=lambda: clock[0])
+        cache["a"] = 1
+        cache["b"] = 2
+        assert "a" in cache  # membership never reorders (streamlit's rule)
+        cache["c"] = 3  # so "a" (the oldest write) is the one evicted
+        assert "a" not in cache and "b" in cache and "c" in cache
+
+    def test_cache_data_copies_and_counts(self, playground: Any) -> None:
+        @playground.cache_data(ttl=60.0, max_entries=8)
+        def build(n: int) -> dict[str, Any]:
+            return {"n": n, "items": [n]}
+
+        first = build(1)
+        assert build.misses == 1 and build.hits == 0
+        second = build(1)  # the hit
+        assert build.hits == 1
+        # st.cache_data pickles values back: every read its own copy
+        assert first is not second and first == second
+        first["items"].append(99)
+        assert build(1)["items"] == [1]  # the mutation never leaked
+        build(2)
+        assert build.misses == 2
+        build.clear()
+        assert len(build.cache) == 0
+
+    def test_cache_resource_shares_singleton(self, playground: Any) -> None:
+        class Widget:
+            pass
+
+        @playground.cache_resource(ttl=60.0)
+        def borrow() -> Any:
+            return Widget()
+
+        one = borrow()
+        two = borrow()
+        assert one is two  # st.cache_resource: one shared object
+        assert borrow.hits == 1
+        one.tag = "kept"
+        assert borrow().tag == "kept"
+
+    # -- streamlit: the st.metric delta contract -------------------------- #
+
+    def test_metric_delta_spec_arrow_rules(self, playground: Any) -> None:
+        spec = playground.metric_delta_spec
+        assert spec(None) == ("", "none")
+        assert spec("") == ("", "none")
+        assert spec(0) == ("", "muted")
+        assert spec("0") == ("", "muted")
+        assert spec(-0.015) == ("\u2193", "bad")
+        assert spec("-0.0%") == ("\u2193", "bad")
+        assert spec(0.015) == ("\u2191", "good")
+        # streamlit does NOT parse string deltas: "0%" follows the sign
+        # rule (positive -> up, green), "-0.0%" the minus rule (down)
+        assert spec("0%") == ("\u2191", "good")
+
+    def test_format_metric_line(self, playground: Any) -> None:
+        line = playground.format_metric_line("best val loss", 0.412, -0.015)
+        assert "0.412" in line
+        assert "\u2193" in line and "0.015" in line
+        flat = playground.format_metric_line("accuracy", 0.9, None)
+        assert "0.9" in flat and "\u2191" not in flat and "\u2193" not in flat
+
+    # -- gradio: the CSVLogger flag files ---------------------------------- #
+
+    def test_flag_run_csv_appends_and_splits_on_headers(self, playground: Any, tmp_path: Any) -> None:
+        flags = tmp_path / "flags"
+        headers = ["run", "best val loss"]
+        path, count = playground.flag_run_csv(
+            flags, headers, ["abc123", 0.41], "correct", "playground"
+        )
+        assert path == flags / "log.csv" and count == 1
+        lines = (flags / "log.csv").read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "run,best val loss,flag,username,timestamp"
+        assert lines[1].startswith("abc123,0.41,correct,playground,")
+        # a second flag of the same shape appends (ClassicCSV behaviour)
+        _, count2 = playground.flag_run_csv(
+            flags, headers, ["def456", 0.39], "incorrect", "playground"
+        )
+        assert count2 == 2
+        # a header change rolls a NEW numbered file (CSVLogger >= 5.0)
+        path3, count3 = playground.flag_run_csv(
+            flags, headers + ["notes"], ["ghi789", 0.5, "edge case"], "ambiguous", "playground"
+        )
+        assert path3 == flags / "log-1.csv" and count3 == 1
+
+    # -- nicegui: the nine notify positions -------------------------------- #
+
+    def test_toast_geometry_nine_positions(self, playground: Any) -> None:
+        positions = (
+            "top-left", "top-right", "bottom-left", "bottom-right",
+            "top", "bottom", "left", "right", "center",
+        )
+        for position in positions:
+            x, y = playground.toast_geometry(position, 320, 90, 1200, 800)
+            assert 0 <= x <= 1200 - 320, position
+            assert 0 <= y <= 800 - 90, position
+        # bottom-right hugs the corner with the margin
+        x, y = playground.toast_geometry("bottom-right", 320, 90, 1200, 800)
+        assert (x, y) == (1200 - 320 - 24, 800 - 90 - 24)
+        # unknown positions degrade to nicegui's default (bottom)
+        x, y = playground.toast_geometry("diagonal", 320, 90, 1200, 800)
+        assert y == 800 - 90 - 24
+
+    # -- gradio: examples pagination --------------------------------------- #
+
+    def test_paginate_examples(self, playground: Any) -> None:
+        items = list(range(25))
+        page, pages = playground.paginate_examples(items)
+        assert page == items[:10] and pages == 3  # examples_per_page = 10
+        last, _ = playground.paginate_examples(items, page=2)
+        assert last == items[20:]
+        clamped, _ = playground.paginate_examples(items, page=99)
+        assert clamped == items[20:]  # out-of-range pages clamp to the last
+        empty, pages = playground.paginate_examples([])
+        assert empty == [] and pages == 1
+
+
+class TestGuiPlatformAbsorptionGui:
+    """(100x-175) The GUI-platform absorption round's window surface --
+    the Look & feel card on the Utilities tab (CustomTkinter's four
+    accent packs applied live over the View ▸ Accent pack menu, the
+    nicegui @ui.refreshable preview rebuild, CTk's scaling spin, the
+    nicegui/gradio toast playground), the notify engine itself, and the
+    Experiments card's gradio flag button + streamlit st.metric delta
+    on the leaderboard line."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    # -- the Look & feel card ---------------------------------------------- #
+
+    def test_look_feel_card_pack_picker(self, playground: Any, app: Any) -> None:
+        combo = app._lookfeel_pack_combo
+        assert "default" in combo["values"]
+        assert "gold" in combo["values"]
+        try:
+            app._pack_var.set("gold")
+            app._on_pack_change()
+            # the live module accent now reads CTk gold.json's light value
+            assert playground.ACCENT == "#EFB951"
+            assert playground.ACCENT_DARK == "#DBA220"
+            # and switching back restores the toolkit palette
+            app._pack_var.set("default")
+            app._on_pack_change()
+            assert playground.ACCENT == playground._LIGHT_PALETTE["ACCENT"]
+        finally:
+            app._pack_var.set("default")
+            app._on_pack_change()
+
+    def test_refresh_preview_rebuilds_the_census(self, playground: Any, app: Any) -> None:
+        before = app._lookfeel_preview_builds
+        app._lookfeel_refresh_preview()
+        assert app._lookfeel_preview_builds == before + 1
+        app._pack_var.set("dark-blue")
+        app._on_pack_change()
+        try:
+            app._lookfeel_refresh_preview()
+            text = app._lookfeel_preview_text.get("1.0", "end")
+            # the census names the pack and its authentic CTk hexes
+            assert "dark-blue" in text
+            assert "#3A7EBF" in text and "#1F538D" in text
+            assert "corner_radius 6" in text
+        finally:
+            app._pack_var.set("default")
+            app._on_pack_change()
+
+    def test_scaling_spin_follows_ctk_floor(self, playground: Any, app: Any) -> None:
+        try:
+            app._lookfeel_scaling_spin.set("1.5")
+            app._on_scaling_change()
+            assert app._font_var.get() == 15  # 10 pt * 1.5
+            # below CTk's 0.4 floor the factor clamps, then the font
+            # hierarchy clamps to its own 8 pt minimum
+            app._lookfeel_scaling_spin.set("0.25")
+            app._on_scaling_change()
+            assert app._font_var.get() == 8
+        finally:
+            app._lookfeel_scaling_spin.set("1.0")
+            app._on_scaling_change()
+            assert app._font_var.get() == 10
+
+    # -- the notify engine (nicegui notify + gradio toasts) --------------- #
+
+    def test_notify_creates_and_expires_toast(self, playground: Any, app: Any) -> None:
+        import time
+
+        app.notify("job finished", level="success", duration=0.05)
+        assert len(app._toast_stack) == 1
+        toast = app._toast_stack[0]["window"]
+        assert toast.winfo_exists()
+        for _ in range(40):
+            app.update()
+            time.sleep(0.01)
+        assert app._toast_stack == []  # the duration closed it
+        assert not toast.winfo_exists()
+
+    def test_notify_sticky_until_dismissed(self, playground: Any, app: Any) -> None:
+        import time
+
+        app.notify("needs a click", level="warning", duration=None)
+        assert len(app._toast_stack) == 1
+        for _ in range(30):
+            app.update()
+            time.sleep(0.01)
+        assert len(app._toast_stack) == 1  # gradio: None/0 = indefinite
+        app._dismiss_toast(app._toast_stack[0])
+        app.update()
+        assert app._toast_stack == []
+
+    def test_notify_unknown_level_and_position_fall_back(self, playground: Any, app: Any) -> None:
+        app.notify("odd args", level="shouty", position="diagonal", duration=0.05)
+        entry = app._toast_stack[0]
+        assert entry["level"] == "info"  # gradio's default level
+        assert entry["position"] == "bottom"  # nicegui's default position
+
+    # -- the Experiments card: gradio flagging + streamlit metric ---------- #
+
+    def test_flag_selected_run_writes_csv(
+        self, playground: Any, app: Any, tmp_path: Any
+    ) -> None:
+        log = tmp_path / "experiments.jsonl"
+        log.write_text("", encoding="utf-8")
+        app._dl_experiment_log = log
+        run = {
+            "run_id": "flagme123456",
+            "kind": "NumpyMLPRegressor",
+            "status": "FINISHED",
+            "metrics": {"loss/best_val": 0.4},
+            "metadata": {"started_at": "2026-11-03 04:00:00"},
+        }
+        app._dl_runs = [run]
+        app._dl_runs_by_iid = {"flagme123456": run}
+        app._dl_apply_filter()
+        app._dl_runs_tree.selection_set("flagme123456")
+        app._dl_flag_combo.set("correct")
+        app._dl_flag_selected_run()
+        csv = tmp_path / "experiments-flags" / "log.csv"
+        assert csv.is_file()
+        text = csv.read_text(encoding="utf-8")
+        assert "flagme123456"[:8] in text
+        assert "NumpyMLPRegressor" in text and "0.4" in text
+        assert ",correct,playground," in text
+        # the flag lands a success toast, gradio-style
+        assert any(entry["level"] == "success" for entry in app._toast_stack)
+        for entry in list(app._toast_stack):
+            app._dismiss_toast(entry)
+
+    def test_flag_without_selection_warns(self, playground: Any, app: Any) -> None:
+        app._dl_runs_tree.selection_remove(app._dl_runs_tree.selection())
+        app._dl_flag_selected_run()
+        assert any(entry["level"] == "warning" for entry in app._toast_stack)
+        for entry in list(app._toast_stack):
+            app._dismiss_toast(entry)
+
+    def test_leaderboard_line_carries_metric_delta(
+        self, playground: Any, app: Any, tmp_path: Any
+    ) -> None:
+        log = tmp_path / "experiments.jsonl"
+        log.write_text("", encoding="utf-8")
+        app._dl_experiment_log = log
+        older = {
+            "run_id": "aaa111111111",
+            "kind": "NumpyMLPRegressor",
+            "status": "FINISHED",
+            "metrics": {"loss/best_val": 0.45},
+            "metadata": {"started_at": "2026-11-01 00:00:00"},
+        }
+        newer = {
+            "run_id": "bbb222222222",
+            "kind": "NumpyMLPRegressor",
+            "status": "FINISHED",
+            "metrics": {"loss/best_val": 0.40},
+            "metadata": {"started_at": "2026-11-02 00:00:00"},
+        }
+        app._dl_runs = [older, newer]
+        app._dl_runs_by_iid = {run["run_id"]: run for run in (older, newer)}
+        app._dl_filter_entry.delete(0, "end")
+        app._dl_apply_filter()
+        text = app._dl_best_label.cget("text")
+        # streamlit's st.metric: the leader carries the delta vs the
+        # runner-up -- a lower loss is the down arrow
+        assert "bbb222222222"[:8] in text
+        assert "\u2193" in text and "0.05" in text

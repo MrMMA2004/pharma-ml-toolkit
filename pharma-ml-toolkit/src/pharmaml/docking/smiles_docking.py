@@ -54,7 +54,7 @@ from typing import Any
 from pharmaml.docking.parsing import parse_dlg_cluster_table, parse_vina_output
 from pharmaml.docking.preparation import GridBox, smiles_to_pdbqt, write_dpf, write_gpf
 from pharmaml.docking.receptor import distribute_receptor
-from pharmaml.docking.workflow import run_autodock4, run_vina
+from pharmaml.docking.workflow import locate_engine_binary, run_autodock4, run_vina
 from pharmaml.exceptions import DataValidationError, DockingError
 from pharmaml.logger import get_logger
 from pharmaml.utils.io import ensure_directory
@@ -166,6 +166,7 @@ def dock_smiles_array(
     ga_run: int = 100,
     timeout_s: float = 3600.0,
     keep_folders: bool = True,
+    engine_dir: str | Path | None = None,
     progress: Callable[..., Any] | None = None,
 ) -> Any:
     """Dock every SMILES of an array against one receptor, simultaneously.
@@ -222,6 +223,10 @@ def dock_smiles_array(
     keep_folders:
         Keep the prepared campaign folders (default).  ``False``
         removes them after the run -- only the result table survives.
+    engine_dir:
+        Folder holding the engine binaries (``vina`` / ``vina.exe`` /
+        ``autogrid4.exe`` / ``autodock4.exe``), searched before PATH --
+        the Windows ``.exe`` builds the toolkit ships in ``engines/``.
     progress:
         Optional ``report(done, total, note)`` callback (worker-thread
         safe); called once per finished ligand.
@@ -271,11 +276,15 @@ def dock_smiles_array(
             "must match"
         )
     binaries = ("vina",) if engine == "vina" else ("autogrid4", "autodock4")
-    missing = [name for name in binaries if shutil.which(name) is None]
+    missing = [
+        name for name in binaries if locate_engine_binary(name, engine_dir) is None
+    ]
     if missing:
         raise DockingError(
             f"the {engine} engine needs {', '.join(missing)} on PATH -- "
-            "install AutoDock Tools / Vina first"
+            "install AutoDock Tools / Vina first, or point the engine "
+            "folder at their .exe builds (vina.exe / autogrid4.exe / "
+            "autodock4.exe)"
         )
     workers = max(1, min(workers, len(rows)))
     report = _progress_sink(progress)
@@ -356,6 +365,7 @@ def dock_smiles_array(
                     exhaustiveness=exhaustiveness,
                     num_modes=num_modes,
                     timeout_s=timeout_s,
+                    engine_dir=engine_dir,
                 )
                 entry["seconds"] = result.seconds
                 if not result.ok:
@@ -371,7 +381,7 @@ def dock_smiles_array(
             else:
                 write_gpf(ligand, receptor_file="r.pdbqt", box=box)
                 write_dpf(ligand, receptor_file="r.pdbqt", ga_run=ga_run)
-                result = run_autodock4(folder, timeout_s=timeout_s)
+                result = run_autodock4(folder, timeout_s=timeout_s, engine_dir=engine_dir)
                 entry["seconds"] = result.seconds
                 if not result.ok:
                     entry["error"] = result.error or "autodock4 failed"

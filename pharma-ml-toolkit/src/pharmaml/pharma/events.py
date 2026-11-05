@@ -529,7 +529,7 @@ def steady_state_amounts(
     >>> try:  # canonical input (sibling ODE-simulation module)
     ...     from pharmaml.pharma.pkpd import CompartmentModel
     ...     model = CompartmentModel(cl=1.0, vd=10.0, ka=10.0)
-    ... except ModuleNotFoundError:  # stand-in with identical depot -> central ODEs
+    ... except ImportError:  # stand-in with identical depot -> central ODEs
     ...     class _OralTwoCmt:
     ...         def __init__(self, cl, vd, ka):
     ...             self.cl, self.vd, self.ka = cl, vd, ka
