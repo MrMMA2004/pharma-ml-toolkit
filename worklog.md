@@ -6645,3 +6645,81 @@ usage section ported from the arena twin, the docs INDEX re-derived
 the package re-exports), `GITHUB_LINKS_REGISTRY.md` folded in from
 the arena branch, and `.env` untracked in favour of the committed
 `.env.example` template (the local file survives on disk).
+
+## Round 194 — the ninth rollback, the 2-hour sync mandate, and the 100-run counter (2026-11-06)
+
+The owner's directive, verbatim: *"Continue the MASTER_PROMPT. Make a
+scheduled task that runs every 2 hours (100 times) with this task:
+Continue the MASTER_PROMPT and update the GitHub repository (including
+the latest zip file)."*
+
+The session opened expecting the round-192 aftermath (the local chain
+27b14f3 → 4a81d6c → 65c6b20 → 1ad20cf, the SMILES lab unpushed). What
+it found instead was the **ninth rollback**: the local repo sat at
+`2eb0ede` (the round-186-era state — v1.2.106 pins, playground.py at
+30,027 lines, `csv_standardize.py` absent), the venv had rolled with it
+(numpy 2.1.3, no rdkit, no editable pharmaml), and the credential layer
+was stripped again — no `origin` remote, no `~/.github_token`, no
+credential helper. The scheduler was empty too: the webDevReview 15-min
+job (500162) had been wiped with everything else. Only the untracked
+`upload/` leftovers hinted at the lost future (the v1.2.107/109/112
+zips — the future's own ship artifacts, intact on disk).
+
+**The remote was the survivor again — and the recovery was a single
+fast-forward.** The token was re-extracted from `upload/Command.txt`
+(the MASTER_PROMPT document itself carries it; that user upload is the
+disk-side fallback — never a commit candidate, precisely because it
+holds the secret), the remote re-added, the helper restored, and
+`git pull --ff-only origin main` brought all 26 commits home in one
+move: `2eb0ede → 101f5f7`, the full round-187→193 arc — the XAI/GNN
+absorption stack, the arena re-merge, the reference_census fix, the
+SMILES lab, and the v1.2.112 ship in all three homes. The six
+conflicting untracked files (three PDFs + three zips) were moved aside
+pre-pull and came back **byte-identical** (cmp-verified) — the leftover
+artifacts were the same bytes the remote had shipped. The prior
+session's pending arena question is settled by history: round 193 part 1
+(77b871a) had already re-merged the arena twin's orphan work.
+
+**The venv re-repair met a new wall.** `scratch/venv_repair.sh` (the
+5th-rollback script) ran as written, but its one-shot install line now
+dies at `ResolutionImpossible`: shap 0.54.1's metadata asks `numpy>=2`
+against the 1.26.4 constraint — the exact resolver warning
+`requirements.txt` documents ("not a runtime break"). The scripted path
+wasn't idempotent against today's resolver, so the install ran
+hand-guided: numpy 1.26.4 → the rdkit/meeko/gemmi/selfies/ruff/mypy/
+pytest batch → shap 0.54.1 with `--no-deps` plus its real runtime deps
+(slicer, numba, cloudpickle, packaging) → matplotlib 3.10.9, seaborn,
+fpdf2, python-docx, mordred, xgboost/lightgbm/catboost → the editable
+pharmaml (1.2.112). torch 2.14.1 (CPU wheel) restoring in the
+background. Import parity confirmed: numpy 1.26.4 · rdkit 2026.09.1 ·
+shap 0.54.1 · matplotlib 3.10.9 · pharmaml 1.2.112 editable.
+
+**Verification (fresh, post-9th-rollback):** 68/68 green (57
+csv_standardize + 11 xai_registry — the recovered SMILES lab and the
+arena fold-in), 174/174 green (explain/geometric/interpret). The web
+E2E: GET / in 0.17 s with zero console errors, the round-193 pins live
+(5137 tests, the XAI absorption suites named on the homepage),
+`/api/toolkit/zip-size` answering `{exact:true, source:"release",
+19155891 bytes}` with zero spawns, the download panel showing the exact
+18.27 MB, and the strong ETag revalidating to 304 in 11 ms.
+
+**The mandate itself: job 507038** — `MASTER_PROMPT-2h-sync-100x`,
+fixed_rate 7200 s, priority 10, kind agentTurn. The payload is a
+self-contained run-book: (0) increment and commit
+`scratch/100runs-counter.json` — the counter rides every commit so the
+rollback can't reset the 100-run tally (git is the survivor); at 100
+the agent deletes the job. (1) the environment quick-check with the
+full recovery recipe (remote re-add, token re-extract from
+Command.txt, helper, ff-pull, venv_repair.sh). (2) continue the
+MASTER_PROMPT per the worklog baselines. (3) the ship ritual and
+`git push origin main` **every run** — the push-cadence directive made
+mechanical. (4) dev-server and download-path health. (5) the worklog
+round entry. The webDevReview 15-min baseline was recreated alongside
+it as job 507040 (cron `0 0/15 * * * ?`, Asia/Tehran) — the ninth
+rollback had emptied the scheduler, so both jobs stand as this round's
+cron pair.
+
+Stage Summary:
+- Deliverable: the ninth-rollback recovery (pure fast-forward, venv re-repaired, all suites green, the golden download path re-verified) plus the owner's 2-hour/100-run scheduled task with its counter-based self-sunset.
+- Lesson pinned: the rollback quartet is repo+venv+credentials+scheduler — check all four every session; and the venv repair script must be re-runnable against today's resolver (shap rides `--no-deps`, its deps installed separately) — the script's one-shot line is not idempotent, this round ran it hand-guided.
+- Baselines for the next round: unchanged (v1.2.112 · 5137 tests (4372 + 765 doctests) · 878 files / 331,626 lines · three homes + repo download/ · 19,155,891 bytes sha-256 b2bec19c… · dev server healthy · cron pair 507038 (2-hour 100x) + webDevReview 507040).
