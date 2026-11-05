@@ -16274,6 +16274,197 @@ class TestXaiAbsorptionGui:
         assert not [d for d in quiet_dialogs if d[0] == "showerror"], quiet_dialogs
 
 
+class TestDeferredXaiHandlersHeadless:
+    """Execute the round-189 callbacks without requiring a Tk display.
+
+    The real Tk tests above remain the native-display verification.  These
+    lightweight widgets pin the handler/table logic in every environment.
+    """
+
+    class Widget:
+        def __init__(self, value: str = "") -> None:
+            self.value = value
+            self.options: dict[str, Any] = {}
+
+        def get(self) -> str:
+            return self.value
+
+        def set(self, value: Any) -> None:
+            self.value = str(value)
+
+        def configure(self, **options: Any) -> None:
+            self.options.update(options)
+
+        def cget(self, key: str) -> Any:
+            return self.options[key]
+
+    class Tree(Widget):
+        def __init__(self) -> None:
+            super().__init__()
+            self.columns: tuple[str, ...] = ()
+            self.rows: dict[str, tuple[Any, ...]] = {}
+
+        def __setitem__(self, key: str, value: Any) -> None:
+            if key == "columns":
+                self.columns = tuple(value)
+
+        def __getitem__(self, key: str) -> Any:
+            return self.columns if key == "columns" else None
+
+        def delete(self, *iids: str) -> None:
+            if not iids:
+                self.rows.clear()
+            else:
+                for iid in iids:
+                    self.rows.pop(iid, None)
+
+        def get_children(self) -> tuple[str, ...]:
+            return tuple(self.rows)
+
+        def heading(self, *_args: Any, **_kwargs: Any) -> None:
+            return None
+
+        def column(self, *_args: Any, **_kwargs: Any) -> None:
+            return None
+
+        def insert(
+            self, _parent: str, _where: str, iid: str, values: tuple[Any, ...]
+        ) -> None:
+            self.rows[iid] = values
+
+        def item(self, iid: str, key: str) -> Any:
+            return self.rows[iid] if key == "values" else None
+
+    class Canvas(Widget):
+        def __init__(self) -> None:
+            super().__init__()
+            self.items: list[dict[str, Any]] = []
+
+        def delete(self, _what: str) -> None:
+            self.items.clear()
+
+        def create_rectangle(self, *_args: Any, **kwargs: Any) -> None:
+            self.items.append(kwargs)
+
+        def find(self, _what: str) -> tuple[int, ...]:
+            return tuple(range(len(self.items)))
+
+    @staticmethod
+    def app(playground: Any) -> Any:
+        app = playground.PlaygroundApp.__new__(playground.PlaygroundApp)
+        app._require_pharmaml = lambda: True
+        app._dl_xai_tree = TestDeferredXaiHandlersHeadless.Tree()
+        app._dl_xai_strip = TestDeferredXaiHandlersHeadless.Canvas()
+        app._dl_xai_summary = TestDeferredXaiHandlersHeadless.Widget()
+        app._dl_xai_row_spin = TestDeferredXaiHandlersHeadless.Widget("0")
+        app._dl_xai_method_combo = TestDeferredXaiHandlersHeadless.Widget(
+            "occlusion — Occlusion"
+        )
+        app._dl_xai_steps_spin = TestDeferredXaiHandlersHeadless.Widget("5")
+        app._dl_xai_threshold_spin = TestDeferredXaiHandlersHeadless.Widget("0.95")
+        app._dl_xai_noise_spin = TestDeferredXaiHandlersHeadless.Widget("3")
+        return app
+
+    def test_graph_anchor_metrics_and_column_restoration_run_without_tk(
+        self, playground: Any, monkeypatch: Any
+    ) -> None:
+        import numpy as np
+
+        app = self.app(playground)
+        dialogs: list[Any] = []
+
+        class Dialogs:
+            def _record(self, name: str, args: tuple[Any, ...]) -> None:
+                dialogs.append((name, args))
+
+            def showerror(self, *args: Any, **_kwargs: Any) -> None:
+                self._record("showerror", args)
+
+            def showwarning(self, *args: Any, **_kwargs: Any) -> None:
+                self._record("showwarning", args)
+
+            def showinfo(self, *args: Any, **_kwargs: Any) -> None:
+                self._record("showinfo", args)
+
+        monkeypatch.setattr(playground, "messagebox", Dialogs())
+        network, name, x_test = TestXaiAbsorptionGui._numpy_run()
+        app._dl_last_run = (network, name, "regression", x_test, "y")
+
+        app._dl_xai_graph()
+        assert len(app._dl_xai_tree.rows) == 4
+        assert app._dl_xai_tree.columns[0] == "node"
+        assert "4 nodes" in app._dl_xai_summary.cget("text")
+
+        app._dl_xai_metrics()
+        assert len(app._dl_xai_tree.rows) == 8
+        assert app._dl_xai_tree.rows["metric-5"][0] == "faithfulness · Pearson r"
+        assert "Quantus metrics — occlusion" in app._dl_xai_summary.cget("text")
+
+        class Threshold:
+            feature_names_in_ = np.array(["dose", "flag"])
+
+            def predict(self, matrix: Any) -> Any:
+                values = np.asarray(matrix, dtype=float)
+                return (values[:, 0] >= 0.0).astype(int)
+
+        reference = np.array(
+            [[-2.0, 0.0], [-2.0, 1.0], [-1.0, 0.0], [-1.0, 1.0],
+             [1.0, 0.0], [1.0, 1.0], [2.0, 0.0], [2.0, 1.0]]
+        )
+        app._dl_last_run = (Threshold(), "Threshold", "classification", reference, "y")
+        app._dl_xai_anchor()
+        assert "coverage 25.0%" in app._dl_xai_summary.cget("text")
+        assert "dose" in app._dl_xai_tree.rows["condition-1"][3]
+
+        app._dl_last_run = (network, name, "regression", x_test, "y")
+        app._dl_xai_explain()
+        assert app._dl_xai_tree.columns[0] == "feature"
+        assert len(app._dl_xai_tree.rows) == 5
+        assert not dialogs, dialogs
+
+    def test_metrics_keep_the_original_class_output_for_every_noisy_row(
+        self, playground: Any, monkeypatch: Any
+    ) -> None:
+        import numpy as np
+
+        app = self.app(playground)
+        monkeypatch.setattr(
+            playground,
+            "messagebox",
+            type("Dialogs", (), {
+                "showerror": lambda *_args, **_kwargs: None,
+                "showwarning": lambda *_args, **_kwargs: None,
+                "showinfo": lambda *_args, **_kwargs: None,
+            })(),
+        )
+
+        class Classifier:
+            def predict_proba(self, matrix: Any) -> Any:
+                values = np.asarray(matrix, dtype=float)
+                return np.column_stack((values[:, 0], -values[:, 0]))
+
+            def predict(self, matrix: Any) -> Any:
+                return np.asarray(matrix)[:, 0] < 0.0
+
+        output_lookups: list[float] = []
+
+        def output_index(_network: Any, row: Any, _task: str) -> int:
+            output_lookups.append(float(row[0]))
+            return 1
+
+        app._dl_xai_output_index = output_index
+        app._dl_xai_noise_spin.set("2")
+        app._dl_last_run = (
+            Classifier(), "Classifier", "classification",
+            np.array([[1.0, 2.0], [2.0, 1.0]]), "y",
+        )
+        app._dl_xai_metrics()
+        # One lookup for the original row; all faithfulness/sensitivity calls
+        # reuse that output instead of following class flips in noisy rows.
+        assert output_lookups == [1.0]
+        assert "Quantus metrics" in app._dl_xai_summary.cget("text")
+
+
 class TestRound186Gui:
     """The Deep Learning tab's four round-186 cards, driven headlessly:
     the Run board (tensorboard), the UMAP map (lmcinnes/umap), the

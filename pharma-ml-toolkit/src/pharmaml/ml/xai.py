@@ -42,15 +42,25 @@ from pharmaml.exceptions import PharmaMLError
 
 __all__ = [
     "ATTRIBUTION_METHODS",
+    "ActivationRecord",
+    "AnchorCondition",
+    "AnchorResult",
     "AttributionResult",
+    "ComplexityResult",
+    "FaithfulnessResult",
     "LayerStack",
+    "SensitivityResult",
     "XaiError",
+    "XaiMetrics",
+    "attribution_complexity",
     "attribution_effectiveness",
     "attribution_methods",
     "cav_directional_derivative",
     "deep_lift",
     "demo_attention_layers",
     "diverging_hex",
+    "evaluate_attribution_metrics",
+    "faithfulness_estimate",
     "feature_permutation",
     "fgsm_attack",
     "gradient_shap",
@@ -64,6 +74,8 @@ __all__ = [
     "layer_conductance",
     "lime_tabular",
     "lrp",
+    "max_sensitivity",
+    "model_activation_trace",
     "noise_tunnel",
     "numpy_layer_stack",
     "occlusion_attributions",
@@ -72,6 +84,7 @@ __all__ = [
     "sensitivity_max",
     "shapley_value",
     "smoothgrad_attributions",
+    "tabular_anchor",
     "token_pairs",
 ]
 
@@ -681,6 +694,555 @@ def layer_activation_summary(trace: Any) -> list[dict[str, float | int]]:
             }
         )
     return summary
+
+
+# ---------------------------------------------------------------------------
+# Round 189 -- the registry's deferred torchlens / alibi / Quantus fold-ins.
+# These are deliberately compact, deterministic surfaces over the existing
+# LayerStack and estimator protocols, not optional dependencies on the source
+# projects.  The implementation notes in GITHUB_LINKS_REGISTRY.md record the
+# exact source files reviewed and the deviations from their full frameworks.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ActivationRecord:
+    """One node in a torchlens-style single-row activation graph."""
+
+    name: str
+    operation: str
+    parents: tuple[str, ...]
+    input_shape: tuple[int, ...]
+    output_shape: tuple[int, ...]
+    parameters: int
+    activation_nbytes: int
+    minimum: float
+    mean: float
+    maximum: float
+    dead_fraction: float
+
+
+def _activation_record(
+    name: str,
+    operation: str,
+    parents: tuple[str, ...],
+    input_values: np.ndarray,
+    output_values: np.ndarray,
+    parameters: int = 0,
+) -> ActivationRecord:
+    incoming = np.asarray(input_values, dtype=float).reshape(-1)
+    outgoing = np.asarray(output_values, dtype=float).reshape(-1)
+    if outgoing.size == 0:
+        raise XaiError(f"activation node {name!r} has an empty output")
+    return ActivationRecord(
+        name=name,
+        operation=operation,
+        parents=parents,
+        input_shape=(int(incoming.size),),
+        output_shape=(int(outgoing.size),),
+        parameters=int(parameters),
+        activation_nbytes=int(outgoing.nbytes),
+        minimum=float(outgoing.min()),
+        mean=float(outgoing.mean()),
+        maximum=float(outgoing.max()),
+        dead_fraction=float(np.mean(outgoing == 0.0)),
+    )
+
+
+def model_activation_trace(estimator: Any, row: Any) -> list[ActivationRecord]:
+    """Trace input, linear, activation and output nodes for one row.
+
+    This is the compact offline counterpart of torchlens' forward trace:
+    every node names its parents, tensor widths, parameter count, retained
+    activation bytes and activation statistics.  It intentionally supports
+    the toolkit's numpy ``LayerStack`` rather than claiming to intercept
+    arbitrary torch operations or tensor-level functional calls.
+    """
+    stack = numpy_layer_stack(estimator)
+    x = _as_row(row)
+    if x.size != stack.n_features:
+        raise XaiError(
+            f"the row has {x.size} features but the network expects "
+            f"{stack.n_features}"
+        )
+    _logits, trace = _forward_trace(stack, x)
+    records = [
+        _activation_record("input", "input", (), x, x),
+    ]
+    current = x
+    parent = "input"
+    for index, (weight, bias) in enumerate(stack.layers):
+        linear_name = f"linear_{index + 1}"
+        if index < len(stack.layers) - 1:
+            z, activated = trace[index]
+        else:
+            z, activated = _logits, _logits
+        parameters = int(weight.size + (bias.size if bias is not None else 0))
+        records.append(
+            _activation_record(
+                linear_name,
+                "linear",
+                (parent,),
+                current,
+                z,
+                parameters,
+            )
+        )
+        parent = linear_name
+        current = np.asarray(z, dtype=float).reshape(-1)
+        if index < len(stack.layers) - 1:
+            activation_name = f"activation_{index + 1}"
+            records.append(
+                _activation_record(
+                    activation_name,
+                    stack.activation,
+                    (linear_name,),
+                    current,
+                    activated,
+                )
+            )
+            parent = activation_name
+            current = np.asarray(activated, dtype=float).reshape(-1)
+    return records
+
+
+@dataclass(frozen=True)
+class AnchorCondition:
+    """A numeric quantile-bin predicate in a tabular anchor."""
+
+    feature_index: int
+    feature_name: str
+    lower: float
+    upper: float
+    row_value: float
+
+    def covers(self, matrix: Any) -> np.ndarray:
+        values = np.asarray(matrix, dtype=float)
+        if values.ndim == 1:
+            values = values.reshape(1, -1)
+        column = values[:, self.feature_index]
+        return (column >= self.lower) & (column < self.upper)
+
+    def describe(self) -> str:
+        lower = "-∞" if not math.isfinite(self.lower) else f"{self.lower:.4g}"
+        upper = "+∞" if not math.isfinite(self.upper) else f"{self.upper:.4g}"
+        return f"{lower} ≤ {self.feature_name} < {upper}"
+
+
+@dataclass(frozen=True)
+class AnchorResult:
+    """An empirical tabular anchor and its precision/coverage evidence."""
+
+    conditions: tuple[AnchorCondition, ...]
+    precision: float
+    coverage: float
+    threshold: float
+    n_covered: int
+    n_samples: int
+    covered_indices: tuple[int, ...]
+    target: Any
+    success: bool
+    candidates_evaluated: int
+
+    @property
+    def names(self) -> list[str]:
+        return [condition.describe() for condition in self.conditions]
+
+    @property
+    def rule(self) -> str:
+        return " AND ".join(self.names) if self.conditions else "TRUE (empty anchor)"
+
+
+@dataclass(frozen=True)
+class _AnchorEvaluation:
+    indices: tuple[int, ...]
+    precision: float
+    coverage: float
+    covered: np.ndarray
+
+
+def _anchor_labels(estimator: Any, matrix: np.ndarray) -> np.ndarray:
+    predict = getattr(estimator, "predict", None)
+    if predict is None:
+        raise XaiError("tabular anchors need an estimator exposing predict(X)")
+    labels = np.asarray(predict(matrix)).reshape(-1)
+    if labels.size != matrix.shape[0]:
+        raise XaiError(
+            f"predict returned {labels.size} labels for {matrix.shape[0]} rows"
+        )
+    return labels
+
+
+def tabular_anchor(
+    estimator: Any,
+    row: Any,
+    reference: Any,
+    feature_names: Any = None,
+    threshold: float = 0.95,
+    max_anchor_size: int = 3,
+    beam_size: int = 4,
+) -> AnchorResult:
+    """Find a high-precision, high-coverage numeric tabular anchor.
+
+    Alibi's AnchorTabular discretises numeric columns into quantile bins and
+    searches conjunctions for precision at least ``threshold`` while
+    maximising coverage.  This offline fold-in keeps those semantics and its
+    beam-search shape, but evaluates the supplied reference frame directly
+    instead of running the stochastic KL-LUCB sampler.  Consequently the
+    reported precision and coverage are empirical on that frame, not PAC
+    confidence guarantees.  ``success=False`` is returned honestly when no
+    candidate reaches the requested threshold.
+    """
+    x = _as_row(row)
+    matrix = np.asarray(reference, dtype=float)
+    if matrix.ndim != 2 or matrix.shape[0] < 2:
+        raise XaiError("anchor reference must be a 2-D frame with at least two rows")
+    if matrix.shape[1] != x.size:
+        raise XaiError(
+            f"the reference has {matrix.shape[1]} features but the row has {x.size}"
+        )
+    if not np.all(np.isfinite(matrix)):
+        raise XaiError("anchor reference and row must contain only finite values")
+    threshold = float(threshold)
+    if not 0.0 < threshold <= 1.0:
+        raise XaiError("anchor threshold must be in (0, 1]")
+    max_anchor_size = int(max_anchor_size)
+    beam_size = int(beam_size)
+    if max_anchor_size < 1 or beam_size < 1:
+        raise XaiError("max_anchor_size and beam_size must both be >= 1")
+    max_anchor_size = min(max_anchor_size, x.size)
+    if feature_names is None:
+        names = [f"x{index + 1}" for index in range(x.size)]
+    else:
+        names = [str(name) for name in feature_names]
+        if len(names) != x.size:
+            raise XaiError("feature_names must have one label per row feature")
+
+    conditions: list[AnchorCondition] = []
+    for index, name in enumerate(names):
+        cuts = np.unique(np.quantile(matrix[:, index], [0.25, 0.5, 0.75]))
+        lower = -math.inf
+        upper = math.inf
+        for cut in cuts:
+            cut_value = float(cut)
+            if x[index] >= cut_value:
+                lower = cut_value
+            else:
+                upper = cut_value
+                break
+        conditions.append(
+            AnchorCondition(index, name, lower, upper, float(x[index]))
+        )
+
+    target = _anchor_labels(estimator, x.reshape(1, -1))[0]
+    labels = _anchor_labels(estimator, matrix)
+    matches = labels == target
+    cache: dict[tuple[int, ...], _AnchorEvaluation] = {}
+
+    def evaluate(indices: tuple[int, ...]) -> _AnchorEvaluation:
+        if indices not in cache:
+            if indices:
+                covered = np.logical_and.reduce(
+                    [conditions[index].covers(matrix) for index in indices]
+                )
+            else:
+                covered = np.ones(matrix.shape[0], dtype=bool)
+            count = int(covered.sum())
+            precision = float(matches[covered].mean()) if count else 0.0
+            cache[indices] = _AnchorEvaluation(
+                indices=indices,
+                precision=precision,
+                coverage=float(count / matrix.shape[0]),
+                covered=covered,
+            )
+        return cache[indices]
+
+    empty = evaluate(())
+    best = empty if empty.precision >= threshold else None
+    fallback = empty
+    frontier = [empty]
+    for _size in range(1, max_anchor_size + 1):
+        proposals: set[tuple[int, ...]] = set()
+        for candidate in frontier:
+            start = candidate.indices[-1] + 1 if candidate.indices else 0
+            for feature in range(start, x.size):
+                proposals.add(candidate.indices + (feature,))
+        if not proposals:
+            break
+        evaluated = [evaluate(indices) for indices in sorted(proposals)]
+        for candidate in evaluated:
+            fallback_key = (fallback.precision, fallback.coverage, -len(fallback.indices))
+            candidate_key = (candidate.precision, candidate.coverage, -len(candidate.indices))
+            if candidate_key > fallback_key:
+                fallback = candidate
+            if candidate.precision >= threshold:
+                if best is None:
+                    best = candidate
+                else:
+                    best_key = (best.coverage, best.precision, -len(best.indices))
+                    candidate_key = (
+                        candidate.coverage,
+                        candidate.precision,
+                        -len(candidate.indices),
+                    )
+                    if candidate_key > best_key:
+                        best = candidate
+        # Alibi retains a beam of promising candidates at each depth.  Here
+        # empirical precision drives that beam; coverage chooses the answer.
+        frontier = sorted(
+            evaluated,
+            key=lambda candidate: (
+                -candidate.precision,
+                -candidate.coverage,
+                candidate.indices,
+            ),
+        )[:beam_size]
+        if best is not None and best.coverage >= 1.0:
+            break
+
+    chosen = best if best is not None else fallback
+    selected_conditions = tuple(conditions[index] for index in chosen.indices)
+    return AnchorResult(
+        conditions=selected_conditions,
+        precision=chosen.precision,
+        coverage=chosen.coverage,
+        threshold=threshold,
+        n_covered=int(chosen.covered.sum()),
+        n_samples=int(matrix.shape[0]),
+        covered_indices=tuple(int(index) for index in np.flatnonzero(chosen.covered)),
+        target=target,
+        success=best is not None,
+        candidates_evaluated=len(cache),
+    )
+
+
+@dataclass(frozen=True)
+class ComplexityResult:
+    """Quantus-style complexity and sparseness readings for one attribution."""
+
+    entropy: float
+    normalized_entropy: float
+    effective_units: float
+    gini: float
+    nonzero_fraction: float
+
+
+@dataclass(frozen=True)
+class FaithfulnessResult:
+    """Correlation between grouped attribution mass and prediction drops."""
+
+    score: float
+    prediction_drops: np.ndarray
+    attribution_sums: np.ndarray
+    note: str
+
+
+@dataclass(frozen=True)
+class SensitivityResult:
+    """Maximum relative attribution change over seeded input perturbations."""
+
+    score: float
+    mean: float
+    samples: np.ndarray
+
+
+@dataclass(frozen=True)
+class XaiMetrics:
+    """The three Quantus families exposed by the playground card."""
+
+    complexity: ComplexityResult
+    faithfulness: FaithfulnessResult
+    sensitivity: SensitivityResult | None
+
+
+def _attribution_vector(attributions: Any) -> np.ndarray:
+    values = np.asarray(attributions, dtype=float).reshape(-1)
+    if values.size == 0:
+        raise XaiError("the attribution vector must not be empty")
+    if not np.all(np.isfinite(values)):
+        raise XaiError("the attribution vector carries NaN/inf")
+    return values
+
+
+def attribution_complexity(attributions: Any) -> ComplexityResult:
+    """Entropy, effective support, Gini sparsity and nonzero share.
+
+    Magnitudes are normalised to a probability vector before entropy, as in
+    Quantus Complexity.  Zero attributions have zero entropy/effective support
+    rather than producing a divide-by-zero or a misleading one-unit support.
+    """
+    values = np.abs(_attribution_vector(attributions))
+    total = float(values.sum())
+    nonzero = values > 0.0
+    if total <= 0.0:
+        return ComplexityResult(0.0, 0.0, 0.0, 0.0, 0.0)
+    probabilities = values / total
+    positive = probabilities > 0.0
+    entropy = float(-np.sum(probabilities[positive] * np.log(probabilities[positive])))
+    normalizer = math.log(values.size) if values.size > 1 else 1.0
+    ordered = np.sort(values)
+    ranks = np.arange(1, values.size + 1, dtype=float)
+    gini = float(
+        np.sum((2.0 * ranks - values.size - 1.0) * ordered)
+        / (values.size * total)
+    )
+    return ComplexityResult(
+        entropy=entropy,
+        normalized_entropy=float(entropy / normalizer),
+        effective_units=float(math.exp(entropy)),
+        gini=gini,
+        nonzero_fraction=float(nonzero.mean()),
+    )
+
+
+def _pearson_or_nan(left: np.ndarray, right: np.ndarray) -> float:
+    if left.size < 2 or left.size != right.size:
+        return float("nan")
+    a = left - left.mean()
+    b = right - right.mean()
+    denominator = float(np.linalg.norm(a) * np.linalg.norm(b))
+    if denominator <= 0.0:
+        return float("nan")
+    return float(np.dot(a, b) / denominator)
+
+
+def faithfulness_estimate(
+    estimator: Any,
+    row: Any,
+    attributions: Any,
+    baseline: Any = None,
+    output_index: int = 0,
+    features_in_step: int = 1,
+) -> FaithfulnessResult:
+    """Quantus FaithfulnessEstimate over grouped top-attribution removal.
+
+    Features enter in descending signed-attribution order.  At every step one
+    group is replaced by the baseline in a fresh copy of the original row and
+    the pair ``(sum(attribution), original_score - perturbed_score)`` is
+    retained; Pearson correlation is the final score.  An undefined
+    correlation stays NaN with an explanatory note instead of being silently
+    converted to zero.
+    """
+    x = _as_row(row)
+    values = _attribution_vector(attributions)
+    if values.size != x.size:
+        raise XaiError("attributions and row must have the same number of features")
+    features_in_step = int(features_in_step)
+    if features_in_step < 1:
+        raise XaiError("features_in_step must be >= 1")
+    if baseline is None:
+        base = np.zeros_like(x)
+        baseline_note = "zero baseline"
+    else:
+        base = _as_row(baseline)
+        if base.size != x.size:
+            raise XaiError("baseline and row must have the same number of features")
+        baseline_note = "given baseline"
+    score, _n_features = _occlusion_score(estimator, x, output_index)
+    original = score(x)
+    order = np.argsort(-values, kind="stable")
+    drops: list[float] = []
+    masses: list[float] = []
+    for start in range(0, x.size, features_in_step):
+        selected = order[start : start + features_in_step]
+        perturbed = x.copy()
+        perturbed[selected] = base[selected]
+        drops.append(float(original - score(perturbed)))
+        masses.append(float(values[selected].sum()))
+    drop_array = np.asarray(drops, dtype=float)
+    mass_array = np.asarray(masses, dtype=float)
+    correlation = _pearson_or_nan(mass_array, drop_array)
+    note = (
+        f"grouped top-attribution removal, {baseline_note}, "
+        f"features_in_step={features_in_step}"
+    )
+    if not math.isfinite(correlation):
+        note += "; Pearson correlation undefined (fewer than two steps or zero variance)"
+    return FaithfulnessResult(correlation, drop_array, mass_array, note)
+
+
+def _explained_values(explain_fn: Callable[[np.ndarray], Any], row: np.ndarray) -> np.ndarray:
+    result = explain_fn(row.copy())
+    values = getattr(result, "attributions", result)
+    return _attribution_vector(values)
+
+
+def max_sensitivity(
+    row: Any,
+    explain_fn: Callable[[np.ndarray], Any],
+    n_samples: int = 16,
+    noise: float = 0.1,
+    seed: int = 0,
+) -> SensitivityResult:
+    """Quantus Max-Sensitivity for an attribution callback.
+
+    Seeded uniform perturbations are applied to the row and the callback must
+    recompute its explanation.  Each sample is ``||a-a_perturbed|| / ||a||``;
+    the reported score is the maximum, with lower values indicating a more
+    robust explanation.  The callback protocol works with every engine.
+    """
+    x = _as_row(row)
+    n_samples = int(n_samples)
+    noise = float(noise)
+    if n_samples < 1:
+        raise XaiError("max sensitivity needs n_samples >= 1")
+    if noise < 0.0:
+        raise XaiError("max-sensitivity noise must be >= 0")
+    original = _explained_values(explain_fn, x)
+    denominator = float(np.linalg.norm(original))
+    if denominator <= 0.0:
+        raise XaiError("max sensitivity is undefined for an all-zero attribution")
+    rng = np.random.default_rng(int(seed))
+    spread = noise * float(np.std(x))
+    if spread <= 0.0:
+        spread = noise * 1e-6
+    ratios = np.empty(n_samples, dtype=float)
+    for index in range(n_samples):
+        perturbed = x + rng.uniform(-spread, spread, size=x.shape)
+        changed = _explained_values(explain_fn, perturbed)
+        if changed.size != original.size:
+            raise XaiError("the explanation callback changed the attribution width")
+        ratios[index] = float(np.linalg.norm(original - changed) / denominator)
+    return SensitivityResult(float(ratios.max()), float(ratios.mean()), ratios)
+
+
+def evaluate_attribution_metrics(
+    estimator: Any,
+    row: Any,
+    attributions: Any,
+    explain_fn: Callable[[np.ndarray], Any] | None = None,
+    baseline: Any = None,
+    output_index: int = 0,
+    features_in_step: int = 1,
+    n_samples: int = 16,
+    noise: float = 0.1,
+    seed: int = 0,
+) -> XaiMetrics:
+    """Evaluate complexity, faithfulness and optional robustness together."""
+    values = _attribution_vector(attributions)
+    sensitivity = (
+        None
+        if explain_fn is None
+        else max_sensitivity(
+            row,
+            explain_fn,
+            n_samples=n_samples,
+            noise=noise,
+            seed=seed,
+        )
+    )
+    return XaiMetrics(
+        complexity=attribution_complexity(values),
+        faithfulness=faithfulness_estimate(
+            estimator,
+            row,
+            values,
+            baseline=baseline,
+            output_index=output_index,
+            features_in_step=features_in_step,
+        ),
+        sensitivity=sensitivity,
+    )
 
 
 def demo_attention_layers(
