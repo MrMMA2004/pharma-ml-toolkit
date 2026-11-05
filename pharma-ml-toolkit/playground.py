@@ -2749,7 +2749,13 @@ def attach_table_chrome(tree: Any, *, sortable: bool = True) -> None:
     _CHROME_COLUMNS[tree] = _tree_columns(tree)
 
 
-class ScrollFrame(ttk.Frame):  # type: ignore[misc] # ttk is None headless
+# Keep CLI helpers importable on Python builds without tkinter.  The real
+# application still rejects GUI startup in main(); only class creation needs
+# this inert base so --probe and --version can reach their headless paths.
+_TtkFrameBase: Any = ttk.Frame if ttk is not None else object
+
+
+class ScrollFrame(_TtkFrameBase):  # type: ignore[misc]
     """A vertically scrollable tab page with mouse-wheel support.
 
     Cards live on ``self.body``; the inner frame always stays as wide as

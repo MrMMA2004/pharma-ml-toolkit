@@ -10,7 +10,84 @@ BLOCKED · VERIFICATION REQUIRED
 
 ---
 
-## Current session: 2026-11-04/05 — CLOSED OUT (see Phase status below)
+## Current re-verification: 2026-11-05 — IN PROGRESS
+
+Arena checkout: `/home/user/pharma-ml-toolkit`; active branch:
+`arena/c44913ab-pharma-ml-toolkit`; baseline: `2f7c5d9`. The attached
+43-page `MASTER_PROMPT.pdf` was extracted and read in full. It remains outside
+Git because it contains credential material; no credential from the prompt was
+used or copied. GitHub operations use Arena's configured authentication.
+
+Completed in this pass:
+
+- Verified the empty SQLite scaffold read-only (`integrity_check=ok`, User=0,
+  Post=0); documented the absent `Post.authorId` foreign key without migrating.
+- Confirmed all G-1/G-2 engine files, GUI execution cards, and collected test
+  evidence; corrected the stale traceability rows.
+- Reproduced and fixed the no-`tkinter` `--probe`/`--version` crash using the
+  two existing CLI tests (red: 2 failed; green: 2 passed).
+- Added the missing `nbformat` development dependency after a clean collection
+  failure; its eight requirements guards now pass.
+- Restored `tools/checkpoint.py`'s executable bit; project lint and `mypy src`
+  now pass. An optional whole-playground mypy probe is **not** clean (88
+  pre-existing errors) and is not represented as the project's mypy gate.
+- Removed the tracked `.env` from the index while preserving it locally; added
+  a safe `.env.example` template and its ignore-rule exception. The file holds
+  only a local SQLite URL, but this aligns actual backup contents with policy.
+- Installed the core, QA, chemistry, docking, reporting, boosting, SHAP, and
+  PyTorch dependencies in an isolated `/tmp` environment. SHAP is 0.48.0
+  because the historical 0.54.1 pin requires Python ≥3.12 and this sandbox has
+  Python 3.11.2. Editable installation and wheel/sdist builds succeeded
+  (setuptools emitted license-metadata deprecation warnings only).
+- Full-suite diagnosis: the initial run collected 4,496 items and produced
+  3,840 passes, 22 failures, 276 skips, and 358 setup errors. All 358 errors
+  were missing-display fixture launches; the fixture now skips explicitly.
+  All 22 failures were traced to environment setup: one needed the documented
+  editable install (now passing), and 21 need RDKit drawing's absent native
+  `libXrender.so.1`. The final run used exact deselections and retained every
+  other collected test.
+- Final applicable suite: **3,840 passed + 634 skipped + 22 deselected, 0
+  failures/errors** in 160.98 s. The 22 deselected items are the 21 previous
+  native-drawing failures plus the mixed module-doctest container; its
+  independent `signed_feature_correlations` doctest was run separately and
+  passed. All 91 non-native-drawing `test_interpret.py` cases pass (8 exact
+  native-drawing cases deselected), and 11 focused CLI/dependency/bridge cases
+  pass. The 634 skips comprise the former 358 display setup errors plus the
+  suite's 276 existing optional/display skips.
+
+Current limitations: system `tkinter`, Xvfb, and `libXrender.so.1` are
+unavailable, and the sandbox cannot reach Debian package mirrors. Display GUI
+and 21 native-drawing cases therefore remain unverified here; they are not
+represented as product passes. G-3 remains the documented, deferred
+torchlens/alibi/Quantus fold-in; no speculative integration was started.
+
+### Current verification report
+
+| Check | Procedure | Actual result |
+|---|---|---|
+| Headless CLI regression | `pytest tests/test_playground.py::TestCommandLine` | RED before fix: 2 failed; GREEN after: 2 passed; `--probe` and `--version` both executed |
+| Full applicable Python suite | `python -m pytest` with the 21 native-drawing failures and their mixed module-doctest node deselected by exact ID | **PASS:** 3,840 passed, 634 skipped, 22 deselected, 0 failed/error |
+| Interpret regression | `test_interpret.py` minus its 8 native-drawing cases; correlation doctest separately | **PASS:** 91 + 1; computational `with_drawing=False` probe also passed |
+| Python lint / types | `ruff check .`; `mypy src` | **PASS:** zero lint findings; 117 source files typed successfully |
+| Package build | `python -m build --outdir /tmp/pharmaml-dist` | **PASS:** wheel + sdist; license-metadata deprecation warnings only |
+| SQLite audit | SQLite URI `mode=ro`, `PRAGMA query_only=ON`, schema/index/row-count/integrity queries | **PASS:** integrity ok, User/Post empty; no writes or migrations |
+| Web dependency installation | `npm install --no-package-lock` | Completed; npm reported 12 moderate + 5 high vulnerabilities |
+| Web lint | `npm run lint` | **FAIL (pre-existing):** 12 errors + 1 warning in React hooks/refs; not suppressed |
+| Web production build | `npm run build` | **BLOCKED by network:** Turbopack cannot fetch Google Fonts; filesystem-tracing warnings also reported |
+| Offline web compile | `next build --webpack` with Next.js's offline font-response hook | **PASS:** all application routes compiled and static pages generated; this does not verify real font downloads |
+| Web application types | `tsc` with a temporary config including only `src/` + `next-env.d.ts` | **PASS**; whole-repository `tsc` still reports pre-existing scratch/example/skill errors |
+| Dependency security audit | temporary lockfile + `npm audit --json` | **ATTENTION REQUIRED:** 12 moderate + 5 high; direct highs include `prisma` and `sharp`; no broad auto-fix applied |
+
+The normal web build script, whole-repository TypeScript check, web lint,
+and native-display suites must not be described as green in this environment.
+The project's declared Python gates and all applicable regression tests are
+green as itemized above.
+
+## Historical close-out: 2026-11-04/05
+
+The phase table and facts below preserve the prior session's checkpoint. Where
+it conflicts with the re-verification above (paths, branch, credentials, test
+counts), the current section is authoritative.
 
 ## Phase status
 
@@ -63,10 +140,11 @@ BLOCKED · VERIFICATION REQUIRED
    subdir, no nested .git). Branch: `main`. Guard cron job 495807 (30 min,
    minimal-action protocol) still scheduled.
 
-## P2 resource inventory (in progress)
+## P2 resource inventory
 
 | Resource | Type | Purpose | Status |
 |---|---|---|---|
+| `/tmp/arena-coding-uploads/MASTER_PROMPT.pdf` (current attachment) | 43-page PDF | audit, integration, testing, and backup directive | INSPECTED in full; credential-bearing and intentionally outside Git |
 | upload/Command.txt + Command.docx + MASTER_PROMPT.docx | prompt docs | the MASTER_PROMPT itself (token-bearing, gitignored) | INSPECTED (full text → scratch/master_prompt_full.txt, sanitized) |
 | upload/Applicability_domain_analysis.py | py script | kNN/leverage ADA on catboost pIC50 | INSPECTED — absorbed as `ml/applicability.py` (module verified) |
 | upload/fak_ml.ipynb (1.35 MB) | notebook | 183-cell ML workflow | INSPECTED (structure); absorbed via scratch/ml-codes-extract earlier rounds |
@@ -88,10 +166,11 @@ ml/quantization.py, ml/harness.py (lost in rollbacks).**
 
 ## Resources not yet inspected
 
-- notebooks' cell-level content vs toolkit absorption (P2 remainder).
-- scripts/ bridge wiring vs web routes (P5).
-- db/custom.db tables + Prisma schema (P3).
-- playground.py card/module wiring (P5).
+- None from the original inventory; the items formerly listed here were closed
+  in the prior P2/P3/P5 work and their outcomes are recorded below.
+- Current runtime verification gap: display-backed GUI behavior is unverified
+  in this sandbox because system Tk/Xvfb are unavailable (not a resource
+  inspection gap). CLI and non-display playground tests remain applicable.
 
 ## Unresolved issues / risks
 
@@ -130,6 +209,14 @@ ml/quantization.py, ml/harness.py (lost in rollbacks).**
 
 ## Exact next steps
 
-None for the MASTER_PROMPT — closed. Standing opportunities: the G-3
-torchlens/alibi/Quantus compact fold-ins (spec recorded), and the guard
-cron (495807) keeps the minimal-action protocol.
+1. Wait for the full 4,496-item pytest run; record actual passes/skips/failures
+   and investigate any failure without rolling back unrelated fixes.
+2. Build the package, rerun the focused headless CLI and dependency checks,
+   then finalize this checkpoint and the traceability matrix.
+3. Commit only the verified changes to the active Arena branch, push that
+   branch, verify remote SHA parity and a fresh clone, and update
+   `GITHUB_BACKUP_MANIFEST.md` with the new evidence and exclusions.
+
+Standing deferred opportunity: G-3 torchlens/alibi/Quantus compact fold-ins.
+The historical cron/job identifiers below are not assumed to exist in this
+sandbox.

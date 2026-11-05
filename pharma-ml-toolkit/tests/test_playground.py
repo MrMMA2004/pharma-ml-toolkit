@@ -774,6 +774,9 @@ def picklist_accept_all(playground: Any, monkeypatch: Any) -> None:
 @pytest.fixture(scope="module")
 def xvfb_display() -> str:
     """A module-scoped virtual display, polled until Xvfb accepts sockets."""
+    if importlib.util.find_spec("tkinter") is None or not _xvfb_available():
+        pytest.skip("needs tkinter + Xvfb for a headless display")
+
     import os
     import socket
     import time
