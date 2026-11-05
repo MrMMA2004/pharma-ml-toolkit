@@ -6181,9 +6181,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             except tk.TclError:
                 return  # a destroyed intermediate (defensive)
             for child in children:
-                if isinstance(child, ttk.Treeview) and not getattr(
-                    child, "reference_census", False
-                ):
+                if isinstance(child, ttk.Treeview):
                     rows = list(child.get_children())
                     if rows:
                         title = self._card_title_for_widget(child)
