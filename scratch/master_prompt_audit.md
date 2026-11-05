@@ -143,3 +143,16 @@ Playground = playground.py cards; Web = Next.js API routes / explorer cards.
   prerequisites must run those cases before claiming full GUI verification.
 - Backup requires a new active-branch commit, push, SHA parity check, and test
   clone; the historical `main` evidence below is not a substitute.
+
+## 2026-11-05 addendum — G-3 resolved by the registry commission
+
+The attached `GitHub_Links_Registry.pdf` was checked URL by URL. Its three
+explicitly deferred entries are now compact, tested surfaces in `ml/xai.py`:
+`model_activation_trace` (torchlens), `tabular_anchor` (alibi), and the
+complexity/faithfulness/max-sensitivity trio (Quantus), with **Model graph**,
+**Anchor rule**, and **Quantus metrics** actions in the existing attribution
+card. The numerical APIs, display-independent handlers, native-Tk test
+coverage, upstream source commits, and deliberate scope limits are recorded in
+`GITHUB_LINKS_REGISTRY.md`. G-11/G-12 and the native display/RDKit limits are
+unchanged; this addendum does not convert those environment exclusions into
+passes.

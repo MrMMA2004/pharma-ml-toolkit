@@ -1,3 +1,41 @@
+## [Unreleased] — 2026-11-05
+
+### Added — the link registry's deferred trio: torchlens · alibi · Quantus
+
+The attached 34-URL registry was re-checked entry by entry through live
+GitHub metadata, complete recursive default-branch trees and READMEs. Thirty
+entries already had concrete toolkit coverage; the project backup was already
+verified. The three entries explicitly marked deferred now land as compact,
+offline surfaces in `ml/xai.py` and the Deep Learning **Attribution &
+attention** card:
+
+* **johnmarktaylor91/torchlens — Model graph.** `model_activation_trace`
+  records input, linear, activation and output nodes with parent links,
+  input/output widths, parameter counts, retained activation bytes,
+  min/mean/max and dead-unit share. It traces the toolkit's numpy LayerStack;
+  it does not pretend to intercept arbitrary framework operations.
+* **SeldonIO/alibi — Anchor rule.** `tabular_anchor` discretises numeric
+  columns into reference-frame quantile bins, beam-searches conjunctions and
+  maximises coverage subject to empirical precision. The result exposes the
+  readable rule, covered indices/counts, precision, coverage, candidate count
+  and an honest `success=False` when the target cannot be met. Direct
+  reference evaluation replaces stochastic KL-LUCB sampling, so no PAC claim
+  is made.
+* **Quantus — Quantus metrics.** `attribution_complexity` reports entropy,
+  normalized entropy, effective support, Gini and nonzero share;
+  `faithfulness_estimate` correlates grouped attribution mass with actual
+  prediction drops; `max_sensitivity` recomputes the selected explanation on
+  seeded noisy rows and reports maximum/mean relative change. Undefined
+  correlations stay NaN with an explanatory note.
+
+The GUI actions share the existing model, held-out-row and attribution-method
+selectors. Their shared table switches schemas safely between graph nodes,
+anchor conditions, metrics and ordinary attributions. `tests/test_xai_registry`
+pins the numerical behavior; the XAI playground suite pins real Tk callbacks
+where a display exists plus display-independent headless handler rendering.
+The one-by-one evidence and scope limits are recorded in
+`GITHUB_LINKS_REGISTRY.md`.
+
 ## [1.2.106] — 2026-11-03
 
 ### Added — round 186: tensorboard · umap · fiftyone · plotly.py, absorbed offline into the Deep Learning tab

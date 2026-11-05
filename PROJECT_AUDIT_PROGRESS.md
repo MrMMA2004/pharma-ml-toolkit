@@ -226,3 +226,37 @@ from the current section and `GITHUB_BACKUP_MANIFEST.md`, not the historical
    new feature commission, not as completed coverage.
 
 The historical cron/job identifiers below are not assumed to exist here.
+
+---
+
+## GitHub Links Registry commission — 2026-11-05 (new follow-up)
+
+This section supersedes the earlier G-3 deferral, not the historical evidence
+above. The attached registry yielded 34 unique URLs. Every URL received an
+individual live metadata and complete recursive-tree check; all external
+READMEs were read. Entries 1–30 map to existing local implementations/cards;
+entry 34 is the verified private backup. Entries 31–33 were shallow-cloned and
+their relevant algorithms/tests inspected before coding.
+
+**Implemented:** torchlens-style `model_activation_trace`, alibi-style numeric
+`tabular_anchor`, and Quantus-style `attribution_complexity`,
+`faithfulness_estimate`, `max_sensitivity`, plus the combined metric report.
+The existing Deep Learning attribution card now has **Model graph**, **Anchor
+rule**, and **Quantus metrics** actions. The APIs are offline and compact;
+their explicit non-parity limits and the one-by-one register are in
+`GITHUB_LINKS_REGISTRY.md`.
+
+**Verification:** the focused run passed 24 tests with 10 display-only skips
+across the new 11-test numerical module, existing XAI helpers, two
+display-independent handler tests, and the native XAI GUI class. The counted
+full applicable suite passed **3,853 tests, skipped 637, and deselected 22**;
+the independent correlation doctest passed separately. This is 13 new passing
+tests (11 numerical + two headless handlers) and three new display-only skips
+over the prior baseline. The deselections are the exact native RDKit-drawing
+failures and their mixed doctest container, not XAI tests.
+
+Ruff, `git diff --check`, mypy over 117 package files, and wheel/sdist builds
+passed. The headless harness executes graph/anchor/metric callbacks and schema
+restoration; native Tk layout and RDKit drawing remain unverified in this
+environment. Normal branch push/SHA/recovery checks are the remaining steps
+for this commission.

@@ -1068,6 +1068,41 @@ tensorflow, no network — and each registry entry credits its origin
 repo (`ATTRIBUTION_METHODS`). The GUI twin is the Deep Learning tab's
 **Attribution & attention** card.
 
+The registry's three deferred fold-ins are now compact offline surfaces in
+the same module and card:
+
+```python
+from pharmaml.ml.xai import (
+    model_activation_trace, tabular_anchor, evaluate_attribution_metrics,
+)
+
+# torchlens-style nodes: parents, shapes, parameters, bytes and activations
+nodes = model_activation_trace(numpy_net, row)
+
+# alibi-style numeric quantile-bin conjunction, measured on reference rows
+anchor = tabular_anchor(any_net, row, reference_rows, threshold=0.95)
+print(anchor.rule, anchor.precision, anchor.coverage, anchor.success)
+
+# Quantus-style complexity + faithfulness + max-sensitivity.  The callback
+# recomputes the SAME attribution method for every seeded noisy row.
+metrics = evaluate_attribution_metrics(
+    any_net,
+    row,
+    occ.attributions,
+    explain_fn=lambda values: occlusion_attributions(any_net, values).attributions,
+    n_samples=12,
+)
+```
+
+The graph tracer supports the toolkit's numpy `LayerStack`; it does not claim
+arbitrary torch/JAX/TensorFlow interception. The anchor search is numeric,
+deterministic and empirical on the supplied reference frame (no KL-LUCB/PAC
+confidence claim), and returns `success=False` when its precision target is
+unreachable. Quantus complexity uses attribution magnitudes; faithfulness
+correlates grouped attribution mass with prediction drops; max-sensitivity is
+the maximum relative explanation change over seeded perturbations. Undefined
+correlations remain NaN with a reason rather than becoming fabricated zeroes.
+
 #### The run board, UMAP, curation views & express figures (`ml.runboard` · `ml.umap` · `ml.curation` · `viz.interactive`) — tensorboard · umap · fiftyone · plotly.py, offline
 
 Round 186 checked four more repositories file by file and lifted what

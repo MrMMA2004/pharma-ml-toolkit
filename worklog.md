@@ -6469,3 +6469,35 @@ twin's ML tab trains live through the python bridge.
 shipped source, four engines, six cards, two shipped bugs found and fixed,
 one version-consistency catch at the gate — and the whole history off-site
 on GitHub as it happened.
+
+---
+
+## Registry follow-up — deferred XAI trio (2026-11-05)
+
+**Commission:** check every link in `GitHub_Links_Registry.pdf` one by one and
+add the remaining items to `playground.py`.
+
+Extracted all 11 pages and 80 annotations into 34 unique repository URLs.
+Queried each repository's live metadata and complete recursive default-branch
+tree (`truncated=false` throughout), retrieved every external README, and
+mapped each entry to local source/tests/cards. The registry itself marked only
+torchlens, alibi and Quantus deferred. Shallow-cloned those three at commits
+`23dc5ee`, `99c3421`, and `85bc29d`; inspected their anchor/metric/trace
+implementations and tests rather than relying on README claims.
+
+Added compact offline implementations to `ml/xai.py`: operation-level
+activation records with parents/shapes/parameters/memory; numeric quantile-bin
+anchor beam search with empirical precision/coverage and honest failure; and
+Quantus-style complexity, grouped-perturbation faithfulness and seeded
+max-sensitivity. Added **Model graph**, **Anchor rule**, and **Quantus
+metrics** to the existing Deep Learning attribution card, sharing its trained
+run, held-out row and selected attribution method. No upstream runtime
+packages were added. Full-source parity is explicitly not claimed; exact scope
+and all 34 dispositions are in `GITHUB_LINKS_REGISTRY.md`.
+
+Verification: 11 new numerical tests plus two display-independent handler
+tests and existing XAI tests — **24 passed, 10 display-only skipped**. The
+counted full applicable suite is **3,853 passed, 637 skipped, 22 deselected**,
+with the independent correlation doctest green. Ruff, all-package mypy, and
+wheel/sdist builds pass. Native Tk/RDKit display behavior remains
+environment-limited. Ordinary push/SHA/recovery checks remain before close-out.

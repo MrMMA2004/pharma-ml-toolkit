@@ -22003,8 +22003,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "engine, occlusion runs on every engine. Layer "
             "activations expose the hidden units; the attention grid "
             "is the toolkit's own numpy multi-head attention over your "
-            "tokens (captum · tf-keras-vis · PAIR-code/saliency · "
-            "bertviz, absorbed offline).",
+            "tokens. Model graph, Anchor rule and Quantus metrics complete "
+            "the deferred torchlens / alibi / Quantus fold-ins (all offline).",
         )
         xai_row = ttk.Frame(xai, style="Card.TFrame")
         grid_append(xai, xai_row, sticky="w")
@@ -22061,6 +22061,56 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "grayscale unit heat map (PAIR-code/saliency's palette).",
         )
         layers_btn.pack(side="left", padx=(8, 0))
+        # round 189: the registry's deferred torchlens / alibi / Quantus
+        # fold-ins share the same trained run and held-out row selector.
+        xai_eval_row = ttk.Frame(xai, style="Card.TFrame")
+        grid_append(xai, xai_eval_row, sticky="w", pady=(7, 0))
+        graph_btn = self._action_button(
+            xai_eval_row,
+            "Model graph",
+            self._dl_xai_graph,
+            tooltip="torchlens-style operation trace: input → linear → "
+            "activation → output, with parent links, tensor widths, "
+            "parameter counts, retained activation bytes and dead-unit "
+            "share. Available for the numpy engine's LayerStack.",
+        )
+        graph_btn.pack(side="left")
+        anchor_btn = self._action_button(
+            xai_eval_row,
+            "Anchor rule",
+            self._dl_xai_anchor,
+            tooltip="alibi AnchorTabular, offline: quantile-bin conditions "
+            "are beam-searched for maximum coverage at the requested "
+            "empirical precision. The held-out reference frame is evaluated "
+            "directly (no stochastic PAC/KL-LUCB guarantee).",
+        )
+        anchor_btn.pack(side="left", padx=(8, 0))
+        ttk.Label(xai_eval_row, text="anchor τ", style="CardMuted.TLabel").pack(
+            side="left", padx=(8, 3)
+        )
+        self._dl_xai_threshold_spin = ttk.Spinbox(
+            xai_eval_row, from_=0.5, to=1.0, increment=0.05, width=6
+        )
+        self._dl_xai_threshold_spin.set("0.95")
+        self._dl_xai_threshold_spin.pack(side="left")
+        metrics_btn = self._action_button(
+            xai_eval_row,
+            "Quantus metrics",
+            self._dl_xai_metrics,
+            tooltip="Evaluate the SELECTED attribution method: complexity "
+            "(entropy, effective support, Gini and nonzero share), "
+            "faithfulness (prediction-drop correlation) and seeded "
+            "max-sensitivity under small input perturbations.",
+        )
+        metrics_btn.pack(side="left", padx=(10, 0))
+        ttk.Label(xai_eval_row, text="noise n", style="CardMuted.TLabel").pack(
+            side="left", padx=(8, 3)
+        )
+        self._dl_xai_noise_spin = ttk.Spinbox(
+            xai_eval_row, from_=1, to=64, width=5
+        )
+        self._dl_xai_noise_spin.set("12")
+        self._dl_xai_noise_spin.pack(side="left")
         # the ranked per-feature table (same Treeview idiom as the
         # preview card; six visible rows, scroll for the rest)
         self._dl_xai_tree = ttk.Treeview(xai, show="headings", height=6)
@@ -24053,20 +24103,39 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return [str(name) for name in list(names)]
         return [f"x{i + 1}" for i in range(len(row))]
 
-    def _dl_xai_explain(self) -> None:
-        """Explain the last trained network on one held-out row."""
+    def _dl_xai_current_row(
+        self, action: str
+    ) -> tuple[Any, str, str, Any, int, str] | None:
+        """The shared run/row context for the round-189 XAI actions."""
         if not self._require_pharmaml():
-            return
+            return None
         if self._dl_last_run is None:
             messagebox.showwarning(
                 "No run yet",
-                "Train a network first -- the attribution card explains "
-                "the LAST trained network on one held-out row.",
+                f"Train a network first -- {action} uses the LAST trained "
+                "network on one held-out row.",
             )
-            return
+            return None
         import numpy as np
 
-        from pharmaml.exceptions import PharmaMLError
+        network, estimator_name, task, x_test, target = self._dl_last_run
+        matrix = np.asarray(x_test, dtype=float)
+        if matrix.ndim != 2 or matrix.shape[0] == 0:
+            messagebox.showwarning(
+                "No rows", "The last run kept no test rows to explain."
+            )
+            return None
+        row_index = self._dl_xai_row_index(int(matrix.shape[0]))
+        if row_index is None:
+            return None
+        return network, estimator_name, task, matrix, row_index, target
+
+    def _dl_xai_compute_attribution(
+        self, network: Any, row: Any, task: str, output_index: int | None = None
+    ) -> tuple[Any, str, int]:
+        """Compute the currently selected method for metrics and Explain."""
+        import numpy as np
+
         from pharmaml.ml.xai import (
             ATTRIBUTION_METHODS,
             input_x_gradient,
@@ -24075,44 +24144,58 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             smoothgrad_attributions,
         )
 
-        network, estimator_name, task, x_test, target = self._dl_last_run
-        matrix = np.asarray(x_test, dtype=float)
-        if matrix.ndim != 2 or matrix.shape[0] == 0:
-            messagebox.showwarning(
-                "No rows", "The last run kept no test rows to explain."
-            )
-            return
-        row_index = self._dl_xai_row_index(int(matrix.shape[0]))
-        if row_index is None:
-            return
         raw = str(self._dl_xai_method_combo.get()).strip()
         method = raw.split(" — ")[0].strip() if " — " in raw else raw
         if method not in ATTRIBUTION_METHODS:
             method = "integrated_gradients"
-        output_index = self._dl_xai_output_index(network, matrix[row_index], task)
+        values = np.asarray(row, dtype=float).reshape(-1)
+        if output_index is None:
+            output_index = self._dl_xai_output_index(network, values, task)
+        if method == "integrated_gradients":
+            try:
+                steps = int(float(str(self._dl_xai_steps_spin.get()).strip() or "50"))
+            except (TypeError, ValueError):
+                steps = 50
+            steps = max(5, min(steps, 500))
+            self._dl_xai_steps_spin.set(str(steps))
+            result = integrated_gradients(
+                network, values, steps=steps, output_index=output_index
+            )
+        elif method == "smoothgrad":
+            result = smoothgrad_attributions(
+                network, values, output_index=output_index
+            )
+        elif method == "occlusion":
+            result = occlusion_attributions(
+                network, values, output_index=output_index
+            )
+        else:
+            result = input_x_gradient(network, values, output_index=output_index)
+        return result, method, output_index
+
+    @staticmethod
+    def _dl_xai_set_columns(
+        tree: Any, specifications: tuple[tuple[str, str, int], ...]
+    ) -> None:
+        """Reuse one Treeview for attributions, graph nodes and metrics."""
+        tree.delete(*tree.get_children())
+        tree["columns"] = tuple(column for column, _text, _width in specifications)
+        for column, text, width in specifications:
+            tree.heading(column, text=text)
+            tree.column(column, width=width, minwidth=54, stretch=True)
+
+    def _dl_xai_explain(self) -> None:
+        """Explain the last trained network on one held-out row."""
+        context = self._dl_xai_current_row("the attribution card")
+        if context is None:
+            return
+        from pharmaml.exceptions import PharmaMLError
+
+        network, estimator_name, task, matrix, row_index, target = context
         try:
-            if method == "integrated_gradients":
-                try:
-                    steps = int(float(str(self._dl_xai_steps_spin.get()).strip() or "50"))
-                except (TypeError, ValueError):
-                    steps = 50
-                steps = max(5, min(steps, 500))
-                self._dl_xai_steps_spin.set(str(steps))
-                result = integrated_gradients(
-                    network, matrix[row_index], steps=steps, output_index=output_index
-                )
-            elif method == "smoothgrad":
-                result = smoothgrad_attributions(
-                    network, matrix[row_index], output_index=output_index
-                )
-            elif method == "occlusion":
-                result = occlusion_attributions(
-                    network, matrix[row_index], output_index=output_index
-                )
-            else:
-                result = input_x_gradient(
-                    network, matrix[row_index], output_index=output_index
-                )
+            result, method, _output_index = self._dl_xai_compute_attribution(
+                network, matrix[row_index], task
+            )
         except PharmaMLError as exc:
             # the honest refusal: a torch-engine run under a gradient
             # method names the occlusion sibling that still works.
@@ -24146,7 +24229,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             names = [f"x{i + 1}" for i in range(values.size)]
         order = np.argsort(np.abs(values))[::-1]
         total = float(np.abs(values).sum()) or 1.0
-        self._dl_xai_tree.delete(*self._dl_xai_tree.get_children())
+        self._dl_xai_set_columns(
+            self._dl_xai_tree,
+            (
+                ("feature", "feature", 150),
+                ("value", "value", 90),
+                ("attribution", "attribution", 110),
+                ("share", "|attr| share", 96),
+                ("direction", "pushes", 110),
+            ),
+        )
         for index in order:
             share = abs(float(values[index])) / total
             direction = (
@@ -24188,6 +24280,257 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             text=f"{label} — {estimator_name} · target {target} · "
             f"row {row_index} ({int(values.size)} features)\n"
             f"{result.note}{delta}"
+        )
+
+    def _dl_xai_graph(self) -> None:
+        """Render the deferred torchlens-style operation graph."""
+        context = self._dl_xai_current_row("the model graph")
+        if context is None:
+            return
+        import numpy as np
+
+        from pharmaml.exceptions import PharmaMLError
+        from pharmaml.ml.xai import diverging_hex, model_activation_trace
+
+        network, estimator_name, _task, matrix, row_index, target = context
+        try:
+            records = model_activation_trace(network, matrix[row_index])
+        except PharmaMLError as exc:
+            messagebox.showwarning("Cannot trace this run", str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Model graph failed", exc)
+            return
+        self._dl_xai_set_columns(
+            self._dl_xai_tree,
+            (
+                ("node", "node", 105),
+                ("operation", "operation", 80),
+                ("parents", "parents", 105),
+                ("input", "input", 65),
+                ("output", "output", 65),
+                ("parameters", "params", 70),
+                ("mean", "mean", 80),
+                ("dead", "dead", 65),
+                ("nbytes", "bytes", 70),
+            ),
+        )
+        for index, record in enumerate(records):
+            self._dl_xai_tree.insert(
+                "",
+                "end",
+                iid=f"node-{index}",
+                values=(
+                    record.name,
+                    record.operation,
+                    ", ".join(record.parents) or "—",
+                    "×".join(str(size) for size in record.input_shape),
+                    "×".join(str(size) for size in record.output_shape),
+                    record.parameters,
+                    f"{record.mean:+.4g}",
+                    f"{record.dead_fraction:.0%}",
+                    record.activation_nbytes,
+                ),
+            )
+        self._dl_xai_strip.delete("all")
+        self._dl_xai_strip.configure(bg=BG)
+        means = np.asarray([record.mean for record in records], dtype=float)
+        vmax = float(np.abs(means).max()) if means.size else 0.0
+        cell = max(6.0, 560.0 / max(len(records), 1))
+        for index, record in enumerate(records[:48]):
+            self._dl_xai_strip.create_rectangle(
+                index * cell,
+                2,
+                (index + 1) * cell - 1,
+                22,
+                fill=diverging_hex(record.mean, vmax),
+                outline=BG,
+            )
+        parameters = sum(record.parameters for record in records)
+        nbytes = sum(record.activation_nbytes for record in records)
+        self._dl_xai_summary.configure(
+            text=f"Model graph — {estimator_name} · target {target} · row {row_index}\n"
+            f"{len(records)} nodes · {parameters} parameters · "
+            f"{nbytes / 1024.0:.1f} KiB retained activations. "
+            "Parents and widths are traced for this row; the strip encodes node means."
+        )
+
+    def _dl_xai_anchor(self) -> None:
+        """Find and render an empirical alibi-style tabular anchor."""
+        context = self._dl_xai_current_row("the anchor rule")
+        if context is None:
+            return
+        from pharmaml.exceptions import PharmaMLError
+        from pharmaml.ml.xai import tabular_anchor
+
+        network, estimator_name, _task, matrix, row_index, target = context
+        try:
+            threshold = float(str(self._dl_xai_threshold_spin.get()).strip() or "0.95")
+        except (TypeError, ValueError):
+            threshold = 0.95
+        threshold = max(0.5, min(threshold, 1.0))
+        self._dl_xai_threshold_spin.set(f"{threshold:g}")
+        names = self._dl_xai_feature_names(network, matrix[row_index])
+        try:
+            result = tabular_anchor(
+                network,
+                matrix[row_index],
+                matrix,
+                feature_names=names,
+                threshold=threshold,
+                max_anchor_size=3,
+                beam_size=4,
+            )
+        except PharmaMLError as exc:
+            messagebox.showwarning("Cannot anchor this run", str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Anchor rule failed", exc)
+            return
+        self._dl_xai_set_columns(
+            self._dl_xai_tree,
+            (
+                ("order", "#", 45),
+                ("feature", "feature", 130),
+                ("row_value", "row value", 90),
+                ("condition", "quantile-bin condition", 310),
+            ),
+        )
+        if result.conditions:
+            for index, condition in enumerate(result.conditions, start=1):
+                self._dl_xai_tree.insert(
+                    "",
+                    "end",
+                    iid=f"condition-{index}",
+                    values=(
+                        index,
+                        condition.feature_name,
+                        f"{condition.row_value:.4g}",
+                        condition.describe(),
+                    ),
+                )
+        else:
+            self._dl_xai_tree.insert(
+                "",
+                "end",
+                iid="condition-empty",
+                values=("—", "all features", "—", result.rule),
+            )
+        self._dl_xai_strip.delete("all")
+        status = "meets τ" if result.success else "τ NOT reached; best candidate shown"
+        self._dl_xai_summary.configure(
+            text=f"Anchor rule — {estimator_name} · target {target} · row {row_index} · "
+            f"predicted {result.target}\n{result.rule}\n"
+            f"precision {result.precision:.1%} · coverage {result.coverage:.1%} · "
+            f"{result.n_covered}/{result.n_samples} covered rows · {status} · "
+            f"{result.candidates_evaluated} candidates. Empirical on the held-out "
+            "reference frame (deterministic; no PAC confidence claim)."
+        )
+
+    def _dl_xai_metrics(self) -> None:
+        """Evaluate the selected attribution with the Quantus metric trio."""
+        context = self._dl_xai_current_row("the Quantus metrics")
+        if context is None:
+            return
+        import math
+
+        from pharmaml.exceptions import PharmaMLError
+        from pharmaml.ml.xai import evaluate_attribution_metrics
+
+        network, estimator_name, task, matrix, row_index, target = context
+        try:
+            n_samples = int(float(str(self._dl_xai_noise_spin.get()).strip() or "12"))
+        except (TypeError, ValueError):
+            n_samples = 12
+        n_samples = max(1, min(n_samples, 64))
+        self._dl_xai_noise_spin.set(str(n_samples))
+        try:
+            base, method, output_index = self._dl_xai_compute_attribution(
+                network, matrix[row_index], task
+            )
+
+            def explain(values: Any) -> Any:
+                result, _method, _index = self._dl_xai_compute_attribution(
+                    network, values, task, output_index=output_index
+                )
+                return result.attributions
+
+            report = evaluate_attribution_metrics(
+                network,
+                matrix[row_index],
+                base.attributions,
+                explain_fn=explain,
+                output_index=output_index,
+                n_samples=n_samples,
+                seed=0,
+            )
+        except PharmaMLError as exc:
+            messagebox.showwarning("Cannot evaluate this run", str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Quantus metrics failed", exc)
+            return
+        self._dl_xai_set_columns(
+            self._dl_xai_tree,
+            (
+                ("metric", "metric", 190),
+                ("score", "score", 110),
+                ("reading", "reading", 260),
+            ),
+        )
+
+        def number(value: float) -> str:
+            return "undefined" if not math.isfinite(value) else f"{value:.5g}"
+
+        complexity = report.complexity
+        faithfulness = report.faithfulness
+        sensitivity = report.sensitivity
+        rows = [
+            ("complexity · entropy", number(complexity.entropy), "lower = less diffuse"),
+            (
+                "complexity · normalized entropy",
+                f"{complexity.normalized_entropy:.1%}",
+                "0 = concentrated; 1 = uniform",
+            ),
+            (
+                "complexity · effective units",
+                number(complexity.effective_units),
+                "exp(entropy) support",
+            ),
+            ("complexity · Gini", f"{complexity.gini:.4f}", "higher = sparser"),
+            (
+                "complexity · nonzero share",
+                f"{complexity.nonzero_fraction:.1%}",
+                "fraction with nonzero attribution",
+            ),
+            (
+                "faithfulness · Pearson r",
+                number(faithfulness.score),
+                "higher = attribution mass tracks score drops",
+            ),
+        ]
+        if sensitivity is not None:
+            rows.extend(
+                [
+                    (
+                        "robustness · max sensitivity",
+                        number(sensitivity.score),
+                        "lower = more stable; max relative change",
+                    ),
+                    (
+                        "robustness · mean sensitivity",
+                        number(sensitivity.mean),
+                        f"mean over {len(sensitivity.samples)} seeded perturbations",
+                    ),
+                ]
+            )
+        for index, values in enumerate(rows):
+            self._dl_xai_tree.insert("", "end", iid=f"metric-{index}", values=values)
+        self._dl_xai_strip.delete("all")
+        self._dl_xai_summary.configure(
+            text=f"Quantus metrics — {method} · {estimator_name} · target {target} · "
+            f"row {row_index}\n{faithfulness.note}. Robustness recomputes {method} "
+            f"for {n_samples} seeded noisy rows; complexity uses |attribution|."
         )
 
     def _dl_xai_layers(self) -> None:
