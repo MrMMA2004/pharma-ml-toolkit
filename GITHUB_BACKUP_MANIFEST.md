@@ -96,3 +96,42 @@ proven under actual loss, not just test-clone drills.
   v1.2.107 zip's sha-256 comparison local-vs-clone (equal).
 - The token lives only in `~/.github_token` (600) + the docx uploads
   (gitignored); the clone grep is clean.
+
+## Restore-from-backup verification (2026-11-06 — the 8th rollback)
+
+Exercised for real a second time, mid-round: the sandbox filesystem
+snapped back to the November-3 snapshot (HEAD `2eb0ede`, venv without
+rdkit/pharmaml, token/remote/global-config/tmp all wiped) — minutes
+AFTER the three stranded commits had been pushed. The remote was the
+only thing standing; GitHub held every round since November 3.
+
+| Field | Value |
+|---|---|
+| Local HEAD before recovery | `2eb0ede` (the November-3 snapshot) |
+| Remote HEAD at rollback | `08390e3` (rounds 186-192 + the cron's walk-filter fix) |
+| Recovery method | token re-extract → remote re-add → `git fetch` → `git merge --ff-only` |
+| upload/ untracked blockers | moved aside, merged, restored — every file md5-identical to the remote blobs |
+| Post-restore venv | numpy 1.26.4 · rdkit 2026.09.1 · pharmaml 1.2.111 editable (re-pinned) |
+| Post-restore tests | 86 green (fold-in + picklist + csv standardize + docs guards) |
+| Post-restore pushes | `77b871a` (the round-193 fold-in, pushed within the hour) → `5435f8d` |
+
+**Conclusion (the owner's own directive, proven by the hour):** "Update
+the GitHub repository more frequently" — the fast-forward push minutes
+before the rollback was the only reason rounds 186-192 survived. The
+push cadence is now: every landed unit is committed AND pushed before
+the next unit starts.
+
+## v1.2.112 release-zip homes (2026-11-06)
+
+`pharma-ml-toolkit-v1.2.112.zip` — 19,155,891 bytes, sha-256
+`b2bec19c4c11db336cd8a047a465e72a95afd9d2f7a76c2d0ff36b8b4d6c8e13`,
+built with the route's own exclusion list (ZIP_EXCLUDE_ARGS, `*.zip`
+nesting guard included), placed in all three homes:
+
+- `download/pharma-ml-toolkit-v1.2.112.zip` (repo root)
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.112.zip`
+- `upload/pharma-ml-toolkit-v1.2.112.zip`
+
+The download route flipped to `exact: true, source: "release"` with a
+strong ETag and the exact content-length; the zip-size route answers
+`19155891` with zero spawns.
