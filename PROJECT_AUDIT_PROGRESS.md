@@ -10,7 +10,7 @@ BLOCKED · VERIFICATION REQUIRED
 
 ---
 
-## Current re-verification: 2026-11-05 — IN PROGRESS
+## Current re-verification: 2026-11-05 — COMPLETED WITH DOCUMENTED LIMITS
 
 Arena checkout: `/home/user/pharma-ml-toolkit`; active branch:
 `arena/c44913ab-pharma-ml-toolkit`; baseline: `2f7c5d9`. The attached
@@ -34,6 +34,10 @@ Completed in this pass:
 - Removed the tracked `.env` from the index while preserving it locally; added
   a safe `.env.example` template and its ignore-rule exception. The file holds
   only a local SQLite URL, but this aligns actual backup contents with policy.
+- Implementation commit `1718302a25efc94aba2c8056e74a599c43e5d6c5` was pushed
+  to the active branch and recovered in a fresh clone: local == remote == clone,
+  1,701 files, zero credential-pattern files, and release-ZIP SHA parity.
+  `GITHUB_BACKUP_MANIFEST.md` records the evidence and final limitations.
 - Installed the core, QA, chemistry, docking, reporting, boosting, SHAP, and
   PyTorch dependencies in an isolated `/tmp` environment. SHAP is 0.48.0
   because the historical 0.54.1 pin requires Python ≥3.12 and this sandbox has
@@ -209,14 +213,16 @@ ml/quantization.py, ml/harness.py (lost in rollbacks).**
 
 ## Exact next steps
 
-1. Wait for the full 4,496-item pytest run; record actual passes/skips/failures
-   and investigate any failure without rolling back unrelated fixes.
-2. Build the package, rerun the focused headless CLI and dependency checks,
-   then finalize this checkpoint and the traceability matrix.
-3. Commit only the verified changes to the active Arena branch, push that
-   branch, verify remote SHA parity and a fresh clone, and update
-   `GITHUB_BACKUP_MANIFEST.md` with the new evidence and exclusions.
+No mandatory step remains for this targeted re-verification and backup. Resume
+from the current section and `GITHUB_BACKUP_MANIFEST.md`, not the historical
+`main` checkpoint below. Separately commissioned follow-ups, in priority order:
 
-Standing deferred opportunity: G-3 torchlens/alibi/Quantus compact fold-ins.
-The historical cron/job identifiers below are not assumed to exist in this
-sandbox.
+1. Review and remediate G-12 dependency advisories, then rerun web and bridge
+   regression tests; avoid an unreviewed `npm audit fix --force`.
+2. Correct G-11's 12 web lint errors with focused component tests.
+3. On a host with Tk, Xvfb, and RDKit's native drawing prerequisites, run the
+   complete suite without display exclusions and the normal online font build.
+4. Consider the deferred G-3 torchlens/alibi/Quantus compact fold-ins only as a
+   new feature commission, not as completed coverage.
+
+The historical cron/job identifiers below are not assumed to exist here.
