@@ -1,3 +1,46 @@
+## [1.2.113] — 2026-11-06
+
+### Fixed — round 195 (run 1/100): the stale-notebook catch the focused subsets masked, and the session-count pin the XAI absorption outgrew
+
+The 2-hour sync mandate's first scheduled run (job 507038) opened on a
+fully recovered tree (the ninth rollback's fast-forward held: HEAD ==
+`origin/main` at `101f5f7`), repaired the venv's latest partial loss
+(rdkit + torch gone again while the repo layer stayed intact — the
+rollback quartet's venv leg is the flakiest), then ran the **full
+4,372-case tests/ suite + the src/ doctest half** end to end instead of
+the recent rounds' focused subsets — and the wider net caught two real
+regressions:
+
+* **All eight executed notebooks still carried `1.2.110`-era committed
+  outputs** (the version print and every figure/table behind it). The
+  staleness predated the 1.2.111 and 1.2.112 bumps and survived two
+  rounds of verification because both ran focused subsets;
+  `test_notebook_variants.py::test_executed_outputs_print_shipped_version`
+  — the guard built for exactly this — was simply not in those subsets.
+  The prescribed driver (`scratch/reexecute_all_notebooks_64.py`)
+  re-ran all eight top-to-bottom at 1.2.113 (201 s, every notebook now
+  prints `pharmaml 1.2.113`), and the twins were regenerated; 119/119
+  notebook-variant guards green.
+* **`TestDeepLearningTab::test_deep_learning_inputs_survive_a_session_
+  round_trip` pinned 61 `_dl_` session variables** — round 193's XAI
+  absorption added the anchor-τ and noise-n eval spins (+2 → 63) and
+  nobody re-counted. The generic walk was right (every user input
+  rides the session by design); the pin was stale. Re-pinned to 63
+  with the arithmetic comment extended.
+
+The doctest half re-counted fresh with the fully repaired stack:
+**773 items** (the 765 baseline missed eight torch-dependent doctest
+items that only collect once torch imports — the addendum's
+foreground retry landed torch after that count), 0 failures, exit 0.
+The honest total is now **4,372 + 773 = 5,145 tests, all green**.
+
+### Shipped
+
+* `pharma-ml-toolkit-v1.2.113.zip` — the release archive rebuilt so the
+  shipped notebooks' committed evidence matches the shipped tree (the
+  v1.2.112 zip carried notebooks printing 1.2.110: a time-travel
+  artifact inside the artifact); three homes byte-identical.
+
 ## [1.2.112] — 2026-11-06
 
 ### Added — round 193: the arena branch's orphaned round-189 fold-ins recovered, the (100x-174) report contract restored, and the eighth rollback survived by the push

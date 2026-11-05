@@ -135,3 +135,27 @@ nesting guard included), placed in all three homes:
 The download route flipped to `exact: true, source: "release"` with a
 strong ETag and the exact content-length; the zip-size route answers
 `19155891` with zero spawns.
+
+## v1.2.113 release-zip homes (2026-11-06, run 1/100 of the 2-hour sync mandate)
+
+`pharma-ml-toolkit-v1.2.113.zip` — 19,066,185 bytes, sha-256
+`b12719264cf99ae1ae82c411179f545a74ffdc1103c35d996dca1cc9f13a3efb`,
+built with the standing builder (`scratch/build_zip_179.py`, the
+ZIP_EXCLUDE_ARGS mirror + testzip + leak scan: 912 entries / 875
+files / nested zips NONE / real leaks 0), placed in all three homes:
+
+- `download/pharma-ml-toolkit-v1.2.113.zip` (repo root)
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.113.zip`
+- `upload/pharma-ml-toolkit-v1.2.113.zip`
+
+**Why the rebuild:** the run's full-suite net caught all eight executed
+notebooks still carrying `1.2.110`-era committed outputs — the v1.2.112
+zip shipped a time-travel artifact inside the artifact. All eight were
+re-executed at 1.2.113 (driver `scratch/reexecute_all_notebooks_64.py`,
+201 s) and the twins regenerated; every notebook now prints
+`pharmaml 1.2.113`. Plus the session-count pin fix (61 → 63 `_dl_`
+variables: round 193's anchor-τ / noise-n XAI eval spins) and the fresh
+doctest recount (773 items with the fully repaired torch-inclusive
+stack; the 765 baseline under-collected by exactly those eight
+torch-dependent items). Total honest count: **4,372 + 773 = 5,145
+tests, all green**.

@@ -3221,7 +3221,7 @@ class TestDeepLearningTab:
             first._dl_flag_combo.set("ambiguous")
             payload = first._collect_session()
             saved = [key for key in payload["variables"] if key.startswith("_dl_")]
-            assert len(saved) == 61  # 18 + 6 + 13 + round-189's 21 + the fork's three
+            assert len(saved) == 63  # 18 + 6 + 13 + round-189's 21 + the fork's three + round-193's two XAI eval spins (anchor tau + noise n)
 
             second._session = payload
             second._restore_session()

@@ -6732,3 +6732,71 @@ green, bringing the post-ninth-rollback fresh verification to
 365/365 across seven suites (csv_standardize, xai_registry, explain,
 geometric, interpret, generative, gnn). The venv now matches the
 requirements.txt verified snapshot in full.
+
+## Round 195 — run 1/100: the full-suite net, the stale-notebook catch, and the v1.2.113 re-ship (2026-11-06)
+
+The 2-hour sync mandate's first scheduled fire (job 507038). The
+repo layer held this time — HEAD == `origin/main` at `101f5f7`, no
+tenth rollback — but the **venv leg rolled again**: rdkit and torch
+gone while the rest of the site-packages survived (the rollback
+quartet's flakiest leg, second partial venv loss in three rounds).
+`scratch/venv_repair.sh` ran clean this time (the round-194 hand-guided
+seq is now codified: numpy first, the batch, shap `--no-deps`, the
+heavy wheels foreground); import parity re-confirmed (numpy 1.26.4 ·
+rdkit 2026.09.1 · torch 2.14.1+cpu · pharmaml 1.2.113 editable after
+the bump). Background processes died twice more mid-run (pytest, then
+the first dev-server restart — the reaper takes anything spawned in a
+finished Bash call, setsid or not): **every long operation now runs
+foreground or inside a single tool-call window**.
+
+**The full-suite net (the run-book's own prescription) caught what the
+focused-subset rounds had masked:**
+- All eight executed notebooks still carried `1.2.110`-era committed
+  outputs — stale through the 1.2.111 AND 1.2.112 bumps, invisible
+  while verification ran focused subsets that skipped
+  `test_notebook_variants.py`. The prescribed driver
+  (`reexecute_all_notebooks_64.py`) re-ran all eight (201 s), twins
+  regenerated, every notebook now prints `pharmaml 1.2.113`; 119/119
+  notebook guards green.
+- `TestDeepLearningTab::test_deep_learning_inputs_survive_a_session_
+  round_trip` pinned 61 `_dl_` session variables; round 193's XAI
+  eval spins (anchor-τ `_dl_xai_threshold_spin` + noise-n
+  `_dl_xai_noise_spin`) made it 63. The generic walk was right; the
+  pin was stale → re-pinned 63, arithmetic comment extended.
+- The doctest half re-counted fresh: **773 items, 0 failures** (the
+  765 baseline under-collected by exactly the eight torch-dependent
+  doctest items that only import-collect once torch is installed).
+  Honest total: **4,372 + 773 = 5,145 tests, all green** — non-
+  playground 3,520 (xdist -n4, 100% dots), playground 852 verified in
+  twelve single-process class chunks (the one xdist-artifact F at 85%
+  did not reproduce single-threaded), src/ doctests exit 0.
+
+**The v1.2.113 ship ritual** (tests/ + examples/ changed meaningfully
+→ bump per the run-book): VERSION + `__init__.py` + pyproject.toml
+(the walk's preferred carrier — the missed one that left the first
+restart answering 1.2.112) all at 1.2.113; CHANGELOG [1.2.113];
+`build_zip_179.py` → 912 entries / 875 files / 19,066,185 bytes /
+sha-256 `b1271926…` / nested zips NONE / real leaks 0; three homes
+byte-identical (repo download/ + dist-archive/ + upload/); web pins
+5137 → 5,145 (overview, download-panel ×3, footer), FALLBACK_STATS
+881 files / 331,648 lines (fresh-walk derived), SHIPPED_TOOLKIT_
+VERSION 1.2.113; GITHUB_BACKUP_MANIFEST gained the run-1 block. Web
+E2E: zip-size `{exact:true, source:"release", 19066185,
+version:"1.2.113"}`, download HEAD release/19066185/strong-ETag, walk
+881 files · version 1.2.113.
+
+Stage Summary:
+- Deliverable: the first scheduled sync run — venv re-repaired, the
+  two-round-old notebook staleness caught and fixed at the source, the
+  session-count pin re-true, and an honest 5,145-green v1.2.113 shipped
+  to all three homes.
+- Lesson pinned: focused subsets are how a two-round regression
+  survives — the run-book's "full suite may take a while" is the
+  cheap insurance, not the expense; and the version carrier list is
+  FOUR deep (VERSION, `__init__.py`, pyproject.toml, the web pin) —
+  bump all four or the walk and the routes disagree.
+- Baselines for the next round: unchanged except the counts (v1.2.113 ·
+  5,145 tests (4,372 + 773 doctests) · 881 files / 331,648 lines ·
+  three homes + repo download/ · 19,066,185 bytes sha-256 b1271926… ·
+  dev server healthy · cron pair 507038 (2-hour 100x) + webDevReview
+  507040).
