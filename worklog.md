@@ -6800,3 +6800,61 @@ Stage Summary:
   three homes + repo download/ · 19,066,185 bytes sha-256 b1271926… ·
   dev server healthy · cron pair 507038 (2-hour 100x) + webDevReview
   507040).
+
+## Round 196 — run 2/100: the tenth rollback, and the drill that made it a non-event (2026-11-06)
+
+The second scheduled fire (job 507038) opened on the **tenth
+rollback**: HEAD back at `2eb0ede` (the round-186 snapshot — the same
+signature as the ninth), the credential layer stripped again (no
+token file, no helper, no origin remote), the venv's rdkit/torch/
+matplotlib-3.10.9/mordred/pharmaml legs gone, and the run-1 counter
+file with them. The difference from every previous rollback: **the
+drill is now codified in the run-book itself**, so the recovery was
+mechanical and took minutes, not hours — token re-extracted from
+`upload/Command.txt` (93 bytes, the disk-side fallback holding),
+helper re-wired, remote re-added, the seven untracked-conflict files
+(three PDFs + four zips — including the run-1 v1.2.113 zip, itself a
+tracked file on the remote now) moved aside, `git pull --ff-only
+origin main` brought `101f5f7 → 892fec9` home (rounds 194-195, the
+counter saying runs_completed: 1), and every set-aside file came back
+**byte-identical (cmp-verified)** for the third consecutive rollback.
+The dev server had survived the rollback serving v1.2.113 exactly
+(`{exact:true, source:"release", 19066185}`) — the webDevReview
+15-min job's restart discipline proving its keep.
+
+**The durable advancement: `scratch/venv_repair.sh` rewritten** (the
+10th drill's lesson). The 5th-rollback script's one-shot install line
+has now died at `ResolutionImpossible` in two consecutive rollbacks
+(shap 0.54.1's `numpy>=2` metadata vs the 1.26.4 constraint that
+requirements.txt itself documents as "not a runtime break") — both
+times the firing session hand-guided the same sequence. The script now
+codifies it: numpy first, the chem/QA batch (shap NOT in it), shap via
+`--no-deps` + slicer/numba/cloudpickle/packaging, the GUI/report/ML
+layer (matplotlib 3.10.9 = the live-TkAgg pin, mordred, the boosting
+trio), torch CPU, pytest-xdist, the editable pharmaml, and a
+seventeen-module import verification. Plus the pinned lesson that
+background pip dies in this sandbox (three losses across rounds
+194-196): the script's header now says **run it foreground inside one
+tool-call window**.
+
+**Verification (fresh, post-tenth-rollback):** 187/187 green (57
+csv_standardize + 119 notebook variants — run 1's staleness guards —
++ 11 xai_registry) and 7/7 TestReview132Gui under a fresh Xvfb (the
+(100x-174) report-contract trio included). venv import parity:
+numpy 1.26.4 · rdkit 2026.09.1 · torch 2.14.1+cpu · matplotlib
+3.10.9 · pharmaml 1.2.113 editable.
+
+Stage Summary:
+- Deliverable: the tenth rollback turned into a ten-minute drill —
+  credentials, tree, venv, and scheduler all restored, the key suites
+  re-verified green, and the venv repair script made idempotent and
+  resolver-proof so the eleventh rollback's recovery is one foreground
+  command.
+- Lesson pinned: codify the drill in the artifact the next session
+  actually reads (the run-book payload), not just the worklog; and the
+  venv leg is the rollback quartet's flakiest — its repair script must
+  be re-runnable, not hand-guided archaeology.
+- Baselines for the next round: unchanged (v1.2.113 · 5,145 tests
+  (4,372 + 773 doctests) · 881 files / 331,648 lines · three homes +
+  repo download/ · 19,066,185 bytes sha-256 b1271926… · dev server
+  healthy · cron pair 507038 (2-hour 100x) + webDevReview 507040).
