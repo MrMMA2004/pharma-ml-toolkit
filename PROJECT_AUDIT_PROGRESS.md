@@ -10,7 +10,23 @@ BLOCKED · VERIFICATION REQUIRED
 
 ---
 
-## Current session: 2026-11-05 — RECOVERY from the 6th rollback (see Recovery record below); all ten phases remain COMPLETED as closed out 2026-11-04/05
+## Current session: 2026-11-05 (later) — 7th rollback recovered mid-session; TWO deliverables shipped: the GitHub Link Registry (9e4dbc5) and the Prompt Registry (27b14f3). All ten phases remain COMPLETED.
+
+## Deliverables record — 2026-11-05 (the two registries)
+
+1. **`GitHub_Links_Registry.pdf`** (9e4dbc5, 11 pages): every GitHub link the
+   owner gave — 33 user-given repositories + the private backup, 34 URLs
+   re-verified HTTP 200 against the GitHub API on 2026-11-05, 13 link
+   instructions quoted, HTML cover source in `scratch/github_links_registry/`.
+2. **`Prompt_Registry.pdf`** (27b14f3, 11 pages): every prompt the owner gave —
+   56 register entries in 8 eras, recurring standing prompts quantified, the
+   MASTER_PROMPT structure documented, method notes on paraphrases and the
+   transliterated Persian filenames, HTML cover source in
+   `scratch/prompt_registry/`.
+3. **A 7th rollback hit mid-build** (HEAD → 2eb0ede, token/remote/venv/PDFs
+   wiped). Recovered via the standard drill; both deliverables pushed to
+   origin as they landed. venv re-pinned after ship (import verification +
+   385 green engine tests).
 
 ## Recovery record — 2026-11-05 (6th rollback, restored from GitHub)
 

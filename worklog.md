@@ -6491,3 +6491,33 @@ explorer and hero. The full-suite accounting stands from the close-out
 (the tree is the same SHA); this session's chunks re-proved the stack.
 The backup discipline is no longer theoretical: one catastrophic local
 loss already fully recovered from origin.
+
+## Round 191 — the seventh rollback, two registries, and the recovery that proved the system (2026-11-05)
+
+Two deliverables and one more rollback. First, the GitHub Link Registry
+(9e4dbc5): the complete verified register of every GitHub repository link
+given across the project -- 33 user-given repositories plus the private
+backup, 13 link instructions quoted from the audited CHANGELOG and worklog,
+all 34 URLs re-verified against the GitHub API on 2026-11-05 (captum's
+redirect resolved, torchlens/alibi/Quantus owners search-resolved), 11
+pages, cascade palette, Template 01 cover, all 34 URLs proven complete via
+per-cell coordinate reconstruction. Then the Prompt Registry (27b14f3): the
+companion register of every prompt and instruction the owner gave -- 56
+entries in 8 eras from the founding RAR analysis through the
+MASTER_PROMPT capstone to the two registry asks themselves, the recurring
+standing prompts quantified (24 review instances, the 25-round
+completeness loop, the 13-round link template), the MASTER_PROMPT's
+six-part structure documented, Persian-named upload filenames
+transliterated with a method note (ReportLab cannot shape Arabic script),
+VLM-verified layout.
+
+Mid-build the SEVENTH rollback hit: HEAD reset to 2eb0ede again, the token
+file, remote config, venv pins and both registry PDFs wiped. Recovery ran
+the practiced drill: token re-extracted from the re-uploaded Command.txt
+(HTTP 200 verified), remote re-added, fetch + fast-forward back to 9e4dbc5
+(the Links Registry restored byte-for-byte from origin), the Prompt
+Registry built from the re-verified corpus, and the venv re-pinned after
+the ship (numpy 1.26.4, torch 2.14.1+cpu, full import verification, 385
+engine/graph/features tests green). Both deliverables pushed as they
+landed -- the backup discipline is now the only reason this session's work
+survives at all.
