@@ -40,7 +40,18 @@ A tabbed graphical interface opens with every calculation domain of the
   the verdict table, and REINVENT4's default standardization chain:
   largest fragment, salt removal, the nine neutralisation SMARTS, the
   unwanted-pattern rejections, the (2, 70) heavy-atom / prior-
-  vocabulary window).
+  vocabulary window).  Row 11 carries (192) the CSV → canonical SMILES
+  card -- the standardization lab: a CSV file (or pasted rows) run
+  through one of six chains (RDKit MolStandardize, MolVS's standardize
+  -- the library RDKit absorbed -- the ChEMBL structure pipeline with
+  its 163-salt + 9-solvent strip lists, datamol's standardize_mol, the
+  REINVENT4 default, or plain canonicalisation), every toggle exposed
+  (salts out, uncharge, normalize, metals, reionize, canonical
+  tautomer, stereo, the dimorphite_dl protonation window with its 41
+  substructure pKa rules), the per-row report table (steps, change
+  flags, invalid rows kept with their errors -- no silent drops -- the
+  duplicate register), a canonical-corpus CSV export and the
+  OpenBabel-slot InChI round-trip check.
 * **PK / PD**       -- half-life <-> k(e), accumulation, IV bolus decay
   and Emax curves (plotted), oral Cmax/tmax, Cockcroft-Gault creatinine
   clearance with renal dose adjustment, loading/maintenance dosing,
@@ -1777,6 +1788,34 @@ _FEAT_DEFAULT_SMILES = (
     "CC(=O)Oc1ccccc1C(=O)O",  # aspirin
     "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",  # caffeine
     "CC(=O)Nc1ccc(O)cc1",  # paracetamol
+)
+
+#: (192) The six chains of the standardization lab's profile picker --
+#: key · label (the run handler splits at the first " · " and the
+#: engine validates the key against its own PROFILES registry).
+_CSVSTD_PROFILE_VALUES = (
+    "rdkit · RDKit MolStandardize",
+    "molvs · MolVS standardize",
+    "chembl · ChEMBL structure pipeline",
+    "datamol · datamol standardize_mol",
+    "reinvent · REINVENT4 default",
+    "plain · Plain canonicalisation",
+)
+
+#: (192) The CSV → canonical SMILES card's demo corpus -- the pasted
+#: rows every run without a picked file starts from (the header line
+#: the card's own source heuristic demands): salts, a drug salt, an
+#: HCl salt, a charged nitro drawing, stereo, a tautomer and one bad
+#: row -- one of every story the six chains tell.
+_CSVSTD_DEMO_ROWS = (
+    "SMILES,name\n"
+    "CC(=O)[O-].[Na+],sodium acetate\n"
+    "CC(=O)Oc1ccccc1C(=O)[O-].[Na+],aspirin sodium\n"
+    "CN(C)C.Cl,trimethylamine hydrochloride\n"
+    "c1ccc(cc1)[N+](=O)[O-],nitrobenzene drawn charged\n"
+    "C[C@H](N)C(=O)O,L-alanine\n"
+    "CC(O)=CC(C)=O,enol tautomer\n"
+    "not-a-smiles,bad row\n"
 )
 
 #: Plain-language meaning + unit of every RISM-KH descriptor column
@@ -10112,6 +10151,377 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         self._view3d_report.pack(fill="x")
         self._view3d_state = None
+
+        # -- CSV → canonical SMILES (the standardization lab) -- (192) -- #
+        # the owner's round-192 directive: take the smiles from a CSV
+        # file and convert them to canonical smiles (standardized and
+        # processed).  Six chains behind one card -- RDKit's own
+        # MolStandardize order, MolVS's standardize (the library RDKit
+        # absorbed), the ChEMBL structure pipeline (the 163-salt +
+        # 9-solvent strip lists), datamol's standardize_mol, the
+        # REINVENT4 default and the plain sanitize+canonical baseline --
+        # plus the dimorphite_dl protonation window and the
+        # OpenBabel-slot InChI round-trip check.
+        std_card = make_card(
+            page.grid,
+            "CSV → canonical SMILES (the standardization lab)",
+            row=11,
+            column=0,
+            span=2,
+            subtitle=(
+                "A CSV of SMILES (file or pasted rows) standardised to "
+                "canonical form through one of six chains — RDKit "
+                "MolStandardize, MolVS, the ChEMBL structure pipeline "
+                "(its 163-salt strip list), datamol, REINVENT4 or plain "
+                "canonicalisation — with the dimorphite_dl protonation "
+                "window and the OpenBabel-slot InChI round-trip check."
+            ),
+        )
+        std_file_row = ttk.Frame(std_card, style="Card.TFrame")
+        grid_append(std_card, std_file_row, sticky="ew", pady=(0, 4))
+        self._csvstd_path: str | None = None
+        self._csvstd_path_label = ttk.Label(
+            std_file_row,
+            text="no CSV picked — paste rows below or pick a file",
+            style="CardMuted.TLabel",
+            wraplength=560,
+            justify="left",
+        )
+        self._csvstd_path_label.pack(side="left", fill="x", expand=True)
+        pick_btn = self._action_button(
+            std_file_row,
+            "Pick CSV…",
+            self._csvstd_pick_file,
+            tooltip=(
+                "Any .csv/.tsv/.smi table with a SMILES column (auto-"
+                "detected: the name match, then the >50 % parse-rate "
+                "check).  The pasted box below doubles as the preview "
+                "and the no-file input."
+            ),
+        )
+        pick_btn.pack(side="right")
+        self._csvstd_text = _grid_text(std_card, height=6, mono=self._mono)
+        self._csvstd_text.insert("1.0", _CSVSTD_DEMO_ROWS)
+        grid_append(std_card, self._csvstd_text, sticky="ew")
+
+        std_option_row = ttk.Frame(std_card, style="Card.TFrame")
+        grid_append(std_card, std_option_row, sticky="ew", pady=(6, 0))
+        ttk.Label(std_option_row, text="profile", style="Field.TLabel").pack(side="left")
+        self._csvstd_profile = ttk.Combobox(
+            std_option_row,
+            state="readonly",
+            width=34,
+            values=_CSVSTD_PROFILE_VALUES,
+        )
+        self._csvstd_profile.set("rdkit · RDKit MolStandardize")
+        self._csvstd_profile.pack(side="left", padx=(4, 14))
+        ttk.Label(std_option_row, text="SMILES col", style="Field.TLabel").pack(side="left")
+        self._csvstd_column = ttk.Entry(std_option_row, width=10)
+        self._csvstd_column.pack(side="left", padx=(4, 0))
+        ttk.Label(std_option_row, text="id col", style="Field.TLabel").pack(
+            side="left", padx=(10, 0)
+        )
+        self._csvstd_id_column = ttk.Entry(std_option_row, width=8)
+        self._csvstd_id_column.pack(side="left", padx=(4, 0))
+
+        std_toggle_row = ttk.Frame(std_card, style="Card.TFrame")
+        grid_append(std_card, std_toggle_row, sticky="ew", pady=(4, 0))
+        self._csvstd_remove_fragments = tk.BooleanVar(value=True)
+        self._csvstd_uncharge = tk.BooleanVar(value=True)
+        self._csvstd_normalize = tk.BooleanVar(value=True)
+        self._csvstd_metals = tk.BooleanVar(value=True)
+        self._csvstd_reionize = tk.BooleanVar(value=True)
+        self._csvstd_tautomer = tk.BooleanVar(value=False)
+        self._csvstd_keep_stereo = tk.BooleanVar(value=True)
+        self._csvstd_protonate = tk.BooleanVar(value=False)
+        for label, variable, tip in (
+            ("salts out", self._csvstd_remove_fragments,
+             "Strip counter-ions / keep the parent (each chain's own "
+             "rule: FragmentParent, LargestFragmentChooser, the ChEMBL "
+             "salt lists)."),
+            ("uncharge", self._csvstd_uncharge,
+             "Neutralise the protonation charges (the Uncharger ladder)."),
+            ("normalize", self._csvstd_normalize,
+             "Fix the functional-group drawings (nitro, sulfoxide, N-oxide …)."),
+            ("metals", self._csvstd_metals,
+             "Break covalent metal–organic bonds into ion pairs."),
+            ("reionize", self._csvstd_reionize,
+             "Move protons to the strongest acid (MolVS's reionizer)."),
+            ("canonical tautomer", self._csvstd_tautomer,
+             "Collapse to the canonical tautomer (the heavier leg)."),
+            ("keep stereo", self._csvstd_keep_stereo,
+             "Keep isomeric SMILES (off → the stereo-parent form)."),
+            ("protonate", self._csvstd_protonate,
+             "dimorphite_dl: enumerate the protonation states inside the "
+             "pH window (41 substructure pKa rules)."),
+        ):
+            box = ttk.Checkbutton(std_toggle_row, text=label, variable=variable)
+            if tip:
+                Tooltip(box, tip)
+            box.pack(side="left", padx=(0, 10))
+        self._csvstd_ph_min = ttk.Entry(std_toggle_row, width=5)
+        self._csvstd_ph_min.insert(0, "6.4")
+        self._csvstd_ph_min.pack(side="left", padx=(2, 2))
+        ttk.Label(std_toggle_row, text="– pH –", style="CardMuted.TLabel").pack(side="left")
+        self._csvstd_ph_max = ttk.Entry(std_toggle_row, width=5)
+        self._csvstd_ph_max.insert(0, "8.4")
+        self._csvstd_ph_max.pack(side="left", padx=(2, 0))
+
+        std_button_row = ttk.Frame(std_card, style="Card.TFrame")
+        grid_append(std_card, std_button_row, sticky="ew", pady=(6, 0))
+        run_btn = self._action_button(
+            std_button_row,
+            "Standardize",
+            self._csvstd_run,
+            primary=True,
+            tooltip=(
+                "Every CSV row through the chosen chain: the canonical "
+                "SMILES, the executed steps, the change flags, the "
+                "invalid rows kept with their errors (no silent drops), "
+                "the duplicate register and the protonation states."
+            ),
+        )
+        run_btn.pack(side="left")
+        export_btn = self._action_button(
+            std_button_row,
+            "Export CSV…",
+            self._csvstd_export,
+            tooltip="Write the standardised corpus (identifier, original, canonical, status, steps, flags, states, error).",
+        )
+        export_btn.pack(side="left", padx=(10, 0))
+        inchi_btn = self._action_button(
+            std_button_row,
+            "InChI round-trip",
+            self._csvstd_inchi_check,
+            tooltip=(
+                "The OpenBabel slot: SMILES → InChI → back → canonical "
+                "SMILES.  Agreement counts the rows a second, format-"
+                "neutral toolkit would canonicalise identically."
+            ),
+        )
+        inchi_btn.pack(side="left", padx=(10, 0))
+
+        self._csvstd_summary = ttk.Label(
+            std_card,
+            text="no run yet — pick a CSV (or edit the pasted rows) and Standardize",
+            style="CardMuted.TLabel",
+            wraplength=860,
+            justify="left",
+        )
+        grid_append(std_card, self._csvstd_summary, pady=(6, 0))
+        std_tree_frame = ttk.Frame(std_card, style="Card.TFrame")
+        grid_append(std_card, std_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._csvstd_tree = ttk.Treeview(
+            std_tree_frame,
+            columns=("identifier", "original", "canonical", "status", "flags"),
+            show="headings",
+            height=10,
+        )
+        for column, width in (
+            ("identifier", 110),
+            ("original", 200),
+            ("canonical", 200),
+            ("status", 90),
+            ("flags", 150),
+        ):
+            self._csvstd_tree.heading(column, text=column)
+            self._csvstd_tree.column(
+                column, width=width, minwidth=56, stretch=column in ("original", "canonical")
+            )
+        std_bar = ttk.Scrollbar(
+            std_tree_frame, orient="vertical", command=self._csvstd_tree.yview
+        )
+        self._csvstd_tree.configure(yscrollcommand=std_bar.set)
+        self._csvstd_tree.pack(side="left", fill="both", expand=True)
+        std_bar.pack(side="right", fill="y")
+        self._csvstd_report: Any = None
+
+    def _csvstd_pick_file(self) -> None:
+        """Pick the CSV whose SMILES column the card standardises."""
+        if filedialog is None:  # pragma: no cover - headless import
+            return
+        path = filedialog.askopenfilename(
+            title="Pick the CSV of SMILES",
+            filetypes=[
+                ("SMILES tables", "*.csv *.tsv *.smi *.txt"),
+                ("All files", "*.*"),
+            ],
+        )
+        if not path:
+            return
+        self._csvstd_path = path
+        self._csvstd_path_label.configure(text=f"{path}")
+        try:  # the preview: first 40 lines into the pasted box
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                preview_lines = [line.rstrip("\n\r") for _, line in zip(range(40), handle)]
+            self._csvstd_text.delete("1.0", "end")
+            self._csvstd_text.insert("1.0", "\n".join(preview_lines))
+            if len(preview_lines) == 40:
+                self._csvstd_text.insert("end", "\n… preview truncated (the file is read in full on run)")
+        except OSError as exc:
+            self._show_error("Could not read the CSV", exc)
+
+    def _csvstd_options(self) -> dict[str, Any]:
+        """Read the card's toggles into the engine's option dict."""
+        return {
+            "profile": self._csvstd_profile.get().split(" · ")[0],
+            "remove_fragments": bool(self._csvstd_remove_fragments.get()),
+            "uncharge": bool(self._csvstd_uncharge.get()),
+            "normalize": bool(self._csvstd_normalize.get()),
+            "disconnect_metals": bool(self._csvstd_metals.get()),
+            "reionize": bool(self._csvstd_reionize.get()),
+            "tautomer": bool(self._csvstd_tautomer.get()),
+            "keep_stereo": bool(self._csvstd_keep_stereo.get()),
+            "protonate": bool(self._csvstd_protonate.get()),
+            "min_ph": parse_float(self._csvstd_ph_min.get(), "pH min"),
+            "max_ph": parse_float(self._csvstd_ph_max.get(), "pH max"),
+        }
+
+    def _csvstd_source(self) -> Any:
+        """The run's source: the picked file, else the pasted rows."""
+        if self._csvstd_path:
+            return self._csvstd_path
+        import io
+
+        text = self._csvstd_text.get("1.0", "end").strip()
+        if not text:
+            return None
+        first = text.splitlines()[0].strip()
+        if "smiles" not in first.lower():  # bare SMILES lines: add the header
+            text = "SMILES\n" + text
+        return io.StringIO(text)
+
+    def _csvstd_run(self) -> None:
+        """Standardise the CSV (file or pasted rows) — the round-192 run."""
+        if (
+            not self._require_pharmaml()
+            or not self._require("pandas", "CSV loading")
+            or not self._require("rdkit", "standardization")
+        ):
+            return
+        source = self._csvstd_source()
+        if source is None:
+            messagebox.showwarning(
+                "No SMILES", "Pick a CSV file or paste at least one row."
+            )
+            return
+        options = self._csvstd_options()
+        smiles_column = self._csvstd_column.get().strip() or None
+        id_column = self._csvstd_id_column.get().strip() or None
+
+        def work() -> Any:
+            from pharmaml.chem.csv_standardize import standardize_csv
+
+            return standardize_csv(
+                source,
+                smiles_column=smiles_column,
+                id_column=id_column,
+                **options,
+            )
+
+        def render(report: Any) -> None:
+            self._csvstd_report = report
+            tree = self._csvstd_tree
+            tree.delete(*tree.get_children())
+            for record in report.records:
+                states = ""
+                if record.protonation_states:
+                    states = f" · {len(record.protonation_states)} state(s)"
+                tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        _cell_text(record.identifier, limit=16),
+                        _cell_text(record.original, limit=40),
+                        _cell_text(record.canonical or "—", limit=40),
+                        record.status,
+                        _cell_text("; ".join(record.flags) or "—", limit=30) + states,
+                    ),
+                )
+            summary = report.summary()
+            self._csvstd_summary.configure(
+                text=(
+                    f"{summary['rows']} rows · {summary['standardized']} standardized · "
+                    f"{summary['unchanged']} unchanged · {summary['invalid']} invalid · "
+                    f"{summary['rejected']} rejected · {summary['duplicate-rows']} duplicate(s)"
+                    + (
+                        f" · {summary['protonation-ambiguous']} protonation-ambiguous"
+                        if summary["protonation-ambiguous"]
+                        else ""
+                    )
+                    + f" · {report.profile} chain · {summary['elapsed']:.2f}s · column {report.smiles_column}"
+                ),
+                style="Field.TLabel",
+            )
+
+        self._start_job("CSV standardization", work, render)
+
+    def _csvstd_export(self) -> None:
+        """Write the last report's standardised corpus as CSV."""
+        if self._csvstd_report is None:
+            messagebox.showwarning(
+                "Nothing to export", "Run a standardization first."
+            )
+            return
+        if filedialog is None:  # pragma: no cover - headless import
+            return
+        target = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            initialfile="canonical_smiles.csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Export the canonical SMILES corpus",
+        )
+        if not target:
+            return
+        try:
+            path = self._csvstd_report.write_csv(target)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Export failed", exc)
+            return
+        self._job_label.configure(text=f"canonical SMILES exported · {path}")
+
+    def _csvstd_inchi_check(self) -> None:
+        """The OpenBabel-slot cross-toolkit check over the last report."""
+        if self._csvstd_report is None:
+            messagebox.showwarning(
+                "No report", "Run a standardization first."
+            )
+            return
+        if not self._require_pharmaml() or not self._require("rdkit", "InChI"):
+            return
+        canonicals = [
+            record.canonical
+            for record in self._csvstd_report.records
+            if record.canonical
+        ]
+
+        def work() -> Any:
+            from pharmaml.chem.csv_standardize import inchi_roundtrip_check
+
+            results = [inchi_roundtrip_check(smi) for smi in canonicals]
+            agreed = sum(1 for flag, _other in results if flag)
+            disagreements = [
+                (smi, other)
+                for smi, (flag, other) in zip(canonicals, results)
+                if not flag
+            ]
+            return agreed, disagreements
+
+        def render(payload: Any) -> None:
+            agreed, disagreements = payload
+            total = len(canonicals)
+            note = (
+                f"InChI round-trip: {agreed}/{total} canonical forms stable "
+                f"under the format-neutral normalisation"
+            )
+            if disagreements:
+                sample = "; ".join(
+                    f"{smi[:24]}… → {other[:24]}…" for smi, other in disagreements[:3]
+                )
+                note += f" — drifted: {sample}"
+            self._csvstd_summary.configure(text=note, style="Field.TLabel")
+
+        self._start_job("InChI round-trip check", work, render)
 
     def _rism_run(self) -> None:
         """Compute the RISM-KH solvation descriptors for the pasted array."""

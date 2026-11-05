@@ -6521,3 +6521,63 @@ the ship (numpy 1.26.4, torch 2.14.1+cpu, full import verification, 385
 engine/graph/features tests green). Both deliverables pushed as they
 landed -- the backup discipline is now the only reason this session's work
 survives at all.
+
+## Round 192 — the CSV → canonical SMILES standardization lab (2026-11-06)
+
+The owner's directive, verbatim: *"Add a section to playground.py to
+take the smiles from the csv file and convert them to canonical
+smiles (standardized and processed)"* — delivered with seven GitHub
+links, all re-verified against the API (HTTP 200): rdkit/rdkit, its
+Code/GraphMol/MolStandardize subtree, datamol-io/datamol,
+chembl/ChEMBL_Structure_Pipeline, openbabel/openbabel,
+UnixJunkie/dimorphite_dl and mcs07/MolVS (two of the seven repeats;
+five new repositories for the Link Registry's next edition).
+
+The absorption followed the round-186 discipline: treeless shallow
+clones, the four small repos read file by file, the machinery ported
+with the house typing.  The engine is `chem/csv_standardize.py`
+(1,893 lines): six standardization profiles behind one front door
+(`standardize_smiles`) — the RDKit MolStandardize chain in the
+module's documented order, MolVS's `Standardizer.standardize`
+verbatim (sanitize FIRST, the ordering MolVS alone does), the ChEMBL
+structure pipeline step by step (the exclude flag, the SGroup strip,
+kekulize, the SENTINEL-isotope H removal, the twelve ChEMBL SMIRKS +
+the alkoxide pre-step, the canonical-order uncharger, the tartrate
+flatten, and the fragment parent with their 163 salts + 9 solvents
+embedded verbatim — including their honest "everything is a salt →
+keep everything" fallback: a pure salt pair comes back whole), and
+datamol's `standardize_mol` with the library's own defaults; the
+REINVENT4 default and a plain sanitize+canonical baseline complete
+the register.  The dimorphite_dl protonation enumerator rides the
+same module: the 41 rules of site_substructures.smarts embedded with
+their pKa means and stds, the pH-window overlap test, the
+list-order protect discipline, the nitrogen charge ladder with its
+`*`-moiety inversion and the `[nH-]` fix, and the six-reaction
+neutralisation fixpoint.  OpenBabel keeps its documented non-
+dependency status — the OB-style cross-toolkit check is the InChI
+round-trip standing in that slot.
+
+The batch driver (`standardize_csv`) keeps the house rules: no
+silent drops (every unparseable row is a record carrying its error),
+the SMILES-column auto-detection with a typed error naming the
+columns tried, the duplicate register flagging canonical collisions
+against their first row, separator fallbacks for comma / semicolon /
+tab in both files and pasted streams, and the report object with the
+summary counts and the CSV export.
+
+The card lands in playground.py's Chemistry tab at row 11 (span 2):
+"CSV → canonical SMILES (the standardization lab)" — the file picker
+with its 40-line preview, the pasted-box input seeded with a seven-
+row demo corpus (a salt, a drug salt, an HCl salt, a charged nitro
+drawing, stereo, a tautomer and one bad row — one of every story the
+chains tell), the six-chain profile picker, the column overrides,
+eight toggles plus the pH window, the per-row results table, the
+summary line, the corpus export and the InChI round-trip button.
+57 tests + the module doctests cover it (the registry and the
+embedded tables parse, every profile's canonical answer, the
+protonation windows, the column detection, the batch rules, the
+export round-trip); ruff and mypy clean; the self-test builds every
+tab under Xvfb and the card was exercised end-to-end (the sodium
+salt collapses, the InChI agrees 6/6, the protonation enumerates).
+Shipped as v1.2.111 with the CHANGELOG entry, the rebuilt docs
+INDEX (739 symbols), and the GitHub backup pushed as usual.

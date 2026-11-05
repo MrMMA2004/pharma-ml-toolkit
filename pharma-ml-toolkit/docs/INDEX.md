@@ -39,6 +39,22 @@ after adding new public functions.
 | Symbol | Kind | Summary |
 |---|---|---|
 | `ATOMPAIR_BITS` | constant |  |
+| `CHEMBL_EXCLUDE_METALS` | constant |  |
+| `CHEMBL_NORMALIZATION_TRANSFORMS` | constant |  |
+| `CHEMBL_SALTS` | constant |  |
+| `CHEMBL_SOLVENTS` | constant |  |
+| `PROTONATION_SMARTS` | constant |  |
+| `PROFILES` | constant |  |
+| `StandardizeOptions` | class | Every toggle the five chains respect, one name across profiles. |
+| `StandardizeOutcome` | class | One molecule through one chain -- the per-row answer. |
+| `StandardizationProfile` | class | A registered chain: key, label, reference repo, builder. |
+| `StandardizationRecord` | class | One CSV row's outcome (identifier + provenance). |
+| `StandardizationReport` | class | The batch answer -- records, summary, exports. |
+| `detect_smiles_column` | function | Find the SMILES column of a CSV frame -- the card's auto-pick. |
+| `inchi_roundtrip_check` | function | The cross-toolkit agreement check standing in OpenBabel's slot. |
+| `protonate_smiles` | function | The dimorphite_dl protonation enumerator for one SMILES. |
+| `standardize_csv` | function | Standardise a CSV of SMILES -- the batch front door. |
+| `standardize_smiles` | function | Standardise one SMILES to its canonical form -- every chain |
 | `AVALON_BITS` | constant |  |
 | `D3D_COLUMNS` | constant |  |
 | `D3D_DESCRIPTOR_COUNT` | constant |  |

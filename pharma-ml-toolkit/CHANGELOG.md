@@ -1,3 +1,89 @@
+## [1.2.111] — 2026-11-06
+
+### Added — round 192: the CSV → canonical SMILES standardization lab (five chains + the protonation enumerator, absorbed from the owner's seven links)
+
+The owner's directive — *"Add a section to playground.py to take the
+smiles from the csv file and convert them to canonical smiles
+(standardized and processed)"* — delivered with seven reference
+repositories, all verified against the GitHub API (HTTP 200) and
+absorbed file-by-file from treeless shallow clones:
+
+* **`chem/csv_standardize.py`** — the engine (1,893 lines): one
+  standardization front door (`standardize_smiles`), one CSV batch
+  driver (`standardize_csv`), six registered chains and the
+  protonation enumerator.
+  * **rdkit/rdkit · Code/GraphMol/MolStandardize** (the subtree the
+    owner linked): `MetalDisconnector` → `Normalizer` → `Reionizer` →
+    `FragmentParent`/`ChargeParent` → `AssignStereochemistry` →
+    canonical SMILES, the optional canonical-tautomer leg included.
+  * **mcs07/MolVS**: `Standardizer.standardize` verbatim (sanitize
+    FIRST — the one ordering MolVS does differently), the fragment /
+    charge parents on the same RDKit classes MolVS became.
+  * **chembl/ChEMBL_Structure_Pipeline**: `standardizer.py` step by
+    step — the metal/borane exclude flag, the SGroup strip, kekulize,
+    the SENTINEL-isotope `remove_hs_from_mol`, the twelve ChEMBL
+    SMIRKS + the alkoxide pre-step, `Uncharger(canonicalOrder=True)`,
+    the tartrate flatten, and the solvent/salt-list fragment parent
+    with **their 163 salts + 9 solvents embedded verbatim**
+    (`CHEMBL_SALTS` / `CHEMBL_SOLVENTS`) — including their honest
+    "everything is a salt → keep everything" fallback (a pure salt
+    pair comes back whole).
+  * **datamol-io/datamol**: `dm.standardize_mol` with the library's
+    own defaults (`disconnect_metals=False, uncharge=False`,
+    stereo clean-recalc); the fragment front step documented as the
+    toolkit's addition (datamol's standardize never touches
+    fragments).
+  * **UnixJunkie/dimorphite_dl**: the protonation enumerator — the
+    **41 substructure rules of `site_substructures.smarts` embedded
+    verbatim** with the pKa mean/std columns
+    (`PROTONATION_SMARTS`), `define_protonation_state`'s pH-window
+    overlap test, the list-order matching with the protect
+    discipline, the nitrogen charge ladder (the `*`-named
+    neutral-acid moieties, the explicit-H bond-order table, the
+    `[nH-]` → `[n-]` fix) and the six-reaction `neutralize_mol`
+    fixpoint before the rules read the molecule
+    (`protonate_smiles`).
+  * **openbabel/openbabel**: the cross-toolkit slot — OB is not a
+    pharmaml dependency (the `chem/standardize.py` policy), so the
+    OB-style "second toolkit agrees" check is the InChI round-trip
+    (`inchi_roundtrip_check`).
+  * the **reinvent** profile reuses the round-100x-164 REINVENT4
+    chain; **plain** is the sanitize+canonical baseline.
+* **The batch driver's house rules**: no silent drops (every
+  unparseable row is a record with its error), the SMILES-column
+  auto-detection (name match, then the >50 % parse-rate check over
+  text columns — a typed error names the columns tried), the
+  duplicate register (canonical collisions flagged against their
+  first row), the report (`StandardizationReport`: summary counts,
+  `to_frame`, `write_csv`), separator fallbacks (comma / semicolon /
+  tab) for both paths and pasted streams.
+* **`playground.py`** — the card (Chemistry tab, row 11, span 2):
+  "CSV → canonical SMILES (the standardization lab)".  A CSV file
+  picker (with a 40-line preview into the pasted box — the no-file
+  input, seeded with a 7-row demo corpus: a salt, a drug salt, an HCl
+  salt, a charged nitro drawing, stereo, a tautomer, one bad row),
+  the profile picker (six chains), the SMILES/id column overrides,
+  eight toggles (salts out, uncharge, normalize, metals, reionize,
+  canonical tautomer, keep stereo, protonate) + the pH window, the
+  results table (identifier / original / canonical / status / flags
+  with the state counts), the summary line (rows · standardized ·
+  unchanged · invalid · rejected · duplicates · protonation-ambiguous
+  · chain · elapsed · column), a canonical-corpus CSV export and the
+  InChI round-trip button.
+* **57 tests** (`tests/test_csv_standardize.py`) + the module
+  doctests: the registry and embedded tables (163 salts parse, 41
+  SMARTS parse), every profile's canonical answer (the sodium-salt
+  collapse, the ChEMBL drug-salt strip vs the pure-salt-pair
+  fallback, the metal exclusion, the REINVENT window rejection, the
+  sulfoxide normalization flag, the tautomer collapse, the stereo
+  parent), the protonation windows (the physiological deprotonation,
+  the low-pH acid, the glycine amine ambiguity, the azide fixpoint,
+  the -1000 pKa rule), the InChI round-trip, the column detection
+  (name match, parse-rate fallback, the named error), and the batch
+  driver (summary counts, the duplicate register, the export
+  round-trip, the separator fallbacks, all six profiles over the
+  demo corpus).
+
 ## [1.2.106] — 2026-11-03
 
 ### Added — round 186: tensorboard · umap · fiftyone · plotly.py, absorbed offline into the Deep Learning tab
