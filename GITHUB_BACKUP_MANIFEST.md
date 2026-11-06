@@ -185,3 +185,28 @@ interpolation lab, PBPK & FIH chain, OSP model library, RxODE-style
 dosing events, apriori association rules) plus ten GUI tests
 (`TestCatalogAbsorptionGui`). Honest count: **4,382 + 773 = 5,155
 tests**; fresh walk pins **882 files / 333,040 lines** at v1.2.114.
+
+## v1.2.115 release-zip homes (2026-11-06, round 200 — the arena merge)
+
+`pharma-ml-toolkit-v1.2.115.zip` — 19,112,553 bytes, sha-256
+`d04238d1b1fde31d1468b6b7f4384f01e39f508fd4475c95cb1b8ce7f4d0ac27`,
+built with the standing builder (`scratch/build_zip_179.py`: 917 entries /
+880 files / nested zips NONE / real leaks 0 / accepted placeholders 12),
+placed in all four homes:
+
+- `download/pharma-ml-toolkit-v1.2.115.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.115.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.115.zip`
+- `upload/pharma-ml-toolkit-v1.2.115.zip`
+
+**Why the rebuild:** the owner's "check other branches" directive surfaced
+`arena/2697c755-pharma-ml-toolkit` — a parallel catalog-absorption stream
+whose single completed commit folded in the catalog items main had never
+absorbed as modules (`pharmaml.docking.dockstring`, `pharmaml.ml.dta`
+(DeepDTA), `pharmaml.pkpd.pregnancy`), a 140-repository disposition audit
+(`docs/GITHUB_RESEARCH_CATALOG_AUDIT.md`), three playground cards and 34
+tests. Merged with main's round-199 nine cards (no overlap: 128 cards
+total), all 8 notebooks re-executed at 1.2.115, honest count
+**4,416 + 773 = 5,189 tests**; fresh walk pins **886 files / 335,487
+lines**. The second arena branch (`arena/c44913ab`) was verified
+byte-absorbed into main (stale, no merge needed).

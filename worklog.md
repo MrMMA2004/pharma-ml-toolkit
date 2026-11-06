@@ -7030,3 +7030,68 @@ Stage Summary:
   19,073,364 bytes sha-256 ea2cf57d… · dev server healthy · cron pair
   508389 (2-hour 100x, run 4 next) + webDevReview 508392 ·
   runs_completed: 3.
+
+## Round 200 — the arena merge: two parallel catalog absorptions unified, v1.2.115 shipped (2026-11-06)
+
+The owner's directive ("Continue the catalog; check other branches in the
+GitHub repository") turned the branch survey into the round's work. Three
+branches live on the remote:
+
+- `main` (9b101da, round 199) — the nine no-gap cards.
+- `arena/c44913ab-pharma-ml-toolkit` — 4 commits, 19 behind, last push
+  Nov 5 10:40 UTC: **stale and fully absorbed** (its xai.py and
+  test_xai_registry.py are byte-identical to main's; the work entered
+  main long ago under different SHAs). No merge needed; documented.
+- `arena/2697c755-pharma-ml-toolkit` — ONE completed commit (e1de1aa,
+  Nov 6 09:40 UTC, "Add research catalog fold-ins and playground
+  coverage"), 4 behind main: a **parallel catalog absorption** covering
+  the items main had never absorbed as modules —
+  `pharmaml.docking.dockstring` (all 58 upstream search boxes + the three
+  original objectives, F2/promiscuous-PPAR/selective-JAK2),
+  `pharmaml.ml.dta` (DeepDTA's exact 25-symbol encodings, aligned
+  ECFP/AA-composition features, the rm2 correction), and
+  `pharmaml.pkpd.pregnancy` (OSP pregnancy index + a disclosed
+  two-compartment maternal–fetal model with unbound-fraction placental
+  transfer) — plus the 140-repository disposition audit
+  (`docs/GITHUB_RESEARCH_CATALOG_AUDIT.md`), three playground cards
+  (DOCKSTRING lab, Protein–ligand affinity, Advanced PK/PD & PBPK), 27
+  fold-in tests + 7 playground tests, and notebooks executed at their
+  1.2.114.
+
+The merge (`--no-ff`, merge commit `ae52e6d`) resolved five conflicts:
+the duplicate v1.2.114 zips → main's verified bytes (both sides had built
+one); playground.py → both card sets kept (their Advanced PK/PD card
+re-gridded row 8 → 10 to sit under main's three PK cards; no overlap —
+116 shared + 9 + 3 = 128 cards); test_playground.py → both class sets
+kept; CHANGELOG → unified under the 1.2.115 header. One post-merge fix:
+their string-target monkeypatch (`playground_under_test.filedialog…`)
+needed the shared `_load_playground()` fixture to register the module in
+`sys.modules` (their loader differed; one honest line). Their sandbox had
+no tkinter/Xvfb so their GUI tests were skipped there — this repo's Xvfb
+ran them for real: 4/4 GUI + 3/3 headless + 27/27 fold-ins + 10/10
+round-199 cards green, 206/206 on the fresh battery.
+
+Ship ritual: four carriers at 1.2.115; all eight notebooks re-executed
+at 1.2.115 (213 s — the branch's runs printed 1.2.114, the round-195
+staleness trap caught before it shipped); build_zip_179 → 917 entries /
+880 files / 19,112,553 bytes / sha-256 d04238d1… / real leaks 0; four
+homes byte-identical; fresh walk pins **886 files / 335,487 lines**; web
+pins 5,155 → **5,189 tests** (tests/ 4,382 → 4,416: +27 fold-ins +7
+playground); manifest block. The dev server died during the notebook
+re-execution and was restarted (GET / 200, zip-size exact:true
+19,112,553 v1.2.115).
+
+Stage Summary:
+- Deliverable: both arena branches dispositioned (one merged, one
+  verified stale), the two parallel catalog absorptions unified into one
+  v1.2.115 release with 128 playground cards and 5,189 tests.
+- Lesson pinned: parallel sessions produce complementary work when the
+  task is big — main's module-vs-card diff and the branch's
+  catalog-vs-module diff were two halves of the same disposition. Merge
+  conflicts in appended-tail files resolve as both-sides-kept; grid-row
+  renumbering is the quiet collision to check.
+- Baselines for the next round: v1.2.115 · 5,189 tests (4,416 + 773
+  doctests) · 886 files / 335,487 lines · four zip homes at
+  19,112,553 bytes sha-256 d04238d1… · dev server healthy · cron pair
+  508389 (2-hour 100x, run 4 next) + webDevReview 508392 ·
+  runs_completed: 3.

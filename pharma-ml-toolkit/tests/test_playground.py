@@ -33,6 +33,10 @@ def _load_playground() -> Any:
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # (round 200, the arena merge) register under the spec's name so
+    # string-target monkeypatches ("playground_under_test.filedialog…")
+    # resolve -- the merged fold-in tests import it by that name
+    sys.modules["playground_under_test"] = module
     return module
 
 
