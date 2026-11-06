@@ -1,3 +1,95 @@
+## [1.2.117] — 2026-11-06
+
+### Added — round 202: every card described, complementary cards grouped into workflows
+
+The owner's continuation directive: *"for each card, include a short
+description of what it does, and group cards that are complementary and
+complete a process together."* Both halves ship as the playground's
+third session-wide guarantee (after sample-data-ready and
+Excel-beside-CSV): **every card is described and grouped**.
+
+#### Every card described
+
+All **137 cards** now carry a one-line subtitle saying what the card
+does. Nine cards had shipped bare and gained theirs this round: the
+two *Preview (first 12 rows)* cards (Data & ML, Deep Learning), the
+*Results* cards of Data & ML / Deep Learning / Generative, the
+Generative *Objective & evolution*, PK's *Loading & maintenance
+dosing*, and the Home *What lives where* + *pharmaml could not be
+imported* cards. The guarantee is pinned by a live-walk test over the
+built application (`_live_cards()` — every shell, every tab, zero
+bare titles allowed).
+
+#### Complementary cards — the workflows
+
+A declarative **`WORKFLOWS` registry** (11 pipelines, 57 steps) chains
+the cards that complete a process together, each step addressed by
+`(tab title, card title, step blurb)` — the drift-proof addressing the
+finder's memory already uses:
+
+* **QSAR end-to-end** (Data & ML, 8 steps): Dataset → Preview → Train
+  a model → Results → Leaderboard → Ensemble builder → Model
+  persistence → Applicability domain.
+* **Descriptors & features** (Chemistry, 4): canonical-SMILES
+  standardisation → SMILES inspector → Feature factory → Library
+  similarity scan.
+* **Docking campaign** (Docking, 7): ligand PDBQT → receptor → grid
+  box/configs → campaign runner → results → consensus rescore → the
+  audit card.
+* **Dose design** (PK / PD, 5): Cockcroft–Gault → loading/maintenance
+  → pediatric rules → dosing events & regimen → TDM adjustment.
+* **Exposure analysis** (PK / PD, 5): NCA → half-life ↔ elimination →
+  IV infusion → PBPK first-in-human → the advanced ODE/PBPK card.
+* **Biomarker discovery** (Cell Lines, 5): response screen audit →
+  sensitivity matrix → sensitive vs resistant → expression table →
+  biomarker discovery.
+* **Deep learning study** (Deep Learning, 7): Dataset → Preview →
+  Network & training → Training history → Results → Attribution &
+  attention → Hyperparameter search.
+* **Generative optimization** (Generative, 7): corpus → objective &
+  evolution → results → Pareto front → ring moves → breeding → the
+  scoring oracles.
+* **Unsupervised structure** (3), **Inferential statistics**
+  (Foundations, 3) and **Table preparation** (Utilities, 3) complete
+  the set — every step a live card on the named tab (pinned).
+
+#### The three surfaces
+
+* **The Home map** — a new collapsible *"Complementary cards — the
+  workflows"* card renders the whole registry: one bold name + purpose
+  line per pipeline, then numbered step chips (three per row, full
+  titles, no truncation) each of which **jumps straight to that step's
+  card** via `_jump_to_workflow_step` (title-based tab resolution +
+  the existing flash-and-scroll jump). A step whose card is missing is
+  a true no-op — the selection never moves (the test pins this: the
+  first draft teleported to the tab anyway, and the battery caught
+  it).
+* **The badges** — every participating card (57) wears a quiet
+  `◇ pipeline · step i/n` chip on its title row, tooltip carrying the
+  pipeline's purpose plus the full A → B → C chain. `_CARD_INDEX`
+  stays a 3-tuple (20 unpack sites untouched); the badge registry
+  `_WORKFLOW_BADGES` is the separate, rebuild-exact test surface.
+* **The finder** — Ctrl+F's haystack now includes the workflow name
+  (`workflow_for_card`): typing "docking campaign" lists the whole
+  chain; the dialog's hint line says so.
+
+#### Tests & ship
+
+17 new tests (`tests/test_playground_workflows.py`): registry
+integrity (names unique, ≥3 steps, real tab titles, unique step
+addresses, no card claimed by two pipelines), badge-text math (step
+numbering, unregistered card, unknown workflow), chain text, resolver
+behaviour, and — under Xvfb — the live-built guarantees (137 cards all
+subtitled, 57/57 steps resolve to live cards, 57/57 badges with exact
+text, the Home map card present, both jumps land on the right tab, the
+no-op really is one). The DearPyGui collapsible-registry pin gained
+`home-workflows` (card 137). Fresh pins: **tests/ 4,459 collected +
+777 doctests = 5,236 total; tree 893 files / 337,231 lines; zip
+19,251,057 bytes, sha-256 `6b5c93e4…`** (921 entries / 883 files /
+four homes byte-identical / real leaks 0). All eight notebooks
+re-executed at 1.2.117 (224 s, examples/ as the kernel cwd — the
+notebooks' `Path("data")` resolves there).
+
 ## [1.2.116] — 2026-11-06
 
 ### Added — round 201: Excel everywhere + every tab sample-data ready (the owner's two session-wide guarantees)

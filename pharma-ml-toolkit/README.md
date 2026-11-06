@@ -113,7 +113,16 @@ whenever you prefer pointing and clicking:
 python playground.py
 ```
 
-A tabbed window opens with every calculation domain: **Chemistry** (IC50/Ki →
+A tabbed window opens with every calculation domain — and since v1.2.117
+every one of its 137 cards carries a one-line description of what it
+does, while the **complementary cards that complete a process together
+are grouped as named workflows** (11 pipelines, 57 steps): the Home
+tab's *Complementary cards — the workflows* map lists every pipeline
+with one-click step chips, each participating card wears a
+`◇ pipeline · step i/n` badge, and the Ctrl+F card finder matches
+workflow names too (typing "docking campaign" lists the whole chain):
+
+**Chemistry** (IC50/Ki →
 pIC50/pKi, molar mass, the ~200-descriptor table for any SMILES, Tanimoto
 similarity, and the **feature factory** — compute the full 10,000+-column
 seven-family feature matrix for a CSV or pasted SMILES set, rank every
@@ -323,7 +332,7 @@ pharma-ml-toolkit/
 │                            # Tkinter window over every domain (chemistry · PK/PD · cell lines · QSAR · generative);
 │                            # probes its dependencies at launch, degrades gracefully, headlessly
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
-├── VERSION                 # the release version (1.2.112) — `cat VERSION` after extracting
+├── VERSION                 # the release version (1.2.117) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface

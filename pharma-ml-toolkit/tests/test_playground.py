@@ -15195,6 +15195,8 @@ class TestDearPyGuiRoundTwo:
             # (round 201) the Home sample-data quick start -- every tab
             # ready to run in one click, collapsible like its siblings
             "home-quick-start",
+            # (round 202) the complementary-card workflows map on Home
+            "home-workflows",
             "pk-half-life",
             "pk-iv-bolus",
             "pk-oral",

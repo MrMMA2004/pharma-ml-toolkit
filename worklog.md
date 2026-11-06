@@ -7181,3 +7181,104 @@ Stage Summary:
   bytes sha-256 cc4eabb5… · dev server to restart + health-check · cron
   pair 508389 (2-hour 100x, run 4 next) + webDevReview 508967 ·
   runs_completed: 3.
+
+## Round 202 — every card described, complementary cards grouped into workflows, v1.2.117 shipped (2026-11-06)
+
+Task ID: 3 (the owner's continuation directive on the catalog work)
+Agent: orchestrator (Z.ai Code main session)
+Task: "In playground.py, for each card, include a short description of
+what it does, and group cards that are complementary and complete a
+process together."
+
+Work Log:
+- THE TWELFTH ROLLBACK (repo layer): the session opened on the 2eb0ede
+  rollback point AGAIN — remote gone, token gone, counter gone, venv
+  drifted to default numpy. The drill ran mechanically: token
+  restored from upload/Command.txt (94 bytes), remote re-added, fetch
+  showed the remote had advanced to c2cf1f9 (round 201 — the scheduled
+  runs and owner sessions had shipped rounds 199-201: the catalog
+  absorption, the arena merge, Excel-everywhere). The ff-merge aborted
+  on eleven colliding untracked upload/ files — moved aside, merged,
+  byte-compared IDENTICAL (the local leftovers were the same bytes the
+  remote had tracked), cleaned. venv_repair.sh ran foreground (numpy
+  1.26.4 / torch 2.14.1+cpu / pharmaml 1.2.116 restored).
+- THE DELIVERABLE: a declarative WORKFLOWS registry (11 pipelines, 57
+  steps) in playground.py — QSAR end-to-end (8), Descriptors &
+  features (4), Docking campaign (7), Dose design (5), Exposure
+  analysis (5), Biomarker discovery (5), Deep learning study (7),
+  Generative optimization (7), Unsupervised structure (3), Inferential
+  statistics (3), Table preparation (3) — every step addressed by
+  (tab title, card title, blurb), the drift-proof addressing the
+  finder's memory already uses.
+- THE THREE SURFACES: (1) the Home tab's new collapsible
+  "Complementary cards — the workflows" map renders the registry —
+  bold name + purpose per pipeline, numbered step chips wrapped three
+  per row, each chip jumping through _jump_to_workflow_step (title-
+  based tab resolution + the flash-and-scroll jump); (2) every
+  participating card (57) wears a "◇ pipeline · step i/n" badge on its
+  title row with the full-chain tooltip (_WORKFLOW_BADGES as the
+  rebuild-exact test surface — _CARD_INDEX stays a 3-tuple, all 20
+  unpack sites untouched); (3) the Ctrl+F finder's haystack now
+  includes workflow_for_card() — typing "docking campaign" lists the
+  whole chain.
+- THE DESCRIPTION GAP: an AST audit found nine cards shipping bare
+  (both Preview cards, three Results cards, Objective & evolution,
+  Loading & maintenance, What lives where, pharmaml-could-not-import)
+  — all nine gained honest one-liners; the 137-card all-subtitled
+  guarantee is pinned by a live-walk test.
+- THE BUG THE TESTS CAUGHT: the first _jump_to_workflow_step draft
+  switched to the TAB even when the card didn't exist there (the
+  half-resolved teleport) — the no-op test caught it; the helper now
+  verifies the card is live on that tab before moving anything.
+- THE SUITE: 17 new tests (tests/test_playground_workflows.py) —
+  registry integrity (unique names, ≥3 steps, real tab titles, no
+  card claimed by two pipelines), badge-text math, chain text,
+  resolver behaviour, and the live-built guarantees under Xvfb.
+  Playground battery re-run class-aligned after the reaper lesson:
+  non-Review 485+1s, Review120-130 165, Review131-140 84, Review141+
+  ML-GUI 181, absorption/DearPyGui/R186-189 113+1s, catalog/platform/
+  report 115 — zero failures; the three xdist artifacts re-verified
+  serially green. Library suite 3,573 all-dots (-n 4), doctests 774+3s
+  = 777. Honest count: 4,459 + 777 = 5,236.
+- THE SHIP: four carriers at 1.2.117; all 8 notebooks re-executed at
+  1.2.117 (224 s — the first attempt failed on data/ until the kernel
+  cwd was set to examples/, where the notebooks' Path("data")
+  resolves); build_zip_180 → 921 entries / 883 files / 19,251,057
+  bytes / sha-256 6b5c93e4… / four homes byte-identical / real leaks
+  0 (the CHANGELOG's zip citation rode the round-201 pin-sync pattern:
+  the shipped zip's own CHANGELOG is one iteration behind the repo's —
+  the self-referential sha never converges, so the numbers live in the
+  manifest outside the zip). Web pins: 5,219 → 5,236 tests (seven
+  sites), FALLBACK_STATS 890/336,397 → 893/337,231 (live route
+  verified identical), zip-size exact:true 19,251,057 v1.2.117
+  source:release; eslint clean; dev server restarted (setsid) after
+  the reaper took it.
+- E2E (agent-browser): home renders every live pin (1.2.117 badge,
+  5236 tests, 893 files, 337,231 LOC); the Download tab serves v1.2.117
+  at a live-computed 18.36 MB; zero console errors; 57 interactive
+  elements at 390×844; footer pushed naturally at the 6,361px document
+  bottom; screenshot download/web-r202-e2e.png.
+
+Stage Summary:
+- Deliverable: v1.2.117 — the playground's third session-wide
+  guarantee: every card described (137 subtitles) and grouped (11
+  workflows / 57 steps / badges + Home map + finder matching), 17 new
+  tests, zip in four homes.
+- Lessons pinned: (1) the AST-guided rewriter's single-line insertion
+  path dropped commas — five calls jammed keywords onto literals; the
+  post-rewrite AST re-parse caught every one (parse-verify after
+  mechanical rewrites, always); (2) the tab-set pin must list the
+  BUILD order, not the logical order (Generative sits AFTER
+  Foundations/Best-of/ResponseAI in the notebook — the round-201
+  jump-chip lesson in test form); (3) the no-op contract needs the
+  card-existence check BEFORE the tab jump, or a missing card
+  teleports; (4) detached background runners die between tool calls
+  in this sandbox even under setsid+nohup — foreground chunks ≤570 s
+  are the only stable form (confirmed twice this round); (5) notebooks
+  execute with kernel cwd examples/ — Path("data") resolves there.
+- Baselines for the next round: v1.2.117 · 5,236 tests (4,459 + 777
+  doctests) · census 893 files / 337,231 lines · four zip homes at
+  19,251,057 bytes sha-256 6b5c93e4… · dev server healthy (setsid) ·
+  cron pair 508389 (2-hour 100x, run 4 next) + webDevReview 508967 ·
+  runs_completed: 3 (owner-interaction round; the counter counts cron
+  runs only).

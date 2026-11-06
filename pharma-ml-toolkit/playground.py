@@ -24,6 +24,16 @@ engine, identical column hygiene), and every table card's Save button
 writes ``.xlsx`` workbooks (``export_table``'s sixth format, plus the
 DTA / UMAP / canonical-SMILES exporters).
 
+A third guarantee (round 202): **every card is described and grouped** --
+each of the 130+ cards carries a one-line subtitle saying what it does,
+and the complementary cards that complete a process together are
+chained as named workflows (the :data:`WORKFLOWS` registry): the Home
+tab's *Complementary cards -- the workflows* map lists every pipeline
+with one-click step chips, each participating card wears a
+``\u25c7 pipeline \u00b7 step i/n`` badge, and the Ctrl+F finder matches
+workflow names too (typing "docking campaign" lands on the whole
+chain).
+
 * **Chemistry**     -- IC50/Ki -> pIC50/pKi conversion, molar mass, the
   full RDKit descriptor table for any SMILES, Tanimoto similarity, the
   RISM-KH solvation card (ten 3D-RISM-KH-inspired descriptors per
@@ -4486,6 +4496,219 @@ class ScrollFrame(ttk.Frame):  # type: ignore[misc] # ttk is None headless
 _CARD_INDEX: list[tuple[str, str, Any]] = []
 
 
+#: (round 202) complementary-card workflows -- the owner's grouping
+#: ask: cards that complete a process TOGETHER, chained in order.
+#: Each entry names its steps by ``(tab title, card title, blurb)`` --
+#: the same addressing the finder's memory uses, resolved against the
+#: LIVE notebook at click time so the chains cannot drift when tabs
+#: are inserted.  The Home tab renders the whole registry as a card
+#: ("Complementary cards -- the workflows"); ``make_card(workflow=...)``
+#: badges each participating card with its pipeline name and step
+#: number, and the Ctrl+F finder matches workflow names too.
+WORKFLOWS: list[dict[str, Any]] = [
+    {
+        "name": "QSAR end-to-end",
+        "purpose": "Table in, trusted prediction out -- load, train, compare, harden and ship a model.",
+        "steps": [
+            ("Data & ML", "Dataset", "Open a CSV/Excel table (or a bundled example) and pick the target."),
+            ("Data & ML", "Preview (first 12 rows)", "Eyeball the rows exactly as parsed before any training."),
+            ("Data & ML", "Train a model", "Fit one model family and read its held-out metrics."),
+            ("Data & ML", "Results", "The fitted model's metrics, figures and exports."),
+            ("Data & ML", "Leaderboard", "Cross-validate every family at once -- the fair comparison."),
+            ("Data & ML", "Ensemble builder (voting & stacking)", "Combine the winners into one stronger estimator."),
+            ("Data & ML", "Model persistence (save & reuse)", "Save the trained bundle; load it back to predict."),
+            (
+                "Data & ML",
+                "Applicability domain & prediction reliability",
+                "Is a new compound inside the model's turf?",
+            ),
+        ],
+    },
+    {
+        "name": "Descriptors & features",
+        "purpose": "From raw structures to a model-ready feature matrix.",
+        "steps": [
+            (
+                "Chemistry",
+                "CSV \u2192 canonical SMILES (the standardization lab)",
+                "Clean a SMILES column to one canonical form first.",
+            ),
+            ("Chemistry", "SMILES inspector", "The 200+ RDKit descriptors for one molecule."),
+            ("Chemistry", "Feature factory", "10,000+ descriptor/fingerprint columns, ranked to a top-K."),
+            (
+                "Chemistry",
+                "Library similarity scan",
+                "Tanimoto matrix / threshold / top-k over a whole library.",
+            ),
+        ],
+    },
+    {
+        "name": "Docking campaign",
+        "purpose": "Prepare, dock, rescore and audit a whole virtual screen.",
+        "steps": [
+            ("Docking", "Ligand library \u2192 PDBQT", "Convert every ligand into dock-ready PDBQT."),
+            ("Docking", "Receptor preparation", "Clean the receptor; bad residues out, atom types in."),
+            ("Docking", "Grid box & docking configs", "Place the search box; write the GPF/DPF configs."),
+            ("Docking", "Campaign runner", "Run the whole campaign (Vina or AutoDock4, resumable)."),
+            ("Docking", "Docking results", "Parse DLG/Vina outputs into one ranked table."),
+            ("Docking", "Consensus rescore", "Merge scoring functions and re-rank the poses."),
+            ("Docking", "Grid, torsion & completion audit", "Verify the campaign's configs really agree."),
+        ],
+    },
+    {
+        "name": "Dose design",
+        "purpose": "Renal function to regimen -- the bedside dosing chain.",
+        "steps": [
+            (
+                "PK / PD",
+                "Cockcroft\u2013Gault creatinine clearance",
+                "Estimate renal function first -- it sets the clearance.",
+            ),
+            ("PK / PD", "Loading & maintenance dosing", "Reach the target fast, then hold it steady."),
+            ("PK / PD", "Pediatric dose rules", "Weight/age-scaled rules for the youngest patients."),
+            ("PK / PD", "Dosing events & regimen", "Compose doses, infusions and times into a regimen."),
+            ("PK / PD", "TDM trough adjustment", "Adjust the maintenance dose from a measured trough."),
+        ],
+    },
+    {
+        "name": "Exposure analysis",
+        "purpose": "Concentration data to exposure verdicts (NCA through PBPK).",
+        "steps": [
+            (
+                "PK / PD",
+                "Non-compartmental analysis (NCA)",
+                "AUC/AUMC/MRT/Cmax/t\u00bd from a concentration-time series.",
+            ),
+            ("PK / PD", "Half-life \u2194 elimination", "One number in, ke and accumulation out."),
+            ("PK / PD", "IV infusion & distribution", "Infusion and steady-state exposure."),
+            ("PK / PD", "PBPK & first-in-human", "Mechanistic compartments to a FIH starting dose."),
+            (
+                "PK / PD",
+                "Advanced PK/PD & PBPK (RxODE \u00b7 nlmixr2 \u00b7 OSP)",
+                "Full ODE models -- pregnancy PBPK included.",
+            ),
+        ],
+    },
+    {
+        "name": "Biomarker discovery",
+        "purpose": "Screen to sensitivity to the genes that explain it.",
+        "steps": [
+            ("Cell Lines", "Response screen", "Audit the screen: replicates, per-compound summaries."),
+            ("Cell Lines", "Sensitivity matrix", "Which lines yield to which compounds."),
+            ("Cell Lines", "Sensitive vs resistant", "Call the extremes per compound."),
+            ("Cell Lines", "Expression table", "MAD-ranked variable genes on the expression side."),
+            ("Cell Lines", "Biomarker discovery", "Correlate expression with response to find markers."),
+        ],
+    },
+    {
+        "name": "Deep learning study",
+        "purpose": "One dataset through network, training, attribution and tuning.",
+        "steps": [
+            ("Deep Learning", "Dataset", "Open the table and pick the target for the network."),
+            (
+                "Deep Learning",
+                "Preview (first 12 rows)",
+                "The first dozen rows of the deep-learning table, as loaded.",
+            ),
+            ("Deep Learning", "Network & training", "Architecture, widths, dropout, optimizer, patience."),
+            ("Deep Learning", "Training history", "The epoch-by-epoch loss curves."),
+            ("Deep Learning", "Results", "Held-out metrics, the parity/confusion figure."),
+            ("Deep Learning", "Attribution & attention", "Which inputs moved the prediction."),
+            ("Deep Learning", "Hyperparameter search", "Sweep the knobs systematically."),
+        ],
+    },
+    {
+        "name": "Generative optimization",
+        "purpose": "Seeds to novel molecules -- evolve, inspect, decompose.",
+        "steps": [
+            ("Generative", "Corpus / seed molecules", "The starting chemistry the GA/RL breeds from."),
+            ("Generative", "Objective & evolution", "Pick the objective and run the GA or RL loop."),
+            ("Generative", "Results", "The population's scores and leaderboard."),
+            ("Generative", "Pareto front", "The multi-objective trade-off set, drawn."),
+            ("Generative", "Ring topology moves", "One molecule's ring-surgery options."),
+            ("Generative", "Breed two molecules", "Cross two parents into children."),
+            ("Generative", "Scoring oracles (GuacaMol)", "The objective functions themselves."),
+        ],
+    },
+    {
+        "name": "Unsupervised structure",
+        "purpose": "Project a table into clusters/embeddings and read the structure.",
+        "steps": [
+            ("Unsupervised", "Unsupervised dataset", "Pick the table and columns to embed."),
+            ("Unsupervised", "Method", "Choose the projector and its knobs."),
+            ("Unsupervised", "Results", "The embedding, its diagnostics and figure."),
+        ],
+    },
+    {
+        "name": "Inferential statistics",
+        "purpose": "Foundations -- test, estimate, and simulate the null.",
+        "steps": [
+            ("Foundations", "Statistics & hypothesis testing", "The core tests on the loaded table."),
+            ("Foundations", "Inferential statistics (pingouin)", "The full suite -- ANOVA, correlations, more."),
+            ("Foundations", "Distribution sampler", "Draw and inspect the null distributions."),
+        ],
+    },
+    {
+        "name": "Table preparation",
+        "purpose": "Utilities -- get tables campaign-ready before analysis.",
+        "steps": [
+            ("Utilities", "Table merge & split", "Join or cut tables by column."),
+            ("Utilities", "Table compare & annotate", "Three-way reconciliation of ligand columns."),
+            ("Utilities", "Reindex by number", "Renumber rows deterministically."),
+        ],
+    },
+]
+
+#: (round 202) the badges ``make_card(workflow=...)`` rendered, keyed by
+#: ``(workflow name, card title)`` -> badge text -- the test surface for
+#: "every registry step carries its badge" without walking the widget
+#: tree (module-level like ``_CARD_INDEX``; rebuilds overwrite the same
+#: keys, so the map stays exact across GUI-fixture teardowns).
+_WORKFLOW_BADGES: dict[tuple[str, str], str] = {}
+
+
+def workflow_step_badge(workflow_name: str, card_title: str) -> str:
+    """The badge text a workflow-participating card carries.
+
+    ``"QSAR end-to-end \u00b7 step 3/7"`` when the title is a registry
+    step of the named workflow, the bare workflow name when it is not
+    (a card may join a pipeline without being an official step), and
+    the name unchanged for unknown workflows.
+    """
+    for workflow in WORKFLOWS:
+        if workflow["name"] != workflow_name:
+            continue
+        titles = [step[1] for step in workflow["steps"]]
+        if card_title in titles:
+            return f"{workflow_name} \u00b7 step {titles.index(card_title) + 1}/{len(titles)}"
+        return workflow_name
+    return workflow_name
+
+
+def workflow_chain_text(workflow_name: str) -> str:
+    """The tooltip chain for a workflow badge (purpose + A \u2192 B \u2192 C)."""
+    for workflow in WORKFLOWS:
+        if workflow["name"] == workflow_name:
+            chain = " \u2192 ".join(step[1] for step in workflow["steps"])
+            return f"{workflow['purpose']}\n{chain}"
+    return workflow_name
+
+
+def workflow_for_card(tab_title: str, card_title: str) -> str:
+    """Which workflow a (tab, card) pair belongs to ("" when none).
+
+    The registry addresses cards by tab title + card title -- the
+    drift-proof addressing the finder's memory already uses -- so the
+    Ctrl+F finder can match "docking campaign" and land on the chained
+    cards even though ``_CARD_INDEX`` stays a 3-tuple.
+    """
+    for workflow in WORKFLOWS:
+        for step_tab, step_card, _blurb in workflow["steps"]:
+            if step_tab == tab_title and step_card == card_title:
+                return workflow["name"]
+    return ""
+
+
 #: (100x-159) DearPyGui ``add_collapsing_header`` parity: the registry of
 #: collapsible cards -- stable key -> bookkeeping (title / shell /
 #: content / chevron button / expanded flag).  The session's
@@ -4535,6 +4758,7 @@ def make_card(
     span: int = 1,
     collapsible: bool = False,
     key: str = "",
+    workflow: str = "",
 ) -> Any:
     """Create a white card with a heading on a tab's card grid.
 
@@ -4557,6 +4781,14 @@ def make_card(
     omitted); a finder jump to a folded card unfolds it first, the
     per-tab reset restores the launch look, and the fold state
     persists with the session (``collapsed_cards`` text key).
+
+    (round 202) ``workflow=NAME`` badges the card as one step of a
+    complementary-card pipeline: a quiet \u25c7 chip on the title
+    row's right naming the workflow and the step number
+    (``QSAR end-to-end \u00b7 step 3/7``), its tooltip carrying the
+    whole chain.  The registry (:data:`WORKFLOWS`) drives the Home
+    tab's "Complementary cards" map and the Ctrl+F finder's
+    workflow-name matching.
     """
     shell = tk.Frame(parent, background=CARD, highlightbackground=BORDER, highlightthickness=1)
     _CARD_INDEX.append((title, subtitle, shell))
@@ -4568,6 +4800,21 @@ def make_card(
     strip = tk.Frame(title_row, width=3, background=ACCENT)
     strip.pack(side="left", fill="y", padx=(0, 8))
     ttk.Label(title_row, text=title, style="CardTitle.TLabel").pack(side="left", anchor="w")
+    if workflow:
+        # (round 202) the complementary-card badge -- a quiet \u25c7 chip
+        # on the title row's right naming the pipeline and the step
+        # number, its tooltip carrying the whole chain.  Packed BEFORE
+        # the collapsible chevron so the chevron stays right-most.
+        badge_text = workflow_step_badge(workflow, title)
+        badge = ttk.Label(title_row, text=f"\u25c7 {badge_text}", style="CardMuted.TLabel")
+        badge.pack(side="right", anchor="ne", padx=(6, 0))
+        Tooltip(
+            badge,
+            f"One step of the {workflow} workflow -- the complementary "
+            f"cards that complete this process together:\n"
+            f"{workflow_chain_text(workflow)}",
+        )
+        _WORKFLOW_BADGES[(workflow, title)] = badge_text
     if subtitle:
         ttk.Label(
             header, text=subtitle, style="CardMuted.TLabel", wraplength=620, justify="left"
@@ -5557,6 +5804,35 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 level="success",
             )
 
+    def _jump_to_workflow_step(self, tab_title: str, card_title: str) -> None:
+        """(round 202) Jump to one workflow step's card by tab TITLE.
+
+        The workflow registry addresses cards by ``(tab title, card
+        title)`` -- the drift-proof addressing the finder's memory
+        already uses -- so this resolves the tab by its label (the
+        same lookup the quick-jump chips use) before the card jump
+        lands.  A missing tab OR card is a true no-op (the selection
+        does not move): the map renders at build time but resolves at
+        CLICK time against the live notebook, and a half-resolved
+        step must never teleport the user to a tab whose card is not
+        there.
+        """
+        wanted = tab_title.strip().lower()
+        try:
+            for tab_id in self._book.tabs():
+                if str(self._book.tab(tab_id, "text")).strip().lower() != wanted:
+                    continue
+                index = self._book.index(tab_id)
+                if not any(
+                    card_index == index and live_title == card_title
+                    for live_title, _subtitle, _shell, card_index in self._live_cards()
+                ):
+                    return  # the card is not on that tab -- do not move
+                self._jump_to_card(index, card_title)
+                return
+        except tk.TclError:  # pragma: no cover - no notebook yet
+            pass
+
     # -- the Ctrl+F card finder (100x-120) ----------------------------- #
     def _card_tab_index(self, shell: Any, pages: list[Any]) -> int | None:
         """Resolve which tab page a card shell descends from."""
@@ -5642,7 +5918,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             pass
         ttk.Label(
             win,
-            text="Type words from a card's title or subtitle — Enter jumps to it.",
+            text="Type words from a card's title, subtitle or workflow — Enter jumps to it.",
             style="CardMuted.TLabel",
         ).pack(anchor="w", padx=14, pady=(12, 4))
         entry = ttk.Entry(win, width=54)
@@ -5767,12 +6043,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._finder_last_query = entry.get().strip()
             tree.delete(*tree.get_children())
             for title, subtitle, _shell, index in self._live_cards():
-                haystack = f"{title} {subtitle}".lower()
-                if query and not all(word in haystack for word in query.split()):
-                    continue
                 try:
                     tab_name = str(self._book.tab(index, "text")).strip()
                 except tk.TclError:  # pragma: no cover - tab vanished
+                    continue
+                # (round 202) the workflow name rides the haystack --
+                # typing "docking campaign" lands on the chained cards
+                # even though _CARD_INDEX stays a 3-tuple.
+                haystack = f"{title} {subtitle} {workflow_for_card(tab_name, title)}".lower()
+                if query and not all(word in haystack for word in query.split()):
                     continue
                 tree.insert("", "end", values=(title, tab_name), iid=f"{index}:{title}")
 
@@ -8820,6 +9099,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             column=0,
             collapsible=True,
             key="home-what-lives-where",
+        subtitle="One line per tab -- what runs where, and which pip line it wants.", 
         )
         # (round 201) the sample-data quick start -- the owner's
         # "every tab ready to run" ask, one click from a cold start:
@@ -8857,6 +9137,56 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
             button.pack(side="left", padx=(0, 6))
             Tooltip(button, f"Load {blurb} and jump to the tab.")
+
+        # (round 202) the complementary-card map -- the owner's grouping
+        # ask rendered as the registry itself: every workflow with its
+        # purpose and its ordered step chips, one click from this card
+        # to any step's card (the participating cards carry the same
+        # pipelines as ◇ badges on their own title rows).
+        flows = make_card(
+            page.grid,
+            "Complementary cards — the workflows",
+            collapsible=True,
+            key="home-workflows",
+            span=2,
+            row=4,
+            column=0,
+            subtitle="Cards that complete a process together, chained in "
+            "order -- each chip jumps straight to that step's card; "
+            "the same pipelines badge the cards themselves.",
+        )
+        for workflow in WORKFLOWS:
+            head = ttk.Frame(flows, style="Card.TFrame")
+            grid_append(flows, head, sticky="ew", pady=(8, 1))
+            ttk.Label(
+                head, text=workflow["name"], style="Field.TLabel", font=("TkDefaultFont", 10, "bold")
+            ).pack(side="left")
+            ttk.Label(
+                head,
+                text=f" — {workflow['purpose']}",
+                style="CardMuted.TLabel",
+                wraplength=560,
+                justify="left",
+            ).pack(side="left", padx=(8, 0))
+            chip_wrap = ttk.Frame(flows, style="Card.TFrame")
+            grid_append(flows, chip_wrap, sticky="ew")
+            current_row = ttk.Frame(chip_wrap, style="Card.TFrame")
+            current_row.pack(fill="x")
+            for position, (step_tab, step_card, step_blurb) in enumerate(workflow["steps"], start=1):
+                # wrap every three chips: the long step titles stay
+                # honest (no truncation) without overflowing the card
+                if position > 1 and (position - 1) % 3 == 0:
+                    current_row = ttk.Frame(chip_wrap, style="Card.TFrame")
+                    current_row.pack(fill="x", pady=(2, 0))
+                step_chip = ttk.Button(
+                    current_row,
+                    text=f"{position} {step_card}",
+                    style="Chip.TButton",
+                    command=lambda t=step_tab, c=step_card: self._jump_to_workflow_step(t, c),
+                )
+                step_chip.pack(side="left", padx=(0, 6))
+                Tooltip(step_chip, f"On {step_tab}: {step_blurb}")
+
         entries = [
             (
                 "Chemistry",
@@ -8997,7 +9327,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             ttk.Label(row, text=f"[{needs}]", style="CardMuted.TLabel").pack(side="right")
 
         if self.pharmaml is None:
-            broken = make_card(page.grid, "pharmaml could not be imported", span=2, row=3, column=0)
+            broken = make_card(
+                page.grid,
+                "pharmaml could not be imported",
+                subtitle="The import failed -- the error and the fix, verbatim.",
+                span=2,
+                row=3,
+                column=0,
+            )
             grid_append(
                 broken,
                 ttk.Label(
@@ -9078,6 +9415,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             row=1,
             column=0,
             subtitle="Every RDKit 2D descriptor for one molecule (type to filter).",
+        workflow="Descriptors & features", 
         )
         self._smiles_entry = ttk.Entry(desc, width=34)
         self._smiles_entry.insert(0, "CC(=O)Oc1ccccc1C(=O)O")
@@ -9158,6 +9496,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "ranked and cut to the top K you keep -- the ten "
             "fak_ml.ipynb families, the shape_3d 3D descriptors, "
             "the RISM-KH solvation family and D2.py's radius-3 ECFP.",
+        workflow="Descriptors & features", 
         )
         source_row = ttk.Frame(factory, style="Card.TFrame")
         grid_append(factory, source_row, sticky="w")
@@ -9611,6 +9950,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "right (or load one from a CSV) -- the all-vs-all "
             "Tanimoto matrix, the pairs-above-threshold scan, "
             "or the top-k nearest neighbours of one query.",
+        workflow="Descriptors & features", 
         )
         scan.columnconfigure(0, weight=1)
         scan.columnconfigure(1, weight=1)
@@ -10311,6 +10651,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "canonicalisation — with the dimorphite_dl protonation "
                 "window and the OpenBabel-slot InChI round-trip check."
             ),
+        workflow="Descriptors & features", 
         )
         std_file_row = ttk.Frame(std_card, style="Card.TFrame")
         grid_append(std_card, std_file_row, sticky="ew", pady=(0, 4))
@@ -12600,6 +12941,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             row=0,
             column=0,
             subtitle="k(e) = ln2 / t½  ·  accumulation over a dosing interval.",
+        workflow="Exposure analysis", 
         )
         self._thalf_a = ttk.Entry(half, width=14)
         self._thalf_a.insert(0, "4")
@@ -12711,6 +13053,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             row=1,
             column=1,
             subtitle="Plus the renal dose adjustment for a normal regimen.",
+        workflow="Dose design", 
         )
         self._cg_age = ttk.Entry(crcl, width=14)
         self._cg_age.insert(0, "55")
@@ -12747,6 +13090,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             column=0,
             collapsible=True,
             key="pk-loading",
+        workflow="Dose design", 
+        subtitle="Loading dose reaches the target fast; maintenance holds it there.", 
         )
         self._md_cl = ttk.Entry(doses, width=14)
         self._md_cl.insert(0, "5")
@@ -12823,6 +13168,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             row=3,
             column=0,
             subtitle="Young's rule (age) and Clark's rule (weight in lb).",
+        workflow="Dose design", 
         )
         self._young_age = ttk.Entry(peds, width=14)
         self._young_age.insert(0, "6")
@@ -12899,6 +13245,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "matched pairs): AUC / AUMC by the linear trapezoid, "
             "MRT, Cmax / Tmax, the terminal half-life — plus Vd and "
             "CL when a dose is given (Vd = dose / AUC after IV).",
+        workflow="Exposure analysis", 
         )
         self._nca_times = ttk.Entry(nca, width=34)
         self._nca_times.insert(0, _NCA_DEFAULT_TIMES)
@@ -12967,6 +13314,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "(rate = CL·Css), the steady state a given rate "
             "reaches, Vd = CL / k(e), and absolute "
             "bioavailability F from paired EV/IV AUCs.",
+        workflow="Exposure analysis", 
         )
         self._inf_cl = ttk.Entry(infusion, width=14)
         self._inf_cl.insert(0, "5")
@@ -13033,6 +13381,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             column=1,
             subtitle="Dose individualisation from one measured trough: the "
             "linear-proportional new dose (with an optional floor).",
+        workflow="Dose design", 
         )
         self._tdm_dose = ttk.Entry(tdm, width=14)
         self._tdm_dose.insert(0, "250")
@@ -13232,6 +13581,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             subtitle="The Python-usable slice of the OSP stack: microsomal "
             "IVIVE, well-stirred hepatic clearance, DDI AUC ratio, MABEL "
             "and NOAEL-HED — the FIH starting dose is the safer of the two.",
+        workflow="Exposure analysis", 
         )
         self._pbpk_clint = ttk.Entry(pbpk_card, width=10)
         self._pbpk_clint.insert(0, "10")
@@ -13368,6 +13718,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             subtitle="The NONMEM/mrgsolve event grammar (RxODE-style): one "
             "dose record, additional doses until a stop time, and weekday "
             "schedules — realized as the full dose-event table.",
+        workflow="Dose design", 
         )
         self._evreg_dose = ttk.Entry(evreg_card, width=10)
         self._evreg_dose.insert(0, "500")
@@ -13418,6 +13769,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "qualification, and the pregnancy building block's separate "
             "maternal/fetal unbound-fraction transfer. The pregnancy pane "
             "is a disclosed two-compartment model, not a 27-compartment fit.",
+        workflow="Exposure analysis", 
         )
         advanced_tabs = ttk.Notebook(advanced)
         grid_append(advanced, advanced_tabs, sticky="nsew", weight=True)
@@ -14432,6 +14784,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             column=0,
             subtitle="A GDSC/CCLE-style long table: one row per cell line × "
             "compound, one metric column (LN_IC50, AUC, ...).",
+        workflow="Biomarker discovery", 
         )
         screen_buttons = ttk.Frame(screen, style="Card.TFrame")
         screen_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
@@ -14485,6 +14838,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             row=1,
             column=0,
             subtitle="Pivot one metric into the classic cell line × compound table.",
+        workflow="Biomarker discovery", 
         )
         self._bio_metric_combo = ttk.Combobox(matrix, state="readonly", width=22)
         form_row(matrix, "metric", self._bio_metric_combo)
@@ -14528,6 +14882,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             row=2,
             column=0,
             subtitle="Threshold one compound's panel into sensitivity calls.",
+        workflow="Biomarker discovery", 
         )
         self._bio_compound_combo = ttk.Combobox(
             calls, state="readonly", width=22, textvariable=self._bio_compound_var
@@ -14619,6 +14974,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             column=0,
             subtitle="Rows are cell lines, columns genes (log2 counts or "
             "intensities — normalisation happens inside the analysis).",
+        workflow="Biomarker discovery", 
         )
         expression_buttons = ttk.Frame(expression, style="Card.TFrame")
         expression_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
@@ -14676,6 +15032,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             subtitle="Correlate every gene's expression with one drug's response "
             "(Benjamini–Hochberg FDR control) — the EGFR / erlotinib "
             "story on the example data.",
+        workflow="Biomarker discovery", 
         )
         self._bio_marker_compound_combo = ttk.Combobox(
             biomarkers,
@@ -15302,6 +15659,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             column=0,
             subtitle="A SMILES CSV becomes one folder per ligand, each with a "
             "3D l.pdbqt (Meeko + RDKit).",
+        workflow="Docking campaign", 
         )
         lib_buttons = ttk.Frame(ligands, style="Card.TFrame")
         lib_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
@@ -15391,6 +15749,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             column=1,
             subtitle="PDB / CIF / PDBQT → a docking-ready receptor PDBQT "
             "(waters out, atom types in).",
+        workflow="Docking campaign", 
         )
         rec_buttons = ttk.Frame(receptor, style="Card.TFrame")
         rec_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
@@ -15502,6 +15861,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             column=0,
             subtitle="Enclose a reference ligand, then write the AutoDock4 "
             "r.gpf / r.dpf pair next to it.",
+        workflow="Docking campaign", 
         )
         lig_buttons = ttk.Frame(grid_card, style="Card.TFrame")
         lig_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
@@ -15572,6 +15932,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             column=1,
             subtitle="One tree, three sources: a campaign scan, an AutoDock4 "
             "DLG cluster table, or a Vina mode table.",
+        workflow="Docking campaign", 
         )
         scan_buttons = ttk.Frame(results, style="Card.TFrame")
         scan_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
@@ -15669,6 +16030,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             column=0,
             subtitle="autogrid4 + autodock4 over every prepared ligand folder, "
             "or one AutoDock Vina run.",
+        workflow="Docking campaign", 
         )
         self._dock_engine_combo = ttk.Combobox(
             runner, state="readonly", width=22, values=_DOCK_ENGINES
@@ -15799,6 +16161,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             subtitle="Combine the loaded table's evidence into one 0–1 "
             "consensus, with the per-column units that explain "
             "the winner (the docking rescore CLI, mouse edition).",
+        workflow="Docking campaign", 
         )
         rescore_buttons = ttk.Frame(rescore, style="Card.TFrame")
         rescore_buttons.grid(row=0, column=0, columnspan=2, sticky="w")
@@ -15991,6 +16354,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "REMARKs vs BRANCH counts of prepared ligands, or "
             "check a campaign tree for missing / incomplete "
             "AutoDock4 runs.",
+        workflow="Docking campaign", 
         )
         self._dock_audit_mode = ttk.Combobox(
             audit, state="readonly", width=30, values=_DOCK_AUDIT_MODES
@@ -19114,6 +19478,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             row=0,
             column=0,
             subtitle="Any CSV the toolkit's read_table can sniff, or a bundled example.",
+        workflow="QSAR end-to-end", 
         )
         open_btn = self._action_button(data, "Open CSV…", self._ml_open_csv)
         open_btn.grid(row=0, column=0, sticky="w")
@@ -19217,7 +19582,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         prep_save_btn.pack(side="left", padx=(10, 0))
         self._ml_prep_frame: Any = None
 
-        preview = make_card(page.grid, "Preview (first 12 rows)", span=2, row=1, column=0)
+        preview = make_card(
+            page.grid,
+            "Preview (first 12 rows)",
+            subtitle="The first dozen rows as parsed -- catch surprises before training.",
+            span=2,
+            row=1,
+            column=0,
+            workflow="QSAR end-to-end",
+        )
         tree_frame = ttk.Frame(preview, style="Card.TFrame")
         grid_append(preview, tree_frame, sticky="nsew", weight=True)
         self._preview_tree = ttk.Treeview(tree_frame, show="headings", height=8)
@@ -19242,6 +19615,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             column=0,
             subtitle="Features = the numeric columns except the target "
             "(helpers like SMILES ids are dropped automatically).",
+        workflow="QSAR end-to-end", 
         )
         self._target_combo = ttk.Combobox(config, state="readonly", width=26)
         form_row(config, "target column", self._target_combo)
@@ -19620,7 +19994,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         study_intermediates_btn.pack(side="left", padx=(10, 0))
 
-        results = make_card(page.grid, "Results", span=2, row=5, column=0)
+        results = make_card(
+            page.grid,
+            "Results",
+            subtitle="The fitted model's metrics, figures and exports.",
+            span=2,
+            row=5,
+            column=0,
+            workflow="QSAR end-to-end",
+        )
         ml_result_buttons = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, ml_result_buttons, sticky="w")
         calib_btn = self._action_button(
@@ -19956,6 +20338,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "registry ranking; Benchmark feature families (below) "
             "fills it with the per-family ranking; a hyperparameter "
             "search fills it with the trial ranking, best first.",
+        workflow="QSAR end-to-end", 
         )
         self._board_status = ttk.Label(
             board,
@@ -20196,6 +20579,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "predictions. The same ensembles are registry models "
             "too (pick 'voting' / 'stacking' in the model "
             "combobox above for the default RF + SVM + KNN trio).",
+        workflow="QSAR end-to-end", 
         )
         ens_members = ttk.Frame(ensemble, style="Card.TFrame")
         grid_append(ensemble, ens_members, sticky="ew")
@@ -20275,6 +20659,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "versions, timestamp); the other half loads any "
             "bundle back, audits new data against its feature "
             "contract and predicts.",
+        workflow="QSAR end-to-end", 
         )
         persist.columnconfigure(0, weight=1)
         persist.columnconfigure(1, weight=1)
@@ -20429,6 +20814,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "resampling (ensemble spread vs its own training-side "
             "threshold)? Both answers fold into one reliable / "
             "not-reliable verdict per compound.",
+        workflow="QSAR end-to-end", 
         )
         ad_source_row = ttk.Frame(ad, style="Card.TFrame")
         grid_append(ad, ad_source_row, sticky="ew")
@@ -24433,6 +24819,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "Pick the numeric columns to analyse; the colour-by column "
                 "paints the embedding scatters."
             ),
+        workflow="Unsupervised structure", 
         )
         refresh_btn = self._action_button(
             data,
@@ -24516,6 +24903,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "The handbook's unsupervised roster, one typed call each -- "
                 "random_state=42 threaded everywhere, scans reported honestly."
             ),
+        workflow="Unsupervised structure", 
         )
         self._unsup_method = ttk.Combobox(
             method, state="readonly", width=28, values=list(self._UNSUP_METHODS)
@@ -24613,6 +25001,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             row=1,
             column=1,
             subtitle="The typed record's own summary, its figure, and the CSV twin.",
+        workflow="Unsupervised structure", 
         )
         self._unsup_summary = ttk.Label(
             results,
@@ -25039,6 +25428,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             subtitle="Any CSV the toolkit's read_table can sniff, or a "
             "bundled example. Features = the numeric columns "
             "except the target (same rule as the Data & ML tab).",
+        workflow="Deep learning study", 
         )
         open_btn = self._action_button(data, "Open CSV…", self._dl_open_csv)
         open_btn.grid(row=0, column=0, sticky="w")
@@ -25069,7 +25459,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dl_info = ttk.Label(data, text="no dataset loaded", style="CardMuted.TLabel")
         self._dl_info.grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
-        preview = make_card(page.grid, "Preview (first 12 rows)", span=2, row=1, column=0)
+        preview = make_card(
+            page.grid,
+            "Preview (first 12 rows)",
+            subtitle="The first dozen rows of the deep-learning table, exactly as loaded.",
+            span=2,
+            row=1,
+            column=0,
+            workflow="Deep learning study",
+        )
         tree_frame = ttk.Frame(preview, style="Card.TFrame")
         grid_append(preview, tree_frame, sticky="nsew", weight=True)
         self._dl_preview_tree = ttk.Treeview(tree_frame, show="headings", height=8)
@@ -25102,6 +25500,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "the toolkit's own autograd trainer with a selectable "
             "optimizer -- and the automatic stand-in when torch is "
             "absent, so the card trains everywhere.",
+        workflow="Deep learning study", 
         )
         self._dl_arch_combo = ttk.Combobox(
             net, state="readonly", width=26, values=_DL_ARCHITECTURES
@@ -25209,7 +25608,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         check_btn.pack(side="left", padx=(10, 0))
 
-        results = make_card(page.grid, "Results", span=2, row=3, column=0)
+        results = make_card(
+            page.grid,
+            "Results",
+            subtitle="Held-out metrics, the parity/confusion figure and the export row.",
+            span=2,
+            row=3,
+            column=0,
+            workflow="Deep learning study",
+        )
         self._dl_metrics = ttk.Frame(results, style="Card.TFrame")
         grid_append(results, self._dl_metrics, sticky="ew")
         ttk.Label(
@@ -25240,6 +25647,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             column=0,
             subtitle="Per-epoch training/validation loss -- the "
             "early-stopping verdict rides on the figure title.",
+        workflow="Deep learning study", 
         )
         self._dl_hist_summary = ttk.Label(
             hist, text="train a network to see the loss curves", style="CardMuted.TLabel"
@@ -25310,6 +25718,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "is the toolkit's own numpy multi-head attention over your "
             "tokens. Model graph, Anchor rule and Quantus metrics complete "
             "the deferred torchlens / alibi / Quantus fold-ins (all offline).",
+        workflow="Deep learning study", 
         )
         xai_row = ttk.Frame(xai, style="Card.TFrame")
         grid_append(xai, xai_row, sticky="w")
@@ -26111,6 +26520,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "preset search space over one registry model, choose the "
             "sampler, and watch the study's trial log -- the best "
             "parameters and cross-validated score land at the top.",
+        workflow="Deep learning study", 
         )
         self._dl_hpo_preset_combo = ttk.Combobox(
             hpo_card,
@@ -29763,6 +30173,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             row=0,
             column=0,
             subtitle="One SMILES per line. Empty text = the bundled 244-molecule drug-like corpus.",
+        workflow="Generative optimization", 
         )
         self._corpus_text = _grid_text(corpus, height=9, mono=self._mono)
         grid_append(corpus, self._corpus_text, sticky="nsew", weight=True)
@@ -29804,7 +30215,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._gen_alerts_text = _grid_text(corpus, height=3, mono=self._mono)
         grid_append(corpus, self._gen_alerts_text, sticky="ew")
 
-        controls = make_card(page.grid, "Objective & evolution", row=0, column=1)
+        controls = make_card(
+            page.grid,
+            "Objective & evolution",
+            subtitle="Pick the objective (QED, LogP, similarity, novelty, SMARTS) and evolve -- GA or RL.",
+            row=0,
+            column=1,
+            workflow="Generative optimization",
+        )
         self._objective_combo = ttk.Combobox(
             controls, state="readonly", width=26, values=_OBJECTIVE_KINDS
         )
@@ -30028,7 +30446,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         run_btn.grid(row=controls.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(8, 0))
 
-        results = make_card(page.grid, "Results", span=2, row=1, column=0)
+        results = make_card(
+            page.grid,
+            "Results",
+            subtitle="The final population's scores, leaderboard and the structure grids.",
+            span=2,
+            row=1,
+            column=0,
+            workflow="Generative optimization",
+        )
         self._ga_summary = ttk.Label(
             results,
             text="no run yet — pick an objective and press Run evolution",
@@ -30092,6 +30518,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             subtitle="Molecules no other candidate dominates — the trade-offs "
             "a blended leaderboard hides. Filled after every "
             "multi-objective run.",
+        workflow="Generative optimization", 
         )
         self._pareto_summary = ttk.Label(
             pareto,
@@ -30173,6 +30600,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             subtitle="Every distinct one-step ring-size mutant of one "
             "molecule — contraction and expansion over each "
             "saturated ring (fused/spiro rings are never touched).",
+        workflow="Generative optimization", 
         )
         self._topo_smiles = ttk.Entry(moves, width=30)
         self._topo_smiles.insert(0, "C1CCNCC1")  # piperidine: 3 mutants
@@ -30225,6 +30653,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             subtitle="Scaffold-hop crossover: homologous cuts on two parents "
             "breed hybrid children — bridge, ring-merge and linker "
             "transplant geometries compete for each draw.",
+        workflow="Generative optimization", 
         )
         self._breed_a = ttk.Entry(breed, width=30)
         self._breed_a.insert(0, "CC(=O)Oc1ccccc1C(=O)O")  # aspirin
@@ -30291,6 +30720,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             subtitle="The benchmark score book (GuacaMol): QED, synthetic "
             "accessibility, penalized logP, rediscovery similarity and the "
             "property filter — one molecule, every oracle.",
+        workflow="Generative optimization", 
         )
         self._oracle_entry = ttk.Entry(oracle_card, width=30)
         self._oracle_entry.insert(0, "CC(=O)Oc1ccccc1C(=O)O")  # aspirin
@@ -31760,6 +32190,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "descriptives, normality, the right test (Welch or "
             "Mann-Whitney), both confidence intervals and the effect "
             "size — with the branch it took reported, never hidden.",
+        workflow="Inferential statistics", 
         )
         self._found_stat_mode = ttk.Combobox(
             stats_card,
@@ -31796,6 +32227,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "from the course's five distributions with the theoretical "
             "moments drawn against the sample — 'what does n=200 "
             "actually look like?'",
+        workflow="Inferential statistics", 
         )
         self._found_dist_kind = ttk.Combobox(
             dist_card,
@@ -31870,6 +32302,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             subtitle="Groups pasted as 'label: v1, v2, …' lines — Welch "
             "ANOVA plus Tukey HSD and Games-Howell pairwise tables (the "
             "pingouin-style workflow).",
+        workflow="Inferential statistics", 
         )
         self._istat_text = _grid_text(istat_card, height=6, mono=self._mono)
         self._istat_text.insert(
@@ -34473,6 +34906,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "trio: stack several tables into one (named columns "
             "first, the rest sorted), merge every table in a "
             "folder, or stream one big CSV into fixed-size parts.",
+        workflow="Table preparation", 
         )
         self._util_merge_mode = ttk.Combobox(
             merge, state="readonly", width=24, values=_UTIL_MERGE_MODES
@@ -34590,6 +35024,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "reconcile one ligand-name column across two tables "
             "(common / only-A / only-B, name-normalised), or join "
             "SMILES onto name columns from a reference table.",
+        workflow="Table preparation", 
         )
         self._util_cmp_mode = ttk.Combobox(
             compare, state="readonly", width=26, values=_UTIL_COMPARE_MODES
@@ -34892,6 +35327,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "rows onto the full number range so missing runs "
             "appear as gaps instead of silently vanishing; rows "
             "outside the range are dropped with a warning.",
+        workflow="Table preparation", 
         )
         self._util_reindex_pick_btn = self._action_button(
             reindex, "Pick CSV…", self._util_reindex_pick

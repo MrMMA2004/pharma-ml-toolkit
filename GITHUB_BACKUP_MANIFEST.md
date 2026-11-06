@@ -186,6 +186,33 @@ dosing events, apriori association rules) plus ten GUI tests
 (`TestCatalogAbsorptionGui`). Honest count: **4,382 + 773 = 5,155
 tests**; fresh walk pins **882 files / 333,040 lines** at v1.2.114.
 
+## v1.2.117 release-zip homes (2026-11-06, round 202 — every card described, complementary cards grouped)
+
+`pharma-ml-toolkit-v1.2.117.zip` — 19,251,057 bytes, sha-256
+`6b5c93e4b5d2677f994230e522f7123511f614cea01778944d32393557df1785`,
+built with the standing builder (`scratch/build_zip_180.py`: 921 entries /
+883 files / nested zips NONE / real leaks 0), placed in all four homes:
+
+- `download/pharma-ml-toolkit-v1.2.117.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.117.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.117.zip`
+- `upload/pharma-ml-toolkit-v1.2.117.zip`
+
+**Why the rebuild:** the owner's continuation directive — every card a
+short description, complementary cards grouped into processes. All 137
+cards now carry subtitles (nine had shipped bare); a declarative
+`WORKFLOWS` registry (11 pipelines / 57 steps, addressed by tab title +
+card title) chains the complementary cards; the Home tab gained the
+*"Complementary cards — the workflows"* map (numbered step chips that
+jump straight to each step's card, a missing card a TRUE no-op — the
+test caught the first draft teleporting to the tab anyway); every
+participating card wears a `◇ pipeline · step i/n` badge
+(`_WORKFLOW_BADGES`, `_CARD_INDEX` untouched as a 3-tuple); the Ctrl+F
+finder's haystack now matches workflow names. 17 new tests
+(`tests/test_playground_workflows.py`), the DearPyGui registry pin
+gained `home-workflows`. Honest count: **4,459 + 777 = 5,236 tests**;
+fresh walk pins **893 files / 337,231 lines** at v1.2.117.
+
 ## v1.2.116 release-zip homes (2026-11-06, round 201 — Excel everywhere + sample-data-ready tabs)
 
 `pharma-ml-toolkit-v1.2.116.zip` — 19,233,206 bytes, sha-256
