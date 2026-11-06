@@ -7095,3 +7095,89 @@ Stage Summary:
   19,112,553 bytes sha-256 d04238d1… · dev server healthy · cron pair
   508389 (2-hour 100x, run 4 next) + webDevReview 508392 ·
   runs_completed: 3.
+
+---
+
+## Round 201 — Excel everywhere + every tab sample-data ready, v1.2.116 shipped (2026-11-06)
+
+The owner's directive on the catalog continuation: "Make sure all
+playground.py tabs have sample data ready to run. Playground.py should
+have Excel input and output in addition to .csv files." Both landed as
+session-wide guarantees, plus the twelfth rollback recovery (repo layer:
+HEAD rewound to 2eb0ede/round-186, remote + token + counter gone; the
+codified drill restored all — token from upload/Command.txt, ff-pull to
+7708de0, all ten rollback-survivor upload files byte-identical, venv
+repaired in the foreground, webDevReview job recreated as 508967).
+
+**Excel I/O.** Library: `export_table`'s sixth format `xlsx` (openpyxl,
+sheet "table", no index; TABLE_FORMATS pinned by doctest) and
+`read_indexed_table_with_progress`'s Excel arm (`pd.read_excel` with the
+label-missing positional fallback — the expression matrix keeps its
+`cell_line` index from a workbook). Playground: a shared
+`DATA_FILE_TYPES` constant feeds all 14 dataset pickers (every one now
+titled "… (CSV or Excel)"); the four raw `pd.read_csv` sites ported to
+`read_table` (bundle prediction, AD train/test, DTA pairs, the sync
+expression loader — which now shares ONE library reader with its worker
+twin); `_save_frame_dialog` offers "Excel workbook (*.xlsx)" (every
+table card); DTA/UMAP exports ride `write_table` (index preserved);
+the canonical-SMILES export writes workbooks beside CSV.
+
+**Sample-data ready.** The audit: prefilled (NCA series, basket
+transactions, Response AI seeded demos), Load-example buttons already
+shipped (feature factory, cell-line screen/expression, docking
+library/campaign/pocket, Data & ML, Deep Learning, Foundations,
+Generative) — the four missing tabs got them: Unsupervised (QSAR example
+into the shared dataset + column-tree refresh), Best-of ML (real columns
+into the privacy/time-series pickers via the Foundations frame),
+Utilities (two example tables + the split source, Run without a
+dialog), and Home's new "Try it now — sample data" card (five chips:
+load an example AND jump to its tab). 26 new tests pin all of it.
+
+**The latent-v1.2.115 catch.** The full 674-test GUI battery — run
+class-aligned in ten groups after the mixed-class batches proved
+contamination-prone (a mid-class split hung the session-report modal;
+detached runners were reaped twice; direct per-group tool calls were the
+stable form) — surfaced five stale pins whose classes had not been re-run
+since the cards they pin grew: three home jump chips selected the WRONG
+tabs (index math drifted when tabs were inserted; now title-based via
+`_jump_to_tab_by_name`, chip row complete at twelve), the round-121
+finder pin (the arena card's "log-down NCA" subtitle is a legitimate
+second match), the round-122/123/124 session-report empty-state pins
+(false since the 100x-174 attribution census pre-fills at build — the
+guard tests now empty that one tree), and the DearPyGui collapsible
+registry pin (the two arena cards + home-quick-start added). All six
+repairs verified isolated + a fresh 88/88 battery over the five classes.
+
+**Ship ritual.** Four carriers at 1.2.116; all eight notebooks
+re-executed (the ML notebook died under `-W ignore` kernel args —
+`PYTHONWARNINGS=ignore` in the env was the working form, and it also
+kept the sklearn warning paths from leaking `/home/z/` into outputs);
+build_zip_180 → 920 entries / 882 files / 19,233,206 bytes / sha-256
+cc4eabb5… / real leaks 0 / four homes byte-identical; fresh census pins
+**888 files / 336,329 lines**; web pins 5,189 → **5,219 tests** — an
+honest correction: tests/ 4,416 → 4,442 (+26) and doctests 773 → 777
+(the old 773 was itself stale post-arena-merge: 776 at HEAD + 1 new
+doctest; the census arithmetic now says 4,442 + 777 = 5,219).
+Battery evidence: 869/869 playground (195 non-GUI + 674 GUI in ten
+class-aligned groups) + 470 focused (io/viz/csv_standardize/biology/
+chem_tables) + 26 excel/samples + 776 doctests executed (2 skipped).
+
+Stage Summary:
+- Deliverable: v1.2.116 — Excel input on all 14 dataset pickers, Excel
+  output on every table card + the three direct exporters, all 13 tabs
+  sample-data ready (four new Load-example affordances + the Home
+  quick-start), the jump-chip wrong-tab bug fixed, five latent stale
+  pins repaired, 26 new tests, 5,219 total.
+- Lessons pinned: (1) GUI batteries must run class-aligned — mixed
+  splits hang on cross-class modal state; (2) detached runners get
+  reaped in this sandbox (twice today) — direct per-group tool calls are
+  the stable form; (3) `PYTHONWARNINGS=ignore` beats kernel-arg `-W
+  ignore` for nbconvert (ipykernel dies on the latter); (4) census/doctest
+  pins drift silently when merges add content without re-measuring —
+  re-measure at every ship; (5) index-based tab references rot —
+  resolve by title.
+- Baselines for the next round: v1.2.116 · 5,219 tests (4,442 + 777
+  doctests) · 888 files / 336,329 lines · four zip homes at 19,233,206
+  bytes sha-256 cc4eabb5… · dev server to restart + health-check · cron
+  pair 508389 (2-hour 100x, run 4 next) + webDevReview 508967 ·
+  runs_completed: 3.

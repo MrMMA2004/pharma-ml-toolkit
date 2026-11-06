@@ -5883,9 +5883,17 @@ class TestReview121Gui:
         entry = next(child for child in win.winfo_children() if child.winfo_class() == "TEntry")
         assert entry.get() == "nca"
         tree = next(child for child in win.winfo_children() if child.winfo_class() == "Treeview")
-        # the prefill also filtered the list: NCA cards only
+        # the prefill also filtered the list: every card whose title OR
+        # subtitle carries the query.  "nca" hits the NCA card itself
+        # and -- since the round-200 arena merge -- the Advanced PK/PD
+        # card, whose subtitle documents its linear-up/log-down NCA
+        # engine (a latent v1.2.115 staleness the round-201 battery
+        # caught; the old all-NCA pin predated that card).
         labels = [str(tree.item(row, "values")[0]) for row in tree.get_children()]
-        assert labels and all("NCA" in label for label in labels), labels
+        assert labels, labels
+        assert "Non-compartmental analysis (NCA)" in labels
+        assert "Advanced PK/PD & PBPK (RxODE · nlmixr2 · OSP)" in labels
+        assert len(labels) == 2, labels
         win.destroy()
 
     # -- the home guide grew the Deep Learning blurb ------------------- #
@@ -6119,6 +6127,12 @@ class TestReview122Gui:
     ) -> None:
         # (100x-123) the guard covers the report's TWO axes now: no
         # figures AND no filled tables -> the honest info dialog.
+        # (round 201) the Deep Learning tab's attribution card pre-fills
+        # its method-registry table at build, so the empty state needs
+        # that one tree emptied first -- a latent v1.2.115 staleness the
+        # round battery caught (the save dialog popped instead of the
+        # info, hanging headless runs).
+        app._dl_attr_tree.delete(*app._dl_attr_tree.get_children())
         app._menu_save_session_report()
         assert any("Nothing to report yet" in str(a) for a in quiet_dialogs)
 
@@ -6402,6 +6416,12 @@ class TestReview123Gui:
         assert app._card_title_for_widget(app) is None  # the root is no card
 
     def test_live_session_tables_skips_empty_trees(self, app: Any) -> None:
+        # (round 201) the Deep Learning attribution card pre-fills its
+        # method-registry census at build (pinned since 100x-174) -- empty
+        # it so the fresh-app state really is "every tree empty", which
+        # is what this walk must skip (a latent staleness the round
+        # battery caught: the class had not been re-run since 100x-174)
+        app._dl_attr_tree.delete(*app._dl_attr_tree.get_children())
         assert app._live_session_tables() == []
 
     def test_live_session_tables_walks_a_real_job(self, app: Any, quiet_dialogs: list[Any]) -> None:
@@ -6461,6 +6481,11 @@ class TestReview123Gui:
 
         target = pathlib.Path(tmp_path) / "combined.pdf"
         monkeypatch.setattr(playground.filedialog, "asksaveasfilename", lambda **_k: str(target))
+        # (round 201) retire the attribution census table first so the
+        # counts below stay the test's own "1 figure + 1 table" story
+        # (the census rides every report since 100x-174; this class's
+        # pins predate it and had not been re-run)
+        app._dl_attr_tree.delete(*app._dl_attr_tree.get_children())
         figure = self._figure_static("combined")
         app._job_label_base = "combined figure"
         app._render_figure(app._ml_host, figure)
@@ -6693,6 +6718,10 @@ class TestReview124Gui:
         self, app: Any, quiet_dialogs: list[Any]
     ) -> None:
         # neither a figure nor a filled table -> the honest info dialog
+        # (round 201) the attribution card's pre-filled registry table
+        # must be emptied for the honest empty state (same latent
+        # v1.2.115 staleness as the PDF twin above)
+        app._dl_attr_tree.delete(*app._dl_attr_tree.get_children())
         app._session_figures.clear()
         app._menu_save_session_report_html()
         assert any("Nothing to report yet" in str(a) for _n, a in quiet_dialogs)
@@ -15163,6 +15192,9 @@ class TestDearPyGuiRoundTwo:
         expected = {
             "home-dependency-status",
             "home-what-lives-where",
+            # (round 201) the Home sample-data quick start -- every tab
+            # ready to run in one click, collapsible like its siblings
+            "home-quick-start",
             "pk-half-life",
             "pk-iv-bolus",
             "pk-oral",
@@ -15178,6 +15210,12 @@ class TestDearPyGuiRoundTwo:
             "pk-units",
             # (100x-165) the Utilities tab's Git quick reference
             "utilities-git-reference",
+            # (round 200, the arena merge) the two absorbed collapsible
+            # cards -- the Advanced PK/PD & PBPK engines card and the
+            # DOCKSTRING benchmark lab (latent v1.2.115 staleness: the
+            # registry pin predated both and the class was not re-run)
+            "pk-advanced-engines",
+            "dock-dockstring-benchmark",
         }
         assert set(playground._COLLAPSE_CARDS) == expected
         assert playground.collapsed_card_keys() == []  # launch look = expanded

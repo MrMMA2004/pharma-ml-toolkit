@@ -496,6 +496,17 @@ def read_indexed_table_with_progress(
     if not file_path.is_file():
         raise DataValidationError(f"Input file not found: {file_path}")
     suffix = file_path.suffix.lower()
+    if suffix in _EXCEL_LIKE:
+        # (round 201) the Excel arm -- a workbook takes the plain
+        # indexed pair through ``pd.read_excel`` (openpyxl engine),
+        # keeping the label-missing fallback of the CSV twin: a sheet
+        # without the preferred label index falls back to the first
+        # column exactly like the CSV path does.  Workbooks are never
+        # chunk-streamed (they load whole into memory by nature).
+        try:
+            return pd.read_excel(file_path, index_col=index_col)
+        except ValueError:
+            return pd.read_excel(file_path, index_col=fallback_index_col)
     if suffix not in _CSV_LIKE or file_path.stat().st_size < size_threshold:
         # small file (or non-CSV extension): the plain indexed pair,
         # label-missing fallback included -- byte-for-byte the sync twin

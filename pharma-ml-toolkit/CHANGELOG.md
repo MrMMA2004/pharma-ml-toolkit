@@ -1,3 +1,109 @@
+## [1.2.116] — 2026-11-06
+
+### Added — round 201: Excel everywhere + every tab sample-data ready (the owner's two session-wide guarantees)
+
+The owner's continuation directive on the catalog work landed two
+session-wide guarantees on the playground: **every tab is sample-data
+ready** (a first-time user is never more than one click from a running
+calculation) and **Excel (.xlsx) rides beside CSV on every input and
+output** (workbooks open in every dataset picker; every table card
+exports them).
+
+#### Excel I/O — the library arms
+
+* `pharmaml.viz.export_table` grew its **sixth format**: `.xlsx`
+  (openpyxl engine, one sheet named `table`, no index column) —
+  `TABLE_FORMATS` is now `csv / tsv / md / json / html / xlsx`, so the
+  playground's shared save dialog writes a workbook the moment the
+  picked name ends in `.xlsx`.
+* `pharmaml.utils.io.read_indexed_table_with_progress` grew the **Excel
+  arm** (`pd.read_excel` with the label-missing positional fallback the
+  CSV twin has) — the Cell Lines expression loader reads `.xlsx`
+  matrices with the `cell_line` label index preserved.
+
+#### Excel I/O — the playground wiring
+
+* A shared `DATA_FILE_TYPES` constant (data files + Excel workbook +
+  CSV-like + all files) now feeds **all 14 dataset pickers**: the
+  Data & ML / Deep Learning / Foundations openers, the chemistry
+  library scan and SMILES-table pickers, the cell-line screen and
+  expression pickers, the bundle-prediction and applicability-domain
+  train/test pickers, both audit pickers, the DTA pair-table browser,
+  and the big-table split picker — all read through the Excel-aware
+  `read_table` (the four raw `pd.read_csv` call sites were ported:
+  bundle prediction, AD train/test, DTA pairs, the sync expression
+  loader which now shares ONE library reader with its worker twin).
+* Every table card's Save button offers **"Excel workbook (*.xlsx)"**
+  (the shared `_save_frame_dialog`), and the three direct exporters
+  honour the extension too: DTA paired features and the UMAP map via
+  `write_table` (the embedding-label index preserved on both arms), the
+  canonical-SMILES corpus via `to_excel` beside `write_csv`.
+
+#### Sample-data ready — the tab-by-tab audit
+
+* Prefilled by design (verified by new pins): the PK/PD NCA
+  concentration-time series, the Best-of-ML basket transactions, the
+  Response AI seeded demos, the Foundations/Best-of-ML synthetic
+  fallbacks.
+* One-click **Load example** buttons already shipped for the feature
+  factory, cell-line screen/expression, docking library/campaign/pocket,
+  Data & ML, Deep Learning, Foundations and Generative — this round
+  added the four missing tabs: **Unsupervised** (loads the QSAR example
+  into the shared dataset and refreshes the column tree), **Best-of ML**
+  (real columns into the privacy + time-series pickers via the shared
+  Foundations frame), **Utilities** (two example tables into the merge
+  slot + the QSAR example as the split source — Run works without a
+  single dialog) and **Home**: a new *"Try it now — sample data"*
+  quick-start card whose five chips load an example AND jump to its tab.
+
+#### Fixed — the latent v1.2.115 staleness the round battery caught
+
+The round's full 674-test GUI battery (run class-aligned, the way the
+suite demands) surfaced five stale pins that had shipped silently
+because their classes had not been re-run since the cards they pin
+grew:
+
+* **Three home quick-jump chips jumped to the WRONG tabs** — the chips
+  hard-coded `index + 1` positions that drifted when Generative /
+  Foundations swapped build order and Best-of ML / Response AI landed
+  between them and Utilities (Foundations → Generative, Generative →
+  Foundations, Utilities → Best-of ML). Jumping is now **title-based**
+  (`_jump_to_tab_by_name`) and the chip row lists all twelve tabs.
+* The round-121 finder pin (`all("NCA" in label)`) predated the
+  round-200 arena card whose subtitle documents its linear-up/log-down
+  NCA engine — the finder's honest two-card match set is now pinned.
+* The round-122/123/124 session-report pins assumed a fresh app has no
+  filled tables — false since the 100x-174 attribution census table
+  pre-fills at build. The guard tests now empty that one tree first
+  (the empty state is honest again); the walk-skip and both-axes pins
+  were updated the same way.
+* The DearPyGui collapsible-card registry pin missed the two round-200
+  arena cards (`pk-advanced-engines`, `dock-dockstring-benchmark`) —
+  both are now in the expected set (with the round-201
+  `home-quick-start` card).
+
+#### Tests & ship
+
+26 new tests (`tests/test_excel_io_and_samples.py`): the library Excel
+arms (round-trips, label index + fallback, unsupported-extension
+verdict), the dialog wiring (all eleven unguarded pickers offer the
+Excel patterns), the four exporters honour `.xlsx`, and the per-tab
+sample-data story (prefills matched, the four new loaders land real
+bundled tables, the quick-start loads AND jumps, every chip title
+resolves). Fresh pins: **tests/ 4,442 collected + 777 doctests =
+5,219 total** (the v1.2.115 pin of 773 doctests was itself stale — the
+arena merge had added three; the census correction rides this entry).
+Full battery green: 869 playground tests (195 non-GUI + 674 GUI across
+ten class-aligned groups) + 470 focused (io / viz / csv_standardize /
+biology / chem_tables) + 776 executed doctests. All eight notebooks
+re-executed at 1.2.116 (the ML notebook's kernel-arg `-W ignore`
+attempt killed the kernel; `PYTHONWARNINGS=ignore` in the environment
+was the working form — the sklearn warning paths stopped leaking the
+venv location into outputs). build_zip_180 → 920 entries / 882 files /
+19,233,206 bytes / sha-256 `cc4eabb5…` / real leaks 0 / four homes
+byte-identical (repo `download/`, `dist-archive/`, legacy
+`download/`, `upload/`). Fresh census: **888 files / 336,329 lines**.
+
 ## [1.2.115] — 2026-11-06
 
 ### Added — round 200: the arena merge — two parallel catalog absorptions unified into one release

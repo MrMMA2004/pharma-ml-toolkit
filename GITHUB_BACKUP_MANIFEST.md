@@ -186,6 +186,34 @@ dosing events, apriori association rules) plus ten GUI tests
 (`TestCatalogAbsorptionGui`). Honest count: **4,382 + 773 = 5,155
 tests**; fresh walk pins **882 files / 333,040 lines** at v1.2.114.
 
+## v1.2.116 release-zip homes (2026-11-06, round 201 — Excel everywhere + sample-data-ready tabs)
+
+`pharma-ml-toolkit-v1.2.116.zip` — 19,233,206 bytes, sha-256
+`cc4eabb50c72d5cc57fb244c4d20385dc87cdc209919628901fe53f27efaa6d8`,
+built with the standing builder (`scratch/build_zip_180.py`: 920 entries /
+882 files / nested zips NONE / real leaks 0), placed in all four homes:
+
+- `download/pharma-ml-toolkit-v1.2.116.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.116.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.116.zip`
+- `upload/pharma-ml-toolkit-v1.2.116.zip`
+
+**Why the rebuild:** the owner's continuation directive — every
+playground tab sample-data ready, Excel input AND output beside CSV.
+Excel rides all 14 dataset pickers (`DATA_FILE_TYPES`, read through the
+Excel-aware `read_table`) and every table card's save dialog
+(`export_table`'s sixth format `xlsx`, plus the DTA/UMAP/
+canonical-SMILES exporters via `write_table`/`to_excel`). The four
+missing tabs got Load-example buttons (Unsupervised, Best-of ML,
+Utilities, and the Home "Try it now — sample data" quick-start card).
+The round's full 674-test class-aligned GUI battery also caught five
+latent stale pins (three home jump chips selected wrong tabs — now
+title-based; the finder/session-report/registry pins predated the
+100x-174 census table and the round-200 arena cards) — all repaired.
+Honest count: **4,442 + 777 = 5,219 tests** (the 773-doctest pin was
+itself stale post-arena-merge); fresh census pins **888 files /
+336,329 lines** at v1.2.116.
+
 ## v1.2.115 release-zip homes (2026-11-06, round 200 — the arena merge)
 
 `pharma-ml-toolkit-v1.2.115.zip` — 19,112,553 bytes, sha-256

@@ -8,6 +8,22 @@ downloaded archive)::
 A tabbed graphical interface opens with every calculation domain of the
 :mod:`pharmaml` package, no command-line knowledge required:
 
+Two session-wide guarantees (round 201): **every tab is sample-data
+ready** -- each domain either prefills a runnable example (the PK/PD
+concentration-time series, the basket transactions, the seeded demos),
+ships a one-click *Load example* button (the feature factory's
+descriptor library, the cell-line screen and expression matrix, the
+docking library / campaign / pocket, the Data & ML / Deep Learning /
+Foundations / Generative example datasets, the Unsupervised and
+Best-of-ML shared-frame loaders, the Utilities example tables), or
+carries the Home tab's *Try it now -- sample data* quick-start row that
+loads an example AND jumps to its tab; and **Excel rides beside CSV
+everywhere** -- every dataset picker opens ``.xlsx`` / ``.xls`` /
+``.xlsm`` workbooks (``pharmaml.utils.io.read_table``, the openpyxl
+engine, identical column hygiene), and every table card's Save button
+writes ``.xlsx`` workbooks (``export_table``'s sixth format, plus the
+DTA / UMAP / canonical-SMILES exporters).
+
 * **Chemistry**     -- IC50/Ki -> pIC50/pKi conversion, molar mass, the
   full RDKit descriptor table for any SMILES, Tanimoto similarity, the
   RISM-KH solvation card (ten 3D-RISM-KH-inspired descriptors per
@@ -648,6 +664,21 @@ except ImportError:  # pragma: no cover -- a Python built without tkinter
 TOOLKIT_ROOT = Path(__file__).resolve().parent
 SRC_DIR = TOOLKIT_ROOT / "src"
 EXAMPLES_DIR = TOOLKIT_ROOT / "examples" / "data"
+
+#: (round 201) the open-a-table dialog's file types -- Excel joins the
+#: CSV arm everywhere: every dataset picker in the playground offers
+#: ``.xlsx`` / ``.xls`` / ``.xlsm`` workbooks, read through
+#: ``pharmaml.utils.io.read_table`` (the openpyxl engine -- sheet 0 by
+#: default, column hygiene identical to the CSV path).  The save side
+#: mirrors it: ``export_table`` grew an ``xlsx`` arm, so every table
+#: card's Save button writes a workbook when the name ends in
+#: ``.xlsx``.
+DATA_FILE_TYPES = [
+    ("Data files", "*.csv *.tsv *.txt *.xlsx *.xls *.xlsm"),
+    ("Excel workbook", "*.xlsx *.xls *.xlsm"),
+    ("CSV-like table", "*.csv *.tsv *.txt"),
+    ("All files", "*.*"),
+]
 
 
 def toolkit_version() -> str:
@@ -5460,6 +5491,72 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         except tk.TclError:  # pragma: no cover - no tab selected yet
             pass
 
+    def _jump_to_tab_by_name(self, title: str) -> None:
+        """(round 201) Select a tab by its TITLE, not its index.
+
+        The home quick-jump chips hard-coded ``index + 1`` positions,
+        and the numbers drifted when Generative / Foundations swapped
+        build order and Best-of ML / Response AI landed between them
+        and Utilities -- three chips silently jumped to the WRONG tabs
+        (Foundations -> Generative, Generative -> Foundations,
+        Utilities -> Best-of ML).  A title lookup cannot drift: it
+        scans the notebook's own tab labels (stripping the cosmetic
+        ``f"  {title}  "`` padding) and selects the match.
+        """
+        wanted = title.strip().lower()
+        try:
+            for tab_id in self._book.tabs():
+                if str(self._book.tab(tab_id, "text")).strip().lower() == wanted:
+                    self._book.select(tab_id)
+                    return
+        except tk.TclError:  # pragma: no cover - no notebook yet
+            pass
+
+    def _quick_start(self, kind: str) -> None:
+        """(round 201) The home quick-start: load a SHIPPED example,
+        jump to its tab, and say what to press next.
+
+        Every domain of the playground runs on bundled sample data
+        (the owner's "ready to run" ask) -- this is the one-click
+        route from a cold start to a running calculation, using the
+        synchronous example loaders (shipped files, tiny, no worker
+        round-trip needed).
+        """
+        if kind == "qsar":
+            self._ml_load_path(EXAMPLES_DIR / "qsar_regression.csv")
+            self._jump_to_tab_by_name("Data & ML")
+            self.notify(
+                "qsar_regression.csv loaded -- pick pIC50 as the target and Train",
+                level="success",
+            )
+        elif kind == "descriptors":
+            self._feat_load_example()
+            self._jump_to_tab_by_name("Chemistry")
+        elif kind == "cellline":
+            self._bio_load_example()
+            self._jump_to_tab_by_name("Cell Lines")
+        elif kind == "docking":
+            self._dock_load_example()
+            self._jump_to_tab_by_name("Docking")
+        elif kind == "stats":
+            path = EXAMPLES_DIR / "qsar_regression.csv"
+            if not path.is_file():
+                messagebox.showwarning("Missing example", f"{path.name} was not found.")
+                return
+            try:
+                from pharmaml.utils.io import read_table
+
+                self._found_load_frame(read_table(path), path.name)
+                self._found_path = path
+            except Exception as exc:  # noqa: BLE001
+                self._show_error("Could not load the example", exc)
+                return
+            self._jump_to_tab_by_name("Foundations")
+            self.notify(
+                "qsar_regression.csv loaded -- the inferential suite is ready",
+                level="success",
+            )
+
     # -- the Ctrl+F card finder (100x-120) ----------------------------- #
     def _card_tab_index(self, shell: Any, pages: list[Any]) -> int | None:
         """Resolve which tab page a card shell descends from."""
@@ -8625,25 +8722,28 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ttk.Label(jump_row, text="jump to:", style="CardMuted.TLabel").pack(
             side="left", padx=(0, 8)
         )
-        for index, name in enumerate(
-            (
-                "Chemistry",
-                "PK / PD",
-                "Cell Lines",
-                "Docking",
-                "Data & ML",
-                "Unsupervised",
-                "Deep Learning",
-                "Foundations",
-                "Generative",
-                "Utilities",
-            )
+        for name in (
+            "Chemistry",
+            "PK / PD",
+            "Cell Lines",
+            "Docking",
+            "Data & ML",
+            "Unsupervised",
+            "Deep Learning",
+            "Generative",
+            "Foundations",
+            "Best-of ML",
+            "Response AI",
+            "Utilities",
         ):
+            # (round 201) title-based lookup: the old index math
+            # drifted when tabs were inserted (three chips jumped to
+            # the wrong tabs); a name match cannot drift.
             chip = ttk.Button(
                 jump_row,
                 text=name,
                 style="Chip.TButton",
-                command=lambda idx=index + 1: self._jump_to_tab(idx),
+                command=lambda title=name: self._jump_to_tab_by_name(title),
             )
             chip.pack(side="left", padx=(0, 6))
             Tooltip(chip, f"Switch straight to the {name} tab.")
@@ -8721,6 +8821,42 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             collapsible=True,
             key="home-what-lives-where",
         )
+        # (round 201) the sample-data quick start -- the owner's
+        # "every tab ready to run" ask, one click from a cold start:
+        # each button loads a SHIPPED example into its domain and
+        # jumps to the tab (the round-201 Excel absorption rides the
+        # same card: every dataset picker opens .xlsx workbooks beside
+        # CSV, every table card saves them).
+        quick = make_card(
+            page.grid,
+            "Try it now — sample data",
+            collapsible=True,
+            key="home-quick-start",
+            span=2,
+            row=3,
+            column=0,
+            subtitle="Every domain ships a runnable example: one click loads "
+            "it and jumps to the tab. Excel (.xlsx) workbooks open in "
+            "every dataset picker; every table card exports them.",
+        )
+        quick_row = ttk.Frame(quick, style="Card.TFrame")
+        grid_append(quick, quick_row, sticky="w")
+        quick_specs = (
+            ("QSAR dataset", "qsar", "qsar_regression.csv — pick pIC50 and Train"),
+            ("Descriptor library", "descriptors", "library_with_descriptors.csv — the feature factory"),
+            ("Cell-line screen", "cellline", "cellline_screen.csv — audit + sensitivity matrix"),
+            ("Docking library", "docking", "ligand_library.csv — prepare + grid configs"),
+            ("Statistics table", "stats", "qsar_regression.csv — the inferential suite"),
+        )
+        for label, kind, blurb in quick_specs:
+            button = ttk.Button(
+                quick_row,
+                text=label,
+                style="Chip.TButton",
+                command=lambda k=kind: self._quick_start(k),
+            )
+            button.pack(side="left", padx=(0, 6))
+            Tooltip(button, f"Load {blurb} and jump to the tab.")
         entries = [
             (
                 "Chemistry",
@@ -10566,18 +10702,30 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         target = filedialog.asksaveasfilename(
             defaultextension=".csv",
-            initialfile="canonical_smiles.csv",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            initialfile="canonical_smiles",
+            filetypes=[
+                ("CSV table", "*.csv"),
+                ("Excel workbook", "*.xlsx"),
+                ("All files", "*.*"),
+            ],
             title="Export the canonical SMILES corpus",
         )
         if not target:
             return
         try:
-            path = self._csvstd_report.write_csv(target)
+            # (round 201) the xlsx arm: the standardised corpus lands in
+            # a workbook (one sheet, no index) beside the classic CSV
+            if str(target).lower().endswith((".xlsx", ".xls", ".xlsm")):
+                self._csvstd_report.to_frame().to_excel(
+                    target, index=False, sheet_name="canonical_smiles", engine="openpyxl"
+                )
+                self._job_label.configure(text=f"canonical SMILES exported · {target}")
+            else:
+                path = self._csvstd_report.write_csv(target)
+                self._job_label.configure(text=f"canonical SMILES exported · {path}")
         except Exception as exc:  # noqa: BLE001
             self._show_error("Export failed", exc)
             return
-        self._job_label.configure(text=f"canonical SMILES exported · {path}")
 
     def _csvstd_inchi_check(self) -> None:
         """The OpenBabel-slot cross-toolkit check over the last report."""
@@ -10922,8 +11070,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not self._require_pharmaml() or not self._require("pandas", "library loading"):
             return
         path = filedialog.askopenfilename(
-            title="Open the library CSV",
-            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+            title="Open the library table (CSV or Excel)",
+            filetypes=DATA_FILE_TYPES,
         )
         if not path:
             return
@@ -11722,8 +11870,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
             return
         path = filedialog.askopenfilename(
-            title="Open a SMILES CSV",
-            filetypes=[("SMILES table", "*.csv *.tsv"), ("All files", "*.*")],
+            title="Open a SMILES table (CSV or Excel)",
+            filetypes=DATA_FILE_TYPES,
         )
         if path:
             # (100x-143) the dialog flow is job-based -- a big CSV never
@@ -14604,8 +14752,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not self._require_pharmaml() or not self._require("pandas", "screen loading"):
             return
         path = filedialog.askopenfilename(
-            title="Open a response screen",
-            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+            title="Open a response screen (CSV or Excel)",
+            filetypes=DATA_FILE_TYPES,
         )
         if path:
             # (100x-143) the dialog flow is job-based -- a big screen
@@ -14922,8 +15070,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not self._require_pharmaml() or not self._require("pandas", "expression loading"):
             return
         path = filedialog.askopenfilename(
-            title="Open an expression table",
-            filetypes=[("CSV table", "*.csv"), ("All files", "*.*")],
+            title="Open an expression table (CSV or Excel)",
+            filetypes=DATA_FILE_TYPES,
         )
         if path:
             # (100x-143) the dialog flow is job-based -- a wide
@@ -14942,16 +15090,22 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._bio_load_expr_path(path)
 
     def _bio_load_expr_path(self, path: Path) -> None:
-        """Synchronous read + adopt (examples, tests, relays)."""
-        try:
-            import pandas as pd
+        """Synchronous read + adopt (examples, tests, relays).
 
-            try:
-                frame = pd.read_csv(path, index_col="cell_line")
-            except ValueError:
-                # user tables name their identifier column differently --
-                # fall back to the first column as the cell-line index
-                frame = pd.read_csv(path, index_col=0)
+        (round 201) Both expression loaders now share ONE library
+        reader -- ``read_indexed_table_with_progress`` grew the Excel
+        arm (``pd.read_excel`` with the label-missing positional
+        fallback), so a picked ``.xlsx`` matrix reads identically here
+        and on the worker pool; the no-op reporter keeps the
+        synchronous promise (the tiny shipped examples never fire
+        progress anyway).
+        """
+        try:
+            from pharmaml.utils.io import read_indexed_table_with_progress
+
+            frame = read_indexed_table_with_progress(
+                path, lambda *_args: None, index_col="cell_line"
+            )
         except Exception as exc:  # noqa: BLE001
             self._show_error("Could not read the expression table", exc)
             return
@@ -20439,7 +20593,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         path = filedialog.askopenfilename(
             title="Open a dataset",
-            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+            filetypes=DATA_FILE_TYPES,
         )
         if path:
             # (100x-143) the dialog flow is job-based -- a big CSV never
@@ -21343,8 +21497,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showwarning("No bundle", "Open a model bundle first (the button above).")
             return
         path = filedialog.askopenfilename(
-            title="Open the data to predict on",
-            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+            title="Open the data to predict on (CSV or Excel)",
+            filetypes=DATA_FILE_TYPES,
         )
         if not path:
             return
@@ -21352,11 +21506,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         task = str(metadata.get("task", "regression"))
 
         def work() -> Any:
-            import pandas as pd
-
             from pharmaml.ml.persistence import validate_bundle_input
+            from pharmaml.utils.io import read_table
 
-            frame = pd.read_csv(path)
+            # (round 201) read_table -- the Excel-aware arm of the plain
+            # ``pd.read_csv``: a picked .xlsx/.xls workbook reads through
+            # the openpyxl engine with the same column hygiene
+            frame = read_table(path)
             # the training target rides along when the scored CSV is the
             # training table itself -- the bundle records its name, and
             # the audit drops it automatically (the ml check convention)
@@ -21604,8 +21760,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _ml_ad_pick_train_csv(self) -> None:
         """Pick the bundle mode's training CSV."""
         path = filedialog.askopenfilename(
-            title="Open the training CSV",
-            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+            title="Open the training table (CSV or Excel)",
+            filetypes=DATA_FILE_TYPES,
         )
         if not path:
             return
@@ -21615,8 +21771,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
     def _ml_ad_pick_test_csv(self) -> None:
         """Pick the bundle mode's query CSV."""
         path = filedialog.askopenfilename(
-            title="Open the test CSV",
-            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+            title="Open the test table (CSV or Excel)",
+            filetypes=DATA_FILE_TYPES,
         )
         if not path:
             return
@@ -21633,18 +21789,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         metadata for the reliability table, not a feature (the upload's
         own CSVs carry SMILES in the first column).
         """
-        import pandas as pd
 
         from pharmaml.ml.persistence import validate_bundle_input
+        from pharmaml.utils.io import read_table
 
         model, metadata, bundle_path = self._ml_bundle
         if self._ml_ad_train_path is None or self._ml_ad_test_path is None:
             raise ValueError(
-                "pick both the training and the test CSV first (the "
+                "pick both the training and the test table first (the "
                 "bundle mode needs the original tables)."
             )
-        train_frame = pd.read_csv(self._ml_ad_train_path)
-        test_frame = pd.read_csv(self._ml_ad_test_path)
+        # (round 201) read_table: the bundle mode accepts Excel workbooks
+        # exactly like CSVs (the openpyxl engine, identical hygiene)
+        train_frame = read_table(self._ml_ad_train_path)
+        test_frame = read_table(self._ml_ad_test_path)
         target = metadata.get("target")
         if target is None or target not in train_frame.columns:
             raise ValueError(
@@ -21993,7 +22151,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         chosen = filedialog.askopenfilename(
             title="Choose the dataset to audit",
-            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+            filetypes=DATA_FILE_TYPES,
         )
         if not chosen:
             return
@@ -24284,8 +24442,22 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             "automatically whenever a new dataset lands there).",
         )
         refresh_btn.grid(row=0, column=0, sticky="w")
+        # (round 201) the sample-data arm: the tab's own one-click route
+        # to a runnable state -- loads the bundled QSAR example into the
+        # SHARED dataset (exactly what the Data & ML tab's Load example
+        # does) and refreshes the column tree, so PCA / k-means / the
+        # manifolds run without visiting another tab first.
+        example_btn = self._action_button(
+            data,
+            "Load example",
+            self._unsup_load_example,
+            tooltip="qsar_regression.csv -- 260 compounds x 20 numeric descriptor "
+            "columns; loads into the shared dataset and refreshes.",
+        )
+        example_btn.grid(row=0, column=0, sticky="w", padx=(0, 10))
+        refresh_btn.grid(row=0, column=1, sticky="w")
         self._unsup_info = ttk.Label(data, text="no dataset loaded", style="CardMuted.TLabel")
-        self._unsup_info.grid(row=0, column=1, sticky="w", padx=(12, 0))
+        self._unsup_info.grid(row=0, column=2, sticky="w", padx=(12, 0))
         columns_row = ttk.Frame(data, style="Card.TFrame")
         columns_row.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         self._unsup_columns = ttk.Treeview(
@@ -24507,6 +24679,26 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _unsup_clear_selection(self) -> None:
         self._unsup_columns.selection_remove(self._unsup_columns.get_children())
+
+    def _unsup_load_example(self) -> None:
+        """(round 201) Load the bundled QSAR example as the shared dataset.
+
+        The Unsupervised tab analyses the Data & ML tab's table; this
+        button is the tab's own one-click route to a runnable state
+        (the sibling of every other tab's Load example) -- the shipped
+        ``qsar_regression.csv`` (260 compounds, 20 numeric descriptor
+        columns) lands through the SAME synchronous adoption the Data
+        & ML example button uses, then the column tree refreshes so
+        PCA / k-means / GMM / the manifolds are one Run away.
+        """
+        if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
+            return
+        path = EXAMPLES_DIR / "qsar_regression.csv"
+        if not path.is_file():
+            messagebox.showwarning("Missing example", f"{path.name} was not found.")
+            return
+        self._ml_load_path(path)
+        self._unsup_refresh_dataset()
 
     def _unsup_refresh_dataset(self) -> None:
         """Re-read the Data & ML tab's table into the column tree.
@@ -26364,8 +26556,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _dl_dta_browse(self) -> None:
         path = filedialog.askopenfilename(
-            title="Open paired drug–target affinity CSV",
-            filetypes=[("CSV tables", "*.csv *.tsv"), ("All files", "*.*")],
+            title="Open paired drug–target affinity data (CSV or Excel)",
+            filetypes=DATA_FILE_TYPES,
         )
         if path:
             self._dl_dta_path.delete(0, "end")
@@ -26388,7 +26580,6 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         def work():
             import numpy as np
-            import pandas as pd
             from sklearn.linear_model import Ridge
             from sklearn.model_selection import train_test_split
 
@@ -26397,7 +26588,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from pharmaml.ml.dta import deepdta_rm2, demo_dta_frame, paired_dta_features
 
             if source == "CSV path":
-                pairs = pd.read_csv(path, sep=None, engine="python")
+                # (round 201) read_table -- delimiter sniffing for the
+                # pasted-path CSVs AND the Excel arm for picked .xlsx
+                # pair tables (the openpyxl engine, sheet 0)
+                from pharmaml.utils.io import read_table
+
+                pairs = read_table(path)
             else:
                 pairs = demo_dta_frame()
             features = paired_dta_features(
@@ -26466,12 +26662,23 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             title="Export paired DTA features",
             defaultextension=".csv",
             initialfile="paired_dta_features.csv",
-            filetypes=[("CSV", "*.csv")],
+            filetypes=[
+                ("CSV table", "*.csv"),
+                ("Excel workbook", "*.xlsx"),
+                ("All files", "*.*"),
+            ],
         )
         if not path:
             return
-        self._dl_dta_last["features"].training_frame().to_csv(path, index=False)
-        self.notify(f"saved paired DTA features: {path}", level="success")
+        try:
+            # (round 201) write_table honours the picked extension -- the
+            # .xlsx arm lands the same frame in a workbook (openpyxl)
+            from pharmaml.utils.io import write_table
+
+            written = write_table(self._dl_dta_last["features"].training_frame(), path)
+            self.notify(f"saved paired DTA features: {written}", level="success")
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not save the DTA features", exc)
 
     # ------------------------------------------------------------- #
     # Round 186: the four absorbed cards' handlers
@@ -26770,22 +26977,33 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
 
     def _dl_umap_save(self) -> None:
-        """Save the embedding coordinates as CSV."""
+        """Save the embedding coordinates as CSV or Excel."""
         if self._dl_umap_record is None:
             messagebox.showwarning("No map yet", "Hit Embed first.")
             return
         path = filedialog.asksaveasfilename(
             title="Save the UMAP map",
             defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            filetypes=[
+                ("CSV table", "*.csv"),
+                ("Excel workbook", "*.xlsx"),
+                ("All files", "*.*"),
+            ],
         )
         if not path:
             return
-        frame = self._dl_umap_record.as_frame()
-        frame.to_csv(path, index=True)
-        self._dl_umap_summary.configure(
-            text=f"saved {len(frame)} rows to {Path(path).name}"
-        )
+        try:
+            # (round 201) write_table keeps the index (the embedding
+            # labels) on BOTH arms -- csv and the new .xlsx workbook
+            from pharmaml.utils.io import write_table
+
+            frame = self._dl_umap_record.as_frame()
+            written = write_table(frame, path, index=True)
+            self._dl_umap_summary.configure(
+                text=f"saved {len(frame)} rows to {Path(written).name}"
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not save the UMAP map", exc)
 
     def _dl_curation_set_frame(self) -> bool:
         """(Re)build the curation view + refresh its combos.
@@ -27094,7 +27312,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         path = filedialog.askopenfilename(
             title="Open a dataset",
-            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+            filetypes=DATA_FILE_TYPES,
         )
         if path:
             # (100x-143) the dialog flow is job-based -- a big CSV never
@@ -27927,7 +28145,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         chosen = filedialog.askopenfilename(
             title="Choose the dataset to audit",
-            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+            filetypes=DATA_FILE_TYPES,
         )
         if not chosen:
             return
@@ -31743,7 +31961,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         path = filedialog.askopenfilename(
             title="Open a dataset",
-            filetypes=[("Data files", "*.csv *.tsv *.txt"), ("All files", "*.*")],
+            filetypes=DATA_FILE_TYPES,
         )
         if not path:
             return
@@ -32623,10 +32841,25 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         form_row(privacy, "bins", self._bestof_bins)
         self._bestof_column = ttk.Combobox(privacy, state="readonly", width=24)
         form_row(privacy, "column", self._bestof_column)
+        privacy_buttons = ttk.Frame(privacy, style="Card.TFrame")
+        grid_append(privacy, privacy_buttons, pady=(4, 0), sticky="w")
         privacy_btn = self._action_button(
-            privacy, "Privatise the column", self._bestof_run_dp, primary=True
+            privacy_buttons, "Privatise the column", self._bestof_run_dp, primary=True
         )
-        grid_append(privacy, privacy_btn, pady=(4, 0))
+        privacy_btn.pack(side="left")
+        # (round 201) the sample-data arm: the card runs on the seeded
+        # synthetic fallback, but real columns come from the shared
+        # Foundations frame -- one click loads the bundled QSAR example
+        # in-tab (fills this picker AND the time-series card's).
+        bestof_example_btn = self._action_button(
+            privacy_buttons,
+            "Load example dataset",
+            self._bestof_load_example,
+            tooltip="qsar_regression.csv -- 260 compounds x 20 numeric columns into "
+            "the shared Foundations frame; fills the column pickers here "
+            "and in the time-series card.",
+        )
+        bestof_example_btn.pack(side="left", padx=(10, 0))
         privacy_table = ttk.Frame(privacy, style="Card.TFrame")
         grid_append(privacy, privacy_table, sticky="nsew", pady=(6, 0), weight=True)
         self._bestof_dp_tree = ttk.Treeview(privacy_table, show="headings", height=7)
@@ -32857,6 +33090,40 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         grid_append(assoc_card, self._assoc_detail, sticky="ew")
 
     # -- Best-of ML: card handlers ---------------------------------------- #
+
+    def _bestof_load_example(self) -> None:
+        """(round 201) Load the bundled QSAR example into the shared frame.
+
+        The Best-of ML cards read the Foundations tab's frame (with a
+        seeded synthetic fallback); this button is the tab's own
+        one-click route to REAL sample data -- the shipped
+        ``qsar_regression.csv`` lands through the same adoption the
+        Foundations example button uses, then both column pickers
+        (privacy, time-series) refresh from its numeric columns.
+        """
+        if not self._require_pharmaml() or not self._require("pandas", "CSV loading"):
+            return
+        path = EXAMPLES_DIR / "qsar_regression.csv"
+        if not path.is_file():
+            messagebox.showwarning("Missing example", f"{path.name} was not found.")
+            return
+        try:
+            from pharmaml.utils.io import read_table
+
+            frame = read_table(path)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not load the example", exc)
+            return
+        if frame.empty:
+            messagebox.showwarning("Empty example", f"{path.name} has no rows.")
+            return
+        self._found_load_frame(frame, path.name)
+        self._found_path = path
+        self._bestof_refresh_columns()
+        self.notify(
+            "qsar_regression.csv loaded -- the column pickers carry real columns",
+            level="success",
+        )
 
     def _bestof_refresh_columns(self) -> None:
         """Refresh the column pickers from the Foundations frame."""
@@ -34227,6 +34494,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         ):
             button = self._action_button(merge_pick, label, command)
             button.pack(side="left")
+        # (round 201) the sample-data arm: two shipped example tables in
+        # the picked-files slot AND the QSAR example as the split source
+        # -- one click and either mode runs without a single dialog.
+        merge_example_btn = self._action_button(
+            merge_pick,
+            "Load example tables",
+            self._util_merge_load_example,
+            tooltip="screening_library.csv + walkthrough_compounds.csv as the "
+            "picked tables (merge mode) and qsar_regression.csv as the "
+            "split source -- every mode runnable immediately.",
+        )
+        merge_example_btn.pack(side="left", padx=(10, 0))
         self._util_merge_info = ttk.Label(
             merge,
             text="no tables, folder or file picked yet",
@@ -34853,13 +35132,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         return shown
 
     def _save_frame_dialog(self, frame: Any, title: str, name: str, subject: str = "table") -> None:
-        """Ask a path and write ``frame`` (``export_table``, five formats).
+        """Ask a path and write ``frame`` (``export_table``, six formats).
 
         The library's visual export story owns the dialog (100x-121):
-        ``.csv``, ``.tsv``, GitHub-ready ``.md``, records ``.json`` and a
-        standalone styled ``.html`` -- ``export_table`` picks the writer
+        ``.csv``, ``.tsv``, GitHub-ready ``.md``, records ``.json``, a
+        standalone styled ``.html`` -- and (round 201) the Excel
+        workbook ``.xlsx`` arm, so every table card can hand its result
+        straight to a spreadsheet -- ``export_table`` picks the writer
         from the picked extension, so every table card can hand its
-        results to a report, a notebook or a browser.
+        results to a report, a notebook, a browser or Excel.
         """
         if frame is None:
             messagebox.showinfo("Nothing to save", "Run the tool first.")
@@ -34870,6 +35151,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             initialfile=name,
             filetypes=[
                 ("CSV table", "*.csv"),
+                ("Excel workbook", "*.xlsx"),
                 ("TSV table", "*.tsv"),
                 ("Markdown table", "*.md"),
                 ("JSON records", "*.json"),
@@ -34904,6 +35186,36 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             picked = f"big CSV: {self._util_merge_split_file}"
         self._util_merge_info.configure(text=picked)
 
+    def _util_merge_load_example(self) -> None:
+        """(round 201) Load shipped example tables -- every mode runnable.
+
+        The merge arm gets two REAL bundled tables (the screening
+        library and the walkthrough compounds -- different schemas on
+        purpose, so the merge's column-union story is part of the
+        demo), the split arm gets the QSAR example as its big source;
+        the mode resets to "merge picked files" and the info line
+        refreshes, so Run works without a single file dialog.
+        """
+        picked = [
+            EXAMPLES_DIR / "screening_library.csv",
+            EXAMPLES_DIR / "walkthrough_compounds.csv",
+        ]
+        split_source = EXAMPLES_DIR / "qsar_regression.csv"
+        missing = [path.name for path in (*picked, split_source) if not path.is_file()]
+        if missing:
+            messagebox.showwarning(
+                "Missing examples", ", ".join(missing) + " were not found."
+            )
+            return
+        self._util_merge_files = list(picked)
+        self._util_merge_split_file = split_source
+        self._util_merge_mode.set(_UTIL_MERGE_MODES[0])
+        self._util_merge_mode_changed()
+        self.notify(
+            "2 example tables picked + the QSAR split source -- hit Run",
+            level="success",
+        )
+
     def _util_merge_pick_files(self) -> None:
         paths = filedialog.askopenfilenames(
             title="Pick the tables to merge",
@@ -34922,8 +35234,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _util_merge_pick_split_file(self) -> None:
         path = filedialog.askopenfilename(
-            title="Pick the big CSV to split",
-            filetypes=[("CSV file", "*.csv"), ("All files", "*.*")],
+            title="Pick the big table to split (CSV or Excel)",
+            filetypes=DATA_FILE_TYPES,
         )
         if path:
             self._util_merge_split_file = Path(path)
