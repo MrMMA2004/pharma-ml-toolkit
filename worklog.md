@@ -6858,3 +6858,58 @@ Stage Summary:
   (4,372 + 773 doctests) · 881 files / 331,648 lines · three homes +
   repo download/ · 19,066,185 bytes sha-256 b1271926… · dev server
   healthy · cron pair 507038 (2-hour 100x) + webDevReview 507040).
+
+## Round 197 — the owner's catalog, the standing review mandate, and the eleventh local rollback (2026-11-06)
+
+The owner uploaded `upload/GitHub_Research_Repository_Catalog.pdf` (525,999 bytes) — a
+Persian-language curated catalog of 140 unique GitHub repositories for computational
+pharmacy and drug-discovery research (108 surfaced in the original conversation + 32
+supplementary), organized in 11 categories: repo-discovery lists; classic data
+science/ML; cheminformatics/descriptors/fingerprints; QSAR/ADMET; molecular
+generation; docking/protein structure; PK/PD/PBPK; visualization/reporting; DL
+training/optimization; DL interpretation/XAI; GUI frameworks — plus a research-use
+guide (canonical vs standardized SMILES discipline, scaffold splits over random
+splits, attribution ≠ causation, low-RAM starting stacks per pathway). It is now
+committed to upload/ so it rides the repo and survives rollbacks, and the 2-hour
+run-book names it as the audit reference for module-coverage work.
+
+The same interaction carried the owner's standing mandate for the 2-hour task:
+"review the current codebase and implementation, troubleshoot potential issues, and
+continue improving the engineering details." The gateway exposes no in-place job
+edit, so the refresh was delete + recreate: 507038 → 508389, same name
+(MASTER_PROMPT-2h-sync-100x), same fixed_rate 7200s / Asia/Tehran / priority 10,
+full five-step run-book preserved verbatim with three deltas — the standing mandate
+woven into STEP 2 (with the catalog as named reference), the venv-repair line
+corrected to foreground (round 196's lesson: background pip dies in this sandbox),
+and the rollback ordinal updated to the tenth. The counter's self-delete still
+binds — it deletes by job name, not ID, so the new job ID is transparent to STEP 0.
+
+The scheduler check found the webDevReview 15-minute job missing (507040 lost in the
+rollback window) — recreated as 508392 (cron `0 0/15 * * * ?`, Asia/Tehran, standard
+description). The cron pair is intact again.
+
+And the rollback itself: this session's local tree had snapped back to 2eb0ede
+(round 186 — the ninth and tenth rollbacks' signature) while the remote survived at
+7be2f0a/round-196 (run 2/100 complete, counter at 2, venv_repair.sh already rewritten
+resolver-proof by the parallel session). The codified drill ran mechanically one more
+time: token re-extracted from upload/Command.txt, helper + remote re-wired, eleven
+untracked conflicts set aside to /tmp, ff-pull restored rounds 194–196. Every
+set-aside file came back byte-identical for the fourth consecutive rollback; the
+only genuinely-new bytes were the catalog PDF itself and the two gitignored
+token-bearing files (Command.txt/Command.docx — restored to the tree, never
+committed; .gitignore lines 59–61 already guard them against accidental sweeps).
+Counter unchanged at 2 — this was an owner interaction, not a numbered run; the
+next firing is run 3/100.
+
+Stage Summary:
+- Deliverable: the owner's research-repository catalog absorbed into the repo, the
+  2-hour run-book upgraded with the standing codebase-review/engineering-details
+  mandate (job 508389), the webDevReview 15-min leg recreated (508392), and the
+  eleventh local rollback recovered in minutes by the codified drill.
+- Lesson pinned: gateway jobs are edited by delete + recreate (the name-based
+  self-delete survives the ID change); and the remote-is-the-survivor lesson holds —
+  eleventh rollback, every set-aside file byte-identical again.
+- Baselines for the next round: unchanged (v1.2.113 · 5,145 tests (4,372 + 773
+  doctests) · 881 files / 331,648 lines · three homes + repo download/ ·
+  19,066,185 bytes sha-256 b1271926… · dev server healthy · cron pair 508389
+  (2-hour 100x, run 3 next) + webDevReview 508392).
