@@ -6913,3 +6913,40 @@ Stage Summary:
   doctests) · 881 files / 331,648 lines · three homes + repo download/ ·
   19,066,185 bytes sha-256 b1271926… · dev server healthy · cron pair 508389
   (2-hour 100x, run 3 next) + webDevReview 508392).
+
+## Round 198 — run 3/100: a venv-only loss, a peer-race audit, and the standing mandate's first verification cycle (2026-11-06)
+
+The first firing of the recreated job 508389 (the standing-mandate payload) ran under a
+live race: round 197's session was still committing in this window, and its `git add`
+swept this run's freshly-written counter increment (runs_completed: 3) into `071cb4a` —
+a UUID-only commit message that violates the conventional-message rule. Content correct,
+message not; history stays unrewritten against a pushed shared branch with active peers.
+Lesson pinned for every session sharing this workspace: stage named paths, never
+`git add -A`.
+
+The four-part inventory caught a venv-layer-only loss. Repo/HEAD never moved backward —
+the round-197 commits were visible on origin, so no twelfth rollback — credentials and
+the scheduler pair (508389 + 508392, both confirmed live via the gateway listing) were
+intact, but the sandbox recycle had swapped /home/z/.venv for a default environment
+(numpy 2.1.3, matplotlib 3.9.2; rdkit/torch/pharmaml/shap missing entirely).
+scratch/venv_repair.sh ran foreground and restored pinned parity inside one tool window:
+VENV-REPAIR-DONE numpy 1.26.4 / torch 2.14.1+cpu / matplotlib 3.10.9 / pharmaml 1.2.113
+editable, 17-module import verify. This is the repair script's second consecutive clean
+rescue since the round-196 rewrite.
+
+Fresh verification after the rebuild: 187/187 (csv_standardize + notebook_variants +
+xai_registry — the rounds-195/196 fresh set), single process, zero failures. Health E2E:
+GET / 200; /api/toolkit/zip-size → {"zipBytes":19066185,"version":"1.2.113","exact":true,
+"source":"release"}; token guards (.gitignore lines 59–61) and both version carriers
+(VERSION, pyproject) verified at 1.2.113; tree clean after fetch/ff-pull.
+
+No src/tests/docs deltas this run (verification + audit only) → no bump, no zip rebuild:
+v1.2.113 (19,066,185 bytes, sha-256 b1271926…) remains the shipped truth in all three
+homes.
+
+Stage Summary:
+- Deliverable: run 3/100 completed on the upgraded payload; venv-only loss repaired in
+  one window; peer-race lesson pinned (named paths over `git add -A`).
+- Baselines for the next round: unchanged (v1.2.113 · 5,145 tests (4,372 + 773 doctests)
+  · 881 files / 331,648 lines · 19,066,185 bytes sha-256 b1271926… · dev server healthy ·
+  cron pair 508389 (2-hour 100x) + webDevReview 508392 · runs_completed: 3).
