@@ -45,7 +45,11 @@ chain).
   20-family, ~27,700-column descriptor + fingerprint matrix (the
   ten fak_ml.ipynb datamol families and the shape_3d 3D block
   included, the RISM-KH family closing), ranked and cut to a top-K
-  selection --
+  selection -- and (round 204) the feature-recalculation card, which
+  replays the factory's SAVED selection metadata on new molecules
+  (``recalculate_selected_features``: the frozen top-K recomputed
+  exactly, only the families the recorded columns need, a stale
+  metadata file failing loudly instead of silently drifting) --
   plus (100x-119) the canonical-tautomer & 3D-structure card
   (canonicalize_tautomer + a multi-conformer 3D PDB writer with its
   ETKDG/UFF report), the 167-key MACCS fingerprint card, and the
@@ -4537,6 +4541,11 @@ WORKFLOWS: list[dict[str, Any]] = [
             ("Chemistry", "Feature factory", "10,000+ descriptor/fingerprint columns, ranked to a top-K."),
             (
                 "Chemistry",
+                "Feature recalculation (from metadata)",
+                "Replay the saved selection on NEW molecules -- the frozen feature set.",
+            ),
+            (
+                "Chemistry",
                 "Library similarity scan",
                 "Tanimoto matrix / threshold / top-k over a whole library.",
             ),
@@ -5197,6 +5206,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._feat_csv_path: Path | None = None
         self._feat_smiles_column: str | None = None
         self._feat_descriptor_count: int = _FEATURE_DESCRIPTORS_FALLBACK
+        # -- Feature recalculation state (round 204, Chemistry tab) --- #
+        self._recl_metadata: dict[str, Any] | None = None  # adopted selection metadata
+        self._recl_source_note: str = ""  # where the metadata came from
+        self._recl_frame: Any = None  # recalculated feature frame
+        self._recl_report: Any = None  # its FeatureReport
         # -- RISM-KH solvation card state ----------------------------- #
         self._rism_frame: Any = None  # last computed descriptor frame
         # -- Ensemble-builder + model-persistence state (ML tab) ------ #
@@ -10912,6 +10926,137 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._ecfp_hl_detail = _grid_text(ecfp_hl, height=6, mono=self._mono)
         grid_append(ecfp_hl, self._ecfp_hl_detail, sticky="ew")
 
+        # -- feature recalculation card (round 204) ---------------------- #
+        # The owner's catalog continuation: the factory's stored metadata
+        # (selection_metadata) replayed on NEW molecules -- the QSAR
+        # "apply the frozen feature set" step, one card.
+        recl = make_card(
+            page.grid,
+            "Feature recalculation (from metadata)",
+            row=13,
+            column=0,
+            span=2,
+            subtitle="The feature factory's saved metadata replayed on NEW "
+            "molecules: the frozen top-K selection is recomputed exactly "
+            "-- only the families the recorded columns need, the recorded "
+            "columns in the recorded rank order -- so the feature table a "
+            "model was trained on follows it to every new screening batch "
+            "without re-running the ranking.",
+            workflow="Descriptors & features",
+        )
+        recl_meta_row = ttk.Frame(recl, style="Card.TFrame")
+        grid_append(recl, recl_meta_row, sticky="w")
+        recl_json_btn = self._action_button(
+            recl_meta_row,
+            "Load metadata JSON\u2026",
+            self._recl_load_json,
+            tooltip="A selection_metadata file -- the JSON the feature "
+            "factory's Save metadata JSON button writes: selected "
+            "features in rank order, the family ledger, the fingerprint "
+            "sizes, K and method.",
+        )
+        recl_json_btn.pack(side="left")
+        recl_example_btn = self._action_button(
+            recl_meta_row,
+            "Load example",
+            self._recl_load_example,
+            tooltip="examples/data/selection_metadata.json -- a "
+            "variance-ranked top-24 of the ecfp + descriptors families "
+            "over eight drug-like molecules, written by the factory's "
+            "own metadata saver.",
+        )
+        recl_example_btn.pack(side="left", padx=(10, 0))
+        recl_adopt_btn = self._action_button(
+            recl_meta_row,
+            "Use the factory's current selection",
+            self._recl_adopt_factory,
+            tooltip="No file needed: adopt the selection the feature "
+            "factory computed in THIS session -- the metadata is built "
+            "exactly the way the Save JSON button writes it.",
+        )
+        recl_adopt_btn.pack(side="left", padx=(10, 0))
+        self._recl_meta_info = ttk.Label(
+            recl,
+            text="no metadata loaded — Load example is one click away",
+            style="CardMuted.TLabel",
+            wraplength=620,
+            justify="left",
+        )
+        grid_append(recl, self._recl_meta_info, sticky="w", pady=(6, 0))
+        ttk.Label(
+            recl,
+            text="New molecules (one SMILES per line; # comments ignored)",
+            style="Field.TLabel",
+        ).grid(row=recl.grid_size()[1], column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self._recl_smiles_text = _grid_text(recl, height=4, mono=self._mono)
+        self._recl_smiles_text.insert("1.0", "CCO\nc1ccccc1\nCC(=O)O")  # a fresh batch
+        grid_append(recl, self._recl_smiles_text, sticky="ew")
+        self._recl_njobs_spin = ttk.Spinbox(recl, from_=1, to=32, increment=1, width=8)
+        self._recl_njobs_spin.set("1")
+        form_row(recl, "n_jobs", self._recl_njobs_spin)
+        recl_btn = self._action_button(
+            recl,
+            "Recalculate features",
+            self._recl_run,
+            primary=True,
+            tooltip="recalculate_selected_features -- only the families "
+            "the recorded columns need; a stale metadata file (a "
+            "fingerprint size or a descriptor name this build no longer "
+            "knows) fails loudly instead of silently drifting.",
+        )
+        recl_btn.grid(row=recl.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._recl_summary = ttk.Label(
+            recl,
+            text="—",
+            style="CardMuted.TLabel",
+            wraplength=560,
+            justify="left",
+        )
+        self._recl_summary.grid(
+            row=recl_btn.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
+        recl_tree_frame = ttk.Frame(recl, style="Card.TFrame")
+        grid_append(recl, recl_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._recl_tree = ttk.Treeview(
+            recl_tree_frame,
+            columns=("row", "smiles", "v1", "v2", "v3", "v4", "v5", "v6"),
+            show="headings",
+            height=9,
+        )
+        for column, width in (
+            ("row", 48),
+            ("smiles", 190),
+            ("v1", 110),
+            ("v2", 110),
+            ("v3", 110),
+            ("v4", 110),
+            ("v5", 110),
+            ("v6", 110),
+        ):
+            self._recl_tree.heading(
+                column, text=f"value {column[1:]}" if column.startswith("v") else column
+            )
+            self._recl_tree.column(
+                column, width=width, minwidth=40, stretch=(column == "smiles")
+            )
+        recl_bar = ttk.Scrollbar(recl_tree_frame, orient="vertical", command=self._recl_tree.yview)
+        self._recl_tree.configure(yscrollcommand=recl_bar.set)
+        self._recl_tree.pack(side="left", fill="both", expand=True)
+        recl_bar.pack(side="right", fill="y")
+        self._recl_more_label = ttk.Label(recl, text="", style="CardMuted.TLabel")
+        grid_append(recl, self._recl_more_label, sticky="w")
+        recl_export_buttons = ttk.Frame(recl, style="Card.TFrame")
+        grid_append(recl, recl_export_buttons, sticky="w", pady=(2, 0))
+        recl_save_btn = self._action_button(
+            recl_export_buttons,
+            "Save recalculated table\u2026",
+            self._recl_save,
+            tooltip="SMILES + the recorded feature columns in rank order -- "
+            "CSV, Excel (.xlsx), TSV, Markdown, JSON records or HTML "
+            "(export_table picks the writer from the extension).",
+        )
+        recl_save_btn.pack(side="left")
+
     def _csvstd_pick_file(self) -> None:
         """Pick the CSV whose SMILES column the card standardises."""
         if filedialog is None:  # pragma: no cover - headless import
@@ -12669,6 +12814,233 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
 
         self._start_job("variance filter", work, render)
+
+    # -- feature recalculation card handlers (round 204) ---------------- #
+
+    def _recl_load_json(self) -> None:
+        """Pick + adopt a saved selection-metadata JSON file."""
+        path = filedialog.askopenfilename(
+            title="Open selection metadata",
+            filetypes=[("JSON metadata", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as handle:
+                metadata = json.load(handle)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not read the metadata", exc)
+            return
+        self._recl_adopt_metadata(metadata, Path(path).name)
+
+    def _recl_load_example(self) -> None:
+        """Load the bundled example metadata (the sample-data guarantee)."""
+        path = EXAMPLES_DIR / "selection_metadata.json"
+        if not path.is_file():
+            messagebox.showwarning(
+                "Missing example",
+                "examples/data/selection_metadata.json was not found.",
+            )
+            return
+        try:
+            with open(path, encoding="utf-8") as handle:
+                metadata = json.load(handle)
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not read the example", exc)
+            return
+        self._recl_adopt_metadata(metadata, "the bundled example")
+
+    def _recl_adopt_factory(self) -> None:
+        """Adopt the factory's in-session selection -- no file needed."""
+        selection = getattr(self, "_feat_selection", None)
+        report = getattr(self, "_feat_report", None)
+        if selection is None or report is None:
+            messagebox.showinfo(
+                "No factory selection",
+                "Compute & select features in the feature factory first -- "
+                "its current selection becomes this card's metadata.",
+            )
+            return
+        if not self._require_pharmaml():
+            return
+        try:
+            from pharmaml.chem.features import selection_metadata
+
+            k = self._feat_k if self._feat_k else len(selection.selected)
+            metadata = selection_metadata(selection, report, k=k)
+            if self._feat_target_name is not None:
+                metadata["target_column"] = self._feat_target_name
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not build the metadata", exc)
+            return
+        self._recl_adopt_metadata(metadata, "the factory's current selection")
+
+    def _recl_adopt_metadata(self, metadata: Any, note: str) -> None:
+        """Shared adoption: light shape check, honest info line.
+
+        The heavy validation (unknown columns, size contradictions,
+        vanished features) belongs to the run itself --
+        ``recalculate_selected_features`` raises with the exact story,
+        and this GUI never pre-empts it with a half-copy.
+        """
+        selected = metadata.get("selected_features") if isinstance(metadata, dict) else None
+        if not isinstance(selected, list) or not selected:
+            messagebox.showwarning(
+                "Not selection metadata",
+                "This file carries no selected_features list -- save the "
+                "metadata from the feature factory's Save metadata JSON "
+                "button (selection_metadata) first.",
+            )
+            return
+        counts = metadata.get("family_counts") or {}
+        families_line = (
+            " \u00b7 ".join(f"{family} {count}" for family, count in counts.items())
+            or "families unknown"
+        )
+        method = str(metadata.get("method", "?")).replace("_", " ")
+        k_note = metadata.get("k_requested", "?")
+        self._recl_metadata = metadata
+        self._recl_source_note = note
+        # a fresh metadata invalidates any stale render
+        self._recl_frame = None
+        self._recl_report = None
+        self._recl_meta_info.configure(
+            text=(
+                f"{len(selected):,} selected features \u00b7 {families_line} \u00b7 "
+                f"method {method} \u00b7 K {k_note} \u00b7 from {note}"
+            )
+        )
+
+    def _recl_run(self) -> None:
+        """Replay the recorded selection on the pasted new molecules."""
+        if not self._require_pharmaml() or not self._require(
+            "rdkit", "feature recalculation"
+        ):
+            return
+        metadata = self._recl_metadata
+        if metadata is None:
+            messagebox.showwarning(
+                "No metadata",
+                "Load the selection metadata first -- the bundled example, "
+                "a saved JSON file, or the factory's current selection.",
+            )
+            return
+        smiles = parse_smiles_lines(self._recl_smiles_text.get("1.0", "end"))
+        if not smiles:
+            messagebox.showwarning(
+                "No SMILES",
+                "Paste the new molecules first -- one SMILES per line.",
+            )
+            return
+        try:
+            n_jobs = parse_int(
+                self._recl_njobs_spin.get(), "n_jobs", minimum=1, maximum=32
+            )
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+
+        def work(notify: Any) -> Any:
+            from pharmaml.chem.features import recalculate_selected_features
+
+            return recalculate_selected_features(
+                smiles, metadata, n_jobs=n_jobs, progress=notify
+            )
+
+        def render(payload: Any) -> None:
+            self._recl_render(payload)
+
+        selected_count = len(metadata.get("selected_features", []))
+        label = f"recalculating {selected_count:,} features over {len(smiles)} molecules"
+        self._start_job(label, work, render)
+
+    def _recl_render(self, payload: Any) -> None:
+        """Show the recalculated matrix: molecules x recorded features."""
+        frame, report = payload
+        self._recl_frame = frame
+        self._recl_report = report
+        metadata = self._recl_metadata or {}
+        selected = list(metadata.get("selected_features", []))
+        tree = self._recl_tree
+        tree.delete(*tree.get_children())
+        if report.n_valid == 0:
+            self._recl_summary.configure(
+                text=(
+                    f"0 valid molecules ({len(report.dropped)} dropped) — "
+                    "check the pasted SMILES"
+                ),
+                style="Field.TLabel",
+            )
+            return
+        dropped_note = f" ({len(report.dropped)} dropped)" if report.dropped else ""
+        families_line = " \u00b7 ".join(
+            f"{family} {count}" for family, count in (metadata.get("family_counts") or {}).items()
+        )
+        self._recl_summary.configure(
+            text=(
+                f"{len(frame.columns):,} features recalculated for "
+                f"{report.n_valid} molecules{dropped_note} in the recorded "
+                f"rank order"
+                + (f" \u00b7 {families_line}" if families_line else "")
+            ),
+            style="Field.TLabel",
+        )
+        # the value matrix: the first six recorded columns become the
+        # live headings (the factory tree's mirror -- rows are molecules
+        # here, columns are the frozen features).
+        shown_columns = [column for column in selected[:6] if column in frame.columns]
+        for position in range(1, 7):
+            column_name = (
+                shown_columns[position - 1] if position <= len(shown_columns) else f"value {position}"
+            )
+            tree.heading(f"v{position}", text=column_name)
+        shown_rows = min(len(frame), 300)
+        for position in range(shown_rows):
+            original_index = int(frame.index[position])
+            values = [
+                format_number(float(frame.iloc[position][column])) for column in shown_columns
+            ]
+            values += [""] * (6 - len(values))
+            tree.insert(
+                "",
+                "end",
+                values=(original_index + 1, report.smiles[position], *values),
+            )
+        hidden_rows = len(frame) - shown_rows
+        hidden_columns = len(selected) - len(shown_columns)
+        notes = []
+        if hidden_rows > 0:
+            notes.append(f"+{hidden_rows:,} more molecules")
+        if hidden_columns > 0:
+            notes.append(f"+{hidden_columns:,} more columns")
+        self._recl_more_label.configure(
+            text=(" \u00b7 ".join(notes) + " — save the table for the full matrix") if notes else ""
+        )
+
+    def _recl_save(self) -> None:
+        """Save SMILES + the recalculated recorded columns (rank order)."""
+        frame = self._recl_frame
+        report = self._recl_report
+        if frame is None or report is None:
+            messagebox.showinfo("Nothing to save", "Recalculate features first.")
+            return
+        if not self._require_pharmaml():
+            return
+        try:
+            import pandas as pd
+
+            out = pd.DataFrame({"SMILES": list(report.smiles)})
+            for column in frame.columns:
+                out[column] = frame[column].tolist()
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not build the table", exc)
+            return
+        self._save_frame_dialog(
+            out,
+            "Save the recalculated features",
+            "recalculated_features.csv",
+            "Recalculated-feature table",
+        )
 
     # -- molecule grid card handlers (100x-167) ------------------------- #
 

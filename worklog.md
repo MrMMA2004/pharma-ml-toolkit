@@ -7351,3 +7351,104 @@ Stage Summary:
   19,251,057 bytes sha-256 6b5c93e4 · dev server healthy · cron pair
   508389 (2-hour 100x, run 5 next) + webDevReview 509961 ·
   runs_completed: 4.
+
+## Round 204 — the feature-recalculation roundtrip: the factory's stored metadata replayed on new molecules, v1.2.118 shipped (2026-11-07)
+
+The owner's catalog continuation directive: *"add a section to use the
+metadata stored by the feature factory to recalculate the selected
+features."* The selection metadata the factory's Save-JSON button
+writes (`selection_metadata`: selected features in rank order, the
+family ledger, the fingerprint sizes, K, method) is now a first-class
+REPLAY input — the QSAR workflow's "apply the frozen feature set"
+step, one library function + one card.
+
+The library arm — `pharmaml.chem.features.recalculate_selected_features(smiles,
+metadata, n_jobs, progress)` — replays a recorded selection against a
+fresh SMILES batch: only the families the recorded columns need are
+computed (a descriptors-only selection never touches the seventeen
+fingerprint families — the efficiency promise has its own test), the
+result carries exactly the recorded columns in the recorded rank
+order, and `n_jobs`/`progress` pass straight through to
+`compute_feature_frame`. The ledger keys the metadata itself carries
+are cross-checked BEFORE any chemistry runs, so a stale file from a
+different build fails loudly instead of silently recomputing a
+drifted vocabulary: `fingerprint_sizes` contradictions (recorded bits
+vs this build's), `families_computed` inconsistencies (a selected
+column whose family was never computed), unknown column prefixes,
+duplicate/empty entries, and features that no longer exist in this
+build's frame (an RDKit property that vanished) are all honest
+ValueError stops with the exact story. Exported through
+`pharmaml.chem` beside its sibling `selection_metadata`.
+
+The playground card — *Feature recalculation (from metadata)*
+(Chemistry, row 13, span 2) — carries the round-202 guarantees by
+construction: a one-line subtitle, the **Descriptors & features**
+workflow badge (the pipeline is now 5 steps — canonical-SMILES →
+inspector → factory → RECALCULATION → similarity scan; the other four
+cards' badges renumbered automatically from the registry), and
+sample-data ready: `examples/data/selection_metadata.json`, a REAL
+variance-ranked top-24 (ecfp + descriptors, 22 + 2 columns) written
+by the factory's own metadata saver over eight drug-like molecules,
+roundtrip-verified before commit. Three adoption paths: the bundled
+example, any saved JSON file, or **the factory's current in-session
+selection** (no file round-trip at all — the relay builds the metadata
+exactly the way Save-JSON writes it). The render is the value matrix
+— molecules x recorded features, the first six columns as live tree
+headings (the factory tree's mirror: rows are molecules here,
+columns are the frozen features) — and Save writes CSV / Excel
+(.xlsx) / TSV / Markdown / JSON / HTML through the standard table
+dialog (the Excel guarantee rides free).
+
+Verification: `tests/test_feature_recalculation.py` — 30 tests (15
+library incl. the value-parity cross-check against a direct compute,
+the dropped-molecule report, the progress callback and every loud
+stop; 2 example-file honesty tests; 13 GUI under Xvfb incl. the badge
+text "Descriptors & features · step 4/5", the three adoption paths,
+the run+render, the stale-metadata error surfacing through the job
+poller's dialog, and the xlsx save round-trip). Regression battery
+green: test_playground_workflows + test_excel_io_and_samples (43),
+test_features + test_rism under xdist (142+1s), test_playground.py in
+two chunks (non-GUI + GUI, 288 dots), features.py doctests (5 items,
+the new function's three examples included). Honest count:
+**4,489 tests/ + 778 doctests = 5,267** (collection-verified; +30
+tests, +1 doctest item over round 202's 5,236).
+
+THE SHIP: four carriers at 1.2.118 (VERSION / __init__ / pyproject /
+SHIPPED_TOOLKIT_VERSION); all 8 notebooks re-executed at 1.2.118
+(204 s, kernel cwd examples/ — the round-202 trap held);
+`scratch/build_zip_181.py` (the round-180 recipe, restamped) → 923
+entries / 885 files / 19,255,469 bytes / sha-256 5e7e07b0… / four
+homes byte-identical / real leaks 0; the zip carries the new test
+file, the example metadata and the 5 recalculate call-sites. Web
+pins: 5,236 → 5,267 tests (seven sites), FALLBACK_STATS 893/337,231 →
+897/338,379 (the fresh census walk replicating toolkit-fs.ts's exact
+rules — excluded dirs, data-node extensions never line-counted,
+`split("\n")` line semantics). Health E2E: the dev server died during
+the notebook run and AGAIN between tool calls (a plain
+`setsid … &` does not survive the sandbox reaper — lesson #4
+reconfirmed); `scratch/dev_daemon.py`'s double-fork launch is the
+only stable form — GET / 200, zip-size `exact:true 19,255,469 v1.2.118
+source:release`, agent-browser sees the live pins (1.2.118 badge,
+5,267 tests, 897 files, 338,379 lines) with zero console errors.
+
+Stage Summary:
+- Deliverable: v1.2.118 — recalculate_selected_features (library) +
+  the Feature recalculation (from metadata) card (playground) + the
+  bundled example metadata + 30 tests + 1 doctest; zip in four homes.
+- Lessons pinned: (1) the metadata a card writes is a product surface
+  the moment an owner asks to replay it — the ledger keys became
+  cross-checked contracts, not decoration; (2) a workflow gaining a
+  step renumbers every sibling badge — the registry-derived badge
+  text (`step i/n`) absorbed it with zero manual edits, exactly what
+  the round-202 declarative design promised; (3) the dev server
+  cannot survive tool-call boundaries without the double-fork daemon
+  — two failed launches this round (setsid-alone, then in-call
+  restart) before the standing recipe ran; (4) the census must be
+  walked with the route's own classification rules (data extensions
+  never line-counted) or the FALLBACK_STATS pin drifts silently.
+- Baselines for the next round: v1.2.118 · 5,267 tests (4,489 +
+  778 doctests) · census 897 files / 338,379 lines · four zip homes
+  at 19,255,469 bytes sha-256 5e7e07b0… · dev server healthy
+  (double-fork daemon) · cron pair 508389 (2-hour 100x, run 5 next)
+  + webDevReview 509961 · runs_completed: 4 (owner-interaction
+  round; the counter counts cron runs only).

@@ -1,3 +1,55 @@
+## [1.2.118] — 2026-11-07
+
+### Added — round 204: the feature-recalculation roundtrip (metadata → the same features, new molecules)
+
+The owner's catalog continuation directive: *"add a section to use the
+metadata stored by the feature factory to recalculate the selected
+features."* The selection metadata the factory's Save-JSON button
+writes is now a first-class replay input — the QSAR workflow's
+"apply the frozen feature set" step, one card.
+
+#### The library arm
+
+**`pharmaml.chem.features.recalculate_selected_features(smiles,
+metadata)`** replays a recorded selection against a fresh SMILES batch:
+only the families the recorded columns need are computed (a
+descriptors-only selection never touches the seventeen fingerprint
+families), the result carries exactly the recorded columns in the
+recorded rank order, and `n_jobs`/`progress` pass straight through to
+`compute_feature_frame`. The ledger keys the metadata itself carries
+are cross-checked before any chemistry runs — a stale file from a
+different build fails loudly instead of silently recomputing a drifted
+vocabulary: `fingerprint_sizes` contradictions (recorded bits vs this
+build's), `families_computed` inconsistencies, unknown column
+prefixes, duplicate/empty entries, and features that no longer exist
+in this build's frame (an RDKit property that vanished) are all
+honest `ValueError` stops with the exact story.
+
+#### The playground card
+
+**Feature recalculation (from metadata)** (Chemistry, row 13) carries
+the round-202 guarantees by construction: a one-line subtitle, the
+**Descriptors & features** workflow badge (now 5 steps: … → Feature
+factory → Feature recalculation → …), and a ready-to-run example —
+`examples/data/selection_metadata.json`, a real variance-ranked top-24
+(ecfp + descriptors, 22 + 2 columns) written by the factory's own
+metadata saver over eight drug-like molecules. Three adoption paths:
+the bundled example, any saved JSON file, or **the factory's current
+in-session selection** (no file round-trip at all). The render is the
+value matrix — molecules × recorded features, the first six columns as
+live tree headings — and Save writes CSV / **Excel (.xlsx)** / TSV /
+Markdown / JSON / HTML through the standard table dialog.
+
+#### Numbers
+
+30 new tests (`tests/test_feature_recalculation.py`: 15 library, 2
+example-file, 13 GUI under Xvfb) + 1 new doctest item in
+`recalculate_selected_features` — honest total **5,267** (4,489
+tests/ + 778 doctests). All eight notebooks re-executed at 1.2.118
+(204 s). Census 897 files / 338,379 lines. Release zip
+`build_zip_181` → 923 entries / 885 files / 19,255,469 bytes /
+sha-256 `5e7e07b0…`, byte-identical in all four homes, real leaks 0.
+
 ## [1.2.117] — 2026-11-06
 
 ### Added — round 202: every card described, complementary cards grouped into workflows

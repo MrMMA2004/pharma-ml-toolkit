@@ -168,7 +168,7 @@ True
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -1538,6 +1538,188 @@ def selection_metadata(
         "dropped": [[int(row), str(smi)] for row, smi in report.dropped],
         "total_features": int(report.total_columns),
     }
+
+
+def recalculate_selected_features(
+    smiles: Sequence[str],
+    metadata: Mapping[str, Any],
+    *,
+    n_jobs: int = 1,
+    progress: Callable[..., Any] | None = None,
+) -> tuple[pd.DataFrame, FeatureReport]:
+    """Recalculate a frozen feature selection for NEW molecules.
+
+    The roundtrip half of :func:`selection_metadata`: the metadata dict
+    a selection run saved (``selected_features`` in rank order, the
+    family ledger, the fingerprint sizes) is replayed against a fresh
+    SMILES batch -- only the families the selected columns actually
+    need are computed, and the result carries exactly the recorded
+    columns, in the recorded rank order.  This is the QSAR workflow's
+    "apply the frozen feature set" step: train once, select once, then
+    recompute the SAME features for every new screening batch without
+    re-running the ranking.
+
+    Parameters
+    ----------
+    smiles:
+        SMILES strings for the new batch (a DataFrame column works
+        directly).  A bare string is rejected -- wrap it in a list.
+    metadata:
+        The dict produced by :func:`selection_metadata` (a mapping of
+        the same shape; ``json.load`` of a saved file works directly).
+        Only ``selected_features`` is required; the ledger keys
+        (``fingerprint_sizes``, ``families_computed``) are cross-checked
+        for consistency when present, so a stale metadata file from a
+        different build fails loudly instead of silently recomputing a
+        drifted vocabulary.
+    n_jobs:
+        Worker count passed through to :func:`compute_feature_frame`.
+    progress:
+        Optional ``progress(done, total, note)`` callback passed
+        through to :func:`compute_feature_frame`.
+
+    Returns
+    -------
+    tuple
+        ``(frame, report)``.  ``frame`` has one row per molecule that
+        parsed AND computed cleanly (indexed by original input row
+        position, name ``"original_index"``) and one column per
+        recorded feature, in the metadata's rank order.  ``report`` is
+        the :class:`FeatureReport` of the underlying computation -- its
+        ``families`` ledger covers every family the selected columns
+        needed (NOT the original run's full family set), and its
+        ``dropped`` pairs carry the new batch's failures.
+
+    Raises
+    ------
+    ValueError
+        If ``smiles`` is a bare string; ``metadata`` is not a mapping;
+        ``selected_features`` is missing, empty or holds duplicates;
+        a recorded column has an unknown prefix; the metadata's
+        ``fingerprint_sizes`` or ``families_computed`` entries
+        contradict this build; or a recorded column does not exist in
+        the recomputed frame (a descriptor property this RDKit no
+        longer offers -- the honest stale-metadata stop).
+
+    Examples
+    --------
+    A selection roundtrip: compute, select, record, then recalculate
+    the recorded columns for a different molecule set:
+
+    >>> from pharmaml.chem.features import (
+    ...     compute_feature_frame, rank_features, select_top_features,
+    ... )
+    >>> frame, report = compute_feature_frame(
+    ...     ["CCO", "CCC", "CCN"], families=("ecfp", "descriptors"))
+    >>> scores = rank_features(frame, None, method="variance")
+    >>> selection = select_top_features(
+    ...     frame, scores.reindex(frame.columns), 5)
+    >>> meta = selection_metadata(selection, report, k=5)
+    >>> new_frame, new_report = recalculate_selected_features(
+    ...     ["CCO", "c1ccccc1"], meta)
+    >>> list(new_frame.columns) == meta["selected_features"]
+    True
+    >>> len(new_report.smiles), new_report.dropped
+    (2, [])
+
+    Empty metadata cannot be replayed:
+
+    >>> recalculate_selected_features(["CCO"], {"selected_features": []})
+    Traceback (most recent call last):
+    ...
+    ValueError: metadata carries no selected_features -- recompute a selection with compute_feature_frame + select_top_features first
+
+    A fingerprint-size contradiction is the loud stale-metadata stop:
+
+    >>> recalculate_selected_features(
+    ...     ["CCO"], {"selected_features": ["ecfp_bit_17"],
+    ...               "fingerprint_sizes": {"ecfp": 1024}})
+    Traceback (most recent call last):
+    ...
+    ValueError: metadata's fingerprint_sizes['ecfp'] says 1024 bits, but this build computes 2048 -- the metadata comes from a different toolkit version; re-select and re-save it
+    """
+    smiles_list = _as_smiles_list(smiles, "smiles")
+    if not isinstance(metadata, Mapping):
+        raise ValueError(  # noqa: TRY004 — the contract pins ValueError
+            f"metadata must be a mapping (the dict selection_metadata "
+            f"returns, or json.load of a saved file), not {type(metadata).__name__}"
+        )
+    selected_raw = metadata.get("selected_features")
+    if not isinstance(selected_raw, (list, tuple)) or not selected_raw:
+        raise ValueError(
+            "metadata carries no selected_features -- recompute a selection "
+            "with compute_feature_frame + select_top_features first"
+        )
+    selected: list[str] = [str(column) for column in selected_raw]
+    if len(set(selected)) != len(selected):
+        duplicates = sorted(
+            {column for column in selected if selected.count(column) > 1}
+        )
+        raise ValueError(
+            f"metadata's selected_features holds duplicates: {duplicates}; "
+            "a rank order cannot repeat a column -- the file is corrupt"
+        )
+    if any(not column.strip() for column in selected):
+        raise ValueError(
+            "metadata's selected_features holds an empty column name -- "
+            "the file is corrupt"
+        )
+
+    # which families do the recorded columns need?  (family_of_column
+    # raises on an unknown prefix; the error gains the metadata context)
+    needed: list[str] = []
+    for column in selected:
+        try:
+            family = family_of_column(column)
+        except ValueError as exc:
+            raise ValueError(
+                f"metadata's selected_features names {column!r}, which is "
+                f"not a column this module can compute: {exc}"
+            ) from exc
+        if family not in needed:
+            needed.append(family)
+
+    # cross-check the ledger keys the metadata itself carries -- a
+    # stale file from a different build must fail LOUDLY here, not
+    # silently recompute a drifted vocabulary.
+    recorded_sizes = metadata.get("fingerprint_sizes")
+    if isinstance(recorded_sizes, Mapping):
+        for family, recorded_bits in recorded_sizes.items():
+            if family in _FINGERPRINT_SIZES and int(recorded_bits) != _FINGERPRINT_SIZES[family]:
+                raise ValueError(
+                    f"metadata's fingerprint_sizes[{family!r}] says "
+                    f"{recorded_bits} bits, but this build computes "
+                    f"{_FINGERPRINT_SIZES[family]} -- the metadata comes from "
+                    "a different toolkit version; re-select and re-save it"
+                )
+    recorded_families = metadata.get("families_computed")
+    if isinstance(recorded_families, Mapping):
+        for family in needed:
+            if family not in recorded_families:
+                raise ValueError(
+                    f"metadata's families_computed has no {family!r} entry, "
+                    f"yet selected_features names its columns -- the file is "
+                    "internally inconsistent"
+                )
+
+    # compute only the needed families, in the canonical order
+    families = [family for family in FEATURE_FAMILIES if family in needed]
+    frame, report = compute_feature_frame(
+        smiles_list, families=families, n_jobs=n_jobs, progress=progress
+    )
+
+    # restrict to the recorded columns in the recorded rank order; a
+    # column that vanished (an RDKit property this build dropped) is
+    # the honest stop, not a silent NaN column.
+    missing = [column for column in selected if column not in frame.columns]
+    if missing:
+        preview = ", ".join(missing[:5]) + (" ..." if len(missing) > 5 else "")
+        raise ValueError(
+            f"{len(missing)} recorded features no longer exist in this "
+            f"build's frame ({preview}); the metadata predates a "
+            "vocabulary change -- re-select and re-save it"
+        )
+    return frame.loc[:, selected], report
 
 
 @dataclass(frozen=True, slots=True)

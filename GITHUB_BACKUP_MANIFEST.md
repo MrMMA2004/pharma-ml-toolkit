@@ -186,6 +186,35 @@ dosing events, apriori association rules) plus ten GUI tests
 (`TestCatalogAbsorptionGui`). Honest count: **4,382 + 773 = 5,155
 tests**; fresh walk pins **882 files / 333,040 lines** at v1.2.114.
 
+## v1.2.118 release-zip homes (2026-11-07, round 204 — the feature-recalculation roundtrip)
+
+`pharma-ml-toolkit-v1.2.118.zip` — 19,255,469 bytes, sha-256
+`5e7e07b0f3377acc3b20f60fbeec285f8d075cc263666427864c85794c12d7e1`,
+built with the standing builder (`scratch/build_zip_181.py`: 923 entries /
+885 files / nested zips NONE / real leaks 0), placed in all four homes:
+
+- `download/pharma-ml-toolkit-v1.2.118.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.118.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.118.zip`
+- `upload/pharma-ml-toolkit-v1.2.118.zip`
+
+**Why the rebuild:** the owner's catalog continuation directive — use
+the metadata stored by the feature factory to recalculate the selected
+features. `pharmaml.chem.features.recalculate_selected_features`
+replays a saved selection on NEW molecules (only the needed families,
+the recorded columns in the recorded rank order, stale metadata
+failing loudly: fingerprint-size contradictions, families_computed
+inconsistencies, vanished features); the playground gained the
+*Feature recalculation (from metadata)* card (Chemistry row 13, the
+Descriptors & features workflow's 5th step, three adoption paths:
+the bundled `examples/data/selection_metadata.json` example, any JSON
+file, the factory's in-session selection; the molecule-x-feature value
+matrix render; CSV/Excel save). 30 new tests
+(`tests/test_feature_recalculation.py`) + 1 new doctest item —
+honest count: **4,489 + 778 = 5,267 tests**; fresh walk pins
+**897 files / 338,379 lines** at v1.2.118 (all eight notebooks
+re-executed at 1.2.118, 204 s).
+
 ## v1.2.117 release-zip homes (2026-11-06, round 202 — every card described, complementary cards grouped)
 
 `pharma-ml-toolkit-v1.2.117.zip` — 19,251,057 bytes, sha-256

@@ -72,6 +72,7 @@ from pharmaml.chem.features import (
     family_of_column,
     filter_low_variance,
     rank_features,
+    recalculate_selected_features,
     select_top_features,
     selection_metadata,
 )
@@ -355,6 +356,7 @@ __all__ = [
     "protonate_smiles",
     "random_selfies_molecules",
     "rank_features",
+    "recalculate_selected_features",
     "register",
     "reinvent_standardize_mol",
     "reinvent_standardize_smiles",

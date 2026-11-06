@@ -1,0 +1,79 @@
+{
+  "selected_features": [
+    "desc_amw",
+    "desc_exactmw",
+    "desc_tpsa",
+    "desc_labuteASA",
+    "desc_CrippenMR",
+    "desc_NumAtoms",
+    "desc_NumHeavyAtoms",
+    "desc_kappa1",
+    "desc_chi0v",
+    "desc_chi0n",
+    "desc_lipinskiHBA",
+    "desc_NumHeteroatoms",
+    "desc_NumRotatableBonds",
+    "desc_NumHBA",
+    "desc_CrippenClogP",
+    "desc_lipinskiHBD",
+    "desc_chi2v",
+    "desc_chi2n",
+    "desc_chi1v",
+    "desc_chi1n",
+    "desc_kappa2",
+    "desc_Phi",
+    "ecfp_bit_378",
+    "ecfp_bit_389"
+  ],
+  "descriptor_names": [
+    "amw",
+    "exactmw",
+    "tpsa",
+    "labuteASA",
+    "CrippenMR",
+    "NumAtoms",
+    "NumHeavyAtoms",
+    "kappa1",
+    "chi0v",
+    "chi0n",
+    "lipinskiHBA",
+    "NumHeteroatoms",
+    "NumRotatableBonds",
+    "NumHBA",
+    "CrippenClogP",
+    "lipinskiHBD",
+    "chi2v",
+    "chi2n",
+    "chi1v",
+    "chi1n",
+    "kappa2",
+    "Phi"
+  ],
+  "fingerprint_sizes": {
+    "ecfp": 2048
+  },
+  "family_counts": {
+    "descriptors": 22,
+    "ecfp": 2
+  },
+  "families_computed": {
+    "descriptors": 43,
+    "ecfp": 2048
+  },
+  "k_requested": 24,
+  "method": "",
+  "n_molecules": 8,
+  "dropped": [],
+  "total_features": 2091,
+  "source_note": "Bundled example: variance-ranked top-24 of the ecfp + descriptors families over eight diverse drug-like molecules (aspirin, caffeine, paracetamol, ibuprofen, a chromanone scaffold, quinazoline, a heteroaryl amide, anthranilic acid) -- the Recalculate from metadata card loads this file so the roundtrip is one click.",
+  "example_smiles": [
+    "CC(=O)Oc1ccccc1C(=O)O",
+    "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",
+    "CC(=O)Nc1ccc(O)cc1",
+    "CC(C)Cc1ccc(cc1)C(C)C(=O)O",
+    "COc1cc2c(cc1OC)C(=O)C(C)(O)CC2",
+    "c1ccc2c(c1)ncnc2N",
+    "CC(=O)Nc1nncc(c1C(C)=O)N",
+    "OC(=O)c1ccccc1N"
+  ]
+}
