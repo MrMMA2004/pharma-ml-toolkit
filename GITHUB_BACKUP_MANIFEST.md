@@ -186,6 +186,40 @@ dosing events, apriori association rules) plus ten GUI tests
 (`TestCatalogAbsorptionGui`). Honest count: **4,382 + 773 = 5,155
 tests**; fresh walk pins **882 files / 333,040 lines** at v1.2.114.
 
+## v1.2.119 release-zip homes (2026-11-07, round 205 — the heavy-work safety kit)
+
+`pharma-ml-toolkit-v1.2.119.zip` — 19,275,451 bytes, sha-256
+`0c78934edd1b1327ec8d6fd0212bb7cec2b7895dae8d52b6b2fb4d0cc3851f44`,
+built with the standing builder (`scratch/build_zip_182.py`: 925 entries /
+887 files / nested zips NONE / real leaks 0 — the first build leaked one
+`/home/z/` path a peer session's notebook re-execution had embedded in
+`examples/complete_ml_workflow.ipynb`'s sklearn warning outputs; sanitized
+and rebuilt), placed in all four homes:
+
+- `download/pharma-ml-toolkit-v1.2.119.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.119.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.119.zip`
+- `upload/pharma-ml-toolkit-v1.2.119.zip`
+
+**Why the rebuild:** the owner's collapse report — *"playground.py
+collapses during heavy work"* — diagnosed as the OOM story (dmesg's two
+recorded python OOM-kills; the tune path's 7 loky workers for one
+n_jobs=4 call; 4 GB / 2 cores with ~1.6 GB available). The fix:
+`pharmaml.exceptions.JobCancelled` — the cooperative-stop channel every
+checkpoint loop honours when its progress callback answers `False`
+(feature factory batches, the recalculation replay, both progressive
+table readers, both CV leaderboards) — plus the playground's Stop
+button, live memory watchdog (launch RSS + 75% of launch-time
+MemAvailable ceiling, 256 MB system floor), pre-flight batch guard
+(molecules × columns × 3 copies × 8 bytes vs half the available RAM,
+refusing with its own arithmetic) and ML n_jobs memory cap (768 MB per
+loky worker, the reduction riding the job label). 26 new tests
+(`tests/test_job_safety.py`) — honest count: **4,515 + 778 = 5,293
+tests**; fresh walk pins **901 files / 339,748 lines** at v1.2.119
+(`scratch/census.py`, the toolkit-fs.ts-exact walk). The owner also
+uploaded `upload/MASTER_PROMPT part2.pdf` — directive #16, the complete
+PySide6 (Qt for Python) GUI redesign, the next multi-round mandate.
+
 ## v1.2.118 release-zip homes (2026-11-07, round 204 — the feature-recalculation roundtrip)
 
 `pharma-ml-toolkit-v1.2.118.zip` — 19,255,469 bytes, sha-256

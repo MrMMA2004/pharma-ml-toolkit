@@ -1465,6 +1465,129 @@ def _call_work(work: Callable[..., Any], report: Callable[..., None]) -> Any:
     return work()
 
 
+# --------------------------------------------------------------------------- #
+# (round 205) the heavy-work safety kit: memory maths + the cooperative stop
+#
+# The owner's report -- "playground.py collapses during heavy work" -- is
+# the OOM story this kit answers.  A big featurization batch, a huge CSV
+# load or a tune run with many loky workers can outrun the box's RAM;
+# the kernel then SIGKILLs the biggest process (the Tk app itself) and
+# the window vanishes with every loaded input.  Three layers keep that
+# from happening:
+#
+#   1. pre-flight arithmetic  -- the factory/recalc cards estimate the
+#      dense matrix before a single molecule computes and refuse with
+#      the numbers when it cannot fit the AVAILABLE memory;
+#   2. the Stop button        -- the status bar gains a Stop control;
+#      a job whose work function carries a progress reporter stops at
+#      its next checkpoint (molecule batch, leaderboard row, CSV chunk)
+#      through the reporter's return value, the cooperative-stop channel
+#      the toolkit now honours everywhere it reports progress;
+#   3. the live watchdog      -- the 150 ms progress poller samples RSS;
+#      crossing the job's memory ceiling (or the SYSTEM running dry)
+#      flips the same stop flag, so the batch halts BEFORE the OS
+#      would kill the window -- "cancelled", not "collapsed".
+# --------------------------------------------------------------------------- #
+
+
+def _meminfo_mb(field: str) -> float | None:
+    """Read a ``/proc/meminfo`` field in MB; ``None`` off-Linux.
+
+    ``MemAvailable`` (not MemFree) is the honest budget -- it includes
+    reclaimable cache, which is exactly what a growing DataFrame can
+    push out.  Off-Linux (or a missing field) the guards quietly stand
+    down instead of guessing.
+    """
+    try:
+        with open("/proc/meminfo", encoding="ascii") as handle:
+            for line in handle:
+                if line.startswith(field + ":"):
+                    return int(line.split()[1]) / 1024.0
+    except OSError:
+        return None
+    return None
+
+
+def _rss_mb() -> float:
+    """This process's resident set in MB (0.0 when /proc is absent)."""
+    try:
+        with open("/proc/self/status", encoding="ascii") as handle:
+            for line in handle:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024.0
+    except OSError:
+        return 0.0
+    return 0.0
+
+
+#: MB of available memory each loky CV worker is budgeted (a fresh
+#: interpreter + sklearn import + the dataset copy it pickle-receives).
+#: The ML n_jobs cap divides MemAvailable by this; 768 MB keeps a
+#: 1.6 GB-free box at 2 workers -- the historical 1 worker, never 32.
+_ML_WORKER_MEM_MB = 768.0
+
+#: Fraction of MemAvailable a pre-flight matrix estimate may not exceed
+#: (half the budget: the ranking/render copies that follow the vstack
+#: consume the rest).
+_GUARD_MEM_FRACTION = 0.5
+
+#: System-wide floor: when MemAvailable drops below this the watchdog
+#: trips even if the job itself looks small (a neighbour ballooned).
+_SYSTEM_MEM_FLOOR_MB = 256.0
+
+#: Working-copy factor for the dense-matrix estimate: the vstack of
+#: per-molecule vectors, the DataFrame materialisation and the ranking
+#: pass hold the matrix ~3x over its life.
+_MATRIX_COPIES = 3
+
+
+def _feature_matrix_bytes(molecules: int, columns: int) -> int:
+    """The dense-matrix footprint estimate: rows x columns x 8 B x copies."""
+    return int(molecules) * max(int(columns), 1) * 8 * _MATRIX_COPIES
+
+
+def _guard_batch(message_prefix: str, molecules: int, columns: int) -> str | None:
+    """Refusal message when a batch cannot fit the available memory."""
+    available = _meminfo_mb("MemAvailable")
+    if available is None or molecules <= 0 or columns <= 0:
+        return None
+    estimate = _feature_matrix_bytes(molecules, columns)
+    budget = _GUARD_MEM_FRACTION * available * 1024 * 1024
+    if estimate <= budget:
+        return None
+    return (
+        f"{message_prefix}: this batch's dense matrix alone would need "
+        f"≈ {estimate / 1024**3:.1f} GB ({molecules:,} molecules × "
+        f"{columns:,} columns × {_MATRIX_COPIES} working copies × 8 bytes), "
+        f"but only {available / 1024:.1f} GB of memory is available right "
+        "now. The window would be killed mid-computation -- halve the "
+        "corpus or drop some of the wide 2048-bit fingerprint families "
+        "(they dominate the column count), then run again."
+    )
+
+
+def _factory_batch_columns(families: list[str]) -> int:
+    """Column estimate for a factory batch: per-family widths, 210 for descriptors."""
+    columns = 0
+    for family in families:
+        if family == "descriptors":
+            columns += 210  # the current build's ~200 + headroom
+        else:
+            columns += _FEATURE_FAMILY_BITS.get(family, 2048)
+    return columns
+
+
+def _is_job_cancelled(exc: BaseException) -> bool:
+    """True for the toolkit's cooperative-stop error.
+
+    Name-matched on purpose: the playground must classify a stopped job
+    even when ``pharmaml`` could not be imported at all (the graceful
+    degrade path) -- and the toolkit's :class:`JobCancelled` is the only
+    error whose name says exactly this.
+    """
+    return any(cls.__name__ == "JobCancelled" for cls in type(exc).__mro__)
+
+
 def _split_triple(raw: str) -> list[str]:
     """Split an ``"x y z"`` / ``"x,y,z"`` widget string into three parts."""
     return str(raw).strip().replace(",", " ").split()
@@ -5054,6 +5177,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._jobs: queue.Queue[tuple[str, Any, Any]] = queue.Queue()
         self._busy = False
         self._on_done: Callable[[Any], None] | None = None
+        # (round 205) the cooperative-stop + memory-watchdog state: the
+        # Stop button / watchdog flip ``_cancel_requested``, the progress
+        # reporter answers False at the next checkpoint, and the toolkit
+        # loops halt with their JobCancelled -- the window survives heavy
+        # work instead of being OOM-killed under it.
+        self._cancel_requested = False
+        self._cancel_reason = ""
+        self._job_cancellable = False
+        self._job_mem_floor_mb = 0.0
+        self._job_mem_budget_mb = 0.0
+        self._job_mem_peak_mb = 0.0
         # -- progress + ETA plumbing (100x-106) ----------------------- #
         # Worker threads push (done, total, note) tuples here; the
         # ``_poll_progress`` after-loop drains them onto the status bar
@@ -5668,6 +5802,20 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._job_label.pack(side="right", padx=(12, 0))
         self._progress = ttk.Progressbar(bar, mode="indeterminate", length=130)
         self._progress.pack(side="right")
+        # (round 205) the Stop control: a running job whose work carries
+        # a progress reporter halts at its next checkpoint (molecule
+        # batch, leaderboard row, CSV chunk).  Disabled while idle; a
+        # checkpoint-less job says so honestly when clicked.
+        self._stop_button = ttk.Button(bar, text="Stop", command=self._request_cancel)
+        self._stop_button.pack(side="right", padx=(0, 8))
+        self._stop_button.state(["disabled"])
+        Tooltip(
+            self._stop_button,
+            "Stop the running job at its next checkpoint (molecule batch, "
+            "leaderboard row or table chunk) -- the window and every loaded "
+            "input survive.  The memory watchdog trips the same channel when "
+            "the job would otherwise be killed for RAM.",
+        )
 
     def _build_hintbar(self) -> None:
         """The keyboard-shortcut hint row (100x-65), above the status bar.
@@ -6253,6 +6401,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 button.state(["disabled"])
         self._job_label_base = label
         self._job_started = time.monotonic()
+        # (round 205) a fresh job resets the cooperative-stop state and
+        # snapshots the memory floor the watchdog measures growth from
+        # (75% of what was available at launch is the job's ceiling).
+        self._cancel_requested = False
+        self._cancel_reason = ""
+        self._job_cancellable = _accepts_progress_argument(work)
+        self._job_mem_floor_mb = _rss_mb()
+        available = _meminfo_mb("MemAvailable")
+        self._job_mem_budget_mb = 0.75 * (available or 0.0)
+        self._job_mem_peak_mb = self._job_mem_floor_mb
+        if self._stop_button.winfo_exists():
+            self._stop_button.state(["!disabled"])
         with contextlib.suppress(queue.Empty):
             while True:  # stale updates from a previous job never leak
                 self._progress_updates.get_nowait()
@@ -6267,7 +6427,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
         threading.Thread(target=runner, name="playground-job", daemon=True).start()
 
-    def _report_progress(self, done: int, total: int | None = None, note: str = "") -> None:
+    def _report_progress(self, done: int, total: int | None = None, note: str = "") -> bool:
         """Worker-thread progress feed (thread-safe: queue → poller).
 
         Called from inside ``work`` for every completed unit -- a tuner
@@ -6275,8 +6435,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         count, the total (``None`` for open-ended work) and an optional
         note rendered after the fraction.  Only the latest update is
         shown; the poller coalesces bursts.
+
+        (round 205) The RETURN value is the cooperative-stop channel:
+        ``True`` while the job should keep running, ``False`` once the
+        Stop button or the memory watchdog asked it to halt.  The
+        toolkit's checkpoint loops check ``is False`` and raise
+        ``JobCancelled`` -- callbacks that ignore the value (the
+        historical contract) are unaffected.
         """
         self._progress_updates.put((int(done), total, note))
+        return not self._cancel_requested
 
     def _poll_progress(self) -> None:
         """Drain progress updates into the status bar (bar + ETA).
@@ -6312,6 +6480,34 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 text += f" · {note}"
             with contextlib.suppress(tk.TclError):
                 self._job_label.configure(text=text)
+        # (round 205) the memory watchdog rides the same 150 ms poll (a
+        # /proc read is a few hundred bytes -- cheap).  Crossing the
+        # job's ceiling (floor + 75% of what was available at launch)
+        # or the SYSTEM floor flips the same stop flag the Stop button
+        # sets; the next reporter callback answers False and the batch
+        # halts at its checkpoint -- cancelled, not OOM-killed.
+        if self._busy:
+            rss = _rss_mb()
+            if rss > self._job_mem_peak_mb:
+                self._job_mem_peak_mb = rss
+            over_ceiling = (
+                self._job_mem_budget_mb > 0.0
+                and rss > self._job_mem_floor_mb + self._job_mem_budget_mb
+            )
+            available = _meminfo_mb("MemAvailable")
+            system_tight = available is not None and available < _SYSTEM_MEM_FLOOR_MB
+            if (over_ceiling or system_tight) and not self._cancel_requested:
+                self._cancel_requested = True
+                self._cancel_reason = (
+                    "memory ceiling" if over_ceiling else "system memory low"
+                )
+                with contextlib.suppress(tk.TclError):
+                    self._job_label.configure(
+                        text=(
+                            f"{self._job_label_base} — stopping at the "
+                            f"{self._cancel_reason} (RSS {self._job_mem_peak_mb:.0f} MB)…"
+                        )
+                    )
         # (100x-158) the DearPyGui affordance upkeep rides the same 150 ms
         # poll: prune destroyed figure toolbars, re-stripe any tree whose
         # row count changed (every populate path, unedited), all cheap.
@@ -6341,16 +6537,45 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # next job starts)
         elapsed = time.monotonic() - self._job_started
         label = getattr(self, "_job_label_base", "") or "job"
-        if error is not None:
+        # (round 205) capture the stop reason BEFORE the reset below can
+        # clear it -- the dialog needs it after the state machine moved on.
+        stop_reason = (
+            (self._cancel_reason or "user request")
+            if error is not None and _is_job_cancelled(error)
+            else ""
+        )
+        if error is not None and _is_job_cancelled(error):
+            # (round 205) the cooperative stop lands here: the Stop
+            # button or the memory watchdog answered False at a
+            # checkpoint.  A stop is not a failure -- an info dialog
+            # with the reason, no red traceback, and the window plus
+            # every loaded input survive (the collapse this round
+            # exists to prevent).
+            self._job_label.configure(
+                text=f"{label} — cancelled after {_fmt_duration(elapsed)}"
+            )
+        elif error is not None:
             self._job_label.configure(text=f"{label} FAILED after {_fmt_duration(elapsed)}")
         else:
             self._job_label.configure(text=f"{label} — done in {_fmt_duration(elapsed)}")
         for button in self._action_buttons:
             if button.winfo_exists():
                 button.state(["!disabled"])
-        if error is not None:
+        # (round 205) the job is over: retire the Stop control and any
+        # stale stop request so the NEXT job starts clean.
+        if self._stop_button.winfo_exists():
+            self._stop_button.state(["disabled"])
+        self._cancel_requested = False
+        self._cancel_reason = ""
+        if error is not None and not _is_job_cancelled(error):
             traceback.print_exception(type(error), error, error.__traceback__)
             messagebox.showerror("Calculation failed", f"{type(error).__name__}: {error}")
+        elif error is not None:
+            messagebox.showinfo(
+                "Job stopped",
+                f"{label} was stopped by {stop_reason} after {_fmt_duration(elapsed)}.\n\n"
+                f"{error}",
+            )
         else:
             # (100x-142) capture-and-clear BEFORE invoking: a render
             # callback that chains straight into _start_job (e.g. an
@@ -6372,6 +6597,31 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not self._busy:
             self._on_done = None
         self.after(80, self._poll_jobs)
+
+    def _request_cancel(self) -> None:
+        """(round 205) Stop button: halt the running job at a checkpoint.
+
+        Flips the cooperative-stop flag the progress reporter reads; a
+        job whose ``work`` carries the reporter (the factory, the
+        recalculation, the CSV streamer, the leaderboards) stops at its
+        next checkpoint with ``JobCancelled``.  A checkpoint-less job
+        gets the honest label instead -- the stop cannot interrupt it,
+        and pretending otherwise would be a lie the user pays for.
+        """
+        if not self._busy or self._cancel_requested:
+            return
+        self._cancel_requested = True
+        self._cancel_reason = self._cancel_reason or "the Stop button"
+        note = (
+            "stopping at the next checkpoint…"
+            if self._job_cancellable
+            else (
+                "stop requested — this job reports no checkpoints, so it "
+                "runs to completion (closing the window ends it now)"
+            )
+        )
+        with contextlib.suppress(tk.TclError):
+            self._job_label.configure(text=f"{self._job_label_base} — {note}")
 
     def report_callback_exception(self, exc: Any, val: Any, tb: Any) -> None:
         """Route Tk callback crashes to the console and a dialog."""
@@ -12500,6 +12750,15 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
+        # (round 205) the pre-flight memory guard: the dense matrix is
+        # estimated BEFORE a single molecule computes, and a batch that
+        # cannot fit the available RAM is refused with its own
+        # arithmetic -- the historical alternative was the kernel
+        # killing the window mid-batch.
+        guard = _guard_batch("Batch too large", len(smiles), _factory_batch_columns(families))
+        if guard is not None:
+            messagebox.showwarning("Batch too large for the available memory", guard)
+            return
         method = _FEAT_RANKER_METHODS.get(self._feat_ranker_combo.get(), "auto")
         task = _FEAT_TASK_METHODS.get(self._feat_task_combo.get(), "auto")
         # variance ranking needs numpy only; every model ranker needs sklearn
@@ -12938,6 +13197,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
+            return
+        # (round 205) same pre-flight memory guard as the factory: the
+        # replay matrix (molecules x recorded features) is estimated
+        # up front with the same three-copy arithmetic.
+        guard = _guard_batch(
+            "Recalculation too large",
+            len(smiles),
+            len(metadata.get("selected_features", [])),
+        )
+        if guard is not None:
+            messagebox.showwarning("Batch too large for the available memory", guard)
             return
 
         def work(notify: Any) -> Any:
@@ -21806,6 +22076,25 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         n_jobs = parse_int(self._ml_njobs_spin.get(), "n_jobs", minimum=1, maximum=32)
         return strategy, n_jobs
 
+    def _effective_ml_n_jobs(self, requested: int) -> tuple[int, str]:
+        """(round 205) Cap loky CV workers to the memory the box has.
+
+        GridSearchCV / cross_validate workers are full interpreters
+        that each receive a copy of the dataset; a memory-tight box
+        asked for many workers is the OOM collapse this round exists
+        to prevent (the kernel kills the biggest process -- the Tk
+        app).  The cap keeps ~768 MB of available memory per worker;
+        when it bites, the returned note rides the job label so the
+        reduction is honest, never silent.
+        """
+        available = _meminfo_mb("MemAvailable")
+        if available is None:
+            return requested, ""
+        capped = max(1, min(requested, int(available / _ML_WORKER_MEM_MB)))
+        if capped >= requested:
+            return requested, ""
+        return capped, f" — n_jobs {requested}→{capped} (memory cap)"
+
     def _smiles_for_split(self, frame: Any, strategy: str) -> list[str] | None:
         """SMILES per row for scaffold splits, from the frame's own column.
 
@@ -21869,6 +22158,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             model_params = self._ml_manual_params(model_name, task)
             cv = parse_int(self._ml_cv_spin.get(), "cv folds", minimum=2, maximum=10)
             split_strategy, n_jobs = self._ml_split_settings()
+            # (round 205) the memory-aware worker cap (tune runs fan out
+            # to loky processes; the note rides the job label below).
+            n_jobs, njobs_note = self._effective_ml_n_jobs(n_jobs)
         except ValueError as exc:
             messagebox.showwarning("Check the manual settings", str(exc))
             return
@@ -21986,7 +22278,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             except Exception as exc:  # noqa: BLE001
                 self._show_error("Plot failed", exc)
 
-        self._start_job(f"training {model_name} ({task})", work, render)
+        self._start_job(f"training {model_name} ({task}){njobs_note}", work, render)
 
     # -- ensemble builder card ------------------------------------------ #
     def _ens_train(self) -> None:
@@ -23558,6 +23850,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # card's n_jobs spinbox (1 = the historical serial run).
         try:
             _strategy, n_jobs = self._ml_split_settings()
+            # (round 205) the memory-aware worker cap for the CV fan-out.
+            n_jobs, njobs_note = self._effective_ml_n_jobs(n_jobs)
         except ValueError as exc:
             messagebox.showwarning("Check the n_jobs setting", str(exc))
             return
@@ -23595,7 +23889,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "is the task's objective (higher is better)"
             )
 
-        self._start_job(f"comparing models ({task})", work, render)
+        self._start_job(f"comparing models ({task}){njobs_note}", work, render)
 
     def _ml_benchmark_families(self) -> None:
         """Cross-validate one model over every 2D feature family (100x-148).
@@ -23629,6 +23923,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         try:
             folds = parse_int(self._bench_cv.get(), "benchmark folds", minimum=2, maximum=10)
             n_jobs = parse_int(self._ml_njobs_spin.get(), "n_jobs", minimum=1, maximum=32)
+            # (round 205) the memory-aware worker cap for the CV fan-out.
+            n_jobs, njobs_note = self._effective_ml_n_jobs(n_jobs)
         except ValueError as exc:
             messagebox.showerror("Input", str(exc))
             return
@@ -23676,7 +23972,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 note += f"; {n_nan} family(ies) failed and sank"
             self._board_status.configure(text=note)
 
-        self._start_job(f"benchmarking feature families ({task})", work, render)
+        self._start_job(f"benchmarking feature families ({task}){njobs_note}", work, render)
 
     def _ml_stack_oof(self) -> None:
         """Out-of-fold stacking leaderboard + residual card (100x-149).

@@ -7452,3 +7452,96 @@ Stage Summary:
   (double-fork daemon) · cron pair 508389 (2-hour 100x, run 5 next)
   + webDevReview 509961 · runs_completed: 4 (owner-interaction
   round; the counter counts cron runs only).
+
+## Round 205 — the heavy-work safety kit: the collapse report answered (stop button, memory watchdog, batch guard, n_jobs cap), v1.2.119 shipped (2026-11-07)
+
+The owner's report (IM, verbatim): *"Playground.py collapses during
+heavy work."* Diagnosis first, on the box's own evidence: this sandbox
+runs 4 GB / 2 cores with ~1.6 GB available once the dev server and
+browser pool settle; dmesg carries TWO recorded OOM kills of python
+(1.1 GB and 0.95 GB anon-RSS); and the tune path's loky probe showed
+**7 worker processes** for one `n_jobs=4` GridSearchCV call — every
+worker a full interpreter holding a dataset copy. The collapse mode:
+heavy work outruns the RAM → the kernel kills the biggest process —
+the Tk app itself — and the window vanishes with every loaded input.
+The reproduction harness (`scratch/stress_playground.py`, real app
+under Xvfb, real card flows through the real worker-thread path)
+closed the loop: before the fix there was NO stop channel at all (a
+`rg -i cancel` over playground.py finds only dialog Cancel buttons),
+no memory arithmetic anywhere, and n_jobs allowed up to 32 loky
+workers on a box that cannot feed two.
+
+The fix, in two arms:
+
+* **The cooperative-stop channel (pharmaml)** —
+  `pharmaml.exceptions.JobCancelled`, raised at every checkpoint loop
+  when the progress callback answers `False`: the feature factory's
+  molecule-batch boundary (and therefore the recalculation replay,
+  which passes the callback through), BOTH progressive table readers'
+  chunk boundaries (the stop propagates as itself, never wrapped into
+  DataValidationError), and both CV leaderboards' completed rows
+  (compare_models / benchmark_feature_families). Callbacks returning
+  None or truthy never cancel — every historical callback and mock is
+  byte-identical.
+* **The app machinery (playground)** — the status-bar **Stop button**
+  (enabled exactly while busy; a checkpoint-less job gets the honest
+  "no checkpoints" label; a stop lands as "cancelled after X s" + an
+  info dialog naming the reason, never a red traceback); the **live
+  memory watchdog** riding the standing 150 ms poll (job ceiling =
+  launch RSS + 75% of launch-time MemAvailable, plus a 256 MB system
+  floor; both trip the same stop flag BEFORE the kernel would strike);
+  the **pre-flight batch guard** (factory + recalculation cards
+  estimate molecules × columns × 3 copies × 8 bytes and refuse with
+  their own arithmetic when it cannot fit half the available memory;
+  off-Linux the guards stand down); and the **ML n_jobs memory cap**
+  (768 MB of available memory per loky worker, the reduction riding
+  the job label — "n_jobs 4→2 (memory cap)" — never silent).
+
+Verification: the stress driver's six phases all green — mid-job Stop
+("cancelled after 3 s", checkpoint 100/237 named), the same job
+unstopped completing (231 × 27,759 frame in 7 s — a stop never
+poisons the next job), the watchdog trip ("stopped by memory ceiling
+after 1 s"), the guard refusal with full arithmetic, the cap maths,
+and the recalculation + xgboost regressions (the cap engaging live on
+this box: "training xgboost — n_jobs 2→1 (memory cap)"). Focused
+batteries: test_job_safety 26 green; recalc+csv 87 green; the four
+touched modules' doctests green; ml_pipeline+interpret xdist exit 0;
+TestGuiUnderXvfb 22 + TestFeatureFactoryGuiUnderXvfb 7 green;
+`--self-test` green under Xvfb. Full-suite runs were OOM-killed by the
+BOX itself (peer session's 1.8 GB stdin-workers were resident) — the
+focused-battery convention of rounds 203-204 applied instead.
+
+Peer-session notes (the workspace is shared): a parallel session
+bumped the counter to 5 mid-round, left `scratch/debug_roundtrip*.py`
+and an `experiments.jsonl`, re-executed two example notebooks (whose
+sklearn warning outputs carried `/home/z/` paths — sanitized before
+the zip; first build leaked 1, rebuild leaks 0), and co-edited
+`tests/test_job_safety.py` (lengthening the cancel round-trip's work
+to survive Tk's slow first `update()` warm-up — kept). The owner also
+uploaded `upload/MASTER_PROMPT part2.pdf`: **directive #16, the
+complete PySide6 (Qt for Python) GUI redesign** — 18 sub-sections,
+the next multi-round mandate for the run book.
+
+Stage Summary:
+- Deliverable: v1.2.119 — JobCancelled + four checkpoint loops (the
+  cooperative-stop channel) + Stop button + memory watchdog + pre-flight
+  batch guard + ML n_jobs cap + 26 tests (`tests/test_job_safety.py`);
+  zip in four homes.
+- Lessons pinned: (1) an unkillable-by-design job is a collapse
+  waiting for a small box — the stop channel must exist BEFORE the
+  memory arithmetic, because the watchdog needs something to trip;
+  (2) `monkeypatch.undo()` re-arms EVERY patch on the shared instance —
+  a quiet-dialogs fixture undone mid-test let the real modal block
+  Xvfb forever (the faulthandler SIGABRT stack dump found it in one
+  shot); (3) the census pin must be walked on the FINAL post-ship tree
+  (round-201's mid-ship lesson, now round-proven: the 897/338,379 pin
+  was 52 lines stale against its own HEAD); (4) parallel sessions
+  share the disk AND the test files — named-path staging only, and
+  re-run the leak scan after any peer notebook re-execution.
+- Baselines for the next round: v1.2.119 · 5,293 tests (4,515 +
+  778 doctests) · census 901 files / 339,748 lines · four zip homes
+  at 19,275,451 bytes sha-256 0c78934e… · web pins 5267→5293 (seven
+  sites) + fallback stats 897/338,379→901/339,748 · directive #16
+  (PySide6 redesign) absorbed in `upload/MASTER_PROMPT part2.pdf` ·
+  runs_completed: 5 (the counter counts cron runs only; run 5 was the
+  peer's in-flight round).

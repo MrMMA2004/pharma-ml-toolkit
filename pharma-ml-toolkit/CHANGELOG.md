@@ -1,3 +1,73 @@
+## [1.2.119] — 2026-11-07
+
+### Fixed / Added — round 205: the heavy-work safety kit (the collapse report)
+
+The owner's report: *"playground.py collapses during heavy work."* The
+diagnosis is the OOM story — a heavy featurization batch, a huge CSV
+stream, or a tune/compare run fanning out to many loky CV workers (each
+a full interpreter holding a dataset copy) can outrun the box's RAM, at
+which point the kernel kills the biggest process — the Tk app itself —
+and the window vanishes with every loaded input. Three layers answer it.
+
+#### The cooperative-stop channel (the library arm)
+
+**`pharmaml.exceptions.JobCancelled`** — the named error every
+checkpoint loop raises when its progress callback answers `False`:
+
+* `compute_feature_frame` (and therefore
+  `recalculate_selected_features`, which passes the callback through)
+  stops at the next molecule-batch boundary — *"feature batch
+  cancelled after 25/60 molecules"*;
+* `read_table_with_progress` / `read_indexed_table_with_progress`
+  stop at the next CSV chunk, **before** the concat would double the
+  memory — the stop propagates as itself, never wrapped into a
+  `DataValidationError`;
+* `compare_models` / `benchmark_feature_families` stop after the
+  completed leaderboard row.
+
+Callbacks that return `None` or any truthy value never cancel — every
+historical callback and test mock runs byte-identically.
+
+#### The playground machinery (the app arm)
+
+* **The Stop button** — the status bar gains a Stop control, enabled
+  exactly while a job runs. A job whose work carries the progress
+  reporter halts at its next checkpoint (molecule batch, leaderboard
+  row, table chunk); a checkpoint-less job gets the honest label
+  ("this job reports no checkpoints, so it runs to completion"). A stop
+  is not a failure: the status bar reads *"cancelled after 42 s"*, an
+  info dialog names the reason, and the window plus every loaded input
+  survive.
+* **The live memory watchdog** — the standing 150 ms progress poll
+  samples RSS (a /proc read, a few hundred bytes). Crossing the job's
+  ceiling (its launch RSS + 75% of what was available then) or the
+  system floor (`MemAvailable` < 256 MB) flips the same stop flag, so
+  the batch halts at its checkpoint *before* the OS would kill the
+  window — cancelled, not collapsed.
+* **The pre-flight batch guard** — the factory and recalculation cards
+  estimate the dense matrix (molecules × columns × 3 working copies ×
+  8 bytes) before a single molecule computes and refuse with their own
+  arithmetic when it cannot fit half the available memory: *"≈ 1.4 GB
+  … but only 0.2 GB is available — halve the corpus or drop some of the
+  wide 2048-bit families."* Off-Linux (no /proc/meminfo) the guards
+  stand down instead of guessing.
+* **The ML n_jobs memory cap** — loky CV workers are budgeted 768 MB of
+  available memory each; a capped request rides the job label honestly
+  (*"training xgboost (regression) — n_jobs 4→2 (memory cap)"*) instead
+  of silently spawning workers the box cannot feed.
+
+#### Verification
+
+`scratch/stress_playground.py` drives the real app under Xvfb through
+the real card flows: a mid-job Stop lands *"cancelled after 3 s"* with
+the checkpoint named (100/237 molecules); the same job unstopped
+completes (231 × 27,759 frame in 7 s); a fake RSS over the ceiling
+trips the watchdog (*"stopped by memory ceiling after 1 s"*); a fake
+200 MB MemAvailable refuses the batch with the full arithmetic; the
+cap maths holds; and the recalculation + xgboost paths still complete.
+26 new tests (`tests/test_job_safety.py`) — honest total **5,293**
+(4,515 tests/ + 778 doctests, the doctest item count unchanged).
+
 ## [1.2.118] — 2026-11-07
 
 ### Added — round 204: the feature-recalculation roundtrip (metadata → the same features, new molecules)

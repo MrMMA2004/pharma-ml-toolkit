@@ -71,6 +71,7 @@ import functools
 import hashlib
 import importlib.util
 import io
+import json
 import sys
 import urllib.request
 from pathlib import Path
@@ -576,6 +577,65 @@ def build_seed_molecules() -> None:
 
 
 # ---------------------------------------------------------------------------
+# round 204/205 -- the Recalculate-from-metadata card's bundled example.
+# The file shipped in round 204 but no builder path claimed it, so
+# --check mode flagged it as an orphan (the provenance guard caught the
+# gap the same day -- this step closes it).
+# ---------------------------------------------------------------------------
+_SELECTION_EXAMPLE_SMILES = [
+    "CC(=O)Oc1ccccc1C(=O)O",   # aspirin
+    "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",  # caffeine
+    "CC(=O)Nc1ccc(O)cc1",      # paracetamol
+    "CC(C)Cc1ccc(cc1)C(C)C(=O)O",  # ibuprofen
+    "COc1cc2c(cc1OC)C(=O)C(C)(O)CC2",  # a chromanone scaffold
+    "c1ccc2c(c1)ncnc2N",       # quinazoline
+    "CC(=O)Nc1nncc(c1C(C)=O)N",  # a heteroaryl amide
+    "OC(=O)c1ccccc1N",         # anthranilic acid
+]
+
+_SELECTION_SOURCE_NOTE = (
+    "Bundled example: variance-ranked top-24 of the ecfp + descriptors "
+    "families over eight diverse drug-like molecules (aspirin, caffeine, "
+    "paracetamol, ibuprofen, a chromanone scaffold, quinazoline, a "
+    "heteroaryl amide, anthranilic acid) -- the Recalculate from metadata "
+    "card loads this file so the roundtrip is one click."
+)
+
+
+@_owned
+def build_selection_metadata() -> None:
+    """The recalculation card's bundled example, via the factory's own saver.
+
+    ``examples/data/selection_metadata.json`` is regenerated through the
+    SAME pipeline the playground card drives: :func:`compute_feature_frame`
+    over the eight fixed drug-like molecules, :func:`select_top_features`
+    (variance, k=24 -- fully deterministic over a fixed corpus), then
+    :func:`selection_metadata` for the JSON-ready dict.  ``source_note``
+    and ``example_smiles`` are the builder's own provenance keys, appended
+    after the saver's keys exactly as the round-204 file had them.
+    """
+    from pharmaml.chem.features import (
+        compute_feature_frame,
+        rank_features,
+        select_top_features,
+        selection_metadata,
+    )
+
+    frame, report = compute_feature_frame(
+        _SELECTION_EXAMPLE_SMILES, families=("descriptors", "ecfp")
+    )
+    scores = rank_features(frame).reindex(frame.columns)  # variance; column order
+    selection = select_top_features(frame, scores, k=24)
+    metadata = selection_metadata(selection, report, k=24)
+    metadata["source_note"] = _SELECTION_SOURCE_NOTE
+    metadata["example_smiles"] = list(_SELECTION_EXAMPLE_SMILES)
+    # round-204's file ends WITHOUT a trailing newline (json.dumps output
+    # verbatim) -- kept byte-identical so --check stays clean.
+    payload = json.dumps(metadata, indent=2).encode("utf-8")
+    _write_if_changed(DATA_DIR / "selection_metadata.json", payload)
+
+
+# ---------------------------------------------------------------------------
 # complete_docking_workflow.ipynb -- cell 29 (synthetic AutoDock4 campaign)
 # ---------------------------------------------------------------------------
 def make_dlg(seed: int, n_clusters: int = 5, total_runs: int = 50) -> str:
@@ -937,6 +997,7 @@ def main(argv: list[str] | None = None) -> None:
     build_walkthrough_tables()
     build_ligand_library()
     build_seed_molecules()
+    build_selection_metadata()
     build_docking_campaign()
     if check_only:
         if _drift_report() != 0:

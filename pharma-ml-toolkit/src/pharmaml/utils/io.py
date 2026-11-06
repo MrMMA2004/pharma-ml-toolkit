@@ -135,7 +135,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from pharmaml.exceptions import DataValidationError
+from pharmaml.exceptions import DataValidationError, JobCancelled
 from pharmaml.logger import get_logger
 
 __all__ = [
@@ -377,7 +377,15 @@ def read_table_with_progress(
                 if len(chunk):
                     # the header-only file yields one EMPTY chunk -- a
                     # 0-rows "progress" blip would be noise, not news
-                    report(done, estimated, "")
+                    if report(done, estimated, "") is False:
+                        # (round 205) the cooperative stop: the GUI's
+                        # Stop button / memory watchdog answered False
+                        # -- the stream halts at this chunk boundary
+                        # BEFORE the concat would double the memory.
+                        raise JobCancelled(
+                            f"table read cancelled after {done:,} rows -- "
+                            "stopped at a checkpoint by the caller"
+                        )
 
     try:
         try:
@@ -403,6 +411,11 @@ def read_table_with_progress(
                 # truly malformed file)
                 return read_table(file_path)
     except DataValidationError:
+        raise
+    except JobCancelled:
+        # (round 205) the cooperative stop is the CALLER's verdict,
+        # not a parse failure -- it must reach the playground's job
+        # poller as itself, never wrapped into a DataValidationError.
         raise
     except Exception as exc:  # pandas raises a wide variety of errors
         raise DataValidationError(f"Failed to parse '{file_path}': {exc}") from exc
@@ -531,7 +544,13 @@ def read_indexed_table_with_progress(
                 if len(chunk):
                     # the header-only file yields one EMPTY chunk -- a
                     # 0-rows "progress" blip would be noise, not news
-                    report(done, estimated, "")
+                    if report(done, estimated, "") is False:
+                        # (round 205) cooperative stop -- same contract
+                        # as read_table_with_progress's chunk loop.
+                        raise JobCancelled(
+                            f"indexed table read cancelled after {done:,} rows -- "
+                            "stopped at a checkpoint by the caller"
+                        )
 
     try:
         try:
@@ -546,6 +565,10 @@ def read_indexed_table_with_progress(
             done = 0
             _drain(fallback_index_col)
     except DataValidationError:
+        raise
+    except JobCancelled:
+        # (round 205) same guard as read_table_with_progress: the stop
+        # propagates as itself, never wrapped.
         raise
     except Exception as exc:  # pandas raises a wide variety of errors
         raise DataValidationError(f"Failed to parse '{file_path}': {exc}") from exc

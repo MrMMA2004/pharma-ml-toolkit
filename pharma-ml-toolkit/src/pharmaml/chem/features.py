@@ -176,6 +176,7 @@ import numpy as np
 import pandas as pd
 
 from pharmaml.chem.descriptors import require_rdkit
+from pharmaml.exceptions import JobCancelled
 from pharmaml.logger import get_logger
 
 _LOG = get_logger(__name__)
@@ -836,7 +837,14 @@ def compute_feature_frame(
         fired on the calling thread as molecule batches COMPLETE --
         the GUI's determinate progress bar + ETA convention (the
         docking ``_progress_sink`` twin).  ``None`` keeps the silent
-        behaviour byte for byte.
+        behaviour byte for byte.  (round 205) The callback's RETURN
+        value is the cooperative-stop channel: returning ``False``
+        stops the batch at the next batch boundary with
+        :class:`~pharmaml.exceptions.JobCancelled`; ``None``/truthy
+        returns never cancel (every historical callback is
+        unaffected).  The GUI's Stop button and its live memory
+        watchdog speak through this channel, so a run-away batch can
+        be halted BEFORE the OS would kill the whole window.
 
     Returns
     -------
@@ -866,6 +874,10 @@ def compute_feature_frame(
     DependencyError
         If RDKit is not installed (raised by the shared
         :func:`pharmaml.chem.descriptors.require_rdkit` guard).
+    JobCancelled
+        (round 205) If the ``progress`` callback returns ``False`` at
+        a batch boundary -- the cooperative stop; the message names
+        how many molecules completed before the stop.
 
     Examples
     --------
@@ -886,6 +898,21 @@ def compute_feature_frame(
     ... )
     >>> seen
     [(2, 2, 'feature factory')]
+
+    (round 205) a callback that returns ``False`` stops the batch at
+    the boundary -- the cooperative-stop channel the playground's Stop
+    button and memory watchdog speak:
+
+    >>> stopped = []
+    >>> try:
+    ...     compute_feature_frame(
+    ...         ["CCO"] * 60, families=("ecfp",),
+    ...         progress=lambda done, total, note: False if done >= 25 else None,
+    ...     )
+    ... except JobCancelled as exc:
+    ...     stopped.append(str(exc))
+    >>> stopped
+    ['feature batch cancelled after 25/60 molecules -- stopped at a checkpoint by the caller']
 
     Notes
     -----
@@ -1035,7 +1062,17 @@ def compute_feature_frame(
             results.extend(compute_one(pair) for pair in batch)
         done += len(batch)
         if progress is not None:
-            progress(done, total, "feature factory")
+            if progress(done, total, "feature factory") is False:
+                # (round 205) the cooperative stop: the caller's
+                # reporter answered False -- the GUI's Stop button or
+                # its memory watchdog.  Halt at this batch boundary
+                # with the named error so the poller can tell a stop
+                # apart from a failure (the window survives either
+                # way; the half-computed batch is discarded).
+                raise JobCancelled(
+                    f"feature batch cancelled after {done}/{total} molecules "
+                    "-- stopped at a checkpoint by the caller"
+                )
 
     rows: list[np.ndarray] = []
     valid_smiles: list[str] = []
@@ -1576,7 +1613,10 @@ def recalculate_selected_features(
         Worker count passed through to :func:`compute_feature_frame`.
     progress:
         Optional ``progress(done, total, note)`` callback passed
-        through to :func:`compute_feature_frame`.
+        through to :func:`compute_feature_frame` -- including the
+        (round 205) cooperative-stop contract: returning ``False``
+        halts the replay at a batch boundary with
+        :class:`~pharmaml.exceptions.JobCancelled`.
 
     Returns
     -------

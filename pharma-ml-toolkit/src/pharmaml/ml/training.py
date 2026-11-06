@@ -59,7 +59,7 @@ from sklearn.metrics import get_scorer_names
 from sklearn.model_selection import GridSearchCV, cross_validate
 from sklearn.pipeline import Pipeline
 
-from pharmaml.exceptions import DataValidationError, ModelError
+from pharmaml.exceptions import DataValidationError, JobCancelled, ModelError
 from pharmaml.logger import get_logger
 from pharmaml.ml.models import (
     MODEL_REGISTRY,
@@ -580,7 +580,17 @@ def compare_models(
         if on_model is not None:
             # one call per completed row (success or failure) — the
             # progress-bar heartbeat for the longest job in the tab.
-            on_model({"model": name, "index": position, "total": len(models)})
+            # (round 205) the return value is the cooperative-stop
+            # channel: a False answer stops the leaderboard after this
+            # row -- the GUI's Stop button / memory watchdog, so a
+            # run-away comparison halts before the OS kills the window.
+            if on_model(
+                {"model": name, "index": position, "total": len(models)}
+            ) is False:
+                raise JobCancelled(
+                    f"model comparison cancelled after {position}/{len(models)} "
+                    "models -- stopped at a checkpoint by the caller"
+                )
 
     frame = pd.DataFrame(rows)
     column = f"{metric}_mean"
@@ -793,7 +803,15 @@ def benchmark_feature_families(
             _LOG.warning("Family %s failed during benchmarking: %s", family, exc)
             rows.append({"family": family, f"{metric}_mean": np.nan, "folds": cv})
         if on_family is not None:
-            on_family({"family": family, "index": position, "total": len(family_list)})
+            # (round 205) same cooperative-stop contract as the compare
+            # leaderboard: False halts the family sweep after this row.
+            if on_family(
+                {"family": family, "index": position, "total": len(family_list)}
+            ) is False:
+                raise JobCancelled(
+                    f"family benchmark cancelled after {position}/{len(family_list)} "
+                    "families -- stopped at a checkpoint by the caller"
+                )
 
     board = pd.DataFrame(rows)
     column = f"{metric}_mean"
