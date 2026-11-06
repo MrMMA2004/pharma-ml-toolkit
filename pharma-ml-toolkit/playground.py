@@ -615,6 +615,7 @@ import contextlib
 import copy
 import csv
 import inspect
+import itertools
 import json
 import math
 import queue
@@ -10334,6 +10335,106 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         std_bar.pack(side="right", fill="y")
         self._csvstd_report: Any = None
 
+        # -- SMILES augmentation (maxsmi, round 199) --------------------- #
+        # the catalog's maxsmi concept: one molecule, many randomized
+        # atom orderings -- the augmentation corpus behind SMILES-ML
+        # robustness studies, surfaced as a one-click card
+        aug_card = make_card(
+            page.grid,
+            "SMILES augmentation (maxsmi)",
+            row=12,
+            column=0,
+            subtitle="One molecule, many random atom orderings — the "
+            "augmentation corpus behind maxsmi (Malidau et al. 2021): "
+            "unique variants, charset and token stats for SMILES-based "
+            "ML robustness.",
+        )
+        self._aug_entry = ttk.Entry(aug_card, width=30)
+        self._aug_entry.insert(0, "CC(=O)Oc1ccccc1C(=O)O")  # aspirin
+        form_row(aug_card, "SMILES", self._aug_entry)
+        self._aug_count = ttk.Spinbox(aug_card, from_=1, to=64, increment=1, width=6)
+        self._aug_count.set("12")
+        form_row(aug_card, "variants", self._aug_count)
+        aug_button = self._action_button(
+            aug_card,
+            "Enumerate",
+            self._aug_run,
+            primary=True,
+            tooltip="Randomized SMILES variants of the molecule; the "
+            "summary line counts unique strings, charset size and the "
+            "canonical token count.",
+        )
+        aug_button.grid(row=aug_card.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._aug_result = ttk.Label(
+            aug_card,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=340,
+            justify="left",
+        )
+        self._aug_result.grid(
+            row=aug_button.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
+        bind_enter(self._aug_entry, aug_button)
+        aug_copy_btn = self._action_button(
+            aug_card, "Copy", lambda: self._copy(self._aug_result.cget("text"))
+        )
+        aug_copy_btn.grid(row=aug_card.grid_size()[1], column=0, sticky="w")
+        self._aug_variants = _grid_text(aug_card, height=5, mono=self._mono)
+        grid_append(aug_card, self._aug_variants, sticky="ew")
+
+        # -- ECFP bit highlighter (ECFP6-Highlighter-GUI, round 199) ----- #
+        # the catalog's ECFP6-Highlighter-GUI concept: which substructure
+        # environments light up which Morgan bits -- environments, corpus
+        # presence and the saveable highlight PNG
+        ecfp_hl = make_card(
+            page.grid,
+            "ECFP bit highlighter",
+            row=12,
+            column=1,
+            subtitle="Which substructure environments light up which "
+            "Morgan bits (the ECFP6-Highlighter-GUI concept): bit lookup, "
+            "corpus presence and a saveable highlight PNG.",
+        )
+        self._ecfp_hl_entry = ttk.Entry(ecfp_hl, width=30)
+        self._ecfp_hl_entry.insert(0, "CC(=O)Oc1ccccc1C(=O)O")  # aspirin
+        form_row(ecfp_hl, "SMILES", self._ecfp_hl_entry)
+        self._ecfp_hl_bits = ttk.Entry(ecfp_hl, width=14)
+        self._ecfp_hl_bits.insert(0, "389, 456")  # real aspirin bits (r=3)
+        form_row(ecfp_hl, "bits", self._ecfp_hl_bits)
+        self._ecfp_hl_radius = ttk.Combobox(
+            ecfp_hl, state="readonly", width=6, values=("2", "3")
+        )
+        self._ecfp_hl_radius.set("3")
+        form_row(ecfp_hl, "radius", self._ecfp_hl_radius)
+        ecfp_hl_button = self._action_button(
+            ecfp_hl,
+            "Highlight",
+            self._ecfp_hl_run,
+            primary=True,
+            tooltip="Report which bits have matching substructure "
+            "environments and how often each appears across the bundled "
+            "corpus; Save PNG draws the highlighted atoms.",
+        )
+        ecfp_hl_button.grid(row=ecfp_hl.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._ecfp_hl_result = ttk.Label(
+            ecfp_hl,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=340,
+            justify="left",
+        )
+        self._ecfp_hl_result.grid(
+            row=ecfp_hl_button.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
+        bind_enter(self._ecfp_hl_bits, ecfp_hl_button)
+        ecfp_hl_save_btn = self._action_button(ecfp_hl, "Save PNG", self._ecfp_hl_save)
+        ecfp_hl_save_btn.grid(row=ecfp_hl.grid_size()[1], column=0, sticky="w")
+        self._ecfp_hl_detail = _grid_text(ecfp_hl, height=6, mono=self._mono)
+        grid_append(ecfp_hl, self._ecfp_hl_detail, sticky="ew")
+
     def _csvstd_pick_file(self) -> None:
         """Pick the CSV whose SMILES column the card standardises."""
         if filedialog is None:  # pragma: no cover - headless import
@@ -12970,6 +13071,191 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         bind_enter(self._uc_value, uc_btn)
         bind_enter(self._uc_to, uc_btn)
         self._uc_dimension_changed()
+
+        # -- PBPK & first-in-human (PK-Sim/OSPSuite concepts, round 199) - #
+        # the Python-usable slice of the OSP stack the catalog devotes
+        # its whole §7 to: microsomal IVIVE, well-stirred hepatic
+        # clearance, DDI AUC ratio, MABEL and NOAEL-HED
+        pbpk_card = make_card(
+            page.grid,
+            "PBPK & first-in-human",
+            row=8,
+            column=0,
+            subtitle="The Python-usable slice of the OSP stack: microsomal "
+            "IVIVE, well-stirred hepatic clearance, DDI AUC ratio, MABEL "
+            "and NOAEL-HED — the FIH starting dose is the safer of the two.",
+        )
+        self._pbpk_clint = ttk.Entry(pbpk_card, width=10)
+        self._pbpk_clint.insert(0, "10")
+        form_row(pbpk_card, "CLint uL/min/mg", self._pbpk_clint)
+        self._pbpk_liver = ttk.Entry(pbpk_card, width=10)
+        self._pbpk_liver.insert(0, "1500")
+        form_row(pbpk_card, "liver weight g", self._pbpk_liver)
+        self._pbpk_mppgl = ttk.Entry(pbpk_card, width=10)
+        self._pbpk_mppgl.insert(0, "40")
+        form_row(pbpk_card, "MPPGL", self._pbpk_mppgl)
+        self._pbpk_qh = ttk.Entry(pbpk_card, width=10)
+        self._pbpk_qh.insert(0, "90")
+        form_row(pbpk_card, "Q_h L/h", self._pbpk_qh)
+        self._pbpk_fub = ttk.Entry(pbpk_card, width=10)
+        self._pbpk_fub.insert(0, "0.1")
+        form_row(pbpk_card, "fu_b", self._pbpk_fub)
+        self._pbpk_clint_iv = ttk.Entry(pbpk_card, width=10)
+        self._pbpk_clint_iv.insert(0, "33.8")
+        form_row(pbpk_card, "CLint in-vivo L/h", self._pbpk_clint_iv)
+        self._pbpk_iconc = ttk.Entry(pbpk_card, width=10)
+        self._pbpk_iconc.insert(0, "1.0")
+        form_row(pbpk_card, "[I]", self._pbpk_iconc)
+        self._pbpk_ki = ttk.Entry(pbpk_card, width=10)
+        self._pbpk_ki.insert(0, "1.0")
+        form_row(pbpk_card, "K_i", self._pbpk_ki)
+        self._pbpk_ec50 = ttk.Entry(pbpk_card, width=10)
+        self._pbpk_ec50.insert(0, "1.0")
+        form_row(pbpk_card, "EC50", self._pbpk_ec50)
+        self._pbpk_fup = ttk.Entry(pbpk_card, width=10)
+        self._pbpk_fup.insert(0, "0.1")
+        form_row(pbpk_card, "fu_plasma", self._pbpk_fup)
+        self._pbpk_vol = ttk.Entry(pbpk_card, width=10)
+        self._pbpk_vol.insert(0, "100")
+        form_row(pbpk_card, "V L", self._pbpk_vol)
+        self._pbpk_noael = ttk.Entry(pbpk_card, width=10)
+        self._pbpk_noael.insert(0, "50")
+        form_row(pbpk_card, "NOAEL mg/kg", self._pbpk_noael)
+        self._pbpk_bw = ttk.Entry(pbpk_card, width=10)
+        self._pbpk_bw.insert(0, "6")
+        form_row(pbpk_card, "animal BW kg", self._pbpk_bw)
+        pbpk_button = self._action_button(
+            pbpk_card,
+            "Run the chain",
+            self._pbpk_run,
+            primary=True,
+            tooltip="IVIVE scales the microsomal CLint, the well-stirred "
+            "model turns it into hepatic clearance, the DDI ratio folds "
+            "in inhibition, and MABEL vs NOAEL-HED settles the FIH dose.",
+        )
+        pbpk_button.grid(row=pbpk_card.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._pbpk_result = ttk.Label(
+            pbpk_card,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=340,
+            justify="left",
+        )
+        self._pbpk_result.grid(
+            row=pbpk_button.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
+        self._pbpk_detail = _grid_text(pbpk_card, height=8, mono=self._mono)
+        grid_append(pbpk_card, self._pbpk_detail, sticky="ew")
+
+        # -- OSP PBPK model library (PK-Sim ecosystem, round 199) -------- #
+        # the catalog's OSP model-library concept as a browsable table:
+        # the curated collection of published PBPK models with lookup
+        osp_card = make_card(
+            page.grid,
+            "OSP PBPK model library",
+            row=8,
+            column=1,
+            subtitle="The Open-Systems-Pharmacology model collection — "
+            "curated published PBPK models with version, category and "
+            "pediatric flag, plus a name lookup.",
+        )
+        self._osp_search = ttk.Entry(osp_card, width=24)
+        self._osp_search.insert(0, "Alfentanil")
+        form_row(osp_card, "find model", self._osp_search)
+        osp_load_btn = self._action_button(
+            osp_card,
+            "Load library",
+            self._osp_load,
+            primary=True,
+            tooltip="Browse the whole curated model table; the lookup "
+            "button resolves one model by name.",
+        )
+        osp_load_btn.grid(row=osp_card.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        osp_lookup_btn = self._action_button(osp_card, "Look up", self._osp_lookup)
+        osp_lookup_btn.grid(
+            row=osp_load_btn.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
+        bind_enter(self._osp_search, osp_lookup_btn)
+        osp_tree_frame = ttk.Frame(osp_card, style="Card.TFrame")
+        grid_append(osp_card, osp_tree_frame, sticky="nsew", pady=(6, 0), weight=True)
+        self._osp_tree = ttk.Treeview(
+            osp_tree_frame,
+            show="headings",
+            height=9,
+            columns=("name", "version", "category", "pediatric", "notes"),
+        )
+        for column, width in (
+            ("name", 110),
+            ("version", 60),
+            ("category", 110),
+            ("pediatric", 70),
+            ("notes", 150),
+        ):
+            self._osp_tree.heading(column, text=column)
+            self._osp_tree.column(
+                column, width=width, minwidth=48, stretch=column in ("name", "notes")
+            )
+        osp_bar = ttk.Scrollbar(osp_tree_frame, orient="vertical", command=self._osp_tree.yview)
+        self._osp_tree.configure(yscrollcommand=osp_bar.set)
+        self._osp_tree.pack(side="left", fill="both", expand=True)
+        osp_bar.pack(side="right", fill="y")
+        self._osp_summary = ttk.Label(
+            osp_card,
+            text="load the library to browse the curated models",
+            style="CardMuted.TLabel",
+            wraplength=420,
+            justify="left",
+        )
+        grid_append(osp_card, self._osp_summary, sticky="w", pady=(4, 0))
+
+        # -- Dosing events & regimen (RxODE/mrgsolve grammar, round 199) - #
+        # the catalog's NONMEM/mrgsolve event grammar: one dose record
+        # plus additional doses until a stop time, and weekday schedules
+        evreg_card = make_card(
+            page.grid,
+            "Dosing events & regimen",
+            row=9,
+            column=0,
+            subtitle="The NONMEM/mrgsolve event grammar (RxODE-style): one "
+            "dose record, additional doses until a stop time, and weekday "
+            "schedules — realized as the full dose-event table.",
+        )
+        self._evreg_dose = ttk.Entry(evreg_card, width=10)
+        self._evreg_dose.insert(0, "500")
+        form_row(evreg_card, "dose mg", self._evreg_dose)
+        self._evreg_ii = ttk.Entry(evreg_card, width=10)
+        self._evreg_ii.insert(0, "12")
+        form_row(evreg_card, "interval h", self._evreg_ii)
+        self._evreg_until = ttk.Entry(evreg_card, width=10)
+        self._evreg_until.insert(0, "72")
+        form_row(evreg_card, "until h", self._evreg_until)
+        self._evreg_days = ttk.Entry(evreg_card, width=14)
+        self._evreg_days.insert(0, "m, w, f")
+        form_row(evreg_card, "weekday codes", self._evreg_days)
+        evreg_button = self._action_button(
+            evreg_card,
+            "Realize regimen",
+            self._evreg_run,
+            primary=True,
+            tooltip="addl_until counts the additional doses, the event "
+            "table lists every realized dose record, and the weekday "
+            "codes build the mrgsolve-style weekly schedule.",
+        )
+        evreg_button.grid(row=evreg_card.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._evreg_result = ttk.Label(
+            evreg_card,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=340,
+            justify="left",
+        )
+        self._evreg_result.grid(
+            row=evreg_button.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
+        self._evreg_detail = _grid_text(evreg_card, height=8, mono=self._mono)
+        grid_append(evreg_card, self._evreg_detail, sticky="ew")
 
     def _uc_dimension_changed(self) -> None:
         """Load the picked dimension's units into both comboboxes."""
@@ -29128,6 +29414,49 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._breed_text = _grid_text(breed, height=6, mono=self._mono)
         self._breed_host = self._figure_host(breed, height=420)
 
+        # -- Scoring oracles (GuacaMol, round 199) ----------------------- #
+        # the catalog's GuacaMol benchmark score book: QED, SA, penalized
+        # logP, rediscovery similarity and the property filter
+        oracle_card = make_card(
+            page.grid,
+            "Scoring oracles (GuacaMol)",
+            row=4,
+            column=0,
+            subtitle="The benchmark score book (GuacaMol): QED, synthetic "
+            "accessibility, penalized logP, rediscovery similarity and the "
+            "property filter — one molecule, every oracle.",
+        )
+        self._oracle_entry = ttk.Entry(oracle_card, width=30)
+        self._oracle_entry.insert(0, "CC(=O)Oc1ccccc1C(=O)O")  # aspirin
+        form_row(oracle_card, "SMILES", self._oracle_entry)
+        self._oracle_ref = ttk.Entry(oracle_card, width=30)
+        self._oracle_ref.insert(0, "O=C(O)c1ccccc1O")  # salicylic acid
+        form_row(oracle_card, "rediscovery target", self._oracle_ref)
+        oracle_button = self._action_button(
+            oracle_card,
+            "Score",
+            self._oracle_run,
+            primary=True,
+            tooltip="Every oracle at once: QED (weighted desirability), SA "
+            "score, penalized logP, the rediscovery similarity to the "
+            "target, and the Lipinski-style property filter.",
+        )
+        oracle_button.grid(row=oracle_card.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._oracle_result = ttk.Label(
+            oracle_card,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=340,
+            justify="left",
+        )
+        self._oracle_result.grid(
+            row=oracle_button.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
+        bind_enter(self._oracle_entry, oracle_button)
+        self._oracle_detail = _grid_text(oracle_card, height=8, mono=self._mono)
+        grid_append(oracle_card, self._oracle_detail, sticky="ew")
+
     def _objective_hint(self, _event: Any = None) -> None:
         kind = self._objective_combo.get()
         hints = {
@@ -30664,6 +30993,100 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         grid_append(dist_card, self._found_dist_note, pady=(4, 0))
 
+        # -- Inferential statistics (pingouin, round 199) ---------------- #
+        # the catalog's pingouin concept: Welch ANOVA with honest
+        # post-hoc tables (Tukey HSD, Games-Howell) over pasted groups
+        istat_card = make_card(
+            page.grid,
+            "Inferential statistics (pingouin)",
+            row=5,
+            column=0,
+            subtitle="Groups pasted as 'label: v1, v2, …' lines — Welch "
+            "ANOVA plus Tukey HSD and Games-Howell pairwise tables (the "
+            "pingouin-style workflow).",
+        )
+        self._istat_text = _grid_text(istat_card, height=6, mono=self._mono)
+        self._istat_text.insert(
+            "1.0",
+            "control: 2.1, 2.4, 2.2, 2.5, 2.3\n"
+            "low: 2.8, 3.1, 2.9, 3.0\n"
+            "high: 3.6, 3.9, 3.4, 3.8, 3.7",
+        )
+        grid_append(istat_card, self._istat_text, sticky="ew")
+        istat_button = self._action_button(
+            istat_card,
+            "Run the tests",
+            self._istat_run,
+            primary=True,
+            tooltip="Welch ANOVA across the groups (robust to unequal "
+            "variances), then both pairwise post-hoc tables below.",
+        )
+        istat_button.grid(row=istat_card.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._istat_result = ttk.Label(
+            istat_card,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=340,
+            justify="left",
+        )
+        self._istat_result.grid(
+            row=istat_button.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
+        self._istat_detail = _grid_text(istat_card, height=10, mono=self._mono)
+        grid_append(istat_card, self._istat_detail, sticky="ew")
+
+        # -- Interpolation lab (SciPy, round 199) ------------------------ #
+        # the catalog's SciPy concept: linear / natural-cubic / PCHIP
+        # interpolation at query points plus the holdout audit
+        interp_card = make_card(
+            page.grid,
+            "Interpolation lab (SciPy)",
+            row=5,
+            column=1,
+            subtitle="Knots pasted as 'x, y' lines — linear, natural-cubic "
+            "and PCHIP interpolation at query points, plus the holdout "
+            "audit comparing all three.",
+        )
+        self._interp_text = _grid_text(interp_card, height=5, mono=self._mono)
+        self._interp_text.insert(
+            "1.0",
+            "0, 0\n1, 0.6\n2, 0.9\n3, 1.1\n4, 1.3\n"
+            "5, 1.5\n6, 1.7\n7, 2.0\n8, 2.2",
+        )
+        grid_append(interp_card, self._interp_text, sticky="ew")
+        self._interp_query = ttk.Entry(interp_card, width=14)
+        self._interp_query.insert(0, "3, 5, 6")
+        form_row(interp_card, "query x", self._interp_query)
+        self._interp_method = ttk.Combobox(
+            interp_card, state="readonly", width=10, values=("linear", "cubic", "pchip")
+        )
+        self._interp_method.set("pchip")
+        form_row(interp_card, "method", self._interp_method)
+        interp_button = self._action_button(
+            interp_card,
+            "Interpolate",
+            self._interp_run,
+            primary=True,
+            tooltip="Evaluate the chosen spline at the query points; the "
+            "holdout audit refits without every 4th knot and reports "
+            "each method's honest error.",
+        )
+        interp_button.grid(row=interp_card.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._interp_result = ttk.Label(
+            interp_card,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=340,
+            justify="left",
+        )
+        self._interp_result.grid(
+            row=interp_button.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
+        self._interp_detail = _grid_text(interp_card, height=6, mono=self._mono)
+        grid_append(interp_card, self._interp_detail, sticky="ew")
+
     # -- Foundations: dataset plumbing ------------------------------------ #
 
     def _found_open_csv(self) -> None:
@@ -31732,6 +32155,58 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         )
         grid_append(timeseries, self._bestof_ts_note, sticky="w", pady=(4, 0))
         self._bestof_refresh_columns()
+
+        # -- Association rules (apriori, round 199) ---------------------- #
+        # the catalog's Orange3 basket-analysis concept: frequent
+        # itemsets and association rules over pasted transactions
+        assoc_card = make_card(
+            page.grid,
+            "Association rules (apriori)",
+            row=4,
+            column=0,
+            subtitle="Transactions pasted one per line (comma-separated "
+            "items) — frequent itemsets and association rules with "
+            "support, confidence and lift (the Orange3 basket analysis).",
+        )
+        self._assoc_text = _grid_text(assoc_card, height=6, mono=self._mono)
+        self._assoc_text.insert(
+            "1.0",
+            "aspirin, metformin\n"
+            "aspirin, statin\n"
+            "aspirin, metformin, statin\n"
+            "metformin\n"
+            "aspirin, metformin",
+        )
+        grid_append(assoc_card, self._assoc_text, sticky="ew")
+        self._assoc_support = ttk.Entry(assoc_card, width=8)
+        self._assoc_support.insert(0, "0.30")
+        form_row(assoc_card, "min support", self._assoc_support)
+        self._assoc_confidence = ttk.Entry(assoc_card, width=8)
+        self._assoc_confidence.insert(0, "0.40")
+        form_row(assoc_card, "min confidence", self._assoc_confidence)
+        assoc_button = self._action_button(
+            assoc_card,
+            "Mine rules",
+            self._assoc_run,
+            primary=True,
+            tooltip="The apriori pipeline: frequent itemsets above the "
+            "support threshold, then rules above the confidence "
+            "threshold ranked by lift.",
+        )
+        assoc_button.grid(row=assoc_card.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._assoc_result = ttk.Label(
+            assoc_card,
+            text="—",
+            style="Result.TLabel",
+            font=self._mono_result,
+            wraplength=340,
+            justify="left",
+        )
+        self._assoc_result.grid(
+            row=assoc_button.grid_info()["row"], column=1, sticky="w", padx=(10, 0)
+        )
+        self._assoc_detail = _grid_text(assoc_card, height=8, mono=self._mono)
+        grid_append(assoc_card, self._assoc_detail, sticky="ew")
 
     # -- Best-of ML: card handlers ---------------------------------------- #
 
@@ -34406,6 +34881,525 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._save_frame_dialog(
             self._util_frames.get("reindex"), "Save the dense table", "reindexed.csv"
         )
+
+    # -- Catalog absorption handlers (round 199) ------------------------- #
+    # one handler per new card from the GitHub research repository
+    # catalog: every backend module already tested in tests/, these
+    # are the GUI surfaces that had no card until now
+
+    def _aug_run(self) -> None:
+        """SMILES augmentation card: randomized variants of one molecule."""
+        if not self._require_pharmaml():
+            return
+        text = self._aug_entry.get().strip()
+        if not text:
+            messagebox.showwarning("Empty input", "Type a SMILES string first.")
+            return
+        try:
+            k = parse_int(self._aug_count.get(), "variants", minimum=1, maximum=64)
+        except ValueError as exc:
+            messagebox.showerror("Invalid input", str(exc))
+            return
+
+        def work() -> Any:
+            from pharmaml.chem.smiles_enumeration import enumerate_smiles
+
+            return enumerate_smiles(text, k=k)
+
+        def render(payload: Any) -> None:
+            if payload is None:
+                self._aug_result.configure(text="invalid SMILES — no variants")
+                self._aug_variants.delete("1.0", "end")
+                return
+            self._aug_result.configure(
+                text=f"{payload.n_unique_augmentations} unique · "
+                f"charset {len(payload.charset)} · {payload.n_tokens} tokens"
+            )
+            self._aug_variants.delete("1.0", "end")
+            self._aug_variants.insert("1.0", "\n".join(payload.augmentations[:8]))
+
+        self._start_job("SMILES augmentation", work, render)
+
+    def _ecfp_hl_run(self) -> None:
+        """ECRP bit highlighter: environments plus corpus presence."""
+        if not self._require_pharmaml() or not self._require("rdkit", "the ECFP bit highlighter"):
+            return
+        text = self._ecfp_hl_entry.get().strip()
+        raw_bits = self._ecfp_hl_bits.get().strip()
+        if not text or not raw_bits:
+            messagebox.showwarning("Empty input", "Type a SMILES and at least one bit id.")
+            return
+        try:
+            bits = [
+                parse_int(part, "bit id", minimum=0, maximum=2047)
+                for part in raw_bits.split(",")
+                if part.strip()
+            ]
+        except ValueError as exc:
+            messagebox.showerror("Invalid input", str(exc))
+            return
+        radius = int(self._ecfp_hl_radius.get())
+        corpus = list(_FEAT_DEFAULT_SMILES[:40])
+
+        def work() -> Any:
+            from pharmaml.chem.bit_highlights import bit_environments, bit_presence_report
+
+            atoms, bonds = bit_environments(text, bits, radius=radius)
+            presence = bit_presence_report([text] + corpus, bits, radius=radius)
+            return atoms, bonds, presence
+
+        def render(payload: Any) -> None:
+            atoms, bonds, presence = payload
+            self._ecfp_hl_result.configure(
+                text=f"{len(atoms)} atoms · {len(bonds)} bonds highlighted"
+            )
+            unique_bits = sorted(set(bits))
+            n_corpus = max(len(presence) - 1, 0)  # row 0 is the query molecule
+            lines = []
+            query_row = presence.iloc[0] if len(presence) else None
+            for bit in unique_bits:
+                in_query = bool(query_row is not None and bit in query_row["present"])
+                n_seen = 0
+                for cell in presence["present"].iloc[1:]:
+                    if bit in cell:
+                        n_seen += 1
+                coverage = (n_seen / n_corpus) if n_corpus else 0.0
+                state = "present" if in_query else "absent"
+                lines.append(
+                    f"bit {bit}: {state} in query · corpus {n_seen}/{n_corpus} ({coverage:.0%})"
+                )
+            self._ecfp_hl_detail.delete("1.0", "end")
+            self._ecfp_hl_detail.insert("1.0", "\n".join(lines))
+
+        self._start_job("ECFP bit highlighter", work, render)
+
+    def _ecfp_hl_save(self) -> None:
+        """ECRP bit highlighter: write the highlight PNG."""
+        if filedialog is None:  # pragma: no cover - headless import
+            return
+        if not self._require_pharmaml() or not self._require("rdkit", "the ECFP bit highlighter"):
+            return
+        text = self._ecfp_hl_entry.get().strip()
+        if not text:
+            messagebox.showwarning("Empty input", "Type a SMILES string first.")
+            return
+        try:
+            bits = [
+                parse_int(part, "bit id", minimum=0, maximum=2047)
+                for part in self._ecfp_hl_bits.get().split(",")
+                if part.strip()
+            ]
+        except ValueError as exc:
+            messagebox.showerror("Invalid input", str(exc))
+            return
+        radius = int(self._ecfp_hl_radius.get())
+        target = filedialog.asksaveasfilename(
+            defaultextension=".png",
+            initialfile="ecfp-highlight.png",
+            filetypes=[("PNG image", "*.png"), ("All files", "*.*")],
+            title="Save the ECFP bit highlight",
+        )
+        if not target:
+            return
+
+        def work() -> Any:
+            from pharmaml.chem.bit_highlights import highlight_bits_png
+
+            data = highlight_bits_png(text, bits, radius=radius)
+            with open(target, "wb") as fh:
+                fh.write(data)
+            return target, len(data)
+
+        def render(payload: Any) -> None:
+            path, size = payload
+            self._job_label.configure(text=f"highlight PNG saved · {path} ({size} bytes)")
+
+        self._start_job("ECFP highlight PNG", work, render)
+
+    def _oracle_run(self) -> None:
+        """Scoring oracles card: the GuacaMol score book for one molecule."""
+        if not self._require_pharmaml() or not self._require("rdkit", "the scoring oracles"):
+            return
+        text = self._oracle_entry.get().strip()
+        if not text:
+            messagebox.showwarning("Empty input", "Type a SMILES string first.")
+            return
+        reference = self._oracle_ref.get().strip()
+
+        def work() -> Any:
+            from pharmaml.chem.oracles import (
+                penalized_logp,
+                property_filter,
+                qed_score,
+                rediscovery_score,
+                sa_score,
+            )
+
+            qed = qed_score(text)
+            sa = sa_score(text)
+            logp = penalized_logp(text)
+            redis = rediscovery_score(text, reference) if reference else None
+            props = property_filter(text)
+            return qed, sa, logp, redis, props
+
+        def render(payload: Any) -> None:
+            qed, sa, logp, redis, props = payload
+            redis_text = f" · rediscovery {redis:.3f}" if redis is not None else ""
+            self._oracle_result.configure(
+                text=f"QED {qed:.3f} · SA {sa:.2f} · logP {logp:.2f}{redis_text}"
+            )
+            verdict = "PASS" if props["ok"] else "VIOLATIONS"
+            lines = [f"property filter: {verdict}"]
+            for key, value in props["values"].items():
+                lines.append(f"  {key:<6} {value:>10}")
+            for violation in props["violations"]:
+                lines.append(f"  ! {violation}")
+            self._oracle_detail.delete("1.0", "end")
+            self._oracle_detail.insert("1.0", "\n".join(lines))
+
+        self._start_job("scoring oracles", work, render)
+
+    def _istat_run(self) -> None:
+        """Inferential statistics card: Welch ANOVA plus pairwise post-hoc."""
+        if not self._require_pharmaml():
+            return
+        raw = self._istat_text.get("1.0", "end-1c")
+        groups: dict[str, list[float]] = {}
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line or ":" not in line:
+                continue
+            label, _, values = line.partition(":")
+            try:
+                numbers = [float(part) for part in values.split(",") if part.strip()]
+            except ValueError:
+                numbers = []
+            if numbers:
+                groups[label.strip() or f"group {len(groups) + 1}"] = numbers
+        if len(groups) < 2:
+            messagebox.showwarning(
+                "Not enough groups", "Paste at least two 'label: values' lines."
+            )
+            return
+        ordered = list(groups.items())
+
+        def work() -> Any:
+            from pharmaml.ml.inferential import games_howell, tukey_hsd, welch_anova
+
+            matrix = [values for _label, values in ordered]
+            anova = welch_anova(matrix)
+            tukey = tukey_hsd(matrix)
+            howell = games_howell(matrix)
+            return anova, tukey, howell
+
+        def render(payload: Any) -> None:
+            anova, tukey, howell = payload
+            row = anova.iloc[0]
+            f_stat = float(row["F"])
+            p_value = float(row["p-unc"])
+            self._istat_result.configure(
+                text=f"Welch F = {f_stat:.3f} · p = {p_value:.4g} · {len(ordered)} groups"
+            )
+            lines = [
+                "Tukey HSD (pairwise):",
+                tukey.to_string(index=False),
+                "",
+                "Games-Howell (pairwise):",
+                howell.to_string(index=False),
+            ]
+            self._istat_detail.delete("1.0", "end")
+            self._istat_detail.insert("1.0", "\n".join(lines)[:4000])
+
+        self._start_job("inferential statistics", work, render)
+
+    def _interp_run(self) -> None:
+        """Interpolation lab card: knots, query points, holdout audit."""
+        if not self._require_pharmaml():
+            return
+        raw = self._interp_text.get("1.0", "end-1c")
+        knots: list[tuple[float, float]] = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line or "," not in line:
+                continue
+            left, _, right = line.partition(",")
+            try:
+                knots.append((float(left), float(right)))
+            except ValueError:
+                continue
+        if len(knots) < 2:
+            messagebox.showwarning("Not enough knots", "Paste at least two 'x, y' lines.")
+            return
+        xs = [point[0] for point in knots]
+        if any(b <= a for a, b in itertools.pairwise(xs)):
+            messagebox.showwarning("Not increasing", "Knot x values must be strictly increasing.")
+            return
+        query_raw = self._interp_query.get().strip() or str(xs[-1])
+        try:
+            x_new = [float(part) for part in query_raw.split(",") if part.strip()]
+        except ValueError:
+            messagebox.showwarning("Invalid query", "Query points must be numbers.")
+            return
+        method = self._interp_method.get()
+
+        def work() -> Any:
+            import numpy as np
+
+            from pharmaml.ml.interpolate import interpolate_1d, interpolation_audit
+
+            xs_arr = np.asarray(xs, dtype=float)
+            ys_arr = np.asarray([point[1] for point in knots], dtype=float)
+            values = interpolate_1d(
+                xs_arr, ys_arr, np.asarray(x_new, dtype=float), method=method
+            )
+            audit = interpolation_audit(ys_arr) if len(knots) >= 8 else None
+            return values, audit
+
+        def render(payload: Any) -> None:
+            values, audit = payload
+            pairs = ", ".join(f"{q:g} -> {v:.4g}" for q, v in zip(x_new, values))
+            self._interp_result.configure(text=f"{method}: {pairs}")
+            if audit is None:
+                lines = ["holdout audit: needs >= 8 knots (the honest guard)"]
+            else:
+                lines = ["holdout audit (every 4th knot refit):"]
+                for row in audit:
+                    lines.append(f"  {row}")
+            self._interp_detail.delete("1.0", "end")
+            self._interp_detail.insert("1.0", "\n".join(lines))
+
+        self._start_job("interpolation", work, render)
+
+    def _pbpk_run(self) -> None:
+        """PBPB & FIH card: IVIVE, well-stirred, DDI, MABEL, NOAEL."""
+        if not self._require_pharmaml():
+            return
+        fields = {
+            "CLint uL/min/mg": self._pbpk_clint.get(),
+            "liver weight g": self._pbpk_liver.get(),
+            "MPPGL": self._pbpk_mppgl.get(),
+            "Q_h L/h": self._pbpk_qh.get(),
+            "fu_b": self._pbpk_fub.get(),
+            "CLint in-vivo L/h": self._pbpk_clint_iv.get(),
+            "[I]": self._pbpk_iconc.get(),
+            "K_i": self._pbpk_ki.get(),
+            "EC50": self._pbpk_ec50.get(),
+            "fu_plasma": self._pbpk_fup.get(),
+            "V L": self._pbpk_vol.get(),
+            "NOAEL mg/kg": self._pbpk_noael.get(),
+            "animal BW kg": self._pbpk_bw.get(),
+        }
+        numbers: dict[str, float] = {}
+        for label, raw in fields.items():
+            try:
+                numbers[label] = parse_float(raw, label, minimum=0.0)
+            except ValueError as exc:
+                messagebox.showerror("Invalid input", str(exc))
+                return
+
+        def work() -> Any:
+            from pharmaml.pkpd.pbpk import (
+                first_in_human_dose,
+                hepatic_ddi_auc_ratio,
+                ivive_clint_invivo,
+                mabel_dose,
+                noael_hed,
+                well_stirred_clearance,
+            )
+
+            clint_in_vivo = ivive_clint_invivo(
+                clint_ul_min_mg=numbers["CLint uL/min/mg"],
+                liver_weight_g=numbers["liver weight g"],
+                mppgl=numbers["MPPGL"],
+            )
+            hepatic = well_stirred_clearance(
+                q_h=numbers["Q_h L/h"],
+                fu_b=numbers["fu_b"],
+                clint=numbers["CLint in-vivo L/h"],
+            )
+            auc_ratio = hepatic_ddi_auc_ratio(
+                q_h=numbers["Q_h L/h"],
+                fu_b=numbers["fu_b"],
+                clint=numbers["CLint in-vivo L/h"],
+                inhibitor_conc=numbers["[I]"],
+                ki=numbers["K_i"],
+            )
+            mabel = mabel_dose(
+                ec50=numbers["EC50"],
+                fu_plasma=numbers["fu_plasma"],
+                v_volume=numbers["V L"],
+            )
+            hed = noael_hed(
+                noael_mgkg=numbers["NOAEL mg/kg"], animal_bw=numbers["animal BW kg"]
+            )
+            fih = first_in_human_dose(mabel=mabel, noael=hed)
+            return clint_in_vivo, hepatic, auc_ratio, mabel, hed, fih
+
+        def render(payload: Any) -> None:
+            clint_in_vivo, hepatic, auc_ratio, mabel, hed, fih = payload
+            severity = "strong" if auc_ratio >= 5 else "moderate" if auc_ratio >= 2 else "weak"
+            self._pbpk_result.configure(
+                text=f"FIH start {fih:.3g} mg · AUC ratio {auc_ratio:.2f} ({severity})"
+            )
+            lines = [
+                f"IVIVE CLint (in-vivo):   {clint_in_vivo:.3g} L/h",
+                f"well-stirred hepatic CL: {hepatic:.3g} L/h",
+                f"DDI AUC ratio:           {auc_ratio:.2f} ({severity} inhibitor)",
+                f"MABEL (10% occupancy):   {mabel:.3g} mg",
+                f"NOAEL HED:               {hed:.3g} mg",
+                f"FIH starting dose:       {fih:.3g} mg  (= min(MABEL, NOAEL-HED))",
+            ]
+            self._pbpk_detail.delete("1.0", "end")
+            self._pbpk_detail.insert("1.0", "\n".join(lines))
+
+        self._start_job("PBPK & FIH", work, render)
+
+    def _osp_load(self) -> None:
+        """OSP library card: fill the model table."""
+        if not self._require_pharmaml():
+            return
+
+        def work() -> Any:
+            from pharmaml.pkpd.osplib import library_frame, library_summary
+
+            return library_frame(), library_summary()
+
+        def render(payload: Any) -> None:
+            frame, summary = payload
+            self._osp_tree.delete(*self._osp_tree.get_children())
+            for _index, row in frame.iterrows():
+                self._osp_tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        row["name"],
+                        row["version"],
+                        row["category"],
+                        row["pediatric"],
+                        row["notes"],
+                    ),
+                )
+            parts = " · ".join(f"{count} {label}" for label, count in summary.items())
+            self._osp_summary.configure(text=f"{len(frame)} models · {parts}")
+
+        self._start_job("OSP model library", work, render)
+
+    def _osp_lookup(self) -> None:
+        """OSP library card: find one model by name."""
+        if not self._require_pharmaml():
+            return
+        query = self._osp_search.get().strip()
+        if not query:
+            messagebox.showwarning("Empty query", "Type a model name to look up.")
+            return
+
+        def work() -> Any:
+            from pharmaml.pkpd.osplib import find_model
+
+            return find_model(query)
+
+        def render(payload: Any) -> None:
+            entry = payload
+            self._osp_summary.configure(
+                text=f"{entry.name} · v{entry.version} · {entry.category} · "
+                f"{'pediatric' if entry.pediatric else 'adult'} — {entry.notes}"
+            )
+
+        self._start_job("OSP model lookup", work, render)
+
+    def _evreg_run(self) -> None:
+        """Dosing events card: addl regimen plus weekday schedule."""
+        if not self._require_pharmaml():
+            return
+        try:
+            dose = parse_float(self._evreg_dose.get(), "dose", minimum=0.0)
+            interval = parse_float(self._evreg_ii.get(), "interval", minimum=1e-9)
+            until = parse_float(self._evreg_until.get(), "until", minimum=0.0)
+        except ValueError as exc:
+            messagebox.showerror("Invalid input", str(exc))
+            return
+        day_codes = [code.strip().lower() for code in self._evreg_days.get().split(",") if code.strip()]
+
+        def work() -> Any:
+            from pharmaml.pkpd.events import addl_until, ev, ev_days, realize_addl
+
+            n_addl = addl_until(0.0, interval, until)
+            events = realize_addl(ev(dose, ii=interval, addl=n_addl))
+            weekly = ev_days(dose, day_codes) if day_codes else []
+            return n_addl, events, weekly
+
+        def render(payload: Any) -> None:
+            n_addl, events, weekly = payload
+            total = sum(row.amt for row in events)
+            self._evreg_result.configure(
+                text=f"{len(events)} doses · total {total:g} mg · +{n_addl} additional"
+            )
+            lines = [f"{'time':>8} {'amount':>10} {'cmt':>4} {'evid':>5}"]
+            for row in events[:14]:
+                lines.append(f"{row.time:>8g} {row.amt:>10g} {row.cmt:>4} {row.evid:>5}")
+            if len(events) > 14:
+                lines.append(f"... +{len(events) - 14} more")
+            if weekly:
+                times = ", ".join(f"{row.time:g}h" for row in weekly)
+                lines.append("")
+                lines.append(f"weekday schedule ({', '.join(day_codes)}): {times}")
+            self._evreg_detail.delete("1.0", "end")
+            self._evreg_detail.insert("1.0", "\n".join(lines))
+
+        self._start_job("dosing events", work, render)
+
+    def _assoc_run(self) -> None:
+        """Association rules card: the apriori pipeline over pasted lines."""
+        if not self._require_pharmaml():
+            return
+        transactions: list[list[str]] = []
+        for line in self._assoc_text.get("1.0", "end-1c").splitlines():
+            items = [item.strip() for item in line.split(",") if item.strip()]
+            if items:
+                transactions.append(items)
+        if len(transactions) < 2:
+            messagebox.showwarning("Not enough transactions", "Paste at least two lines.")
+            return
+        try:
+            min_support = parse_float(
+                self._assoc_support.get(), "min support", minimum=0.01, maximum=1.0
+            )
+            min_confidence = parse_float(
+                self._assoc_confidence.get(), "min confidence", minimum=0.01, maximum=1.0
+            )
+        except ValueError as exc:
+            messagebox.showerror("Invalid input", str(exc))
+            return
+
+        def work() -> Any:
+            from pharmaml.ml.apriori import apriori_pipeline
+
+            return apriori_pipeline(
+                transactions, min_support=min_support, min_confidence=min_confidence
+            )
+
+        def render(payload: Any) -> None:
+            result = payload
+            n_rules = len(result.rules)
+            self._assoc_result.configure(
+                text=f"{result.n_transactions} transactions · {result.n_items} items · "
+                f"{len(result.frequent)} itemsets · {n_rules} rules"
+            )
+            lines = []
+            if n_rules:
+                for _index, row in result.rules.head(8).iterrows():
+                    ante = ", ".join(str(item) for item in row["antecedent"])
+                    conse = ", ".join(str(item) for item in row["consequent"])
+                    lines.append(
+                        f"{ante} -> {conse}  supp {row['support']:.2f} · "
+                        f"conf {row['confidence']:.2f} · lift {row['lift']:.2f}"
+                    )
+            else:
+                lines.append("no rules above the thresholds — lower support/confidence")
+            self._assoc_detail.delete("1.0", "end")
+            self._assoc_detail.insert("1.0", "\n".join(lines))
+
+        self._start_job("association rules", work, render)
 
 
 def _frame_from_records(columns: tuple[str, ...], records: list[tuple[Any, ...]]) -> Any:

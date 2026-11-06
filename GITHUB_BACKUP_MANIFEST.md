@@ -159,3 +159,29 @@ doctest recount (773 items with the fully repaired torch-inclusive
 stack; the 765 baseline under-collected by exactly those eight
 torch-dependent items). Total honest count: **4,372 + 773 = 5,145
 tests, all green**.
+
+## v1.2.114 release-zip homes (2026-11-06, round 199 — the catalog absorption)
+
+`pharma-ml-toolkit-v1.2.114.zip` — 19,073,364 bytes, sha-256
+`ea2cf57d97e14e3392cd7817611c9432b9f2f18e81eb0db30c7a464e0bba5c96`,
+built with the standing builder (`scratch/build_zip_179.py`, the
+ZIP_EXCLUDE_ARGS mirror + testzip + leak scan: 912 entries / 875
+files / nested zips NONE / real leaks 0 / accepted placeholders 12 —
+the two flagged scratch junit XMLs were scrubbed by the idempotent
+137 recipe before acceptance), placed in all three homes:
+
+- `download/pharma-ml-toolkit-v1.2.114.zip` (repo root)
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.114.zip`
+- `upload/pharma-ml-toolkit-v1.2.114.zip`
+
+**Why the rebuild:** the owner's directive — "check the GitHub links in
+GitHub_Research_Repository_Catalog.pdf one by one and add the remaining
+features to playground.py." All 140 catalog links verified live (report:
+`pharma-ml-toolkit/docs/GITHUB_CATALOG_LINKCHECK.md`); the gap analysis
+found nine tested backend modules with no playground card, and this
+release adds those nine cards (maxsmi augmentation, ECFP bit highlighter,
+GuacaMol scoring oracles, pingouin-style inferential statistics, SciPy
+interpolation lab, PBPK & FIH chain, OSP model library, RxODE-style
+dosing events, apriori association rules) plus ten GUI tests
+(`TestCatalogAbsorptionGui`). Honest count: **4,382 + 773 = 5,155
+tests**; fresh walk pins **882 files / 333,040 lines** at v1.2.114.

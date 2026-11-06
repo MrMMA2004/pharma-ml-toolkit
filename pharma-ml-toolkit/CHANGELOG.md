@@ -1,3 +1,42 @@
+## [1.2.114] — 2026-11-06
+
+### Added — round 199: the GitHub research repository catalog absorbed — link check + the nine cards that closed the no-card gap
+
+The owner's `upload/GitHub_Research_Repository_Catalog.pdf` (140 curated
+repositories across 11 pharma-ML categories) was read end to end, every one
+of its 140 links checked one by one (all live; five redirect to renamed
+orgs — the report ships as `docs/GITHUB_CATALOG_LINKCHECK.md`), and its gap
+analysis drove this release: the backend modules that had **no playground
+card** until now.
+
+* **Chemistry** — `SMILES augmentation (maxsmi)`: randomized atom orderings,
+  uniqueness/charset/token stats (`chem/smiles_enumeration.py`); `ECFP bit
+  highlighter`: the ECFP6-Highlighter-GUI concept — atom/bond environment
+  union, per-bit corpus presence, saveable highlight PNG
+  (`chem/bit_highlights.py`).
+* **Generative** — `Scoring oracles (GuacaMol)`: QED, Ertl SA, normalized
+  penalized logP, rediscovery similarity and the property filter in one
+  click (`chem/oracles.py`).
+* **Foundations** — `Inferential statistics (pingouin)`: Welch ANOVA with
+  Tukey HSD and Games-Howell post-hoc tables over pasted groups
+  (`ml/inferential.py`); `Interpolation lab (SciPy)`: linear/natural-cubic/
+  PCHIP at query points plus the honest holdout audit (`ml/interpolate.py`).
+* **PK** — `PBPK & first-in-human`: microsomal IVIVE, well-stirred hepatic
+  clearance, DDI AUC ratio with inhibitor grading, MABEL vs NOAEL-HED and
+  the FIH starting dose (`pkpd/pbpk.py`); `OSP PBPK model library`: the
+  curated 40-model collection as a browsable, lookup-able table
+  (`pkpd/osplib.py`); `Dosing events & regimen`: the NONMEM/mrgsolve event
+  grammar — addl_until, realized dose tables, weekday schedules
+  (`pkpd/events.py`).
+* **Best of ML** — `Association rules (apriori)`: frequent itemsets and
+  support/confidence/lift rules over pasted transactions (`ml/apriori.py`).
+
+Ten new GUI tests (`TestCatalogAbsorptionGui`) drive every card the way a
+mouse does — tests/ now 4,382 cases (playground 852 → 862), 5,155 with the
+773 doctests. Still card-less, noted for later rounds: `ml/dalex.py`,
+`ml/deepensemble.py`, `ml/drugresponse.py`, `ml/pharmacogenomics.py`,
+`pkpd/physiology.py`, `pkpd/compounds.py`.
+
 ## [1.2.113] — 2026-11-06
 
 ### Fixed — round 195 (run 1/100): the stale-notebook catch the focused subsets masked, and the session-count pin the XAI absorption outgrew

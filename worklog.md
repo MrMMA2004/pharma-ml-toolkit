@@ -6950,3 +6950,83 @@ Stage Summary:
 - Baselines for the next round: unchanged (v1.2.113 · 5,145 tests (4,372 + 773 doctests)
   · 881 files / 331,648 lines · 19,066,185 bytes sha-256 b1271926… · dev server healthy ·
   cron pair 508389 (2-hour 100x) + webDevReview 508392 · runs_completed: 3).
+
+## Round 199 — the catalog absorption: 140 links checked one by one, nine cards closing the no-card gap (2026-11-06)
+
+The owner's directive was explicit: "Check the GitHub links in
+GitHub_Research_Repository_Catalog.pdf one by one and add the remaining
+features to playground.py." The PDF's Persian RTL text scatters URLs
+across line breaks, so the extraction needed two passes (hyphen-rejoin +
+eight hand-reconstructed owner-only fragments — chembl covers two repos,
+OSPSuite.ReportingFramework was dot-split into oblivion) before the count
+matched the catalog's stated 140 unique. Every link was then probed with a
+follow-redirect curl: **140/140 live (HTTP 200)**, five redirect to renamed
+orgs (awesome-molecular-docking → Thinklab-SJTU, ydata-profiling →
+Data-Centric-AI-Community/fg-data-profiling, selfies → the-matter-lab,
+AutoDock-Vina and AutoDock-GPU → forlilab), one needed a retry
+(Robterheine/ferxgui). The report ships as
+`pharma-ml-toolkit/docs/GITHUB_CATALOG_LINKCHECK.md`.
+
+The "remaining features" interpretation: a module-vs-card diff. The src
+tree already absorbed nearly every catalog capability across 200 rounds
+(lime.py, dalex.py, population.py, ddi.py, pbpk.py, osplib.py, events.py,
+smiles_enumeration.py, bit_highlights.py, oracles.py, apriori.py,
+inferential.py, interpolate.py, sequences.py all exist and are tested) —
+but fifteen of them had **zero references in playground.py**. Nine cards
+closed the highest-value, catalog-faithful gaps: SMILES augmentation
+(maxsmi) + ECFP bit highlighter (ECFP6-Highlighter-GUI) in Chemistry;
+scoring oracles (GuacaMol) in Generative; inferential statistics (pingouin)
++ interpolation lab (SciPy) in Foundations; PBPK & first-in-human
+(PK-Sim/OSPSuite) + OSP model library + dosing events & regimen
+(RxODE/mrgsolve grammar) in PK; association rules (Orange3 basket
+analysis) in Best of ML. Ten new GUI tests drive each card the way a
+mouse does (`TestCatalogAbsorptionGui`, all green under Xvfb).
+
+Three bugs caught by the honest loop before anything shipped: a ttk
+Spinbox default built with `value=12` (the values-list option, not
+initial content — the house idiom is `.set("12")`; the empty parse then
+hit a modal dialog and hung the headless driver), an interpolation-audit
+default below the module's 8-point minimum (now 9 knots + a graceful
+"needs >= 8 knots" note instead of an error dialog), and a bit-highlighter
+render that misread `bit_environments`' (atoms, bonds) return as
+(matched-bits, absent-bits) — the docstring's union semantics now render
+honestly ("4 atoms · 3 bonds highlighted", per-bit query+corpus
+presence). The Edit tool double-applied insertions whose new_str contains
+old_str (four card blocks duplicated — deduped by a verified byte-equal
+script); the Bash tool's heredoc/display channel mangles "[m" sequences
+(a false "corruption" alarm — the file was intact; only a misplaced
+`import itertools` needed the Edit tool). Ruff: only the two pre-existing
+tolerated ISC004 findings remain (verified identical on HEAD); my RUF007
+zip→pairwise and ISC004 f-string findings were fixed.
+
+Ship ritual: VERSION + __init__ + pyproject + SHIPPED_TOOLKIT_VERSION all
+at 1.2.114; CHANGELOG entry; build_zip_179 → 912 entries / 875 files /
+19,073,364 bytes / sha-256 ea2cf57d… / nested zips NONE / real leaks 0
+(two stale scratch junit XMLs scrubbed by the idempotent 137 recipe);
+four homes byte-identical (repo download/ + toolkit download/ +
+dist-archive/ + upload/); fresh walk pins **882 files / 333,040 lines**
+at 1.2.114; web pins 5,145 → **5,155 tests** (playground 852 → 862; the
+fresh 187-set + notebook variants 119 + session/reset/finder batteries +
+the DL session pin re-verified green post-change); manifest block.
+Health E2E: GET / 200; zip-size `exact:true` 19,073,364 v1.2.114;
+download HEAD carries the exact content-length and a strong
+zip-v1.2.114 ETag.
+
+Stage Summary:
+- Deliverable: the owner's catalog fully link-checked (140/140 live,
+  five renames documented), nine zero-exposure backend modules surfaced
+  as playground cards with ten GUI tests, and the v1.2.114 release
+  shipped through the standing ritual.
+- Lesson pinned: module-vs-card diffing is the honest way to honor "add
+  the remaining features" against a 200-round codebase — the backend was
+  already there; the GUI was the gap. And the Edit tool double-applies
+  when new_str contains old_str; script inserts with count=1 replaces
+  and post-edit occurrence checks are the safe pattern.
+- Still card-less for later rounds: ml/dalex.py, ml/deepensemble.py,
+  ml/drugresponse.py, ml/pharmacogenomics.py, pkpd/physiology.py,
+  pkpd/compounds.py.
+- Baselines for the next round: v1.2.114 · 5,155 tests (4,382 + 773
+  doctests) · 882 files / 333,040 lines · four zip homes at
+  19,073,364 bytes sha-256 ea2cf57d… · dev server healthy · cron pair
+  508389 (2-hour 100x, run 4 next) + webDevReview 508392 ·
+  runs_completed: 3.

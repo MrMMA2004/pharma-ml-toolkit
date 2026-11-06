@@ -18398,3 +18398,175 @@ class TestGuiPlatformAbsorptionGui:
         # runner-up -- a lower loss is the down arrow
         assert "bbb222222222"[:8] in text
         assert "\u2193" in text and "0.05" in text
+
+
+# --------------------------------------------------------------------- #
+# round 199: the catalog absorption cards -- the GitHub research
+# repository catalog's backend modules that had no playground card
+# (maxsmi, ECFP6-Highlighter-GUI, GuacaMol oracles, pingouin, SciPy,
+# PK-Sim/OSPSuite, RxODE-style events, Orange3 basket analysis)
+# --------------------------------------------------------------------- #
+@XVFB_SKIP
+class TestCatalogAbsorptionGui:
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        # persist_session=False keeps the suite deterministic (the
+        # module-surface rule: never read/write a real session file)
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        # collect the (destroyed) widget/Variable cycles NOW, in the
+        # main thread -- the next test's worker may otherwise finalize
+        # tk Variables off-thread
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        """Neutralise modal dialogs so failures assert instead of blocking."""
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 120.0) -> bool:
+        """Pump the Tk loop until the worker queue drains (probe pattern)."""
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    def test_smiles_augmentation_card_counts_unique_variants(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._aug_run()  # aspirin, 12 requested
+        assert self._drain(app), "augmentation job hung"
+        text = app._aug_result.cget("text")
+        assert "unique" in text and "charset" in text and "tokens" in text
+        assert app._aug_variants.get("1.0", "end").strip() != ""
+        assert quiet_dialogs == []
+
+    def test_ecfp_highlighter_card_reports_atom_bond_union(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ecfp_hl_run()  # aspirin, real bits 389/456
+        assert self._drain(app), "bit highlighter job hung"
+        assert "atoms" in app._ecfp_hl_result.cget("text")
+        assert "bonds" in app._ecfp_hl_result.cget("text")
+        detail = app._ecfp_hl_detail.get("1.0", "end")
+        assert "bit 389" in detail and "in query" in detail and "corpus" in detail
+        assert quiet_dialogs == []
+
+    def test_scoring_oracles_card_scores_aspirin(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._oracle_run()  # aspirin vs the salicylic-acid target
+        assert self._drain(app), "oracles job hung"
+        text = app._oracle_result.cget("text")
+        assert "QED 0.55" in text  # the known aspirin QED
+        assert "SA" in text and "logP" in text and "rediscovery" in text
+        detail = app._oracle_detail.get("1.0", "end")
+        assert "property filter" in detail and "PASS" in detail
+        assert quiet_dialogs == []
+
+    def test_inferential_card_runs_welch_and_both_posthoc_tables(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._istat_run()  # control / low / high defaults
+        assert self._drain(app), "inferential job hung"
+        assert "Welch F" in app._istat_result.cget("text")
+        assert "groups" in app._istat_result.cget("text")
+        detail = app._istat_detail.get("1.0", "end")
+        assert "Tukey HSD" in detail and "Games-Howell" in detail
+        assert quiet_dialogs == []
+
+    def test_interpolation_card_answers_query_and_audits(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._interp_run()  # 9 knots, pchip, query 3/5/6
+        assert self._drain(app), "interpolation job hung"
+        text = app._interp_result.cget("text")
+        assert text.startswith("pchip:") and "->" in text
+        detail = app._interp_detail.get("1.0", "end")
+        assert "holdout audit" in detail and "rmse" in detail
+        assert quiet_dialogs == []
+
+    def test_interpolation_card_guards_short_series_honestly(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._interp_text.delete("1.0", "end")
+        app._interp_text.insert("1.0", "0, 0\n1, 0.6\n2, 0.9")  # only 3 knots
+        app._interp_run()
+        assert self._drain(app), "short-series interpolation job hung"
+        assert app._interp_result.cget("text").startswith("pchip:")
+        assert "needs >= 8 knots" in app._interp_detail.get("1.0", "end")
+        assert quiet_dialogs == []
+
+    def test_pbpk_card_computes_the_fih_chain(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._pbpk_run()  # the literature defaults
+        assert self._drain(app), "PBPK job hung"
+        assert "FIH start" in app._pbpk_result.cget("text")
+        assert "AUC ratio" in app._pbpk_result.cget("text")
+        detail = app._pbpk_detail.get("1.0", "end")
+        for needle in (
+            "IVIVE CLint",
+            "well-stirred hepatic CL",
+            "DDI AUC ratio",
+            "MABEL",
+            "NOAEL HED",
+            "FIH starting dose",
+        ):
+            assert needle in detail, needle
+        assert quiet_dialogs == []
+
+    def test_osp_library_card_loads_and_looks_up(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._osp_load()
+        assert self._drain(app), "OSP library job hung"
+        rows = app._osp_tree.get_children()
+        assert len(rows) == 40  # the curated collection size
+        assert "40 models" in app._osp_summary.cget("text")
+        first_name = app._osp_tree.item(rows[0], "values")[0]
+        app._osp_search.delete(0, "end")
+        app._osp_search.insert(0, first_name)
+        app._osp_lookup()
+        assert self._drain(app), "OSP lookup job hung"
+        assert first_name in app._osp_summary.cget("text")
+        assert quiet_dialogs == []
+
+    def test_dosing_events_card_realizes_regimen_and_weekday(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._evreg_run()  # 500 mg q12h until 72h + m/w/f codes
+        assert self._drain(app), "events job hung"
+        text = app._evreg_result.cget("text")
+        assert "6 doses" in text and "3000 mg" in text  # 0,12,...,60 h
+        detail = app._evreg_detail.get("1.0", "end")
+        assert "weekday schedule" in detail and "0h, 48h, 96h" in detail
+        assert quiet_dialogs == []
+
+    def test_association_rules_card_mines_the_default_basket(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._assoc_run()  # the 5-transaction co-medication basket
+        assert self._drain(app), "apriori job hung"
+        text = app._assoc_result.cget("text")
+        assert "5 transactions" in text and "rules" in text
+        detail = app._assoc_detail.get("1.0", "end")
+        assert "aspirin" in detail and "lift" in detail
+        assert quiet_dialogs == []
