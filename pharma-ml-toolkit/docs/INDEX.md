@@ -173,6 +173,7 @@ after adding new public functions.
 | `protonate_smiles` | function | The dimorphite_dl protonation enumerator for one SMILES. |
 | `random_selfies_molecules` | function | Sample ``n`` molecules uniformly from the robust SELFIES alphabet. |
 | `rank_features` | function | Rank feature columns by importance, descending. |
+| `recalculate_selected_features` | function | Recalculate a frozen feature selection for NEW molecules. |
 | `register` | constant |  |
 | `reinvent_standardize_mol` | function | The REINVENT4 ``default`` standardization chain, on an RDKit Mol. |
 | `reinvent_standardize_smiles` | function | :func:`reinvent_standardize_mol` from (and back to) a SMILES. |
