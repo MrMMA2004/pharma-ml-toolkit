@@ -3219,9 +3219,20 @@ class TestDeepLearningTab:
             first._dl_filter_entry.delete(0, "end")
             first._dl_filter_entry.insert(0, "mlp")
             first._dl_flag_combo.set("ambiguous")
+            # The paired drug–target card's six inputs ride the same walk.
+            first._dl_dta_source.set("CSV path")
+            first._dl_dta_path.insert(0, "paired.csv")
+            for entry, value in (
+                (first._dl_dta_smiles_col, "canonical_smiles"),
+                (first._dl_dta_protein_col, "sequence"),
+                (first._dl_dta_affinity_col, "pKd"),
+            ):
+                entry.delete(0, "end")
+                entry.insert(0, value)
+            first._dl_dta_dipeptides.set(True)
             payload = first._collect_session()
             saved = [key for key in payload["variables"] if key.startswith("_dl_")]
-            assert len(saved) == 63  # 18 + 6 + 13 + round-189's 21 + the fork's three + round-193's two XAI eval spins (anchor tau + noise n)
+            assert len(saved) == 69  # prior 63 + the paired-DTA card's six inputs
 
             second._session = payload
             second._restore_session()
@@ -3281,6 +3292,12 @@ class TestDeepLearningTab:
             assert second._dl_depth_combo.get() == "3"
             assert second._dl_filter_entry.get() == "mlp"
             assert second._dl_flag_combo.get() == "ambiguous"
+            assert second._dl_dta_source.get() == "CSV path"
+            assert second._dl_dta_path.get() == "paired.csv"
+            assert second._dl_dta_smiles_col.get() == "canonical_smiles"
+            assert second._dl_dta_protein_col.get() == "sequence"
+            assert second._dl_dta_affinity_col.get() == "pKd"
+            assert bool(second._dl_dta_dipeptides.get()) is True
         finally:
             first.destroy()
             second.destroy()
@@ -18398,3 +18415,230 @@ class TestGuiPlatformAbsorptionGui:
         # runner-up -- a lower loss is the down arrow
         assert "bbb222222222"[:8] in text
         assert "\u2193" in text and "0.05" in text
+
+
+@XVFB_SKIP
+class TestResearchCatalogFoldinsGui:
+    """Headless drives for the three 140-repository catalog fold-in cards."""
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _wait(app: Any, seconds: float = 90.0) -> None:
+        import time
+
+        deadline = time.time() + seconds
+        while app._busy and time.time() < deadline:
+            app.update()
+            time.sleep(0.01)
+        assert not app._busy, "catalog fold-in job hung"
+
+    def test_dta_demo_builds_features_and_exports(
+        self, app: Any, quiet_dialogs: list[Any], monkeypatch: Any, tmp_path: Path
+    ) -> None:
+        assert app._dl_dta_source.get() == "synthetic demo (12 pairs)"
+        app._dl_dta_run()
+        self._wait(app)
+        assert app._dl_dta_last is not None
+        features = app._dl_dta_last["features"]
+        assert features.X.shape == (12, 2071)
+        report = app._dl_dta_text.get("1.0", "end")
+        assert "ridge RMSE" in report and "DeepDTA rm2" in report
+        assert "not the upstream neural" in report
+        target = tmp_path / "dta.csv"
+        monkeypatch.setattr(
+            "playground_under_test.filedialog.asksaveasfilename", lambda **_kwargs: str(target)
+        )
+        app._dl_dta_export()
+        assert target.is_file() and target.stat().st_size > 2048
+        assert quiet_dialogs == []
+
+    def test_advanced_pk_regimen_nca_and_pregnancy(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._pk_regimen_run()
+        assert "Cmax" in app._pk_regimen_text.get("1.0", "end")
+        assert getattr(app._pk_regimen_host, "_pg_figure", None) is not None
+        app._pk_nca_run()
+        nca = app._pk_regimen_text.get("1.0", "end")
+        assert "linear-up/log-down AUC" in nca and "terminal λz" in nca
+        app._pk_pregnancy_run()
+        pregnancy = app._pk_pregnancy_text.get("1.0", "end")
+        assert "fetal/maternal AUC ratio" in pregnancy
+        assert "not the released 27-compartment fit" in pregnancy
+        assert getattr(app._pk_pregnancy_host, "_pg_figure", None) is not None
+        assert quiet_dialogs == []
+
+    def test_osp_library_pregnancy_registry_and_ddi(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._pk_osp_library()
+        assert "Vancomycin" in app._pk_osp_text.get("1.0", "end")
+        app._pk_pregnancy_models()
+        pregnancy = app._pk_osp_text.get("1.0", "end")
+        assert "Acetaminophen" in pregnancy and "Raltegravir" in pregnancy
+        app._pk_ddi_run()
+        ddi = app._pk_osp_text.get("1.0", "end")
+        assert "gmfe" in ddi and "fraction_within_guest" in ddi
+        assert quiet_dialogs == []
+
+    def test_dockstring_box_objective_and_campaign_bridge(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        assert len(app._dock_benchmark_target["values"]) == 58
+        app._dock_benchmark_target.set("DRD2")
+        app._dock_benchmark_show()
+        assert "size_z = 32.000" in app._dock_benchmark_text.get("1.0", "end")
+        app._dock_benchmark_use()
+        assert app._dock_size_entry.get() == "30 30 32"
+        app._dock_benchmark_objective.set("selective_JAK2")
+        app._dock_benchmark_qed.delete(0, "end")
+        app._dock_benchmark_qed.insert(0, "0.8")
+        app._dock_benchmark_evaluate()
+        result = app._dock_benchmark_text.get("1.0", "end")
+        assert "value: -6.1" in result
+        assert "no docking engine was run" in result
+        assert quiet_dialogs == []
+
+
+@pytest.mark.skipif(importlib.util.find_spec("tkinter") is None, reason="needs tkinter to import playground")
+class TestResearchCatalogFoldinsHeadless:
+    """Drive new handlers with stub widgets; no Tk display is necessary."""
+
+    class Value:
+        def __init__(self, value: Any = "") -> None:
+            self.value = str(value)
+
+        def get(self) -> str:
+            return self.value
+
+        def delete(self, *_args: Any) -> None:
+            self.value = ""
+
+        def insert(self, _index: Any, value: Any) -> None:
+            self.value = str(value)
+
+        def set(self, value: Any) -> None:
+            self.value = str(value)
+
+    class Text(Value):
+        def get(self, *_args: Any) -> str:
+            return self.value
+
+    @staticmethod
+    def _bare(playground: Any) -> Any:
+        app = object.__new__(playground.PlaygroundApp)
+        app._require_pharmaml = lambda: True
+        app._require = lambda *_args: True
+        app.errors: list[Any] = []
+        app._show_error = lambda title, error: app.errors.append((title, error))
+        app.notifications: list[Any] = []
+        app.notify = lambda *args, **kwargs: app.notifications.append((args, kwargs))
+        return app
+
+    def test_paired_dta_handler_runs_synchronously(self, playground: Any) -> None:
+        app = self._bare(playground)
+        app._dl_dta_source = self.Value("synthetic demo (12 pairs)")
+        app._dl_dta_path = self.Value()
+        app._dl_dta_smiles_col = self.Value("smiles")
+        app._dl_dta_protein_col = self.Value("protein")
+        app._dl_dta_affinity_col = self.Value("affinity")
+        app._dl_dta_dipeptides = self.Value(False)
+        app._dl_dta_dipeptides.get = lambda: False  # type: ignore[method-assign]
+        app._dl_dta_text = self.Text()
+        app._dl_dta_last = None
+
+        def start_job(_label: str, work: Any, render: Any) -> None:
+            render(work())
+
+        app._start_job = start_job
+        app._dl_dta_run()
+        assert app._dl_dta_last["features"].X.shape == (12, 2071)
+        assert "ridge RMSE" in app._dl_dta_text.value
+        assert app.errors == []
+
+    def test_regimen_nca_and_pregnancy_handlers(self, playground: Any) -> None:
+        app = self._bare(playground)
+        regimen = {
+            "dose_mg": "100", "tau_h": "12", "n_doses": "3", "ka": "1.2",
+            "cl": "2", "v2": "20", "q": "1", "v3": "10", "duration_h": "36",
+        }
+        app._pk_regimen_entries = {key: self.Value(value) for key, value in regimen.items()}
+        app._pk_route_combo = self.Value("oral")
+        app._pk_regimen_text = self.Text()
+        app._pk_regimen_host = object()
+        app._pk_nca_text = self.Text("0,10\n1,8\n2,6.5\n4,4.2\n8,1.8\n12,0.8\n24,0.1")
+        pregnancy = {
+            "dose_mg": "100", "maternal_volume_l": "50", "fetal_volume_l": "3",
+            "maternal_clearance_l_h": "1", "fetal_clearance_l_h": "0.1",
+            "placental_clearance_l_h": "2", "maternal_fu": "0.8",
+            "fetal_fu": "0.4", "duration_h": "12",
+        }
+        app._pk_pregnancy_entries = {key: self.Value(value) for key, value in pregnancy.items()}
+        app._pk_pregnancy_text = self.Text()
+        app._pk_pregnancy_host = object()
+        figures: list[Any] = []
+        app._render_figure = lambda _host, figure, **_kwargs: figures.append(figure)
+
+        app._pk_regimen_run()
+        assert "events: 3" in app._pk_regimen_text.value
+        app._pk_nca_run()
+        assert "terminal λz" in app._pk_regimen_text.value
+        app._pk_pregnancy_run()
+        assert "fetal/maternal AUC ratio" in app._pk_pregnancy_text.value
+        assert len(figures) == 2
+        assert all(hasattr(figure, "savefig") for figure in figures)
+        assert app.errors == []
+
+    def test_osp_and_dockstring_handlers(self, playground: Any) -> None:
+        app = self._bare(playground)
+        app._pk_osp_text = self.Text()
+        app._pk_ddi_text = self.Text("1,1.1\n2,1.8\n0.5,0.6")
+        app._pk_osp_library()
+        assert "Vancomycin" in app._pk_osp_text.value
+        app._pk_pregnancy_models()
+        assert "Acetaminophen" in app._pk_osp_text.value
+        app._pk_ddi_run()
+        assert "gmfe" in app._pk_osp_text.value
+
+        app._dock_benchmark_target = self.Value("DRD2")
+        app._dock_benchmark_text = self.Text()
+        app._dock_center_entry = self.Value()
+        app._dock_size_entry = self.Value()
+        app._dock_benchmark_show()
+        assert "size_z = 32.000" in app._dock_benchmark_text.value
+        app._dock_benchmark_use()
+        assert app._dock_size_entry.value == "30 30 32"
+        app._dock_benchmark_qed = self.Value("0.8")
+        app._dock_benchmark_smiles = self.Value("CCO")
+        app._dock_benchmark_objective = self.Value("selective_JAK2")
+        app._dock_benchmark_scores = {
+            "JAK2": self.Value("-9"),
+            "LCK": self.Value("-9"),
+            "F2": self.Value("-7"),
+            "PPARA": self.Value("-7"),
+            "PPARD": self.Value("-7"),
+            "PPARG": self.Value("-7"),
+        }
+        app._dock_benchmark_evaluate()
+        assert "value: -6.1" in app._dock_benchmark_text.value
+        assert app.errors == []

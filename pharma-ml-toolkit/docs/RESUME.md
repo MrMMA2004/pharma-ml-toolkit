@@ -4,6 +4,19 @@ _Last rebuilt 2026-11-02 after the rollback that ate rounds 180–182.
 Updated 2026-11-03 after a second rollback ate round 184, and again the
 same evening after a THIRD rollback ate the first round-185 ship._
 
+## 2026-11-06 — Arena research-catalog addendum (v1.2.114)
+
+The active Arena branch is `arena/2697c755-pharma-ml-toolkit`; no older Arena
+branch is part of this ship. The 140-repository disposition lives in
+`docs/GITHUB_RESEARCH_CATALOG_AUDIT.md`. The new computation is covered by 27
+focused tests and three module doctest groups. CI-style Ruff and mypy pass;
+all eight notebooks executed at 1.2.114; the full non-Tk suite exits 0 on the
+pinned NumPy 1.26.4 stack. This minimal Python build has no `tkinter` and the
+image has no Xvfb, so the four real-Tk and three stub-callback regression
+tests are retained but skipped, never reported as executed. Headless RDKit
+rendering required a temporary external XRender loader shim because the image
+also lacks `libXrender.so.1`; the shim is not part of the archive.
+
 ## The standing zip-safety rule (2026-11-03, user instruction)
 
 *"After each round, save the zip file in a safe place so that rollback

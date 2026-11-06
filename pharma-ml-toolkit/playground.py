@@ -10234,9 +10234,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._csvstd_protonate = tk.BooleanVar(value=False)
         for label, variable, tip in (
             ("salts out", self._csvstd_remove_fragments,
-             "Strip counter-ions / keep the parent (each chain's own "
-             "rule: FragmentParent, LargestFragmentChooser, the ChEMBL "
-             "salt lists)."),
+             ("Strip counter-ions / keep the parent (each chain's own "
+              "rule: FragmentParent, LargestFragmentChooser, the ChEMBL "
+              "salt lists).")),
             ("uncharge", self._csvstd_uncharge,
              "Neutralise the protonation charges (the Uncharger ladder)."),
             ("normalize", self._csvstd_normalize,
@@ -10250,8 +10250,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             ("keep stereo", self._csvstd_keep_stereo,
              "Keep isomeric SMILES (off → the stereo-parent form)."),
             ("protonate", self._csvstd_protonate,
-             "dimorphite_dl: enumerate the protonation states inside the "
-             "pH window (41 substructure pKa rules)."),
+             ("dimorphite_dl: enumerate the protonation states inside the "
+              "pH window (41 substructure pKa rules).")),
         ):
             box = ttk.Checkbutton(std_toggle_row, text=label, variable=variable)
             if tip:
@@ -12970,6 +12970,325 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         bind_enter(self._uc_value, uc_btn)
         bind_enter(self._uc_to, uc_btn)
         self._uc_dimension_changed()
+
+        advanced = make_card(
+            page.grid,
+            "Advanced PK/PD & PBPK (RxODE · nlmixr2 · OSP)",
+            collapsible=True,
+            key="pk-advanced-engines",
+            span=2,
+            row=8,
+            column=0,
+            subtitle="The previously library-only pharmaml.pkpd engines, now "
+            "interactive: exact two-compartment multiple dosing, linear-up/"
+            "log-down NCA + terminal λz, OSP's 40-model library and DDI "
+            "qualification, and the pregnancy building block's separate "
+            "maternal/fetal unbound-fraction transfer. The pregnancy pane "
+            "is a disclosed two-compartment model, not a 27-compartment fit.",
+        )
+        advanced_tabs = ttk.Notebook(advanced)
+        grid_append(advanced, advanced_tabs, sticky="nsew", weight=True)
+
+        regimen_tab = ttk.Frame(advanced_tabs, style="Card.TFrame", padding=8)
+        pregnancy_tab = ttk.Frame(advanced_tabs, style="Card.TFrame", padding=8)
+        osp_tab = ttk.Frame(advanced_tabs, style="Card.TFrame", padding=8)
+        advanced_tabs.add(regimen_tab, text="Regimen + NCA")
+        advanced_tabs.add(pregnancy_tab, text="Maternal–fetal")
+        advanced_tabs.add(osp_tab, text="OSP library + DDI")
+
+        regimen_fields = ttk.Frame(regimen_tab, style="Card.TFrame")
+        grid_append(regimen_tab, regimen_fields, sticky="w")
+        self._pk_regimen_entries: dict[str, ttk.Entry] = {}
+        regimen_defaults = (
+            ("dose_mg", "dose mg", "100"), ("tau_h", "interval h", "24"),
+            ("n_doses", "doses", "3"), ("ka", "ka /h", "1.0"),
+            ("cl", "CL L/h", "5"), ("v2", "central V L", "50"),
+            ("q", "Q L/h", "10"), ("v3", "peripheral V L", "100"),
+            ("duration_h", "duration h", "72"),
+        )
+        for index, (key, label, default) in enumerate(regimen_defaults):
+            row, column = divmod(index, 3)
+            ttk.Label(regimen_fields, text=label, style="CardMuted.TLabel").grid(
+                row=row * 2, column=column, sticky="w", padx=(0, 12)
+            )
+            entry = ttk.Entry(regimen_fields, width=12)
+            entry.insert(0, default)
+            entry.grid(row=row * 2 + 1, column=column, sticky="w", padx=(0, 12))
+            self._pk_regimen_entries[key] = entry
+        self._pk_route_combo = ttk.Combobox(
+            regimen_tab, state="readonly", width=10, values=["oral", "iv"]
+        )
+        self._pk_route_combo.set("oral")
+        form_row(regimen_tab, "route", self._pk_route_combo)
+        regimen_button = self._action_button(
+            regimen_tab, "Simulate exact regimen", self._pk_regimen_run, primary=True,
+            tooltip="TwoCompartment's matrix-exponential solution with explicit repeated DosingEvents.",
+        )
+        regimen_button.grid(row=regimen_tab.grid_size()[1], column=0, sticky="w", pady=(5, 0))
+        self._pk_regimen_text = _grid_text(regimen_tab, height=6, mono=self._mono)
+        grid_append(regimen_tab, self._pk_regimen_text, sticky="ew", pady=(5, 0))
+        self._pk_regimen_host = self._figure_host(regimen_tab, height=260)
+        ttk.Label(
+            regimen_tab,
+            text="Observed NCA rows: time, concentration (comma or whitespace)",
+            style="CardMuted.TLabel",
+        ).grid(row=regimen_tab.grid_size()[1], column=0, sticky="w", pady=(5, 0))
+        self._pk_nca_text = _grid_text(regimen_tab, height=5, mono=self._mono)
+        self._pk_nca_text.insert("1.0", "0,10\n1,8\n2,6.5\n4,4.2\n8,1.8\n12,0.8\n24,0.1")
+        grid_append(regimen_tab, self._pk_nca_text, sticky="ew")
+        nca_button = self._action_button(
+            regimen_tab, "Run extended NCA", self._pk_nca_run,
+            tooltip="pkpdutils linear-up/log-down AUC and best-adjusted-R² terminal phase.",
+        )
+        nca_button.grid(row=regimen_tab.grid_size()[1], column=0, sticky="w", pady=(5, 0))
+
+        pregnancy_fields = ttk.Frame(pregnancy_tab, style="Card.TFrame")
+        grid_append(pregnancy_tab, pregnancy_fields, sticky="w")
+        self._pk_pregnancy_entries: dict[str, ttk.Entry] = {}
+        pregnancy_defaults = (
+            ("dose_mg", "maternal IV dose mg", "100"),
+            ("maternal_volume_l", "maternal V L", "50"),
+            ("fetal_volume_l", "fetal V L", "3"),
+            ("maternal_clearance_l_h", "maternal CL L/h", "1"),
+            ("fetal_clearance_l_h", "fetal CL L/h", "0.1"),
+            ("placental_clearance_l_h", "placental Q L/h", "2"),
+            ("maternal_fu", "maternal fu", "0.8"),
+            ("fetal_fu", "fetal fu", "0.4"),
+            ("duration_h", "duration h", "48"),
+        )
+        for index, (key, label, default) in enumerate(pregnancy_defaults):
+            row, column = divmod(index, 3)
+            ttk.Label(pregnancy_fields, text=label, style="CardMuted.TLabel").grid(
+                row=row * 2, column=column, sticky="w", padx=(0, 12)
+            )
+            entry = ttk.Entry(pregnancy_fields, width=12)
+            entry.insert(0, default)
+            entry.grid(row=row * 2 + 1, column=column, sticky="w", padx=(0, 12))
+            self._pk_pregnancy_entries[key] = entry
+        pregnancy_button = self._action_button(
+            pregnancy_tab, "Simulate maternal–fetal transfer", self._pk_pregnancy_run,
+            primary=True,
+            tooltip="Bidirectional Qp × (fu_m·Cm − fu_f·Cf); amounts integrated by the adaptive RK45 engine.",
+        )
+        pregnancy_button.grid(row=pregnancy_tab.grid_size()[1], column=0, sticky="w", pady=(5, 0))
+        self._pk_pregnancy_text = _grid_text(pregnancy_tab, height=8, mono=self._mono)
+        grid_append(pregnancy_tab, self._pk_pregnancy_text, sticky="ew", pady=(5, 0))
+        self._pk_pregnancy_host = self._figure_host(pregnancy_tab, height=280)
+
+        osp_buttons = ttk.Frame(osp_tab, style="Card.TFrame")
+        grid_append(osp_tab, osp_buttons, sticky="w")
+        library_button = self._action_button(
+            osp_buttons, "Browse 40 OSP models", self._pk_osp_library,
+            tooltip="Name, release, category, pediatric variant and notes from pkpd/osplib.py.",
+        )
+        library_button.pack(side="left")
+        pregnancy_models_button = self._action_button(
+            osp_buttons, "Browse 16 pregnancy projects", self._pk_pregnancy_models,
+            tooltip="Compound project index only; no fitted lightweight parameters are implied.",
+        )
+        pregnancy_models_button.pack(side="left", padx=(8, 0))
+        ttk.Label(
+            osp_tab,
+            text="DDI ratios, one per line: observed, predicted",
+            style="CardMuted.TLabel",
+        ).grid(row=osp_tab.grid_size()[1], column=0, sticky="w", pady=(6, 0))
+        self._pk_ddi_text = _grid_text(osp_tab, height=6, mono=self._mono)
+        self._pk_ddi_text.insert("1.0", "1.0,1.1\n2.0,1.8\n0.5,0.6\n3.2,2.4")
+        grid_append(osp_tab, self._pk_ddi_text, sticky="ew")
+        ddi_button = self._action_button(
+            osp_tab, "Qualify DDI ratios", self._pk_ddi_run,
+            tooltip="OSP GMFE plus fractions inside two-fold and Guest et al. limits.",
+        )
+        ddi_button.grid(row=osp_tab.grid_size()[1], column=0, sticky="w", pady=(5, 0))
+        self._pk_osp_text = _grid_text(osp_tab, height=16, mono=self._mono)
+        grid_append(osp_tab, self._pk_osp_text, sticky="ew", pady=(5, 0))
+
+    @staticmethod
+    def _pk_numeric_rows(text: str) -> Any:
+        import numpy as np
+
+        rows: list[list[float]] = []
+        for raw in text.splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                rows.append([float(value) for value in line.replace(",", " ").split()])
+            except ValueError as exc:
+                raise ValueError(f"invalid numeric row: {raw!r}") from exc
+        if not rows or len({len(row) for row in rows}) != 1:
+            raise ValueError("enter equally sized numeric rows")
+        return np.asarray(rows, dtype=float)
+
+    def _pk_regimen_run(self) -> None:
+        if not self._require_pharmaml():
+            return
+        try:
+            import numpy as np
+
+            from pharmaml.pkpd.compartments import TwoCompartment
+            from pharmaml.pkpd.ode import DosingEvent
+            from pharmaml.viz._compat import new_figure
+
+            values = {
+                key: parse_float(entry.get(), key, minimum=0.0)
+                for key, entry in self._pk_regimen_entries.items()
+            }
+            for key in ("dose_mg", "tau_h", "ka", "v2", "q", "v3", "duration_h"):
+                if values[key] <= 0:
+                    raise ValueError(f"{key} must be > 0")
+            n_doses = parse_int(
+                self._pk_regimen_entries["n_doses"].get(), "n_doses", minimum=1, maximum=100
+            )
+            route = self._pk_route_combo.get()
+            model = TwoCompartment(
+                ka=values["ka"], cl=values["cl"], v2=values["v2"],
+                q=values["q"], v3=values["v3"],
+            )
+            times = np.linspace(0.0, values["duration_h"], 145)
+            compartment = 0 if route == "oral" else 1
+            amount = values["dose_mg"] * (model.f if route == "oral" else 1.0)
+            events = [
+                DosingEvent(time=index * values["tau_h"], amount=amount, compartment=compartment)
+                for index in range(n_doses)
+                if index * values["tau_h"] <= values["duration_h"]
+            ]
+            amounts = model.amounts(times, values["dose_mg"], route=route, events=events)
+            concentration = amounts[:, 1] / model.v2
+            figure, axis = new_figure(figsize=(7.2, 3.0))
+            axis.plot(times, concentration, color="#167C80", linewidth=2)
+            for event in events:
+                axis.axvline(event.time, color="#999999", linewidth=0.7, alpha=0.5)
+            axis.set(xlabel="time (h)", ylabel="central concentration (mg/L)")
+            axis.set_title(f"Exact two-compartment regimen · {len(events)} {route} dose(s)")
+            figure.tight_layout()
+            self._render_figure(
+                self._pk_regimen_host, figure, caption="Advanced PK: exact repeated regimen"
+            )
+            auc = float(
+                np.sum((concentration[:-1] + concentration[1:]) * 0.5 * np.diff(times))
+            )
+            self._pk_regimen_text.delete("1.0", "end")
+            self._pk_regimen_text.insert(
+                "1.0",
+                f"events: {len(events)} · route: {route}\n"
+                f"Cmax {concentration.max():.5g} mg/L at {times[concentration.argmax()]:.3g} h\n"
+                f"AUC(0–{values['duration_h']:g} h) {auc:.5g} mg·h/L\n"
+                "matrix-exponential linCmt solution; doses are exact event boundaries",
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Regimen simulation failed", exc)
+
+    def _pk_nca_run(self) -> None:
+        if not self._require_pharmaml():
+            return
+        try:
+            from pharmaml.pkpd.nca_ext import auc_linear_log, fit_terminal_phase
+
+            rows = self._pk_numeric_rows(self._pk_nca_text.get("1.0", "end"))
+            if rows.shape[1] != 2:
+                raise ValueError("NCA needs exactly two columns: time, concentration")
+            fit = fit_terminal_phase(rows[:, 0], rows[:, 1])
+            auc = auc_linear_log(rows[:, 0], rows[:, 1])
+            self._pk_regimen_text.delete("1.0", "end")
+            self._pk_regimen_text.insert(
+                "1.0",
+                f"linear-up/log-down AUC {auc:.6g}\n"
+                f"terminal λz {fit.lambda_z:.6g} /h · half-life {fit.half_life:.6g} h\n"
+                f"window rows {fit.start_index}–{fit.end_index} ({fit.n_points} points) · "
+                f"adjusted R² {fit.r2_adj:.6f}\n"
+                f"span {fit.span_half_lives:.3g} half-lives · span_low={fit.span_low}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Extended NCA failed", exc)
+
+    def _pk_pregnancy_run(self) -> None:
+        if not self._require_pharmaml():
+            return
+        try:
+            import numpy as np
+
+            from pharmaml.pkpd.pregnancy import (
+                MaternalFetalParameters,
+                simulate_maternal_fetal,
+            )
+            from pharmaml.viz._compat import new_figure
+
+            values = {
+                key: parse_float(entry.get(), key, minimum=0.0)
+                for key, entry in self._pk_pregnancy_entries.items()
+            }
+            duration = values.pop("duration_h")
+            dose = values.pop("dose_mg")
+            if duration <= 0:
+                raise ValueError("duration_h must be > 0")
+            result = simulate_maternal_fetal(
+                MaternalFetalParameters(**values),
+                dose_mg=dose,
+                times=np.linspace(0.0, duration, 145),
+            )
+            frame = result.frame
+            figure, axis = new_figure(figsize=(7.2, 3.1))
+            axis.plot(frame["time_h"], frame["maternal_concentration_mg_l"], label="maternal")
+            axis.plot(frame["time_h"], frame["fetal_concentration_mg_l"], label="fetal")
+            axis.set(xlabel="time (h)", ylabel="total plasma concentration (mg/L)")
+            axis.set_title("Two-compartment maternal–fetal transfer (lightweight model)")
+            axis.legend()
+            figure.tight_layout()
+            self._render_figure(
+                self._pk_pregnancy_host, figure, caption="Maternal–fetal unbound transfer"
+            )
+            final = frame.iloc[-1]
+            self._pk_pregnancy_text.delete("1.0", "end")
+            self._pk_pregnancy_text.insert(
+                "1.0",
+                f"fetal/maternal AUC ratio {result.fetal_maternal_auc_ratio:.5f}\n"
+                f"final maternal {final['maternal_concentration_mg_l']:.5g} mg/L · "
+                f"fetal {final['fetal_concentration_mg_l']:.5g} mg/L\n"
+                f"final unbound maternal {final['maternal_unbound_mg_l']:.5g} · "
+                f"fetal {final['fetal_unbound_mg_l']:.5g} mg/L\n"
+                f"solver: {result.n_steps} accepted · {result.n_rejected} rejected steps\n"
+                "scope: two compartments, user parameters; not the released 27-compartment fit",
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Maternal–fetal simulation failed", exc)
+
+    def _pk_osp_library(self) -> None:
+        if not self._require_pharmaml():
+            return
+        from pharmaml.pkpd.osplib import library_frame, library_summary
+
+        self._pk_osp_text.delete("1.0", "end")
+        self._pk_osp_text.insert(
+            "1.0", f"summary: {library_summary()}\n\n{library_frame().to_string(index=False)}"
+        )
+
+    def _pk_pregnancy_models(self) -> None:
+        if not self._require_pharmaml():
+            return
+        from pharmaml.pkpd.pregnancy import pregnancy_model_frame
+
+        self._pk_osp_text.delete("1.0", "end")
+        self._pk_osp_text.insert("1.0", pregnancy_model_frame().to_string(index=False))
+
+    def _pk_ddi_run(self) -> None:
+        if not self._require_pharmaml():
+            return
+        try:
+            from pharmaml.pkpd.ddi import qualification_metrics
+
+            rows = self._pk_numeric_rows(self._pk_ddi_text.get("1.0", "end"))
+            if rows.shape[1] != 2:
+                raise ValueError("DDI qualification needs observed, predicted columns")
+            metrics = qualification_metrics(rows[:, 0], rows[:, 1])
+            self._pk_osp_text.delete("1.0", "end")
+            self._pk_osp_text.insert(
+                "1.0",
+                "OSP DDI qualification\n"
+                + "\n".join(f"{key}: {value:.6g}" for key, value in metrics.items()),
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("DDI qualification failed", exc)
 
     def _uc_dimension_changed(self) -> None:
         """Load the picked dimension's units into both comboboxes."""
@@ -15852,6 +16171,149 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._pocket_report_text.insert("1.0", "the pocket report appears here")
         grid_append(pocket_card, self._pocket_report_text, sticky="ew", pady=(4, 0))
         self._pocket_last: Any = None
+
+        benchmark = make_card(
+            page.grid,
+            "DOCKSTRING target & benchmark lab",
+            collapsible=True,
+            key="dock-dockstring-benchmark",
+            span=2,
+            row=9,
+            column=0,
+            subtitle="docking/dockstring.py: all 58 upstream Vina search boxes "
+            "plus the original F2, promiscuous-PPAR and corrected selective-"
+            "JAK2 objectives (10·(1−QED) penalty). Docking scores remain "
+            "external/user inputs; the registry is not a docking result. "
+            "Send any target box to the Campaign runner or evaluate a score set.",
+        )
+        benchmark_top = ttk.Frame(benchmark, style="Card.TFrame")
+        grid_append(benchmark, benchmark_top, sticky="w")
+        dockstring_names = ["ABL1", "ACHE", "ADAM17", "ADORA2A", "ADRB1", "ADRB2", "AKT1", "AKT2", "AR", "BACE1", "CA2", "CASP3", "CDK2", "CSF1R", "CYP2C9", "CYP3A4", "DHFR", "DPP4", "DRD2", "DRD3", "EGFR", "ESR1", "ESR2", "F10", "F2", "FGFR1", "GBA", "HMGCR", "HSD11B1", "HSP90AA1", "IGF1R", "JAK2", "KDR", "KIT", "LCK", "MAOB", "MAP2K1", "MAPK1", "MAPK14", "MAPKAPK2", "MET", "MMP13", "NOS1", "NR3C1", "PARP1", "PDE5A", "PGR", "PLK1", "PPARA", "PPARD", "PPARG", "PTGS2", "PTK2", "PTPN1", "REN", "ROCK1", "SRC", "THRB"]
+        self._dock_benchmark_target = ttk.Combobox(
+            benchmark_top, state="readonly", width=14, values=dockstring_names
+        )
+        self._dock_benchmark_target.set("F2")
+        ttk.Label(benchmark_top, text="target", style="CardMuted.TLabel").grid(row=0, column=0)
+        self._dock_benchmark_target.grid(row=0, column=1, padx=(5, 16))
+        self._dock_benchmark_objective = ttk.Combobox(
+            benchmark_top, state="readonly", width=20, values=["F2", "promiscuous_PPAR", "selective_JAK2"]
+        )
+        self._dock_benchmark_objective.set("selective_JAK2")
+        ttk.Label(benchmark_top, text="objective", style="CardMuted.TLabel").grid(row=0, column=2)
+        self._dock_benchmark_objective.grid(row=0, column=3, padx=(5, 0))
+        benchmark_scores = ttk.Frame(benchmark, style="Card.TFrame")
+        grid_append(benchmark, benchmark_scores, sticky="w", pady=(5, 0))
+        self._dock_benchmark_scores: dict[str, ttk.Entry] = {}
+        for index, (target, default) in enumerate(
+            (("F2", "-9"), ("PPARA", "-8"), ("PPARD", "-9"),
+             ("PPARG", "-7"), ("JAK2", "-9"), ("LCK", "-9"))
+        ):
+            ttk.Label(benchmark_scores, text=target, style="CardMuted.TLabel").grid(
+                row=0, column=index * 2, sticky="w"
+            )
+            entry = ttk.Entry(benchmark_scores, width=8)
+            entry.insert(0, default)
+            entry.grid(row=0, column=index * 2 + 1, padx=(3, 10))
+            self._dock_benchmark_scores[target] = entry
+        benchmark_qed = ttk.Frame(benchmark, style="Card.TFrame")
+        grid_append(benchmark, benchmark_qed, sticky="w", pady=(5, 0))
+        ttk.Label(benchmark_qed, text="SMILES (for QED=auto)", style="CardMuted.TLabel").pack(side="left")
+        self._dock_benchmark_smiles = ttk.Entry(benchmark_qed, width=32)
+        self._dock_benchmark_smiles.insert(0, "CCO")
+        self._dock_benchmark_smiles.pack(side="left", padx=(5, 14))
+        ttk.Label(benchmark_qed, text="QED", style="CardMuted.TLabel").pack(side="left")
+        self._dock_benchmark_qed = ttk.Entry(benchmark_qed, width=9)
+        self._dock_benchmark_qed.insert(0, "auto")
+        self._dock_benchmark_qed.pack(side="left", padx=(5, 0))
+        benchmark_buttons = ttk.Frame(benchmark, style="Card.TFrame")
+        grid_append(benchmark, benchmark_buttons, sticky="w", pady=(6, 0))
+        show_box = self._action_button(
+            benchmark_buttons, "Show target box", self._dock_benchmark_show,
+            tooltip="Display the selected upstream center/size config (angstrom).",
+        )
+        show_box.pack(side="left")
+        use_box = self._action_button(
+            benchmark_buttons, "Send box to Campaign", self._dock_benchmark_use,
+            tooltip="Copy center and size into the Campaign runner's Vina fields.",
+        )
+        use_box.pack(side="left", padx=(8, 0))
+        evaluate_box = self._action_button(
+            benchmark_buttons, "Evaluate objective", self._dock_benchmark_evaluate,
+            primary=True,
+            tooltip="QED=auto computes QED from the SMILES; otherwise enter a number in [0,1].",
+        )
+        evaluate_box.pack(side="left", padx=(8, 0))
+        self._dock_benchmark_text = _grid_text(benchmark, height=10, mono=self._mono)
+        grid_append(benchmark, self._dock_benchmark_text, sticky="ew", pady=(6, 0))
+
+    def _dock_benchmark_show(self) -> None:
+        if not self._require_pharmaml():
+            return
+        try:
+            from pharmaml.docking.dockstring import get_target
+
+            target = get_target(self._dock_benchmark_target.get())
+            self._dock_benchmark_text.delete("1.0", "end")
+            self._dock_benchmark_text.insert(
+                "1.0",
+                f"DOCKSTRING target: {target.name}\n{target.config_text()}\n"
+                "center/size are angstrom; receptor PDBQT is not bundled",
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("DOCKSTRING target failed", exc)
+
+    def _dock_benchmark_use(self) -> None:
+        if not self._require_pharmaml():
+            return
+        try:
+            from pharmaml.docking.dockstring import get_target
+
+            target = get_target(self._dock_benchmark_target.get())
+            for entry, values in (
+                (self._dock_center_entry, target.center),
+                (self._dock_size_entry, target.size),
+            ):
+                entry.delete(0, "end")
+                entry.insert(0, " ".join(f"{value:g}" for value in values))
+            self._dock_benchmark_text.delete("1.0", "end")
+            self._dock_benchmark_text.insert(
+                "1.0", f"sent {target.name} center/size to the Campaign runner"
+            )
+            self.notify(f"{target.name} search box copied to Campaign", level="success")
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("Could not use DOCKSTRING box", exc)
+
+    def _dock_benchmark_evaluate(self) -> None:
+        if not self._require_pharmaml():
+            return
+        try:
+            from pharmaml.docking.dockstring import evaluate_objective
+
+            qed_text = self._dock_benchmark_qed.get().strip()
+            if qed_text.lower() == "auto":
+                from pharmaml.chem.oracles import qed_score
+
+                qed = qed_score(self._dock_benchmark_smiles.get().strip())
+                qed_source = "computed from SMILES"
+            else:
+                qed = parse_float(qed_text, "QED", minimum=0.0, maximum=1.0)
+                qed_source = "user supplied"
+            scores = {
+                name: parse_float(entry.get(), f"{name} docking score")
+                for name, entry in self._dock_benchmark_scores.items()
+            }
+            objective = self._dock_benchmark_objective.get()
+            value = evaluate_objective(objective, scores, qed=qed)
+            self._dock_benchmark_text.delete("1.0", "end")
+            self._dock_benchmark_text.insert(
+                "1.0",
+                f"objective: {objective}\nvalue: {value:.8g} (lower is better)\n"
+                f"QED: {qed:.6f} ({qed_source})\n"
+                "scores are external/user inputs; no docking engine was run\n"
+                "selective JAK2 uses upstream's corrected LCK median −8.1",
+            )
+        except Exception as exc:  # noqa: BLE001
+            self._show_error("DOCKSTRING objective failed", exc)
 
     # -- ligand library card ------------------------------------------- #
     def _dock_open_csv(self) -> None:
@@ -25538,6 +26000,194 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._dl_ebm_text = _grid_text(ebm, height=9, mono=self._mono)
         self._dl_ebm_text.insert("1.0", "train the glassbox model -- the term report appears here")
         grid_append(ebm, self._dl_ebm_text, sticky="ew", pady=(6, 0))
+
+        dta = make_card(
+            page.grid,
+            "Protein–ligand affinity (DeepDTA · DeepPurpose · DGL-LifeSci)",
+            span=2,
+            row=16,
+            column=0,
+            subtitle="ml/dta.py: DeepDTA's exact 25-symbol protein encoding, "
+            "20-AA composition (optionally 400 dipeptides) and aligned "
+            "2,048-bit ECFP ligand features. Build an ordinary paired "
+            "matrix, fit a ridge baseline and report held-out RMSE/R²/"
+            "concordance/DeepDTA rm2. This is the data/metric fold-in, not "
+            "the upstream CNN/transformer checkpoints.",
+        )
+        self._dl_dta_source = ttk.Combobox(
+            dta,
+            state="readonly",
+            width=28,
+            values=["synthetic demo (12 pairs)", "CSV path"],
+        )
+        self._dl_dta_source.set("synthetic demo (12 pairs)")
+        form_row(dta, "paired data", self._dl_dta_source)
+        dta_path_row = ttk.Frame(dta, style="Card.TFrame")
+        self._dl_dta_path = ttk.Entry(dta_path_row, width=52)
+        self._dl_dta_path.pack(side="left", fill="x", expand=True)
+        dta_browse = self._action_button(
+            dta_path_row, "Browse…", self._dl_dta_browse,
+            tooltip="Choose a CSV with ligand SMILES, protein sequence and affinity columns.",
+        )
+        dta_browse.pack(side="left", padx=(6, 0))
+        form_row(dta, "CSV (when selected)", dta_path_row)
+        dta_columns = ttk.Frame(dta, style="Card.TFrame")
+        self._dl_dta_smiles_col = ttk.Entry(dta_columns, width=14)
+        self._dl_dta_smiles_col.insert(0, "smiles")
+        self._dl_dta_protein_col = ttk.Entry(dta_columns, width=14)
+        self._dl_dta_protein_col.insert(0, "protein")
+        self._dl_dta_affinity_col = ttk.Entry(dta_columns, width=14)
+        self._dl_dta_affinity_col.insert(0, "affinity")
+        for col_index, label, widget in (
+            (0, "SMILES column", self._dl_dta_smiles_col),
+            (2, "protein column", self._dl_dta_protein_col),
+            (4, "affinity column", self._dl_dta_affinity_col),
+        ):
+            ttk.Label(dta_columns, text=label, style="CardMuted.TLabel").grid(
+                row=0, column=col_index, sticky="w", padx=(0, 5)
+            )
+            widget.grid(row=0, column=col_index + 1, padx=(0, 14))
+        grid_append(dta, dta_columns, sticky="w", pady=(4, 0))
+        self._dl_dta_dipeptides = tk.BooleanVar(value=False)
+        dta_dipep = ttk.Checkbutton(
+            dta,
+            text="include 400 standard-dipeptide frequencies (slower/wider)",
+            variable=self._dl_dta_dipeptides,
+        )
+        form_row(dta, "target features", dta_dipep)
+        dta_buttons = ttk.Frame(dta, style="Card.TFrame")
+        grid_append(dta, dta_buttons, sticky="w", pady=(6, 0))
+        dta_run = self._action_button(
+            dta_buttons,
+            "Build features + ridge baseline",
+            self._dl_dta_run,
+            primary=True,
+            tooltip="Drop invalid ligands as whole pairs, fit ridge on 75% "
+            "of rows and evaluate on the remaining 25% with seed 42.",
+        )
+        dta_run.pack(side="left")
+        dta_export = self._action_button(
+            dta_buttons, "Export paired features…", self._dl_dta_export,
+            tooltip="Save the last aligned feature matrix (plus affinity) as CSV.",
+        )
+        dta_export.pack(side="left", padx=(10, 0))
+        self._dl_dta_text = _grid_text(dta, height=10, mono=self._mono)
+        self._dl_dta_text.insert(
+            "1.0", "build the demo or load a paired CSV -- the baseline report appears here"
+        )
+        grid_append(dta, self._dl_dta_text, sticky="ew", pady=(6, 0))
+        self._dl_dta_last: Any = None
+
+    def _dl_dta_browse(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Open paired drug–target affinity CSV",
+            filetypes=[("CSV tables", "*.csv *.tsv"), ("All files", "*.*")],
+        )
+        if path:
+            self._dl_dta_path.delete(0, "end")
+            self._dl_dta_path.insert(0, path)
+            self._dl_dta_source.set("CSV path")
+
+    def _dl_dta_run(self) -> None:
+        """Build aligned DTA features and score an honest held-out ridge."""
+        if not self._require_pharmaml() or not self._require("pandas", "DTA features"):
+            return
+        source = self._dl_dta_source.get()
+        path = self._dl_dta_path.get().strip()
+        if source == "CSV path" and not path:
+            messagebox.showwarning("No paired CSV", "Choose a CSV path or use the synthetic demo.")
+            return
+        smiles_col = self._dl_dta_smiles_col.get().strip()
+        protein_col = self._dl_dta_protein_col.get().strip()
+        affinity_col = self._dl_dta_affinity_col.get().strip()
+        dipeptides = bool(self._dl_dta_dipeptides.get())
+
+        def work():
+            import numpy as np
+            import pandas as pd
+            from sklearn.linear_model import Ridge
+            from sklearn.model_selection import train_test_split
+
+            from pharmaml.exceptions import DataValidationError
+            from pharmaml.ml.benchmetrics import concordance_index, r2_score, rmse
+            from pharmaml.ml.dta import deepdta_rm2, demo_dta_frame, paired_dta_features
+
+            if source == "CSV path":
+                pairs = pd.read_csv(path, sep=None, engine="python")
+            else:
+                pairs = demo_dta_frame()
+            features = paired_dta_features(
+                pairs,
+                smiles_column=smiles_col,
+                protein_column=protein_col,
+                affinity_column=affinity_col,
+                dipeptides=dipeptides,
+            )
+            if features.y is None or len(features.y) < 6:
+                raise ValueError("the ridge baseline needs at least 6 valid labelled pairs")
+            train, test = train_test_split(
+                np.arange(len(features.y)), test_size=0.25, random_state=42
+            )
+            model = Ridge(alpha=1.0)
+            model.fit(features.X.iloc[train], features.y.iloc[train])
+            predicted = model.predict(features.X.iloc[test])
+            observed = features.y.iloc[test].to_numpy()
+            try:
+                rm2 = deepdta_rm2(observed, predicted)
+            except DataValidationError:  # a tiny constant hold-out has no defined rm2
+                rm2 = float("nan")
+            return {
+                "features": features,
+                "model": model,
+                "train": train,
+                "test": test,
+                "observed": observed,
+                "predicted": predicted,
+                "rmse": rmse(observed, predicted),
+                "r2": r2_score(observed, predicted),
+                "concordance": concordance_index(observed, predicted),
+                "rm2": rm2,
+            }
+
+        def render(result: dict[str, Any]) -> None:
+            self._dl_dta_last = result
+            features = result["features"]
+            lines = [
+                f"paired rows: {len(features.kept_indices)} kept · {len(features.dropped)} dropped",
+                (f"matrix: {features.X.shape[0]} × {features.X.shape[1]} "
+                 f"({features.n_ligand_features} ligand + {features.n_protein_features} protein)"),
+                f"split: {len(result['train'])} train · {len(result['test'])} held out (seed 42)",
+                f"ridge RMSE {result['rmse']:.4f} · R² {result['r2']:.4f}",
+                f"concordance {result['concordance']:.4f} · DeepDTA rm2 {result['rm2']:.4f}",
+                "held-out rows (source position, observed, predicted):",
+            ]
+            for index, observed, predicted in zip(
+                result["test"], result["observed"], result["predicted"]
+            ):
+                source_index = features.kept_indices[int(index)]
+                lines.append(f"  {source_index:4d}  {observed:9.4f}  {predicted:9.4f}")
+            if features.dropped:
+                lines.append("dropped ligand rows: " + repr(features.dropped[:8]))
+            lines.append("scope: ridge baseline, not the upstream neural DTA checkpoints")
+            self._dl_dta_text.delete("1.0", "end")
+            self._dl_dta_text.insert("1.0", "\n".join(lines))
+
+        self._start_job("paired protein–ligand features + ridge", work, render)
+
+    def _dl_dta_export(self) -> None:
+        if self._dl_dta_last is None:
+            messagebox.showwarning("No DTA features", "Build the paired features first.")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Export paired DTA features",
+            defaultextension=".csv",
+            initialfile="paired_dta_features.csv",
+            filetypes=[("CSV", "*.csv")],
+        )
+        if not path:
+            return
+        self._dl_dta_last["features"].training_frame().to_csv(path, index=False)
+        self.notify(f"saved paired DTA features: {path}", level="success")
 
     # ------------------------------------------------------------- #
     # Round 186: the four absorbed cards' handlers
