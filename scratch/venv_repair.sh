@@ -29,7 +29,11 @@ $P install --no-deps shap==0.54.1 2>&1 | tail -1
 $P install slicer numba cloudpickle packaging -c /tmp/constraint.txt 2>&1 | tail -1
 
 # 4. the GUI/report/ML layer (matplotlib 3.10.9 = the live-TkAgg pin)
+#    openpyxl 3.1.5 rides here since v1.2.116: the playground's Excel
+#    input/output guarantee (xlsx read + write) depends on it explicitly —
+#    pre-116 repairs did not carry it and a future repair must not drop it.
 $P install matplotlib==3.10.9 seaborn==0.13.2 fpdf2==2.8.5 python-docx==1.2.0 \
+    openpyxl==3.1.5 \
     mordred==1.2.0 xgboost==2.1.3 lightgbm==4.5.0 catboost==1.2.8 \
     -c /tmp/constraint.txt 2>&1 | tail -1
 
@@ -43,4 +47,4 @@ $P install pytest-xdist 2>&1 | tail -1
 cd /home/z/my-project/pharma-ml-toolkit && $P install --no-deps -e . 2>&1 | tail -1
 
 # 8. verify the full import surface
-/home/z/.venv/bin/python -c "import numpy, rdkit, selfies, shap, meeko, gemmi, matplotlib, torch, mordred, xgboost, lightgbm, catboost, seaborn, fpdf, docx, pharmaml; print('VENV-REPAIR-DONE numpy', numpy.__version__, 'torch', torch.__version__, 'matplotlib', matplotlib.__version__, 'pharmaml', pharmaml.__version__)"
+/home/z/.venv/bin/python -c "import numpy, rdkit, selfies, shap, meeko, gemmi, matplotlib, torch, mordred, xgboost, lightgbm, catboost, seaborn, fpdf, docx, openpyxl, pandas, pharmaml; print('VENV-REPAIR-DONE numpy', numpy.__version__, 'torch', torch.__version__, 'matplotlib', matplotlib.__version__, 'openpyxl', openpyxl.__version__, 'pharmaml', pharmaml.__version__)"

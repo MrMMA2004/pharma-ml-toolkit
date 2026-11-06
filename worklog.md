@@ -7282,3 +7282,72 @@ Stage Summary:
   cron pair 508389 (2-hour 100x, run 4 next) + webDevReview 508967 ·
   runs_completed: 3 (owner-interaction round; the counter counts cron
   runs only).
+
+## Round 203 — run 4 of 100: the 12th rollback absorbed (repo + venv + cron trio), Excel-guarantee repair-proofing (2026-11-07)
+
+The sandbox came back rolled back to `2eb0ede` (the round-186-era HEAD)
+with the *trio* of losses this drill now knows by heart, each in its
+own layer: (1) repo layer — remote refs gone, `origin/main` unresolvable,
+HEAD six-plus rounds behind; (2) venv layer — `/home/z/.venv` missing
+rdkit entirely while numpy sat at a stock 2.x; (3) cron layer — the
+webDevReview job lost with the rollback (the 2-hour job survived because
+the scheduler itself is outside the sandbox). Recovery, in order:
+token + credential-helper + remote re-drill from `upload/Command.txt`,
+`git fetch` (origin/main = `fe203ce`, round 202), aside-and-restore for
+the untracked `upload/` residents that shadow tracked paths — with the
+hash comparison proving every aside zip was byte-identical to its
+tracked twin (v1.2.114 `ea2cf57d`, v1.2.115 `d04238d1`, v1.2.116
+`cc4eabb5`, v1.2.117 `6b5c93e4`; zero divergence, asides dropped), then
+`git pull --ff-only` landing clean on round 202. `scratch/venv_repair.sh`
+foregrounded to a full green stack (VENV-REPAIR-DONE: numpy 1.26.4,
+torch 2.14.1+cpu, matplotlib 3.10.9, pharmaml 1.2.117).
+
+Engineering detail of the round — the Excel guarantee gets repair-proofed:
+since v1.2.116 the playground's session-wide Excel promise (xlsx read +
+write alongside CSV) rests on openpyxl, but the repair script never
+pinned it — the live venv carried it only as someone else's dependency,
+so a future venv-layer rollback could have rebuilt a venv that silently
+breaks the guarantee the owner asked for by name. `scratch/venv_repair.sh`
+now pins `openpyxl==3.1.5` explicitly in the GUI/report/ML batch (with a
+comment naming the v1.2.116 contract it serves) and the step-8 import
+verification asserts `openpyxl` + `pandas` alongside the rest — the
+recovery tool and the guarantee it must recover are now the same commit.
+The webDevReview companion was recreated as job 509961 (its predecessor
+508967 died with the sandbox), and the run counter incremented to 4.
+
+Verification (post-rollback, fresh-venv): focused battery green
+(`test_csv_standardize.py` 57 passed; `test_excel_io_and_samples.py` +
+`test_playground_workflows.py` + `test_catalog_foldins.py` exit 0 — the
+rounds 199-202 additions), collect-only sweep across all 64 test files
+exit 0 (no import breakage anywhere; `testpaths` = tests + src confirms
+the 5,236 arithmetic), and an xdist chunk (`test_ml_pipeline.py` +
+`test_interpret.py`, 304 tests, -n 4) exit 0 on the rebuilt numeric
+stack. The playground's three session-wide guarantees re-introspected at
+source: 11 workflows / 57 steps in the registry, 141 `subtitle=` sites
+against 139 `make_card` call-sites. Health E2E: GET / 200; zip-size
+`exact:true 19,251,057 v1.2.117 source:release` — the exact round-202
+pins, zero drift. No version bump: the round's only code change is the
+scratch-layer repair script; v1.2.117 stands, four homes at
+19,251,057 bytes sha-256 6b5c93e4.
+
+Stage Summary:
+- Rollback: 12th observed, trio form (repo → 2eb0ede, venv rdkit-less,
+  webDevReview job lost); recovered to fe203ce (round 202) with zip
+  parity proven, venv repaired foreground, cron pair restored
+  (508389 run 4 + webDevReview 509961).
+- Deliverable: venv_repair.sh openpyxl pin — the Excel guarantee now
+  survives the recoveries; no src/tests/playground/docs changes, so
+  v1.2.117 stays the shipped truth.
+- Lessons pinned: (1) the aside-and-restore drill now includes hash
+  comparison — proving aside files byte-identical to their tracked
+  twins before dropping them closes the "did I just lose data?" doubt
+  in one step; (2) a guarantee named by the owner must also be pinned
+  in the *recovery* layer — venv_repair.sh is part of the product
+  surface for anything the owner asked for by name; (3) the trio form
+  (repo+venv+cron) is now the rollback shape to expect, not the
+  exception — the STEP 1 checklist order handles all three.
+- Baselines for the next round: v1.2.117 · 5,236 tests (4,459 + 777
+  doctests) · census 893 files / 337,231 lines · four zip homes at
+  19,251,057 bytes sha-256 6b5c93e4 · dev server healthy · cron pair
+  508389 (2-hour 100x, run 5 next) + webDevReview 509961 ·
+  runs_completed: 4.
