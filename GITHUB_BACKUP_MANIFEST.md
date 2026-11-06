@@ -211,7 +211,7 @@ latent stale pins (three home jump chips selected wrong tabs — now
 title-based; the finder/session-report/registry pins predated the
 100x-174 census table and the round-200 arena cards) — all repaired.
 Honest count: **4,442 + 777 = 5,219 tests** (the 773-doctest pin was
-itself stale post-arena-merge); fresh census pins **888 files /
+itself stale post-arena-merge); fresh census pins **890 files /
 336,329 lines** at v1.2.116.
 
 ## v1.2.115 release-zip homes (2026-11-06, round 200 — the arena merge)

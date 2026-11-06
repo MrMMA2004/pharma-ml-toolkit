@@ -102,7 +102,7 @@ was the working form — the sklearn warning paths stopped leaking the
 venv location into outputs). build_zip_180 → 920 entries / 882 files /
 19,233,206 bytes / sha-256 `cc4eabb5…` / real leaks 0 / four homes
 byte-identical (repo `download/`, `dist-archive/`, legacy
-`download/`, `upload/`). Fresh census: **888 files / 336,329 lines**.
+`download/`, `upload/`). Fresh census: **890 files / 336,397 lines**.
 
 ## [1.2.115] — 2026-11-06
 

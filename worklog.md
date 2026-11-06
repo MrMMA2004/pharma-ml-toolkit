@@ -7154,7 +7154,7 @@ re-executed (the ML notebook died under `-W ignore` kernel args —
 kept the sklearn warning paths from leaking `/home/z/` into outputs);
 build_zip_180 → 920 entries / 882 files / 19,233,206 bytes / sha-256
 cc4eabb5… / real leaks 0 / four homes byte-identical; fresh census pins
-**888 files / 336,329 lines**; web pins 5,189 → **5,219 tests** — an
+**final census 890 files / 336,397 lines**; web pins 5,189 → **5,219 tests** — an
 honest correction: tests/ 4,416 → 4,442 (+26) and doctests 773 → 777
 (the old 773 was itself stale post-arena-merge: 776 at HEAD + 1 new
 doctest; the census arithmetic now says 4,442 + 777 = 5,219).
@@ -7177,7 +7177,7 @@ Stage Summary:
   re-measure at every ship; (5) index-based tab references rot —
   resolve by title.
 - Baselines for the next round: v1.2.116 · 5,219 tests (4,442 + 777
-  doctests) · 888 files / 336,329 lines · four zip homes at 19,233,206
+  doctests) · final census 890 files / 336,397 lines · four zip homes at 19,233,206
   bytes sha-256 cc4eabb5… · dev server to restart + health-check · cron
   pair 508389 (2-hour 100x, run 4 next) + webDevReview 508967 ·
   runs_completed: 3.
