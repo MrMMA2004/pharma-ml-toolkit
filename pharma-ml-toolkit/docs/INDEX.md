@@ -39,23 +39,11 @@ after adding new public functions.
 | Symbol | Kind | Summary |
 |---|---|---|
 | `ATOMPAIR_BITS` | constant |  |
+| `AVALON_BITS` | constant |  |
 | `CHEMBL_EXCLUDE_METALS` | constant |  |
 | `CHEMBL_NORMALIZATION_TRANSFORMS` | constant |  |
 | `CHEMBL_SALTS` | constant |  |
 | `CHEMBL_SOLVENTS` | constant |  |
-| `PROTONATION_SMARTS` | constant |  |
-| `PROFILES` | constant |  |
-| `StandardizeOptions` | class | Every toggle the five chains respect, one name across profiles. |
-| `StandardizeOutcome` | class | One molecule through one chain -- the per-row answer. |
-| `StandardizationProfile` | class | A registered chain: key, label, reference repo, builder. |
-| `StandardizationRecord` | class | One CSV row's outcome (identifier + provenance). |
-| `StandardizationReport` | class | The batch answer -- records, summary, exports. |
-| `detect_smiles_column` | function | Find the SMILES column of a CSV frame -- the card's auto-pick. |
-| `inchi_roundtrip_check` | function | The cross-toolkit agreement check standing in OpenBabel's slot. |
-| `protonate_smiles` | function | The dimorphite_dl protonation enumerator for one SMILES. |
-| `standardize_csv` | function | Standardise a CSV of SMILES -- the batch front door. |
-| `standardize_smiles` | function | Standardise one SMILES to its canonical form -- every chain |
-| `AVALON_BITS` | constant |  |
 | `D3D_COLUMNS` | constant |  |
 | `D3D_DESCRIPTOR_COUNT` | constant |  |
 | `ECFP3_BITS` | constant |  |
@@ -75,6 +63,8 @@ after adding new public functions.
 | `MORGAN_RADIUS` | constant |  |
 | `NEUTRALIZE_PATTERNS` | constant |  |
 | `PATTERN_BITS` | constant |  |
+| `PROFILES` | constant |  |
+| `PROTONATION_SMARTS` | constant |  |
 | `RDKIT_FP_BITS` | constant |  |
 | `REINVENT_DEFAULT_ELEMENTS` | constant |  |
 | `REPRESENTATIONS` | constant |  |
@@ -109,6 +99,11 @@ after adding new public functions.
 | `SelfiesBatchConversion` | class | Result of :func:`batch_smiles_to_selfies` -- per-row, never row-destructive. |
 | `SelfiesRobustnessReport` | class | Validity under random corruption: SELFIES symbols vs SMILES characters. |
 | `SelfiesRoundtripReport` | class | Round-trip fidelity audit of a SMILES column, the repo's own QA pattern. |
+| `StandardizationProfile` | class | A registered chain: key, label, reference repo, builder. |
+| `StandardizationRecord` | class | One CSV row's outcome (identifier + provenance). |
+| `StandardizationReport` | class | The batch answer -- records, summary, exports. |
+| `StandardizeOptions` | class | Every toggle the five chains respect, one name across profiles. |
+| `StandardizeOutcome` | class | One molecule through one chain -- the per-row answer. |
 | `TableComparison` | class | Set reconciliation of one ligand column across two tables. |
 | `VarianceFilterResult` | class | Result of :func:`filter_low_variance`. |
 | `add_ic50_column` | function | Append an IC50 column converted from a pIC50 column. |
@@ -140,6 +135,7 @@ after adding new public functions.
 | `demo_complex` | function | A designed ligand/protein pair that triggers nine families. |
 | `descriptor_card` | function | The ``info()`` popup as a text card: the descriptor set mols2grid |
 | `detect_interactions` | function | Run every detector family over a ligand/protein pair. |
+| `detect_smiles_column` | function | Find the SMILES column of a CSV frame -- the card's auto-pick. |
 | `dihedral_angle` | function | Signed dihedral p0-p1-p2-p3 in degrees, −180..180. |
 | `distance_matrix` | function | The full pairwise distance matrix ``(n, n)`` in Å. |
 | `family_of_column` | function | Return the feature family a frame column belongs to. |
@@ -154,6 +150,7 @@ after adding new public functions.
 | `ic50_from_pic50_series` | function | Vectorised pIC50 -> IC50 conversion preserving NaN for bad rows. |
 | `ic50_to_pic50` | function | Convert an IC50 measurement to pIC50 = -log10(IC50 [M]). |
 | `implicit_hydrogens` | function | Per-atom hydrogen counts from the valence model. |
+| `inchi_roundtrip_check` | function | The cross-toolkit agreement check standing in OpenBabel's slot. |
 | `kabsch_rotation` | function | The optimal rotation aligning ``mobile`` onto ``target``. |
 | `ki_to_pki` | function | Convert an inhibition constant to pKi = -log10(Ki [M]). |
 | `ligand_from_pdb` | function | Typed ligand residues from PDB text (HETATM records only). |
@@ -173,6 +170,7 @@ after adding new public functions.
 | `point_distance` | function | Euclidean distance between two atoms (Å). |
 | `prepare_pic50_dataset` | function | Turn a raw SMILES + EC50 table into a modelling-ready pEC50 set. |
 | `protein_from_pdb` | function | Typed protein residues from PDB text. |
+| `protonate_smiles` | function | The dimorphite_dl protonation enumerator for one SMILES. |
 | `random_selfies_molecules` | function | Sample ``n`` molecules uniformly from the robust SELFIES alphabet. |
 | `rank_features` | function | Rank feature columns by importance, descending. |
 | `register` | constant |  |
@@ -211,6 +209,8 @@ after adding new public functions.
 | `smiles_to_pdb` | function | Generate an optimised 3D PDB ligand from a SMILES string. |
 | `smiles_to_selfies` | function | Translate one SMILES string to its SELFIES encoding. |
 | `split_table_into_chunks` | function | Stream a large CSV into fixed-size part files. |
+| `standardize_csv` | function | Standardise a CSV of SMILES -- the batch front door. |
+| `standardize_smiles` | function | Standardise one SMILES to its canonical form -- every chain |
 | `structure_summary` | function | The header-line facts: chains, residues, elements, B-values. |
 | `substructure_matches` | function | All atom-index mappings of ``query`` inside ``mol``. |
 | `superpose` | function | Least-squares superposition of ``mobile`` onto ``target``. |
@@ -232,6 +232,7 @@ after adding new public functions.
 
 | Symbol | Kind | Summary |
 |---|---|---|
+| `AMINO_ACIDS` | constant |  |
 | `AUX_LOSS_WEIGHT` | constant |  |
 | `CATALOG_CATEGORIES` | constant |  |
 | `CATALOG_LICENSE` | constant |  |
@@ -245,6 +246,9 @@ after adding new public functions.
 | `COVERAGE_NATIVE` | constant |  |
 | `COVERAGE_OUT_OF_SCOPE` | constant |  |
 | `COVERAGE_PARTIAL` | constant |  |
+| `DEEPDTA_CHARCANSMISET` | constant |  |
+| `DEEPDTA_CHARISOSMISET` | constant |  |
+| `DEEPDTA_CHARPROTSET` | constant |  |
 | `DEFAULT_ALPHA` | constant |  |
 | `DEFAULT_BETA` | constant |  |
 | `DISTRIBUTIONS` | constant |  |
@@ -295,6 +299,7 @@ after adding new public functions.
 | `CrossEntropyLoss` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `DPNoiseScale` | class | The noise multiplier a training plan needs, by bisection. |
 | `DPStatisticsReport` | class | A column's headline statistics, privatised under one ε. |
+| `DTAFeatureSet` | class | Aligned paired features, optional target and explicit row accounting. |
 | `DecompositionResult` | class | The additive split: observed = trend + seasonal + remainder. |
 | `DeepMLPClassifier` | class | Deep feed-forward neural-network classifier (PyTorch). |
 | `DeepMLPRegressor` | class | Deep feed-forward neural-network regressor (PyTorch). |
@@ -418,6 +423,8 @@ after adding new public functions.
 | `cross_entropy` | function | Softmax cross-entropy: ``mean(−log_softmax[i, label_i])``. |
 | `cross_model_importances` | function | Permutation importances for a WHOLE panel of fitted models. |
 | `curve_fit` | function | The scipy-named entry point: (best params, covariance matrix). |
+| `deepdta_rm2` | function | DeepDTA's ``get_rm2`` external-prediction metric. |
+| `demo_dta_frame` | function | Twelve synthetic, clearly non-benchmark pairs for the offline GUI. |
 | `describe_series` | function | One sample's descriptive statistics (scipy's moment machinery). |
 | `describe_tensor` | function | Audit one array with chapter 2's "key attributes" vocabulary. |
 | `design_matrices` | function | Expand a formula against a data frame into the design matrix. |
@@ -443,6 +450,8 @@ after adding new public functions.
 | `kde_fit` | function | Kernel density estimation (PDSH 05.13) for ONE numeric column. |
 | `kmeans_cluster` | function | k-means clustering (PDSH 05.11), with the elbow AND the silhouette. |
 | `knn_applicability_domain` | function | kNN-distance applicability domain (the upload's step 4-5). |
+| `label_sequence` | function | Encode a protein with DeepDTA's exact labels, truncation and padding. |
+| `label_smiles` | function | Encode SMILES with DeepDTA's exact labels, truncation and zero padding. |
 | `laplace_mechanism` | function | The Laplace mechanism: exact (ε, 0)-differential privacy. |
 | `levenberg_marquardt` | function | Levenberg-Marquardt least squares, plain NumPy, deterministic. |
 | `linear_regression_gd` | function | Batch gradient descent on the squared error (DSBC's centrepiece). |
@@ -462,7 +471,10 @@ after adding new public functions.
 | `murcko_scaffold_key` | function | Canonical Bemis–Murcko scaffold SMILES for one molecule. |
 | `no_grad` | function | Disable graph construction (the inference-mode switch). |
 | `normality_report` | function | Both normality tests (the course's gate before choosing a test). |
+| `one_hot_sequence` | function | DeepDTA's dense ``(max_length, 25)`` one-hot protein encoding. |
+| `one_hot_smiles` | function | DeepDTA's dense ``(max_length, alphabet_size)`` SMILES one-hot. |
 | `one_sample_ttest` | function | Is this sample's mean different from ``mu0``? |
+| `paired_dta_features` | function | Build an aligned ECFP + protein matrix from a paired DTA table. |
 | `paired_ttest` | function | Did the paired differences move away from zero? |
 | `param_importances` | function | Random-forest (MDI) hyperparameter importances of a finished search. |
 | `parse_formula` | function | Parse a formula into ``(response, terms)``. |
@@ -472,6 +484,7 @@ after adding new public functions.
 | `permutation_feature_importance` | function | Permutation importances of a fitted model on held-out data. |
 | `predict_scratch` | function | Predict with a trained scratch model (standardisation reapplied). |
 | `predict_with_uncertainty` | function | Predictive mean and per-row standard deviation of a GP model. |
+| `protein_feature_frame` | function | Return aligned AAC (and optionally dipeptide) features per sequence. |
 | `quantile_prediction_intervals` | function | Central-``1 - alpha`` prediction intervals via quantile regression. |
 | `rdp_epsilon` | function | The RDP accountant: T plain Gaussian steps -> (ε, δ). |
 | `recommend_itembased` | function | Item-based collaborative filtering: the similarity-weighted sum. |
@@ -643,8 +656,11 @@ after adding new public functions.
 |---|---|---|
 | `DEFAULT_MGL_PYTHON` | constant |  |
 | `DEFAULT_PREPARE_LIGAND4` | constant |  |
+| `DOCKSTRING_OBJECTIVES` | constant |  |
+| `DOCKSTRING_TARGETS` | constant |  |
 | `UNSUPPORTED_LIGAND_ATOMS` | constant |  |
 | `AutomorphismCache` | class | spyrmsd's pose-list economy: enumerate the automorphisms once. |
+| `DockingTarget` | class | One DOCKSTRING receptor name and Vina search box (angstrom). |
 | `GridBox` | class | Docking search box geometry. |
 | `GridParameters` | class | Parsed AutoDock4 grid parameter file (GPF) content. |
 | `LigandLibrary` | class | A validated ligand library loaded from a table file. |
@@ -672,9 +688,12 @@ after adding new public functions.
 | `distribute_receptor` | function | Copy a prepared receptor into every ligand folder of a campaign. |
 | `dock_smiles_array` | function | Dock every SMILES of an array against one receptor, simultaneously. |
 | `engine_argv` | function | The argv prefix that launches one engine binary on this host. |
+| `evaluate_objective` | function | Evaluate one named original objective from precomputed docking scores. |
 | `extract_pdbqt_atom_types` | function | Collect sorted unique AutoDock atom types from a PDBQT ligand. |
 | `extract_pocket` | function | The MOAD pocket selection: residues near the ligand. |
+| `f2_objective` | function | Original F2 optimization objective (lower is better). |
 | `generate_ligand_structures` | function | Generate 3D ligand structures (PDB + MOL2) from a SMILES library. |
+| `get_target` | function | Case-sensitive upstream target lookup with an informative refusal. |
 | `hungarian_rmsd` | function | The Hungarian-assignment RMSD (``spyrmsd/hungarian.py``). |
 | `kabsch_rmsd` | function | The RMSD after the optimal Kabsch superposition. |
 | `kabsch_transform` | function | The Kabsch rigid transformation superposing A onto B. |
@@ -686,6 +705,7 @@ after adding new public functions.
 | `min_intra_distance` | function | The minimum pairwise atom distance (the self-clash metric). |
 | `parse_dlg_cluster_table` | function | Parse the ``CLUSTERING HISTOGRAM`` table of an AutoDock4 DLG. |
 | `parse_dlg_summary` | function | Summarise one DLG: best cluster, most populated cluster, extremes. |
+| `parse_dockstring_search_box` | function | Parse a DOCKSTRING/Vina six-key config into an unnamed target box. |
 | `parse_vina_config` | function | Parse an AutoDock Vina config file into a ``key -> value`` dict. |
 | `parse_vina_output` | function | Parse the mode table of a Vina output (stdout log or PDBQT REMARKs). |
 | `perturb_torsions` | function | Apply torsion updates to a geometry (``modify_conformer_torsion_angles``). |
@@ -695,7 +715,9 @@ after adding new public functions.
 | `pose_rmsd_matrix` | function | The pairwise in-place (or Kabsch) RMSD matrix of a pose set. |
 | `prepare_ligand_library` | function | Prepare every ligand of a CSV library into a campaign tree. |
 | `prepare_protein` | function | Import a protein and prepare a docking-ready receptor PDBQT. |
+| `promiscuous_ppar_objective` | function | Worst (maximum) PPAR score plus QED penalty; any NaN propagates. |
 | `qcp_rmsd` | function | The QCP RMSD (Theobald 2005, ``spyrmsd/qcp.py`` verbatim). |
+| `qed_penalty` | function | DOCKSTRING's ``10 * (1-QED)`` optimization penalty. |
 | `randomize_pose` | function | DiffDock's ``randomize_position``: the diffusion initial state. |
 | `read_gpf` | function | Parse an AutoDock4 grid parameter file (GPF) into a dict. |
 | `reindex_by_number` | function | Reindex a frame onto the full ligand-number range. |
@@ -708,8 +730,10 @@ after adding new public functions.
 | `scan_gpf_ligand_types` | function | Report the ``ligand_types`` of every sub-directory's ``r.gpf``. |
 | `scan_torsion_consistency` | function | Audit every ``.pdbqt`` under a tree for torsion consistency. |
 | `scan_vina_directory` | function | Summarise every Vina ``.log`` under a results tree. |
+| `selective_jak2_objective` | function | Corrected selective-JAK2 objective from upstream ``original.py``. |
 | `smiles_to_pdbqt` | function | Convert one SMILES to a 3D PDBQT ligand (Meeko + RDKit). |
 | `symmetry_corrected_rmsd` | function | The symmetry-corrected RMSD (spyrmsd's ``symmrmsd``). |
+| `target_frame` | function | The target registry as a flat table suitable for export/display. |
 | `torsion_bonds` | function | DiffDock's rotatable bonds (``get_transformation_mask`` rule). |
 | `vina_batch_progress` | function | Count what a resumed Vina batch would skip and what it would dock. |
 | `write_config_batch` | function | Write the ``r.gpf`` + ``r.dpf`` pair into every ligand folder. |

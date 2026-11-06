@@ -1,4 +1,20 @@
-## [1.2.114] — 2026-11-06
+## [1.2.115] — 2026-11-06
+
+### Added — round 200: the arena merge — two parallel catalog absorptions unified into one release
+
+The owner's continuation directive ("Continue the catalog; check other
+branches") surfaced a second, parallel absorption stream: branch
+`arena/2697c755-pharma-ml-toolkit` (one completed commit, 09:40 UTC) had
+folded in the catalog items main had never absorbed as modules, while
+main's round 199 had closed the no-card gap for modules that already
+existed. This release merges both work streams (plus the branch survey:
+`arena/c44913ab` was verified byte-absorbed into main long ago — stale,
+no merge needed). The catalog's disposition is now three-layer: 140/140
+links live-checked, every repository audited for coverage, and every
+absorbable concept either carded, module-backed, or honestly bounded as
+an external engine.
+
+#### From main — round 199: the link check and the nine no-gap cards
 
 ### Added — round 199: the GitHub research repository catalog absorbed — link check + the nine cards that closed the no-card gap
 
@@ -36,6 +52,68 @@ mouse does — tests/ now 4,382 cases (playground 852 → 862), 5,155 with the
 773 doctests. Still card-less, noted for later rounds: `ml/dalex.py`,
 `ml/deepensemble.py`, `ml/drugresponse.py`, `ml/pharmacogenomics.py`,
 `pkpd/physiology.py`, `pkpd/compounds.py`.
+
+#### From arena/2697c755 — the three module fold-ins and the full catalog audit
+
+### Added — the 140-repository research-catalog disposition, paired DTA, maternal–fetal PK and DOCKSTRING playground fold-ins
+
+* **A complete, evidence-bounded catalog audit** —
+  `docs/GITHUB_RESEARCH_CATALOG_AUDIT.md` disposes of every one of the PDF's
+  140 unique repositories (108 conversation-derived, 32 supplemental), with
+  live default-branch blob counts, canonical redirects, archived status,
+  existing coverage, new work and explicit external-engine boundaries. All
+  140 metadata/tree checks passed and no tree was truncated.
+* **`pharmaml.ml.dta`** — DeepDTA's exact 25-symbol protein label/one-hot
+  encoding and canonical/isomeric-SMILES character encoding; aligned RDKit ECFP,
+  amino-acid-composition and optional 400-dipeptide features; paired-row drop
+  accounting; a deterministic 12-pair demo; and the upstream squared-
+  correction `rm2`. The Deep Learning tab gains paired CSV loading, a
+  held-out ridge baseline (RMSE/R²/concordance/rm2) and aligned-feature CSV
+  export. This is a data/metric baseline, not a bundled neural checkpoint.
+* **`pharmaml.pkpd.pregnancy`** — PK-Sim/fertilization-age conversion, a
+  16-project OSP pregnancy index, and a disclosed two-compartment
+  maternal–fetal RK45 model. Placental transfer uses
+  `Qp * (fu_maternal * C_maternal - fu_fetal * C_fetal)`, so unbound—not
+  total—concentrations equilibrate. No 27-compartment OSP parity is claimed.
+* **The advanced PK/PD playground notebook** — exact repeated
+  two-compartment regimens, linear-up/log-down NCA with terminal-phase
+  selection, maternal–fetal profiles/AUC ratio, the 40-model OSP registry,
+  pregnancy projects and observed/predicted DDI qualification now have GUI
+  surfaces instead of remaining library-only.
+* **`pharmaml.docking.dockstring`** — all 58 upstream search boxes and the
+  three original objectives (F2 with QED penalty, promiscuous PPAR and
+  selective JAK2 with the corrected −8.1 LCK median). The Docking tab gains
+  a target/objective lab and a search-box bridge into Campaign; evaluating an
+  objective never implies that a docking engine ran.
+* **Verification** — 27 focused numerical tests and all three new module
+  doctest groups pass; CI-style Ruff and mypy pass across the source and
+  tests, and the full non-Tk suite exits 0 on the pinned NumPy 1.26.4 stack.
+  (The minimal image lacks system `libXrender`; headless RDKit drawing checks
+  used a temporary, external XRender loader shim—no X11 drawing was executed.)
+  All eight executed notebooks completed at 1.2.114 and their no-output twins
+  were regenerated. Four real-Tk regression drives and
+  three display-independent stub-callback tests are included, but this Python
+  build has no `tkinter` module (and no Xvfb), so they are reported as skipped
+  rather than passed. Static review also corrected the two new plot handlers
+  to unpack `new_figure()`'s `(figure, axes)` contract.
+
+#### Shipped (superseded by the unified 1.2.115 archive below)
+
+* `pharma-ml-toolkit-v1.2.114.zip` — source, tests, complete catalog audit,
+  playground fold-ins and freshly executed 1.2.114 notebooks; ZIP integrity
+  checked and safe copies retained under the repository's archive protocol.
+
+### Merged
+
+* The merge kept both card sets (no overlaps: 116 shared cards + main's 9
+  + the branch's 3 = 128); the branch's Advanced PK/PD card was re-gridded
+  to row 10 to sit under main's three PK cards; playground/test conflicts
+  resolved as both-sides-kept; the duplicate v1.2.114 zips resolved to
+  main's verified bytes and are superseded by the v1.2.115 rebuild.
+* The branch's GUI tests (skipped in its tkinter-less sandbox) now run
+  for real under this repo's Xvfb — a direct value of the unification.
+* Notebooks re-executed at 1.2.115 (the round-195 staleness lesson: the
+  branch's runs printed its 1.2.114).
 
 ## [1.2.113] — 2026-11-06
 
