@@ -296,7 +296,7 @@ def _guard_ragged_boundaries(file_path: Path, separator: str, chunk_rows: int) -
 
 def read_table_with_progress(
     path: str | Path,
-    report: Callable[[int, int | None, str], None],
+    report: Callable[[int, int | None, str], bool | None],
     *,
     chunk_rows: int = 50_000,
     size_threshold: int = 8 * 1024 * 1024,
@@ -436,7 +436,7 @@ def read_table_with_progress(
 
 def read_indexed_table_with_progress(
     path: str | Path,
-    report: Callable[[int, int | None, str], None],
+    report: Callable[[int, int | None, str], bool | None],
     *,
     index_col: str | int,
     fallback_index_col: str | int = 0,

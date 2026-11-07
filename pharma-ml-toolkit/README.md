@@ -332,7 +332,15 @@ pharma-ml-toolkit/
 │                            # Tkinter window over every domain (chemistry · PK/PD · cell lines · QSAR · generative);
 │                            # probes its dependencies at launch, degrades gracefully, headlessly
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
-├── VERSION                 # the release version (1.2.117) — `cat VERSION` after extracting
+├── studio.py               # NEW (v1.2.120): the PySide6 front end — `python studio.py` opens PharmaML
+│                            # Studio (directive #16 redesign, increment 1): sidebar navigation,
+│                            # PyQtGraph scientific plots, Qt-Material/QDarkStyleSheet theming,
+│                            # QThreadPool workers with the cooperative Stop; runs offscreen for CI
+│                            # (`ui/headless.py` preloads the committed EGL stub when the box has none)
+├── ui/                      # the Studio package: main_window · theme_manager · app_settings · pages/
+│                            # (dashboard · data_explorer · model_analysis · settings) · widgets/ ·
+│                            # workers/ · native/ (the EGL stub + build script) — see docs/gui/
+├── VERSION                 # the release version (1.2.120) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface

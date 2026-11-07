@@ -1,3 +1,66 @@
+## [1.2.120] — 2026-11-07
+
+### Added — round 206: PharmaML Studio, the PySide6 GUI (directive #16, increment 1)
+
+The owner's expanded directive (`upload/MASTER_PROMPT part2.pdf`, the
+44-page four-technology edition) mandates the complete GUI redesign.
+This is increment 1 of the migration: the application shell, the theme
+system, and three working feature pages -- with the Tkinter playground
+kept fully functional alongside until every section is verified.
+
+#### The stack (verified pins under the numpy 1.26.4 constraint)
+
+* **PySide6 6.8.3** (Qt 6.8 LTS) -- application architecture:
+  QMainWindow shell, sidebar navigation, QStackedWidget pages, status
+  bar, toast notifications, Ctrl+1..9 jumps.
+* **PyQtGraph 0.13.7** -- scientific visualization (the LAST numpy-1.x
+  line; 0.14 requires numpy>=2.2 which this stack cannot take):
+  themed plot panels, real held-out predictions/residuals/histograms.
+* **Qt-Material 2.17** -- primary Material Design provider (curated
+  teal/cyan/amber pairs, density via the template extra dict).
+* **QDarkStyleSheet 3.2.3** -- verified alternative provider (via
+  qtpy); native Qt is the guaranteed fallback. One provider active at
+  a time -- switching clears the previous stylesheet first.
+
+#### The architecture (presentation / logic / data, strictly separated)
+
+* `studio.py` entry point; `ui/` package: `main_window`, `pages/`
+  (dashboard, data explorer, model analysis, settings), `widgets/`
+  (navigation, data table, plot panel, progress panel, notifications),
+  `workers/job_worker` (QRunnable on QThreadPool).
+* The backend is reused untouched: `read_table` (CSV/TSV/XLSX),
+  `MODEL_REGISTRY` + `train_model`, and the v1.2.119 `JobCancelled`
+  cooperative-stop channel -- the Studio Stop button rides the same
+  contract, checkpoint-honest, never a red traceback.
+* Headless bootstrap (`ui/headless.py`): real EGL probed first; when
+  absent (this sandbox), the committed no-op stub
+  `ui/native/libEGL.so.1` preloads via ctypes (SONAME-correct) and is
+  also copied into the wheel's Qt/lib (RUNPATH $ORIGIN) so plain
+  pytest runs survive pytest-qt's eager binding probe.
+* Every number on the dashboard is computed live from the installed
+  package (module census, 33-model registry, 11 workflows / 58 steps,
+  example datasets); Model Analysis trains a real registry model on a
+  real held-out split and plots real predictions.
+
+#### Tests and verification
+
+36 new offscreen tests (`tests/ui/`, pytest-qt): theme switching /
+conflict prevention / persistence, navigation and geometry state,
+table model/sort/copy/truncation guard, worker finish/fail/cancel/
+duplicate-guard/progress, page smokes on real data (CSV + Excel load,
+an end-to-end ridge fit). Focused batteries green (data_loading +
+job_safety + csv_standardize 121; playground contract guards 73;
+io doctests); collect-only 4,551 across 73 files, exit 0; ruff and
+mypy clean on the new tree (and the two pre-existing io.py mypy errors
+fixed by widening the progress-callback type to `bool | None` -- the
+round-205 contract the annotations undersold).
+
+#### The recovery layer carries the stack
+
+`scratch/venv_repair.sh` step 6b now installs the five pinned GUI
+packages under the numpy constraint AND re-copies the EGL stub into
+the venv's Qt/lib -- a future rollback cannot lose the GUI stack.
+
 ## [1.2.119] — 2026-11-07
 
 ### Fixed / Added — round 205: the heavy-work safety kit (the collapse report)

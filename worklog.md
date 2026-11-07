@@ -7545,3 +7545,104 @@ Stage Summary:
   (PySide6 redesign) absorbed in `upload/MASTER_PROMPT part2.pdf` ·
   runs_completed: 5 (the counter counts cron runs only; run 5 was the
   peer's in-flight round).
+
+## Round 206 — PharmaML Studio: the PySide6 GUI redesign begins (directive #16, the expanded four-technology edition), v1.2.120 shipped (2026-11-07)
+
+The owner re-uploaded `upload/MASTER_PROMPT part2.pdf` — the expanded
+44-page edition of directive #16 (round 205 had absorbed the 17-page
+PySide6-only v1; the v2 adds PyQtGraph, Qt-Material and QDarkStyleSheet
+as integral requirements). The hash-compare drill caught the swap:
+aside 540,944 bytes vs tracked 98,565 — the fresh upload restored as
+the authoritative directive, the v1 kept in history.
+
+**The 13th rollback absorbed first** (the quad form): repo HEAD at
+`2eb0ede` (the same snapshot point as the 12th), venv rdkit-less,
+token/remote gone, webDevReview job gone, `scratch/100runs-counter.json`
+gone from disk (recovered by the ff-pull — the counter-rides-commits
+design proving itself). The standing drill: token re-extract → helper
+→ remote add → fetch → aside the 15 blocking zips/PDFs (hash-proven;
+only the part2 PDF diverged, by design) → ff-pull to `cd88a7e` →
+`venv_repair.sh` foreground green → webDevReview recreated (job
+510903). Runs 6 and 7 had fired into an unavailable sandbox
+(concurrency-limit failures, zero work done — the counter honestly
+stays at 5).
+
+**What shipped — increment 1 of the GUI redesign** (the directive's own
+migration strategy, 16.18, followed step by step):
+
+- **Environment leg**: PySide6 6.8.3 (Qt 6.8 LTS), pyqtgraph 0.13.7
+  (the LAST numpy-1.x line — 0.14 wants numpy≥2.2, the stack pins
+  1.26.4), qt-material 2.17, qdarkstyle 3.2.3, pytest-qt 4.5.0 — all
+  installed under the numpy constraint; the pinned scientific stack
+  untouched.
+- **The EGL story** (this box ships libGL but no libEGL, and
+  libQt6Gui links libEGL at load): the committed no-op stub
+  `ui/native/libEGL.so.1` (SONAME-correct — a dlopened stub without
+  SONAME does NOT satisfy DT_NEEDED; that cost one debug cycle)
+  preloads via ctypes RTLD_GLOBAL from `ui/headless.py` (real EGL
+  probed first), AND is copied into the wheel's Qt/lib dir —
+  libQt6Gui's RUNPATH $ORIGIN makes the dependency resolve with zero
+  env vars, which matters because **pytest-qt registers as a plugin
+  and imports the binding eagerly in EVERY pytest run** (that broke
+  all test collection until the Qt/lib copy landed; the venv_repair
+  step 6b now re-copies it after install — repair-proof).
+- **The app**: `studio.py` + `ui/` package — QMainWindow shell with
+  sidebar navigation + QStackedWidget + status bar + toast
+  notifications + Ctrl+1..9; ThemeManager (one active provider at a
+  time, stylesheet cleared before every switch, ChartPalette emitted
+  so PyQtGraph plots re-colour — dark themes get dark plots); QSettings
+  persistence (geometry/nav/theme, explicit sync() for same-process
+  round-trips); JobWorker (QRunnable/QThreadPool) riding the v1.2.119
+  `JobCancelled` cooperative-stop contract — the Stop button is
+  checkpoint-honest, duplicate submissions refused.
+- **The pages (real data only)**: Dashboard (live census — package
+  version, module/line walk, 33-model registry, 11 workflows/58 steps
+  from the playground's WORKFLOWS, the example datasets on disk);
+  Data Explorer (any CSV/TSV/XLSX through `read_table` — the same
+  Excel guarantee as the playground — QTableView model/view, real
+  column histograms with honest stats); Model Analysis (real
+  registry-model training on a real held-out split in a worker:
+  predictions-vs-actual, residuals, feature importance when the
+  estimator exposes it, R²/accuracy + CV mean); Settings (live
+  provider/theme/density switching, reset).
+- **The audit + docs**: `docs/gui/GUI_AUDIT.md` (the 13-tab inventory
+  mapped to backend modules and Studio status — 16.2/16.4 satisfied),
+  `docs/gui/GUI_REDESIGN.md` (architecture, launch, theming,
+  dependencies, testing, migration state), five offscreen screenshots
+  in `docs/gui/screenshots/` (dashboard/data/settings/models in
+  dark_teal + light + qdarkstyle).
+- **Engineering cleanup riding along**: the two pre-existing mypy
+  errors in `src/pharmaml/utils/io.py` fixed by widening the
+  progress-callback type to `bool | None` — the annotation had
+  undersold the round-205 cooperative-stop contract (`report(...) is
+  False` against a `-> None` callable); zero runtime change.
+
+**Verification**: 36 new offscreen tests (`tests/ui/`) green; focused
+batteries green (data_loading + job_safety + csv_standardize 121;
+playground contract guards 73; docs-index 26; io doctests); collect-only
+**4,551 across 73 files, exit 0**; ruff clean and mypy clean on the new
+tree (`ui/` + `studio.py` + `tests/ui/`, 19 files). Honest total:
+**4,551 + 778 doctests = 5,329**.
+
+**Ship**: `scratch/build_zip_183.py` → **v1.2.120 = 19,755,438 bytes,
+sha-256 `9cf93f90…`, 967 entries / 921 files, real leaks 0** (first
+build leaked one `/home/z/` path in my own GUI_REDESIGN.md test command
+— generalized and rebuilt), four homes byte-identical; web pins
+5,293 → 5,329 (eight sites) + fallback stats 901/339,748 → 937/342,548
+(`scratch/census.py`, the toolkit-fs.ts-exact walk); README tree gains
+studio.py + ui/; GITHUB_BACKUP_MANIFEST.md section added.
+
+**Lessons pinned**:
+1. A dlopened stub WITHOUT a matching SONAME does not satisfy a
+   DT_NEEDED lookup — the linker re-searches paths and misses. The
+   SONAME flag (`-Wl,-soname,libEGL.so.1`) is the whole trick.
+2. Installing pytest-qt changes EVERY pytest run in the environment
+   (plugin eager-import of the Qt binding) — GUI test dependencies
+   are environment-wide decisions; the venv-local EGL stub (RUNPATH
+   $ORIGIN) is the only zero-env answer on an EGL-less box.
+3. The owner's re-upload of an absorbed directive is a NEW directive —
+   hash-compare the aside copy against the tracked twin before
+   discarding (the 12th-rollback drill upgrade caught a 540,944-byte
+   v2 where round 205 had absorbed a 98,565-byte v1).
+4. QSettings writes are cached — same-process round-trips need an
+   explicit sync() (the geometry test caught it).

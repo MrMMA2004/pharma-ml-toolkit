@@ -186,6 +186,46 @@ dosing events, apriori association rules) plus ten GUI tests
 (`TestCatalogAbsorptionGui`). Honest count: **4,382 + 773 = 5,155
 tests**; fresh walk pins **882 files / 333,040 lines** at v1.2.114.
 
+## v1.2.120 release-zip homes (2026-11-07, round 206 — PharmaML Studio, the PySide6 GUI increment 1)
+
+`pharma-ml-toolkit-v1.2.120.zip` — 19,755,438 bytes, sha-256
+`9cf93f9015c7c7be8c1d543f01bab51ce97c5d59c024025328a413395f136429`,
+built with the standing builder (`scratch/build_zip_183.py`: 967 entries /
+921 files / nested zips NONE / real leaks 0 — the first build leaked one
+`/home/z/` path my own `docs/gui/GUI_REDESIGN.md` carried in its test
+command; generalized to `python -m pytest` and rebuilt), placed in all
+four homes:
+
+- `download/pharma-ml-toolkit-v1.2.120.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.120.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.120.zip`
+- `upload/pharma-ml-toolkit-v1.2.120.zip`
+
+**What shipped:** the owner's re-uploaded, expanded directive #16
+(`upload/MASTER_PROMPT part2.pdf`, the 44-page four-technology edition —
+the 17-page PySide6-only v1 had been absorbed in round 205). Increment 1
+of the GUI redesign: **PharmaML Studio** (`studio.py` + `ui/` package) —
+PySide6 6.8.3 shell (sidebar nav, QStackedWidget, status bar, toasts,
+Ctrl+1..9), PyQtGraph 0.13.7 themed plots, Qt-Material 2.17 primary
+theming with QDarkStyleSheet 3.2.3 as the verified alternative and
+native as fallback (one provider active at a time; every switch
+re-colours the plots through ChartPalette), QSettings persistence, and
+the QThreadPool JobWorker riding the v1.2.119 `JobCancelled`
+cooperative-stop contract. Dashboard census computed live from the
+installed package; Data Explorer reads real CSV/TSV/XLSX through
+`read_table`; Model Analysis trains real registry models with real
+held-out metrics. 36 new offscreen tests (`tests/ui/`, pytest-qt 4.5.0)
+— honest count: **4,551 + 778 = 5,329 tests**; fresh walk pins **937
+files / 342,548 lines** at v1.2.120 (`scratch/census.py`, the
+toolkit-fs.ts-exact walk). The recovery layer carries the stack:
+`scratch/venv_repair.sh` step 6b installs the five pinned GUI packages
+under the numpy constraint and re-copies the EGL stub
+(`ui/native/libEGL.so.1`, SONAME-correct, committed) into the wheel's
+Qt/lib — RUNPATH $ORIGIN makes plain pytest runs survive pytest-qt's
+eager binding probe on this EGL-less box. The 13th rollback (repo to
+`2eb0ede`, venv rdkit-less, token/remote/webDevReview lost) was
+absorbed by the standing drill before the round started.
+
 ## v1.2.119 release-zip homes (2026-11-07, round 205 — the heavy-work safety kit)
 
 `pharma-ml-toolkit-v1.2.119.zip` — 19,275,451 bytes, sha-256
