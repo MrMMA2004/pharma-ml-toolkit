@@ -9571,3 +9571,72 @@ run 16 next) · Part-3 remaining: §18 presets/recommendations layer,
 §19 CV results interface + scaffold splits, §20 checkpoint depth,
 §21 hover tooltips, §22 SMILES previews, §23 responsive pass,
 §24 SA-in-generative wiring — §17 CLOSED.
+
+---
+
+## Round 223 (v1.2.136) — the playground SIGILL root-caused and fixed (cron run 16/100)
+
+*Fired as cron run 16 and found round 222 freshly pushed (`d7f876b`) by the
+concurrent IM session that had finished the Part-3 §17 engine mid-flight —
+including its verdict that the playground's `Illegal instruction` crash was
+"environmental on the pristine tree".  This round took that verdict apart.*
+
+**The trail** — the six-chunk suite run (the round-222 runner's first FULL
+execution) lost three chunks: chunk 2 (SIGILL), chunk 4 (kernel SIGKILL at
+~163/241), chunk 5 (SIGILL).  Round 222's files live in chunks 1/4 — and
+chunk 1 was green.  Bisection: every non-playground file of chunk 2 green
+(357 tests); `TestDockingRescoreReport` alone (3 tests) still SIGILLs;
+each test passes alone but the class dies when `test_report_bundle_end_to_end`
+runs after ANY sibling; the repro went 3/3 crash.  Every victim stack is
+`Garbage-collecting` — the automatic GC pass firing **on the worker thread**
+(`_start_job`'s `threading.Thread`, the same runner every playground job
+uses) during a native-heavy phase: matplotlib's transform/marker
+constructors inside `plot_consensus_ranking` (the rescore-report path) and
+torch's ddtrace-hooked module import inside `neural.fit` (`test_small_
+regression_run_fills_all_three_cards` at a different drifting position).
+Crash positions drift run-to-run (94 → 97 → 113 → 123) — a timing race.
+`-p no:ddtrace` still crashes (ddtrace exonerated as the root cause;
+a participant only); thread-pinned BLAS + `PYTHONMALLOC=malloc` still
+crash.  The pristine-tree crash round 222 observed is exactly what the
+diagnosis predicts: the latent race predates this round in playground
+plumbing; the 16th-rollback venv rebuild merely re-timed it into
+visibility.
+
+**The fix** — `_start_job.runner` suspends automatic GC for the bounded
+job body (`gc.disable()` … `finally: gc.enable()`; reference-counted
+garbage still frees immediately), `_poll_jobs` drains the deferred cycles
+with ONE `gc.collect()` on the main thread at the safe point (worker
+fully done), and the report bundle's `work()` wraps its figure+PDF phase
+in the same guard.  Proof: repro 3/3 crash → **3/3 green**; the FULL
+869-test playground chunk completed for the first time on this sandbox;
+the restructured nine-chunk suite fully green (1, 2, 3, 4a, 4b, 4c, 5, 6
+exit 0).
+
+**The collateral finds** — (1) the stale review-144 source-scan pin
+(expected exactly 3 `read_table_with_progress` streaming loaders; the
+round-215 DL file-load job is a legitimate 4th) trued 3 → 4; (2) the ui
+chunk's SIGKILL was plain OOM (241 PySide6 pages in one process) — the
+runner now splits tests/ui across THREE processes (4a/4b/4c) and
+`test_playground.py` no longer rides chunk 2's glob (it is chunk 5's
+whole world — one crash muddied two chunks at once).
+
+**The ship** — four carriers → **1.2.136**; notebooks re-executed
+**200 s (8/8 at `pharmaml 1.2.136`)**, twins regenerated, scrub dropped
+**0** (fifth consecutive zero-drop round); `scratch/build_zip_223.py` →
+**v1.2.136 = 20,406,407 bytes**, sha-256
+`2ff1fb348772de53e70428ad7eeaeda9095fbc95d46da4474d1bcf85183ce0a7`,
+1008 entries / 962 files, testzip OK per home, **real leaks 0**,
+predecessor v1.2.135 swept from all four homes.  Census (runs LAST):
+**982 files / 358,388 lines** (the re-exec slimmed the notebooks'
+committed outputs).  Web pins: FALLBACK_STATS 982/358,388; the 5,575
+test pins unchanged (the fix adds behaviour, not tests).  CHANGELOG +
+manifest v1.2.136 sections.
+
+**Baselines for the next round** — v1.2.136 (four homes) · honest
+totals **5,575 = 4,790 collect + 785 doctest** · census **982/358,388**
+· ui **272 dots** · the nine-chunk runner `scratch/run_suite_chunks_
+222.py` is the standing full-suite gate · counter **16/100** (cron
+run 16) · Part-3 remaining: §18 presets/recommendations layer, §19 CV
+results interface + scaffold splits, §20 checkpoint depth, §21 hover
+tooltips, §22 SMILES previews, §23 responsive pass, §24 SA-in-
+generative wiring — §17 CLOSED.

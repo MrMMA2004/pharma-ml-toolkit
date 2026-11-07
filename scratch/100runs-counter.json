@@ -1,9 +1,9 @@
 {
   "job": "MASTER_PROMPT-2h-sync-100x",
-  "runs_completed": 15,
+  "runs_completed": 16,
   "max_runs": 100,
   "interval": "every 2 hours (fixed_rate 7200s)",
   "purpose": "Continue the MASTER_PROMPT and update the GitHub repository (including the latest zip file). Counter is committed to git each run so it survives sandbox rollbacks (the remote is the survivor).",
   "created": "round 194, after the 9th rollback recovery (local wiped to 2eb0ede/round-186; remote survived at 101f5f7/round-193 v1.2.112; recovered via pure fast-forward)",
-  "last_run_note": "2026-11-08 round 222 (IM continuation: \"MASTER_PROMPT part3\" uploaded): the Part-3 \u00a717 image-export engine shipped as v1.2.135 (TIFF 16-bit I;16 + lossless codecs + multi-page stacks, JPEG quality with the 16-bit/alpha/float refusals, validation-in-the-loop, the ExportManager manifest, the GUI bridge + Image Lab export row; 36 items + 7 doctests = 5,575 honest totals); the 16th rollback recovered first (token from the PDF, ff to 234a34b, venv foreground); playground SIGILL proven environmental on the pristine tree; counter stays 15/100 (no cron fire)"
+  "last_run_note": "2026-11-08 cron run 16 = worklog round 223 (v1.2.136): the playground SIGILL root-caused -- a latent worker-thread GC race in _start_job (automatic GC pass firing on the Tk job worker during matplotlib/torch native phases; round 222 had called it environmental) -- fixed centrally (gc.disable in runner + main-thread drain in _poll_jobs + report-work guard); repro 3/3 crash -> 3/3 green, full 869-test playground chunk completed, nine-chunk suite all green; stale review-144 pin trued 3->4; ui chunk OOM split x3; zip v1.2.136 (20,406,407 B, sha 2ff1fb34...) in four homes; census 982/358,388; notebooks 8/8 at 1.2.136."
 }

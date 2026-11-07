@@ -449,6 +449,40 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.136 release-zip homes (2026-11-08, round 223 — the playground SIGILL root-caused and fixed)
+
+`pharma-ml-toolkit-v1.2.136.zip` — 20,406,407 bytes, sha-256
+`2ff1fb348772de53e70428ad7eeaeda9095fbc95d46da4474d1bcf85183ce0a7`,
+1008 entries / 962 files, built with the standing four-home builder
+(`scratch/build_zip_223.py`, the round-217 recipe verbatim) — testzip
+OK per home, **real leaks 0** (fifth consecutive zero-drop round;
+twin scrub 0 drops), predecessor v1.2.135 swept from all four homes.
+Byte-identical copies ship to all four homes (repo-root `download/`,
+`pharma-ml-toolkit/dist-archive/`, `pharma-ml-toolkit/download/`,
+`upload/`).  The increment: round 222 had called the playground's
+`Illegal instruction` crash "environmental on the pristine tree" —
+round 223 root-caused it to a **latent worker-thread GC race in
+`_start_job` itself** (the automatic GC pass firing on the
+`threading.Thread` worker during native-heavy phases: matplotlib
+transform/marker construction in the rescore-report path, the `torch`
+import inside `neural.fit`; crash position drifts run-to-run, which
+is a timing race, not a poisoned binary).  The fix suspends automatic
+GC for the bounded job body in `runner()` and drains the deferred
+cycles once on the main thread in `_poll_jobs`; the report bundle's
+`work()` carries the same guard.  Proof: the minimal repro
+(`TestDockingRescoreReport`) went 3/3 crash → **3/3 green**, the full
+869-test playground chunk completed for the first time on this
+sandbox, and the restructured nine-chunk suite is fully green.  Also:
+the stale review-144 source-scan pin trued 3 → 4 (the round-215 DL
+file-load job legitimately adopted the streaming reader), and the
+OOM-killed ui chunk split across three processes (4a/4b/4c) with
+`test_playground.py` exclusively in chunk 5.  Verification: honest
+totals **5,575 = 4,790 collect + 785 doctest** (unchanged — the fix
+adds behaviour, not tests; the review-144 pin edit re-points an
+existing test), notebooks re-executed **200 s (8/8 at `pharmaml
+1.2.136`)**, twin scrub 0 drops, ruff clean, mypy 0 on touched files,
+census **982 files / 358,388 lines**, zip endpoint `exact:true`.
+
 ## v1.2.135 release-zip homes (2026-11-08, round 222 — the Part-3 §17 image-export engine, TIFF/JPEG first-class)
 
 `pharma-ml-toolkit-v1.2.135.zip` — 20,408,163 bytes, sha-256

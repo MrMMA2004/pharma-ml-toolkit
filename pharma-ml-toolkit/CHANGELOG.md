@@ -1,3 +1,55 @@
+## [1.2.136] — 2026-11-08
+
+### Fixed — round 223: the playground SIGILL root-caused and fixed (the worker-thread GC race)
+
+* **The crash** — round 222's first-ever full chunked suite run lost
+  three chunks: the 869-test Tk playground chunk died with
+  `Fatal Python error: Illegal instruction` (exit 132), ui chunk 4
+  died with the kernel's SIGKILL, and chunk 2 died too (it carried
+  the playground file).  Round 222's release note called the SIGILL
+  "proven environmental on the pristine tree" — the pristine-tree
+  rerun was the right experiment, but the conclusion stopped one
+  step short: the crash reproduces at a DIFFERENT test position on
+  every run (94 → 97 → 113 → 123 → …), which is a timing race, not
+  a poisoned binary.
+* **The bisection (round 223)** — the repro shrank to three tests:
+  `TestDockingRescoreReport` crashes when `test_report_bundle_end_to_end`
+  runs after ANY sibling, yet passes alone; every victim stack is
+  `Garbage-collecting` — the automatic GC pass firing **on the
+  worker thread** during one of its native-heavy phases (matplotlib
+  transform/marker constructors inside `plot_consensus_ranking`;
+  the `torch` import inside `neural.fit`, with ddtrace's import
+  hooks in the frame).  The worker is `_start_job`'s
+  `threading.Thread` — the SAME thread every playground job runs
+  on — so the race is latent playground plumbing that the
+  16th-rollback venv rebuild merely re-timed into visibility.
+* **The fix** — `_start_job.runner` suspends automatic GC for the
+  bounded job body (`gc.disable()` … `finally: gc.enable()`;
+  reference-counted garbage, the vast majority, still frees
+  immediately), and `_poll_jobs` drains the deferred cycles with
+  one `gc.collect()` on the main thread at the safe point (the
+  worker fully done).  The report bundle's own `work()` carries the
+  same guard around its figure+PDF phase.  Long jobs stay bounded —
+  no blanket disable outside the runner, no unbounded cycle
+  accumulation.
+* **The proof** — the repro class: 3/3 crash before → **3/3 green
+  after**; the full 869-test playground chunk completed for the
+  first time on this sandbox (the only failure was a stale
+  review-144 source-scan pin, fixed below); and the restructured
+  nine-chunk suite is fully green (chunks 1, 2, 3, 4a, 4b, 4c, 5,
+  6 exit 0).
+* **The stale pin** — `TestReview144Gui`'s loader scan expected
+  exactly 3 `read_table_with_progress` streaming loaders; the
+  round-215 deep-learning file-load job adopted the same reader as
+  a legitimate 4th and never bumped the pin (full playground runs
+  had been out of the focused-loop's reach since).  True 3 → 4.
+* **The OOM lesson, applied** — ui chunk 4 (241 PySide6 tests in one
+  process) was kernel-OOM-killed at ~163/241 even with next-server
+  down; the runner now splits tests/ui across three processes
+  (4a/4b/4c) and `test_playground.py` no longer rides chunk 2's
+  glob (it is chunk 5's whole world — one crash muddied two chunks
+  at once).
+
 ## [1.2.135] — 2026-11-08
 
 ### Added — round 222: the Part-3 §17 image-export engine (TIFF/JPEG first-class)
