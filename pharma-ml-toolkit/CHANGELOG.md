@@ -1,3 +1,54 @@
+## [1.2.123] — 2026-11-07
+
+### Fixed — round 209: the second playground collapse mode (the stale display connection)
+
+* **`PlaygroundApp.destroy()`** is now a real teardown, in three arms,
+  answering the "Playground.py collapses during heavy work" family's
+  second mode: a build-destroy-rebuild host (and every pytest GUI
+  battery) left the destroyed app's Tcl interpreter — with its X
+  display connection — alive forever, because
+  * the module-level card registries (`_CARD_INDEX`,
+    `_COLLAPSE_CARDS`) kept every card's shell widget referenced past
+    the app's death (now cleared at `__init__` *and* `destroy()` — the
+    rebuild-overwrite semantics they were documented with);
+  * Tcl's pending `after` scripts (the recurring status-bar pollers)
+    are cancelled by id before the widget tree goes down;
+  * every leftover `_register`ed callback command (bind handlers,
+    variable traces — the trace commands tkinter's `Variable` never
+    deletes itself) is swept off the interpreter after
+    `super().destroy()`: `_register` names them `repr(id(f))…`, so
+    they are exactly the digit-leading commands (2,147 deleted on a
+    built app; widget paths and Tcl core commands never start with a
+    digit).  Each surviving C-side pin made the app→interpreter→
+    callback→app cycle uncollectable, and when the X server then went
+    away the next Tk event pump hit the broken connection — Tk 9's X
+    error handler **terminated the whole process** (`X connection to
+    :N broken` → `exit(1)`, rc=1, zero output — reproduced
+    deterministically outside pytest, see
+    `scratch/probe_kill_between.py` + the LD_PRELOAD `exit`-shim
+    backtrace `scratch/exit-shim.c`).
+  * `_silence_variables()` detaches every app-reachable `tk.Variable`
+    (`_tk = None`) so the interpreter-exit `Variable.__del__` cannot
+    double-delete swept commands (the unraisable "can't delete Tcl
+    command" exit noise).
+* **One session-scoped Xvfb** (`tests/conftest.py::xvfb_display`,
+  display :96) replaces the four per-file/per-class servers
+  (test_playground :98, workflows :97, recalculation :97, excel :97):
+  the server is torn down exactly once, after the last test — a
+  mid-session server death, the collapse's trigger, is structurally
+  impossible now.  All four files' local fixtures deleted.
+* Watchdog hygiene: the memory-peak update uses `max()` (ruff PLR1730);
+  nine blind `except Exception` guards around `winfo_exists()` in
+  `tests/test_playground.py` narrowed to `tk.TclError`.
+* 2 new regression tests (`tests/test_job_safety.py`): destroy
+  releases both registries; a rebuilt app replaces the registry and
+  every indexed shell belongs to the live app.  The combined
+  job_safety+workflows battery — the exact shape that terminated the
+  process pre-fix — passes twice from a clean room (45 tests, rc=0,
+  zero exit noise); self-test green; focused batteries and the ui/
+  suite green; doctests 775 passed + 3 skipped; collect-only 4,586.
+  Honest total: **4,586 + 778 = 5,364**.
+
 ## [1.2.122] — 2026-11-07
 
 ### Added — round 208: PK/PD Workbench, the Studio's increment 3 (directive #16, 16.18 migration)

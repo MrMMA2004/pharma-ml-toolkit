@@ -392,6 +392,49 @@ with arithmetic before the heavy compute), the factory's
 13 new offscreen tests. Honest count **4,564 + 778 = 5,342 tests**; fresh
 walk pins **939 files / 343,253 lines**.
 
+## v1.2.123 release-zip homes (2026-11-07, round 209 — the second playground collapse mode fixed)
+
+`pharma-ml-toolkit-v1.2.123.zip` — 19,781,667 bytes, sha-256
+`d1627ecd3f9fdc778dfd862ec1aa1e766c995e618265cf13edc19c1f4c1d74c2`
+(the first build at 19,781,694 leaked one `/home/z/` path into the
+re-executed ML notebook's ConvergenceWarning traceback — scrubbed by
+the standing `scratch/scrub_home_paths_137.py` pass, rebuild
+supersedes it), built with the standing builder
+(`scratch/build_zip_183.py`: 972 entries / 926 files / real leaks 0),
+placed in all four homes:
+
+- `download/pharma-ml-toolkit-v1.2.123.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.123.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.123.zip`
+- `upload/pharma-ml-toolkit-v1.2.123.zip`
+
+**What shipped:** the collapse forensics round — the "Playground.py
+collapses during heavy work" family's second mode, root-caused and
+fixed.  The mechanism: `PlaygroundApp.destroy()` left the module-level
+card registries, Tcl's pending `after` scripts and every
+`_register`ed callback command (bind handlers, variable traces — the
+trace commands tkinter's `Variable` never deletes) holding the whole
+app graph past the app's death; the Tcl interpreter and its X display
+connection therefore survived `destroy()` + `del` + `gc.collect()`,
+and when the X server went away (a per-class/per-module Xvfb fixture
+teardown) the next Tk event pump touched the broken connection — Tk
+9's X error handler terminated the whole process (`X connection to :N
+broken` → `exit(1)`, rc=1, zero output).  Reproduced deterministically
+outside pytest (`scratch/probe_kill_between.py`; the `exit()` call
+site captured via an LD_PRELOAD shim, `scratch/exit-shim.c`:
+`Tk_RestackWindow → TkWmRestackToplevel → TkWmMapWindow →
+TkUnixDoOneXEvent → exit(1)`).  The fix: a real three-arm teardown
+(registries cleared at build+destroy, afters cancelled, 2,147
+digit-leading callback commands swept post-destroy, variables
+silenced) plus one session-scoped Xvfb (:96) replacing the four
+per-file servers — a mid-session server death is structurally
+impossible now.  Honest totals: collect-only **4,586** (+2 regression
+tests) + doctests 775 passed / 3 skipped = **5,364**; the combined
+job_safety+workflows battery — the exact pre-fix killing shape —
+passes twice from a clean room (45 tests, rc=0, zero exit noise);
+self-test green; web pins 5,362 → 5,364 + census 946/344,354 → 946 /
+344,494.
+
 ## v1.2.122 release-zip homes (2026-11-07, round 208 — PK/PD Workbench, the Studio's increment 3)
 
 `pharma-ml-toolkit-v1.2.122.zip` — 19,784,995 bytes, sha-256

@@ -20,10 +20,9 @@ here:
 
 from __future__ import annotations
 
-import contextlib
+import gc
 import importlib.util
 import shutil
-import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -158,6 +157,7 @@ class TestJobCancelledChannel:
     def test_compare_models_false_stops_after_the_row(self) -> None:
         import numpy as np
         import pandas as pd
+
         from pharmaml.exceptions import JobCancelled
         from pharmaml.ml import compare_models
 
@@ -178,6 +178,7 @@ class TestJobCancelledChannel:
     def test_compare_models_legacy_heartbeat_completes(self) -> None:
         import numpy as np
         import pandas as pd
+
         from pharmaml.ml import compare_models
 
         rng = np.random.default_rng(205)
@@ -197,6 +198,7 @@ class TestJobCancelledChannel:
     def test_family_benchmark_false_stops(self) -> None:
         import numpy as np
         import pandas as pd
+
         from pharmaml.exceptions import JobCancelled
         from pharmaml.ml import benchmark_feature_families
 
@@ -252,7 +254,7 @@ class TestMemoryMaths:
         assert playground._is_job_cancelled(JobCancelled("x"))
         assert not playground._is_job_cancelled(ValueError("x"))
 
-        class JobCancelled:  # noqa: A001 - the duck-typed twin
+        class JobCancelled:
             pass
 
         assert playground._is_job_cancelled(JobCancelled())
@@ -277,41 +279,11 @@ class TestMemoryMaths:
 # --------------------------------------------------------------------- #
 @XVFB_SKIP
 class TestGuiSafetyMachinery:
-    @pytest.fixture(scope="class")
-    def xvfb_display(self) -> Any:
-        import os
-        import socket
-
-        display = ":98"
-        process = subprocess.Popen(
-            ["Xvfb", display, "-screen", "0", "1280x800x24"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        socket_path = Path(f"/tmp/.X11-unix/X{display[1:]}")
-        deadline = time.time() + 10.0
-        ready = False
-        while time.time() < deadline:
-            if socket_path.exists():
-                probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                try:
-                    probe.connect(str(socket_path))
-                    ready = True
-                except OSError:
-                    pass
-                finally:
-                    probe.close()
-            if ready:
-                break
-            time.sleep(0.1)
-        assert ready, "Xvfb did not come up on :98 within 10 s"
-        os.environ["DISPLAY"] = display
-        try:
-            yield display
-        finally:
-            process.terminate()
-            with contextlib.suppress(subprocess.TimeoutExpired):
-                process.wait(timeout=5)
+    # (round 209) the display fixture moved to tests/conftest.py as ONE
+    # session-scoped Xvfb: per-class fresh servers + a stale display
+    # connection from a destroyed app = the next Tk event pump hits the
+    # broken connection and Tk 9's X error handler exits the whole
+    # process (the round-209 collapse forensics).
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
@@ -478,3 +450,58 @@ class TestGuiSafetyMachinery:
         monkeypatch.setattr(playground, "_meminfo_mb", real_meminfo)
         assert (capped, note) == (2, " — n_jobs 8→2 (memory cap)")
         assert (untouched, empty) == (2, "")
+
+    # -- the round-209 registry leak (the second collapse mode) ---------- #
+
+    def test_destroy_releases_the_module_card_registries(
+        self, playground: Any, xvfb_display: str
+    ) -> None:
+        """destroy() drops the module-level card registries.
+
+        _CARD_INDEX/_COLLAPSE_CARDS held every shell widget past the
+        app's death, keeping the Tcl interpreter (and its X connection)
+        alive; when the fixture's Xvfb then went away, the next Tk event
+        pump hit the broken connection and Tk 9's X error handler
+        terminated the whole process (exit(1), zero output).  Own
+        destroy (not the app fixture) so the teardown's destroy stays
+        the only re-destroy.
+        """
+        application = playground.PlaygroundApp(persist_session=False)
+        try:
+            assert playground._CARD_INDEX, "a built app indexes no cards"
+            assert playground._COLLAPSE_CARDS, "a built app registers no collapse state"
+        finally:
+            application.destroy()
+            del application
+            gc.collect()
+        assert playground._CARD_INDEX == []
+        assert playground._COLLAPSE_CARDS == {}
+
+    def test_a_rebuilt_app_replaces_the_registry(
+        self, playground: Any, xvfb_display: str
+    ) -> None:
+        """Two sequential apps in one process: the second owns the index.
+
+        The same build-destroy-rebuild shape that terminated the pytest
+        process pre-fix -- now the rebuild starts from a clean directory
+        and every indexed shell belongs to the live app.
+        """
+        first = playground.PlaygroundApp(persist_session=False)
+        try:
+            assert len(playground._CARD_INDEX) >= 130
+        finally:
+            first.destroy()
+            del first
+            gc.collect()
+        second = playground.PlaygroundApp(persist_session=False)
+        try:
+            live = second._live_cards()
+            assert len(live) >= 130
+            for _title, _subtitle, shell, _index in live:
+                assert shell.winfo_toplevel() is second, (
+                    "the rebuilt app indexed a stale shell of its predecessor"
+                )
+        finally:
+            second.destroy()
+            del second
+            gc.collect()

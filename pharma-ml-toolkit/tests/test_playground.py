@@ -12,12 +12,12 @@ Chemistry tab's feature factory compute/export runs).
 
 from __future__ import annotations
 
-import contextlib
 import importlib.util
 import json
 import shutil
 import subprocess
 import sys
+import tkinter as _tk
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -834,43 +834,11 @@ def picklist_accept_all(playground: Any, monkeypatch: Any) -> None:
     )
 
 
-@pytest.fixture(scope="module")
-def xvfb_display() -> str:
-    """A module-scoped virtual display, polled until Xvfb accepts sockets."""
-    import os
-    import socket
-    import time
-
-    display = ":98"
-    process = subprocess.Popen(
-        ["Xvfb", display, "-screen", "0", "1280x800x24"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    socket_path = Path(f"/tmp/.X11-unix/X{display[1:]}")
-    deadline = time.time() + 10.0
-    ready = False
-    while time.time() < deadline:
-        if socket_path.exists():
-            probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            try:
-                probe.connect(str(socket_path))
-                ready = True
-            except OSError:
-                pass
-            finally:
-                probe.close()
-        if ready:
-            break
-        time.sleep(0.1)
-    assert ready, "Xvfb did not come up on :98 within 10 s"
-    os.environ["DISPLAY"] = display
-    try:
-        yield display
-    finally:
-        process.terminate()
-        with contextlib.suppress(subprocess.TimeoutExpired):
-            process.wait(timeout=5)
+# (round 209) the display fixture moved to tests/conftest.py as ONE
+# session-scoped Xvfb: a module-scoped server torn down mid-session left
+# a destroyed app's stale display connection pointing at a dead server --
+# the next Tk event pump hit it and Tk 9's X error handler exited the
+# whole process (the round-209 collapse forensics).
 
 
 @XVFB_SKIP
@@ -5904,7 +5872,7 @@ class TestReview121Gui:
                 continue
             try:
                 live = bool(shell.winfo_exists())
-            except Exception:  # noqa: BLE001 - destroyed earlier shell
+            except _tk.TclError:
                 live = False
             if live:
                 guide = shell
@@ -6269,7 +6237,7 @@ class TestReview122Gui:
                 continue
             try:
                 live = bool(shell.winfo_exists())
-            except Exception:  # noqa: BLE001 - destroyed earlier shell
+            except _tk.TclError:
                 live = False
             if live:
                 guide = shell
@@ -6548,7 +6516,7 @@ class TestReview123Gui:
                 continue
             try:
                 live = bool(shell.winfo_exists())
-            except Exception:  # noqa: BLE001 - destroyed earlier shell
+            except _tk.TclError:
                 live = False
             if live:
                 guide = shell
@@ -6815,7 +6783,7 @@ class TestReview124Gui:
                 continue
             try:
                 live = bool(shell.winfo_exists())
-            except Exception:  # noqa: BLE001 - destroyed earlier shell
+            except _tk.TclError:
                 live = False
             if live:
                 guide = shell
@@ -7030,7 +6998,7 @@ class TestReview125Gui:
                 continue
             try:
                 live = bool(shell.winfo_exists())
-            except Exception:  # noqa: BLE001 - destroyed earlier shell
+            except _tk.TclError:
                 live = False
             if live:
                 guide = shell
@@ -7211,7 +7179,7 @@ class TestReview126Gui:
                 continue
             try:
                 live = bool(shell.winfo_exists())
-            except Exception:  # noqa: BLE001 - destroyed earlier shell
+            except _tk.TclError:
                 live = False
             if live:
                 guide = shell
@@ -7451,7 +7419,7 @@ class TestReview127Gui:
                 continue
             try:
                 live = bool(shell.winfo_exists())
-            except Exception:  # noqa: BLE001 - destroyed earlier shell
+            except _tk.TclError:
                 live = False
             if live:
                 guide = shell
@@ -7685,7 +7653,7 @@ class TestReview128Gui:
                 continue
             try:
                 live = bool(shell.winfo_exists())
-            except Exception:  # noqa: BLE001 - destroyed earlier shell
+            except _tk.TclError:
                 live = False
             if live:
                 guide = shell
@@ -8417,7 +8385,7 @@ class TestReview132Gui:
             # and strand the modal)
             try:
                 alive = dialog.winfo_exists()
-            except Exception:  # noqa: BLE001 - destroyed mid-callback
+            except _tk.TclError:
                 alive = False
             if not alive:
                 return

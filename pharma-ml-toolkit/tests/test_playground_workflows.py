@@ -20,10 +20,8 @@ the exact expected text.
 
 from __future__ import annotations
 
-import contextlib
 import importlib.util
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -80,43 +78,11 @@ XVFB_SKIP = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(scope="module")
-def xvfb_display() -> str:
-    """A module-scoped virtual display, polled until Xvfb accepts sockets."""
-    import os
-    import socket
-    import time
-
-    display = ":97"
-    process = subprocess.Popen(
-        ["Xvfb", display, "-screen", "0", "1280x800x24"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    socket_path = Path(f"/tmp/.X11-unix/X{display[1:]}")
-    deadline = time.time() + 10.0
-    ready = False
-    while time.time() < deadline:
-        if socket_path.exists():
-            probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            try:
-                probe.connect(str(socket_path))
-                ready = True
-            except OSError:
-                pass
-            finally:
-                probe.close()
-        if ready:
-            break
-        time.sleep(0.1)
-    assert ready, f"Xvfb did not come up on {display} within 10 s"
-    os.environ["DISPLAY"] = display
-    try:
-        yield display
-    finally:
-        process.terminate()
-        with contextlib.suppress(subprocess.TimeoutExpired):
-            process.wait(timeout=5)
+# (round 209) the display fixture moved to tests/conftest.py as ONE
+# session-scoped Xvfb: a module-scoped server torn down between modules
+# left a destroyed app's stale display connection pointing at a dead
+# server -- the next Tk event pump hit it and Tk 9's X error handler
+# exited the whole process (the round-209 collapse forensics).
 
 
 # --------------------------------------------------------------------- #

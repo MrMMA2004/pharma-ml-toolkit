@@ -21,10 +21,8 @@ output beside CSV.  These tests pin both halves:
 
 from __future__ import annotations
 
-import contextlib
 import importlib.util
 import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -168,44 +166,11 @@ XVFB_SKIP = pytest.mark.skipif(
 
 @XVFB_SKIP
 class TestExcelAndSampleDataGui:
-    @pytest.fixture(scope="class")
-    def xvfb_display(self) -> Any:
-        """A class-scoped virtual display (its own :97 -- never the :98
-        the main playground suite owns, so parallel modules collide on
-        nothing)."""
-        import os
-        import socket
-
-        display = ":97"
-        process = subprocess.Popen(
-            ["Xvfb", display, "-screen", "0", "1280x800x24"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        socket_path = Path(f"/tmp/.X11-unix/X{display[1:]}")
-        deadline = time.time() + 10.0
-        ready = False
-        while time.time() < deadline:
-            if socket_path.exists():
-                probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                try:
-                    probe.connect(str(socket_path))
-                    ready = True
-                except OSError:
-                    pass
-                finally:
-                    probe.close()
-            if ready:
-                break
-            time.sleep(0.1)
-        assert ready, "Xvfb did not come up on :97 within 10 s"
-        os.environ["DISPLAY"] = display
-        try:
-            yield display
-        finally:
-            process.terminate()
-            with contextlib.suppress(subprocess.TimeoutExpired):
-                process.wait(timeout=5)
+    # (round 209) the display fixture moved to tests/conftest.py as ONE
+    # session-scoped Xvfb -- per-class fresh servers + a stale display
+    # connection from a destroyed app = the next Tk event pump hits the
+    # broken connection and Tk 9's X error handler exits the whole
+    # process (the round-209 collapse forensics).
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:

@@ -5165,6 +5165,16 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 "tkinter is not available in this Python build -- install the "
                 "python3-tk system package (or use an official python.org build)"
             )
+        # (round 209) the module-level card registries index THIS build's
+        # cards and only these (the rebuild-overwrite note at
+        # _COLLAPSE_CARDS) -- so a second PlaygroundApp in the same
+        # process starts from a clean directory BEFORE its first card is
+        # made, and no stale shell of a previous app survives the
+        # rebuild.  Cleared before super().__init__() on purpose: the
+        # stale X connection of a destroyed predecessor must be released
+        # before the new root's first event pump can touch it.
+        _CARD_INDEX.clear()
+        _COLLAPSE_CARDS.clear()
         super().__init__()
         self.deps = dependencies if dependencies is not None else probe_dependencies()
         self.pharmaml: Any = None
@@ -6488,8 +6498,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         # halts at its checkpoint -- cancelled, not OOM-killed.
         if self._busy:
             rss = _rss_mb()
-            if rss > self._job_mem_peak_mb:
-                self._job_mem_peak_mb = rss
+            self._job_mem_peak_mb = max(self._job_mem_peak_mb, rss)
             over_ceiling = (
                 self._job_mem_budget_mb > 0.0
                 and rss > self._job_mem_floor_mb + self._job_mem_budget_mb
@@ -8424,6 +8433,103 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if self._persist_session:
             self._write_session_file()
         self.destroy()
+
+    def destroy(self) -> None:
+        """Destroy the window and release the module-level card registries.
+
+        (round 209) ``_CARD_INDEX``/``_COLLAPSE_CARDS`` are module-level
+        and hold every card's shell widget: past ``destroy()`` those
+        strong references kept the whole widget tree -- and with it the
+        Tcl interpreter and its X display connection -- alive.  A host
+        that builds, destroys and rebuilds the app leaked one X
+        connection per build, and when the X server then went away (a
+        test fixture's Xvfb teardown; the collapse the round-209
+        forensics traced to ``X connection to :N broken`` -> ``exit(1)``
+        inside Tk's error handler) the NEXT Tk event pump of the
+        surviving interpreter terminated the whole process -- the
+        "Playground.py collapses during heavy work" family, second
+        mode.  Clearing the registries here drops the last Python
+        references, so the interpreter finalizes and the display
+        connection closes with it.
+
+        (round 209, second arm) ``destroy()`` alone also leaves Tcl's
+        pending ``after`` scripts queued: the recurring pollers
+        (``_poll_jobs``/``_poll_progress``/the topmost reset lambda) are
+        referenced from Tcl's C-level after queue, a reference Python's
+        cyclic gc cannot see -- the app->interpreter->callable->app
+        cycle is therefore uncollectable and the interpreter (with its
+        X connection) survives ``del`` + ``gc.collect()``.  Cancelling
+        every pending after releases those C-side references first;
+        ``super().destroy()`` then tears the widget tree (and its
+        ``bind`` registrations) down and the interpreter can actually
+        die.
+
+        (round 209, second arm) Tk's C-level registrations: pending
+        ``after`` scripts and every callback ``_register``ed into the
+        Tcl command table (bind handlers, variable traces, widget
+        ``command=`` options) are referenced ONLY from Tcl's C side --
+        a reference Python's cyclic gc cannot see -- so the
+        app->interpreter->callable->app cycle is uncollectable and the
+        interpreter (with its X connection) survives ``del`` +
+        ``gc.collect()``.  Bare tkinter cleans up because it has no
+        such registrations left over; the app's dozens of them each pin
+        their closure.  ``after`` scripts are cancelled by id; the
+        command sweep then deletecommands every leftover registered
+        callback -- ``Misc._register`` names them ``repr(id(f))`` plus
+        an optional handler name, so they are exactly the commands whose
+        name starts with a digit (widget paths start with ``.``, Tcl
+        core commands never start with a digit) -- and the interpreter
+        can finally die.
+        """
+        with contextlib.suppress(Exception):
+            for after_id in self.tk.call("after", "info"):
+                self.tk.call("after", "cancel", after_id)
+        self._silence_variables()
+        _CARD_INDEX.clear()
+        _COLLAPSE_CARDS.clear()
+        super().destroy()
+        # The command sweep runs AFTER the widget tree is down (the
+        # recursion above deletecommands every tracked registration; a
+        # pre-destroy sweep would race it and raise "can't delete Tcl
+        # command" out of Misc.destroy).  What is left now are exactly
+        # the UNTRACKED registrations -- variable traces above all --
+        # and deleting them releases the last invisible C pins.
+        with contextlib.suppress(Exception):
+            for command in self.tk.splitlist(self.tk.eval("info commands")):
+                if command[:1].isdigit():
+                    with contextlib.suppress(Exception):
+                        self.tk.deletecommand(command)
+
+    def _silence_variables(self) -> None:
+        """Drop every app-reachable Variable's Tcl handle (round 209).
+
+        The command sweep below deletes the trace callbacks; a Variable
+        whose ``__del__`` still runs later (the leak keeps app-graph
+        objects alive to interpreter exit) would then retry
+        ``deletecommand`` on an already-deleted name and raise
+        ``TclError: can't delete Tcl command`` as unraisable exit noise.
+        ``Variable.__del__`` no-ops when ``_tk`` is None -- so detach
+        every Variable this app's attribute graph can reach.
+        """
+        stack: list[Any] = [self.__dict__]
+        seen: set[int] = set()
+        while stack and len(seen) < 100_000:
+            container = stack.pop()
+            if id(container) in seen:
+                continue
+            seen.add(id(container))
+            if isinstance(container, dict):
+                values = list(container.values())
+            elif isinstance(container, (list, tuple, set, frozenset)):
+                values = list(container)
+            else:
+                continue
+            for value in values:
+                if isinstance(value, tk.Variable):
+                    value._tk = None  # type: ignore[attr-defined]  # tkinter privates, not in the stubs
+                    value._tclCommands = None  # type: ignore[attr-defined]
+                elif isinstance(value, (dict, list, tuple, set, frozenset)):
+                    stack.append(value)
 
     # -- menu actions ---------------------------------------------------- #
     def _menu_open_csv(self) -> None:
