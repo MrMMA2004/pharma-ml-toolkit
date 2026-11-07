@@ -8283,3 +8283,142 @@ GITHUB_BACKUP_MANIFEST gains the v1.2.125 section.
 5. `rdkit.Chem.Lipinski.NumRotatableBonds` exists at runtime but
    not in the stubs — `rdMolDescriptors.CalcNumRotatableBonds` is
    the canonical, mypy-clean spelling.
+
+## Round 212 — the Unsupervised Workbench: the Studio's increment 6 (audit row 7, the Unsupervised tab), v1.2.126 shipped (2026-11-07)
+
+An IM continuation round ("Continue MASTER_PROMPT part2"), not a cron
+trigger — the counter stays at 10; the session-inherited summary was
+STALE AGAIN (it believed run 8 unexecuted and Task F at zero progress;
+the repo said rounds 204–211 had shipped D-④, the collapse family
+fixes, and five Studio increments). Per the compounding lesson
+("open from `git log` + the worklog's latest round, then pick up the
+trail the repo says") the round opened from HEAD `4edc884` (one cron
+auto-commit ahead of origin: the round-211 probe archived) and took
+the audit's own next step: **Studio increment 6, the Unsupervised
+Workbench**.
+
+**What shipped — `ui/pages/unsupervised.py`, the seventh feature
+page** (the playground Unsupervised tab, the PDSH handbook's
+unsupervised roster over a shared dataset + column selection —
+the 77-row bundled descriptor library by default, the 260-row QSAR
+table, or whatever Data Explorer holds — with incomplete rows dropped
+up-front and the count reported; four tabs, each wired to the SAME
+public backend APIs the playground cards call):
+
+- **PCA** — `pca_reduce` on the checked columns (auto
+  n_components = min(10, n, p)): the explained-variance ladder as bars
+  + the cumulative dash line, the loadings table, the dominant PC1
+  feature in the report. Engine-printed on the library: 8 components,
+  PC1 45.2% + PC2 36.3%, cumulative at 8 = 100.0%, PC1 dominated by
+  NumHAcceptors (|loading| 0.447); at n=3 the cumulative is 90.9%;
+  the QSAR table's auto fit is 10 components / 62.5%.
+- **Clustering** — `kmeans_cluster` (Lloyd/mini-batch, manual k or the
+  silhouette scan: k=3 → silhouette 0.438 sizes 8/39/30; auto → k=2
+  0.466), `gmm_cluster` (the BIC sweep picks 4 components, converged,
+  log-likelihood -688.22, weights 0.55/0.09/0.21/0.16, the soft
+  responsibilities landing in the table; manual diag n=3 carries
+  chosen_by=manual), `hierarchical_cluster` (all four linkages: ward
+  29/7/41 with two merge heights, complete 31/7/39 — the linkage
+  choice visibly changes the cut). The scatter shows the first two
+  checked columns coloured by membership.
+- **Density (KDE)** — `kde_fit` on one numeric column, all six
+  kernels, CV-or-manual bandwidth: the density curve over the
+  histogram twin (scaled by n·bin-width, the matplotlib convention),
+  the 200-point curve table (MolWt: bandwidth 10 by CV, mean
+  log-likelihood -395.58; manual 20 → source=manual); non-positive or
+  non-numeric bandwidth refused up-front.
+- **Manifold** — `manifold_embedding` for isomap / LLE
+  (standard/modified/ltsa) / MDS / spectral / t-SNE: the 2-D
+  embedding scatter + coordinate table, the record's own str echoed;
+  violated preconditions surface the engine's exact words (t-SNE
+  perplexity 100 → "perplexity strictly below the sample count",
+  isomap n_neighbors 100 → "1 <= n_neighbors < n_samples (77)").
+
+Sidebar grows to **nine sections** (unsupervised between models and
+settings, the audit's usage order); `pages.count()` pin 8 → 9 with
+the navigation-order test updated.
+
+**A display-forensics lesson caught in-round**: the Bash tool's
+output channel eats the two-byte sequence `[m` (the ANSI reset
+escape) — `sed`/`python` printouts of `xs[mask]` showed `xsask]` and
+looked like file corruption, but Read showed the file intact. The
+sequence also round-trips edits dangerously (a heredoc carrying
+`[mask]` silently writes `ask]`). Verdict: never trust a Bash-printed
+view of bracket-followed-by-m text; Read is the ground truth, and
+heredocs that must contain the sequence should assemble it
+(`'[' + 'm'`).
+
+**Verification**: 23 new offscreen tests
+(`tests/ui/test_unsupervised_page.py`), every asserted number
+engine-printed first by the committed
+`scripts/probe_unsupervised_212.py` (repo-root scripts/, riding the
+git history outside the archive) — green FIRST RUN, all 23. ui/ suite
+**119 green** (96 + 23) + job_safety 28 green in ONE invocation (147
+dots, exit 0 — the sandbox still truncates pytest's summary line, so
+the dots + exit code are the honest count); notebook variants 119
+green; web-parity/data_loading/csv_standardize 89 green;
+docs_index + excel_io_and_samples 52 green; doctests **775 passed +
+3 skipped = 778** (the robust `[NN%]`-row counter); collect-only
+**4,636 across the tests tree** (+23). Honest total: **4,636 + 778
+= 5,414**. ruff clean and mypy clean on every touched file. `bun run
+lint` clean after the web-pin edits.
+
+**Ship**: all 8 notebooks re-executed at 1.2.126 (207 s, zero error
+outputs, foreground — the background-silent-death rule) + the 7
+no-output twins regenerated; the OOM ritual respected (dev server
+stopped for the re-execution, restarted via the double-fork daemon
+after, GET / 200). The scrub-before-build discipline caught **TWO
+real leaks this round**: (a) the re-executed ML notebook's warning
+stderr — not just the usual ConvergenceWarning family but also a
+FutureWarning traceback carrying the venv path (the scrub rule is now
+"any stderr stream carrying an absolute path", not
+"ConvergenceWarning" narrowly), and (b) the round-211 probe's
+absolute run-hint — `scratch/probe_docking_211.py` was created AFTER
+v1.2.125 was cut and had never been scrubbed; its paths are now
+file-relative and its TK constant parents-based (the repo-root
+`scripts/` duplicate the cron loop archived stays as-is — outside
+the archive). The `/home/jake` + `/home/USER` hits the scrub's
+broader verification flags in two old junit xmls are historical
+guard-test quotations, byte-identical to the v1.2.125 archive —
+accepted placeholders, not build-machine paths.
+`scratch/build_zip_212.py` → **v1.2.126 = 19,823,465 bytes, sha-256
+`0a7eeea2…`** (full: 0a7eeea27571950d5846e2f1d0bb691f26e43df91f023
+79b82dfa17df076061e), 981 entries / 935 files, nested zips NONE, real
+leaks 0, four homes byte-identical (testzip OK on each); the
+predecessor v1.2.125 removed from all four homes. Census LAST on the
+post-ship tree: **955 files / 347,988 lines** (+3 = the page + its
+tests + the round-211 probe that post-dated the last census). Web
+pins 5,391 → 5,414 (page.tsx hero + FALLBACK_STATS 952/346,738 →
+955/347,988; download-panel 3 lines / 4 occurrences; overview 3
+lines); the zip-size endpoint answers `{"zipBytes":19823465,
+"version":"1.2.126","exact":true,"source":"release"}`; CHANGELOG
+gains the v1.2.126 Added section; GUI audit row 7 + the migration
+status updated (increment 6 of N; next: Deep Learning per the
+audit's usage order); GITHUB_BACKUP_MANIFEST gains the v1.2.126
+section (with the two-leak story recorded). E2E via agent-browser:
+title/pins/census render, the download panel carries the new
+5,414-chip and the 18.91 MB release archive, the endpoint answers
+exact from inside the browser, zero console/page errors; the
+round-212 evidence screenshot filed at
+`download/round212-e2e-overview.png` (repo-root download/, outside
+the census walk — no shift).
+
+**Lessons pinned**:
+1. The `[m`-eating display channel (above) — Read over Bash-print
+   for any bracket-m text; heredocs assemble the sequence when it
+   must survive.
+2. The scrub rule generalises: a version-bump re-execution can leak
+   ANY warning stderr (FutureWarning this round, ConvergenceWarning
+   before), and files created between a round's zip build and its
+   commit (the probe) ride the NEXT archive unscrubbed — scrub is a
+   pre-build WALK, not a remembered list.
+3. The old junit xmls' `/home/jake` + `/home/USER` quotations are
+   permanent accepted placeholders (byte-identical across archives);
+   the four-needle zip scan (`/home/z/`, tokens) remains the real
+   gate, the scrub's broader `/home/<user>/` verification the
+   advisory one.
+4. A page's per-engine result tables need per-engine index names —
+   the GMM responsibilities table is sample-indexed, the k-means
+   centroids cluster-indexed, the hierarchical sizes frame needs no
+   reset at all; one shared `reset_index().rename(...)` was wrong
+   three different ways.

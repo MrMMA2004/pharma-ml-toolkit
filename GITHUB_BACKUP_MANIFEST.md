@@ -449,6 +449,31 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.126 release-zip homes (2026-11-07, round 212 — the Unsupervised Workbench, the Studio's increment 6)
+
+`pharma-ml-toolkit-v1.2.126.zip` — 19,823,465 bytes, sha-256
+`0a7eeea27571950d5846e2f1d0bb691f26e43df91f02379b82dfa17df076061e`,
+built with the standing four-home builder (`scratch/build_zip_212.py`,
+the round-180/183 recipe with VERSION read dynamically);
+scrub-before-build caught TWO real leaks this round — the re-executed
+ML notebook's warning stderr (a FutureWarning traceback carrying the
+venv path, next to the usual ConvergenceWarning family) AND the
+round-211 probe's absolute run-hint (created after v1.2.125 was cut,
+never scrubbed until now; its paths are file-relative and its TK
+constant parents-based); 981 entries / 935 files / nested zips NONE /
+real leaks 0 (the /home/jake and /home/USER hits in two old junit
+xmls are historical guard-test quotations, byte-identical to the
+v1.2.125 archive), placed byte-identical in all four homes:
+
+- `download/pharma-ml-toolkit-v1.2.126.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.126.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.126.zip`
+- `upload/pharma-ml-toolkit-v1.2.126.zip`
+
+The immediate predecessor (v1.2.125) left all four homes; deeper
+history stays (v1.2.106's only surviving copy lives in the repo
+download/ sweep archive).
+
 ## v1.2.125 release-zip homes (2026-11-07, round 211 — the Docking Workbench, the Studio's increment 5)
 
 `pharma-ml-toolkit-v1.2.125.zip` — 19,705,454 bytes, sha-256

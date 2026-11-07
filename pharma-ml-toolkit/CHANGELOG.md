@@ -1,3 +1,50 @@
+## [1.2.126] — 2026-11-07
+
+### Added — round 212: the Unsupervised Workbench (Studio increment 6, audit row 7)
+
+* **`ui/pages/unsupervised.py`** — the Studio's sixth feature page,
+  migrating the playground Unsupervised tab (directive #16, 16.18
+  migration step 6). The PDSH handbook's unsupervised roster over a
+  shared dataset + column selection (the 77-row bundled descriptor
+  library by default, the 260-row QSAR table, or whatever Data
+  Explorer holds), four engine tabs each wired to the SAME public
+  backend APIs the playground cards call:
+  * **PCA** — `pca_reduce` on the checked columns (auto
+    n_components = min(10, n, p)): the explained-variance ladder as
+    bars with the cumulative dash line, the loadings table, and the
+    dominant PC1 feature in the report (on the descriptor library:
+    8 components, PC1+PC2 at 81.5%, PC1 dominated by NumHAcceptors).
+  * **Clustering** — `kmeans_cluster` (Lloyd / mini-batch, manual k
+    or the silhouette scan), `gmm_cluster` (the BIC sweep or manual
+    components, every covariance type, the soft responsibilities
+    landing in the table) and `hierarchical_cluster` (all four
+    linkages, merge heights in the report); the scatter shows the
+    first two checked columns coloured by membership (k=3 on the
+    library: silhouette 0.438, sizes 8/39/30; the BIC sweep picks
+    4 components, converged, weights 0.55/0.09/0.21/0.16).
+  * **Density (KDE)** — `kde_fit` on one numeric column with the
+    CV-chosen (or manual) bandwidth and all six kernels: the density
+    curve over the histogram twin (scaled by n·bin-width), the
+    200-point curve table (MolWt: bandwidth 10 by cross-validation,
+    mean log-likelihood -395.58).
+  * **Manifold** — `manifold_embedding` for isomap / LLE
+    (standard/modified/ltsa) / MDS / spectral / t-SNE: the 2-D
+    embedding scatter + coordinate table, the method's own knobs
+    echoed in the report; violated preconditions (t-SNE perplexity
+    or isomap neighbourhood above the sample count) surface the
+    engine's exact words.
+* Incomplete rows are dropped up-front with the count reported (the
+  engines' completeness rule made visible); every heavy path runs in
+  a `JobWorker` off the GUI thread.
+* Sidebar grows to **nine sections** (unsupervised between models
+  and settings, the audit's usage order); `pages.count()` pin 8 → 9
+  with the navigation-order test updated.
+* **`tests/ui/test_unsupervised_page.py`** — 23 offscreen tests,
+  every asserted number engine-printed first by the committed
+  `scripts/probe_unsupervised_212.py`; **`tests/ui/` suite now 119
+  green** (96 + 23), collect-only **4,636 across the tests tree**;
+  honest totals **5,414** (4,636 + 778 doctests).
+
 ## [1.2.125] — 2026-11-07
 
 ### Added — round 211: the Docking Workbench (Studio increment 5, audit row 5)

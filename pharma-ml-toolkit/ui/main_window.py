@@ -34,6 +34,7 @@ SECTIONS: list[tuple[str, str]] = [
     ("biology", "Biology Workbench"),
     ("docking", "Docking Workbench"),
     ("models", "Model Analysis"),
+    ("unsupervised", "Unsupervised Workbench"),
     ("settings", "Settings"),
 ]
 
@@ -66,6 +67,7 @@ class MainWindow(QMainWindow):
         from .pages.model_analysis import ModelAnalysisPage
         from .pages.pkpd import PKPDWorkbenchPage
         from .pages.settings_page import SettingsPage
+        from .pages.unsupervised import UnsupervisedWorkbenchPage
 
         self.dashboard_page = DashboardPage()
         self.data_page = DataExplorerPage(theme=self.theme)
@@ -74,6 +76,9 @@ class MainWindow(QMainWindow):
         self.biology_page = BiologyWorkbenchPage(theme=self.theme, runner=self.runner)
         self.docking_page = DockingWorkbenchPage(theme=self.theme, runner=self.runner)
         self.model_page = ModelAnalysisPage(theme=self.theme, runner=self.runner, data_explorer=self.data_page)
+        self.unsupervised_page = UnsupervisedWorkbenchPage(
+            theme=self.theme, runner=self.runner, data_explorer=self.data_page
+        )
         self.settings_page = SettingsPage(self.theme)
 
         for page in (
@@ -84,6 +89,7 @@ class MainWindow(QMainWindow):
             self.biology_page,
             self.docking_page,
             self.model_page,
+            self.unsupervised_page,
             self.settings_page,
         ):
             self.pages.addWidget(page)
@@ -151,6 +157,7 @@ class MainWindow(QMainWindow):
         self.biology_page.apply_palette(palette)
         self.docking_page.apply_palette(palette)
         self.model_page.apply_palette(palette)
+        self.unsupervised_page.apply_palette(palette)
         self._status.showMessage(f"Theme: {provider} · {name}")
 
     # -- notifications -----------------------------------------------------------------

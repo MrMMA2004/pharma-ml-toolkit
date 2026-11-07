@@ -1,6 +1,6 @@
 """Probe: print the real numbers the Docking Workbench tests will assert.
 
-Run: cd /home/z/my-project/pharma-ml-toolkit && /home/z/.venv/bin/python /home/z/my-project/scripts/probe_docking_211.py
+Run from the toolkit root: python scratch/probe_docking_211.py
 """
 
 from pathlib import Path
@@ -23,7 +23,7 @@ from pharmaml.docking import (
     target_frame,
 )
 
-TK = Path("/home/z/my-project/pharma-ml-toolkit")
+TK = Path(__file__).resolve().parents[1]
 CAMPAIGN = TK / "examples" / "data" / "docking_campaign"
 LIBRARY = TK / "examples" / "data" / "ligand_library.csv"
 
