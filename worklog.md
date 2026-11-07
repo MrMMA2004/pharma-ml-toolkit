@@ -8147,3 +8147,139 @@ supersession note.
    re-leaks `/home/z/` paths into its output cells) — the standing
    `scrub_home_paths_137.py` pass is not optional, and the archive
    leak scan after the build is the contract that proves it.
+
+## Round 211 — the Docking Workbench: the Studio's increment 5 (audit row 5, the Docking tab), v1.2.125 shipped (2026-11-07)
+
+Run 10/100 (the 18:21 cron trigger, the first since round 210 recorded
+"no new cron trigger" — counter 9→10 per the increment-per-trigger
+rule). The environment arrived healthy for the first round in a while:
+HEAD `2ffd849` == origin/main (round 210), token/helper/rdkit in
+place, remote present, ff-pull a no-op. The session-inherited summary
+was five rounds STALE (it believed Task F undiagnosed and D-④
+unstarted) — the worklog's rounds 204–210 told the truth instead, and
+per lesson #1 of round 210 ("read HEAD before reading the summary")
+the round opened from the repo's actual state: D-④ done (round 204),
+the heavy-work collapse family root-caused and fixed (rounds 205 +
+209), the Studio at increment 4 with "next: Docking per the audit's
+usage order". So this round = **Studio increment 5, the Docking
+Workbench**.
+
+**What shipped — `ui/pages/docking.py`, the sixth feature page**
+(four of the Docking tab's engines, each wired to the SAME public
+backend APIs the cards call, none needing the external engine
+binaries — vina/autodock4/AutoGrid stay the cards' job — in four tabs):
+
+- **Campaign summary** — one job runs the card's full pipeline:
+  `check_docking_completion` + `scan_docking_directory` over the
+  bundled synthetic AutoDock4 campaign (14 ligand folders: 12 complete
+  runs, 08_benzocaine missing its log, 10_nicotine interrupted before
+  clustering — the audit rows ride the scan verbatim), then the
+  rescore card's arithmetic on the OK rows: RDKit heavy-atom counts
+  from the campaign's `ligands.csv` (matched by folder name),
+  `ligand_efficiency_series`, and `consensus_rescore` over the three
+  evidence columns (`best_lowest_energy` explicitly lower-is-better +
+  `best_num_in_cluster` + `ligand_efficiency`), ranked best-first —
+  metformin 0.781674 the engine-printed top. The OK folders feed the
+  cluster tab's combo (cross-tab state, GUI-thread writes only, jobs
+  capture inputs at submit).
+- **Cluster analysis** — `parse_dlg_cluster_table` on the chosen
+  folder's `r.dlg`: the CLUSTERING HISTOGRAM as a real table
+  (rank / lowest / mean / #in-cluster), the top-cluster and
+  most-populated story in the report (aspirin: 5 clusters, rank 1 at
+  -4.91 kcal/mol with 15 runs; caffeine's most-populated is rank 2 —
+  the not-always-rank-one case pinned).
+- **Ligand library** — `load_ligand_csv` on the bundled library
+  (10 rows: 8 valid + 2 deliberately invalid, whose exact RDKit
+  reasons ride the table) plus the RDKit property columns the
+  preparation card reports (heavy atoms, rotatable bonds) on the
+  valid rows (naproxen 17/3, caffeine 0 rotatable — the rigid
+  xanthine case pinned).
+- **DOCKSTRING lab** — `target_frame` (all 58 upstream Vina search
+  boxes, volumes charted; first ABL1, last THRB), `get_target` config
+  previews, and `parse_search_box` validation of a pasted six-key
+  config (an incomplete config reports exactly which keys are
+  missing). The validator catches `PharmaMLError` explicitly — no
+  blind `except Exception` (the round-209 narrowing discipline).
+
+Sidebar grows to **eight sections** (docking between biology and
+models, the audit's usage order); `pages.count()` pin 7 → 8 with the
+navigation-order test updated; theme palette wiring added.
+
+**A lesson in test design caught in-round**: the cluster battery's
+first run failed because the cluster combo's first item is the
+CONSENSUS-BEST folder (07_metformin), not the alphabetically-first
+(01_aspirin) — the combo is fed by the ranked frame, and the test
+must select the folder explicitly. Fixed by selection, not by
+reordering the engine.
+
+**A lesson in verifying pins caught in-round**: the first doctest
+recount reported 775 items (772 passed + 3 skipped), seemingly
+breaking the standing 778 pin. The robust recount (regex over the
+`[NN%]` progress rows, catching `s`-LEADING lines) reproduced the
+standing numbers exactly: **775 passed + 3 skipped = 778** — the
+naive `startswith('.')` filter had silently dropped one line. The
+pin was true; the counter was the bug.
+
+**Verification**: 14 new offscreen tests (`tests/ui/
+test_docking_page.py`), every asserted number engine-printed first
+by `scratch/probe_docking_211.py` (COMMITTED — the round-210
+lost-builders lesson applies to probes too): 14 folders → 12 OK / 1
+missing log / 1 incomplete, metformin 0.781674 with 9 heavy atoms,
+aspirin's 5 clusters (rank 1 -4.91/15 runs, cluster sizes sum 55),
+caffeine rank 2/15 runs, library 10/8/2 with the exact error
+strings, naproxen 17 heavy atoms / 3 rotatable, DRD2's box
+(9.250, 6.167, -7.000)/(30, 30, 32). Green first run except the
+combo-order lesson above. ui/ suite 96 green (82 + 14) +
+job_safety 28 green in ONE invocation (the session-scoped Xvfb
+holding); notebook-freshness/web-parity/data_loading/
+csv_standardize 280 green; docs_index + excel_io_and_samples 52
+green; doctests 775 passed + 3 skipped = 778; collect-only
+**4,613 across the tests tree** (+14). Honest total: **4,613 + 778
+= 5,391**. ruff clean and mypy clean on every touched file (the
+`Lipinski.NumRotatableBonds` stub gap dodged via
+`rdMolDescriptors.CalcNumRotatableBonds`).
+
+**Ship**: all 8 notebooks re-executed at 1.2.125 (201 s, zero error
+outputs; the first background attempt DIED SILENTLY — empty log,
+instant exit — confirming the sandbox's background-process lesson;
+the foreground run was clean) + the 7 no-output twins regenerated;
+the OOM ritual respected (dev server stopped for the re-execution,
+restarted via the double-fork daemon after, GET / 200). The
+scrub-before-build discipline caught the ML notebook's fresh
+ConvergenceWarning traceback again (1 file scrubbed; the version-bump
+re-execution re-leaks it every round, exactly as round 210 pinned).
+`scratch/build_zip_210.py` → **v1.2.125 = 19,705,454 bytes, sha-256
+`877a5ecf…`** (full: 877a5ecf76b29c4ad23fbfda94e89b8a6ccce5f0e23890e
+bf039bdd45fa724be), 977 entries / 932 files, nested zips NONE, real
+leaks 0, 12 accepted placeholders, four homes byte-identical; the
+predecessor v1.2.124 removed from all four homes (the round-209/210
+policy). Census LAST on the post-ship tree: **952 files / 346,738
+lines** (+2 files = the new page + its tests). Web pins 5,377 →
+5,391 (seven sites) + fallback stats 950/345,766 → 952/346,738; the
+zip-size endpoint answers `{"zipBytes":19705454,"version":"1.2.125",
+"exact":true,"source":"release"}`; CHANGELOG gains the v1.2.125
+Added section; GUI audit row 5 + the migration status updated
+(increment 5 of N; next: Unsupervised per the audit's usage order);
+GITHUB_BACKUP_MANIFEST gains the v1.2.125 section.
+
+**Lessons pinned**:
+1. The session-inherited summary is five rounds behind after a
+   handful of parallel-continuation rounds — ALWAYS open from `git
+   log` + the worklog's latest round, then pick up the trail the
+   repo says (this is round-210 lesson #1 compounding: it applies
+   every round, not just rollback rounds).
+2. Background processes in this sandbox die silently — even a
+   nohup'd pure-python driver exits with an EMPTY log. The
+   foreground rule is not pip-specific (round 203's lesson
+   generalized).
+3. Counting pytest -q progress dots with `startswith('.')` drops
+   every row that STARTS with a skip/xfail marker — filter by
+   `^[.sxXFE]+\s*\[\s*\d+%\]` or the count lies by whole rows. A
+   pin that "breaks" may be the counter's bug, not the tree's.
+4. Combos fed by a RANKED frame deliver the ranked-first item, not
+   the alphabetical first — tests must select explicitly, and the
+   ranked order is itself the pin (metformin first is the engine's
+   honest verdict).
+5. `rdkit.Chem.Lipinski.NumRotatableBonds` exists at runtime but
+   not in the stubs — `rdMolDescriptors.CalcNumRotatableBonds` is
+   the canonical, mypy-clean spelling.
