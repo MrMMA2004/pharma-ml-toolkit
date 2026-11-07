@@ -9070,3 +9070,84 @@ remote; their polish edits may extend it) · next planned: the other
 agent closes increment 10 as **v1.2.131** (full ritual), then Response
 AI (audit row 12) builds on `scratch/probe_response_218.py` · counter
 **14/100**.
+
+## Round 217 (ship close-out) — 2026-11-07 — increment 10 shipped: the Best-of ML Workbench, v1.2.131
+
+The increment-10 owner's leg of the round (rounds 217/218 above are the
+concurrent agent's recovery, verification and prep legs — one round,
+two agents, one protocol).  What shipped:
+
+**The page** — `ui/pages/bestofml.py` (1,190 lines), the Studio's tenth
+feature page, eight tabs over the SAME public backend APIs the
+playground's eight cards call: the catalogue (`search_catalog` /
+`catalog_top`, the top-10 star bars), the coverage audit
+(`coverage_table`'s 35 verdicts + the verdict-count bars), differential
+privacy (`dp_statistics` with the worst-bin row, the grouped true-vs-DP
+value-space bars, `dp_sgd_noise_scale`'s sigma 50.3), the recommender
+(leave-one-out vs popularity — lift 0.73, popularity won, the report
+says so), LSH (`ann_benchmark`'s recall/compression sweep as two
+lines), adversarial (logistic on the explorer frame or the two-blob
+demo, the broken-rate curve 5/5/14/44), time series (ACF lag bars peak
+24 / PACF / decomposition / CUSUM / window table, the honest
+two-full-periods refusal) and apriori (pasted transactions, lift bars).
+Every cluster reads the Data Explorer's frame with the playground's own
+guards (≥ 8 finite values, ≥ 60 rows for the ANN block, label
+factorisation) and falls back to the tab's seeded synthetics — mirrored
+exactly.  19 offscreen tests
+(`tests/ui/test_bestofml_page.py`), every number engine-printed first
+by the committed probe (`scratch/probe_bestofml_217.py`); three
+first-run test bugs were mine and fixed in the tests (the always-present
+changepoints row, ACF(0)=1.0 being the max bar, the ε display name);
+the DP worst-bin row was a real page bug the test caught (the table
+mirrored the playground after the fix).
+
+**The ritual** — OOM ritual respected (next-server down for the
+notebook run); notebooks re-executed **206 s** (8/8, zero errors, all
+print `pharmaml 1.2.131`) + 7 twins regenerated; the scrub dropped **4**
+fresh stderr leaks (complete_ml_workflow's warnings carrying absolute
+paths — the watch doing its job after a 0-drop round 216);
+`scratch/build_zip_217.py` — the FIRST build's leak scan caught the
+round-216 venv-repair wrapper carrying a hardcoded `/home/z/` (the
+first zip to include it): the wrapper now resolves via `$HOME` +
+`BASH_SOURCE` (verified from a relocated clone), rebuilt **v1.2.131 =
+20,078,596 bytes**, sha-256
+`6243f110c8e719a3fd7ff9561d5b752ad9d6c92b6b9a6403cc3e86bfcc069eac`,
+994 entries / 948 files, testzip OK per home, **real leaks 0**;
+predecessor v1.2.130 swept from all four homes.  Census LAST on the
+post-ship tree: **968 files / 352,830 lines** (+6 / +2,099).  Web pins:
+hero 5,478 → **5,497** tests + FALLBACK_STATS 962/350,731 →
+**968/352,830**, download-panel 3 lines + overview 2 lines to 5,497;
+four version carriers at 1.2.131.  GUI_AUDIT row 11 → shipped;
+GUI_REDESIGN migration status → increment 10; CHANGELOG v1.2.131
+section; GITHUB_BACKUP_MANIFEST v1.2.131 section (the leak-caught
+story recorded).
+
+**Verification** — the ui suite + job_safety in one invocation: **230
+dots, exit 0** (199 ui incl. the 19 new + 31 job_safety); focused batch
+(web_parity, data_loading, csv_standardize, docs_index,
+excel_io_and_samples) exit 0; notebook_variants **47 green**;
+doctests **778 exit 0**; collect-only **4,719** (honest total
+4,719 + 778 = **5,497**); ruff clean; mypy clean on both touched ui
+files; `bun run lint` exit 0; agent-browser E2E: the live hero prints
+**968 files · 352,830 lines · 5,497 tests** with the v1.2.131 chip, the
+Download tab carries 5,497 ×3 and the exact **19.15 MB**, zero
+console/page errors (screenshot committed:
+`docs/gui/screenshots/round217_hero_bestofml.png`); zip endpoint
+`{"zipBytes":20078596,"version":"1.2.131","exact":true,"source":"release"}`.
+
+**The race, from the owner's side** — the recovery (PAT from the PDF's
+76+17 line-wrap, ff-pull to `ba60af0`, venv repair foreground, dev
+daemon restart) ran before the increment; the concurrent agent's cron
+runs 13/14 then verified the in-flight work instead of duplicating it
+(the round-217 entry above records the withdrawn parallel draft — one
+increment, one owner), pushed the unpushed `3b42566`, closed D-④ and
+landed the Response AI probe prep (`scratch/probe_response_218.py`,
+with the API-shape notes recorded for the page author).  This
+close-out rides the same commit train.
+
+**Baselines for the next round** — v1.2.131 stands (four carriers, four
+homes) · honest totals **5,497** (4,719 + 778) · census **968 /
+352,830** · sidebar **13 sections** (bestofml live) · audit row 12
+(**Response AI**) is the last planned row, probe ready · counter
+**14/100** (the concurrent agent's runs 13/14; this is an IM
+continuation, no cron fire — counter unchanged by this leg).
