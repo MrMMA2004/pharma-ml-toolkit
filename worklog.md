@@ -9360,3 +9360,121 @@ four homes) · honest totals **5,514** (4,736 + 778) · census **972 /
 the tree's own modes) · pytest 9.0.2 accounting noted (775 + 3) ·
 GUI_AUDIT rows 1-13 shipped, next increments = cross-cutting
 concerns or new audit rows · counter **15/100**.
+
+## Round 221 — 2026-11-08 — IM continuation: "Finish MASTER_PROMPT part2" — the Image Lab closes the Part-2 image-visualization debt (v1.2.134)
+
+**The trigger** — the owner's "Finish MASTER_PROMPT part2".  Part2
+was extracted and read in full (2380 lines): it is directive 16 —
+the complete four-technology GUI redesign — with its own acceptance
+checklist (16.22, 22 items) and deliverables (16.21, A-J).  The
+honest gap analysis against the live tree: 20 of the 22 acceptance
+items were already green (Studio increments 1-11 shipped all 13
+GUI_AUDIT rows; themes, background execution, tests, docs, GitHub
+backup all live).  The genuine remaining debt was Part2's own
+visualization core: **16.8.2 (ImageView/image analysis), 16.8.3
+(interactive ROI), 16.8.4 (histogram + colormap controls) and the
+16.8.7/16.19 export criterion** — a grep over `ui/` found NO
+ImageView, ROI, HistogramLUT or export surface anywhere.  This round
+closes exactly that.
+
+**The probe first** (the house rule) — `scratch/probe_imagelab_221.py`,
+per-section fresh seeds, every number the page asserts:
+  * §1 the similarity matrix: the bundled `seed_molecules.csv` (12
+    named drugs, all RDKit-valid) through `compute_fingerprints`
+    (morgan r=2, 2048 bits) + `tanimoto_matrix` — 12x12, diagonal
+    ones, off-diagonal min 0.021277 (metformin ~ diclofenac) / max
+    0.529412 (caffeine ~ theophylline) / mean 0.130395; highest
+    mean-similarity ibuprofen 0.164474, lowest metformin 0.042181.
+  * §2 the response matrix: the Biology pipeline's 23x8 LN_IC50
+    pivot — 1 NaN hole, finite min -0.177930 (A549 / erlotinib),
+    max 4.424495 (U-251 / sorafenib), mean 3.020384.
+  * §3 the explorer matrix: the seeded 12-row demo — raw means
+    [4.83015, 2.082817, 341.68], stds [1.101275, 0.563282,
+    35.815786]; z-means 0, z-stds 1; min -1.971670 / max 2.364600,
+    row of max |z| = 6.
+  * §4 the ROI statistics: fixed region rows [2,6) x cols [7,10) —
+    16 cells, mean 0.131007, min 0.021277, max 0.529412.
+  * §5 the timing surface: 1024² = 1,048,576 pairs in ~1.4 s and
+    4096² = 16.7M pairs in ~19.8 s (~0.8-0.9 M pairs/s), diag mean
+    1.0, off-diagonal mean ~0.081.
+
+**The widget** — `ui/widgets/image_panel.py`: a
+`pg.GraphicsLayoutWidget` with an `ImageItem` (NaN-masked via the
+masked-array path), a `HistogramLUTItem` (the 16.8.4 control, seven
+deterministic gradient presets: viridis default + magma/inferno/
+plasma/thermal/turbo/grey, unknown names refused honestly), a shared
+`RectROI` whose sub-matrix count/mean/min/max recompute live (the
+probe's own bounding-rect-slice arithmetic, exposed as
+`roi_stats_from_values` so tests pin it without a widget), theme
+sync through the house `apply_palette` (background/axes/ROI pen;
+the colormap stays data-driven, never a theme guess — 16.11's
+rule), and `export_png` (the widget grab → PNG file).  First
+smoke-run found `PlotItem` has no `setBackground` — the call moved
+to the `GraphicsLayoutWidget` (the fix that made everything render).
+
+**The page** — `ui/pages/image_lab.py`, sidebar section 15
+("Image Lab"), five tabs, all engine tabs in `JobWorker`: the
+similarity heatmap (bundled seeds OR the explorer's SMILES-like
+column — organic-fragment heuristic — with the three honest
+refusals), the response matrix (with cell-line/compound tick axes),
+the explorer matrix (raw/z-scored span pickers that snap forward,
+never invert; refusal below 2 numeric columns; the seeded demo when
+no table is loaded), the ROI explorer (spin boxes move the SAME
+RectROI the other tabs share; the defaults reproduce the probe's
+region), and the performance tab (n-spin 64..4096, seeded bit
+matrix, timings reported honestly, never asserted).  The house
+wiring followed exactly: `parent` first, `theme=None` optional,
+public `apply_palette`, `ProgressPanel.attach`, `_failed(message)`
+routed by `runner.job_name`.  A drafting flaw was caught and
+removed before ship: the ROI tab's RDKit-less fallback briefly
+returned a zero matrix — replaced by the honest empty-panel refusal
+(no fabricated arrays, ever).
+
+**The tests** — `tests/ui/test_image_lab_page.py`, 18 offscreen
+tests: the five end-to-end tabs against the probe-printed numbers,
+the explorer-column paths (fake frames at 90/12/3 rows), the three
+refusals, the ROI math + NaN masking (the widget vs the helper),
+the gradient switch + unknown-preset refusal, the PNG export (magic
+bytes `89504e470d0a1a0a` + >2 KB render), the theme sync
+(`dataclasses.replace` — ChartPalette is frozen), and the
+main-window wiring pin (15 pages, imagelab at index 13).  The
+sidebar growth re-pinned five older tests: `test_main_window`
+(14 → 15 pages AND the navigation order list), `test_responseai_page`
+(position len-3 + imagelab at len-2 + count 15),
+`test_foundations_page` (len-4 → len-5), `test_bestml_page`
+(len-3 → len-4) — plus `test_navigation_switches_pages` (the order
+list, the one collateral find of the full-suite re-run).
+
+**The OOM incident** — the first full ui+job_safety run died at
+~62% with EXIT 137 (SIGKILL): the dev server's next-server was
+holding the memory the Qt suite needed.  The OOM ritual was applied
+(server down, suite, server back) and the re-run went green:
+**265 dots exit 0** (247 + 18).  Collect-only **4,754** (+18);
+doctests 775 + 3 (unchanged); ruff clean; mypy 0 on the three
+touched ui files (one `findChildren` cast — the bestofml house
+pattern for PySide6's untyped Qt scans).
+
+**The ship** — four carriers → **1.2.134**; notebooks re-executed
+**204 s** (8/8, zero errors, all print `pharmaml 1.2.134`); the
+scrub dropped **0** (fourth consecutive zero-drop round);
+`scratch/build_zip_221.py` (the round-217 recipe verbatim) —
+**v1.2.134 = 20,370,596 bytes**, sha-256
+`7e817d3611b1bd8f983f2fc14484630d275141d0696cf29ed0bd62d4a6bc4776`,
+1002 entries / 956 files, testzip OK per home, **real leaks 0**,
+predecessor v1.2.133 swept from all four homes.  Census (runs LAST):
+**976 files / 356,316 lines** (+4 / +1,717).  Web pins:
+FALLBACK_STATS 976/356,316; the 5,514 → **5,532** test pins at all
+five sites; `bun run lint` clean; GET / 200; zip endpoint
+`{"zipBytes":20370596,"version":"1.2.134","exact":true,
+"source":"release"}`.  GUI_REDESIGN.md migration status → increment
+12 (with the honest remaining-work note: card-level coverage depth
+on the subset pages before the Tkinter playground can be retired);
+GUI_AUDIT.md cross-cutting list gains the image-visualization line;
+CHANGELOG + GITHUB_BACKUP_MANIFEST v1.2.134 sections.
+
+**Baselines for the next round** — v1.2.134 stands (four carriers,
+four homes) · honest totals **5,532** (4,754 + 778) · census **976 /
+356,316** · sidebar **15 sections** (imagelab live) · Part-2
+acceptance: 21 of 22 items green (the remaining item is the
+Tkinter-retirement decision, gated on card-level coverage depth) ·
+counter **15/100** (IM continuation — no cron fire; run 16 next).

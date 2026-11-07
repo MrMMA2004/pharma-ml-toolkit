@@ -298,7 +298,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "5514 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite, the SHAP/Optuna and XAI absorption suites, the runboard/umap/curation/express quartet, and the round-189 hpo/pruning/quantization/harness engines with the gnn/gnnxai/featurize orphan suite)",
+    after: "5532 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite, the SHAP/Optuna and XAI absorption suites, the runboard/umap/curation/express quartet, and the round-189 hpo/pruning/quantization/harness engines with the gnn/gnnxai/featurize orphan suite)",
   },
   {
     aspect: "Interface",
@@ -443,8 +443,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="5514"
-                countTo={5514}
+                value="5532"
+                countTo={5532}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />

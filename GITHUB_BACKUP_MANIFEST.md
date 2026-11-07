@@ -449,6 +449,34 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.134 release-zip homes (2026-11-08, round 221 — the Image Lab, the Part-2 §16.8.2-16.8.4 closure)
+
+`pharma-ml-toolkit-v1.2.134.zip` — 20,370,596 bytes, sha-256
+`7e817d3611b1bd8f983f2fc14484630d275141d0696cf29ed0bd62d4a6bc4776`,
+1002 entries / 956 files, built with the standing four-home builder
+(`scratch/build_zip_221.py`, the round-217 recipe verbatim) — testzip
+OK per home, **real leaks 0** (fourth consecutive zero-drop round),
+predecessor v1.2.133 swept from all four homes. Byte-identical copies
+ship to all four homes (repo-root `download/`,
+`pharma-ml-toolkit/dist-archive/`, `pharma-ml-toolkit/download/`,
+`upload/`). The increment: the Image Lab (Studio increment 12,
+sidebar section 15) — `ui/widgets/image_panel.py` (ImageItem +
+HistogramLUT colormap control with seven gradient presets + the
+shared RectROI with live sub-matrix statistics + PNG export + theme
+sync) and `ui/pages/image_lab.py` (five tabs on real project data:
+the 12-drug Tanimoto similarity heatmap, the 23x8 LN_IC50 response
+matrix with its masked NaN hole, the explorer's z-scored numeric
+columns, the fixed-region ROI demo reproducing the probe's
+statistics, and the tanimoto timing surface). 18 offscreen tests;
+the sidebar growth re-pinned five older tests (15 pages).
+Verification: ui suite + job_safety 265 dots exit 0 (the OOM ritual
+respected — next-server down for the run), collect-only 4,754,
+doctests 775 + 3 (pytest-9 accounting), ruff clean, mypy 0 on the
+three touched ui files, notebooks re-executed 204 s (8/8, all print
+`pharmaml 1.2.134`) + 7 twins regenerated, scrub dropped 0, census
+**976 files / 356,316 lines** (census runs LAST), web pins synced
+(976/356,316, 5,532 tests), four version carriers at 1.2.134.
+
 ## v1.2.133 release-zip homes (2026-11-08, round 220, cron run 15/100 — the lint-restore round)
 
 `pharma-ml-toolkit-v1.2.133.zip` — 20,348,595 bytes, sha-256
