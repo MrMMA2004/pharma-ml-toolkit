@@ -691,10 +691,10 @@ def render_matplotlib(figure: Figure, path: Any = None) -> Any:
     colorscale.  Needs the ``reports`` extra (matplotlib), exactly
     like every other plotting function in this package.
     """
-    from pharmaml.viz._compat import get_pyplot, save_figure
+    from pharmaml.viz._compat import get_pyplot, new_figure, save_figure
 
     plt = get_pyplot()
-    fig, ax = plt.subplots(figsize=(8.0, 6.0))
+    fig, ax = new_figure(figsize=(8.0, 6.0))
     for trace in figure.data:
         spec = trace.to_dict()
         if spec.get("type") == "bar":

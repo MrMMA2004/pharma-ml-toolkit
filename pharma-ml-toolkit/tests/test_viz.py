@@ -1866,6 +1866,18 @@ class TestFigureReadability:
             with pytest.raises(DataValidationError, match="scale"):
                 new_figure(scale=invalid)
 
+    def test_spec_renderer_uses_shared_style(self, close_all):
+        from pharmaml.viz.figures import Figure, Trace, render_matplotlib
+
+        spec = Figure(data=[Trace(x=[0, 1, 2], y=[1.0, 3.0, 2.0], name="response")])
+        fig = render_matplotlib(spec)
+        ax = fig.axes[0]
+        assert fig.dpi == 120
+        assert type(fig.get_layout_engine()).__name__ == "TightLayoutEngine"
+        assert not ax.spines["top"].get_visible()
+        assert ax.xaxis.get_gridlines()[0].get_color() == "#D7DEE5"
+        assert [text.get_text() for text in ax.get_legend().get_texts()] == ["response"]
+
     def test_png_and_html_exports_are_resolution_aware(self, tmp_path, close_all):
         import base64
 

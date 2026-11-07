@@ -86,3 +86,23 @@ def test_tkagg_figure_upscale_is_capped(playground: Any) -> None:
 def test_default_figure_host_is_taller(playground: Any) -> None:
     signature = inspect.signature(playground.PlaygroundApp._figure_host)
     assert signature.parameters["height"].default == 390
+
+
+def test_playground_does_not_bypass_shared_figure_renderer() -> None:
+    path = Path(__file__).resolve().parents[1] / "playground.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    direct_calls = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        function = node.func
+        if (
+            isinstance(function, ast.Attribute)
+            and isinstance(function.value, ast.Name)
+            and function.value.id == "plt"
+            and function.attr in {"figure", "subplots"}
+        ):
+            direct_calls.append((node.lineno, f"plt.{function.attr}"))
+        if isinstance(function, ast.Name) and function.id == "Figure":
+            direct_calls.append((node.lineno, "Figure"))
+    assert direct_calls == []

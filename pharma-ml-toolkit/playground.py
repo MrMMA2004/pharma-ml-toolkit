@@ -4655,17 +4655,18 @@ def molecule_grid_figure(
     corners vs its interior trade-offs).  The same pad/truncate contract
     as ``scores``; ``None`` keeps the uniform classic look.
     """
-    import matplotlib.pyplot as plt
     import numpy as np
     from rdkit import Chem
     from rdkit.Chem import Draw
+
+    from pharmaml.viz import new_figure
 
     count = max(len(entries), 1)
     # 3 columns fit the card width up to a 2-row litter (parents +
     # children); wider grids only for the biggest draws.
     columns = 3 if count <= 6 else 4
     rows = max(1, -(-count // columns))  # ceil division
-    figure, axes = plt.subplots(
+    figure, axes = new_figure(
         rows, columns, figsize=(3.1 * columns, 3.0 * rows + 0.5), squeeze=False
     )
     panels = [panel for row_axes in axes for panel in row_axes]
@@ -4682,6 +4683,7 @@ def molecule_grid_figure(
         # skips the whole xaxis at draw time), so the scores row would
         # vanish -- hide the frame and the ticks instead, keeping the
         # label machinery alive.  Same look, one more capability.
+        panel.grid(False)
         for spine in panel.spines.values():
             spine.set_visible(False)
         panel.set_xticks([])
@@ -22684,10 +22686,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # this one is small enough to draw inline): the best
             # blender's test predictions against the transformed truth,
             # the y=x diagonal as the red dashed reference.
-            from matplotlib.figure import Figure
+            from pharmaml.viz import new_figure
 
-            figure = Figure(figsize=(6.2, 4.4))
-            axes = figure.add_subplot(1, 1, 1)
+            figure, axes = new_figure(figsize=(6.2, 4.4))
             axes.scatter(
                 result.y_test_trans,
                 result.best_test_prediction,
@@ -22704,7 +22705,6 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             if result.residual_test_r2 is not None:
                 title += " + residual"
             axes.set_title(title)
-            figure.tight_layout()
             self._render_figure(self._stack_host, figure)
 
         self._start_job(f"OOF stacking ({n_base} base × {n_meta} meta)", work, render)
@@ -31635,23 +31635,21 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         activation = self._found_act_combo.get()
 
         def work(report_progress: Any) -> Any:
-            import matplotlib.pyplot as plt
-
             from pharmaml.ml.tensors import (
                 NaiveDense,
                 NaiveSequential,
                 fit_scratch,
                 linear_regression_gd,
             )
+            from pharmaml.viz import new_figure
 
             if kind == "linear GD":
                 result = linear_regression_gd(x, y, learning_rate=learning_rate, epochs=epochs)
-                figure, axis = plt.subplots(figsize=(6.2, 3.4))
+                figure, axis = new_figure(figsize=(6.2, 3.4))
                 axis.plot(range(1, len(result.mse_history) + 1), result.mse_history)
                 axis.set_xlabel("epoch")
                 axis.set_ylabel("mean squared error")
                 axis.set_title(f"Gradient descent — {label}")
-                axis.grid(alpha=0.3)
                 return figure, ("linear GD", result.final_line())
 
             head = "sigmoid" if task == "classification" else "linear"
@@ -31673,7 +31671,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 seed=42,
                 progress=report_progress,
             )
-            figure, axis = plt.subplots(figsize=(6.2, 3.4))
+            figure, axis = new_figure(figsize=(6.2, 3.4))
             axis.plot(range(1, history.epochs_run + 1), history.train_loss, label="train")
             if history.val_loss:
                 axis.plot(range(1, history.epochs_run + 1), history.val_loss, label="validation")
@@ -31681,7 +31679,6 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             axis.set_ylabel("binary cross-entropy" if task == "classification" else "MSE")
             axis.set_title(f"From scratch ({task}) — {label}")
             axis.legend(frameon=False, fontsize=9)
-            axis.grid(alpha=0.3)
             return figure, ("scratch network", history.final_line())
 
         def render(payload: Any) -> None:
@@ -31719,9 +31716,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         activation = self._found_act_combo.get()
 
         def work(report_progress: Any) -> Any:
-            import matplotlib.pyplot as plt
-
             from pharmaml.ml.tensors import capacity_sweep
+            from pharmaml.viz import new_figure
 
             result = capacity_sweep(
                 x,
@@ -31735,7 +31731,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 seed=42,
                 progress=report_progress,
             )
-            figure, axis = plt.subplots(figsize=(6.2, 3.4))
+            figure, axis = new_figure(figsize=(6.2, 3.4))
             labels = [point.hidden_width or 0 for point in result.points]
             positions = range(len(result.points))
             axis.plot(
@@ -31762,7 +31758,6 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             axis.set_ylabel("binary cross-entropy" if task == "classification" else "MSE")
             axis.set_title(f"Capacity sweep — {label}")
             axis.legend(frameon=False, fontsize=9)
-            axis.grid(alpha=0.3)
             return figure, result
 
         def render(payload: Any) -> None:
@@ -31818,9 +31813,8 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         bidirectional = bool(self._found_seq_bidir.get())
 
         def work(report_progress: Any) -> Any:
-            import matplotlib.pyplot as plt
-
             from pharmaml.ml.sequences import forecast_timeseries, synthetic_series
+            from pharmaml.viz import new_figure
 
             if series is None:
                 values = synthetic_series(kind, 300, seed=42)
@@ -31840,11 +31834,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 seed=42,
                 progress=report_progress,
             )
-            figure, (full_axis, zoom_axis) = plt.subplots(2, 1, figsize=(6.2, 4.6), sharex=False)
+            figure, (full_axis, zoom_axis) = new_figure(2, 1, figsize=(6.2, 4.6), sharex=False)
             full_axis.plot(result.series_tail_index, result.series_tail, lw=1.0)
             full_axis.set_title(f"{model_kind.upper()} forecast — {name}")
             full_axis.set_ylabel("value")
-            full_axis.grid(alpha=0.3)
             zoom_axis.plot(result.val_index, result.val_actual, lw=1.2, label="actual")
             zoom_axis.plot(result.val_index, result.val_pred, lw=1.2, ls="--", label="model")
             zoom_axis.plot(
@@ -31857,7 +31850,6 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             zoom_axis.set_xlabel("series index")
             zoom_axis.set_ylabel("value")
             zoom_axis.legend(frameon=False, fontsize=8)
-            zoom_axis.grid(alpha=0.3)
             return figure, result
 
         def render(payload: Any) -> None:
@@ -31886,13 +31878,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         causal = bool(self._found_attn_causal.get())
 
         def work() -> Any:
-            import matplotlib.pyplot as plt
-
             from pharmaml.ml.attention import (
                 PositionalReport,
                 self_attention_report,
                 sinusoidal_positions,
             )
+            from pharmaml.viz import new_figure
 
             numeric = [
                 str(column) for column in frame.columns if frame[column].dtype.kind in "biufc"
@@ -31917,7 +31908,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
             columns = min(4, n_heads)
             rows = -(-n_heads // columns)
-            figure, axes = plt.subplots(
+            figure, axes = new_figure(
                 rows + 1,
                 columns,
                 figsize=(3.0 * columns, 2.6 * (rows + 1)),
@@ -31925,11 +31916,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             )
             for index in range(n_heads):
                 axis = axes[index // columns][index % columns]
+                axis.grid(False)
                 image = axis.imshow(report.weights[index], cmap="viridis", vmin=0.0, aspect="auto")
                 axis.set_title(f"head {index} · H {report.entropies[index]:.2f}", fontsize=9)
                 figure.colorbar(image, ax=axis, fraction=0.046)
             # the last row's leftover panels carry the positional encoding
             pe_axis = axes[rows][0]
+            pe_axis.grid(False)
             pe_image = pe_axis.imshow(positional.encoding, cmap="magma", aspect="auto")
             pe_axis.set_title("sinusoidal positions", fontsize=9)
             figure.colorbar(pe_image, ax=pe_axis, fraction=0.046)
@@ -32037,11 +32030,11 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
 
         def work() -> Any:
-            import matplotlib.pyplot as plt
             import numpy as np
             from scipy import stats as scipy_stats
 
             from pharmaml.ml.stats import sample_distribution
+            from pharmaml.viz import new_figure
 
             sample = sample_distribution(
                 kind,
@@ -32053,7 +32046,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 trials=trials,
                 seed=42,
             )
-            figure, axis = plt.subplots(figsize=(6.2, 3.2))
+            figure, axis = new_figure(figsize=(6.2, 3.2))
             discrete = kind in ("binomial", "poisson")
             if discrete:
                 values, counts = np.unique(sample.values, return_counts=True)
@@ -32094,7 +32087,6 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             axis.set_ylabel("density / frequency")
             axis.set_title(f"{kind} · n = {sample.n}")
             axis.legend(frameon=False, fontsize=9)
-            axis.grid(alpha=0.3)
             return figure, sample
 
         def render(payload: Any) -> None:
