@@ -1077,8 +1077,10 @@ class BestOfMLWorkbenchPage(QWidget):
             rows.append(
                 (
                     "first change",
-                    f"index {first.index} ({first.direction}, statistic "
-                    f"{first.statistic:.2f} vs {changes.critical_value:.3f})",
+                    (
+                        f"index {first.index} ({first.direction}, statistic "
+                        f"{first.statistic:.2f} vs {changes.critical_value:.3f})"
+                    ),
                 )
             )
         rows.append(("window rows", f"{len(table)} x {len(table.columns)}"))

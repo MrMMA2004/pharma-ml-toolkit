@@ -1,3 +1,59 @@
+## [1.2.131] — 2026-11-07
+
+### Added — round 217: the Best-of ML Workbench (Studio increment 10, audit row 11)
+
+* **`ui/pages/bestofml.py`** — the Studio's tenth feature page,
+  migrating the playground Best-of ML tab's eight clusters (the
+  `lukasmasuch/best-of-ml-python` absorption), each wired to the SAME
+  public backend APIs the cards call:
+  * **Catalogue** — `search_catalog` / `catalog_top` over the embedded
+    snapshot (924 projects, 35 sections, 5,121,472 stars): substring
+    search keeps the catalogue's score order; the top-10 star counts
+    draw as the bars; the category picker rides the same `all
+    categories` + titles list the card builds.
+  * **Coverage audit** — `coverage_table`'s 35 verdicts (12 native /
+    6 partial / 4 external / 13 out-of-scope) as the table plus the
+    verdict-count bars.
+  * **Differential privacy** — `dp_statistics` under one epsilon
+    budget (count/sum/mean + the worst-bin row, the data-derived
+    bounds disclosed) with the true-vs-DP bin counts as GROUPED
+    value-space bars, plus `dp_sgd_noise_scale`'s RDP accountant line
+    (sigma 50.3 for eps 4 / delta 1e-5 / 1500 steps).
+  * **Recommender** — `evaluate_recommender` (leave-one-out hit-rate
+    against the popularity baseline over the seeded 24x20 matrix,
+    219 observed) + user 0's ranked recommendations; the popularity
+    arm CAN win (lift 0.73 here) and the report says so rather than
+    burying it.
+  * **Vector search (LSH)** — `ann_benchmark`'s recall@5 vs
+    candidate-compression trade-off over plane counts 2/4/6/8/10 at
+    k=5 with multiprobe, drawn as the two-line sweep; reads the Data
+    Explorer's numeric block (>= 60 rows) or the seeded three-blob
+    synthetic.
+  * **Adversarial robustness** — logistic regression (or ridge) on
+    the Data Explorer's table (label columns factorised, the
+    two-blob demo as fallback) attacked by the zeroth-order sign
+    family: the broken-rate curve (5/5/14/44 broken at
+    0.05/0.1/0.25/0.5 sd), the clean accuracy and the median
+    adversarial margin.
+  * **Time series** — ACF (the lag bars, peak at the period) / PACF,
+    the additive decomposition strengths, CUSUM changepoints and the
+    tsfresh-lite window table; honest two-full-periods refusal.
+  * **Association rules** — `apriori_pipeline` over pasted
+    transactions with the lift bars (support/confidence thresholds
+    parsed with honest bounds).
+* **`ui/main_window.py`** — the thirteenth section (`bestofml`,
+  right before Settings); `tests/ui/test_main_window.py` re-pinned to
+  13 pages and the foundations wiring test to len-3.
+* **`scratch/probe_bestofml_217.py`** — the committed probe: every
+  number the new tests assert was engine-printed first (catalogue
+  924/35/5,121,472 · DP 49.9741 -> 49.6516 · recommender 8 vs 11 hits
+  lift 0.7273 · LSH recall 0.985 -> 0.575 · adversarial 0.9875 clean
+  · ACF peak lag 24, seasonal strength 0.9819 · apriori 5/3/5/4).
+* **`pharma-ml-toolkit/scratch/venv_repair.sh`** — the
+  discoverability wrapper now resolves the canonical repair script
+  via `$HOME` instead of a hardcoded absolute path (the zip leak scan
+  caught it the first time it shipped).
+
 ## [1.2.130] — 2026-11-07
 
 ### Added — round 216: the Foundations Workbench (Studio increment 9, audit row 10)

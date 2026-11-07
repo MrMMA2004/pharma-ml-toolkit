@@ -18,7 +18,7 @@
 set -euo pipefail
 
 CANDIDATES=(
-    "/home/z/my-project/scratch/venv_repair.sh"
+    "${HOME}/my-project/scratch/venv_repair.sh"
     "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/scratch/venv_repair.sh"
 )
 for candidate in "${CANDIDATES[@]}"; do

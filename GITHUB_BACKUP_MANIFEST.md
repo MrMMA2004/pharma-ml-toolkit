@@ -449,7 +449,28 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
-## v1.2.130 release-zip homes (2026-11-07, round 216 — the Foundations Workbench, the Studio's increment 9)
+## v1.2.131 release-zip homes (2026-11-07, round 217 — the Best-of ML Workbench, the Studio's increment 10)
+
+`pharma-ml-toolkit-v1.2.131.zip` — 20,078,596 bytes, sha-256
+`6243f110c8e719a3fd7ff9561d5b752ad9d6c92b6b9a6403cc3e86bfcc069eac`,
+994 entries / 948 files, built with the standing four-home builder
+(`scratch/build_zip_217.py`, the round-216 recipe plus the predecessor
+sweep and per-home testzip verification); the first build's leak scan
+caught the round-216 venv-repair wrapper carrying a hardcoded
+`/home/z/` path (the first zip to include it — the scan doing exactly
+its job): the wrapper now resolves via `$HOME` and the dynamic
+`BASH_SOURCE` walk, verified from a relocated clone, rebuilt clean
+with **real leaks 0**. Byte-identical copies ship to all four homes
+(repo-root `download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, `upload/`); predecessor v1.2.130 swept
+from all four. The 14th rollback was absorbed before the increment
+(local wiped to `2eb0ede` again; remote survived at `ba60af0`; PAT
+re-extracted from `upload/MASTER_PROMPT.pdf`'s 76+17 line-wrap;
+ff-pull clean; venv repaired foreground; the concurrent agent's
+cron run 13 recovered in parallel and — seeing this round's
+work-in-flight — verified it instead of duplicating it: every
+overlapping probe number recomputed identical, 19/19 bestofml tests
+green under it, one increment one owner).
 
 `pharma-ml-toolkit-v1.2.130.zip` — 19,862,379 bytes, sha-256
 `0d8571ce98ea8b244e16787433754efc317423ca609787265ebedf130f5e28f6`,

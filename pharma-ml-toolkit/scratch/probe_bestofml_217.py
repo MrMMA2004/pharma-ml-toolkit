@@ -19,9 +19,9 @@ import numpy as np
 print("== catalogue summary ==")
 from pharmaml.ml.catalog import (
     catalog_summary,
+    catalog_top,
     coverage_table,
     search_catalog,
-    catalog_top,
 )
 
 summary = catalog_summary()

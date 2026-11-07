@@ -103,11 +103,38 @@ training run with held-out R²), and chart-palette sync.
 
 ## Migration status (16.18)
 
-Increment 9 of N — shell, navigation, theme system, Data Explorer,
+Increment 10 of N — shell, navigation, theme system, Data Explorer,
 Chemistry Workbench, PK/PD Workbench, Biology Workbench, Docking
 Workbench, Model Analysis, Unsupervised Workbench, Deep Learning
-Workbench, Generative Workbench, Foundations Workbench, Settings are
-live and tested. The Foundations Workbench (increment 9, audit row 10)
+Workbench, Generative Workbench, Foundations Workbench, Best-of ML
+Workbench, Settings are live and tested. The Best-of ML Workbench
+(increment 10, audit row 11) brings the playground Best-of ML tab's
+clusters, each wired to the same public backend APIs the cards call:
+the catalogue (``search_catalog`` / ``catalog_top`` over the embedded
+best-of-ml-python snapshot — 924 projects, 35 sections, the top-10
+star counts as the bars; the search keeps the catalogue's score
+order), the coverage audit (``coverage_table`` — the honest map of
+all 35 categories: 12 native / 6 partial / 4 external / 13
+out-of-scope, with the verdict-count bars), the differential privacy
+surface (``dp_statistics`` — count/sum/mean/histogram under one
+epsilon budget with the worst-bin row, the data-derived-bounds
+disclosure and the RDP accountant's DP-SGD sigma; the true-vs-DP bin
+counts as grouped value-space bars), the recommender (the seeded
+24x20 latent-factor matrix through ``evaluate_recommender`` —
+leave-one-out hit-rate against the popularity baseline, which CAN win
+and the report says so — plus user 0's ranked recommendations), the
+vector search (``ann_benchmark`` — the LSH recall@5 vs
+candidate-compression trade-off curve over plane counts 2/4/6/8/10
+with multiprobe), the adversarial audit (logistic regression on the
+loaded table or the seeded two-blob demo attacked by the zeroth-order
+sign family — the broken-rate curve and the median adversarial
+margin), the time-series analysis half (ACF as the lag bars / PACF,
+the additive decomposition strengths, CUSUM changepoints, the
+tsfresh-lite window table), and the association rules
+(``apriori_pipeline`` over pasted transactions with the lift bars).
+19 offscreen tests, every asserted number engine-printed first by the
+committed probe (``scratch/probe_bestofml_217.py``). The Foundations
+Workbench (increment 9, audit row 10)
 brings the playground Foundations tab's clusters, each wired to the
 same public backend APIs the cards call: the group comparison
 (``compare_groups`` — descriptives, both normality verdicts, the
