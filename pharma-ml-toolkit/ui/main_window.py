@@ -38,6 +38,7 @@ SECTIONS: list[tuple[str, str]] = [
     ("deep_learning", "Deep Learning Workbench"),
     ("generative", "Generative Workbench"),
     ("foundations", "Foundations Workbench"),
+    ("bestofml", "Best-of ML Workbench"),
     ("settings", "Settings"),
 ]
 
@@ -62,6 +63,7 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
 
         # -- pages (import lazily so Qt is up first) ----------------------------
+        from .pages.bestofml import BestOfMLWorkbenchPage
         from .pages.biology import BiologyWorkbenchPage
         from .pages.chemistry import ChemistryWorkbenchPage
         from .pages.dashboard import DashboardPage
@@ -94,6 +96,9 @@ class MainWindow(QMainWindow):
         self.foundations_page = FoundationsWorkbenchPage(
             theme=self.theme, runner=self.runner, data_explorer=self.data_page
         )
+        self.bestofml_page = BestOfMLWorkbenchPage(
+            theme=self.theme, runner=self.runner, data_explorer=self.data_page
+        )
         self.settings_page = SettingsPage(self.theme)
 
         for page in (
@@ -108,6 +113,7 @@ class MainWindow(QMainWindow):
             self.deep_learning_page,
             self.generative_page,
             self.foundations_page,
+            self.bestofml_page,
             self.settings_page,
         ):
             self.pages.addWidget(page)
@@ -179,6 +185,7 @@ class MainWindow(QMainWindow):
         self.deep_learning_page.apply_palette(palette)
         self.generative_page.apply_palette(palette)
         self.foundations_page.apply_palette(palette)
+        self.bestofml_page.apply_palette(palette)
         self._status.showMessage(f"Theme: {provider} · {name}")
 
     # -- notifications -----------------------------------------------------------------

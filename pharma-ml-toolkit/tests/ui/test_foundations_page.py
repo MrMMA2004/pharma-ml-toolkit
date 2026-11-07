@@ -292,5 +292,5 @@ def test_main_window_carries_the_foundations_section(studio_app) -> None:
     from ui.main_window import SECTIONS
 
     keys = [key for key, _title in SECTIONS]
-    assert keys.index("foundations") == len(keys) - 2  # right before Settings
-    assert len(keys) == 12
+    assert keys.index("foundations") == len(keys) - 3  # before Best-of ML, before Settings
+    assert len(keys) == 13
