@@ -48,10 +48,10 @@ pharma-ml-toolkit/
 │   ├── app_settings.py  ← QSettings facade
 │   ├── main_window.py
 │   ├── native/          ← eglstub.c + libEGL.so.1 + build_stub.sh
-│   ├── pages/  dashboard · data_explorer · model_analysis · settings_page
+│   ├── pages/  dashboard · data_explorer · chemistry · pkpd · biology · docking · model_analysis · unsupervised · deep_learning · settings_page
 │   ├── widgets/ navigation · data_table · plot_widget · progress_panel · notification_widget
 │   └── workers/ job_worker.py (QRunnable + cooperative stop)
-└── tests/ui/            ← 36 offscreen tests (pytest-qt)
+└── tests/ui/            ← 146 offscreen tests (pytest-qt)
 ```
 
 ## Theming (16.9–16.11)
@@ -103,10 +103,41 @@ training run with held-out R²), and chart-palette sync.
 
 ## Migration status (16.18)
 
-Increment 5 of N — shell, navigation, theme system, Data Explorer,
+Increment 7 of N — shell, navigation, theme system, Data Explorer,
 Chemistry Workbench, PK/PD Workbench, Biology Workbench, Docking
-Workbench, Model Analysis, Settings are live and tested. The Docking
-Workbench (increment 5, v1.2.125) brings four of the playground
+Workbench, Model Analysis, Unsupervised Workbench, Deep Learning
+Workbench, Settings are live and tested. (This status block had
+lagged one increment: the Unsupervised Workbench shipped as
+v1.2.126 in round 212 without the rewrite landing here — both
+increments are recorded now.) The Deep Learning Workbench
+(increment 7) brings the playground Deep Learning tab's four audit
+clusters, each wired to the same public backend APIs the cards call:
+the training run (``make_train_test_split`` over the numeric-feature
+rule, then ``DeepMLP*``/``ResidualMLP*`` (torch) or ``NumpyMLP*``
+(the toolkit's own numpy autograd engine when torch is absent),
+fitted with per-epoch callbacks and early stopping, then
+``evaluate_model`` — the parity scatter with the overfit line
+(Pearson r, train R², the gap) for regression or the per-class F1
+bars with the confusion table for classification: on the bundled
+260-row QSAR regression table DeepMLPRegressor lands R² 0.891 with
+an honest overfit gap of 0.061, and DeepMLPClassifier reaches
+accuracy 0.952 over active/inactive/weak), the runboard
+(``RunTrace`` over the run's ``history_`` with the raw +
+EMA-smoothed (``smooth_series``, bias-corrected, TensorBoard's own
+slider math) loss curves, and the weight histogram via
+``numpy_layer_stack`` + ``histogram_event`` — the numpy engine's
+layers snapshot, with a torch run refusing honestly by naming the
+engine rule), the UMAP map (``umap_embed`` on the run's test rows or
+the dataset's numeric matrix, the fuzzy k-NN graph and spectral init
+with the Venna-Kaski ``trustworthiness`` score in the report), and
+the fiftyone-style curation (``SampleSet``/``DataView`` stage
+algebra — filter / sort_by / limit / identity reset with every stage
+named — plus the four audits: ``find_duplicates``,
+``find_outliers``, ``uniqueness`` and ``sort_by_similarity``). The
+Unsupervised Workbench (increment 6, v1.2.126) brings the PDSH
+roster — PCA variance ladder + loadings, k-means/mini-batch/GMM/hierarchical
+clustering with the soft responsibilities, KDE density over the
+histogram twin, and all five manifolds. The Docking Workbench (increment 5, v1.2.125) brings four of the playground
 Docking tab's engines, each wired to the same public backend APIs the
 cards call, none needing the external engine binaries: the campaign
 summary (`check_docking_completion` + `scan_docking_directory` over
@@ -162,6 +193,6 @@ over: a five-molecule probe fixes the exact per-molecule column count,
 then the dense-matrix estimate is checked against half of
 `MemAvailable` and the batch refuses with its arithmetic before the
 heavy compute. Next increments migrate the remaining playground
-sections (Docking per the audit's usage order); the Tkinter
+sections (Generative per the audit's usage order); the Tkinter
 playground is retired only after every section has a verified Studio
 page. See `docs/gui/GUI_AUDIT.md` for the full tab-by-tab map.

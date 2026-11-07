@@ -1,9 +1,9 @@
 {
   "job": "MASTER_PROMPT-2h-sync-100x",
-  "runs_completed": 10,
+  "runs_completed": 11,
   "max_runs": 100,
   "interval": "every 2 hours (fixed_rate 7200s)",
   "purpose": "Continue the MASTER_PROMPT and update the GitHub repository (including the latest zip file). Counter is committed to git each run so it survives sandbox rollbacks (the remote is the survivor).",
   "created": "round 194, after the 9th rollback recovery (local wiped to 2eb0ede/round-186; remote survived at 101f5f7/round-193 v1.2.112; recovered via pure fast-forward)",
-  "last_run_note": "2026-11-07 round 212 (IM continuation, no cron trigger — counter stays 10): Studio increment 6 shipped \u2014 the Unsupervised Workbench (ui/pages/unsupervised.py, audit row 7): PCA variance ladder + loadings (PC1+PC2 81.5%, PC1 = NumHAcceptors), k-means/mini-batch/GMM-BIC/hierarchical clustering with soft responsibilities (BIC picks 4, converged), KDE density over the histogram twin (bw 10 by CV), all five manifolds; sidebar 9 sections, 23 new offscreen tests; two real leaks caught at scrub (ML notebook FutureWarning stderr + the round-211 probe's absolute paths); v1.2.126 = 19,823,465 bytes sha 0a7eeea2, four homes byte-identical; honest totals 5,414 (4,636 + 778); web pins 5,414 + census 955/347,988"
+  "last_run_note": "2026-11-07 round 213 (cron run 11 of 100; counter caught up 10->11, runs 5-8 were sandbox losses): Studio increment 7 shipped — the Deep Learning Workbench (ui/pages/deep_learning.py, audit row 8): train & evaluate (DeepMLP/ResidualMLP torch or NumpyMLP autograd, parity/overfit R2 0.891 gap 0.061, per-class F1 0.952), RunTrace+EMA runboard with weight histograms + honest torch refusal, UMAP trustworthiness 0.770, fiftyone-style curation; sidebar 10 sections; 27 offscreen tests (probe committed); mypy 9-error cleanup; notebooks re-executed 397s all print 1.2.127, 7 twins rebuilt with the variant-note id, 4 warning-stderr leaks scrubbed; v1.2.127 = 19,833,253 bytes sha 2bccb408, four homes byte-identical, predecessor 1.2.126 removed; honest totals 5,441 (4,663 + 778); census 957/348,207; web pins 5,441 + FALLBACK_STATS fixed; next: Generative Workbench (row 9)"
 }

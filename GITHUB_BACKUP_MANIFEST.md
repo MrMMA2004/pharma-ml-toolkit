@@ -449,6 +449,82 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.127 release-zip homes (2026-11-07, round 213 — the Deep Learning Workbench, the Studio's increment 7)
+
+`pharma-ml-toolkit-v1.2.127.zip` — 19,833,253 bytes, sha-256
+`9ccabfd3a66953947070891e1d1d2923ac5b08b5ac54c9e3b7aba72ed87cdcd3`,
+built with the standing four-home builder (`scratch/build_zip_213.py`,
+the round-180/212 recipe plus the predecessor sweep and per-home
+testzip verification; this round had a two-agent race — while the
+IM continuation session was mid-flight, the 2-hour cron fired its
+run 11 as a concurrent agent that found the WIP page, incremented
+the counter to 11, improved the builder, re-executed the notebooks
+and rebuilt, then stalled; three consecutive builds of the same
+post-scrub tree all measured exactly 19,833,253 bytes — the byte
+pin the web endpoint serves is rebuild-stable, while zip's directory
+walk order varies the digest between otherwise-identical builds, so
+the sha-256 above is the FINAL canonical build's, superseding both
+the cut-off session's 19,840,058 / `910685b4…` unscrubbed-tree
+snapshot and the concurrent agent's `2bccb408…` intermediate);
+scrub-before-build caught ONE real leak this round — the re-executed
+ML notebook's warning stderr again (the round-212 rule holding: a
+version-bump re-execution can leak ANY warning stream carrying an
+absolute path; four stderr streams over sklearn's
+ConvergenceWarning/FutureWarning tracebacks with the venv path were
+dropped whole before the archive was cut); 983 entries / 937 files /
+nested zips NONE / real leaks 0, placed byte-identical in all four
+homes:
+
+- `download/pharma-ml-toolkit-v1.2.127.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.127.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.127.zip`
+- `upload/pharma-ml-toolkit-v1.2.127.zip`
+
+The immediate predecessor (v1.2.126) was removed from all four homes
+(this round's deletion rides the commit); deeper history stays
+(v1.2.106's only surviving copy lives in the repo download/ sweep
+archive).
+
+**What shipped:** directive #16's 16.18 migration step 7 — the
+Studio's Deep Learning Workbench (`ui/pages/deep_learning.py`, audit
+row 8, the playground Deep Learning tab): the audit row's four
+clusters wired to the same public backend APIs the cards call — the
+training run (`make_train_test_split` over the numeric-feature rule,
+then `DeepMLP*`/`ResidualMLP*` (torch) or `NumpyMLP*` (the numpy
+autograd twin when torch is absent) with per-epoch callbacks and
+early stopping, then `evaluate_model`: the parity scatter + overfit
+line for regression — R² 0.891 / gap 0.061 on the bundled 260-row
+table — or the per-class F1 bars + confusion table for
+classification — accuracy 0.952 over active/inactive/weak), the
+runboard (`RunTrace` + `smooth_series` EMA loss curves;
+`numpy_layer_stack` + `histogram_event` weight histograms with the
+honest torch refusal), the UMAP map (`umap_embed` + Venna-Kaski
+`trustworthiness` 0.770 over the run's 52 test rows), and the
+fiftyone-style curation (`SampleSet`/`DataView` stage algebra +
+`find_duplicates`/`find_outliers`/`uniqueness`/`sort_by_similarity`).
+Sidebar 9 → 10 sections; 27 new offscreen tests
+(`tests/ui/test_deep_learning_page.py`) with every number
+engine-printed first by the committed `scripts/probe_dl_213.py`
+(repo-root scripts/, outside the archive); the probe's dropout
+mismatch caught in-round (the numpy branch had defaulted to 0.0
+while the page passes 0.1 to both engines — the probe was aligned to
+the page's honest shared-knob contract and re-run before any test
+assertion was written); the GUI_REDESIGN.md migration status caught
+up (it had lagged one increment — v1.2.126's entry recorded
+alongside this one); notebooks re-executed at 1.2.127 (397 s, zero
+error outputs, foreground — the second execution after the cut-off
+session's 247 s run, same all-green result, the committed outputs
+are the second run's) + the 7 no-output twins regenerated (the
+variant-note id pin reproduced); the OOM ritual respected (dev
+server down for the re-execution, restarted via the double-fork
+daemon after, GET / 200); honest totals 5,441 (4,663 collect-only +
+778 doctests); web pins 5,414 → 5,441 (page.tsx hero chip +
+FALLBACK_STATS census mirror + download-panel 3 lines + overview 3
+lines — the comma-less `5441` literals; the census fix rode
+FALLBACK_STATS: 349,558 → 348,207) + census
+955/347,988 → 957/348,207 (`scratch/census.py`, the toolkit-fs.ts-
+exact walk, run on the post-ship tree).
+
 ## v1.2.126 release-zip homes (2026-11-07, round 212 — the Unsupervised Workbench, the Studio's increment 6)
 
 `pharma-ml-toolkit-v1.2.126.zip` — 19,823,465 bytes, sha-256

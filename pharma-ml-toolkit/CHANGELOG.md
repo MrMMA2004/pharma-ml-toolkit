@@ -1,3 +1,62 @@
+## [1.2.127] — 2026-11-07
+
+### Added — round 213: the Deep Learning Workbench (Studio increment 7, audit row 8)
+
+* **`ui/pages/deep_learning.py`** — the Studio's seventh feature
+  page, migrating the playground Deep Learning tab (directive #16,
+  16.18 migration step 7). The audit row's four clusters over a
+  shared dataset + target selection (the 260-row QSAR regression
+  table with target pIC50 by default, the 420-row QSAR
+  classification table with target activity, or whatever Data
+  Explorer holds), each wired to the SAME public backend APIs the
+  playground cards call:
+  * **Train & evaluate** — `make_train_test_split` (random, seeded)
+    over the numeric-feature rule, then `DeepMLP*`/`ResidualMLP*`
+    (torch) or `NumpyMLP*` (the toolkit's own numpy autograd engine
+    when torch is absent), fitted with per-epoch callbacks and early
+    stopping on a held-out validation fraction, then `evaluate_model`
+    on the test rows: the parity scatter with the overfit line
+    (Pearson r, train R², the gap) for regression — DeepMLPRegressor
+    on the bundled table lands R² 0.891 / RMSE 0.957 / MAE 0.758
+    with a 0.061 gap; the numpy twin lands R² 0.789 — or the
+    per-class F1 bars with the confusion table for classification
+    (DeepMLPClassifier: accuracy 0.952, F1 macro 0.953 over
+    active/inactive/weak).
+  * **Runboard** — `RunTrace` over the last run's per-epoch
+    `history_`: the raw + EMA-smoothed loss curves
+    (`smooth_series`, the bias-corrected EMA TensorBoard's own
+    slider computes, beta knob 0–0.95), and the weight histogram via
+    `numpy_layer_stack` + `histogram_event` (the numpy engine's
+    3-layer snapshot: layer1's 640 weights, min/max/mean/std in the
+    per-layer table); a torch run refuses honestly, naming the
+    engine rule.
+  * **UMAP map** — `umap_embed` on the last run's test rows (or the
+    dataset's numeric matrix): the fuzzy k-NN graph, the a/b curve
+    from min_dist, spectral init, negative-sampling SGD, the
+    neighbours/min_dist/metric knobs, and the Venna-Kaski
+    `trustworthiness` score at k<=10 in the report (52 test rows →
+    2-D, 525 fuzzy edges, trustworthiness 0.770).
+  * **Curation** — `SampleSet.from_frame` + the `DataView` stage
+    algebra (`filter` / `sort_by` / `limit` / the identity reset,
+    every stage named in the report) and the four audits:
+    `find_duplicates` (0 duplicate rows over the 260-row table),
+    `find_outliers` (z-score > 4: exactly one, descr_012 #44),
+    `uniqueness` (260 scored, top #254 0.436) and
+    `sort_by_similarity` (row 0's nearest: #165 0.626).
+* Sidebar grows to **ten sections** (deep learning between
+  unsupervised and settings, the audit's usage order); `pages.count()`
+  pin 9 → 10 with the navigation-order test updated.
+* **`tests/ui/test_deep_learning_page.py`** — 27 offscreen tests,
+  every asserted number engine-printed first by the committed
+  `scripts/probe_dl_213.py`; **`tests/ui/` suite now 146 green**
+  (119 + 27), collect-only **4,663 across the tests tree**; honest
+  totals **5,441** (4,663 + 778 doctests).
+* `docs/gui/GUI_AUDIT.md` row 8 planned → shipped; the
+  `GUI_REDESIGN.md` migration status caught up (it had lagged one
+  increment — the Unsupervised Workbench's v1.2.126 entry is
+  recorded alongside this one), the architecture tree and the
+  ten-section sidebar note updated.
+
 ## [1.2.126] — 2026-11-07
 
 ### Added — round 212: the Unsupervised Workbench (Studio increment 6, audit row 7)

@@ -26,7 +26,7 @@ checkpoints).
 | 5 | Docking | DOCKSTRING lab, affinity, campaigns | `pharmaml.docking.*` | **Docking Workbench** (increment 5: campaign scan + completion audit + 3-column consensus rescore + DLG cluster tables + ligand library audit + the 58-box DOCKSTRING registry) |
 | 6 | Data & ML | QSAR training, leaderboards, AD | `pharmaml.ml.*` | **Model Analysis** (registry fit + curves) |
 | 7 | Unsupervised | clustering, reduction | `pharmaml.ml.unsupervised` | **Unsupervised Workbench** (increment 6: PCA variance ladder + loadings, k-means/mini-batch/GMM/hierarchical clustering with the soft responsibilities, KDE density over the histogram twin, all five manifolds) |
-| 8 | Deep Learning | runboard, UMAP, curation, figures | `pharmaml.ml.*` (torch) | planned |
+| 8 | Deep Learning | runboard, UMAP, curation, figures | `pharmaml.ml.*` (torch) | **Deep Learning Workbench** (increment 7: the training run — DeepMLP*/ResidualMLP* (torch) or NumpyMLP* (numpy autograd) with early stopping + evaluate_model parity/overfit or per-class F1 + confusion; the runboard — RunTrace EMA loss curves + numpy_layer_stack weight histograms with the honest torch refusal; the UMAP map — umap_embed + Venna-Kaski trustworthiness; the fiftyone-style curation — DataView stage algebra + the four audits) |
 | 9 | Generative | RNN/RL optimization | `pharmaml.generative.*` | planned |
 | 10 | Foundations | statistics, table prep | `pharmaml.utils.*`, `profiling` | planned |
 | 11 | Best-of ML | curated model cards | `pharmaml.ml.*` | planned |
@@ -63,8 +63,9 @@ state persistence (QSettings: geometry/nav/theme).
    failure mode, but the thread model remains single-threaded). The
    Studio's QThreadPool workers fix the root cause.
 2. Tab order encodes history, not workflow frequency — the sidebar's
-   eight live sections are ordered by usage (dashboard → data →
-   chemistry → pkpd → biology → docking → models → settings).
+   ten live sections are ordered by usage (dashboard → data →
+   chemistry → pkpd → biology → docking → models → unsupervised →
+   deep learning → settings).
 3. No theme or appearance control exists in Tkinter; Studio ships the
    full provider stack (Qt-Material primary, QDarkStyleSheet
    alternative, native fallback) with runtime switching.

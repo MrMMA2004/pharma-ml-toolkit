@@ -8422,3 +8422,139 @@ the census walk — no shift).
    centroids cluster-indexed, the hierarchical sizes frame needs no
    reset at all; one shared `reset_index().rename(...)` was wrong
    three different ways.
+
+## Round 213 — the Deep Learning Workbench: the Studio's increment 7 (audit row 8), v1.2.127 shipped (2026-11-07)
+
+Cron run 11 of 100 (Job 508389, fired 2026-11-07 20:20:59 +08:00,
+trace `cron-agent-loop-202611072020`; the counter caught up 10 → 11 —
+runs 5–8 of the mandate were lost to sandbox interruptions, so the
+one-shot correction is part of this round's commit). The repo opened
+from HEAD `dc96c63` with the tree carrying a cut-off session's WIP:
+the page, its probe, the 27-test file, the 9→10 pin, all four version
+carriers at 1.2.127, the CHANGELOG/GUI_AUDIT/GUI_REDESIGN sections,
+a superseded zip build (19,840,058 / `910685b4…`) and a manifest
+narrative written before the final notebooks run. The round finished
+the increment and shipped it.
+
+**What shipped — `ui/pages/deep_learning.py`, the eighth feature
+page** (the playground Deep Learning tab, audit row 8's four clusters
+over a shared dataset + target selection — the 260-row QSAR
+regression table by default, the 420-row QSAR classification table,
+or whatever Data Explorer holds — each wired to the SAME public
+backend APIs the playground cards call):
+
+- **Train & evaluate** — `make_train_test_split` (random, seeded)
+  over the numeric-feature rule, then `DeepMLP*`/`ResidualMLP*`
+  (torch) or `NumpyMLP*` (the numpy autograd twin) with per-epoch
+  callbacks + early stopping, then `evaluate_model`: regression
+  renders the parity scatter + the overfit line — DeepMLPRegressor
+  lands R² 0.891 / RMSE 0.957 / MAE 0.758, Pearson r 0.945, train
+  R² 0.952, gap 0.061; the numpy twin R² 0.791 — classification
+  renders the per-class F1 bars + the confusion table
+  (DeepMLPClassifier: accuracy 0.952, F1 macro 0.953 over
+  active/inactive/weak).
+- **Runboard** — `RunTrace` over the last run's `history_`: raw +
+  EMA (`smooth_series`, beta knob) loss curves; weight histograms
+  via `numpy_layer_stack` + `histogram_event` (layer1's 640 weights,
+  per-layer min/max/mean/std/bias_std); a torch run refuses
+  honestly, naming the engine rule.
+- **UMAP map** — `umap_embed` over the run's 52 test rows: 525 fuzzy
+  edges, a=1.5769/b=0.8951, spectral init, Venna-Kaski
+  trustworthiness 0.770 in the report.
+- **Curation** — `SampleSet.from_frame` + the `DataView` stage
+  algebra (filter/sort_by/limit/identity) + the four audits
+  (`find_duplicates`, `find_outliers` z>4, `uniqueness`,
+  `sort_by_similarity` k-NN cosine).
+
+Sidebar grows to **ten sections**; `pages.count()` pin 9 → 10.
+
+**The round's own engineering** (the cut-off session left nine mypy
+errors and an unverified pipeline): (a) mypy cleaned — the
+`estimator_cls` annotation widened to `type` at first assignment (the
+numpy/torch/residual branches assign three different class families)
+and `_render_curves` gained an honest `epochs is None` guard (the
+dataclass default; the render path no longer assumes the job always
+fills it); ruff + mypy clean on every touched file after. (b) The
+notebook re-execution driver was GONE (repo-root `scratch/` rolled
+back; the 64-era 816-LOC driver lost) — rebuilt as
+`scripts/reexecute_notebooks_213.py`: ExecutePreprocessor in-process
+in a /tmp WORK dir (notebooks + `data/` copied in; the executed
+result written back to examples/), foreground, per-notebook
+seconds/error/version-print report. First run failed 8/8 with
+FileNotFoundError: nbclient's kernel CWD defaults to the DRIVER's CWD,
+not the notebook's dir — the `resources={"metadata": {"path": WORK}}`
+metapath is the fix (the lost driver's WORK-dir discipline, rediscovered
+the hard way). (c) All 8 notebooks re-executed at 1.2.127: 397 s,
+zero error outputs, all print 1.2.127 (the second execution — the
+cut-off session's 247 s run's outputs were superseded); the 7 twins
+regenerated with the `variant-note` id at index 1 (the
+`test_note_cell_inserted` + `test_sources_match_original` pins
+filtered by id, not position — the first twin attempt failed both).
+(d) The scrub-before-build walk caught FOUR leaking stderr streams in
+the re-executed ML notebook (sklearn ConvergenceWarning/FutureWarning
+tracebacks carrying the venv path — the round-212 rule re-proven: a
+version-bump re-execution re-leaks warning stderr EVERY round, now
+three rounds running); `scripts/scrub_twins_213.py` drops any
+stream/error output carrying an absolute path and rebuilds the twins
+from the executed notebooks without re-running them. (e)
+`scratch/build_zip_213.py` (the 180/182/212 recipe + the predecessor
+sweep + per-home testzip): **v1.2.127 = 19,833,253 bytes, sha-256
+`2bccb408…`** (full: 2bccb40826816c031d6fc939c6e61659ae274d0049ced3e
+2a507926a74ffa4d9), 983 entries / 937 files, testzip OK on each of
+the four homes, real leaks 0; the predecessor v1.2.126 removed from
+all four homes (the deletion rides this commit; the round-209/210/212
+policy). (f) Census LAST on the post-ship tree: **957 files / 348,207
+lines** (+2 = the page + its tests; the probe rides repo-root
+scripts/ outside the walk; the notebooks' JSON reformatted smaller by
+the fresh execution — the census moved DOWN 348,207 vs the
+cut-off session's pre-scrub guess 349,558, which the manifest
+recorded before the final run). Web pins: the page.tsx hero chip
+already carried 5,441 (the cut-off session's honest count — it
+matched); FALLBACK_STATS 349,558 → **348,207** (the one stale pin;
+`bun run lint` clean after).
+
+**Verification**: 27 new offscreen tests
+(`tests/ui/test_deep_learning_page.py`), every asserted number
+engine-printed first by the committed `scripts/probe_dl_213.py` —
+the ui suite **146 green** (119 + 27, one invocation, exit 0 — the
+sandbox still truncates pytest's summary line, so the dots + exit
+code are the honest count) + job_safety 28 green; the focused batch
+(web_parity, data_loading, csv_standardize, docs_index,
+excel_io_and_samples, runboard, neural, umap, curation) exit 0;
+notebook_variants **47 green** after the twin fix; doctests **775
+passed + 3 skipped = 778**; collect-only **4,663 across the tests
+tree** (+27). Honest total: **4,663 + 778 = 5,441**.
+
+**Ops**: webDevReview was gone again (rollback casualty) — recreated
+as job 511915 (fixed_rate 900 s); the dev server was found dead
+(SIGTERM in dev.log, the OOM ritual's precondition) and restarted via
+the double-fork daemon after the notebook run — GET / 200; the
+zip-size endpoint answers `{"zipBytes":19833253,"version":"1.2.127",
+"exact":true,"source":"release"}`; the manifest's v1.2.127 section
+updated to the superseding build (the earlier cut-off build
+`910685b4…` recorded as superseded, not erased).
+
+**Lessons pinned**:
+1. nbclient's kernel CWD is the DRIVER's CWD, not the notebook's
+   directory — a notebook that reads `Path("data")/...` fails 8/8
+   with FileNotFoundError unless the client is given
+   `resources={"metadata": {"path": WORK}}`. The lost 64-era driver
+   knew this; the rebuilt one rediscovered it.
+2. The no-output twins carry a note cell with the pinned id
+   `variant-note` at index 1 — `test_note_cell_inserted` asserts
+   position AND content, `test_sources_match_original` filters the
+   comparison BY that id; a twin rebuilt without the id fails both.
+3. The warning-stderr re-leak is now a three-round streak (210's
+   ConvergenceWarning, 212's FutureWarning + venv path, 213's four
+   streams again) — the scrub-before-build WALK is not optional at
+   any version bump that re-executes notebooks, and the scrub script
+   (`scripts/scrub_twins_213.py`) is re-runnable after any fresh
+   execution without re-running the notebooks themselves.
+
+**Baselines for the next round**: v1.2.127 (four carriers) · honest
+totals 5,441 (4,663 + 778) · census 957 files / 348,207 lines ·
+zip 19,833,253 bytes / sha `2bccb408…` / 983 entries / 937 files ·
+Studio increment 8 next: the **Generative Workbench** (audit row 9,
+`pharmaml.generative.*` — RNN/RL optimization), then Foundations
+(row 10) and Best-of ML (row 11) · sidebar 10 sections · dev server
+healthy (double-fork daemon) · counter 11/100.
