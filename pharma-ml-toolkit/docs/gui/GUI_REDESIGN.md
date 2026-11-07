@@ -103,13 +103,28 @@ training run with held-out R²), and chart-palette sync.
 
 ## Migration status (16.18)
 
-Increment 8 of N — shell, navigation, theme system, Data Explorer,
+Increment 9 of N — shell, navigation, theme system, Data Explorer,
 Chemistry Workbench, PK/PD Workbench, Biology Workbench, Docking
 Workbench, Model Analysis, Unsupervised Workbench, Deep Learning
-Workbench, Generative Workbench, Settings are live and tested. (This
-status block had lagged one increment earlier: the Unsupervised
-Workbench shipped as v1.2.126 in round 212 without the rewrite
-landing here — both increments were recorded then.) The Generative
+Workbench, Generative Workbench, Foundations Workbench, Settings are
+live and tested. The Foundations Workbench (increment 9, audit row 10)
+brings the playground Foundations tab's clusters, each wired to the
+same public backend APIs the cards call: the group comparison
+(``compare_groups`` — descriptives, both normality verdicts, the
+decision branch reported, the CIs and Cohen's d, with both group
+histograms drawn on ONE shared axis; the synthetic demo mirrors the
+card's rng-42 groups exactly, the columns mode reads the Data
+Explorer's loaded table), the distribution sampler
+(``sample_distribution`` over the course's five distributions with the
+theoretical pdf/pmf drawn over the sample histogram in the SAME value
+space — the round-215 ``PlotPanel.bars(x=…)``/``histogram(range=…)``
+extension), the inferential tests (``welch_anova`` + BOTH pairwise
+post-hoc tables, Tukey HSD in the data table and Games-Howell in the
+report), and the table profiler (``profile_dataset`` — the type
+census bar chart, the per-column table and the fg-data-profiling
+alert rules). 13 offscreen tests, every asserted number
+engine-printed first by the committed probe
+(``scratch/probe_foundations_215.py``). The Generative
 Workbench (increment 8) brings the playground Generative tab's
 clusters, each wired to the same public backend APIs the cards call:
 the evolution run (``build_objective``-built objectives — QED, the

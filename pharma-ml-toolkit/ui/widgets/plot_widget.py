@@ -70,9 +70,16 @@ class PlotPanel(QWidget):
             pen = pg.mkPen(self._palette.foreground, width=1, style=Qt.PenStyle.DotLine)
             self._plot.addLine(x=float(x), pen=pen)
 
-    def bars(self, heights: np.ndarray, *, labels: list[str] | None = None, index: int = 0, width: float = 0.6) -> None:
-        """Vertical bar chart (feature importance and histograms)."""
-        x = np.arange(len(heights), dtype=float)
+    def bars(self, heights: np.ndarray, *, labels: list[str] | None = None, index: int = 0, width: float = 0.6, x: np.ndarray | None = None) -> None:
+        """Vertical bar chart (feature importance and histograms).
+
+        ``x`` (round 215, the Foundations sampler) places the bars at
+        VALUE-space positions -- the histogram centers -- instead of the
+        default ``0..n-1`` slot grid, so a theoretical density curve can
+        be drawn over the sample in the same coordinates.
+        """
+        if x is None:
+            x = np.arange(len(heights), dtype=float)
         brush = pg.mkBrush(self._palette.series[index % len(self._palette.series)])
         bg = pg.BarGraphItem(x=x, height=heights, width=width, brush=brush)
         self._plot.addItem(bg)
@@ -80,10 +87,10 @@ class PlotPanel(QWidget):
             ticks = [(float(i), labels[i]) for i in range(len(labels))]
             self._plot.getAxis("bottom").setTicks([ticks])
 
-    def histogram(self, values: np.ndarray, *, bins: int = 30, index: int = 0) -> None:
-        counts, edges = np.histogram(values, bins=bins)
+    def histogram(self, values: np.ndarray, *, bins: int | np.ndarray = 30, index: int = 0, range: tuple[float, float] | None = None) -> None:
+        counts, edges = np.histogram(values, bins=bins, range=range)
         centers = (edges[:-1] + edges[1:]) / 2.0
-        self.bars(counts, labels=None, index=index, width=float(np.median(np.diff(centers))))
+        self.bars(counts, labels=None, index=index, width=float(np.median(np.diff(centers))), x=centers)
 
     def clear(self) -> None:
         self._plot.clear()

@@ -1,3 +1,47 @@
+## [1.2.130] — 2026-11-07
+
+### Added — round 216: the Foundations Workbench (Studio increment 9, audit row 10)
+
+* **`ui/pages/foundations.py`** — the Studio's ninth feature page,
+  migrating the playground Foundations tab's clusters, each wired to
+  the SAME public backend APIs the cards call:
+  * **Compare groups** — `compare_groups`: descriptives, five-number
+    summaries, both normality verdicts, the decision branch reported
+    (`both normal → Welch t` / `non-normal → Mann-Whitney`), the
+    per-group CIs and Cohen's d, with both group histograms drawn on
+    ONE shared axis; the synthetic demo mirrors the card's rng-42
+    groups exactly, the columns mode reads the Data Explorer's loaded
+    table (B defaults to the second numeric column so the run starts
+    runnable).
+  * **Distribution sampler** — `sample_distribution` over the course's
+    five distributions with the theoretical pdf/pmf drawn over the
+    sample histogram in the SAME value space (discrete kinds get
+    integer-aligned bins and the pmf scaled by n).
+  * **Inferential tests** — `welch_anova` + BOTH pairwise post-hoc
+    tables: Tukey HSD lands in the data table, Games-Howell in the
+    report.
+  * **Table profiler** — `profile_dataset` on a pasted CSV: the type
+    census bar chart, the per-column table (type / missing /
+    distinct / top / key stat) and the fg-data-profiling alert rules.
+* **`ui/widgets/plot_widget.py`** — `bars(x=…)` places bars at
+  VALUE-space positions (the histogram centers) instead of the
+  `0..n-1` slot grid, and `histogram(range=…)` accepts a shared range
+  so two overlaid histograms keep comparable edges; both default to
+  the historical behaviour (no call site changed).
+* **`ui/main_window.py`** — sidebar 11 → 12 sections (Foundations
+  before Settings); theme palette forwarded to the new page.
+* **`tests/ui/test_foundations_page.py`** — 13 offscreen tests, every
+  asserted number engine-printed first by the committed probe
+  (`scratch/probe_foundations_215.py`); `tests/ui/test_main_window.py`
+  re-pinned to the 12-section shell.
+
+### Notes
+
+* Notebooks re-executed against the 1.2.130 tree (205 s, all eight
+  print `pharmaml 1.2.130`); the 7 no-output twins regenerated; the
+  scrub walk dropped 0 leaking streams.
+* Honest totals: 4,700 pytest cases + 778 doctests = **5,478**.
+
 ## [1.2.129] — 2026-11-07
 
 ### Changed — round 215: the file-load jobs stream too (the safety kit's third layer reaches the load path)

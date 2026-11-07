@@ -449,6 +449,42 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.130 release-zip homes (2026-11-07, round 216 — the Foundations Workbench, the Studio's increment 9)
+
+`pharma-ml-toolkit-v1.2.130.zip` — 19,862,379 bytes, sha-256
+`0d8571ce98ea8b244e16787433754efc317423ca609787265ebedf130f5e28f6`,
+built with the standing four-home builder (`scratch/build_zip_216.py`,
+the round-180/212/213/214/215 recipe plus the predecessor sweep and
+per-home testzip verification); the first build's leak scan caught the
+round's own probe docstring carrying an absolute `/home/z/` path —
+fixed to the toolkit-root relative form and rebuilt before anything
+shipped (the scan doing exactly its job); the re-executed notebooks
+scrubbed clean (0 dropped); 988 entries / 942 files / nested zips NONE
+/ real leaks 0, placed byte-identical in all four homes:
+
+- `download/pharma-ml-toolkit-v1.2.130.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.130.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.130.zip`
+- `upload/pharma-ml-toolkit-v1.2.130.zip`
+
+The immediate predecessor (v1.2.129) was removed from all four homes
+(the deletion rides this commit).
+
+**What shipped:** audit row 10 (the playground Foundations tab) — the
+Foundations Workbench (`ui/pages/foundations.py`, Studio increment 9):
+compare groups (`compare_groups` with the branch reported and both
+histograms on a shared axis; the synthetic demo mirrors the card's
+rng-42 groups, the columns mode reads the Data Explorer's frame), the
+five-distribution sampler (`sample_distribution` with the theory drawn
+in the same value space via the new `PlotPanel.bars(x=…)` /
+`histogram(range=…)` extension), the inferential tests (`welch_anova`
+plus Tukey HSD in the table and Games-Howell in the report), and the
+table profiler (`profile_dataset` with the type census and alert
+rules). Sidebar 11 → 12 sections; 13 offscreen tests with the
+committed probe; notebooks re-executed (205 s, all eight print
+1.2.130); honest totals 4,700 + 778 = **5,478**; census 962 files /
+350,687 lines; web pins 5,478 + census.
+
 ## v1.2.129 release-zip homes (2026-11-07, round 215 — the file-load jobs stream too)
 
 `pharma-ml-toolkit-v1.2.129.zip` — 19,848,910 bytes, sha-256
