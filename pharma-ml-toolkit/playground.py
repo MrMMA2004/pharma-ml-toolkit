@@ -6430,10 +6430,32 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._job_label.configure(text=label)
 
         def runner() -> None:
+            # (round 222) the worker body runs while the Tk main thread
+            # keeps allocating (event pumps, redraws) -- and an automatic
+            # GC pass that fires ON THE WORKER during one of its native-
+            # heavy phases (matplotlib figure construction, the torch
+            # import inside neural.fit) walks the heap mid-native-work.
+            # The round-222 suite bisection traced fatal SIGILLs to
+            # exactly that point -- inside the GC pass itself, on
+            # matplotlib's transform/marker constructors
+            # (test_report_bundle_end_to_end after any sibling) and on
+            # torch's ddtrace-hooked module import
+            # (test_small_regression_run_fills_all_three_cards), each
+            # with a drifting crash position (the timing race).
+            # Automatic collection is therefore suspended for the
+            # bounded job body -- reference-counted garbage (the vast
+            # majority) still frees immediately -- and resumed in the
+            # finally; the deferred cycles drain on the main thread's
+            # single gc.collect() in _poll_jobs once the worker is done.
+            import gc
+
+            gc.disable()
             try:
                 self._jobs.put((_call_work(work, self._report_progress), None))
             except BaseException as exc:  # noqa: BLE001 - surfaced in the UI
                 self._jobs.put((None, exc))
+            finally:
+                gc.enable()
 
         threading.Thread(target=runner, name="playground-job", daemon=True).start()
 
@@ -6530,6 +6552,14 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         except queue.Empty:
             self.after(80, self._poll_jobs)
             return
+        # (round 222) the worker ran with automatic GC suspended (the
+        # runner's race fix), so its cycle garbage deferred to here --
+        # one collect on the main thread at the safe point (the worker
+        # is fully done, its native state released) drains it before
+        # the next job starts.
+        import gc
+
+        gc.collect()
         self._busy = False
         self._progress.stop()
         with contextlib.suppress(tk.TclError):
@@ -18875,6 +18905,27 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         directions = higher_is_better or {}
 
         def work() -> Any:
+            import gc
+
+            # (round 222) the figures are built on this worker thread
+            # while the Tk main thread keeps allocating (event pumps,
+            # redraws).  A GC pass that starts inside that window walks
+            # the heap while both threads are mid-allocation, and the
+            # round-222 suite bisection traced fatal SIGILLs to exactly
+            # that point -- inside the GC pass itself, on matplotlib's
+            # transform/marker constructors
+            # (TestDockingRescoreReport::test_report_bundle_end_to_end
+            # after any sibling).  Automatic collection is suspended for
+            # the bounded report body (seconds: two figures + the
+            # bundle/PDF write) and resumed in the finally; the deferred
+            # cycles drain on the next ordinary pass.
+            gc.disable()
+            try:
+                return _build_report()
+            finally:
+                gc.enable()
+
+        def _build_report() -> Any:
             from pharmaml.exceptions import DataValidationError
             from pharmaml.viz import (
                 plot_consensus_ranking,

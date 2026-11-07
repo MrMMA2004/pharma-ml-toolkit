@@ -12255,9 +12255,11 @@ class TestReview144Gui:
         self,
     ) -> None:
         source = PLAYGROUND_PATH.read_text(encoding="utf-8")
-        # the three read_table loaders take the reporter...
+        # the three read_table loaders take the reporter... (the round-215
+        # deep-learning file-load job adopted the same streaming reader as
+        # its fourth -- the round-222 full-suite run caught the stale pin)
         assert source.count("def work(report: Any) -> Any:") >= 4
-        assert source.count("return read_table_with_progress(path, report)") == 3
+        assert source.count("return read_table_with_progress(path, report)") == 4
         # ...and the Cell Lines screen forwards it through the loader API
         assert "raw = load_response_table(path, report=report)" in source
 
