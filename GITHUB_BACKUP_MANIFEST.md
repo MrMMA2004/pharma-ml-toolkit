@@ -449,6 +449,46 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.135 release-zip homes (2026-11-08, round 222 — the Part-3 §17 image-export engine, TIFF/JPEG first-class)
+
+`pharma-ml-toolkit-v1.2.135.zip` — 20,408,163 bytes, sha-256
+`d150ff7d5451770b856bb63743650a2858c40c9fe69e04f6c92d302e56e4e136`,
+1008 entries / 962 files, built with the standing four-home builder
+(`scratch/build_zip_222.py`, the round-217 recipe verbatim) — testzip
+OK per home, **real leaks 0** (fifth consecutive zero-drop round),
+predecessor v1.2.134 swept from all four homes. Byte-identical copies
+ship to all four homes (repo-root `download/`,
+`pharma-ml-toolkit/dist-archive/`, `pharma-ml-toolkit/download/`,
+`upload/`). The increment: the Part-3 directive's §17 —
+`src/pharmaml/viz/export.py` (the engine: TIFF as the scientific path
+with genuine 16-bit `I;16` preservation, lossless LZW/DEFLATE/none,
+multi-page stacks, dpi tags; JPEG as the presentation path with
+quality 1-95 and the 16-bit/alpha/float integrity refusals;
+validation as part of every export — magic-byte sniff + dimension
+check + extension/content honesty; the `ExportManager` batch with a
+JSON manifest; matplotlib figures and Qt widget grabs through the
+same rules; Pillow optional with the actionable install hint),
+`ui/widgets/image_export.py` (the grab bridge),
+`ImagePanel.export_image` + the new `PlotPanel.export_image`, and the
+Image Lab's §17 export row (format combo with TIFF default, JPEG
+quality spin, TIFF compression combo, the extension-stamping rule,
+the honest result-card status line). 36 new collected items + 7 new
+doctests. Verification: the six-chunk suite green (chunk 1/3 fixed
+in-flight — docs INDEX rows for the new viz surface, the Pillow pin
+block; chunk 2 green after the notebook re-execution; ui +
+job_safety 272 dots exit 0 with the OOM ritual respected;
+playground's Tk suite crashes SIGILL on BOTH the round-221 pristine
+tree and this tree — environmental, the freshly-repaired venv after
+the 16th rollback, non-regression proven by stash-and-rerun),
+collect-only 4,790, doctests 785, ruff clean, mypy 0 on the touched
+files, notebooks re-executed 197 s (8/8, all print
+`pharmaml 1.2.135`) + 7 twins regenerated, census **982 files /
+359,737 lines** (census runs LAST), web pins synced (982/359,737,
+5,575 tests), four version carriers at 1.2.135. The 16th rollback
+recovered before all of it: token re-extracted from the PDF (93
+chars), remote re-added, pure ff to `234a34b`, venv repaired
+foreground.
+
 ## v1.2.134 release-zip homes (2026-11-08, round 221 — the Image Lab, the Part-2 §16.8.2-16.8.4 closure)
 
 `pharma-ml-toolkit-v1.2.134.zip` — 20,370,596 bytes, sha-256

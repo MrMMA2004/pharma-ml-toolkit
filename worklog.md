@@ -9478,3 +9478,96 @@ four homes) · honest totals **5,532** (4,754 + 778) · census **976 /
 acceptance: 21 of 22 items green (the remaining item is the
 Tkinter-retirement decision, gated on card-level coverage depth) ·
 counter **15/100** (IM continuation — no cron fire; run 16 next).
+
+---
+
+## Round 222 — 2026-11-08 — IM continuation: "MASTER_PROMPT part3" — the §17 image-export engine opens Part-3 (v1.2.135)
+
+**The 16th rollback recovered first** — local wiped to `2eb0ede`
+(round-186 again), remote + token + `Command.txt` gone. The ritual:
+PAT re-extracted from `upload/MASTER_PROMPT.pdf` (pdftotext + the
+76+17 line-wrap join = 93 chars), `~/.github_token` +
+credential.helper, remote re-added, `git pull --ff-only` to
+**`234a34b`** (pure ff — remote had already shipped round 221's
+v1.2.134 while the session context was summarised; the upload/
+artefacts aside-and-back byte-identical), venv repaired FOREGROUND
+(`scratch/venv_repair.sh` — numpy 1.26.4, torch 2.14.1+cpu,
+matplotlib 3.10.9, rdkit, pharmaml 1.2.134, PySide6 + pyqtgraph
+0.13.7).
+
+**The Part-3 absorption** — `upload/MASTER_PROMPT part3.pdf`
+extracted and read in full: §17 image export (TIFF/JPEG), §18
+advanced HPO + search-space management, §19 CV for all ML/DL
+models, §20 pause/resume/stop + checkpoints, §21 interactive charts
++ images, §22 SMILES→molecule interaction, §23 responsive rescaling,
+§24 SA scoring in the generative module, §25 integration criteria.
+The gap audit: SA scoring ALREADY lives in `chem/oracles.py` (the
+full Ertl-Schuffenhauer pipeline), the HPO/TPE/Hyperband machinery
+already lives in `ml/hpo.py` + `ml/tuner.py`, CV mean/std in
+`ml/training.py` — but §17 was a COMPLETE gap (PNG-only export,
+no format system anywhere). §25's acceptance list starts with image
+export. Round 222 = **the §17 engine**.
+
+**The engine (`src/pharmaml/viz/export.py`)** — TIFF the scientific
+path: `uint16` → genuine `I;16` (bit-identical reopen, test-pinned),
+lossless `tiff_lzw`/`tiff_deflate`/`none`, multi-page stacks
+(`export_matrix(pages=...)` with `n_frames` validation), dpi tags.
+JPEG the presentation path: quality 1-95 validated, the 16-bit
+REFUSAL (explicit `downcast_16bit=True` or raise — §17.2's
+"never silently convert high-bit-depth"), RGBA composited onto an
+explicit background (never a silent alpha drop), float matrices
+refuse without `normalize_float=True`. Validation as part of the
+export (§17.4): every write reopened + `sniff_format` magic-byte
+check + dimension check; `validate_export` catches PNG-bytes-under-
+`.tiff` lies and wrong dimensions without raising; extension must
+MATCH format. `ExportManager` batches with a JSON manifest;
+`EXPORT_FILTERS` carries the §17.1 dialog strings. matplotlib
+figures route through Agg (SVG stays vectorial); Qt widget grabs
+through `export_widget_image`. Pillow optional exactly like
+matplotlib — the actionable `DependencyError` with the
+`pharmaml[reports]` hint; `Pillow>=10.0` added to the reports extra
+(the verified stack pins 11.3.0).
+
+**The GUI** — `ui/widgets/image_export.py` (grab_png_bytes +
+export_widget_grab: the GUI renders, the engine decides);
+`ImagePanel.export_image` + the new `PlotPanel.export_image` (the
+pre-§17 `export_png` stays as a validation-backed boolean shim);
+the Image Lab export row: format combo (TIFF default — the
+scientific choice), JPEG quality spin 1-95, TIFF compression combo,
+the three-filter dialog, the extension-stamping rule, and the honest
+status line carrying the engine's result card + every integrity
+warning (failures surface the engine's error, never a silent pass).
+
+**The verification** — the six-chunk suite: chunk 1 caught the docs
+INDEX drift (the new viz symbols added to `docs/INDEX.md` — the
+guard earning its keep), chunk 3 caught the Pillow pin-block format
+(the comment annotation must sit on its own line — the anchored pin
+regex), chunk 2's notebook failures were the pre-re-execution state
+(notebooks re-executed 197 s, 8/8 at `pharmaml 1.2.135`); after the
+fixes all chunks green, ui + job_safety **272 dots exit 0** (265 + 7
+new; the OOM ritual respected — next-server KILLED, not stopped:
+SIGSTOP keeps the memory). **The playground SIGILL**: the Tk suite
+crashes with exit 132 during GC in matplotlib Axis construction —
+proven ENVIRONMENTAL by stash-and-rerun (the pristine round-221
+tree `234a34b` crashes identically under the freshly-repaired venv;
+the 16th-rollback venv rebuild changed the binary mix, not the
+round-222 code — zero playground/src bytes touched this round).
+Collect-only **4,790** (+36); doctests **785** (+7); ruff clean
+(the 558-file mode sweep re-normalised after the rollback's exec-bit
+smear — the round-220 lesson applied); mypy 0 on all touched files;
+scrub 0; census **982 files / 359,737 lines**.
+
+**The ship** — four carriers → **1.2.135**; zip
+`pharma-ml-toolkit-v1.2.135.zip` (20,408,163 bytes, sha-256
+`d150ff7d…`, 1008 entries/962 files, testzip OK per home, leaks 0,
+predecessor v1.2.134 swept from all four homes); web pins synced
+(982/359,737, 5,575 tests); CHANGELOG + README §17 section +
+COVERAGE round-222 rows + the manifest's v1.2.135 section.
+
+**Baselines for the next round** — v1.2.135 (four homes) · honest
+totals **5,575 = 4,790 collect + 785 doctest** · census 982/359,737
+· ui 272 dots · counter **15/100** (IM continuation — no cron fire;
+run 16 next) · Part-3 remaining: §18 presets/recommendations layer,
+§19 CV results interface + scaffold splits, §20 checkpoint depth,
+§21 hover tooltips, §22 SMILES previews, §23 responsive pass,
+§24 SA-in-generative wiring — §17 CLOSED.
