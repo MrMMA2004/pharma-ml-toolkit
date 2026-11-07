@@ -685,36 +685,109 @@ def jitter(
 def render_matplotlib(figure: Figure, path: Any = None) -> Any:
     """Draw a Figure spec through the toolkit's matplotlib layer.
 
-    The bridge that proves the spec is renderer-agnostic: scatter and
-    bar traces land on one axes (subplot grids use their own axes via
-    the layout domains); heatmaps draw as images with the embedded
-    colorscale.  Needs the ``reports`` extra (matplotlib), exactly
-    like every other plotting function in this package.
+    Single-panel specs retain their classic 8×6 canvas.  ``make_subplots``
+    specs render onto their declared cells with subplot titles, axis labels
+    and the overall figure title intact.  Scatter, line, bar and heat-map
+    traces share the house style; unused cells are hidden and empty legends
+    are never emitted.  Needs the ``reports`` extra, like every other
+    plotting function in this package.
     """
     from pharmaml.viz._compat import get_pyplot, new_figure, save_figure
 
+    def text(value: Any) -> str:
+        if isinstance(value, dict):
+            return str(value.get("text", ""))
+        return "" if value is None else str(value)
+
+    grid = figure._grid_ref
+    rows = len(grid) if grid else 1
+    columns = max((len(row) for row in grid), default=1) if grid else 1
     plt = get_pyplot()
-    fig, ax = new_figure(figsize=(8.0, 6.0))
+    fig, raw_axes = new_figure(
+        rows,
+        columns,
+        figsize=(max(8.0, 4.8 * columns), max(6.0, 3.8 * rows)),
+        squeeze=False,
+    )
+    axes = np.asarray(raw_axes)
+    references: dict[str, tuple[int, int]] = {}
+    layout_keys: dict[tuple[int, int], tuple[str, str]] = {}
+    if grid:
+        for row_index, row in enumerate(grid):
+            for column_index, grid_cell in enumerate(row):
+                if not grid_cell:
+                    continue
+                reference = grid_cell[0]
+                references[reference.trace_kwargs["xaxis"]] = (row_index, column_index)
+                layout_keys[(row_index, column_index)] = reference.layout_keys
+
+    used: set[tuple[int, int]] = set()
+    labelled: set[tuple[int, int]] = set()
     for trace in figure.data:
         spec = trace.to_dict()
+        row_index, column_index = references.get(spec.get("xaxis") or "x", (0, 0))
+        cell_key = (row_index, column_index)
+        used.add(cell_key)
+        ax = axes[row_index, column_index]
+        label = spec.get("name") if spec.get("showlegend", True) else None
+        if label:
+            labelled.add(cell_key)
         if spec.get("type") == "bar":
-            ax.bar(spec.get("x", []), spec.get("y", []),
-                   color=(spec.get("marker") or {}).get("color"), label=spec.get("name"))
+            color = (spec.get("marker") or {}).get("color")
+            if spec.get("orientation") == "h":
+                ax.barh(spec.get("y", []), spec.get("x", []), color=color, label=label)
+            else:
+                ax.bar(spec.get("x", []), spec.get("y", []), color=color, label=label)
         elif spec.get("type") == "heatmap":
             z = np.asarray(spec["z"], dtype=float)
             spec.get("colorscale") or make_colorscale(PERCEPTUAL_CMAPS["viridis"])
-            ax.imshow(z, aspect="auto", cmap="viridis")
+            ax.grid(False)
+            image = ax.imshow(z, aspect="auto", cmap="viridis")
+            if spec.get("showscale", True):
+                fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
         else:
             x = np.asarray(spec.get("x") or [], dtype=float)
             y = np.asarray(spec.get("y") or [], dtype=float)
-            color = (spec.get("marker") or {}).get("color")
-            sizes = (spec.get("marker") or {}).get("size")
-            if isinstance(color, (list, np.ndarray)) and color and isinstance(color[0], float):
-                color = None  # continuous color arrays ride the colorscale
-            if sizes is not None and isinstance(sizes, (list, np.ndarray)):
-                sizes = np.sqrt(np.asarray(sizes, dtype=float))
-            ax.scatter(x, y, c=color, s=sizes, label=spec.get("name"))
-    ax.legend(loc="best")
+            mode = str(spec.get("mode") or "markers")
+            line = spec.get("line") or {}
+            if "lines" in mode:
+                ax.plot(
+                    x,
+                    y,
+                    color=line.get("color"),
+                    linewidth=line.get("width", 1.8),
+                    linestyle="--" if line.get("dash") in {"dash", "dot"} else "-",
+                    label=label,
+                )
+            if "markers" in mode:
+                color = (spec.get("marker") or {}).get("color") or line.get("color")
+                sizes = (spec.get("marker") or {}).get("size")
+                if isinstance(color, (list, np.ndarray)) and color and isinstance(color[0], float):
+                    color = None  # continuous color arrays ride the colorscale
+                if sizes is not None and isinstance(sizes, (list, np.ndarray)):
+                    sizes = np.sqrt(np.asarray(sizes, dtype=float))
+                ax.scatter(x, y, c=color, s=sizes, label=label)
+
+    annotations = figure.layout.get("annotations", [])
+    for row_index in range(rows):
+        for column_index in range(columns):
+            cell_key = (row_index, column_index)
+            ax = axes[row_index, column_index]
+            if cell_key not in used:
+                ax.set_visible(False)
+                continue
+            x_key, y_key = layout_keys.get(cell_key, ("xaxis", "yaxis"))
+            ax.set_xlabel(text(figure.layout.get(x_key, {}).get("title")))
+            ax.set_ylabel(text(figure.layout.get(y_key, {}).get("title")))
+            annotation_index = row_index * columns + column_index
+            if annotation_index < len(annotations):
+                ax.set_title(text(annotations[annotation_index]))
+            if cell_key in labelled:
+                ax.legend(loc="best", frameon=False)
+
+    title = text(figure.layout.get("title"))
+    if title:
+        fig.suptitle(title, fontsize=14, fontweight="semibold")
     if path is not None:
         save_figure(fig, path)
         plt.close(fig)

@@ -1878,6 +1878,33 @@ class TestFigureReadability:
         assert ax.xaxis.get_gridlines()[0].get_color() == "#D7DEE5"
         assert [text.get_text() for text in ax.get_legend().get_texts()] == ["response"]
 
+    def test_spec_renderer_honors_subplot_layout_and_titles(self, close_all):
+        from pharmaml.viz.figures import Trace, make_subplots, render_matplotlib
+
+        spec = make_subplots(
+            rows=2,
+            cols=2,
+            subplot_titles=["Dose response", "Clearance", "Unused", "Exposure"],
+        )
+        spec.add_trace(
+            Trace(x=[0, 1], y=[0.0, 1.0], mode="lines", name="dose"),
+            row=1,
+            col=1,
+        )
+        spec.add_trace(Trace(x=[0, 1], y=[1.0, 0.2]), row=2, col=2)
+        spec.update_layout(title="PK overview", xaxis_title="Time (h)")
+        spec.layout["yaxis4"]["title"] = {"text": "AUC"}
+        fig = render_matplotlib(spec)
+        axes = fig.axes
+        assert len(axes) == 4
+        assert axes[0].get_title() == "Dose response"
+        assert axes[3].get_title() == "Exposure"
+        assert not axes[1].get_visible() and not axes[2].get_visible()
+        assert axes[0].get_xlabel() == "Time (h)"
+        assert axes[3].get_ylabel() == "AUC"
+        assert fig._suptitle.get_text() == "PK overview"
+        assert len(axes[0].lines) == 1 and len(axes[3].collections) == 1
+
     def test_png_and_html_exports_are_resolution_aware(self, tmp_path, close_all):
         import base64
 
