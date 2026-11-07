@@ -1,3 +1,75 @@
+## [1.2.132] — 2026-11-08
+
+### Added — round 219: the Response AI Workbench (Studio increment 11, audit row 12)
+
+* **`ui/pages/responseai.py`** — the Studio's eleventh feature page,
+  giving `pharmaml.ml.drugresponse` — the module absorbed from
+  `CSOgroup/CaDRReS` (the bilinear factorisation + the
+  informative-weight sibling), `Precily` (the multi-omics fusion
+  discipline) and `DeepResponse` (the response VAE) — its FIRST GUI
+  surface (the playground's Response AI tab predates the module and
+  rides other engines).  Eight tabs, each wired to the module's
+  public APIs:
+  * **Hill curve** — `fit_hill_curve` on the seeded 4PL demo (seed
+    42, noise parameter): every fitted parameter against the
+    generating truth (top 0.9981 vs 1.0, bottom 0.049 vs 0.05, ic50
+    0.8123 vs 0.8, hill 1.1679 vs 1.2), r² 0.999669, the log-dose
+    AUC both ways (model-based 3.055882 vs closed-form 3.057985),
+    the fitted curve drawn over the log10-dose grid with the noisy
+    points scattered on top.
+  * **Response metrics** — `response_metrics` (Pearson / Spearman /
+    RMSE / MAE, n) on the seeded noisy pair (pearson 0.979392, rmse
+    0.058964) or two Data Explorer columns (>= 8 finite aligned
+    values, honest refusal otherwise), the observed-vs-predicted
+    scatter with the identity line.
+  * **Rank correlations** — `rank_correlations` (Pearson, Spearman,
+    Kendall tau-b in one call) on the seeded curved pair (0.914276 /
+    0.918042 / 0.744681 over n=48) or two explorer columns.
+  * **Response model** — `DrugResponseModel` (the CaDRReS bilinear
+    factorisation, training included) on the seeded 12x4 screen with
+    a 15% NaN mask: 40 observed pairs, final loss 0.029817 after 120
+    full-batch epochs, the in-sample pearson 0.164369 reported
+    honestly ("honestly modest, the toy screen is tiny"), the
+    predicted-response head for two cell lines and the
+    observed-vs-predicted scatter over all observed pairs.
+  * **Cross-validation** — `cross_validate_response` over the same
+    screen, folds split CELL LINES so no cell line straddles a fold:
+    the per-fold pearson table (-0.190352 / -0.599944 / 0.178499 /
+    0.712589) with the mean 0.025198 reported honestly ("the toy
+    screen barely carries signal"), the per-fold bars (negative folds
+    draw downward — honest).
+  * **Informative regression** — `InformativeRegression` (the
+    cadrres-iw idea: the penalty on feature j's weight is
+    l2*beta_j^2/v_j for the per-feature prior variance v_j): the
+    prior-shrunk coefficients [0.4789, 1.1233, -0.5979] against the
+    generating [0.5, 1.5, -0.8] under priors [100, 4, 4], the loss
+    curve 2.421297 -> 0.550247 over 300 epochs.
+  * **Response VAE** — `ResponseVAE` on the seeded 60x10 features
+    with a response head: the ELBO -20.220437 -> -10.032681 (the
+    bound improving), the reconstruction / KL / response MSE ledgers
+    (7.74856 / 1.343065 / 0.941055) drawn as the bound curve.
+  * **Multi-omics fusion** — `MultiOmicsFusion` on the seeded 30 x
+    (12 expression + 8 mutation) blocks: the per-block audit
+    (`block_report` — n_features, n_constant, total variance
+    equalised to 1.0 by the sqrt-width scaling, the raw mean column
+    stds 0.927576 / 0.488877 shown side by side), the latent 30x20
+    under two-level columns, the equalisation bars (both 1.0 — flat
+    on purpose, that IS the point).
+* **`ui/main_window.py`** — the fourteenth section (`responseai`,
+  right before Settings); `tests/ui/test_main_window.py` re-pinned
+  to 14 pages, the bestofml wiring test to len-3, the foundations
+  wiring test to len-4.
+* **`scratch/probe_response_218.py`** — round 218's probe prep
+  re-seeded per section (fresh `default_rng(42)` at every section
+  head, the bestofml probe's house pattern) so each page tab is a
+  standalone seeded job; `block_report`'s audit numbers added; every
+  number the new tests assert engine-printed first.
+* **`tests/ui/test_responseai_page.py`** — 17 offscreen tests: the
+  eight end-to-end tabs against the probe-printed numbers, the
+  explorer-column paths for the metrics/rank tabs, the honest
+  refusals (short columns, out-of-range epochs/folds/noise), the
+  parse helpers, and the main-window wiring pin.
+
 ## [1.2.131] — 2026-11-07
 
 ### Added — round 217: the Best-of ML Workbench (Studio increment 10, audit row 11)

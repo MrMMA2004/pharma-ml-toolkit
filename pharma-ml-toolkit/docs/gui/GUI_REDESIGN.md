@@ -103,11 +103,38 @@ training run with held-out R²), and chart-palette sync.
 
 ## Migration status (16.18)
 
-Increment 10 of N — shell, navigation, theme system, Data Explorer,
+Increment 11 of N — shell, navigation, theme system, Data Explorer,
 Chemistry Workbench, PK/PD Workbench, Biology Workbench, Docking
 Workbench, Model Analysis, Unsupervised Workbench, Deep Learning
 Workbench, Generative Workbench, Foundations Workbench, Best-of ML
-Workbench, Settings are live and tested. The Best-of ML Workbench
+Workbench, Response AI Workbench, Settings are live and tested. The
+Response AI Workbench (increment 11, audit row 12) gives
+``pharmaml.ml.drugresponse`` — the module absorbed from
+CaDRReS / Precily / DeepResponse with no prior GUI surface — its
+first one: eight tabs, each wired to the module's public APIs.  The
+Hill curve (``fit_hill_curve`` on the seeded 4PL demo — every fitted
+parameter against the generating truth, r², the log-dose AUC both
+ways, model-based vs closed-form), the response metrics
+(``response_metrics`` on the seeded noisy pair or two Data Explorer
+columns — Pearson/Spearman/RMSE/MAE with the observed-vs-predicted
+scatter), the rank correlations (``rank_correlations`` — Pearson,
+Spearman and Kendall tau-b in one call), the response model
+(``DrugResponseModel`` — the CaDRReS bilinear factorisation on the
+seeded 12x4 screen with a 15% NaN mask, full-batch gradient descent
+over the observed pairs only, the honest in-sample pearson and the
+predicted-response head), the cross-validation
+(``cross_validate_response`` — folds split CELL LINES so no cell line
+straddles a fold; the ~0 mean pearson reported honestly), the
+informative regression (``InformativeRegression`` — per-feature prior
+variances shrink non-informative weights harder, the shrunk
+coefficients against the generating truth), the response VAE
+(``ResponseVAE`` — the ELBO bound improving, with the
+reconstruction / KL / response ledgers), and the multi-omics fusion
+(``MultiOmicsFusion`` — z-scored blocks with the per-block total
+variance equalised to 1.0, the audit table).  17 offscreen tests,
+every asserted number engine-printed first by the committed probe
+(``scratch/probe_response_218.py``, round 219 re-seeded per section
+so each tab is a standalone seeded job). The Best-of ML Workbench
 (increment 10, audit row 11) brings the playground Best-of ML tab's
 clusters, each wired to the same public backend APIs the cards call:
 the catalogue (``search_catalog`` / ``catalog_top`` over the embedded

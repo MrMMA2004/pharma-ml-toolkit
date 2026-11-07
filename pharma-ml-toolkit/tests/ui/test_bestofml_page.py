@@ -495,5 +495,5 @@ def test_main_window_carries_the_bestofml_section(studio_app) -> None:
     from ui.main_window import SECTIONS
 
     keys = [key for key, _title in SECTIONS]
-    assert keys.index("bestofml") == len(keys) - 2  # right before Settings
-    assert len(keys) == 13
+    assert keys.index("bestofml") == len(keys) - 3  # before Response AI, before Settings
+    assert len(keys) == 14

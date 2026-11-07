@@ -10,14 +10,18 @@ rank correlations, the DrugResponseModel trained on a seeded
 12-cell-line x 4-drug screen with a NaN mask (seed 42), the
 leave-nothing-out cross-validation report over the same screen, and the
 InformativeRegression / ResponseVAE / MultiOmicsFusion smokes.
+
+Round-219 note: re-seeded per section (fresh ``default_rng(42)`` at
+every section head, the bestofml probe's house pattern) so each page
+tab is a standalone job whose numbers this probe prints exactly — the
+sections no longer share one global draw order.  Sections 1-2 are
+unchanged by construction (the first draw / no draws at all).
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-
-rng = np.random.default_rng(42)
 
 # == 1. the Hill fit: a seeded 4PL demo ====================================
 print("== hill fit ==")
@@ -30,7 +34,8 @@ from pharmaml.ml.drugresponse import (
     response_metrics,
 )
 
-hill_true = dict(hill_coef=1.2, ic50=0.8, top=1.0, bottom=0.05)
+rng = np.random.default_rng(42)
+hill_true = {"hill_coef": 1.2, "ic50": 0.8, "top": 1.0, "bottom": 0.05}
 doses = np.logspace(-3, 3, 21)
 clean = dose_response_curve(doses, hill_true["hill_coef"], hill_true["ic50"],
                             top=hill_true["top"], bottom=hill_true["bottom"])
@@ -53,6 +58,7 @@ print("auc_log_dose(clean):", round(float(auc_log_dose(doses, clean)), 6))
 
 # == 3. the response metrics ==============================================
 print("== response metrics ==")
+rng = np.random.default_rng(42)
 y_true = rng.uniform(0.0, 1.0, 60)
 y_pred = np.clip(y_true + rng.normal(0.0, 0.08, 60), 0.0, 1.0)
 metrics = response_metrics(y_true, y_pred)
@@ -60,6 +66,7 @@ print({k: (int(v) if k == "n" else round(float(v), 6)) for k, v in sorted(metric
 
 # == 4. the rank correlations =============================================
 print("== rank correlations ==")
+rng = np.random.default_rng(42)
 x = rng.uniform(0.0, 10.0, 48)
 y = 0.7 * x + rng.normal(0.0, 1.5, 48)
 rc = rank_correlations(x, y)
@@ -70,24 +77,31 @@ print("n:", rc.n, "pearson:", round(float(rc.pearson), 6),
 print("== drug response model ==")
 from pharmaml.ml.drugresponse import DrugResponseModel
 
-n_cells, n_drugs, n_features = 12, 4, 8
-X = pd.DataFrame(
-    rng.normal(0.0, 1.0, (n_cells, n_features)),
-    index=[f"CELL_{i:02d}" for i in range(n_cells)],
-    columns=[f"feat_{j}" for j in range(n_features)],
-)
-true_factor = rng.normal(0.0, 1.0, n_cells)
-drugs = ["DRUG_A", "DRUG_B", "DRUG_C", "DRUG_D"]
-potency = np.array([0.9, 0.7, 0.5, 0.3])
-table = pd.DataFrame(
-    {
-        d: 1.0 / (1.0 + np.exp(-(potency[k] * true_factor + rng.normal(0.0, 0.05, n_cells))))
-        for k, d in enumerate(drugs)
-    },
-    index=X.index,
-)
-mask = rng.random(table.shape) < 0.15
-table = table.mask(mask)
+
+def _seeded_screen(rng: np.random.Generator) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """The seeded 12x4 screen (shared verbatim by sections 5 and 6)."""
+    n_cells, n_features = 12, 8
+    X = pd.DataFrame(
+        rng.normal(0.0, 1.0, (n_cells, n_features)),
+        index=[f"CELL_{i:02d}" for i in range(n_cells)],
+        columns=[f"feat_{j}" for j in range(n_features)],
+    )
+    true_factor = rng.normal(0.0, 1.0, n_cells)
+    drugs = ["DRUG_A", "DRUG_B", "DRUG_C", "DRUG_D"]
+    potency = np.array([0.9, 0.7, 0.5, 0.3])
+    table = pd.DataFrame(
+        {
+            d: 1.0 / (1.0 + np.exp(-(potency[k] * true_factor + rng.normal(0.0, 0.05, n_cells))))
+            for k, d in enumerate(drugs)
+        },
+        index=X.index,
+    )
+    mask = rng.random(table.shape) < 0.15
+    return X, table.mask(mask)
+
+
+rng = np.random.default_rng(42)
+X, table = _seeded_screen(rng)
 print("screen:", table.shape, "observed pairs:", int(table.notna().sum().sum()))
 model = DrugResponseModel(n_factors=2, lr=0.1, epochs=120, l2=0.001, seed=42)
 history = model.fit(X, table)
@@ -99,6 +113,8 @@ print("predict head:\n", pred.round(4).to_string())
 
 # == 6. the cross-validation report ========================================
 print("== cross validation ==")
+rng = np.random.default_rng(42)  # the SAME screen, rebuilt standalone
+X, table = _seeded_screen(rng)
 report = cross_validate_response(
     lambda: DrugResponseModel(n_factors=2, lr=0.1, epochs=120, l2=0.001, seed=42),
     X, table, n_folds=4, seed=42,
@@ -119,6 +135,7 @@ print("mean pearson over", report.n_folds, "folds:", round(float(np.mean(pearson
 print("== informative regression ==")
 from pharmaml.ml.drugresponse import InformativeRegression
 
+rng = np.random.default_rng(42)
 Xr = np.column_stack([np.ones(40), rng.normal(0.0, 1.0, 40), rng.normal(0.0, 1.0, 40)])
 beta = np.array([0.5, 1.5, -0.8])
 yr = Xr @ beta + rng.normal(0.0, 0.1, 40)
@@ -132,6 +149,7 @@ print("intercept:", round(float(info.intercept), 4), "coef:", np.round(np.asarra
 print("== response vae ==")
 from pharmaml.ml.drugresponse import ResponseVAE
 
+rng = np.random.default_rng(42)
 Xv = rng.normal(0.0, 1.0, (60, 10))
 yv = (Xv @ rng.normal(0.0, 0.5, 10)) + rng.normal(0.0, 0.1, 60)
 vae = ResponseVAE(latent_dim=4, hidden=16, lr=0.01, epochs=80, seed=42)
@@ -147,6 +165,7 @@ print("reconstruction last:", round(float(vae_history.reconstruction[-1]), 6),
 print("== multi omics fusion ==")
 from pharmaml.ml.drugresponse import MultiOmicsFusion
 
+rng = np.random.default_rng(42)
 blocks = {
     "expr": pd.DataFrame(rng.normal(0.0, 1.0, (30, 12)), index=[f"C{i:02d}" for i in range(30)]),
     "mut": pd.DataFrame(rng.integers(0, 2, (30, 8)).astype(float), index=[f"C{i:02d}" for i in range(30)]),
@@ -159,3 +178,5 @@ print("block stds (per-block mean of the column stds):",
       {k: round(float(v.mean()), 6) for k, v in fusion.block_stds_.items()})
 print("block means (per-block mean of the column means):",
       {k: round(float(v.mean()), 6) for k, v in fusion.block_means_.items()})
+print("block_report:")
+print(fusion.block_report().to_string(index=False))

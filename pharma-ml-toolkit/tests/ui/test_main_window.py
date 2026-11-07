@@ -6,7 +6,7 @@ from PySide6.QtCore import QSettings, Qt
 
 
 def test_window_constructs_with_all_pages(main_window) -> None:
-    assert main_window.pages.count() == 13
+    assert main_window.pages.count() == 14
     assert main_window.windowTitle() == "PharmaML Studio"
 
 
@@ -14,7 +14,7 @@ def test_navigation_switches_pages(main_window) -> None:
     order = [
         "dashboard", "data", "chemistry", "pkpd", "biology", "docking",
         "models", "unsupervised", "deep_learning", "generative",
-        "foundations", "bestofml", "settings",
+        "foundations", "bestofml", "responseai", "settings",
     ]
     for i, key in enumerate(order):
         main_window.go_to(key)

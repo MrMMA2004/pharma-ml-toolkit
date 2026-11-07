@@ -449,6 +449,41 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.132 release-zip homes (2026-11-08, round 219 — the Response AI Workbench, the Studio's increment 11)
+
+`pharma-ml-toolkit-v1.2.132.zip` — 20,288,273 bytes, sha-256
+`8ae2c2487be43b96c8619dc08168400536604a0bac9b48389aa70f96907dcf27`,
+997 entries / 951 files, built with the standing four-home builder
+(`scratch/build_zip_219.py`, the round-217 recipe verbatim) — testzip
+OK per home, **real leaks 0** (a zero-drop scrub round: the leak
+sources fixed in rounds 216/217 hold), predecessor v1.2.131 swept
+from all four homes. Byte-identical copies ship to all four homes
+(repo-root `download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, `upload/`). The increment:
+`ui/pages/responseai.py` (the Studio's eleventh feature page, audit
+row 12) gives `pharmaml.ml.drugresponse` — absorbed from
+CaDRReS/Precily/DeepResponse with NO prior GUI surface — its first
+one: eight tabs (Hill curve / response metrics / rank correlations /
+the CaDRReS response model / cell-line-grouped cross-validation /
+informative regression / the ResponseVAE / multi-omics fusion), 17
+offscreen tests (`tests/ui/test_responseai_page.py`), every asserted
+number engine-printed first by the re-seeded committed probe
+(`pharma-ml-toolkit/scratch/probe_response_218.py` — round 219
+re-seeded it per section, fresh `default_rng(42)` at every section
+head, so each tab is a standalone seeded job; `block_report`'s audit
+numbers added). Notebooks re-executed at 1.2.132 (201 s, all eight
+print `pharmaml 1.2.132`, zero stale); 7 twins regenerated; the twin
+scrub dropped 0. Honest totals: collect-only **4,736** + 778
+doctests = **5,514**; web pins 5,497 → 5,514 (page.tsx hero +
+FALLBACK_STATS 971/354,453 + download-panel ×3 + overview ×2) +
+census 968/352,830 → **971 / 354,453**. The sidebar grows to
+**14 sections** (test_main_window + bestofml/foundations wiring pins
+re-pinned). No rollback this round — the tree opened clean and synced
+at `5a50f90` (round 217's close-out); this is an IM continuation, no
+cron fire — the canonical counter stays **14/100**; the webDevReview
+15-min job had vanished from the scheduler again and was recreated as
+job 512508.
+
 ## v1.2.131 release-zip homes (2026-11-07, round 217 — the Best-of ML Workbench, the Studio's increment 10)
 
 `pharma-ml-toolkit-v1.2.131.zip` — 20,078,596 bytes, sha-256
