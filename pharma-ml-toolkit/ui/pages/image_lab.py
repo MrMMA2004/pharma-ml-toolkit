@@ -230,21 +230,87 @@ class ImageLabPage(QWidget):
         form = QFormLayout(row)
         form.setContentsMargins(0, 0, 0, 0)
         form.addRow("Colormap (16.8.4):", box)
-        export = QPushButton("Export PNG…")
-        export.clicked.connect(lambda: self._export_panel(panel))
+
+        # Part-3 §17: the format-aware export controls -- TIFF/JPEG are
+        # first-class beside PNG, with the compression/quality knobs the
+        # section requires, and the dialog filters follow the chosen
+        # format (§17.1).
+        fmt_box = QComboBox()
+        fmt_box.addItems(["TIFF (lossless, 16-bit safe)", "PNG (lossless)", "JPEG (lossy, quality)"])
+        fmt_box.setCurrentIndex(0)
+        quality = QSpinBox()
+        quality.setRange(1, 95)
+        quality.setValue(92)
+        quality.setToolTip("JPEG quality 1-95 (§17.3) -- lossy; prefer TIFF for scientific data")
+        compress = QComboBox()
+        compress.addItems(["LZW", "DEFLATE", "None"])
+        compress.setToolTip("TIFF compression (§17.2) -- all three are lossless")
+        export = QPushButton("Export image…")
+        export.clicked.connect(
+            lambda: self._export_panel(panel, fmt_box, quality, compress)
+        )
+        form.addRow("Export format (§17):", fmt_box)
+        form.addRow("JPEG quality:", quality)
+        form.addRow("TIFF compression:", compress)
         form.addRow("", export)
         return row
 
-    def _export_panel(self, panel: ImagePanel) -> None:
+    def _export_panel(
+        self,
+        panel: ImagePanel,
+        fmt_box: QComboBox,
+        quality: QSpinBox,
+        compress: QComboBox,
+    ) -> None:
+        choice = fmt_box.currentText()
+        if choice.startswith("TIFF"):
+            default_name, ext = "imagelab.tiff", ".tiff"
+        elif choice.startswith("PNG"):
+            default_name, ext = "imagelab.png", ".png"
+        else:
+            default_name, ext = "imagelab.jpg", ".jpg"
+        filters = (
+            "TIFF images (*.tif *.tiff);;"
+            "PNG images (*.png);;"
+            "JPEG images (*.jpg *.jpeg)"
+        )
         path, _filter = QFileDialog.getSaveFileName(
-            self, "Export the image panel", "imagelab.png", "PNG images (*.png)"
+            self, "Export the image panel", default_name, filters
         )
         if not path:
             return
-        if panel.export_png(path):
-            self._status.setText(f"Exported {path}")
-        else:
-            self._status.setText(f"Export FAILED for {path}")
+        # §17.4: the extension must match the requested format -- the
+        # engine enforces byte honesty; the dialog keeps the promise by
+        # stamping the chosen format's extension when the user's name
+        # carries a foreign one (aliases .tif/.tiff, .jpg/.jpeg pass).
+        from pathlib import Path as _Path
+
+        from pharmaml.viz.export import EXPORT_EXTENSIONS, ExportFormat
+
+        fmt_key = ExportFormat.TIFF if ext == ".tiff" else (
+            ExportFormat.PNG if ext == ".png" else ExportFormat.JPEG
+        )
+        suffix = _Path(path).suffix.lower()
+        if suffix not in EXPORT_EXTENSIONS[fmt_key]:
+            path = str(_Path(path).with_suffix(ext))
+        compression = {
+            "LZW": "tiff_lzw",
+            "DEFLATE": "tiff_deflate",
+            "None": "none",
+        }[compress.currentText()]
+        try:
+            result = panel.export_image(
+                path,
+                jpeg_quality=int(quality.value()),
+                compression=compression,
+            )
+        except Exception as exc:  # noqa: BLE001 - honest status line
+            self._status.setText(f"Export FAILED for {path}: {exc}")
+            return
+        note = f"Exported {result.path} ({result.format}, {result.width}x{result.height}, {result.size_bytes:,} bytes)"
+        if result.warnings:
+            note += " -- " + "; ".join(result.warnings)
+        self._status.setText(note)
 
     # -- tab 1: similarity heatmap ----------------------------------------------
     def _build_similarity_tab(self) -> QWidget:

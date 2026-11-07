@@ -1986,6 +1986,44 @@ save_pdf_report(                             # or standalone, without the bundle
 )
 ```
 
+#### First-class image export: PNG, SVG, TIFF, JPEG (Part-3 §17)
+
+```python
+import numpy as np
+from pharmaml.viz import (
+    export_image, export_matrix, export_figure, ExportManager, sniff_format,
+)
+
+export_image(matrix_u8, "panel.png")         # .png / .tif / .tiff / .jpg / .jpeg
+export_image(matrix_u16, "assay.tiff",       # 16-bit data stays 16-bit (I;16),
+    compression="tiff_lzw")                  # lossless: tiff_lzw / tiff_deflate / none
+export_matrix(page0, "stack.tiff",           # multi-page TIFF (image stacks),
+    pages=[page1, page2])                    # every page bit-depth-checked
+export_image(photo, "slide.jpg",             # configurable quality 1-95; a 16-bit
+    jpeg_quality=92)                         # source REFUSES silent quantisation
+export_figure(fig, "figure.tiff", dpi=300)   # matplotlib fig -> same rules
+                                             # (.svg stays vectorial)
+
+manager = ExportManager("figures", "{name}.tiff")   # batch + JSON manifest
+manager.export(heatmap, "heatmap")
+manager.export(parity, "parity")             # each write reopened + magic-sniffed
+
+sniff_format("figures/heatmap.tiff")         # "TIFF" from the magic bytes —
+                                             # never the extension's claim
+```
+
+The scientific-integrity rules are the feature: 16-bit matrices export
+as genuine `I;16` TIFFs (never silently quantised to 8-bit); float
+matrices refuse without an explicit `normalize_float=True`; JPEG is
+honest about being lossy (explicit `downcast_16bit=True` required for
+16-bit sources, alpha composited onto a chosen background); and every
+exported file is reopened, magic-byte-sniffed and dimension-checked
+before success is reported — an extension never lies about content
+(§17.4). Pillow is optional exactly like matplotlib
+(`pip install 'pharmaml[reports]'`); the Studio's Image Lab and every
+plot panel export through this same engine (format + JPEG quality +
+TIFF compression controls in the export row).
+
 matplotlib is optional (``pip install 'pharmaml[reports]'``); the Agg backend is
 forced automatically outside notebooks, so plotting works on headless servers
 and CI — and renders inline inside Jupyter.

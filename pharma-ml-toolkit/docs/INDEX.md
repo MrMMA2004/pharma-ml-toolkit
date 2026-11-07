@@ -747,14 +747,24 @@ after adding new public functions.
 
 | Symbol | Kind | Summary |
 |---|---|---|
+| `EXPORT_EXTENSIONS` | constant | Canonical extension aliases per export format (`.tif`/`.tiff`, `.jpg`/`.jpeg`). |
+| `EXPORT_FILTERS` | constant | §17 file-dialog filter strings for the four first-class formats. |
 | `PALETTE` | constant |  |
 | `PDF_THEMES` | constant |  |
 | `PLOT_FORMATS` | constant |  |
 | `REPORT_THEMES` | constant |  |
 | `TABLE_FORMATS` | constant |  |
+| `TIFF_COMPRESSIONS` | constant | The lossless TIFF compression choices (`none`/`tiff_lzw`/`tiff_deflate`). |
+| `ExportFormat` | class | The four first-class raster/vector export formats (Part-3 §17). |
+| `ExportManager` | class | Batch export to a directory with per-write validation + a JSON manifest. |
+| `ExportResult` | class | The honest report card of one export (format, size, mode, warnings, validated). |
 | `HTMLReport` | class | Builder for a self-contained HTML report. |
+| `ImageExportOptions` | class | Per-export configuration (quality, compression, dpi, background, integrity flags). |
 | `close_figure` | function | Close a figure defensively (no-op when matplotlib is absent). |
 | `export_docx` | function | Write a DataFrame as a Word ``.docx`` document with a grid table. |
+| `export_figure` | function | Export a matplotlib figure to PNG/TIFF/JPEG/SVG with the §17 integrity rules. |
+| `export_image` | function | Export an array / PIL image / file to any §17 format, validated on write. |
+| `export_matrix` | function | Export a scientific matrix (+ multi-page TIFF stacks) bit-depth-honestly. |
 | `export_table` | function | Write a DataFrame in a *visual* format chosen by the extension. |
 | `figure_to_base64` | function | Render a figure to a ``data:`` URI for embedding in HTML reports. |
 | `get_pyplot` | function | Return ``matplotlib.pyplot`` with a safe backend already selected. |
@@ -817,6 +827,8 @@ after adding new public functions.
 | `save_figure` | function | Save a figure to ``png``/``svg``/``pdf`` (chosen by extension). |
 | `save_pdf_report` | function | Write a multi-page PDF document report (metrics, tables, figures). |
 | `save_visual_bundle` | function | Render figures + tables + metrics into one directory + HTML report. |
+| `sniff_format` | function | Identify an image file from its magic bytes (never the extension's claim). |
+| `validate_export` | function | Reopen an exported file and verify format/dimensions/pages (§17.4). |
 
 ## `pharmaml.utils.io`
 

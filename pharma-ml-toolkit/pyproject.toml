@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pharmaml"
-version = "1.2.134"
+version = "1.2.135"
 description = "A production-ready toolkit for QSAR machine learning, pharmaceutical calculations (PK/PD/dosage), and molecular-docking workflows."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -81,6 +81,12 @@ reports = [
     "fpdf2>=2.7,<3",  # the maintained PyPI name for the fpdf module
     # (the verified stack pins fpdf2 2.8.5 — see requirements.txt)
     "python-docx>=1.1",
+    # (r222 / Part-3 §17) the first-class TIFF/JPEG image-export
+    # surface (viz/export.py) — Pillow writes the lossless TIFFs
+    # (16-bit I;16, multi-page stacks, LZW/DEFLATE) and the quality-
+    # controlled JPEGs. Importing the toolkit stays dependency-free;
+    # only exporting needs it (same contract as matplotlib).
+    "Pillow>=10.0",
 ]
 dev = [
     "pytest>=7.4",

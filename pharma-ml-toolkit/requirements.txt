@@ -64,6 +64,10 @@ tqdm==4.67.1
 # seaborn==0.13.2
 # fpdf2==2.8.5
 # python-docx==1.2.0
+# Pillow==11.3.0
+#                     # (r222 / Part-3 §17) TIFF/JPEG first-class image
+#                     # export: lossless 16-bit TIFFs, multi-page stacks,
+#                     # LZW/DEFLATE, quality-controlled JPEGs
 
 # ---- Development / QA ------------------------------------------------
 # pytest==9.0.2

@@ -9,12 +9,15 @@ Scientific data goes in as numpy arrays with real labels/units.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from ..theme_manager import ChartPalette
+from .image_export import export_widget_grab
 
 
 class PlotPanel(QWidget):
@@ -105,6 +108,30 @@ class PlotPanel(QWidget):
 
     def add_legend(self) -> None:
         self._plot.addLegend(size=(10, 10))
+
+    # -- export (Part-3 §17) --------------------------------------------------
+    def export_image(
+        self,
+        path: str | Path,
+        *,
+        jpeg_quality: int | None = None,
+        compression: str | None = None,
+        dpi: float | None = None,
+    ):
+        """Export the rendered plot to PNG/TIFF/JPEG (§17 engine).
+
+        The extension picks the format; every write is reopened,
+        magic-byte-sniffed and dimension-checked before success is
+        reported.  Returns the core
+        :class:`~pharmaml.viz.export.ExportResult`.
+        """
+        return export_widget_grab(
+            self._plot,
+            path,
+            jpeg_quality=jpeg_quality,
+            compression=compression,
+            dpi=dpi,
+        )
 
     def widget(self) -> pg.PlotWidget:
         return self._plot

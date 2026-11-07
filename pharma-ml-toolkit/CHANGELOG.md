@@ -1,3 +1,78 @@
+## [1.2.135] — 2026-11-08
+
+### Added — round 222: the Part-3 §17 image-export engine (TIFF/JPEG first-class)
+
+* **`src/pharmaml/viz/export.py`** — the core engine the Part-3
+  directive's first section demands: TIFF and JPEG join PNG and SVG
+  as first-class export formats, with the scientific-integrity rules
+  written into the code rather than the docs:
+  * **TIFF, the scientific path (§17.2)** — a `uint16` matrix
+    exports as a genuine `I;16` TIFF (bit-identical on reopen),
+    never a silently-quantised 8-bit copy; lossless compression
+    choices (`tiff_lzw` / `tiff_deflate` / `none`); multi-page
+    stacks via `export_matrix(..., pages=[...])` with per-page
+    validation; dpi resolution tags.
+  * **JPEG, the presentation path (§17.3)** — configurable quality
+    1-95 (validated range); a 16-bit source REFUSES to export
+    silently quantised (raise, or explicit `downcast_16bit=True`
+    with a recorded warning); an RGBA source composites onto an
+    explicit background colour — never a silent alpha drop; float
+    matrices refuse without explicit `normalize_float=True` (the
+    classic integrity trap, refused loudly with the recorded range).
+  * **Validation as part of the export (§17.4)** — every write is
+    reopened, magic-byte-sniffed (`sniff_format`: PNG/JPEG/TIFF
+    II+MM/SVG headers) and dimension-checked before success is
+    reported; `validate_export()` catches extension/content lies
+    (PNG bytes under a `.tiff` name) and wrong dimensions without
+    raising; the extension must MATCH the requested format — §17.4's
+    "do not change file extensions without actually converting".
+  * **The reusable manager (§17.4)** — `ExportManager` batches
+    images to a directory with a filename pattern, validates each
+    write and records a JSON manifest (name, format, size, mode,
+    compression, warnings — the audit trail the acceptance
+    criteria ask for). `EXPORT_FILTERS` carries the §17.1 dialog
+    filter strings (`.tif .tiff`, `.jpg .jpeg`).
+  * `export_figure()` routes matplotlib figures through the same
+    rules (SVG stays vectorial via matplotlib's own writer; raster
+    formats render through Agg then encode with the TIFF/JPEG
+    policy); `export_widget_image()` takes Qt-rendered bytes.
+  * Pillow stays optional exactly like matplotlib: importing is
+    free, exporting without it raises the actionable
+    `DependencyError` with the `pip install 'pharmaml[reports]'`
+    hint (Pillow>=10.0 added to the reports extra; the verified
+    stack pins 11.3.0).
+* **`ui/widgets/image_export.py`** — the GUI bridge:
+  `grab_png_bytes` (Qt widget → PNG bytes, offscreen-safe) +
+  `export_widget_grab` (bytes → the engine's integrity-checked
+  pipeline). The GUI never re-implements format policy; it renders,
+  the engine decides.
+* **`ui/widgets/image_panel.py` / `ui/widgets/plot_widget.py`** —
+  `ImagePanel.export_image()` and the new
+  `PlotPanel.export_image()`: extension picks the format, TIFF
+  carries the compression choice, JPEG the quality, every write
+  validated; the pre-§17 `export_png` boolean API keeps working as
+  a validation-backed shim.
+* **`ui/pages/image_lab.py`** — the export row goes §17: format
+  combo (TIFF default — the scientific choice, PNG, JPEG), JPEG
+  quality spin 1-95 (default 92, tooltipped lossy), TIFF compression
+  combo (LZW/DEFLATE/None), one dialog with the three filters, the
+  §17.4 extension-stamping rule (a foreign suffix gets the chosen
+  format's extension), and an honest status line carrying the
+  engine's result card — format, dimensions, byte count, and every
+  integrity warning.
+* **The tests** — `tests/test_export_images.py` (29 collected
+  items, 27 functions with the compression knob parametrised ×3:
+  the 16-bit roundtrip, the three compressions, quality
+  monotonicity, every refusal, the multi-page stack, the
+  mismatch/liar/mismatched-dimension/missing/corrupt validation
+  cases, the manager manifest + format override, the Pillow-free
+  error shape) and `tests/ui/test_export_gui.py` (7 offscreen
+  tests: both panels' three formats at the exact rendered size, the
+  compat shim, the control row's contract, the result-card status
+  line, the extension stamping, the honest FAILURE status). 36 new
+  collected items + 7 new doctests; honest totals 5,532 → **5,575 =
+  4,790 collect + 785 doctest**.
+
 ## [1.2.134] — 2026-11-08
 
 ### Added — round 221: the Image Lab (Studio increment 12 — the Part-2 §16.8.2-16.8.4/16.8.7 closure)

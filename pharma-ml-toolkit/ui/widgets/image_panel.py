@@ -31,6 +31,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from ..theme_manager import ChartPalette
+from .image_export import export_widget_grab
 
 #: The colormap presets the HistogramLUT control can switch between
 #: (16.8.4).  Deterministic, print-safe gradients -- viridis is the
@@ -164,12 +165,42 @@ class ImagePanel(QWidget):
     def _on_roi_changed(self) -> None:
         self.roi_changed.emit()
 
-    # -- export (16.8.7 / 16.19) ---------------------------------------------
+    # -- export (16.8.7 / 16.19 / Part-3 §17) ------------------------------
+    def export_image(
+        self,
+        path: str | Path,
+        *,
+        jpeg_quality: int | None = None,
+        compression: str | None = None,
+        dpi: float | None = None,
+    ):
+        """Export the rendered panel to PNG/TIFF/JPEG (§17 engine).
+
+        The extension picks the format; TIFF carries the lossless
+        compression choice (default ``tiff_lzw``), JPEG the quality
+        setting, and the written file is reopened + validated before
+        success is reported (§17.4).  Returns the core
+        :class:`~pharmaml.viz.export.ExportResult`.
+        """
+        return export_widget_grab(
+            self._graphics,
+            path,
+            jpeg_quality=jpeg_quality,
+            compression=compression,
+            dpi=dpi,
+        )
+
     def export_png(self, path: str | Path) -> bool:
-        """Grab the rendered panel to a PNG file; True on success."""
-        pixmap = self._graphics.grab()
-        ok = pixmap.save(str(path))
-        return bool(ok)
+        """Grab the rendered panel to a PNG file; True on success.
+
+        Compatibility shim over :meth:`export_image` (the pre-§17 API
+        callers keep working, now validation-checked).
+        """
+        try:
+            self.export_image(path)
+            return True
+        except Exception:  # noqa: BLE001 - boolean contract
+            return False
 
     def clear(self) -> None:
         self._values = None
