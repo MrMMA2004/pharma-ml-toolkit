@@ -9151,3 +9151,119 @@ homes) · honest totals **5,497** (4,719 + 778) · census **968 /
 (**Response AI**) is the last planned row, probe ready · counter
 **14/100** (the concurrent agent's runs 13/14; this is an IM
 continuation, no cron fire — counter unchanged by this leg).
+
+## Round 219 (ship) — 2026-11-08 — increment 11 shipped: the Response AI Workbench, v1.2.132
+
+The IM-continuation leg that took ownership of the planned increment
+(audit row 12 — the last planned GUI_AUDIT row): no concurrent-agent
+WIP in flight (the tree opened clean and synced at `5a50f90`, round
+217's close-out), so per the race protocol this leg built it.  What
+shipped:
+
+**The page** — `ui/pages/responseai.py`, the Studio's eleventh
+feature page, giving `pharmaml.ml.drugresponse` — the module absorbed
+from `CSOgroup/CaDRReS` (the bilinear factorisation + the
+informative-weight idea), `Precily` (the multi-omics fusion
+discipline) and `DeepResponse` (the response VAE) — its FIRST GUI
+surface: the playground's Response AI tab predates the module and
+rides other engines (visiblenet/metalearn/bayesopt — round 167), so
+this page is the module's own workbench.  Eight tabs over the public
+APIs, every number engine-printed first by the probe: the Hill curve
+(`fit_hill_curve` on the seeded 4PL demo — top 0.9981 vs 1.0, ic50
+0.8123 vs 0.8, hill 1.1679 vs 1.2, r² 0.999669, the log-dose AUC
+both ways 3.055882 vs 3.057985, the fitted curve drawn over the
+log10-dose grid), the response metrics (`response_metrics` on the
+seeded noisy pair — pearson 0.979392, rmse 0.058964 — or two Data
+Explorer columns with the >= 8-finite-aligned guard and honest
+refusal), the rank correlations (0.914276 / 0.918042 / 0.744681 over
+n=48), the response model (`DrugResponseModel` on the seeded 12x4
+screen with a 15% NaN mask — 40 observed pairs, final loss 0.029817,
+in-sample pearson 0.164369 "honestly modest, the toy screen is
+tiny"), the cross-validation (folds split CELL LINES — pearsons
+-0.190352 / -0.599944 / 0.178499 / 0.712589, mean 0.025198 "the toy
+screen barely carries signal", negative folds drawn downward), the
+informative regression (prior-shrunk coefs [0.4789, 1.1233, -0.5979]
+vs generating [0.5, 1.5, -0.8] under priors [100, 4, 4]), the
+response VAE (ELBO -20.220437 → -10.032681, the bound improving) and
+the multi-omics fusion (block_report's total variance equalised to
+1.0 for both blocks, the raw mean column stds 0.927576 / 0.488877
+side by side, the latent 30x20).
+
+**The probe re-seed** — round 218's probe drew from ONE global rng
+sequence across its nine sections, which no standalone per-tab job
+can reproduce; round 219 re-seeded it per section (fresh
+`default_rng(42)` at every section head — the bestofml probe's house
+pattern, `scratch/probe_bestofml_217.py` does exactly this), added
+`block_report`'s audit numbers, and re-ran it BEFORE the tests were
+written: sections 1-2 unchanged by construction (the first draw / no
+draws), sections 3-9 re-pinned to the fresh-seed values.  The API
+shape notes recorded in round 218's entry held exactly
+(`HillFit.parameters` dict; `InformativeRegression.fit` returns the
+loss series; `VAEHistory.elbo[-1]` et al.; `block_stds_` per-column
+Series — aggregated before printing).
+
+**The tests** — `tests/ui/test_responseai_page.py`, 17 offscreen
+tests: the eight end-to-end tabs against the probe-printed numbers
+(tables, reports, plots — lines/scatters/bars each checked), the
+explorer-column paths for the metrics/rank tabs (fake explorer frames
+at 90/70 aligned rows), the honest refusals (3 finite rows < 8,
+epochs 10 < 20, folds 1 < 2, noise -0.1 < 0 / 2.5 > 1), the parse
+helpers, and the main-window wiring pin (14 sections).  One
+first-run test bug was mine (the Hill curve's max over the finite
+grid approaches the fitted top asymptotically — 0.99803 vs 0.9981 —
+the assertion now tolerates the approach).  The sidebar growth
+re-pinned three older tests: `test_main_window` (13 → 14 pages),
+`test_bestofml_page` (len-2 → len-3), `test_foundations_page`
+(len-3 → len-4).
+
+**The ritual** — OOM ritual respected (next-server down for the
+notebook run, dev daemon restarted after); notebooks re-executed
+**201 s** (8/8, zero errors, all print `pharmaml 1.2.132`) + 7 twins
+regenerated; the scrub dropped **0** (the round-216/217 leak fixes
+hold — first back-to-back zero-drop rounds);
+`scratch/build_zip_219.py` (the round-217 recipe verbatim) —
+**v1.2.132 = 20,288,273 bytes**, sha-256
+`8ae2c2487be43b96c8619dc08168400536604a0bac9b48389aa70f96907dcf27`,
+997 entries / 951 files, testzip OK per home, **real leaks 0**;
+predecessor v1.2.131 swept from all four homes.  Census: **971 files
+/ 354,525 lines** (+3 / +2,695 vs round 217) — the first census run
+this round printed 354,453 because it ran BEFORE the CHANGELOG
+section was written (72 lines inside the tree); the census must run
+LAST on the post-ship tree (round 217's own rule, restated).  The
+live hero had it right all along (the endpoint computes it live);
+FALLBACK_STATS and the manifest were corrected to 354,525.  Web
+pins: hero 5,497 → **5,514** tests + FALLBACK_STATS 971/354,525,
+download-panel 3 sites + overview 2 sites to 5,514; four version
+carriers at 1.2.132.  GUI_AUDIT row 12 → shipped; GUI_REDESIGN
+migration status → increment 11 with the Response AI paragraph;
+CHANGELOG v1.2.132 section; GITHUB_BACKUP_MANIFEST v1.2.132 section.
+
+**Verification** — the ui suite + job_safety in one invocation:
+**247 dots, exit 0** (199 + 31 was round 217's 230; +17 new); the
+touched-files batch 53 dots; the focused batch (web_parity,
+data_loading, csv_standardize, docs_index, excel_io_and_samples) 213
+dots exit 0; notebook_variants **47 green**; doctests **778** (the
+usual 1 skip); collect-only **4,736** (honest total 4,736 + 778 =
+**5,514**); ruff clean; mypy 0 on both touched ui files (15
+Optional-narrowing errors fixed by typing the outcome fields `Any`,
+the bestofml house pattern); `bun run lint` exit 0; agent-browser
+E2E: the live hero prints **971 files · 354,525 LOC · 5,514 tests**
+with the v1.2.132 chip, the Download tab carries 5,514 at three
+sites + the exact 19.35 MB, zero console/page errors (screenshot
+committed: `docs/gui/screenshots/round219_hero_responseai.png`); zip
+endpoint `{"zipBytes":20288273,"version":"1.2.132","exact":true,"source":"release"}`.
+
+**Ops** — the webDevReview 15-min job had vanished from the scheduler
+again (job 512428 from round 218 gone): recreated as **job 512508**;
+the master job 508389 alive (raw run_count 19 vs the canonical
+counter 14 — the intentional env-dead-fire drift).  Committed and
+pushed: `6c1658c` (the increment) then this close-out train; origin
+verified.  This is an IM continuation — no cron fire, the canonical
+counter stays **14/100**.
+
+**Baselines for the next round** — v1.2.132 stands (four carriers,
+four homes) · honest totals **5,514** (4,736 + 778) · census **971 /
+354,525** · sidebar **14 sections** (responseai live) · GUI_AUDIT's
+planned rows are ALL shipped (rows 1-13 done; the next Studio
+increments come from the cross-cutting concerns or new audit rows)
+· counter **14/100**.

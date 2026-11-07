@@ -475,8 +475,8 @@ numbers added). Notebooks re-executed at 1.2.132 (201 s, all eight
 print `pharmaml 1.2.132`, zero stale); 7 twins regenerated; the twin
 scrub dropped 0. Honest totals: collect-only **4,736** + 778
 doctests = **5,514**; web pins 5,497 → 5,514 (page.tsx hero +
-FALLBACK_STATS 971/354,453 + download-panel ×3 + overview ×2) +
-census 968/352,830 → **971 / 354,453**. The sidebar grows to
+FALLBACK_STATS 971/354,525 + download-panel ×3 + overview ×2) +
+census 968/352,830 → **971 / 354,525**. The sidebar grows to
 **14 sections** (test_main_window + bestofml/foundations wiring pins
 re-pinned). No rollback this round — the tree opened clean and synced
 at `5a50f90` (round 217's close-out); this is an IM continuation, no
