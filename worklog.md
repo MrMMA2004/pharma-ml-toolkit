@@ -8925,3 +8925,67 @@ FALLBACK_STATS precedent re-applied); evidence screenshot committed at
 `scratch/e2e_r216_foundations_pins.png`; the zip endpoint answered
 `{"zipBytes":19862379,"version":"1.2.130","exact":true}`.  Tip:
 f09eed5.
+
+## Round 217 — 2026-11-07 — the 14th rollback recovered; the increment-10 race verified, not duplicated
+
+**Run context**: cron run 13/100 (job 508389, fired 23:56 +08:00) — the
+counter 12 → **13**.  The 14th rollback hit on open: local wiped to
+`2eb0ede` (round-186 era), `scratch/100runs-counter.json` gone, token
+and remote gone, venv dead (`import rdkit` failed).  Recovery, all
+verified: the PAT re-extracted from `upload/MASTER_PROMPT.pdf` via
+pdftotext + the 93-char line-wrap reconstruction
+(`scripts/extract_pat.py`, committed — the Command.txt path is dead,
+the PDF is the durable carrier; auth check HTTP 200); credential
+helper + origin remote restored; the 6 untracked upload files that
+blocked the ff-pull moved aside and came back **byte-identical**
+(purged); ff-pull clean to `ba60af0` (round 216 v1.2.130); the venv
+repaired in the foreground via the root `scratch/venv_repair.sh`
+(5th+ time the drill paid).
+
+**The race, and the protocol that resolves it**: the round-217 planned
+increment (Studio increment 10 — Best-of ML, audit row 11) was ALREADY
+mid-flight by the concurrent agent — its `ui/pages/bestofml.py` (1,184
+lines), `tests/ui/test_bestofml_page.py` (19 tests),
+`scratch/probe_bestofml_217.py` and the `main_window.py` wiring
+(`bestofml` section, 13 keys) were in the tree uncommitted, timestamps
+minutes old.  My own parallel draft (`ui/pages/bestof.py`, built
+against the same probe-printed numbers) was **withdrawn and deleted**
+rather than landed — one increment, one owner.  The verification leg
+of the standing mandate ran instead, independently: my own probe
+(`scratch/probe_bestof_217.py`, deleted with the duplicate, results
+identical) recomputed every overlapping number from the engines
+directly — catalogue 924/35/5,121,472, DP true→dp 49.9741→49.6516 on
+the ε=1 N(50,5²) n=400 demo (seed 42), the LSH sweep
+0.985→0.575 recall across planes 2→10 at 1.38x→13.60x compression,
+adversarial clean 0.9875 with 44/160 broken at 0.5 sd, ACF peak lag 24
+/ seasonal strength 0.9819 on the period-24 signal — all matching
+their probe; their `ann_benchmark` probes contract ∈ {1,2} (the only
+probe bug I hit was mine, probes=8).  Their test file then ran green
+under me: **19/19** bestofml + the re-pinned main_window and
+foundations **21/21** (one transient "file not found" caught their
+agent mid-edit — the file reappeared seconds later; a live race
+observed, not an error).  Their increment is sound and theirs to
+commit/ship.
+
+**The engineering fix (small, verifiable)**: the runbook's
+`bash scratch/venv_repair.sh` is typed from `pharma-ml-toolkit/` every
+rollback and failed there THIS recovery ("No such file or directory")
+— the canonical script lives at the repo ROOT's scratch/.  New
+`pharma-ml-toolkit/scratch/venv_repair.sh`: a thin exec-wrapper that
+resolves the canonical script from both CWDs (absolute first, relative
+fallback), zero recipe duplication, `venv_repair_9.sh` marked
+superseded in its header.  Verified from both working directories.
+
+**Ops**: dev server healthy (GET / 200); zip endpoint exact v1.2.130
+(19,862,379 bytes); the webDevReview 15-min job recreated as **job
+512428** (its predecessor died in the rollback); scheduler raw run_count
+18 vs counter 13 (env-dead fires, the intentional drift).  No version
+bump this round — no tracked src/tests/playground/docs bytes changed;
+the Studio increment 10 ships with the other agent's round (v1.2.131
+with the full ritual per the round-214/215 contract).
+
+**Baselines for the next round**: v1.2.130 stands (four carriers) ·
+honest totals 5,478 (4,700 + 778) · census 962 files / 350,731 lines
+(the post-ship fallback pin) · sidebar 13 sections (`bestofml` wired,
+page uncommitted — the other agent's round to close) · next planned:
+Response AI (audit row 12) after increment 10 lands · counter **13/100**.
