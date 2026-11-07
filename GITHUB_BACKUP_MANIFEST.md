@@ -391,3 +391,34 @@ with arithmetic before the heavy compute), the factory's
 `(fraction, label)` with the cooperative-stop channel propagating, and
 13 new offscreen tests. Honest count **4,564 + 778 = 5,342 tests**; fresh
 walk pins **939 files / 343,253 lines**.
+
+## v1.2.122 release-zip homes (2026-11-07, round 208 — PK/PD Workbench, the Studio's increment 3)
+
+`pharma-ml-toolkit-v1.2.122.zip` — 19,777,011 bytes, sha-256
+`7cc737a15110a01dc171621bd6cc8eb8bb146e1000c9f646218baaec53c42521`,
+built with the standing builder (`scratch/build_zip_183.py`: 971 entries /
+925 files / real leaks 0), placed in all four homes:
+
+- `download/pharma-ml-toolkit-v1.2.122.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.122.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.122.zip`
+- `upload/pharma-ml-toolkit-v1.2.122.zip`
+
+**What shipped:** directive #16's 16.18 migration step 3 — the Studio's
+PK/PD Workbench (`ui/pages/pkpd.py`, audit row 3): three of the
+playground PK/PD tab's engines wired to the same public backend APIs
+the cards call — the exact two-compartment regimen simulator
+(`TwoCompartment` matrix-exponential linCmt with explicit repeated
+`DosingEvent` records; concentration curve with dotted dose markers,
+Cmax/Tmax, trapezoid AUC, the realized dose-event table), the
+non-compartmental analysis (`validate_concentration_series` →
+`nca_summary` + the extended `fit_terminal_phase`/`auc_linear_log`:
+linear-up/log-down AUC, terminal λz window with adjusted R² and span,
+Vd/CL with an IV dose, the observed profile with its AUC shaded), and
+the NONMEM/mrgsolve event grammar (`ev`/`addl_until`/`realize_addl`/
+`ev_days` — the full realized dose-event table with weekday schedules).
+`ui/widgets/plot_widget.py` gained two reusable palette-aware primitives
+(`line(fill=True)` area shading + `vlines` dose markers); all 8 notebooks
+re-executed at 1.2.122 (200 s, 7 twins regenerated); 18 new offscreen
+tests. Honest count **4,582 + 778 = 5,360 tests**; fresh walk pins
+**945 files / 344,253 lines**.

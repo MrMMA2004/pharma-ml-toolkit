@@ -1,3 +1,44 @@
+## [1.2.122] — 2026-11-07
+
+### Added — round 208: PK/PD Workbench, the Studio's increment 3 (directive #16, 16.18 migration)
+
+* **`ui/pages/pkpd.py`** — the fourth feature page, mapped to the
+  playground PK/PD tab (audit row 3). Three of the tab's engines, each
+  wired to the same public backend APIs the cards call, in three tabs:
+  the exact two-compartment **regimen simulator** (`TwoCompartment`
+  matrix-exponential linCmt with explicit repeated `DosingEvent`
+  records — concentration curve with dotted dose markers, Cmax/Tmax,
+  trapezoid AUC over the simulated window, the realized dose-event
+  table), the **non-compartmental analysis** (the card's pasted
+  series through `validate_concentration_series` → `nca_summary`
+  plus the extended `fit_terminal_phase`/`auc_linear_log`:
+  linear-up/log-down AUC, terminal λz window with adjusted R² and
+  span, Vd and CL when an IV dose is given — the observed profile
+  drawn with its AUC shaded under the curve), and the **dosing
+  events** realization (the NONMEM/mrgsolve grammar `ev`/
+  `addl_until`/`realize_addl`/`ev_days`: one dose record plus
+  additional doses until a stop time, and weekday schedules, as the
+  full dose-event table).
+* **`ui/widgets/plot_widget.py`** — two reusable palette-aware
+  additions: `line(..., fill=True)` (area shading at `fillLevel=0`
+  with a translucent series brush — the AUC visual) and `vlines(xs)`
+  (dotted vertical marker lines for dose/event times).
+* Sidebar gains the PK/PD section between Chemistry and Model
+  Analysis (usage order); theme switches re-paint the page's plot.
+* 18 new offscreen tests (`tests/ui/test_pkpd_page.py`): the three
+  end-to-end runs against the REAL engine numbers (the regimen curve
+  checked against a fresh `TwoCompartment` solve; the default series'
+  AUC 56.485 / t½ 4.233; `addl_until(0, 12, 72) == 5` under the
+  mrgsolve convention), IV-route compartment switch, positivity and
+  n_doses bounds, NCA length mismatch and unsorted-series refusal,
+  Vd/CL arithmetic, duplicate-submission refusal, palette sync,
+  main-window integration (six pages), fill/vline plot semantics.
+
+### Changed
+
+* Honest total **5,360** tests (4,582 collected + 778 doctests);
+  `ui/` suite 49 → 67.
+
 ## [1.2.121] — 2026-11-07
 
 ### Added — round 207: Chemistry Workbench, the Studio's increment 2 (directive #16, 16.18 migration)

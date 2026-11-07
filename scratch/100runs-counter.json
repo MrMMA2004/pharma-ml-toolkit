@@ -1,9 +1,9 @@
 {
   "job": "MASTER_PROMPT-2h-sync-100x",
-  "runs_completed": 7,
+  "runs_completed": 8,
   "max_runs": 100,
   "interval": "every 2 hours (fixed_rate 7200s)",
   "purpose": "Continue the MASTER_PROMPT and update the GitHub repository (including the latest zip file). Counter is committed to git each run so it survives sandbox rollbacks (the remote is the survivor).",
   "created": "round 194, after the 9th rollback recovery (local wiped to 2eb0ede/round-186; remote survived at 101f5f7/round-193 v1.2.112; recovered via pure fast-forward)",
-  "last_run_note": "2026-11-07 12:20 cron run (round 207, counter 6->7): environment clean (HEAD ec3da7f, no rollback); the Studio's increment 2 shipped — ui/pages/chemistry.py Chemistry Workbench (standardize_csv + compute_feature_frame with the v1.2.119 batch guard carried over via a 5-molecule probe, the (done,total,note)->(fraction,label) progress bridge, cooperative Stop at molecule-batch boundaries), 13 new tests/ui/ + shell tests at five sections (5,342 honest total = 4,564 collected + 778 doctests), notebooks re-executed at 1.2.121, v1.2.120 -> v1.2.121 (19,764,621 bytes, sha 0986dc2c, four homes), web pins 5342 + census 939/343,253"
+  "last_run_note": "2026-11-07 14:20 cron run (round 208 completion, counter 7->8): landed the interrupted in-flight increment 3 — ui/pages/pkpd.py PK/PD Workbench (TwoCompartment regimen simulator, NCA with terminal-phase lambda-z/AUC lin-log, dosing-event realization ev/addl_until/ev_days), plot_widget line-fill + vlines, 18 offscreen tests; v1.2.122 (19,777,011 bytes, sha 7cc737a1, four homes), pins 5360; test battery + worklog round 208 + commit/push this run"
 }

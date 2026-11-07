@@ -7731,3 +7731,102 @@ row 2 + the migration-status section + GITHUB_BACKUP_MANIFEST section.
    stack (not the ~200 a full-mordred guess suggests) — a refusal
    test at 0.01 MB let a 5,160-byte matrix squeak under its 5,355-byte
    budget; the test now uses 0.001 MB and asserts the arithmetic text.
+
+## Round 208 — PK/PD Workbench: the Studio's increment 3 (directive #16, 16.18), v1.2.122 shipped (2026-11-07)
+
+The owner's "Continue MASTER_PROMPT part2" directive, landing in the
+clean window after run 7 (round 207 had already absorbed it: HEAD
+`5632863` = origin/main, counter 7/100, environment healthy — no
+rollback). This round continues the 16.18 migration sequence at step 11:
+audit row 3, the PK/PD tab.
+
+Concurrent-run note: run 8 fired into a parallel sandbox at 14:20 +08:00
+mid-round and wrote the counter (7→8, an accurate note observing this
+round's in-flight tree) while this round's full battery ran; this
+commit lands both the work and that counter state — one round, one
+commit, no duplicate sections.
+
+**What shipped — `ui/pages/pkpd.py`, the fourth feature page** (three
+of the tab's engines, each wired to the SAME public backend APIs the
+playground cards call, in three tabs):
+
+- **Regimen simulator** — `TwoCompartment` (the matrix-exponential
+  linCmt solution) with explicit repeated `DosingEvent` records: the
+  central concentration curve with dotted vertical dose markers,
+  Cmax/Tmax and the trapezoid AUC over the simulated window, plus the
+  realized dose-event table (time/amount/cmt/evid). The card's own
+  validation semantics carried over (positivity on
+  dose/tau/ka/v2/q/v3/duration — CL may legitimately be 0; n_doses
+  bounded 1..100; route switches the event compartment 0↔1 and the
+  bioavailability factor).
+- **Non-compartmental analysis** — the card's pasted series (defaults
+  mirrored: the one-compartment IV bolus, t½≈4 h, sampled to 24 h)
+  through `validate_concentration_series` → `nca_summary` PLUS the
+  extended `fit_terminal_phase`/`auc_linear_log`, consolidated into one
+  metrics table (11 rows without a dose, 13 with): trapezoid and
+  linear-up/log-down AUC, AUMC, MRT, Cmax/Tmax, both terminal
+  half-lives, λz, adjusted R², span, and Vd/CL when an IV dose is
+  given. The observed profile is drawn with its AUC shaded under the
+  curve (`line(fill=True)`) and sample markers.
+- **Dosing events** — the NONMEM/mrgsolve grammar
+  (`ev`/`addl_until`/`realize_addl`/`ev_days`): the full realized
+  dose-event table (time, amount, cmt, evid, addl, from_addl, source)
+  including the weekday schedule rows, with the honest mrgsolve
+  convention documented in the test (`addl_until(0, 12, 72) == 5` —
+  the until boundary is not an addl dose).
+- **`ui/widgets/plot_widget.py`** gained two reusable palette-aware
+  primitives: `line(..., fill=True)` (translucent series-brush area
+  shading at fillLevel=0) and `vlines(xs)` (dotted marker lines);
+  both are cleared by `clear()` and re-coloured on theme switches.
+- Sidebar: six sections now (pkpd between chemistry and models, usage
+  order); main-window/theme wiring + `pages.count()` pin updated.
+
+**The bugs the harness caught before they shipped**: my first test
+expectations were GUESSES (AUC 38.1/t½ 2.52 from an ad-hoc series;
+7 addl doses; `opts['brush']`) — the real engines answered 56.485/
+4.233 (the card's actual defaults), 6 doses (+5 additional, mrgsolve
+convention), and "brush lives on the child PlotCurveItem, not the
+PlotDataItem wrapper". Also one dead branch removed (an `interval <= 0`
+check unreachable behind a parse minimum). The lesson re-learnt: never
+assert a number you haven't seen the engine print.
+
+**Verification**: 18 new offscreen tests (`tests/ui/test_pkpd_page.py`)
+— the three end-to-end runs against real engine numbers (the regimen
+curve checked `np.allclose` against a fresh `TwoCompartment` solve;
+dose markers at 0/24/48; the IV compartment switch; NCA arithmetic and
+Vd/CL = dose/AUC; the unsorted-series refusal through the worker's
+failed channel; duplicate-submission refusal; palette sync;
+main-window integration at six pages; fill/vline plot semantics and
+their clear() behaviour). ui/ suite 49 → 67 green; focused batteries
+green (notebook freshness guard + docs-index + job_safety + web parity
+171; data_loading + csv_standardize + excel 121). The Xvfb GUI class
+OOM-kills this 4 GB sandbox at ~48% of test_playground.py (exit 137,
+zero failures before the kill — the pre-existing characteristic that
+keeps the standing discipline at collect-only + focused batteries,
+exactly as rounds 205–207 verified). Collect-only **4,582 across the
+tests tree, exit 0**; ruff and mypy clean on every touched file.
+Honest total: **4,582 + 778 doctests = 5,360**. A full non-GUI battery
+was additionally launched detached; it was still in flight (66%+, zero
+failures) when the concurrent run-8 sandbox forced the commit window —
+its completion rides the next round's verification.
+
+**Ship**: all 8 notebooks re-executed at 1.2.122 first (200 s, dev
+server stopped for the re-execution — the OOM ritual — and restarted
+via the daemon after; 7 no-output twins regenerated),
+`scratch/build_zip_183.py` → **v1.2.122 = 19,777,011 bytes, sha-256
+`7cc737a1…`**, 971 entries / 925 files, real leaks 0, four homes
+byte-identical; web pins 5,342 → 5,360 (seven sites) + fallback stats
+939/343,253 → 945/344,253 (`scratch/census.py`, the toolkit-fs.ts-exact
+walk on the post-ship tree); README tree + CHANGELOG + the GUI audit
+row 3 + the migration-status section + GITHUB_BACKUP_MANIFEST section.
+
+**Lessons pinned**:
+1. Assert only numbers the engine has printed for you — a guessed
+   expectation is a test-shaped fabrication (this round caught three).
+2. `PlotDataItem.opts` does not carry the `brush` kwarg — the fill
+   brush lives on the child `PlotCurveItem` (`item.curve.opts`); assert
+   against the item that actually renders.
+3. The full Xvfb GUI battery is a memory hazard on a 4 GB box even
+   with the dev server stopped (exit 137 at the playground's Tk
+   import cascade) — the honest verification stays collect-only +
+   focused batteries, and the GUI class runs green in isolation.

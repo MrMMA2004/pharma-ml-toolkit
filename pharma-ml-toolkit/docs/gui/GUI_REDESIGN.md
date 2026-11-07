@@ -103,17 +103,30 @@ training run with held-out R²), and chart-palette sync.
 
 ## Migration status (16.18)
 
-Increment 2 of N — shell, navigation, theme system, Data Explorer,
-Chemistry Workbench, Model Analysis, Settings are live and tested.
-The Chemistry Workbench (increment 2, v1.2.121) standardizes a SMILES
-column through the playground's own `standardize_csv` batch front door
-and computes multi-family features through `compute_feature_frame`
-with the v1.2.119 batch guard carried over: a five-molecule probe
-fixes the exact per-molecule column count, then the dense-matrix
-estimate is checked against half of `MemAvailable` and the batch
-refuses with its arithmetic before the heavy compute — both jobs in
-QThreadPool workers with the cooperative Stop. Next increments
-migrate the remaining playground sections (PK/PD per the audit's
-usage order); the Tkinter playground is retired only after every
-section has a verified Studio page. See `docs/gui/GUI_AUDIT.md` for
-the full tab-by-tab map.
+Increment 3 of N — shell, navigation, theme system, Data Explorer,
+Chemistry Workbench, PK/PD Workbench, Model Analysis, Settings are
+live and tested. The PK/PD Workbench (increment 3, v1.2.122) brings
+three of the playground PK/PD tab's engines, each wired to the same
+public backend APIs the cards call: the exact two-compartment regimen
+simulator (`TwoCompartment` matrix-exponential linCmt with explicit
+repeated `DosingEvent` records — concentration curve, dose markers,
+Cmax/Tmax, trapezoid AUC), the non-compartmental analysis
+(`validate_concentration_series` → `nca_summary` plus the extended
+`fit_terminal_phase`/`auc_linear_log` — linear-up/log-down AUC,
+terminal λz window, Vd and CL when an IV dose is given, the observed
+profile drawn with its AUC shaded), and the NONMEM/mrgsolve event
+grammar (`ev`/`addl_until`/`realize_addl`/`ev_days` — the full realized
+dose-event table with weekday schedules). All three run in QThreadPool
+workers; the honest disclosure: they are single-shot engine calls
+without checkpoint loops, so the cooperative Stop lands only for
+checkpoint-wired jobs. The Chemistry Workbench (increment 2, v1.2.121)
+standardizes a SMILES column through the playground's own
+`standardize_csv` batch front door and computes multi-family features
+through `compute_feature_frame` with the v1.2.119 batch guard carried
+over: a five-molecule probe fixes the exact per-molecule column count,
+then the dense-matrix estimate is checked against half of
+`MemAvailable` and the batch refuses with its arithmetic before the
+heavy compute. Next increments migrate the remaining playground
+sections (Cell Lines per the audit's usage order); the Tkinter
+playground is retired only after every section has a verified Studio
+page. See `docs/gui/GUI_AUDIT.md` for the full tab-by-tab map.

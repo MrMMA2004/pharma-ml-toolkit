@@ -49,11 +49,26 @@ class PlotPanel(QWidget):
         brush = pg.mkBrush(self._palette.series[index % len(self._palette.series)])
         self._plot.plot(x, y, pen=pen, symbol=symbol, symbolSize=size, symbolBrush=brush, name=label or None)
 
-    def line(self, x: np.ndarray, y: np.ndarray, *, label: str = "", width: int = 2, index: int = 0, style: str = "solid") -> None:
+    def line(self, x: np.ndarray, y: np.ndarray, *, label: str = "", width: int = 2, index: int = 0, style: str = "solid", fill: bool = False) -> None:
         pen = pg.mkPen(self._palette.series[index % len(self._palette.series)], width=width)
         if style == "dash":
             pen.setStyle(Qt.PenStyle.DashLine)
-        self._plot.plot(x, y, pen=pen, name=label or None)
+        kwargs: dict[str, object] = {}
+        if fill:  # area-under-the-curve shading (NCA profiles)
+            fill_color = pg.mkColor(self._palette.series[index % len(self._palette.series)])
+            fill_color.setAlpha(70)
+            kwargs["fillLevel"] = 0.0
+            kwargs["brush"] = pg.mkBrush(fill_color)
+        self._plot.plot(x, y, pen=pen, name=label or None, **kwargs)
+
+    def vlines(self, xs, *, label: str = "") -> None:
+        """Vertical marker lines (dose times, event boundaries).
+
+        Palette-aware dotted lines; removed by the next ``clear()``.
+        """
+        for x in xs:
+            pen = pg.mkPen(self._palette.foreground, width=1, style=Qt.PenStyle.DotLine)
+            self._plot.addLine(x=float(x), pen=pen)
 
     def bars(self, heights: np.ndarray, *, labels: list[str] | None = None, index: int = 0, width: float = 0.6) -> None:
         """Vertical bar chart (feature importance and histograms)."""
