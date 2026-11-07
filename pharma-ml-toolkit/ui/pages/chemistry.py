@@ -255,10 +255,12 @@ class ChemistryWorkbenchPage(QWidget):
                 seconds=float(report.elapsed),
             )
 
-        worker = self._runner.submit("SMILES standardization", job)
-        if worker is not None:
-            worker.signals.finished.connect(self._standardize_done)
-            worker.signals.failed.connect(self._failed)
+        self._runner.submit(
+            "SMILES standardization",
+            job,
+            on_finished=self._standardize_done,
+            on_failed=self._failed,
+        )
 
     def _standardize_done(self, outcome: object) -> None:
         assert isinstance(outcome, StandardizeOutcome)
@@ -341,11 +343,13 @@ class ChemistryWorkbenchPage(QWidget):
             )
 
         name = f"feature factory ({preset})"
-        worker = self._runner.submit(name, job)
-        if worker is not None:
-            worker.signals.finished.connect(self._features_done)
-            worker.signals.failed.connect(self._failed)
-            worker.signals.cancelled.connect(self._cancelled)
+        self._runner.submit(
+            name,
+            job,
+            on_finished=self._features_done,
+            on_failed=self._failed,
+            on_cancelled=self._cancelled,
+        )
 
     def _features_done(self, outcome: object) -> None:
         assert isinstance(outcome, FeaturesOutcome)

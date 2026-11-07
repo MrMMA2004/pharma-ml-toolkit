@@ -241,13 +241,14 @@ class ModelAnalysisPage(QWidget):
             progress(1.0, "done")
             return outcome
 
-        worker = self._runner.submit(f"{model} on {target}", job)
-        if worker is None:  # pragma: no cover - busy guard already checked
-            return
-        worker.signals.finished.connect(self._render)
-        worker.signals.failed.connect(self._failed)
-        worker.signals.cancelled.connect(self._cancelled)
-        worker.signals.progress.connect(self._progress.update_progress)
+        self._runner.submit(
+            f"{model} on {target}",
+            job,
+            on_finished=self._render,
+            on_failed=self._failed,
+            on_cancelled=self._cancelled,
+            on_progress=self._progress.update_progress,
+        )
 
     # -- rendering --------------------------------------------------------------
     def _render(self, outcome: AnalysisOutcome) -> None:

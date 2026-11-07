@@ -108,8 +108,27 @@ class JobRunner(QObject):
         return self._job_name
 
     # -- control --------------------------------------------------------------
-    def submit(self, name: str, job: BackendJob) -> JobWorker | None:
-        """Start ``job`` unless one is already running (returns the worker)."""
+    def submit(
+        self,
+        name: str,
+        job: BackendJob,
+        on_finished: Callable[[Any], None] | None = None,
+        on_failed: Callable[[str], None] | None = None,
+        on_cancelled: Callable[[float], None] | None = None,
+        on_progress: Callable[[int, str], None] | None = None,
+    ) -> JobWorker | None:
+        """Start ``job`` unless one is already running (returns the worker).
+
+        The optional ``on_*`` handlers are connected BEFORE the runnable
+        enters the pool (round 208): ``pool.start`` hands the worker to
+        another thread immediately, so a page that connects
+        ``worker.signals.finished`` *after* ``submit`` returns races the
+        emitting thread and can lose the result of an instant job —
+        the UI stays on "Running …" forever. Wiring the handlers inside
+        ``submit`` closes that window. The runner's own finishers stay
+        the first connections, so ``job_ended`` still fires before the
+        page's result slot (the ordering the offscreen tests settle on).
+        """
         if self._busy:
             return None
         self._busy = True
@@ -120,6 +139,14 @@ class JobRunner(QObject):
         worker.signals.finished.connect(lambda _r: self._finish())
         worker.signals.failed.connect(lambda _m: self._finish())
         worker.signals.cancelled.connect(lambda _s: self._finish())
+        if on_finished is not None:
+            worker.signals.finished.connect(on_finished)
+        if on_failed is not None:
+            worker.signals.failed.connect(on_failed)
+        if on_cancelled is not None:
+            worker.signals.cancelled.connect(on_cancelled)
+        if on_progress is not None:
+            worker.signals.progress.connect(on_progress)
         self._pool.start(worker)
         return worker
 
