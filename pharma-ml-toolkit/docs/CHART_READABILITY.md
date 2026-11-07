@@ -12,6 +12,7 @@ HTML reports and document exports without requiring each plot to restyle itself.
 | display DPI | 120 | Clear interactive/notebook figures |
 | `EXPORT_DPI` | 220 | High-resolution PNG and rasterized PDF/SVG artists |
 | `HTML_DPI` | 160 | Crisp, zoomable embedded report images |
+| `MAX_RASTER_PIXELS` | 40,000,000 | Memory safety for exceptionally large physical figures |
 | layout | `tight` | Reserves room for labels and titles |
 | export bounds | tight + 0.16-inch padding | Prevents clipped titles and tick labels |
 
@@ -44,6 +45,10 @@ spacing manually. Invalid, non-finite and non-positive sizes, scales and DPI val
 `DataValidationError` instead of creating a corrupt or empty export.
 
 For HTML, `figure_to_base64(fig)` uses `HTML_DPI`; it also accepts `dpi=` explicitly.
+Exceptionally large physical figures are subject to `MAX_RASTER_PIXELS`: effective DPI
+is reduced only when the base figure would exceed 40 million pixels, with extra margin
+for tight-bound labels. This prevents a large similarity matrix from exhausting memory;
+ordinary figures still use the full requested DPI, and SVG/PDF paths and text stay vector.
 SVG/PDF metadata handling remains reproducible: SVG dates/IDs and PDF creation dates do
 not make otherwise identical exports differ between runs.
 

@@ -25,6 +25,7 @@ __all__ = [
     "DEFAULT_FIGSIZE",
     "EXPORT_DPI",
     "HTML_DPI",
+    "MAX_RASTER_PIXELS",
     "PALETTE",
     "PLOT_FORMATS",
     "close_figure",
@@ -45,6 +46,25 @@ PLOT_FORMATS: tuple[str, ...] = ("png", "svg", "pdf")
 DEFAULT_FIGSIZE: tuple[float, float] = (9.0, 6.0)
 EXPORT_DPI: int = 220
 HTML_DPI: int = 160
+#: Avoid multi-hundred-megabyte RGBA buffers for exceptionally large
+#: physical figures (for example an 80-label similarity heat-map).
+MAX_RASTER_PIXELS: int = 40_000_000
+
+
+def _bounded_raster_dpi(fig: Any, dpi: float) -> float:
+    """Keep normal exports crisp without allocating unbounded rasters.
+
+    SVG/PDF text and paths stay vector regardless of this value; their DPI
+    controls rasterized artists such as heat-maps.  A five-percent margin
+    covers tight-bound label/padding growth beyond the base figure size.
+    """
+    width, height = (float(value) for value in fig.get_size_inches())
+    pixels = width * height * dpi * dpi
+    if pixels <= MAX_RASTER_PIXELS:
+        return dpi
+    import math
+
+    return max(1.0, dpi * math.sqrt(MAX_RASTER_PIXELS / pixels) * 0.95)
 
 
 def _positive_number(value: Any, name: str) -> float:
@@ -277,7 +297,7 @@ def save_figure(fig, path: str | Path, *, dpi: int = EXPORT_DPI) -> Path:
             f"Unsupported figure format {file_path.suffix!r}; "
             f"supported: {', '.join(PLOT_FORMATS)} (picked from the file extension)"
         )
-    resolution = _positive_number(dpi, "dpi")
+    resolution = _bounded_raster_dpi(fig, _positive_number(dpi, "dpi"))
     file_path.parent.mkdir(parents=True, exist_ok=True)
     mpl = require_matplotlib()
     with mpl.rc_context({"svg.hashsalt": _SVG_HASHSALT}):
@@ -299,7 +319,7 @@ def figure_to_base64(fig, fmt: str = "png", *, dpi: int = HTML_DPI) -> str:
         raise DataValidationError(
             f"Unsupported figure format {fmt!r}; supported: {', '.join(PLOT_FORMATS)}"
         )
-    resolution = _positive_number(dpi, "dpi")
+    resolution = _bounded_raster_dpi(fig, _positive_number(dpi, "dpi"))
     buffer = io.BytesIO()
     mpl = require_matplotlib()
     with mpl.rc_context({"svg.hashsalt": _SVG_HASHSALT}):

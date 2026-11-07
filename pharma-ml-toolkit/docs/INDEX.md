@@ -749,6 +749,7 @@ after adding new public functions.
 | `DEFAULT_FIGSIZE` | constant | Readable default physical figure size, in inches. |
 | `EXPORT_DPI` | constant | Default resolution for file exports. |
 | `HTML_DPI` | constant | Default resolution for embedded HTML figures. |
+| `MAX_RASTER_PIXELS` | constant | Pixel budget for exceptionally large raster exports. |
 | `PALETTE` | constant |  |
 | `PDF_THEMES` | constant |  |
 | `PLOT_FORMATS` | constant |  |

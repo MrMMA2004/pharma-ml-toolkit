@@ -1892,6 +1892,19 @@ class TestFigureReadability:
         with pytest.raises(DataValidationError, match="dpi"):
             save_figure(fig, tmp_path / "bad.png", dpi=0)
 
+    def test_exceptionally_large_rasters_have_a_memory_budget(
+        self, monkeypatch, close_all
+    ):
+        from pharmaml.viz import _compat, new_figure
+
+        normal, _ = new_figure(figsize=(4.0, 3.0))
+        huge, _ = new_figure(figsize=(50.0, 40.0))
+        monkeypatch.setattr(_compat, "MAX_RASTER_PIXELS", 1_000_000)
+        assert _compat._bounded_raster_dpi(normal, 220.0) == 220.0
+        bounded = _compat._bounded_raster_dpi(huge, 220.0)
+        assert 1.0 < bounded < 220.0
+        assert 50.0 * 40.0 * bounded * bounded <= 1_000_000
+
 
 class TestSaveFigure:
     def test_formats_and_dirs(self, tmp_path, trained_classifier):
