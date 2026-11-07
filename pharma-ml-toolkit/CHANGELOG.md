@@ -1,3 +1,51 @@
+## [1.2.115] — 2026-11-07
+
+### Improved — readable, scalable charts in files, reports and the playground
+
+* **One shared visual standard** — `new_figure()` now defaults to 9×6 inches,
+  120 display DPI and tight layout, with stronger title/label hierarchy,
+  quieter grid lines, subtle spines and more breathing room around ticks.
+  The optional positive `scale` argument enlarges the physical layout without
+  inflating fonts; `layout="constrained"` and `layout=None` remain available.
+  Existing plotting function signatures are unchanged.
+* **Crisp, uncropped exports** — `save_figure()` defaults to 220 DPI and
+  `figure_to_base64()` to 160 DPI, with explicit `dpi` overrides on both.
+  Tight export bounds include 0.16-inch padding and consistent figure
+  backgrounds. Reproducible SVG/PDF metadata handling is preserved. A
+  40-million-pixel safety budget lowers effective DPI only for exceptionally
+  large physical figures (the 77-compound notebook heat-map would otherwise
+  allocate roughly 100 million pixels before padding); ordinary exports keep
+  their full requested resolution and vector content remains vector. The new
+  `DEFAULT_FIGSIZE`, `EXPORT_DPI`, `HTML_DPI` and `MAX_RASTER_PIXELS` constants
+  make the defaults discoverable and reusable.
+* **Responsive playground figures** — default figure hosts grow from 330 to
+  390 pixels. Live TkAgg figures preserve aspect ratio as their hosts resize,
+  with a bounded 1.35× upscale and no intentional centre cropping. The PNG
+  fallback now renders at `HTML_DPI`, fits in both directions and uses
+  high-quality resampling; existing toolbars, crosshairs and session-report
+  registration remain in place.
+* **Documentation and example** — `docs/CHART_READABILITY.md` explains
+  physical scale versus output resolution, all overrides and GUI behavior.
+  `examples/chart_readability.py` produces a deterministic concentration–time
+  chart as PNG, SVG, PDF and self-contained HTML without a display server.
+* **Verification** — the RL-inclusive chart/export suite passes with **219
+  passed and 6 skipped**, and three display-independent playground sizing
+  tests cover shrinking, bounded upscaling and host height. The full applicable
+  non-GUI suite exits 0 with **3,486 passed, 44 skipped and 24 deselected**;
+  769 applicable source doctests collect with zero failures (three skips).
+  All eight notebooks executed at 1.2.115, their no-output twins were rebuilt,
+  and all 119 notebook-variant guards pass. Native `test_playground.py` and the
+  RDKit XRender-dependent groups were excluded because this image has no
+  working Tk/display, Xvfb or `libXrender`; they are not counted as passed.
+  Full-source Ruff and mypy, Python compilation, dependency consistency and
+  whitespace checks pass.
+
+### Shipped
+
+* `pharma-ml-toolkit-v1.2.115.zip` — source, tests, documentation, visual
+  example and refreshed notebooks; ZIP integrity checked and safe copies
+  retained under the repository's archive protocol.
+
 ## [1.2.114] — 2026-11-06
 
 ### Added — the 140-repository research-catalog disposition, paired DTA, maternal–fetal PK and DOCKSTRING playground fold-ins

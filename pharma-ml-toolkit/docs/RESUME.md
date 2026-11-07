@@ -4,6 +4,25 @@ _Last rebuilt 2026-11-02 after the rollback that ate rounds 180–182.
 Updated 2026-11-03 after a second rollback ate round 184, and again the
 same evening after a THIRD rollback ate the first round-185 ship._
 
+## 2026-11-07 — Arena chart-readability addendum (v1.2.115)
+
+The active branch remains `arena/2697c755-pharma-ml-toolkit`. Shared Matplotlib
+figures now use a 9×6 layout, 120 display DPI, consistent typography and quiet
+grid/spine styling. File/HTML exports default to 220/160 DPI with tight padded
+bounds and reproducible SVG/PDF metadata. Playground hosts default to 390 px,
+live figures preserve aspect ratio on resize, and the PNG fallback uses the
+same high-resolution policy. Usage is documented in
+`docs/CHART_READABILITY.md`; `examples/chart_readability.py` regenerates PNG,
+SVG, PDF and HTML evidence under the ignored `artifacts/` tree.
+
+The final applicable non-GUI suite exits 0 with 3,486 passed, 44 skipped and
+24 deselected; 769 source doctests collect with zero failures (three skips).
+The RL-inclusive visualization suite has 219 passed and six skipped. All eight
+executed notebooks ran at 1.2.115, their no-output twins were regenerated and
+all 119 notebook-variant guards pass. Native `test_playground.py` and RDKit
+XRender-dependent groups were excluded because this image has no working
+Tk/display, Xvfb or `libXrender`; no native GUI/X11 execution is claimed.
+
 ## 2026-11-06 — Arena research-catalog addendum (v1.2.114)
 
 The active Arena branch is `arena/2697c755-pharma-ml-toolkit`; no older Arena

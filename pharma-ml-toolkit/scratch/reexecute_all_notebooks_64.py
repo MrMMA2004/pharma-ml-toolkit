@@ -68,10 +68,10 @@ def main() -> int:
         )
         client.execute()
         # 100x-101: the executed outputs must not leak the build machine's
-        # absolute venv paths (library deprecation warnings print their
+        # absolute venv/repository paths (library warnings print their
         # source file). Rewrite the interpreter's own site-packages prefix
-        # (computed, never hardcoded) to a neutral one BEFORE writing, so
-        # the committed outputs stay portable on any machine.
+        # (computed, never hardcoded) and this checkout's root to neutral
+        # forms BEFORE writing, so committed outputs stay portable.
         # 102 fix: nbclient delivers stream text as EITHER a str (one
         # iopub message) or a list of str chunks — iterating a bare str
         # would char-split it (the 1.2.45 regression), so normalise both
@@ -85,7 +85,7 @@ def main() -> int:
                     joined = "".join(
                         t.replace(_SITE_PACKAGES + "/", "site-packages/")
                         for t in raw
-                    )
+                    ).replace(str(ROOT) + "/", "")
                     output["text"] = joined.splitlines(keepends=True)
         nbformat.write(nb, path)
 
