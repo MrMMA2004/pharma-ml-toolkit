@@ -33,10 +33,17 @@ checkpoints).
 | 12 | Response AI | drug response | `pharmaml.ml.drugresponse` | **Response AI Workbench** (increment 11: the module's FIRST GUI surface — the Hill curve fit with every parameter against the generating truth + the log-dose AUC both ways, response metrics + rank correlations on the Data Explorer's columns or seeded pairs, the CaDRReS `DrugResponseModel` on the seeded 12x4 screen with the honest in-sample pearson, cell-line-grouped cross-validation with the ~0 mean reported honestly, the informative-prior regression, the `ResponseVAE` ELBO ledger, the `MultiOmicsFusion` per-block audit with total variance equalised) |
 | 13 | Utilities | CSV standardize, converters, IO | `pharmaml.utils.io`, `chem.csv_standardize` | **Data Explorer** (tables + distributions) |
 
-Plus the cross-cutting concerns, all live in Studio increment 1:
-theme/appearance (Settings page), navigation (sidebar + Ctrl+1..9),
-background execution (JobWorker/QThreadPool with cooperative stop),
-state persistence (QSettings: geometry/nav/theme).
+Plus the cross-cutting concerns, all live in Studio: theme/appearance
+(Settings page), navigation (sidebar + Ctrl+1..9), background
+execution (JobWorker/QThreadPool with cooperative stop), state
+persistence (QSettings: geometry/nav/theme), and — increment 12
+(round 221, the Part-2 §16.8.2-16.8.4/16.8.7 closure) — matrix
+image visualization (the **Image Lab**: `ui/widgets/image_panel.py`
++ `ui/pages/image_lab.py`, an ImageItem + HistogramLUT colormap
+control + live-ROI sub-matrix statistics + PNG export, five tabs on
+real project data: the 12-drug Tanimoto similarity heatmap, the
+23x8 LN_IC50 response matrix, the explorer's numeric columns, the
+fixed-region ROI demo, and the tanimoto timing surface).
 
 ## Preserved / redesigned / consolidated / replaced
 

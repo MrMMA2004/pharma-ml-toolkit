@@ -1,3 +1,57 @@
+## [1.2.134] — 2026-11-08
+
+### Added — round 221: the Image Lab (Studio increment 12 — the Part-2 §16.8.2-16.8.4/16.8.7 closure)
+
+* **`ui/widgets/image_panel.py`** — the plot widget's sibling for
+  MATRIX data: a `pg.GraphicsLayoutWidget` carrying an `ImageItem`
+  (16.8.2), a `HistogramLUTItem` (16.8.4 — the histogram + colormap
+  control, seven deterministic gradient presets: viridis/magma/
+  inferno/plasma/thermal/turbo/grey), a shared `RectROI` (16.8.3)
+  whose sub-matrix count/mean/min/max recompute live through the
+  bounding-rect slice (the probe's own arithmetic), NaN masking via
+  the masked-array path, theme-synced chrome (background/axes/ROI
+  pen — the colormap stays data-driven, never a theme guess), and
+  `export_png` (16.8.7 / 16.19's export criterion).
+* **`ui/pages/image_lab.py`** — the Studio's twelfth feature page
+  (sidebar section 15), five tabs on REAL project data, every
+  number engine-printed first by the committed probe
+  `scratch/probe_imagelab_221.py` (per-section fresh seeds):
+  * **Similarity heatmap** — `compute_fingerprints` (morgan r=2,
+    2048 bits) + `tanimoto_matrix` over the bundled
+    `seed_molecules.csv` roster (12 drugs; off-diagonal min
+    0.021277 / max 0.529412 / mean 0.130395; most similar caffeine ~
+    theophylline 0.529412; least metformin ~ diclofenac 0.021277;
+    highest mean-similarity ibuprofen 0.164474) or the loaded
+    table's SMILES column (organic-fragment heuristic + the honest
+    refusals: no table / no SMILES-like column / < 4 SMILES).
+  * **Response matrix** — the Biology pipeline's own 23x8 LN_IC50
+    pivot (one honest NaN hole masked; most sensitive A549 /
+    erlotinib -0.177930; most resistant U-251 / sorafenib 4.424495;
+    mean 3.020384) with cell-line/compound tick axes.
+  * **Explorer matrix** — the loaded table's numeric columns raw or
+    z-scored (the seeded 12-row demo: raw means [4.8301, 2.0828,
+    341.6800], z stds [1.0, 1.0, 1.0], min -1.971670 / max 2.364600,
+    row of max |z| = 6); refusal below 2 numeric columns; the span
+    pickers snap forward, never invert.
+  * **ROI explorer** — the spin-box region rows [2,6) x cols [7,10)
+    reproduces the probe's statistics exactly (16 cells, mean
+    0.131007, min 0.021277, max 0.529412); the shared RectROI moves
+    with the spins.
+  * **Performance** — `tanimoto_matrix` over seeded bit matrices
+    (n from a spin box, default 1024): pairs, wall seconds, M
+    pairs/s — the 16.19 large-dataset number, reported honestly as a
+    timing, never asserted.
+* **The tests** — `tests/ui/test_image_lab_page.py`, 18 offscreen
+  tests: the five end-to-end tabs against the probe-printed numbers,
+  the explorer-column paths (fake explorer frames at 90/12/3 rows),
+  the honest refusals, the ROI math + NaN masking, the gradient
+  preset switch + unknown-preset refusal, the PNG export (magic
+  bytes + a real render), the theme sync, and the main-window wiring
+  pin (15 pages). The sidebar growth re-pinned five older tests:
+  `test_main_window` (14 → 15 pages + the navigation order),
+  `test_responseai_page` (position + count), `test_foundations_page`
+  (len-4 → len-5), `test_bestofml_page` (len-3 → len-4).
+
 ## [1.2.133] — 2026-11-08
 
 ### Changed — round 220 (cron run 15/100): the lint-restore round (the standing mandate's engineering review)

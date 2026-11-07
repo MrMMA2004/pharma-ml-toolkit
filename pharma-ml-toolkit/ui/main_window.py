@@ -40,6 +40,7 @@ SECTIONS: list[tuple[str, str]] = [
     ("foundations", "Foundations Workbench"),
     ("bestofml", "Best-of ML Workbench"),
     ("responseai", "Response AI Workbench"),
+    ("imagelab", "Image Lab"),
     ("settings", "Settings"),
 ]
 
@@ -73,6 +74,7 @@ class MainWindow(QMainWindow):
         from .pages.docking import DockingWorkbenchPage
         from .pages.foundations import FoundationsWorkbenchPage
         from .pages.generative import GenerativeWorkbenchPage
+        from .pages.image_lab import ImageLabPage
         from .pages.model_analysis import ModelAnalysisPage
         from .pages.pkpd import PKPDWorkbenchPage
         from .pages.responseai import ResponseAIWorkbenchPage
@@ -104,6 +106,9 @@ class MainWindow(QMainWindow):
         self.responseai_page = ResponseAIWorkbenchPage(
             theme=self.theme, runner=self.runner, data_explorer=self.data_page
         )
+        self.imagelab_page = ImageLabPage(
+            theme=self.theme, runner=self.runner, data_explorer=self.data_page
+        )
         self.settings_page = SettingsPage(self.theme)
 
         for page in (
@@ -120,6 +125,7 @@ class MainWindow(QMainWindow):
             self.foundations_page,
             self.bestofml_page,
             self.responseai_page,
+            self.imagelab_page,
             self.settings_page,
         ):
             self.pages.addWidget(page)
@@ -193,6 +199,7 @@ class MainWindow(QMainWindow):
         self.foundations_page.apply_palette(palette)
         self.bestofml_page.apply_palette(palette)
         self.responseai_page.apply_palette(palette)
+        self.imagelab_page.apply_palette(palette)
         self._status.showMessage(f"Theme: {provider} · {name}")
 
     # -- notifications -----------------------------------------------------------------

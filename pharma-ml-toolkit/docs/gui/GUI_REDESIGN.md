@@ -48,10 +48,10 @@ pharma-ml-toolkit/
 │   ├── app_settings.py  ← QSettings facade
 │   ├── main_window.py
 │   ├── native/          ← eglstub.c + libEGL.so.1 + build_stub.sh
-│   ├── pages/  dashboard · data_explorer · chemistry · pkpd · biology · docking · model_analysis · unsupervised · deep_learning · generative · settings_page
-│   ├── widgets/ navigation · data_table · plot_widget · progress_panel · notification_widget
+│   ├── pages/  dashboard · data_explorer · chemistry · pkpd · biology · docking · model_analysis · unsupervised · deep_learning · generative · foundations · bestofml · responseai · image_lab · settings_page
+│   ├── widgets/ navigation · data_table · plot_widget · image_panel · progress_panel · notification_widget
 │   └── workers/ job_worker.py (QRunnable + cooperative stop)
-└── tests/ui/            ← 167 offscreen tests (pytest-qt)
+└── tests/ui/            ← 234 offscreen tests (pytest-qt)
 ```
 
 ## Theming (16.9–16.11)
@@ -103,12 +103,35 @@ training run with held-out R²), and chart-palette sync.
 
 ## Migration status (16.18)
 
-Increment 11 of N — shell, navigation, theme system, Data Explorer,
+Increment 12 of N — shell, navigation, theme system, Data Explorer,
 Chemistry Workbench, PK/PD Workbench, Biology Workbench, Docking
 Workbench, Model Analysis, Unsupervised Workbench, Deep Learning
 Workbench, Generative Workbench, Foundations Workbench, Best-of ML
-Workbench, Response AI Workbench, Settings are live and tested. The
-Response AI Workbench (increment 11, audit row 12) gives
+Workbench, Response AI Workbench, Image Lab, Settings are live and
+tested. The Image Lab (increment 12) is the cross-cutting closure of
+the Part-2 acceptance list's remaining visualization debt — the
+directive's own §16.8.2-16.8.4/16.8.7 items no prior page carried:
+``ui/widgets/image_panel.py`` (a ``pg.GraphicsLayoutWidget`` with an
+``ImageItem``, a ``HistogramLUTItem`` colormap/histogram control with
+the seven deterministic gradient presets, and a shared ``RectROI``
+whose sub-matrix count/mean/min/max recompute live, plus PNG export)
+and ``ui/pages/image_lab.py`` — five tabs, every number
+engine-printed first by the committed probe
+(``scratch/probe_imagelab_221.py``, per-section fresh seeds): the
+similarity heatmap (``compute_fingerprints`` morgan r=2 2048-bit +
+``tanimoto_matrix`` over the bundled 12-drug roster or the loaded
+table's SMILES column — the 12x12 Tanimoto image, off-diagonal
+extremes, most/least-similar pairs), the response matrix (the
+Biology pipeline's 23x8 LN_IC50 pivot with its one honest NaN hole
+masked and the most sensitive/resistant pairs), the explorer matrix
+(the loaded table's numeric columns raw or z-scored, or the seeded
+12-row demo; the honest refusal below 2 numeric columns), the ROI
+explorer (the spin-box region reproducing the probe's fixed-region
+statistics exactly), and the performance tab (``tanimoto_matrix``
+over seeded bit matrices — pairs, wall seconds, M pairs/s, reported
+honestly as a timing, never asserted).  18 offscreen tests
+(``tests/ui/test_image_lab_page.py``). The Response AI Workbench
+(increment 11, audit row 12) gives
 ``pharmaml.ml.drugresponse`` — the module absorbed from
 CaDRReS / Precily / DeepResponse with no prior GUI surface — its
 first one: eight tabs, each wired to the module's public APIs.  The
@@ -280,7 +303,10 @@ through `compute_feature_frame` with the v1.2.119 batch guard carried
 over: a five-molecule probe fixes the exact per-molecule column count,
 then the dense-matrix estimate is checked against half of
 `MemAvailable` and the batch refuses with its arithmetic before the
-heavy compute. Next increments migrate the remaining playground
-sections (Foundations per the audit's usage order); the Tkinter
-playground is retired only after every section has a verified Studio
-page. See `docs/gui/GUI_AUDIT.md` for the full tab-by-tab map.
+heavy compute. The Part-2 §16.8.2-16.8.4/16.8.7 image-visualization
+debt is closed (the Image Lab, increment 12); the remaining Part-2
+work is card-level coverage depth on the subset pages (Docking,
+Biology, PK/PD carry four/three of their tab's engines each) before
+the Tkinter playground can be retired — it is retired only after
+every section has a verified Studio page. See
+`docs/gui/GUI_AUDIT.md` for the full tab-by-tab map.
