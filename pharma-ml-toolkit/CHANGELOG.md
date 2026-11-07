@@ -1,3 +1,51 @@
+## [1.2.124] — 2026-11-07
+
+### Added — round 210: the Biology Workbench (Studio increment 4, audit row 4)
+
+* **`ui/pages/biology.py`** — the Studio's fourth feature page,
+  migrating the playground Cell Lines tab (directive #16, 16.18
+  migration step 4). Four engine tabs, each wired to the SAME public
+  backend APIs the playground cards call — nothing fabricated:
+  * **Screen audit** — one job runs the card's full pipeline:
+    `load_response_table` (the bundled 185-row GDSC-style screen) →
+    `audit_response_table` (missing metric values, duplicate pairs) →
+    `replicate_variability` (the duplicate pair's spread) →
+    `collapse_replicates` (the pivot precondition, CV recorded) →
+    `summarize_compounds` (per-compound panel summary in the table,
+    median-metric bars in the plot) → `response_matrix` (the 23×8
+    matrix the other tabs share). The audit's issues ride the report
+    line verbatim.
+  * **Sensitivity matrix** — the collapsed screen's lines × compounds
+    matrix with `call_sensitive_resistant` quartile calls on the
+    chosen compound's column (lower LN_IC50 = more sensitive, the
+    card's convention; quantile order validated — sensitive below
+    resistant).
+  * **Variable genes (MAD)** — `most_variable_genes` with the
+    per-gene MAD recomputed honestly from the frame, exactly the
+    playground card's arithmetic (the library returns names only).
+  * **Biomarker discovery** — `normalize_expression` →
+    `impute_expression` (the normalized matrix cached on the GUI
+    thread for the next run) → `sensitivity_associations`
+    (Spearman/Pearson, BH-corrected) → `top_biomarkers`, with
+    `direction_of_association` naming the top hit's story
+    ("expression high -> more resistant" etc.) in the report.
+* Sidebar grows to **seven sections** (biology between pkpd and
+  models, the audit's usage order); theme palette wiring and the
+  `pages.count()` pin updated; cross-tab state is written only from
+  the GUI thread (the jobs capture their inputs at submit — the
+  round-208 lost-update lesson applied from the start).
+* 13 new offscreen tests (`tests/ui/test_biology_page.py`), every
+  asserted number engine-printed first on this exact bundled data:
+  185 rows → 184 unique pairs, 23 lines × 8 compounds, the
+  MCF-7/crizotinib duplicate (audit count 2, spread CV 0.0%),
+  crizotinib 6/11/6 quartile calls, GENE_115 the MAD top (1.1874),
+  GENE_144 the strongest cisplatin association (|rho| 0.6097, FDR
+  0.495, 0 of 300 significant). Refusals without a loaded screen,
+  quantile/input validation, duplicate-submission refusal, and
+  palette sync all pinned.
+* GUI audit row 4 and the migration status updated (increment 4 of
+  N; next: Docking per the audit's usage order).
+
 ## [1.2.123] — 2026-11-07
 
 ### Fixed — round 209: the second playground collapse mode (the stale display connection)

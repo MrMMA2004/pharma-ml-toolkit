@@ -392,6 +392,63 @@ with arithmetic before the heavy compute), the factory's
 13 new offscreen tests. Honest count **4,564 + 778 = 5,342 tests**; fresh
 walk pins **939 files / 343,253 lines**.
 
+## v1.2.124 release-zip homes (2026-11-07, round 210 — the Biology Workbench, the Studio's increment 4)
+
+`pharma-ml-toolkit-v1.2.124.zip` — 19,694,253 bytes, sha-256
+`ca6b5a0b9e45733b2f25abbdf51a9f608f6507d54b3c2882d8a4de35e16144e7`
+(the first build at 19,692,660 / `64e81fcd…` is SUPERSEDED — its
+builder had a home-path bug, `ROOT.parents[1]` resolving to `/home/z`,
+that shipped the zip into two directories OUTSIDE the repo and carried
+the broken recipe inside the archive; the fixed builder rebuilt the
+same round), built with the standing builder
+(`scratch/build_zip_210.py` — the FOUR-HOME edition, COMMITTED this
+round after the 13th rollback ate the untracked round-209 builders:
+975 entries / 930 files / real leaks 0; the scrub-before-build
+discipline caught the re-executed ML notebook's fresh
+ConvergenceWarning traceback — the version-bump re-execution
+re-leaks it every round), placed in all four homes:
+
+- `download/pharma-ml-toolkit-v1.2.124.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.124.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.124.zip`
+- `upload/pharma-ml-toolkit-v1.2.124.zip`
+
+The immediate predecessor (v1.2.123) left all four homes — tracked
+removals in dist-archive/ + upload/ + the legacy download/, the
+untracked repo download/ copy unlinked; deeper history stays where it
+is (v1.2.106's only surviving copy lives in the repo download/ sweep
+archive and survived this round on purpose).
+
+**What shipped:** directive #16's 16.18 migration step 4 — the
+Studio's Biology Workbench (`ui/pages/biology.py`, audit row 4, the
+playground Cell Lines tab): four engine tabs wired to the same public
+backend APIs the cards call — the screen audit
+(`load_response_table` → `audit_response_table` →
+`replicate_variability` → `collapse_replicates` →
+`summarize_compounds` → `response_matrix`, one job: the bundled
+185-row GDSC-style screen loads, audits its missing metric values and
+the MCF-7/crizotinib duplicate pair, collapses the replicates and
+pivots the 23×8 matrix the other tabs share), the sensitivity matrix
+(`response_matrix` + `call_sensitive_resistant` quartile calls,
+lower LN_IC50 = more sensitive), the MAD gene ranking
+(`most_variable_genes` with the per-gene MAD recomputed honestly),
+and biomarker discovery (`normalize_expression` →
+`impute_expression` → `sensitivity_associations` BH-corrected →
+`top_biomarkers` + `direction_of_association`). The sidebar grows to
+seven sections; cross-tab state is written only from the GUI thread
+(the round-208 lost-update lesson applied from birth). All 8
+notebooks re-executed at 1.2.124 (201 s, zero error outputs, 7 twins
+regenerated); 13 new offscreen tests, every asserted number
+engine-printed first. Honest totals: collect-only **4,599** + 778
+doctests = **5,377**; web pins 5,364 → 5,377 (seven sites) + census
+946/344,494 → **950 / 345,766** (`scratch/census_210.py`, committed,
+the toolkit-fs.ts-exact walk, run on the post-ship tree). The 13th
+rollback was absorbed first
+(local HEAD at `2eb0ede`/round-186-era, counter recovered by the
+ff-pull — the counter-rides-commits design proving itself again;
+venv rdkit-less → the foreground repair; webDevReview job recreated
+as 511610).
+
 ## v1.2.123 release-zip homes (2026-11-07, round 209 — the second playground collapse mode fixed)
 
 `pharma-ml-toolkit-v1.2.123.zip` — 19,781,667 bytes, sha-256

@@ -8012,3 +8012,138 @@ commit (8→9).
    the zip build (the first v1.2.123 build leaked the ML notebook's
    warning traceback; the scrub-then-rebuild discipline caught it the
    same round).
+
+## Round 210 — the Biology Workbench: the Studio's increment 4 (audit row 4, the Cell Lines tab), v1.2.124 shipped (2026-11-07)
+
+The owner's "Continue MASTER_PROMPT part2" directive, landing in the
+window after Run 9 (round 209). The inherited session summary was
+STALE — it believed Run 8 unexecuted and Task F undiagnosed; the
+ff-pull told the truth instead: the prior sessions had already
+executed rounds 204–209 (Run 8/9 landed, the counter at 9, the
+playground collapse root-caused and fixed, D-④'s
+`recalculate_selected_features` section in playground.py). The 13th
+rollback absorbed first, the quad form: repo HEAD at `2eb0ede`
+(the round-186 snapshot point again), venv rdkit-less, token/remote
+gone, webDevReview job gone, `scratch/100runs-counter.json` gone from
+disk — the ff-pull recovered it from the remote (the
+counter-rides-commits design proving itself the second time; the
+counter honestly stays at 9: no new cron trigger fired in this
+window). The standing drill: token re-extract → helper → remote add
+→ fetch → aside the 17 blocking zips/PDFs → ff-pull to `a201f56` →
+`venv_repair.sh` foreground green (numpy 1.26.4, pharmaml 1.2.123,
+PySide6 + pyqtgraph OK) → webDevReview recreated (job 511610).
+
+**What shipped — `ui/pages/biology.py`, the fifth feature page**
+(four of the Cell Lines tab's engines, each wired to the SAME public
+backend APIs the playground cards call, in four tabs):
+
+- **Screen audit** — one job runs the card's full pipeline:
+  `load_response_table` (the bundled 185-row GDSC-style screen) →
+  `audit_response_table` (2 rows: missing metric values ×1, duplicate
+  pairs MCF-7/crizotinib ×2) → `replicate_variability` (the pair's
+  spread, CV 0.0%) → `collapse_replicates(add_cv=True)` (185→184
+  rows, the pivot precondition) → `summarize_compounds` (the 8-row
+  per-compound panel summary, compound index riding the table as a
+  column, median-metric bars in the plot) → `response_matrix` (the
+  23×8 matrix stored as the cross-tab state; both compound combos
+  fed from its columns). The audit issues ride the report verbatim.
+- **Sensitivity matrix** — the collapsed screen's lines × compounds
+  matrix in the table plus `call_sensitive_resistant` quartile calls
+  on the chosen compound (lower LN_IC50 = more sensitive, the card's
+  convention; quantile order validated — sensitive strictly below
+  resistant).
+- **Variable genes (MAD)** — `most_variable_genes` with the per-gene
+  MAD recomputed honestly from the frame (the card's own arithmetic;
+  the library returns names only): top-10 of 300, GENE_115 first at
+  1.1874.
+- **Biomarker discovery** — `normalize_expression` →
+  `impute_expression` → `sensitivity_associations` (Spearman or
+  Pearson, BH-corrected) → `top_biomarkers`, with
+  `direction_of_association` naming the top hit's story in the
+  report; the normalized matrix is cached on the GUI thread for the
+  next run. The engine's honest warning when nothing clears FDR
+  (0 of 300 on the bundled data) shows in the counts.
+
+Cross-tab state is written ONLY from the GUI thread, in the finished
+handlers — the jobs capture their inputs at submit (the round-208
+lost-update lesson applied from birth, not retrofitted). Sidebar:
+seven sections now (biology between pkpd and models, the audit's
+usage order); `pages.count()` pin 6 → 7 with the navigation-order
+test updated; theme palette wiring added.
+
+**The four-home builder bug, caught and superseded in-round**: the
+first v1.2.124 build (19,692,660 bytes, `64e81fcd…`) shipped with a
+broken recipe INSIDE the archive — `ROOT.parents[1]` resolves to
+`/home/z`, not the repo root, so two of the four homes received the
+zip into directories OUTSIDE the repo (`/home/z/download/`,
+`/home/z/upload/`), and the repo's own `download/` + `upload/` homes
+went empty. The `ls` of the homes caught it; the fix
+(`REPO = ROOT.parent`) plus a policy correction (the sweep removes
+the IMMEDIATE predecessor from all four homes — round-209's observed
+behavior — not every old zip: v1.2.106's only surviving copy lives
+in the repo download/ sweep archive and the first sweep-all draft
+would have destroyed it; the legacy home's tracked 115–121 restored
+via `git checkout`) rebuilt the same round: **v1.2.124 final =
+19,694,253 bytes, sha-256 `ca6b5a0b…`**, 975 entries / 930 files,
+real leaks 0, four homes byte-identical (one unique sha), v1.2.123
+removed from all four homes.
+
+**The lost-builders lesson, closed**: round 209's builders
+(`build_zip_183.py`, `census.py`) died untracked with the rollback —
+this round's `scratch/build_zip_210.py` (the four-home edition) and
+`scratch/census_210.py` (the toolkit-fs.ts-exact walk: every file
+counts, only viewable text line-counts with the TS `countLines`
+semantics) are COMMITTED. The census also runs on the post-ship
+tree, after the home sweep settles: **950 files / 345,766 lines**
+(the 944 interim was pre-sweep-restoration — always census LAST).
+
+**Verification**: 13 new offscreen tests
+(`tests/ui/test_biology_page.py`), every asserted number
+engine-printed first (185→184, 23×8, MCF-7/crizotinib audit counts,
+crizotinib 6/11/6 quartile calls, GENE_115/1.1874,
+GENE_144/|rho| 0.6097/FDR 0.495) — green first run; ui/ suite 69 →
+82 green; job_safety 28 green; notebook freshness + web parity +
+data_loading + csv_standardize 256 green; docs_index +
+excel_io_and_samples 52 green; doctests **775 passed + 3 skipped =
+778**; collect-only **4,599 across the tests tree, exit 0**; ruff
+clean and mypy clean on every touched file (scratch/ is
+extend-excluded by the project's own convention, verified against
+the 179 ancestor). Honest total: **4,599 + 778 = 5,377**. All 8
+notebooks re-executed at 1.2.124 (201 s, zero error outputs, 7
+no-output twins regenerated; dev server stopped for the re-execution
+— the OOM ritual — and restarted via the double-fork daemon after,
+GET / 200). The zip-size endpoint answers
+`{"zipBytes":19694253,"version":"1.2.124","exact":true,"source":"release"}`
+— the release home serves the exact bytes, zero python spawns. Web
+pins 5,364 → 5,377 (seven sites) + fallback stats 946/344,494 →
+950/345,766; README tree gains biology in the pages list + the
+VERSION pin refreshed; CHANGELOG gains the v1.2.124 Added section;
+GUI audit row 4 + the migration status updated (increment 4 of N;
+next: Docking per the audit's usage order);
+GITHUB_BACKUP_MANIFEST gains the v1.2.124 section with the
+supersession note.
+
+**Lessons pinned**:
+1. A session-inherited summary is a CLAIM, not a state: the ff-pull
+   is the truth — this round's entire backlog was already done, and
+   only the environment needed the rollback drill. Read HEAD before
+   reading the summary.
+2. `Path.parents` is zero-indexed from the path itself:
+   `ROOT.parents[1]` is the GRANDparent. The four-home builder wrote
+   two copies outside the repo and the archive carried the bug —
+   verify the PRINTED destination paths against the repo layout, not
+   against the intent.
+3. The predecessor-removal policy is the round-209 observed form:
+   the immediate predecessor leaves all four homes; deeper history
+   stays (v1.2.106's only copy survives in the repo download/ sweep
+   archive). A sweep-all draft destroys unique history — enumerate
+   what's unique before deleting.
+4. The census runs LAST, on the post-ship tree: the interim 944
+   counted a mid-sweep state (the legacy home's restored zips change
+   the file count); the pinned number is the one the live walk would
+   answer.
+5. The scrub-before-build discipline catches the ML notebook's
+   ConvergenceWarning traceback EVERY version bump (the re-execution
+   re-leaks `/home/z/` paths into its output cells) — the standing
+   `scrub_home_paths_137.py` pass is not optional, and the archive
+   leak scan after the build is the contract that proves it.

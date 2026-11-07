@@ -103,9 +103,25 @@ training run with held-out R²), and chart-palette sync.
 
 ## Migration status (16.18)
 
-Increment 3 of N — shell, navigation, theme system, Data Explorer,
-Chemistry Workbench, PK/PD Workbench, Model Analysis, Settings are
-live and tested. The PK/PD Workbench (increment 3, v1.2.122) brings
+Increment 4 of N — shell, navigation, theme system, Data Explorer,
+Chemistry Workbench, PK/PD Workbench, Biology Workbench, Model
+Analysis, Settings are live and tested. The Biology Workbench
+(increment 4, v1.2.124) brings four of the playground Cell Lines
+tab's engines, each wired to the same public backend APIs the cards
+call: the screen audit (`load_response_table` →
+`audit_response_table` → `replicate_variability` →
+`collapse_replicates` → `summarize_compounds` → `response_matrix`,
+one job: the bundled 185-row GDSC-style screen loads, audits its
+missing metric values and duplicate pairs, collapses the replicates
+and pivots the 23×8 matrix the other tabs share), the sensitivity
+matrix (`response_matrix` + `call_sensitive_resistant` quartile
+calls — lower LN_IC50 means more sensitive, the card's convention),
+the MAD gene ranking (`most_variable_genes` with the per-gene MAD
+recomputed honestly from the frame), and biomarker discovery
+(`normalize_expression` → `impute_expression` →
+`sensitivity_associations` with BH correction → `top_biomarkers`,
+with `direction_of_association` naming the top hit's story). The
+PK/PD Workbench (increment 3, v1.2.122) brings
 three of the playground PK/PD tab's engines, each wired to the same
 public backend APIs the cards call: the exact two-compartment regimen
 simulator (`TwoCompartment` matrix-exponential linCmt with explicit
@@ -127,6 +143,6 @@ over: a five-molecule probe fixes the exact per-molecule column count,
 then the dense-matrix estimate is checked against half of
 `MemAvailable` and the batch refuses with its arithmetic before the
 heavy compute. Next increments migrate the remaining playground
-sections (Cell Lines per the audit's usage order); the Tkinter
+sections (Docking per the audit's usage order); the Tkinter
 playground is retired only after every section has a verified Studio
 page. See `docs/gui/GUI_AUDIT.md` for the full tab-by-tab map.

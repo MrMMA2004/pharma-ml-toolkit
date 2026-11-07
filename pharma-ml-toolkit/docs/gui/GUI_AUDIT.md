@@ -22,7 +22,7 @@ checkpoints).
 | 1 | Home | quick-jump chips, workflow guide | `WORKFLOWS` registry | **Dashboard** (live census, dataset index) |
 | 2 | Chemistry | standardize, descriptors, fingerprints, feature factory, feature recalculation | `pharmaml.chem.*` | **Chemistry Workbench** (increment 2: standardize + multi-family feature factory with the batch guard) |
 | 3 | PK / PD | dose response, exposure, pregnancy PK | `pharmaml.pkpd.*` | **PK/PD Workbench** (increment 3: exact two-compartment regimen simulator + trapezoid/linear-up-log-down NCA + the NONMEM event grammar) |
-| 4 | Cell Lines | expression, screening | `pharmaml.biology.*` | planned |
+| 4 | Cell Lines | expression, screening | `pharmaml.biology.*` | **Biology Workbench** (increment 4: screen audit + sensitivity matrix with quartile calls + MAD gene ranking + biomarker discovery) |
 | 5 | Docking | DOCKSTRING lab, affinity, campaigns | `pharmaml.docking.*` | planned |
 | 6 | Data & ML | QSAR training, leaderboards, AD | `pharmaml.ml.*` | **Model Analysis** (registry fit + curves) |
 | 7 | Unsupervised | clustering, reduction | `pharmaml.ml.unsupervised` | planned |
@@ -63,8 +63,8 @@ state persistence (QSettings: geometry/nav/theme).
    failure mode, but the thread model remains single-threaded). The
    Studio's QThreadPool workers fix the root cause.
 2. Tab order encodes history, not workflow frequency — the sidebar's
-   six live sections are ordered by usage (dashboard → data → chemistry
-   → pkpd → models → settings).
+   seven live sections are ordered by usage (dashboard → data →
+   chemistry → pkpd → biology → models → settings).
 3. No theme or appearance control exists in Tkinter; Studio ships the
    full provider stack (Qt-Material primary, QDarkStyleSheet
    alternative, native fallback) with runtime switching.
