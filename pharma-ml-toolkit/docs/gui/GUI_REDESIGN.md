@@ -103,9 +103,17 @@ training run with held-out R²), and chart-palette sync.
 
 ## Migration status (16.18)
 
-Increment 1 of N — shell, navigation, theme system, Data Explorer,
-Model Analysis, Settings are live and tested. Next increments migrate
-the remaining playground sections (Chemistry first, per the audit's
+Increment 2 of N — shell, navigation, theme system, Data Explorer,
+Chemistry Workbench, Model Analysis, Settings are live and tested.
+The Chemistry Workbench (increment 2, v1.2.121) standardizes a SMILES
+column through the playground's own `standardize_csv` batch front door
+and computes multi-family features through `compute_feature_frame`
+with the v1.2.119 batch guard carried over: a five-molecule probe
+fixes the exact per-molecule column count, then the dense-matrix
+estimate is checked against half of `MemAvailable` and the batch
+refuses with its arithmetic before the heavy compute — both jobs in
+QThreadPool workers with the cooperative Stop. Next increments
+migrate the remaining playground sections (PK/PD per the audit's
 usage order); the Tkinter playground is retired only after every
 section has a verified Studio page. See `docs/gui/GUI_AUDIT.md` for
 the full tab-by-tab map.

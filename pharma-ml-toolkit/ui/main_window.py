@@ -29,6 +29,7 @@ from .workers.job_worker import JobRunner
 SECTIONS: list[tuple[str, str]] = [
     ("dashboard", "Dashboard"),
     ("data", "Data Explorer"),
+    ("chemistry", "Chemistry Workbench"),
     ("models", "Model Analysis"),
     ("settings", "Settings"),
 ]
@@ -54,6 +55,7 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
 
         # -- pages (import lazily so Qt is up first) ----------------------------
+        from .pages.chemistry import ChemistryWorkbenchPage
         from .pages.dashboard import DashboardPage
         from .pages.data_explorer import DataExplorerPage
         from .pages.model_analysis import ModelAnalysisPage
@@ -61,10 +63,11 @@ class MainWindow(QMainWindow):
 
         self.dashboard_page = DashboardPage()
         self.data_page = DataExplorerPage(theme=self.theme)
+        self.chemistry_page = ChemistryWorkbenchPage(theme=self.theme, runner=self.runner, data_explorer=self.data_page)
         self.model_page = ModelAnalysisPage(theme=self.theme, runner=self.runner, data_explorer=self.data_page)
         self.settings_page = SettingsPage(self.theme)
 
-        for page in (self.dashboard_page, self.data_page, self.model_page, self.settings_page):
+        for page in (self.dashboard_page, self.data_page, self.chemistry_page, self.model_page, self.settings_page):
             self.pages.addWidget(page)
 
         splitter.addWidget(self.nav)
@@ -125,6 +128,7 @@ class MainWindow(QMainWindow):
     # -- theming -------------------------------------------------------------------
     def _on_theme(self, provider: str, name: str, palette: ChartPalette) -> None:
         self.data_page.apply_palette(palette)
+        self.chemistry_page.apply_palette(palette)
         self.model_page.apply_palette(palette)
         self._status.showMessage(f"Theme: {provider} · {name}")
 

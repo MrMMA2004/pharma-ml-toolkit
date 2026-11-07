@@ -368,3 +368,26 @@ total), all 8 notebooks re-executed at 1.2.115, honest count
 **4,416 + 773 = 5,189 tests**; fresh walk pins **886 files / 335,487
 lines**. The second arena branch (`arena/c44913ab`) was verified
 byte-absorbed into main (stale, no merge needed).
+
+## v1.2.121 release-zip homes (2026-11-07, round 207 — Chemistry Workbench, the Studio's increment 2)
+
+`pharma-ml-toolkit-v1.2.121.zip` — 19,764,621 bytes, sha-256
+`0986dc2c4078b5768b0cb6156dd4062af962252dd98c26aa7ad37b43e9bb12d8`,
+built with the standing builder (`scratch/build_zip_183.py`: 969 entries /
+923 files / real leaks 0), placed in all four homes:
+
+- `download/pharma-ml-toolkit-v1.2.121.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.121.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.121.zip`
+- `upload/pharma-ml-toolkit-v1.2.121.zip`
+
+**What shipped:** directive #16's 16.18 migration step 2 — the Studio's
+Chemistry Workbench (`ui/pages/chemistry.py`): the playground's own
+`standardize_csv` batch front door + `compute_feature_frame` multi-family
+factory with the v1.2.119 batch guard carried over (five-molecule probe →
+exact column count → dense-matrix estimate vs half of MemAvailable, refuse
+with arithmetic before the heavy compute), the factory's
+`(done, total, note)` progress convention adapted to the Studio's
+`(fraction, label)` with the cooperative-stop channel propagating, and
+13 new offscreen tests. Honest count **4,564 + 778 = 5,342 tests**; fresh
+walk pins **939 files / 343,253 lines**.

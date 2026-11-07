@@ -333,12 +333,12 @@ pharma-ml-toolkit/
 │                            # probes its dependencies at launch, degrades gracefully, headlessly
 │                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
 ├── studio.py               # NEW (v1.2.120): the PySide6 front end — `python studio.py` opens PharmaML
-│                            # Studio (directive #16 redesign, increment 1): sidebar navigation,
+│                            # Studio (directive #16 redesign, increments 1–2): sidebar navigation,
 │                            # PyQtGraph scientific plots, Qt-Material/QDarkStyleSheet theming,
 │                            # QThreadPool workers with the cooperative Stop; runs offscreen for CI
 │                            # (`ui/headless.py` preloads the committed EGL stub when the box has none)
 ├── ui/                      # the Studio package: main_window · theme_manager · app_settings · pages/
-│                            # (dashboard · data_explorer · model_analysis · settings) · widgets/ ·
+│                            # (dashboard · data_explorer · chemistry · model_analysis · settings) · widgets/ ·
 │                            # workers/ · native/ (the EGL stub + build script) — see docs/gui/
 ├── VERSION                 # the release version (1.2.120) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release

@@ -7646,3 +7646,88 @@ studio.py + ui/; GITHUB_BACKUP_MANIFEST.md section added.
    v2 where round 205 had absorbed a 98,565-byte v1).
 4. QSettings writes are cached — same-process round-trips need an
    explicit sync() (the geometry test caught it).
+
+## Round 207 — Chemistry Workbench: the Studio's increment 2 (directive #16, 16.18), v1.2.121 shipped (2026-11-07)
+
+Run window: the 12:20 cron trigger (run counter 6 → 7; runs 6 and 7
+per the job's own trigger count had fired into unavailable/concurrent
+sandboxes — round 206's closing note — and this round's work lands in
+the first clean window after them). Environment arrived healthy: HEAD
+`ec3da7f` = origin/main, token/remote/venv intact (rdkit + PySide6 +
+openpyxl 3.1.5 import green), no rollback to absorb.
+
+**What shipped — migration step 2 of the PySide6 redesign** (the
+audit's row 2, the Chemistry tab): `ui/pages/chemistry.py`, the third
+feature page.
+
+- **Standardize**: any SMILES-bearing dataset (six bundled examples
+  probed on disk + the Data Explorer table) flows through the
+  playground's own batch front door `standardize_csv` — the full
+  report table (identifier/original/canonical/status/steps/flags) +
+  the summary line, byte-identical semantics to the card.
+- **Feature factory**: `compute_feature_frame` with four honest
+  presets (descriptors fast / descriptors+MACCS+E-state / ECFP /
+  all-20-families), the per-family column counts and kept/dropped
+  molecules reported, and a real PyQtGraph histogram of any computed
+  feature column (the combo lists at most 400 columns, and says so).
+- **The v1.2.119 batch guard, carried over**: a five-molecule probe
+  (inside the worker, never the GUI thread) fixes the EXACT
+  per-molecule column count, then the dense-matrix estimate
+  (molecules × columns × 8 B × 3 copies) is checked against half of
+  `MemAvailable` and the batch refuses with its arithmetic BEFORE the
+  heavy compute; off-Linux the guard stands down — the playground's
+  own constants, backgrounded.
+- **The progress-convention bridge**: the factory speaks
+  `(done, total, note)`, the Studio speaks `(fraction, label)` — one
+  adapter in the page, and the callback's return value propagates the
+  cooperative-stop channel, so Stop lands as a clean "Cancelled after
+  N s" at the next molecule batch boundary (never a traceback).
+- **The two bugs the harness caught before they shipped**: mypy
+  flagged the "All families" preset passing `None` straight through
+  (`compute_feature_frame` rejects None) — and the naive fix (assign
+  the captured `families` in the closure) made it a job-local
+  everywhere (UnboundLocalError); the fix is a distinct local
+  `requested`, with a dedicated end-to-end test so the class stays
+  dead.
+
+**Verification**: 13 new offscreen tests (`tests/ui/
+test_chemistry_page.py`) — construction, SMILES auto-detection,
+preset→registry mapping, guard refusal with its arithmetic, off-Linux
+stand-down, empty-column refusal, the real standardize report, the
+real descriptor run (43 columns on this stack, invalid SMILES
+dropped), the all-families resolution (2/2 kept, shape_3d + rism ran),
+cooperative stop under a 2,000-molecule load, duplicate submission,
+palette sync. Shell tests updated to five pages/sections. Focused
+batteries green: ui/ 49, notebook freshness guard + docs-index +
+job_safety 171, data_loading + csv_standardize 95, module/toolkit
+version pins 7. Collect-only **4,564 across the tests tree, exit 0**;
+ruff clean and mypy clean on the touched files. Honest total:
+**4,564 + 778 doctests = 5,342**.
+
+**Ship**: notebooks re-executed at 1.2.121 first (all 8 + the 7
+no-output twins, 199 s, the OOM ritual respected — dev server stopped
+for the re-execution, restarted via the double-fork daemon after),
+`scratch/build_zip_183.py` → **v1.2.121 = 19,764,621 bytes, sha-256
+`0986dc2c…`**, 969 entries / 923 files, real leaks 0 (the first build
+at the pre-re-execution tree is superseded; both homes refreshed),
+four homes byte-identical; web pins 5,329 → 5,342 (seven sites) +
+fallback stats 937/342,548 → 939/343,253 (`scratch/census.py` walked
+on the final post-ship tree); README tree + CHANGELOG + the GUI audit
+row 2 + the migration-status section + GITHUB_BACKUP_MANIFEST section.
+
+**Lessons pinned**:
+1. A Qt queued-slot ordering trap: `job_ended` is emitted from
+   `JobRunner._finish` BEFORE the page's finished/failed slot (both
+   connected, in that order) — a `waitSignal(job_ended)` test can
+   observe the stale report text unless it drains the pool and pumps
+   the loop (`_settle`). The round's flake class, killed at birth.
+2. Closure capture + reassignment: assigning a captured variable
+   INSIDE a nested job callable silently makes it local everywhere
+   (UnboundLocalError at the first earlier reference) — mypy's
+   used-before-def flags exactly this shape; the fix is a distinct
+   local name, and the regression test runs the real API.
+3. The memory-guard arithmetic needs the REAL probe numbers, not
+   guessed ones: the descriptor family produces 43 columns on this
+   stack (not the ~200 a full-mordred guess suggests) — a refusal
+   test at 0.01 MB let a 5,160-byte matrix squeak under its 5,355-byte
+   budget; the test now uses 0.001 MB and asserts the arithmetic text.

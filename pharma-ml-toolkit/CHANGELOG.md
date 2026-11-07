@@ -1,3 +1,37 @@
+## [1.2.121] — 2026-11-07
+
+### Added — round 207: Chemistry Workbench, the Studio's increment 2 (directive #16, 16.18 migration)
+
+* **`ui/pages/chemistry.py`** — the third feature page, mapped to the
+  playground Chemistry tab (audit row 2): a SMILES-bearing dataset
+  (bundled or from Data Explorer) flows through the playground's own
+  batch front door — `standardize_csv` (full report table + summary)
+  and `compute_feature_frame` (multi-family matrix + per-family counts,
+  kept/dropped molecules) — with a real histogram of any computed
+  feature column. Sidebar gains the section between Data Explorer and
+  Model Analysis (usage order, audit issue #2); the theme stack
+  re-paints its chart on switch.
+* **The v1.2.119 batch guard, carried into the Studio**: a
+  five-molecule probe fixes the exact per-molecule column count, then
+  the dense-matrix estimate (molecules × columns × 8 B × 3 copies) is
+  checked against half of `MemAvailable` and the batch refuses with
+  its arithmetic BEFORE the heavy compute — off-Linux the guard stands
+  down, exactly like the cards.
+* **The factory's `(done, total, note)` progress convention is adapted
+  to the Studio's `(fraction, label)`** at one place in the page; the
+  callback's return value propagates the cooperative-stop channel, so
+  Stop lands as a clean "Cancelled after N s" at the next molecule
+  batch boundary (never a traceback).
+* **13 new offscreen tests** (`tests/ui/test_chemistry_page.py`):
+  construction, SMILES auto-detection, preset→registry mapping, guard
+  refusal with its arithmetic, off-Linux stand-down, empty-column
+  refusal, the real standardize report, the real descriptor factory
+  run (43 columns on this stack, invalid SMILES dropped), the
+  all-families resolution (the mypy-caught UnboundLocalError class),
+  cooperative stop under load, duplicate submission, palette sync.
+  Shell tests updated to five pages/sections. Honest total:
+  4,564 collected + 778 doctests = **5,342**.
+
 ## [1.2.120] — 2026-11-07
 
 ### Added — round 206: PharmaML Studio, the PySide6 GUI (directive #16, increment 1)
