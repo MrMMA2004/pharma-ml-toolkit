@@ -8914,3 +8914,14 @@ cards over `pharmaml.ml.*`), then Response AI (row 12) — the last two
 planned rows before the playground-retirement decision point ·
 sidebar 12 sections · dev server to restart after the heavy runs
 (double-fork daemon) · counter 12/100 (IM continuation).
+
+**Round 216 addendum (the browser close-out)**: the post-launch
+self-verification (agent-browser) printed the live hero as `962 files
+· 350,731 lines · 5,478 tests` with zero console/page errors — the
+round's census walk (350,687) had run BEFORE the CHANGELOG prepend
+landed its +44 viewable lines, so the fallback pin was corrected to
+the true post-ship number (`fix(web)` f09eed5, the round-213
+FALLBACK_STATS precedent re-applied); evidence screenshot committed at
+`scratch/e2e_r216_foundations_pins.png`; the zip endpoint answered
+`{"zipBytes":19862379,"version":"1.2.130","exact":true}`.  Tip:
+f09eed5.
