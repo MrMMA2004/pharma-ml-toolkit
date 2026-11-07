@@ -8499,8 +8499,14 @@ stream/error output carrying an absolute path and rebuilds the twins
 from the executed notebooks without re-running them. (e)
 `scratch/build_zip_213.py` (the 180/182/212 recipe + the predecessor
 sweep + per-home testzip): **v1.2.127 = 19,833,253 bytes, sha-256
-`2bccb408…`** (full: 2bccb40826816c031d6fc939c6e61659ae274d0049ced3e
-2a507926a74ffa4d9), 983 entries / 937 files, testzip OK on each of
+`9ccabfd3…`** (full: 9ccabfd3a66953947070891e1d1d2923ac5b08b5ac54c9e3b7aba72ed87cdcd3 —
+the canonical FINAL build by the surviving IM continuation session;
+the concurrent agent's `2bccb408…` intermediate and the cut-off
+session's unscrubbed `910685b4…` / 19,840,058 snapshot were
+superseded; three consecutive builds of the same post-scrub tree all
+measured exactly 19,833,253 bytes — the byte pin is rebuild-stable,
+zip's directory walk order varies the digest between
+otherwise-identical builds), 983 entries / 937 files, testzip OK on each of
 the four homes, real leaks 0; the predecessor v1.2.126 removed from
 all four homes (the deletion rides this commit; the round-209/210/212
 policy). (f) Census LAST on the post-ship tree: **957 files / 348,207
@@ -8553,8 +8559,56 @@ updated to the superseding build (the earlier cut-off build
 
 **Baselines for the next round**: v1.2.127 (four carriers) · honest
 totals 5,441 (4,663 + 778) · census 957 files / 348,207 lines ·
-zip 19,833,253 bytes / sha `2bccb408…` / 983 entries / 937 files ·
+zip 19,833,253 bytes / sha `9ccabfd3…` (canonical final build) / 983 entries / 937 files ·
 Studio increment 8 next: the **Generative Workbench** (audit row 9,
 `pharmaml.generative.*` — RNN/RL optimization), then Foundations
 (row 10) and Best-of ML (row 11) · sidebar 10 sections · dev server
 healthy (double-fork daemon) · counter 11/100.
+
+### Round 213 addendum — the surviving session's close-out (the two-agent race reconciled)
+
+The 2h cron's run 11 fired MID-FLIGHT inside this round's IM
+continuation session: two agents worked the same tree for a window
+(the cron agent found the WIP page, set the counter to 11
+"IN PROGRESS", hardened `build_zip_213.py` with the per-home testzip
++ predecessor-sweep reporting, re-executed the notebooks a second
+time — 397 s, zero errors — and scrubbed four warning-stderr leaks
+with the re-runnable `scripts/scrub_twins_213.py`, then wrote its
+half of the round) while the IM session (this one) ran its own
+probe/page/tests/ship pass. The reconciliation, done by the
+surviving session AFTER the cron agent's commits landed:
+
+- **The canonical artifact**: three consecutive builds of the same
+  post-scrub tree all measured exactly **19,833,253 bytes** — the
+  byte pin the endpoint serves is rebuild-stable — while zip's
+  directory-walk order varies the sha-256 between
+  otherwise-identical builds (observed: `2bccb408…` → `05d91c3f…` →
+  `9ccabfd3…`). The four homes and the commit now hold the FINAL
+  canonical build (`9ccabfd3a66953947070891e1d1d2923ac5b08b5ac54c
+  9e3b7aba72ed87cdcd3`); the counter note, worklog baselines and
+  manifest were reconciled to it (the `2bccb408` mentions that
+  remain are deliberate history).
+- **Verification re-run on the final tree** (the notebooks changed
+  under the first verification pass): ui/ + job_safety **174 green**
+  (146 + 28, exit 0), notebook variants **119 green**, web-parity +
+  data_loading + csv_standardize **161 green**, docs_index +
+  excel_io_and_samples **52 green**, doctests exit 0 (778, unchanged
+  — no `src/pharmaml` docstring touched this round), collect-only
+  **4,663**; ruff + mypy clean on every touched file; `bun run
+  lint` clean after the pin edits.
+- **The E2E pass on the final pins**: the overview renders the
+  5,441-tests hero, the live census 957 / 348,207 (the
+  FALLBACK_STATS now agrees with it — the earlier 349,558 was a
+  pre-re-exec snapshot) and the v1.2.127 chip; the Download tab
+  carries the 5,441 chip and the 18.91 MiB exact badge
+  (`/api/toolkit/zip-size?exact=true` →
+  `{"zipBytes":19833253,"version":"1.2.127","exact":true}` — inside
+  the browser too); zero console/page errors; evidence at
+  `download/round213-e2e-overview.png` (refreshed) and
+  `download/round213-e2e-download.png` (the Download tab, new).
+- **Lesson pinned**: when the 2h cron and an IM continuation can
+  overlap, the zip digest is NOT a safe single-agent pin — pin the
+  BYTE SIZE (rebuild-stable) as the contract and treat the sha-256
+  as build-specific evidence; and a round that gets interrupted
+  should re-run its whole verification stack on whatever tree
+  actually ships, not trust numbers computed mid-flight.
