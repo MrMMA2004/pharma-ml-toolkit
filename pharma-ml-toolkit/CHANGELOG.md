@@ -34,10 +34,30 @@
   Vd/CL arithmetic, duplicate-submission refusal, palette sync,
   main-window integration (six pages), fill/vline plot semantics.
 
+### Fixed — the round-208 lost-update race (Run 8 addendum)
+
+* **`ui/workers/job_worker.py`** — `JobRunner.submit` now accepts the
+  page's result handlers (`on_finished` / `on_failed` / `on_cancelled`
+  / `on_progress`) and connects them BEFORE `pool.start`. The old
+  page-side pattern (`worker = runner.submit(...)` then
+  `worker.signals.finished.connect(...)`) raced the emitting pool
+  thread: an instant job could emit `finished` before the page's
+  connect line ran, the result was lost forever and the UI stayed on
+  "Running …" — caught by the pkpd offscreen suite as a non-
+  deterministic flake (4/18 failing at first run, then passing
+  alone). The runner's own finishers stay the first connections, so
+  `job_ended` still lands before the result slot. All six call sites
+  migrated (`pkpd` ×3, `chemistry` ×2, `model_analysis` ×1); the three
+  job-worker tests that ENCODED the racy connect-after-submit pattern
+  (two of which already failed with `assert []` on the pre-fix tree
+  under load) moved to the deterministic handler form; +2 regression
+  tests pin the handler-before-start guarantee and the ended-before-
+  result ordering.
+
 ### Changed
 
-* Honest total **5,360** tests (4,582 collected + 778 doctests);
-  `ui/` suite 49 → 67.
+* Honest total **5,362** tests (4,584 collected + 778 doctests);
+  `ui/` suite 49 → 69.
 
 ## [1.2.121] — 2026-11-07
 

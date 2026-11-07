@@ -394,10 +394,12 @@ walk pins **939 files / 343,253 lines**.
 
 ## v1.2.122 release-zip homes (2026-11-07, round 208 — PK/PD Workbench, the Studio's increment 3)
 
-`pharma-ml-toolkit-v1.2.122.zip` — 19,777,011 bytes, sha-256
-`7cc737a15110a01dc171621bd6cc8eb8bb146e1000c9f646218baaec53c42521`,
-built with the standing builder (`scratch/build_zip_183.py`: 971 entries /
-925 files / real leaks 0), placed in all four homes:
+`pharma-ml-toolkit-v1.2.122.zip` — 19,784,995 bytes, sha-256
+`702a83dc876885b5ee3334d4d94e84ceee8425feeac22e36503a405b2350037e`
+(the Run 8 addendum rebuild after the lost-update race fix — the
+pre-addendum build at 19,777,011 / `7cc737a1…` is superseded),
+built with the standing builder (`scratch/build_zip_183.py`: 972 entries /
+926 files / real leaks 0), placed in all four homes:
 
 - `download/pharma-ml-toolkit-v1.2.122.zip` (repo root)
 - `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.122.zip`

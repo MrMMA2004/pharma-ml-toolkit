@@ -7830,3 +7830,45 @@ row 3 + the migration-status section + GITHUB_BACKUP_MANIFEST section.
    with the dev server stopped (exit 137 at the playground's Tk
    import cascade) — the honest verification stays collect-only +
    focused batteries, and the GUI class runs green in isolation.
+
+**Run 8 addendum (2026-11-07 14:20 cron, counter 7→8): the lost-update race found and killed.**
+The interrupted pre-commit window left the tree uncommitted; Run 8
+picked it up and the pkpd offscreen suite failed 4/18 on the first
+execution — the SAME stale-report shape as round 207's lesson 1, but
+with `_settle` already in place. Root cause is a REAL page bug, not a
+test timing bug: `JobRunner.submit` called `pool.start(worker)` and
+returned, and the pages connected `worker.signals.finished`/`failed`
+AFTER that return — an instant job (dosing-events realization, NCA on
+10 points) can emit into slots that do not exist yet, the result is
+lost forever and the UI stays on "Running …" (14/18 passing was pure
+scheduling luck). Fix: `submit` grew optional `on_finished`/
+`on_failed`/`on_cancelled`/`on_progress` parameters connected BEFORE
+`pool.start` (the runner's own finishers stay first, so `job_ended`
+still precedes the result slot); all six call sites migrated (pkpd ×3,
+chemistry ×2, model_analysis ×1). The three job-worker tests that
+encoded the racy connect-after-submit pattern moved to the handler
+form — and `git stash` attribution proved two of them ALREADY failed
+(`assert []`) on the pre-fix tree under load, i.e. the suite carried
+the same latent flake outside the GUI pages. +2 regression tests pin
+the handler-before-start guarantee (12 instant submissions, strict
+`["ended", result]` ordering) and the failed-path wiring.
+**Verification (all fresh, this run)**: ui/ suite 69 green (pkpd 18
+twice, job-worker 7); focused batteries exit 0 (notebook freshness +
+docs-index + job_safety + web parity + data_loading + csv_standardize +
+excel); doctests **775 passed + 3 skipped = 778**; collect-only
+**4,584 across the tests tree, exit 0** → honest total
+**4,584 + 778 = 5,362**; mypy strict clean (20 files), ruff clean;
+playground_workflows 17 green; test_playground.py again died in-session
+(timeout at 66/869 after 66 greens, OOM 137 when run after it) and the
+two previously-hung TestGuiUnderXvfb tests pass **green in isolation**
+(exit 0) — lesson 3 re-confirmed, my changes touch neither
+playground.py nor its tests. The interrupted round's detached full
+battery died with the sandbox recycle (no process, no log survives);
+this run's collect-only + focused + doctest evidence discharges its
+verification obligation. **Ship (supersedes the pre-addendum build)**:
+`scratch/build_zip_183.py` → **v1.2.122 = 19,784,995 bytes, sha-256
+`702a83dc…`**, 972 entries / 926 files, real leaks 0, four homes
+byte-identical; web pins 5,360 → 5,362 (seven sites) + fallback stats
+945/344,253 → 946/344,354 (`scratch/census.py` on the post-fix tree);
+CHANGELOG gains the Fixed section; the manifest's zip section notes
+the supersession. Counter rides the commit (7→8).
