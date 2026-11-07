@@ -1,3 +1,54 @@
+## [1.2.125] — 2026-11-07
+
+### Added — round 211: the Docking Workbench (Studio increment 5, audit row 5)
+
+* **`ui/pages/docking.py`** — the Studio's fifth feature page,
+  migrating the playground Docking tab (directive #16, 16.18
+  migration step 5). Four engine tabs, each wired to the SAME public
+  backend APIs the playground cards call, none needing the external
+  engine binaries (vina/autodock4/AutoGrid stay the cards' job):
+  * **Campaign summary** — one job runs the card's full pipeline:
+    `check_docking_completion` + `scan_docking_directory` over the
+    bundled synthetic AutoDock4 campaign (14 ligand folders: 12
+    complete runs, 08_benzocaine missing its log, 10_nicotine
+    interrupted before clustering — the audit rows ride the scan),
+    then the rescore card's arithmetic on the OK rows: RDKit
+    heavy-atom counts from the campaign's `ligands.csv`,
+    `ligand_efficiency_series`, and `consensus_rescore` over the
+    three evidence columns (`best_lowest_energy` lower-is-better +
+    `best_num_in_cluster` + `ligand_efficiency`), ranked best-first
+    (metformin 0.782 the engine-printed top).
+  * **Cluster analysis** — `parse_dlg_cluster_table` on the chosen
+    folder's `r.dlg`: the CLUSTERING HISTOGRAM as a real table
+    (rank / lowest / mean energy / #in-cluster), the top-cluster and
+    most-populated story in the report; the folder combo is fed by
+    the campaign scan's cross-tab state.
+  * **Ligand library** — `load_ligand_csv` on the bundled library
+    (8 valid + 2 deliberately invalid rows whose reasons ride the
+    table) plus the RDKit property columns the preparation card
+    reports (heavy atoms, rotatable bonds) on the valid rows.
+  * **DOCKSTRING lab** — `target_frame` (all 58 upstream Vina search
+    boxes with their volumes charted), `get_target` config previews,
+    and `parse_search_box` validation of a pasted six-key config
+    (incomplete configs report exactly which keys are missing).
+* Sidebar grows to **eight sections** (docking between biology and
+  models, the audit's usage order); theme palette wiring and the
+  `pages.count()` pin 7 → 8 with the navigation-order test updated.
+* 14 new offscreen tests (`tests/ui/test_docking_page.py`), every
+  asserted number engine-printed first on this exact bundled data:
+  14 folders → 12 OK / 1 missing log / 1 incomplete, metformin the
+  consensus top (0.781674) with its 9 heavy atoms, aspirin's five
+  clusters (rank 1 at -4.91 kcal/mol, 15 runs; the sum of cluster
+  sizes 55), caffeine's most-populated cluster rank 2 (15 runs),
+  the library at 10 rows / 8 valid / 2 invalid with the exact RDKit
+  reasons, naproxen 17 heavy atoms / 3 rotatable bonds, caffeine 0
+  (the rigid xanthine), 58 DOCKSTRING targets (first ABL1, last
+  THRB), DRD2's box (9.250, 6.167, -7.000) / (30, 30, 32).
+  Refusals without a scanned campaign, config validation,
+  duplicate-submission refusal, and palette sync all pinned.
+* GUI audit row 5 and the migration status updated (increment 5 of
+  N; next: Unsupervised per the audit's usage order).
+
 ## [1.2.124] — 2026-11-07
 
 ### Added — round 210: the Biology Workbench (Studio increment 4, audit row 4)

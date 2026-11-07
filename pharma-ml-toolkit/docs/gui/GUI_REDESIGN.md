@@ -103,9 +103,28 @@ training run with held-out R²), and chart-palette sync.
 
 ## Migration status (16.18)
 
-Increment 4 of N — shell, navigation, theme system, Data Explorer,
-Chemistry Workbench, PK/PD Workbench, Biology Workbench, Model
-Analysis, Settings are live and tested. The Biology Workbench
+Increment 5 of N — shell, navigation, theme system, Data Explorer,
+Chemistry Workbench, PK/PD Workbench, Biology Workbench, Docking
+Workbench, Model Analysis, Settings are live and tested. The Docking
+Workbench (increment 5, v1.2.125) brings four of the playground
+Docking tab's engines, each wired to the same public backend APIs the
+cards call, none needing the external engine binaries: the campaign
+summary (`check_docking_completion` + `scan_docking_directory` over
+the bundled synthetic AutoDock4 campaign — 14 folders: 12 complete
+runs, one missing log, one interrupted before clustering — then the
+rescore card's arithmetic on the OK rows: RDKit heavy atoms from the
+campaign's `ligands.csv`, `ligand_efficiency_series`, and
+`consensus_rescore` over `best_lowest_energy` + `best_num_in_cluster`
++ `ligand_efficiency`, ranked best-first: metformin 0.782 top), the
+cluster analysis (`parse_dlg_cluster_table` — the CLUSTERING
+HISTOGRAM as a real table with the top-cluster and most-populated
+story, the folder combo fed by the scan's cross-tab state), the
+ligand library audit (`load_ligand_csv` — 8 valid + 2 deliberately
+invalid rows whose reasons ride the table — plus the RDKit heavy-atom
+and rotatable-bond columns the preparation card reports), and the
+DOCKSTRING lab (`target_frame`, all 58 upstream Vina search boxes,
+with `get_target` config previews and `parse_search_box` validation
+of a pasted six-key config). The Biology Workbench
 (increment 4, v1.2.124) brings four of the playground Cell Lines
 tab's engines, each wired to the same public backend APIs the cards
 call: the screen audit (`load_response_table` →

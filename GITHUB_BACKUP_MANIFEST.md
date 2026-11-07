@@ -449,7 +449,53 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
-## v1.2.123 release-zip homes (2026-11-07, round 209 — the second playground collapse mode fixed)
+## v1.2.125 release-zip homes (2026-11-07, round 211 — the Docking Workbench, the Studio's increment 5)
+
+`pharma-ml-toolkit-v1.2.125.zip` — 19,705,454 bytes, sha-256
+`877a5ecf76b29c4ad23fbfda94e89b8a6ccce5f0e23890ebf039bdd45fa724be`,
+built with the standing four-home builder (`scratch/build_zip_210.py`,
+scrub-before-build: the re-executed ML notebook's ConvergenceWarning
+traceback caught and scrubbed again before the archive was cut;
+977 entries / 932 files / nested zips NONE / real leaks 0 / 12
+accepted placeholders), placed byte-identical in all four homes:
+
+- `download/pharma-ml-toolkit-v1.2.125.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.125.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.125.zip`
+- `upload/pharma-ml-toolkit-v1.2.125.zip`
+
+The immediate predecessor (v1.2.124) left all four homes; deeper
+history stays (v1.2.106's only surviving copy lives in the repo
+download/ sweep archive).
+
+**What shipped:** directive #16's 16.18 migration step 5 — the
+Studio's Docking Workbench (`ui/pages/docking.py`, audit row 5, the
+playground Docking tab): four engine tabs wired to the same public
+backend APIs the cards call, none needing the external engine
+binaries — the campaign summary (`check_docking_completion` +
+`scan_docking_directory` over the bundled synthetic AutoDock4
+campaign: 14 folders, 12 OK / 1 missing log / 1 incomplete, then the
+rescore card's arithmetic on the OK rows — RDKit heavy atoms from the
+campaign's ligands.csv, `ligand_efficiency_series`, `consensus_rescore`
+over `best_lowest_energy` + `best_num_in_cluster` +
+`ligand_efficiency`, metformin 0.782 the engine-printed top), the
+cluster analysis (`parse_dlg_cluster_table` — the CLUSTERING
+HISTOGRAM as a real table, the folder combo fed by the scan's
+cross-tab state), the ligand library audit (`load_ligand_csv` — 8
+valid + 2 deliberately invalid rows whose reasons ride the table —
+plus RDKit heavy atoms / rotatable bonds), and the DOCKSTRING lab
+(`target_frame`'s 58 upstream Vina search boxes, `get_target` config
+previews, `parse_search_box` validation). The sidebar grows to eight
+sections (docking between biology and models); pages.count() pin
+7 → 8. All 8 notebooks re-executed at 1.2.125 (201 s, zero error
+outputs, 7 twins regenerated); 14 new offscreen tests, every asserted
+number engine-printed first. Honest totals: collect-only **4,613** +
+778 doctests = **5,391**; web pins 5,377 → 5,391 (seven sites) +
+census 950/345,766 → **952 / 346,738** (`scratch/census_210.py` on
+the post-ship tree). Counter 9 → 10 (this run's cron trigger, the
+first since round 210 recorded "no new cron trigger").
+
+## v1.2.123 release-zip homes (2026-11-07, round 209 — the second playground collapse mode fixed) — the second playground collapse mode fixed)
 
 `pharma-ml-toolkit-v1.2.123.zip` — 19,781,667 bytes, sha-256
 `d1627ecd3f9fdc778dfd862ec1aa1e766c995e618265cf13edc19c1f4c1d74c2`

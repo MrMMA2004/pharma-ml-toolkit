@@ -32,6 +32,7 @@ SECTIONS: list[tuple[str, str]] = [
     ("chemistry", "Chemistry Workbench"),
     ("pkpd", "PK/PD Workbench"),
     ("biology", "Biology Workbench"),
+    ("docking", "Docking Workbench"),
     ("models", "Model Analysis"),
     ("settings", "Settings"),
 ]
@@ -61,6 +62,7 @@ class MainWindow(QMainWindow):
         from .pages.chemistry import ChemistryWorkbenchPage
         from .pages.dashboard import DashboardPage
         from .pages.data_explorer import DataExplorerPage
+        from .pages.docking import DockingWorkbenchPage
         from .pages.model_analysis import ModelAnalysisPage
         from .pages.pkpd import PKPDWorkbenchPage
         from .pages.settings_page import SettingsPage
@@ -70,6 +72,7 @@ class MainWindow(QMainWindow):
         self.chemistry_page = ChemistryWorkbenchPage(theme=self.theme, runner=self.runner, data_explorer=self.data_page)
         self.pkpd_page = PKPDWorkbenchPage(theme=self.theme, runner=self.runner)
         self.biology_page = BiologyWorkbenchPage(theme=self.theme, runner=self.runner)
+        self.docking_page = DockingWorkbenchPage(theme=self.theme, runner=self.runner)
         self.model_page = ModelAnalysisPage(theme=self.theme, runner=self.runner, data_explorer=self.data_page)
         self.settings_page = SettingsPage(self.theme)
 
@@ -79,6 +82,7 @@ class MainWindow(QMainWindow):
             self.chemistry_page,
             self.pkpd_page,
             self.biology_page,
+            self.docking_page,
             self.model_page,
             self.settings_page,
         ):
@@ -145,6 +149,7 @@ class MainWindow(QMainWindow):
         self.chemistry_page.apply_palette(palette)
         self.pkpd_page.apply_palette(palette)
         self.biology_page.apply_palette(palette)
+        self.docking_page.apply_palette(palette)
         self.model_page.apply_palette(palette)
         self._status.showMessage(f"Theme: {provider} · {name}")
 

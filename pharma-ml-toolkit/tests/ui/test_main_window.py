@@ -6,13 +6,14 @@ from PySide6.QtCore import QSettings, Qt
 
 
 def test_window_constructs_with_all_pages(main_window) -> None:
-    assert main_window.pages.count() == 7
+    assert main_window.pages.count() == 8
     assert main_window.windowTitle() == "PharmaML Studio"
 
 
 def test_navigation_switches_pages(main_window) -> None:
     order = [
-        "dashboard", "data", "chemistry", "pkpd", "biology", "models", "settings",
+        "dashboard", "data", "chemistry", "pkpd", "biology", "docking",
+        "models", "settings",
     ]
     for i, key in enumerate(order):
         main_window.go_to(key)
@@ -21,6 +22,8 @@ def test_navigation_switches_pages(main_window) -> None:
     assert main_window.pages.currentIndex() == 3
     main_window.go_to("biology")
     assert main_window.pages.currentIndex() == 4
+    main_window.go_to("docking")
+    assert main_window.pages.currentIndex() == 5
 
 
 def test_nav_emits_section_keys(main_window) -> None:
