@@ -8989,3 +8989,84 @@ honest totals 5,478 (4,700 + 778) · census 962 files / 350,731 lines
 (the post-ship fallback pin) · sidebar 13 sections (`bestofml` wired,
 page uncommitted — the other agent's round to close) · next planned:
 Response AI (audit row 12) after increment 10 lands · counter **13/100**.
+
+## Round 218 — 2026-11-08 — cron run 14/100: the race honored, the bestofml commit backed up, the Response AI probe prep
+
+**Run context**: cron run 14/100 (job 508389, fired 00:21 +08:00) — the
+counter 13 → **14**.  No rollback this time: the tree opened clean at
+`3b42566` (origin/main `d5bead0` + 1), venv alive (rdkit 2026.09.1),
+token/remote/credential helper intact, both scheduler jobs alive
+(master 508389, raw run_count 19 vs the canonical counter — the
+intentional drift; webDevReview recreated as job 512428, status 1,
+next run scheduled).
+
+**The race, honored per round 217's protocol**: the concurrent agent is
+LIVE mid-increment on Studio increment 10 (Best-of ML, audit row 11) —
+its commit `3b42566` (ui/pages/bestofml.py 1,184 lines +
+test_bestofml_page.py 19 tests + the probe + main_window wiring) landed
+locally minutes before this run opened, with two uncommitted polish
+edits on top (a probe import reorder and a paren-wrapped implicit
+string concat in the change-point row formatting — lint-style).
+**One increment, one owner**: this run did NOT touch their files, did
+NOT commit their WIP, did NOT bump the version (their round ships
+v1.2.131 with the full ritual).  What this run did instead:
+
+- **The push that protects**: `3b42566` was committed-but-unpushed —
+  exactly the state the 13th/14th rollbacks punish (the remote is the
+  sole survivor).  This run pushed it to origin as part of the round's
+  commit train (a clean fast-forward; the working tree's polish edits
+  stayed theirs, uncommitted).  Their later push remains a
+  fast-forward on top.
+- **The verification leg, re-run on the live tree**: 128/128 focused
+  tests green — their bestofml 19 + the re-pinned foundations and
+  main_window + job_safety 31 + csv_standardize, WITH their uncommitted
+  polish in place (the tree is green mid-flight, not just at the
+  commit).
+- **D-④ closed out**: `recalculate_selected_features` verified present
+  in playground.py (module docstring line 50, the Chemistry tab's
+  feature-recalculation card) — the long-pending verify item needed no
+  work; it was done rounds ago and merely awaited this check.
+
+**The increment prep (zero collision)**: the next planned Studio
+increment is 11 — **Response AI** (GUI_AUDIT row 12, the last planned
+row after 10/11 ship; backend `pharmaml.ml.drugresponse`, 1,994 lines).
+Per the round-205+ house rule (probe first, page against printed
+numbers), this run landed `scratch/probe_response_218.py`: nine seeded
+sections (seed 42) printing the exact numbers the future page/tests
+pin — the Hill fit recovering the seeded 4PL truth (hill 1.1679 vs
+1.2, ic50 0.8123 vs 0.8, top 0.9981 vs 1.0, bottom 0.049 vs 0.05,
+r² 0.999669, fitted AUC 3.055882), the closed-form curve values +
+`auc_log_dose` 3.057985, `response_metrics` (n 60, pearson 0.970159,
+rmse 0.067114), `rank_correlations` (pearson 0.800237 / spearman
+0.780178 / kendall 0.58156), the `DrugResponseModel` on a seeded
+12×4 screen with a 15% NaN mask (36 observed pairs, final loss
+0.043046, in-sample r 0.263145 — honestly modest, the toy screen is
+tiny), the 4-fold `cross_validate_response` (per-fold pearson
+-0.340262 / 0.680095 / -0.132166 / 0.193665, mean 0.100333),
+`InformativeRegression` (prior-shrunk coef [0.4962, 1.1717, -0.6176]
+vs the generating [0.5, 1.5, -0.8]), `ResponseVAE` (ELBO -19.770638 →
+-10.847929, the bound improving) and `MultiOmicsFusion` (block-variance
+equalization, per-block stds expr 1.016623 / mut 0.491287).  Probe
+exit 0, deterministic.  Three API-shape corrections were learned
+mid-probe and are recorded here for the page author:
+`HillFit.parameters` is a **dict** (not an array);
+`InformativeRegression.fit` returns the per-epoch **loss** series (the
+coefficients live on `.coef` / `.intercept`); `VAEHistory.elbo` /
+`reconstruction` / `kl_divergence` / `response_loss` are per-epoch
+**series** (final = `[-1]`), and `MultiOmicsFusion.block_stds_` /
+`block_means_` are per-**column** pandas Series (aggregate before
+printing).
+
+**Ops**: dev server healthy (GET / 200, ~200 ms); zip endpoint
+`{"zipBytes":19862379,"version":"1.2.130","exact":true,"source":"release"}`
+— v1.2.130 stands in all four homes, untouched this round.  No version
+bump: no tracked src/tests/playground/docs bytes changed (the probe is
+scratch/, the counter scratch/).
+
+**Baselines for the next round**: v1.2.130 stands (four carriers) ·
+honest totals 5,478 (4,700 + 778) · census 962 files / 350,731 lines ·
+sidebar 13 sections (bestofml page committed at `3b42566`, now on the
+remote; their polish edits may extend it) · next planned: the other
+agent closes increment 10 as **v1.2.131** (full ritual), then Response
+AI (audit row 12) builds on `scratch/probe_response_218.py` · counter
+**14/100**.
