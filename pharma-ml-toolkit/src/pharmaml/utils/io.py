@@ -374,18 +374,17 @@ def read_table_with_progress(
             for chunk in reader:
                 chunks.append(chunk)
                 done += len(chunk)
-                if len(chunk):
-                    # the header-only file yields one EMPTY chunk -- a
-                    # 0-rows "progress" blip would be noise, not news
-                    if report(done, estimated, "") is False:
-                        # (round 205) the cooperative stop: the GUI's
-                        # Stop button / memory watchdog answered False
-                        # -- the stream halts at this chunk boundary
-                        # BEFORE the concat would double the memory.
-                        raise JobCancelled(
-                            f"table read cancelled after {done:,} rows -- "
-                            "stopped at a checkpoint by the caller"
-                        )
+                # the header-only file yields one EMPTY chunk -- a
+                # 0-rows "progress" blip would be noise, not news.
+                # (round 205) inside the guard: the cooperative stop --
+                # the GUI's Stop button / memory watchdog answered False
+                # -- the stream halts at this chunk boundary BEFORE the
+                # concat would double the memory.
+                if len(chunk) and report(done, estimated, "") is False:
+                    raise JobCancelled(
+                        f"table read cancelled after {done:,} rows -- "
+                        "stopped at a checkpoint by the caller"
+                    )
 
     try:
         try:
@@ -541,16 +540,15 @@ def read_indexed_table_with_progress(
             for chunk in reader:
                 chunks.append(chunk)
                 done += len(chunk)
-                if len(chunk):
-                    # the header-only file yields one EMPTY chunk -- a
-                    # 0-rows "progress" blip would be noise, not news
-                    if report(done, estimated, "") is False:
-                        # (round 205) cooperative stop -- same contract
-                        # as read_table_with_progress's chunk loop.
-                        raise JobCancelled(
-                            f"indexed table read cancelled after {done:,} rows -- "
-                            "stopped at a checkpoint by the caller"
-                        )
+                # the header-only file yields one EMPTY chunk -- a
+                # 0-rows "progress" blip would be noise, not news.
+                # (round 205) inside the guard: the cooperative stop --
+                # same contract as read_table_with_progress's chunk loop.
+                if len(chunk) and report(done, estimated, "") is False:
+                    raise JobCancelled(
+                        f"indexed table read cancelled after {done:,} rows -- "
+                        "stopped at a checkpoint by the caller"
+                    )
 
     try:
         try:

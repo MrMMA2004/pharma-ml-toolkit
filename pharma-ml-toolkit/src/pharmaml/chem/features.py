@@ -1061,18 +1061,17 @@ def compute_feature_frame(
         else:
             results.extend(compute_one(pair) for pair in batch)
         done += len(batch)
-        if progress is not None:
-            if progress(done, total, "feature factory") is False:
-                # (round 205) the cooperative stop: the caller's
-                # reporter answered False -- the GUI's Stop button or
-                # its memory watchdog.  Halt at this batch boundary
-                # with the named error so the poller can tell a stop
-                # apart from a failure (the window survives either
-                # way; the half-computed batch is discarded).
-                raise JobCancelled(
-                    f"feature batch cancelled after {done}/{total} molecules "
-                    "-- stopped at a checkpoint by the caller"
-                )
+        # (round 205) inside the guard: the cooperative stop -- the
+        # caller's reporter answered False -- the GUI's Stop button or
+        # its memory watchdog.  Halt at this batch boundary with the
+        # named error so the poller can tell a stop apart from a
+        # failure (the window survives either way; the half-computed
+        # batch is discarded).
+        if progress is not None and progress(done, total, "feature factory") is False:
+            raise JobCancelled(
+                f"feature batch cancelled after {done}/{total} molecules "
+                "-- stopped at a checkpoint by the caller"
+            )
 
     rows: list[np.ndarray] = []
     valid_smiles: list[str] = []

@@ -1,3 +1,39 @@
+## [1.2.133] — 2026-11-08
+
+### Changed — round 220 (cron run 15/100): the lint-restore round (the standing mandate's engineering review)
+
+* **The bare-`ruff check .` green convention restored** — the 15th
+  sandbox rollback restored the tree from the remote with the upload
+  mount's 777 bits smeared over every `.py` file, so a bare
+  `ruff check .` (the pyproject-pinned convention, `scratch/`
+  excluded) suddenly reported 159 findings: 153 x EXE002 (executable
+  without shebang), 1 x EXE001, 5 x SIM102.  All 153 no-shebang files
+  are back to 0644 (`studio.py`, the one shebang carrier, is the
+  single legitimate 0755); EXE001/EXE002 = 0.
+* **The five round-205 cooperative-stop guards collapsed (SIM102)** —
+  identical short-circuit semantics, one nesting level less, comments
+  preserved at the guard:
+  * `utils/io.py` x2 — `read_table_with_progress` and the indexed
+    reader's chunk loops (`if len(chunk) and report(...) is False:`).
+  * `ml/training.py` x2 — `compare_models`' `on_model` and the family
+    benchmark's `on_family` heartbeat guards.
+  * `chem/features.py` x1 — the feature factory's per-batch
+    `progress` guard.
+  Net -4 lines; no behaviour change (the `and` short-circuit keeps
+  the `is not None` guard strictly before the callback call).
+* **No new tests** — the collapse is covered by the existing nets:
+  `tests/test_job_safety.py` (31, every stop checkpoint), the io /
+  training / features batches, and the ui suite re-run green AFTER the
+  edits (247 dots exit 0).
+* **Environment note** — the repaired venv carries pytest 9.0.2 (the
+  pre-rollback venv was pytest 8): the same 778 collected doctest
+  items now report as **775 passed + 3 skipped** where pytest 8
+  accounted the three all-`+SKIP` docstring items
+  (`pharmaml.viz`, `pharmaml.data.load_dataset`,
+  `pharmaml.data.split_table` — every example `+SKIP` by design,
+  the download-required examples) differently.  Zero failures; the
+  honest grand total **5,514 = 4,736 + 778** is unchanged.
+
 ## [1.2.132] — 2026-11-08
 
 ### Added — round 219: the Response AI Workbench (Studio increment 11, audit row 12)

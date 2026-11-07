@@ -577,20 +577,19 @@ def compare_models(
         except Exception as exc:  # noqa: BLE001 — keep the leaderboard alive on failures
             _LOG.warning("Model %s failed during comparison: %s", name, exc)
             rows.append({"model": name, f"{metric}_mean": np.nan, "folds": cv})
-        if on_model is not None:
-            # one call per completed row (success or failure) — the
-            # progress-bar heartbeat for the longest job in the tab.
-            # (round 205) the return value is the cooperative-stop
-            # channel: a False answer stops the leaderboard after this
-            # row -- the GUI's Stop button / memory watchdog, so a
-            # run-away comparison halts before the OS kills the window.
-            if on_model(
-                {"model": name, "index": position, "total": len(models)}
-            ) is False:
-                raise JobCancelled(
-                    f"model comparison cancelled after {position}/{len(models)} "
-                    "models -- stopped at a checkpoint by the caller"
-                )
+        # one call per completed row (success or failure) — the
+        # progress-bar heartbeat for the longest job in the tab.
+        # (round 205) inside the guard: the cooperative-stop channel --
+        # a False answer stops the leaderboard after this row -- the
+        # GUI's Stop button / memory watchdog, so a run-away comparison
+        # halts before the OS kills the window.
+        if on_model is not None and on_model(
+            {"model": name, "index": position, "total": len(models)}
+        ) is False:
+            raise JobCancelled(
+                f"model comparison cancelled after {position}/{len(models)} "
+                "models -- stopped at a checkpoint by the caller"
+            )
 
     frame = pd.DataFrame(rows)
     column = f"{metric}_mean"
@@ -802,16 +801,16 @@ def benchmark_feature_families(
         except Exception as exc:  # noqa: BLE001 — keep the board alive on failures
             _LOG.warning("Family %s failed during benchmarking: %s", family, exc)
             rows.append({"family": family, f"{metric}_mean": np.nan, "folds": cv})
-        if on_family is not None:
-            # (round 205) same cooperative-stop contract as the compare
-            # leaderboard: False halts the family sweep after this row.
-            if on_family(
-                {"family": family, "index": position, "total": len(family_list)}
-            ) is False:
-                raise JobCancelled(
-                    f"family benchmark cancelled after {position}/{len(family_list)} "
-                    "families -- stopped at a checkpoint by the caller"
-                )
+        # (round 205) inside the guard: the same cooperative-stop
+        # contract as the compare leaderboard: False halts the family
+        # sweep after this row.
+        if on_family is not None and on_family(
+            {"family": family, "index": position, "total": len(family_list)}
+        ) is False:
+            raise JobCancelled(
+                f"family benchmark cancelled after {position}/{len(family_list)} "
+                "families -- stopped at a checkpoint by the caller"
+            )
 
     board = pd.DataFrame(rows)
     column = f"{metric}_mean"
