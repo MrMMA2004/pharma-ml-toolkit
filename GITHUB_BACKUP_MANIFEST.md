@@ -449,6 +449,36 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.133 release-zip homes (2026-11-08, round 220, cron run 15/100 — the lint-restore round)
+
+`pharma-ml-toolkit-v1.2.133.zip` — 20,348,595 bytes, sha-256
+`eac9c60af3f76662cb7d17b7915441587d531539569e65575cdcd4cc219e9f7f`,
+998 entries / 952 files, built with the standing four-home builder
+(`scratch/build_zip_220.py`, the round-217 recipe verbatim) — testzip
+OK per home, **real leaks 0** (third consecutive zero-drop round),
+predecessor v1.2.132 swept from all four homes. Byte-identical copies
+ship to all four homes (repo-root `download/`,
+`pharma-ml-toolkit/dist-archive/`, `pharma-ml-toolkit/download/`,
+`upload/`). The round: the 15th sandbox rollback recovered first
+(local wiped to 2eb0ede/round-186 v1.2.106; remote survived at
+27633fc/round-219; pure fast-forward, every `upload/` artefact
+re-synced byte-identical), then the standing mandate's engineering
+review: the bare-`ruff check .` green convention restored (the
+rollback had smeared the upload mount's 777 bits over 153 no-shebang
+`.py` files -> 0644; `studio.py` stays the one 0755) and the five
+round-205 cooperative-stop guards collapsed (SIM102, identical
+short-circuit semantics): `utils/io.py` x2, `ml/training.py` x2,
+`chem/features.py` x1. Verification: focused batches 213 + 409 dots,
+ui suite + job_safety re-run AFTER the edits 247 dots exit 0,
+doctests 775 passed + 3 skipped under the repaired venv's pytest 9.0.2
+(the same 778 collected items; the three all-`+SKIP` docstring items
+now itemized as skips — honest grand total 5,514 unchanged),
+collect-only 4,736, ruff clean, mypy 0 on the three touched files,
+notebooks re-executed 204 s (8/8, zero errors, all print
+`pharmaml 1.2.133`) + 7 twins regenerated, scrub dropped 0, census
+**972 files / 354,599 lines** (census runs LAST), web pins synced
+(972/354,599, 5,514 tests), four version carriers at 1.2.133.
+
 ## v1.2.132 release-zip homes (2026-11-08, round 219 — the Response AI Workbench, the Studio's increment 11)
 
 `pharma-ml-toolkit-v1.2.132.zip` — 20,288,273 bytes, sha-256

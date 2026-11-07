@@ -9267,3 +9267,96 @@ four homes) · honest totals **5,514** (4,736 + 778) · census **971 /
 planned rows are ALL shipped (rows 1-13 done; the next Studio
 increments come from the cross-cutting concerns or new audit rows)
 · counter **14/100**.
+
+## Round 220 — 2026-11-08 — cron run 15/100: the 15th rollback recovered, then the lint-restore round (v1.2.133)
+
+**The rollback (STEP 0/1 first)** — the sandbox had wiped to
+`2eb0ede` (round 186, v1.2.106) with the origin remote, the token AND
+`~/.github_token` gone; `upload/Command.txt` also missing, so the PAT
+was re-extracted from `upload/MASTER_PROMPT.pdf` (pdftotext + the
+line-wrap join, 93 chars).  Remote re-added, credential helper
+restored, `git pull --ff-only origin main` -> `27633fc` (round 219's
+close-out): a pure fast-forward, zero conflicts — every one of the 18
+`upload/` artefacts moved aside for the pull came back
+byte-identical.  The worklog's true state vs the session summary's
+stale baselines (v1.2.129/round 215): rounds 216-219 had shipped
+v1.2.130 through v1.2.132 with the counter at 14/100 (run 14 was the
+00:21 cron).  venv repaired in the foreground (rdkit 2026.09.1 back;
+PySide6/pyqtgraph OK).  The webDevReview 15-min job had vanished from
+the scheduler again (512508 gone): recreated as **job 512785**; the
+master job 508389 alive (raw run_count 22 vs the canonical 15 — the
+intentional env-dead-fire drift).
+
+**The round (STEP 2)** — GUI_AUDIT's planned rows are all shipped
+(rows 1-13), so per the worklog's own "next increments come from the
+cross-cutting concerns" note this leg ran the standing mandate's
+engineering review instead of a new feature row:
+
+* **Baseline verification first** — focused batch (web_parity,
+  data_loading, csv_standardize, docs_index, excel_io_and_samples)
+  213 dots exit 0; ui suite + job_safety 247 dots exit 0 (the round-219
+  pin, green on the freshly pulled tree).
+* **The find** — a bare `ruff check .` (the pyproject-pinned green
+  convention, scratch/ excluded) reported **159 findings** on a tree
+  whose last two rounds logged "ruff clean": the rollback restore had
+  smeared the upload mount's 777 bits over every `.py` file, so 153
+  files carried EXE002 (executable without shebang) and `studio.py`
+  carried EXE001 (shebang present, bit missing).  Git couldn't see it
+  (`core.filemode=false` is pinned from an earlier round precisely to
+  absorb sandbox permission noise) — the lint gate was the only
+  witness.  Fix: all 153 no-shebang files back to 0644, `studio.py`
+  0755 — EXE001/EXE002 zero, and the next release zip is the first
+  one in a while to carry sane modes.
+* **The five real findings (SIM102)** — every round-205
+  cooperative-stop guard that wraps its callback call in
+  `if cb is not None:` + nested `if cb(...) is False:` collapsed to
+  one combined `if cb is not None and cb(...) is False:` (identical
+  short-circuit semantics, one nesting level less, the
+  why-comments preserved above the guard): `utils/io.py` x2
+  (read_table_with_progress + the indexed reader's chunk loops),
+  `ml/training.py` x2 (compare_models' on_model + the family
+  benchmark's on_family), `chem/features.py` x1 (the feature
+  factory's per-batch progress guard).  Net -4 lines, zero behaviour
+  change.
+* **Post-edit re-verification** — the touched-module batch (io,
+  data_loading, excel_io_and_samples, features,
+  feature_recalculation, cli_features, job_safety) 409 dots + 1 skip
+  exit 0; the training-callback files (interpret, multiclass,
+  split_categorical) 94 dots; ui + job_safety re-run AFTER the edits
+  247 dots exit 0; doctests **775 passed + 3 skipped**; collect-only
+  **4,736**; ruff **clean**; mypy 0 on the three touched files.
+
+**The doctest accounting note** — the repaired venv carries pytest
+9.0.2 (the pre-rollback venv was pytest 8): the same **778 collected**
+doctest items now report as 775 + 3 where the last rounds logged 778
++ 1.  The probe pinned it: the three extra "skips" are the
+all-`+SKIP` docstring items (`pharmaml.viz`, `data.load_dataset`,
+`data.split_table` — every example +SKIP by design, the
+download-required examples), which pytest 9 itemizes as skips where
+pytest 8 accounted them under the headline count.  Zero failures, no
+source change (all three files git-untouched), honest grand total
+**5,514 = 4,736 + 778 unchanged**.
+
+**The ship (STEP 3/4)** — src changed meaningfully (5 sites), so the
+full ritual: four carriers -> **1.2.133**; notebooks re-executed
+**204 s** (8/8, zero errors, all print `pharmaml 1.2.133`) + 7 twins
+regenerated; the scrub dropped **0** (third consecutive zero-drop
+round); `scratch/build_zip_220.py` (the round-217 recipe verbatim) —
+**v1.2.133 = 20,348,595 bytes**, sha-256
+`eac9c60af3f76662cb7d17b7915441587d531539569e65575cdcd4cc219e9f7f`,
+998 entries / 952 files, testzip OK per home, **real leaks 0**,
+predecessor v1.2.132 swept from all four homes.  Census (runs LAST):
+**972 files / 354,599 lines** (+1 / +74: the changelog section + the
+round-220 helpers).  Web pins: FALLBACK_STATS 972/354,599; the 5,514
+test pins unchanged (five sites).  CHANGELOG v1.2.133 section;
+GITHUB_BACKUP_MANIFEST v1.2.133 section.  Health: GET / 200; zip
+endpoint `{"zipBytes":20348595,"version":"1.2.133","exact":true,
+"source":"release"}`.  The OOM ritual was respected (next-server down
+for the notebook run, dev daemon restarted after).
+
+**Baselines for the next round** — v1.2.133 stands (four carriers,
+four homes) · honest totals **5,514** (4,736 + 778) · census **972 /
+354,599** · ruff bare-check green (the convention is now enforced by
+the tree's own modes) · pytest 9.0.2 accounting noted (775 + 3) ·
+GUI_AUDIT rows 1-13 shipped, next increments = cross-cutting
+concerns or new audit rows · counter **15/100**.
