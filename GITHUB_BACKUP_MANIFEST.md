@@ -449,6 +449,71 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.128 release-zip homes (2026-11-07, round 214 — the Generative Workbench, the Studio's increment 8)
+
+`pharma-ml-toolkit-v1.2.128.zip` — 19,845,385 bytes, sha-256
+`93cb100b69359ba734950fd30f6f8f003c819f2ba87279c0c4929942fae4a7a6`
+(the canonical final build; per the round-213 lesson the BYTE SIZE is
+the rebuild-stable pin — the endpoint serves it exactly — while zip's
+directory walk order varies the digest between otherwise-identical
+builds), built with the standing four-home builder
+(`scratch/build_zip_214.py`, the round-180/212/213 recipe plus the
+predecessor sweep and per-home testzip verification);
+scrub-before-build caught the re-executed ML notebook's warning stderr
+AGAIN (the fourth-round streak: 210 / 212 / 213 / 214 — four sklearn
+ConvergenceWarning/FutureWarning stderr streams carrying the venv path
+dropped whole by `scripts/scrub_twins_214.py` before the archive was
+cut); 985 entries / 939 files / nested zips NONE / real leaks 0,
+placed byte-identical in all four homes:
+
+- `download/pharma-ml-toolkit-v1.2.128.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.128.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.128.zip`
+- `upload/pharma-ml-toolkit-v1.2.128.zip`
+
+The immediate predecessor (v1.2.127) was removed from all four homes
+(the deletion rides this commit); deeper history stays (v1.2.106's
+only surviving copy lives in the repo download/ sweep archive).
+
+**What shipped:** directive #16's 16.18 migration step 8 — the
+Studio's Generative Workbench (`ui/pages/generative.py`, audit row 9,
+the playground Generative tab): the audit row's clusters wired to the
+same public backend APIs the cards call — the evolution run
+(`build_objective`-built objectives over GeneticOptimizer /
+ReinventOptimizer / MctsOptimizer with the CLI corpus idiom mirrored
+exactly and the ranked leaderboard + per-generation best/mean curves:
+GA best 0.927 / 271 uniques, multi-objective seeded 0.962 / 276, RL
+0.582 / 58, MCTS 0.593 / 17 with 276 tree nodes / 828 rollouts), the
+Pareto front (`pareto_front` over the multi-objective breakdown: 9 of
+276 non-dominated, the strongest member dominates 262, the
+deepest-front-member rank 59 — a single-objective run refuses
+honestly), molecule surgery (`ring_topology_moves` — piperidine's 3
+mutants, aromatic rings never re-sized — and `scaffold_hop_crossover`
+breeding, every product scored by `QedObjective` for the bars) and the
+GuacaMol scoring oracles (`qed_score` / `sa_score` / `penalized_logp`
+/ `rediscovery_score` + the property filter: aspirin vs salicylic
+acid QED 0.550 · SA 8.61 · logP −7.30 · rediscovery 0.448 · PASS).
+Sidebar 10 → 11 sections; 21 new offscreen tests
+(`tests/ui/test_generative_page.py`) with every number
+engine-printed first by the committed `scripts/probe_generative_214.py`;
+**the round-213 notebook driver's copy-back bug caught and fixed** —
+`shutil.copy2(work_nb, src)` restored the UNEXECUTED work file
+(nbclient mutates the in-memory notebook; the work FILE is never
+written), round 213's pass was masked because the tree already carried
+1.2.127 outputs from the concurrent agent's run, and the fixed driver
+writes with `nbformat.write(nb, src)` (both the 213 and 214 copies
+carry the fix — the first 214 run reported all-green while silently
+restoring 1.2.127 outputs; the version-pin test caught it, the second
+run committed real 1.2.128 outputs); notebooks re-executed at 1.2.128
+(227 s, zero error outputs) + the 7 no-output twins regenerated with
+the variant-note id; the OOM ritual respected (dev server down for the
+re-execution, restarted via the double-fork daemon after, GET / 200);
+honest totals 5,462 (4,684 collect-only + 778 doctests); web pins
+5,441 → 5,462 (page.tsx hero + FALLBACK_STATS 957/348,207 →
+959/349,352, download-panel 3 lines, overview 3 lines) + census
+957/348,207 → 959/349,352 (`scratch/census.py`, the toolkit-fs.ts-
+exact walk, run on the post-ship tree).
+
 ## v1.2.127 release-zip homes (2026-11-07, round 213 — the Deep Learning Workbench, the Studio's increment 7)
 
 `pharma-ml-toolkit-v1.2.127.zip` — 19,833,253 bytes, sha-256

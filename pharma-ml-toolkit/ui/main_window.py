@@ -36,6 +36,7 @@ SECTIONS: list[tuple[str, str]] = [
     ("models", "Model Analysis"),
     ("unsupervised", "Unsupervised Workbench"),
     ("deep_learning", "Deep Learning Workbench"),
+    ("generative", "Generative Workbench"),
     ("settings", "Settings"),
 ]
 
@@ -66,6 +67,7 @@ class MainWindow(QMainWindow):
         from .pages.data_explorer import DataExplorerPage
         from .pages.deep_learning import DeepLearningWorkbenchPage
         from .pages.docking import DockingWorkbenchPage
+        from .pages.generative import GenerativeWorkbenchPage
         from .pages.model_analysis import ModelAnalysisPage
         from .pages.pkpd import PKPDWorkbenchPage
         from .pages.settings_page import SettingsPage
@@ -84,6 +86,9 @@ class MainWindow(QMainWindow):
         self.deep_learning_page = DeepLearningWorkbenchPage(
             theme=self.theme, runner=self.runner, data_explorer=self.data_page
         )
+        self.generative_page = GenerativeWorkbenchPage(
+            theme=self.theme, runner=self.runner
+        )
         self.settings_page = SettingsPage(self.theme)
 
         for page in (
@@ -96,6 +101,7 @@ class MainWindow(QMainWindow):
             self.model_page,
             self.unsupervised_page,
             self.deep_learning_page,
+            self.generative_page,
             self.settings_page,
         ):
             self.pages.addWidget(page)
@@ -165,6 +171,7 @@ class MainWindow(QMainWindow):
         self.model_page.apply_palette(palette)
         self.unsupervised_page.apply_palette(palette)
         self.deep_learning_page.apply_palette(palette)
+        self.generative_page.apply_palette(palette)
         self._status.showMessage(f"Theme: {provider} · {name}")
 
     # -- notifications -----------------------------------------------------------------

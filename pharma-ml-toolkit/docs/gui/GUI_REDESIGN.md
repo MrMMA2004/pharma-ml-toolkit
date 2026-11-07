@@ -48,10 +48,10 @@ pharma-ml-toolkit/
 │   ├── app_settings.py  ← QSettings facade
 │   ├── main_window.py
 │   ├── native/          ← eglstub.c + libEGL.so.1 + build_stub.sh
-│   ├── pages/  dashboard · data_explorer · chemistry · pkpd · biology · docking · model_analysis · unsupervised · deep_learning · settings_page
+│   ├── pages/  dashboard · data_explorer · chemistry · pkpd · biology · docking · model_analysis · unsupervised · deep_learning · generative · settings_page
 │   ├── widgets/ navigation · data_table · plot_widget · progress_panel · notification_widget
 │   └── workers/ job_worker.py (QRunnable + cooperative stop)
-└── tests/ui/            ← 146 offscreen tests (pytest-qt)
+└── tests/ui/            ← 167 offscreen tests (pytest-qt)
 ```
 
 ## Theming (16.9–16.11)
@@ -103,13 +103,32 @@ training run with held-out R²), and chart-palette sync.
 
 ## Migration status (16.18)
 
-Increment 7 of N — shell, navigation, theme system, Data Explorer,
+Increment 8 of N — shell, navigation, theme system, Data Explorer,
 Chemistry Workbench, PK/PD Workbench, Biology Workbench, Docking
 Workbench, Model Analysis, Unsupervised Workbench, Deep Learning
-Workbench, Settings are live and tested. (This status block had
-lagged one increment: the Unsupervised Workbench shipped as
-v1.2.126 in round 212 without the rewrite landing here — both
-increments are recorded now.) The Deep Learning Workbench
+Workbench, Generative Workbench, Settings are live and tested. (This
+status block had lagged one increment earlier: the Unsupervised
+Workbench shipped as v1.2.126 in round 212 without the rewrite
+landing here — both increments were recorded then.) The Generative
+Workbench (increment 8) brings the playground Generative tab's
+clusters, each wired to the same public backend APIs the cards call:
+the evolution run (``build_objective``-built objectives — QED, the
+LogP / MW / TPSA windows, the QED+LogP blend, the multi-objective
+triple, similarity — over ``GeneticOptimizer`` /
+``ReinventOptimizer`` / ``MctsOptimizer``, the CLI corpus idiom
+mirrored exactly, with the ranked leaderboard and the
+per-generation best/mean curves: the GA over the built-in corpus
+lands best 0.927 over 271 uniques, the multi-objective seeded run
+0.962 over 276), the Pareto front (``pareto_front`` over the last
+run's breakdown — 9 of 276 non-dominated, the trade-off scatter
+over the first two objectives, the deepest-front-member rank; a
+single-objective run refuses honestly), molecule surgery
+(``ring_topology_moves`` — piperidine's 3 mutants — and
+``scaffold_hop_crossover`` breeding, every product scored by
+``QedObjective``), and the GuacaMol scoring oracles
+(``qed_score`` / ``sa_score`` / ``penalized_logp`` /
+``rediscovery_score`` + the property filter). The Deep Learning
+Workbench
 (increment 7) brings the playground Deep Learning tab's four audit
 clusters, each wired to the same public backend APIs the cards call:
 the training run (``make_train_test_split`` over the numeric-feature
@@ -193,6 +212,6 @@ over: a five-molecule probe fixes the exact per-molecule column count,
 then the dense-matrix estimate is checked against half of
 `MemAvailable` and the batch refuses with its arithmetic before the
 heavy compute. Next increments migrate the remaining playground
-sections (Generative per the audit's usage order); the Tkinter
+sections (Foundations per the audit's usage order); the Tkinter
 playground is retired only after every section has a verified Studio
 page. See `docs/gui/GUI_AUDIT.md` for the full tab-by-tab map.

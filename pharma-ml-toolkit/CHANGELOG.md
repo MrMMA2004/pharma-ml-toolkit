@@ -1,3 +1,63 @@
+## [1.2.128] — 2026-11-07
+
+### Added — round 214: the Generative Workbench (Studio increment 8, audit row 9)
+
+* **`ui/pages/generative.py`** — the Studio's eighth feature page,
+  migrating the playground Generative tab (directive #16, 16.18
+  migration step 8). The audit row's clusters over a shared corpus
+  selection (the bundled 12-molecule seed table or the built-in
+  244-molecule drug-like corpus, with the seeded-mode checkbox),
+  each wired to the SAME public backend APIs the playground cards
+  call:
+  * **Evolve** — the objective built exactly like the playground's
+    `build_objective` (QED, the LogP / MW / TPSA windows, the
+    QED+LogP blend, the multi-objective triple, similarity to a
+    reference), then `GeneticOptimizer` (topology mutation + splice
+    crossover), `ReinventOptimizer` (policy-gradient RL over an
+    on-the-fly SMILES RNN prior, the CLI corpus idiom mirrored
+    exactly: empty = built-in, seeded = anchored ahead of the bundle,
+    unseeded lines = the sampling pool alone) or `MctsOptimizer`
+    (ChemTSv2-style MCTS): the ranked leaderboard
+    (`GenerationResult.to_dataframe()`) plus the per-generation
+    best/mean score curves. Engine-printed: the GA over the built-in
+    corpus lands best 0.927 (271 uniques, 16 generations); the
+    multi-objective seeded run lands best 0.962 over 276 uniques; the
+    RL run lands 0.582 over 58 uniques; the MCTS run lands 0.593 over
+    17 uniques (276 tree nodes, 828 rollouts).
+  * **Pareto front** — `pareto_front` over the last run's breakdown:
+    the non-dominated set as a table + the trade-off scatter over the
+    first two objectives, the deepest-front-member rank in the
+    report (9 of 276 non-dominated, the strongest member dominates
+    262); a single-objective run refuses honestly.
+  * **Molecule surgery** — `ring_topology_moves` (piperidine's
+    exactly 3 one-step ring-size mutants; aromatic and fused/spiro
+    rings are never re-sized) and `scaffold_hop_crossover` (the
+    BREED-style breeding: bridge / ring-merge / linker-transplant
+    cuts compete per draw — aspirin × the ibuprofen core, seed 42,
+    4/4 viable), every product scored by `QedObjective` for the bars.
+  * **Scoring oracles** — the GuacaMol benchmark book for one
+    molecule: `qed_score` / `sa_score` / `penalized_logp` /
+    `rediscovery_score` plus the Lipinski-style `property_filter`
+    with its values and violations in the table (aspirin vs salicylic
+    acid: QED 0.550 · SA 8.61 · logP −7.30 · rediscovery 0.448 ·
+    filter PASS).
+* Sidebar grows to **eleven sections** (generative between deep
+  learning and settings, the audit's usage order); `pages.count()` pin
+  10 → 11 with the navigation-order test updated.
+* **`tests/ui/test_generative_page.py`** — 21 offscreen tests, every
+  asserted number engine-printed first by the committed
+  `scripts/probe_generative_214.py`; **`tests/ui/` suite now 167
+  green** (146 + 21) with job_safety 28 green in the same invocation,
+  collect-only **4,684 across the tests tree**; honest totals
+  **5,462** (4,684 + 778 doctests).
+* The round-213 notebook driver's copy-back bug caught and fixed:
+  `shutil.copy2(work_nb, src)` restored the UNEXECUTED work file
+  (nbclient mutates the in-memory notebook; the work FILE is never
+  written) — round 213's pass was masked because the tree already
+  carried 1.2.127 outputs from the concurrent agent's run; the fixed
+  driver writes with `nbformat.write(nb, src)` and both the 213 and
+  214 copies carry the fix.
+
 ## [1.2.127] — 2026-11-07
 
 ### Added — round 213: the Deep Learning Workbench (Studio increment 7, audit row 8)

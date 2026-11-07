@@ -52,7 +52,7 @@ def run_one(name: str) -> dict:
         error = f"{type(exc).__name__}: {exc}"
     seconds = time.monotonic() - started
     if not error:
-        shutil.copy2(work_nb, src)  # the executed result lands back in examples/
+        nbformat.write(nb, src)  # the executed result lands back in examples/ (nbclient mutates the in-memory nb; the work FILE was never written)
     prints_version = False
     error_outputs = 0
     for cell in nb.cells:

@@ -8612,3 +8612,137 @@ surviving session AFTER the cron agent's commits landed:
   as build-specific evidence; and a round that gets interrupted
   should re-run its whole verification stack on whatever tree
   actually ships, not trust numbers computed mid-flight.
+
+## Round 214 — the Generative Workbench: the Studio's increment 8 (audit row 9), v1.2.128 shipped (2026-11-07)
+
+An IM continuation round ("Continue MASTER_PROMPT part2", trace
+`1a1b6297dd962f99`) — the counter stays at 11 (no cron trigger). The
+repo opened clean from HEAD `97e9e83` (round 213's close-out) and took
+the audit's own next step per the baseline: **Studio increment 8, the
+Generative Workbench (audit row 9)**.
+
+**What shipped — `ui/pages/generative.py`, the ninth feature page**
+(the playground Generative tab's clusters over a shared corpus
+selection — the bundled 12-molecule seed table or the built-in
+244-molecule drug-like corpus, with the seeded-mode checkbox — each
+wired to the SAME public backend APIs the playground cards call):
+
+- **Evolve** — the objective built exactly like the playground's
+  `build_objective` (QED, the LogP / MW / TPSA windows, the QED+LogP
+  blend = `MultiObjective([Qed, LogPBand], weights=[0.7, 0.3])`, the
+  multi-objective triple = the CLI's 'druglike' recipe, similarity to
+  a reference), then `GeneticOptimizer` (topology mutation + splice
+  crossover, pop 24 × 16 generations), `ReinventOptimizer` (RL: the
+  CLI corpus idiom mirrored EXACTLY — empty = the built-in prior
+  corpus, seeded mode anchors the lines ahead of the bundle, unseeded
+  lines are the sampling pool alone; the first page draft collapsed
+  this three-way rule to always-anchor and the RL test caught it) or
+  `MctsOptimizer` (ChemTSv2-style over SMILES prefixes): the ranked
+  leaderboard (`GenerationResult.to_dataframe()` head 20) + the
+  per-generation best/mean score curves. Engine-printed: GA over the
+  built-in corpus best 0.926784 / 271 uniques (16 history records);
+  the multi-objective seeded run best 0.961862 / 276 uniques; RL best
+  0.582072 / 58 uniques (12 iterations); MCTS best 0.592551 / 17
+  uniques (276 nodes / 828 rollouts).
+- **Pareto front** — `pareto_front` over the last run's breakdown: 9
+  of 276 non-dominated over [qed, mw_band, tpsa_band], the strongest
+  member dominates 262, the deepest front member at leaderboard rank
+  59; the trade-off scatter over the first two objectives; a
+  single-objective run (or no run at all) refuses honestly.
+- **Molecule surgery** — `ring_topology_moves` (piperidine's exactly
+  3 mutants C1CCCC1 / C1CCCNCC1 / C1CCNC1; benzene 0 — aromatic rings
+  are never re-sized) and `scaffold_hop_crossover` (aspirin × the
+  ibuprofen core, seed 42, 4/4 viable children), every product scored
+  by `QedObjective` for the bars.
+- **Scoring oracles** — the GuacaMol book on one molecule
+  (`qed_score` / `sa_score` / `penalized_logp` / `rediscovery_score`
+  + the Lipinski-style `property_filter` with values and violations):
+  aspirin vs salicylic acid — QED 0.550122 · SA 8.613951 · logP
+  −7.302008 · rediscovery 0.448276 · filter PASS (10 table rows: 4
+  oracles + 6 property values).
+
+Sidebar grows to **eleven sections** (generative between deep
+learning and settings); `pages.count()` pin 10 → 11 with the
+navigation-order test updated.
+
+**The round's own engineering**: (a) the probe
+(`scripts/probe_generative_214.py`) printed every asserted number
+first — including the GA history record shape
+(`best_score`/`mean_score`/`valid_offspring_fraction`, the first
+draft's `best`/`mean` key guess failed fast). (b) The RL/MCTS corpus
+semantics bug: the first page draft always anchored lines into the
+prior corpus; the playground's actual three-way rule (empty / seeded /
+sampling-pool) was mirrored exactly after the RL test's mode label
+caught the difference. (c) **The round-213 notebook driver's copy-back
+bug caught and fixed**: `shutil.copy2(work_nb, src)` restored the
+UNEXECUTED work file — nbclient mutates the in-memory notebook and the
+work FILE is never written — so the first 214 notebook run reported
+all-green (`prints_1.2.128=True`, checked against the in-memory
+object) while silently restoring 1.2.127 outputs on disk; the
+`test_executed_outputs_print_shipped_version[pharmaml_walkthrough]`
+pin caught it (all eight notebooks still printed 1.2.127), the fix is
+`nbformat.write(nb, src)` and BOTH driver copies (213 + 214) carry it
+— round 213's pass was masked because the tree already carried 1.2.127
+outputs from the concurrent agent's own run. (d) The second, fixed
+notebook run: 227 s, zero error outputs, all eight print 1.2.128, the
+7 twins regenerated with the `variant-note` id; the scrub walk
+(`scripts/scrub_twins_214.py`) dropped 4 leaking warning-stderr
+streams from the ML notebook — **the fourth-round streak** (210 / 212
+/ 213 / 214). (e) `scratch/build_zip_214.py` (the 180/212/213 recipe
++ predecessor sweep + per-home testzip): **v1.2.128 = 19,845,385
+bytes**, sha-256 `93cb100b69359ba734950fd30f6f8f003c819f2ba87279c0c
+4929942fae4a7a6` (the canonical build; the byte size is the
+rebuild-stable pin per the round-213 lesson), 985 entries / 939
+files, testzip OK on each of the four homes, real leaks 0; the
+predecessor v1.2.127 removed from all four homes. (f) Census LAST on
+the post-ship tree: **959 files / 349,352 lines** (+2 = the page +
+its tests). Web pins: hero 5,441 → **5,462**, FALLBACK_STATS
+957/348,207 → **959/349,352**, download-panel 3 lines + overview 3
+lines to 5,462; `bun run lint` clean after.
+
+**Verification**: 21 new offscreen tests
+(`tests/ui/test_generative_page.py`), every asserted number
+engine-printed first by the committed probe — the ui suite **167
+green** (146 + 21) + job_safety 28 green in one invocation (195
+dots, exit 0); the focused batch (web_parity, data_loading,
+csv_standardize, docs_index, excel_io_and_samples, generative) exit
+0; notebook_variants **47 green** after the driver fix; doctests
+**778** (exit 0, unchanged — no `src/pharmaml` docstring touched);
+collect-only **4,684 across the tests tree** (+21). Honest total:
+**4,684 + 778 = 5,462**. ruff + mypy clean on every touched file
+(the `optimizer: Any` annotation — the same multi-family class
+selection mypy pattern round 213 pinned).
+
+**Ops**: the OOM ritual respected (dev server down for the notebook
+run, restarted via the double-fork daemon after — GET / 200); the
+zip-size endpoint answers `{"zipBytes":19845385,"version":"1.2.128",
+"exact":true,"source":"release"}`; GUI_AUDIT row 9 planned → shipped,
+GUI_REDESIGN migration status → increment 8 with the architecture
+tree + eleven-section note updated; CHANGELOG gains the v1.2.128
+Added section; GITHUB_BACKUP_MANIFEST gains the v1.2.128 section
+(with the driver-bug story recorded).
+
+**Lessons pinned**:
+1. nbclient executes the IN-MEMORY notebook — a driver that copies
+   the work FILE back commits nothing. The honest signal is the
+   version-pin test against the committed bytes, not the driver's
+   own in-memory check (which read True while the disk said 1.2.127).
+   `nbformat.write(nb, src)` is the only correct copy-back.
+2. A page that mirrors a playground flow must mirror its SEMANTICS,
+   not just its calls — the RL/MCTS corpus rule is a three-way branch
+   (empty / seeded-anchor / sampling pool), and collapsing it changed
+   the engine's actual inputs; the mode label in the report caught
+   what a diff review would have blessed.
+3. The warning-stderr re-leak streak is now four rounds — the
+   scrub-before-build WALK + the re-runnable twin script stay
+   mandatory at every version bump, and the version-pin test is the
+   backstop that makes a silent driver failure impossible to ship.
+
+**Baselines for the next round**: v1.2.128 (four carriers) · honest
+totals 5,462 (4,684 + 778) · census 959 files / 349,352 lines ·
+zip 19,845,385 bytes / sha `93cb100b…` / 985 entries / 939 files ·
+Studio increment 9 next: the **Foundations Workbench** (audit row 10,
+`pharmaml.utils.*` + profiling — statistics, table prep), then
+Best-of ML (row 11) and Response AI (row 12) · sidebar 11 sections ·
+dev server healthy (double-fork daemon) · counter 11/100 (IM
+continuation — no cron trigger).
