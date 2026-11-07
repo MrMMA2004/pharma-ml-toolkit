@@ -4,6 +4,18 @@ _Last rebuilt 2026-11-02 after the rollback that ate rounds 180–182.
 Updated 2026-11-03 after a second rollback ate round 184, and again the
 same evening after a THIRD rollback ate the first round-185 ship._
 
+## 2026-11-07 — Arena chart-consistency addendum (v1.2.116)
+
+The remaining direct playground plotting calls now route through `new_figure()`;
+a static test guards that contract. `render_matplotlib()` honors spec-driven
+subplot cells, figure/subplot titles, axis labels, line/marker modes, bars and
+heat-map colorbars instead of flattening all traces onto one axes. Focused
+verification has 225 passed and six skipped. The final applicable non-GUI
+suite exits 0 with 3,489 passed, 44 skipped and 24 deselected; 769 source
+doctests collect with zero failures (three skips). All eight notebooks ran at
+1.2.116, their no-output twins were rebuilt and all 119 notebook guards pass.
+Native Tk/Xvfb and RDKit XRender execution remain unavailable.
+
 ## 2026-11-07 — Arena chart-readability addendum (v1.2.115)
 
 The active branch remains `arena/2697c755-pharma-ml-toolkit`. Shared Matplotlib

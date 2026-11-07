@@ -62,6 +62,16 @@ This writes PNG, SVG, PDF and a self-contained HTML preview under
 `artifacts/chart-readability/` (ignored by Git). The example uses only NumPy and the
 reporting dependencies; it needs no display server or external data.
 
+## Renderer-agnostic figure specs
+
+`pharmaml.viz.figures.render_matplotlib()` uses the same house style as native plotting
+helpers. Single-panel specs keep an 8×6 canvas. Specs built with `make_subplots()` retain
+their declared grid cells, subplot titles, overall figure title and axis titles; unused
+cells are hidden and empty legends are omitted. Scatter/line, horizontal or vertical bar,
+and heat-map traces are supported. This keeps a spec's Matplotlib export visually aligned
+with its interactive Canvas representation instead of collapsing every trace onto one
+unlabelled axes.
+
 ## Playground presentation
 
 Desktop figure hosts default to 390 pixels high (individual dense cards may request more).

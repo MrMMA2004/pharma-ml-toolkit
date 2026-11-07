@@ -1,3 +1,34 @@
+## [1.2.116] — 2026-11-07
+
+### Fixed — shared playground styling and faithful subplot-spec rendering
+
+* **Every playground chart uses the shared renderer** — the remaining direct
+  `plt.subplots()` / raw `Figure(...)` paths (structure grids, OOF stacking,
+  scratch training, capacity sweeps, sequence forecasts, attention grids and
+  distribution samples) now use `new_figure()`. Conflicting grid overrides were
+  removed; molecule and heat-map panels explicitly disable grids where they
+  would obscure the image. A static regression guard prevents new direct
+  plotting calls from bypassing the house style.
+* **Matplotlib figure specs retain their layout** — `render_matplotlib()` now
+  honors `make_subplots()` cells, overall and subplot titles, axis titles,
+  horizontal/vertical bars, line/marker modes and heat-map colorbars. Traces no
+  longer collapse onto one unlabelled axes, unused cells are hidden, and empty
+  legends are omitted. Single-panel specs and path export retain their API.
+* **Verification** — the focused visualization/playground sizing suite passes
+  with **225 passed and 6 skipped**. The final applicable non-GUI suite exits 0
+  with **3,489 passed, 44 skipped and 24 deselected**; 769 applicable source
+  doctests collect with zero failures (three skips). All eight notebooks ran at
+  1.2.116, their no-output twins were rebuilt, and all 119 notebook-variant
+  guards pass. Full-source Ruff and mypy pass. Native `test_playground.py` and
+  RDKit XRender-dependent execution remain unavailable and are not claimed as
+  passed.
+
+### Shipped
+
+* `pharma-ml-toolkit-v1.2.116.zip` — source, tests, documentation and refreshed
+  notebooks; ZIP integrity checked and safe copies retained under the
+  repository's archive protocol.
+
 ## [1.2.115] — 2026-11-07
 
 ### Improved — readable, scalable charts in files, reports and the playground
