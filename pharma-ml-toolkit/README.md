@@ -1939,7 +1939,7 @@ from pharmaml.viz import (
     plot_table_comparison,
     plot_energy_distribution, plot_top_ligands, plot_consensus_ranking,
     HTMLReport, export_table, metrics_to_dataframe, save_visual_bundle, save_figure,
-    export_docx, save_pdf_report,
+    export_docx, save_pdf_report, new_figure, figure_to_base64,
 )
 
 fig = plot_confusion_matrix(report)          # ClassificationReport -> heat-map (2+ classes)
@@ -1971,7 +1971,12 @@ save_pdf_report(                             # or standalone, without the bundle
 
 matplotlib is optional (``pip install 'pharmaml[reports]'``); the Agg backend is
 forced automatically outside notebooks, so plotting works on headless servers
-and CI — and renders inline inside Jupyter.
+and CI — and renders inline inside Jupyter. Figures default to 9×6 inches with
+tight layout and stronger typography; PNG exports default to 220 DPI and HTML
+figures to 160 DPI. Use ``new_figure(scale=1.35)`` when a dense plot needs more
+physical room, or ``save_figure(..., dpi=300)`` for a higher-resolution export.
+See [chart readability and export](docs/CHART_READABILITY.md) and run
+``python examples/chart_readability.py`` for a reproducible PNG/SVG/PDF/HTML demo.
 
 ---
 

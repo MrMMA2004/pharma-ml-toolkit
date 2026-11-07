@@ -746,6 +746,9 @@ after adding new public functions.
 
 | Symbol | Kind | Summary |
 |---|---|---|
+| `DEFAULT_FIGSIZE` | constant | Readable default physical figure size, in inches. |
+| `EXPORT_DPI` | constant | Default resolution for file exports. |
+| `HTML_DPI` | constant | Default resolution for embedded HTML figures. |
 | `PALETTE` | constant |  |
 | `PDF_THEMES` | constant |  |
 | `PLOT_FORMATS` | constant |  |
