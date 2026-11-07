@@ -7872,3 +7872,143 @@ byte-identical; web pins 5,360 → 5,362 (seven sites) + fallback stats
 945/344,253 → 946/344,354 (`scratch/census.py` on the post-fix tree);
 CHANGELOG gains the Fixed section; the manifest's zip section notes
 the supersession. Counter rides the commit (7→8).
+
+## Round 209 — the second playground collapse mode: the stale display connection that killed the whole process, v1.2.123 shipped (2026-11-07)
+
+Run window: the 15:23 cron trigger (Run 9; the counter's catch-up
+state 8 was already recorded by the concurrent runs — this run writes
+8→9).  Environment arrived DEEP-ROLLED-BACK (the 13th+ form): HEAD at
+`2eb0ede` (the round-186 snapshot), origin remote gone, token gone,
+rdkit gone, the counter file gone from disk.  The standing drill ran
+clean end to end: token re-extract → credential helper → remote add →
+the 5 upstream-tracked untracked upload files aside
+(/tmp/rollback13-upload-zips/) → ff-pull to `4e8de3f` (round 208) →
+`venv_repair.sh` foreground green (numpy 1.26.4 / torch 2.14.1+cpu /
+matplotlib 3.10.9 / openpyxl 3.1.5 / pharmaml 1.2.122 / PySide6
+offscreen OK) → the counter restored BY THE PULL (the counter-rides-
+commits design proving itself a second time) → webDevReview assumed
+alive server-side (no recreation needed this window).
+
+**What shipped — the collapse forensics round.**  The standing
+mandate's verification pass opened with an anomaly: `test_job_safety.py`
++ `test_playground_workflows.py` in ONE pytest invocation died at the
+first built-app test with **rc=1, zero output, no traceback** — and
+reproduced deterministically (5+ consecutive runs), while every
+standing battery passed alone.  The forensics chain, in order:
+
+1. pytest-systematic bisection: both files green alone; the pair died
+   at test 36 (the first TestWorkflowsInBuiltApp test); registry-only
+   tests after the watchdog test = green; `-s` and `--capture=sys` and
+   `--capture=tee-sys` = green; default fd capture = death.  A
+   bare-tkinter reproduction WITHOUT pytest (probe_kill_between.py:
+   app1 → destroy+gc → **kill :98** → app2 on :97) died identically —
+   pytest and fd-capture were only modulating a race window.
+2. An LD_PRELOAD `exit()` shim (`scratch/exit-shim.c`) caught the
+   death and dumped the native backtrace: `Tcl_EvalObjv →
+   Tk_RestackWindow → TkWmRestackToplevel → TkWmMapWindow →
+   TkUnixDoOneXEvent → exit(1)` — **Tk 9's X error handler**, exiting
+   the process on a dead display connection.  The shim's fd2 dump
+   named it: `X connection to :98 broken (explicit kill or server
+   shutdown)`.  The fresh-vs-orphan Xvfb correlation resolved: every
+   pass since the orphans appeared reused LONG-LIVED servers (the
+   fixture's own spawn failed, the orphan answered the socket probe);
+   every death ran against freshly spawned servers killed mid-session.
+3. Why the stale connection survived destroy+gc — a probe ladder
+   (weakref alive; registries fixed; afters cancelled; module-global
+   identity search clean; gc.DEBUG_SAVEALL put the app NOT in garbage;
+   one-pass reverse-reference map found zero C-pinned members): the
+   surviving pins are Tk's C-level registrations invisible to the
+   cyclic gc — most notably the VARIABLE TRACES, whose commands
+   tkinter's `Variable._register` tracks on the Variable's own
+   `_tclCommands` list that nothing ever deletes (`Variable` has no
+   destroy).  2,147 digit-leading callback commands were live on a
+   built app.
+
+The fix, in arms (playground.py): `destroy()` is now a real teardown —
+`_CARD_INDEX`/`_COLLAPSE_CARDS` cleared at `__init__` AND `destroy()`
+(the rebuild-overwrite semantics they were documented with); every
+pending `after` cancelled by id; after `super().destroy()`, every
+leftover digit-leading command is deletecommand'ed off the interpreter
+(`Misc._register` names them `repr(id(f))…`; widget paths start with
+`.` and Tcl core commands never start with a digit — the filter is
+exact); `_silence_variables()` detaches every app-reachable
+`tk.Variable` (`_tk = None`) so the interpreter-exit
+`Variable.__del__` cannot double-delete swept commands (the unraisable
+"can't delete Tcl command" exit noise — caught, understood, silenced).
+An ordering lesson is baked in as a comment: the command sweep MUST
+run AFTER the widget-tree recursion, or Misc.destroy's own
+deletecommands raise "can't delete Tcl command" out of the teardown.
+And the suite gets the structural guarantee: **one session-scoped
+Xvfb** (`tests/conftest.py::xvfb_display`, :96) replaces the four
+per-file/per-class servers (playground :98, workflows :97,
+recalculation :97, excel :97, all local fixture definitions deleted) —
+a mid-session server death, the collapse's trigger, is structurally
+impossible now; the server dies exactly once, after the last test,
+when nothing pumps Tk any more.  Watchdog hygiene rode along
+(`max()` for the memory peak, PLR1730) and nine blind
+`except Exception` guards around `winfo_exists()` in
+test_playground.py narrowed to `tk.TclError`.
+
+**Verification**: the combined job_safety+workflows battery — the
+exact pre-fix killing shape — passes **twice from a clean room**
+(45 tests, rc=0, zero exit noise); the two new regression tests
+(destroy releases both registries; a rebuilt app owns the index and
+every indexed shell belongs to the live app) green; self-test green
+under a fresh Xvfb; recalculation+excel batteries green (56); the ui/
+suite green (69); doctests **775 passed + 3 skipped = 778**;
+collect-only **4,586** (+2).  Honest total: **4,586 + 778 = 5,364**.
+ruff clean on every touched file (the fixture deletions' import
+fallout swept); mypy on playground.py at its exact 105-error
+pre-existing baseline (the two tkinter-private writes carry
+type-ignore comments).  The full test_playground.py battery was
+attempted once and died at its DOCUMENTED point (66/869 in, rc=132 —
+the round-208 exit-137 sibling), unchanged by this round's edits —
+the standing discipline (collect-only + focused batteries + GUI
+classes in isolation; three TestGuiUnderXvfb tests green isolated)
+applies.
+
+**Ship**: all 8 notebooks re-executed at 1.2.123 (the new committed
+driver `pharma-ml-toolkit/scratch/reexec_notebooks_209.py`: nbclient,
+timeout 900, the four worker caps, `resources={"metadata": {"path":
+examples}}` — the missing resources kwarg cost one failed pass with
+`FileNotFoundError: data/qsar_classification.csv`; 207 s total, zero
+error outputs) + the 7 no-output twins regenerated via
+`scratch/strip_notebook_outputs.py`; the OOM ritual respected (dev
+server stopped for the re-execution, restarted via the double-fork
+daemon after, GET / 200).  `scratch/build_zip_183.py` → the first
+build leaked ONE real path (the ML notebook's ConvergenceWarning
+traceback carrying `/home/z/.venv/...` sklearn frames) — scrubbed by
+the standing `scratch/scrub_home_paths_137.py` pass and rebuilt →
+**v1.2.123 = 19,781,667 bytes, sha-256 `d1627ecd…`**, 972 entries /
+926 files, real leaks 0, four homes byte-identical (repo download/ +
+dist-archive/ + legacy toolkit download/ + upload/); the v1.2.122
+zips removed from all homes.  Web pins 5,362 → 5,364 (seven sites) +
+fallback stats 946/344,354 → 946/344,494 (`scratch/census.py` on the
+final tree); CHANGELOG gains the v1.2.123 Fixed section;
+GITHUB_BACKUP_MANIFEST gains the v1.2.123 section (with the
+supersession note).  Commit `447bac9` (39 files, named paths, no
+`git add -A`) pushed and verified; the worklog + counter ride this
+commit (8→9).
+
+**Lessons pinned**:
+1. rc=1 with ZERO output is a signature, not a mystery: it is Tk 9's
+   X error handler exiting the process after `X connection to :N
+   broken` — the message goes to the capture temp file and dies with
+   the process.  An LD_PRELOAD exit() shim with an fd2 dump names the
+   call site in minutes (the whole diagnosis hinges on it).
+2. tkinter's `Variable` never deletes its trace commands: every
+   `trace_add` in a long-lived app leaks one C-pinned callback unless
+   the app sweeps them at teardown.  The digit-leading-command filter
+   (`repr(id(f))…` names) is the exact, safe enumeration.
+3. Per-file/per-class Xvfb fixtures are a latent collapse trigger:
+   ANY server teardown while ANY stale display connection exists can
+   exit the whole pytest process.  One session-scoped server is the
+   only shape that cannot lose the race.
+4. The notebook re-execution driver needs `resources={"metadata":
+   {"path": examples}}` — without it the kernel's cwd is the caller's
+   and the data-relative cells fail mid-run (the pass costs ~3.5
+   minutes; the failure costs one rerun).
+5. The census/leak-scan ordering holds: scrub `/home/z/` paths BEFORE
+   the zip build (the first v1.2.123 build leaked the ML notebook's
+   warning traceback; the scrub-then-rebuild discipline caught it the
+   same round).
