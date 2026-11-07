@@ -22,6 +22,9 @@ from typing import Any
 from pharmaml.exceptions import DataValidationError, DependencyError
 
 __all__ = [
+    "DEFAULT_FIGSIZE",
+    "EXPORT_DPI",
+    "HTML_DPI",
     "PALETTE",
     "PLOT_FORMATS",
     "close_figure",
@@ -35,6 +38,29 @@ __all__ = [
 
 #: File formats :func:`save_figure` can write (matplotlib backends).
 PLOT_FORMATS: tuple[str, ...] = ("png", "svg", "pdf")
+
+#: Readable defaults shared by notebooks, exported files and HTML reports.
+#: Vector formats remain resolution-independent; the DPI still improves any
+#: rasterised artists they contain.
+DEFAULT_FIGSIZE: tuple[float, float] = (9.0, 6.0)
+EXPORT_DPI: int = 220
+HTML_DPI: int = 160
+
+
+def _positive_number(value: Any, name: str) -> float:
+    """Validate a finite, positive display/export scale."""
+    if isinstance(value, bool):
+        raise DataValidationError(f"{name} must be a finite positive number")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise DataValidationError(f"{name} must be a finite positive number") from exc
+    import math
+
+    if not math.isfinite(number) or number <= 0.0:
+        raise DataValidationError(f"{name} must be a finite positive number")
+    return number
+
 
 #: Colour-blind-friendly accents used consistently across all figures.
 PALETTE: tuple[str, ...] = (
@@ -127,6 +153,26 @@ def require_matplotlib():
     # but don't hijack the inline backend of a running notebook.
     if not _ipython_shell_running():
         matplotlib.use("Agg", force=True)
+    # set_title() reapplies these rcParams after style_axis() has run.  Keep
+    # the typography here as well so every plotting module gets the same
+    # treatment; explicit per-plot font settings still take precedence.
+    matplotlib.rcParams.update(
+        {
+            "font.size": 10,
+            "figure.facecolor": "white",
+            "axes.facecolor": "white",
+            "axes.titlesize": 12,
+            "axes.titleweight": "semibold",
+            "axes.labelsize": 10,
+            "axes.labelcolor": "#263238",
+            "xtick.labelsize": 9,
+            "ytick.labelsize": 9,
+            "xtick.color": "#4B5563",
+            "ytick.color": "#4B5563",
+            "legend.fontsize": 9,
+            "savefig.facecolor": "white",
+        }
+    )
     return matplotlib
 
 
@@ -138,36 +184,91 @@ def get_pyplot():
     return plt
 
 
-def new_figure(nrows: int = 1, ncols: int = 1, figsize: tuple[float, float] = (8.0, 6.0), **kwargs):
-    """Create a styled ``(figure, axes)`` pair (grid + soft spines).
+def new_figure(
+    nrows: int = 1,
+    ncols: int = 1,
+    figsize: tuple[float, float] = DEFAULT_FIGSIZE,
+    *,
+    scale: float = 1.0,
+    layout: str | None = "tight",
+    **kwargs: Any,
+):
+    """Create a readable, consistently styled ``(figure, axes)`` pair.
 
-    All plot functions in this package build on this helper so every
-    figure shares the same visual language.
+    ``scale`` multiplies both physical dimensions without changing font
+    sizes: it is useful when a dense chart needs more room, rather than a
+    blurry upscale of the same cramped layout.  ``layout='tight'`` reserves
+    space for labels as artists are added; pass ``'constrained'`` or ``None``
+    for matplotlib's other layout policies.  Explicit ``figsize`` and
+    ``dpi`` keyword arguments retain their normal matplotlib meaning.
     """
     import numpy as np
 
+    factor = _positive_number(scale, "scale")
+    if len(figsize) != 2:
+        raise DataValidationError("figsize must contain exactly (width, height)")
+    width, height = (
+        _positive_number(value, "figsize dimensions") for value in figsize
+    )
+    kwargs.setdefault("dpi", 120)
     plt = get_pyplot()
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize, **kwargs)
+    fig, axes = plt.subplots(
+        nrows=nrows,
+        ncols=ncols,
+        figsize=(width * factor, height * factor),
+        layout=layout,
+        **kwargs,
+    )
+    fig.patch.set_facecolor("white")
     for ax in np.atleast_1d(axes).ravel():
         style_axis(ax)
     return fig, axes
 
 
 def style_axis(ax) -> None:
-    """Apply the house style to one axis (grid behind data, subtle frame)."""
-    ax.grid(True, alpha=0.3, linewidth=0.6)
+    """Apply the house style: quiet grid, legible type and subtle frame."""
+    ax.set_facecolor("#FFFFFF")
     ax.set_axisbelow(True)
+    ax.grid(
+        True,
+        which="major",
+        color="#D7DEE5",
+        alpha=0.68,
+        linewidth=0.7,
+    )
+    ax.grid(False, which="minor")
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color("#A8B2BC")
+        ax.spines[side].set_linewidth(0.8)
+    ax.tick_params(
+        axis="both",
+        which="major",
+        labelsize=9,
+        colors="#4B5563",
+        length=3.5,
+        width=0.7,
+        pad=3,
+    )
+    for label in (ax.xaxis.label, ax.yaxis.label):
+        label.set_fontsize(10)
+        label.set_color("#263238")
+    ax.xaxis.labelpad = 6
+    ax.yaxis.labelpad = 7
+    ax.title.set_fontsize(12)
+    ax.title.set_fontweight("semibold")
+    ax.title.set_color("#17242B")
 
 
-def save_figure(fig, path: str | Path) -> Path:
-    """Save a figure to ``png``/``svg``/``pdf`` (chosen by extension).
+def save_figure(fig, path: str | Path, *, dpi: int = EXPORT_DPI) -> Path:
+    """Save a crisp, uncropped ``png``/``svg``/``pdf`` figure.
 
-    Parent directories are created automatically; returns the resolved
-    path so CLI handlers can echo the artifact back to the user. Output
-    is byte-reproducible: identical figures hash identically across
-    processes (svg/pdf timestamps and random ids are stripped).
+    The 220-DPI default keeps small labels and thin lines readable in
+    documents and zoomed presentations.  ``bbox_inches='tight'`` plus a
+    small padding guard prevents title/tick-label clipping.  Parent
+    directories are created automatically.  SVG/PDF metadata is stripped
+    so identical figures remain byte-reproducible across processes.
     """
     file_path = Path(path)
     fmt = file_path.suffix.lower().lstrip(".")
@@ -176,26 +277,40 @@ def save_figure(fig, path: str | Path) -> Path:
             f"Unsupported figure format {file_path.suffix!r}; "
             f"supported: {', '.join(PLOT_FORMATS)} (picked from the file extension)"
         )
+    resolution = _positive_number(dpi, "dpi")
     file_path.parent.mkdir(parents=True, exist_ok=True)
     mpl = require_matplotlib()
     with mpl.rc_context({"svg.hashsalt": _SVG_HASHSALT}):
         fig.savefig(
-            file_path, dpi=150, bbox_inches="tight", **_reproducible_kwargs(fmt)
+            file_path,
+            dpi=resolution,
+            bbox_inches="tight",
+            pad_inches=0.16,
+            facecolor=fig.get_facecolor(),
+            edgecolor="none",
+            **_reproducible_kwargs(fmt),
         )
     return file_path
 
 
-def figure_to_base64(fig, fmt: str = "png") -> str:
-    """Render a figure to a ``data:`` URI for embedding in HTML reports."""
+def figure_to_base64(fig, fmt: str = "png", *, dpi: int = HTML_DPI) -> str:
+    """Render a crisp ``data:`` URI for zoomable HTML report figures."""
     if fmt not in PLOT_FORMATS:
         raise DataValidationError(
             f"Unsupported figure format {fmt!r}; supported: {', '.join(PLOT_FORMATS)}"
         )
+    resolution = _positive_number(dpi, "dpi")
     buffer = io.BytesIO()
     mpl = require_matplotlib()
     with mpl.rc_context({"svg.hashsalt": _SVG_HASHSALT}):
         fig.savefig(
-            buffer, format=fmt, dpi=110, bbox_inches="tight",
+            buffer,
+            format=fmt,
+            dpi=resolution,
+            bbox_inches="tight",
+            pad_inches=0.16,
+            facecolor=fig.get_facecolor(),
+            edgecolor="none",
             **_reproducible_kwargs(fmt),
         )
     encoded = base64.b64encode(buffer.getvalue()).decode("ascii")

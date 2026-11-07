@@ -61,6 +61,9 @@ Example
 """
 
 from pharmaml.viz._compat import (
+    DEFAULT_FIGSIZE,
+    EXPORT_DPI,
+    HTML_DPI,
     PALETTE,
     PLOT_FORMATS,
     close_figure,
@@ -147,6 +150,9 @@ from pharmaml.viz.report import (
 
 __all__ = [
     # backend
+    "DEFAULT_FIGSIZE",
+    "EXPORT_DPI",
+    "HTML_DPI",
     "PALETTE",
     "PDF_THEMES",
     "PLOT_FORMATS",

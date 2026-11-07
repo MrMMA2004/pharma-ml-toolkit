@@ -1837,6 +1837,62 @@ def plot_confusion_curves_safe(trained_classifier):
     return plot_roc_curves(result.model, X_test, y_test)
 
 
+class TestFigureReadability:
+    def test_shared_style_and_default_scale(self, close_all):
+        from pharmaml.viz import DEFAULT_FIGSIZE, new_figure
+
+        fig, ax = new_figure()
+        assert tuple(fig.get_size_inches()) == DEFAULT_FIGSIZE == (9.0, 6.0)
+        assert fig.dpi == 120
+        assert type(fig.get_layout_engine()).__name__ == "TightLayoutEngine"
+        ax.set(xlabel="Dose (mg)", ylabel="Response", title="Readable chart")
+        assert ax.title.get_fontsize() == 12
+        assert ax.title.get_fontweight() in (600, "600", "semibold")
+        assert ax.xaxis.label.get_fontsize() == 10
+        assert ax.yaxis.label.get_fontsize() == 10
+        assert ax.xaxis.labelpad == 6 and ax.yaxis.labelpad == 7
+        assert not ax.spines["top"].get_visible()
+        assert not ax.spines["right"].get_visible()
+        assert matplotlib.colors.to_hex(ax.spines["left"].get_edgecolor()) == "#a8b2bc"
+        assert ax.xaxis.get_gridlines()[0].get_color() == "#D7DEE5"
+
+    def test_physical_scale_and_custom_dpi(self, close_all):
+        from pharmaml.viz import new_figure
+
+        fig, _ = new_figure(figsize=(4.0, 3.0), scale=1.5, dpi=144)
+        assert tuple(fig.get_size_inches()) == (6.0, 4.5)
+        assert fig.dpi == 144
+        for invalid in (0, -1, float("nan"), True):
+            with pytest.raises(DataValidationError, match="scale"):
+                new_figure(scale=invalid)
+
+    def test_png_and_html_exports_are_resolution_aware(self, tmp_path, close_all):
+        import base64
+
+        from PIL import Image
+
+        from pharmaml.viz import figure_to_base64, new_figure, save_figure
+
+        fig, ax = new_figure(figsize=(4.0, 3.0))
+        ax.plot([0, 1, 2], [0, 1, 4], label="response")
+        ax.set(xlabel="Time (h)", ylabel="Concentration", title="Export scale")
+        ax.legend()
+        low = save_figure(fig, tmp_path / "low.png", dpi=110)
+        high = save_figure(fig, tmp_path / "high.png")  # 220 DPI default
+        with Image.open(low) as low_image, Image.open(high) as high_image:
+            assert high_image.width > low_image.width
+            assert high_image.height > low_image.height
+            assert high_image.width >= 700 and high_image.height >= 450
+        low_uri = figure_to_base64(fig, dpi=110)
+        high_uri = figure_to_base64(fig)  # 160 DPI default
+        assert high_uri.startswith("data:image/png;base64,")
+        assert len(base64.b64decode(high_uri.split(",", 1)[1])) > len(
+            base64.b64decode(low_uri.split(",", 1)[1])
+        )
+        with pytest.raises(DataValidationError, match="dpi"):
+            save_figure(fig, tmp_path / "bad.png", dpi=0)
+
+
 class TestSaveFigure:
     def test_formats_and_dirs(self, tmp_path, trained_classifier):
         _, report, _, _ = trained_classifier
