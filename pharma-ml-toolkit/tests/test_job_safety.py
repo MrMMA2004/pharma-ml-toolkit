@@ -505,3 +505,97 @@ class TestGuiSafetyMachinery:
             second.destroy()
             del second
             gc.collect()
+
+
+# --------------------------------------------------------------------- #
+# (round 215) the file-load jobs stream too
+# --------------------------------------------------------------------- #
+class TestTheFileLoadJobsStream:
+    """The three user-file loads ride ``read_table_with_progress`` now.
+
+    Round 205's kit guarded the factory/recalc batches, the CV fan-outs
+    and the progressive reads the Docking tab used -- but three file
+    loaders still called the plain ``read_table`` inside a ZERO-argument
+    ``work``: the job runner classified them checkpointless, so the Stop
+    button stayed disabled and the memory watchdog had nothing to flip
+    while a multi-hundred-megabyte library CSV streamed in.  Exactly the
+    "huge CSV load" story the round-205 header names.  Each test here
+    starts the real job against a small temp CSV and pins BOTH halves of
+    the repair: the job is cancellable while it runs (the reporter is
+    wired), and the render still lands the loaded frame.
+    """
+
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain(app: Any, timeout: float = 60.0) -> bool:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    @staticmethod
+    def _assay_csv(tmp_path: Path, name: str = "assay.csv") -> Path:
+        path = tmp_path / name
+        rows = ["SMILES,IC50 (nM)"]
+        rows += [f"{'C' * (index + 1)}O,{100.0 + index}" for index in range(12)]
+        path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+        return path
+
+    def test_dock_rescore_load_is_cancellable(self, app: Any, tmp_path: Path) -> None:
+        path = self._assay_csv(tmp_path, "summary.csv")
+        app._dock_load_rescore_csv(path)
+        assert app._busy
+        # THE pin: the reporter is wired, so Stop / the watchdog apply
+        assert app._job_cancellable
+        assert self._drain(app)
+        assert app._dock_results_source == "csv"
+        assert len(app._dock_results_tree.get_children()) == 12
+        assert not app._busy
+
+    def test_library_scan_load_is_cancellable(
+        self, playground: Any, app: Any, tmp_path: Path, monkeypatch: Any, quiet_dialogs: list
+    ) -> None:
+        path = self._assay_csv(tmp_path, "library.csv")
+        monkeypatch.setattr(
+            playground.filedialog, "askopenfilename", lambda **k: str(path)
+        )
+        app._scan_pick_library()
+        assert app._busy and app._job_cancellable
+        assert self._drain(app)
+        assert "12 SMILES loaded" in str(app._scan_lib_info.cget("text"))
+        assert not app._busy
+
+    def test_pic50_append_load_is_cancellable(self, app: Any, tmp_path: Path) -> None:
+        path = self._assay_csv(tmp_path, "pic50_in.csv")
+        app._conv_mode.set("append pIC50 (from IC50 nM)")
+        app._conv_input = path
+        app._conv_run()
+        assert app._busy and app._job_cancellable
+        assert self._drain(app)
+        frame = app._conv_frame
+        assert frame is not None and len(frame) == 12
+        assert "pIC50" in frame.columns
+        assert not app._busy

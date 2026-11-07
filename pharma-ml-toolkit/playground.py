@@ -11748,11 +11748,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             source_col = self._conv_source_col.get().strip() or "IC50 (nM)"
             unit = self._conv_unit.get()
 
-            def work() -> Any:
+            # (round 215) the read streams through read_table_with_progress:
+            # the reporter turns the load into a checkpointed job -- a
+            # determinate rows bar for a big library CSV and, more
+            # importantly, a Stop the watchdog can flip (a bare work()
+            # ran silent and uncancellable, the exact "huge CSV load"
+            # story the round-205 kit names).  Small files still take
+            # the plain reader -- byte-for-byte the old behaviour.
+            def work(report: Any) -> Any:
                 from pharmaml.chem import add_pic50_column
-                from pharmaml.utils.io import read_table
+                from pharmaml.utils.io import read_table_with_progress
 
-                frame = read_table(input_path)
+                frame = read_table_with_progress(input_path, report)
                 if "pIC50" in frame.columns:
                     # (100x-150) the append-only twin refuses collisions
                     # now -- an input file that ALREADY carries a pIC50
@@ -11918,10 +11925,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         if not path:
             return
 
-        def work() -> Any:
-            from pharmaml.utils.io import read_table
+        # (round 215) the streaming reader + reporter: the library load
+        # becomes cancellable (Stop / the memory watchdog) and carries a
+        # rows bar; small files keep the plain reader's behaviour.
+        def work(report: Any) -> Any:
+            from pharmaml.utils.io import read_table_with_progress
 
-            frame = read_table(path)
+            frame = read_table_with_progress(path, report)
             column = detect_smiles_column(frame)
             if column is None:
                 raise ValueError(
@@ -18615,10 +18625,13 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             self._dock_load_rescore_csv(Path(path))
 
     def _dock_load_rescore_csv(self, path: Path) -> None:
-        def work() -> Any:
-            from pharmaml.utils.io import read_table
+        # (round 215) the streaming reader + reporter: a huge summary CSV
+        # now reports rows and honours Stop / the memory watchdog instead
+        # of running silent and uncancellable; small files are unchanged.
+        def work(report: Any) -> Any:
+            from pharmaml.utils.io import read_table_with_progress
 
-            return read_table(path)
+            return read_table_with_progress(path, report)
 
         def render(frame: Any) -> None:
             if frame.empty:

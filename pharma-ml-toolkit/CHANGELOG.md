@@ -1,3 +1,36 @@
+## [1.2.129] — 2026-11-07
+
+### Changed — round 215: the file-load jobs stream too (the safety kit's third layer reaches the load path)
+
+* **`playground.py`** — the three user-file loads that still called the
+  plain `read_table` inside a ZERO-argument `work` now stream through
+  `read_table_with_progress` with the job reporter wired, closing the
+  "huge CSV load" story the round-205 kit's header names:
+  * the **pIC50 append** conversion (a multi-hundred-megabyte assay
+    table now shows a determinate rows bar and honours Stop at the
+    reader's chunk boundaries);
+  * the **library similarity scan** pick (the same streaming read
+    before the SMILES-column sniff);
+  * the **docking rescore summary CSV** load (likewise).
+  A zero-argument `work` is classified checkpointless by the job
+  runner — the Stop button stayed disabled and the memory watchdog had
+  nothing to flip for exactly the loads most likely to balloon; small
+  files (below the 8 MB threshold) still take the plain reader
+  byte-for-byte, so behaviour only changes where the progress actually
+  helps.
+* **`tests/test_job_safety.py`** — three new regression tests
+  (`TestTheFileLoadJobsStream`): the real jobs started against temp
+  CSVs, each pinned cancellable mid-flight (`_job_cancellable`) with
+  its render landing (the tree rows / the loaded frame / the pIC50
+  column present).
+
+### Notes
+
+* Notebooks re-executed against the 1.2.129 tree (202 s, all eight
+  print `pharmaml 1.2.129`); the 7 no-output twins regenerated; the
+  scrub walk dropped 0 leaking streams this round.
+* Honest totals: 4,687 pytest cases + 778 doctests = **5,465**.
+
 ## [1.2.128] — 2026-11-07
 
 ### Added — round 214: the Generative Workbench (Studio increment 8, audit row 9)

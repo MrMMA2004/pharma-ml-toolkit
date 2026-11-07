@@ -449,6 +449,42 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.129 release-zip homes (2026-11-07, round 215 — the file-load jobs stream too)
+
+`pharma-ml-toolkit-v1.2.129.zip` — 19,848,910 bytes, sha-256
+`3f7da583f7716040facd1817289751d4df211571f28c711b88156ef021220d51`,
+built with the standing four-home builder (`scratch/build_zip_215.py`,
+the round-180/212/213/214 recipe plus the predecessor sweep and
+per-home testzip verification); the re-executed notebooks scrubbed
+clean on the first pass this round (0 dropped — the fifth round of the
+leak-streak watch, 210 / 212 / 213 / 214 / 215); 985 entries / 939
+files / nested zips NONE / real leaks 0, placed byte-identical in all
+four homes:
+
+- `download/pharma-ml-toolkit-v1.2.129.zip` (repo root)
+- `pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.129.zip`
+- `pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.129.zip`
+- `upload/pharma-ml-toolkit-v1.2.129.zip`
+
+The immediate predecessor (v1.2.128) was removed from all four homes
+(the deletion rides this commit).
+
+**What shipped:** the round-215 extension of the heavy-work safety kit
+— the three user-file loads that still called the plain `read_table`
+inside a ZERO-argument `work` (the pIC50 append, the library
+similarity-scan pick, the docking rescore summary CSV) now stream
+through `read_table_with_progress` with the job reporter wired: a
+determinate rows bar for a multi-hundred-megabyte table, a Stop the
+watchdog can flip, and the cooperative stop honoured at every chunk
+boundary — the "huge CSV load" story the round-205 header names, now
+closed. Small files keep the plain reader byte-for-byte. Three new
+regression tests in `tests/test_job_safety.py` (the real jobs started
+against temp CSVs, each pinned cancellable mid-flight with its render
+landing). Honest totals 4,687 + 778 = **5,465**; census 959 files /
+349,557 lines; web pins 5,465 + census; version carriers bumped to
+1.2.129 in all four places; notebooks re-executed (202 s, all eight
+print 1.2.129) + the 7 twins regenerated.
+
 ## v1.2.128 release-zip homes (2026-11-07, round 214 — the Generative Workbench, the Studio's increment 8)
 
 `pharma-ml-toolkit-v1.2.128.zip` — 19,845,385 bytes, sha-256
