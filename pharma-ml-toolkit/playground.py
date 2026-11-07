@@ -6001,6 +6001,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
 
     def _close_embedded(self, host: Any) -> None:
         figure = getattr(host, "_pg_figure", None)
+        host._pg_canvas = None
         if figure is None:
             return
         with contextlib.suppress(Exception):
@@ -6026,6 +6027,39 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 _FIGURE_CANVAS = None
         return _FIGURE_CANVAS
 
+    def _resize_host_figure(self, host: Any) -> None:
+        """Fit a live TkAgg figure into its host without cropping or distortion."""
+        figure = getattr(host, "_pg_figure", None)
+        canvas = getattr(host, "_pg_canvas", None)
+        design = getattr(host, "_pg_design_size", None)
+        if figure is None or canvas is None or design is None:
+            return
+        try:
+            box_w = max(int(host.winfo_width()) - 12, 160)
+            box_h = max(int(host.winfo_height()) - 12, 120)
+            widget = canvas.get_tk_widget()
+            for child in host.winfo_children():
+                if child is widget or not child.winfo_ismapped():
+                    continue
+                if child.winfo_manager() == "pack":
+                    box_h = max(box_h - int(child.winfo_height()) - 4, 120)
+            width, height = design
+            # The design size is the export layout.  Fit that layout into the
+            # available panel (small upscale allowed), never crop its centre
+            # and never stretch one axis independently of the other.
+            factor = min(
+                box_w / (width * figure.dpi),
+                box_h / (height * figure.dpi),
+                1.35,
+            )
+            target = (max(1.0, width * factor), max(1.0, height * factor))
+            current = tuple(float(value) for value in figure.get_size_inches())
+            if max(abs(current[i] - target[i]) for i in (0, 1)) > 0.03:
+                figure.set_size_inches(*target, forward=True)
+                canvas.draw_idle()
+        except (tk.TclError, RuntimeError, ValueError):
+            return  # a host being destroyed or an exotic Tk build
+
     def _render_figure(self, host: Any, figure: Any, caption: str | None = None) -> None:
         """Embed a matplotlib figure into ``host`` (replacing any prior one).
 
@@ -6040,6 +6074,7 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         the page actually holds.
         """
         self._register_session_figure(host, figure, caption)
+        host._pg_design_size = tuple(float(value) for value in figure.get_size_inches())
         self._close_embedded(host)
         for child in host.winfo_children():
             child.destroy()
@@ -6055,7 +6090,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             widget = canvas.get_tk_widget()
             widget.configure(background=CARD, highlightthickness=0)
             widget.pack(fill="both", expand=True)
+            host._pg_canvas = canvas
             self._attach_crosshair(canvas)
+            self._resize_host_figure(host)
             self._figure_seq += 1
             host._pg_figure_seq = self._figure_seq
             host._pg_figure = figure
@@ -6063,8 +6100,18 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             return
         import io
 
+        from pharmaml.viz import HTML_DPI
+
         buffer = io.BytesIO()
-        figure.savefig(buffer, format="png", dpi=110, facecolor=CARD)
+        figure.savefig(
+            buffer,
+            format="png",
+            dpi=HTML_DPI,
+            bbox_inches="tight",
+            pad_inches=0.16,
+            facecolor=figure.get_facecolor(),
+            edgecolor="none",
+        )
         data = buffer.getvalue()
         photo = tk.PhotoImage(data=data)
         # (100x-123) the PNG fallback cannot REDRAW like the TkAgg canvas
@@ -6079,22 +6126,24 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             from PIL import Image
 
             host.update_idletasks()
-            box_w = max(int(host.winfo_width()), 100)
-            box_h = max(int(host.winfo_height()), 100)
+            box_w = max(int(host.winfo_width()) - 12, 100)
+            box_h = max(int(host.winfo_height()) - 12, 100)
             with Image.open(io.BytesIO(data)) as raster:
-                if raster.width > box_w or raster.height > box_h:
-                    scale = min(box_w / raster.width, box_h / raster.height)
-                    resample = getattr(Image, "Resampling", Image).LANCZOS
-                    resized = raster.resize(
-                        (
-                            max(1, int(raster.width * scale)),
-                            max(1, int(raster.height * scale)),
-                        ),
-                        resample,
-                    )
-                    out = io.BytesIO()
-                    resized.save(out, format="PNG")
-                    photo = tk.PhotoImage(data=out.getvalue())
+                # Fit in BOTH directions.  The 160-DPI source keeps the
+                # permitted 1.35x upscale crisp instead of enlarging a
+                # blurry 110-DPI thumbnail; oversized panels never crop.
+                scale = min(box_w / raster.width, box_h / raster.height, 1.35)
+                resample = getattr(Image, "Resampling", Image).LANCZOS
+                resized = raster.resize(
+                    (
+                        max(1, int(raster.width * scale)),
+                        max(1, int(raster.height * scale)),
+                    ),
+                    resample,
+                )
+                out = io.BytesIO()
+                resized.save(out, format="PNG")
+                photo = tk.PhotoImage(data=out.getvalue())
         except Exception:  # noqa: BLE001 - keep the unscaled raster
             photo = tk.PhotoImage(data=data)
         label = tk.Label(host, image=photo, background=CARD)
@@ -6105,11 +6154,17 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         host._pg_figure = figure
         self._last_figure = figure
 
-    def _figure_host(self, parent: Any, height: int = 330) -> Any:
+    def _figure_host(self, parent: Any, height: int = 390) -> Any:
         """A reserved white area (grid-managed) that figures embed into."""
         host = tk.Frame(parent, background=CARD, height=height)
         grid_append(parent, host, sticky="nsew", pady=(6, 0), weight=True)
         host.pack_propagate(False)
+        host.grid_propagate(False)
+        host.bind(
+            "<Configure>",
+            lambda _event, target=host: self._resize_host_figure(target),
+            add="+",
+        )
         return host
 
     def _register_session_figure(self, host: Any, figure: Any, caption: str | None = None) -> None:
