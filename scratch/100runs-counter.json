@@ -5,5 +5,5 @@
   "interval": "every 2 hours (fixed_rate 7200s)",
   "purpose": "Continue the MASTER_PROMPT and update the GitHub repository (including the latest zip file). Counter is committed to git each run so it survives sandbox rollbacks (the remote is the survivor).",
   "created": "round 194, after the 9th rollback recovery (local wiped to 2eb0ede/round-186; remote survived at 101f5f7/round-193 v1.2.112; recovered via pure fast-forward)",
-  "last_run_note": "2026-11-09 round 231 — user-reported studio.py PySide6 Windows console noise (QFontDatabase fonts-dir + QStyleHints unique-connection x4) diagnosed as benign; Qt message-handler filter shipped; Part-3 backlog §21/§22/§23 open (§24 done r230, §20 done earlier)"
+  "last_run_note": "2026-11-09 round 231 — adopted the compaction-interrupted session's work and shipped it as v1.2.144: the user-reported Windows Qt console noise fixed at the source (ui.qt_noise_filter installed before QApplication, PHARMAML_STUDIO_QT_VERBOSE escape hatch) + Part-3 §22 SMILES previews (hover popup + detail dialog, MolDraw2DCairo 2x, FIFO cache); 7/7 chunks, notebooks 8/8 in 194 s, zip 20,015,981 B sha c7321d18… four homes, census 995/314,875, pins 4,877 = 4,079 + 798; Part-3 remaining §21/§23"
 }

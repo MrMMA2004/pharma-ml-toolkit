@@ -10419,3 +10419,79 @@ totals **4,860 = 4,062 collect + 798 doctest** · census **991/313,916**
 SMILES previews / §23 responsive pass** (§20 + §24 done; the natural
 next slice is §22 — hover/click structure previews over the SMILES
 columns the SA tab and every result table now carry).
+
+## Round 231 (2026-11-09, cron run 23/100 job 515197 fire #7 + the owner's "Continue MASTER_PROMPT part3" and the v1.2.142 Windows console report) — the user-reported Qt noise fixed at the source + the Part-3 §22 SMILES structure previews, shipped as v1.2.144
+
+**The interruption first**: the previous turn of this very session had
+written the whole round (the noise filter, the preview widget, both
+test files, the wiring, the counter bump) and was cut off by a context
+compaction BEFORE any test run, commit, or push.  This round adopted
+that work after the DUAL-SESSION check came back clean — no foreign
+process alive, writes stopped 20:34, and the only running session was
+this chain's own continuation — then finished the ritual end-to-end.
+
+**The user's report, resolved**: `python studio.py` on Windows
+(Miniconda py312, pip PySide6 6.8.x) printed the QFontDatabase
+fonts-dir advice and the QStyleHints unique-connection line four
+times.  Diagnosis (documented in the module docstring with the
+verbatim report): both families are benign Qt-internal notices — the
+PySide6 *wheel* ships no `lib/fonts` on Windows where text renders
+through GDI/DirectWrite anyway, and the QStyleHints connects are
+QGuiApplicationPrivate's own Qt 6.8 plumbing, not Studio code.  The
+fix is at the source of visibility: `ui.qt_noise_filter`
+(`install_qt_message_handler`) drops exactly those three message
+signatures and passes everything else through with Qt's default
+formatting; `ui.run()` installs it BEFORE the QApplication exists
+(because that is when both families fire), real warnings/criticals
+stay visible, and `PHARMAML_STUDIO_QT_VERBOSE=1` disables the filter
+entirely.  The 5-test suite drives `qWarning` through the real
+`qInstallMessageHandler` path and asserts the order-of-install
+contract against `ui.run()`'s own source.
+
+**Part-3 §22 (SMILES structure previews)**: hover a SMILES cell in
+the Generative tab → 2-D structure after a 350 ms dwell; click → the
+detail dialog (original/canonical SMILES, formula, weight, Ertl SA
+with method attribution, copy button).  `MoleculeRenderer` draws with
+`MolDraw2DCairo` at 2× device pixels behind a 128-entry FIFO cache,
+refuses invalid input with the original value preserved (never a
+made-up molecule), and renders nothing until requested.  The
+controller matches columns *by name* (`smiles/canonical/mutant/
+child`), so every frame the shared table binds gains the behaviour.
+12 tests on real renders; README §22 section; the Generative tab's
+hint text mentions the interaction.
+
+**Tests**: focused 44/44 (noise filter + previews + generative page);
+full chunk gate **7/7** — 6 green on first pass, chunk 2's only two
+failures were the notebook-version pins, green after the notebook
+re-exec; notebook variants 119/119 post-re-exec.  Honest totals
+**4,877 = 4,079 collect + 798 doctest** (+17).
+
+**Release**: VERSION 1.2.144 (four files), notebooks 8/8 at pharmaml
+1.2.144 in 194 s (error-outputs 0), zip **20,015,981 B, sha-256
+`c7321d18114c2c2d5bbce2d2a740d2c40f9707c080e3ffad5c0468c53fbd65dc`**
+(1020 entries / 975 files, testzip OK, real leaks 0, nested zips
+NONE) byte-identical in the four homes, predecessor v1.2.143 swept.
+Census **995 files / 314,875 lines**.  Web pins updated (overview
+4877 + round-231 suite history, download-panel 4877 ×3, page.tsx
+fallback 995/314,875, SHIPPED_TOOLKIT_VERSION 1.2.144) and the
+manifest v1.2.144 section appended.  Health: dev server restarted
+(Ready 1236 ms, GET / 200), zip route `exact:true` at 20,015,981,
+download route streams exactly 20,015,981 bytes, agent-browser pass
+clean (badge 1.2.144, 4877 stat, download panel, zero page errors).
+
+**Scheduler**: master job **515197** alive (fire #7; next 02:59:45
++03:30); webDevReview **515705** alive (recreated 03:23 by the
+interrupted session — the 512785 → 513599 → 513796 → 515198 →
+515576 → 515705 lineage — run_count 4 at check time).  No rollback
+this round; local started exactly at origin/main c756df6.
+
+**Commits & push**: `bb47025` (the release commit) pushed;
+`origin/main == HEAD == bb47025` verified; the worklog + counter
+ride the follow-up commit.  Counter **23/100**.
+
+**Baselines for the next round** — v1.2.144 (four homes) · honest
+totals **4,877 = 4,079 collect + 798 doctest** · census **995/314,875**
+· counter **23/100** · Part-3 remaining: **§21 hover tooltips /
+§23 responsive pass** (§20 + §22 + §24 done; the natural next slice
+is §21 — rich hover tooltips over the Studio's metric cells and
+toolbar actions, building on the §22 popup plumbing).
