@@ -1196,3 +1196,21 @@ v1.2.140 swept from all four homes; placed byte-identical in
 38,317 + its 980-test Tk-coupled suite ~21,600, plus the ML Workbench
 +1,798 and the Model Analysis round-228 additions). Honest totals
 **4,769 = 3,974 collect + 795 doctest** (5,725 − 980 retired + 24 new).
+
+## v1.2.142 release-zip homes (2026-11-08, round 229 — the Part-3 §20 checkpoint engine: long jobs pause/resume/stop without losing work)
+
+`pharma-ml-toolkit-v1.2.142.zip` — 19,982,355 bytes, sha-256
+`5579a34af1c854b6478549a7b58aeb3c4f3d4fd69385194765bff89e3b0c5732`,
+1013 entries / 968 files, built with the standing four-home builder
+(`scratch/build_zip_210.py`, the committed version-agnostic recipe)
+— testzip OK per home, **real leaks 0**, nested zips NONE, predecessor
+v1.2.141 swept from all four homes; placed byte-identical in
+`download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`. Census **988 files /
+312,512 lines** (the checkpoint engine +1 module and its 36-test
+file, the six benchmark integration tests, the GUI resume-loop test,
+the README §20 section and the round-229 docs rows). Honest totals
+**4,815 = 4,019 collect + 796 doctest** (4,769 + 43 new: 36 engine +
+6 benchmark integration + 1 GUI two-Start loop; +2 straggler tests
+the round-228 count predates). Notebooks re-executed **8/8 at
+pharmaml 1.2.142 in 201 s** (the foreground recipe).
