@@ -33,6 +33,28 @@ class ModelError(PharmaMLError):
     """Raised for unknown model names or invalid model configurations."""
 
 
+class JobCancelled(PharmaMLError):
+    """Raised when a long batch is stopped at a checkpoint by its caller.
+
+    (round 205) The cooperative-stop channel: every compute loop that
+    already reports progress (the feature factory's molecule batches,
+    ``recalculate_selected_features``, the progressive table reader, the
+    ``compare_models`` / ``benchmark_feature_families`` leaderboards)
+    checks the callback's RETURN value -- ``progress(...) is False``
+    means "stop at this checkpoint".  Raising this named error (instead
+    of a bare ``RuntimeError``) lets the playground's job poller tell a
+    user-requested stop apart from a failure: the status bar reads
+    "cancelled after 42 s", the window and every loaded input survive.
+
+    A callback that returns ``None`` or any truthy value never cancels,
+    which keeps every historical callback (and every test mock) running
+    byte-identically.
+    """
+
+    def __init__(self, message: str = "job cancelled at a checkpoint") -> None:
+        super().__init__(message)
+
+
 class PersistenceError(PharmaMLError):
     """Raised when saving/loading model artifacts fails."""
 

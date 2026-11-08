@@ -1,0 +1,19 @@
+upload/GitHub_Links_Registry.pdf
+upload/GitHub_Research_Repository_Catalog.pdf
+upload/MASTER_PROMPT part2.pdf
+upload/MASTER_PROMPT part3.pdf
+upload/MASTER_PROMPT.pdf
+upload/Prompt_Registry.pdf
+upload/pharma-ml-toolkit-v1.2.107.zip
+upload/pharma-ml-toolkit-v1.2.109.zip
+upload/pharma-ml-toolkit-v1.2.112.zip
+upload/pharma-ml-toolkit-v1.2.113.zip
+upload/pharma-ml-toolkit-v1.2.114.zip
+upload/pharma-ml-toolkit-v1.2.115.zip
+upload/pharma-ml-toolkit-v1.2.116.zip
+upload/pharma-ml-toolkit-v1.2.117.zip
+upload/pharma-ml-toolkit-v1.2.118.zip
+upload/pharma-ml-toolkit-v1.2.119.zip
+upload/pharma-ml-toolkit-v1.2.120.zip
+upload/pharma-ml-toolkit-v1.2.121.zip
+upload/pharma-ml-toolkit-v1.2.140.zip

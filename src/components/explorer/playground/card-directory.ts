@@ -11,8 +11,9 @@
  * surfaces honestly as a "not found" toast instead of a silent jump to
  * the wrong card.
  *
- * The desktop registry (`playground.py`'s `_CARD_INDEX`) is built at UI
- * construction time, so it can never drift; the web catalog is static,
+ * (Historically the desktop registry was the retired Tk playground's
+ * `_CARD_INDEX`, built at UI construction time so it could never drift; the
+ * Studio pages carry those cards now.) The web catalog is static,
  * so the E2E probe walks EVERY entry and asserts the jump resolves —
  * drift is caught the round it happens, not by the user.
  *
@@ -265,6 +266,16 @@ export const PLAYGROUND_CARDS: readonly PlaygroundCardEntry[] = [
     blurb: "seeded scaffold-hop crossover litter",
     match: "Breed two molecules",
     keywords: "breed crossover scaffold hop children litter parents generative",
+  },
+  /* -- SA score (part3 §24 — Ertl-Schuffenhauer over the bridge) ------- */
+  {
+    id: "gen-sa-score",
+    tab: "generative",
+    title: "Synthetic Accessibility score",
+    blurb: "Ertl–Schuffenhauer SA with filter + CSV export",
+    match: "Synthetic Accessibility score",
+    keywords:
+      "sa score sascore ertl schuffenhauer synthetic accessibility ease of synthesis complexity",
   },
   /* -- The session-report strip (rides above every sub-tab) ------------- */
   {

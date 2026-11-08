@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
-from pharmaml.viz import HTML_DPI, PALETTE, figure_to_base64, new_figure, save_figure
+from pharmaml.viz import PALETTE, figure_to_base64, new_figure, save_figure
 
 
 def main() -> None:
@@ -47,8 +47,8 @@ def main() -> None:
         path = save_figure(fig, out_dir / f"concentration-profile.{extension}")
         print(f"wrote {path}")
 
-    # HTML uses a separate 160-DPI default so zoomed report figures stay crisp.
-    uri = figure_to_base64(fig, dpi=HTML_DPI)
+    # Embed the same figure directly in a self-contained HTML report.
+    uri = figure_to_base64(fig)
     html = f"""<!doctype html>
 <html lang="en"><meta charset="utf-8"><title>PharmaML chart example</title>
 <body style="margin:2rem;background:#f4f6f8;font-family:sans-serif">

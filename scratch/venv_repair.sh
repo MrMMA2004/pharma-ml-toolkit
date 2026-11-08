@@ -29,7 +29,11 @@ $P install --no-deps shap==0.54.1 2>&1 | tail -1
 $P install slicer numba cloudpickle packaging -c /tmp/constraint.txt 2>&1 | tail -1
 
 # 4. the GUI/report/ML layer (matplotlib 3.10.9 = the live-TkAgg pin)
+#    openpyxl 3.1.5 rides here since v1.2.116: the playground's Excel
+#    input/output guarantee (xlsx read + write) depends on it explicitly —
+#    pre-116 repairs did not carry it and a future repair must not drop it.
 $P install matplotlib==3.10.9 seaborn==0.13.2 fpdf2==2.8.5 python-docx==1.2.0 \
+    openpyxl==3.1.5 \
     mordred==1.2.0 xgboost==2.1.3 lightgbm==4.5.0 catboost==1.2.8 \
     -c /tmp/constraint.txt 2>&1 | tail -1
 
@@ -39,8 +43,34 @@ $P install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu 2>&1 |
 # 6. pytest-xdist (the round-195 parallel chunk runner; optional but pinned now)
 $P install pytest-xdist 2>&1 | tail -1
 
+# 6b. the Studio GUI stack (round 206, directive #16 — the PySide6
+#     redesign). pyqtgraph MUST stay 0.13.7: 0.14 requires numpy>=2.2
+#     and this stack pins 1.26.4 (mordred). PySide6 6.8.3 = the Qt 6.8
+#     LTS wheel verified under Python 3.12. The EGL stub under
+#     pharma-ml-toolkit/ui/native/ carries the headless fallback: this
+#     box has no system libEGL, so the stub is ALSO copied into the
+#     wheel's Qt/lib dir (libQt6Gui.so.6 carries RUNPATH $ORIGIN, so
+#     the dependency resolves with zero env vars — plain pytest runs
+#     import pytest-qt's binding probe, which loads QtGui eagerly).
+$P install PySide6==6.8.3 pyqtgraph==0.13.7 qt-material==2.17 \
+    qdarkstyle==3.2.3 pytest-qt==4.5.0 \
+    -c /tmp/constraint.txt 2>&1 | tail -1
+cp /home/z/my-project/pharma-ml-toolkit/ui/native/libEGL.so.1 \
+   /home/z/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libEGL.so.1
+
 # 7. the editable toolkit itself (its version tracks the checkout)
 cd /home/z/my-project/pharma-ml-toolkit && $P install --no-deps -e . 2>&1 | tail -1
 
 # 8. verify the full import surface
-/home/z/.venv/bin/python -c "import numpy, rdkit, selfies, shap, meeko, gemmi, matplotlib, torch, mordred, xgboost, lightgbm, catboost, seaborn, fpdf, docx, pharmaml; print('VENV-REPAIR-DONE numpy', numpy.__version__, 'torch', torch.__version__, 'matplotlib', matplotlib.__version__, 'pharmaml', pharmaml.__version__)"
+/home/z/.venv/bin/python -c "import numpy, rdkit, selfies, shap, meeko, gemmi, matplotlib, torch, mordred, xgboost, lightgbm, catboost, seaborn, fpdf, docx, openpyxl, pandas, pharmaml; print('VENV-REPAIR-DONE numpy', numpy.__version__, 'torch', torch.__version__, 'matplotlib', matplotlib.__version__, 'openpyxl', openpyxl.__version__, 'pharmaml', pharmaml.__version__)"
+
+# 8b. verify the Studio GUI stack offscreen (the EGL stub + offscreen
+#     platform ride inside ui.headless — real EGL, when present, wins)
+cd /home/z/my-project/pharma-ml-toolkit && /home/z/.venv/bin/python -c "
+import sys; sys.path.insert(0, '.')
+from ui.headless import ensure_headless
+ensure_headless()
+from PySide6.QtWidgets import QApplication
+import pyqtgraph, qt_material, qdarkstyle
+app = QApplication([])
+print('STUDIO-REPAIR-DONE PySide6 OK pyqtgraph', pyqtgraph.__version__)"

@@ -37,6 +37,7 @@ MODULES: tuple[str, ...] = (
     "pharmaml.viz",
     "pharmaml.utils.io",
     "pharmaml.utils.validation",
+    "pharmaml.utils.checkpoints",
 )
 
 HEADER = """\

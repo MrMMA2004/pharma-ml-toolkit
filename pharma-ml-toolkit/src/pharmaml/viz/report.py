@@ -121,8 +121,11 @@ __all__ = [
 
 _LOG = get_logger(__name__)
 
-#: Extensions :func:`export_table` understands.
-TABLE_FORMATS: tuple[str, ...] = ("csv", "tsv", "md", "json", "html")
+#: Extensions :func:`export_table` understands -- the round-201
+#: Excel absorption added ``xlsx`` (openpyxl engine) beside the five
+#: visual formats, so every playground table card can hand its result
+#: to a spreadsheet with the same one-call story.
+TABLE_FORMATS: tuple[str, ...] = ("csv", "tsv", "md", "json", "html", "xlsx")
 
 _REPORT_CSS = """
 /* Theme engine (100x-126): 'auto' follows the OS (the original
@@ -352,12 +355,20 @@ def export_table(frame: pd.DataFrame, path: str | Path, max_rows: int | None = N
 
     Supported: ``.csv``, ``.tsv``, ``.md``/``.markdown`` (GitHub-ready
     table), ``.json`` (records orientation), ``.html`` (styled table
-    that renders standalone in a browser).
+    that renders standalone in a browser) and ``.xlsx`` (Excel
+    workbook via the openpyxl engine, round 201 -- the spreadsheet
+    twin of the CSV arm, one sheet, no index column).
 
     Returns
     -------
     Path
         The resolved output path (parent directories created).
+
+    Examples
+    --------
+    >>> from pharmaml.viz import TABLE_FORMATS
+    >>> sorted(TABLE_FORMATS)
+    ['csv', 'html', 'json', 'md', 'tsv', 'xlsx']
     """
     file_path = Path(path)
     fmt = file_path.suffix.lower().lstrip(".")
@@ -385,6 +396,13 @@ def export_table(frame: pd.DataFrame, path: str | Path, max_rows: int | None = N
             + _frame_to_html(frame, max_rows) + "</body></html>"
         )
         file_path.write_text(document, encoding="utf-8")
+    elif fmt == "xlsx":
+        # (round 201) the Excel arm -- openpyxl writes the workbook
+        # (``engine=`` pinned so a headless xlrd never gets a chance);
+        # the full frame lands in ONE sheet with no index column,
+        # mirroring the CSV arm's layout exactly (``read_table`` reads
+        # it back with the same columns).
+        frame.to_excel(file_path, index=False, sheet_name="table", engine="openpyxl")
     else:
         raise DataValidationError(
             f"Unsupported table format {file_path.suffix!r}; "

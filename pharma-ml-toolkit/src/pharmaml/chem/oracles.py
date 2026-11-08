@@ -211,8 +211,33 @@ def qed_score(mol_or_smiles: Any, weights: str = "mean") -> float:
 # ------------------------------------------------------------------ #
 
 _SA_MIN, _SA_MAX = -4.0, 2.5
-#: Offline default: no histogram -> every fragment unseen (score -4).
+#: The fragment table, loaded lazily from the RDKit wheel's own Contrib
+#: database (``Contrib/SA_Score/fpscores.pkl.gz`` -- the exact file the
+#: official ``sascorer.py`` reads; part3 §24's ``sa_scoring`` owns the
+#: loader).  A Contrib-less build leaves this ``None`` and every
+#: fragment stays unseen (score -4) -- the honest offline degradation.
 _FRAGMENT_HISTOGRAM: Mapping[int, float] | None = None
+_FRAGMENT_HISTOGRAM_LOADED = False
+
+
+def _fragment_histogram() -> Mapping[int, float] | None:
+    """Return Ertl's fragment table, or ``None`` when unavailable.
+
+    Delegates to :mod:`pharmaml.chem.sa_scoring`'s lazy loader (the
+    RDKit wheel ships the database alongside the Contrib scorer) and
+    caches the outcome so a Contrib-less build degrades once, quietly.
+    """
+    global _FRAGMENT_HISTOGRAM, _FRAGMENT_HISTOGRAM_LOADED
+    if _FRAGMENT_HISTOGRAM_LOADED:
+        return _FRAGMENT_HISTOGRAM
+    _FRAGMENT_HISTOGRAM_LOADED = True
+    try:
+        from pharmaml.chem.sa_scoring import _fragment_scores
+
+        _FRAGMENT_HISTOGRAM = _fragment_scores()
+    except Exception:  # noqa: BLE001 - degradation is the documented contract
+        _FRAGMENT_HISTOGRAM = None
+    return _FRAGMENT_HISTOGRAM
 
 
 def sa_score(
@@ -226,14 +251,18 @@ def sa_score(
     complexity penalties, the symmetry correction, and the
     ``[1, 10]`` rescale with the smoothed top end.
 
-    **Offline degradation, stated plainly:** the fragment histogram
-    (Ertl's ``fpscores.pkl``, built from ~1M GDB molecules) is a
-    Dataverse download TDC fetches at runtime; without it every
-    fragment scores the unseen-fragment penalty ``-4``, so the score
-    collapses toward the top of the scale and only the complexity
-    penalties differentiate molecules.  Pass a loaded histogram via
-    ``fragment_histogram`` to activate the real ranking.  Invalid
-    SMILES returns 100 (TDC's contract).
+    **The fragment table ships with RDKit itself** (part3 §24's
+    wiring): Ertl's ``fpscores.pkl`` histogram -- built from ~1M GDB
+    molecules -- lives inside the RDKit wheel
+    (``Contrib/SA_Score/fpscores.pkl.gz``) and is loaded lazily on
+    first use, so the oracle ranks with the *real* fragment model
+    (aspirin 1.58, caffeine 2.30 -- the reference Contrib values).
+    Only a Contrib-less RDKit build degrades: every fragment then
+    scores the unseen-fragment penalty ``-4``, the score collapses
+    toward the top of the scale and only the complexity penalties
+    differentiate molecules.  Pass ``fragment_histogram`` to override
+    the table explicitly.  Invalid SMILES returns 100 (TDC's
+    contract).
 
     Examples
     --------
@@ -249,10 +278,12 @@ def sa_score(
     mol = mol_or_smiles if hasattr(mol_or_smiles, "GetNumAtoms") else _mol(str(mol_or_smiles))
     if mol is None:
         return 100.0
-    from rdkit.Chem import rdMolDescriptors
+    from rdkit.Chem import rdFingerprintGenerator, rdMolDescriptors
 
-    hist = fragment_histogram if fragment_histogram is not None else _FRAGMENT_HISTOGRAM
-    fp = rdMolDescriptors.GetMorganFingerprint(mol, 2)
+    hist = fragment_histogram if fragment_histogram is not None else _fragment_histogram()
+    # the generator API is the Contrib sascorer's own (the legacy
+    # GetMorganFingerprint path is deprecated and spams stderr)
+    fp = rdFingerprintGenerator.GetMorganGenerator(radius=2).GetSparseCountFingerprint(mol)
     fps = fp.GetNonzeroElements()
     score1 = 0.0
     nf = 0
@@ -299,7 +330,7 @@ def penalized_logp(mol_or_smiles: Any) -> float:
 
     Examples
     --------
-    >>> -10.0 < penalized_logp("CCO") < -5.0
+    >>> -1.0 < penalized_logp("CCO") < 0.0  # real Ertl SA (part3 §24) replaced the degraded -7.x
     True
     >>> penalized_logp("c1ccccc1") > penalized_logp("CCO")  # lipophilic wins
     True

@@ -70,6 +70,11 @@ after adding new public functions.
 | `REPRESENTATIONS` | constant |  |
 | `RISM_DESCRIPTORS` | constant |  |
 | `RISM_DESCRIPTOR_COUNT` | constant |  |
+| `SA_SCORE_LIMITATIONS` | constant |  |
+| `SA_SCORE_METHOD` | constant |  |
+| `SAFilterResult` | class | §24.4 filtering outcome: kept AND rejected are both preserved. |
+| `SAScoreBatch` | class | Batch results with the validity accounting (§24.2/24.3). |
+| `SAScoreResult` | class | One molecule's SA score with full validation context (§24.2). |
 | `TOPOLOGICAL_BITS` | constant |  |
 | `UNSUPPORTED_METALS` | constant |  |
 | `AtomEnvironment` | class | One ``(atom, radius)`` hit a Morgan bit fires on. |
@@ -139,6 +144,7 @@ after adding new public functions.
 | `dihedral_angle` | function | Signed dihedral p0-p1-p2-p3 in degrees, −180..180. |
 | `distance_matrix` | function | The full pairwise distance matrix ``(n, n)`` in Å. |
 | `family_of_column` | function | Return the feature family a frame column belongs to. |
+| `filter_by_sa` | function | Filter scored candidates by an inclusive SA range (§24.4). |
 | `filter_low_variance` | function | Cut feature columns whose variance is below ``threshold``. |
 | `find_rings` | function | The smallest set of smallest rings, as atom-index sets. |
 | `fingerprint_diversity` | function | Mean pairwise Tanimoto *distance* across a pose series. |
@@ -173,6 +179,7 @@ after adding new public functions.
 | `protonate_smiles` | function | The dimorphite_dl protonation enumerator for one SMILES. |
 | `random_selfies_molecules` | function | Sample ``n`` molecules uniformly from the robust SELFIES alphabet. |
 | `rank_features` | function | Rank feature columns by importance, descending. |
+| `recalculate_selected_features` | function | Recalculate a frozen feature selection for NEW molecules. |
 | `register` | constant |  |
 | `reinvent_standardize_mol` | function | The REINVENT4 ``default`` standardization chain, on an RDKit Mol. |
 | `reinvent_standardize_smiles` | function | :func:`reinvent_standardize_mol` from (and back to) a SMILES. |
@@ -191,6 +198,10 @@ after adding new public functions.
 | `select_string` | function | NGL's selection string grammar resolved to atom indices. |
 | `select_top_features` | function | Select the top-K features with the rar's two-layer strategy. |
 | `selection_metadata` | function | Build the JSON-ready metadata dict for a feature-selection run. |
+| `sa_score` | function | Score one SMILES string (or an RDKit molecule). |
+| `sa_score_frame` | function | The §24.3 generative-results table: SMILES, SA, validity, order. |
+| `sa_score_summary` | function | Direction-aware batch statistics for interfaces (§24.3). |
+| `sa_scores` | function | Score a batch of SMILES with per-molecule validity (§24.2). |
 | `selfies_alphabet` | function | Sorted set of SELFIES symbols appearing in an iterable of strings. |
 | `selfies_available` | function | Report whether the optional ``selfies`` package is importable. |
 | `selfies_feature_matrix` | function | Featurise a SMILES column as a SELFIES label / one-hot matrix. |
@@ -242,10 +253,12 @@ after adding new public functions.
 | `CATEGORY_COVERAGE` | constant |  |
 | `CHANGEPOINT_ALPHA` | constant |  |
 | `CHANGEPOINT_MIN_SEGMENT` | constant |  |
+| `CLASSIFICATION_CV_METRICS` | constant |  |
 | `COVERAGE_EXTERNAL` | constant |  |
 | `COVERAGE_NATIVE` | constant |  |
 | `COVERAGE_OUT_OF_SCOPE` | constant |  |
 | `COVERAGE_PARTIAL` | constant |  |
+| `CV_STRATEGIES` | constant |  |
 | `DEEPDTA_CHARCANSMISET` | constant |  |
 | `DEEPDTA_CHARISOSMISET` | constant |  |
 | `DEEPDTA_CHARPROTSET` | constant |  |
@@ -257,9 +270,11 @@ after adding new public functions.
 | `INITIAL_POINTS_PER_DIM` | constant |  |
 | `KDE_KERNELS` | constant |  |
 | `MANIFOLD_METHODS` | constant |  |
+| `METRIC_LABELS` | constant |  |
 | `MODEL_ALIASES` | constant |  |
 | `MODEL_REGISTRY` | constant |  |
 | `NO_SCALE_MODELS` | constant |  |
+| `REGRESSION_CV_METRICS` | constant |  |
 | `SCRATCH_ACTIVATIONS` | constant |  |
 | `SCRATCH_TASKS` | constant |  |
 | `SEQUENCE_MODELS` | constant |  |
@@ -284,6 +299,7 @@ after adding new public functions.
 | `BayesianSearchReport` | class | The oracle's ledger: trials, the best, the acquisition diagnostics. |
 | `BootstrapUncertainty` | class | Bootstrap-ensemble uncertainty of a fitted estimator. |
 | `BroadcastReport` | class | NumPy's broadcasting verdict for two shapes. |
+| `CVResult` | class | A complete §19 CV report for one model on one dataset. |
 | `CapacityPoint` | class | One (width, train loss, validation loss) sample of the sweep. |
 | `CapacitySweepResult` | class | Chapter 5's "reducing the network's size" figure, as data. |
 | `CatalogCategory` | class | One catalogue section: slug, title, subtitle, live counts. |
@@ -308,8 +324,10 @@ after adding new public functions.
 | `DistributionSample` | class | Seeded draws plus the population moments to compare against. |
 | `DoseResponseReport` | class | A fitted sigmoid Emax curve with its uncertainty. |
 | `EmbeddingRecord` | class | Typed report of :func:`manifold_embedding`. |
+| `EvaluationEstimate` | class | The pre-execution budget answer (§18.5). |
 | `Factor` | class | One predictor inside a term: numeric, categorical or intercept. |
 | `FewShotReport` | class | The three-arm verdict on a new task (TCRP's evaluation). |
+| `FoldRecord` | class | One fold's honest bookkeeping (§19.2 "individual fold scores"). |
 | `ForecastResult` | class | Everything the sequence card reports, after one run. |
 | `GaussianProcessSurrogate` | class | An RBF-kernel Gaussian process over the trials seen so far. |
 | `GmmResult` | class | Typed report of :func:`gmm_cluster`. |
@@ -332,6 +350,7 @@ after adding new public functions.
 | `MedianPruner` | function | The median pruner: ``PercentilePruner(50)``. |
 | `MetaHistory` | class | The meta-training curve. |
 | `MetaModel` | class | The meta-trained network (TCRP's ``observed_tissue_model``). |
+| `MetricSummary` | class | One metric aggregated across folds (mean, std, every fold value). |
 | `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
 | `Module` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `NaiveDense` | class | Chollet's ``NaiveDense`` (chapter 2), plain NumPy. |
@@ -345,6 +364,7 @@ after adding new public functions.
 | `OntologyGraph` | class | A parsed DrugCell ontology: the DAG plus its gene annotations. |
 | `OntologyReport` | class | The hierarchy audit: rows per term plus the headline stats. |
 | `OntologyRow` | class | One term's audit row: size, depth, layer, gene enrichment. |
+| `ParamAdvice` | class | One searchable hyperparameter: its range, prior, role, and deps. |
 | `Parameter` | class | A leaf tensor that always requires grad. |
 | `PcaResult` | class | Typed report of :func:`pca_reduce`. |
 | `PercentilePruner` | class | Prune trials whose running CV mean falls below a percentile. |
@@ -364,6 +384,7 @@ after adding new public functions.
 | `ResidualMLPRegressor` | class | Residual (skip-connection) deep-network regressor (PyTorch). |
 | `RobustnessAudit` | class | The verdict curve of a model under the sign-pattern family. |
 | `ScratchHistory` | class | Everything the scratch training loop observed, per epoch. |
+| `SearchRecommendation` | class | A preset applied and adapted to a concrete dataset/budget. |
 | `SequenceHistory` | class | Per-epoch training telemetry for one recurrent fit. |
 | `Sequential` | class | Modules applied in order. |
 | `ShapInteractions` | class | Pairwise SHAP interaction values of a fitted tree model (100x-160). |
@@ -371,6 +392,7 @@ after adding new public functions.
 | `Sigmoid` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `SignificanceResult` | class | One test's verdict: statistic, p-value, decision, effect size. |
 | `Softmax` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
+| `SpaceIssue` | class | One compatibility or sanity finding (§18.2 validation). |
 | `TPESearch` | class | Tree-structured Parzen Estimator search — Optuna's flagship sampler. |
 | `TaskFamily` | class | Seeded related regression tasks: one shared prior, per-task draws. |
 | `TaskSplit` | class | One task's support/query split (the inner-loop data contract). |
@@ -388,6 +410,7 @@ after adding new public functions.
 | `adapt` | function | Clone-and-fine-tune on a support set (the inner loop alone). |
 | `adversarial_audit` | function | Run the sign-pattern family across a radius grid. |
 | `adversarial_augmentation` | function | Adversarial training's closed-form half: in-ball noisy copies. |
+| `advice_families` | function | The tokens with hand-authored §18.3 tables. |
 | `ann_benchmark` | function | Recall@k and candidate compression of LSH against brute force. |
 | `anova_ii` | function | Type-II ANOVA table from the term slices. |
 | `applicability_domain` | function | The uploaded workflow end-to-end, one call. |
@@ -401,6 +424,7 @@ after adding new public functions.
 | `brute_force_knn` | function | The exact top-k by Euclidean distance -- the benchmark baseline. |
 | `build_ann_classifier` | function | sklearn MLP classifier hypermodel (the legacy ANN upgrade). |
 | `build_ann_regressor` | function | sklearn MLP regressor hypermodel (the legacy ANN upgrade). |
+| `build_cv_splitter` | function | Build the CV splitter plus its limitations notes (§19.3). |
 | `build_deep_classifier` | function | Deep MLP classifier hypermodel (PyTorch, ``batchnorm`` searchable). |
 | `build_deep_regressor` | function | Deep MLP regressor hypermodel (PyTorch, ``batchnorm`` searchable). |
 | `build_hsvr` | function | :class:`~pharmaml.ml.hierarchical.HierarchicalSVR` hypermodel. |
@@ -417,13 +441,19 @@ after adding new public functions.
 | `commonsense_baseline` | function | Predict "the last observed value" (``evaluate_naive_method``). |
 | `compare_groups` | function | The course's decision flow, end to end, every branch reported. |
 | `compare_models` | function | Cross-validated leaderboard over (a subset of) the registry. |
+| `compare_models_cv` | function | Cross-validate a model panel into full §19 reports + the board. |
 | `composition_report` | function | Sequential composition: the ε's of queries on the same rows add. |
 | `contrast_matrix` | function | The coding matrix for one categorical factor. |
 | `coverage_table` | function | The category-by-category audit, in catalogue order. |
 | `cross_entropy` | function | Softmax cross-entropy: ``mean(−log_softmax[i, label_i])``. |
 | `cross_model_importances` | function | Permutation importances for a WHOLE panel of fitted models. |
+| `cross_validate_model` | function | Cross-validate ONE registry model into a full §19 CVResult. |
 | `curve_fit` | function | The scipy-named entry point: (best params, covariance matrix). |
+| `cv_result_from_dict` | function | Rebuild a :class:`CVResult` from :meth:`CVResult.to_dict` output. |
+| `cv_result_to_dict` | function | §19.9 interchange: :class:`CVResult` → JSON-ready dict. |
+| `dataset_fingerprint` | function | Stable sha256 fingerprint of the data a CV result belongs to. |
 | `deepdta_rm2` | function | DeepDTA's ``get_rm2`` external-prediction metric. |
+| `default_folds` | function | Fold-count default with its justification (§19.3). |
 | `demo_dta_frame` | function | Twelve synthetic, clearly non-benchmark pairs for the offline GUI. |
 | `describe_series` | function | One sample's descriptive statistics (scipy's moment machinery). |
 | `describe_tensor` | function | Audit one array with chapter 2's "key attributes" vocabulary. |
@@ -432,6 +462,7 @@ after adding new public functions.
 | `dot_product_attention` | function | Scaled dot-product attention: ``softmax(QKᵀ/√dₖ)·V``. |
 | `dp_sgd_noise_scale` | function | Invert the RDP accountant: the σ that meets (ε, δ) in T steps. |
 | `dp_statistics` | function | Count, sum, mean (+ optional histogram) under one ε budget. |
+| `estimate_evaluations` | function | Estimate the number of evaluations a budget implies. |
 | `evaluate_model` | function | Evaluate a fitted model on held-out data. |
 | `evaluate_recommender` | function | Leave-one-out: hide one rating per user, rebuild, hit@N. |
 | `expected_improvement` | function | The classic expected improvement over the best observed score. |
@@ -441,12 +472,14 @@ after adding new public functions.
 | `fit_scratch` | function | Chapter 2's full training loop, mouse-free edition. |
 | `fomaml_train` | function | First-order MAML over the task family (TCRP's train loop). |
 | `forecast_timeseries` | function | The chapter's end-to-end workflow on one series. |
+| `format_cv_score` | function | Render ``CV Score = Mean ± Standard Deviation`` honestly. |
 | `gaussian_mechanism` | function | The analytic Gaussian mechanism: (ε, δ)-DP with the classic bound. |
 | `gmm_cluster` | function | Gaussian mixture model (PDSH 05.12) with the AIC/BIC sweep. |
 | `gradient_check` | function | Central-difference check of ``function``'s reverse-mode gradient. |
 | `group_difference` | function | Cohort difference of a SHAP summary, with a bootstrap interval. |
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
 | `hierarchy_report` | function | The peeling audit: per-term rows and the hierarchy's shape. |
+| `hypermodel_from_advice` | function | Compile a recommendation into a tuner-searchable hypermodel. |
 | `kde_fit` | function | Kernel density estimation (PDSH 05.13) for ONE numeric column. |
 | `kmeans_cluster` | function | k-means clustering (PDSH 05.11), with the elbow AND the silhouette. |
 | `knn_applicability_domain` | function | kNN-distance applicability domain (the upload's step 4-5). |
@@ -484,11 +517,15 @@ after adding new public functions.
 | `permutation_feature_importance` | function | Permutation importances of a fitted model on held-out data. |
 | `predict_scratch` | function | Predict with a trained scratch model (standardisation reapplied). |
 | `predict_with_uncertainty` | function | Predictive mean and per-row standard deviation of a GP model. |
+| `preset_styles` | function | The three §18.2 preset styles, in increasing cost order. |
 | `protein_feature_frame` | function | Return aligned AAC (and optionally dipeptide) features per sequence. |
 | `quantile_prediction_intervals` | function | Central-``1 - alpha`` prediction intervals via quantile regression. |
 | `rdp_epsilon` | function | The RDP accountant: T plain Gaussian steps -> (ε, δ). |
 | `recommend_itembased` | function | Item-based collaborative filtering: the similarity-weighted sum. |
+| `recommend_search` | function | The §18.2 recommendation: preset + dataset/budget adaptation. |
 | `recommend_userbased` | function | User-based collaborative filtering: the k-neighbour weighted mean. |
+| `recommendation_from_json` | function | Load a recommendation exported by :func:`recommendation_to_json`. |
+| `recommendation_to_json` | function | Serialize a recommendation (§18.5's export-as-JSON). |
 | `resolve_model_name` | function | Normalise a user-supplied model name to a registry key. |
 | `resource_bounds` | function | The declared ``[min, max]`` grid of a hypermodel's resource slot. |
 | `sample_distribution` | function | Draw ``n`` seeded samples from one of the course's distributions. |
@@ -515,6 +552,8 @@ after adding new public functions.
 | `train_model` | function | Train (and optionally grid-search) one registry model. |
 | `two_sample_ttest` | function | Two independent samples: Welch's t (default) or Student's t. |
 | `validate_bundle_input` | function | Audit a new dataset against a saved model bundle before inference. |
+| `validate_space` | function | Compatibility-check a search space before optimization starts. |
+| `validate_values` | function | Compatibility-check one drawn parameter combination. |
 | `window_features` | function | Fixed non-overlapping windows, one feature row each (tsfresh-lite). |
 
 ## `pharmaml.generative`
@@ -548,6 +587,7 @@ after adding new public functions.
 | `QedObjective` | class | RDKit QED (quantitative estimate of drug-likeness). |
 | `RawComponentObjective` | class | A REINVENT4 component: raw descriptor value pushed through a transform. |
 | `ReinventOptimizer` | class | Policy-gradient fine-tuning of a SMILES RNN prior. |
+| `SAScoreObjective` | class | Ertl synthetic-accessibility score as a generation reward (part3 §24.5). |
 | `ScaffoldSimilarityFilter` | class | Bucket by *similar* scaffolds (``scaffold_similarity``). |
 | `ScoreTransform` | class | Base class of the REINVENT4 transform DSL. |
 | `ScoringObjective` | class | Base class for generation objectives: ``score(smiles) -> [0, 1]``. |
@@ -746,18 +786,24 @@ after adding new public functions.
 
 | Symbol | Kind | Summary |
 |---|---|---|
-| `DEFAULT_FIGSIZE` | constant | Readable default physical figure size, in inches. |
-| `EXPORT_DPI` | constant | Default resolution for file exports. |
-| `HTML_DPI` | constant | Default resolution for embedded HTML figures. |
-| `MAX_RASTER_PIXELS` | constant | Pixel budget for exceptionally large raster exports. |
+| `EXPORT_EXTENSIONS` | constant |  |
+| `EXPORT_FILTERS` | constant |  |
 | `PALETTE` | constant |  |
 | `PDF_THEMES` | constant |  |
 | `PLOT_FORMATS` | constant |  |
 | `REPORT_THEMES` | constant |  |
 | `TABLE_FORMATS` | constant |  |
+| `TIFF_COMPRESSIONS` | constant |  |
+| `ExportFormat` | class | The four first-class raster/vector export formats (§17.1). |
+| `ExportManager` | class | Batch export with the §17.4 manager contract. |
+| `ExportResult` | class | What an export actually produced -- the honest report card. |
 | `HTMLReport` | class | Builder for a self-contained HTML report. |
+| `ImageExportOptions` | class | Per-export configuration (§17.4's reusable export manager knobs). |
 | `close_figure` | function | Close a figure defensively (no-op when matplotlib is absent). |
 | `export_docx` | function | Write a DataFrame as a Word ``.docx`` document with a grid table. |
+| `export_figure` | function | Export a matplotlib figure to any §17 format. |
+| `export_image` | function | Export an image (array / PIL image / existing file) to any §17 format. |
+| `export_matrix` | function | Export a scientific matrix -- the §17.2-specialised path. |
 | `export_table` | function | Write a DataFrame in a *visual* format chosen by the extension. |
 | `figure_to_base64` | function | Render a figure to a ``data:`` URI for embedding in HTML reports. |
 | `get_pyplot` | function | Return ``matplotlib.pyplot`` with a safe backend already selected. |
@@ -820,6 +866,8 @@ after adding new public functions.
 | `save_figure` | function | Save a figure to ``png``/``svg``/``pdf`` (chosen by extension). |
 | `save_pdf_report` | function | Write a multi-page PDF document report (metrics, tables, figures). |
 | `save_visual_bundle` | function | Render figures + tables + metrics into one directory + HTML report. |
+| `sniff_format` | function | Identify an image file from its magic bytes alone. |
+| `validate_export` | function | Reopen an exported file and verify it kept its promises. |
 
 ## `pharmaml.utils.io`
 
@@ -846,6 +894,26 @@ after adding new public functions.
 | `validate_concentration_series` | function | Validate a paired time/concentration series for PK math. |
 | `validate_positive` | function | Assert ``value`` is a finite, (strictly) positive number. |
 | `validate_smiles_syntax` | function | Return True if ``smiles`` passes lightweight syntax checks. |
+
+## `pharmaml.utils.checkpoints`
+
+*Durable checkpoints for long-running jobs (MASTER_PROMPT Part-3 §20).*
+
+| Symbol | Kind | Summary |
+|---|---|---|
+| `Any` | class | Special type indicating an unconstrained type. |
+| `CheckpointInfo` | class | One validated checkpoint record (the contents of one JSON file). |
+| `CheckpointManager` | class | Write, validate, rotate and clear checkpoint files for one job. |
+| `Path` | class | PurePath subclass that can make system calls. |
+| `PersistenceError` | class | Raised when saving/loading model artifacts fails. |
+| `SCHEMA` | constant |  |
+| `annotations` | constant |  |
+| `dataclass` | function | Add dunder methods based on the fields defined in the class. |
+| `default_directory` | function | The GUI's per-job checkpoint home: ``~/.pharmaml/checkpoints/<name>/``. |
+| `hashlib` | module | hashlib module - A common interface to many hash functions. |
+| `json` | module | JSON (JavaScript Object Notation) <https://json.org> is a subset of |
+| `os` | module | OS routines for NT or Posix depending on what system we're on. |
+| `time` | module | This module provides various functions to manipulate time values. |
 
 ## Command-line interface
 

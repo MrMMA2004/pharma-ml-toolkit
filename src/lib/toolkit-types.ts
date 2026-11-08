@@ -951,6 +951,60 @@ export interface SurgeryBreedResponse {
 export type SurgeryResponse = SurgeryTopologyResponse | SurgeryBreedResponse;
 
 /* ------------------------------------------------------------------ */
+/* Synthetic Accessibility scoring (part3 §24 — Ertl-Schuffenhauer)    */
+/* ------------------------------------------------------------------ */
+
+/** One molecule's SA row: score is null exactly when the SMILES is
+ * invalid (the error field then carries the reason, the original
+ * string is preserved — never a misleading number). */
+export interface SAScoreRow {
+  smiles: string;
+  score: number | null;
+  valid: boolean;
+  error: string | null;
+  canonicalSmiles: string | null;
+  method: string;
+  direction: string;
+}
+
+/** Direction-aware batch statistics over the valid subset only. */
+export interface SASummary {
+  nTotal?: number;
+  nScored?: number;
+  nInvalid?: number;
+  min?: number;
+  max?: number;
+  mean?: number;
+  median?: number;
+  std?: number;
+  method: string;
+  direction: string;
+  limitations: string;
+  elapsedSeconds?: number;
+}
+
+/** Response of /api/chem/sa-score: every row, the easiest-first
+ * ordering, the summary statistics, and — when a filter bound was
+ * requested — the kept/rejected split with both sides preserved. */
+export interface SAScoreResponse {
+  nTotal: number;
+  nScored: number;
+  nInvalid: number;
+  results: SAScoreRow[];
+  sorted: Array<{ smiles: string; score: number | null }>;
+  summary: SASummary;
+  method: string;
+  direction: string;
+  limitations: string;
+  elapsedSeconds: number;
+  rdkitVersion: string;
+  kept?: SAScoreRow[];
+  rejected?: SAScoreRow[];
+  nKept?: number;
+  nRejected?: number;
+}
+
+/* ------------------------------------------------------------------ */
 /* Docking ligand prep (SMILES -> PDBQT + grid box + GPF/DPF)          */
 /* ------------------------------------------------------------------ */
 

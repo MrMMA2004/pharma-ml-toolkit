@@ -76,11 +76,11 @@ const INSTALL_STEPS: InstallStep[] = [
     title: "Open the playground",
     description:
       "A tabbed Tkinter GUI over every domain — chemistry, PK/PD dosing, ML on your CSVs, and the generative GA. Every trained model ships as a one-click report bundle (report.html + figures + tables, optional report.pdf — the CLI --plots/--pdf-report story, mouse edition), and Check CSV… audits any new dataset against the last model before you predict — in both the Data & ML tab and the Deep Learning tab (the ml check story, mouse edition). No terminal needed; works straight after unzipping.",
-    commands: ["python playground.py"],
+    commands: ["python studio.py"],
   },
   {
     title: "Verify the install",
-    description: "5145 tests should pass and the CLI answers with its version.",
+    description: "4899 tests should pass and the CLI answers with its version.",
     commands: ["python -m pytest", "pharmaml --version", "cat VERSION"],
   },
 ];
@@ -309,7 +309,7 @@ function collectDirSummary(
 ): Array<{ name: string; files: number; size: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "5145 pytest cases across all domains",
+    tests: "4899 pytest cases across all domains",
     examples: "eight executed notebooks + seven no-output twins + runnable demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
@@ -336,7 +336,7 @@ function collectDirSummary(
       name: "(root)",
       files: rootFiles,
       size: rootBytes,
-      note: "README, CHANGELOG, VERSION, playground.py, pyproject.toml, Dockerfile, requirements.txt",
+      note: "README, CHANGELOG, VERSION, studio.py + ui/, pyproject.toml, Dockerfile, requirements.txt",
     });
   }
   return out;
@@ -601,7 +601,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="5145" countTo={5145} label="passing tests" />
+          <StatChip icon={CircleCheck} value="4899" countTo={4899} label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}
@@ -1010,7 +1010,7 @@ export function DownloadPanel() {
           />
           <CommandStrip
             command="cat VERSION"
-            hint="what you have now — or python playground.py --version"
+            hint="what you have now — cat VERSION inside the archive"
           />
           <div className="space-y-1.5">
             <p className="text-[11px] leading-snug text-muted-foreground">

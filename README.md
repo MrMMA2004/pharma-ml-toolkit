@@ -4,9 +4,9 @@
 
 ### Pharmaceutical machine learning, from compound table to reproducible report
 
-**An offline-first Python toolkit, graphical playground and web console for cheminformatics, QSAR, PK/PD, docking, explainable AI and scientific visualization.**
+**An offline-first Python toolkit, PySide6 Studio and web console for cheminformatics, QSAR, PK/PD, docking, explainable AI and scientific visualization.**
 
-[![Version 1.2.116](https://img.shields.io/badge/version-1.2.116-0f766e)](pharma-ml-toolkit/CHANGELOG.md)
+[![Version 1.2.145](https://img.shields.io/badge/version-1.2.145-0f766e)](pharma-ml-toolkit/CHANGELOG.md)
 [![Python 3.10+](https://img.shields.io/badge/python-%E2%89%A5%203.10-3776ab?logo=python&logoColor=white)](pharma-ml-toolkit/pyproject.toml)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-525252)](pharma-ml-toolkit/LICENSE)
 [![8 executed notebooks](https://img.shields.io/badge/notebooks-8%20executed-6d28d9)](pharma-ml-toolkit/examples/)
@@ -14,7 +14,7 @@
 [Quick start](#quick-start) ·
 [Capabilities](#capabilities) ·
 [Examples](#examples-and-documentation) ·
-[Download v1.2.116](download/pharma-ml-toolkit-v1.2.116.zip) ·
+[Download v1.2.145](download/pharma-ml-toolkit-v1.2.145.zip) ·
 [Full user guide](pharma-ml-toolkit/README.md)
 
 </div>
@@ -34,7 +34,7 @@ PharmaML brings the repetitive parts of a computational-pharmacology workflow in
 | **Docking & molecular workflows** | Prepare ligands and receptors, calculate grid boxes, run AutoDock Vina-compatible workflows and analyze docking results. |
 | **Explainable & generative ML** | Inspect feature effects and applicability domains, use deep or ensemble models, and evaluate generated molecular libraries. |
 | **Reports & visualization** | Create accessible Matplotlib figures, HTML/SVG/PDF exports, model cards, dataset reports and reproducible run manifests. |
-| **Desktop & web interfaces** | Explore the same package through a local graphical playground or browse code, APIs, notebooks and downloads in the included web console. |
+| **Desktop & web interfaces** | Explore the same package through the 17-page PharmaML Studio or browse code, APIs, notebooks and downloads in the included web console. |
 
 <p align="center">
   <a href="pharma-ml-toolkit/examples/chart_readability.py">
@@ -46,23 +46,26 @@ PharmaML brings the repetitive parts of a computational-pharmacology workflow in
 
 ## Quick start
 
-### Python package and graphical playground
+### Python package and PharmaML Studio
 
 PharmaML supports **Python 3.10–3.12**. The project is currently distributed from GitHub and versioned ZIP archives, not as a PyPI release.
 
 ```bash
 git clone https://github.com/MrMMA2004/pharma-ml-toolkit.git
 cd pharma-ml-toolkit/pharma-ml-toolkit
-python -m pip install -e ".[chem,reports]"
+# Install the verified core stack, then the package
+python -m pip install -r requirements.txt
+python -m pip install -e .
 
 # Inspect the command-line interface
 pharmaml --help
 
-# Launch the local graphical playground
-python playground.py
+# Launch the 17-page PySide6 Studio after enabling the pinned
+# "Studio GUI" block in requirements.txt and reinstalling it
+python studio.py
 ```
 
-Prefer a downloaded snapshot? Get the **[v1.2.116 source ZIP](download/pharma-ml-toolkit-v1.2.116.zip)**, extract it, enter its `pharma-ml-toolkit/` directory and run the same editable-install command. See the [installation guide](pharma-ml-toolkit/README.md#installation) for optional docking, boosting, explainability, deep-learning and development dependencies.
+Prefer a downloaded snapshot? Get the **[v1.2.145 source ZIP](download/pharma-ml-toolkit-v1.2.145.zip)**, extract it, enter its `pharma-ml-toolkit/` directory and run the same editable-install command. See the [installation guide](pharma-ml-toolkit/README.md#installation) for optional Studio GUI, cheminformatics, docking, boosting, explainability, deep-learning and development dependencies.
 
 ### Web console
 
@@ -89,7 +92,6 @@ Start with an executed notebook or jump directly to the reference material:
 | [Docking workflow](pharma-ml-toolkit/examples/complete_docking_workflow.ipynb) | Ligand preparation, docking and result analysis. |
 | [Generative workflow](pharma-ml-toolkit/examples/complete_generative_workflow.ipynb) | Molecular generation and evaluation. |
 | [API & module index](pharma-ml-toolkit/docs/INDEX.md) | Package map and links into the detailed documentation. |
-| [Chart readability guide](pharma-ml-toolkit/docs/CHART_READABILITY.md) | Figure sizing, typography, export formats and accessibility conventions. |
 | [Full user guide](pharma-ml-toolkit/README.md) | Detailed domain coverage, CLI, deployment, testing and troubleshooting. |
 | [Changelog](pharma-ml-toolkit/CHANGELOG.md) | Release history and migration notes. |
 
@@ -99,7 +101,7 @@ Every notebook also has a `*_no_output.ipynb` twin for a clean starting point. T
 
 ```text
 pharma-ml-toolkit/
-├── pharma-ml-toolkit/       Python package, desktop playground and full manual
+├── pharma-ml-toolkit/       Python package, PharmaML Studio and full manual
 │   ├── src/pharmaml/        Typed library source
 │   ├── examples/            Executed notebooks and runnable scripts
 │   ├── tests/               Python unit and integration tests
@@ -114,15 +116,14 @@ pharma-ml-toolkit/
 
 ## Verification and reproducibility
 
-The v1.2.116 source release was validated with:
+The [v1.2.145 release record](pharma-ml-toolkit/CHANGELOG.md) reports:
 
-- **3,489 passing tests**, 44 skips and 24 environment-specific deselections;
-- **120 notebook and path-leakage checks** across eight refreshed notebook pairs;
-- **769 applicable doctests**, with zero failures and three skips;
-- clean full-source **Ruff** and **mypy** checks; and
-- archive integrity, fresh-import and chart-rendering smoke tests.
+- **4,899 collected pytest and doctest cases**—4,101 tests plus 798 doctests—with all eight verification chunks green;
+- **eight executed notebooks refreshed at v1.2.145**, together with their clean no-output twins;
+- a **1,001-file, 316,019-line** release census; and
+- archive integrity verification for the 20,140,128-byte release ZIP.
 
-Native GUI/XRender execution was unavailable in the release environment; optional native GUI and RDKit-drawing tests remain explicitly excluded rather than silently skipped. Reproduction commands and the complete test inventory are in the [testing guide](pharma-ml-toolkit/README.md#testing) and [changelog](pharma-ml-toolkit/CHANGELOG.md).
+The test inventory covers domain calculations, data leakage, notebooks, CLI, visualization, web parity and the seventeen Studio pages. See the [testing guide](pharma-ml-toolkit/README.md#testing), [GUI audit](pharma-ml-toolkit/docs/gui/GUI_AUDIT.md) and [changelog](pharma-ml-toolkit/CHANGELOG.md) for the complete release evidence and reproduction commands.
 
 ## Contributing and license
 

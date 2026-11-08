@@ -1,0 +1,1150 @@
+16. COMPLETE GUI REDESIGN USING PYSIDE6, PYQTGRAPH, QT-MATERIAL, AND
+QDARKSTYLESHEET
+
+16.1. Primary Objective
+
+Completely redesign the existing application's graphical user interface using four
+complementary technologies:
+
+1. PySide6 (Qt for Python): The primary desktop GUI framework.
+2. PyQtGraph: The scientific plotting, data visualization, and interactive graphics engine.
+3. Qt-Material: The primary UI styling and Material Design theme system.
+4. QDarkStyleSheet: An optional alternative dark/light styling framework.
+
+Official repositories:
+
+- PySide6: https://github.com/qtproject/pyside-pyside-setup
+- PyQtGraph: https://github.com/pyqtgraph/pyqtgraph
+- Qt-Material: https://github.com/UN-GCPDS/qt-material
+- QDarkStyleSheet: https://github.com/ColinDuquesnoy/QDarkStyleSheet
+
+The objective is to transform the existing GUI into a professional, modern, intuitive, responsive,
+visually consistent, and maintainable desktop application.
+
+This is a complete UI/UX redesign, not merely a cosmetic modification.
+
+Preserve all existing backend functionality, database integrations, algorithms, modules,
+datasets, and application capabilities while replacing or substantially improving the graphical
+
+presentation and user interaction layer.
+
+The redesigned interface must provide appropriate visual and interactive access to all relevant
+project features, including scientific data, computational workflows, database operations, and
+machine learning functionality.
+
+---
+
+16.2. Repository Inspection and Technical Evaluation
+
+Before implementation, inspect all four repositories and their relevant documentation.
+
+PySide6
+
+Investigate:
+
+- QtWidgets.
+- QtGui.
+- QtCore.
+- QtSql.
+- QtQuick and QML where relevant.
+- Signals and slots.
+- Qt Designer.
+- Model/View architecture.
+- QThread and QThreadPool.
+- QSettings.
+
+- Qt resource systems.
+- Dialogs, menus, toolbars, and custom widgets.
+
+PyQtGraph
+
+Investigate:
+
+- PlotWidget.
+- ImageView.
+- GraphicsView.
+- GraphicsLayoutWidget.
+- PlotItem.
+- ViewBox.
+- ImageItem.
+- ScatterPlotWidget.
+- HistogramLUTWidget.
+- GradientWidget.
+- ColorMapWidget.
+- DataTreeWidget.
+- TableWidget.
+- ConsoleWidget.
+- Parameter-related widgets and tools.
+- OpenGL-based visualization components where appropriate.
+
+Examine the examples and performance recommendations before selecting components.
+
+Qt-Material
+
+Investigate:
+
+- Built-in Material Design themes.
+- Light and dark themes.
+- Custom color palettes.
+- Accent colors.
+- Custom fonts.
+- Custom CSS stylesheets.
+- Runtime theme switching.
+- Theme selection menus.
+- Interactive theme customization.
+- Density scaling.
+- Theme export.
+- Resource and icon management.
+
+QDarkStyleSheet
+
+Investigate:
+
+- Dark and light palettes.
+- Qt stylesheet architecture.
+- Customizable palette colors.
+
+- Widget styling.
+- Resource and icon integration.
+- PySide6 compatibility.
+- Interaction with custom Qt widgets.
+- Compatibility with PyQtGraph.
+
+Review current releases, official documentation, examples, dependency requirements, and
+known compatibility issues.
+
+Do not assume that every component is necessary. Select features according to actual project
+requirements.
+
+---
+
+16.3. Framework Responsibilities and Integration Strategy
+
+Use each library according to its intended purpose.
+
+Technology| Responsibility| Implementation Strategy
+PySide6| Application architecture| Main windows, navigation, forms, dialogs, widgets, events
+PyQtGraph| Data visualization| Scientific charts, image analysis, interactive plots, data
+exploration
+Qt-Material| Primary styling| Material Design, colors, typography, themes, visual consistency
+QDarkStyleSheet| Alternative styling| Optional dark/light themes and palette customization
+
+Architecture Rules
+
+- PySide6 must be the primary GUI framework.
+- PyQtGraph must provide scientific and computational visualizations.
+- Qt-Material should be evaluated as the default styling system.
+- QDarkStyleSheet should be treated as an alternative styling provider rather than automatically
+combined with Qt-Material.
+- Avoid conflicting global stylesheets.
+- Create a consistent styling interface so that the application can switch between supported
+theme providers without rewriting individual screens.
+- Do not mix PyQt and PySide bindings in the same application process.
+- Use native PySide6 widgets wherever possible.
+- Use custom widgets only when they provide a genuine improvement.
+
+The application architecture must remain modular and maintainable.
+
+---
+
+16.4. Existing GUI Assessment
+
+Before redesigning the interface, thoroughly inspect the existing GUI and its relationship with
+the backend.
+
+Identify:
+
+- Existing windows and screens.
+- Available menus and navigation elements.
+- Existing buttons, forms, dialogs, and interactive components.
+- Current user workflows.
+
+- Existing functionality and execution paths.
+- Database connections and data presentation mechanisms.
+- Existing charts, tables, visualizations, and output panels.
+- UI-related dependencies and supporting modules.
+- Usability problems and inconsistent design patterns.
+- Performance bottlenecks and responsiveness issues.
+
+Map every existing GUI feature to its corresponding backend functionality.
+
+Create an inventory of existing screens and identify which components should be preserved,
+redesigned, consolidated, or replaced.
+
+Do not remove or hide existing capabilities simply because the new interface has a different
+layout.
+
+---
+
+16.5. GUI Architecture
+
+Implement a clean separation between three primary layers:
+
+1. Presentation Layer
+
+PySide6 windows, widgets, dialogs, navigation, styling, and visualization components.
+
+2. Application Logic Layer
+
+Existing business logic, algorithms, computational workflows, model execution, and application
+services.
+
+3. Data Layer
+
+Database operations, data access, data models, persistence mechanisms, and external data
+sources.
+
+Use an appropriate architecture such as MVC, MVP, or MVVM when justified by project
+complexity.
+
+Requirements:
+
+- Keep GUI code separate from business logic.
+- Avoid placing database queries and computational algorithms directly inside widget classes.
+- Reuse existing backend functions and modules.
+- Use Qt signals and slots for component communication.
+- Keep UI components modular and reusable.
+- Ensure that GUI components do not depend unnecessarily on database implementation details.
+- Allow the GUI to evolve independently of the backend.
+- Avoid unnecessary architectural complexity.
+
+---
+
+16.6. Professional UI/UX and Visual Design
+
+Create a cohesive, modern, professional desktop interface.
+
+The interface should follow a consistent design system covering:
+
+- Color palette.
+- Typography.
+- Spacing and margins.
+- Border radii.
+- Component dimensions.
+- Icons.
+- Button styles.
+- Input controls.
+- Tables.
+- Dialogs.
+- Navigation elements.
+- Status indicators.
+- Charts and visualization panels.
+
+Prioritize:
+
+- Clean and uncluttered layouts.
+- Clear visual hierarchy.
+- Consistent alignment.
+- Readable typography.
+- Meaningful whitespace.
+
+- Intuitive navigation.
+- Clear visual feedback.
+- Consistent interaction patterns.
+- Appropriate visual contrast.
+
+Avoid excessive animations, unnecessary decorative elements, and visually distracting effects.
+
+The result should resemble a polished professional desktop application rather than a collection
+of default Python widgets.
+
+---
+
+16.7. Main Application Layout and Navigation
+
+Design the application structure according to its actual functionality and user workflows.
+
+Consider the following components where appropriate:
+
+- Main application window.
+- Collapsible sidebar navigation.
+- Top navigation bar.
+- Dashboard or home screen.
+- Dedicated feature pages.
+- Central content area.
+- Data tables and visualization panels.
+- Settings and configuration screens.
+
+- Help and documentation section.
+- Status bar.
+- Notification system.
+
+Evaluate suitable Qt components:
+
+- "QMainWindow"
+- "QWidget"
+- "QStackedWidget"
+- "QSplitter"
+- "QTabWidget"
+- "QToolBar"
+- "QMenuBar"
+- "QStatusBar"
+- "QDialog"
+- "QDockWidget"
+- "QScrollArea"
+
+Use appropriate layouts and dynamic resizing.
+
+Do not add unnecessary screens. Every navigation item must correspond to a real application
+capability.
+
+---
+
+16.8. PyQtGraph: Scientific Data Visualization Engine
+
+Integrate PyQtGraph as the primary scientific plotting and interactive visualization library.
+
+Its performance-oriented architecture uses NumPy and Qt graphics capabilities, making it
+particularly suitable for scientific and engineering applications.
+
+16.8.1. Interactive Scientific Charts
+
+Use "PlotWidget" and related components to implement:
+
+- Line plots.
+- Multiple data series.
+- Scatter plots.
+- Histograms.
+- Time-series visualization.
+- Statistical distributions.
+- Comparison charts.
+- Real-time data plotting.
+- Interactive scientific measurements.
+- Multi-panel visualizations.
+
+Where useful, support:
+
+- Zooming and panning.
+- Mouse-coordinate inspection.
+- Interactive legends.
+
+- Data-point selection.
+- Axis customization.
+- Grid controls.
+- Linked axes.
+- Automatic range adjustment.
+- Dynamic updates.
+- Custom colors and line styles.
+- Appropriate scientific labels and units.
+
+Charts must be connected to actual application data, not populated with fabricated
+demonstration values.
+
+16.8.2. ImageView and Image Analysis
+
+Use PyQtGraph's "ImageView" and related components whenever image data visualization is
+relevant.
+
+Support:
+
+- Two-dimensional image visualization.
+- Three-dimensional image stacks.
+- Frame and slice navigation.
+- Image intensity inspection.
+- Histogram visualization.
+- Adjustable intensity levels.
+- Editable color gradients.
+
+- Lookup tables and colormaps.
+- Region of Interest (ROI) selection.
+- ROI-based analysis.
+- Image normalization.
+- Background subtraction.
+- Image export.
+
+For three-dimensional arrays, provide appropriate controls for navigating between frames or
+slices.
+
+Use image-processing libraries where necessary to load and preprocess the actual image
+formats.
+
+16.8.3. Interactive ROI and Data Exploration
+
+Implement Region of Interest functionality when appropriate.
+
+Support:
+
+- Interactive rectangular ROI.
+- Other appropriate ROI geometries.
+- Region selection.
+- Measurement extraction.
+- Signal or intensity profiles.
+- Region-based statistical analysis.
+- Linking ROI selections to corresponding data.
+
+- Visual feedback during interaction.
+
+Do not introduce ROI controls into sections where they have no meaningful application.
+
+16.8.4. Histograms, Color Maps, and Scientific Controls
+
+Use:
+
+- "HistogramLUTWidget"
+- "GradientWidget"
+- "ColorMapWidget"
+- Appropriate PyQtGraph plotting components.
+
+Provide meaningful visualization controls for:
+
+- Intensity adjustment.
+- Color mapping.
+- Data ranges.
+- Histogram ranges.
+- Display normalization.
+- Scientific visualization settings.
+
+Maintain consistency between visualization controls and the actual underlying data.
+
+16.8.5. Advanced Data Visualization
+
+Where appropriate, investigate:
+
+- "GraphicsLayoutWidget" for multi-panel figures.
+- "ScatterPlotWidget" for data exploration.
+- "DataTreeWidget" for hierarchical data inspection.
+- "TableWidget" for lightweight data presentation.
+- "ConsoleWidget" for an optional controlled interactive console.
+- Parameter-related widgets for configurable analysis settings.
+- "GLViewWidget" for optional OpenGL-based three-dimensional visualization.
+
+Only implement advanced components when they provide a meaningful benefit.
+
+Do not expose an unrestricted interactive Python console unless there is a specific, justified
+requirement and appropriate security controls.
+
+16.8.6. Scientific and Machine Learning Visualization
+
+For the project's computational and machine learning functionality, evaluate PyQtGraph for:
+
+- Model performance visualization.
+- Training and validation curves.
+- Prediction versus actual plots.
+- Residual plots.
+- Feature importance charts.
+- Confusion matrices.
+
+- Classification result visualization.
+- Regression analysis.
+- Correlation matrices.
+- Data distribution plots.
+- Hyperparameter optimization results.
+- Real-time training progress.
+- Comparative model evaluation.
+
+Where useful, integrate these visualizations with existing machine learning workflows.
+
+Do not create charts for metrics that the underlying model or dataset does not actually provide.
+
+For plots requiring a specialized library or rendering capability beyond PyQtGraph, evaluate an
+appropriate complementary solution rather than forcing every visualization into one tool.
+
+16.8.7. Performance Optimization
+
+- Use NumPy arrays efficiently.
+- Avoid unnecessary data copying.
+- Implement downsampling or aggregation for very large datasets where appropriate.
+- Avoid excessive redraw operations.
+- Update charts incrementally when possible.
+- Separate heavy calculations from rendering.
+- Avoid unnecessary synchronization between independent plots.
+- Use OpenGL only when the benefit is demonstrated and the runtime environment supports it.
+- Provide a suitable fallback when optional graphics capabilities are unavailable.
+
+Do not sacrifice accuracy of scientific data to improve visual performance.
+
+---
+
+16.9. Qt-Material: Primary Theme and Styling System
+
+Evaluate Qt-Material as the preferred primary application styling framework.
+
+Use its features to establish a consistent Material Design visual language.
+
+16.9.1. Built-in Themes
+
+Evaluate available dark and light themes, including:
+
+- Dark Teal.
+- Dark Blue.
+- Dark Cyan.
+- Dark Purple.
+- Dark Amber.
+- Light Teal.
+- Light Blue.
+- Light Cyan.
+- Light Purple.
+- Other available themes.
+
+Choose an appropriate default theme and ensure consistent appearance throughout the
+application.
+
+16.9.2. Custom Theme Development
+
+Use Qt-Material customization facilities to control:
+
+- Primary color.
+- Secondary color.
+- Accent colors.
+- Light and dark color variants.
+- Primary and secondary text colors.
+- Font family.
+- Font size.
+- Line height.
+- Component density.
+- Button styles.
+- Custom CSS rules.
+
+Define a coherent project-specific palette rather than using unrelated default colors throughout
+the interface.
+
+16.9.3. Runtime Theme Switching
+
+Implement theme switching without unnecessarily restarting the application.
+
+Where appropriate, use:
+
+- "apply_stylesheet()"
+- "list_themes()"
+- "QtStyleTools"
+- "add_menu_theme()"
+- "show_dock_theme()"
+
+Provide a dedicated appearance or settings section for theme selection.
+
+Ensure that switching a theme does not reset unrelated application state.
+
+16.9.4. Custom Stylesheets
+
+Use custom stylesheets to refine the default Material Design appearance.
+
+Implement consistent styles for:
+
+- Buttons.
+- Inputs.
+- Tables.
+- Menus.
+- Dialogs.
+- Navigation.
+
+- Tooltips.
+- Status indicators.
+- Custom widgets.
+- Embedded plotting components where compatible.
+
+Use meaningful visual states for success, warning, danger, and informational actions.
+
+16.9.5. Density and Accessibility
+
+Evaluate the density scaling feature.
+
+Choose appropriate spacing and component dimensions for different display sizes and
+accessibility requirements.
+
+Do not make the interface excessively compact or visually crowded.
+
+16.9.6. Theme Export
+
+Evaluate the theme export functionality.
+
+Where useful, export customized themes into:
+
+- ".qss" stylesheet files.
+- ".rcc" resource collections.
+- Associated local theme assets.
+
+Keep exported resources inside an organized project directory.
+
+Document how the exported theme is loaded and maintained.
+
+---
+
+16.10. QDarkStyleSheet: Alternative Theme Framework
+
+Evaluate QDarkStyleSheet as an alternative to Qt-Material.
+
+Its main purpose in this project is to provide a consistent dark/light Qt widget styling system.
+
+16.10.1. Theme Capabilities
+
+Investigate:
+
+- Dark and light palettes.
+- Consistent widget appearance.
+- Palette customization.
+- Theme-related color variables.
+- Stylesheet resource handling.
+- Qt widget compatibility.
+- Interaction with custom widgets and PyQtGraph.
+
+16.10.2. Optional Alternative Theme Provider
+
+Implement QDarkStyleSheet only if its verified compatibility and visual behavior justify including
+it.
+
+The application may offer the user a choice between supported style providers:
+
+- Qt-Material themes.
+- QDarkStyleSheet themes.
+- Native Qt styling, if useful as a fallback.
+
+Implement these choices through a centralized theme-management component.
+
+16.10.3. Qt6 Compatibility Verification
+
+Before adopting QDarkStyleSheet:
+
+- Inspect its latest release and official compatibility information.
+- Verify PySide6 compatibility using the installed version.
+- Check its Qt6-related limitations and known instabilities.
+- Test all essential widgets.
+- Check its behavior with PyQtGraph.
+- Pin a verified dependency version.
+- Document any remaining limitations.
+
+Do not assume that compatibility with older Qt versions automatically guarantees reliable
+behavior with the current PySide6 environment.
+
+16.10.4. Styling Conflict Prevention
+
+Never apply Qt-Material and QDarkStyleSheet globally as competing stylesheets.
+
+Use one active global theme provider at a time.
+
+When switching providers:
+
+1. Remove or replace the previously active stylesheet.
+2. Apply the selected theme.
+3. Refresh relevant custom components.
+4. Update visualization colors where necessary.
+5. Verify that the interface remains visually consistent.
+
+---
+
+16.11. Unified Theme Management
+
+Create a reusable theme management module, for example:
+
+"ui/theme_manager.py"
+
+Its responsibilities should include:
+
+- Initial theme selection.
+- Active theme tracking.
+- Theme switching.
+- Theme persistence.
+- Theme provider selection.
+- Custom color management.
+- Styling of custom widgets.
+- Synchronization with chart colors.
+- Fallback handling.
+- Theme compatibility validation.
+
+The theme manager must prevent stylesheet conflicts.
+
+Ensure that PyQtGraph visualizations adapt to the selected application theme.
+
+For example:
+
+- Dark backgrounds in dark themes.
+- Appropriate foreground colors.
+- Readable axis labels.
+- Visible grid lines.
+- Consistent chart colors.
+- Suitable selection and highlight colors.
+
+Do not assume that changing the application's stylesheet automatically updates every
+PyQtGraph plot element.
+
+---
+
+16.12. Data Presentation and Interactive Components
+
+Select suitable Qt components for presenting and interacting with project data.
+
+Examples include:
+
+- "QTableView" and "QAbstractTableModel" for structured datasets.
+- "QTreeView" for hierarchical information.
+- "QFormLayout" for structured input forms.
+- "QProgressBar" for long-running operations.
+- "QComboBox" for controlled selections.
+- "QLineEdit" and "QTextEdit" for text input.
+- "QFileDialog" for file selection.
+- "QMessageBox" for important notifications and errors.
+
+Where appropriate, provide:
+
+- Sorting and filtering.
+- Search functionality.
+- Pagination or incremental loading.
+- Column resizing and selection.
+- Copy and export operations.
+
+- Input validation.
+- Clear empty-state messages.
+- Useful error notifications.
+- Loading indicators.
+
+Do not load unnecessarily large datasets directly into the interface if model/view architecture or
+incremental loading would be more efficient.
+
+Use PyQtGraph for data visualization rather than unnecessarily creating custom plotting engines.
+
+---
+
+16.13. Scientific Visualization and Machine Learning Dashboard
+
+If the existing application includes computational chemistry, cheminformatics, machine learning,
+scientific data analysis, or model evaluation features, design appropriate dashboard sections
+for them.
+
+Potential sections include:
+
+Data Exploration
+
+- Dataset summaries.
+- Data distributions.
+- Missing-value analysis.
+- Interactive tables.
+- Correlation visualization.
+
+- Feature exploration.
+
+Machine Learning
+
+- Model performance.
+- Training history.
+- Prediction results.
+- Model comparisons.
+- Classification and regression metrics.
+- Feature importance.
+- Hyperparameter optimization.
+
+Scientific Analysis
+
+- Scientific plots.
+- Image visualization.
+- Statistical measurements.
+- Interactive analysis controls.
+- Exportable figures and reports.
+
+Project Management
+
+- Database status.
+- Dataset management.
+- Model management.
+
+- File management.
+- Execution history.
+- Application configuration.
+
+Only implement dashboard sections that correspond to actual project capabilities.
+
+Do not create placeholder dashboards or fabricated metrics merely to make the interface look
+comprehensive.
+
+---
+
+16.14. Responsiveness and Background Processing
+
+The graphical interface must remain responsive during computationally expensive operations.
+
+- Never execute long-running calculations directly on the GUI thread.
+- Use "QThread", "QThreadPool", "QRunnable", or another appropriate background execution
+mechanism.
+- Provide progress indicators for long-running operations.
+- Support cancellation where technically safe.
+- Handle worker errors and communicate results through Qt signals.
+- Prevent duplicate submissions of expensive operations when necessary.
+- Avoid race conditions and unsafe shared-state access.
+- Release resources appropriately when background tasks finish.
+- Avoid updating GUI widgets directly from worker threads.
+
+Pay particular attention to:
+
+- Database operations.
+- Machine learning workflows.
+- Model training.
+- Data processing.
+- Large file operations.
+- Scientific visualization preparation.
+- Dataset loading and preprocessing.
+
+For live plotting, use efficient update mechanisms and avoid repeatedly rebuilding entire plots.
+
+---
+
+16.15. User Experience, Accessibility, and Application State
+
+Implement where appropriate:
+
+- Consistent keyboard navigation.
+- Useful keyboard shortcuts.
+- Tooltips for non-obvious controls.
+- Accessible labels.
+- Sensible focus management.
+- Clear error messages.
+- Confirmation dialogs for destructive operations.
+
+- Input validation before execution.
+- Useful default values.
+- Persistent user preferences.
+- Appropriate window resizing.
+- Support for different display scaling settings.
+
+Use "QSettings" or the existing configuration mechanism to preserve:
+
+- Window geometry.
+- Window position.
+- Theme selection.
+- User preferences.
+- Relevant navigation state.
+- Table column widths.
+- Sorting preferences.
+- Application-specific settings.
+
+Do not store sensitive credentials or authentication information in ordinary UI settings.
+
+---
+
+16.16. Modular GUI Project Structure
+
+Organize the GUI into a dedicated and maintainable package.
+
+A possible structure is:
+
+project/
+|
+
+├── playground.py
+|
+
+├── ui/
+│ ├── __init__.py
+│ ├── main_window.py
+│ ├── theme_manager.py
+│ ├── app_settings.py
+│ │
+│ ├── pages/
+│ │ ├── dashboard.py
+│ │ ├── data_explorer.py
+│ │ ├── model_analysis.py
+│ │ └── settings_page.py
+│ │
+│ ├── widgets/
+│ │ ├── navigation.py
+│ │ ├── data_table.py
+│ │ ├── plot_widget.py
+│ │ ├── progress_panel.py
+│ │ └── notification_widget.py
+│ │
+
+│ ├── dialogs/
+│ │ └── ...
+│ │
+│ ├── workers/
+│ │ └── ...
+│ │
+│ ├── styles/
+│ │ ├── custom.css
+│ │ └── themes/
+│ │
+│ └── resources/
+│
+
+└── ...
+
+│
+├── tests/
+│ └── ui/
+│
+
+└── ...
+
+│
+└── requirements.txt
+
+Treat this structure as a reference, not a mandatory restructuring requirement.
+
+Adapt it to the existing architecture.
+
+Do not create unnecessary files or move unrelated backend modules solely to match this
+example.
+
+---
+
+16.17. Installation, Dependencies, and Compatibility
+
+Check the existing Python environment before installing or upgrading packages.
+
+Evaluate the compatibility of:
+
+- Python.
+- PySide6.
+- Qt runtime.
+- PyQtGraph.
+- NumPy.
+- SciPy.
+- Qt-Material.
+- QDarkStyleSheet.
+- Other existing project dependencies.
+
+Pay particular attention to NumPy compatibility with the existing scientific and machine learning
+stack.
+
+The current PyQtGraph repository specifies recent-version requirements including Python 3.12+,
+Qt 6.8+, and NumPy 2.2+. Verify the requirements of the actual version selected before
+changing the environment.
+
+Requirements:
+
+- Avoid unnecessary dependency upgrades.
+- Do not break existing machine learning, scientific computing, or database packages.
+- Do not install incompatible Qt bindings simultaneously.
+- Prefer stable and mutually compatible package versions.
+- Pin verified versions in the dependency specification.
+- Test the final environment in a clean installation where practical.
+- Document installation and execution instructions.
+
+Evaluate optional dependencies such as SciPy, OpenGL-related packages, and other extensions
+only when their functionality is actually required.
+
+Do not install every optional package indiscriminately.
+
+---
+
+16.18. GUI Migration Strategy
+
+Do not replace the entire GUI in one uncontrolled modification.
+
+Follow this sequence:
+
+1. Audit the existing GUI and its backend dependencies.
+2. Document existing user workflows and GUI capabilities.
+3. Establish the new PySide6 architecture.
+4. Inspect and evaluate all three complementary libraries: PyQtGraph, Qt-Material, and
+QDarkStyleSheet.
+
+5. Verify package and environment compatibility.
+6. Establish the new design system and theme strategy.
+7. Design the main application structure and navigation.
+8. Implement the main window and reusable components.
+9. Implement the centralized theme manager.
+10. Integrate scientific visualization components.
+11. Migrate existing features incrementally.
+12. Connect each interface component to the appropriate backend functionality.
+13. Validate each completed screen.
+14. Perform integration and regression testing.
+15. Remove obsolete GUI components only after their replacements have been verified.
+
+Maintain recovery points and preserve working versions throughout the migration.
+
+---
+
+16.19. GUI Testing and Verification
+
+Test the redesigned GUI systematically.
+
+Functional Testing
+
+Verify:
+
+- Application startup and shutdown.
+
+- Navigation between screens.
+- Button and menu functionality.
+- Input validation.
+- Database interactions.
+- File import and export.
+- Data presentation.
+- Model execution.
+- Charts and visualizations.
+- Background processing.
+- Error handling.
+
+PyQtGraph Testing
+
+Verify:
+
+- Plot rendering.
+- Interactive zooming and panning.
+- Data updates.
+- Large dataset performance.
+- ImageView functionality.
+- ROI interaction.
+- Histogram and colormap controls.
+- Export operations.
+- Theme compatibility.
+- Optional OpenGL functionality and fallbacks.
+
+Theme Testing
+
+Verify:
+
+- Qt-Material theme initialization.
+- Light and dark theme appearance.
+- Runtime theme switching.
+- Custom color and font settings.
+- QDarkStyleSheet compatibility, if adopted.
+- Theme persistence.
+- Stylesheet conflict prevention.
+- PyQtGraph chart appearance after switching themes.
+
+UI and Regression Testing
+
+Verify:
+
+- Window resizing.
+- Screen scaling.
+- Keyboard interactions.
+- State persistence.
+- Widget behavior.
+- Existing backend functionality.
+- Database integrity.
+
+Use appropriate testing tools such as "pytest", "pytest-qt", and Qt's own testing utilities where
+compatible.
+
+Test individual widgets as well as complete user workflows.
+
+Do not consider the redesign complete merely because the application window opens
+successfully.
+
+---
+
+16.20. GUI Documentation and Deployment
+
+Create or update documentation covering:
+
+- GUI architecture.
+- Main application entry point.
+- Screen and navigation structure.
+- Reusable widget components.
+- PyQtGraph visualization architecture.
+- Theme management.
+- Qt-Material customization.
+- QDarkStyleSheet integration, if implemented.
+- Backend integration.
+- Dependencies and compatible versions.
+- Installation instructions.
+
+- Application launch instructions.
+- Testing procedures.
+- Theme customization instructions.
+
+Ensure that the project can be installed and launched using documented procedures.
+
+Evaluate deployment requirements and licensing obligations before distributing the application.
+
+---
+
+16.21. GUI Deliverables
+
+Provide the following deliverables:
+
+A. Complete Redesigned GUI
+
+A professional and fully functional PySide6 application.
+
+B. Scientific Visualization Integration
+
+PyQtGraph-based interactive charts, image visualization, and other relevant scientific
+visualizations.
+
+C. Theme Management System
+
+A centralized styling architecture with Qt-Material as the preferred primary theme provider and
+
+QDarkStyleSheet as an optional alternative when verified compatible.
+
+D. Modular UI Source Code
+
+Organized windows, pages, widgets, dialogs, theme modules, and background workers.
+
+E. Backend Integration
+
+Verified connections between all redesigned interface components and existing application
+functionality.
+
+F. Dependency Specifications
+
+Updated package requirements with verified compatibility.
+
+G. GUI Documentation
+
+Architecture, installation, customization, and execution instructions.
+
+H. GUI Testing Report
+
+Functional tests, integration tests, responsiveness tests, theme tests, and regression results.
+
+I. Interface Screenshots
+
+Screenshots showing the actual redesigned interface, including representative dashboard, data
+
+analysis, scientific visualization, and appearance settings screens where applicable.
+
+J. GitHub Backup
+
+Ensure all authorized GUI source files, theme resources, configuration files, documentation, and
+tests are included in the project's existing GitHub backup system.
+
+---
+
+16.22. GUI Acceptance Criteria
+
+The redesign is complete only when:
+
+- [ ] PySide6 is correctly integrated into the existing project.
+- [ ] The previous GUI has been fully assessed.
+- [ ] All existing relevant GUI capabilities have been mapped.
+- [ ] A consistent and professional visual design has been implemented.
+- [ ] The main application window and navigation work correctly.
+- [ ] All relevant features are accessible through the redesigned interface.
+- [ ] Existing backend functionality remains intact.
+- [ ] Database operations work correctly.
+- [ ] PyQtGraph visualizations work correctly.
+- [ ] Scientific data and image visualization function correctly where applicable.
+- [ ] Qt-Material themes are correctly applied.
+- [ ] Runtime theme switching works correctly.
+- [ ] QDarkStyleSheet has been evaluated and integrated only if its compatibility is verified.
+
+- [ ] Global stylesheet conflicts are prevented.
+- [ ] PyQtGraph plots remain readable under supported themes.
+- [ ] Long-running operations do not freeze the GUI.
+- [ ] Input validation and error handling work correctly.
+- [ ] The interface supports appropriate resizing and scaling.
+- [ ] Relevant GUI tests have been executed.
+- [ ] Regression testing confirms that existing functionality is preserved.
+- [ ] Installation and execution instructions are documented.
+- [ ] Updated GUI source files and resources are included in the GitHub backup.
+
+---
+
+FINAL GUI DESIGN PRINCIPLE
+
+Build a complete desktop application, not just a visually attractive window.
+
+Use:
+
+- PySide6 for the application framework and interaction architecture.
+- PyQtGraph for scientific and interactive data visualization.
+- Qt-Material for the primary Material Design experience.
+- QDarkStyleSheet as an optional alternative dark/light styling system.
+
+Preserve existing backend functionality while significantly improving the user experience, visual
+consistency, scientific visualization, navigation, performance, and maintainability.
+
+Every visual component must serve a real functional purpose.
+
+Every visualization must use actual project data.
+
+Every theme must work consistently across the application.
+
+Every significant GUI modification must be tested and recoverable.
+
+The final GUI must be fully integrated with the existing application, documented, tested, and
+included in the verified GitHub backup.
+
+

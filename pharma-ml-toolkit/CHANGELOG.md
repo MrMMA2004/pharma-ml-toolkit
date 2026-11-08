@@ -1,83 +1,1638 @@
-## [1.2.116] — 2026-11-07
+## [1.2.145] — 2026-11-09
 
-### Fixed — shared playground styling and faithful subplot-spec rendering
+### Fixed — round 232: the Windows black-window bug (the user report)
 
-* **Every playground chart uses the shared renderer** — the remaining direct
-  `plt.subplots()` / raw `Figure(...)` paths (structure grids, OOF stacking,
-  scratch training, capacity sweeps, sequence forecasts, attention grids and
-  distribution samples) now use `new_figure()`. Conflicting grid overrides were
-  removed; molecule and heat-map panels explicitly disable grids where they
-  would obscure the image. A static regression guard prevents new direct
-  plotting calls from bypassing the house style.
-* **Matplotlib figure specs retain their layout** — `render_matplotlib()` now
-  honors `make_subplots()` cells, overall and subplot titles, axis titles,
-  horizontal/vertical bars, line/marker modes and heat-map colorbars. Traces no
-  longer collapse onto one unlabelled axes, unused cells are hidden, and empty
-  legends are omitted. Single-panel specs and path export retain their API.
-* **Verification** — the focused visualization/playground sizing suite passes
-  with **225 passed and 6 skipped**. The final applicable non-GUI suite exits 0
-  with **3,489 passed, 44 skipped and 24 deselected**; 769 applicable source
-  doctests collect with zero failures (three skips). All eight notebooks ran at
-  1.2.116, their no-output twins were rebuilt, and all 119 notebook-variant
-  guards pass. Full-source Ruff and mypy pass. Native `test_playground.py` and
-  RDKit XRender-dependent execution remain unavailable and are not claimed as
-  passed.
+* **`studio.py` launched with console noise and NO window on Windows**
+  (miniconda py312, PySide6): `ui/headless.py`'s displayless probe
+  tested only X11's `DISPLAY` — a variable that NEVER exists on Windows
+  (nor is it the whole story on Wayland) — so every Windows desktop
+  launch silently forced `QT_QPA_PLATFORM=offscreen`: the QApplication
+  ran with an invisible window, `app.exec()` blocked forever and no GUI
+  ever appeared.  The probe is now platform-aware: offscreen is chosen
+  ONLY on Linux-class platforms exposing neither `DISPLAY` nor
+  `WAYLAND_DISPLAY`; Windows/macOS always keep their native plugin, and
+  a caller-set `QT_QPA_PLATFORM` still wins.  7 decision-matrix tests
+  (`tests/ui/test_headless_platform.py`: Windows, macOS, Wayland-only,
+  X11, displayless Linux, explicit override, idempotence).
 
-### Shipped
+### Added — round 232: the Part-3 §21 slice 1 — hover data inspection on every chart
 
-* `pharma-ml-toolkit-v1.2.116.zip` — source, tests, documentation and refreshed
-  notebooks; ZIP integrity checked and safe copies retained under the
-  repository's archive protocol.
+* **`ui/widgets/chart_inspector.py::ChartInspector`** — every
+  `PlotPanel` (all fourteen pages plot through it) now carries: a
+  crosshair cursor; nearest-real-data-point snapping with a highlight
+  ring (the whole bar BODY is the hover target on bar charts/histograms;
+  the 8 %-of-visible-range tolerance is resolution-independent); a live
+  readout line under the plot with the EXACT values — series, x, y and
+  per-point metadata attached by the page (`meta=` on
+  `line`/`scatter`/`bars` or `attach_metadata()` afterwards) —
+  histograms read out exact bin boundaries + count, labelled bars read
+  out their category; per-point metadata is cached (§21.6: an expensive
+  provider runs once per point, the readout text only rebuilds when the
+  snapped point changes; a failing provider degrades to plain values);
+  a context menu with per-series visibility toggles, the
+  hover-inspection on/off switch and reset-to-default-view; and
+  click-to-select that pins the readout and emits `pointSelected(label,
+  index)` — the §21.5 drill-down wiring point.  Theme-aware through the
+  ChartPalette.  14 GUI tests (`tests/ui/test_chart_inspector.py`).
+* **PlotPanel API**: `set_inspection_enabled()` /
+  `inspection_enabled()` / `attach_metadata()`; the readout label has a
+  fixed minimum height so the layout never jumps when it fills (§23
+  thinking).
 
-## [1.2.115] — 2026-11-07
+### Docs repaired — the interrupted round 231's missing rows
 
-### Improved — readable, scalable charts in files, reports and the playground
+* The compaction-interrupted round 231 shipped v1.2.144's code and
+  release ritual but never wrote its CHANGELOG entry, COVERAGE row or
+  GUI_AUDIT progress — all three are reconstructed here (the §22 SMILES
+  previews, the Qt console-noise filter, and their 17 tests).
 
-* **One shared visual standard** — `new_figure()` now defaults to 9×6 inches,
-  120 display DPI and tight layout, with stronger title/label hierarchy,
-  quieter grid lines, subtle spines and more breathing room around ticks.
-  The optional positive `scale` argument enlarges the physical layout without
-  inflating fonts; `layout="constrained"` and `layout=None` remain available.
-  Existing plotting function signatures are unchanged.
-* **Crisp, uncropped exports** — `save_figure()` defaults to 220 DPI and
-  `figure_to_base64()` to 160 DPI, with explicit `dpi` overrides on both.
-  Tight export bounds include 0.16-inch padding and consistent figure
-  backgrounds. Reproducible SVG/PDF metadata handling is preserved. A
-  40-million-pixel safety budget lowers effective DPI only for exceptionally
-  large physical figures (the 77-compound notebook heat-map would otherwise
-  allocate roughly 100 million pixels before padding); ordinary exports keep
-  their full requested resolution and vector content remains vector. The new
-  `DEFAULT_FIGSIZE`, `EXPORT_DPI`, `HTML_DPI` and `MAX_RASTER_PIXELS` constants
-  make the defaults discoverable and reusable.
-* **Responsive playground figures** — default figure hosts grow from 330 to
-  390 pixels. Live TkAgg figures preserve aspect ratio as their hosts resize,
-  with a bounded 1.35× upscale and no intentional centre cropping. The PNG
-  fallback now renders at `HTML_DPI`, fits in both directions and uses
-  high-quality resampling; existing toolbars, crosshairs and session-report
-  registration remain in place.
-* **Documentation and example** — `docs/CHART_READABILITY.md` explains
-  physical scale versus output resolution, all overrides and GUI behavior.
-  `examples/chart_readability.py` produces a deterministic concentration–time
-  chart as PNG, SVG, PDF and self-contained HTML without a display server.
-* **Verification** — the RL-inclusive chart/export suite passes with **219
-  passed and 6 skipped**, and three display-independent playground sizing
-  tests cover shrinking, bounded upscaling and host height. The full applicable
-  non-GUI suite exits 0 with **3,486 passed, 44 skipped and 24 deselected**;
-  769 applicable source doctests collect with zero failures (three skips).
-  All eight notebooks executed at 1.2.115, their no-output twins were rebuilt,
-  and all 119 notebook-variant guards pass. Native `test_playground.py` and the
-  RDKit XRender-dependent groups were excluded because this image has no
-  working Tk/display, Xvfb or `libXrender`; they are not counted as passed.
-  Full-source Ruff and mypy, Python compilation, dependency consistency and
-  whitespace checks pass.
+## [1.2.144] — 2026-11-08 *(entry reconstructed in 1.2.145 — the interrupted round 231's ship)*
 
-### Shipped
+### Added — round 231: the Part-3 §22 SMILES previews + the Qt console-noise fix
 
-* `pharma-ml-toolkit-v1.2.115.zip` — source, tests, documentation, visual
-  example and refreshed notebooks; ZIP integrity checked and safe copies
-  retained under the repository's archive protocol.
+* **`ui/widgets/smiles_preview.py`** — `MoleculeRenderer`
+  (RDKit `MolDraw2DCairo` at 2× device pixels, a 128-entry FIFO render
+  cache — identical molecules are never redrawn — and honest
+  invalid-SMILES refusal), `MoleculePopup` (the 350 ms hover dwell,
+  §22.2's configurable interval) and `SmilesDetailDialog` (the §22.5
+  detail view: large structure, original + canonical SMILES, molecular
+  formula, weight, the Ertl SA score with method attribution — each
+  either computed or an explicit "not calculated" line, plus one-click
+  canonical-SMILES copy).  Wired onto the Generative tab's shared table
+  by COLUMN NAME, so every frame it binds (the SA board, the evolution
+  mutants, the topo/front children) gains the behaviour wherever a
+  SMILES / canonical / mutant / child column appears.
+* **`ui/qt_noise_filter.py`** — the user-reported v1.2.142 Windows
+  console noise (the `QFontDatabase` fonts-dir advice and the Qt 6.8
+  `QStyleHints` unique-connection chatter ×4) diagnosed BENIGN (Qt
+  notices, not failures); a message-handler filter installed BEFORE the
+  QApplication in `ui.run()` drops both, with the
+  `PHARMAML_STUDIO_QT_VERBOSE=1` escape hatch.  17 tests (5 filter incl.
+  a live `qInstallMessageHandler` round-trip, 12 preview tests on real
+  renders).
 
-## [1.2.114] — 2026-11-06
+## [1.2.143] — 2026-11-08
+
+### Added — round 230: the Part-3 §24 SA engine — Ertl synthetic accessibility end-to-end
+
+* **The engine** — `chem.sa_scoring` (exported from `pharmaml.chem`):
+  the Ertl–Schuffenhauer synthetic accessibility score on the real
+  fragment model — the RDKit wheel ships Ertl's own
+  `Contrib/SA_Score/fpscores.pkl.gz`, loaded lazily, so aspirin
+  scores 1.58 and caffeine 2.30 (the reference Contrib values), not
+  the histogram-less degradation.  Batch API: `sa_scores` (rows keep
+  the original SMILES, canonical form, score, easy/moderate/hard
+  band, per-row parse errors — invalid rows never crash the batch),
+  `filter_by_sa` (the optional max-SA bound *flags* rejects in place
+  — the §24.4 never-silently-discard contract), `sa_score_summary`
+  (mean ± std, range, the honest "computational estimate, not a route
+  plan" caveat).  37 tests.
+* **The oracle upgrade** — `chem.oracles.sa_score` now delegates to
+  the same lazy fragment loader (a Contrib-less RDKit build degrades
+  honestly to the complexity-only ranking) and switched to the
+  non-deprecated `rdFingerprintGenerator` Morgan API;
+  `penalized_logp` therefore moved onto the real SA scale (aspirin
+  1.137, ethanol -0.258 — the old -7.3-era pins were the degraded
+  scorer's artefacts; doctest and GUI pins trued).
+* **The generative wiring** — `generative.scoring.SAScoreObjective`
+  (§24.5): the objective window bounds become the easy/hard reward
+  anchors, so "SA score (ease of synthesis)" is selectable in the
+  Studio's Evolve objective combo — SA as ONE signal in the loop,
+  never the sole target (§24.5's explicit anti-goal).
+* **The Studio tab** — the Generative page's engine tabs gained "SA
+  score": paste molecules (four seeded defaults), set the optional
+  max-SA bound, get the ranked table (rank / SMILES / canonical /
+  score / band / status) with rejects kept in place and the summary
+  line.  6 GUI tests (defaults, filter, invalid rows, empty input,
+  bad bound, objective selection).
+* **The web bridge** — `/api/chem/sa-score` (zod-validated, ≤ 50
+  molecules, min/max bounds) over `scripts/sa_score_bridge.py`
+  (stdin→stdout JSON inside the venv) feeding the Explorer's
+  Playground `sa-score-card` (the SA calculator card in the
+  generative strip), with the card-directory/probe pins updated.
+* **Infrastructure hardening** — a ROOT `conftest.py` preloads the
+  round-206 EGL stub (`ui.headless.ensure_headless()`) for EVERY
+  pytest invocation: pytest-qt imports `PySide6.QtGui` at
+  `pytest_configure` (before any `tests/` conftest can run), so in an
+  EGL-less container every non-`tests/ui` invocation — the library
+  chunks and the `src/pharmaml` doctest chunk — INTERNALERRORed on
+  `libEGL.so.1`.  The suite is container-EGL-flip-proof now.
+* Round 230 also completed the interrupted round's ship (the
+  syntax-error fix in `ui/pages/generative.py`, the true-value test
+  pins the dead session guessed wrong: easiest-first ordering, the
+  2-kept/2-rejected filter split, `_obj_lo`/`_obj_hi` names).
+
+
+## [1.2.142] — 2026-11-08
+
+### Added — round 229: the Part-3 §20 checkpoint engine — long jobs pause/resume/stop without losing work
+
+* **The checkpoint engine** — `utils/checkpoints.py`
+  (`CheckpointManager` + `CheckpointInfo` + `default_directory`,
+  exported from `pharmaml.utils`): atomic self-verifying JSON
+  checkpoints for long-running jobs.  Every save is temp + `fsync` +
+  `os.replace` + directory `fsync` (a crash mid-write leaves the
+  previous checkpoint intact); each file carries a SHA-256 over its
+  canonical content, so a truncated or tampered newest checkpoint is
+  QUARANTINED to `*.json.corrupt` on read and the resume falls back to
+  the previous valid one instead of failing; rotation keeps the newest
+  `keep` (a 40-hour job checkpoints thousands of times without filling
+  the disk); states are plain JSON (no pickle — a malicious checkpoint
+  cannot execute on load); inputs are validated strictly (plain
+  filename stems, non-negative int steps, dict states, JSON-serialisable
+  payloads with the actionable hint to store large artefacts in the
+  caller's own files).  36 engine tests.
+* **The family benchmark wired end-to-end** —
+  `benchmark_feature_families` grows `checkpoint_dir` /
+  `checkpoint_name` / `resume`: after EVERY completed row (success or
+  NaN-swallowed failure, BEFORE the cooperative-stop check) the
+  board-so-far lands atomically on disk; a stopped run's next call
+  with the same signature (task + cv + metric + resolved model +
+  family list + a SHA-1 of the SMILES — any mismatch starts fresh)
+  resumes at the first unscored family instead of recomputing;
+  checkpoint write failures degrade to log warnings and never kill a
+  40-minute sweep.  The smoke caught the subtle bug: `enumerate`'s
+  `start=` offsets the counter without skipping elements — the resume
+  must slice `family_list[start_position - 1:]`, or reused rows
+  recompute AND re-save at shifted steps.  6 integration tests
+  (including the featuriser-counting spy that pins "resume computes
+  only the unscored families").
+* **The Studio wiring** — the ML Workbench Leaderboards tab
+  checkpoints into `~/.pharmaml/checkpoints/family-benchmark` by
+  default (an unwritable home degrades to fresh runs, never fails the
+  page): Stop keeps the finished families on disk, the next Start
+  resumes, and the status line leads with "checkpoint found: k/n
+  families already scored — resuming there"; the Start button's
+  tooltip carries the contract.  1 GUI test runs the full two-Start
+  loop (fill the checkpoint, then resume it).
+
+## [1.2.141] — 2026-11-08
+
+### Added — round 228: THE RETIREMENT ROUND — the ML Workbench joins the Studio, Part-2 (§16) declared complete, and playground.py is retired (the owner's "everything must be in studio.py" directive, increment 3)
+
+* **The ML Workbench** — `ui/pages/ml_workbench.py` (increment 14,
+  1,798 lines, 18 page tests), the Data & ML tab's last unported
+  cards as five Studio tabs, every card wired to the SAME public
+  backend APIs the legacy Tk cards call: **Hyperparameter search**
+  (`RandomSearch` / `TPESearch` / `Hyperband` over every grid-bearing
+  registry family, the trials/η/cv/pruner controls, the defaults
+  baseline the search has to beat, the held-out verdict, the
+  trial-ranking board, and Apply-best → the Model Analysis page's
+  manual-params table via `apply_search_result`); **Leaderboards**
+  (the `benchmark_feature_families` family benchmark over the SMILES
+  column + the `stack_oof_regressors` OOF stacking leaderboard with
+  the residual correction and the native parity scatter); **Ensemble
+  builder** (`build_voting` / `build_stacking` over the ticked
+  registry members with held-out metrics); **Persistence**
+  (`save_model` + the provenance sidecar, `load_model`, the
+  predict-on-CSV arm with `validate_bundle_input`'s honest
+  feature-contract audit); **Applicability domain**
+  (`applicability_domain` with the reliability table, the
+  kNN-distance native scatter — inside vs outside AD + the threshold
+  line — and the bootstrap-uncertainty status, sourced from the Model
+  Analysis run / the Workbench ensemble / a loaded bundle).
+* **The Model Analysis page's round-228 additions** — the
+  **manual-hyperparameters** table (the selected registry model's
+  `param_grid` knobs, blank keeps the estimator's own default, the
+  values riding `train_model`'s `model_params`); the kept-run
+  `last_run()` hand-off (the fitted estimator + splits + held-out
+  metrics that feed the Workbench's AD/persistence cards); and four
+  NATIVE diagnostic figures — **calibration curve**
+  (sklearn.calibration under the job), **learning curve** (train
+  sizes vs CV score, ± 1 std band edges), **ROC** and **PR** curves
+  (one-vs-rest per class, macro AUC / AP in the title) — no
+  matplotlib import anywhere on the page (§16.8).
+* **The latent classification crash fixed** — the training job's
+  blanket `np.asarray(y, dtype=float)` crashed EVERY string-class
+  run ("could not convert string to float: 'weak'"); the honest dtype
+  split (regression floats, classification labels as-is) plus the
+  new classifier-diagnostics tests close it.
+
+### Removed — the retirement (§16.18 step 15 fires)
+
+* **`playground.py` (38,317 lines) is retired** — deleted together
+  with its 980-test Tk-coupled suite (`test_playground.py` 876 +
+  `test_playground_workflows.py` 17 + `test_job_safety.py` 31 +
+  `test_excel_io_and_samples.py` 26 + `test_feature_recalculation.py`
+  30). All thirteen content surfaces are verified Studio pages (the
+  audit's Part-2 completion assessment now reads 100%); `python
+  studio.py` is THE front end; the README, `studio.py`'s docstring,
+  the dashboard's migration note and its Studio-pages census (the
+  playground-workflows card's replacement), GUI_AUDIT and
+  GUI_REDESIGN all carry the retirement; the suite driver's Tk chunk
+  left with it. Honest totals: **4,769 = 3,974 collect + 795
+  doctest**, census **985 files / 311,333 lines**.
+
+### Changed
+
+* `ui/main_window.py` — SECTIONS grows to seventeen ("mlworkbench",
+  "ML Workbench" after Model Analysis); the count-pinned tests trued
+  (five suites 16 → 17, the utilities index 14 → 15).
+* The web pins — SHIPPED_TOOLKIT_VERSION 1.2.141, FALLBACK_STATS
+  985/311,333, the hero fallback literals, the 4,769 passing-tests
+  chips (download panel + overview), the overview after-text.
+
+## [1.2.140] — 2026-11-08
+
+### Added — round 227: the Utilities Workbench joins the Studio + the JobRunner GC-race fix (the owner's "everything must be in studio.py" directive, increment 2)
+
+* **The Utilities Workbench** — `ui/pages/utilities.py` (increment 13),
+  the retirement backlog's missing tab: the legacy Tk playground's
+  Utilities tab ported as five Studio tabs, every card wired to the
+  SAME public backend APIs the cards call.  **Table merge & split**
+  (`merge_tables` / `merge_table_folder` / `split_table_into_chunks`
+  with the round-201 example loader); **compare & annotate**
+  (`compare_tables` / `annotate_with_smiles`, the common/only-A/only-B
+  counts drawn as native PyQtGraph bars — no matplotlib on the page);
+  **approved drugs → report** (`filter_approved_drugs`, CSV + the
+  bordered Word table through `export_docx` with the honest
+  python-docx refusal); **campaign file tools**
+  (`collect_files`/`list_file_names`/`distribute_files`/
+  `delete_named_files`/`cleanup_tree` — dry-run by default, one
+  confirmation before any real destructive run, the shipped
+  14-ligand example tree in one click); **reindex by number**
+  (`reindex_by_number` with the dense-gap honesty).  Honest
+  pre-flight refusals everywhere; the split parts folder is picked
+  BEFORE the run (the Studio contract — no dialog mid-job).  18 new
+  page tests (`tests/ui/test_utilities_page.py`).
+* **The JobRunner GC-race fix** — `ui/workers/job_worker.py`: the
+  runner's finisher (the FIRST slot of the finished emission)
+  dropping the last worker reference let CPython's immediate
+  refcount destruction tear down the worker's `JobSignals`
+  mid-delivery, silently swallowing every page slot connected after
+  it — the Utilities campaign jobs (1.35 s docking import inside the
+  worker) hit it deterministically.  The retired-workers hold keeps
+  the signals alive past the emission; a forced-`gc.collect()`
+  regression test pins it.
+* **Docs trued** — `docs/gui/GUI_AUDIT.md`'s Part-2 assessment
+  advances to ~93% (twelve of thirteen surfaces; the Utilities
+  blocker resolved — the remaining blocker is the Model-Analysis
+  depth alone); `GUI_REDESIGN.md` carries increment 13; the
+  section-count tests trued to the 16-page window.
+
+## [1.2.139] — 2026-11-08
+
+### Added — round 226: the Part-3 §19 CV interface joins the Studio (the owner's "everything must be in studio.py" directive)
+
+* **The verdict first** — `docs/gui/GUI_AUDIT.md` now carries the
+  honest Part-2 (§16) completion assessment: architecture, theming,
+  visualization, workers and eleven of thirteen content surfaces are
+  verified, but §16.22's "all relevant features are accessible" is not
+  yet literally true (the remaining Model-Analysis depth + the
+  Utilities workflow cards), so §16.18 step 15 correctly refuses to
+  retire `playground.py` today; its module docstring now states the
+  legacy status.
+* **The port** — `ui/pages/model_analysis.py` grows the §19
+  cross-validation interface that round 225 gave the playground only:
+  the **Compare models (CV)** board (the whole available registry
+  under ONE shared splitter via `compare_models_cv`), the cv-folds
+  spinner (2–10, default 5) + the cv-strategy combo
+  (auto/kfold/stratified/group/stratified_group/scaffold), the honest
+  pre-flight refusals (scaffold CV without a SMILES column, grouped
+  strategies without a group-like column — refused BEFORE any job),
+  the formatted `mean ± std (k-fold CV)` leaderboard, and the
+  double-click **CV report dialog** (fold table with train-side
+  mirrors, per-metric aggregates with honest directions, the notes,
+  and the PyQtGraph fold chart with mean line + ± 1 std band edges —
+  no matplotlib backend roulette).  The group-source detectors are
+  studio-owned (`detect_smiles_column` / `detect_group_column`, the
+  playground's honesty contracts) so the page stays independent of the
+  legacy file.  Seven new page tests (`tests/ui/test_model_analysis_page.py`),
+  the suite driver chunk 4c extended.
+
+## [1.2.137] — 2026-11-08
+
+### Added — round 224: the Part-3 §18.2/§18.3 hyperparameter recommendations layer (`pharmaml.ml.hpo_presets`)
+
+* **The gap** — the search engines already existed (the TPE /
+  successive-halving / Hyperband math in `ml.hpo`, the keras-tuner-style
+  `HyperParameters` + searchers in `ml.tuner`) but the registry grids
+  are deliberately tiny — three points per slot, sized for a
+  GridSearchCV sweep.  §18 asks for the layer above: comprehensive,
+  resource-aware ranges WITH the advice that makes them usable.
+* **The tables (§18.3)** — hand-authored `ParamAdvice` rows for the
+  directive's eight families (logistic regression, random forest,
+  SVM/SVR — task-aware, XGBoost, LightGBM, CatBoost, k-NN, and both
+  neural families the toolkit ships: sklearn `ann` + PyTorch `dnn`),
+  every parameter carrying its range, log/linear prior,
+  essential/key/extended priority, a one-line purpose, and its
+  dependency structure; every other grid-bearing registry family gets
+  the honest fallback (advice derived from its own declared grid).
+* **The presets (§18.2)** — conservative (essential-only,
+  middle-half ranges — the log-domain middle half for scale
+  parameters), balanced (essential + key, full ranges, trimmed
+  categorical lists), exploratory (everything, the combinations that
+  need validation).  Deterministic, step-snapped, reproducible.
+* **The adaptation (§18.2)** — `recommend_search` adapts to dataset
+  size (small-n caps estimator budgets at 300 and k at n/2; large-n
+  notes the model-based-search preference), dimensionality
+  (family-aware notes), class imbalance (>= 4:1 keeps `balanced`
+  weighting searchable, elevated to essential; xgboost/catboost get
+  their honest `scale_pos_weight` / `auto_class_weights` notes), and
+  the resource tier (low caps budgets/epochs, drops batch sizes below
+  32).  Every adaptation leaves a visible note.
+* **The validation (§18.2)** — `validate_space` / `validate_values`
+  enforce the solver-penalty matrix (l1 needs saga/liblinear;
+  the solver list is ordered by compatibility so preset trims never
+  admit an invalid pair outside exploratory), the kernel-conditioned
+  parameters (degree/gamma), task-only parameters (epsilon is
+  SVR-only, class_weight is classification-only), CatBoost
+  loss_function-vs-task, and range sanity; the bridge re-checks each
+  drawn trial and fails it loudly instead of silently training an
+  invalid combination.
+* **The bridge** — `hypermodel_from_advice` compiles a recommendation
+  into a genuine tuner-searchable hypermodel (registry families via
+  `build_model` + `set_params`; ann/dnn/hsvr bespoke constructors),
+  so the presets plug straight into RandomSearch/TPESearch — proven
+  end-to-end with real searches over advised spaces.
+* **The interchange (§18.5)** — `recommendation_to_json` /
+  `recommendation_from_json` round-trip losslessly with schema
+  validation on load (11 typed mangling tests);
+  `estimate_evaluations` answers the pre-execution budget question
+  (grid point-product with recorded assumptions, or the trial count
+  for random/TPE).
+* **The honest scope** — parameters the estimator does not accept are
+  never advised: xgboost/catboost imbalance knobs are noted not
+  searched, the dnn optimizer is fixed AdamW (its `weight_decay`
+  surrogate IS searched, as a documented fixed row), ann inherits
+  sklearn's 'auto' batch semantics.
+* 66 collected tests + 8 doctests; docs INDEX rows; the 17th sandbox
+  rollback recovered before the round started (PAT re-extracted from
+  the PDF with newline-join, 19 upload files byte-identical after the
+  ff-pull, venv rebuilt in the foreground).
+
+## [1.2.136] — 2026-11-08
+
+### Fixed — round 223: the playground SIGILL root-caused and fixed (the worker-thread GC race)
+
+* **The crash** — round 222's first-ever full chunked suite run lost
+  three chunks: the 869-test Tk playground chunk died with
+  `Fatal Python error: Illegal instruction` (exit 132), ui chunk 4
+  died with the kernel's SIGKILL, and chunk 2 died too (it carried
+  the playground file).  Round 222's release note called the SIGILL
+  "proven environmental on the pristine tree" — the pristine-tree
+  rerun was the right experiment, but the conclusion stopped one
+  step short: the crash reproduces at a DIFFERENT test position on
+  every run (94 → 97 → 113 → 123 → …), which is a timing race, not
+  a poisoned binary.
+* **The bisection (round 223)** — the repro shrank to three tests:
+  `TestDockingRescoreReport` crashes when `test_report_bundle_end_to_end`
+  runs after ANY sibling, yet passes alone; every victim stack is
+  `Garbage-collecting` — the automatic GC pass firing **on the
+  worker thread** during one of its native-heavy phases (matplotlib
+  transform/marker constructors inside `plot_consensus_ranking`;
+  the `torch` import inside `neural.fit`, with ddtrace's import
+  hooks in the frame).  The worker is `_start_job`'s
+  `threading.Thread` — the SAME thread every playground job runs
+  on — so the race is latent playground plumbing that the
+  16th-rollback venv rebuild merely re-timed into visibility.
+* **The fix** — `_start_job.runner` suspends automatic GC for the
+  bounded job body (`gc.disable()` … `finally: gc.enable()`;
+  reference-counted garbage, the vast majority, still frees
+  immediately), and `_poll_jobs` drains the deferred cycles with
+  one `gc.collect()` on the main thread at the safe point (the
+  worker fully done).  The report bundle's own `work()` carries the
+  same guard around its figure+PDF phase.  Long jobs stay bounded —
+  no blanket disable outside the runner, no unbounded cycle
+  accumulation.
+* **The proof** — the repro class: 3/3 crash before → **3/3 green
+  after**; the full 869-test playground chunk completed for the
+  first time on this sandbox (the only failure was a stale
+  review-144 source-scan pin, fixed below); and the restructured
+  nine-chunk suite is fully green (chunks 1, 2, 3, 4a, 4b, 4c, 5,
+  6 exit 0).
+* **The stale pin** — `TestReview144Gui`'s loader scan expected
+  exactly 3 `read_table_with_progress` streaming loaders; the
+  round-215 deep-learning file-load job adopted the same reader as
+  a legitimate 4th and never bumped the pin (full playground runs
+  had been out of the focused-loop's reach since).  True 3 → 4.
+* **The OOM lesson, applied** — ui chunk 4 (241 PySide6 tests in one
+  process) was kernel-OOM-killed at ~163/241 even with next-server
+  down; the runner now splits tests/ui across three processes
+  (4a/4b/4c) and `test_playground.py` no longer rides chunk 2's
+  glob (it is chunk 5's whole world — one crash muddied two chunks
+  at once).
+
+## [1.2.135] — 2026-11-08
+
+### Added — round 222: the Part-3 §17 image-export engine (TIFF/JPEG first-class)
+
+* **`src/pharmaml/viz/export.py`** — the core engine the Part-3
+  directive's first section demands: TIFF and JPEG join PNG and SVG
+  as first-class export formats, with the scientific-integrity rules
+  written into the code rather than the docs:
+  * **TIFF, the scientific path (§17.2)** — a `uint16` matrix
+    exports as a genuine `I;16` TIFF (bit-identical on reopen),
+    never a silently-quantised 8-bit copy; lossless compression
+    choices (`tiff_lzw` / `tiff_deflate` / `none`); multi-page
+    stacks via `export_matrix(..., pages=[...])` with per-page
+    validation; dpi resolution tags.
+  * **JPEG, the presentation path (§17.3)** — configurable quality
+    1-95 (validated range); a 16-bit source REFUSES to export
+    silently quantised (raise, or explicit `downcast_16bit=True`
+    with a recorded warning); an RGBA source composites onto an
+    explicit background colour — never a silent alpha drop; float
+    matrices refuse without explicit `normalize_float=True` (the
+    classic integrity trap, refused loudly with the recorded range).
+  * **Validation as part of the export (§17.4)** — every write is
+    reopened, magic-byte-sniffed (`sniff_format`: PNG/JPEG/TIFF
+    II+MM/SVG headers) and dimension-checked before success is
+    reported; `validate_export()` catches extension/content lies
+    (PNG bytes under a `.tiff` name) and wrong dimensions without
+    raising; the extension must MATCH the requested format — §17.4's
+    "do not change file extensions without actually converting".
+  * **The reusable manager (§17.4)** — `ExportManager` batches
+    images to a directory with a filename pattern, validates each
+    write and records a JSON manifest (name, format, size, mode,
+    compression, warnings — the audit trail the acceptance
+    criteria ask for). `EXPORT_FILTERS` carries the §17.1 dialog
+    filter strings (`.tif .tiff`, `.jpg .jpeg`).
+  * `export_figure()` routes matplotlib figures through the same
+    rules (SVG stays vectorial via matplotlib's own writer; raster
+    formats render through Agg then encode with the TIFF/JPEG
+    policy); `export_widget_image()` takes Qt-rendered bytes.
+  * Pillow stays optional exactly like matplotlib: importing is
+    free, exporting without it raises the actionable
+    `DependencyError` with the `pip install 'pharmaml[reports]'`
+    hint (Pillow>=10.0 added to the reports extra; the verified
+    stack pins 11.3.0).
+* **`ui/widgets/image_export.py`** — the GUI bridge:
+  `grab_png_bytes` (Qt widget → PNG bytes, offscreen-safe) +
+  `export_widget_grab` (bytes → the engine's integrity-checked
+  pipeline). The GUI never re-implements format policy; it renders,
+  the engine decides.
+* **`ui/widgets/image_panel.py` / `ui/widgets/plot_widget.py`** —
+  `ImagePanel.export_image()` and the new
+  `PlotPanel.export_image()`: extension picks the format, TIFF
+  carries the compression choice, JPEG the quality, every write
+  validated; the pre-§17 `export_png` boolean API keeps working as
+  a validation-backed shim.
+* **`ui/pages/image_lab.py`** — the export row goes §17: format
+  combo (TIFF default — the scientific choice, PNG, JPEG), JPEG
+  quality spin 1-95 (default 92, tooltipped lossy), TIFF compression
+  combo (LZW/DEFLATE/None), one dialog with the three filters, the
+  §17.4 extension-stamping rule (a foreign suffix gets the chosen
+  format's extension), and an honest status line carrying the
+  engine's result card — format, dimensions, byte count, and every
+  integrity warning.
+* **The tests** — `tests/test_export_images.py` (29 collected
+  items, 27 functions with the compression knob parametrised ×3:
+  the 16-bit roundtrip, the three compressions, quality
+  monotonicity, every refusal, the multi-page stack, the
+  mismatch/liar/mismatched-dimension/missing/corrupt validation
+  cases, the manager manifest + format override, the Pillow-free
+  error shape) and `tests/ui/test_export_gui.py` (7 offscreen
+  tests: both panels' three formats at the exact rendered size, the
+  compat shim, the control row's contract, the result-card status
+  line, the extension stamping, the honest FAILURE status). 36 new
+  collected items + 7 new doctests; honest totals 5,532 → **5,575 =
+  4,790 collect + 785 doctest**.
+
+## [1.2.134] — 2026-11-08
+
+### Added — round 221: the Image Lab (Studio increment 12 — the Part-2 §16.8.2-16.8.4/16.8.7 closure)
+
+* **`ui/widgets/image_panel.py`** — the plot widget's sibling for
+  MATRIX data: a `pg.GraphicsLayoutWidget` carrying an `ImageItem`
+  (16.8.2), a `HistogramLUTItem` (16.8.4 — the histogram + colormap
+  control, seven deterministic gradient presets: viridis/magma/
+  inferno/plasma/thermal/turbo/grey), a shared `RectROI` (16.8.3)
+  whose sub-matrix count/mean/min/max recompute live through the
+  bounding-rect slice (the probe's own arithmetic), NaN masking via
+  the masked-array path, theme-synced chrome (background/axes/ROI
+  pen — the colormap stays data-driven, never a theme guess), and
+  `export_png` (16.8.7 / 16.19's export criterion).
+* **`ui/pages/image_lab.py`** — the Studio's twelfth feature page
+  (sidebar section 15), five tabs on REAL project data, every
+  number engine-printed first by the committed probe
+  `scratch/probe_imagelab_221.py` (per-section fresh seeds):
+  * **Similarity heatmap** — `compute_fingerprints` (morgan r=2,
+    2048 bits) + `tanimoto_matrix` over the bundled
+    `seed_molecules.csv` roster (12 drugs; off-diagonal min
+    0.021277 / max 0.529412 / mean 0.130395; most similar caffeine ~
+    theophylline 0.529412; least metformin ~ diclofenac 0.021277;
+    highest mean-similarity ibuprofen 0.164474) or the loaded
+    table's SMILES column (organic-fragment heuristic + the honest
+    refusals: no table / no SMILES-like column / < 4 SMILES).
+  * **Response matrix** — the Biology pipeline's own 23x8 LN_IC50
+    pivot (one honest NaN hole masked; most sensitive A549 /
+    erlotinib -0.177930; most resistant U-251 / sorafenib 4.424495;
+    mean 3.020384) with cell-line/compound tick axes.
+  * **Explorer matrix** — the loaded table's numeric columns raw or
+    z-scored (the seeded 12-row demo: raw means [4.8301, 2.0828,
+    341.6800], z stds [1.0, 1.0, 1.0], min -1.971670 / max 2.364600,
+    row of max |z| = 6); refusal below 2 numeric columns; the span
+    pickers snap forward, never invert.
+  * **ROI explorer** — the spin-box region rows [2,6) x cols [7,10)
+    reproduces the probe's statistics exactly (16 cells, mean
+    0.131007, min 0.021277, max 0.529412); the shared RectROI moves
+    with the spins.
+  * **Performance** — `tanimoto_matrix` over seeded bit matrices
+    (n from a spin box, default 1024): pairs, wall seconds, M
+    pairs/s — the 16.19 large-dataset number, reported honestly as a
+    timing, never asserted.
+* **The tests** — `tests/ui/test_image_lab_page.py`, 18 offscreen
+  tests: the five end-to-end tabs against the probe-printed numbers,
+  the explorer-column paths (fake explorer frames at 90/12/3 rows),
+  the honest refusals, the ROI math + NaN masking, the gradient
+  preset switch + unknown-preset refusal, the PNG export (magic
+  bytes + a real render), the theme sync, and the main-window wiring
+  pin (15 pages). The sidebar growth re-pinned five older tests:
+  `test_main_window` (14 → 15 pages + the navigation order),
+  `test_responseai_page` (position + count), `test_foundations_page`
+  (len-4 → len-5), `test_bestofml_page` (len-3 → len-4).
+
+## [1.2.133] — 2026-11-08
+
+### Changed — round 220 (cron run 15/100): the lint-restore round (the standing mandate's engineering review)
+
+* **The bare-`ruff check .` green convention restored** — the 15th
+  sandbox rollback restored the tree from the remote with the upload
+  mount's 777 bits smeared over every `.py` file, so a bare
+  `ruff check .` (the pyproject-pinned convention, `scratch/`
+  excluded) suddenly reported 159 findings: 153 x EXE002 (executable
+  without shebang), 1 x EXE001, 5 x SIM102.  All 153 no-shebang files
+  are back to 0644 (`studio.py`, the one shebang carrier, is the
+  single legitimate 0755); EXE001/EXE002 = 0.
+* **The five round-205 cooperative-stop guards collapsed (SIM102)** —
+  identical short-circuit semantics, one nesting level less, comments
+  preserved at the guard:
+  * `utils/io.py` x2 — `read_table_with_progress` and the indexed
+    reader's chunk loops (`if len(chunk) and report(...) is False:`).
+  * `ml/training.py` x2 — `compare_models`' `on_model` and the family
+    benchmark's `on_family` heartbeat guards.
+  * `chem/features.py` x1 — the feature factory's per-batch
+    `progress` guard.
+  Net -4 lines; no behaviour change (the `and` short-circuit keeps
+  the `is not None` guard strictly before the callback call).
+* **No new tests** — the collapse is covered by the existing nets:
+  `tests/test_job_safety.py` (31, every stop checkpoint), the io /
+  training / features batches, and the ui suite re-run green AFTER the
+  edits (247 dots exit 0).
+* **Environment note** — the repaired venv carries pytest 9.0.2 (the
+  pre-rollback venv was pytest 8): the same 778 collected doctest
+  items now report as **775 passed + 3 skipped** where pytest 8
+  accounted the three all-`+SKIP` docstring items
+  (`pharmaml.viz`, `pharmaml.data.load_dataset`,
+  `pharmaml.data.split_table` — every example `+SKIP` by design,
+  the download-required examples) differently.  Zero failures; the
+  honest grand total **5,514 = 4,736 + 778** is unchanged.
+
+## [1.2.132] — 2026-11-08
+
+### Added — round 219: the Response AI Workbench (Studio increment 11, audit row 12)
+
+* **`ui/pages/responseai.py`** — the Studio's eleventh feature page,
+  giving `pharmaml.ml.drugresponse` — the module absorbed from
+  `CSOgroup/CaDRReS` (the bilinear factorisation + the
+  informative-weight sibling), `Precily` (the multi-omics fusion
+  discipline) and `DeepResponse` (the response VAE) — its FIRST GUI
+  surface (the playground's Response AI tab predates the module and
+  rides other engines).  Eight tabs, each wired to the module's
+  public APIs:
+  * **Hill curve** — `fit_hill_curve` on the seeded 4PL demo (seed
+    42, noise parameter): every fitted parameter against the
+    generating truth (top 0.9981 vs 1.0, bottom 0.049 vs 0.05, ic50
+    0.8123 vs 0.8, hill 1.1679 vs 1.2), r² 0.999669, the log-dose
+    AUC both ways (model-based 3.055882 vs closed-form 3.057985),
+    the fitted curve drawn over the log10-dose grid with the noisy
+    points scattered on top.
+  * **Response metrics** — `response_metrics` (Pearson / Spearman /
+    RMSE / MAE, n) on the seeded noisy pair (pearson 0.979392, rmse
+    0.058964) or two Data Explorer columns (>= 8 finite aligned
+    values, honest refusal otherwise), the observed-vs-predicted
+    scatter with the identity line.
+  * **Rank correlations** — `rank_correlations` (Pearson, Spearman,
+    Kendall tau-b in one call) on the seeded curved pair (0.914276 /
+    0.918042 / 0.744681 over n=48) or two explorer columns.
+  * **Response model** — `DrugResponseModel` (the CaDRReS bilinear
+    factorisation, training included) on the seeded 12x4 screen with
+    a 15% NaN mask: 40 observed pairs, final loss 0.029817 after 120
+    full-batch epochs, the in-sample pearson 0.164369 reported
+    honestly ("honestly modest, the toy screen is tiny"), the
+    predicted-response head for two cell lines and the
+    observed-vs-predicted scatter over all observed pairs.
+  * **Cross-validation** — `cross_validate_response` over the same
+    screen, folds split CELL LINES so no cell line straddles a fold:
+    the per-fold pearson table (-0.190352 / -0.599944 / 0.178499 /
+    0.712589) with the mean 0.025198 reported honestly ("the toy
+    screen barely carries signal"), the per-fold bars (negative folds
+    draw downward — honest).
+  * **Informative regression** — `InformativeRegression` (the
+    cadrres-iw idea: the penalty on feature j's weight is
+    l2*beta_j^2/v_j for the per-feature prior variance v_j): the
+    prior-shrunk coefficients [0.4789, 1.1233, -0.5979] against the
+    generating [0.5, 1.5, -0.8] under priors [100, 4, 4], the loss
+    curve 2.421297 -> 0.550247 over 300 epochs.
+  * **Response VAE** — `ResponseVAE` on the seeded 60x10 features
+    with a response head: the ELBO -20.220437 -> -10.032681 (the
+    bound improving), the reconstruction / KL / response MSE ledgers
+    (7.74856 / 1.343065 / 0.941055) drawn as the bound curve.
+  * **Multi-omics fusion** — `MultiOmicsFusion` on the seeded 30 x
+    (12 expression + 8 mutation) blocks: the per-block audit
+    (`block_report` — n_features, n_constant, total variance
+    equalised to 1.0 by the sqrt-width scaling, the raw mean column
+    stds 0.927576 / 0.488877 shown side by side), the latent 30x20
+    under two-level columns, the equalisation bars (both 1.0 — flat
+    on purpose, that IS the point).
+* **`ui/main_window.py`** — the fourteenth section (`responseai`,
+  right before Settings); `tests/ui/test_main_window.py` re-pinned
+  to 14 pages, the bestofml wiring test to len-3, the foundations
+  wiring test to len-4.
+* **`scratch/probe_response_218.py`** — round 218's probe prep
+  re-seeded per section (fresh `default_rng(42)` at every section
+  head, the bestofml probe's house pattern) so each page tab is a
+  standalone seeded job; `block_report`'s audit numbers added; every
+  number the new tests assert engine-printed first.
+* **`tests/ui/test_responseai_page.py`** — 17 offscreen tests: the
+  eight end-to-end tabs against the probe-printed numbers, the
+  explorer-column paths for the metrics/rank tabs, the honest
+  refusals (short columns, out-of-range epochs/folds/noise), the
+  parse helpers, and the main-window wiring pin.
+
+## [1.2.131] — 2026-11-07
+
+### Added — round 217: the Best-of ML Workbench (Studio increment 10, audit row 11)
+
+* **`ui/pages/bestofml.py`** — the Studio's tenth feature page,
+  migrating the playground Best-of ML tab's eight clusters (the
+  `lukasmasuch/best-of-ml-python` absorption), each wired to the SAME
+  public backend APIs the cards call:
+  * **Catalogue** — `search_catalog` / `catalog_top` over the embedded
+    snapshot (924 projects, 35 sections, 5,121,472 stars): substring
+    search keeps the catalogue's score order; the top-10 star counts
+    draw as the bars; the category picker rides the same `all
+    categories` + titles list the card builds.
+  * **Coverage audit** — `coverage_table`'s 35 verdicts (12 native /
+    6 partial / 4 external / 13 out-of-scope) as the table plus the
+    verdict-count bars.
+  * **Differential privacy** — `dp_statistics` under one epsilon
+    budget (count/sum/mean + the worst-bin row, the data-derived
+    bounds disclosed) with the true-vs-DP bin counts as GROUPED
+    value-space bars, plus `dp_sgd_noise_scale`'s RDP accountant line
+    (sigma 50.3 for eps 4 / delta 1e-5 / 1500 steps).
+  * **Recommender** — `evaluate_recommender` (leave-one-out hit-rate
+    against the popularity baseline over the seeded 24x20 matrix,
+    219 observed) + user 0's ranked recommendations; the popularity
+    arm CAN win (lift 0.73 here) and the report says so rather than
+    burying it.
+  * **Vector search (LSH)** — `ann_benchmark`'s recall@5 vs
+    candidate-compression trade-off over plane counts 2/4/6/8/10 at
+    k=5 with multiprobe, drawn as the two-line sweep; reads the Data
+    Explorer's numeric block (>= 60 rows) or the seeded three-blob
+    synthetic.
+  * **Adversarial robustness** — logistic regression (or ridge) on
+    the Data Explorer's table (label columns factorised, the
+    two-blob demo as fallback) attacked by the zeroth-order sign
+    family: the broken-rate curve (5/5/14/44 broken at
+    0.05/0.1/0.25/0.5 sd), the clean accuracy and the median
+    adversarial margin.
+  * **Time series** — ACF (the lag bars, peak at the period) / PACF,
+    the additive decomposition strengths, CUSUM changepoints and the
+    tsfresh-lite window table; honest two-full-periods refusal.
+  * **Association rules** — `apriori_pipeline` over pasted
+    transactions with the lift bars (support/confidence thresholds
+    parsed with honest bounds).
+* **`ui/main_window.py`** — the thirteenth section (`bestofml`,
+  right before Settings); `tests/ui/test_main_window.py` re-pinned to
+  13 pages and the foundations wiring test to len-3.
+* **`scratch/probe_bestofml_217.py`** — the committed probe: every
+  number the new tests assert was engine-printed first (catalogue
+  924/35/5,121,472 · DP 49.9741 -> 49.6516 · recommender 8 vs 11 hits
+  lift 0.7273 · LSH recall 0.985 -> 0.575 · adversarial 0.9875 clean
+  · ACF peak lag 24, seasonal strength 0.9819 · apriori 5/3/5/4).
+* **`pharma-ml-toolkit/scratch/venv_repair.sh`** — the
+  discoverability wrapper now resolves the canonical repair script
+  via `$HOME` instead of a hardcoded absolute path (the zip leak scan
+  caught it the first time it shipped).
+
+## [1.2.130] — 2026-11-07
+
+### Added — round 216: the Foundations Workbench (Studio increment 9, audit row 10)
+
+* **`ui/pages/foundations.py`** — the Studio's ninth feature page,
+  migrating the playground Foundations tab's clusters, each wired to
+  the SAME public backend APIs the cards call:
+  * **Compare groups** — `compare_groups`: descriptives, five-number
+    summaries, both normality verdicts, the decision branch reported
+    (`both normal → Welch t` / `non-normal → Mann-Whitney`), the
+    per-group CIs and Cohen's d, with both group histograms drawn on
+    ONE shared axis; the synthetic demo mirrors the card's rng-42
+    groups exactly, the columns mode reads the Data Explorer's loaded
+    table (B defaults to the second numeric column so the run starts
+    runnable).
+  * **Distribution sampler** — `sample_distribution` over the course's
+    five distributions with the theoretical pdf/pmf drawn over the
+    sample histogram in the SAME value space (discrete kinds get
+    integer-aligned bins and the pmf scaled by n).
+  * **Inferential tests** — `welch_anova` + BOTH pairwise post-hoc
+    tables: Tukey HSD lands in the data table, Games-Howell in the
+    report.
+  * **Table profiler** — `profile_dataset` on a pasted CSV: the type
+    census bar chart, the per-column table (type / missing /
+    distinct / top / key stat) and the fg-data-profiling alert rules.
+* **`ui/widgets/plot_widget.py`** — `bars(x=…)` places bars at
+  VALUE-space positions (the histogram centers) instead of the
+  `0..n-1` slot grid, and `histogram(range=…)` accepts a shared range
+  so two overlaid histograms keep comparable edges; both default to
+  the historical behaviour (no call site changed).
+* **`ui/main_window.py`** — sidebar 11 → 12 sections (Foundations
+  before Settings); theme palette forwarded to the new page.
+* **`tests/ui/test_foundations_page.py`** — 13 offscreen tests, every
+  asserted number engine-printed first by the committed probe
+  (`scratch/probe_foundations_215.py`); `tests/ui/test_main_window.py`
+  re-pinned to the 12-section shell.
+
+### Notes
+
+* Notebooks re-executed against the 1.2.130 tree (205 s, all eight
+  print `pharmaml 1.2.130`); the 7 no-output twins regenerated; the
+  scrub walk dropped 0 leaking streams.
+* Honest totals: 4,700 pytest cases + 778 doctests = **5,478**.
+
+## [1.2.129] — 2026-11-07
+
+### Changed — round 215: the file-load jobs stream too (the safety kit's third layer reaches the load path)
+
+* **`playground.py`** — the three user-file loads that still called the
+  plain `read_table` inside a ZERO-argument `work` now stream through
+  `read_table_with_progress` with the job reporter wired, closing the
+  "huge CSV load" story the round-205 kit's header names:
+  * the **pIC50 append** conversion (a multi-hundred-megabyte assay
+    table now shows a determinate rows bar and honours Stop at the
+    reader's chunk boundaries);
+  * the **library similarity scan** pick (the same streaming read
+    before the SMILES-column sniff);
+  * the **docking rescore summary CSV** load (likewise).
+  A zero-argument `work` is classified checkpointless by the job
+  runner — the Stop button stayed disabled and the memory watchdog had
+  nothing to flip for exactly the loads most likely to balloon; small
+  files (below the 8 MB threshold) still take the plain reader
+  byte-for-byte, so behaviour only changes where the progress actually
+  helps.
+* **`tests/test_job_safety.py`** — three new regression tests
+  (`TestTheFileLoadJobsStream`): the real jobs started against temp
+  CSVs, each pinned cancellable mid-flight (`_job_cancellable`) with
+  its render landing (the tree rows / the loaded frame / the pIC50
+  column present).
+
+### Notes
+
+* Notebooks re-executed against the 1.2.129 tree (202 s, all eight
+  print `pharmaml 1.2.129`); the 7 no-output twins regenerated; the
+  scrub walk dropped 0 leaking streams this round.
+* Honest totals: 4,687 pytest cases + 778 doctests = **5,465**.
+
+## [1.2.128] — 2026-11-07
+
+### Added — round 214: the Generative Workbench (Studio increment 8, audit row 9)
+
+* **`ui/pages/generative.py`** — the Studio's eighth feature page,
+  migrating the playground Generative tab (directive #16, 16.18
+  migration step 8). The audit row's clusters over a shared corpus
+  selection (the bundled 12-molecule seed table or the built-in
+  244-molecule drug-like corpus, with the seeded-mode checkbox),
+  each wired to the SAME public backend APIs the playground cards
+  call:
+  * **Evolve** — the objective built exactly like the playground's
+    `build_objective` (QED, the LogP / MW / TPSA windows, the
+    QED+LogP blend, the multi-objective triple, similarity to a
+    reference), then `GeneticOptimizer` (topology mutation + splice
+    crossover), `ReinventOptimizer` (policy-gradient RL over an
+    on-the-fly SMILES RNN prior, the CLI corpus idiom mirrored
+    exactly: empty = built-in, seeded = anchored ahead of the bundle,
+    unseeded lines = the sampling pool alone) or `MctsOptimizer`
+    (ChemTSv2-style MCTS): the ranked leaderboard
+    (`GenerationResult.to_dataframe()`) plus the per-generation
+    best/mean score curves. Engine-printed: the GA over the built-in
+    corpus lands best 0.927 (271 uniques, 16 generations); the
+    multi-objective seeded run lands best 0.962 over 276 uniques; the
+    RL run lands 0.582 over 58 uniques; the MCTS run lands 0.593 over
+    17 uniques (276 tree nodes, 828 rollouts).
+  * **Pareto front** — `pareto_front` over the last run's breakdown:
+    the non-dominated set as a table + the trade-off scatter over the
+    first two objectives, the deepest-front-member rank in the
+    report (9 of 276 non-dominated, the strongest member dominates
+    262); a single-objective run refuses honestly.
+  * **Molecule surgery** — `ring_topology_moves` (piperidine's
+    exactly 3 one-step ring-size mutants; aromatic and fused/spiro
+    rings are never re-sized) and `scaffold_hop_crossover` (the
+    BREED-style breeding: bridge / ring-merge / linker-transplant
+    cuts compete per draw — aspirin × the ibuprofen core, seed 42,
+    4/4 viable), every product scored by `QedObjective` for the bars.
+  * **Scoring oracles** — the GuacaMol benchmark book for one
+    molecule: `qed_score` / `sa_score` / `penalized_logp` /
+    `rediscovery_score` plus the Lipinski-style `property_filter`
+    with its values and violations in the table (aspirin vs salicylic
+    acid: QED 0.550 · SA 8.61 · logP −7.30 · rediscovery 0.448 ·
+    filter PASS).
+* Sidebar grows to **eleven sections** (generative between deep
+  learning and settings, the audit's usage order); `pages.count()` pin
+  10 → 11 with the navigation-order test updated.
+* **`tests/ui/test_generative_page.py`** — 21 offscreen tests, every
+  asserted number engine-printed first by the committed
+  `scripts/probe_generative_214.py`; **`tests/ui/` suite now 167
+  green** (146 + 21) with job_safety 28 green in the same invocation,
+  collect-only **4,684 across the tests tree**; honest totals
+  **5,462** (4,684 + 778 doctests).
+* The round-213 notebook driver's copy-back bug caught and fixed:
+  `shutil.copy2(work_nb, src)` restored the UNEXECUTED work file
+  (nbclient mutates the in-memory notebook; the work FILE is never
+  written) — round 213's pass was masked because the tree already
+  carried 1.2.127 outputs from the concurrent agent's run; the fixed
+  driver writes with `nbformat.write(nb, src)` and both the 213 and
+  214 copies carry the fix.
+
+## [1.2.127] — 2026-11-07
+
+### Added — round 213: the Deep Learning Workbench (Studio increment 7, audit row 8)
+
+* **`ui/pages/deep_learning.py`** — the Studio's seventh feature
+  page, migrating the playground Deep Learning tab (directive #16,
+  16.18 migration step 7). The audit row's four clusters over a
+  shared dataset + target selection (the 260-row QSAR regression
+  table with target pIC50 by default, the 420-row QSAR
+  classification table with target activity, or whatever Data
+  Explorer holds), each wired to the SAME public backend APIs the
+  playground cards call:
+  * **Train & evaluate** — `make_train_test_split` (random, seeded)
+    over the numeric-feature rule, then `DeepMLP*`/`ResidualMLP*`
+    (torch) or `NumpyMLP*` (the toolkit's own numpy autograd engine
+    when torch is absent), fitted with per-epoch callbacks and early
+    stopping on a held-out validation fraction, then `evaluate_model`
+    on the test rows: the parity scatter with the overfit line
+    (Pearson r, train R², the gap) for regression — DeepMLPRegressor
+    on the bundled table lands R² 0.891 / RMSE 0.957 / MAE 0.758
+    with a 0.061 gap; the numpy twin lands R² 0.789 — or the
+    per-class F1 bars with the confusion table for classification
+    (DeepMLPClassifier: accuracy 0.952, F1 macro 0.953 over
+    active/inactive/weak).
+  * **Runboard** — `RunTrace` over the last run's per-epoch
+    `history_`: the raw + EMA-smoothed loss curves
+    (`smooth_series`, the bias-corrected EMA TensorBoard's own
+    slider computes, beta knob 0–0.95), and the weight histogram via
+    `numpy_layer_stack` + `histogram_event` (the numpy engine's
+    3-layer snapshot: layer1's 640 weights, min/max/mean/std in the
+    per-layer table); a torch run refuses honestly, naming the
+    engine rule.
+  * **UMAP map** — `umap_embed` on the last run's test rows (or the
+    dataset's numeric matrix): the fuzzy k-NN graph, the a/b curve
+    from min_dist, spectral init, negative-sampling SGD, the
+    neighbours/min_dist/metric knobs, and the Venna-Kaski
+    `trustworthiness` score at k<=10 in the report (52 test rows →
+    2-D, 525 fuzzy edges, trustworthiness 0.770).
+  * **Curation** — `SampleSet.from_frame` + the `DataView` stage
+    algebra (`filter` / `sort_by` / `limit` / the identity reset,
+    every stage named in the report) and the four audits:
+    `find_duplicates` (0 duplicate rows over the 260-row table),
+    `find_outliers` (z-score > 4: exactly one, descr_012 #44),
+    `uniqueness` (260 scored, top #254 0.436) and
+    `sort_by_similarity` (row 0's nearest: #165 0.626).
+* Sidebar grows to **ten sections** (deep learning between
+  unsupervised and settings, the audit's usage order); `pages.count()`
+  pin 9 → 10 with the navigation-order test updated.
+* **`tests/ui/test_deep_learning_page.py`** — 27 offscreen tests,
+  every asserted number engine-printed first by the committed
+  `scripts/probe_dl_213.py`; **`tests/ui/` suite now 146 green**
+  (119 + 27), collect-only **4,663 across the tests tree**; honest
+  totals **5,441** (4,663 + 778 doctests).
+* `docs/gui/GUI_AUDIT.md` row 8 planned → shipped; the
+  `GUI_REDESIGN.md` migration status caught up (it had lagged one
+  increment — the Unsupervised Workbench's v1.2.126 entry is
+  recorded alongside this one), the architecture tree and the
+  ten-section sidebar note updated.
+
+## [1.2.126] — 2026-11-07
+
+### Added — round 212: the Unsupervised Workbench (Studio increment 6, audit row 7)
+
+* **`ui/pages/unsupervised.py`** — the Studio's sixth feature page,
+  migrating the playground Unsupervised tab (directive #16, 16.18
+  migration step 6). The PDSH handbook's unsupervised roster over a
+  shared dataset + column selection (the 77-row bundled descriptor
+  library by default, the 260-row QSAR table, or whatever Data
+  Explorer holds), four engine tabs each wired to the SAME public
+  backend APIs the playground cards call:
+  * **PCA** — `pca_reduce` on the checked columns (auto
+    n_components = min(10, n, p)): the explained-variance ladder as
+    bars with the cumulative dash line, the loadings table, and the
+    dominant PC1 feature in the report (on the descriptor library:
+    8 components, PC1+PC2 at 81.5%, PC1 dominated by NumHAcceptors).
+  * **Clustering** — `kmeans_cluster` (Lloyd / mini-batch, manual k
+    or the silhouette scan), `gmm_cluster` (the BIC sweep or manual
+    components, every covariance type, the soft responsibilities
+    landing in the table) and `hierarchical_cluster` (all four
+    linkages, merge heights in the report); the scatter shows the
+    first two checked columns coloured by membership (k=3 on the
+    library: silhouette 0.438, sizes 8/39/30; the BIC sweep picks
+    4 components, converged, weights 0.55/0.09/0.21/0.16).
+  * **Density (KDE)** — `kde_fit` on one numeric column with the
+    CV-chosen (or manual) bandwidth and all six kernels: the density
+    curve over the histogram twin (scaled by n·bin-width), the
+    200-point curve table (MolWt: bandwidth 10 by cross-validation,
+    mean log-likelihood -395.58).
+  * **Manifold** — `manifold_embedding` for isomap / LLE
+    (standard/modified/ltsa) / MDS / spectral / t-SNE: the 2-D
+    embedding scatter + coordinate table, the method's own knobs
+    echoed in the report; violated preconditions (t-SNE perplexity
+    or isomap neighbourhood above the sample count) surface the
+    engine's exact words.
+* Incomplete rows are dropped up-front with the count reported (the
+  engines' completeness rule made visible); every heavy path runs in
+  a `JobWorker` off the GUI thread.
+* Sidebar grows to **nine sections** (unsupervised between models
+  and settings, the audit's usage order); `pages.count()` pin 8 → 9
+  with the navigation-order test updated.
+* **`tests/ui/test_unsupervised_page.py`** — 23 offscreen tests,
+  every asserted number engine-printed first by the committed
+  `scripts/probe_unsupervised_212.py`; **`tests/ui/` suite now 119
+  green** (96 + 23), collect-only **4,636 across the tests tree**;
+  honest totals **5,414** (4,636 + 778 doctests).
+
+## [1.2.125] — 2026-11-07
+
+### Added — round 211: the Docking Workbench (Studio increment 5, audit row 5)
+
+* **`ui/pages/docking.py`** — the Studio's fifth feature page,
+  migrating the playground Docking tab (directive #16, 16.18
+  migration step 5). Four engine tabs, each wired to the SAME public
+  backend APIs the playground cards call, none needing the external
+  engine binaries (vina/autodock4/AutoGrid stay the cards' job):
+  * **Campaign summary** — one job runs the card's full pipeline:
+    `check_docking_completion` + `scan_docking_directory` over the
+    bundled synthetic AutoDock4 campaign (14 ligand folders: 12
+    complete runs, 08_benzocaine missing its log, 10_nicotine
+    interrupted before clustering — the audit rows ride the scan),
+    then the rescore card's arithmetic on the OK rows: RDKit
+    heavy-atom counts from the campaign's `ligands.csv`,
+    `ligand_efficiency_series`, and `consensus_rescore` over the
+    three evidence columns (`best_lowest_energy` lower-is-better +
+    `best_num_in_cluster` + `ligand_efficiency`), ranked best-first
+    (metformin 0.782 the engine-printed top).
+  * **Cluster analysis** — `parse_dlg_cluster_table` on the chosen
+    folder's `r.dlg`: the CLUSTERING HISTOGRAM as a real table
+    (rank / lowest / mean energy / #in-cluster), the top-cluster and
+    most-populated story in the report; the folder combo is fed by
+    the campaign scan's cross-tab state.
+  * **Ligand library** — `load_ligand_csv` on the bundled library
+    (8 valid + 2 deliberately invalid rows whose reasons ride the
+    table) plus the RDKit property columns the preparation card
+    reports (heavy atoms, rotatable bonds) on the valid rows.
+  * **DOCKSTRING lab** — `target_frame` (all 58 upstream Vina search
+    boxes with their volumes charted), `get_target` config previews,
+    and `parse_search_box` validation of a pasted six-key config
+    (incomplete configs report exactly which keys are missing).
+* Sidebar grows to **eight sections** (docking between biology and
+  models, the audit's usage order); theme palette wiring and the
+  `pages.count()` pin 7 → 8 with the navigation-order test updated.
+* 14 new offscreen tests (`tests/ui/test_docking_page.py`), every
+  asserted number engine-printed first on this exact bundled data:
+  14 folders → 12 OK / 1 missing log / 1 incomplete, metformin the
+  consensus top (0.781674) with its 9 heavy atoms, aspirin's five
+  clusters (rank 1 at -4.91 kcal/mol, 15 runs; the sum of cluster
+  sizes 55), caffeine's most-populated cluster rank 2 (15 runs),
+  the library at 10 rows / 8 valid / 2 invalid with the exact RDKit
+  reasons, naproxen 17 heavy atoms / 3 rotatable bonds, caffeine 0
+  (the rigid xanthine), 58 DOCKSTRING targets (first ABL1, last
+  THRB), DRD2's box (9.250, 6.167, -7.000) / (30, 30, 32).
+  Refusals without a scanned campaign, config validation,
+  duplicate-submission refusal, and palette sync all pinned.
+* GUI audit row 5 and the migration status updated (increment 5 of
+  N; next: Unsupervised per the audit's usage order).
+
+## [1.2.124] — 2026-11-07
+
+### Added — round 210: the Biology Workbench (Studio increment 4, audit row 4)
+
+* **`ui/pages/biology.py`** — the Studio's fourth feature page,
+  migrating the playground Cell Lines tab (directive #16, 16.18
+  migration step 4). Four engine tabs, each wired to the SAME public
+  backend APIs the playground cards call — nothing fabricated:
+  * **Screen audit** — one job runs the card's full pipeline:
+    `load_response_table` (the bundled 185-row GDSC-style screen) →
+    `audit_response_table` (missing metric values, duplicate pairs) →
+    `replicate_variability` (the duplicate pair's spread) →
+    `collapse_replicates` (the pivot precondition, CV recorded) →
+    `summarize_compounds` (per-compound panel summary in the table,
+    median-metric bars in the plot) → `response_matrix` (the 23×8
+    matrix the other tabs share). The audit's issues ride the report
+    line verbatim.
+  * **Sensitivity matrix** — the collapsed screen's lines × compounds
+    matrix with `call_sensitive_resistant` quartile calls on the
+    chosen compound's column (lower LN_IC50 = more sensitive, the
+    card's convention; quantile order validated — sensitive below
+    resistant).
+  * **Variable genes (MAD)** — `most_variable_genes` with the
+    per-gene MAD recomputed honestly from the frame, exactly the
+    playground card's arithmetic (the library returns names only).
+  * **Biomarker discovery** — `normalize_expression` →
+    `impute_expression` (the normalized matrix cached on the GUI
+    thread for the next run) → `sensitivity_associations`
+    (Spearman/Pearson, BH-corrected) → `top_biomarkers`, with
+    `direction_of_association` naming the top hit's story
+    ("expression high -> more resistant" etc.) in the report.
+* Sidebar grows to **seven sections** (biology between pkpd and
+  models, the audit's usage order); theme palette wiring and the
+  `pages.count()` pin updated; cross-tab state is written only from
+  the GUI thread (the jobs capture their inputs at submit — the
+  round-208 lost-update lesson applied from the start).
+* 13 new offscreen tests (`tests/ui/test_biology_page.py`), every
+  asserted number engine-printed first on this exact bundled data:
+  185 rows → 184 unique pairs, 23 lines × 8 compounds, the
+  MCF-7/crizotinib duplicate (audit count 2, spread CV 0.0%),
+  crizotinib 6/11/6 quartile calls, GENE_115 the MAD top (1.1874),
+  GENE_144 the strongest cisplatin association (|rho| 0.6097, FDR
+  0.495, 0 of 300 significant). Refusals without a loaded screen,
+  quantile/input validation, duplicate-submission refusal, and
+  palette sync all pinned.
+* GUI audit row 4 and the migration status updated (increment 4 of
+  N; next: Docking per the audit's usage order).
+
+## [1.2.123] — 2026-11-07
+
+### Fixed — round 209: the second playground collapse mode (the stale display connection)
+
+* **`PlaygroundApp.destroy()`** is now a real teardown, in three arms,
+  answering the "Playground.py collapses during heavy work" family's
+  second mode: a build-destroy-rebuild host (and every pytest GUI
+  battery) left the destroyed app's Tcl interpreter — with its X
+  display connection — alive forever, because
+  * the module-level card registries (`_CARD_INDEX`,
+    `_COLLAPSE_CARDS`) kept every card's shell widget referenced past
+    the app's death (now cleared at `__init__` *and* `destroy()` — the
+    rebuild-overwrite semantics they were documented with);
+  * Tcl's pending `after` scripts (the recurring status-bar pollers)
+    are cancelled by id before the widget tree goes down;
+  * every leftover `_register`ed callback command (bind handlers,
+    variable traces — the trace commands tkinter's `Variable` never
+    deletes itself) is swept off the interpreter after
+    `super().destroy()`: `_register` names them `repr(id(f))…`, so
+    they are exactly the digit-leading commands (2,147 deleted on a
+    built app; widget paths and Tcl core commands never start with a
+    digit).  Each surviving C-side pin made the app→interpreter→
+    callback→app cycle uncollectable, and when the X server then went
+    away the next Tk event pump hit the broken connection — Tk 9's X
+    error handler **terminated the whole process** (`X connection to
+    :N broken` → `exit(1)`, rc=1, zero output — reproduced
+    deterministically outside pytest, see
+    `scratch/probe_kill_between.py` + the LD_PRELOAD `exit`-shim
+    backtrace `scratch/exit-shim.c`).
+  * `_silence_variables()` detaches every app-reachable `tk.Variable`
+    (`_tk = None`) so the interpreter-exit `Variable.__del__` cannot
+    double-delete swept commands (the unraisable "can't delete Tcl
+    command" exit noise).
+* **One session-scoped Xvfb** (`tests/conftest.py::xvfb_display`,
+  display :96) replaces the four per-file/per-class servers
+  (test_playground :98, workflows :97, recalculation :97, excel :97):
+  the server is torn down exactly once, after the last test — a
+  mid-session server death, the collapse's trigger, is structurally
+  impossible now.  All four files' local fixtures deleted.
+* Watchdog hygiene: the memory-peak update uses `max()` (ruff PLR1730);
+  nine blind `except Exception` guards around `winfo_exists()` in
+  `tests/test_playground.py` narrowed to `tk.TclError`.
+* 2 new regression tests (`tests/test_job_safety.py`): destroy
+  releases both registries; a rebuilt app replaces the registry and
+  every indexed shell belongs to the live app.  The combined
+  job_safety+workflows battery — the exact shape that terminated the
+  process pre-fix — passes twice from a clean room (45 tests, rc=0,
+  zero exit noise); self-test green; focused batteries and the ui/
+  suite green; doctests 775 passed + 3 skipped; collect-only 4,586.
+  Honest total: **4,586 + 778 = 5,364**.
+
+## [1.2.122] — 2026-11-07
+
+### Added — round 208: PK/PD Workbench, the Studio's increment 3 (directive #16, 16.18 migration)
+
+* **`ui/pages/pkpd.py`** — the fourth feature page, mapped to the
+  playground PK/PD tab (audit row 3). Three of the tab's engines, each
+  wired to the same public backend APIs the cards call, in three tabs:
+  the exact two-compartment **regimen simulator** (`TwoCompartment`
+  matrix-exponential linCmt with explicit repeated `DosingEvent`
+  records — concentration curve with dotted dose markers, Cmax/Tmax,
+  trapezoid AUC over the simulated window, the realized dose-event
+  table), the **non-compartmental analysis** (the card's pasted
+  series through `validate_concentration_series` → `nca_summary`
+  plus the extended `fit_terminal_phase`/`auc_linear_log`:
+  linear-up/log-down AUC, terminal λz window with adjusted R² and
+  span, Vd and CL when an IV dose is given — the observed profile
+  drawn with its AUC shaded under the curve), and the **dosing
+  events** realization (the NONMEM/mrgsolve grammar `ev`/
+  `addl_until`/`realize_addl`/`ev_days`: one dose record plus
+  additional doses until a stop time, and weekday schedules, as the
+  full dose-event table).
+* **`ui/widgets/plot_widget.py`** — two reusable palette-aware
+  additions: `line(..., fill=True)` (area shading at `fillLevel=0`
+  with a translucent series brush — the AUC visual) and `vlines(xs)`
+  (dotted vertical marker lines for dose/event times).
+* Sidebar gains the PK/PD section between Chemistry and Model
+  Analysis (usage order); theme switches re-paint the page's plot.
+* 18 new offscreen tests (`tests/ui/test_pkpd_page.py`): the three
+  end-to-end runs against the REAL engine numbers (the regimen curve
+  checked against a fresh `TwoCompartment` solve; the default series'
+  AUC 56.485 / t½ 4.233; `addl_until(0, 12, 72) == 5` under the
+  mrgsolve convention), IV-route compartment switch, positivity and
+  n_doses bounds, NCA length mismatch and unsorted-series refusal,
+  Vd/CL arithmetic, duplicate-submission refusal, palette sync,
+  main-window integration (six pages), fill/vline plot semantics.
+
+### Fixed — the round-208 lost-update race (Run 8 addendum)
+
+* **`ui/workers/job_worker.py`** — `JobRunner.submit` now accepts the
+  page's result handlers (`on_finished` / `on_failed` / `on_cancelled`
+  / `on_progress`) and connects them BEFORE `pool.start`. The old
+  page-side pattern (`worker = runner.submit(...)` then
+  `worker.signals.finished.connect(...)`) raced the emitting pool
+  thread: an instant job could emit `finished` before the page's
+  connect line ran, the result was lost forever and the UI stayed on
+  "Running …" — caught by the pkpd offscreen suite as a non-
+  deterministic flake (4/18 failing at first run, then passing
+  alone). The runner's own finishers stay the first connections, so
+  `job_ended` still lands before the result slot. All six call sites
+  migrated (`pkpd` ×3, `chemistry` ×2, `model_analysis` ×1); the three
+  job-worker tests that ENCODED the racy connect-after-submit pattern
+  (two of which already failed with `assert []` on the pre-fix tree
+  under load) moved to the deterministic handler form; +2 regression
+  tests pin the handler-before-start guarantee and the ended-before-
+  result ordering.
+
+### Changed
+
+* Honest total **5,362** tests (4,584 collected + 778 doctests);
+  `ui/` suite 49 → 69.
+
+## [1.2.121] — 2026-11-07
+
+### Added — round 207: Chemistry Workbench, the Studio's increment 2 (directive #16, 16.18 migration)
+
+* **`ui/pages/chemistry.py`** — the third feature page, mapped to the
+  playground Chemistry tab (audit row 2): a SMILES-bearing dataset
+  (bundled or from Data Explorer) flows through the playground's own
+  batch front door — `standardize_csv` (full report table + summary)
+  and `compute_feature_frame` (multi-family matrix + per-family counts,
+  kept/dropped molecules) — with a real histogram of any computed
+  feature column. Sidebar gains the section between Data Explorer and
+  Model Analysis (usage order, audit issue #2); the theme stack
+  re-paints its chart on switch.
+* **The v1.2.119 batch guard, carried into the Studio**: a
+  five-molecule probe fixes the exact per-molecule column count, then
+  the dense-matrix estimate (molecules × columns × 8 B × 3 copies) is
+  checked against half of `MemAvailable` and the batch refuses with
+  its arithmetic BEFORE the heavy compute — off-Linux the guard stands
+  down, exactly like the cards.
+* **The factory's `(done, total, note)` progress convention is adapted
+  to the Studio's `(fraction, label)`** at one place in the page; the
+  callback's return value propagates the cooperative-stop channel, so
+  Stop lands as a clean "Cancelled after N s" at the next molecule
+  batch boundary (never a traceback).
+* **13 new offscreen tests** (`tests/ui/test_chemistry_page.py`):
+  construction, SMILES auto-detection, preset→registry mapping, guard
+  refusal with its arithmetic, off-Linux stand-down, empty-column
+  refusal, the real standardize report, the real descriptor factory
+  run (43 columns on this stack, invalid SMILES dropped), the
+  all-families resolution (the mypy-caught UnboundLocalError class),
+  cooperative stop under load, duplicate submission, palette sync.
+  Shell tests updated to five pages/sections. Honest total:
+  4,564 collected + 778 doctests = **5,342**.
+
+## [1.2.120] — 2026-11-07
+
+### Added — round 206: PharmaML Studio, the PySide6 GUI (directive #16, increment 1)
+
+The owner's expanded directive (`upload/MASTER_PROMPT part2.pdf`, the
+44-page four-technology edition) mandates the complete GUI redesign.
+This is increment 1 of the migration: the application shell, the theme
+system, and three working feature pages -- with the Tkinter playground
+kept fully functional alongside until every section is verified.
+
+#### The stack (verified pins under the numpy 1.26.4 constraint)
+
+* **PySide6 6.8.3** (Qt 6.8 LTS) -- application architecture:
+  QMainWindow shell, sidebar navigation, QStackedWidget pages, status
+  bar, toast notifications, Ctrl+1..9 jumps.
+* **PyQtGraph 0.13.7** -- scientific visualization (the LAST numpy-1.x
+  line; 0.14 requires numpy>=2.2 which this stack cannot take):
+  themed plot panels, real held-out predictions/residuals/histograms.
+* **Qt-Material 2.17** -- primary Material Design provider (curated
+  teal/cyan/amber pairs, density via the template extra dict).
+* **QDarkStyleSheet 3.2.3** -- verified alternative provider (via
+  qtpy); native Qt is the guaranteed fallback. One provider active at
+  a time -- switching clears the previous stylesheet first.
+
+#### The architecture (presentation / logic / data, strictly separated)
+
+* `studio.py` entry point; `ui/` package: `main_window`, `pages/`
+  (dashboard, data explorer, model analysis, settings), `widgets/`
+  (navigation, data table, plot panel, progress panel, notifications),
+  `workers/job_worker` (QRunnable on QThreadPool).
+* The backend is reused untouched: `read_table` (CSV/TSV/XLSX),
+  `MODEL_REGISTRY` + `train_model`, and the v1.2.119 `JobCancelled`
+  cooperative-stop channel -- the Studio Stop button rides the same
+  contract, checkpoint-honest, never a red traceback.
+* Headless bootstrap (`ui/headless.py`): real EGL probed first; when
+  absent (this sandbox), the committed no-op stub
+  `ui/native/libEGL.so.1` preloads via ctypes (SONAME-correct) and is
+  also copied into the wheel's Qt/lib (RUNPATH $ORIGIN) so plain
+  pytest runs survive pytest-qt's eager binding probe.
+* Every number on the dashboard is computed live from the installed
+  package (module census, 33-model registry, 11 workflows / 58 steps,
+  example datasets); Model Analysis trains a real registry model on a
+  real held-out split and plots real predictions.
+
+#### Tests and verification
+
+36 new offscreen tests (`tests/ui/`, pytest-qt): theme switching /
+conflict prevention / persistence, navigation and geometry state,
+table model/sort/copy/truncation guard, worker finish/fail/cancel/
+duplicate-guard/progress, page smokes on real data (CSV + Excel load,
+an end-to-end ridge fit). Focused batteries green (data_loading +
+job_safety + csv_standardize 121; playground contract guards 73;
+io doctests); collect-only 4,551 across 73 files, exit 0; ruff and
+mypy clean on the new tree (and the two pre-existing io.py mypy errors
+fixed by widening the progress-callback type to `bool | None` -- the
+round-205 contract the annotations undersold).
+
+#### The recovery layer carries the stack
+
+`scratch/venv_repair.sh` step 6b now installs the five pinned GUI
+packages under the numpy constraint AND re-copies the EGL stub into
+the venv's Qt/lib -- a future rollback cannot lose the GUI stack.
+
+## [1.2.119] — 2026-11-07
+
+### Fixed / Added — round 205: the heavy-work safety kit (the collapse report)
+
+The owner's report: *"playground.py collapses during heavy work."* The
+diagnosis is the OOM story — a heavy featurization batch, a huge CSV
+stream, or a tune/compare run fanning out to many loky CV workers (each
+a full interpreter holding a dataset copy) can outrun the box's RAM, at
+which point the kernel kills the biggest process — the Tk app itself —
+and the window vanishes with every loaded input. Three layers answer it.
+
+#### The cooperative-stop channel (the library arm)
+
+**`pharmaml.exceptions.JobCancelled`** — the named error every
+checkpoint loop raises when its progress callback answers `False`:
+
+* `compute_feature_frame` (and therefore
+  `recalculate_selected_features`, which passes the callback through)
+  stops at the next molecule-batch boundary — *"feature batch
+  cancelled after 25/60 molecules"*;
+* `read_table_with_progress` / `read_indexed_table_with_progress`
+  stop at the next CSV chunk, **before** the concat would double the
+  memory — the stop propagates as itself, never wrapped into a
+  `DataValidationError`;
+* `compare_models` / `benchmark_feature_families` stop after the
+  completed leaderboard row.
+
+Callbacks that return `None` or any truthy value never cancel — every
+historical callback and test mock runs byte-identically.
+
+#### The playground machinery (the app arm)
+
+* **The Stop button** — the status bar gains a Stop control, enabled
+  exactly while a job runs. A job whose work carries the progress
+  reporter halts at its next checkpoint (molecule batch, leaderboard
+  row, table chunk); a checkpoint-less job gets the honest label
+  ("this job reports no checkpoints, so it runs to completion"). A stop
+  is not a failure: the status bar reads *"cancelled after 42 s"*, an
+  info dialog names the reason, and the window plus every loaded input
+  survive.
+* **The live memory watchdog** — the standing 150 ms progress poll
+  samples RSS (a /proc read, a few hundred bytes). Crossing the job's
+  ceiling (its launch RSS + 75% of what was available then) or the
+  system floor (`MemAvailable` < 256 MB) flips the same stop flag, so
+  the batch halts at its checkpoint *before* the OS would kill the
+  window — cancelled, not collapsed.
+* **The pre-flight batch guard** — the factory and recalculation cards
+  estimate the dense matrix (molecules × columns × 3 working copies ×
+  8 bytes) before a single molecule computes and refuse with their own
+  arithmetic when it cannot fit half the available memory: *"≈ 1.4 GB
+  … but only 0.2 GB is available — halve the corpus or drop some of the
+  wide 2048-bit families."* Off-Linux (no /proc/meminfo) the guards
+  stand down instead of guessing.
+* **The ML n_jobs memory cap** — loky CV workers are budgeted 768 MB of
+  available memory each; a capped request rides the job label honestly
+  (*"training xgboost (regression) — n_jobs 4→2 (memory cap)"*) instead
+  of silently spawning workers the box cannot feed.
+
+#### Verification
+
+`scratch/stress_playground.py` drives the real app under Xvfb through
+the real card flows: a mid-job Stop lands *"cancelled after 3 s"* with
+the checkpoint named (100/237 molecules); the same job unstopped
+completes (231 × 27,759 frame in 7 s); a fake RSS over the ceiling
+trips the watchdog (*"stopped by memory ceiling after 1 s"*); a fake
+200 MB MemAvailable refuses the batch with the full arithmetic; the
+cap maths holds; and the recalculation + xgboost paths still complete.
+26 new tests (`tests/test_job_safety.py`) — honest total **5,293**
+(4,515 tests/ + 778 doctests, the doctest item count unchanged).
+
+## [1.2.118] — 2026-11-07
+
+### Added — round 204: the feature-recalculation roundtrip (metadata → the same features, new molecules)
+
+The owner's catalog continuation directive: *"add a section to use the
+metadata stored by the feature factory to recalculate the selected
+features."* The selection metadata the factory's Save-JSON button
+writes is now a first-class replay input — the QSAR workflow's
+"apply the frozen feature set" step, one card.
+
+#### The library arm
+
+**`pharmaml.chem.features.recalculate_selected_features(smiles,
+metadata)`** replays a recorded selection against a fresh SMILES batch:
+only the families the recorded columns need are computed (a
+descriptors-only selection never touches the seventeen fingerprint
+families), the result carries exactly the recorded columns in the
+recorded rank order, and `n_jobs`/`progress` pass straight through to
+`compute_feature_frame`. The ledger keys the metadata itself carries
+are cross-checked before any chemistry runs — a stale file from a
+different build fails loudly instead of silently recomputing a drifted
+vocabulary: `fingerprint_sizes` contradictions (recorded bits vs this
+build's), `families_computed` inconsistencies, unknown column
+prefixes, duplicate/empty entries, and features that no longer exist
+in this build's frame (an RDKit property that vanished) are all
+honest `ValueError` stops with the exact story.
+
+#### The playground card
+
+**Feature recalculation (from metadata)** (Chemistry, row 13) carries
+the round-202 guarantees by construction: a one-line subtitle, the
+**Descriptors & features** workflow badge (now 5 steps: … → Feature
+factory → Feature recalculation → …), and a ready-to-run example —
+`examples/data/selection_metadata.json`, a real variance-ranked top-24
+(ecfp + descriptors, 22 + 2 columns) written by the factory's own
+metadata saver over eight drug-like molecules. Three adoption paths:
+the bundled example, any saved JSON file, or **the factory's current
+in-session selection** (no file round-trip at all). The render is the
+value matrix — molecules × recorded features, the first six columns as
+live tree headings — and Save writes CSV / **Excel (.xlsx)** / TSV /
+Markdown / JSON / HTML through the standard table dialog.
+
+#### Numbers
+
+30 new tests (`tests/test_feature_recalculation.py`: 15 library, 2
+example-file, 13 GUI under Xvfb) + 1 new doctest item in
+`recalculate_selected_features` — honest total **5,267** (4,489
+tests/ + 778 doctests). All eight notebooks re-executed at 1.2.118
+(204 s). Census 897 files / 338,379 lines. Release zip
+`build_zip_181` → 923 entries / 885 files / 19,255,469 bytes /
+sha-256 `5e7e07b0…`, byte-identical in all four homes, real leaks 0.
+
+## [1.2.117] — 2026-11-06
+
+### Added — round 202: every card described, complementary cards grouped into workflows
+
+The owner's continuation directive: *"for each card, include a short
+description of what it does, and group cards that are complementary and
+complete a process together."* Both halves ship as the playground's
+third session-wide guarantee (after sample-data-ready and
+Excel-beside-CSV): **every card is described and grouped**.
+
+#### Every card described
+
+All **137 cards** now carry a one-line subtitle saying what the card
+does. Nine cards had shipped bare and gained theirs this round: the
+two *Preview (first 12 rows)* cards (Data & ML, Deep Learning), the
+*Results* cards of Data & ML / Deep Learning / Generative, the
+Generative *Objective & evolution*, PK's *Loading & maintenance
+dosing*, and the Home *What lives where* + *pharmaml could not be
+imported* cards. The guarantee is pinned by a live-walk test over the
+built application (`_live_cards()` — every shell, every tab, zero
+bare titles allowed).
+
+#### Complementary cards — the workflows
+
+A declarative **`WORKFLOWS` registry** (11 pipelines, 57 steps) chains
+the cards that complete a process together, each step addressed by
+`(tab title, card title, step blurb)` — the drift-proof addressing the
+finder's memory already uses:
+
+* **QSAR end-to-end** (Data & ML, 8 steps): Dataset → Preview → Train
+  a model → Results → Leaderboard → Ensemble builder → Model
+  persistence → Applicability domain.
+* **Descriptors & features** (Chemistry, 4): canonical-SMILES
+  standardisation → SMILES inspector → Feature factory → Library
+  similarity scan.
+* **Docking campaign** (Docking, 7): ligand PDBQT → receptor → grid
+  box/configs → campaign runner → results → consensus rescore → the
+  audit card.
+* **Dose design** (PK / PD, 5): Cockcroft–Gault → loading/maintenance
+  → pediatric rules → dosing events & regimen → TDM adjustment.
+* **Exposure analysis** (PK / PD, 5): NCA → half-life ↔ elimination →
+  IV infusion → PBPK first-in-human → the advanced ODE/PBPK card.
+* **Biomarker discovery** (Cell Lines, 5): response screen audit →
+  sensitivity matrix → sensitive vs resistant → expression table →
+  biomarker discovery.
+* **Deep learning study** (Deep Learning, 7): Dataset → Preview →
+  Network & training → Training history → Results → Attribution &
+  attention → Hyperparameter search.
+* **Generative optimization** (Generative, 7): corpus → objective &
+  evolution → results → Pareto front → ring moves → breeding → the
+  scoring oracles.
+* **Unsupervised structure** (3), **Inferential statistics**
+  (Foundations, 3) and **Table preparation** (Utilities, 3) complete
+  the set — every step a live card on the named tab (pinned).
+
+#### The three surfaces
+
+* **The Home map** — a new collapsible *"Complementary cards — the
+  workflows"* card renders the whole registry: one bold name + purpose
+  line per pipeline, then numbered step chips (three per row, full
+  titles, no truncation) each of which **jumps straight to that step's
+  card** via `_jump_to_workflow_step` (title-based tab resolution +
+  the existing flash-and-scroll jump). A step whose card is missing is
+  a true no-op — the selection never moves (the test pins this: the
+  first draft teleported to the tab anyway, and the battery caught
+  it).
+* **The badges** — every participating card (57) wears a quiet
+  `◇ pipeline · step i/n` chip on its title row, tooltip carrying the
+  pipeline's purpose plus the full A → B → C chain. `_CARD_INDEX`
+  stays a 3-tuple (20 unpack sites untouched); the badge registry
+  `_WORKFLOW_BADGES` is the separate, rebuild-exact test surface.
+* **The finder** — Ctrl+F's haystack now includes the workflow name
+  (`workflow_for_card`): typing "docking campaign" lists the whole
+  chain; the dialog's hint line says so.
+
+#### Tests & ship
+
+17 new tests (`tests/test_playground_workflows.py`): registry
+integrity (names unique, ≥3 steps, real tab titles, unique step
+addresses, no card claimed by two pipelines), badge-text math (step
+numbering, unregistered card, unknown workflow), chain text, resolver
+behaviour, and — under Xvfb — the live-built guarantees (137 cards all
+subtitled, 57/57 steps resolve to live cards, 57/57 badges with exact
+text, the Home map card present, both jumps land on the right tab, the
+no-op really is one). The DearPyGui collapsible-registry pin gained
+`home-workflows` (card 137). Fresh pins: **tests/ 4,459 collected +
+777 doctests = 5,236 total; tree 893 files / 337,231 lines; zip
+19,251,057 bytes, sha-256 `6b5c93e4…`** (921 entries / 883 files /
+four homes byte-identical / real leaks 0). All eight notebooks
+re-executed at 1.2.117 (224 s, examples/ as the kernel cwd — the
+notebooks' `Path("data")` resolves there).
+
+## [1.2.116] — 2026-11-06
+
+### Added — round 201: Excel everywhere + every tab sample-data ready (the owner's two session-wide guarantees)
+
+The owner's continuation directive on the catalog work landed two
+session-wide guarantees on the playground: **every tab is sample-data
+ready** (a first-time user is never more than one click from a running
+calculation) and **Excel (.xlsx) rides beside CSV on every input and
+output** (workbooks open in every dataset picker; every table card
+exports them).
+
+#### Excel I/O — the library arms
+
+* `pharmaml.viz.export_table` grew its **sixth format**: `.xlsx`
+  (openpyxl engine, one sheet named `table`, no index column) —
+  `TABLE_FORMATS` is now `csv / tsv / md / json / html / xlsx`, so the
+  playground's shared save dialog writes a workbook the moment the
+  picked name ends in `.xlsx`.
+* `pharmaml.utils.io.read_indexed_table_with_progress` grew the **Excel
+  arm** (`pd.read_excel` with the label-missing positional fallback the
+  CSV twin has) — the Cell Lines expression loader reads `.xlsx`
+  matrices with the `cell_line` label index preserved.
+
+#### Excel I/O — the playground wiring
+
+* A shared `DATA_FILE_TYPES` constant (data files + Excel workbook +
+  CSV-like + all files) now feeds **all 14 dataset pickers**: the
+  Data & ML / Deep Learning / Foundations openers, the chemistry
+  library scan and SMILES-table pickers, the cell-line screen and
+  expression pickers, the bundle-prediction and applicability-domain
+  train/test pickers, both audit pickers, the DTA pair-table browser,
+  and the big-table split picker — all read through the Excel-aware
+  `read_table` (the four raw `pd.read_csv` call sites were ported:
+  bundle prediction, AD train/test, DTA pairs, the sync expression
+  loader which now shares ONE library reader with its worker twin).
+* Every table card's Save button offers **"Excel workbook (*.xlsx)"**
+  (the shared `_save_frame_dialog`), and the three direct exporters
+  honour the extension too: DTA paired features and the UMAP map via
+  `write_table` (the embedding-label index preserved on both arms), the
+  canonical-SMILES corpus via `to_excel` beside `write_csv`.
+
+#### Sample-data ready — the tab-by-tab audit
+
+* Prefilled by design (verified by new pins): the PK/PD NCA
+  concentration-time series, the Best-of-ML basket transactions, the
+  Response AI seeded demos, the Foundations/Best-of-ML synthetic
+  fallbacks.
+* One-click **Load example** buttons already shipped for the feature
+  factory, cell-line screen/expression, docking library/campaign/pocket,
+  Data & ML, Deep Learning, Foundations and Generative — this round
+  added the four missing tabs: **Unsupervised** (loads the QSAR example
+  into the shared dataset and refreshes the column tree), **Best-of ML**
+  (real columns into the privacy + time-series pickers via the shared
+  Foundations frame), **Utilities** (two example tables into the merge
+  slot + the QSAR example as the split source — Run works without a
+  single dialog) and **Home**: a new *"Try it now — sample data"*
+  quick-start card whose five chips load an example AND jump to its tab.
+
+#### Fixed — the latent v1.2.115 staleness the round battery caught
+
+The round's full 674-test GUI battery (run class-aligned, the way the
+suite demands) surfaced five stale pins that had shipped silently
+because their classes had not been re-run since the cards they pin
+grew:
+
+* **Three home quick-jump chips jumped to the WRONG tabs** — the chips
+  hard-coded `index + 1` positions that drifted when Generative /
+  Foundations swapped build order and Best-of ML / Response AI landed
+  between them and Utilities (Foundations → Generative, Generative →
+  Foundations, Utilities → Best-of ML). Jumping is now **title-based**
+  (`_jump_to_tab_by_name`) and the chip row lists all twelve tabs.
+* The round-121 finder pin (`all("NCA" in label)`) predated the
+  round-200 arena card whose subtitle documents its linear-up/log-down
+  NCA engine — the finder's honest two-card match set is now pinned.
+* The round-122/123/124 session-report pins assumed a fresh app has no
+  filled tables — false since the 100x-174 attribution census table
+  pre-fills at build. The guard tests now empty that one tree first
+  (the empty state is honest again); the walk-skip and both-axes pins
+  were updated the same way.
+* The DearPyGui collapsible-card registry pin missed the two round-200
+  arena cards (`pk-advanced-engines`, `dock-dockstring-benchmark`) —
+  both are now in the expected set (with the round-201
+  `home-quick-start` card).
+
+#### Tests & ship
+
+26 new tests (`tests/test_excel_io_and_samples.py`): the library Excel
+arms (round-trips, label index + fallback, unsupported-extension
+verdict), the dialog wiring (all eleven unguarded pickers offer the
+Excel patterns), the four exporters honour `.xlsx`, and the per-tab
+sample-data story (prefills matched, the four new loaders land real
+bundled tables, the quick-start loads AND jumps, every chip title
+resolves). Fresh pins: **tests/ 4,442 collected + 777 doctests =
+5,219 total** (the v1.2.115 pin of 773 doctests was itself stale — the
+arena merge had added three; the census correction rides this entry).
+Full battery green: 869 playground tests (195 non-GUI + 674 GUI across
+ten class-aligned groups) + 470 focused (io / viz / csv_standardize /
+biology / chem_tables) + 776 executed doctests. All eight notebooks
+re-executed at 1.2.116 (the ML notebook's kernel-arg `-W ignore`
+attempt killed the kernel; `PYTHONWARNINGS=ignore` in the environment
+was the working form — the sklearn warning paths stopped leaking the
+venv location into outputs). build_zip_180 → 920 entries / 882 files /
+19,233,206 bytes / sha-256 `cc4eabb5…` / real leaks 0 / four homes
+byte-identical (repo `download/`, `dist-archive/`, legacy
+`download/`, `upload/`). Fresh census: **890 files / 336,397 lines**.
+
+## [1.2.115] — 2026-11-06
+
+### Added — round 200: the arena merge — two parallel catalog absorptions unified into one release
+
+The owner's continuation directive ("Continue the catalog; check other
+branches") surfaced a second, parallel absorption stream: branch
+`arena/2697c755-pharma-ml-toolkit` (one completed commit, 09:40 UTC) had
+folded in the catalog items main had never absorbed as modules, while
+main's round 199 had closed the no-card gap for modules that already
+existed. This release merges both work streams (plus the branch survey:
+`arena/c44913ab` was verified byte-absorbed into main long ago — stale,
+no merge needed). The catalog's disposition is now three-layer: 140/140
+links live-checked, every repository audited for coverage, and every
+absorbable concept either carded, module-backed, or honestly bounded as
+an external engine.
+
+#### From main — round 199: the link check and the nine no-gap cards
+
+### Added — round 199: the GitHub research repository catalog absorbed — link check + the nine cards that closed the no-card gap
+
+The owner's `upload/GitHub_Research_Repository_Catalog.pdf` (140 curated
+repositories across 11 pharma-ML categories) was read end to end, every one
+of its 140 links checked one by one (all live; five redirect to renamed
+orgs — the report ships as `docs/GITHUB_CATALOG_LINKCHECK.md`), and its gap
+analysis drove this release: the backend modules that had **no playground
+card** until now.
+
+* **Chemistry** — `SMILES augmentation (maxsmi)`: randomized atom orderings,
+  uniqueness/charset/token stats (`chem/smiles_enumeration.py`); `ECFP bit
+  highlighter`: the ECFP6-Highlighter-GUI concept — atom/bond environment
+  union, per-bit corpus presence, saveable highlight PNG
+  (`chem/bit_highlights.py`).
+* **Generative** — `Scoring oracles (GuacaMol)`: QED, Ertl SA, normalized
+  penalized logP, rediscovery similarity and the property filter in one
+  click (`chem/oracles.py`).
+* **Foundations** — `Inferential statistics (pingouin)`: Welch ANOVA with
+  Tukey HSD and Games-Howell post-hoc tables over pasted groups
+  (`ml/inferential.py`); `Interpolation lab (SciPy)`: linear/natural-cubic/
+  PCHIP at query points plus the honest holdout audit (`ml/interpolate.py`).
+* **PK** — `PBPK & first-in-human`: microsomal IVIVE, well-stirred hepatic
+  clearance, DDI AUC ratio with inhibitor grading, MABEL vs NOAEL-HED and
+  the FIH starting dose (`pkpd/pbpk.py`); `OSP PBPK model library`: the
+  curated 40-model collection as a browsable, lookup-able table
+  (`pkpd/osplib.py`); `Dosing events & regimen`: the NONMEM/mrgsolve event
+  grammar — addl_until, realized dose tables, weekday schedules
+  (`pkpd/events.py`).
+* **Best of ML** — `Association rules (apriori)`: frequent itemsets and
+  support/confidence/lift rules over pasted transactions (`ml/apriori.py`).
+
+Ten new GUI tests (`TestCatalogAbsorptionGui`) drive every card the way a
+mouse does — tests/ now 4,382 cases (playground 852 → 862), 5,155 with the
+773 doctests. Still card-less, noted for later rounds: `ml/dalex.py`,
+`ml/deepensemble.py`, `ml/drugresponse.py`, `ml/pharmacogenomics.py`,
+`pkpd/physiology.py`, `pkpd/compounds.py`.
+
+#### From arena/2697c755 — the three module fold-ins and the full catalog audit
 
 ### Added — the 140-repository research-catalog disposition, paired DTA, maternal–fetal PK and DOCKSTRING playground fold-ins
 
@@ -121,11 +1676,23 @@
   rather than passed. Static review also corrected the two new plot handlers
   to unpack `new_figure()`'s `(figure, axes)` contract.
 
-### Shipped
+#### Shipped (superseded by the unified 1.2.115 archive below)
 
 * `pharma-ml-toolkit-v1.2.114.zip` — source, tests, complete catalog audit,
   playground fold-ins and freshly executed 1.2.114 notebooks; ZIP integrity
   checked and safe copies retained under the repository's archive protocol.
+
+### Merged
+
+* The merge kept both card sets (no overlaps: 116 shared cards + main's 9
+  + the branch's 3 = 128); the branch's Advanced PK/PD card was re-gridded
+  to row 10 to sit under main's three PK cards; playground/test conflicts
+  resolved as both-sides-kept; the duplicate v1.2.114 zips resolved to
+  main's verified bytes and are superseded by the v1.2.115 rebuild.
+* The branch's GUI tests (skipped in its tkinter-less sandbox) now run
+  for real under this repo's Xvfb — a direct value of the unification.
+* Notebooks re-executed at 1.2.115 (the round-195 staleness lesson: the
+  branch's runs printed its 1.2.114).
 
 ## [1.2.113] — 2026-11-06
 

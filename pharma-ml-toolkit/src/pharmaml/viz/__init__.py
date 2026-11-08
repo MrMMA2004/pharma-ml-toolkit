@@ -45,7 +45,14 @@ layer for **all** toolkit codes:
                   (csv/tsv/markdown/json/html), :func:`save_pdf_report`
                   (multi-page PDF document — the legacy scripts' only
                   report format), :func:`export_docx` (Word tables),
-                  :func:`save_visual_bundle`.
+                  :func:`save_visual_bundle`, and the Part-3 §17
+                  first-class image-export surface:
+                  :func:`export_image` / :func:`export_matrix` /
+                  :func:`export_figure` (PNG/TIFF/JPEG — 16-bit
+                  TIFFs, multi-page stacks, JPEG quality, validated
+                  writes) plus :class:`ExportManager` and
+                  :func:`sniff_format`/ :func:`validate_export`
+                  (magic-byte honesty checks).
 
 matplotlib stays optional: importing this package never needs it —
 only *calling* a plotting function does (clear
@@ -61,10 +68,6 @@ Example
 """
 
 from pharmaml.viz._compat import (
-    DEFAULT_FIGSIZE,
-    EXPORT_DPI,
-    HTML_DPI,
-    MAX_RASTER_PIXELS,
     PALETTE,
     PLOT_FORMATS,
     close_figure,
@@ -85,6 +88,20 @@ from pharmaml.viz.docking_plots import (
     plot_energy_distribution,
     plot_receptor_atom_types,
     plot_top_ligands,
+)
+from pharmaml.viz.export import (
+    EXPORT_EXTENSIONS,
+    EXPORT_FILTERS,
+    TIFF_COMPRESSIONS,
+    ExportFormat,
+    ExportManager,
+    ExportResult,
+    ImageExportOptions,
+    export_figure,
+    export_image,
+    export_matrix,
+    sniff_format,
+    validate_export,
 )
 from pharmaml.viz.generative_plots import (
     plot_mcts_introspection,
@@ -150,20 +167,27 @@ from pharmaml.viz.report import (
 )
 
 __all__ = [
+    # image export (Part-3 §17)
+    "EXPORT_EXTENSIONS",
+    "EXPORT_FILTERS",
     # backend
-    "DEFAULT_FIGSIZE",
-    "EXPORT_DPI",
-    "HTML_DPI",
-    "MAX_RASTER_PIXELS",
     "PALETTE",
     "PDF_THEMES",
     "PLOT_FORMATS",
     "REPORT_THEMES",
     "TABLE_FORMATS",
+    "TIFF_COMPRESSIONS",
+    "ExportFormat",
+    "ExportManager",
+    "ExportResult",
     # reports & tables
     "HTMLReport",
+    "ImageExportOptions",
     "close_figure",
     "export_docx",
+    "export_figure",
+    "export_image",
+    "export_matrix",
     "export_table",
     "figure_to_base64",
     "get_pyplot",
@@ -229,4 +253,6 @@ __all__ = [
     "save_figure",
     "save_pdf_report",
     "save_visual_bundle",
+    "sniff_format",
+    "validate_export",
 ]
