@@ -2046,6 +2046,38 @@ def detect_smiles_column(frame: Any) -> str | None:
     return None
 
 
+#: (round 225, Part-3 §19.3) column-name tokens that mark a GROUP
+#: source -- the replicate/cluster labels the grouped CV strategies
+#: keep inside one side of every fold.
+_GROUP_COLUMN_TOKENS: tuple[str, ...] = (
+    "group",
+    "cluster",
+    "series",
+    "batch",
+    "plate",
+    "cohort",
+)
+
+
+def detect_group_column(frame: Any) -> str | None:
+    """Find a group-like column for the grouped CV strategies, or None.
+
+    A column whose (case-insensitive, ``_``/space-stripped) name
+    contains a group token (``group`` / ``cluster`` / ``series`` /
+    ``batch`` / ``plate`` / ``cohort``) and holds 2..n_rows/2 distinct
+    values -- one label per replicate set, not a unique-per-row ID and
+    not a constant.
+    """
+    n_rows = len(frame)
+    for column in frame.columns:
+        flat = str(column).strip().lower().replace(" ", "_")
+        if any(token in flat for token in _GROUP_COLUMN_TOKENS):
+            distinct = frame[column].nunique()
+            if 2 <= distinct <= max(2, n_rows // 2):
+                return str(column)
+    return None
+
+
 def default_target_column(frame: Any) -> str | None:
     """Pick the most likely target column of a loaded dataset.
 
@@ -2361,6 +2393,19 @@ _ML_SPLIT_STRATEGIES: tuple[str, ...] = (
     "scaffold",
     "kennard_stone",
     "temporal",
+)
+
+#: (round 225, Part-3 §19.3) the CV fold strategies the Compare button
+#: threads into pharmaml.ml.cv_results.compare_models_cv -- mirrors
+#: ``pharmaml.ml.cv_results.CV_STRATEGIES`` plus the 'auto' token (the
+#: task default: stratified for classification, kfold for regression).
+_ML_CV_STRATEGIES: tuple[str, ...] = (
+    "auto",
+    "kfold",
+    "stratified",
+    "group",
+    "stratified_group",
+    "scaffold",
 )
 
 #: Hidden-activation tokens -- mirrors ``pharmaml.ml.neural._ACTIVATIONS``
@@ -20441,16 +20486,40 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         form_row(config, "model", self._model_combo)
         # manual model settings (100x-106): the CV fold count the
         # Train button threads into train_model (tune on) and the
-        # leaderboard button's own 3-fold convention stays untouched.
+        # leaderboard button reads too (round 225: the §19 CV results
+        # interface made folds configurable on BOTH buttons).
         self._ml_cv_spin = ttk.Spinbox(config, from_=2, to=10, increment=1, width=10)
         self._ml_cv_spin.set("5")
         Tooltip(
             self._ml_cv_spin,
             "Cross-validation folds for Train & evaluate with the tune "
-            "tick on (and the CV columns of the saved report). The "
-            "leaderboard button keeps its own 3-fold convention.",
+            "tick on, and for the Compare-models leaderboard's full §19 "
+            "CV report (fold scores, mean ± std, per-model detail). 5 = "
+            "the directive's default; 3 for expensive models or limited "
+            "data (default_folds justifies every choice).",
         )
         form_row(config, "cv folds", self._ml_cv_spin)
+        # (round 225, Part-3 §19.3) the CV fold STRATEGY -- how the folds
+        # themselves are drawn (a different question from the train/test
+        # fence above): row-level, stratified, grouped, or Murcko-scaffold.
+        self._ml_cv_strategy = ttk.Combobox(
+            config, state="readonly", width=26, values=_ML_CV_STRATEGIES
+        )
+        self._ml_cv_strategy.set("auto")
+        Tooltip(
+            self._ml_cv_strategy,
+            "How the Compare-models CV folds are drawn "
+            "(pharmaml.ml.cv_results): auto -- stratified for "
+            "classification, kfold for regression; group / "
+            "stratified_group -- replicate rows never straddle folds "
+            "(needs a group-like column; SMILES column groups by "
+            "scaffold); scaffold -- Bemis-Murcko frameworks never span "
+            "train/validation folds, the honest structural-generalisation "
+            "estimate (expect LOWER scores than row-level CV -- that gap "
+            "is the optimism of random folds made visible). Double-click "
+            "a leaderboard row for the full §19 fold-by-fold report.",
+        )
+        form_row(config, "cv strategy", self._ml_cv_strategy)
         # (round 179) the split strategy + worker count, shared by the
         # tab's Train / Ensemble / Tune cards.
         self._ml_split_combo = ttk.Combobox(
@@ -20499,9 +20568,12 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         train_btn.pack(side="left")
         compare_btn = self._action_button(
             buttons,
-            "Compare models (3-fold CV)",
+            "Compare models (CV)",
             self._ml_compare,
-            tooltip="Cross-validated leaderboard over the available registry.",
+            tooltip="The full §19 CV leaderboard: every registry model "
+            "under the SAME folds (cv folds + cv strategy above), each "
+            "row carrying its formatted 'mean ± std (k-fold CV)' score. "
+            "Double-click a row for the fold-by-fold detail window.",
         )
         compare_btn.pack(side="left", padx=(10, 0))
         self._ml_pdf_var = tk.BooleanVar(value=False)
@@ -21166,6 +21238,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         self._board_tree = ttk.Treeview(board_frame, show="headings", height=6)
         board_bar = ttk.Scrollbar(board_frame, orient="vertical", command=self._board_tree.yview)
         self._board_tree.configure(yscrollcommand=board_bar.set)
+        # (round 225, Part-3 §19.8) double-click a compare-models row for
+        # the full CV report window (fold table, aggregates, notes, chart);
+        # rows from other fillers answer with the honest status hint.
+        self._board_tree.bind("<Double-1>", self._ml_cv_detail, add="+")
         self._board_tree.pack(side="left", fill="both", expand=True)
         board_bar.pack(side="right", fill="y")
         board_buttons = ttk.Frame(board, style="Card.TFrame")
@@ -24026,11 +24102,53 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             messagebox.showwarning("Check the n_jobs setting", str(exc))
             return
 
-        # (100x-142) same main-thread capture as _ml_train.
+        # (100x-142) same main-thread capture as _ml_train -- captured
+        # BEFORE the §19 strategy block below reads its columns.
         frame = self._ml_frame
 
+        # (round 225, Part-3 §19) the full CV report: fold count from
+        # the spinner, fold strategy from the combo, groups honestly
+        # sourced (scaffold -> the SMILES column's Murcko frameworks;
+        # group-like strategies -> a group/cluster/series column, if
+        # the dataset carries one).
+        try:
+            folds = parse_int(self._ml_cv_spin.get(), "cv folds", minimum=2, maximum=10)
+        except ValueError as exc:
+            messagebox.showerror("Input", str(exc))
+            return
+        cv_strategy = self._ml_cv_strategy.get()
+        smiles: list[str] | None = None
+        groups: list[object] | None = None
+        if cv_strategy == "scaffold":
+            smiles_column = detect_smiles_column(frame)
+            if smiles_column is None:
+                messagebox.showwarning(
+                    "No SMILES column",
+                    "Scaffold CV groups rows by their Bemis-Murcko "
+                    "framework -- the loaded dataset has no SMILES-like "
+                    "column. Switch the cv strategy to auto/stratified or "
+                    "load a molecular dataset.",
+                )
+                return
+            smiles = [str(value) for value in frame[smiles_column].tolist()]
+        elif cv_strategy in ("group", "stratified_group"):
+            group_column = detect_group_column(frame)
+            if group_column is None:
+                messagebox.showwarning(
+                    "No group column",
+                    f"The {cv_strategy!r} fold strategy needs a group-like "
+                    "column (group / cluster / series / batch / plate / "
+                    "cohort) so replicate rows never straddle folds -- the "
+                    "dataset carries none. Scaffold CV offers the same "
+                    "leakage honesty for molecular data (it derives the "
+                    "groups from the SMILES column).",
+                )
+                return
+            groups = frame[group_column].tolist()
+        engine_strategy = None if cv_strategy == "auto" else cv_strategy
+
         def work(report: Any) -> Any:
-            from pharmaml.ml import compare_models
+            from pharmaml.ml import compare_models_cv
 
             y = frame[target]
             numeric, _dropped = numeric_feature_columns(frame, target)
@@ -24040,9 +24158,22 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 # model name is the note, index/total the fraction.
                 report(info["index"], info["total"], info["model"])
 
-            return compare_models(frame[numeric], y, task, cv=3, n_jobs=n_jobs, on_model=on_model)
+            return compare_models_cv(
+                frame[numeric],
+                y,
+                task,
+                strategy=engine_strategy,
+                n_folds=folds,
+                smiles=smiles,
+                groups=groups,
+                on_model=on_model,
+            )
 
-        def render(board: Any) -> None:
+        def render(payload: Any) -> None:
+            results, board = payload
+            # (round 225) keep the full §19 CVResults for the detail
+            # window (double-click a row); a fresh run replaces them.
+            self._cv_results = {result.model: result for result in results}
             self._board_frame = board
             self._board_tree.delete(*self._board_tree.get_children())
             columns = [str(column) for column in board.columns]
@@ -24054,12 +24185,194 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
                 self._board_tree.insert(
                     "", "end", values=[_cell_text(value, limit=30) for value in row.tolist()]
                 )
+            strategy_label = cv_strategy if cv_strategy != "auto" else (
+                "stratified" if task == "classification" else "kfold"
+            )
             self._board_status.configure(
-                text="3-fold CV over the available registry — the score column "
-                "is the task's objective (higher is better)"
+                text=f"{folds}-fold {strategy_label} CV over the available "
+                "registry — every row is 'mean ± std (k-fold CV)' under the "
+                "SAME folds; double-click a row for the fold-by-fold §19 "
+                "report (individual fold scores, train-side mirrors, notes)"
             )
 
         self._start_job(f"comparing models ({task}){njobs_note}", work, render)
+
+    def _ml_cv_detail(self, event: Any = None) -> None:
+        """(round 225, Part-3 §19.8) the dedicated CV results section.
+
+        Double-click on the leaderboard opens this window for the
+        clicked model's full :class:`~pharmaml.ml.cv_results.CVResult`:
+        the §19.2 display contract (``CV Score = mean ± std (k-fold
+        CV)``), the fold-by-fold table (individual fold scores + the
+        train-side mirrors + fold sizes/timings), the per-metric
+        aggregates with their honest directions, the strategy
+        limitations notes, and the fold-by-fold chart (per-fold primary
+        score with the mean line and the ± std band) -- CV performance
+        and any future independent-test numbers stay structurally
+        separate (§19.7's "clearly distinguish" rule).
+        """
+        selection = self._board_tree.selection()
+        row_id = selection[0] if selection else self._board_tree.identify_row(event.y)
+        if not row_id:
+            return
+        values = self._board_tree.item(row_id, "values")
+        if not values:
+            return
+        model_name = str(values[0])
+        results = getattr(self, "_cv_results", None) or {}
+        result = results.get(model_name)
+        if result is None:
+            # another flow filled the board (family benchmark, trials)
+            self._board_status.configure(
+                text="no §19 CV report on this row — run Compare models (CV) "
+                "first; double-click detail is the compare board's own"
+            )
+            return
+
+        from pharmaml.ml.cv_results import METRIC_LABELS
+
+        win = tk.Toplevel(self)
+        win.title(f"CV report — {result.model}")
+        win.configure(background=BG)
+        win.transient(self)
+        try:
+            win.geometry(
+                f"900x680+{max(40, self.winfo_rootx() + 60)}+"
+                f"{max(40, self.winfo_rooty() + 40)}"
+            )
+        except tk.TclError:  # pragma: no cover - unmapped parent
+            pass
+
+        # -- the §19.2 headline ------------------------------------------ #
+        ttk.Label(
+            win,
+            text=f"{result.model} — {result.summary()}",
+            style="CardTitle.TLabel",
+        ).pack(anchor="w", padx=14, pady=(12, 2))
+        ttk.Label(
+            win,
+            text=(
+                f"task {result.task} · strategy {result.strategy} · "
+                f"{result.n_folds} folds · seed {result.seed} · "
+                f"{METRIC_LABELS.get(result.primary, (result.primary, False))[0]} "
+                f"(primary) · {result.duration_s:.1f} s wall · "
+                f"pharmaml {result.toolkit_version}"
+            ),
+            style="CardMuted.TLabel",
+        ).pack(anchor="w", padx=14, pady=(0, 6))
+
+        # -- the fold-by-fold table (§19.2 individual fold scores) ------ #
+        fold_frame = ttk.Frame(win, style="Card.TFrame")
+        fold_frame.pack(fill="both", expand=True, padx=14, pady=(0, 6))
+        fold_tree = ttk.Treeview(fold_frame, show="headings", height=6)
+        fold_bar = ttk.Scrollbar(fold_frame, orient="vertical", command=fold_tree.yview)
+        fold_tree.configure(yscrollcommand=fold_bar.set)
+        short_names = [
+            (name, METRIC_LABELS.get(name, (name, False))[0]) for name in result.metrics
+        ]
+        fold_columns = ["fold", "n_train", "n_val"] + [
+            f"val {label}" for _name, label in short_names
+        ]
+        fold_tree["columns"] = fold_columns
+        for column in fold_columns:
+            fold_tree.heading(column, text=column)
+            fold_tree.column(column, width=95, minwidth=70, stretch=True)
+        for record in result.folds:
+            cells = [record.fold, record.n_train, record.n_val]
+            for name, _label in short_names:
+                value = record.scores.get(name)
+                cells.append(_cell_text(round(value, 4) if value is not None else "nan", limit=12))
+            fold_tree.insert("", "end", values=cells)
+        fold_tree.pack(side="left", fill="both", expand=True)
+        fold_bar.pack(side="right", fill="y")
+
+        # -- the aggregates + train-side mirror (§19.2 mean / std) ------ #
+        agg_frame = ttk.Frame(win, style="Card.TFrame")
+        agg_frame.pack(fill="x", padx=14, pady=(0, 6))
+        agg_tree = ttk.Treeview(agg_frame, show="headings", height=5)
+        agg_columns = ["metric", "mean ± std (k-fold CV)", "train mean", "direction"]
+        agg_tree["columns"] = agg_columns
+        for column in agg_columns:
+            agg_tree.heading(column, text=column)
+            agg_tree.column(column, width=200 if column == "metric" else 170, stretch=True)
+        for name, summary in result.metrics.items():
+            label, lower_is_better = METRIC_LABELS.get(name, (name, False))
+            train_values = [
+                record.train_scores.get(name)
+                for record in result.folds
+                if record.train_scores.get(name) is not None
+            ]
+            train_mean = (
+                f"{sum(train_values) / len(train_values):.4f}" if train_values else "—"
+            )
+            direction = "lower is better" if lower_is_better else "higher is better"
+            agg_tree.insert(
+                "", "end", values=(label, summary.summary(), train_mean, direction)
+            )
+        agg_tree.pack(side="left", fill="both", expand=True)
+
+        # -- the notes (§19.3 documented limitations / drops) ------------ #
+        if result.notes:
+            ttk.Label(
+                win, text="notes — strategy & metric honesty", style="CardMuted.TLabel"
+            ).pack(anchor="w", padx=14, pady=(4, 0))
+            notes_text = tk.Text(
+                win,
+                height=min(6, len(result.notes)),
+                width=104,
+                wrap="word",
+                background=CARD,
+                relief="flat",
+                font=("TkDefaultFont", 9),
+            )
+            notes_text.insert("1.0", "\n".join(f"• {note}" for note in result.notes))
+            notes_text.configure(state="disabled")
+            notes_text.pack(anchor="w", padx=14, pady=(0, 6))
+
+        # -- the fold-by-fold chart (§19.8 recommended) ------------------ #
+        chart_host = ttk.Frame(win, style="Card.TFrame")
+        chart_host.pack(fill="both", expand=True, padx=14, pady=(0, 10))
+        try:
+            # the toolkit's compat helper: forces the safe Agg backend
+            # BEFORE pyplot resolution could pick Qt (PySide6 aborts the
+            # process on a cursor-less Xvfb -- the probe caught it).
+            from pharmaml.viz import get_pyplot
+
+            plt = get_pyplot()
+
+            summary = result.metrics[result.primary]
+            label, lower_is_better = METRIC_LABELS.get(
+                result.primary, (result.primary, False)
+            )
+            figure, axis = plt.subplots(figsize=(8.6, 2.9))
+            folds = range(1, result.n_folds + 1)
+            axis.plot(
+                folds,
+                summary.folds,
+                marker="o",
+                linewidth=1.6,
+                label="fold score",
+            )
+            axis.axhline(summary.mean, linestyle="--", linewidth=1.2, label="mean")
+            axis.fill_between(
+                list(folds),
+                summary.mean - summary.std,
+                summary.mean + summary.std,
+                alpha=0.18,
+                label="± 1 std",
+            )
+            axis.set_xlabel("fold")
+            axis.set_ylabel(label)
+            axis.set_title(
+                f"{result.model} — {result.summary()}"
+                + (" (lower is better)" if lower_is_better else "")
+            )
+            axis.set_xticks(list(folds))
+            axis.grid(alpha=0.3)
+            axis.legend(loc="best", fontsize=8)
+            self._render_figure(chart_host, figure, f"CV folds — {result.model}")
+        except Exception:  # noqa: BLE001 — the chart is a bonus, never a blocker
+            chart_host.destroy()
 
     def _ml_benchmark_families(self) -> None:
         """Cross-validate one model over every 2D feature family (100x-148).

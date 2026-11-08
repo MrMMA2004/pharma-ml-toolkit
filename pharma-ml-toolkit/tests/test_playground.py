@@ -3419,6 +3419,176 @@ class TestNumericFeatureGuard:
 
 
 # --------------------------------------------------------------------- #
+# the round-225 Part-3 §19 CV results interface: the cv-strategy combo,
+# the formatted 'mean ± std (k-fold CV)' board, and the double-click
+# fold-by-fold report window
+# --------------------------------------------------------------------- #
+class TestCVResultsGui:
+    @pytest.fixture()
+    def app(self, playground: Any, xvfb_display: str) -> Any:
+        application = playground.PlaygroundApp(persist_session=False)
+        yield application
+        application.destroy()
+        import gc
+
+        del application
+        gc.collect()
+
+    @pytest.fixture()
+    def quiet_dialogs(self, playground: Any, monkeypatch: Any) -> list[Any]:
+        seen: list[Any] = []
+        for name in ("showerror", "showwarning", "showinfo"):
+            monkeypatch.setattr(
+                playground.messagebox,
+                name,
+                lambda *a, _seen=seen, _n=name, **k: _seen.append((_n, a)),
+            )
+        return seen
+
+    @staticmethod
+    def _drain_jobs(app: Any, timeout: float = 120.0) -> bool:
+        import time
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            app.update()
+            if not app._busy:
+                return True
+            time.sleep(0.02)
+        return False
+
+    # -- source pins: the strategy mirror + the wiring ------------------- #
+
+    def test_cv_strategy_tokens_mirror_the_library(self, playground: Any) -> None:
+        from pharmaml.ml.cv_results import CV_STRATEGIES
+
+        assert set(playground._ML_CV_STRATEGIES) - {"auto"} == set(CV_STRATEGIES)
+
+    def test_cv_interface_source_pins(self) -> None:
+        source = PLAYGROUND_PATH.read_text(encoding="utf-8")
+        assert '"Compare models (CV)"' in source
+        assert 'self._board_tree.bind("<Double-1>", self._ml_cv_detail' in source
+        assert "def _ml_cv_detail" in source
+        assert "compare_models_cv" in source
+        assert 'form_row(config, "cv strategy", self._ml_cv_strategy)' in source
+        assert "detect_group_column" in source
+
+    def test_detect_group_column_is_honest_about_what_counts(self, playground: Any) -> None:
+        import pandas as pd
+
+        frame = pd.DataFrame(
+            {
+                "value": [1.0] * 8,
+                "cluster_id": [1, 1, 2, 2, 3, 3, 4, 4],  # 4 groups of 2
+                "row_id": range(8),  # unique-per-row: an ID, never a group
+                "batch": ["x"] * 8,  # constant: never a group
+            }
+        )
+        assert playground.detect_group_column(frame) == "cluster_id"
+        assert playground.detect_group_column(pd.DataFrame({"value": [1.0, 2.0]})) is None
+
+    # -- pre-flight guards (descriptors-only example) -------------------- #
+
+    def test_scaffold_cv_without_smiles_warns_before_the_job(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()  # qsar_regression.csv: descriptors-only
+        app._ml_cv_strategy.set("scaffold")
+        app._ml_compare()
+        assert not app._busy  # the gate stopped before any job started
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "No SMILES column" in titles
+        message = next(c[1][1] for c in quiet_dialogs if c[0] == "showwarning")
+        assert "Bemis-Murcko" in message
+        app._ml_cv_strategy.set("auto")
+
+    def test_group_cv_without_a_group_column_warns_before_the_job(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        app._ml_load_example()  # no group/cluster/series column either
+        app._ml_cv_strategy.set("group")
+        app._ml_compare()
+        assert not app._busy
+        titles = [call[1][0] for call in quiet_dialogs]
+        assert "No group column" in titles
+        message = next(c[1][1] for c in quiet_dialogs if c[0] == "showwarning")
+        assert "never straddle" in message
+        app._ml_cv_strategy.set("auto")
+
+    # -- the functional path: board + double-click report ---------------- #
+
+    def test_compare_board_carries_the_formatted_score_and_opens_the_report(
+        self, app: Any, playground: Any, quiet_dialogs: list[Any], monkeypatch: Any
+    ) -> None:
+        import tkinter as tkmod
+
+        import pharmaml.ml as ml_module
+        from pharmaml.ml import compare_models_cv as real_compare
+
+        def fast_compare(X: Any, y: Any, task: str, models: Any = None, **kwargs: Any) -> Any:
+            # the real engine on a fast two-model panel -- the GUI test
+            # must not fan out over the whole registry.
+            return real_compare(X, y, task, ["ridge", "lasso"], **kwargs)
+
+        monkeypatch.setattr(ml_module, "compare_models_cv", fast_compare)
+        app._ml_load_example()
+        app._ml_cv_spin.set("3")
+        app._ml_compare()
+        assert self._drain_jobs(app, timeout=300.0), "compare job hung"
+        assert quiet_dialogs == []
+        # the board carries the §19.2 formatted column
+        board = app._board_frame
+        assert "cv_score" in board.columns
+        assert board["cv_score"].str.contains("±").all()
+        assert board["cv_score"].str.endswith("(3-fold CV)").all()
+        assert set(board["model"]) == {"ridge", "lasso"}
+        assert (board["strategy"] == "kfold").all()  # regression task default
+        # the full CVResults are kept for the detail window
+        assert set(app._cv_results) == {"ridge", "lasso"}
+        # double-click the FIRST row (the better model) -> the report
+        first_row = app._board_tree.get_children()[0]
+        app._board_tree.selection_set(first_row)
+        app._ml_cv_detail()
+        dialogs = [
+            child
+            for child in app.winfo_children()
+            if isinstance(child, tkmod.Toplevel)
+            and child.title().startswith("CV report — ")
+        ]
+        assert len(dialogs) == 1
+        win = dialogs[0]
+        expected_model = str(app._board_tree.item(first_row, "values")[0])
+        assert win.title() == f"CV report — {expected_model}"
+        # the fold table + the aggregates table live inside (the fold
+        # tree sits one frame down -- walk the whole window)
+        def _walk(widget: Any) -> Any:
+            for child in widget.winfo_children():
+                yield child
+                yield from _walk(child)
+
+        trees = [w for w in _walk(win) if w.winfo_class() == "Treeview"]
+        fold_trees = [t for t in trees if "fold" in t["columns"]]
+        assert fold_trees and len(fold_trees[0].get_children()) == 3  # 3 fold rows
+        win.destroy()
+
+    def test_double_click_on_a_foreign_board_answers_with_the_status_hint(
+        self, app: Any, quiet_dialogs: list[Any]
+    ) -> None:
+        # a board row with NO §19 report behind it (e.g. a family
+        # benchmark) must not open a window -- the honest status hint
+        app._ml_load_example()
+        app._cv_results = {}  # nothing stored (as after a foreign filler)
+        app._board_tree.delete(*app._board_tree.get_children())
+        app._board_tree["columns"] = ("family",)
+        app._board_tree.insert("", "end", values=("ecfp",))
+        row = app._board_tree.get_children()[0]
+        app._board_tree.selection_set(row)
+        app._ml_cv_detail()
+        assert "no §19 CV report" in app._board_status.cget("text")
+        assert quiet_dialogs == []
+
+
+# --------------------------------------------------------------------- #
 # the Data & ML tab's Hyperparameter search card (100x-90) -- the
 # RandomSearch story, mouse edition
 # --------------------------------------------------------------------- #

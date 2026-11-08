@@ -172,6 +172,24 @@ _BUDGET_SLOTS: frozenset[str] = frozenset(
 )
 
 
+def _bounds(param: ParamAdvice) -> tuple[float, float]:
+    """``(low, high)`` of a numeric-kind parameter, contract enforced.
+
+    Numeric kinds always carry bounds — :func:`validate_space` rejects
+    a numeric row without them — so a ``None`` here is a malformed
+    advice row, and the honest answer is the loud error, not a silent
+    ``float(None)`` crash deeper in the narrowing/adaptation math.
+    (The round-225 mypy truing: the narrowing never had a runtime bug,
+    but the type holes hid the contract.)
+    """
+    if param.low is None or param.high is None:
+        raise ModelError(
+            f"parameter {param.name!r} (kind {param.kind!r}) is missing its "
+            "numeric bounds -- a malformed advice row"
+        )
+    return float(param.low), float(param.high)
+
+
 # ---------------------------------------------------------------------------
 # The advice records
 # ---------------------------------------------------------------------------
@@ -222,7 +240,7 @@ class ParamAdvice:
         if style == "exploratory" or self.kind in {"fixed", "boolean"}:
             return self
         if self.kind in {"int", "float"}:
-            low, high = float(self.low), float(self.high)
+            low, high = _bounds(self)
             if style == "balanced":
                 return self
             if self.log:
@@ -241,9 +259,9 @@ class ParamAdvice:
                     return self
                 return replace(self, low=float(lo_i), high=float(hi_i))
             if self.step:
-                step = float(self.step)
-                lo = low + math.ceil((lo - low) / step) * step
-                hi = low + math.floor((hi - low) / step) * step
+                step_f = float(self.step)
+                lo = low + math.ceil((lo - low) / step_f) * step_f
+                hi = low + math.floor((hi - low) / step_f) * step_f
                 if hi <= lo:
                     return self
             return replace(self, low=lo, high=hi)
@@ -1089,7 +1107,8 @@ def _cap_int(param: ParamAdvice, cap: int) -> tuple[ParamAdvice, bool]:
     A cap below the declared low leaves the parameter unchanged -- the
     honest refusal (``max_iter``'s floor of 500 is not "capped" by 300).
     """
-    low, high = int(param.low), int(param.high)
+    low_f, high_f = _bounds(param)
+    low, high = int(low_f), int(high_f)
     if cap < low or cap >= high:
         return param, False
     return replace(param, high=float(cap)), True
@@ -1169,8 +1188,9 @@ def recommend_search(
             if "n_neighbors" in names:
                 for i, p in enumerate(params):
                     if p.name == "n_neighbors":
-                        cap = max(3, min(int(p.high), n_samples // 2))
-                        if cap < p.high:
+                        _low, high = _bounds(p)
+                        cap = max(3, min(int(high), n_samples // 2))
+                        if cap < high:
                             params[i] = replace(p, high=float(cap))
                             capped_any = True
                         break
@@ -1196,7 +1216,7 @@ def recommend_search(
             if p.name == "epochs":
                 params[i], changed = _cap_int(p, 100)
                 capped_any = capped_any or changed
-            if p.kind == "int" and p.name == "batch_size" and p.low < 32:
+            if p.kind == "int" and p.name == "batch_size" and p.low is not None and p.low < 32:
                 params[i] = replace(p, low=32.0)
                 capped_any = True
             if p.kind == "choice" and p.name == "batch_size":
@@ -1420,8 +1440,8 @@ def validate_space(
                 )
             )
     if "gamma" in names and "kernel" in names:
-        kernels = {str(k) for k in _collect_choices(params, "kernel")}
-        if kernels == {"linear"}:
+        kernel_set = {str(k) for k in _collect_choices(params, "kernel")}
+        if kernel_set == {"linear"}:
             issues.append(
                 SpaceIssue("warning", "gamma", "gamma is ignored by the linear kernel")
             )
@@ -1581,9 +1601,11 @@ def estimate_evaluations(
         elif p.kind == "boolean":
             count *= 2
         elif p.kind == "int" and not p.step:
-            count *= max(1, int(p.high) - int(p.low) + 1)
+            _low, _high = _bounds(p)
+            count *= max(1, int(_high) - int(_low) + 1)
         elif p.step:
-            points = round((p.high - p.low) / p.step) + 1
+            _low, _high = _bounds(p)
+            points = round((_high - _low) / p.step) + 1
             count *= max(1, points)
         else:
             count *= 20
@@ -1797,17 +1819,19 @@ def hypermodel_from_advice(
         drawn: dict[str, Any] = {}
         for p in rec.params:
             if p.kind == "int":
+                _low, _high = _bounds(p)
                 drawn[p.name] = hp.Int(
                     p.name,
-                    int(p.low),
-                    int(p.high),
+                    int(_low),
+                    int(_high),
                     step=int(p.step) if p.step else None,
                 )
             elif p.kind == "float":
+                _low, _high = _bounds(p)
                 drawn[p.name] = hp.Float(
                     p.name,
-                    float(p.low),
-                    float(p.high),
+                    _low,
+                    _high,
                     step=float(p.step) if p.step else None,
                     log=p.log,
                 )

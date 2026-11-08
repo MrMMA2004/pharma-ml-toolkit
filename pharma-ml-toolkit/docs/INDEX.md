@@ -243,10 +243,12 @@ after adding new public functions.
 | `CATEGORY_COVERAGE` | constant |  |
 | `CHANGEPOINT_ALPHA` | constant |  |
 | `CHANGEPOINT_MIN_SEGMENT` | constant |  |
+| `CLASSIFICATION_CV_METRICS` | constant |  |
 | `COVERAGE_EXTERNAL` | constant |  |
 | `COVERAGE_NATIVE` | constant |  |
 | `COVERAGE_OUT_OF_SCOPE` | constant |  |
 | `COVERAGE_PARTIAL` | constant |  |
+| `CV_STRATEGIES` | constant |  |
 | `DEEPDTA_CHARCANSMISET` | constant |  |
 | `DEEPDTA_CHARISOSMISET` | constant |  |
 | `DEEPDTA_CHARPROTSET` | constant |  |
@@ -258,9 +260,11 @@ after adding new public functions.
 | `INITIAL_POINTS_PER_DIM` | constant |  |
 | `KDE_KERNELS` | constant |  |
 | `MANIFOLD_METHODS` | constant |  |
+| `METRIC_LABELS` | constant |  |
 | `MODEL_ALIASES` | constant |  |
 | `MODEL_REGISTRY` | constant |  |
 | `NO_SCALE_MODELS` | constant |  |
+| `REGRESSION_CV_METRICS` | constant |  |
 | `SCRATCH_ACTIVATIONS` | constant |  |
 | `SCRATCH_TASKS` | constant |  |
 | `SEQUENCE_MODELS` | constant |  |
@@ -285,6 +289,7 @@ after adding new public functions.
 | `BayesianSearchReport` | class | The oracle's ledger: trials, the best, the acquisition diagnostics. |
 | `BootstrapUncertainty` | class | Bootstrap-ensemble uncertainty of a fitted estimator. |
 | `BroadcastReport` | class | NumPy's broadcasting verdict for two shapes. |
+| `CVResult` | class | A complete §19 CV report for one model on one dataset. |
 | `CapacityPoint` | class | One (width, train loss, validation loss) sample of the sweep. |
 | `CapacitySweepResult` | class | Chapter 5's "reducing the network's size" figure, as data. |
 | `CatalogCategory` | class | One catalogue section: slug, title, subtitle, live counts. |
@@ -312,6 +317,7 @@ after adding new public functions.
 | `EvaluationEstimate` | class | The pre-execution budget answer (§18.5). |
 | `Factor` | class | One predictor inside a term: numeric, categorical or intercept. |
 | `FewShotReport` | class | The three-arm verdict on a new task (TCRP's evaluation). |
+| `FoldRecord` | class | One fold's honest bookkeeping (§19.2 "individual fold scores"). |
 | `ForecastResult` | class | Everything the sequence card reports, after one run. |
 | `GaussianProcessSurrogate` | class | An RBF-kernel Gaussian process over the trials seen so far. |
 | `GmmResult` | class | Typed report of :func:`gmm_cluster`. |
@@ -334,6 +340,7 @@ after adding new public functions.
 | `MedianPruner` | function | The median pruner: ``PercentilePruner(50)``. |
 | `MetaHistory` | class | The meta-training curve. |
 | `MetaModel` | class | The meta-trained network (TCRP's ``observed_tissue_model``). |
+| `MetricSummary` | class | One metric aggregated across folds (mean, std, every fold value). |
 | `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
 | `Module` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `NaiveDense` | class | Chollet's ``NaiveDense`` (chapter 2), plain NumPy. |
@@ -407,6 +414,7 @@ after adding new public functions.
 | `brute_force_knn` | function | The exact top-k by Euclidean distance -- the benchmark baseline. |
 | `build_ann_classifier` | function | sklearn MLP classifier hypermodel (the legacy ANN upgrade). |
 | `build_ann_regressor` | function | sklearn MLP regressor hypermodel (the legacy ANN upgrade). |
+| `build_cv_splitter` | function | Build the CV splitter plus its limitations notes (§19.3). |
 | `build_deep_classifier` | function | Deep MLP classifier hypermodel (PyTorch, ``batchnorm`` searchable). |
 | `build_deep_regressor` | function | Deep MLP regressor hypermodel (PyTorch, ``batchnorm`` searchable). |
 | `build_hsvr` | function | :class:`~pharmaml.ml.hierarchical.HierarchicalSVR` hypermodel. |
@@ -423,13 +431,19 @@ after adding new public functions.
 | `commonsense_baseline` | function | Predict "the last observed value" (``evaluate_naive_method``). |
 | `compare_groups` | function | The course's decision flow, end to end, every branch reported. |
 | `compare_models` | function | Cross-validated leaderboard over (a subset of) the registry. |
+| `compare_models_cv` | function | Cross-validate a model panel into full §19 reports + the board. |
 | `composition_report` | function | Sequential composition: the ε's of queries on the same rows add. |
 | `contrast_matrix` | function | The coding matrix for one categorical factor. |
 | `coverage_table` | function | The category-by-category audit, in catalogue order. |
 | `cross_entropy` | function | Softmax cross-entropy: ``mean(−log_softmax[i, label_i])``. |
 | `cross_model_importances` | function | Permutation importances for a WHOLE panel of fitted models. |
+| `cross_validate_model` | function | Cross-validate ONE registry model into a full §19 CVResult. |
 | `curve_fit` | function | The scipy-named entry point: (best params, covariance matrix). |
+| `cv_result_from_dict` | function | Rebuild a :class:`CVResult` from :meth:`CVResult.to_dict` output. |
+| `cv_result_to_dict` | function | §19.9 interchange: :class:`CVResult` → JSON-ready dict. |
+| `dataset_fingerprint` | function | Stable sha256 fingerprint of the data a CV result belongs to. |
 | `deepdta_rm2` | function | DeepDTA's ``get_rm2`` external-prediction metric. |
+| `default_folds` | function | Fold-count default with its justification (§19.3). |
 | `demo_dta_frame` | function | Twelve synthetic, clearly non-benchmark pairs for the offline GUI. |
 | `describe_series` | function | One sample's descriptive statistics (scipy's moment machinery). |
 | `describe_tensor` | function | Audit one array with chapter 2's "key attributes" vocabulary. |
@@ -448,6 +462,7 @@ after adding new public functions.
 | `fit_scratch` | function | Chapter 2's full training loop, mouse-free edition. |
 | `fomaml_train` | function | First-order MAML over the task family (TCRP's train loop). |
 | `forecast_timeseries` | function | The chapter's end-to-end workflow on one series. |
+| `format_cv_score` | function | Render ``CV Score = Mean ± Standard Deviation`` honestly. |
 | `gaussian_mechanism` | function | The analytic Gaussian mechanism: (ε, δ)-DP with the classic bound. |
 | `gmm_cluster` | function | Gaussian mixture model (PDSH 05.12) with the AIC/BIC sweep. |
 | `gradient_check` | function | Central-difference check of ``function``'s reverse-mode gradient. |
