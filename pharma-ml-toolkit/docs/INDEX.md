@@ -309,6 +309,7 @@ after adding new public functions.
 | `DistributionSample` | class | Seeded draws plus the population moments to compare against. |
 | `DoseResponseReport` | class | A fitted sigmoid Emax curve with its uncertainty. |
 | `EmbeddingRecord` | class | Typed report of :func:`manifold_embedding`. |
+| `EvaluationEstimate` | class | The pre-execution budget answer (§18.5). |
 | `Factor` | class | One predictor inside a term: numeric, categorical or intercept. |
 | `FewShotReport` | class | The three-arm verdict on a new task (TCRP's evaluation). |
 | `ForecastResult` | class | Everything the sequence card reports, after one run. |
@@ -346,6 +347,7 @@ after adding new public functions.
 | `OntologyGraph` | class | A parsed DrugCell ontology: the DAG plus its gene annotations. |
 | `OntologyReport` | class | The hierarchy audit: rows per term plus the headline stats. |
 | `OntologyRow` | class | One term's audit row: size, depth, layer, gene enrichment. |
+| `ParamAdvice` | class | One searchable hyperparameter: its range, prior, role, and deps. |
 | `Parameter` | class | A leaf tensor that always requires grad. |
 | `PcaResult` | class | Typed report of :func:`pca_reduce`. |
 | `PercentilePruner` | class | Prune trials whose running CV mean falls below a percentile. |
@@ -365,6 +367,7 @@ after adding new public functions.
 | `ResidualMLPRegressor` | class | Residual (skip-connection) deep-network regressor (PyTorch). |
 | `RobustnessAudit` | class | The verdict curve of a model under the sign-pattern family. |
 | `ScratchHistory` | class | Everything the scratch training loop observed, per epoch. |
+| `SearchRecommendation` | class | A preset applied and adapted to a concrete dataset/budget. |
 | `SequenceHistory` | class | Per-epoch training telemetry for one recurrent fit. |
 | `Sequential` | class | Modules applied in order. |
 | `ShapInteractions` | class | Pairwise SHAP interaction values of a fitted tree model (100x-160). |
@@ -372,6 +375,7 @@ after adding new public functions.
 | `Sigmoid` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `SignificanceResult` | class | One test's verdict: statistic, p-value, decision, effect size. |
 | `Softmax` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
+| `SpaceIssue` | class | One compatibility or sanity finding (§18.2 validation). |
 | `TPESearch` | class | Tree-structured Parzen Estimator search — Optuna's flagship sampler. |
 | `TaskFamily` | class | Seeded related regression tasks: one shared prior, per-task draws. |
 | `TaskSplit` | class | One task's support/query split (the inner-loop data contract). |
@@ -389,6 +393,7 @@ after adding new public functions.
 | `adapt` | function | Clone-and-fine-tune on a support set (the inner loop alone). |
 | `adversarial_audit` | function | Run the sign-pattern family across a radius grid. |
 | `adversarial_augmentation` | function | Adversarial training's closed-form half: in-ball noisy copies. |
+| `advice_families` | function | The tokens with hand-authored §18.3 tables. |
 | `ann_benchmark` | function | Recall@k and candidate compression of LSH against brute force. |
 | `anova_ii` | function | Type-II ANOVA table from the term slices. |
 | `applicability_domain` | function | The uploaded workflow end-to-end, one call. |
@@ -433,6 +438,7 @@ after adding new public functions.
 | `dot_product_attention` | function | Scaled dot-product attention: ``softmax(QKᵀ/√dₖ)·V``. |
 | `dp_sgd_noise_scale` | function | Invert the RDP accountant: the σ that meets (ε, δ) in T steps. |
 | `dp_statistics` | function | Count, sum, mean (+ optional histogram) under one ε budget. |
+| `estimate_evaluations` | function | Estimate the number of evaluations a budget implies. |
 | `evaluate_model` | function | Evaluate a fitted model on held-out data. |
 | `evaluate_recommender` | function | Leave-one-out: hide one rating per user, rebuild, hit@N. |
 | `expected_improvement` | function | The classic expected improvement over the best observed score. |
@@ -448,6 +454,7 @@ after adding new public functions.
 | `group_difference` | function | Cohort difference of a SHAP summary, with a bootstrap interval. |
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
 | `hierarchy_report` | function | The peeling audit: per-term rows and the hierarchy's shape. |
+| `hypermodel_from_advice` | function | Compile a recommendation into a tuner-searchable hypermodel. |
 | `kde_fit` | function | Kernel density estimation (PDSH 05.13) for ONE numeric column. |
 | `kmeans_cluster` | function | k-means clustering (PDSH 05.11), with the elbow AND the silhouette. |
 | `knn_applicability_domain` | function | kNN-distance applicability domain (the upload's step 4-5). |
@@ -485,11 +492,15 @@ after adding new public functions.
 | `permutation_feature_importance` | function | Permutation importances of a fitted model on held-out data. |
 | `predict_scratch` | function | Predict with a trained scratch model (standardisation reapplied). |
 | `predict_with_uncertainty` | function | Predictive mean and per-row standard deviation of a GP model. |
+| `preset_styles` | function | The three §18.2 preset styles, in increasing cost order. |
 | `protein_feature_frame` | function | Return aligned AAC (and optionally dipeptide) features per sequence. |
 | `quantile_prediction_intervals` | function | Central-``1 - alpha`` prediction intervals via quantile regression. |
 | `rdp_epsilon` | function | The RDP accountant: T plain Gaussian steps -> (ε, δ). |
 | `recommend_itembased` | function | Item-based collaborative filtering: the similarity-weighted sum. |
+| `recommend_search` | function | The §18.2 recommendation: preset + dataset/budget adaptation. |
 | `recommend_userbased` | function | User-based collaborative filtering: the k-neighbour weighted mean. |
+| `recommendation_from_json` | function | Load a recommendation exported by :func:`recommendation_to_json`. |
+| `recommendation_to_json` | function | Serialize a recommendation (§18.5's export-as-JSON). |
 | `resolve_model_name` | function | Normalise a user-supplied model name to a registry key. |
 | `resource_bounds` | function | The declared ``[min, max]`` grid of a hypermodel's resource slot. |
 | `sample_distribution` | function | Draw ``n`` seeded samples from one of the course's distributions. |
@@ -516,6 +527,8 @@ after adding new public functions.
 | `train_model` | function | Train (and optionally grid-search) one registry model. |
 | `two_sample_ttest` | function | Two independent samples: Welch's t (default) or Student's t. |
 | `validate_bundle_input` | function | Audit a new dataset against a saved model bundle before inference. |
+| `validate_space` | function | Compatibility-check a search space before optimization starts. |
+| `validate_values` | function | Compatibility-check one drawn parameter combination. |
 | `window_features` | function | Fixed non-overlapping windows, one feature row each (tsfresh-lite). |
 
 ## `pharmaml.generative`
@@ -747,24 +760,24 @@ after adding new public functions.
 
 | Symbol | Kind | Summary |
 |---|---|---|
-| `EXPORT_EXTENSIONS` | constant | Canonical extension aliases per export format (`.tif`/`.tiff`, `.jpg`/`.jpeg`). |
-| `EXPORT_FILTERS` | constant | §17 file-dialog filter strings for the four first-class formats. |
+| `EXPORT_EXTENSIONS` | constant |  |
+| `EXPORT_FILTERS` | constant |  |
 | `PALETTE` | constant |  |
 | `PDF_THEMES` | constant |  |
 | `PLOT_FORMATS` | constant |  |
 | `REPORT_THEMES` | constant |  |
 | `TABLE_FORMATS` | constant |  |
-| `TIFF_COMPRESSIONS` | constant | The lossless TIFF compression choices (`none`/`tiff_lzw`/`tiff_deflate`). |
-| `ExportFormat` | class | The four first-class raster/vector export formats (Part-3 §17). |
-| `ExportManager` | class | Batch export to a directory with per-write validation + a JSON manifest. |
-| `ExportResult` | class | The honest report card of one export (format, size, mode, warnings, validated). |
+| `TIFF_COMPRESSIONS` | constant |  |
+| `ExportFormat` | class | The four first-class raster/vector export formats (§17.1). |
+| `ExportManager` | class | Batch export with the §17.4 manager contract. |
+| `ExportResult` | class | What an export actually produced -- the honest report card. |
 | `HTMLReport` | class | Builder for a self-contained HTML report. |
-| `ImageExportOptions` | class | Per-export configuration (quality, compression, dpi, background, integrity flags). |
+| `ImageExportOptions` | class | Per-export configuration (§17.4's reusable export manager knobs). |
 | `close_figure` | function | Close a figure defensively (no-op when matplotlib is absent). |
 | `export_docx` | function | Write a DataFrame as a Word ``.docx`` document with a grid table. |
-| `export_figure` | function | Export a matplotlib figure to PNG/TIFF/JPEG/SVG with the §17 integrity rules. |
-| `export_image` | function | Export an array / PIL image / file to any §17 format, validated on write. |
-| `export_matrix` | function | Export a scientific matrix (+ multi-page TIFF stacks) bit-depth-honestly. |
+| `export_figure` | function | Export a matplotlib figure to any §17 format. |
+| `export_image` | function | Export an image (array / PIL image / existing file) to any §17 format. |
+| `export_matrix` | function | Export a scientific matrix -- the §17.2-specialised path. |
 | `export_table` | function | Write a DataFrame in a *visual* format chosen by the extension. |
 | `figure_to_base64` | function | Render a figure to a ``data:`` URI for embedding in HTML reports. |
 | `get_pyplot` | function | Return ``matplotlib.pyplot`` with a safe backend already selected. |
@@ -827,8 +840,8 @@ after adding new public functions.
 | `save_figure` | function | Save a figure to ``png``/``svg``/``pdf`` (chosen by extension). |
 | `save_pdf_report` | function | Write a multi-page PDF document report (metrics, tables, figures). |
 | `save_visual_bundle` | function | Render figures + tables + metrics into one directory + HTML report. |
-| `sniff_format` | function | Identify an image file from its magic bytes (never the extension's claim). |
-| `validate_export` | function | Reopen an exported file and verify format/dimensions/pages (§17.4). |
+| `sniff_format` | function | Identify an image file from its magic bytes alone. |
+| `validate_export` | function | Reopen an exported file and verify it kept its promises. |
 
 ## `pharmaml.utils.io`
 

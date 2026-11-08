@@ -1,3 +1,64 @@
+## [1.2.137] — 2026-11-08
+
+### Added — round 224: the Part-3 §18.2/§18.3 hyperparameter recommendations layer (`pharmaml.ml.hpo_presets`)
+
+* **The gap** — the search engines already existed (the TPE /
+  successive-halving / Hyperband math in `ml.hpo`, the keras-tuner-style
+  `HyperParameters` + searchers in `ml.tuner`) but the registry grids
+  are deliberately tiny — three points per slot, sized for a
+  GridSearchCV sweep.  §18 asks for the layer above: comprehensive,
+  resource-aware ranges WITH the advice that makes them usable.
+* **The tables (§18.3)** — hand-authored `ParamAdvice` rows for the
+  directive's eight families (logistic regression, random forest,
+  SVM/SVR — task-aware, XGBoost, LightGBM, CatBoost, k-NN, and both
+  neural families the toolkit ships: sklearn `ann` + PyTorch `dnn`),
+  every parameter carrying its range, log/linear prior,
+  essential/key/extended priority, a one-line purpose, and its
+  dependency structure; every other grid-bearing registry family gets
+  the honest fallback (advice derived from its own declared grid).
+* **The presets (§18.2)** — conservative (essential-only,
+  middle-half ranges — the log-domain middle half for scale
+  parameters), balanced (essential + key, full ranges, trimmed
+  categorical lists), exploratory (everything, the combinations that
+  need validation).  Deterministic, step-snapped, reproducible.
+* **The adaptation (§18.2)** — `recommend_search` adapts to dataset
+  size (small-n caps estimator budgets at 300 and k at n/2; large-n
+  notes the model-based-search preference), dimensionality
+  (family-aware notes), class imbalance (>= 4:1 keeps `balanced`
+  weighting searchable, elevated to essential; xgboost/catboost get
+  their honest `scale_pos_weight` / `auto_class_weights` notes), and
+  the resource tier (low caps budgets/epochs, drops batch sizes below
+  32).  Every adaptation leaves a visible note.
+* **The validation (§18.2)** — `validate_space` / `validate_values`
+  enforce the solver-penalty matrix (l1 needs saga/liblinear;
+  the solver list is ordered by compatibility so preset trims never
+  admit an invalid pair outside exploratory), the kernel-conditioned
+  parameters (degree/gamma), task-only parameters (epsilon is
+  SVR-only, class_weight is classification-only), CatBoost
+  loss_function-vs-task, and range sanity; the bridge re-checks each
+  drawn trial and fails it loudly instead of silently training an
+  invalid combination.
+* **The bridge** — `hypermodel_from_advice` compiles a recommendation
+  into a genuine tuner-searchable hypermodel (registry families via
+  `build_model` + `set_params`; ann/dnn/hsvr bespoke constructors),
+  so the presets plug straight into RandomSearch/TPESearch — proven
+  end-to-end with real searches over advised spaces.
+* **The interchange (§18.5)** — `recommendation_to_json` /
+  `recommendation_from_json` round-trip losslessly with schema
+  validation on load (11 typed mangling tests);
+  `estimate_evaluations` answers the pre-execution budget question
+  (grid point-product with recorded assumptions, or the trial count
+  for random/TPE).
+* **The honest scope** — parameters the estimator does not accept are
+  never advised: xgboost/catboost imbalance knobs are noted not
+  searched, the dnn optimizer is fixed AdamW (its `weight_decay`
+  surrogate IS searched, as a documented fixed row), ann inherits
+  sklearn's 'auto' batch semantics.
+* 66 collected tests + 8 doctests; docs INDEX rows; the 17th sandbox
+  rollback recovered before the round started (PAT re-extracted from
+  the PDF with newline-join, 19 upload files byte-identical after the
+  ff-pull, venv rebuilt in the foreground).
+
 ## [1.2.136] — 2026-11-08
 
 ### Fixed — round 223: the playground SIGILL root-caused and fixed (the worker-thread GC race)
