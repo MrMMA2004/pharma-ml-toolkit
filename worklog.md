@@ -9640,3 +9640,101 @@ run 16) · Part-3 remaining: §18 presets/recommendations layer, §19 CV
 results interface + scaffold splits, §20 checkpoint depth, §21 hover
 tooltips, §22 SMILES previews, §23 responsive pass, §24 SA-in-
 generative wiring — §17 CLOSED.
+
+## Round 224 (v1.2.137) — the Part-3 §18.2/§18.3 hyperparameter recommendations layer (IM continuation: "Continue MASTER_PROMPT part3")
+
+*Fired as the direct user trigger the two queued IM messages had been
+promising.  The 17th sandbox rollback landed BEFORE the round: local
+git was back at `2eb0ede` with the origin remote and `~/.github_token`
+gone — and the two intervening sessions (rounds 221–223, pushed to
+`3c666f1` = v1.2.136) survived only on the GitHub remote.  The
+recovery: remote re-added, PAT re-extracted from
+`upload/MASTER_PROMPT.pdf` (the 15th-rollback lesson refined —
+newline-DELETION reconstructs the 93-char token; the space-join had
+produced a 76-char truncation that auth-failed), 19 untracked upload
+blockers moved to `/tmp` for the ff-pull and ALL byte-identical
+afterwards, venv rebuilt in the foreground (rdkit 2026.09.1), and the
+rollback's 0777 mode smear swept again — 383 no-shebang files back to
+0644, `studio.py` restored to 0755, ruff fully green.*
+
+**The work — `pharmaml.ml.hpo_presets`** — the §18 gap the worklog's
+baselines had named: the engines existed (TPE/SHA/Hyperband in
+`ml.hpo`, the keras-tuner container + searchers in `ml.tuner`) but
+the registry grids are deliberately tiny, three points per slot.
+The new layer:
+
+* **the §18.3 tables** — hand-authored `ParamAdvice` rows for the
+  directive's eight families (logistic, random forest, SVM/SVR
+  task-aware, XGBoost, LightGBM, CatBoost, KNN, plus BOTH neural
+  families the toolkit actually ships: the sklearn `ann` and the
+  PyTorch `dnn` — whose table honestly covers batch_size,
+  weight_decay, patience and a documented FIXED optimizer row), each
+  parameter carrying range / log prior / essential-key-extended
+  priority / one-line purpose / dependency; every other grid-bearing
+  registry family derives advice from its own declared grid (the
+  honest "Additional Models" fallback).
+* **the three presets** — conservative (essential-only, middle-half
+  ranges — the log-domain middle half for scale parameters),
+  balanced (essential + key, trimmed categorical lists), exploratory
+  (everything).  Deterministic, step-snapped: RF conservative
+  n_estimators is [300, 600] every time.
+* **the adaptation** — `recommend_search` adapts to dataset size
+  (small-n caps budgets at 300 and k at n/2), dimensionality
+  (family-aware notes), class imbalance (>= 4:1 keeps `balanced`
+  weighting searchable, elevated to essential; xgboost/catboost get
+  their honest `scale_pos_weight` / `auto_class_weights` notes;
+  families without the parameter get the stratified-CV note), and
+  resource tier (low caps budgets, drops sub-32 batches).  Every
+  adaptation leaves a visible note — the design correction of the
+  round: adaptation runs on the FULL table BEFORE preset narrowing,
+  so a capped budget narrows instead of degenerating.
+* **the validation** — `validate_space` / `validate_values`: the
+  solver-penalty matrix (the solver list is ORDERED by compatibility
+  — saga first — so preset trims never admit an invalid pair outside
+  exploratory), kernel-conditioned degree/gamma, task-only
+  epsilon/class_weight, CatBoost loss_function-vs-task, range
+  sanity; the bridge re-checks every drawn trial and fails it loudly
+  (`l1 + lbfgs` never silently trains).
+* **the bridge** — `hypermodel_from_advice` compiles a recommendation
+  into a genuine tuner-searchable HyperModel; proven end-to-end with
+  a real 4-trial RandomSearch and a 10-trial TPESearch over advised
+  spaces (all trials inside the advised envelope).
+* **the interchange** — lossless schema-checked JSON round-trip
+  (11 typed mangling tests) and `estimate_evaluations` (grid
+  point-product with recorded assumptions; the trial count for
+  random/TPE).
+
+**The ship** — four carriers → **1.2.137**; notebooks re-executed
+**199 s (8/8 at `pharmaml 1.2.137`)**, twins regenerated via the
+standing re-exec driver; `scratch/build_zip_210.py` (the committed
+version-agnostic four-home recipe) → **v1.2.137 = 20,330,910
+bytes**, sha-256
+`d00db97929064108b5b60e22656da9d54c9131cc5d53892146d7199b94576308`,
+1009 entries / 964 files, testzip OK per home, **real leaks 0**
+(the pre-build scrub caught 2 stale scratch junit XMLs — the
+round-209 ordering discipline proving itself), predecessor v1.2.136
+swept from all four homes.  Census (runs LAST): **984 files /
+362,491 lines**.  Web pins: FALLBACK_STATS 984/362,491; tests pin
+**5,649 = 4,856 collect + 793 doctest** (66 new collected + 8 new
+doctests); SHIPPED_TOOLKIT_VERSION 1.2.137; the overview's
+after-text now names the Part-3 §18 suite.  Zip endpoint
+`exact:true` (20,330,910, source release), GET / 200, web lint
+clean.
+
+**The suite gate** — the nine-chunk runner
+(`scratch/run_suite_chunks_222.py`, next-server down per the OOM
+ritual): chunks 1/3/4a/4b/4c green, **chunk 5 = the full 869-test
+playground chunk green** (the round-223 GC fix holding), chunk 6
+doctests green; chunk 2's only reds were the two notebook version
+pins, which went green after the re-execution (test_notebook_variants
+119/119) — the suite is effectively all-green at ship time.
+
+**Baselines for the next round** — v1.2.137 (four homes) · honest
+totals **5,649 = 4,856 collect + 793 doctest** · census **984/362,491**
+· counter **16/100** (riding — IM continuation rounds don't
+increment; round 223 took cron run 16) · Part-3 remaining: **§19 CV
+results interface + scaffold splits, §20 checkpoint depth, §21 hover
+tooltips, §22 SMILES previews, §23 responsive pass, §24 SA-in-
+generative wiring** — §18's presets/recommendations layer CLOSED
+(§18.5's interactive search-space editor GUI + §18.6's optimization
+progress plots remain the natural GUI follow-up).

@@ -449,6 +449,50 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.137 release-zip homes (2026-11-08, round 224 — the Part-3 §18.2/§18.3 hyperparameter recommendations layer)
+
+`pharma-ml-toolkit-v1.2.137.zip` — 20,330,910 bytes, sha-256
+`d00db97929064108b5b60e22656da9d54c9131cc5d53892146d7199b94576308`,
+1009 entries / 964 files, built with the standing four-home builder
+(`scratch/build_zip_210.py`, the committed version-agnostic recipe)
+— testzip OK per home, **real leaks 0** (the pre-build home-path
+scrub caught two stale scratch junit XMLs first, exactly the
+round-209 ordering discipline), predecessor v1.2.136 swept from all
+four homes.  Byte-identical copies ship to all four homes (repo-root
+`download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, `upload/`).  The increment:
+`pharmaml.ml.hpo_presets` — the §18.2/§18.3 layer the search engines
+lacked: hand-authored `ParamAdvice` tables for the directive's eight
+families (logistic/RF/SVM-SVR/XGBoost/LightGBM/CatBoost/KNN plus the
+shipped ann/dnn neural families) with per-parameter ranges, log
+priors, essential/key/extended priorities, one-line purposes and
+dependency structure; the registry-grid fallback for every other
+grid-bearing family; the three deterministic presets
+(conservative/balanced/exploratory, step-snapped middle-half
+narrowing); `recommend_search`'s dataset/budget adaptation (small-n
+caps, imbalance keeps `balanced` weighting searchable —
+xgboost/catboost get their honest `scale_pos_weight` /
+`auto_class_weights` notes — low resources cap budgets and drop
+sub-32 batches, every adaptation leaving a visible note);
+`validate_space`/`validate_values` enforcing the solver-penalty
+matrix (solver list ordered by compatibility so preset trims stay
+valid outside exploratory), kernel/task-conditioned parameters and
+range sanity, with the per-trial guard failing incompatible draws
+loudly; `hypermodel_from_advice` compiling a recommendation into a
+tuner-searchable HyperModel (proven with real RandomSearch/TPESearch
+runs over advised spaces); lossless schema-checked JSON round-trip
+and `estimate_evaluations` budget answers.  Verification: honest
+totals **5,649 = 4,856 collect + 793 doctest** (66 new collected +
+8 new doctests), the nine-chunk suite green (chunk 2's only reds
+were the two notebook version pins, green again after the re-exec),
+notebooks re-executed **199 s (8/8 at `pharmaml 1.2.137`)**, twins
+regenerated, ruff clean, census **984 files / 362,491 lines**, zip
+endpoint `exact:true`.  The 17th sandbox rollback recovered before
+the round (PAT re-extracted from the PDF with newline-join — the
+space-join token was a 76-char truncation; 19 upload blockers moved
+aside for the ff-pull and all byte-identical; venv foreground
+repair; the 0777 mode smear swept again — 383 files back to 0644).
+
 ## v1.2.136 release-zip homes (2026-11-08, round 223 — the playground SIGILL root-caused and fixed)
 
 `pharma-ml-toolkit-v1.2.136.zip` — 20,406,407 bytes, sha-256
