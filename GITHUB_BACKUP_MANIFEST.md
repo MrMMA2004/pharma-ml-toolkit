@@ -1264,3 +1264,48 @@ Qt 6.8 internal plumbing, not Studio code) and `ui.run()` now
 installs a message-handler filter BEFORE the QApplication exists so
 the noise never reaches the console; real warnings still pass and
 `PHARMAML_STUDIO_QT_VERBOSE=1` disables the filter.
+
+## v1.2.145 release-zip homes (2026-11-09, round 232 — the user-reported Windows black-window fix + the Part-3 §21 slice 1 hover inspection)
+
+`pharma-ml-toolkit-v1.2.145.zip` — 20,140,128 bytes, sha-256
+`d3c666272d52aba253eebe0d6f36de44fd943920486efdfda72fdc8dbc6fa0bc`,
+1028 entries / 982 files, built with the standing four-home builder
+recipe (`pharma-ml-toolkit/scratch/build_zip_232.py`, the needles and
+the repo path assembled at runtime — the archive-ships-clean
+discipline the round-137 scrubber taught) — testzip OK per home,
+**real leaks 0** (after the scrub: the re-executed ML notebook's
+sklearn-warning venv paths neutralised, the two stale round-148/158
+junit quotations neutralised, the builder's own literals assembled),
+nested zips NONE, predecessor v1.2.144 swept from all four homes;
+placed byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`. Census **1001 files /
+316,019 lines** (the ui/widgets/chart_inspector module + the two test
+files + the three round-232 scratch drivers). Honest totals
+**4,899 = 4,101 collect + 798 doctest** (4,877 + 22: 7 platform
+decision-matrix tests + 15 ChartInspector tests). The notebooks
+re-executed **8/8 at pharmaml 1.2.145 in 195 s** (foreground,
+error-outputs 0). Round 232's headline is the SECOND user-reported
+Windows fix in a row, and this one was a real bug: `studio.py`
+launched with console noise and NO window on the user's Windows
+box because `ui/headless.py`'s displayless probe tested only X11's
+`DISPLAY` — a variable that never exists on Windows — silently
+forcing the offscreen platform there (the app ran with an invisible
+window; `app.exec()` blocked forever). The probe is now
+platform-aware: offscreen ONLY on Linux-class platforms with neither
+`DISPLAY` nor `WAYLAND_DISPLAY`; Windows/macOS keep native; an
+explicit `QT_QPA_PLATFORM` still wins. The round also shipped the
+Part-3 §21 slice 1: every PyQtGraph chart (all fourteen pages plot
+through PlotPanel) gained a ChartInspector — crosshair,
+nearest-real-point snapping (bar bodies are whole hover targets),
+the readout line of EXACT values with cached per-point metadata,
+per-series visibility toggles + reset-view in the context menu, and
+click-to-select with the `pointSelected` drill-down signal; the
+decorations are fully LAZY (first hover) so the pages'
+`listDataItems()[0]` and InfiniteLine-census pins stay true, and the
+readout floats as an overlay so the §17 export pins keep the panel's
+exact geometry. Suite: the seven-chunk gate grew an eighth chunk
+(4b split into 4b+4d — the round-225 OOM lesson repeating at 1.66 GB
+rss); 8/8 chunks green. Round 232 also repaired the interrupted
+round 231's missing docs (the CHANGELOG 1.2.144 entry, the COVERAGE
+row, the GUI_AUDIT progress) and recreated the missing 15-minute
+webDevReview cron (job 515897).

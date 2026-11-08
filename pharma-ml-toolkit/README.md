@@ -244,6 +244,18 @@ Engineering notes:
 * **Headless / CI** — `QT_QPA_PLATFORM=offscreen python studio.py` runs
   without a display (`ui/headless.py` preloads the committed EGL stub on
   boxes that have none); the offscreen page tests ride the same path.
+  The offscreen fallback is Linux-displayless-ONLY (round 232, the
+  Windows black-window fix): Windows, macOS and Wayland desktops keep
+  their native platform plugin, because a displayless probe that tests
+  only X11's `DISPLAY` would silently force every Windows launch
+  offscreen — the app running with an invisible window and no GUI.
+* **Hover data inspection (§21)** — every PyQtGraph plot ships with a
+  crosshair cursor, nearest-data-point snapping and a live readout line
+  of the REAL values (series, exact x/y, per-point metadata when the
+  page attaches it — bin boundaries on histograms, categories on bar
+  charts); right-click a chart for per-series visibility toggles, the
+  inspection switch and reset-to-default-view; click a point to pin
+  its readout and emit the drill-down signal pages can wire.
 * **Sessions persist** — QSettings remember the window geometry, the
   navigation state and the theme across launches.
 * **Light and dark** — the Settings page's theme switcher recolours the
@@ -2080,6 +2092,36 @@ of the canonical SMILES.  The preview controller matches columns *by
 name*, so every frame the shared table binds (the SA board, the
 evolution mutants, the topo/front children) gains the behaviour
 wherever a SMILES / canonical / mutant / child column appears.
+
+#### Hover data inspection on every chart (Part-3 §21)
+
+Every chart in the Studio (all fourteen pages plot through the same
+`PlotPanel`) carries a hover inspector (round 232, §21 slice 1):
+
+* a **crosshair** follows the mouse inside the plot;
+* the **nearest real data point** snaps with a highlight ring — the
+  whole bar body is the target on bar charts and histograms, so
+  hovering anywhere on a bar reads it out; the snap tolerance is
+  8 % of the visible axis range per axis (resolution-independent);
+* the **readout line** under the plot shows the exact values — series
+  name, x, y and any metadata the page attached (histograms: exact bin
+  boundaries and count; labelled bars: the category; scatter pages can
+  attach per-point records through `meta=` / `attach_metadata()`) —
+  §21.3: tooltips display the data that is actually plotted, never
+  estimated or fabricated values;
+* **metadata is cached** per point (§21.6: an expensive provider runs
+  once per point, never per mouse-move; the readout text itself only
+  rebuilds when the snapped point changes); a failing provider
+  degrades to the plain values;
+* the **context menu** (right-click) offers per-series visibility
+  toggles, the hover-inspection on/off switch and reset-to-default-view;
+* **clicking a point** pins its readout and emits `pointSelected` — the
+  wiring point for pages to open deeper drill-downs (the §21.5
+  molecule-detail hook).
+
+The inspector is theme-aware (the crosshair, marker and readout
+recolour with the ChartPalette) and every piece runs under the
+offscreen page tests.
 
 ---
 

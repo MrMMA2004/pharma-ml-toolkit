@@ -1794,3 +1794,23 @@ COVERED(≈) · 13 N-A-HONEST · 9 STRETCH.
 | The web bridge | `/api/chem/sa-score` (zod: ≤ 50 SMILES, min/max bounds) over `scripts/sa_score_bridge.py` (stdin→stdout JSON in the venv) feeding the Explorer Playground `sa-score-card`; the card-directory + probe pins updated. |
 | Infrastructure | ROOT `conftest.py` preloads the round-206 EGL stub for EVERY pytest invocation — pytest-qt imports `PySide6.QtGui` at `pytest_configure` (before any `tests/` conftest), so EGL-less containers INTERNALERRORed every non-`tests/ui` run (the library chunks AND the doctest chunk). |
 | Tests | `tests/test_sa_score.py` (37: the reference values, bands, filtering, summary, invalid rows, the Contrib-less degradation) · `tests/ui/test_generative_page.py` +6 (the SA tab defaults with the true easiest-first pins — the ibuprofen core 1.520 leads, not aspirin 1.580 — the 2-kept/2-rejected filter split, invalid rows, empty input, the bad bound, the objective selection with `_obj_lo`/`_obj_hi`) · `tests/test_web_parity.py` (the bridge + card pins). |
+
+## Round 231 (v1.2.144) — the Part-3 §22 SMILES previews + the Qt console-noise filter *(COVERAGE row reconstructed in round 232 — the interrupted round shipped the code but not its docs rows)*
+
+| What | Where it landed |
+| --- | --- |
+| SMILES previews (§22) | `ui/widgets/smiles_preview.py` — `MoleculeRenderer` (MolDraw2DCairo at 2× device pixels, 128-entry FIFO cache, honest invalid-SMILES refusal — §22.4 never a made-up molecule), `MoleculePopup` (350 ms dwell, §22.2), `SmilesDetailDialog` (§22.5: formula / weight / the Ertl SA score with method attribution / canonical-SMILES copy); wired onto the Generative tab's shared table by COLUMN NAME so every bound frame gains it. |
+| Qt console-noise filter | `ui/qt_noise_filter.py` — the user-reported v1.2.142 Windows noise (QFontDatabase fonts-dir advice + the Qt 6.8 QStyleHints unique-connection chatter ×4) diagnosed benign; the message handler installs BEFORE the QApplication in `ui.run()`; `PHARMAML_STUDIO_QT_VERBOSE=1` escape hatch. |
+| Tests | +17: `tests/ui/test_smiles_preview.py` (12, on real renders) · `tests/ui/test_qt_noise_filter.py` (5, incl. a live `qInstallMessageHandler` round-trip); the chunk runner updated. |
+
+## Round 232 (v1.2.145) — the Windows black-window fix + the Part-3 §21 slice 1 (hover inspection)
+
+*The user reported `studio.py` showing console noise with NO window on Windows — root-caused to the headless bootstrap forcing the offscreen platform there; and every chart gained hover data inspection.*
+
+| What | Where it landed |
+| --- | --- |
+| The Windows fix (user report) | `ui/headless.py` — the displayless probe tested only X11's `DISPLAY`, which NEVER exists on Windows (nor covers Wayland): every Windows launch silently forced `QT_QPA_PLATFORM=offscreen` — the app ran with an invisible window, `app.exec()` blocked, no GUI appeared. Now platform-aware: offscreen ONLY on Linux-class platforms with neither `DISPLAY` nor `WAYLAND_DISPLAY`; Windows/macOS keep native; explicit `QT_QPA_PLATFORM` still wins; the applied-dict records `"native"` for observability. |
+| Hover inspection (§21 slice 1) | `ui/widgets/chart_inspector.py::ChartInspector` on every `PlotPanel` — crosshair, nearest-point snapping (bar bodies are whole hover targets on bars/histograms; 8 %-of-range resolution-independent tolerance), the readout line of REAL values with page-attached per-point metadata (`meta=` on line/scatter/bars, `attach_metadata()`; histograms read exact bin boundaries + count, labelled bars their category), per-point metadata caching + debounced text rebuild (§21.6), failing providers degrade to plain values, the context menu (per-series visibility toggles / inspection switch / reset-view), click-to-select with the `pointSelected(label, index)` drill-down signal (§21.5). |
+| PlotPanel API | `set_inspection_enabled()` / `inspection_enabled()` / `attach_metadata()`; the readout QLabel has a fixed minimum height (no layout jump — the §23 seed). |
+| Tests | `tests/ui/test_headless_platform.py` (7: the Windows/macOS/Wayland/X11/displayless/explicit/idempotence decision matrix) · `tests/ui/test_chart_inspector.py` (14: readout real values, nearest-of-two, far-hover, cached-once metadata, failing metadata, attach-after-plot, histogram bins, bar categories, crosshair wiring, click-select emit, disabled no-op, hidden-series skip, clear reset, placeholder naming); the chunk runner grows chunk 4c. |
+| Docs repaired | The interrupted round 231's missing rows reconstructed: CHANGELOG 1.2.144 entry, this COVERAGE row, GUI_AUDIT's §22 progress — plus README's Windows-native note, the §21 section, GUI_AUDIT's round-232 progress and CHANGELOG 1.2.145. |

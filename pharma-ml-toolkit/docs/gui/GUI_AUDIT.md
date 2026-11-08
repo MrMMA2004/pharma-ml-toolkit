@@ -146,11 +146,12 @@ and §16.18 step 15 **fires**: `playground.py` is retired this round
 carry the new honest totals.
 
 
-## Part-3 progress — round 230: §24 SA-in-generative wiring
+## Part-3 progress — round 232: §21 slice 1 (hover inspection) + the Windows black-window fix
 
 *The Part-3 backlog after Part-2's completion: §20 checkpoint depth /
 §21 hover tooltips / §22 SMILES previews / §23 responsive pass / §24
-SA-in-generative wiring.  Round 229 landed §20; round 230 landed §24.*
+SA-in-generative wiring.  Round 229 landed §20; round 230 landed §24;
+round 231 landed §22; round 232 landed §21 slice 1.*
 
 - **§20 (pause/resume/stop + checkpoints) — the engine and the
   Leaderboards tab are DONE** (round 229).  `pharmaml.utils.checkpoints`
@@ -184,9 +185,42 @@ SA-in-generative wiring.  Round 229 landed §20; round 230 landed §24.*
   the easy/hard reward anchors — SA as one signal, never the sole
   target).  The oracle book grew the SA line and `penalized_logp`
   moved onto the real fragment table.  37 engine tests + 6 GUI tests.
-- **§21 hover tooltips / §22 SMILES previews / §23 responsive pass** —
-  unchanged, still open (the natural next slice: §22's hover/click
-  structure previews over the SMILES columns the SA tab just added).
+- **§22 (SMILES previews) — DONE** (round 231): `ui/widgets/
+  smiles_preview.py` — the `MoleculeRenderer` (MolDraw2DCairo at 2×,
+  128-entry FIFO cache, honest invalid-SMILES refusal), the 350 ms
+  `MoleculePopup` dwell and the `SmilesDetailDialog` (formula /
+  weight / SA / copy), wired onto the Generative tab's shared table by
+  COLUMN NAME so every bound frame gains the behaviour.  12 preview
+  tests on real renders.
+- **§21 (hover inspection) — slice 1 DONE** (round 232):
+  `ui/widgets/chart_inspector.py::ChartInspector`, attached to every
+  `PlotPanel` (all fourteen pages) — crosshair, nearest-point snapping
+  (the whole bar body is the target on bars/histograms; 8 %-of-range
+  resolution-independent tolerance), the live readout of the REAL
+  values with page-attached per-point metadata (exact bin boundaries
+  on histograms, categories on labelled bars; cached per point, §21.6
+  debouncing), the context menu (per-series visibility toggles, the
+  inspection switch, reset-to-default-view) and click-to-select with
+  the `pointSelected` drill-down signal (the §21.5 wiring point).
+  14 inspector tests + the PlotPanel API
+  (`set_inspection_enabled` / `attach_metadata`).
+  **Remaining §21 depth**: §21.4's image-specific inspection (pixel /
+  channel readout on the Image Lab), per-page metadata adoption
+  (scatter pages attaching sample IDs through `meta=`), and the
+  §21.5 molecule-hover SA/formula readouts on chemistry scatter
+  charts.
+- **§23 (responsive rescaling / overlap prevention) — OPEN**, with
+  the first seed landed (the readout label's fixed minimum height —
+  no layout jump when it fills).  The remaining work: the QSplitter /
+  QScrollArea audit pass over the pages, export-dimension legibility
+  checks, and the aspect-ratio guarantees on molecular images.
+- **Round-232 platform fix (the user report)**: `studio.py` opened
+  with console noise and NO window on Windows — `ui/headless.py`'s
+  displayless probe tested only X11's `DISPLAY` (never set on
+  Windows), silently forcing the offscreen platform there.  The probe
+  is now platform-aware (Linux-displayless-only; Windows/macOS/
+  Wayland keep native).  7 decision-matrix tests in
+  `tests/ui/test_headless_platform.py`.
 - **Round-230 infrastructure hardening**: a ROOT `conftest.py` now
   preloads the round-206 EGL stub (`ui.headless.ensure_headless()`)
   for EVERY pytest invocation — pytest-qt imports `PySide6.QtGui` at

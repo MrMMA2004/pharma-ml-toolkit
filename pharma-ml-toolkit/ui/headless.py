@@ -14,9 +14,18 @@ containers). It is a no-op on a normal desktop:
    symbols satisfy the dynamic linker. The offscreen plugin never
    actually issues GL calls through the stub entries.
 
-2. Platform plugin: with no ``DISPLAY`` (and not already configured)
-   we select Qt's ``offscreen`` platform so the app and the test suite
-   run truly headless. A real desktop keeps its native platform.
+2. Platform plugin: with no display server reachable (and not already
+   configured) we select Qt's ``offscreen`` platform so the app and the
+   test suite run truly headless. A real desktop keeps its native
+   platform.  Round 232 (the Windows black-screen fix): the probe is now
+   platform-aware -- ``DISPLAY`` only exists on X11, so the old test
+   ``not os.environ.get("DISPLAY")`` was TRUE on every Windows and
+   Wayland desktop too, silently forcing ``offscreen`` there: the app
+   ran with an invisible window (``app.exec()`` blocked, no GUI ever
+   appeared -- the user-reported "studio.py opens no window").  Now
+   offscreen is only chosen on Linux-class platforms that expose NEITHER
+   ``DISPLAY`` nor ``WAYLAND_DISPLAY``; Windows/macOS always keep their
+   native platform plugin.
 
 3. Binding pin: ``PYQTGRAPH_QT_LIB=PySide6`` so pyqtgraph 0.13 binds to
    PySide6 explicitly (it would otherwise probe Qt bindings via qtpy).
@@ -75,11 +84,24 @@ def ensure_headless() -> dict[str, str | None]:
     if sys.platform.startswith("linux") and not _real_egl_available():
         applied["egl"] = "stub" if _load_stub() else "unavailable"
 
-    # 2. Platform plugin: pick offscreen when there is no display and the
-    #    caller has not chosen one already.
-    if not os.environ.get("QT_QPA_PLATFORM") and not os.environ.get("DISPLAY"):
+    # 2. Platform plugin: pick offscreen only on Linux-class platforms
+    #    with NO display server in reach.  ``DISPLAY`` is an X11 variable;
+    #    Windows and macOS never set it, and a Wayland desktop may set
+    #    only ``WAYLAND_DISPLAY`` -- so the display probe itself must be
+    #    platform-aware or the GUI would be forced offscreen (invisible)
+    #    on exactly the desktops users launch it from (round 232).
+    _has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    if (
+        sys.platform.startswith("linux")
+        and not os.environ.get("QT_QPA_PLATFORM")
+        and not _has_display
+    ):
         os.environ["QT_QPA_PLATFORM"] = "offscreen"
         applied["platform"] = "offscreen"
+    elif not os.environ.get("QT_QPA_PLATFORM"):
+        # Desktop platforms (``win32`` / ``darwin`` / Linux-with-display):
+        # record what the native plugin will be, for observability.
+        applied["platform"] = "native"
 
     # 3. pyqtgraph binding pin (PySide6 is the only binding we ship).
     os.environ.setdefault("PYQTGRAPH_QT_LIB", "PySide6")

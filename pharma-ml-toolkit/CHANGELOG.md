@@ -1,3 +1,76 @@
+## [1.2.145] — 2026-11-09
+
+### Fixed — round 232: the Windows black-window bug (the user report)
+
+* **`studio.py` launched with console noise and NO window on Windows**
+  (miniconda py312, PySide6): `ui/headless.py`'s displayless probe
+  tested only X11's `DISPLAY` — a variable that NEVER exists on Windows
+  (nor is it the whole story on Wayland) — so every Windows desktop
+  launch silently forced `QT_QPA_PLATFORM=offscreen`: the QApplication
+  ran with an invisible window, `app.exec()` blocked forever and no GUI
+  ever appeared.  The probe is now platform-aware: offscreen is chosen
+  ONLY on Linux-class platforms exposing neither `DISPLAY` nor
+  `WAYLAND_DISPLAY`; Windows/macOS always keep their native plugin, and
+  a caller-set `QT_QPA_PLATFORM` still wins.  7 decision-matrix tests
+  (`tests/ui/test_headless_platform.py`: Windows, macOS, Wayland-only,
+  X11, displayless Linux, explicit override, idempotence).
+
+### Added — round 232: the Part-3 §21 slice 1 — hover data inspection on every chart
+
+* **`ui/widgets/chart_inspector.py::ChartInspector`** — every
+  `PlotPanel` (all fourteen pages plot through it) now carries: a
+  crosshair cursor; nearest-real-data-point snapping with a highlight
+  ring (the whole bar BODY is the hover target on bar charts/histograms;
+  the 8 %-of-visible-range tolerance is resolution-independent); a live
+  readout line under the plot with the EXACT values — series, x, y and
+  per-point metadata attached by the page (`meta=` on
+  `line`/`scatter`/`bars` or `attach_metadata()` afterwards) —
+  histograms read out exact bin boundaries + count, labelled bars read
+  out their category; per-point metadata is cached (§21.6: an expensive
+  provider runs once per point, the readout text only rebuilds when the
+  snapped point changes; a failing provider degrades to plain values);
+  a context menu with per-series visibility toggles, the
+  hover-inspection on/off switch and reset-to-default-view; and
+  click-to-select that pins the readout and emits `pointSelected(label,
+  index)` — the §21.5 drill-down wiring point.  Theme-aware through the
+  ChartPalette.  14 GUI tests (`tests/ui/test_chart_inspector.py`).
+* **PlotPanel API**: `set_inspection_enabled()` /
+  `inspection_enabled()` / `attach_metadata()`; the readout label has a
+  fixed minimum height so the layout never jumps when it fills (§23
+  thinking).
+
+### Docs repaired — the interrupted round 231's missing rows
+
+* The compaction-interrupted round 231 shipped v1.2.144's code and
+  release ritual but never wrote its CHANGELOG entry, COVERAGE row or
+  GUI_AUDIT progress — all three are reconstructed here (the §22 SMILES
+  previews, the Qt console-noise filter, and their 17 tests).
+
+## [1.2.144] — 2026-11-08 *(entry reconstructed in 1.2.145 — the interrupted round 231's ship)*
+
+### Added — round 231: the Part-3 §22 SMILES previews + the Qt console-noise fix
+
+* **`ui/widgets/smiles_preview.py`** — `MoleculeRenderer`
+  (RDKit `MolDraw2DCairo` at 2× device pixels, a 128-entry FIFO render
+  cache — identical molecules are never redrawn — and honest
+  invalid-SMILES refusal), `MoleculePopup` (the 350 ms hover dwell,
+  §22.2's configurable interval) and `SmilesDetailDialog` (the §22.5
+  detail view: large structure, original + canonical SMILES, molecular
+  formula, weight, the Ertl SA score with method attribution — each
+  either computed or an explicit "not calculated" line, plus one-click
+  canonical-SMILES copy).  Wired onto the Generative tab's shared table
+  by COLUMN NAME, so every frame it binds (the SA board, the evolution
+  mutants, the topo/front children) gains the behaviour wherever a
+  SMILES / canonical / mutant / child column appears.
+* **`ui/qt_noise_filter.py`** — the user-reported v1.2.142 Windows
+  console noise (the `QFontDatabase` fonts-dir advice and the Qt 6.8
+  `QStyleHints` unique-connection chatter ×4) diagnosed BENIGN (Qt
+  notices, not failures); a message-handler filter installed BEFORE the
+  QApplication in `ui.run()` drops both, with the
+  `PHARMAML_STUDIO_QT_VERBOSE=1` escape hatch.  17 tests (5 filter incl.
+  a live `qInstallMessageHandler` round-trip, 12 preview tests on real
+  renders).
+
 ## [1.2.143] — 2026-11-08
 
 ### Added — round 230: the Part-3 §24 SA engine — Ertl synthetic accessibility end-to-end
