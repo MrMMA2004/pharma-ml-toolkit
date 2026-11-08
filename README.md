@@ -6,15 +6,16 @@
 
 **An offline-first Python toolkit, PySide6 Studio and web console for cheminformatics, QSAR, PK/PD, docking, explainable AI and scientific visualization.**
 
-[![Version 1.2.145](https://img.shields.io/badge/version-1.2.145-0f766e)](pharma-ml-toolkit/CHANGELOG.md)
+[![CI](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/MrMMA2004/pharma-ml-toolkit?display_name=tag&color=0f766e)](https://github.com/MrMMA2004/pharma-ml-toolkit/releases/latest)
 [![Python 3.10+](https://img.shields.io/badge/python-%E2%89%A5%203.10-3776ab?logo=python&logoColor=white)](pharma-ml-toolkit/pyproject.toml)
-[![MIT licensed](https://img.shields.io/badge/license-MIT-525252)](pharma-ml-toolkit/LICENSE)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-525252)](LICENSE)
 [![8 executed notebooks](https://img.shields.io/badge/notebooks-8%20executed-6d28d9)](pharma-ml-toolkit/examples/)
 
 [Quick start](#quick-start) ·
 [Capabilities](#capabilities) ·
 [Examples](#examples-and-documentation) ·
-[Download v1.2.145](download/pharma-ml-toolkit-v1.2.145.zip) ·
+[Latest release](https://github.com/MrMMA2004/pharma-ml-toolkit/releases/latest) ·
 [Full user guide](pharma-ml-toolkit/README.md)
 
 </div>
@@ -65,7 +66,7 @@ pharmaml --help
 python studio.py
 ```
 
-Prefer a downloaded snapshot? Get the **[v1.2.145 source ZIP](download/pharma-ml-toolkit-v1.2.145.zip)**, extract it, enter its `pharma-ml-toolkit/` directory and run the same editable-install command. See the [installation guide](pharma-ml-toolkit/README.md#installation) for optional Studio GUI, cheminformatics, docking, boosting, explainability, deep-learning and development dependencies.
+Prefer a downloaded snapshot? Get the **[latest source ZIP from GitHub Releases](https://github.com/MrMMA2004/pharma-ml-toolkit/releases/latest)**, extract it, enter its `pharma-ml-toolkit/` directory and run the same editable-install command. See the [installation guide](pharma-ml-toolkit/README.md#installation) for optional Studio GUI, cheminformatics, docking, boosting, explainability, deep-learning and development dependencies.
 
 ### Web console
 
@@ -127,6 +128,6 @@ The test inventory covers domain calculations, data leakage, notebooks, CLI, vis
 
 ## Contributing and license
 
-Bug reports and focused pull requests are welcome. Keep changes offline-friendly, deterministic where practical, covered by tests, and documented when they alter public APIs or generated artifacts.
+Bug reports and focused pull requests are welcome. See the [contribution guide](CONTRIBUTING.md), [code of conduct](CODE_OF_CONDUCT.md) and [security policy](SECURITY.md). Keep changes offline-friendly, deterministic where practical, covered by tests, and documented when they alter public APIs or generated artifacts.
 
-PharmaML is available under the [MIT License](pharma-ml-toolkit/LICENSE).
+PharmaML is available under the [MIT License](LICENSE).
