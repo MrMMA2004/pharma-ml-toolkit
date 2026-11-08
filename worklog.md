@@ -9977,3 +9977,110 @@ pins.  Part-3 §20 (checkpoint depth) / §21 (hover tooltips) / §22
 (SMILES previews) / §23 (responsive pass) / §24 (SA-in-generative
 wiring) remain; §18.5's search-space editor GUI + §18.6's optimization
 progress plots remain natural follow-ups.
+
+## Round 227 (2026-11-08, IM continuation of cron run 19/100 job 514067) — the Utilities Workbench joins the Studio + the JobRunner GC-race fix, v1.2.140
+
+**The session.**  The owner's "Continue" extended round 226's directive
+run ("everything must be in studio.py").  Sandbox clean at `84b900b`
+(v1.2.139, counter 19/100, no rollback this time); both scheduler
+jobs alive — master **514067** (enabled, succeeding) and webDevReview
+**514354** (recreated 17:00:49).  Counter rides at 19 (IM
+continuations don't increment — only cron fires do, per the
+round-224/225 precedent).
+
+**The work — the retirement backlog's missing tab.**  The Utilities
+Workbench (`ui/pages/utilities.py`, increment 13): the legacy Tk
+playground's Utilities tab ported as five Studio tabs, every card
+wired to the SAME public backend APIs the cards call:
+
+* **Table merge & split** — `merge_tables` / `merge_table_folder` /
+  `split_table_into_chunks`, the round-201 example loader riding
+  along (two shipped example tables + the QSAR split source, one
+  click).  The Studio's honest pre-flight replaces the playground's
+  mid-job dialog: the split parts folder is picked BEFORE the run and
+  the split refuses to guess.
+* **Compare & annotate** — `compare_tables` (the name-normalised
+  common/only-A/only-B reconciliation) and `annotate_with_smiles`;
+  the reconciliation counts draw as NATIVE PyQtGraph bars (the §16.8
+  rule — no matplotlib anywhere on the page, so the round-225
+  Qt-abort class cannot recur).
+* **Approved drugs → report** — `filter_approved_drugs` over
+  TSV/CSV exports, with the CSV arm and the bordered-Word `export_docx`
+  arm (the honest python-docx refusal when the extra is absent).
+* **Campaign file tools** — `collect_files` / `list_file_names` /
+  `distribute_files` / `delete_named_files` / `cleanup_tree`: dry-run
+  by default on every destructive path, ONE confirmation before any
+  real run, the shipped 14-ligand example tree loadable in one click.
+* **Reindex by number** — `reindex_by_number` with the dense
+  0..N index and the gap-row honesty.
+
+18 new page tests (`tests/ui/test_utilities_page.py`): construction +
+the mode-token mirror, every pre-flight refusal, both example
+loaders, the functional merge/split (260 rows streamed into 3 parts,
+every row exactly once), the compare reconciliation (extension and
+case normalisation verified) + the native bars, the annotate join,
+the approved filter + both report writers, the collect/list/delete
+dry-runs over real trees, a REAL distribute (the confirmation
+answered Yes), and the dense reindex with 3 gap rows.
+
+**The engine bug the port exposed — the JobRunner GC race**
+(`ui/workers/job_worker.py`): the campaign-tools tests hung on
+"Running …" while `busy` had already flipped false.  Instrumentation
+nailed it: the runner's `_finish` is the FIRST slot of the finished
+emission, and dropping the last worker reference there let CPython's
+immediate refcount destruction tear down the worker's `JobSignals`
+BEFORE the page slots connected after it delivered — silently
+swallowed.  The Utilities campaign jobs (a 1.35 s
+`pharmaml.docking` import inside the worker) hit it 4/4
+deterministically; fast jobs squeaked by on timing.  The fix: a
+retired-workers hold (`_retired`, cleared on the next submit) keeps
+the signals alive past the emission — an engine-level fix every page
+inherits — plus a forced-`gc.collect()` regression test in
+`tests/ui/test_job_worker.py` (the late slot must survive the
+first slot's GC).
+
+**The main-window wiring** — SECTIONS grows ("utilities", "Utilities
+Workbench") before Settings (16 pages); four stale section-count
+tests trued (bestofml/responseai/foundations/imagelab each hardcoded
+15 or a `len-4` formula).  `docs/gui/GUI_AUDIT.md`'s Part-2
+assessment advances to **~93%** (twelve of thirteen surfaces — the
+Utilities blocker resolved; the remaining blocker is the
+Model-Analysis depth alone); `GUI_REDESIGN.md` carries increment 13.
+
+**The ship.**  Four carriers → **1.2.140**; the nine-chunk suite
+(`scratch/run_suite_chunks_225.py`, next-server down per the OOM
+ritual — the full tests/ui directory in ONE process got the kernel
+OOM-kill at 64% again): chunks 1/3/4a/4b/4c/5/6 green, chunk 2 red on
+exactly the two notebook freshness guards (the bump-then-reexecute
+order) → notebooks re-executed **8/8 at `pharmaml 1.2.140` in 198 s**,
+no-output twins regenerated, the guards re-run green — 9/9 chunks.
+`scratch/build_zip_210.py` → **v1.2.140 = 20,387,313 bytes**, sha-256
+`a911956dbd34ecedea2b30192957283cdfce724da58a63f757c2f44532228694`,
+1015 entries / 970 files, testzip OK per home, **real leaks 0**,
+nested zips NONE, predecessor v1.2.139 swept from all four homes.
+Census: **990 files / 367,201 lines**.  Web pins: FALLBACK_STATS
+988/365,533 → 990/367,201; tests pin **5,706 → 5,725 = 4,930 collect
++ 795 doctests**; SHIPPED_TOOLKIT_VERSION 1.2.140;
+GITHUB_BACKUP_MANIFEST.md's v1.2.140 entry + CHANGELOG's 1.2.140
+entry written.  Pushed `84b900b..52392e8`.
+
+**Post-ship verification** (agent-browser): GET / 200, header badge
+**v1.2.140**, the hero hydrating the LIVE walk (990 files /
+367,239 lines / 5,725 passing tests), the Download panel serving
+v1.2.140 at 19.44 MB with the copy-commands, the zip-size endpoint
+`exact:true` with 20,387,313 bytes (zero python spawns), the theme
+toggle flipping dark↔light, no console errors, no horizontal scroll,
+the footer pinned at the page bottom.  One more stale-pin catch
+during verification: the hero's PRE-hydration fallback literals in
+`overview.tsx` still read 802/331,626 (ancient) — trued to
+990/367,201 (this commit).
+
+**Baselines for the next round** — v1.2.140 (four homes) · honest
+totals **5,725 = 4,930 collect + 795 doctest** · census **990/367,201**
+· counter **19/100** · **the retirement backlog shrunk to ONE item**:
+(1) the remaining Model-Analysis depth (leaderboard variants, family
+benchmark, tuner card, applicability-domain), then (2) re-verify →
+delete `playground.py` + its 876-test Tk suite + true the pins.
+Part-3 §20 (checkpoint depth) / §21 (hover tooltips) / §22 (SMILES
+previews) / §23 (responsive pass) / §24 (SA-in-generative wiring)
+remain.
