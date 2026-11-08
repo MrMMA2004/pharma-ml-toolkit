@@ -9768,3 +9768,126 @@ daemon restarted next-server), zip route `exact:true` v1.2.137 =
 observed in this window (the 17th belonged to the concurrent session's
 pre-round recovery, recorded above).
 
+
+---
+
+## Round 225 (2026-11-08, IM continuation — "Continue MASTER_PROMPT part3") — the Part-3 §19 cross-validation results layer, v1.2.138
+
+*The user's direct instruction (the third "Continue MASTER_PROMPT part3"
+of the day) arrived with the sandbox healthy again after two aborted
+cron rounds.  State check first: the concurrent session had already
+closed §17 (round 222, v1.2.135), the playground SIGILL (round 223,
+v1.2.136) and §18.2/§18.3 (round 224, v1.2.137) — counter at 18/100,
+tree clean at 52db946.  The worklog's own baseline named this round's
+work: **§19 CV results interface + scaffold splits**.*
+
+**The engine** — `src/pharmaml/ml/cv_results.py` (the §19 directive,
+cross-validation promoted from a hidden training detail to a
+first-class reportable result):
+
+* **§19.3 strategies** — `build_cv_splitter`: kfold / stratified /
+  group / stratified_group / **scaffold** (Bemis–Murcko grouping via
+  `splits.scaffold_groups`, reusing the round-179 machinery), honest
+  guards everywhere (folds ≤ rows, folds ≤ rarest class, folds ≤
+  distinct scaffolds — a doomed request fails loudly, never an
+  all-NaN board), and **limitations notes that travel with every
+  result** ("scaffold CV expects LOWER scores — that gap is the
+  optimism of row-level splitting made visible").
+* **§19.6/§19.7 the fold loop** — explicit, not vectorised: every fold
+  `clone()`s the whole pipeline, so preprocessing refits on the fold's
+  training rows only (leakage rule) and a deep model gets a fresh
+  module + optimizer + scheduler every fold — proven, not assumed, by
+  `test_dnn_cross_validation_uses_a_fresh_model_per_fold` (3 fits, 3
+  DISTINCT object ids, counted via monkeypatch).
+* **§19.2 the display contract** — `format_cv_score` renders
+  `CV Score = Mean ± Std (k-fold CV)` exactly; `CVResult` records
+  strategy/folds/seed, individual fold scores, train-side mirrors,
+  per-fold fit/score timings, mean/std aggregates, best_params, and
+  `summary()`/`headline()` for boards.
+* **§19.4/§19.5 honest metric panels** — binary-only rows (precision/
+  recall/f1/average-precision) dropped for multiclass with a note;
+  proba rows dropped for no-`predict_proba` estimators (ridge_classifier)
+  with the balanced_accuracy primary fallback; every panel metric
+  carries a display label + honest direction (RMSE lower-is-better).
+* **§19.9 persistence** — `dataset_fingerprint` (sha256 over shape/
+  columns/y/X bytes), feature-column snapshot, execution metadata
+  (toolkit version, UTC timestamp, duration), and a schema-checked
+  JSON round-trip (`cv_result_to_dict`/`from_dict`) that rejects
+  foreign payloads loudly.
+* **`compare_models_cv`** — the panel under ONE shared splitter
+  (comparable board), alias collapsing, the cooperative JobCancelled
+  stop channel mirroring `compare_models`, and a board frame with the
+  formatted `cv_score` column sorted honestly (ascending for
+  lower-is-better primaries).
+
+**The GUI** — the playground's §19.8 results interface: a **cv
+strategy combo** on the Train card (auto/kfold/stratified/group/
+stratified_group/scaffold, `detect_group_column` honestly sourcing
+group-like columns), the Compare button now reading the cv-folds
+spinner + strategy, the board carrying `cv_score` formatted per row,
+and **the double-click CV report window** — fold-by-fold table with
+train mirrors, aggregate table with directions, the notes, and a
+fold-by-fold chart (mean line, ±1 std band).  Foreign board rows
+(family benchmarks, trials) answer with the honest status hint, not a
+crash.  **The round's catch:** a bare `import matplotlib.pyplot` in
+the detail window let backend resolution pick **PySide6/Qt, which
+ABORTS the whole process** under a cursor-less Xvfb ("qt.qpa.plugin:
+Could not load the Qt platform plugin xcb") — the bisect probe found
+it in minutes; the fix routes the import through
+`pharmaml.viz.get_pyplot` (the toolkit's standing Agg-forcing helper),
+and a regression test pins the window opening end to end.
+
+**The standing-mandate side quest** — the §18 layer's **15 latent
+mypy errors trued to zero** via the `_bounds` contract helper (numeric
+kinds always carry bounds; a None is a malformed advice row and gets
+the loud ModelError instead of a silent `float(None)` crash deeper in
+the narrowing math) + the `kernels`→`kernel_set` reuse fix:
+**`src/pharmaml` is now mypy-clean end to end** (191 files, 0 errors,
+the first fully-clean src gate since the §18 layer landed).
+
+**The ship** — four carriers → **1.2.138**; notebooks re-executed
+**223 s (8/8 at `pharmaml 1.2.138`)**, twins regenerated with the
+variant-note cell + 4 warning-stderr leaks scrubbed (the standing
+round-212 rule — the suite's leakage pin caught the ML notebook's
+sklearn tracebacks first, exactly the designed ordering);
+`scratch/build_zip_210.py` → **v1.2.138 = 20,349,987 bytes**, sha-256
+`ce3fd87cbdb21b036e432b801222e15abc2c0ab4ecc89b17f09a9e83de057e76`,
+1012 entries / 967 files, testzip OK per home, **real leaks 0**,
+nested zips NONE, predecessor v1.2.137 swept from all four homes.
+Census (runs LAST): **986 files / 363,183 lines**.  Web pins:
+FALLBACK_STATS 986/363,183; tests pin **5,699 = 4,904 collect + 795
+doctests** (41 engine tests + 7 GUI tests + 2 doctest items);
+SHIPPED_TOOLKIT_VERSION 1.2.138; the overview's after-text now names
+the Part-3 §19 suite.  Zip endpoint `exact:true` (20,349,987, source
+release), GET / 200 after the OOM-ritual restart, web lint clean.
+
+**The suite gate** — the nine-chunk runner
+(`scratch/run_suite_chunks_225.py`, next-server down per the OOM
+ritual): chunks 3/4a/4b/4c/6 green, **chunk 5 = the full playground
+chunk green** (the new TestCVResultsGui riding inside), chunks 1/2's
+three reds (the leakage pin + two twin note-cell pins) went green
+immediately after the scrub — the suite effectively all-green at ship
+time, the same shape as round 224.
+
+**The scheduler self-heal** — the master cron 514037 was found
+"Disabled by API" AGAIN (13 minutes after its recreation — the second
+consecutive occurrence); deleted and recreated identically as **514067**
+per the baked-in self-heal rule.  The webDevReview 15-min job was
+missing entirely → recreated as **514068**.  (If the owner is
+deliberately disabling the master job, say so and 514067 will be
+removed.)
+
+**Commits** — `5954ffe` feat(r225) + `7819495` release v1.2.138,
+pushed to origin/main and verified (`git rev-parse origin/main` =
+7819495).  Counter **18/100 riding** (IM continuation rounds don't
+increment; the next cron run will take it to 19).
+
+**Baselines for the next round** — v1.2.138 (four homes) · honest
+totals **5,699 = 4,904 collect + 795 doctest** · census **986/363,183**
+· counter **18/100** · Part-3 remaining: **§20 checkpoint depth (pause/
+resume/stop — `tools/checkpoint.py` exists, needs the CV/job depth),
+§21 hover tooltips, §22 SMILES previews, §23 responsive pass, §24
+SA-in-generative wiring** — §18.5's interactive search-space editor GUI
+and §18.6's optimization progress plots also remain natural GUI
+follow-ups; the web ML playground could gain the §19 fold-detail view
+(a web mirror of the double-click window) as a follow-up.
