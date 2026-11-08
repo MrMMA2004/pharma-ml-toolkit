@@ -54,6 +54,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QPushButton,
     QSpinBox,
     QSplitter,
@@ -83,6 +84,9 @@ _OBJECTIVES: list[tuple[str, str]] = [
     ("blend", "QED + LogP blend"),
     ("multi", "Multi-objective (QED × MW × TPSA)"),
     ("similarity", "Similarity to reference SMILES"),
+    # (part3 §24.5) the Ertl SA scale as an evolution reward: the window
+    # entries become the easy/hard anchors (at/below easy -> 1.0).
+    ("sa", "SA score (ease of synthesis)"),
 ]
 
 _METHODS: list[tuple[str, str]] = [
@@ -99,6 +103,7 @@ def _build_objective(key: str, lo: float, hi: float, reference: str) -> Any:
         MolecularWeightBandObjective,
         MultiObjective,
         QedObjective,
+        SAScoreObjective,
         SimilarityObjective,
         TpsaBandObjective,
     )
@@ -125,6 +130,10 @@ def _build_objective(key: str, lo: float, hi: float, reference: str) -> Any:
         )
     if key == "similarity":
         return SimilarityObjective(reference)
+    if key == "sa":
+        # (part3 §24.5) the window entries are the easy/hard reward anchors
+        # (1 <= easy < hard <= 10; sensible: 1.0/3.0 or 2.0/7.0).
+        return SAScoreObjective(easy=lo, hard=hi)
     raise ValueError(f"unknown objective key: {key}")
 
 
@@ -182,8 +191,17 @@ class OracleOutcome:
     seconds: float = 0.0
 
 
+@dataclass
+class SAScoreOutcome:
+    """What the SA scoring job hands back (part3 §24)."""
+
+    table: pd.DataFrame = field(default_factory=pd.DataFrame)
+    summary: str = ""
+    seconds: float = 0.0
+
+
 class GenerativeWorkbenchPage(QWidget):
-    """The Generative tab's clusters over a shared corpus."""
+    """The Generative tab's clusters over a shared corpus.""""
 
     def __init__(
         self,
@@ -220,12 +238,13 @@ class GenerativeWorkbenchPage(QWidget):
         top.addRow("corpus:", corpus_row)
         lay.addLayout(top)
 
-        # -- the four engine tabs ------------------------------------------------
+        # -- the engine tabs ------------------------------------------------
         self._tabs = QTabWidget()
         self._tabs.addTab(self._build_evolve_tab(), "Evolve")
         self._tabs.addTab(self._build_front_tab(), "Pareto front")
         self._tabs.addTab(self._build_surgery_tab(), "Molecule surgery")
         self._tabs.addTab(self._build_oracle_tab(), "Scoring oracles")
+        self._tabs.addTab(self._build_sa_tab(), "SA score")
         lay.addWidget(self._tabs)
 
         self._progress = ProgressPanel()
@@ -412,9 +431,47 @@ class GenerativeWorkbenchPage(QWidget):
         form.addRow("", hint)
         return tab
 
+    def _build_sa_tab(self) -> QWidget:
+        """(part3 §24) the batch Synthetic Accessibility scoring tab."""
+        tab = QWidget()
+        form = QFormLayout(tab)
+        self._sa_molecules = QPlainTextEdit(
+            "CC(=O)Oc1ccccc1C(=O)O\n"          # aspirin
+            "CC(C)Cc1ccc(O)cc1\n"              # ibuprofen core
+            "Cn1cnc2c1c(=O)n(C)c(=O)n2C\n"      # caffeine
+            "CC1=C(C[C@@H]2[C@]1(C[C@H]([C@@H](C2=O)O)"
+            "NC(=O)c3ccccc3)O)OC(=O)C"          # the taxane-style complex
+        )
+        self._sa_molecules.setPlaceholderText("one SMILES per line")
+        form.addRow("molecules:", self._sa_molecules)
+        self._sa_max = QLineEdit("")
+        self._sa_max.setPlaceholderText("blank = no filter (e.g. 4.0)")
+        form.addRow("max SA:", self._sa_max)
+        self._sa_btn = QPushButton("Score molecules")
+        self._sa_btn.setMinimumHeight(34)
+        self._sa_btn.clicked.connect(self._start_sa_score)
+        form.addRow("", self._sa_btn)
+        hint = QLabel(
+            "Ertl–Schuffenhauer synthetic accessibility per molecule — "
+            "lower = estimated easier to synthesise (a computational "
+            "estimate from complexity and fragment familiarity, not a "
+            "route plan). Invalid rows keep their reason; the optional "
+            "max-SA bound flags rejects without discarding them."
+        )
+        hint.setWordWrap(True)
+        form.addRow("", hint)
+        return tab
+
     # -- job plumbing -----------------------------------------------------------
     def _buttons(self) -> tuple[QPushButton, ...]:
-        return (self._evolve_btn, self._front_btn, self._topo_btn, self._breed_btn, self._oracle_btn)
+        return (
+            self._evolve_btn,
+            self._front_btn,
+            self._topo_btn,
+            self._breed_btn,
+            self._oracle_btn,
+            self._sa_btn,
+        )
 
     def _on_started(self, name: str) -> None:
         for btn in self._buttons():
@@ -821,6 +878,108 @@ class GenerativeWorkbenchPage(QWidget):
         )
 
     def _render_oracle(self, outcome: OracleOutcome) -> None:
+        self._plot.clear()
+        self._table.bind_frame(outcome.table)
+        self._report.setText(f"{outcome.summary} · scored in {outcome.seconds:.1f}s")
+
+    # -- SA score (part3 §24) ---------------------------------------------------------
+    def _start_sa_score(self) -> None:
+        if self._busy_check():
+            return
+        smiles = [
+            line.strip()
+            for line in self._sa_molecules.toPlainText().splitlines()
+            if line.strip()
+        ]
+        if not smiles:
+            self._report.setText("Paste at least one SMILES (one per line) first.")
+            return
+        raw_max = self._sa_max.text().strip()
+        max_sa: float | None = None
+        if raw_max:
+            try:
+                max_sa = float(raw_max)
+            except ValueError:
+                self._report.setText(f"max SA must be a number — got {raw_max!r}.")
+                return
+            if not 1.0 <= max_sa <= 10.0:
+                self._report.setText("max SA must sit on the [1, 10] scale.")
+                return
+
+        def job(progress) -> SAScoreOutcome:
+            from pharmaml.chem.sa_scoring import (
+                filter_by_sa,
+                sa_score_summary,
+                sa_scores,
+            )
+
+            started = _time.monotonic()
+            progress(0.4, "scoring the molecules")
+            batch = sa_scores(smiles)
+            summary = sa_score_summary(smiles)
+            outcome = filter_by_sa(batch.results, max_sa=max_sa) if max_sa else None
+            progress(0.8, "building the table")
+            rows: list[dict[str, Any]] = []
+            for index, result in enumerate(batch.sorted_by_score()):
+                score = result.score if result.score is not None else float("nan")
+                band = "easy" if score <= 3.5 else ("moderate" if score <= 6.0 else "hard")
+                if outcome is not None:
+                    rejected = any(r.smiles == result.smiles for r in outcome.rejected)
+                    status = "rejected" if rejected else "kept"
+                else:
+                    status = "ok"
+                rows.append(
+                    {
+                        "rank": index + 1,
+                        "smiles": result.smiles,
+                        "canonical": result.canonical_smiles or "",
+                        "sa_score": score,
+                        "band": band,
+                        "status": status,
+                    }
+                )
+            for result in batch.results:
+                if not result.valid:
+                    rows.append(
+                        {
+                            "rank": "",
+                            "smiles": result.smiles,
+                            "canonical": "",
+                            "sa_score": float("nan"),
+                            "band": "invalid",
+                            "status": result.error or "invalid SMILES",
+                        }
+                    )
+            frame = pd.DataFrame(
+                rows,
+                columns=["rank", "smiles", "canonical", "sa_score", "band", "status"],
+            )
+            if "mean" in summary:
+                stats = (
+                    f"{summary['n_scored']} scored / {summary['n_invalid']} invalid · "
+                    f"mean {summary['mean']:.3f} ± {summary['std']:.3f} · "
+                    f"range {summary['min']:.3f}–{summary['max']:.3f}"
+                )
+            else:
+                stats = f"0 scored / {summary['n_invalid']} invalid · no valid molecules"
+            if outcome is not None:
+                stats += f" · filter kept {outcome.n_kept}, rejected {outcome.n_rejected}"
+            stats += " · lower = easier · a computational estimate, not a route plan"
+            progress(1.0, "done")
+            return SAScoreOutcome(
+                table=frame, summary=stats, seconds=_time.monotonic() - started
+            )
+
+        self._runner.submit(
+            "the SA score batch",
+            job,
+            on_finished=self._render_sa_score,
+            on_failed=self._failed,
+            on_cancelled=self._cancelled,
+            on_progress=self._progress.update_progress,
+        )
+
+    def _render_sa_score(self, outcome: SAScoreOutcome) -> None:
         self._plot.clear()
         self._table.bind_frame(outcome.table)
         self._report.setText(f"{outcome.summary} · scored in {outcome.seconds:.1f}s")

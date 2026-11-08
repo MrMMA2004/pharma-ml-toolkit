@@ -17,7 +17,7 @@ Pareto front (the strongest member dominates 262 others); the RL run
 best 0.592551 over 17 uniques with 276 tree nodes; piperidine has
 exactly 3 one-step ring-size mutants; the aspirin x ibuprofen-core
 breeding (seed 42, 4 children) yields 4/4 viable; and the oracle book
-on aspirin (rediscovery vs salicylic acid) reads QED 0.550 / SA 8.61 /
+on aspirin (rediscovery vs salicylic acid) reads QED 0.550 / SA 1.58 /
 logP -7.30 / rediscovery 0.448 with a PASSing property filter.
 """
 
@@ -56,11 +56,17 @@ def _run(page, starter, qtbot, studio_app) -> None:
 # -- construction ---------------------------------------------------------------
 
 
-def test_page_constructs_with_four_engine_tabs(studio_app) -> None:
+def test_page_constructs_with_five_engine_tabs(studio_app) -> None:
     page = _fresh_page()
-    assert page._tabs.count() == 4
+    assert page._tabs.count() == 5
     titles = [page._tabs.tabText(i) for i in range(page._tabs.count())]
-    assert titles == ["Evolve", "Pareto front", "Molecule surgery", "Scoring oracles"]
+    assert titles == [
+        "Evolve",
+        "Pareto front",
+        "Molecule surgery",
+        "Scoring oracles",
+        "SA score",
+    ]
 
 
 def test_bundled_seed_corpus_loads(studio_app) -> None:
@@ -267,9 +273,11 @@ def test_oracle_book_real_numbers(studio_app, qtbot) -> None:
     assert page._oracle_ref.text() == "O=C(O)c1ccccc1O"  # salicylic acid
     _run(page, page._start_oracle, qtbot, studio_app)
     text = page.report_text()
-    # probe: QED 0.550122, SA 8.613951, logP -7.302008, rediscovery
+    # probe: QED 0.550122, SA 1.580145 (the real Ertl fragment model
+    # since the part3 §24 wiring -- the RDKit-wheel Contrib database),
+    # logP -7.302008, rediscovery
     # 0.448276, property filter PASS (no violations).
-    assert "QED 0.550 · SA 8.61 · logP -7.30 · rediscovery 0.448" in text
+    assert "QED 0.550 · SA 1.58 · logP -7.30 · rediscovery 0.448" in text
     assert "property filter PASS" in text
     model = page._table.model()
     # 4 oracles + 6 property values (HBA/HBD/LogP/MW/RotB/TPSA)
@@ -286,6 +294,85 @@ def test_oracle_empty_smiles_refused(studio_app) -> None:
     page._oracle_smiles.setText("")
     page._start_oracle()
     assert "Type a SMILES to score first." in page.report_text()
+
+
+# -- SA score (part3 §24) ------------------------------------------------------------------------
+
+
+def test_sa_tab_scores_the_defaults(studio_app, qtbot) -> None:
+    page = _fresh_page()
+    assert page._sa_molecules.toPlainText().startswith("CC(=O)Oc1ccccc1C(=O)O")
+    _run(page, page._start_sa_score, qtbot, studio_app)
+    text = page.report_text()
+    # the four defaults: aspirin 1.580, ibuprofen core, caffeine 2.298
+    # and the taxane-style complex -- all valid, easiest first.
+    assert "4 scored / 0 invalid" in text
+    assert "mean " in text and "range 1.580" in text
+    assert "lower = easier" in text and "not a route plan" in text
+    model = page._table.model()
+    assert model.rowCount() == 4
+    assert model.columnCount() == 6
+    assert model.data(model.index(0, 1)) == "CC(=O)Oc1ccccc1C(=O)O"
+    assert round(float(model.data(model.index(0, 3))), 3) == 1.58
+    assert model.data(model.index(0, 4)) == "easy"
+
+
+def test_sa_tab_filter_flags_rejects_in_place(studio_app, qtbot) -> None:
+    page = _fresh_page()
+    page._sa_max.setText("2.0")
+    _run(page, page._start_sa_score, qtbot, studio_app)
+    text = page.report_text()
+    # aspirin (1.58) survives; caffeine (2.298), the ibuprofen core and
+    # the taxane are flagged rejected but stay in the table.
+    assert "filter kept 1, rejected 3" in text
+    model = page._table.model()
+    statuses = [model.data(model.index(r, 5)) for r in range(model.rowCount())]
+    assert statuses.count("kept") == 1
+    assert statuses.count("rejected") == 3
+
+
+def test_sa_tab_invalid_rows_reported(studio_app, qtbot) -> None:
+    page = _fresh_page()
+    page._sa_molecules.setPlainText("CCO\nnot-a-smiles")
+    _run(page, page._start_sa_score, qtbot, studio_app)
+    text = page.report_text()
+    assert "1 scored / 1 invalid" in text
+    model = page._table.model()
+    assert model.data(model.index(1, 4)) == "invalid"
+    assert "did not parse" in str(model.data(model.index(1, 5)))
+
+
+def test_sa_tab_empty_input_refused(studio_app) -> None:
+    page = _fresh_page()
+    page._sa_molecules.setPlainText("")
+    page._start_sa_score()
+    assert "Paste at least one SMILES" in page.report_text()
+
+
+def test_sa_tab_bad_max_refused(studio_app) -> None:
+    page = _fresh_page()
+    page._sa_max.setText("banana")
+    page._start_sa_score()
+    assert "max SA must be a number" in page.report_text()
+    page._sa_max.setText("42.0")
+    page._start_sa_score()
+    assert "[1, 10] scale" in page.report_text()
+
+
+def test_sa_objective_selectable_in_evolve(studio_app) -> None:
+    page = _fresh_page()
+    labels = [page._objective.itemText(i) for i in range(page._objective.count())]
+    assert "SA score (ease of synthesis)" in labels
+    # the window entries become the easy/hard anchors (validated by the
+    # library): 1.0 / 3.0 builds the default-anchored objective.
+    page._objective.setCurrentText("SA score (ease of synthesis)")
+    page._window_lo.setText("1.0")
+    page._window_hi.setText("3.0")
+    from ui.pages.generative import _build_objective
+
+    objective = _build_objective("sa", 1.0, 3.0, "")
+    assert objective.name == "sa_score"
+    assert (objective.easy, objective.hard) == (1.0, 3.0)
 
 
 # -- shared plumbing -----------------------------------------------------------------------------
