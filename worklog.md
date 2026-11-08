@@ -10200,3 +10200,127 @@ foreground-notebooks/agent-browser mandates); the missing
 webDevReview 15-min job recreated as **515198**.  Counter stays
 20/100 (the 21:39 fire of the disabled job produced no round —
 no counter increment, no orphan work).
+
+## Round 229 (2026-11-08, cron run 21/100 job 515197) — the Part-3 §20 checkpoint engine: long jobs pause/resume/stop without losing work, v1.2.142
+
+**The state inherited**: round 228's retirement landed clean (Part-2
+= 100%, playground.py deleted, v1.2.141, counter 20/100); the
+scheduler self-heal had rebuilt the master job as 515197 and the
+webDevReview job as 515198 — both verified alive and unique this
+round (exactly one master + one 15-min review, the old 513796/514067
+IDs superseded).  No rollback this round: the tree was already at
+origin/main 144c659 (round 228 + addendum), `git pull --ff-only` a
+no-op, rdkit import clean, venv untouched.
+
+**The work — §20 (pause/resume/stop + checkpoints), the first
+standing Part-3 backlog item.**  The cooperative-stop channel (round
+205) already stops long jobs BETWEEN their checkpoints; what was
+missing was the checkpoint itself: a stopped 40-minute sweep used to
+throw its finished work away.  This round gives long jobs durable
+state:
+
+- **The engine** — `src/pharmaml/utils/checkpoints.py` (new module,
+  exported from `pharmaml.utils`): `CheckpointManager` writes small
+  self-verifying JSON checkpoints — atomic (temp + `fsync` +
+  `os.replace` + directory `fsync`, so a crash mid-write leaves the
+  previous checkpoint intact), SHA-256 over the canonical record
+  (a truncated or tampered newest checkpoint is QUARANTINED to
+  `*.json.corrupt` on read and `latest()` falls back to the previous
+  valid one instead of failing the resuming run), rotated (only the
+  newest `keep` survive — a 40-hour job checkpoints thousands of
+  times without filling the disk), strict about inputs (plain
+  filename stems, non-negative int steps, dict states,
+  JSON-serialisable payloads with the actionable hint to store large
+  artefacts in the caller's own files), plain-JSON states (no pickle —
+  a malicious checkpoint cannot execute on load);
+  `CheckpointInfo` carries step/total/state/note/saved_at/elapsed_s/
+  path/integrity; `default_directory()` is the GUI's
+  `~/.pharmaml/checkpoints/<name>/` home.  36 engine tests
+  (`tests/test_checkpoints.py`).
+
+- **The benchmark wiring** — `benchmark_feature_families` grows
+  `checkpoint_dir` / `checkpoint_name` / `resume`: after EVERY
+  completed row (success or NaN-swallowed failure, BEFORE the
+  cooperative-stop check) the board-so-far lands atomically on disk;
+  the next call with the same signature (task + cv + metric +
+  resolved model + family list + a SHA-1 of the SMILES — any
+  mismatch, different dataset or settings, discards the stale
+  checkpoint and starts fresh, so a resumed board is only ever
+  assembled from rows computed on exactly that request) resumes at
+  the first unscored family — consecutive-from-the-front, any gap
+  stops the reuse; checkpoint WRITE failures degrade to log warnings
+  and never kill the sweep.  The smoke caught the subtle bug in
+  minutes: `enumerate`'s `start=` offsets the counter WITHOUT
+  skipping elements — the resume must SLICE
+  `family_list[start_position - 1:]`, or the reused rows recompute
+  AND re-save at shifted steps (the comment now pins the lesson at
+  the loop).  6 integration tests in `tests/test_ml_pipeline.py`
+  (cancel keeps finished families; the featuriser-counting spy pins
+  "resume computes only the unscored families"; resumed board ==
+  uninterrupted board with the ORIGINAL wall-clock fit times;
+  signature mismatch starts fresh; `resume=False` recomputes; an
+  unwritable checkpoint path never kills the board).
+
+- **The Studio wiring** — the ML Workbench Leaderboards tab
+  checkpoints into `~/.pharmaml/checkpoints/family-benchmark` by
+  default (an unwritable home degrades to fresh runs, never fails
+  the page): the Stop button keeps the finished families on disk and
+  the next Start resumes, the status line leads with "checkpoint
+  found: k/n families already scored — resuming there" when a
+  checkpoint matched, and the Start tooltip carries the Stop→resume
+  contract.  1 GUI test runs the full two-Start loop
+  (fill the checkpoint → run 2 reuses every family, the board stays
+  complete).  `tests/ui/test_ml_workbench_page.py` now 19.
+
+**Docs**: README's "Durable job checkpoints (Part-3 §20)" section;
+COVERAGE's round-229 rows; CHANGELOG's 1.2.142 entry;
+`docs/INDEX.md` regenerated (+1 module, 817 symbols — the checkpoints
+trio); GUI_AUDIT's Part-3 progress (§20 engine + Leaderboards tab
+DONE, the other long runners can adopt the same manager — §21/22/23/24
+still open); GUI_REDESIGN's increment-15 entry + the migration-status
+header trued to increment 15.
+
+**The verification**: focused runs green (36 + 6 + 1), ruff clean on
+all seven touched files (the two EXE002 exec-bit smears chmod-ed per
+the round-220 lesson; 5 auto-fixes incl. the PLR0402 aliasing), mypy
+0 on the engine + training.  The FULL seven-chunk suite
+(`scratch/run_suite_chunks_225.py`, next-server killed per the OOM
+ritual): chunks 1/2/3/4a/4b/4c/6 **all exit 0 — 7/7**.
+
+**The ship**: four carriers → **1.2.142** (VERSION /
+`src/pharmaml/__init__.py` / `pyproject.toml` /
+`src/lib/toolkit-version.ts`); notebooks re-executed **8/8 at
+pharmaml 1.2.142 in 201 s** foreground (error-outputs 0, the no-output
+twins regenerated); `scratch/build_zip_210.py` → **v1.2.142 =
+19,982,355 bytes**, sha-256
+`5579a34af1c854b6478549a7b58aeb3c4f3d4fd69385194765bff89e3b0c5732`,
+1013 entries / 968 files, testzip OK per home, **real leaks 0**,
+nested zips NONE, predecessor v1.2.141 swept from all four homes.
+Census: **988 files / 312,512 lines**.  Web pins trued:
+FALLBACK_STATS 985/311,333 → **988/312,512**, the overview's fallback
+literals, tests pin **4,769 → 4,815 = 4,019 collect + 796 doctest**
+(+43: 36 engine + 6 integration + 1 GUI; +2 straggler tests the
+round-228 count predates) with the round-229 suite named in the
+after-text; SHIPPED_TOOLKIT_VERSION 1.2.142;
+GITHUB_BACKUP_MANIFEST.md's v1.2.142 entry.
+
+**Health**: dev server restarted (Ready in 1213 ms), GET / → 200,
+`/api/toolkit/zip-size` → `{"zipBytes":19982355,"version":"1.2.142",
+"exact":true,"source":"release"}`; the agent-browser pass: the
+1.2.142 badge, 988/312,512 live + fallback, the 4815 chip, the
+Download ZIP + copy-quickstart buttons, zero console errors, the
+theme toggle both ways, the footer, mobile 390px no-scroll
+(scrollWidth 390 == innerWidth 390).
+
+**Commits & push**: `ecb8c31`-style feat(r229) + the release commit —
+pushed; `git rev-parse origin/main == HEAD` verified.  Counter
+**21/100** riding both commits.
+
+**Baselines for the next round** — v1.2.142 (four homes) · honest
+totals **4,815 = 4,019 collect + 796 doctest** · census **988/312,512**
+· counter **21/100** · Part-3 remaining: **§21 hover tooltips / §22
+SMILES previews / §23 responsive pass / §24 SA-in-generative wiring**
+(§20's engine + Leaderboards tab done; the docking campaign /
+generative batches / feature factory may adopt the same
+`CheckpointManager` as optional depth).
+
