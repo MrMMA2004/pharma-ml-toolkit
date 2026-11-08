@@ -1181,3 +1181,18 @@ the NONMEM/mrgsolve event grammar (`ev`/`addl_until`/`realize_addl`/
 re-executed at 1.2.122 (200 s, 7 twins regenerated); 18 new offscreen
 tests. Honest count **4,582 + 778 = 5,360 tests**; fresh walk pins
 **945 files / 344,253 lines**.
+
+## v1.2.141 release-zip homes (2026-11-08, round 228 — THE RETIREMENT ROUND: the ML Workbench joins the Studio, Part-2 declared complete, playground.py retired — the owner's "everything must be in studio.py" directive, increment 3)
+
+`pharma-ml-toolkit-v1.2.141.zip` — 19,834,074 bytes, sha-256
+`a50ae20d6050a4cf83f5a52db5f72a21f08f1130caed42f88adf74496d3626e7`,
+1010 entries / 965 files, built with the standing four-home builder
+(`scratch/build_zip_210.py`, the committed version-agnostic recipe)
+— testzip OK per home, **real leaks 0**, nested zips NONE, predecessor
+v1.2.140 swept from all four homes; placed byte-identical in
+`download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`. Census **985 files /
+311,333 lines** (the retirement's −55,868 lines: playground.py
+38,317 + its 980-test Tk-coupled suite ~21,600, plus the ML Workbench
++1,798 and the Model Analysis round-228 additions). Honest totals
+**4,769 = 3,974 collect + 795 doctest** (5,725 − 980 retired + 24 new).

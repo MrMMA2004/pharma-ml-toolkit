@@ -10084,3 +10084,99 @@ delete `playground.py` + its 876-test Tk suite + true the pins.
 Part-3 §20 (checkpoint depth) / §21 (hover tooltips) / §22 (SMILES
 previews) / §23 (responsive pass) / §24 (SA-in-generative wiring)
 remain.
+
+## Round 228 (2026-11-08, cron run 20/100 job 514067 + the owner's direct IM: "Check if MASTER_PROMPT part2 is completely done and retire playground.py (everything must be in studio.py)") — THE RETIREMENT ROUND: the ML Workbench, Part-2 = 100%, playground.py deleted, v1.2.141
+
+**The 19th rollback, recovered pre-round.**  The sandbox restored the
+round-186-era snapshot again (HEAD `2eb0ede`, v1.2.106, no remote, no
+worklog, no counter) while `upload/` (the persistent mount) held the
+newer artifacts through v1.2.140.  The PAT re-extraction found the
+93-char token split across two pdftotext lines of
+`upload/MASTER_PROMPT.pdf` (the 76-char truncation GitHub rejects —
+the round-226 lesson re-applied verbatim: `sed -n '688p;689p'` joined).
+The 19 untracked upload blockers moved to /tmp, the ff-pull landed on
+origin/main `ed969de` (round 227, v1.2.140, counter 19/100 — 100
+commits ahead), every blocker proved byte-identical and was discarded,
+`scratch/venv_repair.sh` ran in the foreground (VENV-REPAIR-DONE
+pharmaml 1.2.140; STUDIO-REPAIR-DONE PySide6 + pyqtgraph OK).
+
+**The owner's question, answered finally: Part-2 (§16) is COMPLETE.**
+The round-226 audit left ONE open parity item (the Model-Analysis
+depth: leaderboard variants, the family benchmark, the tuner card,
+applicability-domain).  This round landed it and re-verified:
+§16.22's acceptance criteria are all green — architecture, theming,
+PyQtGraph/native viz, workers, docs, regression testing (the chunked
+suite), and ALL THIRTEEN content surfaces with their own tests.
+**§16.18 step 15 fired: playground.py is RETIRED.**
+
+**The work — the ML Workbench + the Model Analysis round-228
+additions.**  `ui/pages/ml_workbench.py` (1,798 lines, increment 14),
+five tabs wired to the same public backend APIs the Tk cards called:
+the **Hyperparameter search** (RandomSearch/TPESearch/Hyperband over
+every grid-bearing registry family — the searcher/trials/η/cv/pruner
+controls, the defaults baseline, the held-out verdict, the
+trial-ranking board, Apply-best → `apply_search_result` pins the
+winner into the Model Analysis page's new manual-params table); the
+**Leaderboards** tab (`benchmark_feature_families` over the SMILES
+column + `stack_oof_regressors` OOF stacking with the residual
+correction and the native parity scatter); the **Ensemble builder**
+(`build_voting`/`build_stacking`); **Persistence** (`save_model` +
+sidecar, `load_model`, predict-on-CSV with
+`validate_bundle_input`'s honest feature-contract audit); and the
+**Applicability domain** (`applicability_domain` — the reliability
+table, the kNN-distance native scatter with inside/outside split +
+the threshold line, the bootstrap-uncertainty status, sourced from
+the Model Analysis run / the Workbench ensemble / a loaded bundle).
+The Model Analysis page itself grew the manual-hyperparameters table
+(`train_model`'s `model_params`), the kept-run `last_run()` hand-off,
+and four NATIVE diagnostic figures (calibration, learning curve, ROC,
+PR) — plus the latent string-class-target crash fix ("could not
+convert string to float: 'weak'" — the blanket float cast in the
+training job; the regression-only tests had never met it).  18 new
+Workbench page tests + 6 new Model Analysis tests; the main window
+grew to seventeen sections with the count-pinned tests trued (five
+suites 16→17, the utilities index 14→15 — the round-227 lesson
+pre-empted this time, one straggler caught by the suite and fixed).
+
+**The retirement.**  Deleted: `playground.py` (38,317 lines) and its
+980-test Tk-coupled suite (`test_playground.py` 876,
+`test_playground_workflows.py` 17, `test_job_safety.py` 31,
+`test_excel_io_and_samples.py` 26, `test_feature_recalculation.py`
+30 — every file that loaded the playground by path).  The references
+trued: README (the Graphical-interface section, the engineering
+notes, the file tree — `python studio.py` is THE front end),
+`studio.py`'s docstring, the dashboard (the playground-workflows
+census card → the Studio-pages census; the stale increment-1
+migration note → the COMPLETE note), GUI_AUDIT's Part-2 verdict
+(100%, step 15 fires, the deletion inventory), GUI_REDESIGN's
+increment-14 entry, and the suite driver (chunk 5 gone; chunk 4c
+carries the two new page-test files).  COVERAGE.md/CHANGELOG history
+entries stay as history.  The web "playground" component naming
+(src/components/explorer/playground) is the WEB explorer's own
+naming, untouched.
+
+**The ship.**  Four carriers → **1.2.141**; notebooks re-executed
+**8/8 at pharmaml 1.2.141 in 198 s** (the foreground recipe — the
+detached launches died silently twice), no-output twins regenerated,
+freshness guards green; the seven-chunk suite (`scratch/run_suite_chunks_225.py`,
+next-server down per the OOM ritual): chunks 1/2/3/4a/4b/6 green,
+chunk 4c red on exactly the utilities-index straggler → fixed →
+re-run green — **7/7**.  `scratch/build_zip_210.py` → **v1.2.141 =
+19,834,074 bytes**, sha-256
+`a50ae20d6050a4cf83f5a52db5f72a21f08f1130caed42f88adf74496d3626e7`,
+1010 entries / 965 files, testzip OK per home, **real leaks 0**,
+nested zips NONE, predecessor v1.2.140 swept from all four homes.
+Census: **985 files / 311,333 lines** (the retirement's −55,868).
+Web pins: FALLBACK_STATS 990/367,201 → 985/311,333; the hero
+fallback literals trued; tests pin **5,725 → 4,769 = 3,974 collect +
+795 doctest** (−980 retired +24 new); SHIPPED_TOOLKIT_VERSION
+1.2.141; the download-panel chips + the overview after-text carry the
+honest retirement arithmetic.  GITHUB_BACKUP_MANIFEST.md's v1.2.141
+entry + CHANGELOG's 1.2.141 entry written.
+
+**Baselines for the next round** — v1.2.141 (four homes) · honest
+totals **4,769 = 3,974 collect + 795 doctest** · census **985/311,333**
+· counter **20/100** · the owner's directive ("everything must be in
+studio.py") **COMPLETE**; Part-3 §20 (checkpoint depth) / §21 (hover
+tooltips) / §22 (SMILES previews) / §23 (responsive pass) / §24
+(SA-in-generative wiring) remain the standing Part-3 backlog.

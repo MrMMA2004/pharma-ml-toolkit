@@ -1,3 +1,69 @@
+## [1.2.141] — 2026-11-08
+
+### Added — round 228: THE RETIREMENT ROUND — the ML Workbench joins the Studio, Part-2 (§16) declared complete, and playground.py is retired (the owner's "everything must be in studio.py" directive, increment 3)
+
+* **The ML Workbench** — `ui/pages/ml_workbench.py` (increment 14,
+  1,798 lines, 18 page tests), the Data & ML tab's last unported
+  cards as five Studio tabs, every card wired to the SAME public
+  backend APIs the legacy Tk cards call: **Hyperparameter search**
+  (`RandomSearch` / `TPESearch` / `Hyperband` over every grid-bearing
+  registry family, the trials/η/cv/pruner controls, the defaults
+  baseline the search has to beat, the held-out verdict, the
+  trial-ranking board, and Apply-best → the Model Analysis page's
+  manual-params table via `apply_search_result`); **Leaderboards**
+  (the `benchmark_feature_families` family benchmark over the SMILES
+  column + the `stack_oof_regressors` OOF stacking leaderboard with
+  the residual correction and the native parity scatter); **Ensemble
+  builder** (`build_voting` / `build_stacking` over the ticked
+  registry members with held-out metrics); **Persistence**
+  (`save_model` + the provenance sidecar, `load_model`, the
+  predict-on-CSV arm with `validate_bundle_input`'s honest
+  feature-contract audit); **Applicability domain**
+  (`applicability_domain` with the reliability table, the
+  kNN-distance native scatter — inside vs outside AD + the threshold
+  line — and the bootstrap-uncertainty status, sourced from the Model
+  Analysis run / the Workbench ensemble / a loaded bundle).
+* **The Model Analysis page's round-228 additions** — the
+  **manual-hyperparameters** table (the selected registry model's
+  `param_grid` knobs, blank keeps the estimator's own default, the
+  values riding `train_model`'s `model_params`); the kept-run
+  `last_run()` hand-off (the fitted estimator + splits + held-out
+  metrics that feed the Workbench's AD/persistence cards); and four
+  NATIVE diagnostic figures — **calibration curve**
+  (sklearn.calibration under the job), **learning curve** (train
+  sizes vs CV score, ± 1 std band edges), **ROC** and **PR** curves
+  (one-vs-rest per class, macro AUC / AP in the title) — no
+  matplotlib import anywhere on the page (§16.8).
+* **The latent classification crash fixed** — the training job's
+  blanket `np.asarray(y, dtype=float)` crashed EVERY string-class
+  run ("could not convert string to float: 'weak'"); the honest dtype
+  split (regression floats, classification labels as-is) plus the
+  new classifier-diagnostics tests close it.
+
+### Removed — the retirement (§16.18 step 15 fires)
+
+* **`playground.py` (38,317 lines) is retired** — deleted together
+  with its 980-test Tk-coupled suite (`test_playground.py` 876 +
+  `test_playground_workflows.py` 17 + `test_job_safety.py` 31 +
+  `test_excel_io_and_samples.py` 26 + `test_feature_recalculation.py`
+  30). All thirteen content surfaces are verified Studio pages (the
+  audit's Part-2 completion assessment now reads 100%); `python
+  studio.py` is THE front end; the README, `studio.py`'s docstring,
+  the dashboard's migration note and its Studio-pages census (the
+  playground-workflows card's replacement), GUI_AUDIT and
+  GUI_REDESIGN all carry the retirement; the suite driver's Tk chunk
+  left with it. Honest totals: **4,769 = 3,974 collect + 795
+  doctest**, census **985 files / 311,333 lines**.
+
+### Changed
+
+* `ui/main_window.py` — SECTIONS grows to seventeen ("mlworkbench",
+  "ML Workbench" after Model Analysis); the count-pinned tests trued
+  (five suites 16 → 17, the utilities index 14 → 15).
+* The web pins — SHIPPED_TOOLKIT_VERSION 1.2.141, FALLBACK_STATS
+  985/311,333, the hero fallback literals, the 4,769 passing-tests
+  chips (download panel + overview), the overview after-text.
+
 ## [1.2.140] — 2026-11-08
 
 ### Added — round 227: the Utilities Workbench joins the Studio + the JobRunner GC-race fix (the owner's "everything must be in studio.py" directive, increment 2)
