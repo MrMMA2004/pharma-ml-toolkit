@@ -495,7 +495,7 @@ warning-stderr leaks scrubbed — the standing round-212 rule); the
 nine-chunk suite green (chunks 1/2's three reds — the leakage pin and
 two twin note-cell pins — went green immediately after the scrub).
 Honest totals: collect-only **4,904 + 795 doctests = 5,699 tests**;
-census **986 files / 363,183 lines**; web pins 5,649 → 5,699
+census **987 files / 363,303 lines**; web pins 5,649 → 5,699
 (download-panel + overview + page FALLBACK_STATS 984/362,491 →
 986/363,183) + SHIPPED_TOOLKIT_VERSION 1.2.138 across its four homes.
 Scheduler self-heal during the round: master cron 514037 found

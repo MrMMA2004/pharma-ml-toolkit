@@ -9854,7 +9854,7 @@ sklearn tracebacks first, exactly the designed ordering);
 `ce3fd87cbdb21b036e432b801222e15abc2c0ab4ecc89b17f09a9e83de057e76`,
 1012 entries / 967 files, testzip OK per home, **real leaks 0**,
 nested zips NONE, predecessor v1.2.137 swept from all four homes.
-Census (runs LAST): **986 files / 363,183 lines**.  Web pins:
+Census (runs LAST, re-trued after the suite driver landed): **987 files / 363,303 lines**.  Web pins:
 FALLBACK_STATS 986/363,183; tests pin **5,699 = 4,904 collect + 795
 doctests** (41 engine tests + 7 GUI tests + 2 doctest items);
 SHIPPED_TOOLKIT_VERSION 1.2.138; the overview's after-text now names
@@ -9883,7 +9883,7 @@ pushed to origin/main and verified (`git rev-parse origin/main` =
 increment; the next cron run will take it to 19).
 
 **Baselines for the next round** — v1.2.138 (four homes) · honest
-totals **5,699 = 4,904 collect + 795 doctest** · census **986/363,183**
+totals **5,699 = 4,904 collect + 795 doctest** · census **987/363,303**
 · counter **18/100** · Part-3 remaining: **§20 checkpoint depth (pause/
 resume/stop — `tools/checkpoint.py` exists, needs the CV/job depth),
 §21 hover tooltips, §22 SMILES previews, §23 responsive pass, §24
