@@ -1,9 +1,19 @@
-"""PharmaML Playground -- the whole toolkit behind one window.
+"""PharmaML Playground -- the LEGACY Tkinter interface (retirement pending).
 
 Run this file from the toolkit root (what you get when you unzip the
 downloaded archive)::
 
     python playground.py
+
+**Status (the owner's directive, 2026-11-08): the PySide6 Studio
+(``studio.py``) is the PRIMARY interface and the migration target --
+everything must live there and this Tkinter playground will be
+RETIRED once its replacements are verified (directive 16.18 step 15).
+Sections migrate incrementally; the Part-3 §19 CV interface already
+has its Studio twin (``ui/pages/model_analysis.py``'s Compare-models
+board + CV report dialog).  Until the remaining sections (the
+Utilities workflow cards first) land and are verified, this file
+stays fully functional so no capability ships broken.**
 
 A tabbed graphical interface opens with every calculation domain of the
 :mod:`pharmaml` package, no command-line knowledge required:

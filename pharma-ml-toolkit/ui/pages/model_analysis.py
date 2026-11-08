@@ -6,22 +6,48 @@ target column and a registry model; ``train_model`` runs in a
 predictions-vs-actual, residuals and -- only when the estimator
 exposes them -- feature importances. Metrics come from the actual
 held-out split; nothing on this page is fabricated.
+
+Round 226 (the owner's studio-parity directive): the Part-3 §19
+cross-validation interface migrated here from the legacy Tkinter
+playground -- the **Compare models (CV)** board runs the WHOLE
+available registry under ONE shared splitter (``compare_models_cv``)
+with the fold count and the fold strategy chosen on the page
+(auto / kfold / stratified / group / stratified_group / scaffold),
+the leaderboard carries the formatted ``mean ± std (k-fold CV)``
+score per row, and double-clicking a row opens the full §19 report
+window: the fold-by-fold table with train-side mirrors, the per-metric
+aggregates with their honest directions, the strategy/metric notes,
+and the fold-by-fold PyQtGraph chart (fold scores, mean line, ± 1 std
+band edges). The group-source detection is honest: scaffold CV needs
+a SMILES-like column, grouped strategies need a group/cluster/series/
+batch/plate/cohort column -- a doomed request is refused BEFORE any
+job starts, never silently degraded.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
+    QDialog,
     QFormLayout,
+    QHBoxLayout,
+    QHeaderView,
     QLabel,
     QPushButton,
+    QSpinBox,
     QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -31,12 +57,114 @@ from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
 from ..workers.job_worker import JobRunner
 
+if TYPE_CHECKING:
+    from pharmaml.ml.cv_results import CVResult
+
 _TK = Path(__file__).resolve().parents[2]
 _DATASETS = {
     "qsar_regression.csv": "pIC50",
     "qsar_classification.csv": "activity",
     "walkthrough_classification.csv": "",
 }
+
+#: (round 226, §19.8 port) the fold strategies the Compare board accepts
+#: -- ``auto`` resolves to stratified (classification) / kfold
+#: (regression); the rest pass straight to ``compare_models_cv``.
+_CV_STRATEGIES: tuple[str, ...] = (
+    "auto",
+    "kfold",
+    "stratified",
+    "group",
+    "stratified_group",
+    "scaffold",
+)
+
+#: SMILES-column candidates (the docking module's list, mirrored by the
+#: playground's detector): name-based, case-insensitive.
+_SMILES_COLUMN_CANDIDATES: tuple[str, ...] = (
+    "smiles",
+    "smile",
+    "canonical_smiles",
+    "smiles_nostereo",
+    "smiles_no_stereo",
+    "smiles_string",
+    "canonical",
+)
+
+#: Column-name tokens that mark a GROUP source -- the replicate/cluster
+#: labels the grouped CV strategies keep inside one side of every fold.
+_GROUP_COLUMN_TOKENS: tuple[str, ...] = (
+    "group",
+    "cluster",
+    "series",
+    "batch",
+    "plate",
+    "cohort",
+)
+
+
+def detect_smiles_column(frame: pd.DataFrame) -> str | None:
+    """Find the SMILES column of a loaded table, or ``None`` when absent.
+
+    Name-based and case-insensitive over the same candidate list the
+    docking module uses; the honest ``None`` (the engine's
+    ``csv_standardize`` detector raises instead -- the GUI wants a
+    quiet refusal it can show before any job starts).
+    """
+    lowered = {str(column).strip().lower(): str(column) for column in frame.columns}
+    for candidate in _SMILES_COLUMN_CANDIDATES:
+        if candidate in lowered:
+            return lowered[candidate]
+    return None
+
+
+def detect_group_column(frame: pd.DataFrame) -> str | None:
+    """Find a group-like column for the grouped CV strategies, or ``None``.
+
+    A column whose (case-insensitive, ``_``/space-stripped) name
+    contains a group token (``group`` / ``cluster`` / ``series`` /
+    ``batch`` / ``plate`` / ``cohort``) and holds 2..n_rows/2 distinct
+    values -- one label per replicate set, not a unique-per-row ID and
+    not a constant.
+    """
+    n_rows = len(frame)
+    for column in frame.columns:
+        flat = str(column).strip().lower().replace(" ", "_")
+        if any(token in flat for token in _GROUP_COLUMN_TOKENS):
+            distinct = frame[column].nunique()
+            if 2 <= distinct <= max(2, n_rows // 2):
+                return str(column)
+    return None
+
+
+def numeric_feature_columns(
+    frame: pd.DataFrame, target: str
+) -> tuple[list[str], list[str]]:
+    """Split a dataset's non-target columns into ``(numeric, dropped)``.
+
+    The train flows' shared rule: numeric columns become features;
+    everything else -- SMILES, IDs, free text -- is reported as dropped
+    so the page can say WHY those columns never reached the models.
+    """
+    numeric = [
+        column
+        for column in frame.columns
+        if column != target and pd.api.types.is_numeric_dtype(frame[column])
+    ]
+    dropped = [
+        str(column)
+        for column in frame.columns
+        if column != target and column not in numeric
+    ]
+    return numeric, dropped
+
+
+def detect_task(frame: pd.DataFrame, target: str) -> str:
+    """Regression when the target is numeric with > 10 distinct values."""
+    y = frame[target]
+    numeric_y = pd.api.types.is_numeric_dtype(y)
+    classes = y.astype(str).nunique()
+    return "regression" if numeric_y and classes > 10 else "classification"
 
 
 @dataclass
@@ -95,10 +223,46 @@ class ModelAnalysisPage(QWidget):
         self._train_btn = QPushButton("Train")
         self._train_btn.setMinimumHeight(34)
         self._train_btn.clicked.connect(self._start_training)
+        # -- the §19 CV controls (round 226 port) ------------------------- #
+        self._cv_folds = QSpinBox()
+        self._cv_folds.setRange(2, 10)
+        self._cv_folds.setValue(5)
+        self._cv_folds.setToolTip(
+            "Cross-validation folds for the Compare-models leaderboard's "
+            "full §19 CV report (fold scores, mean ± std, per-model "
+            "detail). 5 = the directive's default; 3 for expensive "
+            "models or limited data."
+        )
+        self._cv_strategy = QComboBox()
+        for token in _CV_STRATEGIES:
+            self._cv_strategy.addItem(token)
+        self._cv_strategy.setCurrentText("auto")
+        self._cv_strategy.setToolTip(
+            "How the Compare-models CV folds are drawn "
+            "(pharmaml.ml.cv_results): auto -- stratified for "
+            "classification, kfold for regression; group / "
+            "stratified_group -- replicate rows never straddle folds "
+            "(needs a group-like column; SMILES column groups by "
+            "scaffold); scaffold -- Bemis-Murcko frameworks never span "
+            "train/validation folds, the honest structural-"
+            "generalisation estimate (expect LOWER scores than "
+            "row-level CV -- that gap is the optimism of random folds "
+            "made visible). Double-click a leaderboard row for the full "
+            "§19 fold-by-fold report."
+        )
+        self._compare_btn = QPushButton("Compare models (CV)")
+        self._compare_btn.setMinimumHeight(34)
+        self._compare_btn.clicked.connect(self._start_compare)
         form.addRow("Dataset:", self._dataset_combo)
         form.addRow("Target column:", self._target_combo)
         form.addRow("Model:", self._model_combo)
-        form.addRow("", self._train_btn)
+        form.addRow("cv folds:", self._cv_folds)
+        form.addRow("cv strategy:", self._cv_strategy)
+        buttons = QHBoxLayout()
+        buttons.addWidget(self._train_btn)
+        buttons.addWidget(self._compare_btn)
+        buttons.addStretch(1)
+        form.addRow("", buttons)
         lay.addLayout(form)
 
         self._progress = ProgressPanel()
@@ -122,6 +286,29 @@ class ModelAnalysisPage(QWidget):
         self._metric_label.setObjectName("studioStatus")
         self._metric_label.setWordWrap(True)
         lay.addWidget(self._metric_label)
+
+        # -- the §19 CV leaderboard (round 226 port) ---------------------- #
+        self._cv_results: dict[str, CVResult] = {}
+        self._board_status = QLabel(
+            "Compare models (CV) cross-validates the available registry "
+            "under ONE shared splitter — double-click a result row for "
+            "the fold-by-fold §19 report."
+        )
+        self._board_status.setObjectName("studioStatus")
+        self._board_status.setWordWrap(True)
+        lay.addWidget(self._board_status)
+        self._board = QTableWidget()
+        self._board.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._board.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._board.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._board.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Interactive
+        )
+        self._board.setWordWrap(False)
+        self._board.itemDoubleClicked.connect(self._open_cv_report)
+        self._board.setMinimumHeight(140)
+        self._board.setMaximumHeight(260)
+        lay.addWidget(self._board)
 
         self._load_dataset(self._dataset_combo.currentText())
 
@@ -154,10 +341,12 @@ class ModelAnalysisPage(QWidget):
     # -- training ------------------------------------------------------------
     def _on_started(self, name: str) -> None:
         self._train_btn.setEnabled(False)
+        self._compare_btn.setEnabled(False)
         self._metric_label.setText(f"Training {name}…")
 
     def _on_ended(self) -> None:
         self._train_btn.setEnabled(True)
+        self._compare_btn.setEnabled(True)
 
     def _start_training(self) -> None:
         if self._frame is None:
@@ -173,10 +362,8 @@ class ModelAnalysisPage(QWidget):
             self._metric_label.setText("A job is already running — Stop it first.")
             return
 
+        task = detect_task(frame, target)
         y = frame[target]
-        numeric_y = pd.api.types.is_numeric_dtype(y)
-        classes = y.astype(str).nunique()
-        task = "regression" if numeric_y and classes > 10 else "classification"
         X = frame.drop(columns=[target])
         X = X.select_dtypes(include=[np.number])
 
@@ -295,6 +482,156 @@ class ModelAnalysisPage(QWidget):
             f"{o.metric_name} {o.metric_value:.3f}{cv} · fitted in {o.seconds:.1f}s"
         )
 
+    # -- the §19 compare board (round 226 port) ----------------------------- #
+    def _start_compare(self) -> None:
+        """Cross-validate the available registry under ONE shared splitter.
+
+        The honest sourcing mirrors the playground's Compare card:
+        ``scaffold`` derives fold groups from the SMILES column's
+        Bemis–Murcko frameworks (refused before any job when the table
+        carries none); ``group``/``stratified_group`` use a detected
+        group-like column (same pre-flight refusal); ``auto`` lets the
+        engine pick stratified/kfold from the task.
+        """
+        if self._frame is None:
+            self._metric_label.setText("Load a dataset first.")
+            return
+        frame = self._frame
+        target = self._target_combo.currentText()
+        if not target or target not in frame.columns:
+            self._metric_label.setText("Pick a target column.")
+            return
+        if self._runner.busy:
+            self._metric_label.setText("A job is already running — Stop it first.")
+            return
+
+        task = detect_task(frame, target)
+        folds = int(self._cv_folds.value())
+        cv_strategy = self._cv_strategy.currentText()
+        smiles: list[str] | None = None
+        groups: list[object] | None = None
+        if cv_strategy == "scaffold":
+            smiles_column = detect_smiles_column(frame)
+            if smiles_column is None:
+                self._board_status.setText(
+                    "Scaffold CV groups rows by their Bemis-Murcko framework "
+                    "— the loaded dataset has no SMILES-like column. Switch "
+                    "the cv strategy to auto/stratified or load a molecular "
+                    "dataset."
+                )
+                return
+            smiles = [str(value) for value in frame[smiles_column].tolist()]
+        elif cv_strategy in ("group", "stratified_group"):
+            group_column = detect_group_column(frame)
+            if group_column is None:
+                self._board_status.setText(
+                    f"The {cv_strategy!r} fold strategy needs a group-like "
+                    "column (group / cluster / series / batch / plate / "
+                    "cohort) so replicate rows never straddle folds — the "
+                    "dataset carries none. Scaffold CV offers the same "
+                    "leakage honesty for molecular data (it derives the "
+                    "groups from the SMILES column)."
+                )
+                return
+            groups = frame[group_column].tolist()
+        engine_strategy = None if cv_strategy == "auto" else cv_strategy
+
+        def job(progress) -> tuple[list[CVResult], pd.DataFrame]:
+            from pharmaml.ml import compare_models_cv
+
+            numeric, _dropped = numeric_feature_columns(frame, target)
+
+            def on_model(info: dict) -> bool:
+                # one heartbeat per leaderboard row; the callback's
+                # return value IS the cooperative-stop channel.
+                return bool(
+                    progress(
+                        float(info["index"]) / max(1, int(info["total"])),
+                        f"cv {info['model']}",
+                    )
+                )
+
+            progress(0.02, "building folds")
+            return compare_models_cv(
+                frame[numeric],
+                frame[target],
+                task,
+                strategy=engine_strategy,
+                n_folds=folds,
+                smiles=smiles,
+                groups=groups,
+                on_model=on_model,
+            )
+
+        self._runner.submit(
+            f"{folds}-fold {cv_strategy} CV compare ({task})",
+            job,
+            on_finished=self._render_compare,
+            on_failed=self._compare_failed,
+            on_cancelled=self._compare_cancelled,
+            on_progress=self._progress.update_progress,
+        )
+
+    def _render_compare(self, payload: tuple[list[CVResult], pd.DataFrame]) -> None:
+        """Fill the leaderboard from ``(results, board)`` and keep the
+        full CVResults for the double-click report window."""
+        results, board = payload
+        self._cv_results = {result.model: result for result in results}
+        columns = [str(column) for column in board.columns]
+        self._board.clear()
+        self._board.setColumnCount(len(columns))
+        self._board.setHorizontalHeaderLabels(columns)
+        self._board.setRowCount(len(board))
+        for row_index, (_, row) in enumerate(board.iterrows()):
+            for col_index, column in enumerate(columns):
+                value = row[column]
+                if (isinstance(value, float) and math.isnan(value)) or value is None:
+                    text = "nan"
+                elif isinstance(value, float):
+                    text = f"{value:.4f}"
+                else:
+                    text = str(value)
+                item = QTableWidgetItem(text)
+                if column == "model":
+                    item.setData(Qt.ItemDataRole.UserRole, str(value))
+                self._board.setItem(row_index, col_index, item)
+        strategy = str(board.iloc[0]["strategy"]) if len(board) else "auto"
+        n_folds = int(board.iloc[0]["folds"]) if len(board) else 0
+        self._board_status.setText(
+            f"{n_folds}-fold {strategy} CV over the available registry — every "
+            "row is 'mean ± std (k-fold CV)' under the SAME folds; double-click "
+            "a row for the fold-by-fold §19 report (individual fold scores, "
+            "train-side mirrors, notes)."
+        )
+
+    def _open_cv_report(self, item: QTableWidgetItem) -> None:
+        """Double-click on the board opens the clicked model's §19 report."""
+        row = item.row()
+        model_item = self._board.item(row, 0)
+        if model_item is None:
+            return
+        model_name = model_item.data(Qt.ItemDataRole.UserRole) or model_item.text()
+        result = self._cv_results.get(str(model_name))
+        if result is None:
+            # another flow filled the board (training alone leaves no CV data)
+            self._board_status.setText(
+                "no §19 CV report on this row — run Compare models (CV) first; "
+                "double-click detail is the compare board's own."
+            )
+            return
+        dialog = CVReportDialog(result, parent=self)
+        dialog.exec()
+
+    def _compare_failed(self, message: str) -> None:
+        self._board_status.setText(
+            f"Compare failed — {message.splitlines()[0] if message else 'error'}"
+        )
+
+    def _compare_cancelled(self, seconds: float) -> None:
+        self._board_status.setText(
+            f"Compare cancelled after {seconds:.1f}s (cooperative stop)."
+        )
+
     def _failed(self, message: str) -> None:
         self._metric_label.setText(f"Training failed — {message.splitlines()[0]}")
 
@@ -304,3 +641,140 @@ class ModelAnalysisPage(QWidget):
     def apply_palette(self, palette: ChartPalette) -> None:
         for plot in (self._pred_plot, self._resid_plot, self._importance_plot):
             plot.apply_palette(palette)
+
+
+class CVReportDialog(QDialog):
+    """The §19 fold-by-fold report for ONE model (the double-click window).
+
+    Mirrors the playground's ``_ml_cv_detail`` window, PyQtGraph-native:
+    the §19.2 headline (``mean ± std (k-fold CV)``), the metadata line,
+    the fold-by-fold table (validation scores + train-side mirrors +
+    fold sizes), the per-metric aggregates with honest directions, the
+    strategy/metric notes, and the fold chart (fold scores, the mean
+    line, the ± 1 std band edges drawn as dashed lines -- PlotPanel has
+    no fill-between, so the BAND is shown by its honest edges). CV
+    numbers stay structurally separate from any independent-test
+    numbers (§19.7's "clearly distinguish" rule).
+    """
+
+    def __init__(self, result: CVResult, parent: QWidget | None = None) -> None:
+        from pharmaml.ml.cv_results import METRIC_LABELS
+
+        super().__init__(parent)
+        self.setWindowTitle(f"CV report — {result.model}")
+        self.resize(900, 680)
+        lay = QVBoxLayout(self)
+
+        headline = QLabel(f"{result.model} — {result.summary()}")
+        headline.setObjectName("studioStatus")
+        headline.setWordWrap(True)
+        lay.addWidget(headline)
+        primary_label = METRIC_LABELS.get(result.primary, (result.primary, False))[0]
+        meta = QLabel(
+            f"task {result.task} · strategy {result.strategy} · "
+            f"{result.n_folds} folds · seed {result.seed} · {primary_label} "
+            f"(primary) · {result.duration_s:.1f} s wall · "
+            f"pharmaml {result.toolkit_version}"
+        )
+        meta.setWordWrap(True)
+        lay.addWidget(meta)
+
+        # -- the fold-by-fold table --------------------------------------- #
+        short_names = [
+            (name, METRIC_LABELS.get(name, (name, False))[0]) for name in result.metrics
+        ]
+        fold_columns = ["fold", "n_train", "n_val"] + [
+            f"val {label}" for _name, label in short_names
+        ]
+        fold_table = QTableWidget(len(result.folds), len(fold_columns))
+        fold_table.setHorizontalHeaderLabels(fold_columns)
+        fold_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        fold_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        for row_index, record in enumerate(result.folds):
+            cells: list[object] = [record.fold, record.n_train, record.n_val]
+            for name, _label in short_names:
+                score = record.scores.get(name)
+                cells.append(round(score, 4) if score is not None else "nan")
+            for col_index, cell in enumerate(cells):
+                text = f"{cell:.4f}" if isinstance(cell, float) else str(cell)
+                fold_table.setItem(row_index, col_index, QTableWidgetItem(text))
+        lay.addWidget(fold_table, stretch=3)
+
+        # -- the aggregates + train-side mirror --------------------------- #
+        agg_columns = ["metric", "mean ± std (k-fold CV)", "train mean", "direction"]
+        agg_table = QTableWidget(len(result.metrics), len(agg_columns))
+        agg_table.setHorizontalHeaderLabels(agg_columns)
+        agg_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        agg_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        for row_index, (name, summary) in enumerate(result.metrics.items()):
+            label, lower_is_better = METRIC_LABELS.get(name, (name, False))
+            train_values: list[float] = [
+                float(mirror)
+                for mirror in (
+                    record.train_scores[name]
+                    for record in result.folds
+                    if record.train_scores.get(name) is not None
+                )
+                if mirror is not None
+            ]
+            train_mean = (
+                f"{sum(train_values) / len(train_values):.4f}" if train_values else "—"
+            )
+            direction = "lower is better" if lower_is_better else "higher is better"
+            for col_index, cell_value in enumerate(
+                (label, summary.summary(), train_mean, direction)
+            ):
+                agg_table.setItem(row_index, col_index, QTableWidgetItem(str(cell_value)))
+        lay.addWidget(agg_table, stretch=3)
+
+        # -- the notes ------------------------------------------------------ #
+        if result.notes:
+            notes = QTextEdit()
+            notes.setReadOnly(True)
+            notes.setPlainText("\n".join(f"• {note}" for note in result.notes))
+            notes.setMaximumHeight(min(140, 24 * (len(result.notes) + 1)))
+            lay.addWidget(notes)
+
+        # -- the fold chart (PyQtGraph; no matplotlib backend roulette) ---- #
+        try:
+            summary = result.metrics[result.primary]
+            label, lower_is_better = METRIC_LABELS.get(
+                result.primary, (result.primary, False)
+            )
+            chart = PlotPanel(
+                title=f"{result.model} — {result.summary()}"
+                + (" (lower is better)" if lower_is_better else "")
+            )
+            chart.setMinimumHeight(180)
+            folds = np.arange(1, result.n_folds + 1, dtype=float)
+            chart.scatter(folds, np.asarray(summary.folds, dtype=float), label="fold score")
+            chart.line(
+                np.array([1.0, float(result.n_folds)]),
+                np.array([summary.mean, summary.mean]),
+                label="mean",
+                width=1,
+                index=1,
+                style="dash",
+            )
+            for edge, name_label in (
+                (summary.mean - summary.std, "− 1 std"),
+                (summary.mean + summary.std, "+ 1 std"),
+            ):
+                chart.line(
+                    np.array([1.0, float(result.n_folds)]),
+                    np.array([edge, edge]),
+                    label=name_label,
+                    width=1,
+                    index=2,
+                    style="dash",
+                )
+            chart.set_labels(x="fold", y=label)
+            chart.add_legend()
+            lay.addWidget(chart, stretch=2)
+        except Exception as exc:  # noqa: BLE001 — honest note, never a blocker
+            chart_note = QLabel(
+                f"fold chart unavailable ({exc}) — the tables above carry "
+                "the same numbers."
+            )
+            chart_note.setWordWrap(True)
+            lay.addWidget(chart_note)

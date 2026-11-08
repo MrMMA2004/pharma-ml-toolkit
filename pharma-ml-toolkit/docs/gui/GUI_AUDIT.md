@@ -24,7 +24,7 @@ checkpoints).
 | 3 | PK / PD | dose response, exposure, pregnancy PK | `pharmaml.pkpd.*` | **PK/PD Workbench** (increment 3: exact two-compartment regimen simulator + trapezoid/linear-up-log-down NCA + the NONMEM event grammar) |
 | 4 | Cell Lines | expression, screening | `pharmaml.biology.*` | **Biology Workbench** (increment 4: screen audit + sensitivity matrix with quartile calls + MAD gene ranking + biomarker discovery) |
 | 5 | Docking | DOCKSTRING lab, affinity, campaigns | `pharmaml.docking.*` | **Docking Workbench** (increment 5: campaign scan + completion audit + 3-column consensus rescore + DLG cluster tables + ligand library audit + the 58-box DOCKSTRING registry) |
-| 6 | Data & ML | QSAR training, leaderboards, AD | `pharmaml.ml.*` | **Model Analysis** (registry fit + curves) |
+| 6 | Data & ML | QSAR training, leaderboards, AD | `pharmaml.ml.*` | **Model Analysis** (increment 13, round 226: registry fit + curves, PLUS the Part-3 §19 CV interface ported from the playground — the Compare-models board over `compare_models_cv` with the fold-count spinner + the fold-strategy combo (auto/kfold/stratified/group/stratified_group/scaffold), the honest pre-flight refusals for scaffold/group sourcing, the formatted `mean ± std (k-fold CV)` leaderboard, and the double-click CV report dialog — fold table with train-side mirrors, per-metric aggregates with directions, notes, the PyQtGraph fold chart with the ± 1 std band edges) |
 | 7 | Unsupervised | clustering, reduction | `pharmaml.ml.unsupervised` | **Unsupervised Workbench** (increment 6: PCA variance ladder + loadings, k-means/mini-batch/GMM/hierarchical clustering with the soft responsibilities, KDE density over the histogram twin, all five manifolds) |
 | 8 | Deep Learning | runboard, UMAP, curation, figures | `pharmaml.ml.*` (torch) | **Deep Learning Workbench** (increment 7: the training run — DeepMLP*/ResidualMLP* (torch) or NumpyMLP* (numpy autograd) with early stopping + evaluate_model parity/overfit or per-class F1 + confusion; the runboard — RunTrace EMA loss curves + numpy_layer_stack weight histograms with the honest torch refusal; the UMAP map — umap_embed + Venna-Kaski trustworthiness; the fiftyone-style curation — DataView stage algebra + the four audits) |
 | 9 | Generative | RNN/RL optimization | `pharmaml.generative.*` | **Generative Workbench** (increment 8: the evolution run — GeneticOptimizer / ReinventOptimizer / MctsOptimizer over build_objective-built objectives with the ranked leaderboard + progress curves; the Pareto front — pareto_front over the multi-objective breakdown with the trade-off scatter; molecule surgery — ring_topology_moves + scaffold_hop_crossover breeding; the GuacaMol scoring oracles) |
@@ -76,3 +76,50 @@ fixed-region ROI demo, and the tanimoto timing surface).
 3. No theme or appearance control exists in Tkinter; Studio ships the
    full provider stack (Qt-Material primary, QDarkStyleSheet
    alternative, native fallback) with runtime switching.
+
+## Part-2 (§16) completion assessment — round 226, the owner's question
+
+*The owner asked directly: "Check if MASTER_PROMPT part2 is completely
+done and retire playground.py (everything must be in studio.py)."  This
+is the honest verdict against directive §16.22's acceptance criteria
+(`upload/MASTER_PROMPT part2.pdf`), with the evidence.*
+
+**Done and verified** (each with its own tests in `tests/ui/`):
+
+- PySide6 integrated, the Studio architecture (`studio.py` → `ui/`)
+  with modular pages/widgets/workers/theme (16.5/16.16).
+- PyQtGraph scientific visualization: live charts everywhere, the
+  Image Lab (increment 12: ImageView-style colormap/ROI/histogram over
+  real project matrices) (16.8).
+- Qt-Material primary + QDarkStyleSheet alternative + native fallback,
+  runtime switching, ChartPalette re-colour of every plot, QSettings
+  persistence (16.9–16.11, 16.15).
+- Navigation, JobWorker background execution with the cooperative
+  Stop channel, input validation, error handling (16.14).
+- GUI documentation (`docs/gui/GUI_REDESIGN.md`, this audit) and the
+  GitHub backup of all GUI sources/tests (16.20/16.21 J).
+
+**NOT yet done — the two open parity items** (why step 15 cannot fire):
+
+1. **Model Analysis depth** — the playground's Data & ML tab carries
+   more than the registry fit + curves the Studio page had at
+   increment 1 (leaderboard variants, the family benchmark, the tuner
+   card, applicability-domain). Round 226 ported the newest and most
+   valuable piece — the §19 CV results interface — but the remaining
+   ML-tab cards still owe their Studio twin.
+2. **The Utilities workflow cards** — the audit's row-13 mapping
+   ("Data Explorer") covers the tab's IO surface only; the rar's
+   campaign-file tools, table merge/split, compare/annotate,
+   approved-drugs report and reindex cards have NO Studio page yet.
+
+**Therefore**: Part-2 is ~90% complete — architecture, theming,
+visualization, workers, docs and eleven of thirteen content surfaces
+are verified, but §16.22's "all relevant features are accessible
+through the redesigned interface" is not yet literally true, and
+§16.18 step 15 ("remove obsolete GUI components only after their
+replacements have been verified") correctly refuses to retire
+`playground.py` today.  The retirement order from here: (1) the
+remaining Model-Analysis depth, (2) a dedicated Utilities Studio page,
+(3) re-verify, THEN delete `playground.py` with its 876-test suite and
+true the pins.  `playground.py`'s module docstring now states this
+status so nobody mistakes it for the primary interface.
