@@ -10609,3 +10609,116 @@ legibility, aspect-ratio guarantees) and §21's remaining depth
 (image pixel inspection on the Image Lab, per-page metadata adoption
 through `meta=`/`attach_metadata`, the §21.5 molecule-hover readouts)
 — §20 + §22 + §24 done, §21 slice 1 done.
+
+
+## Round 233 (2026-11-09, counter 25/100) — the Part-3 §23 slice 1: the responsive pass, shipped as v1.2.146
+
+**The user's IM directive**: "Continue MASTER_PROMPT part3" (the
+fourth consecutive part-3 continuation; the previous session's
+user-reported Windows black-window bug was confirmed SHIPPED in
+v1.2.145 by round 232 — `ui/headless.py`'s platform-aware probe, so
+no GUI troubleshooting remained this round).
+
+**The work — Part-3 §23 (responsive rescaling / overlap prevention),
+slice 1, landed as wired policy rather than per-page heroics**:
+
+* `ui/widgets/responsive.py` (NEW): `configure_splitter()` applies
+  the §23.2 discipline — no collapsible children (a careless drag can
+  never hide the control column, the chart, or the entire
+  navigation), hard per-child minimum extents (`MIN_CHILD_PX` 320;
+  the main window's nav 200 — forms, table headers and axis labels
+  stay unclipped when a splitter is squeezed), stretch factors
+  routing window growth to the chart side (§23.3's resizing
+  discipline).  Wired onto **ALL 20 splitters**: the 15 page
+  splitters, the Image Lab's four tab splitters, the ML Workbench's
+  two, and the main window's nav/content splitter — whose nav side
+  was previously collapsible (the whole navigation could be dragged
+  out of reach; only the pages side had `setCollapsible(1, False)`).
+* `LEGIBILITY_FLOOR` (640×480) answers §23.3's "generated plots
+  remain legible when exported": `image_export.grab_png_bytes(
+  min_size=…)` re-renders a squeezed QGraphicsView from its VECTOR
+  scene at floor scale — text, pens and curves re-drawn crisp at the
+  larger size (never bitmap-stretched), the aspect ratio preserved
+  (§23.4), the pyqtgraph chrome background re-filled via
+  `backgroundBrush()` (scene.render skips the view-layer painting),
+  and §23.5 pinned by test: the data arrays and view ranges are
+  byte-identical across an export — display geometry only.
+  `PlotPanel.export_image` / `ImagePanel.export_image` gained the
+  `min_size` passthrough (default `None` keeps the §17-tested
+  widget-owns-its-size contract); the Image Lab's user-facing export
+  button passes the floor.
+* `ImagePanel.setAspectLocked(True)` (§23.4 "preserve image aspect
+  ratios / avoid stretching"): matrix pixels stay square under every
+  resize — a 100×50 correlation matrix renders 2:1 exactly as the
+  data is shaped, fit-to-view, never stretched to fill the panel.
+* Tests: `tests/ui/test_responsive_policy.py` (13 — the policy
+  contract horizontal/vertical/empty-noop, the structural audit over
+  every live splitter in a constructed main window, the floor
+  upscale/already-legible/no-floor trio, §23.5 data-integrity, the
+  aspect lock, the §22 renderer's canvas-aspect contract).  Docs:
+  GUI_AUDIT's Part-3 progress (§23 slice 1 done; remaining §23 depth
+  = QScrollArea for the tallest forms, adaptive tick density, legend
+  collisions), CHANGELOG 1.2.146, README's §23 section, COVERAGE
+  round-233 row, GUI_REDESIGN increment 17.
+
+**The concurrent-session round** (the DUAL-SESSION RULE exercised
+live): the master cron job fired mid-round — it pulled the user's
+GitHub PR #2 (the landing-page merge `240c082`) at 21:31 and re-ran
+the 233 chunk runner at 21:49 (it found the newest runner).  No
+working-tree collision: the counter stayed at my 25, no foreign file
+edits, and its 8-chunk re-run validated the SAME tree content — the
+suite is green TWICE this round.  During its run the notebook
+re-execution hit the memory ceiling once (kernel died — the known
+4 GB OOM geometry), retried clean after its suite finished.  A
+second user PR (#3, repo trust signals + CI + the alphabetical
+`__all__` re-sort in `chem/__init__.py` and the `_ring_bonds`
+condition inline in `ml/mpnn.py`) landed on origin mid-push: the
+release commit was rebased onto it, 149 focused tests over the
+touched modules (chem tables / SA engine / docs-index / gnn
+doctests) re-run green, and the zip was REBUILT from the rebased
+tree so the archive matches the commit exactly.
+
+**Release**: VERSION 1.2.146 (four homes), notebooks 8/8 at pharmaml
+1.2.146 in 212 s (foreground, error-outputs 0), zip **20,244,070 B,
+sha-256
+`18bdfbcffe3ef6f72a3febec1a307453581425db8c1b375a127c78a5b806a33d`**
+(1035 entries / 988 files, testzip OK per home, real leaks 0 — the
+first build caught the re-executed ML notebook's sklearn-warning
+venv paths, the round-137 scrubber neutralised them and the rebuild
+is clean; predecessor v1.2.145 swept) byte-identical in the four
+homes.  Census **1008 files / 317,082 lines** (the round's additions
++ the user's PR #2 landing-page contribution absorbed).  Web pins
+trued (4912 tests ×5 surfaces — page.tsx hero+footer,
+download-panel ×3, overview's after-string with the round-233 suite
+appended + the StatChip; FALLBACK_STATS 1008/317,082;
+SHIPPED_TOOLKIT_VERSION 1.2.146) and the manifest v1.2.146 section
+appended.  Honest totals **4,912 = 4,114 collect + 798 doctest**
+(+13).
+
+**Health**: dev server restarted after the OOM ritual (GET / 200);
+zip route `exact:true` at 20,244,070 for v1.2.146; download route
+HEAD 200.  The agent-browser pass: badge v1.2.146, hero
+1008/317,082/4,912 hydrated, download panel (v1.2.146 zip, 19.31 MB
+= 20,244,070 B, FILES 1,008, PASSING TESTS 4,912), theme toggle
+dark/light both ways, footer pins, mobile 390×844 zero horizontal
+scroll, ZERO console errors.
+
+**Scheduler**: the master job **515197** alive (it fired this round
+— the concurrent-session story above); the webDevReview 15-min job
+was MISSING at check time again (the 515897 the round-232 worklog
+recorded had vanished) — recreated as **515969**.
+
+**Commits & push**: `12cc2a4` (the release commit, rebased onto the
+user's PR #3 merge) pushed; `origin/main == HEAD == 12cc2a4`
+verified; the worklog + counter ride this follow-up commit.
+Counter **25/100**.
+
+**Baselines for the next round** — v1.2.146 (four homes) · honest
+totals **4,912 = 4,114 collect + 798 doctest** · census
+**1008/317,082** · counter **25/100** · Part-3 remaining: **§23
+depth** (QScrollArea for the tallest forms, adaptive tick/label
+density, legend-collision handling on the densest charts) and
+**§21's remaining depth** (image pixel inspection on the Image Lab,
+per-page metadata adoption through `meta=`, the §21.5
+molecule-hover SA/formula readouts) — §20 + §22 + §24 done, §21
+slice 1 done, §23 slice 1 done.
