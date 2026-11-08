@@ -57,7 +57,7 @@ function ThemeToggle() {
   );
 }
 
-const FALLBACK_STATS = { files: 988, lines: "312,512" };
+const FALLBACK_STATS = { files: 991, lines: "313,916" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);

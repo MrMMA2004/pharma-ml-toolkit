@@ -1,3 +1,55 @@
+## [1.2.143] — 2026-11-08
+
+### Added — round 230: the Part-3 §24 SA engine — Ertl synthetic accessibility end-to-end
+
+* **The engine** — `chem.sa_scoring` (exported from `pharmaml.chem`):
+  the Ertl–Schuffenhauer synthetic accessibility score on the real
+  fragment model — the RDKit wheel ships Ertl's own
+  `Contrib/SA_Score/fpscores.pkl.gz`, loaded lazily, so aspirin
+  scores 1.58 and caffeine 2.30 (the reference Contrib values), not
+  the histogram-less degradation.  Batch API: `sa_scores` (rows keep
+  the original SMILES, canonical form, score, easy/moderate/hard
+  band, per-row parse errors — invalid rows never crash the batch),
+  `filter_by_sa` (the optional max-SA bound *flags* rejects in place
+  — the §24.4 never-silently-discard contract), `sa_score_summary`
+  (mean ± std, range, the honest "computational estimate, not a route
+  plan" caveat).  37 tests.
+* **The oracle upgrade** — `chem.oracles.sa_score` now delegates to
+  the same lazy fragment loader (a Contrib-less RDKit build degrades
+  honestly to the complexity-only ranking) and switched to the
+  non-deprecated `rdFingerprintGenerator` Morgan API;
+  `penalized_logp` therefore moved onto the real SA scale (aspirin
+  1.137, ethanol -0.258 — the old -7.3-era pins were the degraded
+  scorer's artefacts; doctest and GUI pins trued).
+* **The generative wiring** — `generative.scoring.SAScoreObjective`
+  (§24.5): the objective window bounds become the easy/hard reward
+  anchors, so "SA score (ease of synthesis)" is selectable in the
+  Studio's Evolve objective combo — SA as ONE signal in the loop,
+  never the sole target (§24.5's explicit anti-goal).
+* **The Studio tab** — the Generative page's engine tabs gained "SA
+  score": paste molecules (four seeded defaults), set the optional
+  max-SA bound, get the ranked table (rank / SMILES / canonical /
+  score / band / status) with rejects kept in place and the summary
+  line.  6 GUI tests (defaults, filter, invalid rows, empty input,
+  bad bound, objective selection).
+* **The web bridge** — `/api/chem/sa-score` (zod-validated, ≤ 50
+  molecules, min/max bounds) over `scripts/sa_score_bridge.py`
+  (stdin→stdout JSON inside the venv) feeding the Explorer's
+  Playground `sa-score-card` (the SA calculator card in the
+  generative strip), with the card-directory/probe pins updated.
+* **Infrastructure hardening** — a ROOT `conftest.py` preloads the
+  round-206 EGL stub (`ui.headless.ensure_headless()`) for EVERY
+  pytest invocation: pytest-qt imports `PySide6.QtGui` at
+  `pytest_configure` (before any `tests/` conftest can run), so in an
+  EGL-less container every non-`tests/ui` invocation — the library
+  chunks and the `src/pharmaml` doctest chunk — INTERNALERRORed on
+  `libEGL.so.1`.  The suite is container-EGL-flip-proof now.
+* Round 230 also completed the interrupted round's ship (the
+  syntax-error fix in `ui/pages/generative.py`, the true-value test
+  pins the dead session guessed wrong: easiest-first ordering, the
+  2-kept/2-rejected filter split, `_obj_lo`/`_obj_hi` names).
+
+
 ## [1.2.142] — 2026-11-08
 
 ### Added — round 229: the Part-3 §20 checkpoint engine — long jobs pause/resume/stop without losing work

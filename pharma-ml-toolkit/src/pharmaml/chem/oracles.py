@@ -330,7 +330,7 @@ def penalized_logp(mol_or_smiles: Any) -> float:
 
     Examples
     --------
-    >>> -10.0 < penalized_logp("CCO") < -5.0
+    >>> -1.0 < penalized_logp("CCO") < 0.0  # real Ertl SA (part3 §24) replaced the degraded -7.x
     True
     >>> penalized_logp("c1ccccc1") > penalized_logp("CCO")  # lipophilic wins
     True

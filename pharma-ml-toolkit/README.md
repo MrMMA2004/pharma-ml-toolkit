@@ -1746,8 +1746,10 @@ objective.scaffold_stats()   # scaffolds, full buckets, zeroed scores, ...
   **custom-alerts blocklist** — wired into every optimiser with the
   scaffold-memory statistics in the run report.
 * Honest scope: the components that shell out to external CLIs or licensed SDKs
-  (SynthSense, ROCS/OpenEye, ChemProp, Qptuna, Maize, DockStream) and the Ertl
-  SA score (a vendored pickle) did not land.
+  (SynthSense, ROCS/OpenEye, ChemProp, Qptuna, Maize, DockStream) did not land.
+  The Ertl SA score DID land (Part-3 §24, round 230) — see
+  "Synthetic accessibility scoring" below — because the RDKit wheel ships
+  Ertl's own fragment database (no vendored pickle required).
 
 ### DiffDock's pose analysis (from 0 to 100)
 
@@ -2028,6 +2030,35 @@ Leaderboards tab checkpoints into `~/.pharmaml/checkpoints/` by
 default, so its Stop button keeps the finished families and the next
 Start resumes — the status line says so ("checkpoint found: 7/16
 families already scored — resuming there").
+
+#### Synthetic accessibility scoring in the generative loop (Part-3 §24)
+
+Every generated molecule can now carry the Ertl–Schuffenhauer
+**synthetic accessibility (SA) score** — the reference implementation
+(Ertl & Schuffenhauer, *J. Cheminformatics* 2009) whose fragment
+database ships inside the RDKit wheel itself
+(`Contrib/SA_Score/fpscores.pkl.gz`), so the score is the *real*
+fragment model, not an approximation: aspirin 1.58, caffeine 2.30,
+the conventional 1–10 scale where **lower = estimated easier to
+synthesise**.  `pharmaml.chem.sa_scoring` exposes the batch API
+(`sa_scores`, `filter_by_sa`, `sa_score_summary`): per-molecule rows
+keep the original SMILES, the canonical form, the score, an
+`easy/moderate/hard` band and the parse error when a row is invalid —
+invalid SMILES never crash the batch.  The optional max-SA bound only
+*flags* rejects (the §24.4 contract: never silently discard
+candidates); the summary reports mean ± std, range and the honest
+caveat (a computational estimate, not a route plan).
+
+The score is wired in three places: the **oracle book**
+(`chem.oracles.sa_score` — the fragment table is loaded lazily and a
+Contrib-less RDKit build degrades honestly to the complexity-only
+ranking, and `penalized_logp` now uses the real SA too), the
+generative **evolution objective** (`SAScoreObjective`, where the
+window bounds become the easy/hard reward anchors — §24.5: SA as ONE
+signal in a multi-objective loop, never the sole target), and the
+Studio **Generative tab's "SA score" engine tab** — paste molecules,
+set the max-SA bound, get the ranked table (rank / SMILES / canonical
+/ score / band / status) with rejects kept in place.
 
 ---
 

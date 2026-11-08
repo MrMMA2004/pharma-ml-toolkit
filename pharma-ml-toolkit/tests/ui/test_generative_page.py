@@ -275,9 +275,10 @@ def test_oracle_book_real_numbers(studio_app, qtbot) -> None:
     text = page.report_text()
     # probe: QED 0.550122, SA 1.580145 (the real Ertl fragment model
     # since the part3 §24 wiring -- the RDKit-wheel Contrib database),
-    # logP -7.302008, rediscovery
-    # 0.448276, property filter PASS (no violations).
-    assert "QED 0.550 · SA 1.58 · logP -7.30 · rediscovery 0.448" in text
+    # logP 1.136788 (the real SA table also lifted penalized logP off
+    # the degraded -7.302008 the histogram-less scorer reported),
+    # rediscovery 0.448276, property filter PASS (no violations).
+    assert "QED 0.550 · SA 1.58 · logP 1.14 · rediscovery 0.448" in text
     assert "property filter PASS" in text
     model = page._table.model()
     # 4 oracles + 6 property values (HBA/HBD/LogP/MW/RotB/TPSA)
@@ -304,16 +305,17 @@ def test_sa_tab_scores_the_defaults(studio_app, qtbot) -> None:
     assert page._sa_molecules.toPlainText().startswith("CC(=O)Oc1ccccc1C(=O)O")
     _run(page, page._start_sa_score, qtbot, studio_app)
     text = page.report_text()
-    # the four defaults: aspirin 1.580, ibuprofen core, caffeine 2.298
-    # and the taxane-style complex -- all valid, easiest first.
+    # the four defaults, easiest first: the ibuprofen core 1.520,
+    # aspirin 1.580, caffeine 2.298 and the taxane-style complex 4.076
+    # -- all valid.
     assert "4 scored / 0 invalid" in text
-    assert "mean " in text and "range 1.580" in text
+    assert "mean " in text and "range 1.520" in text
     assert "lower = easier" in text and "not a route plan" in text
     model = page._table.model()
     assert model.rowCount() == 4
     assert model.columnCount() == 6
-    assert model.data(model.index(0, 1)) == "CC(=O)Oc1ccccc1C(=O)O"
-    assert round(float(model.data(model.index(0, 3))), 3) == 1.58
+    assert model.data(model.index(0, 1)) == "CC(C)Cc1ccc(O)cc1"
+    assert round(float(model.data(model.index(0, 3))), 3) == 1.52
     assert model.data(model.index(0, 4)) == "easy"
 
 
@@ -322,13 +324,14 @@ def test_sa_tab_filter_flags_rejects_in_place(studio_app, qtbot) -> None:
     page._sa_max.setText("2.0")
     _run(page, page._start_sa_score, qtbot, studio_app)
     text = page.report_text()
-    # aspirin (1.58) survives; caffeine (2.298), the ibuprofen core and
-    # the taxane are flagged rejected but stay in the table.
-    assert "filter kept 1, rejected 3" in text
+    # the ibuprofen core (1.520) and aspirin (1.580) survive; caffeine
+    # (2.298) and the taxane (4.076) are flagged rejected but stay in
+    # the table.
+    assert "filter kept 2, rejected 2" in text
     model = page._table.model()
     statuses = [model.data(model.index(r, 5)) for r in range(model.rowCount())]
-    assert statuses.count("kept") == 1
-    assert statuses.count("rejected") == 3
+    assert statuses.count("kept") == 2
+    assert statuses.count("rejected") == 2
 
 
 def test_sa_tab_invalid_rows_reported(studio_app, qtbot) -> None:
@@ -366,8 +369,8 @@ def test_sa_objective_selectable_in_evolve(studio_app) -> None:
     # the window entries become the easy/hard anchors (validated by the
     # library): 1.0 / 3.0 builds the default-anchored objective.
     page._objective.setCurrentText("SA score (ease of synthesis)")
-    page._window_lo.setText("1.0")
-    page._window_hi.setText("3.0")
+    page._obj_lo.setText("1.0")
+    page._obj_hi.setText("3.0")
     from ui.pages.generative import _build_objective
 
     objective = _build_objective("sa", 1.0, 3.0, "")

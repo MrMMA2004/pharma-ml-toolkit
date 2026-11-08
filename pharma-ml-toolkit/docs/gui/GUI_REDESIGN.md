@@ -397,3 +397,34 @@ layer and the first Studio wiring:
   "checkpoint found: k/n families already scored — resuming there",
   and the Start tooltip carries the contract.  Tests: 36 engine + 6
   integration (featuriser-counting spy) + 1 two-Start GUI loop.
+
+
+## Increment 16 (round 230) — §24 SA-in-generative wiring in the Generative tab
+
+The Part-3 §24 synthetic-accessibility section landed end-to-end:
+
+- **The engine** — `pharmaml.chem.sa_scoring`: the real Ertl
+  fragment model (the RDKit wheel's own Contrib database,
+  `fpscores.pkl.gz`, loaded lazily), the 1–10 scale with lower =
+  easier, batch rows (original + canonical SMILES, score,
+  easy/moderate/hard band, per-row parse errors — invalid rows never
+  crash the batch), `filter_by_sa` flags rejects in place (the §24.4
+  never-discard contract) and `sa_score_summary` reports mean ± std,
+  range and the honest caveat.  37 tests.
+- **The page** — the Generative tab's engine tabs gained "SA score":
+  paste molecules (four seeded defaults — the ibuprofen core, aspirin,
+  caffeine, a taxane-style complex), optionally set the max-SA bound
+  ([1, 10]), get the ranked table (rank / SMILES / canonical / score
+  / band / status) with the summary line.  6 GUI tests.
+- **The evolution wiring** — `SAScoreObjective` (from
+  `pharmaml.generative`): selecting "SA score (ease of synthesis)"
+  turns the objective window bounds into the easy/hard reward anchors
+  (§24.5 — SA as one signal in the loop, never the sole target).
+- **The oracle book** — the book line grew the SA entry
+  (`QED 0.550 · SA 1.58 · logP 1.14 · …`) and `penalized_logp` moved
+  onto the real fragment table (the old -7.3 pins were the degraded
+  histogram-less scorer's artefacts).
+- **Infrastructure** — a ROOT `conftest.py` preloads the EGL stub for
+  every pytest invocation (pytest-qt imports QtGui at configure,
+  before any conftest under `tests/` runs — the library and doctest
+  chunks INTERNALERRORed in EGL-less containers without it).

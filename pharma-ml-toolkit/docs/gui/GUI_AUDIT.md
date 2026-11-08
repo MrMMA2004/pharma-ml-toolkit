@@ -146,15 +146,14 @@ and §16.18 step 15 **fires**: `playground.py` is retired this round
 carry the new honest totals.
 
 
-## Part-3 progress — round 229: §20 checkpoint depth
+## Part-3 progress — round 230: §24 SA-in-generative wiring
 
 *The Part-3 backlog after Part-2's completion: §20 checkpoint depth /
 §21 hover tooltips / §22 SMILES previews / §23 responsive pass / §24
-SA-in-generative wiring.  Round 229 landed §20's engine and its first
-Studio wiring.*
+SA-in-generative wiring.  Round 229 landed §20; round 230 landed §24.*
 
 - **§20 (pause/resume/stop + checkpoints) — the engine and the
-  Leaderboards tab are DONE.**  `pharmaml.utils.checkpoints`
+  Leaderboards tab are DONE** (round 229).  `pharmaml.utils.checkpoints`
   (`CheckpointManager`: atomic fsync+rename saves, SHA-256
   self-verification, corrupt-file quarantine with fallback-to-previous,
   rotation, strict input validation, JSON states — no pickle) is the
@@ -172,5 +171,27 @@ Studio wiring.*
   (the docking campaign, the generative batches, the feature factory's
   molecule loop) can adopt the same `CheckpointManager` — the engine
   is generic and they already carry the cooperative-stop channel.
-- **§21 hover tooltips / §22 SMILES previews / §23 responsive pass /
-  §24 SA-in-generative wiring** — unchanged, still open.
+- **§24 (SA-in-generative wiring) — DONE** (round 230).  The
+  `pharmaml.chem.sa_scoring` engine (the real Ertl fragment model from
+  the RDKit wheel's own Contrib database — aspirin 1.58, caffeine
+  2.30; batch rows keep original + canonical SMILES, an
+  easy/moderate/hard band and per-row parse errors; the optional
+  max-SA bound flags rejects in place per the §24.4 never-discard
+  contract) plus the Generative tab's "SA score" engine tab (paste
+  molecules → ranked table rank/SMILES/canonical/score/band/status,
+  the summary line with mean ± std and the honest caveat) and the
+  `SAScoreObjective` evolution wiring (§24.5: the window bounds become
+  the easy/hard reward anchors — SA as one signal, never the sole
+  target).  The oracle book grew the SA line and `penalized_logp`
+  moved onto the real fragment table.  37 engine tests + 6 GUI tests.
+- **§21 hover tooltips / §22 SMILES previews / §23 responsive pass** —
+  unchanged, still open (the natural next slice: §22's hover/click
+  structure previews over the SMILES columns the SA tab just added).
+- **Round-230 infrastructure hardening**: a ROOT `conftest.py` now
+  preloads the round-206 EGL stub (`ui.headless.ensure_headless()`)
+  for EVERY pytest invocation — pytest-qt imports `PySide6.QtGui` at
+  `pytest_configure`, before any test-module import, so in an
+  EGL-less container every non-`tests/ui` run (the library chunks and
+  the doctest chunk) used to INTERNALERROR on `libEGL.so.1`; the
+  tests/ui conftest only saved runs whose args pointed under
+  `tests/ui`.  The suite is EGL-flip-proof now.

@@ -201,7 +201,7 @@ class SAScoreOutcome:
 
 
 class GenerativeWorkbenchPage(QWidget):
-    """The Generative tab's clusters over a shared corpus.""""
+    """The Generative tab's clusters over a shared corpus."""
 
     def __init__(
         self,

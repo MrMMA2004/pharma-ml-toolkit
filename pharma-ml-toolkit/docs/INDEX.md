@@ -70,6 +70,11 @@ after adding new public functions.
 | `REPRESENTATIONS` | constant |  |
 | `RISM_DESCRIPTORS` | constant |  |
 | `RISM_DESCRIPTOR_COUNT` | constant |  |
+| `SA_SCORE_LIMITATIONS` | constant |  |
+| `SA_SCORE_METHOD` | constant |  |
+| `SAFilterResult` | class | §24.4 filtering outcome: kept AND rejected are both preserved. |
+| `SAScoreBatch` | class | Batch results with the validity accounting (§24.2/24.3). |
+| `SAScoreResult` | class | One molecule's SA score with full validation context (§24.2). |
 | `TOPOLOGICAL_BITS` | constant |  |
 | `UNSUPPORTED_METALS` | constant |  |
 | `AtomEnvironment` | class | One ``(atom, radius)`` hit a Morgan bit fires on. |
@@ -139,6 +144,7 @@ after adding new public functions.
 | `dihedral_angle` | function | Signed dihedral p0-p1-p2-p3 in degrees, −180..180. |
 | `distance_matrix` | function | The full pairwise distance matrix ``(n, n)`` in Å. |
 | `family_of_column` | function | Return the feature family a frame column belongs to. |
+| `filter_by_sa` | function | Filter scored candidates by an inclusive SA range (§24.4). |
 | `filter_low_variance` | function | Cut feature columns whose variance is below ``threshold``. |
 | `find_rings` | function | The smallest set of smallest rings, as atom-index sets. |
 | `fingerprint_diversity` | function | Mean pairwise Tanimoto *distance* across a pose series. |
@@ -192,6 +198,10 @@ after adding new public functions.
 | `select_string` | function | NGL's selection string grammar resolved to atom indices. |
 | `select_top_features` | function | Select the top-K features with the rar's two-layer strategy. |
 | `selection_metadata` | function | Build the JSON-ready metadata dict for a feature-selection run. |
+| `sa_score` | function | Score one SMILES string (or an RDKit molecule). |
+| `sa_score_frame` | function | The §24.3 generative-results table: SMILES, SA, validity, order. |
+| `sa_score_summary` | function | Direction-aware batch statistics for interfaces (§24.3). |
+| `sa_scores` | function | Score a batch of SMILES with per-molecule validity (§24.2). |
 | `selfies_alphabet` | function | Sorted set of SELFIES symbols appearing in an iterable of strings. |
 | `selfies_available` | function | Report whether the optional ``selfies`` package is importable. |
 | `selfies_feature_matrix` | function | Featurise a SMILES column as a SELFIES label / one-hot matrix. |
@@ -577,6 +587,7 @@ after adding new public functions.
 | `QedObjective` | class | RDKit QED (quantitative estimate of drug-likeness). |
 | `RawComponentObjective` | class | A REINVENT4 component: raw descriptor value pushed through a transform. |
 | `ReinventOptimizer` | class | Policy-gradient fine-tuning of a SMILES RNN prior. |
+| `SAScoreObjective` | class | Ertl synthetic-accessibility score as a generation reward (part3 §24.5). |
 | `ScaffoldSimilarityFilter` | class | Bucket by *similar* scaffolds (``scaffold_similarity``). |
 | `ScoreTransform` | class | Base class of the REINVENT4 transform DSL. |
 | `ScoringObjective` | class | Base class for generation objectives: ``score(smiles) -> [0, 1]``. |

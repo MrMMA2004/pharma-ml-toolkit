@@ -1214,3 +1214,26 @@ the README §20 section and the round-229 docs rows). Honest totals
 6 benchmark integration + 1 GUI two-Start loop; +2 straggler tests
 the round-228 count predates). Notebooks re-executed **8/8 at
 pharmaml 1.2.142 in 201 s** (the foreground recipe).
+
+## v1.2.143 release-zip homes (2026-11-08, round 230 — the Part-3 §24 SA engine: Ertl synthetic accessibility end-to-end, completing the interrupted round's ship)
+
+`pharma-ml-toolkit-v1.2.143.zip` — 20,002,126 bytes, sha-256
+`a99c67ed11d95c0883580df15f95113bc79b865bbf57ab88759e40acf455ce7e`,
+1016 entries / 971 files, built with the standing four-home builder
+(`scratch/build_zip_210.py`, the committed version-agnostic recipe)
+— testzip OK per home, **real leaks 0**, nested zips NONE, predecessor
+v1.2.142 swept from all four homes; placed byte-identical in
+`download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`. Census **991 files /
+313,916 lines** (the sa_scoring engine + the generative scoring
+objective module + the root EGL-safe conftest, the 37-test engine
+file, the six SA-tab GUI tests, the README §24 section, the
+round-230 docs rows and the regenerated INDEX). Honest totals
+**4,860 = 4,062 collect + 798 doctest** (4,815 + 45: 37 engine + 6
+GUI + 2 doctests). The notebooks re-executed **8/8 at pharmaml
+1.2.143 in 198 s** (foreground, error-outputs 0). Round 230 also
+carried the interrupted session's completion: the generative.py
+docstring syntax fix, the true-value pin corrections (easiest-first
+ordering, the 2/2 filter split, `_obj_lo`/`_obj_hi`), the
+`penalized_logp` doctest range, and the docs-index regeneration the
+new symbols required.

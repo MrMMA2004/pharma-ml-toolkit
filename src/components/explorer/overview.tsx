@@ -298,7 +298,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "4815 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite, the SHAP/Optuna and XAI absorption suites, the runboard/umap/curation/express quartet, the round-189 hpo/pruning/quantization/harness engines with the gnn/gnnxai/featurize orphan suite, the Part-3 §18 hyperparameter-recommendations suite, the Part-3 §19 cross-validation results suite, the round-226 studio CV-interface port suite, the round-228 ML-Workbench + retirement suite, and the round-229 §20 checkpoint engine suite (36 engine + 6 integration + 1 GUI resume-loop tests) — the Tk playground's 980 coupled tests left with it)",
+    after: "4860 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite, the SHAP/Optuna and XAI absorption suites, the runboard/umap/curation/express quartet, the round-189 hpo/pruning/quantization/harness engines with the gnn/gnnxai/featurize orphan suite, the Part-3 §18 hyperparameter-recommendations suite, the Part-3 §19 cross-validation results suite, the round-226 studio CV-interface port suite, the round-228 ML-Workbench + retirement suite, the round-229 §20 checkpoint engine suite (36 engine + 6 integration + 1 GUI resume-loop tests), and the round-230 §24 synthetic-accessibility suite (37 engine + 6 GUI + the web bridge pins) — the Tk playground's 980 coupled tests left with it)",
   },
   {
     aspect: "Interface",
@@ -356,8 +356,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "988";
-  const loc = stats ? fmtInt(stats.totalLines) : "312,512";
+  const fileCount = stats ? fmtInt(stats.files) : "991";
+  const loc = stats ? fmtInt(stats.totalLines) : "313,916";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -443,8 +443,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="4815"
-                countTo={4815}
+                value="4860"
+                countTo={4860}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />
