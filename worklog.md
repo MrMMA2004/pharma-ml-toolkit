@@ -10495,3 +10495,117 @@ totals **4,877 = 4,079 collect + 798 doctest** · census **995/314,875**
 §23 responsive pass** (§20 + §22 + §24 done; the natural next slice
 is §21 — rich hover tooltips over the Studio's metric cells and
 toolbar actions, building on the §22 popup plumbing).
+
+---
+
+## Round 232 (run 24/100) — v1.2.145: the Windows black-window fix (the user report) + the Part-3 §21 slice 1 (hover inspection)
+
+**The user's report, root-caused**: "When I run studio.py GUI doesn't
+open" (Windows, miniconda py312, PySide6, after the earlier
+console-noise report).  `ui/headless.py`'s displayless probe tested
+only `not os.environ.get("DISPLAY")` — and `DISPLAY` NEVER exists on
+Windows (it is an X11 variable; a Wayland desktop may set only
+`WAYLAND_DISPLAY`).  So every Windows desktop launch silently forced
+`QT_QPA_PLATFORM=offscreen`: the QApplication constructed, the
+console noise printed, `app.exec()` blocked — with an INVISIBLE
+window.  The probe is now platform-aware: offscreen ONLY on
+Linux-class platforms with neither `DISPLAY` nor `WAYLAND_DISPLAY`;
+Windows/macOS always keep their native platform plugin; an explicit
+`QT_QPA_PLATFORM` still wins; the applied-dict records `"native"`
+for observability.  7 decision-matrix tests
+(`tests/ui/test_headless_platform.py`: Windows, macOS, Wayland-only,
+X11, displayless Linux, explicit override, idempotence).
+
+**Part-3 §21 slice 1 — hover data inspection on every chart**:
+`ui/widgets/chart_inspector.py::ChartInspector`, attached to every
+`PlotPanel` (all fourteen pages plot through it): crosshair cursor;
+nearest-real-point snapping with a highlight ring — the whole bar
+BODY is the hover target on bars/histograms, the tolerance is 8 % of
+the visible axis range per axis (resolution-independent); a live
+readout of the EXACT values (§21.3: never estimated) — series, x, y
+and per-point metadata the page attaches (`meta=` on
+line/scatter/bars or `attach_metadata()` afterwards; histograms read
+exact bin boundaries + count, labelled bars their category);
+metadata cached per point with debounced text rebuild (§21.6: a
+provider runs once per point, never per mouse-move; a failing
+provider degrades to the plain values); a context menu with
+per-series visibility toggles, the hover-inspection on/off switch
+and reset-to-default-view; click-to-select that pins the readout and
+emits `pointSelected(label, index)` — the §21.5 drill-down wiring
+point.  Theme-aware through the ChartPalette.  15 tests
+(`tests/ui/test_chart_inspector.py`).
+
+**The three regressions the suite caught (and the lessons)**: (1)
+the LSH/bestofml pages read `listDataItems()[0]` as the first curve —
+the snap marker (a ScatterPlotItem implements 'plotData') must not
+pollute that list; (2) the pkpd pages census the InfiniteLines after
+`clear()` — my crosshair re-add broke "no InfiniteLine survives
+clear()", and the regimen test's `[0.0, 0.0, 0.0, 24.0, 48.0]` was
+my crosshair pair at default position 0.0 beside the three real dose
+markers; (3) the §17 export test pins the panel's exact geometry —
+a readout layout row shrank the plot widget.  Fixes: ALL hover
+decorations are fully LAZY (scene-membership check, first hover),
+and the readout floats as a mouse-transparent overlay on the plot's
+bottom edge — the plot keeps the panel's full geometry, the readout
+costs no vertical space (§23 seed), and page pins stay true.  A
+regression test pins the data-item/InfiniteLine hygiene.
+
+**Suite**: focused green at every step; the full chunk gate grew an
+EIGHTH chunk — 4b split into 4b+4d after the kernel OOM-killed the
+six-suite process at 1.66 GB rss (the round-225 lesson repeating,
+after the last test passed, at teardown); final tally **8/8 chunks
+green** (1, 2, 3, 6 from the first pass; 4a, 4b, 4d, 4c re-run with
+the final code: 95 + 79 + 34 + 92 UI tests).  Honest totals
+**4,899 = 4,101 collect + 798 doctest** (+22: 7 platform + 15
+inspector).  Notebook freshness guard 119/119 post-re-exec.
+
+**Docs repaired for the interrupted round 231**: the CHANGELOG
+1.2.144 entry (reconstructed from the release commit), the COVERAGE
+round-231 row, the GUI_AUDIT §22 progress — the compaction-interrupted
+round shipped code + release but no docs rows.  This round's own
+rows: CHANGELOG 1.2.145, COVERAGE round-232, GUI_AUDIT Part-3
+progress (§21 slice 1 done; §23 open with the overlay seed; §21
+remaining depth: image pixel inspection, per-page metadata
+adoption), README's Windows-native note + the §21 section.
+
+**Release**: VERSION 1.2.145 (four homes), notebooks 8/8 at pharmaml
+1.2.145 in 195 s (error-outputs 0), zip **20,140,128 B, sha-256
+`d3c666272d52aba253eebe0d6f36de44fd943920486efdfda72fdc8dbc6fa0bc`**
+(1028 entries / 982 files, testzip OK, **real leaks 0**, nested zips
+NONE) byte-identical in the four homes, predecessor v1.2.144 swept.
+The leak-zero took the round-137 scrubber pass: the re-executed ML
+notebook's sklearn-warning venv paths neutralised, the two stale
+round-148/158 junit quotations neutralised, and the new builder's
+own needles + repo path assembled at runtime (the
+archive-ships-clean discipline).  Census **1001 files / 316,019
+lines**.  Web pins updated (overview 4899 + round-232 suite history,
+download-panel 4899 ×3, page.tsx FALLBACK_STATS 1001/316,019,
+SHIPPED_TOOLKIT_VERSION 1.2.145) and the manifest v1.2.145 section
+appended.  The agent-browser pass caught a stale footer pin
+("5575 tests" — some pre-retirement era) → trued to 4,899.
+
+**Health**: dev server restarted (GET / 200 in 0.19 s), zip route
+`exact:true` at 20,140,128 for v1.2.145, download route HEAD answers
+content-length 20,140,128 + x-toolkit-version 1.2.145; agent-browser
+verification: badge v1.2.145, hero 1001/316,019/4,899, after-cell
+4,899 with the round-232 suites, footer "1001 files · 316,019 LOC ·
+4899 tests", zero console errors, theme toggle dark/light both ways,
+mobile 390×844 no horizontal scroll.
+
+**Scheduler**: master job **515197** alive; the webDevReview 15-min
+job was MISSING again at check time (the 515705 the round-231
+worklog recorded had vanished) — recreated as **515897**.  No
+rollback this round; local started exactly at origin/main 3e874ae.
+
+**Commits & push**: `df3ed54` (the release commit) pushed;
+`origin/main == HEAD == df3ed54` verified; the worklog + counter
+ride the follow-up commit.  Counter **24/100**.
+
+**Baselines for the next round** — v1.2.145 (four homes) · honest
+totals **4,899 = 4,101 collect + 798 doctest** · census
+**1001/316,019** · counter **24/100** · Part-3 remaining: **§23
+responsive pass** (the QSplitter/QScrollArea audit, export-dimension
+legibility, aspect-ratio guarantees) and §21's remaining depth
+(image pixel inspection on the Image Lab, per-page metadata adoption
+through `meta=`/`attach_metadata`, the §21.5 molecule-hover readouts)
+— §20 + §22 + §24 done, §21 slice 1 done.
