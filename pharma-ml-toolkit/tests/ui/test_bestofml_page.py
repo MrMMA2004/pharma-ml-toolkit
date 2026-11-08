@@ -496,4 +496,4 @@ def test_main_window_carries_the_bestofml_section(studio_app) -> None:
 
     keys = [key for key, _title in SECTIONS]
     assert keys.index("bestofml") == len(keys) - 5  # before Response AI / Image Lab / Utilities / Settings
-    assert len(keys) == 16
+    assert len(keys) == 17

@@ -316,3 +316,51 @@ Biology, PK/PD carry four/three of their tab's engines each) before
 the Tkinter playground can be retired — it is retired only after
 every section has a verified Studio page. See
 `docs/gui/GUI_AUDIT.md` for the full tab-by-tab map.
+
+## Increment 14 (round 228) — the ML Workbench + the retirement
+
+The Data & ML tab's remaining cards land as the **ML Workbench**
+(`ui/pages/ml_workbench.py`, 1,798 lines, 18 page tests), five tabs
+wired to the same public backend APIs the legacy Tk cards call:
+
+- **Hyperparameter search** — the keras-tuner-style story over every
+  grid-bearing registry family (`RandomSearch` / `TPESearch` /
+  `Hyperband` with the trials/η/cv/pruner controls, the defaults
+  baseline the search has to beat, the held-out verdict, the
+  trial-ranking board, and **Apply best** which pins the winning
+  configuration into the Model Analysis page's manual-params table
+  via `apply_search_result`).
+- **Leaderboards** — the family benchmark
+  (`benchmark_feature_families` over the SMILES column) and the OOF
+  stacking leaderboard (`stack_oof_regressors` with the residual
+  correction and the native parity scatter).
+- **Ensemble builder** — `build_voting` / `build_stacking` over the
+  ticked registry members, held-out metrics, native parity/per-class
+  bars.
+- **Persistence** — `save_model` + the provenance sidecar,
+  `load_model`, and the predict-on-CSV arm with
+  `validate_bundle_input`'s honest feature-contract audit.
+- **Applicability domain** — `applicability_domain` with the
+  reliability table, the kNN-distance native scatter (inside vs
+  outside AD + the threshold line), and the bootstrap-uncertainty
+  status, over the Model Analysis run / the Workbench ensemble / a
+  loaded bundle.
+
+The Model Analysis page (round 228 additions): the
+**manual-hyperparameters** table (`train_model`'s `model_params`,
+blank keeps the estimator default), the kept-run `last_run()`
+hand-off (the fitted estimator + splits + held-out metrics that feed
+the Workbench's AD/persistence cards and the diagnostics), and four
+NATIVE diagnostic figures — **calibration curve**, **learning
+curve**, **ROC**, **PR** — plus the latent string-class-target crash
+fix (`could not convert string to float`) the regression-only tests
+had never met.
+
+**The retirement (§16.18 step 15 fires):** with all thirteen content
+surfaces verified, `playground.py` (38,317 lines) is deleted together
+with its 980-test Tk-coupled suite
+(`test_playground.py`/`test_playground_workflows.py`/`test_job_safety.py`/`test_excel_io_and_samples.py`/`test_feature_recalculation.py`).
+`python studio.py` is THE front end. Part-2 (§16) is complete — see
+`docs/gui/GUI_AUDIT.md`'s completion assessment for the evidence and
+the CLI/library surfaces that keep every removed GUI button's
+capability available.

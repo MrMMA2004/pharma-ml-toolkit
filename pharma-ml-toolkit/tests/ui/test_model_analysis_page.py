@@ -192,3 +192,130 @@ def test_double_click_on_a_foreign_board_answers_with_the_status_hint(studio_app
     page._open_cv_report(foreign)
     assert "no §19 CV report" in page._board_status.text()
     page.deleteLater()
+
+
+# -- the round-228 surface: manual params, kept run, diagnostics ---------------- #
+
+
+def test_manual_hyperparameters_table_follows_the_model_combo(studio_app) -> None:
+    page = _fresh_page()
+    keys = [page._params_table.item(row, 0).text() for row in range(page._params_table.rowCount())]
+    assert keys  # random_forest's grid arrived on construction
+    page._model_combo.setCurrentText("ridge")
+    keys_ridge = [
+        page._params_table.item(row, 0).text() for row in range(page._params_table.rowCount())
+    ]
+    assert keys != keys_ridge or "alpha" in keys_ridge
+    # the reset button blanks every value cell
+    page._params_table.item(0, 1).setText("17")
+    page._clear_param_values()
+    assert all(
+        page._params_table.item(row, 1).text() == "" for row in range(page._params_table.rowCount())
+    )
+    # the parser: ints, floats, None, true/false, strings, blanks skipped
+    page._model_combo.setCurrentText("random_forest")
+    rows = page._params_table.rowCount()
+    assert rows >= 3
+    texts = ["42", "0.5", "None", "true", "rbf", ""]
+    for row in range(rows):
+        page._params_table.item(row, 1).setText(texts[row % len(texts)])
+    params = page._collect_model_params()
+    expected = {
+        texts[row % len(texts)] for row in range(rows) if texts[row % len(texts)]
+    }
+    parsed_expectation = {
+        "42": 42,
+        "0.5": 0.5,
+        "None": None,
+        "true": True,
+        "rbf": "rbf",
+    }
+    for token in expected:
+        assert parsed_expectation[token] in params.values()
+    assert "" not in params.values()  # blank cells never pin anything
+    assert len(params) == len(expected)
+    page.deleteLater()
+
+
+def test_trained_run_is_kept_for_the_workbench_and_last_run_is_honest(studio_app, qtbot) -> None:
+    page = _fresh_page()
+    assert page.last_run() is None  # the honest pre-first-Train answer
+    page._model_combo.setCurrentText("ridge")
+    page._start_training()
+    _settle(qtbot, studio_app)
+    run = page.last_run()
+    assert run is not None and run.estimator is not None
+    assert run.X_train is not None and run.X_test is not None
+    assert run.task == "regression"
+    assert {"r2", "rmse", "mae"} <= set(run.metrics)
+    assert run.feature_names  # the bundle's feature contract
+    assert "Last run: ridge" in page._diag_status.text()
+    page.deleteLater()
+
+
+def test_apply_search_result_pins_registry_families_and_notes_the_rest(studio_app) -> None:
+    from pharmaml.ml.models import MODEL_REGISTRY
+
+    page = _fresh_page()
+    note = page.apply_search_result("ridge", {"alpha": 2.5})
+    assert note.startswith("applied: ridge")
+    assert page._model_combo.currentText() == "ridge"
+    pinned = {
+        page._params_table.item(row, 0).text(): page._params_table.item(row, 1).text()
+        for row in range(page._params_table.rowCount())
+    }
+    assert pinned.get("alpha") == "2.5"
+    # a token the registry does not carry answers with the honest note
+    ghost = page.apply_search_result("no_such_family", {})
+    assert "Deep Learning page" in ghost or "not carry" in ghost
+    assert "no_such_family" not in MODEL_REGISTRY
+    page.deleteLater()
+
+
+def test_learning_curve_uses_the_kept_run_and_renders_native(studio_app, qtbot) -> None:
+    page = _fresh_page()
+    page._model_combo.setCurrentText("ridge")
+    page._start_training()
+    _settle(qtbot, studio_app)
+    assert page.last_run() is not None
+    page._start_learning_curve()
+    _settle(qtbot, studio_app)
+    assert "Learning curve over" in page._diag_status.text()
+    assert "±" in page._diag_status.text()  # the band edges ride the honest note
+    page.deleteLater()
+
+
+def test_calibration_and_roc_refuse_regression_runs_honestly(studio_app, qtbot) -> None:
+    page = _fresh_page()  # qsar_regression.csv + ridge: a regression run
+    page._model_combo.setCurrentText("ridge")
+    page._start_training()
+    _settle(qtbot, studio_app)
+    page._start_calibration()
+    assert not page._runner.busy  # refused BEFORE any job
+    assert "predict_proba" in page._diag_status.text()
+    page._start_roc()
+    assert not page._runner.busy
+    assert "predict_proba" in page._diag_status.text()
+    page._start_pr()
+    assert not page._runner.busy
+    page.deleteLater()
+
+
+def test_classifier_diagnostics_render_calibration_roc_and_pr(studio_app, qtbot) -> None:
+    page = _fresh_page()
+    page._dataset_combo.setCurrentText("qsar_classification.csv")
+    page._model_combo.setCurrentText("logistic_regression")
+    page._start_training()
+    _settle(qtbot, studio_app)
+    run = page.last_run()
+    assert run is not None and run.task == "classification"
+    assert "accuracy" in run.metrics
+    for starter, needle in (
+        (page._start_calibration, "Calibration over"),
+        (page._start_roc, "macro AUC"),
+        (page._start_pr, "macro average precision"),
+    ):
+        starter()
+        _settle(qtbot, studio_app)
+        assert needle in page._diag_status.text()
+    page.deleteLater()

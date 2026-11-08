@@ -485,4 +485,4 @@ def test_main_window_carries_the_responseai_section(studio_app) -> None:
     assert keys.index("responseai") == len(keys) - 4
     assert keys[len(keys) - 3] == "imagelab"
     assert keys[len(keys) - 2] == "utilities"
-    assert len(keys) == 16
+    assert len(keys) == 17

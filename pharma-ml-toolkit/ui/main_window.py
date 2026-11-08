@@ -34,6 +34,7 @@ SECTIONS: list[tuple[str, str]] = [
     ("biology", "Biology Workbench"),
     ("docking", "Docking Workbench"),
     ("models", "Model Analysis"),
+    ("mlworkbench", "ML Workbench"),
     ("unsupervised", "Unsupervised Workbench"),
     ("deep_learning", "Deep Learning Workbench"),
     ("generative", "Generative Workbench"),
@@ -77,6 +78,7 @@ class MainWindow(QMainWindow):
         from .pages.generative import GenerativeWorkbenchPage
         from .pages.image_lab import ImageLabPage
         from .pages.model_analysis import ModelAnalysisPage
+        from .pages.ml_workbench import MLWorkbenchPage
         from .pages.pkpd import PKPDWorkbenchPage
         from .pages.responseai import ResponseAIWorkbenchPage
         from .pages.settings_page import SettingsPage
@@ -90,6 +92,9 @@ class MainWindow(QMainWindow):
         self.biology_page = BiologyWorkbenchPage(theme=self.theme, runner=self.runner)
         self.docking_page = DockingWorkbenchPage(theme=self.theme, runner=self.runner)
         self.model_page = ModelAnalysisPage(theme=self.theme, runner=self.runner, data_explorer=self.data_page)
+        self.mlworkbench_page = MLWorkbenchPage(
+            theme=self.theme, runner=self.runner, model_analysis=self.model_page
+        )
         self.unsupervised_page = UnsupervisedWorkbenchPage(
             theme=self.theme, runner=self.runner, data_explorer=self.data_page
         )
@@ -122,6 +127,7 @@ class MainWindow(QMainWindow):
             self.biology_page,
             self.docking_page,
             self.model_page,
+            self.mlworkbench_page,
             self.unsupervised_page,
             self.deep_learning_page,
             self.generative_page,
@@ -197,6 +203,7 @@ class MainWindow(QMainWindow):
         self.biology_page.apply_palette(palette)
         self.docking_page.apply_palette(palette)
         self.model_page.apply_palette(palette)
+        self.mlworkbench_page.apply_palette(palette)
         self.unsupervised_page.apply_palette(palette)
         self.deep_learning_page.apply_palette(palette)
         self.generative_page.apply_palette(palette)

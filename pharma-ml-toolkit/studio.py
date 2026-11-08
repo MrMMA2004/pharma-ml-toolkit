@@ -6,9 +6,10 @@ Launch with::
     python studio.py             # desktop session
     QT_QPA_PLATFORM=offscreen python studio.py   # headless / CI
 
-The Tkinter playground (``playground.py``) remains fully functional
-alongside this application; sections migrate here incrementally and
-are only retired there after their replacements are verified.
+Round 228 (the retirement round): the legacy Tkinter playground
+(``playground.py``) is RETIRED — every tab's capability lives here
+(see ``docs/gui/GUI_AUDIT.md``'s Part-2 completion assessment) and
+this application is THE front end.
 """
 
 from __future__ import annotations

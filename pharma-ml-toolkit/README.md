@@ -104,23 +104,31 @@ python -m pytest
 
 ---
 
-## Graphical playground
+## Graphical interface — PharmaML Studio
 
-The toolkit ships a single-file graphical front end — open it instead of a terminal
+The toolkit ships a graphical front end — open it instead of a terminal
 whenever you prefer pointing and clicking:
 
 ```bash
-python playground.py
+python studio.py
 ```
 
-A tabbed window opens with every calculation domain — and since v1.2.117
-every one of its 137 cards carries a one-line description of what it
-does, while the **complementary cards that complete a process together
-are grouped as named workflows** (11 pipelines, 57 steps): the Home
-tab's *Complementary cards — the workflows* map lists every pipeline
-with one-click step chips, each participating card wears a
-`◇ pipeline · step i/n` badge, and the Ctrl+F card finder matches
-workflow names too (typing "docking campaign" lists the whole chain):
+A PySide6 **Studio** window opens with every calculation domain on its
+sidebar — 17 pages (Dashboard, Data Explorer, the Chemistry / PK/PD /
+Biology / Docking / Model Analysis / ML / Unsupervised / Deep Learning /
+Generative / Foundations / Best-of ML / Response AI / Utilities
+workbenches, the Image Lab, Settings) with PyQtGraph scientific plots,
+Qt-Material / QDarkStyleSheet theming and QThreadPool workers behind a
+cooperative Stop button (directive #16's complete redesign; see
+`docs/gui/GUI_REDESIGN.md` and the tab-by-tab `docs/gui/GUI_AUDIT.md`).
+
+*(History: the original single-file Tkinter `playground.py` was fully
+retired in v1.2.141 — round 228 — after every one of its tabs landed a
+verified Studio page; the card-level descriptions below describe the
+capabilities, which now live in the Studio's pages and the CLI.)*
+
+The capability map, in brief (every item wired to the same public
+backend APIs, grouped as named workflows — 11 pipelines, 57 steps):
 
 **Chemistry** (IC50/Ki →
 pIC50/pKi, molar mass, the ~200-descriptor table for any SMILES, Tanimoto
@@ -223,63 +231,33 @@ DOCKSTRING objective evaluation does not imply that docking was executed.
 
 Engineering notes:
 
-* **No installation required** — like `pytest` above, the playground falls back
-  to the bundled `src/` tree, so it runs straight after unzipping the archive.
-* **Nothing is mandatory** — heavy dependencies are probed at launch and each
+* **No installation required** — like `pytest` above, the Studio falls back
+  to the bundled `src/` tree, so it runs straight after unzipping the
+  archive.
+* **Nothing is mandatory** — heavy dependencies are probed and each
   feature names the exact `pip install` line it wants when missing; missing
   pieces never crash the window.
 * **Responsive by design** — long calculations (descriptor batches, model
-  training, evolution) run in a worker thread with a live progress bar; the
-  figures reuse the package's own plotting helpers, so the window matches the
-  published figure style (with an automatic PNG fallback for exotic Tcl/Tk
-  builds).
-* **Scriptable** — `python playground.py --probe` prints a dependency report,
-  `--self-test` builds the whole UI headlessly (used by the test suite under
-  Xvfb), `--version` prints the playground, package and toolkit versions.
-* **Sessions persist** — on close the window writes
-  `~/.pharmaml/playground-session.json` (every entry, toggle, pasted corpus,
-  the active tab, the geometry, the theme) and restores it on the next
-  launch; `File ▸ Save session now` / `Clear saved session` control it
-  manually, and `--self-test` never touches the file.
-* **Sessions are shareable** — `File ▸ Export session` writes the payload
-  to any path (mail it to a colleague), `File ▸ Import session` applies
-  such a file onto the live window (theme included), and
-  `File ▸ Reset current tab to defaults` (Ctrl+Shift+R) restores just the
-  active tab's inputs while every other tab keeps its live values. Every
-  content tab also carries its own quiet **"Reset this tab to defaults"**
-  button pinned in a non-scrolling footer strip below the cards, so the
-  reset is always one click away (Home, which owns no inputs, has none) —
-  with a second footer affordance next to it, **"Copy inputs as JSON"**:
-  the same tab's live inputs on the clipboard as a small JSON snippet,
-  a share-lite for issue reports and quick hand-offs.
-* **Light and dark** — `View ▸ Follow system / Light / Dark` recolours the
-  whole window from two named palettes; the choice travels with the session
-  and embedded figures keep the published white plot background.
-* **Interactive figures (the DearPyGui affordances, 100x-158)** — every
-  embedded figure carries a styled navigation toolbar (home / pan / zoom /
-  save + the live coordinate readout) and a dashed crosshair under the
-  cursor; every table gains zebra stripes, a hover row highlight and
-  clickable numeric-aware sortable headings; `View ▸ Font size` (9–12 pt)
-  rescales the whole UI hierarchy. `View ▸ Figure toolbars` toggles the
-  toolbars; both preferences ride the session file. The enabling change:
-  matplotlib 3.10, whose Tcl 9 support gives live TkAgg canvases on stacks
-  where 3.9 silently fell back to static PNG figures.
-* **Collapsible cards + the GUI metrics dialog (the second DearPyGui pass,
-  100x-159)** — the tall tabs' cards fold to their heading via a ▾/▸ chevron
-  (the two static Home reference cards and all thirteen PK-tab calculators;
-  the inputs keep their values, the fold rides the session file, a Ctrl+F
-  finder jump unfolds the target, and the per-tab reset restores the launch
-  look). `View ▸ GUI metrics…` opens the developer-tools twin: the live
-  widget census by Tk class, the card/tree/toolbar/job totals, the active
-  preferences, and the palette inspector — one colour chip + hex value per
-  palette key, re-tinted live on theme flips.
-* **Keyboard-first** — every global accelerator is bound and pinned by
-  tests: Ctrl+O open · Ctrl+S save figure · Ctrl+Shift+S save session ·
-  Ctrl+Shift+R reset this tab · Ctrl+Q quit. A quiet **shortcut hint row**
-  above the status bar lists them all (the Ctrl+Shift+R binding itself was
-  a 100x-65 bug fix: the menu had advertised it since the reset feature
-  landed, but no binding existed); `View ▸ Shortcut hints` or the row's own
-  **Hide** button toggles it, and the preference rides the session file.
+  training, evolution) run in a QThreadPool worker with a live progress
+  bar and a cooperative Stop channel; every plot is PyQtGraph-native
+  (no matplotlib backend roulette on exotic stacks).
+* **Headless / CI** — `QT_QPA_PLATFORM=offscreen python studio.py` runs
+  without a display (`ui/headless.py` preloads the committed EGL stub on
+  boxes that have none); the offscreen page tests ride the same path.
+* **Sessions persist** — QSettings remember the window geometry, the
+  navigation state and the theme across launches.
+* **Light and dark** — the Settings page's theme switcher recolours the
+  whole window (Qt-Material densities, the QDarkStyleSheet alternative,
+  a native fallback) and re-tints every PyQtGraph plot through the
+  ChartPalette, live; the choice rides QSettings.
+* **Keyboard-first** — Ctrl+1..9 jump straight to the workbench pages;
+  every long job's cooperative Stop is one click away, and the offscreen
+  page suite pins the navigation map.
+
+*(The retired Tk playground's own affordances — the session-JSON
+export/import, the Ctrl+F card finder, the Tk widget census, the
+matplotlib TkAgg toolbars — retired with it in v1.2.141; their
+capabilities live on through the Studio pages above and the CLI.)*
 
 ---
 
@@ -303,9 +281,10 @@ cat VERSION                                         # what you have now
 Because the install is editable (`pip install -e .`), Python picks up the
 replaced files on the next run — nothing to uninstall or reinstall, unless
 `pyproject.toml` gained new dependencies (then re-run `pip install -e .`).
-`python playground.py --version` prints the playground, package and toolkit
-versions in one place. Files removed between versions are simply left behind
-(harmless); delete the folder first only for a truly clean slate.
+`cat VERSION` prints the toolkit version in one place. Files removed
+between versions are simply left behind (harmless — v1.2.141's retirement
+of `playground.py` is the example: delete it if you unzip over an older
+copy); delete the folder first only for a truly clean slate.
 
 ---
 
@@ -328,25 +307,24 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── playground.py           # NEW: the graphical front end — `python playground.py` opens a tabbed
-│                            # Tkinter window over every domain (chemistry · PK/PD · cell lines · QSAR · generative);
-│                            # probes its dependencies at launch, degrades gracefully, headlessly
-│                            # self-testable (`--self-test`, used by tests/test_playground.py under Xvfb)
-├── studio.py               # NEW (v1.2.120): the PySide6 front end — `python studio.py` opens PharmaML
-│                            # Studio (directive #16 redesign, increments 1–5): sidebar navigation,
-│                            # PyQtGraph scientific plots, Qt-Material/QDarkStyleSheet theming,
-│                            # QThreadPool workers with the cooperative Stop; runs offscreen for CI
-│                            # (`ui/headless.py` preloads the committed EGL stub when the box has none)
+├── studio.py               # THE graphical front end — `python studio.py` opens PharmaML
+│                            # Studio (directive #16 redesign, increments 1–14, all seventeen
+│                            # pages): sidebar navigation, PyQtGraph scientific plots,
+│                            # Qt-Material/QDarkStyleSheet theming, QThreadPool workers with
+│                            # the cooperative Stop; runs offscreen for CI (`ui/headless.py`
+│                            # preloads the committed EGL stub when the box has none); the
+│                            # legacy Tkinter playground.py was retired in v1.2.141
 ├── ui/                      # the Studio package: main_window · theme_manager · app_settings · pages/
-│                            # (dashboard · data_explorer · chemistry · pkpd · biology · docking · model_analysis · settings) · widgets/ ·
-│                            # workers/ · native/ (the EGL stub + build script) — see docs/gui/
+│                            # (dashboard · data_explorer · chemistry · pkpd · biology · docking · model_analysis ·
+│                            # ml_workbench · unsupervised · deep_learning · generative · foundations · bestofml ·
+│                            # responseai · imagelab · utilities · settings) · widgets/ · workers/ · native/ — see docs/gui/
 ├── VERSION                 # the release version (1.2.125) — `cat VERSION` after extracting
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
 ├── docs/LEAKAGE_AUDIT.md   # the data-leakage audit: the rar's 28 leaky files, the toolkit's guards, the web mirror's fix
 ├── docs/DATA_AUDIT.md     # the database audit: every shipped data file checked for gaps and errors (2 real ones fixed)
-├── tests/                   # Extensive pytest coverage across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_playground.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards + data/ fixtures)
+├── tests/                   # Extensive pytest coverage across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards, tests/ui/ — the seventeen Studio pages' offscreen suites + data/ fixtures; the retired Tk playground's 980-test suite left with it in v1.2.141)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~720 KB (audited 526-check clean, docs/DATA_AUDIT.md), every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);

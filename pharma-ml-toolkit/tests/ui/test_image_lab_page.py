@@ -389,6 +389,6 @@ def test_main_window_registers_image_lab(studio_app, main_window) -> None:
 
     assert ("imagelab", "Image Lab") in SECTIONS
     assert main_window.imagelab_page is not None
-    assert main_window.pages.count() == 16
+    assert main_window.pages.count() == 17
     index = [key for key, _label in SECTIONS].index("imagelab")
     assert main_window.pages.widget(index) is main_window.imagelab_page

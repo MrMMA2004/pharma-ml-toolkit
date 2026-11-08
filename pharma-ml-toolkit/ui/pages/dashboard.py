@@ -1,9 +1,9 @@
 """Dashboard: the Studio home screen (directive 16.13).
 
 Every number on this page is computed live from the real toolkit -- the
-installed ``pharmaml`` version, the model registry, the playground's
-workflow registry, the example datasets that exist on disk, and the
-module census of the package tree. No fabricated metrics.
+installed ``pharmaml`` version, the model registry, the Studio's own
+page census, the example datasets that exist on disk, and the module
+census of the package tree. No fabricated metrics.
 """
 
 from __future__ import annotations
@@ -37,18 +37,22 @@ def _module_census() -> tuple[int, int]:
     return len(files), lines
 
 
-def _workflow_census() -> tuple[int, int]:
-    """Introspect the playground's WORKFLOWS registry (11 workflows)."""
-    import importlib.util
+def _studio_census() -> tuple[int, int]:
+    """Count the Studio's page modules and their source lines (real walk).
 
-    spec = importlib.util.spec_from_file_location("studio_pg_census", _TK / "playground.py")
-    if spec is None or spec.loader is None:  # pragma: no cover - moved file
-        return 0, 0
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    workflows = list(getattr(module, "WORKFLOWS", []))
-    steps = sum(len(w.get("steps", [])) for w in workflows if isinstance(w, dict))
-    return len(workflows), steps
+    (round 228) the playground's WORKFLOWS registry retired with
+    ``playground.py`` — the dashboard now censuses the Studio itself:
+    the pages that absorbed those eleven card workflows.
+    """
+    files = list((_TK / "ui").rglob("*.py"))
+    lines = 0
+    for f in files:
+        try:
+            lines += f.read_text(encoding="utf-8", errors="ignore").count("\n") + 1
+        except OSError:  # pragma: no cover - unreadable file
+            continue
+    pages = len(list((_TK / "ui" / "pages").glob("*.py")))
+    return pages, lines
 
 
 def _model_registry_count() -> int:
@@ -120,7 +124,7 @@ class DashboardPage(QWidget):
         except Exception:  # noqa: BLE001 - broken-install fallback, census stays honest
             version = "not installed"
         modules, lines = _module_census()
-        workflows, steps = _workflow_census()
+        pages, studio_lines = _studio_census()
         models = _model_registry_count()
         datasets = _example_datasets()
 
@@ -129,7 +133,16 @@ class DashboardPage(QWidget):
         grid.addWidget(_stat_card("Toolkit version", version, "installed in this environment"), 0, 0)
         grid.addWidget(_stat_card("Package census", f"{modules} modules", f"{lines:,} source lines under src/pharmaml"), 0, 1)
         grid.addWidget(_stat_card("Model registry", f"{models} models", "training-ready estimators"), 0, 2)
-        grid.addWidget(_stat_card("Playground workflows", f"{workflows} workflows", f"{steps} guided steps across the card registry"), 1, 0)
+        grid.addWidget(
+            _stat_card(
+                "Studio pages",
+                f"{pages} pages",
+                f"{studio_lines:,} source lines under ui/ — the retired Tk playground's "
+                "11 card workflows live on across these pages",
+            ),
+            1,
+            0,
+        )
         grid.addWidget(_stat_card("Example datasets", f"{len(datasets)} files", "examples/data — ready to open in Data Explorer"), 1, 1)
         grid.addWidget(_stat_card("GUI framework", "PySide6 + PyQtGraph", "Qt-Material themes, QThread workers"), 1, 2)
         lay.addLayout(grid)
@@ -152,11 +165,10 @@ class DashboardPage(QWidget):
             lay.addWidget(holder)
 
         migration = QLabel(
-            "Migration status (directive #16): this Studio is increment 1 -- shell, "
-            "navigation, theme system, data explorer, model analysis and settings are "
-            "live; the playground's thirteen functional sections migrate in the "
-            "following rounds. The Tkinter playground remains fully functional "
-            "alongside until every section is verified here."
+            "Migration status (directive #16): COMPLETE — all seventeen pages are "
+            "live and verified (increment 14, round 228); the legacy Tkinter "
+            "playground.py is retired and this Studio is THE front end "
+            "(python studio.py)."
         )
         migration.setObjectName("studioMigrationNote")
         migration.setWordWrap(True)

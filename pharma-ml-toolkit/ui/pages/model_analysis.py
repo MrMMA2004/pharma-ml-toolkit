@@ -22,6 +22,21 @@ band edges). The group-source detection is honest: scaffold CV needs
 a SMILES-like column, grouped strategies need a group/cluster/series/
 batch/plate/cohort column -- a doomed request is refused BEFORE any
 job starts, never silently degraded.
+
+Round 228 (the retirement round): the page keeps what a trained run
+needs for everything downstream -- ``AnalysisOutcome`` now carries the
+fitted estimator, the splits and the held-out metrics, exposed through
+``last_run()`` for the ML Workbench page (ensembles, persistence,
+applicability domain).  The **manual hyperparameters** table edits the
+selected registry model's ``param_grid`` knobs by hand (blank keeps the
+estimator's own default; the values ride ``train_model``'s
+``model_params``), and four NATIVE diagnostic figures join the curves:
+the **calibration curve** (predicted probability vs observed frequency
+per bin -- ``sklearn.calibration`` under the job, drawn Qt-native), the
+**learning curve** (train sizes vs CV score with the ± 1 std band
+edges), and the **ROC / PR curves** for classifiers that expose
+``predict_proba`` (one line per class, the macro scores in the title).
+No matplotlib import anywhere on the page (§16.8).
 """
 
 from __future__ import annotations
@@ -169,7 +184,15 @@ def detect_task(frame: pd.DataFrame, target: str) -> str:
 
 @dataclass
 class AnalysisOutcome:
-    """What the background job hands back (all real numbers)."""
+    """What the background job hands back (all real numbers).
+
+    Round 228: the fitted ``estimator`` and the splits ride along so
+    the ML Workbench (ensembles, persistence, applicability domain)
+    and the diagnostic figures can reuse the SAME run instead of
+    retraining -- the page's ``last_run()`` hands this to whoever
+    needs it, estimators never crossing a thread boundary (the job
+    finishes before the reference is read).
+    """
 
     task: str = ""
     model: str = ""
@@ -183,6 +206,13 @@ class AnalysisOutcome:
     importance_names: list[str] = field(default_factory=list)
     importance_values: np.ndarray | None = None
     seconds: float = 0.0
+    estimator: object | None = None
+    X_train: object | None = None
+    y_train: object | None = None
+    X_test: object | None = None
+    feature_names: list[str] = field(default_factory=list)
+    classes: list[str] = field(default_factory=list)
+    metrics: dict[str, float] = field(default_factory=dict)
 
 
 class ModelAnalysisPage(QWidget):
@@ -200,6 +230,7 @@ class ModelAnalysisPage(QWidget):
         self._runner = runner or JobRunner(self)
         self._data_explorer = data_explorer
         self._frame: pd.DataFrame | None = None
+        self._last_outcome: AnalysisOutcome | None = None
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 8, 8, 8)
@@ -223,6 +254,28 @@ class ModelAnalysisPage(QWidget):
         self._train_btn = QPushButton("Train")
         self._train_btn.setMinimumHeight(34)
         self._train_btn.clicked.connect(self._start_training)
+        # -- the manual hyperparameters table (round 228) -------------- #
+        self._params_table = QTableWidget(0, 2)
+        self._params_table.setHorizontalHeaderLabels(["param", "value"])
+        self._params_table.verticalHeader().setVisible(False)
+        self._params_table.setMaximumHeight(150)
+        self._params_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        self._params_table.setToolTip(
+            "The selected registry model's param_grid knobs, editable by "
+            "hand — each value cell starts EMPTY (the estimator's own "
+            "default; blank keeps that default). Pinned keys are simply "
+            "passed to train_model's model_params; ints, floats, None, "
+            "true/false and strings parse honestly."
+        )
+        self._model_combo.currentTextChanged.connect(self._rebuild_param_rows)
+        self._reset_params_btn = QPushButton("Reset to defaults")
+        self._reset_params_btn.setToolTip(
+            "Clear every value cell back to the estimator's own defaults "
+            "(the blank state — nothing is pinned)."
+        )
+        self._reset_params_btn.clicked.connect(self._clear_param_values)
         # -- the §19 CV controls (round 226 port) ------------------------- #
         self._cv_folds = QSpinBox()
         self._cv_folds.setRange(2, 10)
@@ -256,6 +309,11 @@ class ModelAnalysisPage(QWidget):
         form.addRow("Dataset:", self._dataset_combo)
         form.addRow("Target column:", self._target_combo)
         form.addRow("Model:", self._model_combo)
+        params_buttons = QHBoxLayout()
+        params_buttons.addWidget(self._reset_params_btn)
+        params_buttons.addStretch(1)
+        form.addRow("Manual hyperparameters:", self._params_table)
+        form.addRow("", params_buttons)
         form.addRow("cv folds:", self._cv_folds)
         form.addRow("cv strategy:", self._cv_strategy)
         buttons = QHBoxLayout()
@@ -287,6 +345,58 @@ class ModelAnalysisPage(QWidget):
         self._metric_label.setWordWrap(True)
         lay.addWidget(self._metric_label)
 
+        # -- the native diagnostic figures (round 228) ------------------ #
+        diag_buttons = QHBoxLayout()
+        self._diag_buttons: list[QPushButton] = []
+        for label, handler, tip in (
+            (
+                "Calibration curve",
+                self._start_calibration,
+                "The reliability diagram of the last trained CLASSIFIER: "
+                "predicted probability vs observed frequency per bin "
+                "(sklearn.calibration under the job, drawn Qt-native) — "
+                "the honest answer to 'can I trust p = 0.7?'.",
+            ),
+            (
+                "Learning curve",
+                self._start_learning_curve,
+                "Train-set size vs CV score (sklearn.learning_curve under "
+                "the job): the honest answer to 'should we assay 500 more "
+                "compounds?' — a curve still climbing means yes, a plateau "
+                "means no. The ± 1 std band edges ride the dashed lines.",
+            ),
+            (
+                "ROC curves",
+                self._start_roc,
+                "One-vs-rest ROC per class of the last trained classifier "
+                "(needs predict_proba); the macro AUC rides the title.",
+            ),
+            (
+                "PR curve",
+                self._start_pr,
+                "One-vs-rest precision-recall per class of the last trained "
+                "classifier (needs predict_proba); the macro average "
+                "precision rides the title.",
+            ),
+        ):
+            btn = QPushButton(label)
+            btn.setMinimumHeight(30)
+            btn.setToolTip(tip)
+            btn.clicked.connect(handler)
+            self._diag_buttons.append(btn)
+            diag_buttons.addWidget(btn)
+        diag_buttons.addStretch(1)
+        lay.addLayout(diag_buttons)
+        self._diag_plot = PlotPanel(title="Diagnostics (calibration / learning curve / ROC / PR)")
+        self._diag_plot.setMinimumHeight(230)
+        lay.addWidget(self._diag_plot)
+        self._diag_status = QLabel(
+            "The diagnostic figures need a trained run — Train a model first."
+        )
+        self._diag_status.setObjectName("studioStatus")
+        self._diag_status.setWordWrap(True)
+        lay.addWidget(self._diag_status)
+
         # -- the §19 CV leaderboard (round 226 port) ---------------------- #
         self._cv_results: dict[str, CVResult] = {}
         self._board_status = QLabel(
@@ -311,6 +421,7 @@ class ModelAnalysisPage(QWidget):
         lay.addWidget(self._board)
 
         self._load_dataset(self._dataset_combo.currentText())
+        self._rebuild_param_rows(self._model_combo.currentText())
 
     # -- data ---------------------------------------------------------------
     def _load_dataset(self, name: str) -> None:
@@ -342,11 +453,370 @@ class ModelAnalysisPage(QWidget):
     def _on_started(self, name: str) -> None:
         self._train_btn.setEnabled(False)
         self._compare_btn.setEnabled(False)
+        for btn in self._diag_buttons:
+            btn.setEnabled(False)
         self._metric_label.setText(f"Training {name}…")
 
     def _on_ended(self) -> None:
         self._train_btn.setEnabled(True)
         self._compare_btn.setEnabled(True)
+        for btn in self._diag_buttons:
+            btn.setEnabled(True)
+
+    def last_run(self) -> AnalysisOutcome | None:
+        """The last rendered training run (estimator + splits + metrics).
+
+        Round 228's hand-off contract for the ML Workbench page — the
+        ensembles, persistence and applicability-domain cards rebuild
+        from THIS run instead of retraining.  ``None`` before the first
+        Train (the callers' pre-flight says so honestly).
+        """
+        return self._last_outcome
+
+    def apply_search_result(self, family: str, params: dict) -> str:
+        """Point the page at a tuner's winning family + configuration.
+
+        The ML Workbench's ``Apply best`` calls this: registry families
+        switch the model combo and pin the winning values into the
+        manual-hyperparameters table; families the registry does not
+        carry (``dnn`` — the Deep Learning page owns its configuration)
+        answer with the honest note instead of a silent no-op.  Returns
+        the status line the caller shows.
+        """
+        available = [
+            self._model_combo.itemText(index) for index in range(self._model_combo.count())
+        ]
+        if family in available:
+            self._model_combo.setCurrentText(family)
+            self._rebuild_param_rows(family)
+            pinned = 0
+            for row in range(self._params_table.rowCount()):
+                key_item = self._params_table.item(row, 0)
+                value_item = self._params_table.item(row, 1)
+                if key_item is None or value_item is None:
+                    continue
+                name = str(key_item.text())
+                if name in params:
+                    value_item.setText(str(params[name]))
+                    pinned += 1
+            return f"applied: {family} with {pinned} pinned param(s)"
+        return (
+            f"the {family} family trains on the Deep Learning page — the "
+            "winning configuration rides the search summary line"
+        )
+
+    # -- manual hyperparameters (round 228) -------------------------------- #
+    def _rebuild_param_rows(self, model: str) -> None:
+        """Re-fill the params table with the model's param_grid knobs."""
+        self._params_table.setRowCount(0)
+        try:
+            from pharmaml.ml.models import MODEL_REGISTRY
+
+            spec = MODEL_REGISTRY.get(model)
+            grid = dict(getattr(spec, "param_grid", {}) or {})
+        except Exception:  # noqa: BLE001 - broken-install fallback: empty table
+            grid = {}
+        self._params_table.setRowCount(len(grid))
+        for row, (name, values) in enumerate(grid.items()):
+            shown = ", ".join(str(value) for value in values)
+            key_item = QTableWidgetItem(str(name))
+            key_item.setToolTip(f"registry grid: {shown}")
+            key_item.setFlags(key_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self._params_table.setItem(row, 0, key_item)
+            value_item = QTableWidgetItem("")
+            value_item.setToolTip("blank keeps the estimator's own default")
+            self._params_table.setItem(row, 1, value_item)
+
+    def _clear_param_values(self) -> None:
+        """Blank every value cell — nothing pinned, all defaults."""
+        for row in range(self._params_table.rowCount()):
+            item = self._params_table.item(row, 1)
+            if item is not None:
+                item.setText("")
+
+    def _collect_model_params(self) -> dict[str, object]:
+        """Parse the value cells into ``train_model``'s ``model_params``.
+
+        Blank cells are skipped (the estimator's own default); ints,
+        floats, ``None``, ``true``/``false`` and strings parse honestly
+        — anything else rides as the raw text.
+        """
+        params: dict[str, object] = {}
+        for row in range(self._params_table.rowCount()):
+            key_item = self._params_table.item(row, 0)
+            value_item = self._params_table.item(row, 1)
+            if key_item is None or value_item is None:
+                continue
+            text = value_item.text().strip()
+            if not text:
+                continue
+            lowered = text.lower()
+            if lowered == "none":
+                parsed: object = None
+            elif lowered == "true":
+                parsed = True
+            elif lowered == "false":
+                parsed = False
+            else:
+                try:
+                    parsed = int(text)
+                except ValueError:
+                    try:
+                        parsed = float(text)
+                    except ValueError:
+                        parsed = text
+            params[str(key_item.text())] = parsed
+        return params
+
+    # -- the native diagnostic figures (round 228) ------------------------ #
+    def _require_last_run(self) -> AnalysisOutcome | None:
+        run = self._last_outcome
+        if run is None or run.estimator is None or run.X_test is None:
+            self._diag_status.setText(
+                "The diagnostic figures need a trained run — Train a model first."
+            )
+            return None
+        return run
+
+    def _require_proba_run(self, figure: str) -> AnalysisOutcome | None:
+        run = self._require_last_run()
+        if run is None:
+            return None
+        if not hasattr(run.estimator, "predict_proba"):
+            self._diag_status.setText(
+                f"The {figure} needs a classifier that exposes "
+                "predict_proba — the last run is a regression model "
+                "(or a proba-less family). Train a classifier first."
+            )
+            return None
+        return run
+
+    def _submit_diag(self, name: str, job, on_finished) -> None:
+        if self._runner.busy:
+            self._diag_status.setText("A job is already running — Stop it first.")
+            return
+        self._runner.submit(
+            name,
+            job,
+            on_finished=on_finished,
+            on_failed=self._diag_failed,
+            on_cancelled=self._diag_cancelled,
+            on_progress=self._progress.update_progress,
+        )
+
+    def _start_calibration(self) -> None:
+        """The reliability diagram of the last trained classifier."""
+        run = self._require_proba_run("calibration curve")
+        if run is None:
+            return
+        bins = 10
+        estimator = run.estimator
+        X_test = run.X_test
+        y_true = np.asarray(run.y_test).astype(str)
+        classes = list(run.classes) or sorted(set(y_true))
+        positive = classes[-1] if classes else ""
+
+        def job(progress):
+            from sklearn.calibration import calibration_curve
+
+            progress(0.3, "scoring probabilities")
+            proba = estimator.predict_proba(X_test)[:, -1]
+            observed = (y_true == positive).astype(float)
+            fraction_positive, mean_predicted = calibration_curve(
+                observed, proba, n_bins=bins, strategy="uniform"
+            )
+            progress(0.9, "done")
+            return (
+                np.asarray(mean_predicted, dtype=float),
+                np.asarray(fraction_positive, dtype=float),
+                float(proba.mean()),
+            )
+
+        self._submit_diag(
+            f"calibration curve ({run.model})",
+            job,
+            self._render_calibration,
+        )
+
+    def _render_calibration(self, payload) -> None:
+        mean_predicted, fraction_positive, mean_proba = payload
+        self._diag_plot.clear()
+        span = np.array([0.0, 1.0])
+        self._diag_plot.line(span, span, label="perfect", width=1, index=2, style="dash")
+        self._diag_plot.line(
+            mean_predicted, fraction_positive, label="observed", width=2, index=0
+        )
+        self._diag_plot.set_labels(
+            x="mean predicted probability", y="observed frequency", title="Calibration (reliability)"
+        )
+        self._diag_plot.add_legend()
+        self._diag_status.setText(
+            f"Calibration over {len(mean_predicted)} uniform bins — mean "
+            f"predicted probability {mean_proba:.3f}; the dashed diagonal "
+            "is perfect reliability."
+        )
+
+    def _start_learning_curve(self) -> None:
+        """Train sizes vs CV score, the 'assay more?' picture."""
+        run = self._require_last_run()
+        if run is None:
+            return
+        estimator = run.estimator
+        X_train = run.X_train
+        y_train = np.asarray(run.y_train)
+        task = run.task
+        folds = int(self._cv_folds.value())
+
+        def job(progress):
+            from sklearn.model_selection import learning_curve
+
+            progress(0.1, "sizing the ladder")
+            scoring = "r2" if task == "regression" else "accuracy"
+            sizes, train_scores, val_scores = learning_curve(
+                estimator,
+                X_train,
+                y_train,
+                train_sizes=np.linspace(0.2, 1.0, 5),
+                cv=min(folds, 5),
+                scoring=scoring,
+                n_jobs=1,
+            )
+            progress(0.9, "done")
+            return (
+                np.asarray(sizes, dtype=float),
+                train_scores.mean(axis=1),
+                train_scores.std(axis=1),
+                val_scores.mean(axis=1),
+                val_scores.std(axis=1),
+                scoring,
+            )
+
+        self._submit_diag(
+            f"learning curve ({run.model})",
+            job,
+            self._render_learning_curve,
+        )
+
+    def _render_learning_curve(self, payload) -> None:
+        sizes, train_mean, train_std, val_mean, val_std, scoring = payload
+        self._diag_plot.clear()
+        self._diag_plot.line(sizes, train_mean, label="train", width=2, index=0)
+        self._diag_plot.line(sizes, val_mean, label="CV", width=2, index=1)
+        for edge, name in ((val_mean - val_std, "CV − 1 std"), (val_mean + val_std, "CV + 1 std")):
+            self._diag_plot.line(sizes, edge, label=name, width=1, index=2, style="dash")
+        self._diag_plot.set_labels(
+            x="train rows", y=scoring, title="Learning curve (still climbing = assay more)"
+        )
+        self._diag_plot.add_legend()
+        self._diag_status.setText(
+            f"Learning curve over {len(sizes)} sizes × {min(int(self._cv_folds.value()), 5)} folds — "
+            f"CV {scoring} {val_mean[-1]:.3f} ± {val_std[-1]:.3f} at the full "
+            f"{int(sizes[-1])} rows."
+        )
+
+    def _start_roc(self) -> None:
+        """One-vs-rest ROC per class of the last trained classifier."""
+        run = self._require_proba_run("ROC curves")
+        if run is None:
+            return
+        estimator = run.estimator
+        X_test = run.X_test
+        y_true = np.asarray(run.y_test).astype(str)
+        classes = list(run.classes) or sorted(set(y_true))
+
+        def job(progress):
+            from sklearn.metrics import roc_curve, roc_auc_score
+
+            progress(0.2, "scoring probabilities")
+            proba = estimator.predict_proba(X_test)
+            columns = list(getattr(estimator, "classes_", [])) or classes
+            columns = [str(value) for value in columns]
+            curves = []
+            aucs = []
+            for index, cls in enumerate(columns):
+                truth = (y_true == cls).astype(int)
+                scores = proba[:, index]
+                fpr, tpr, _ = roc_curve(truth, scores)
+                auc = roc_auc_score(truth, scores)
+                curves.append((str(cls), np.asarray(fpr, dtype=float), np.asarray(tpr, dtype=float)))
+                aucs.append(float(auc))
+                progress(0.2 + 0.7 * (index + 1) / len(columns), f"roc {cls}")
+            return curves, float(np.mean(aucs)), len(columns)
+
+        self._submit_diag(f"ROC curves ({run.model})", job, self._render_roc)
+
+    def _render_roc(self, payload) -> None:
+        curves, macro_auc, n_classes = payload
+        self._diag_plot.clear()
+        span = np.array([0.0, 1.0])
+        self._diag_plot.line(span, span, label="chance", width=1, index=2, style="dash")
+        for index, (cls, fpr, tpr) in enumerate(curves):
+            self._diag_plot.line(fpr, tpr, label=str(cls), width=2, index=index % 2)
+        self._diag_plot.set_labels(
+            x="false-positive rate", y="true-positive rate", title=f"ROC (macro AUC {macro_auc:.3f})"
+        )
+        self._diag_plot.add_legend()
+        self._diag_status.setText(
+            f"One-vs-rest ROC over {n_classes} class(es) — macro AUC "
+            f"{macro_auc:.3f}; the dashed diagonal is chance."
+        )
+
+    def _start_pr(self) -> None:
+        """One-vs-rest precision-recall per class of the last classifier."""
+        run = self._require_proba_run("PR curve")
+        if run is None:
+            return
+        estimator = run.estimator
+        X_test = run.X_test
+        y_true = np.asarray(run.y_test).astype(str)
+        classes = list(run.classes) or sorted(set(y_true))
+
+        def job(progress):
+            from sklearn.metrics import average_precision_score, precision_recall_curve
+
+            progress(0.2, "scoring probabilities")
+            proba = estimator.predict_proba(X_test)
+            columns = list(getattr(estimator, "classes_", [])) or classes
+            columns = [str(value) for value in columns]
+            curves = []
+            aps = []
+            for index, cls in enumerate(columns):
+                truth = (y_true == cls).astype(int)
+                scores = proba[:, index]
+                precision, recall, _ = precision_recall_curve(truth, scores)
+                ap = average_precision_score(truth, scores)
+                curves.append(
+                    (str(cls), np.asarray(recall, dtype=float), np.asarray(precision, dtype=float))
+                )
+                aps.append(float(ap))
+                progress(0.2 + 0.7 * (index + 1) / len(columns), f"pr {cls}")
+            return curves, float(np.mean(aps)), len(columns), float(len(y_true))
+
+        self._submit_diag(f"PR curve ({run.model})", job, self._render_pr)
+
+    def _render_pr(self, payload) -> None:
+        curves, macro_ap, n_classes, n_rows = payload
+        self._diag_plot.clear()
+        for index, (cls, recall, precision) in enumerate(curves):
+            self._diag_plot.line(recall, precision, label=str(cls), width=2, index=index % 2)
+        self._diag_plot.set_labels(
+            x="recall", y="precision", title=f"PR (macro AP {macro_ap:.3f})"
+        )
+        self._diag_plot.add_legend()
+        self._diag_status.setText(
+            f"One-vs-rest precision-recall over {n_classes} class(es) — "
+            f"macro average precision {macro_ap:.3f} on {int(n_rows)} held-out rows."
+        )
+
+    def _diag_failed(self, message: str) -> None:
+        self._diag_status.setText(
+            f"Diagnostic failed — {message.splitlines()[0] if message else 'error'}"
+        )
+
+    def _diag_cancelled(self, seconds: float) -> None:
+        self._diag_status.setText(
+            f"Diagnostic cancelled after {seconds:.1f}s (cooperative stop)."
+        )
 
     def _start_training(self) -> None:
         if self._frame is None:
@@ -363,6 +833,7 @@ class ModelAnalysisPage(QWidget):
             return
 
         task = detect_task(frame, target)
+        model_params = self._collect_model_params()
         y = frame[target]
         X = frame.drop(columns=[target])
         X = X.select_dtypes(include=[np.number])
@@ -386,35 +857,80 @@ class ModelAnalysisPage(QWidget):
                 tune=False,
                 preprocess=True,
                 n_jobs=1,
+                model_params=model_params or None,
             )
             progress(0.7, "predicting")
             fitted = result.model
             y_pred = fitted.predict(X_test)
+            # (round 228) the honest dtype split: regression keeps floats,
+            # classification keeps the label array AS-IS -- the old blanket
+            # float cast crashed every string-class run ('could not convert
+            # string to float: weak'), a latent bug the regression-only
+            # tests never met.
+            y_test_arr = np.asarray(y_test)
+            y_pred_arr = np.asarray(y_pred)
             outcome = AnalysisOutcome(
                 task=task,
                 model=model,
                 n_train=len(X_train),
                 n_test=len(X_test),
-                y_test=np.asarray(y_test, dtype=float),
-                y_pred=np.asarray(y_pred, dtype=float),
+                y_test=(y_test_arr.astype(float) if task == "regression" else y_test_arr),
+                y_pred=(y_pred_arr.astype(float) if task == "regression" else y_pred_arr),
                 cv_mean=(
                     float(result.cv_mean)
                     if result.cv_mean is not None and result.cv_mean == result.cv_mean
                     else float("nan")
                 ),
                 seconds=float(result.fit_seconds),
+                estimator=fitted,
+                X_train=X_train,
+                y_train=y_train,
+                X_test=X_test,
+                feature_names=[str(name) for name in X.columns],
             )
             progress(0.85, "scoring")
             if task == "regression":
-                from sklearn.metrics import r2_score
+                from sklearn.metrics import mean_absolute_error, r2_score
 
                 outcome.metric_name = "R² (held-out)"
                 outcome.metric_value = float(r2_score(outcome.y_test, outcome.y_pred))
+                outcome.metrics = {
+                    "r2": outcome.metric_value,
+                    "rmse": float(np.sqrt(np.mean((outcome.y_test - outcome.y_pred) ** 2))),
+                    "mae": float(mean_absolute_error(outcome.y_test, outcome.y_pred)),
+                }
             else:
-                from sklearn.metrics import accuracy_score
+                from sklearn.metrics import (
+                    accuracy_score,
+                    balanced_accuracy_score,
+                    matthews_corrcoef,
+                    precision_score,
+                    recall_score,
+                )
 
+                truth = np.asarray(y_test).astype(str)
+                predicted = np.asarray(y_pred).astype(str)
                 outcome.metric_name = "accuracy (held-out)"
-                outcome.metric_value = float(accuracy_score(np.asarray(y_test).astype(str), np.asarray(y_pred).astype(str)))
+                outcome.metric_value = float(accuracy_score(truth, predicted))
+                outcome.classes = sorted(set(truth) | set(predicted))
+                outcome.metrics = {
+                    "accuracy": outcome.metric_value,
+                    "balanced_accuracy": float(balanced_accuracy_score(truth, predicted)),
+                    "precision_macro": float(precision_score(truth, predicted, average="macro", zero_division=0)),
+                    "recall_macro": float(recall_score(truth, predicted, average="macro", zero_division=0)),
+                    "mcc": float(matthews_corrcoef(truth, predicted)),
+                }
+                if hasattr(fitted, "predict_proba"):
+                    from sklearn.metrics import roc_auc_score
+
+                    proba = fitted.predict_proba(X_test)
+                    columns = [str(value) for value in getattr(fitted, "classes_", [])] or outcome.classes
+                    try:
+                        outcome.metrics["roc_auc"] = float(
+                            roc_auc_score(truth, proba, multi_class="ovr", labels=columns)
+                        )
+                    except ValueError:  # single-class held-out split: honest skip
+                        pass
             estimator = fitted.steps[-1][1] if hasattr(fitted, "steps") else fitted
             names = list(X.columns)
             if hasattr(estimator, "feature_importances_"):
@@ -439,6 +955,7 @@ class ModelAnalysisPage(QWidget):
 
     # -- rendering --------------------------------------------------------------
     def _render(self, outcome: AnalysisOutcome) -> None:
+        self._last_outcome = outcome
         self._pred_plot.clear()
         self._resid_plot.clear()
         self._importance_plot.clear()
@@ -480,6 +997,10 @@ class ModelAnalysisPage(QWidget):
         self._metric_label.setText(
             f"{o.model} ({o.task}) · train {o.n_train} / test {o.n_test} · "
             f"{o.metric_name} {o.metric_value:.3f}{cv} · fitted in {o.seconds:.1f}s"
+        )
+        self._diag_status.setText(
+            f"Last run: {o.model} ({o.task}) — the calibration / learning-curve / "
+            "ROC / PR figures below reuse THIS fit."
         )
 
     # -- the §19 compare board (round 226 port) ----------------------------- #

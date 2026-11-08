@@ -114,14 +114,33 @@ the Utilities workflow cards — now has its dedicated Studio page,
 every card wired to the same public backend APIs the playground
 cards call and the destructive campaign paths dry-run by default.)
 
-**Therefore**: Part-2 is ~93% complete — architecture, theming,
-visualization, workers, docs and twelve of thirteen content surfaces
-are verified, but §16.22's "all relevant features are accessible
-through the redesigned interface" is not yet literally true, and
-§16.18 step 15 ("remove obsolete GUI components only after their
-replacements have been verified") correctly refuses to retire
-`playground.py` today.  The retirement order from here: (1) the
-remaining Model-Analysis depth, (2) re-verify, THEN delete
-`playground.py` with its 876-test suite and true the pins.
-`playground.py`'s module docstring now states this status so nobody
-mistakes it for the primary interface.
+(Resolved in round 228, increment 14 — the retirement round: the
+Model-Analysis depth landed as the **ML Workbench**
+(`ui/pages/ml_workbench.py` + `tests/ui/test_ml_workbench_page.py`,
+18 page tests) — the Hyperparameter-search card (RandomSearch /
+TPESearch / Hyperband over every grid-bearing registry family with
+the defaults baseline and the held-out verdict, the trial-ranking
+board, Apply-best), the **family benchmark**
+(`benchmark_feature_families` over the SMILES column), the **OOF
+stacking leaderboard** (`stack_oof_regressors` with the residual
+correction and the native parity scatter), the **ensemble builder**
+(`build_voting` / `build_stacking`), **model persistence**
+(`save_model` / `load_model` / `validate_bundle_input` predict with
+the honest feature-contract audit) and the **applicability domain**
+(`applicability_domain` with the reliability table, the kNN-distance
+native scatter and the bootstrap-uncertainty status).  The Model
+Analysis page itself grew the manual-hyperparameters table
+(`train_model`'s `model_params`), the kept-run `last_run()` hand-off
+and four NATIVE diagnostic figures — calibration curve, learning
+curve, ROC, PR — plus the latent string-class-target crash fix the
+regression-only tests had never met.)
+
+**Therefore (round 228)**: Part-2 is **100% complete** — every
+§16.22 surface (architecture, theming, visualization, workers, docs,
+and ALL THIRTEEN content surfaces) is verified with its own tests,
+and §16.18 step 15 **fires**: `playground.py` is retired this round
+(deleted with its 980-test Tk-coupled suite: `test_playground.py`
+876 + `test_playground_workflows.py` 17 + `test_job_safety.py` 31 +
+`test_excel_io_and_samples.py` 26 + `test_feature_recalculation.py`
+30), the Studio (`python studio.py`) is THE front end, and the pins
+carry the new honest totals.
