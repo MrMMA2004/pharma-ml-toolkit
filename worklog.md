@@ -10180,3 +10180,23 @@ totals **4,769 = 3,974 collect + 795 doctest** · census **985/311,333**
 studio.py") **COMPLETE**; Part-3 §20 (checkpoint depth) / §21 (hover
 tooltips) / §22 (SMILES previews) / §23 (responsive pass) / §24
 (SA-in-generative wiring) remain the standing Part-3 backlog.
+
+**Round 228 addendum (post-ship):** the verification pass caught TEN
+user-visible web texts still pointing at the retired file (the
+Download panel's copy-command `python playground.py`, the archive-
+content note, the `--version` hint, the overview's Interface cell,
+and the ligand-prep / batch-configs / feature-factory /
+vina-folder-scan overflow hints + the card-directory provenance
+comment) — all trued to `python studio.py` (commit `144c659`, pushed;
+agent-browser re-verified: zero `playground.py` strings in the
+rendered page).  The scheduler self-heal also ran: the master job
+514067 was found **disabled by API** (stage failed, run 4 at 21:39,
+disabled 21:40) → deleted + recreated identically as **515197**
+(the payload now carries the 19th/20th-rollback PAT lesson —
+`upload/Command.txt` is gone from rolled-back trees; the 93-char
+token lives in `upload/MASTER_PROMPT.pdf` split across two pdftotext
+lines — plus the Part-2-complete baselines and the
+foreground-notebooks/agent-browser mandates); the missing
+webDevReview 15-min job recreated as **515198**.  Counter stays
+20/100 (the 21:39 fire of the disabled job produced no round —
+no counter increment, no orphan work).
