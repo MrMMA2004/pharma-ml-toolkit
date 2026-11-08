@@ -10722,3 +10722,53 @@ density, legend-collision handling on the densest charts) and
 per-page metadata adoption through `meta=`, the §21.5
 molecule-hover SA/formula readouts) — §20 + §22 + §24 done, §21
 slice 1 done, §23 slice 1 done.
+
+## Round 234 — 2026-11-09 (cron 515197; the DUAL-SESSION monitoring round)
+
+**What happened**: this cron turn started while the sibling turn (the
+manual "Continue MASTER_PROMPT part3" message of the same session) was
+mid-flight executing the full round-233 release ritual. Per the
+DUAL-SESSION RULE the turn STOOD DOWN from all toolkit work and ran as
+monitor + health + verification only — no collisions: the sibling's
+worklog entry explicitly credits the concurrent suite re-run.
+
+**Monitoring & verification done**:
+- environment: origin fast-forwarded through the user's PR #2 (the
+  GitHub landing page) and PR #3 (trust signals + CI) merges — both
+  benign (+198 lines net: README, one example, one asset; VERSION,
+  playground retirement and zips untouched); the in-flight round-233
+  §23 work was intact in the tree and the sibling adopted it.
+- independent verification BEFORE the sibling's ship: the full
+  chunked gate re-run (scratch/run_suite_chunks_233.py) — 8/8 chunks
+  green, 0 failing; collect 4,114 + doctest 798 = **4,912** (matched
+  the sibling's pins exactly); the §23 responsive-policy suite (13
+  tests) + the round-232 headless platform matrix (7) green.
+- AFTER the sibling's ship: commit `12cc2a4` + worklog `e9ad7a4`
+  pushed; local == origin/main (0/0).  Four-home v1.2.146 zip
+  verified byte-identical 20,244,070 B in download/, dist-archive/,
+  pharma-ml-toolkit/download/, upload/ — sha256 prefix 18bdfbcf
+  matches the worklog pin; `/api/toolkit/zip-size` answers
+  `exact:true, 20244070, v1.2.146`; FALLBACK_STATS 1008/317,082.
+- health: the Next.js dev server was DOWN at turn start (curl 000,
+  no listener) — restarted (`bun run dev`), GET / 200 restored.
+
+**The user-facing diagnosis this turn confirmed**: "studio.py GUI
+doesn't open" on Windows was root-caused in round 232 (v1.2.145):
+`ui/headless.py`'s displayless probe tested only X11's `DISPLAY`
+(never set on Windows) and silently forced `QT_QPA_PLATFORM=offscreen`
+— the app ran with an invisible window and `app.exec()` blocked
+forever.  The fix is platform-aware (offscreen only on Linux with
+neither DISPLAY nor WAYLAND_DISPLAY) and the Qt console-noise filter
+landed in v1.2.144.  **The user is on v1.2.142 — the answer is to
+pull the latest zip (≥ v1.2.145; currently v1.2.146)**.
+
+**Scheduler**: master job 515197 alive; webDevReview recreated by the
+sibling as 515969 (the 515897 had vanished again).  Counter **26/100**
+rides this commit.
+
+**Baselines for the next round** — v1.2.146 (four homes) · honest
+totals **4,912 = 4,114 collect + 798 doctest** · census **1008/317,082**
+· counter **26/100** · Part-3 remaining: §23 depth (QScrollArea for
+the tallest forms, adaptive tick/label density, legend-collision
+handling) and §21's remaining depth (image pixel inspection, per-page
+metadata adoption, §21.5 molecule-hover readouts).
