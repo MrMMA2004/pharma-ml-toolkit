@@ -1,3 +1,41 @@
+## [1.2.140] — 2026-11-08
+
+### Added — round 227: the Utilities Workbench joins the Studio + the JobRunner GC-race fix (the owner's "everything must be in studio.py" directive, increment 2)
+
+* **The Utilities Workbench** — `ui/pages/utilities.py` (increment 13),
+  the retirement backlog's missing tab: the legacy Tk playground's
+  Utilities tab ported as five Studio tabs, every card wired to the
+  SAME public backend APIs the cards call.  **Table merge & split**
+  (`merge_tables` / `merge_table_folder` / `split_table_into_chunks`
+  with the round-201 example loader); **compare & annotate**
+  (`compare_tables` / `annotate_with_smiles`, the common/only-A/only-B
+  counts drawn as native PyQtGraph bars — no matplotlib on the page);
+  **approved drugs → report** (`filter_approved_drugs`, CSV + the
+  bordered Word table through `export_docx` with the honest
+  python-docx refusal); **campaign file tools**
+  (`collect_files`/`list_file_names`/`distribute_files`/
+  `delete_named_files`/`cleanup_tree` — dry-run by default, one
+  confirmation before any real destructive run, the shipped
+  14-ligand example tree in one click); **reindex by number**
+  (`reindex_by_number` with the dense-gap honesty).  Honest
+  pre-flight refusals everywhere; the split parts folder is picked
+  BEFORE the run (the Studio contract — no dialog mid-job).  18 new
+  page tests (`tests/ui/test_utilities_page.py`).
+* **The JobRunner GC-race fix** — `ui/workers/job_worker.py`: the
+  runner's finisher (the FIRST slot of the finished emission)
+  dropping the last worker reference let CPython's immediate
+  refcount destruction tear down the worker's `JobSignals`
+  mid-delivery, silently swallowing every page slot connected after
+  it — the Utilities campaign jobs (1.35 s docking import inside the
+  worker) hit it deterministically.  The retired-workers hold keeps
+  the signals alive past the emission; a forced-`gc.collect()`
+  regression test pins it.
+* **Docs trued** — `docs/gui/GUI_AUDIT.md`'s Part-2 assessment
+  advances to ~93% (twelve of thirteen surfaces; the Utilities
+  blocker resolved — the remaining blocker is the Model-Analysis
+  depth alone); `GUI_REDESIGN.md` carries increment 13; the
+  section-count tests trued to the 16-page window.
+
 ## [1.2.139] — 2026-11-08
 
 ### Added — round 226: the Part-3 §19 CV interface joins the Studio (the owner's "everything must be in studio.py" directive)

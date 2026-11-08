@@ -97,6 +97,15 @@ class JobRunner(QObject):
         self._worker: JobWorker | None = None
         self._busy = False
         self._job_name = ""
+        # Finished workers kept referenced until the next submit: the
+        # runner's finisher is the FIRST slot of the finished/failed/
+        # cancelled emission, and dropping the last worker reference
+        # there let CPython's immediate refcount destruction tear down
+        # the worker's JobSignals MID-DELIVERY -- silently swallowing
+        # every page slot connected after ours (the round-227 GC race,
+        # hit deterministically by the Utilities page's slow-import
+        # campaign jobs).
+        self._retired: list[JobWorker] = []
 
     # -- queries -------------------------------------------------------------
     @property
@@ -131,6 +140,7 @@ class JobRunner(QObject):
         """
         if self._busy:
             return None
+        self._retired.clear()  # the previous emission has long drained by now
         self._busy = True
         self._job_name = name
         worker = JobWorker(job)
@@ -158,5 +168,7 @@ class JobRunner(QObject):
     def _finish(self) -> None:
         self._busy = False
         self._job_name = ""
+        if self._worker is not None:
+            self._retired.append(self._worker)  # keep signals alive past this emission
         self._worker = None
         self.job_ended.emit()

@@ -41,6 +41,7 @@ SECTIONS: list[tuple[str, str]] = [
     ("bestofml", "Best-of ML Workbench"),
     ("responseai", "Response AI Workbench"),
     ("imagelab", "Image Lab"),
+    ("utilities", "Utilities Workbench"),
     ("settings", "Settings"),
 ]
 
@@ -80,6 +81,7 @@ class MainWindow(QMainWindow):
         from .pages.responseai import ResponseAIWorkbenchPage
         from .pages.settings_page import SettingsPage
         from .pages.unsupervised import UnsupervisedWorkbenchPage
+        from .pages.utilities import UtilitiesWorkbenchPage
 
         self.dashboard_page = DashboardPage()
         self.data_page = DataExplorerPage(theme=self.theme)
@@ -109,6 +111,7 @@ class MainWindow(QMainWindow):
         self.imagelab_page = ImageLabPage(
             theme=self.theme, runner=self.runner, data_explorer=self.data_page
         )
+        self.utilities_page = UtilitiesWorkbenchPage(theme=self.theme, runner=self.runner)
         self.settings_page = SettingsPage(self.theme)
 
         for page in (
@@ -126,6 +129,7 @@ class MainWindow(QMainWindow):
             self.bestofml_page,
             self.responseai_page,
             self.imagelab_page,
+            self.utilities_page,
             self.settings_page,
         ):
             self.pages.addWidget(page)
@@ -200,6 +204,7 @@ class MainWindow(QMainWindow):
         self.bestofml_page.apply_palette(palette)
         self.responseai_page.apply_palette(palette)
         self.imagelab_page.apply_palette(palette)
+        self.utilities_page.apply_palette(palette)
         self._status.showMessage(f"Theme: {provider} · {name}")
 
     # -- notifications -----------------------------------------------------------------

@@ -481,7 +481,8 @@ def test_main_window_carries_the_responseai_section(studio_app) -> None:
     from ui.main_window import SECTIONS
 
     keys = [key for key, _title in SECTIONS]
-    # responseai now sits right before the Image Lab (increment 12) + Settings
-    assert keys.index("responseai") == len(keys) - 3
-    assert keys[len(keys) - 2] == "imagelab"
-    assert len(keys) == 15
+    # responseai now sits right before the Image Lab (increment 12) + Utilities + Settings
+    assert keys.index("responseai") == len(keys) - 4
+    assert keys[len(keys) - 3] == "imagelab"
+    assert keys[len(keys) - 2] == "utilities"
+    assert len(keys) == 16

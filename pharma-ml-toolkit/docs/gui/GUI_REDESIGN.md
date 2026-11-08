@@ -48,10 +48,10 @@ pharma-ml-toolkit/
 │   ├── app_settings.py  ← QSettings facade
 │   ├── main_window.py
 │   ├── native/          ← eglstub.c + libEGL.so.1 + build_stub.sh
-│   ├── pages/  dashboard · data_explorer · chemistry · pkpd · biology · docking · model_analysis · unsupervised · deep_learning · generative · foundations · bestofml · responseai · image_lab · settings_page
+│   ├── pages/  dashboard · data_explorer · chemistry · pkpd · biology · docking · model_analysis · unsupervised · deep_learning · generative · foundations · bestofml · responseai · image_lab · utilities · settings_page
 │   ├── widgets/ navigation · data_table · plot_widget · image_panel · progress_panel · notification_widget
 │   └── workers/ job_worker.py (QRunnable + cooperative stop)
-└── tests/ui/            ← 234 offscreen tests (pytest-qt)
+└── tests/ui/            ← 267 offscreen tests (pytest-qt)
 ```
 
 ## Theming (16.9–16.11)
@@ -103,12 +103,18 @@ training run with held-out R²), and chart-palette sync.
 
 ## Migration status (16.18)
 
-Increment 12 of N — shell, navigation, theme system, Data Explorer,
+Increment 13 of N — shell, navigation, theme system, Data Explorer,
 Chemistry Workbench, PK/PD Workbench, Biology Workbench, Docking
 Workbench, Model Analysis, Unsupervised Workbench, Deep Learning
 Workbench, Generative Workbench, Foundations Workbench, Best-of ML
-Workbench, Response AI Workbench, Image Lab, Settings are live and
-tested. The Image Lab (increment 12) is the cross-cutting closure of
+Workbench, Response AI Workbench, Image Lab, Utilities Workbench,
+Settings are live and
+tested. Increment 13 (round 227) is the
+Utilities Workbench — the rar's others/General scripts as five tabs
+(table merge & split, compare & annotate with the native
+reconciliation bars, the approved-drugs CSV/DOCX report, the campaign
+file tools dry-run-first, reindex by number), every card wired to the
+same public backend APIs the legacy Tk cards call. The Image Lab (increment 12) is the cross-cutting closure of
 the Part-2 acceptance list's remaining visualization debt — the
 directive's own §16.8.2-16.8.4/16.8.7 items no prior page carried:
 ``ui/widgets/image_panel.py`` (a ``pg.GraphicsLayoutWidget`` with an

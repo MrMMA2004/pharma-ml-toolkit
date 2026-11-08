@@ -172,3 +172,47 @@ def test_submit_failure_handler_before_start(studio_app, qtbot) -> None:
     qtbot.wait(50)
     assert errors and "RuntimeError" in errors[0]
     assert not runner.busy
+
+
+def test_finished_slots_survive_the_worker_gc_race(studio_app, qtbot) -> None:
+    """Regression (round 227): late slots must outlive the finisher.
+
+    The runner's ``_finish`` is the FIRST slot of the finished emission;
+    dropping the last worker reference there used to let CPython's
+    immediate refcount destruction tear down the worker's JobSignals
+    mid-delivery, silently swallowing every page slot connected after
+    it.  The Utilities page's slow-import campaign jobs hit this
+    deterministically (the report stayed on "Running …" while
+    ``busy`` already flipped false).  The retired-workers hold fixes
+    it: a forced ``gc.collect()`` inside the first page slot must not
+    be able to kill the late ones either.
+    """
+    import gc
+    import time as _time
+
+    from ui.workers.job_worker import JobRunner
+
+    runner = JobRunner()
+    order: list[str] = []
+    runner.job_ended.connect(lambda: order.append("job_ended"))
+
+    def job(progress):
+        _time.sleep(0.05)  # land the emit while the main thread pumps events
+        return "payload"
+
+    def first_slot(result: object) -> None:
+        order.append("first")
+        gc.collect()  # the round-227 trigger, made deterministic
+
+    def late_slot(result: object) -> None:
+        order.append("late")
+
+    worker = runner.submit("gc probe", job, on_finished=first_slot)
+    assert worker is not None
+    worker.signals.finished.connect(late_slot)  # connected AFTER submit, page-style
+    deadline = _time.monotonic() + 10.0
+    while _time.monotonic() < deadline and "late" not in order:
+        studio_app.processEvents()
+        _time.sleep(0.01)
+    assert order == ["job_ended", "first", "late"], order
+    assert not runner.busy

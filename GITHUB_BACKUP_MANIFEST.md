@@ -449,6 +449,49 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.140 release-zip homes (2026-11-08, round 227 — the Utilities Workbench joins the Studio + the JobRunner GC-race fix, the owner's "everything must be in studio.py" directive increment 2)
+
+`pharma-ml-toolkit-v1.2.140.zip` — 20,387,313 bytes, sha-256
+`a911956dbd34ecedea2b30192957283cdfce724da58a63f757c2f44532228694`,
+1015 entries / 970 files, built with the standing four-home builder
+(`scratch/build_zip_210.py`, the committed version-agnostic recipe)
+— testzip OK per home, **real leaks 0**, nested zips NONE, predecessor
+v1.2.139 swept from all four homes; placed byte-identical in
+`download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`.
+
+**What shipped:** the retirement backlog's missing tab.  (1) **The
+Utilities Workbench** (`ui/pages/utilities.py`, increment 13) — the
+legacy Tk playground's Utilities tab ported as five Studio tabs: table
+merge & split (`merge_tables`/`merge_table_folder`/
+`split_table_into_chunks`, the round-201 example loader riding along),
+compare & annotate (`compare_tables`/`annotate_with_smiles` with the
+reconciliation counts drawn as NATIVE PyQtGraph bars per §16.8 — no
+matplotlib anywhere on the page), the approved-drugs report
+(`filter_approved_drugs` + the CSV and bordered-Word `export_docx`
+arms), the campaign file tools (`collect_files`/`list_file_names`/
+`distribute_files`/`delete_named_files`/`cleanup_tree`, dry-run by
+default, one confirmation before any real destructive run, the shipped
+14-ligand example tree loadable in one click), and reindex by number
+(`reindex_by_number` with the dense-gap honesty).  Honest pre-flight
+refusals everywhere — nothing picks a dialog mid-job; the split parts
+folder is picked BEFORE the run.  18 new page tests
+(`tests/ui/test_utilities_page.py`), every asserted number the real
+engine's.  (2) **The JobRunner GC-race engine fix**
+(`ui/workers/job_worker.py`): the runner's finisher dropping the last
+worker reference mid-emission let CPython's immediate destruction
+tear down the worker's JobSignals BEFORE the page slots connected
+after it delivered — the Utilities campaign jobs (1.35 s docking
+import) hit it deterministically (report stuck on "Running …" while
+busy already flipped false); the retired-workers hold keeps signals
+alive past the emission, plus the forced-gc regression test.
+Notebooks re-executed 8/8 at `pharmaml 1.2.140` (198 s), no-output
+twins regenerated; census 990 files / 367,201 lines; pins
+5,725 = 4,930 collect + 795 doctest; `docs/gui/GUI_AUDIT.md`'s
+Part-2 assessment advances to ~93% (twelve of thirteen surfaces; the
+Utilities blocker resolved, the remaining blocker is the Model-Analysis
+depth alone); the section-count tests trued to the 16-page window.
+
 ## v1.2.139 release-zip homes (2026-11-08, round 226 — the §19 CV interface joins the Studio, the owner's "everything must be in studio.py" directive)
 
 `pharma-ml-toolkit-v1.2.139.zip` — 20,367,978 bytes, sha-256

@@ -31,7 +31,7 @@ checkpoints).
 | 10 | Foundations | statistics, table prep | `pharmaml.utils.*`, `profiling` | **Foundations Workbench** (increment 9: compare_groups with the branch reported + two-histogram overlay, the five-distribution sampler with the theory drawn in the same value space, Welch ANOVA + Tukey HSD + Games-Howell, profile_dataset with the type census + alert rules) |
 | 11 | Best-of ML | curated model cards | `pharmaml.ml.*` | **Best-of ML Workbench** (increment 10: the 924-project catalogue as queryable data + the 35-verdict coverage audit + the five native capability surfaces — DP statistics with the RDP accountant, leave-one-out collaborative filtering, the LSH recall/compression sweep, the adversarial broken-rate audit, the time-series analysis half — plus the apriori association rules) |
 | 12 | Response AI | drug response | `pharmaml.ml.drugresponse` | **Response AI Workbench** (increment 11: the module's FIRST GUI surface — the Hill curve fit with every parameter against the generating truth + the log-dose AUC both ways, response metrics + rank correlations on the Data Explorer's columns or seeded pairs, the CaDRReS `DrugResponseModel` on the seeded 12x4 screen with the honest in-sample pearson, cell-line-grouped cross-validation with the ~0 mean reported honestly, the informative-prior regression, the `ResponseVAE` ELBO ledger, the `MultiOmicsFusion` per-block audit with total variance equalised) |
-| 13 | Utilities | CSV standardize, converters, IO | `pharmaml.utils.io`, `chem.csv_standardize` | **Data Explorer** (tables + distributions) |
+| 13 | Utilities | CSV standardize, converters, IO | `pharmaml.utils.io`, `chem.csv_standardize` | **Data Explorer** (tables + distributions) + **Utilities Workbench** (increment 13, round 227: the rar's others/General scripts — table merge & split over `merge_tables`/`merge_table_folder`/`split_table_into_chunks`, compare & annotate over `compare_tables`/`annotate_with_smiles` with the native reconciliation bars, the approved-drugs report over `filter_approved_drugs` (CSV + the bordered Word table), the campaign file tools over `collect_files`/`list_file_names`/`distribute_files`/`delete_named_files`/`cleanup_tree` dry-run-first, and `reindex_by_number`) |
 
 Plus the cross-cutting concerns, all live in Studio: theme/appearance
 (Settings page), navigation (sidebar + Ctrl+1..9), background
@@ -99,7 +99,7 @@ is the honest verdict against directive §16.22's acceptance criteria
 - GUI documentation (`docs/gui/GUI_REDESIGN.md`, this audit) and the
   GitHub backup of all GUI sources/tests (16.20/16.21 J).
 
-**NOT yet done — the two open parity items** (why step 15 cannot fire):
+**NOT yet done — the one open parity item** (why step 15 cannot fire):
 
 1. **Model Analysis depth** — the playground's Data & ML tab carries
    more than the registry fit + curves the Studio page had at
@@ -107,19 +107,21 @@ is the honest verdict against directive §16.22's acceptance criteria
    card, applicability-domain). Round 226 ported the newest and most
    valuable piece — the §19 CV results interface — but the remaining
    ML-tab cards still owe their Studio twin.
-2. **The Utilities workflow cards** — the audit's row-13 mapping
-   ("Data Explorer") covers the tab's IO surface only; the rar's
-   campaign-file tools, table merge/split, compare/annotate,
-   approved-drugs report and reindex cards have NO Studio page yet.
 
-**Therefore**: Part-2 is ~90% complete — architecture, theming,
-visualization, workers, docs and eleven of thirteen content surfaces
+(Resolved in round 227, increment 13: the second former blocker —
+the Utilities workflow cards — now has its dedicated Studio page,
+`ui/pages/utilities.py` + `tests/ui/test_utilities_page.py`, with
+every card wired to the same public backend APIs the playground
+cards call and the destructive campaign paths dry-run by default.)
+
+**Therefore**: Part-2 is ~93% complete — architecture, theming,
+visualization, workers, docs and twelve of thirteen content surfaces
 are verified, but §16.22's "all relevant features are accessible
 through the redesigned interface" is not yet literally true, and
 §16.18 step 15 ("remove obsolete GUI components only after their
 replacements have been verified") correctly refuses to retire
 `playground.py` today.  The retirement order from here: (1) the
-remaining Model-Analysis depth, (2) a dedicated Utilities Studio page,
-(3) re-verify, THEN delete `playground.py` with its 876-test suite and
-true the pins.  `playground.py`'s module docstring now states this
-status so nobody mistakes it for the primary interface.
+remaining Model-Analysis depth, (2) re-verify, THEN delete
+`playground.py` with its 876-test suite and true the pins.
+`playground.py`'s module docstring now states this status so nobody
+mistakes it for the primary interface.

@@ -59,7 +59,8 @@ CHUNKS: list[tuple[str, list[str]]] = [
     ("4c (ui n-z)", ["tests/ui/test_model_analysis_page.py",
                      "tests/ui/test_pages_smoke.py", "tests/ui/test_pkpd_page.py",
                      "tests/ui/test_responseai_page.py", "tests/ui/test_theme_manager.py",
-                     "tests/ui/test_unsupervised_page.py"]),
+                     "tests/ui/test_unsupervised_page.py",
+                     "tests/ui/test_utilities_page.py"]),
     ("5 (playground Tk)", ["tests/test_playground.py"]),
     ("6 (src doctests)", ["src/pharmaml", "--doctest-modules"]),
 ]
