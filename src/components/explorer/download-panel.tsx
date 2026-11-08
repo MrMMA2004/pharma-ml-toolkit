@@ -76,7 +76,7 @@ const INSTALL_STEPS: InstallStep[] = [
     title: "Open the playground",
     description:
       "A tabbed Tkinter GUI over every domain — chemistry, PK/PD dosing, ML on your CSVs, and the generative GA. Every trained model ships as a one-click report bundle (report.html + figures + tables, optional report.pdf — the CLI --plots/--pdf-report story, mouse edition), and Check CSV… audits any new dataset against the last model before you predict — in both the Data & ML tab and the Deep Learning tab (the ml check story, mouse edition). No terminal needed; works straight after unzipping.",
-    commands: ["python playground.py"],
+    commands: ["python studio.py"],
   },
   {
     title: "Verify the install",
@@ -336,7 +336,7 @@ function collectDirSummary(
       name: "(root)",
       files: rootFiles,
       size: rootBytes,
-      note: "README, CHANGELOG, VERSION, playground.py, pyproject.toml, Dockerfile, requirements.txt",
+      note: "README, CHANGELOG, VERSION, studio.py + ui/, pyproject.toml, Dockerfile, requirements.txt",
     });
   }
   return out;
@@ -1010,7 +1010,7 @@ export function DownloadPanel() {
           />
           <CommandStrip
             command="cat VERSION"
-            hint="what you have now — or python playground.py --version"
+            hint="what you have now — cat VERSION inside the archive"
           />
           <div className="space-y-1.5">
             <p className="text-[11px] leading-snug text-muted-foreground">

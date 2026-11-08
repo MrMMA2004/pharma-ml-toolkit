@@ -303,7 +303,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Interface",
     before: "Command-line only",
-    after: "CLI + notebooks + playground.py — a point-and-click Tkinter GUI over every domain",
+    after: "CLI + notebooks + studio.py — the PySide6 Studio: seventeen verified pages over every domain (the legacy Tkinter playground retired in v1.2.141)",
   },
   {
     aspect: "Distribution",

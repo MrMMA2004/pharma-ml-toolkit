@@ -211,7 +211,7 @@ export function BatchConfigs() {
     }
     if (candidates.length > MAX_PDBQT) {
       toast.error("Too many PDBQT files for the browser batch", {
-        description: `Pick at most ${MAX_PDBQT} files (you chose ${candidates.length}). Use the desktop playground.py for full campaigns.`,
+        description: `Pick at most ${MAX_PDBQT} files (you chose ${candidates.length}). Use the desktop Studio (python studio.py) for full campaigns.`,
       });
       return;
     }
