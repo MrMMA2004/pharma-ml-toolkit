@@ -449,6 +449,51 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.139 release-zip homes (2026-11-08, round 226 — the §19 CV interface joins the Studio, the owner's "everything must be in studio.py" directive)
+
+`pharma-ml-toolkit-v1.2.139.zip` — 20,367,978 bytes, sha-256
+`580f30e1328c73e2f7f22ac4c9a69a0ff158ac3e6cf1c8bdea124413709eeb6e`,
+1013 entries / 968 files, built with the standing four-home builder
+(`scratch/build_zip_210.py`, the committed version-agnostic recipe)
+— testzip OK per home, **real leaks 0**, nested zips NONE, predecessor
+v1.2.138 swept from all four homes; placed byte-identical in
+`download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`.
+
+**What shipped:** the owner's two-part directive answered.  (1) **The
+Part-2 verdict** — `docs/gui/GUI_AUDIT.md` now carries the honest §16
+completion assessment: architecture, theming, visualization, workers
+and eleven of thirteen content surfaces verified, §16.22's "all
+relevant features accessible" not yet literally true (the remaining
+Model-Analysis depth + the Utilities workflow cards), so §16.18 step
+15 correctly refuses to retire `playground.py` today — its module
+docstring now states the legacy status.  (2) **The §19 studio port** —
+`ui/pages/model_analysis.py` grows the cross-validation interface
+round 225 gave the playground only: the **Compare models (CV)** board
+(the whole available registry under ONE shared splitter via
+`compare_models_cv`), the cv-folds spinner (2–10, default 5) + the
+cv-strategy combo (auto/kfold/stratified/group/stratified_group/
+scaffold), the honest pre-flight refusals (scaffold CV without a
+SMILES column, grouped strategies without a group-like column —
+refused BEFORE any job), the formatted `mean ± std (k-fold CV)`
+leaderboard, and the double-click **CV report dialog** (fold table
+with train-side mirrors, per-metric aggregates with honest
+directions, notes, and the PyQtGraph fold chart with mean line + ± 1
+std band edges — no matplotlib backend roulette).  The group-source
+detectors are studio-owned (`detect_smiles_column` /
+`detect_group_column`, the playground's honesty contracts) so the
+page stays independent of the legacy file.  7 new page tests
+(`tests/ui/test_model_analysis_page.py`); the suite driver chunk 4c
+extended.  18th sandbox rollback recovered pre-round (PAT via
+newline-join from MASTER_PROMPT.pdf, 19 upload blockers byte-identical,
+ff-pull to 086902c, venv repaired).  Suite: the nine-chunk runner
+**all green** (chunk 4c carried the new tests).  Notebooks re-executed
+8/8 at 1.2.139 (**196 s**, 7 twins regenerated).  Honest totals:
+collect-only **4,911 + 795 doctests = 5,706 tests**; census **988
+files / 365,533 lines**; web pins 5,699 → 5,706 (download-panel +
+overview + page FALLBACK_STATS 987/363,303 → 988/365,533) +
+SHIPPED_TOOLKIT_VERSION 1.2.139 across its four homes.
+
 ## v1.2.138 release-zip homes (2026-11-08, round 225 — the Part-3 §19 cross-validation results layer)
 
 `pharma-ml-toolkit-v1.2.138.zip` — 20,349,987 bytes, sha-256

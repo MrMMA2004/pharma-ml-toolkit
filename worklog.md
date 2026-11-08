@@ -9891,3 +9891,89 @@ SA-in-generative wiring** — §18.5's interactive search-space editor GUI
 and §18.6's optimization progress plots also remain natural GUI
 follow-ups; the web ML playground could gain the §19 fold-detail view
 (a web mirror of the double-click window) as a follow-up.
+
+## Round 226 (2026-11-08, cron run 19/100 job 514067 + the owner's direct IM: "Check if MASTER_PROMPT part2 is completely done and retire playground.py (everything must be in studio.py)") — the §19 CV interface joins the Studio, v1.2.139
+
+**The 18th rollback, recovered pre-round.**  The sandbox restored an
+ancient snapshot (HEAD `2eb0ede`, the round-186-era auto-commit atop
+v1.2.106): no origin remote, no `~/.github_token`, `upload/Command.txt`
+gone.  The PAT re-extraction found `upload/MASTER_PROMPT.pdf`'s token
+split across two pdftotext lines — the regex-only read got a 76-char
+truncation that GitHub rejected; the newline-join reconstruction
+(93 chars) fetched cleanly.  The 19 untracked upload blockers moved to
+/tmp, the ff-pull landed on origin/main `086902c`, every blocker proved
+byte-identical, the venv was rdkit-less → `scratch/venv_repair.sh` in
+the foreground (VENV-REPAIR-DONE, pharmaml 1.2.138, PySide6 + pyqtgraph
+OK).  Counter 18 → 19 (STEP 0).
+
+**The owner's question, answered honestly** (documented in
+`docs/gui/GUI_AUDIT.md` §"Part-2 completion assessment"):  Part-2 =
+directive §16 (GUI redesign, `upload/MASTER_PROMPT part2.pdf`,
+16.1–16.22).  Architecture (PySide6/modular pages/widgets/workers),
+theming (Qt-Material primary + QDarkStyleSheet alternative + native
+fallback, runtime switching), PyQtGraph visualization (incl. the Image
+Lab), navigation, JobWorker background execution, docs and GitHub
+backup — all verified with their own suites.  But §16.22's "all
+relevant features are accessible through the redesigned interface" is
+not yet literally true: the Model Analysis page was still increment-1
+thin (306 lines vs the playground ML tab's ~16k) and the Utilities
+workflow cards (the rar's merge/split, compare/annotate,
+approved-drugs, campaign-file tools, reindex) have NO Studio page.  So
+§16.18 step 15 ("remove obsolete GUI components only after their
+replacements have been verified") correctly refuses to retire
+`playground.py` today — and an immediate deletion would also strand
+the 876-test Tk suite and break the pins.  **Verdict: Part-2 ~90%
+done; retirement is the END of a verified migration, not a
+starting-order.**  `playground.py`'s module docstring now says so.
+
+**This round's parity increment — the §19 CV interface ported into the
+Studio** (`ui/pages/model_analysis.py`, 306 → 777 lines): the
+**Compare models (CV)** board (the whole available registry under ONE
+shared splitter via `compare_models_cv`), the **cv-folds spinner**
+(2–10, default 5) + the **cv-strategy combo**
+(auto/kfold/stratified/group/stratified_group/scaffold), the **honest
+pre-flight refusals** (scaffold CV without a SMILES column, grouped
+strategies without a group-like column — refused BEFORE any job, the
+playground's exact contracts), the formatted `mean ± std (k-fold CV)`
+leaderboard, and the double-click **CVReportDialog** (§19.2 headline +
+metadata line, the fold-by-fold table with train-side mirrors, the
+per-metric aggregates with honest directions, the notes, and the
+PyQtGraph fold chart — fold scores, mean line, ± 1 std band edges; the
+Qt-native viz per §16.8, and no matplotlib import at all, so the
+round-225 Qt-abort class cannot recur).  The group-source detectors
+(`detect_smiles_column` / `detect_group_column` / `numeric_feature_columns`
+/ `detect_task`) are studio-owned — the page imports NOTHING from the
+legacy file.  mypy-clean + ruff-clean.  7 new page tests
+(`tests/ui/test_model_analysis_page.py`): construction + the
+strategy-token mirror + the detector honesty + both pre-flight
+refusals + the functional board/report window (the real engine over a
+fast ridge/lasso panel, the double-click opening the report with 3
+fold rows) + the foreign-row status hint.  The suite driver chunk 4c
+extended to carry the new file.
+
+**The ship** — four carriers → **1.2.139**; notebooks re-executed
+**196 s (8/8 at `pharmaml 1.2.139`)**, twins regenerated; the
+nine-chunk suite (`scratch/run_suite_chunks_225.py`, next-server down
+per the OOM ritual) **all green — 0 failing chunks** (chunk 4c carried
+the new tests); `scratch/build_zip_210.py` → **v1.2.139 =
+20,367,978 bytes**, sha-256
+`580f30e1328c73e2f7f22ac4c9a69a0ff158ac3e6cf1c8bdea124413709eeb6e`,
+1013 entries / 968 files, testzip OK per home, **real leaks 0**,
+nested zips NONE, predecessor v1.2.138 swept from all four homes.
+Census (runs LAST): **988 files / 365,533 lines**.  Web pins:
+FALLBACK_STATS 987/363,303 → 988/365,533; tests pin **5,699 → 5,706 =
+4,911 collect + 795 doctests**; SHIPPED_TOOLKIT_VERSION 1.2.139;
+GITHUB_BACKUP_MANIFEST.md's v1.2.139 entry written.  CHANGELOG's
+1.2.139 entry added (round 225 skipped one — not repeated).
+
+**Baselines for the next round** — v1.2.139 (four homes) · honest
+totals **5,706 = 4,911 collect + 795 doctest** · census **988/365,533**
+· counter **19/100** · **the retirement backlog (the owner's
+directive)**: (1) the remaining Model-Analysis depth (leaderboard
+variants, family benchmark, tuner card, applicability-domain), (2) a
+dedicated **Utilities Studio page** (the whole tab is missing), (3)
+re-verify → delete `playground.py` + its 876-test Tk suite + true the
+pins.  Part-3 §20 (checkpoint depth) / §21 (hover tooltips) / §22
+(SMILES previews) / §23 (responsive pass) / §24 (SA-in-generative
+wiring) remain; §18.5's search-space editor GUI + §18.6's optimization
+progress plots remain natural follow-ups.

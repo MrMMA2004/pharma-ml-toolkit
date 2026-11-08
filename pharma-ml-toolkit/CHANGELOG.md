@@ -1,3 +1,33 @@
+## [1.2.139] — 2026-11-08
+
+### Added — round 226: the Part-3 §19 CV interface joins the Studio (the owner's "everything must be in studio.py" directive)
+
+* **The verdict first** — `docs/gui/GUI_AUDIT.md` now carries the
+  honest Part-2 (§16) completion assessment: architecture, theming,
+  visualization, workers and eleven of thirteen content surfaces are
+  verified, but §16.22's "all relevant features are accessible" is not
+  yet literally true (the remaining Model-Analysis depth + the
+  Utilities workflow cards), so §16.18 step 15 correctly refuses to
+  retire `playground.py` today; its module docstring now states the
+  legacy status.
+* **The port** — `ui/pages/model_analysis.py` grows the §19
+  cross-validation interface that round 225 gave the playground only:
+  the **Compare models (CV)** board (the whole available registry
+  under ONE shared splitter via `compare_models_cv`), the cv-folds
+  spinner (2–10, default 5) + the cv-strategy combo
+  (auto/kfold/stratified/group/stratified_group/scaffold), the honest
+  pre-flight refusals (scaffold CV without a SMILES column, grouped
+  strategies without a group-like column — refused BEFORE any job),
+  the formatted `mean ± std (k-fold CV)` leaderboard, and the
+  double-click **CV report dialog** (fold table with train-side
+  mirrors, per-metric aggregates with honest directions, the notes,
+  and the PyQtGraph fold chart with mean line + ± 1 std band edges —
+  no matplotlib backend roulette).  The group-source detectors are
+  studio-owned (`detect_smiles_column` / `detect_group_column`, the
+  playground's honesty contracts) so the page stays independent of the
+  legacy file.  Seven new page tests (`tests/ui/test_model_analysis_page.py`),
+  the suite driver chunk 4c extended.
+
 ## [1.2.137] — 2026-11-08
 
 ### Added — round 224: the Part-3 §18.2/§18.3 hyperparameter recommendations layer (`pharmaml.ml.hpo_presets`)
