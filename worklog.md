@@ -10324,3 +10324,98 @@ SMILES previews / §23 responsive pass / §24 SA-in-generative wiring**
 generative batches / feature factory may adopt the same
 `CheckpointManager` as optional depth).
 
+## Round 230 (2026-11-08, cron run 22/100 job 515197 + the owner's "Continue MASTER_PROMPT part3") — the Part-3 §24 SA engine shipped as v1.2.143, completing the interrupted round's ship
+
+**The state inherited**: the previous incarnation of this very session had
+committed the §24 work in two feature commits (`2013a3f` the SA engine +
+`c993a03` the oracles/generative wiring) at 17:45/17:50 UTC and then died
+before its release ritual — no tests run, no version bump, no zip, no push,
+no worklog.  The commits even carried a SyntaxError (`ui/pages/generative.py`
+line 204: a docstring closed with four quotes) that made every
+`test_generative_page.py` import fail.  This round adopted both commits,
+finished the ship, and hardened the suite against a container flip
+discovered on the way.
+
+**The work — §24 completed, honestly pinned.**
+
+- **The interrupted ship finished**: the one-character syntax fix; the
+  four stale/guessed pins trued to the real computed values (the SA tab
+  table is easiest-first so the ibuprofen core 1.520 leads, not aspirin
+  1.580; the max-2.0 filter keeps 2 and rejects 2; the objective window
+  widgets are `_obj_lo`/`_obj_hi`; the oracle book's penalized logP moved
+  -7.30 → 1.14 because the REAL Ertl fragment table lifted it off the
+  degraded scale); the `penalized_logp` doctest range
+  (`-1.0 < …("CCO") < 0.0`) trued the same way; `docs/INDEX.md`
+  regenerated (817 → 828 symbols) for the new `sa_scoring` +
+  `SAScoreObjective` exports the dead session had skipped.
+- **The EGL hardening** (the round's own find): in THIS container
+  `import PySide6.QtGui` dies on `libEGL.so.1` — and pytest-qt imports
+  it at `pytest_configure`, BEFORE any test module or `tests/` conftest
+  can preload the round-206 EGL stub.  Every non-`tests/ui` invocation
+  INTERNALERRORed (the library chunks AND the doctest chunk; only
+  `tests/ui` runs survived because their conftest preloads the stub as
+  an initial conftest).  A ROOT `conftest.py` now runs
+  `ui.headless.ensure_headless()` for EVERY invocation — real EGL probed
+  first, the committed no-op stub preloaded RTLD_GLOBAL only when
+  missing.  The suite is container-EGL-flip-proof.
+
+**The verification**: focused runs green (37 engine + the generative page
++ web parity), ruff clean on every touched file, mypy 0, the docs-index
+test green after the INDEX regen, and the FULL seven-chunk gate
+(`scratch/run_suite_chunks_225.py`, next-server down per the OOM ritual):
+chunks 2/3/4a/4b/4c/6 exit 0; chunk 1 failed ONLY on the docs-index pins
+that the INDEX regen then fixed (re-verified green separately) —
+effectively 7/7.  The doctest chunk itself only runs thanks to the root
+conftest (it INTERNALERRORed before it).
+
+**The ship**: four carriers → **1.2.143** (VERSION /
+`src/pharmaml/__init__.py` / `pyproject.toml` / `src/lib/toolkit-version.ts`);
+notebooks re-executed **8/8 at pharmaml 1.2.143 in 198 s** foreground
+(error-outputs 0); `scratch/build_zip_210.py` → **v1.2.143 =
+20,002,126 bytes**, sha-256
+`a99c67ed11d95c0883580df15f95113bc79b865bbf57ab88759e40acf455ce7e`,
+1016 entries / 971 files, testzip OK per home, **real leaks 0**, nested
+zips NONE, predecessor v1.2.142 swept from all four homes.  Census: **991
+files / 313,916 lines**.  Web pins trued: FALLBACK_STATS 988/312,512 →
+**991/313,916**, the overview fallback literals, the 4,815 chip → **4,860
+= 4,062 collect + 798 doctest** (+43 engine/GUI, +2 doctests) with the
+round-230 suite named in the after-text; SHIPPED_TOOLKIT_VERSION
+1.2.143; GITHUB_BACKUP_MANIFEST.md's v1.2.143 entry.  Docs: README's
+"Synthetic accessibility scoring" (Part-3 §24) section + the honest-scope
+line corrected (the Ertl SA score DID land — the RDKit wheel ships the
+Contrib database); CHANGELOG's 1.2.143 entry; COVERAGE's round-230 rows;
+GUI_AUDIT's Part-3 progress (§24 DONE, §21/§22/§23 open); GUI_REDESIGN's
+increment-16 entry.
+
+**Health**: dev server restarted (Ready in 1589 ms), GET / → 200,
+`/api/toolkit/zip-size` → `{"zipBytes":20002126,"version":"1.2.143",
+"exact":true,"source":"release"}`; the agent-browser pass: the 1.2.143
+badge, 991/313,916 + 4,860 chips, the Download ZIP + copy buttons, zero
+console errors, the theme toggle both ways, the footer, mobile 390px
+no-scroll (scrollWidth 390 == innerWidth 390) — PLUS the §24 E2E: the
+Playground Surgery strip's SA card scored its four seeded molecules
+through the live bridge (mean 2.37 ± 1.19, range 1.52–4.08, easiest
+first, the honest limitations copy, method attribution, 0.33 s engine
+time; two `POST /api/chem/sa-score → 200` lines in dev.log) and the
+max-2.0 filter kept 2 / rejected 2 with every reject still listed —
+the §24.4 never-discard contract verified live.
+
+**Scheduler**: the master job is 515197 (alive, run_count 5, last fire
+produced the interrupted commits); the webDevReview 15-min job had
+vanished AGAIN (the 512785 → 513599 → 513796 → 515198 lineage) —
+recreated as **515576** and verified in the list.  No rollback this
+round: local was simply 2 ahead of origin/main (the dead session's
+commits), `git pull --ff-only` a no-op, rdkit import clean.
+
+**Commits & push**: the adopted `2013a3f` + `c993a03` plus the release
+commit `9eb5844` ("feat(r230): Part-3 §24 SA engine shipped as v1.2.143
+— Ertl SA end-to-end + the EGL-safe suite") — pushed;
+`git rev-parse origin/main == HEAD == 9eb5844` verified.  Counter
+**22/100** riding the commits.
+
+**Baselines for the next round** — v1.2.143 (four homes) · honest
+totals **4,860 = 4,062 collect + 798 doctest** · census **991/313,916**
+· counter **22/100** · Part-3 remaining: **§21 hover tooltips / §22
+SMILES previews / §23 responsive pass** (§20 + §24 done; the natural
+next slice is §22 — hover/click structure previews over the SMILES
+columns the SA tab and every result table now carry).
