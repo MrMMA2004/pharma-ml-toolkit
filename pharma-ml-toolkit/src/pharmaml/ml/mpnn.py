@@ -198,10 +198,9 @@ def _ring_bonds(mol: Molecule) -> set[int]:
                     parent[nb] = node
                     depth[nb] = depth[node] + 1
                     stack.append(nb)
-                elif nb != parent[node]:
+                elif nb != parent[node] and depth.get(node, 0) >= depth.get(nb, 0):
                     # back edge -> the cycle it closes
-                    if depth.get(node, 0) >= depth.get(nb, 0):
-                        mark_cycle(node, nb)
+                    mark_cycle(node, nb)
     return ring_bonds
 
 
