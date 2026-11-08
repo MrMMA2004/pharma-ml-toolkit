@@ -23,6 +23,7 @@ import { BatchConfigs } from "@/components/explorer/playground/batch-configs";
 import { PkSimulator } from "@/components/explorer/playground/pk-simulator";
 import { LigandReconciler } from "@/components/explorer/playground/ligand-reconciler";
 import { SurgeryCards } from "@/components/explorer/playground/surgery-cards";
+import { SaScoreCard } from "@/components/explorer/playground/sa-score-card";
 import { SessionReport } from "@/components/explorer/playground/session-report";
 import { CardFinderTrigger } from "@/components/explorer/playground/card-finder";
 import { useToolkitStore } from "@/lib/store";
@@ -152,7 +153,10 @@ export function Playground() {
         <LigandReconciler />
       </TabsContent>
       <TabsContent value="generative" className="mt-4 sm:mt-6">
-        <SurgeryCards />
+        <div className="space-y-4 sm:space-y-6">
+          <SaScoreCard />
+          <SurgeryCards />
+        </div>
       </TabsContent>
     </Tabs>
   );

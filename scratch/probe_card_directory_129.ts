@@ -39,6 +39,7 @@ const SOURCES: Record<string, string> = {
   "ligand-sets": "src/components/explorer/playground/ligand-reconciler.tsx",
   "gen-topology": "src/components/explorer/playground/surgery-cards.tsx",
   "gen-breed": "src/components/explorer/playground/surgery-cards.tsx",
+  "gen-sa-score": "src/components/explorer/playground/sa-score-card.tsx",
   "session-report": "src/components/explorer/playground/session-report.tsx",
 };
 

@@ -267,6 +267,16 @@ export const PLAYGROUND_CARDS: readonly PlaygroundCardEntry[] = [
     match: "Breed two molecules",
     keywords: "breed crossover scaffold hop children litter parents generative",
   },
+  /* -- SA score (part3 §24 — Ertl-Schuffenhauer over the bridge) ------- */
+  {
+    id: "gen-sa-score",
+    tab: "generative",
+    title: "Synthetic Accessibility score",
+    blurb: "Ertl–Schuffenhauer SA with filter + CSV export",
+    match: "Synthetic Accessibility score",
+    keywords:
+      "sa score sascore ertl schuffenhauer synthetic accessibility ease of synthesis complexity",
+  },
   /* -- The session-report strip (rides above every sub-tab) ------------- */
   {
     id: "session-report",

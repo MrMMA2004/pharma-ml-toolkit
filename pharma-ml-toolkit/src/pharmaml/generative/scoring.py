@@ -62,6 +62,7 @@ __all__ = [
     "MultiObjective",
     "NoveltyObjective",
     "QedObjective",
+    "SAScoreObjective",
     "ScoringObjective",
     "SimilarityObjective",
     "SubstructureObjective",
@@ -195,6 +196,78 @@ class QedObjective(ScoringObjective):
         except Exception:  # noqa: BLE001 - exotic valences can upset QED
             _LOG.warning("QED failed on %r -- scoring 0.0", smiles)
             return 0.0
+
+
+class SAScoreObjective(ScoringObjective):
+    """Ertl synthetic-accessibility score as a generation reward (part3 §24.5).
+
+    MASTER_PROMPT part3: *"Where supported by the existing generative
+    architecture, allow SA score to be incorporated into candidate-ranking
+    or multi-objective optimization... Clearly distinguish between SA score
+    filtering, SA score ranking, and SA score as an optimization objective."*
+    This class is the third of those: the [1, 10] SA scale is inverted onto
+    a ``[0, 1]`` reward with a linear descent anchored at two configurable
+    points --
+
+    * ``easy`` (default 3.0): the top of the conventional drug-like band;
+      molecules at or below it earn the full 1.0 reward;
+    * ``hard`` (default 7.0): deep complexity territory; molecules at or
+      above it earn 0.0 (and inside :class:`MultiObjective`'s geometric
+      mean a 0.0 vetoes the candidate, which is exactly the "do not
+      optimise solely for low SA" guard the spec demands when combined
+      with other objectives).
+
+    The mapping is deliberately *not* a rescaling of the whole [1, 10]
+    range: the clinical band 1-4 stays comfortably rewarded while the
+    extremes saturate, so the optimiser is not incentivised to trade
+    validity or diversity for marginal SA points.
+
+    The limitations copy ships with every doc reference
+    (:data:`pharmaml.chem.sa_scoring.SA_SCORE_LIMITATIONS`) -- a favourable
+    reward is not evidence a molecule can be synthesised.
+
+    Example
+    -------
+    >>> from pharmaml.generative import SAScoreObjective
+    >>> obj = SAScoreObjective()                      # easy=3, hard=7
+    >>> obj.score("CC(=O)Oc1ccccc1C(=O)O")            # SA 1.58 -> 1.0
+    1.0
+    >>> obj.score("not-a-smiles")                     # invalid -> 0.0
+    0.0
+    """
+
+    name = "sa_score"
+
+    def __init__(self, easy: float = 3.0, hard: float = 7.0) -> None:
+        super().__init__()
+        for bound, label in ((easy, "easy"), (hard, "hard")):
+            if (
+                not isinstance(bound, (int, float))
+                or isinstance(bound, bool)
+                or not math.isfinite(bound)
+            ):
+                raise DataValidationError(
+                    f"SA anchor {label}={bound!r} must be a finite number"
+                )
+        if not 1.0 <= easy < hard <= 10.0:
+            raise DataValidationError(
+                "SA anchors must satisfy 1.0 <= easy < hard <= 10.0 "
+                f"(got easy={easy}, hard={hard})"
+            )
+        self.easy = float(easy)
+        self.hard = float(hard)
+
+    def score(self, smiles: str) -> float:
+        from pharmaml.chem.sa_scoring import sa_score
+
+        result = sa_score(smiles)
+        if not result.valid or result.score is None:
+            self._n_invalid += 1
+            self._n_scored += 1
+            return 0.0
+        self._n_scored += 1
+        reward = (self.hard - result.score) / (self.hard - self.easy)
+        return float(min(max(reward, 0.0), 1.0))
 
 
 class _BandObjective(ScoringObjective):
