@@ -449,6 +449,59 @@ ff-pull — the counter-rides-commits design proving itself again;
 venv rdkit-less → the foreground repair; webDevReview job recreated
 as 511610).
 
+## v1.2.138 release-zip homes (2026-11-08, round 225 — the Part-3 §19 cross-validation results layer)
+
+`pharma-ml-toolkit-v1.2.138.zip` — 20,349,987 bytes, sha-256
+`ce3fd87cbdb21b036e432b801222e15abc2c0ab4ecc89b17f09a9e83de057e76`,
+1012 entries / 967 files, built with the standing four-home builder
+(`scratch/build_zip_210.py`, the committed version-agnostic recipe)
+— testzip OK per home, **real leaks 0**, nested zips NONE, predecessor
+v1.2.137 swept from all four homes; placed byte-identical in
+`download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`.
+
+**What shipped:** the Part-3 §19 directive — cross-validation promoted
+from a hidden training detail to a first-class, reportable result.
+The engine (`src/pharmaml/ml/cv_results.py`): the §19.3 splitter core
+(kfold / stratified / group / stratified_group / **scaffold** —
+Bemis–Murcko grouping over `splits.scaffold_groups`, honest guards for
+labels / groups / scaffold counts, limitations notes travelling with
+every result); the explicit fold loop **cloning the whole pipeline per
+fold** so preprocessing refits per fold (§19.7's leakage rule) and deep
+models get a fresh module + optimizer + scheduler every fold (§19.6,
+proven by a counted-objects test on the torch `dnn`); the §19.2
+bookkeeping (strategy / folds / seed, individual fold scores,
+train-side mirrors, per-fold timings, mean/std aggregates, and the
+`0.923 ± 0.018 (5-fold CV)` display contract); the honest §19.4/§19.5
+metric panels (binary-only rows dropped for multiclass, proba rows
+dropped for no-predict_proba estimators, balanced_accuracy primary
+fallback — every drop leaving a note); §19.9 persistence
+(`dataset_fingerprint` + feature snapshot + schema-checked JSON
+round-trip); `compare_models_cv` sharing ONE splitter across the panel
+with the cooperative JobCancelled stop channel. The playground §19.8
+interface: the cv-strategy combo + configurable folds on the Compare
+button, the board's formatted `cv_score` column, and the double-click
+CV report window (fold table, aggregate table with honest directions,
+notes, fold-by-fold chart with mean ± std band — the matplotlib import
+routed through `pharmaml.viz.get_pyplot` because a bare pyplot import
+let backend resolution pick PySide6/Qt which **aborts the process**
+under a cursor-less Xvfb, caught by the round-225 probe and pinned by
+a regression test). Standing-mandate side quest: the §18 layer's 15
+latent mypy errors trued to zero via the `_bounds` contract helper —
+**src/pharmaml is now mypy-clean end to end** (191 files, 0 errors).
+41 engine tests + 7 GUI tests + doctests; notebooks re-executed 8/8 at
+1.2.138 (**223 s**, 7 twins regenerated with the variant-note cell, 4
+warning-stderr leaks scrubbed — the standing round-212 rule); the
+nine-chunk suite green (chunks 1/2's three reds — the leakage pin and
+two twin note-cell pins — went green immediately after the scrub).
+Honest totals: collect-only **4,904 + 795 doctests = 5,699 tests**;
+census **986 files / 363,183 lines**; web pins 5,649 → 5,699
+(download-panel + overview + page FALLBACK_STATS 984/362,491 →
+986/363,183) + SHIPPED_TOOLKIT_VERSION 1.2.138 across its four homes.
+Scheduler self-heal during the round: master cron 514037 found
+"Disabled by API" again → recreated as **514067**; the missing
+webDevReview 15-min job recreated as **514068**.
+
 ## v1.2.137 release-zip homes (2026-11-08, round 224 — the Part-3 §18.2/§18.3 hyperparameter recommendations layer)
 
 `pharma-ml-toolkit-v1.2.137.zip` — 20,330,910 bytes, sha-256
