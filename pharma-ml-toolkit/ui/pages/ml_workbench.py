@@ -291,6 +291,21 @@ class MLWorkbenchPage(QWidget):
         self._active_status: QLabel | None = None
         self._job_buttons: list[QPushButton] = []
 
+        # -- (round 229, Part-3 §20) the family benchmark's durable
+        # checkpoint home: Stop keeps the finished families on disk and
+        # the next Start resumes from the first unscored one.  An
+        # unwritable home degrades to None (fresh runs, no resume)
+        # instead of failing the page.
+        self._bench_resume_note = ""
+        try:
+            from pharmaml.utils.checkpoints import default_directory
+
+            self._bench_checkpoint_dir: Path | None = default_directory(
+                "family-benchmark"
+            )
+        except Exception:  # noqa: BLE001 -- home may be unwritable
+            self._bench_checkpoint_dir = None
+
         # -- the estimator list + the task-support map (the registry's
         # own declared grid when pharmaml is importable, the curated
         # fallback otherwise) --------------------------------------------
@@ -801,7 +816,11 @@ class MLWorkbenchPage(QWidget):
             "(shape_3d and rism opt-in only -- the 3D families embed "
             "conformers per molecule) and cross-validate the fixed model on "
             "each: the board shows which featurisation carries the signal. "
-            "A family that fails keeps its row with a NaN score and sinks."
+            "A family that fails keeps its row with a NaN score and sinks. "
+            "Progress is checkpointed after every family: Stop keeps the "
+            "finished families on disk and the next Start resumes from the "
+            "first unscored one (a changed dataset, model or fold count "
+            "starts fresh)."
         )
         bench_form.addRow("", self._bench_btn)
         lay.addLayout(bench_form)
@@ -931,9 +950,29 @@ class MLWorkbenchPage(QWidget):
         folds = int(self._bench_folds.value())
         smiles = frame[smiles_column]
         y = frame[target]
+        self._bench_resume_note = ""
 
         def job(progress: Any) -> Any:
             from pharmaml.ml import benchmark_feature_families
+
+            # (round 229, Part-3 §20) surface the resume story before
+            # the run: what the checkpoint on disk will reuse.  A plain
+            # page attribute, filled by the worker thread and read by
+            # the done() slot on the GUI thread afterwards.
+            if self._bench_checkpoint_dir is not None:
+                try:
+                    from pharmaml.utils.checkpoints import CheckpointManager
+
+                    info = CheckpointManager(
+                        self._bench_checkpoint_dir, "family-benchmark"
+                    ).latest()
+                    if info is not None and int(info.total or 0) > 0:
+                        self._bench_resume_note = (
+                            f"checkpoint found: {int(info.step)}/{int(info.total)} "
+                            "families already scored — resuming there"
+                        )
+                except Exception:  # noqa: BLE001 -- the note is cosmetic
+                    self._bench_resume_note = ""
 
             def on_family(info: dict[str, Any]) -> None:
                 progress(info["index"] / max(1, int(info["total"])), str(info["family"]))
@@ -946,6 +985,7 @@ class MLWorkbenchPage(QWidget):
                 cv=folds,
                 n_jobs=1,
                 on_family=on_family,
+                checkpoint_dir=self._bench_checkpoint_dir,
             )
 
         def done(board: Any) -> None:
@@ -966,6 +1006,8 @@ class MLWorkbenchPage(QWidget):
             )
             if n_nan:
                 note += f"; {n_nan} family(ies) failed and sank"
+            if self._bench_resume_note:
+                note = f"{self._bench_resume_note}; {note}"
             self._bench_status.setText(note)
 
         self._submit(f"benchmarking feature families ({task})", job, done, self._bench_status)

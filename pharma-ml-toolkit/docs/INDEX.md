@@ -884,6 +884,26 @@ after adding new public functions.
 | `validate_positive` | function | Assert ``value`` is a finite, (strictly) positive number. |
 | `validate_smiles_syntax` | function | Return True if ``smiles`` passes lightweight syntax checks. |
 
+## `pharmaml.utils.checkpoints`
+
+*Durable checkpoints for long-running jobs (MASTER_PROMPT Part-3 §20).*
+
+| Symbol | Kind | Summary |
+|---|---|---|
+| `Any` | class | Special type indicating an unconstrained type. |
+| `CheckpointInfo` | class | One validated checkpoint record (the contents of one JSON file). |
+| `CheckpointManager` | class | Write, validate, rotate and clear checkpoint files for one job. |
+| `Path` | class | PurePath subclass that can make system calls. |
+| `PersistenceError` | class | Raised when saving/loading model artifacts fails. |
+| `SCHEMA` | constant |  |
+| `annotations` | constant |  |
+| `dataclass` | function | Add dunder methods based on the fields defined in the class. |
+| `default_directory` | function | The GUI's per-job checkpoint home: ``~/.pharmaml/checkpoints/<name>/``. |
+| `hashlib` | module | hashlib module - A common interface to many hash functions. |
+| `json` | module | JSON (JavaScript Object Notation) <https://json.org> is a subset of |
+| `os` | module | OS routines for NT or Posix depending on what system we're on. |
+| `time` | module | This module provides various functions to manipulate time values. |
+
 ## Command-line interface
 
 ```text

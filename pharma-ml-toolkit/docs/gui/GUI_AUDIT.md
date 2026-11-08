@@ -144,3 +144,33 @@ and §16.18 step 15 **fires**: `playground.py` is retired this round
 `test_excel_io_and_samples.py` 26 + `test_feature_recalculation.py`
 30), the Studio (`python studio.py`) is THE front end, and the pins
 carry the new honest totals.
+
+
+## Part-3 progress — round 229: §20 checkpoint depth
+
+*The Part-3 backlog after Part-2's completion: §20 checkpoint depth /
+§21 hover tooltips / §22 SMILES previews / §23 responsive pass / §24
+SA-in-generative wiring.  Round 229 landed §20's engine and its first
+Studio wiring.*
+
+- **§20 (pause/resume/stop + checkpoints) — the engine and the
+  Leaderboards tab are DONE.**  `pharmaml.utils.checkpoints`
+  (`CheckpointManager`: atomic fsync+rename saves, SHA-256
+  self-verification, corrupt-file quarantine with fallback-to-previous,
+  rotation, strict input validation, JSON states — no pickle) is the
+  durable state layer; `benchmark_feature_families` grew
+  `checkpoint_dir`/`checkpoint_name`/`resume` (per-family checkpoints
+  written BEFORE the stop check, signature-matched resume
+  consecutive-from-the-front, write failures degrade to warnings);
+  the ML Workbench Leaderboards tab checkpoints into
+  `~/.pharmaml/checkpoints/family-benchmark` so its Stop button keeps
+  the finished families and the next Start resumes, with the resume
+  story in the status line ("checkpoint found: k/n families already
+  scored — resuming there") and the tooltip.  36 engine tests + 6
+  integration tests + 1 GUI loop test.
+- **Remaining §20 surface (optional depth)**: the other long runners
+  (the docking campaign, the generative batches, the feature factory's
+  molecule loop) can adopt the same `CheckpointManager` — the engine
+  is generic and they already carry the cooperative-stop channel.
+- **§21 hover tooltips / §22 SMILES previews / §23 responsive pass /
+  §24 SA-in-generative wiring** — unchanged, still open.

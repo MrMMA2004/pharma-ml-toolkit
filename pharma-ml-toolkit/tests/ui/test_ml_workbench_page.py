@@ -594,3 +594,46 @@ def test_apply_palette_recolours_every_plot_panel(studio_app) -> None:
     for plot in (page._stack_plot, page._ens_plot, page._ad_plot):
         assert plot._palette is dark
     page.deleteLater()
+
+
+# -- the checkpointed family benchmark (Part-3 §20) ----------------------------------- #
+
+
+def test_family_benchmark_checkpoints_and_resumes(
+    qtbot, studio_app, tmp_path: Path
+) -> None:
+    """The §20 loop: run 1 fills the checkpoint, run 2 resumes from it.
+
+    The second Start with unchanged settings reuses every stored family
+    row (the resume note leads the status line) and still lands the
+    full board -- Stop's progress is never thrown away.
+    """
+    from pharmaml.utils.checkpoints import CheckpointManager
+
+    analysis = _fresh_analysis()
+    page = _fresh_page(model_analysis=analysis)
+    _load_classification(page)  # SMILES + activity -> classification
+    page._bench_folds.setValue(2)
+    page._bench_checkpoint_dir = tmp_path  # the resume home for this test
+
+    page._bench_btn.click()  # run 1: computes and checkpoints per family
+    qtbot.waitSignal(page._runner.job_ended, timeout=300_000).wait()
+    _settle(qtbot, studio_app)
+    assert "family benchmark" in page._bench_status.text()
+    rows_first_run = page._bench_board.rowCount()
+    assert rows_first_run > 5  # the 18 2D families
+
+    info = CheckpointManager(tmp_path, "family-benchmark").latest()
+    assert info is not None
+    assert info.step == info.total  # every family scored before the exit
+    assert info.step == rows_first_run
+
+    page._bench_btn.click()  # run 2: unchanged settings -> pure reuse
+    qtbot.waitSignal(page._runner.job_ended, timeout=300_000).wait()
+    _settle(qtbot, studio_app)
+    status = page._bench_status.text()
+    assert status.startswith("checkpoint found:")
+    assert "families already scored" in status
+    assert page._bench_board.rowCount() == rows_first_run
+    page.deleteLater()
+    analysis.deleteLater()

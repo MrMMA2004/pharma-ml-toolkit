@@ -103,13 +103,19 @@ training run with held-out R²), and chart-palette sync.
 
 ## Migration status (16.18)
 
-Increment 13 of N — shell, navigation, theme system, Data Explorer,
+Increment 15 of N — shell, navigation, theme system, Data Explorer,
 Chemistry Workbench, PK/PD Workbench, Biology Workbench, Docking
 Workbench, Model Analysis, Unsupervised Workbench, Deep Learning
 Workbench, Generative Workbench, Foundations Workbench, Best-of ML
 Workbench, Response AI Workbench, Image Lab, Utilities Workbench,
 Settings are live and
-tested. Increment 13 (round 227) is the
+tested. Increment 15 (round 229) is the
+§20 checkpoint depth: the durable-checkpoint engine
+(`pharmaml.utils.checkpoints`) plus the ML Workbench Leaderboards
+tab's Stop→resume loop (see the increment-15 entry at the end).
+Increment 14 (round 228) was the
+ML Workbench — the Data & ML tab's last unported cards as five Studio
+tabs and THE RETIREMENT of playground.py. Increment 13 (round 227) is the
 Utilities Workbench — the rar's others/General scripts as five tabs
 (table merge & split, compare & annotate with the native
 reconciliation bars, the approved-drugs CSV/DOCX report, the campaign
@@ -364,3 +370,30 @@ with its 980-test Tk-coupled suite
 `docs/gui/GUI_AUDIT.md`'s completion assessment for the evidence and
 the CLI/library surfaces that keep every removed GUI button's
 capability available.
+
+
+## Increment 15 (round 229) — §20 checkpoint depth in the Leaderboards tab
+
+The Part-3 §20 pause/resume/stop section landed its durable-state
+layer and the first Studio wiring:
+
+- **The engine** — `pharmaml.utils.checkpoints`
+  (`CheckpointManager`/`CheckpointInfo`/`default_directory`): atomic
+  self-verifying JSON checkpoints (temp + `fsync` + `os.replace` +
+  directory `fsync`; SHA-256 over the canonical record; corrupt newest
+  quarantined to `*.json.corrupt` with fallback to the previous valid
+  one; rotation keeps the newest `keep`; strict input validation;
+  plain-JSON states — no pickle).
+- **The benchmark** — `benchmark_feature_families` grew
+  `checkpoint_dir` / `checkpoint_name` / `resume`: per-family
+  checkpoints written BEFORE the cooperative-stop check, a
+  signature-matched resume (task + cv + metric + model + families +
+  SMILES digest) skips the finished families, write failures degrade
+  to warnings.
+- **The page** — the ML Workbench Leaderboards tab checkpoints into
+  `~/.pharmaml/checkpoints/family-benchmark` by default (unwritable
+  home → fresh runs, never a crash): Stop keeps the finished
+  families, the next Start resumes, the status line leads with
+  "checkpoint found: k/n families already scored — resuming there",
+  and the Start tooltip carries the contract.  Tests: 36 engine + 6
+  integration (featuriser-counting spy) + 1 two-Start GUI loop.

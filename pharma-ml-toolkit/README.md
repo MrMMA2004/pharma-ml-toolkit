@@ -2006,6 +2006,29 @@ matplotlib is optional (``pip install 'pharmaml[reports]'``); the Agg backend is
 forced automatically outside notebooks, so plotting works on headless servers
 and CI — and renders inline inside Jupyter.
 
+#### Durable job checkpoints: pause, resume, stop without losing work (Part-3 §20)
+
+Long jobs checkpoint.  `pharmaml.utils.checkpoints.CheckpointManager`
+writes a small self-verifying JSON file (SHA-256 over its canonical
+content) after every completed unit of work — one feature family, one
+docking batch, one generative chunk — atomically (`fsync` + rename:
+crash-safe), rotated (only the newest N survive) and validated on read
+(a truncated or tampered newest checkpoint is quarantined to
+`*.json.corrupt` and the resume falls back to the previous one instead
+of failing).  The family benchmark (`benchmark_feature_families`) is
+wired end-to-end: pass `checkpoint_dir=` and a run stopped by the
+cooperative-stop contract leaves its finished families on disk; the
+next call with the same signature (dataset, folds, metric, model,
+family list — all hashed together) resumes from the first unscored
+family instead of recomputing, and any mismatch starts fresh — a
+resumed board is only ever assembled from rows computed on exactly
+that request.  Checkpoint write failures degrade to log warnings; they
+never destroy a 40-minute sweep.  The Studio's ML Workbench
+Leaderboards tab checkpoints into `~/.pharmaml/checkpoints/` by
+default, so its Stop button keeps the finished families and the next
+Start resumes — the status line says so ("checkpoint found: 7/16
+families already scored — resuming there").
+
 ---
 
 ## Command-line interface

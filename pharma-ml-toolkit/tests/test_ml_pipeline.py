@@ -2393,6 +2393,172 @@ class TestBenchmarkFeatureFamilies:
         metric_col = "neg_root_mean_squared_error_mean"
         assert board[metric_col].isna().all()  # swallowed, not raised
 
+    # -- (round 229, Part-3 §20) durable per-family checkpoints ---------
+    def test_cancelled_run_keeps_its_finished_families(self, tmp_path) -> None:
+        """The cooperative stop leaves every finished family on disk."""
+        from pharmaml.exceptions import JobCancelled
+        from pharmaml.ml.training import benchmark_feature_families
+        from pharmaml.utils.checkpoints import CheckpointManager
+
+        with pytest.raises(JobCancelled):
+            benchmark_feature_families(
+                _BENCH_SMILES, [1.0] * 6 + [2.0] * 6, task="regression",
+                families=("estate", "maccs", "erg"), model="ridge", cv=2,
+                on_family=lambda info: info["index"] != 2,
+                checkpoint_dir=tmp_path,
+            )
+        info = CheckpointManager(tmp_path, "family-benchmark").latest()
+        assert info.step == 2  # estate + maccs finished before the stop
+        assert [row["family"] for row in info.state["rows"]] == ["estate", "maccs"]
+
+    def test_resume_computes_only_the_unscored_families(self, tmp_path) -> None:
+        """A matching checkpoint skips the finished families entirely."""
+        from pharmaml.chem import features
+        from pharmaml.exceptions import JobCancelled
+        from pharmaml.ml.training import benchmark_feature_families
+
+        families = ("estate", "maccs", "erg")
+        with pytest.raises(JobCancelled):
+            benchmark_feature_families(
+                _BENCH_SMILES, [1.0] * 6 + [2.0] * 6, task="regression",
+                families=families, model="ridge", cv=2,
+                on_family=lambda info: info["index"] != 2,
+                checkpoint_dir=tmp_path,
+            )
+
+        calls: list[str] = []
+        original = features.compute_feature_frame
+
+        def counting(smiles, families=None, **kwargs):
+            calls.append(families[0] if families else "")
+            return original(smiles, families=families, **kwargs)
+
+        features.compute_feature_frame = counting
+        try:
+            benchmark_feature_families(
+                _BENCH_SMILES, [1.0] * 6 + [2.0] * 6, task="regression",
+                families=families, model="ridge", cv=2,
+                checkpoint_dir=tmp_path,
+            )
+        finally:
+            features.compute_feature_frame = original
+        # only 'erg' (the first unscored family) was computed afresh
+        assert calls == ["erg"]
+
+    def test_resumed_board_matches_an_uninterrupted_run(self, tmp_path) -> None:
+        """Reuse is byte-honest: same scores, only wall-clock differs."""
+        import pandas as pd
+
+        from pharmaml.exceptions import JobCancelled
+        from pharmaml.ml.training import benchmark_feature_families
+
+        families = ("estate", "maccs", "erg")
+        with pytest.raises(JobCancelled):
+            benchmark_feature_families(
+                _BENCH_SMILES, [1.0] * 6 + [2.0] * 6, task="regression",
+                families=families, model="ridge", cv=2,
+                on_family=lambda info: info["index"] != 2,
+                checkpoint_dir=tmp_path,
+            )
+        resumed = benchmark_feature_families(
+            _BENCH_SMILES, [1.0] * 6 + [2.0] * 6, task="regression",
+            families=families, model="ridge", cv=2,
+            checkpoint_dir=tmp_path,
+        )
+        fresh = benchmark_feature_families(
+            _BENCH_SMILES, [1.0] * 6 + [2.0] * 6, task="regression",
+            families=families, model="ridge", cv=2,
+        )
+        score_columns = [column for column in resumed.columns if column != "fit_time_s"]
+        pd.testing.assert_frame_equal(
+            resumed[score_columns].sort_values("family").reset_index(drop=True),
+            fresh[score_columns].sort_values("family").reset_index(drop=True),
+        )
+        # the resumed rows carry the ORIGINAL wall-clock fit times
+        from pharmaml.utils.checkpoints import CheckpointManager
+
+        stored = {
+            row["family"]: row["fit_time_s"]
+            for row in CheckpointManager(tmp_path, "family-benchmark")
+            .latest()
+            .state["rows"]
+        }
+        for _, record in resumed.iterrows():
+            assert record["fit_time_s"] == stored[record["family"]]
+
+    def test_signature_mismatch_starts_fresh(self, tmp_path) -> None:
+        """Changed folds/metric/dataset discard the stale checkpoint."""
+        from pharmaml.chem import features
+        from pharmaml.ml.training import benchmark_feature_families
+
+        families = ("estate", "maccs")
+        benchmark_feature_families(
+            _BENCH_SMILES, [1.0] * 6 + [2.0] * 6, task="regression",
+            families=families, model="ridge", cv=2,
+            checkpoint_dir=tmp_path,
+        )
+        calls: list[str] = []
+        original = features.compute_feature_frame
+
+        def counting(smiles, families=None, **kwargs):
+            calls.append(families[0] if families else "")
+            return original(smiles, families=families, **kwargs)
+
+        features.compute_feature_frame = counting
+        try:
+            benchmark_feature_families(
+                _BENCH_SMILES, [1.0] * 6 + [2.0] * 6, task="regression",
+                families=families, model="ridge", cv=3,  # different folds
+                checkpoint_dir=tmp_path,
+            )
+        finally:
+            features.compute_feature_frame = original
+        assert calls == ["estate", "maccs"]  # everything recomputed
+
+    def test_resume_false_ignores_a_matching_checkpoint(self, tmp_path) -> None:
+        """The explicit opt-out recomputes even with a perfect match."""
+        from pharmaml.chem import features
+        from pharmaml.ml.training import benchmark_feature_families
+
+        benchmark_feature_families(
+            _BENCH_SMILES, [1.0] * 6 + [2.0] * 6, task="regression",
+            families=("estate",), model="ridge", cv=2,
+            checkpoint_dir=tmp_path,
+        )
+        calls: list[str] = []
+        original = features.compute_feature_frame
+
+        def counting(smiles, families=None, **kwargs):
+            calls.append(families[0] if families else "")
+            return original(smiles, families=families, **kwargs)
+
+        features.compute_feature_frame = counting
+        try:
+            benchmark_feature_families(
+                _BENCH_SMILES, [1.0] * 6 + [2.0] * 6, task="regression",
+                families=("estate",), model="ridge", cv=2,
+                checkpoint_dir=tmp_path, resume=False,
+            )
+        finally:
+            features.compute_feature_frame = original
+        assert calls == ["estate"]
+
+    def test_checkpoint_write_failure_never_kills_the_board(
+        self, tmp_path
+    ) -> None:
+        """A checkpoint path that cannot hold files degrades to warnings."""
+        from pharmaml.ml.training import benchmark_feature_families
+
+        blockade = tmp_path / "not-a-directory-yet"
+        blockade.write_text("a file, not a directory", encoding="utf-8")
+        board = benchmark_feature_families(
+            _BENCH_SMILES, [1.0] * 6 + [2.0] * 6, task="regression",
+            families=("estate",), model="ridge", cv=2,
+            checkpoint_dir=blockade,  # mkdir(parents=True) will fail on this
+        )
+        assert board["family"].tolist() == ["estate"]
+        assert board["neg_root_mean_squared_error_mean"].notna().all()
+
 
 class TestSelectKBestUnion:
     """``pharmaml.ml.preprocessing.select_kbest_union`` -- the look.ipynb

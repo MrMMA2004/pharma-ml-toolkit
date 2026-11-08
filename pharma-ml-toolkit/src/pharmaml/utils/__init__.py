@@ -1,5 +1,10 @@
-"""Shared I/O and validation helpers."""
+"""Shared I/O, validation and checkpointing helpers."""
 
+from pharmaml.utils.checkpoints import (
+    CheckpointInfo,
+    CheckpointManager,
+    default_directory,
+)
 from pharmaml.utils.io import (
     ensure_directory,
     read_table,
@@ -15,6 +20,9 @@ from pharmaml.utils.validation import (
 )
 
 __all__ = [
+    "CheckpointInfo",
+    "CheckpointManager",
+    "default_directory",
     "ensure_directory",
     "looks_continuous",
     "read_table",

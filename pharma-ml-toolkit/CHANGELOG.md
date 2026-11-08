@@ -1,3 +1,46 @@
+## [1.2.142] — 2026-11-08
+
+### Added — round 229: the Part-3 §20 checkpoint engine — long jobs pause/resume/stop without losing work
+
+* **The checkpoint engine** — `utils/checkpoints.py`
+  (`CheckpointManager` + `CheckpointInfo` + `default_directory`,
+  exported from `pharmaml.utils`): atomic self-verifying JSON
+  checkpoints for long-running jobs.  Every save is temp + `fsync` +
+  `os.replace` + directory `fsync` (a crash mid-write leaves the
+  previous checkpoint intact); each file carries a SHA-256 over its
+  canonical content, so a truncated or tampered newest checkpoint is
+  QUARANTINED to `*.json.corrupt` on read and the resume falls back to
+  the previous valid one instead of failing; rotation keeps the newest
+  `keep` (a 40-hour job checkpoints thousands of times without filling
+  the disk); states are plain JSON (no pickle — a malicious checkpoint
+  cannot execute on load); inputs are validated strictly (plain
+  filename stems, non-negative int steps, dict states, JSON-serialisable
+  payloads with the actionable hint to store large artefacts in the
+  caller's own files).  36 engine tests.
+* **The family benchmark wired end-to-end** —
+  `benchmark_feature_families` grows `checkpoint_dir` /
+  `checkpoint_name` / `resume`: after EVERY completed row (success or
+  NaN-swallowed failure, BEFORE the cooperative-stop check) the
+  board-so-far lands atomically on disk; a stopped run's next call
+  with the same signature (task + cv + metric + resolved model +
+  family list + a SHA-1 of the SMILES — any mismatch starts fresh)
+  resumes at the first unscored family instead of recomputing;
+  checkpoint write failures degrade to log warnings and never kill a
+  40-minute sweep.  The smoke caught the subtle bug: `enumerate`'s
+  `start=` offsets the counter without skipping elements — the resume
+  must slice `family_list[start_position - 1:]`, or reused rows
+  recompute AND re-save at shifted steps.  6 integration tests
+  (including the featuriser-counting spy that pins "resume computes
+  only the unscored families").
+* **The Studio wiring** — the ML Workbench Leaderboards tab
+  checkpoints into `~/.pharmaml/checkpoints/family-benchmark` by
+  default (an unwritable home degrades to fresh runs, never fails the
+  page): Stop keeps the finished families on disk, the next Start
+  resumes, and the status line leads with "checkpoint found: k/n
+  families already scored — resuming there"; the Start button's
+  tooltip carries the contract.  1 GUI test runs the full two-Start
+  loop (fill the checkpoint, then resume it).
+
 ## [1.2.141] — 2026-11-08
 
 ### Added — round 228: THE RETIREMENT ROUND — the ML Workbench joins the Studio, Part-2 (§16) declared complete, and playground.py is retired (the owner's "everything must be in studio.py" directive, increment 3)
