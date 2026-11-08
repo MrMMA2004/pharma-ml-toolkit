@@ -75,6 +75,7 @@ from PySide6.QtWidgets import (
 from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
+from ..widgets.responsive import configure_splitter
 from ..workers.job_worker import JobRunner
 from .model_analysis import detect_smiles_column, detect_task, numeric_feature_columns
 
@@ -916,6 +917,7 @@ class MLWorkbenchPage(QWidget):
         self._stack_plot = PlotPanel(title="OOF stacking parity (best blender)")
         splitter.addWidget(self._stack_plot)
         splitter.setSizes([420, 420])
+        configure_splitter(splitter, stretch=(0, 1))
         lay.addWidget(splitter, stretch=1)
         return tab
 
@@ -1652,6 +1654,7 @@ class MLWorkbenchPage(QWidget):
         self._ad_plot = PlotPanel(title="Applicability domain — inside vs outside")
         splitter.addWidget(self._ad_plot)
         splitter.setSizes([520, 420])
+        configure_splitter(splitter, stretch=(0, 1))
         lay.addWidget(splitter, stretch=1)
         return tab
 

@@ -64,6 +64,7 @@ from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
+from ..widgets.responsive import configure_splitter
 from ..workers.job_worker import JobRunner
 
 _TK = Path(__file__).resolve().parents[2]
@@ -212,6 +213,7 @@ class UnsupervisedWorkbenchPage(QWidget):
         self._plot = PlotPanel(title="Unsupervised panel")
         splitter.addWidget(self._plot)
         splitter.setSizes([560, 540])
+        configure_splitter(splitter, stretch=(0, 1))
         lay.addWidget(splitter, stretch=1)
 
         self._report = QLabel("No unsupervised run yet — pick a dataset and fit PCA.")

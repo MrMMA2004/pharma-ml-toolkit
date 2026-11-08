@@ -75,6 +75,7 @@ from ..widgets.image_panel import (
     roi_stats_from_values,
 )
 from ..widgets.progress_panel import ProgressPanel
+from ..widgets.responsive import LEGIBILITY_FLOOR, configure_splitter
 from ..workers.job_worker import JobRunner
 
 _TK = Path(__file__).resolve().parents[2]
@@ -303,6 +304,7 @@ class ImageLabPage(QWidget):
                 path,
                 jpeg_quality=int(quality.value()),
                 compression=compression,
+                min_size=LEGIBILITY_FLOOR,
             )
         except Exception as exc:  # noqa: BLE001 - honest status line
             self._status.setText(f"Export FAILED for {path}: {exc}")
@@ -350,6 +352,7 @@ class ImageLabPage(QWidget):
         splitter.addWidget(left)
         splitter.addWidget(right)
         splitter.setStretchFactor(1, 1)
+        configure_splitter(splitter, stretch=(0, 1))
         outer.addWidget(splitter)
         return tab
 
@@ -521,6 +524,7 @@ class ImageLabPage(QWidget):
         splitter.addWidget(left)
         splitter.addWidget(right)
         splitter.setStretchFactor(1, 1)
+        configure_splitter(splitter, stretch=(0, 1))
         outer.addWidget(splitter)
         return tab
 
@@ -625,6 +629,7 @@ class ImageLabPage(QWidget):
         splitter.addWidget(left)
         splitter.addWidget(right)
         splitter.setStretchFactor(1, 1)
+        configure_splitter(splitter, stretch=(0, 1))
         outer.addWidget(splitter)
         return tab
 
@@ -787,6 +792,7 @@ class ImageLabPage(QWidget):
         splitter.addWidget(left)
         splitter.addWidget(right)
         splitter.setStretchFactor(1, 1)
+        configure_splitter(splitter, stretch=(0, 1))
         outer.addWidget(splitter)
 
         self._seed_roi_matrix()

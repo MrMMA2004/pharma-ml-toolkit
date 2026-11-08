@@ -78,6 +78,7 @@ from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView, PandasTableModel
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
+from ..widgets.responsive import configure_splitter
 from ..workers.job_worker import JobRunner
 
 #: the association card's default pasted transactions (mirrored verbatim).
@@ -237,6 +238,7 @@ class BestOfMLWorkbenchPage(QWidget):
         self._plot = PlotPanel(title="Best-of ML")
         splitter.addWidget(self._plot)
         splitter.setSizes([560, 540])
+        configure_splitter(splitter, stretch=(0, 1))
         lay.addWidget(splitter, stretch=1)
 
         self._report = QLabel("No Best-of ML run yet.")

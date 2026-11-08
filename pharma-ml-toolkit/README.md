@@ -2123,6 +2123,43 @@ The inspector is theme-aware (the crosshair, marker and readout
 recolour with the ChartPalette) and every piece runs under the
 offscreen page tests.
 
+#### The responsive pass: splitters, export legibility, aspect (Part-3 §23)
+
+Round 233 (§23 slice 1) makes the layout discipline wired, not
+aspirational — `ui/widgets/responsive.py` is the policy module:
+
+* **No splitter child is collapsible** — the studio's 20 splitters
+  (every page, the Image Lab's four tabs, the ML Workbench's two, and
+  the main window's nav/content splitter) are configured through
+  `configure_splitter()`: a careless drag can no longer hide the
+  control column, the chart, or the entire navigation (§23.2
+  "important controls becoming inaccessible");
+* **hard minimum extents** per child (320 px default; the nav column
+  200 px) — a squeeze stops at readable: forms, table headers and
+  axis labels stay unclipped, and the window itself refuses to shrink
+  below the sum of the minimums;
+* **growth flows to the chart side** — stretch factors route extra
+  window space to plots, not form columns (§23.3's resizing
+  discipline);
+* **exports stay legible** (§23.3): the Image Lab's export button
+  renders at **at least 640×480** — a matrix squeezed into a corner
+  of the window re-renders from its *vector scene* at floor scale
+  (text and curves drawn crisp at the larger size, never
+  bitmap-stretched, aspect preserved — §23.4), while the panels'
+  `export_image(min_size=…)` keeps the widget-owns-its-size contract
+  when no floor is asked for;
+* **matrix pixels stay square** — the ImagePanel locks aspect: a
+  100×50 correlation matrix renders 2:1 exactly as the data is
+  shaped, fit-to-view, never stretched to fill the panel (§23.4
+  "preserve image aspect ratios / avoid stretching");
+* **§23.5 is pinned by test** — the floor re-render and the aspect
+  lock change *display geometry only*: the plotted data arrays and
+  view ranges are byte-identical before and after an export.
+
+The remaining §23 depth (the QScrollArea pass for the tallest forms,
+adaptive tick density, legend-collision handling) is tracked in
+`docs/gui/GUI_AUDIT.md`'s Part-3 progress.
+
 ---
 
 ## Command-line interface

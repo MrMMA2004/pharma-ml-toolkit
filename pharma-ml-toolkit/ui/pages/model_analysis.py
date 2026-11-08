@@ -70,6 +70,7 @@ from PySide6.QtWidgets import (
 from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
+from ..widgets.responsive import configure_splitter
 from ..workers.job_worker import JobRunner
 
 if TYPE_CHECKING:
@@ -335,6 +336,7 @@ class ModelAnalysisPage(QWidget):
         splitter.addWidget(self._pred_plot)
         splitter.addWidget(self._resid_plot)
         splitter.setSizes([420, 420])
+        configure_splitter(splitter, stretch=(0, 1))
         lay.addWidget(splitter, stretch=1)
 
         self._importance_plot = PlotPanel(title="Feature importance (when the estimator exposes it)")

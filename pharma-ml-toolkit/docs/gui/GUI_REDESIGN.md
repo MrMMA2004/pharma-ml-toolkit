@@ -428,3 +428,33 @@ The Part-3 §24 synthetic-accessibility section landed end-to-end:
   every pytest invocation (pytest-qt imports QtGui at configure,
   before any conftest under `tests/` runs — the library and doctest
   chunks INTERNALERRORed in EGL-less containers without it).
+
+
+## Increment 17 (round 233) — §23 slice 1: the responsive pass
+
+The Part-3 §23 responsive-rescaling section landed its first slice as
+wired policy rather than per-page heroics:
+
+- **The policy module** — `ui/widgets/responsive.py`:
+  `configure_splitter()` (§23.2 — no collapsible children, hard
+  per-child minimum extents, stretch factors routing growth to the
+  chart side) and `LEGIBILITY_FLOOR` (§23.3 — the 640×480 export
+  floor).
+- **The audit** — all 20 splitters in the app go through the policy:
+  the 15 page splitters, the Image Lab's four tab splitters, the ML
+  Workbench's two, and the main window's nav/content splitter (whose
+  nav side was previously collapsible — the whole navigation could be
+  dragged out of reach).
+- **Export legibility** — `image_export` re-renders a squeezed
+  QGraphicsView from its vector scene at floor scale (crisp text,
+  preserved aspect, the pyqtgraph chrome re-filled because
+  scene.render skips view-layer painting); the Image Lab's export
+  button passes the floor; the panels keep the widget-owns-its-size
+  contract by default.  §23.5 pinned by test: data arrays and view
+  ranges are byte-identical across an export.
+- **Aspect** — the ImagePanel locks matrix pixels square (§23.4);
+  the §22 molecule renderer's canvas-aspect contract is pinned
+  alongside it.
+- 13 tests in `tests/ui/test_responsive_policy.py`; the remaining §23
+  depth (QScrollArea for the tallest forms, adaptive tick density,
+  legend collisions) stays on the Part-3 backlog.

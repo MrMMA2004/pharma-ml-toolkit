@@ -146,12 +146,13 @@ and §16.18 step 15 **fires**: `playground.py` is retired this round
 carry the new honest totals.
 
 
-## Part-3 progress — round 232: §21 slice 1 (hover inspection) + the Windows black-window fix
+## Part-3 progress — round 233: §23 slice 1 (the responsive pass) + round 232's §21 slice 1 (hover inspection) + the Windows black-window fix
 
 *The Part-3 backlog after Part-2's completion: §20 checkpoint depth /
 §21 hover tooltips / §22 SMILES previews / §23 responsive pass / §24
 SA-in-generative wiring.  Round 229 landed §20; round 230 landed §24;
-round 231 landed §22; round 232 landed §21 slice 1.*
+round 231 landed §22; round 232 landed §21 slice 1; round 233 landed
+§23 slice 1.*
 
 - **§20 (pause/resume/stop + checkpoints) — the engine and the
   Leaderboards tab are DONE** (round 229).  `pharmaml.utils.checkpoints`
@@ -209,11 +210,42 @@ round 231 landed §22; round 232 landed §21 slice 1.*
   (scatter pages attaching sample IDs through `meta=`), and the
   §21.5 molecule-hover SA/formula readouts on chemistry scatter
   charts.
-- **§23 (responsive rescaling / overlap prevention) — OPEN**, with
-  the first seed landed (the readout label's fixed minimum height —
-  no layout jump when it fills).  The remaining work: the QSplitter /
-  QScrollArea audit pass over the pages, export-dimension legibility
-  checks, and the aspect-ratio guarantees on molecular images.
+- **§23 (responsive rescaling / overlap prevention) — slice 1 DONE**
+  (round 233): `ui/widgets/responsive.py` is the policy module and
+  the audit is wired, not aspirational —
+  * `configure_splitter()` applies the §23.2 discipline to **all 20
+    splitters** in the app (15 page splitters + the Image Lab's four
+    tab splitters + the ML Workbench's two + the main window's
+    nav/content splitter): no collapsible children (a careless drag
+    can never hide the control column, the chart, or the whole
+    navigation), hard per-child minimum extents (`MIN_CHILD_PX`
+    320, the main window's nav at 200 — forms, table headers and
+    axis labels stay unclipped), and stretch factors so window
+    growth flows to the chart side (§23.3's resizing discipline).
+  * `LEGIBILITY_FLOOR` (640×480) is §23.3's "plots remain legible
+    when exported": `image_export.grab_png_bytes(min_size=…)`
+    re-renders a squeezed QGraphicsView from its **vector scene** at
+    floor scale — text, pens and curves re-rendered crisp (never
+    bitmap-stretched), aspect preserved (§23.4), the pyqtgraph
+    background re-filled via `backgroundBrush()` (scene.render skips
+    the view-layer painting), and §23.5 pinned: data arrays + view
+    ranges byte-identical across an export.  The panels' export APIs
+    gained the `min_size` passthrough (default `None` keeps the
+    §17-tested widget-owns-its-size contract); the Image Lab's user
+    export button passes the floor.
+  * `ImagePanel` locks aspect (§23.4 "preserve image aspect ratios /
+    avoid stretching"): matrix pixels stay square under every
+    resize — a 100×50 correlation matrix renders 2:1 exactly as the
+    data is shaped, fit-to-view, never stretched to fill the panel.
+  * 13 tests (`tests/ui/test_responsive_policy.py`): the policy
+    contract (horizontal/vertical/empty), the structural audit over
+    every live splitter, the floor upscale + already-legible noop +
+    no-floor contract, §23.5 data-integrity, the aspect lock and
+    the §22 renderer's canvas-aspect contract.
+  * **Remaining §23 depth**: the QScrollArea pass for the tallest
+    forms (the ML Workbench's parameter form is the candidate),
+    adaptive tick/label density audits, and legend-collision
+    handling on the densest charts.
 - **Round-232 platform fix (the user report)**: `studio.py` opened
   with console noise and NO window on Windows — `ui/headless.py`'s
   displayless probe tested only X11's `DISPLAY` (never set on

@@ -51,6 +51,7 @@ from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView, PandasTableModel
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
+from ..widgets.responsive import configure_splitter
 from ..workers.job_worker import JobRunner
 
 #: The NCA card's realistic default series: a one-compartment IV bolus,
@@ -189,6 +190,7 @@ class PKPDWorkbenchPage(QWidget):
         self._plot = PlotPanel(title="PK profile")
         splitter.addWidget(self._plot)
         splitter.setSizes([600, 500])
+        configure_splitter(splitter, stretch=(0, 1))
         lay.addWidget(splitter, stretch=1)
 
         self._report = QLabel("No PK/PD run yet.")

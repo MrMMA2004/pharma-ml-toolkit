@@ -22,7 +22,7 @@ from typing import Any, Callable
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from ..theme_manager import ChartPalette
@@ -201,12 +201,16 @@ class PlotPanel(QWidget):
         jpeg_quality: int | None = None,
         compression: str | None = None,
         dpi: float | None = None,
+        min_size: QSize | None = None,
     ):
         """Export the rendered plot to PNG/TIFF/JPEG (§17 engine).
 
         The extension picks the format; every write is reopened,
         magic-byte-sniffed and dimension-checked before success is
-        reported.  Returns the core
+        reported.  ``min_size`` is the §23.3 legibility floor (a
+        squeezed-live-geometry export re-renders from the vector scene
+        at floor scale, aspect preserved); ``None`` keeps the
+        widget-owns-its-size contract.  Returns the core
         :class:`~pharmaml.viz.export.ExportResult`.
         """
         return export_widget_grab(
@@ -215,6 +219,7 @@ class PlotPanel(QWidget):
             jpeg_quality=jpeg_quality,
             compression=compression,
             dpi=dpi,
+            min_size=min_size,
         )
 
     def widget(self) -> pg.PlotWidget:

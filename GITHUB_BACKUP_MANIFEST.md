@@ -1309,3 +1309,50 @@ rss); 8/8 chunks green. Round 232 also repaired the interrupted
 round 231's missing docs (the CHANGELOG 1.2.144 entry, the COVERAGE
 row, the GUI_AUDIT progress) and recreated the missing 15-minute
 webDevReview cron (job 515897).
+
+## v1.2.146 release-zip homes (2026-11-09, round 233 — the Part-3 §23 slice 1: the responsive pass)
+
+`pharma-ml-toolkit-v1.2.146.zip` — 20,244,070 bytes, sha-256
+`18bdfbcffe3ef6f72a3febec1a307453581425db8c1b375a127c78a5b806a33d`,
+1035 entries / 988 files, built with the standing four-home builder
+recipe (`pharma-ml-toolkit/scratch/build_zip_233.py`, predecessor
+v1.2.145 swept from all four homes) — testzip OK per home, **real
+leaks 0** (the first build caught the re-executed ML notebook's
+sklearn-warning venv paths; the round-137 scrubber neutralised them),
+nested zips NONE.  Built from the REBASED tree: the user's PR #3
+(repo trust signals + CI + the alphabetical `__all__` re-sort in
+`chem/__init__.py` and the `_ring_bonds` condition inline in
+`ml/mpnn.py`) landed mid-round and is absorbed — 149 focused tests
+over the touched modules (chem tables / SA engine / docs-index / gnn
+doctests) re-run green before the rebuild. Placed byte-identical in
+`download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`. Census **1008 files /
+317,082 lines** (the round's own additions — the
+`ui/widgets/responsive.py` policy module, the 13-test
+`tests/ui/test_responsive_policy.py`, the 233 chunk runner — plus the
+user's PR #2 landing-page contribution absorbed from origin: the
+repo-root README, `examples/chart_readability.py` +
+`docs/CHART_READABILITY.md` + the chart-readability PNG). Honest
+totals **4,912 = 4,114 collect + 798 doctest** (4,899 + 13 responsive
+tests). The notebooks re-executed **8/8 at pharmaml 1.2.146 in 212 s**
+(foreground, error-outputs 0). Round 233's headline is the Part-3 §23
+responsive pass, slice 1, landed as WIRED POLICY rather than per-page
+heroics: `ui/widgets/responsive.py::configure_splitter` puts the
+§23.2 discipline on **all 20 splitters** in the app (every page
+splitter, the Image Lab's four tabs, the ML Workbench's two, the main
+window's nav/content splitter — whose nav side was previously
+collapsible: the whole navigation could be dragged out of reach): no
+collapsible children, hard per-child minimum extents (320 px default,
+nav 200), stretch factors routing window growth to the chart side.
+`LEGIBILITY_FLOOR` (640×480) answers §23.3's "plots remain legible
+when exported": a squeezed QGraphicsView re-renders from its VECTOR
+scene at floor scale — crisp text, preserved aspect, the pyqtgraph
+chrome re-filled via `backgroundBrush()` — with §23.5 pinned by test
+(data arrays and view ranges byte-identical across an export). The
+ImagePanel locks aspect (§23.4: matrix pixels stay square, never
+stretched). Suite: 8/8 chunks green — validated TWICE this round (the
+session's own gate run and the concurrent cron session's re-run of
+the same tree). A concurrent-session note: the master cron job fired
+mid-round (pulled the user's PR #2 merge `240c082`, re-ran the 233
+chunk runner) — no working-tree collision, both suite runs green on
+identical content, and this release commit is the single ship.

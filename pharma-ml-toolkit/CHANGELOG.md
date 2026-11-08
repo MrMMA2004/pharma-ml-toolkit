@@ -1,3 +1,47 @@
+## [1.2.146] — 2026-11-09
+
+### Added — round 233: the Part-3 §23 slice 1 — the responsive pass (splitters, export legibility, aspect)
+
+* **`ui/widgets/responsive.py`** — the §23 policy module:
+  `configure_splitter()` applies the §23.2 discipline — **no
+  collapsible children** (a careless drag can never hide the control
+  column, the chart, or the entire navigation), **hard per-child
+  minimum extents** (`MIN_CHILD_PX` 320; the main window's nav column
+  at 200 — forms, table headers and axis labels stay unclipped when a
+  splitter is squeezed) and **stretch factors** so window growth flows
+  to the chart side (§23.3's resizing discipline).  Wired onto **all
+  20 splitters** in the app: the 15 page splitters, the Image Lab's
+  four tab splitters, the ML Workbench's two, and the main window's
+  nav/content splitter (which previously kept only the pages side
+  non-collapsible — the nav itself could be dragged away).
+* **`LEGIBILITY_FLOOR` (640×480)** — §23.3's "generated plots remain
+  legible when exported": `image_export.grab_png_bytes(min_size=…)`
+  re-renders a squeezed `QGraphicsView` from its **vector scene** at
+  floor scale — text, pens and curves are re-rendered crisp at the
+  larger size (never bitmap-stretched), the aspect ratio is preserved
+  (§23.4), and the pyqtgraph chrome background is re-filled via
+  `backgroundBrush()` because `scene.render` skips the view-layer
+  painting.  `PlotPanel.export_image` / `ImagePanel.export_image`
+  gained the `min_size` passthrough — default `None` keeps the
+  §17-tested widget-owns-its-size contract, and the Image Lab's
+  user-facing export button passes the floor so a matrix squeezed
+  into a corner still exports legibly.  §23.5 pinned by test: the
+  data arrays and view ranges are byte-identical across an export —
+  display geometry only.
+* **`ImagePanel` aspect lock** (§23.4 "preserve image aspect ratios /
+  avoid stretching"): matrix pixels stay square under every resize —
+  a 100×50 correlation matrix renders 2:1 exactly as the data is
+  shaped, fit-to-view, never stretched to fill the panel.
+* 13 tests (`tests/ui/test_responsive_policy.py`): the splitter
+  policy contract (horizontal, vertical, empty-noop), the structural
+  audit over every live splitter in a constructed main window (≥19
+  wired, all non-collapsible, all with minimum extents), the export
+  floor (upscale-meets-floor-aspect-preserved, already-legible noop,
+  no-floor contract), §23.5 scientific-data integrity, the ImagePanel
+  aspect lock, and the §22 renderer's canvas-aspect contract.
+* Docs: GUI_AUDIT's Part-3 progress (§23 slice 1 done, the remaining
+  §23 depth named), COVERAGE round-233 row, README's §23 section.
+
 ## [1.2.145] — 2026-11-09
 
 ### Fixed — round 232: the Windows black-window bug (the user report)

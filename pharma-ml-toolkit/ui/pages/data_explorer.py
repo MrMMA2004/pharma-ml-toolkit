@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView
 from ..widgets.plot_widget import PlotPanel
+from ..widgets.responsive import configure_splitter
 
 _TK = Path(__file__).resolve().parents[2]
 
@@ -80,6 +81,7 @@ class DataExplorerPage(QWidget):
         right_lay.addWidget(self._stats_label)
         splitter.addWidget(right)
         splitter.setSizes([640, 420])
+        configure_splitter(splitter, stretch=(0, 1))
         lay.addWidget(splitter, stretch=1)
 
         self._refresh_builtin_list()

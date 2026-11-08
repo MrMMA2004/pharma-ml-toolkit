@@ -24,6 +24,7 @@ from .app_settings import AppSettings
 from .theme_manager import ChartPalette, ThemeManager
 from .widgets.navigation import Navigation
 from .widgets.notification_widget import Notifications
+from .widgets.responsive import configure_splitter
 from .workers.job_worker import JobRunner
 
 SECTIONS: list[tuple[str, str]] = [
@@ -143,7 +144,10 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.nav)
         splitter.addWidget(self.pages)
         splitter.setSizes([200, 980])
-        splitter.setCollapsible(1, False)
+        # §23.2: neither side collapsible -- the nav (every section) and
+        # the page stack stay reachable at every window size; growth
+        # flows to the pages (§23.3 resizing discipline).
+        configure_splitter(splitter, min_sizes=(200, 480), stretch=(0, 1))
         self.setCentralWidget(splitter)
 
         # -- status bar ------------------------------------------------------------

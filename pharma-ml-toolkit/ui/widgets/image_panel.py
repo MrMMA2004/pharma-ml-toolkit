@@ -27,7 +27,7 @@ from pathlib import Path
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QSize, Signal
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from ..theme_manager import ChartPalette
@@ -63,6 +63,12 @@ class ImagePanel(QWidget):
 
         self._graphics = pg.GraphicsLayoutWidget()
         self._view = self._graphics.addPlot(row=0, col=0)
+        # §23.4 "preserve image aspect ratios / avoid stretching":
+        # matrix pixels stay square under every resize -- a 100×50
+        # correlation matrix renders 2:1 on screen exactly as the data
+        # is shaped, fit-to-view, never stretched to fill the panel.
+        # (§23.5: display geometry only -- the values are untouched.)
+        self._view.setAspectLocked(True)
         if title:
             self._view.setTitle(title)
         self._view.showGrid(x=True, y=True, alpha=0.2)
@@ -173,14 +179,18 @@ class ImagePanel(QWidget):
         jpeg_quality: int | None = None,
         compression: str | None = None,
         dpi: float | None = None,
+        min_size: QSize | None = None,
     ):
         """Export the rendered panel to PNG/TIFF/JPEG (§17 engine).
 
         The extension picks the format; TIFF carries the lossless
         compression choice (default ``tiff_lzw``), JPEG the quality
         setting, and the written file is reopened + validated before
-        success is reported (§17.4).  Returns the core
-        :class:`~pharmaml.viz.export.ExportResult`.
+        success is reported (§17.4).  ``min_size`` is the §23.3
+        legibility floor (a squeezed-live-geometry export re-renders
+        from the vector scene at floor scale, aspect preserved);
+        ``None`` keeps the widget-owns-its-size contract.  Returns the
+        core :class:`~pharmaml.viz.export.ExportResult`.
         """
         return export_widget_grab(
             self._graphics,
@@ -188,6 +198,7 @@ class ImagePanel(QWidget):
             jpeg_quality=jpeg_quality,
             compression=compression,
             dpi=dpi,
+            min_size=min_size,
         )
 
     def export_png(self, path: str | Path) -> bool:
