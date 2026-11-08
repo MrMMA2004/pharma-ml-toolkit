@@ -67,6 +67,7 @@ from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
+from ..widgets.smiles_preview import attach_smiles_previews
 from ..workers.job_worker import JobRunner
 
 _TK = Path(__file__).resolve().parents[2]
@@ -255,6 +256,15 @@ class GenerativeWorkbenchPage(QWidget):
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self._table = DataTableView()
+        # Part-3 §22 (round 231): hover a SMILES cell briefly for the
+        # 2-D structure preview; click it for the detail dialog.  The
+        # controller resolves columns by name at hover time, so every
+        # frame this shared table binds (SA board, evolution mutants,
+        # topo/front children) gets the behaviour where a SMILES
+        # column exists.
+        self._smiles_previews = attach_smiles_previews(
+            self._table, columns=("smiles", "canonical", "mutant", "child")
+        )
         splitter.addWidget(self._table)
         self._plot = PlotPanel(title="Generative panel")
         splitter.addWidget(self._plot)
@@ -456,7 +466,9 @@ class GenerativeWorkbenchPage(QWidget):
             "lower = estimated easier to synthesise (a computational "
             "estimate from complexity and fragment familiarity, not a "
             "route plan). Invalid rows keep their reason; the optional "
-            "max-SA bound flags rejects without discarding them."
+            "max-SA bound flags rejects without discarding them. "
+            "Hover a SMILES cell for its 2-D structure; click it for the "
+            "detail dialog (canonical SMILES, formula, weight, SA)."
         )
         hint.setWordWrap(True)
         form.addRow("", hint)

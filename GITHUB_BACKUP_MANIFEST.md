@@ -1237,3 +1237,30 @@ docstring syntax fix, the true-value pin corrections (easiest-first
 ordering, the 2/2 filter split, `_obj_lo`/`_obj_hi`), the
 `penalized_logp` doctest range, and the docs-index regeneration the
 new symbols required.
+
+## v1.2.144 release-zip homes (2026-11-09, round 231 — the user-reported Windows console-noise fix + the Part-3 §22 SMILES structure previews)
+
+`pharma-ml-toolkit-v1.2.144.zip` — 20,015,981 bytes, sha-256
+`c7321d18114c2c2d5bbce2d2a740d2c40f9707c080e3ffad5c0468c53fbd65dc`,
+1020 entries / 975 files, built with the standing four-home builder
+(`scratch/build_zip_210.py`, the committed version-agnostic recipe)
+— testzip OK per home, **real leaks 0**, nested zips NONE, predecessor
+v1.2.143 swept from all four homes; placed byte-identical in
+`download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`. Census **995 files /
+314,875 lines** (the ui.qt_noise_filter module + the §22
+smiles_preview widget module + their two test files, the README §22
+section, the round-231 wiring and the chunk-runner update). Honest
+totals **4,877 = 4,079 collect + 798 doctest** (4,860 + 17: 5
+noise-filter tests incl. a live qInstallMessageHandler round-trip +
+12 preview tests over the real MolDraw2DCairo renderer, the hover
+popup, and the detail dialog). The notebooks re-executed **8/8 at
+pharmaml 1.2.144 in 194 s** (foreground, error-outputs 0). Round 231
+also completed the interrupted session's diagnosis for the
+user-reported v1.2.142 Windows console noise: both families are
+benign (the PySide6 wheel ships no lib/fonts on Windows, where Qt
+renders through GDI/DirectWrite; the QStyleHints connect lines are
+Qt 6.8 internal plumbing, not Studio code) and `ui.run()` now
+installs a message-handler filter BEFORE the QApplication exists so
+the noise never reaches the console; real warnings still pass and
+`PHARMAML_STUDIO_QT_VERBOSE=1` disables the filter.

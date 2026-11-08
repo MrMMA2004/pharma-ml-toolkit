@@ -2060,6 +2060,27 @@ Studio **Generative tab's "SA score" engine tab** — paste molecules,
 set the max-SA bound, get the ranked table (rank / SMILES / canonical
 / score / band / status) with rejects kept in place.
 
+#### Structure previews on every SMILES table (Part-3 §22)
+
+Hover a SMILES cell in the Studio's Generative tab and its 2-D
+structure appears after a short dwell (350 ms default — §22.2's
+"configurable short interval"); click the cell for the full detail
+dialog.  The renderer draws with RDKit's ``MolDraw2DCairo`` at 2×
+device pixels (crisp on high-DPI screens), caches the last 128
+(molecule, size) renders — §22.3: identical molecules are never
+redrawn, and nothing renders until a preview is actually requested —
+and refuses invalid input honestly: an unparseable SMILES shows the
+"no structure drawn" notice with the original value preserved in the
+caption, never a made-up molecule (§22.4).  The detail dialog (§22.5)
+adds the large structure plus the properties calculated right there —
+original and canonical SMILES, molecular formula, molecular weight,
+the Ertl SA score with its method attribution — each either computed
+or shown as an explicit "not calculated" line, with a one-click copy
+of the canonical SMILES.  The preview controller matches columns *by
+name*, so every frame the shared table binds (the SA board, the
+evolution mutants, the topo/front children) gains the behaviour
+wherever a SMILES / canonical / mutant / child column appears.
+
 ---
 
 ## Command-line interface

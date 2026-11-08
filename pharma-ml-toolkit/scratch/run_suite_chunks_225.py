@@ -56,10 +56,16 @@ CHUNKS: list[tuple[str, list[str]]] = [
     ("4b (ui export..jobworker)", ["tests/ui/test_export_gui.py", "tests/ui/test_foundations_page.py",
                      "tests/ui/test_generative_page.py", "tests/ui/test_image_lab_page.py",
                      "tests/ui/test_job_worker.py", "tests/ui/test_main_window.py"]),
+    # (round 231) chunks 4c gains the two new suites: the Qt console-noise
+    # filter (the user-reported v1.2.142 Windows fix) and the §22 SMILES
+    # previews, alphabetical within the n-z batch.
     ("4c (ui n-z)", ["tests/ui/test_ml_workbench_page.py",
                      "tests/ui/test_model_analysis_page.py",
                      "tests/ui/test_pages_smoke.py", "tests/ui/test_pkpd_page.py",
-                     "tests/ui/test_responseai_page.py", "tests/ui/test_theme_manager.py",
+                     "tests/ui/test_qt_noise_filter.py",
+                     "tests/ui/test_responseai_page.py",
+                     "tests/ui/test_smiles_preview.py",
+                     "tests/ui/test_theme_manager.py",
                      "tests/ui/test_unsupervised_page.py",
                      "tests/ui/test_utilities_page.py"]),
     # (round 228) chunk 5 ("playground Tk", tests/test_playground.py) is

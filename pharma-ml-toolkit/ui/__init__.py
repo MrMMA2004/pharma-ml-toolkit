@@ -24,9 +24,16 @@ def run(argv: list[str] | None = None) -> int:
     """Create the QApplication and run the Studio main window.
 
     Returns the Qt exit code. ``ensure_headless()`` runs first so the
-    offscreen platform and EGL fallback apply before any Qt import.
+    offscreen platform and EGL fallback apply before any Qt import;
+    ``install_qt_message_filter()`` (round 231) then drops the two
+    known-benign Qt startup notices (the Windows fonts-dir advice and
+    the Qt 6.8 QStyleHints connect chatter) BEFORE the application
+    object is constructed, because that is when they fire.
     """
     ensure_headless()
+    from .qt_noise_filter import install_qt_message_filter
+
+    install_qt_message_filter()
     from PySide6.QtWidgets import QApplication
 
     from .app_settings import AppSettings

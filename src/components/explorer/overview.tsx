@@ -298,7 +298,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "4860 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite, the SHAP/Optuna and XAI absorption suites, the runboard/umap/curation/express quartet, the round-189 hpo/pruning/quantization/harness engines with the gnn/gnnxai/featurize orphan suite, the Part-3 §18 hyperparameter-recommendations suite, the Part-3 §19 cross-validation results suite, the round-226 studio CV-interface port suite, the round-228 ML-Workbench + retirement suite, the round-229 §20 checkpoint engine suite (36 engine + 6 integration + 1 GUI resume-loop tests), and the round-230 §24 synthetic-accessibility suite (37 engine + 6 GUI + the web bridge pins) — the Tk playground's 980 coupled tests left with it)",
+    after: "4877 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite, the SHAP/Optuna and XAI absorption suites, the runboard/umap/curation/express quartet, the round-189 hpo/pruning/quantization/harness engines with the gnn/gnnxai/featurize orphan suite, the Part-3 §18 hyperparameter-recommendations suite, the Part-3 §19 cross-validation results suite, the round-226 studio CV-interface port suite, the round-228 ML-Workbench + retirement suite, the round-229 §20 checkpoint engine suite (36 engine + 6 integration + 1 GUI resume-loop tests), the round-230 §24 synthetic-accessibility suite (37 engine + 6 GUI + the web bridge pins), and the round-231 pair: the Qt console-noise filter suite (the user-reported v1.2.142 Windows startup noise, 5 tests incl. a live qInstallMessageHandler round-trip) and the Part-3 §22 SMILES-preview suite (12 tests over the real MolDraw2DCairo renderer, hover popup, and detail dialog) — the Tk playground's 980 coupled tests left with it)",
   },
   {
     aspect: "Interface",
@@ -357,7 +357,7 @@ export function Overview() {
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
   const fileCount = stats ? fmtInt(stats.files) : "991";
-  const loc = stats ? fmtInt(stats.totalLines) : "313,916";
+  const loc = stats ? fmtInt(stats.totalLines) : "314,875";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -443,8 +443,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="4860"
-                countTo={4860}
+                value="4877"
+                countTo={4877}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />
