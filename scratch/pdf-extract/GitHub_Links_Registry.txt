@@ -1,0 +1,1290 @@
+P H A R MA ML TOOLKIT · P R OJEC T R EC OR D
+
+The GitHub
+Link Registry
+Every GitHub repository link provided across
+the project sessions: thirty-three user-given
+repositories and the project’s own private
+backup, reconstructed from the audited
+records and re-verified against the GitHub
+API.
+
+34 verified URLs · 13 link instructions
+Verified 5 November 2026 · Toolkit v1.2.107
+
+Z. AI · RE POSITORY RE FE RE NCE
+
+The GitHub Link Registry - PharmaML Toolkit -- Repository Reference
+
+Table of Contents
+1. Purpose and Method
+
+2
+
+2. The Registry at a Glance
+
+2
+
+3. The Complete Link Register
+
+3
+
+ML Foundations and Core Tooling (v1.2.93 - v1.2.96) . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+Molecular Strings and Generative Chemistry (v1.2.97 - v1.2.98) . . . . . . . . . . . . . . . . . . . . 4
+Learning Resources and Landscape Reviews (v1.2.99 - v1.2.100) . . . . . . . . . . . . . . . . . . . . 4
+Chemistry Visualization (v1.2.101) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+PK/PD Simulation Engines (v1.2.102) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+Explainability Round 185 (v1.2.105) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+Deep Learning Round 186 (v1.2.106) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+Graph and Glassbox Round 187 (v1.2.107) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+Deferred Fold-Ins (round 189 plan) . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+The Project's Own Repository . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+
+Z.ai
+
+4. Round-by-Round Link Instructions
+
+7
+
+5. Deferred and Planned Repositories
+
+8
+
+6. The Project Backup Repository
+
+8
+
+7. Verification Evidence
+
+9
+
+Page 1
+
+The GitHub Link Registry - PharmaML Toolkit -- Repository Reference
+
+1. Purpose and Method
+This document is the complete, verified registry of every GitHub repository link provided by the project owner
+across the PharmaML Toolkit sessions. It consolidates the thirty-three repositories named in the link-giving
+instructions, plus the project's own private backup repository that was established during the MASTER_PROMPT
+audit of 4-5 November 2026. Every entry carries the canonical URL exactly as it resolves today, the toolkit
+version and date in which the link was given, the module or engine that the repository fed, and its current status
+within the project.
+The register was reconstructed from the project's own audited records rather than from memory. The primary
+sources are the per-round instruction quotes preserved verbatim in the toolkit CHANGELOG, the round entries of
+the worklog, the round-187 six-repository review document, and the MASTER_PROMPT audit traceability
+matrix. Where a repository was named in more than one instruction - captum, shap and rdkit each appear in two
+absorption rounds - the register lists it once and cross-references every round in which it was given. No repository
+was added on inference alone: an entry exists only where a recorded instruction, review document, or audit row
+names it.
+Every URL in this document was re-validated against the GitHub REST API on 5 November 2026. All thirty-four
+entries returned HTTP 200. One redirect was resolved: pytorch/captum now resolves to meta-pytorch/captum,
+which matches the verification note already recorded in the v1.2.105 changelog. The three repositories whose
+records carry a name without a canonical owner - torchlens, alibi and Quantus - were resolved through repository
+search and verified before inclusion. Live star counts are quoted throughout as evidence of liveness at verification
+time, and the private backup repository was checked with an authenticated call.
+
+2. The Registry at a Glance
+The links span every scientific domain of the toolkit, from machine learning foundations and molecular chemistry
+to pharmacokinetic simulation, explainability and graph learning. The figures below summarize the registry at a
+glance, and the domain table maps each area to its register entries.
+
+Z.ai
+
+33
+
+13
+
+34
+
+1
+
+user-given repositories
+
+link-giving instructions
+
+URLs verified HTTP 200
+
+private backup repository
+
+Page 2
+
+The GitHub Link Registry - PharmaML Toolkit -- Repository Reference
+
+Domain
+
+Repos
+
+Register entries
+
+ML foundations and core tooling
+
+4
+
+register 1-4
+
+Molecular and generative chemistry
+
+4
+
+register 5-8
+
+Learning resources and landscape reviews
+
+3
+
+register 9-11
+
+Chemistry visualization
+
+4
+
+register 12-15
+
+PK/PD simulation engines
+
+4
+
+register 16-19
+
+Explainability and XAI
+
+4
+
+register 20-23
+
+Deep learning infrastructure
+
+4
+
+register 24-27
+
+Graph learning and glassbox models
+
+3
+
+register 28-30
+
+Deferred fold-ins
+
+3
+
+register 31-33
+
+Project backup repository
+
+1
+
+register 34
+
+Table 1. Domain breakdown of the thirty-four registered repositories.
+
+Three repositories recur across instructions: captum and rdkit were given in both round 185/187 waves, and shap
+was given in v1.2.96 and again in round 187. Each is counted once in the register and cross-referenced in its row.
+The absorption of these links is directly visible in the toolkit they built: the shipped v1.2.107 carries 802 source
+files, 277,550 lines of code and a 4,483-test passing suite, with every absorbed lineage wired into playground.py as
+Deep Learning and ML cards.
+
+3. The Complete Link Register
+The register below lists every repository with its full URL, the version and date of the instruction in which it was
+given, the module or engine it fed, and its status. URLs are clickable. The register is grouped by instruction round;
+the numbering is continuous across groups so that any repository can be cited by its register number.
+
+ML Foundations and Core Tooling (v1.2.93 - v1.2.96)
+The first link-giving instructions established the ML core: a full handbook absorption, two GUI passes, and the
+SHAP + Optuna two-repo round.
+No.
+
+Repository
+
+Given in
+
+Absorbed into
+
+Status
+
+https://github.com/jakevdp/pythondatasciencehand
+book
+
+v1.2.93 - 2026-10-27
+
+ML foundations: unsupervised
+block, naive Bayes, 2-D density
+(ml/)
+
+Absorbe
+d
+
+hoffstadt/DearPyGui
+
+v1.2.94/95 2026-10-28 (twice)
+
+playground.py GUI affordances
+(two passes)
+
+Absorbe
+d
+
+v1.2.96 - 2026-10-28;
+round 187
+
+ml/explain.py (TreeExplainer,
+interactions, 7-figure gallery)
+
+Absorbe
+d
+
+jakevdp/pythondatasciencehandbook
+1
+
+2
+
+3
+
+Z.ai
+
+https://github.com/hoffstadt/DearPyGui
+
+shap/shap
+https://github.com/shap/shap
+
+Page 3
+
+The GitHub Link Registry - PharmaML Toolkit -- Repository Reference
+
+No.
+4
+
+Repository
+optuna/optuna
+https://github.com/optuna/optuna
+
+Given in
+v1.2.96 - 2026-10-28
+
+Absorbed into
+TPE / HPO lineage (tuner.py;
+ml/hpo.py rebuilt r189)
+
+Status
+Absorbe
+d
+
+Molecular Strings and Generative Chemistry (v1.2.97 - v1.2.98)
+SELFIES robust molecular strings and the ChemTSv2 / REINVENT4 / DiffDock generative-docking wave.
+No.
+5
+
+Repository
+the-matter-lab/selfies
+https://github.com/the-matter-lab/selfies
+
+Given in
+
+Absorbed into
+
+v1.2.97 - 2026-10-29
+
+chem/selfies_codec.py (codec,
+round-trip audit)
+
+Absorbe
+d
+
+v1.2.97 - 2026-10-29
+
+generative RNN/RL lineage
+
+Absorbe
+d
+
+v1.2.98 - 2026-10-29
+
+generative workflow absorption
+
+Absorbe
+d
+
+v1.2.98 - 2026-10-29
+
+docking absorption round
+
+Absorbe
+d
+
+molecule-generator-collection/ChemTSv2
+6
+
+7
+
+8
+
+https://github.com/molecule-generator-collection
+/ChemTSv2
+
+MolecularAI/REINVENT4
+https://github.com/MolecularAI/REINVENT4
+
+gcorso/DiffDock
+https://github.com/gcorso/DiffDock
+
+Status
+
+Learning Resources and Landscape Reviews (v1.2.99 - v1.2.100)
+Notebook courses and the best-of-ML-Python curated index, reviewed as coverage references.
+No.
+
+Repository
+
+Given in
+
+Absorbed into
+
+Status
+
+v1.2.99 - 2026-10-29
+
+deep-learning notebook
+absorption
+
+Absorbe
+d
+
+v1.2.99 - 2026-10-29
+
+course material absorption
+
+Absorbe
+d
+
+v1.2.100 - 2026-10-3
+0
+
+curated ML landscape review
+
+Absorbe
+d
+
+fchollet/deep-learning-with-python-notebooks
+9
+
+10
+
+11
+
+https://github.com/fchollet/deep-learning-with-p
+ython-notebooks
+
+SENATOROVAI/Data-Science-For-Beginners-from
+-scratch-course
+https://github.com/SENATOROVAI/Data-Science-ForBeginners-from-scratch-course
+
+lukasmasuch/best-of-ml-python
+https://github.com/lukasmasuch/best-of-ml-python
+
+Chemistry Visualization (v1.2.101)
+The four-repo chemistry visualization round: RDKit plus three molecular viewers.
+No.
+12
+
+13
+
+14
+
+Z.ai
+
+Repository
+rdkit/rdkit
+https://github.com/rdkit/rdkit
+
+cbouy/mols2grid
+https://github.com/cbouy/mols2grid
+
+nglviewer/nglview
+https://github.com/nglviewer/nglview
+
+Given in
+
+Absorbed into
+
+Status
+
+v1.2.101 - 2026-10-3
+0; round 187
+
+cheminformatics core (chem/
+descriptors, fingerprints)
+
+Absorbe
+d
+
+v1.2.101 - 2026-10-3
+0
+
+chemistry visualization surfaces
+
+Absorbe
+d
+
+v1.2.101 - 2026-10-3
+0
+
+chemistry visualization surfaces
+
+Absorbe
+d
+
+Page 4
+
+The GitHub Link Registry - PharmaML Toolkit -- Repository Reference
+
+No.
+15
+
+Repository
+3dmol/3Dmol.js
+https://github.com/3dmol/3Dmol.js
+
+Given in
+
+Absorbed into
+
+Status
+
+v1.2.101 - 2026-10-3
+0
+
+chemistry visualization surfaces
+
+Absorbe
+d
+
+PK/PD Simulation Engines (v1.2.102)
+Four pharmacometric simulation frameworks, cloned and reviewed file by file.
+No.
+
+Repository
+Open-Systems-Pharmacology/PK-Sim
+
+16
+
+https://github.com/Open-Systems-Pharmacology/PKSim
+
+Open-Systems-Pharmacology/OSPSuite-R
+17
+
+18
+
+19
+
+https://github.com/Open-Systems-Pharmacology/OSP
+Suite-R
+
+metrumresearchgroup/mrgsolve
+https://github.com/metrumresearchgroup/mrgsolve
+
+nlmixr2/rxode2
+https://github.com/nlmixr2/rxode2
+
+Given in
+
+Absorbed into
+
+Status
+
+v1.2.102 - 2026-11-0
+2
+
+PK/PD engines (pharma/)
+
+Absorbe
+d
+
+v1.2.102 - 2026-11-0
+2
+
+PK/PD engines (pharma/)
+
+Absorbe
+d
+
+v1.2.102 - 2026-11-0
+2
+
+PK/PD engines (pharma/)
+
+Absorbe
+d
+
+v1.2.102 - 2026-11-0
+2
+
+PK/PD engines (pharma/)
+
+Absorbe
+d
+
+Explainability Round 185 (v1.2.105)
+Four interpretability repositories absorbed offline into ml/xai.py as the attribution engine.
+No.
+
+20
+
+21
+
+22
+
+23
+
+Repository
+meta-pytorch/captum
+https://github.com/meta-pytorch/captum
+
+keisen/tf-keras-vis
+https://github.com/keisen/tf-keras-vis
+
+PAIR-code/saliency
+https://github.com/PAIR-code/saliency
+
+jessevig/bertviz
+https://github.com/jessevig/bertviz
+
+Given in
+
+Absorbed into
+
+Status
+
+v1.2.105 (r185) 2026-11-03; round
+187
+
+ml/xai.py offline attribution
+engine
+
+Absorbe
+d
+
+v1.2.105 (r185) 2026-11-03
+
+ml/xai.py (XAI absorption round)
+
+Absorbe
+d
+
+v1.2.105 (r185) 2026-11-03
+
+ml/xai.py (saliency lineage)
+
+Absorbe
+d
+
+v1.2.105 (r185) 2026-11-03
+
+ml/xai.py attention grid (layer x
+head)
+
+Absorbe
+d
+
+Deep Learning Round 186 (v1.2.106)
+The same instruction again, four new repositories: run-board, UMAP, curation, interactive figures.
+No.
+24
+
+25
+
+Z.ai
+
+Repository
+tensorflow/tensorboard
+https://github.com/tensorflow/tensorboard
+
+lmcinnes/umap
+https://github.com/lmcinnes/umap
+
+Given in
+
+Absorbed into
+
+Status
+
+v1.2.106 (r186) 2026-11-03
+
+ml/runboard.py (event model,
+reservoir, EMA)
+
+Absorbe
+d
+
+v1.2.106 (r186) 2026-11-03
+
+ml/umap.py (full algorithm port)
+
+Absorbe
+d
+
+Page 5
+
+The GitHub Link Registry - PharmaML Toolkit -- Repository Reference
+
+No.
+26
+
+27
+
+Repository
+voxel51/fiftyone
+https://github.com/voxel51/fiftyone
+
+plotly/plotly.py
+https://github.com/plotly/plotly.py
+
+Given in
+
+Absorbed into
+
+Status
+
+v1.2.106 (r186) 2026-11-03
+
+ml/curation.py (view-stage
+algebra)
+
+Absorbe
+d
+
+v1.2.106 (r186) 2026-11-03
+
+viz/interactive.py (express layer)
+
+Absorbe
+d
+
+Graph and Glassbox Round 187 (v1.2.107)
+The six-repo review; captum, shap and rdkit recur from earlier rounds, three new lineages land here.
+No.
+28
+
+29
+
+30
+
+Repository
+interpretml/interpret
+https://github.com/interpretml/interpret
+
+divelab/DIG
+https://github.com/divelab/DIG
+
+pyg-team/pytorch_geometric
+https://github.com/pyg-team/pytorch_geometric
+
+Given in
+
+Absorbed into
+
+Status
+
+round 187 2026-11-03
+
+ml/interpret.py (EBM glassbox)
+
+Absorbe
+d
+
+round 187 2026-11-03
+
+ml/geometric.py + ml/gnnxai.py
+(GNN explainers)
+
+Absorbe
+d
+
+round 187 2026-11-03
+
+ml/gnn.py (Data/Batch,
+GCN/SAGE/GIN/GAT)
+
+Absorbe
+d
+
+Deferred Fold-Ins (round 189 plan)
+Recorded as gap G-3 in the audit: compact fold-ins planned for interpret/explain, never landed.
+No.
+31
+
+32
+
+Repository
+johnmarktaylor91/torchlens
+https://github.com/johnmarktaylor91/torchlens
+
+SeldonIO/alibi
+https://github.com/SeldonIO/alibi
+
+Given in
+
+Absorbed into
+
+Status
+
+round 189 plan
+
+fold into interpret/explain
+(activation traces)
+
+Deferred
+
+round 189 plan
+
+fold into interpret/explain
+(anchors)
+
+Deferred
+
+round 189 plan
+
+fold into interpret/explain
+(metrics)
+
+Deferred
+
+understandable-machine-intelligence-lab/Quantus
+33
+
+https://github.com/understandable-machine-intell
+igence-lab/Quantus
+
+The Project's Own Repository
+The private backup repository established during the MASTER_PROMPT audit.
+No.
+34
+
+Z.ai
+
+Repository
+MrMMA2004/pharma-ml-toolkit
+https://github.com/MrMMA2004/pharma-ml-toolkit
+
+Given in
+
+Absorbed into
+
+Status
+
+audit - 2026-11-04/0
+5
+
+the project's own GitHub backup
+(full history)
+
+Backup
+
+Page 6
+
+The GitHub Link Registry - PharmaML Toolkit -- Repository Reference
+
+4. Round-by-Round Link Instructions
+The table below records the link-giving instructions themselves, in chronological order, as preserved in the toolkit
+CHANGELOG and worklog. The recurring phrasing - check the contents and files completely and one by one and
+add the missing items to playground.py - became the project's standing absorption protocol: every repository was
+cloned, inventoried file by file, diffed against existing coverage, and absorbed offline with tests before each
+release shipped.
+Version - date
+
+Instruction (as recorded)
+
+Links given
+
+v1.2.93 - 10-27
+
+Check the contents and files in this GitHub link completely
+and one by one and add the missing items to playground.py
+
+jakevdp/pythondatasciencehandbook
+
+v1.2.94/95 - 10-28
+
+Improve the playground.py GUI (given twice)
+
+hoffstadt/DearPyGui
+
+v1.2.96 - 10-28
+
+Check the contents and files in this GitHub links completely
+and one by one and add the missing items to playground.py
+
+shap/shap, optuna/optuna
+
+v1.2.97 - 10-29
+
+Same instruction, new repositories
+
+the-matter-lab/selfies, molecule-generator-collectio
+n/ChemTSv2
+
+v1.2.98 - 10-29
+
+Same instruction, new repositories
+
+MolecularAI/REINVENT4, gcorso/DiffDock
+
+v1.2.99 - 10-29
+
+Same instruction, new repositories
+
+fchollet/deep-learning-with-python-notebooks,
+SENATOROVAI/Data-Science-For-Beginners-fro
+m-scratch-course
+
+v1.2.100 - 10-30
+
+Same instruction, one repository
+
+lukasmasuch/best-of-ml-python
+
+v1.2.101 - 10-30
+
+Same instruction, four repositories
+
+rdkit/rdkit, cbouy/mols2grid, nglviewer/nglview,
+3dmol/3Dmol.js
+
+v1.2.102 - 11-02
+
+Same instruction, four repositories
+
+Open-Systems-Pharmacology/PK-Sim,
+OSPSuite-R, metrumresearchgroup/mrgsolve,
+nlmixr2/rxode2
+
+v1.2.105 (r185) 11-03
+
+Check the contents and files in this GitHub links completely
+and one by one and add the missing items to playground.py
+(Deep Learning)
+
+meta-pytorch/captum, keisen/tf-keras-vis,
+PAIR-code/saliency, jessevig/bertviz
+
+v1.2.106 (r186) 11-03
+
+The same instruction, four new repositories
+
+tensorflow/tensorboard, lmcinnes/umap,
+voxel51/fiftyone, plotly/plotly.py
+
+round 187 - 11-03
+
+Check the contents and files in this GitHub links completely
+and one by one and add the missing items to playground.py
+(Deep Learning)
+
+meta-pytorch/captum, shap/shap,
+interpretml/interpret, divelab/DIG,
+pyg-team/pytorch_geometric, rdkit/rdkit
+
+round 189 plan
+
+Planned fold-ins recorded in the audit gap report (G-3),
+deferred with reasons
+
+torchlens, alibi, Quantus
+
+Table 2. The thirteen link-giving instructions, quoted from the audited records.
+
+Z.ai
+
+Page 7
+
+The GitHub Link Registry - PharmaML Toolkit -- Repository Reference
+
+5. Deferred and Planned Repositories
+Three repositories from the round-189 planning were recorded as gap G-3 in the audit's coverage report: compact
+fold-ins into the interpret and explain engines that were planned but never landed. They remain the standing next
+commissions for the toolkit's explainability stack. Their canonical URLs were resolved and verified at registry
+time so that the fold-ins can begin without a discovery step.
+Repository
+
+johnmarktaylor91/torchlens
+https://github.com/johnmarktaylor91/torchlens
+
+SeldonIO/alibi
+https://github.com/SeldonIO/alibi
+
+understandable-machine-intelligence-lab/Quantus
+https://github.com/understandable-machine-intell
+igence-lab/Quantus
+
+Planned fold-in
+
+Recorded reason
+
+fold into interpret/explain
+(activation traces)
+
+G-3 gap: deferred with reasons recorded in
+the audit matrix; partial prior coverage
+exists (activation traces approximated in
+ml/xai.py; anchors and Quantus metrics
+absent).
+
+fold into interpret/explain
+(anchors)
+
+G-3 gap: deferred with reasons recorded in
+the audit matrix; partial prior coverage
+exists (activation traces approximated in
+ml/xai.py; anchors and Quantus metrics
+absent).
+
+fold into interpret/explain
+(metrics)
+
+G-3 gap: deferred with reasons recorded in
+the audit matrix; partial prior coverage
+exists (activation traces approximated in
+ml/xai.py; anchors and Quantus metrics
+absent).
+
+Table 3. The deferred trio - planned fold-ins with verified canonical URLs.
+
+6. The Project Backup Repository
+During the MASTER_PROMPT audit the project itself gained a GitHub presence: a private backup repository
+holding the full history of the workspace - the Next.js explorer application, the complete pharma-ml-toolkit
+source tree, tests, notebooks, release archives and the audit documents. It was established with a fine-grained
+personal access token that never enters the repository, its URLs or its logs, and every milestone of the audit was
+pushed to it as it happened.
+The repository has since been exercised for real. A sixth environment rollback reset the local workspace to a
+day-old state, destroying the virtual environment, the credential files and the scheduler state - and the backup
+restored all of it: the remote history was fetched, the local branch fast-forwarded back to the shipped v1.2.107
+tree byte-for-byte, the dependency stack re-pinned, and the recovery verified with green test chunks before the
+recovery record itself was pushed. The registry lists it as entry 34; its URL is private and authenticated, but it is as
+much a part of the project's GitHub footprint as every repository the owner provided.
+MrMMA2004/pharma-ml-toolkit
+https://github.com/MrMMA2004/pharma-ml-toolkit
+
+Private - authenticated access only; full history, 1,701+ tracked files, release archives included.
+
+The backup repository entry - the one GitHub URL the project itself created.
+
+Z.ai
+
+Page 8
+
+The GitHub Link Registry - PharmaML Toolkit -- Repository Reference
+
+7. Verification Evidence
+Verification was performed on 5 November 2026 against the GitHub REST API. Each register entry was queried
+with GET /repos/{owner}/{repo}; a 200 response confirms the URL resolves to a live repository, and the star count
+quoted below is the value returned at check time. The private repository was queried with an authenticated
+request. One canonical correction was applied (the captum redirect), and the three search-resolved owners are
+marked in the notes column.
+Repository
+
+HTTP
+
+Stars
+
+jakevdp/pythondatasciencehandbook
+
+200
+
+50,375
+
+-
+
+hoffstadt/DearPyGui
+
+200
+
+15,652
+
+-
+
+shap/shap
+
+200
+
+25,849
+
+two rounds
+
+optuna/optuna
+
+200
+
+15,010
+
+-
+
+the-matter-lab/selfies
+
+200
+
+864
+
+-
+
+molecule-generator-collection/ChemTSv2
+
+200
+
+125
+
+-
+
+MolecularAI/REINVENT4
+
+200
+
+895
+
+-
+
+gcorso/DiffDock
+
+200
+
+1,599
+
+-
+
+fchollet/deep-learning-with-python-notebooks
+
+200
+
+20,361
+
+-
+
+SENATOROVAI/Data-Science-For-Beginners-from-sc
+ratch-course
+
+200
+
+212
+
+-
+
+lukasmasuch/best-of-ml-python
+
+200
+
+23,856
+
+-
+
+rdkit/rdkit
+
+200
+
+3,667
+
+two rounds
+
+cbouy/mols2grid
+
+200
+
+258
+
+-
+
+nglviewer/nglview
+
+200
+
+930
+
+-
+
+3dmol/3Dmol.js
+
+200
+
+1,036
+
+-
+
+Open-Systems-Pharmacology/PK-Sim
+
+200
+
+186
+
+-
+
+Open-Systems-Pharmacology/OSPSuite-R
+
+200
+
+59
+
+-
+
+metrumresearchgroup/mrgsolve
+
+200
+
+174
+
+-
+
+nlmixr2/rxode2
+
+200
+
+72
+
+-
+
+meta-pytorch/captum
+
+200
+
+5,719
+
+redirect: pytorch/captum ->
+meta-pytorch/captum
+
+keisen/tf-keras-vis
+
+200
+
+337
+
+-
+
+PAIR-code/saliency
+
+200
+
+996
+
+-
+
+jessevig/bertviz
+
+200
+
+8,210
+
+-
+
+tensorflow/tensorboard
+
+200
+
+7,241
+
+-
+
+Z.ai
+
+Note
+
+Page 9
+
+The GitHub Link Registry - PharmaML Toolkit -- Repository Reference
+
+Repository
+
+HTTP
+
+Stars
+
+Note
+
+lmcinnes/umap
+
+200
+
+8,288
+
+-
+
+voxel51/fiftyone
+
+200
+
+11,274
+
+-
+
+plotly/plotly.py
+
+200
+
+18,878
+
+-
+
+interpretml/interpret
+
+200
+
+6,976
+
+-
+
+divelab/DIG
+
+200
+
+2,010
+
+-
+
+pyg-team/pytorch_geometric
+
+200
+
+24,133
+
+-
+
+johnmarktaylor91/torchlens
+
+200
+
+662
+
+owner resolved via search
+
+SeldonIO/alibi
+
+200
+
+2,651
+
+owner resolved via search
+
+understandable-machine-intelligence-lab/Quantus
+
+200
+
+680
+
+owner resolved via search
+
+MrMMA2004/pharma-ml-toolkit
+
+200
+
+private
+
+authenticated check; restored live after
+rollback 6
+
+Table 4. Live verification of all thirty-four registry URLs (2026-11-05).
+
+Star counts are liveness evidence, not ranking: the register values every repository equally, from a 72-star
+pharmacometric engine to a 50,375-star handbook. What matters to the project is recorded in the register's other
+columns - which instruction gave the link, which engine absorbed it, and whether its tests run green in the shipped
+suite today.
+
+Z.ai
+
+Page 10
+
+
