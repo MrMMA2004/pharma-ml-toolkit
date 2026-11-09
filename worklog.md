@@ -11830,3 +11830,104 @@ stretch leg — the §23.10 scale measurement is its foundation) · §20
 checkpoint depth and §24 SA-in-generative wiring beyond the shipped
 slices · the §23 responsive pass is now CLOSED for text AND image
 readouts.
+
+## Round 246 (counter 36→37, owner-directed "continue") — the Part-3 §21.4 original-resolution 1:1 view, shipped as v1.2.158
+
+The stretch leg the round-245 baseline named first, built exactly on
+the §23.10 scale measurement it called the foundation.  Clean pickup:
+no rollback (HEAD = a43a58c = origin/main from round 244's push
+inherited through round 245's 77b0fd6), tree clean, dev server healthy
+before the round started.
+
+**Probe first** (`scratch/probe_image_1to1_246.py`, engine-printed
+before any panel code): the view range that renders ONE image pixel
+at ONE screen pixel is the view box's own (width, height) in px,
+recovered from the live `viewRange()`/`viewPixelSize()` pair (the
+circular arithmetic), centred on the current view centre, applied
+with `padding=0` — under `setAspectLocked(True)` pyqtgraph 0.13.7
+leaves such a range alone because equal data-units-per-px on both
+axes already satisfies the lock.  Pinned: achieved 1.0000 × 1.0000
+on BOTH axes from the fit / 2×2 zoom-in (155.7 screen px per image
+px) / sub-pixel squeeze (0.375) / non-square-view-with-non-square-
+matrix starts; exact centre preservation (11.0, 41.0) → (11.0,
+41.0); idempotence; the achieved scale fresh WITHOUT an event pump
+(setRange invalidates the view cache synchronously); autoRange
+leaving unity; and the hidden widget answering a FAKE default-
+geometry scale (~40 screen px per image px) — the fact that
+justifies the `isVisible()` gate.
+
+**Implementation** (`ui/widgets/image_panel.py`):
+`set_original_resolution()` — the honest three-refusal contract (no
+matrix / hidden panel / degenerate view box ⇒ `None`; the achieved
+scale MEASURED back via `view_pixel_scale`, never assumed) — plus
+`is_original_resolution()` over the exported `RESOLUTION_TOLERANCE`
+(0.05; integer view quantisation keeps the achieved scale NEAR 1.0,
+not always at it) and the §21.4 docstring block.  The page
+(`ui/pages/image_lab.py`): every matrix tab (similarity / response /
+explorer / ROI) carries the new "1:1 original resolution" button via
+a shared `_view_row`; `_toggle_original_resolution` discloses the
+honest three-way outcome in the status line (the achieved scale, the
+fit-restored notice on the second press, the explicit hidden-
+geometry refusal) — never a silent no-op.
+
+**Tests**: `tests/ui/test_image_1to1_246.py` — 16 tests, green on
+the first focused run: the refusals (no data / after clear / the
+hidden panel whose raw view would happily lie), the achieved ≈1:1
+from the fit / zoom-in / sub-pixel starts, the exact circular
+arithmetic (`viewPixelSize()` itself ≈1.0 per axis), idempotence,
+viewport-centre preservation, the band edges (inclusive, both axes),
+`reset_view`/user-zoom leaving unity, and three page legs (the
+golden-path toggle with exactly one live button on the current tab,
+the achieved-scale disclosure, the out-loud hidden refusal).  ruff
+`src/ tests/ ui/` zero findings; mypy clean on the touched files.
+
+**Gate** — the round's one fight: the +16 tests tipped the single
+4c process past the Qt teardown edge (SIGSEGV −11 at 74% with every
+test passing in the two halves — 124 + 165, both green, both
+measured; the round-232 lesson, third verse), so 4c split into 4c
+(widget suites) + 4e (page suites): the gate is NINE chunks now.
+First full run also carried the expected notebook-freshness guards
+(chunks failing until the notebooks re-executed at the new version);
+after the 8/8 foreground notebook re-execution at 1.2.158 (202 s,
+zero error outputs) + the twins regeneration + the round-137 scrub
+(caught `complete_ml_workflow.ipynb`'s `/home/z/` embedding — the
+known ritual; scrubbed, verification zero absolute-home matches,
+BEFORE the build), the full re-run: **9/9 chunks green, 0 failing**.
+
+**Ship**: version chain three-way synced to **1.2.158**; the
+`[1.2.158]` CHANGELOG entry predated the build.
+`scratch/build_zip_246.py` (predecessor v1.2.157 swept from all four
+homes — the PREDECESSOR constant trued BEFORE the first build, the
+round-244 lesson applied; the builder's leak gate confirmed real
+leaks 0 on the first build):
+`pharma-ml-toolkit-v1.2.158.zip` — **22,394,779 bytes, sha-256
+`c29b17c9845df4b35eea9d7a42873a3fae5cc5cb6a2fec9b68dd1fd5d46444b8`**
+(1079 entries / 1032 files, testzip OK per home), byte-identical in
+all four homes.  Census **1052 files / 324,397 lines**.  Web pins
+trued: 5044 ×6, census fallbacks 1052/324,397,
+`SHIPPED_TOOLKIT_VERSION` 1.2.158, the round-246 clause appended to
+the Testing after-string with the quote guard run BEFORE the write
+(single quotes inside, the round-245 Turbopack lesson applied
+proactively — no 500 this round).  Manifest entry inserted.
+
+**Health**: dev server restarted after the gate (GET / 200); zip-size
+endpoint `{"zipBytes":22394779,"version":"1.2.158","exact":true,
+"source":"release"}`.  agent-browser pass: badge v1.2.158 + the 5044
+chip + 1052/324,397 census render, Download ZIP click (zip-size
+200), theme dark↔light, footer the last pushed element (no overlap),
+desktop 1280×900 AND mobile 390×844 zero horizontal scroll (the
+mobile header collapses the version chip by design — the desktop
+badge and the download flow carry it), zero console/page errors.
+Evidence `scratch/r246_web_verify.png` +
+`scratch/r246_web_mobile.png` (ride the NEXT build per the
+audit-trail pattern).
+
+**Baselines for the next round** — v1.2.158 (four homes) · honest
+totals **5,044 = 4,246 collect + 798 doctest** · census
+**1052/324,397** · the gate is NINE chunks (4c = widget suites, 4e =
+page suites) · counter **37/100** · the lint bar stays green (ruff
+zero + mypy clean) · Part-3 remaining: §20 checkpoint depth and §24
+SA-in-generative wiring beyond the shipped slices · §21.4 is now
+CLOSED for inspection AND resolution (hover payload + sub-pixel
+disclosure + the 1:1 original-resolution toggle) · the §23
+responsive pass stays closed.
