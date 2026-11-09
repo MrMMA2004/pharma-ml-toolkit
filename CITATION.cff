@@ -7,7 +7,7 @@ authors:
 repository-code: "https://github.com/MrMMA2004/pharma-ml-toolkit"
 url: "https://github.com/MrMMA2004/pharma-ml-toolkit"
 license: MIT
-version: 1.2.159
+version: 1.2.160
 date-released: 2026-11-10
 abstract: >-
   PharmaML Toolkit is an offline-first Python package for cheminformatics,
