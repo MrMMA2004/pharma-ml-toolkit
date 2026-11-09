@@ -1456,6 +1456,27 @@ Placed byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
 `ui/widgets/plot_widget.py` + the 239 chunk runner).  Honest totals
 **4,947 = 4,149 collect + 798 doctest** (+11).
 
+## v1.2.155 release-zip homes (2026-11-09, round 243 — the Part-3 §23.9 legend placement vs. data)
+
+`pharma-ml-toolkit-v1.2.155.zip` — 21,851,407 bytes, sha-256
+`a42f328593472be44758a091526a2da55182174a47c086fa5a66e1f88b1bb3df`
+(1064 entries / 1017 files, testzip OK per home, real leaks 0 — the
+size grows by the re-executed notebooks and the round-242 QA
+screenshot riding `scratch/` by the audit-trail design; this round's
+`r243_web_verify.png` rides the NEXT build).  Built with the standing
+four-home builder recipe (`scratch/build_zip_243.py`, predecessor
+v1.2.154 swept from all four homes; the CHANGELOG `[1.2.155]` entry
+predated the build — no intra-round rebuild).  Placed byte-identical in
+`download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`.  Census **1037 files /
+322,457 lines** per the canonical walk.  Honest totals
+**5,012 = 4,214 collect + 798 doctest**; the eight-chunk gate green
+(8/8, 0 failing chunks) after the 8/8 foreground notebook re-execution
+at 1.2.155.  Web pins trued 5012 ×6 (page badge, download-panel
+describe/list/chip, overview chip + the round-243 clause in the
+Testing after-string) + census fallbacks 1037/322,457 +
+`SHIPPED_TOOLKIT_VERSION` 1.2.155.
+
 ## v1.2.154 release-zip homes (2026-11-09, round 242 — the Part-3 §23.8 title pixel budget)
 
 `pharma-ml-toolkit-v1.2.154.zip` — 21,154,106 bytes, sha-256
