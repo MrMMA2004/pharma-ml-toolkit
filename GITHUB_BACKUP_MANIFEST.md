@@ -1398,13 +1398,19 @@ doctest** (+4).
 
 ## v1.2.149 release-zip homes (2026-11-09, round 237 — the Qt import guard + `studio.py --doctor`)
 
-`pharma-ml-toolkit-v1.2.149.zip` — 20,325,524 bytes, sha-256
-`b827d00ffd460820ca9d1746e3674c4361b6cdbebfedc38c5709cc3103c91b0c`,
+`pharma-ml-toolkit-v1.2.149.zip` — 20,325,624 bytes, sha-256
+`654da9e9a099a50701483c236ae568077408cedda8a817953b89941333d7d493`,
 1044 entries / 997 files, built with the standing four-home builder
 recipe (`scratch/build_zip_237.py`, predecessor v1.2.148 swept from
 all four homes) — testzip OK per home, **real leaks 0** (the
 re-executed ML notebook's sandbox venv paths scrubbed by the
-round-137 cleaner before the rebuild), nested zips NONE.  Placed
+round-137 cleaner before the rebuild), nested zips NONE.  *(Rebuilt
+once intra-round: the first build's tree carried a stale inner
+version chain — `pyproject.toml` and `pharmaml.__version__` still
+said 1.2.148 while `VERSION` said 1.2.149, which the zip-size route
+surfaced as an `exact:false` fallback answer; the chain is now
+three-way synced inside the archive and the endpoint answers
+`exact:true, 20325624`.)*  Placed
 byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
 `pharma-ml-toolkit/download/`, and `upload/`.  Census **1017 files /
 318,789 lines** (the round's additions: `ui/qt_import_guard.py` and
