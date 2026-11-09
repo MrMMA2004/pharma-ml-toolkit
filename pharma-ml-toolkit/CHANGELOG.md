@@ -1,3 +1,31 @@
+## [1.2.156] — 2026-11-09
+
+### Changed — round 244: the Part-3 lint-backlog close
+
+* The standing ruff hygiene debt the round-243 baseline listed first
+  is paid in full: `ruff check src/ tests/ ui/` now reports zero
+  findings (was src/ 90 + tests/ 57 when the debt was first pinned;
+  rounds 239–243 swept all but 8).  The final 8, all in `tests/`:
+  - **F841 ×2** — `test_chart_inspector.py` dropped a dead
+    `_series["bars"]` lookup whose value was never read;
+    `test_headless_platform.py` keeps the first `ensure_headless()`
+    CALL (it applies the env) but no longer assigns its memo to an
+    unused name — the idempotence assertions are unchanged;
+  - **I001 ×2** — `test_model_analysis_page.py` import blocks
+    organized (stdlib/first-party separation inside the two
+    function-local import groups);
+  - **F401 ×4** — `test_responsive_policy.py` dropped the unused
+    `MIN_CHILD_PX` and three function-local `QSize` imports.
+* **mypy re-verified clean** (193 source files, the §27 hygiene bar)
+  and the four touched suites re-run green (51 tests) before the
+  gate.  `ruff format` is deliberately NOT adopted — the project's
+  established formatting differs from the formatter's output on 272
+  files and the lint bar has always been `ruff check` only.
+* No behavioural change anywhere: the diff is 8 insertions / 10
+  deletions across the four test files, the honest totals stay
+  **5,012 = 4,214 collect + 798 doctest**, and every shipped pin
+  survives.
+
 ## [1.2.155] — 2026-11-09
 
 ### Added — round 243: Part-3 §23.9 — legend placement vs. data

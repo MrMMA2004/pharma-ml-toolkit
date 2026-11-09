@@ -36,7 +36,7 @@ def test_configure_splitter_policy(studio_app) -> None:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QSplitter, QWidget
 
-    from ui.widgets.responsive import MIN_CHILD_PX, configure_splitter
+    from ui.widgets.responsive import configure_splitter
 
     splitter = QSplitter(Qt.Orientation.Horizontal)
     left, right = QWidget(), QWidget()
@@ -137,7 +137,6 @@ def test_page_splitters_carry_the_policy(studio_app) -> None:
 
 def test_plot_panel_export_floor_upscales_crisp(studio_app, qtbot, tmp_path: Path) -> None:
     """A squeezed PlotPanel exports at >= the floor, aspect preserved."""
-    from PySide6.QtCore import QSize
 
     from ui.widgets.plot_widget import PlotPanel
     from ui.widgets.responsive import LEGIBILITY_FLOOR
@@ -164,7 +163,6 @@ def test_plot_panel_export_floor_upscales_crisp(studio_app, qtbot, tmp_path: Pat
 
 def test_plot_panel_export_floor_noop_when_legible(studio_app, qtbot, tmp_path: Path) -> None:
     """A panel already at/above the floor exports at its own size."""
-    from PySide6.QtCore import QSize
 
     from ui.widgets.plot_widget import PlotPanel
     from ui.widgets.responsive import LEGIBILITY_FLOOR
@@ -197,7 +195,6 @@ def test_plot_panel_export_no_floor_keeps_contract(studio_app, qtbot, tmp_path: 
 def test_export_floor_preserves_scientific_data(studio_app, qtbot, tmp_path: Path) -> None:
     """§23.5: the floor re-render is display geometry only -- the plotted
     data arrays and the view range are identical before and after."""
-    from PySide6.QtCore import QSize
 
     from ui.widgets.plot_widget import PlotPanel
     from ui.widgets.responsive import LEGIBILITY_FLOOR

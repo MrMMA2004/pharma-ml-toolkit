@@ -97,7 +97,7 @@ class TestIdempotence:
 
     def test_second_call_returns_memo(self, fresh_probe):
         fresh_probe.setattr(sys, "platform", "linux")
-        first = headless.ensure_headless()
+        headless.ensure_headless()  # first call applies; the memo is asserted below
         assert _platform_env() == "offscreen"
         headless._applied["platform"] = "already-run"
         second = headless.ensure_headless()

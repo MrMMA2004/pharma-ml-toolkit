@@ -113,7 +113,6 @@ class TestChartKinds:
             np.array([3.0, 5.0, 7.0]),
             labels=["Morgan", "MACCS", "RDKit"],
         )
-        record = panel._inspector._series["bars"]
         # Hover mid-body of the x=2 bar: the whole bar is the target.
         snapped = panel._inspector.inspect_at((2.0, 3.5))
         assert snapped == ("bars", 2)
