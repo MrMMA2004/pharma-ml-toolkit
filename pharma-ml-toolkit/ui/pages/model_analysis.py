@@ -44,7 +44,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -75,6 +75,61 @@ from ..workers.job_worker import JobRunner
 
 if TYPE_CHECKING:
     from pharmaml.ml.cv_results import CVResult
+
+
+def _parity_meta(y_test: Any, y_pred: Any) -> Any:
+    """Per-point hover metadata for the regression parity plot (§21.5).
+
+    The readout already shows actual and predicted (the plotted x/y);
+    the added facts are the 0-based held-out row and the signed
+    residual.  Out-of-range indexes answer ``{}`` -- hover metadata
+    must never raise (the ``_molecule_meta`` contract, generative page).
+    """
+    test = np.asarray(y_test, dtype=float)
+    pred = np.asarray(y_pred, dtype=float)
+
+    def meta(i: int) -> dict[str, Any]:
+        if not 0 <= i < test.size or i >= pred.size:
+            return {}
+        return {"row": i, "residual": float(pred[i] - test[i])}
+
+    return meta
+
+
+def _residual_meta(y_test: Any, y_pred: Any) -> Any:
+    """Per-point hover metadata for the residual plot (§21.5).
+
+    The residual plot shows predicted (x) and residual (y) -- both
+    derivable from the parity pair -- so the fact this provider adds is
+    the ACTUAL value behind the point, plus the same 0-based row the
+    parity plot carries (one key, one meaning, across both panels).
+    """
+    test = np.asarray(y_test, dtype=float)
+    pred = np.asarray(y_pred, dtype=float)
+
+    def meta(i: int) -> dict[str, Any]:
+        if not 0 <= i < test.size or i >= pred.size:
+            return {}
+        return {"row": i, "actual": float(test[i])}
+
+    return meta
+
+
+def _fold_meta(scores: Any, mean: float) -> Any:
+    """Per-point hover metadata for the CV fold-score chart (§21.5).
+
+    x/y show the fold and its score; the signed delta against the mean
+    is the added fact (a fold above the mean reads positive).  Fold
+    numbers are 1-based to match the chart's x axis.
+    """
+    values = np.asarray(scores, dtype=float)
+
+    def meta(i: int) -> dict[str, Any]:
+        if not 0 <= i < values.size:
+            return {}
+        return {"fold": i + 1, "delta vs mean": float(values[i] - mean)}
+
+    return meta
 
 _TK = Path(__file__).resolve().parents[2]
 _DATASETS = {
@@ -982,9 +1037,13 @@ class ModelAnalysisPage(QWidget):
             hi = float(max(o.y_test.max(), o.y_pred.max()))
             span = np.array([lo, hi])
             self._pred_plot.line(span, span, label="y = x", width=1, index=1, style="dash")
-            self._pred_plot.scatter(o.y_test, o.y_pred, label="held-out samples")
+            self._pred_plot.scatter(
+                o.y_test, o.y_pred, label="held-out samples", meta=_parity_meta(o.y_test, o.y_pred)
+            )
             self._pred_plot.set_labels(x="actual", y="predicted")
-            self._resid_plot.scatter(o.y_pred, o.y_test - o.y_pred)
+            self._resid_plot.scatter(
+                o.y_pred, o.y_test - o.y_pred, meta=_residual_meta(o.y_test, o.y_pred)
+            )
             self._resid_plot.line(
                 np.array([float(o.y_pred.min()), float(o.y_pred.max())]),
                 np.zeros(2),
@@ -1283,7 +1342,12 @@ class CVReportDialog(QDialog):
             )
             chart.setMinimumHeight(180)
             folds = np.arange(1, result.n_folds + 1, dtype=float)
-            chart.scatter(folds, np.asarray(summary.folds, dtype=float), label="fold score")
+            chart.scatter(
+                folds,
+                np.asarray(summary.folds, dtype=float),
+                label="fold score",
+                meta=_fold_meta(summary.folds, float(summary.mean)),
+            )
             chart.line(
                 np.array([1.0, float(result.n_folds)]),
                 np.array([summary.mean, summary.mean]),

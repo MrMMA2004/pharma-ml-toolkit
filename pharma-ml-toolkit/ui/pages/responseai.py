@@ -110,6 +110,56 @@ def _parse_int(text: str, name: str, *, minimum: int, maximum: int) -> int:
     return value
 
 
+def _dose_meta(doses: Any) -> Any:
+    """Per-point hover metadata for the 4PL demo's measured points (§21.5).
+
+    The plot's x axis is log10(dose), so the ORIGINAL-scale dose is a
+    fact the readout cannot show without this provider; the 0-based row
+    rides alongside (one key, one meaning, across the pages).
+    """
+    values = np.asarray(doses, dtype=float)
+
+    def meta(i: int) -> dict[str, Any]:
+        if not 0 <= i < values.size:
+            return {}
+        return {"dose": float(values[i]), "row": i}
+
+    return meta
+
+
+def _pair_residual_meta(y_true: Any, y_pred: Any) -> Any:
+    """Per-point hover metadata for observed-vs-predicted pair plots (§21.5).
+
+    x/y show the two values; the signed residual and the 0-based row
+    are the added facts.  One factory, two call sites (the metrics
+    pairs and the screen pairs) -- same shape, one meaning.
+    """
+    true = np.asarray(y_true, dtype=float)
+    pred = np.asarray(y_pred, dtype=float)
+
+    def meta(i: int) -> dict[str, Any]:
+        if not 0 <= i < true.size or i >= pred.size:
+            return {}
+        return {"row": i, "residual": float(pred[i] - true[i])}
+
+    return meta
+
+
+def _row_meta(n_points: int) -> Any:
+    """Per-point hover metadata for the correlated-pair scatter (§21.5).
+
+    The pair's two values are already the plotted x/y; the 0-based row
+    is the only per-point fact the plot cannot tell.
+    """
+
+    def meta(i: int) -> dict[str, Any]:
+        if not 0 <= i < n_points:
+            return {}
+        return {"row": i}
+
+    return meta
+
+
 def _seeded_screen(rng: np.random.Generator) -> tuple[pd.DataFrame, pd.DataFrame]:
     """The seeded 12x4 screen (shared verbatim by the model and CV tabs).
 
@@ -586,7 +636,11 @@ class ResponseAIWorkbenchPage(QWidget):
         grid = np.logspace(-3.5, 3.5, 240)
         self._plot.line(np.log10(grid), np.asarray(fit.predict(grid), dtype=float), index=0)
         self._plot.scatter(
-            np.log10(outcome.doses), outcome.response, label="measured", index=1
+            np.log10(outcome.doses),
+            outcome.response,
+            label="measured",
+            index=1,
+            meta=_dose_meta(outcome.doses),
         )
         self._plot.set_labels(x="log10 dose", y="response", title="the fitted Hill curve")
         self._report.setText(
@@ -655,7 +709,9 @@ class ResponseAIWorkbenchPage(QWidget):
             note="observed vs predicted",
         )
         self._plot.clear()
-        self._plot.scatter(outcome.y_true, outcome.y_pred, label="pairs", index=0)
+        self._plot.scatter(
+            outcome.y_true, outcome.y_pred, label="pairs", index=0, meta=_pair_residual_meta(outcome.y_true, outcome.y_pred)
+        )
         lo = float(min(outcome.y_true.min(), outcome.y_pred.min()))
         hi = float(max(outcome.y_true.max(), outcome.y_pred.max()))
         self._plot.line(
@@ -726,7 +782,7 @@ class ResponseAIWorkbenchPage(QWidget):
             note="one call, three agreement scales",
         )
         self._plot.clear()
-        self._plot.scatter(outcome.x, outcome.y, label="pairs", index=0)
+        self._plot.scatter(outcome.x, outcome.y, label="pairs", index=0, meta=_row_meta(len(outcome.x)))
         self._plot.set_labels(x="X", y="Y", title="the correlated pair")
         self._report.setText(
             f"{outcome.source} · n={int(rc.n)} · pearson {float(rc.pearson):.4f} · "
@@ -783,7 +839,13 @@ class ResponseAIWorkbenchPage(QWidget):
         history = outcome.history
         self._table.bind_frame(outcome.pred, note="predicted response scores")
         self._plot.clear()
-        self._plot.scatter(outcome.observed, outcome.predicted, label="observed pairs", index=0)
+        self._plot.scatter(
+            outcome.observed,
+            outcome.predicted,
+            label="observed pairs",
+            index=0,
+            meta=_pair_residual_meta(outcome.observed, outcome.predicted),
+        )
         lo = float(min(outcome.observed.min(), outcome.predicted.min()))
         hi = float(max(outcome.observed.max(), outcome.predicted.max()))
         self._plot.line(

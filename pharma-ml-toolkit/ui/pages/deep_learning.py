@@ -104,6 +104,41 @@ def _maybe_number(text: str) -> Any:
         return stripped
 
 
+def _parity_meta(y_test: Any, y_pred: Any) -> Any:
+    """Per-point hover metadata for the deep-learning parity plot (§21.5).
+
+    The readout already shows actual and predicted (the plotted x/y);
+    the added facts are the 0-based held-out row and the signed
+    residual.  Out-of-range indexes answer ``{}`` -- hover metadata
+    must never raise (the ``_molecule_meta`` contract, generative page).
+    """
+    test = np.asarray(y_test, dtype=float)
+    pred = np.asarray(y_pred, dtype=float)
+
+    def meta(i: int) -> dict[str, Any]:
+        if not 0 <= i < test.size or i >= pred.size:
+            return {}
+        return {"row": i, "residual": float(pred[i] - test[i])}
+
+    return meta
+
+
+def _embedding_meta(n_rows: int) -> Any:
+    """Per-point hover metadata for the UMAP embedding scatter (§21.5).
+
+    x/y are the embedding coordinates; the 0-based source row is the
+    added fact -- the same index the row column of the bound table and
+    the view algebra use, so a hover points straight back at the data.
+    """
+
+    def meta(i: int) -> dict[str, Any]:
+        if not 0 <= i < n_rows:
+            return {}
+        return {"row": i}
+
+    return meta
+
+
 def _parse_hidden(text: str) -> tuple[int, ...]:
     """Comma-separated widths -> a tuple (empty text = the linear net)."""
     stripped = text.strip()
@@ -648,7 +683,7 @@ class DeepLearningWorkbenchPage(QWidget):
         if outcome.task == "regression":
             actual = np.asarray(outcome.y_test, dtype=float)
             predictions = np.asarray(report.predictions, dtype=float)
-            self._plot.scatter(actual, predictions, label="held-out rows")
+            self._plot.scatter(actual, predictions, label="held-out rows", meta=_parity_meta(actual, predictions))
             lo = float(min(actual.min(), predictions.min()))
             hi = float(max(actual.max(), predictions.max()))
             self._plot.line(
@@ -963,7 +998,9 @@ class DeepLearningWorkbenchPage(QWidget):
         self._plot.clear()
         record = outcome.record
         embedding = record.embedding_array
-        self._plot.scatter(embedding[:, 0], embedding[:, 1], label="embedded rows")
+        self._plot.scatter(
+            embedding[:, 0], embedding[:, 1], label="embedded rows", meta=_embedding_meta(int(embedding.shape[0]))
+        )
         self._plot.add_legend()
         self._plot.set_labels(
             x="UMAP1",

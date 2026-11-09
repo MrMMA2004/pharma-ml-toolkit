@@ -67,6 +67,29 @@ from ..widgets.progress_panel import ProgressPanel
 from ..widgets.responsive import configure_splitter
 from ..workers.job_worker import JobRunner
 
+
+def _cluster_meta(labels: Any, cluster: int) -> Any:
+    """Per-point hover metadata for one cluster's scatter (§21.5).
+
+    The legend already says which cluster a series is, so the added
+    facts are the 0-based row in the SOURCE table (the flat index
+    before the cluster mask, matching the row column the bound tables
+    use) and the cluster's member count.  Out-of-range indexes answer
+    ``{}`` -- hover metadata must never raise (the ``_molecule_meta``
+    contract, generative page).
+    """
+    flat = np.asarray(labels)
+    rows = np.flatnonzero(flat == cluster)
+    members = int(rows.size)
+
+    def meta(i: int) -> dict[str, Any]:
+        if not 0 <= i < rows.size:
+            return {}
+        return {"row": int(rows[i]), "cluster members": members}
+
+    return meta
+
+
 _TK = Path(__file__).resolve().parents[2]
 
 #: The page's datasets: the descriptor library (77 rows x 8 descriptor
@@ -577,6 +600,7 @@ class UnsupervisedWorkbenchPage(QWidget):
                     ys[mask],
                     label=f"cluster {cluster}",
                     index=cluster,
+                    meta=_cluster_meta(labels, cluster),
                 )
             self._plot.add_legend()
             self._plot.set_labels(

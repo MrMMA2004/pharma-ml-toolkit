@@ -1,3 +1,40 @@
+## [1.2.153] — 2026-11-09
+
+### Added — round 241: Part-3 §21 completion — per-point meta on the remaining scatter surfaces
+
+* The §21.5 per-point hover-metadata contract no longer stops at the
+  generative page: every data-bearing scatter in the Studio now rides
+  the same ``meta=`` plumbing (the ``_molecule_meta`` pattern, five
+  new page-local factories, eleven call sites wired):
+  - **model_analysis** — the parity plot discloses the 0-based
+    held-out row and the signed residual; the residual plot discloses
+    the row and the ACTUAL value behind the point (x/y there are both
+    derivable); the CV fold chart discloses the 1-based fold and the
+    signed delta against the mean;
+  - **deep_learning** — the parity plot (row + residual) and the UMAP
+    embedding scatter (row — the same 0-based index the bound table's
+    row column and the view algebra use);
+  - **responseai** — the 4PL demo's measured points disclose the
+    ORIGINAL-scale dose (the x axis is log10, so the dose itself was
+    invisible), the metrics/screen pair plots disclose row + residual
+    (one shared factory), the correlated pair discloses its row;
+  - **pkpd** — the NCA observed-profile samples disclose the 1-based
+    sample number; **unsupervised** — each cluster scatter discloses
+    the 0-based SOURCE row (the flat index before the mask) and the
+    cluster's member count.
+* Every provider follows the standing §21 rules: only facts the plot
+  cannot tell, honest keys/values, lazily computed per point and
+  cached by the inspector (§21.6), out-of-range indexes answer ``{}``
+  and exceptions can never kill a hover.
+* **tests/ui/test_scatter_meta_241.py** — 16 tests: per-factory value
+  contracts (signed residuals, 1-based folds/samples, original-scale
+  dose, source-row mapping, member counts), out-of-range empties,
+  NaN-bearing inputs, the two pages' duplicate parity factories
+  sharing one contract, and three inspector-flow tests pinning that
+  the metadata reaches the readout verbatim.
+* ruff + mypy clean on the touched ui/ tree; the eight-chunk gate
+  green after the foreground notebook re-execution at 1.2.153.
+
 ## [1.2.152] — 2026-11-09
 
 ### Added — round 240: the Part-3 §21.4 image pixel/channel inspection

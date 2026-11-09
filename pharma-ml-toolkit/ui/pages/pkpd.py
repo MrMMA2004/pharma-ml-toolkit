@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import time as _time
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -108,6 +109,24 @@ def _parse_series(text: str, name: str) -> list[float]:
         except ValueError:
             raise ValueError(f"{name}: not a number ({part!r})") from None
     return values
+
+
+def _sample_meta(n_points: int) -> Any:
+    """Per-point hover metadata for the NCA observed-profile samples (§21.5).
+
+    The readout already shows time and concentration (the plotted x/y);
+    the sample's 1-based position in the pasted series is the fact the
+    plot alone cannot tell.  Out-of-range indexes answer ``{}`` -- hover
+    metadata must never raise (the same contract ``_molecule_meta``
+    carries on the generative page).
+    """
+
+    def meta(i: int) -> dict[str, Any]:
+        if not 0 <= i < n_points:
+            return {}
+        return {"sample": i + 1}
+
+    return meta
 
 
 @dataclass
@@ -461,7 +480,12 @@ class PKPDWorkbenchPage(QWidget):
         self._table.bind_frame(outcome.metrics)
         self._plot.clear()
         self._plot.line(outcome.times, outcome.concs, fill=True, label="observed (AUC shaded)")
-        self._plot.scatter(outcome.times, outcome.concs, label="samples")
+        self._plot.scatter(
+            outcome.times,
+            outcome.concs,
+            label="samples",
+            meta=_sample_meta(len(outcome.concs)),
+        )
         self._plot.set_labels(
             x="time (h)",
             y="concentration (mg/L)",
