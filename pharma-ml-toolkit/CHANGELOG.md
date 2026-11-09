@@ -1,3 +1,48 @@
+## [1.2.159] — 2026-11-10
+
+### Added — round 247: multi-objective HPO — the Pareto study (`ml/multiobjective.py`)
+
+* The best-of-ml-python HPO/AutoML section audit's closing move. The
+  section's leaders (Optuna, Ax/BoTorch, nevergrad) share one capability
+  this toolkit's search stack lacked: the trade-off itself as a
+  first-class result. The generative side taught Pareto fronts for
+  molecules since the first `--pareto` recipes; this module brings the
+  same honesty to the hyperparameter search — the accuracy-vs-fit-seconds
+  menu, not a single blended verdict.
+* The order theory, pure NumPy under the optuna convention (every
+  objective MINIMIZED): `dominates` (strict Pareto dominance with
+  explicit length/finiteness contracts), `pareto_indices` (the
+  non-dominated set, pairwise O(n²·k) at study scale — the honest
+  complexity statement, checked in tests against an independently-coded
+  brute force on seeded 2-D and 4-D clouds, duplicates surviving
+  together), `hypervolume_2d` (the EXACT 2-D staircase sweep — the
+  convergence indicator, with the WFG reference-must-dominate contract),
+  `crowding_distance` (NSGA-II's spread metric, boundary members +inf),
+  and `chebyshev_scalarize` (MOEA/D's Tchebycheff decomposition; zero
+  weights are the documented corner subproblems).
+* The study: `MultiObjectiveStudy` decomposes the vector objective onto
+  the EXISTING single-objective samplers — each trial takes the next
+  weight vector (the deterministic Das–Dennis simplex lattice cycling
+  when `weight_mode="spread"`, a seeded uniform simplex draw when
+  `"random"`, Optuna's own approach) and tells the random/TPE engine the
+  trial's Chebyshev distance to the running ideal point. The honest
+  drift note (the ideal advances, so the scalar landscape is not strictly
+  stationary — MOEA/D fixes weights per subproblem and leans on
+  neighbourhood exchange) is stated in the class docstring; the first
+  trial is its own ideal, its scalar 0 by construction.
+* The report: `ParetoReport` carries the front, the crowding, the
+  per-objective endpoints (`best_for`), the exact 2-D hypervolume under
+  the nadir+10% documented reference (None beyond two objectives — the
+  honest scope), and the monotone per-trial hypervolume curve under that
+  FIXED reference; `to_dataframe()` mirrors the generative front's tidy
+  frame. The adapter `tune_model_multi` reads `cross_validate`'s own
+  ledger (`score` as the negated mean CV score, `fit_seconds` /
+  `score_seconds` as mean fold times — the same numbers `cv_results`
+  records per fold).
+* 27 new tests (`tests/test_multiobjective_hpo.py`) + 10 module doctests;
+  the tuning notebook gains section 7 (the trade-off demo) and a recap
+  row; chunk 2 of the gate carries the suite by glob.
+
 ## [1.2.158] — 2026-11-09
 
 ### Added — round 246: Part-3 §21.4 — the original-resolution (1:1) view

@@ -11931,3 +11931,91 @@ SA-in-generative wiring beyond the shipped slices · §21.4 is now
 CLOSED for inspection AND resolution (hover payload + sub-pixel
 disclosure + the 1:1 original-resolution toggle) · the §23
 responsive pass stays closed.
+
+---
+
+## Round 247 (counter 38/100) — multi-objective HPO: the Pareto study (`ml/multiobjective.py`), v1.2.159
+
+**Pickup after sandbox rollback #27** (HEAD fell to `2eb0ede`, the round-186 base; the token/
+remote/counter wiped; the recovery ritual held: PAT re-extracted from `MASTER_PROMPT.pdf`
+pdftotext lines 713-714 — the full-text-scan method, NOT the stale 688-689 ritual line — 93
+chars, chmod 600, helper, remote add, 13 collision files moved to `/tmp/aside_backup_27/`
+(the old zips v1.2.107-121 + Prompt_Registry.pdf; the v1.2.158 zip + PDFs byte-identical from
+the pull), ff-pull to `6b924ed`, venv repaired in the foreground (rdkit + the studio headless
+leg), Xvfb :99 restarted, the webDevReview 15-min job recreated (job 519053) after the rollback
+ate it, and the phantom `+x` bits stripped again — the rollback re-set executable bits on 139
+`src/`+`tests/` files, ruff answered 151 phantom EXE002s, all exec bits (user/group/other, the
+second attempt learned that lesson) stripped to zero findings).
+
+**THE LOST WORK note (the unpushed-snapshot lesson, hardest of the year)**: the previous
+session's round-247 cron snapshot `49aa308` — the Part-3 §20.4/§20.5 NumPy-trainer checkpoint
+depth (VERSION 1.2.159, +459 `numpy_neural.py`, +62 `autograd.py`, a 408-line test file,
+notebooks re-executed) — was committed by the session-teardown auto-commit but NEVER PUSHED,
+and rollback #27 ate it whole. The design contract, preserved here so a future round can
+re-implement without re-derivation: `fit(checkpoint_dir=...)` writes the COMPLETE resumable
+state through the round-229 `CheckpointManager` (atomic os.replace, sha-256 self-verification,
+quarantine, JSON+base64 — never pickle) after every `checkpoint_every` epochs AND the final
+epoch: weights, optimizer moment buffers + step count (`Optimizer.state_dict()`/`load_state_dict()`
+on `_velocity/_state/_m/_v/_vmax` with ModelError on shape/name/step mismatches), the training
+RNG state, the early-stopping state (best val loss, stale counter, best weights), and history.
+The acceptance bar is BIT-EXACTNESS: an interrupted-then-resumed fit reaches `np.array_equal`
+predictions vs the uninterrupted run (pinned across Adam, SGD-momentum, chained 5→14→24
+resumes, the classifier path, early-stopping continuity). §20.5's incompatibility contract:
+a config fingerprint (every trajectory-shaping hyperparameter; `epochs`/`patience` stay free
+budgets) + a dataset fingerprint; incompatible/unreadable records discarded with a warning,
+never fatal; a checkpoint at/after budget restores and trains nothing; broken checkpoint homes
+degrade to warnings. 21 tests + a module doctest rode the lost file. THE LESSON: the
+push-cadence directive exists exactly for this — a round's snapshot MUST be pushed before the
+session ends; the counter rides every commit so the RUN count survived (37), but the WORK
+didn't. §20 checkpoint depth returns to the top of the Part-3 backlog.
+
+**The round's work (owner-directed reference)**: the owner sent the best-of-ml-python
+HPO/AutoML section (modelzoo.co mirror → fetched from the canonical `ml-tooling/best-of-ml-python`
+README; the section's 16 ranked leaders: Optuna 13K★, AutoGluon, BoTorch, Ax, BayesianOptimization,
+Hyperopt, AutoKeras, featuretools, nevergrad, lazypredict, mljar-supervised, Hyperactive, FEDOT,
+AlphaPy, Auto_ViML, featurewiz). The audit: rounds 188-189 already absorbed Optuna's TPE +
+Hyperband/SHA + the pruner verdict, the keras-tuner round absorbed the GP-Bayesian oracle, and
+`tuner.py` wires Percentile/MedianPruner with fold curves — but the section's shared flagship
+capability was MISSING: **multi-objective HPO** (Optuna's multi-objective studies, Ax/BoTorch's
+EHVI, nevergrad's portfolio). The generative side taught Pareto fronts for molecules since the
+`--pareto` recipes; `ml/` had nothing. Shipped `ml/multiobjective.py` (755 lines, 10 doctests):
+`dominates`/`pareto_indices` (pairwise O(n²·k) at study scale, duplicates survive together),
+`hypervolume_2d` (the exact staircase sweep, the WFG reference contract), `crowding_distance`
+(NSGA-II), `chebyshev_scalarize` (MOEA/D), `MultiObjectiveStudy` (the decomposition onto the
+EXISTING random/TPE samplers — Das-Dennis lattice cycling or seeded simplex draws, the
+running-ideal Chebyshev scalar, the honest drift note), `ParetoReport` (front + crowding +
+nadir+10% hypervolume + the monotone per-trial curve + `to_dataframe()` + `best_for`), and
+`tune_model_multi` (the sklearn adapter over `cross_validate`'s ledger: score/fit_seconds/
+score_seconds). The honest scope stated in the module: EHVI needs a vector-objective GP,
+MOTPE's multivariate Parzen and NSGA-II's genetic operators stay upstream, exact hypervolume
+beyond 2-D not vendored.
+
+**Gate**: 27 new tests green first run (after two test-side fixes: crowding interior gaps are
+sorted-NEIGHBOUR gaps not extremes; the adapter determinism test reframed to the study level —
+fit_seconds are wall-clock measurements, front membership is timing-sensitive by nature). The
+gate's three fights, all guard-driven, all caught and closed: (1) the fabrication guard rejected
+the demo cell's inline `np.random.default_rng` (the owner's round-24 rule — rewritten onto the
+shipped `qsar_regression.csv` via `ds.X`/`ds.y`, ridge regression); (2) the docs-index guard
+pinned the nine new exports into `docs/INDEX.md`; (3) the leakage guard caught the re-executed
+`complete_ml_workflow.ipynb` carrying `/home/z/` (the round-137 scrub ritual, run BEFORE the
+build, verification zero). The no-output twins re-synced via `scratch/strip_notebook_outputs.py`.
+Final: NINE chunks green (chunk 1's gate leg = the leakage find, fixed + re-verified green in
+isolation; chunks 2-4e and the doctest chunk 6 green in the full run). Lint bar: ruff zero,
+mypy clean across 194 files. Notebooks re-executed at 1.2.159 (8/8, zero error outputs, 200s)
+with the tuning notebook gaining section 7 (the trade-off demo — front of 2 of 8 trials on
+ridge-over-alpha, the honest tiny trade-off) and a recap row.
+
+**Release**: VERSION 1.2.159 · zip 22,654,525 B, sha-256
+`41211e43ddf226dec04ed81dcace7f65d01abf5b20d6ecaacfc36620ec0a35f4` in four byte-identical
+homes (predecessor v1.2.158 swept from all four BEFORE the build) · census **1057/325,926** ·
+honest totals **5,081 = 4,273 collect + 808 doctest** (+27/+10) · web pins trued 5081 ×7
+(page.tsx footer + overview StatChip/countTo/after-string + download-panel three sites) +
+fallbacks 1057/325,926 + `SHIPPED_TOOLKIT_VERSION` 1.2.159 · manifest entry added.
+
+**Baselines for the next round** — v1.2.159 (four homes) · honest totals **5,081 = 4,273 + 808**
+· census **1057/325,926** · the gate is NINE chunks · counter **38/100** · the lint bar green
+(ruff zero + mypy clean, 194 files) · Part-3 remaining: **§20 checkpoint depth (FIRST — the
+lost design contract is preserved above, implement exactly it)** and §24 SA-in-generative
+wiring beyond the shipped slices · §21.4 and §23 stay closed · the §-new MOO follow-on
+candidates (not yet backlog items): a Pareto-front viz twin to `plot_pareto_front`, and the
+report's shortlist `prune(k)` mirroring the generative front's crowding pruner.

@@ -353,6 +353,8 @@ after adding new public functions.
 | `MetricSummary` | class | One metric aggregated across folds (mean, std, every fold value). |
 | `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
 | `Module` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
+| `MOTrial` | class | One multi-objective evaluation: params, values, weights, scalar. |
+| `MultiObjectiveStudy` | class | The optuna multi-objective study, decomposed onto one sampler. |
 | `NaiveDense` | class | Chollet's ``NaiveDense`` (chapter 2), plain NumPy. |
 | `NaiveSequential` | class | Chollet's ``NaiveSequential``: a stack called like a function. |
 | `Neighbor` | class | One retrieved neighbour: row index and its Euclidean distance. |
@@ -366,6 +368,7 @@ after adding new public functions.
 | `OntologyRow` | class | One term's audit row: size, depth, layer, gene enrichment. |
 | `ParamAdvice` | class | One searchable hyperparameter: its range, prior, role, and deps. |
 | `Parameter` | class | A leaf tensor that always requires grad. |
+| `ParetoReport` | class | The front, its spread, its indicator: the trade-off decision's read. |
 | `PcaResult` | class | Typed report of :func:`pca_reduce`. |
 | `PercentilePruner` | class | Prune trials whose running CV mean falls below a percentile. |
 | `PermutationImportance` | class | Permutation feature importances on held-out data. |
@@ -437,6 +440,7 @@ after adding new public functions.
 | `catalog_projects` | function | One category's projects (slug or title), or all 924, score-descending. |
 | `catalog_summary` | function | The snapshot's headline numbers and license distribution. |
 | `catalog_top` | function | The ``n`` highest-scoring projects in a category (or overall). |
+| `chebyshev_scalarize` | function | MOEA/D's Tchebycheff decomposition ``max_j w_j |v_j - ideal_j|``. |
 | `clean_numeric_frame` | function | Drop non-numeric columns (except the target/keep list). |
 | `commonsense_baseline` | function | Predict "the last observed value" (``evaluate_naive_method``). |
 | `compare_groups` | function | The course's decision flow, end to end, every branch reported. |
@@ -448,6 +452,7 @@ after adding new public functions.
 | `cross_entropy` | function | Softmax cross-entropy: ``mean(−log_softmax[i, label_i])``. |
 | `cross_model_importances` | function | Permutation importances for a WHOLE panel of fitted models. |
 | `cross_validate_model` | function | Cross-validate ONE registry model into a full §19 CVResult. |
+| `crowding_distance` | function | NSGA-II's spread metric (boundary members ``+inf``), per point. |
 | `curve_fit` | function | The scipy-named entry point: (best params, covariance matrix). |
 | `cv_result_from_dict` | function | Rebuild a :class:`CVResult` from :meth:`CVResult.to_dict` output. |
 | `cv_result_to_dict` | function | §19.9 interchange: :class:`CVResult` → JSON-ready dict. |
@@ -459,6 +464,7 @@ after adding new public functions.
 | `describe_tensor` | function | Audit one array with chapter 2's "key attributes" vocabulary. |
 | `design_matrices` | function | Expand a formula against a data frame into the design matrix. |
 | `detect_changepoints` | function | Offline mean-shift changepoints: binary segmentation on the CUSUM. |
+| `dominates` | function | Pareto dominance, all objectives minimized (the optuna convention). |
 | `dot_product_attention` | function | Scaled dot-product attention: ``softmax(QKᵀ/√dₖ)·V``. |
 | `dp_sgd_noise_scale` | function | Invert the RDP accountant: the σ that meets (ε, δ) in T steps. |
 | `dp_statistics` | function | Count, sum, mean (+ optional histogram) under one ε budget. |
@@ -480,6 +486,7 @@ after adding new public functions.
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
 | `hierarchy_report` | function | The peeling audit: per-term rows and the hierarchy's shape. |
 | `hypermodel_from_advice` | function | Compile a recommendation into a tuner-searchable hypermodel. |
+| `hypervolume_2d` | function | The exact 2-D dominated hypervolume (the staircase sweep). |
 | `kde_fit` | function | Kernel density estimation (PDSH 05.13) for ONE numeric column. |
 | `kmeans_cluster` | function | k-means clustering (PDSH 05.11), with the elbow AND the silhouette. |
 | `knn_applicability_domain` | function | kNN-distance applicability domain (the upload's step 4-5). |
@@ -510,6 +517,7 @@ after adding new public functions.
 | `paired_dta_features` | function | Build an aligned ECFP + protein matrix from a paired DTA table. |
 | `paired_ttest` | function | Did the paired differences move away from zero? |
 | `param_importances` | function | Random-forest (MDI) hyperparameter importances of a finished search. |
+| `pareto_indices` | function | The non-dominated indices of a point cloud (pairwise, study scale). |
 | `parse_formula` | function | Parse a formula into ``(response, terms)``. |
 | `parse_ontology` | function | Parse the ``drugcell_ont.txt`` three-column format. |
 | `partial_autocorrelation` | function | The partial ACF via Durbin-Levinson: lag-k credit, shorter lags removed. |
@@ -550,6 +558,7 @@ after adding new public functions.
 | `tanh` | function |  |
 | `tensor_primer_report` | function | Walk a table through chapter 2's tensor vocabulary. |
 | `train_model` | function | Train (and optionally grid-search) one registry model. |
+| `tune_model_multi` | function | Cross-validated multi-objective HPO: the accuracy-vs-cost front. |
 | `two_sample_ttest` | function | Two independent samples: Welch's t (default) or Student's t. |
 | `validate_bundle_input` | function | Audit a new dataset against a saved model bundle before inference. |
 | `validate_space` | function | Compatibility-check a search space before optimization starts. |

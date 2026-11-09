@@ -1515,6 +1515,38 @@ clause in the Testing after-string (single quotes inside, the
 round-245 Turbopack lesson applied proactively — the clause's quote
 guard ran before the write).
 
+## v1.2.159 release-zip homes (2026-11-10, round 247 — multi-objective HPO, the Pareto study)
+
+`pharma-ml-toolkit-v1.2.159.zip` — 22,654,525 bytes, sha-256
+`41211e43ddf226dec04ed81dcace7f65d01abf5b20d6ecaacfc36620ec0a35f4`
+(1085 entries / 1038 files, testzip OK per home, real leaks 0 — the
+growth over v1.2.158's 22,394,779 B is the re-executed notebooks at
+1.2.159 (the tuning notebook gains section 7, the trade-off demo over
+the shipped qsar_regression.csv + a recap row), the new
+`ml/multiobjective.py` (755 lines) + its 27-test suite, the INDEX.md
+nine rows, and the round-247 runner/builder pair riding `scratch/`).
+Built with the standing four-home builder recipe
+(`scratch/build_zip_247.py`, predecessor v1.2.158 swept from all four
+homes BEFORE the first build — the round-244 lesson held).  The
+round-137 scrub caught the notebook re-execution's `/home/z/`
+embedding (`complete_ml_workflow.ipynb` again, the known ritual:
+scrubbed, verification zero absolute-home matches) BEFORE the build;
+the builder's leak gate confirmed real leaks 0 first build.  The gate:
+NINE chunks, all green — chunk 1's only fight was that round-137 leak
+re-introduced by the re-execution (fixed by the standing scrubber +
+isolated green re-run), the fabrication guard caught the demo cell's
+first draft using `np.random.default_rng` inline (rewritten onto the
+shipped `ds.X`/`ds.y` — the owner's round-24 rule, kept), and the
+docs-index guard pinned the nine new `pharmaml.ml` exports into
+`docs/INDEX.md`.  Placed byte-identical in `download/`,
+`pharma-ml-toolkit/dist-archive/`, `pharma-ml-toolkit/download/`, and
+`upload/`.  Census **1057 files / 325,926 lines** per the canonical
+walk.  Honest totals **5,081 = 4,273 collect + 808 doctest** (+27
+collect, +10 doctests — the module's own doctests riding chunk 6).
+Web pins trued 5081 x7 + census fallbacks 1057/325,926 +
+`SHIPPED_TOOLKIT_VERSION` 1.2.159 + the round-247 clause in the
+Testing after-string (no new quotes inside — the round-245 guard held).
+
 ## v1.2.156 release-zip homes (2026-11-09, round 244 — the Part-3 lint-backlog close)
 
 `pharma-ml-toolkit-v1.2.156.zip` — 22,068,281 bytes, sha-256
