@@ -11638,3 +11638,97 @@ pixel-perfect toggle is the stretch leg) · §20 checkpoint depth and
 responsive pass is now CLOSED for text (ticks, legend labels, titles
 all budgeted) — the next §23 candidate is the ImagePanel's pixel
 readout under extreme zoom (sub-pixel mapping disclosure).
+
+## Round 244 (2026-11-09, counter 35/100, cron 515197) — the Part-3 lint-backlog close, shipped as v1.2.156 — after the 25th rollback recovery
+
+**Recovery first**: the sandbox rolled back to 2eb0ede (the round-186
+era — playground.py still present, remote/token/counter gone).  The
+25th-rollback ritual ran end to end: remote re-added, the PAT
+re-extracted from `upload/MASTER_PROMPT.pdf` (pdftotext lines 688–689
+joined with no space = the 93-char token), credential helper
+restored, `git fetch` + `git pull --ff-only` after moving 164
+blockers aside to `/tmp/aside_backup` (untracked zips/PDFs in
+`upload/`, stale-era scratch probes — one truncated listing line
+`probe_bes` was a git listing artifact, not a file), then
+`git checkout -- .` restored 727 tracked files the checkout had left
+marked-deleted.  Tree landed exactly on origin/main = 05a455f
+(round 243): counter 34/100, VERSION chain 1.2.155, zip
+21,851,407 B sha a42f3285 in all four homes — verified.  venv
+repaired in the foreground (`venv_repair.sh`: rdkit was missing;
+PySide6 6.8.3 + pyqtgraph 0.13.7 back).
+
+**Key discovery — the remote had moved on**: rounds 239–243 (the
+cron firings this session thought were pending) had already been
+executed and pushed by their own runs; origin/main carried round 243
+with counter 34.  So this firing is round 244, counter 35 — picked
+up from the round-243 baseline's FIRST remaining item: the lint
+backlog.
+
+**Work — the standing ruff hygiene debt is paid in full.**  `ruff
+check src/ tests/ ui/` now reports zero findings (the debt was first
+pinned as src/ 90 + tests/ 57; rounds 239–243 had swept all but 8).
+The final 8, all in `tests/`: **F841 ×2** —
+`test_chart_inspector.py` dropped a dead `_series["bars"]` lookup
+whose value was never read; `test_headless_platform.py` keeps the
+first `ensure_headless()` CALL (it applies the env) but no longer
+assigns its memo to an unused name — the idempotence assertions are
+untouched; **I001 ×2** — `test_model_analysis_page.py` import blocks
+organized; **F401 ×4** — `test_responsive_policy.py` dropped the
+unused `MIN_CHILD_PX` and three function-local `QSize` imports.
+**mypy re-verified clean** (193 source files).  The four touched
+suites re-run green (51 tests).  `ruff format` is deliberately NOT
+adopted — the formatter's output differs from the project's
+established style on 272 files and the lint bar has always been
+`ruff check` only.  No behavioural change: 8 insertions / 10
+deletions across the four test files.
+
+**Gate**: the 244 chunk runner (`run_suite_chunks_244.py`, the 243
+pattern) — **8/8 chunks green, 0 failing** after the 8/8 foreground
+notebook re-execution at 1.2.156 (200 s, zero error outputs) and the
+round-137 home-path scrub (the builder's leak gate caught
+`examples/complete_ml_workflow.ipynb` carrying `/home/z/` on the
+FIRST build; scrubbed, verification zero absolute-home matches,
+second build clean).  Honest totals unchanged **5,012 = 4,214
+collect + 798 doctest** (lint-only round — no test count change).
+
+**Ship**: version chain three-way synced to **1.2.156**; the
+`[1.2.156]` CHANGELOG entry predated the build.
+`scratch/build_zip_244.py` — first run exposed a copied
+PREDECESSOR constant still pointing at v1.2.154 (0 homes swept);
+fixed to v1.2.155, re-run: **swept from all four homes**.
+`pharma-ml-toolkit-v1.2.156.zip` — **22,068,281 bytes, sha-256
+`3c9280837fe260c4df3e74218e599ddefdfa37fcae72824d54c08924f821752e`**
+(1066 entries / 1019 files, testzip OK per home, real leaks 0),
+byte-identical in all four homes.  Noted in the manifest: the zip
+embeds per-entry mtimes, so the sha is build-time dependent — the
+recorded sha is the four-home state of THIS run (never rebuild
+mid-record).  Census **1039 files / 322,599 lines** per the
+canonical walk (census_210.py; the live `/api/toolkit/tree` reports
+its own by-design-different 1040/322,726 — the fallbacks follow the
+canonical walk per the ritual).  Web pins trued: 5012 ×6 unchanged,
+census fallbacks 1039/322,599 (page.tsx FALLBACK_STATS + overview
+fileCount/loc), `SHIPPED_TOOLKIT_VERSION` 1.2.156, the round-244
+clause appended to the Testing after-string; manifest entry
+inserted.
+
+**Health**: dev server restarted after the gate (GET / 200); zip-size
+endpoint `{"zipBytes":22068281,"version":"1.2.156","exact":true,
+"source":"release"}`.  agent-browser pass: badge v1.2.156, live-census
+hero hydration, Download ZIP click (zip-size 200, zero spawns), copy
+commands carrying the v1.2.156 filenames + clipboard round-trip,
+theme dark↔light, footer, desktop 1280×900 AND mobile 390×844 zero
+horizontal scroll, zero console/page errors.  Evidence
+`scratch/r244_web_verify.png` + `scratch/r244_web_mobile.png` (ride
+the NEXT build per the audit-trail pattern).
+
+**Baselines for the next round** — v1.2.156 (four homes) · honest
+totals **5,012 = 4,214 collect + 798 doctest** · census
+**1039/322,599** · counter **35/100** · the lint backlog is CLOSED
+(ruff src/tests/ui zero + mypy clean — future rounds just keep it
+green) · Part-3 remaining: §21.4's "original-resolution view" (a
+true 1:1 pixel-perfect toggle is the stretch leg) · §20 checkpoint
+depth and §24 SA-in-generative wiring beyond the shipped slices ·
+the ImagePanel pixel readout under extreme zoom (sub-pixel mapping
+disclosure — the next §23 candidate) · the QA-screenshot dir now
+also carries r244_web_verify.png / r244_web_mobile.png from this
+round.
