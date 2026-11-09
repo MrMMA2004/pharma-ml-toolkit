@@ -11462,3 +11462,90 @@ of §21.4's "original-resolution view" (fit-to-view + aspect lock are
 live; a true 1:1 pixel-perfect toggle is the stretch leg) · §20
 checkpoint depth and §24 SA-in-generative wiring beyond the shipped
 slices.
+
+---
+
+## Round 242 (2026-11-09, counter 33/100) — the Part-3 §23.8 title pixel budget, shipped as v1.2.154
+
+**Pickup clean** (no rollback this time — the 241 recovery held):
+HEAD == origin/main == `4914760`, tree clean, token alive (93 chars),
+venv alive, dev server 200, both scheduler jobs present (master
+515197 active, webDevReview 517993 running its 15-min rounds).
+
+**The release — §23.8, the responsive pass's last overflow**: a plot
+title is the last unbounded string on a `PlotPanel`.  Pages compose
+long titles (method up front, computed facts at the end), and the
+probe-first evidence pinned pyqtgraph 0.13.7's behavior: the default
+title font is 9pt Sans Serif, an 83-char title advances 534 px, the
+title LabelItem NEVER elides on its own — and (second probe quirk)
+the LabelItem EXISTS even for titleless panels, so "no title" must be
+asserted on the text, not the item.
+
+`_apply_title_budget()` joins the §23.6/§23.7 geometry path
+(`resizeEvent` + `set_labels`):
+
+- measured with the LIVE LabelItem font (fallback: the panel font at
+  the probed 9pt), budgeted to the view column's width — panel − left
+  − right axis widths − breathing room;
+- **middle elide** for titles (unlike the axis labels' right elide):
+  titles are centered and BOTH ends carry meaning — the method up
+  front, the computed facts at the end;
+- the full string stays verbatim on the panel (`_title_full` + the
+  widget tooltip — hover discloses exactly what was elided);
+- the budget follows the width BOTH ways: a title elided narrow is
+  restored verbatim once the full string fits again;
+- pyqtgraph's `setTitle` is touched ONLY when the rendered fit
+  CHANGES (it rebuilds the LabelItem on every call — pinned by a
+  same-instance test);
+- titles survive `clear()`: the title describes the panel, not the
+  data.
+
+**Tests**: `tests/ui/test_plot_title_budget_242.py` — 12 tests: the
+narrow elide (the LabelItem text equals the policy output), verbatim
+survival in `_title_full` + tooltip, the middle-elide head/tail
+shape, the wide-panel verbatim render, BOTH-ways width following, the
+setTitle-rebuild guard, `set_labels` adoption (including a titleless
+panel's first title), `clear()` survival, the empty-title no-op, a
+short title fitting narrow, and a shown-panel resize-event
+end-to-end leg.  Honest totals **4,995 = 4,197 collect + 798
+doctest**.  Full gate: the 242 chunk runner (the new suite joins
+chunk 4c) — **8/8 chunks green, 0 failing** after the 8/8 foreground
+notebook re-execution at 1.2.154 + the round-137 scrub.  ruff + mypy
+clean.
+
+**Ship**: version chain three-way synced to **1.2.154**, the
+`[1.2.154]` CHANGELOG entry predated the build (no intra-round
+rebuild), `scratch/build_zip_242.py`:
+`pharma-ml-toolkit-v1.2.154.zip` — **21,154,106 bytes, sha-256
+`5fd0c6d3abaede61afd4d5ff85e365dfc0c63afbbaec77e9eb523b96d5aec441`**
+(1057 entries / 1010 files, testzip OK per home, real leaks 0; the
+size grows by the round-241 QA screenshot riding `scratch/` by the
+audit-trail design), byte-identical in all four homes, v1.2.153
+swept.  Census **1033 files / 321,738 lines**.  Web pins trued: 4995
+×6, census fallbacks 1033/321,738, `SHIPPED_TOOLKIT_VERSION` 1.2.154,
+the round-242 clause appended to the Testing after-string; manifest
+entry inserted (guarded anchor this time — the 241 stray-header
+lesson).
+
+**Health**: dev server restarted after the gate (GET / 200); zip-size
+endpoint `{"zipBytes":21154106,"version":"1.2.154","exact":true,
+"source":"release"}`.  agent-browser pass: badge 1.2.154, the 4995
+chip, Download ZIP button, theme dark↔light both ways (the semantic
+locator — the @ref scrape from a compact snapshot is unreliable),
+desktop 1280×900 AND mobile 390×844 zero horizontal scroll, zero
+console/page errors.  Screenshot evidence
+`scratch/r242_web_verify.png`.
+
+**Commits & push**: `8f5617a` (the §23.8 release) + `d403f8e` (web
+pins + manifest + zip homes) pushed; HEAD == origin/main ==
+`d403f8e`; worklog + counter ride this commit.
+
+**Baselines for the next round** — v1.2.154 (four homes) · honest
+totals **4,995 = 4,197 collect + 798 doctest** · census
+**1033/321,738** · counter **33/100** · Part-3 remaining: legend
+placement vs. data (the §23.7 follow-up — a legend overlapping the
+plot is still possible when the legend column sits inside the view)
+· lint backlog: src/ 90 + tests/ 57 ruff findings · the standing
+remainder of §21.4's "original-resolution view" (a true 1:1
+pixel-perfect toggle is the stretch leg) · §20 checkpoint depth and
+§24 SA-in-generative wiring beyond the shipped slices.
