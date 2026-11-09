@@ -11240,3 +11240,120 @@ totals **4,947 = 4,149 collect + 798 doctest** · census
 image pixel/channel inspection, per-page `meta=` adoption on the
 remaining scatter pages, §23 leftovers (legend placement vs. data,
 title truncation) · lint backlog: src/ 90 + tests/ 57 ruff findings.
+
+## Round 240 (2026-11-09, counter 31/100, owner-directed) — the six-PDF compliance audit + the Part-3 §21.4 image pixel inspection, shipped as v1.2.152
+
+**Task commissioned**: the owner's direct instruction — *"Check the
+contents of these files thoroughly and make sure that everything is
+executed and checked"* — over the six uploaded PDFs: MASTER_PROMPT
+part1/part2/part3, the GitHub_Research_Repository_Catalog (140 repos),
+the Prompt_Registry (56 prompts), and the GitHub_Links_Registry (34
+URLs).  Pickup was clean (no rollback: HEAD == origin/main ==
+`0ba458d`, tree clean, rdkit alive, token present); the missing
+15-minute webDevReview scheduler job was found and recreated
+(job 517704, the standing STEP-1 self-heal).
+
+**The compliance matrix** (every PDF read end to end, pdftotext +
+line-audited): part1 ≡ the standing MASTER_PROMPT.pdf (identical
+sha-256 — the ten-phase audit commission, closed with evidence at
+v1.2.107: LEAKAGE_AUDIT/DATA_AUDIT/COVERAGE/GITHUB_BACKUP_MANIFEST
+all present); part2 = §16 the complete PySide6/PyQtGraph/Qt-Material
+GUI redesign (closed round 228 — studio.py + ui/ + theme_manager +
+screenshots + docs/gui/*); part3 = §17–§25 with ONE documented
+remaining acceptance line — §21.4 "image coordinates and pixel values
+can be inspected" (the worklog's standing Part-3 remainder); the
+Links Registry's deferred G-3 trio (torchlens/alibi/Quantus)
+verified ABSORBED at round 189 (`ml/xai.py` + `test_xai_registry.py`);
+the Prompt Registry's standing instructions (review loop, changelog
+discipline, zip-safety rule, coverage guarantee) all confirmed in
+force; the 140-repo catalog audited in
+`docs/GITHUB_RESEARCH_CATALOG_AUDIT.md` + link-checked in
+`docs/GITHUB_CATALOG_LINKCHECK.md`.  **§21.4 was this round's ship.**
+
+**What shipped (§21.4)**: `ImagePanel` gained the pixel inspection
+layer — `pixel_at(x, y)` (the pure data-coordinate mapping:
+fractional positions floor onto the pixel, outside/negative refusal,
+NaN → `masked` disclosure, the axis labels riding the payload so
+hovering the similarity heatmap names both molecules) + the scene
+wiring (`sigMouseMoved` → `ImageItem.mapFromScene` → the
+`pixel_hovered` signal) with per-pixel debouncing (§21.6: a
+mouse-move storm over one cell emits once) and a `leaveEvent` reset
+emitting the cursor-left `None` exactly once + `image_metadata()`
+(shape/dtype/channels/finite-NaN census/range) + `reset_view()`
+(§21.2's reset control) + `set_matrix` now accepting RGB(A)
+`(h,w,3|4)` arrays with per-channel hover payloads (NaN-bearing RGB
+refused with a clear error) + a `matrix_changed` signal.  The Image
+Lab page wires a hover readout under every tab's panel: hovering
+shows `Pixel [row, col] (x, y) = value` (+ labels, masked disclosure,
+per-channel values); at rest the same line reports `Matrix RxC · N
+finite / M masked · min · max`.  The engine-first probe
+(`scratch/probe_image_hover_240.py`) pinned the mapFromScene
+round-trip exactness and the RGB feasibility before any widget code
+changed (pyqtgraph 0.13.7: round-trips exact at 4 decimal places,
+negatives stay negative, RGB renders with the standing HistogramLUT
+control attached, `setLevels([0,255])` accepted).
+
+**Tests**: new `tests/ui/test_image_hover_probe.py`, 20 tests — the
+pure mapping (exact values, flooring, boundary refusal, NaN, labels),
+metadata + clear reset, the scene path through the identity
+`mapFromScene` (the chart-inspector idiom: payload emission,
+silent-no-matrix, same-pixel debounce, outside-emits-None-once,
+leaveEvent single reset, replot re-arm), the RGB/RGBA per-channel
+payloads + the honest NaN refusal, `reset_view`, and the page wiring
+(four readout labels, a real engine payload answered, the at-rest
+metadata restore).  Focused runs green (97 tests across the seven
+neighbouring UI suites re-run together); the full chunked gate
+(`scratch/run_suite_chunks_240.py` — the 239 runner plus the new
+suite in chunk 4c, next-server down per the OOM ritual) finished
+**8/8 green** after the planned notebook re-execution (chunk 2's
+version pins were the only failure, exactly as in rounds 238/239;
+re-verified green standalone).  Honest totals **4,967 = 4,169 collect
++ 798 doctest** (+20); the ui/ tree stays ruff- AND mypy-clean (the
+one import slip — `QEvent` lives in QtCore, not QtGui — caught by the
+first focused run and fixed).
+
+**Release**: version chain three-way synced at bump time (VERSION +
+pyproject + `pharmaml.__version__` → 1.2.152); notebooks re-executed
+8/8 in the foreground at 1.2.152 (zero error outputs, 251 s), ML
+notebook scrubbed by the round-137 cleaner (ZERO absolute-home
+matches); the CHANGELOG `[1.2.152]` entry predated the zip build —
+no intra-round rebuild (the round-238 lesson applied proactively);
+the honest-totals split corrected in the entry before the build
+(4,169 + 798, not 4,149 + 818).  Final zip **20,354,109 B, sha-256
+`31ef34b3c641cf33b13575bfa346c19173936b0aca73dbaa8ee83cc87a81e10b`**
+(1052 entries / 1005 files, testzip OK per home, real leaks 0, nested
+zips NONE) byte-identical in the four homes, predecessor v1.2.151
+swept.
+
+**Web pins**: SHIPPED_TOOLKIT_VERSION 1.2.152; 4,967 across the six
+surfaces; census fallbacks **1024 files / 320,559 lines** (canonical
+`scratch/census_210.py`); manifest entry appended (no rebuild note
+needed).  The owner's re-uploaded `MASTER_PROMPT part1.pdf`
+(byte-identical to the standing MASTER_PROMPT.pdf) tracked with the
+audit corpus.
+
+**Health**: dev server restarted after the gate (GET / 200); zip-size
+endpoint `{"zipBytes":20354109,"version":"1.2.152","exact":true,
+"source":"release"}`; `bun run lint` clean.  agent-browser pass:
+badge 1.2.152, hero hydrated (4967 tests · 1025 files · 320,658 LOC
+live — the API walks the current tree, the code fallback pins the
+release census), the round-240 §21.4 clause in the upgrade table,
+download panel "Download ZIP v1.2.152 release archive size (exact)"
++ copy commands on v1.2.152.zip, theme dark↔light both ways, footer
+intact, mobile 390×844 zero horizontal scroll, zero console/page
+errors (dev.log clean; the one 404 was a manual curl to a
+nonexistent `/api/stats` route, not a page fetch).  Screenshot
+evidence `scratch/r240_web_verify.png`.
+
+**Commits & push**: `08905fe` (the §21.4 release) + `60cab75` (web
+pins + manifest + zip homes + part1.pdf) pushed; worklog + counter
+ride this commit.
+
+**Baselines for the next round** — v1.2.152 (four homes) · honest
+totals **4,967 = 4,169 collect + 798 doctest** · census
+**1024/320,559** · counter **31/100** · Part-3 remaining: per-page
+`meta=` adoption on the remaining scatter pages, §23 leftovers
+(legend placement vs. data, title truncation) · lint backlog: src/
+90 + tests/ 57 ruff findings · the standing remainder of §21.4's
+"original-resolution view" (fit-to-view + aspect lock are live; a
+true 1:1 pixel-perfect toggle is the stretch leg).
