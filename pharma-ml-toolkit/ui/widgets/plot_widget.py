@@ -13,6 +13,16 @@ the plot, click-to-select, per-series visibility toggles and a
 reset-view entry in the context menu.  Pages opt out per chart with
 ``set_inspection_enabled(False)``; per-point hover metadata is attached
 through the ``meta=`` callable or ``attach_metadata()``.
+
+Round 243 (Part-3 §23.9): ``add_legend()`` docks the legend BELOW the
+plot -- in the layout row under the bottom axis, in the view column --
+instead of pyqtgraph's default float INSIDE the view box at a (30, 30)
+offset over the data (probed on 0.13.7).  Hard ``maximumHeight`` /
+``maximumWidth`` caps (re-set on every fit) keep the band from eating
+the plot or widening the grid, and the §23.7 label-budget /
+column-escalation policies re-target the docked row.  The §21 hover
+readout re-anchors to the view box's bottom edge whenever a live
+legend band sits under the plot.
 """
 
 from __future__ import annotations
@@ -61,6 +71,17 @@ _LEGEND_MAX_LABEL_PX = 220 # absolute ceiling for one legend label
 # tooltip) and is restored whenever the width lets it fit again.
 _TITLE_PAD_PX = 12  # breathing room around the centered title
 _TITLE_FALLBACK_PT = 9.0  # pyqtgraph 0.13.7's default title size (probed)
+
+# §23.9 (round 243) legend placement: pyqtgraph's default legend floats
+# INSIDE the view box at a (30, 30) offset -- over the data (probed on
+# 0.13.7: the legend's scene rect intersects the view box's, always).
+# The panel docks the legend in the layout row BELOW the bottom axis
+# instead -- structurally incapable of covering a data point at any
+# width -- with hard size caps so the docked band stays a guest of the
+# plot, never its landlord.
+_LEGEND_BAND_FRAC = 0.35    # the docked row may claim at most this fraction of the panel height
+_LEGEND_SAMPLE_PX = 40      # per-entry overhead: the ItemSample swatch + spacings (probed)
+_LEGEND_MIN_LABEL_PX = 24   # a label never gets less than this much room
 
 
 class PlotPanel(QWidget):
@@ -115,12 +136,20 @@ class PlotPanel(QWidget):
         self.apply_palette(self._palette)
 
     def resizeEvent(self, event) -> None:  # Qt signature
-        """Pin the readout and re-fit the §23.6/§23.7/§23.8 density policies."""
+        """Pin the readout and re-fit the §23.6/§23.7/§23.8/§23.9 policies."""
         super().resizeEvent(event)
-        self._position_readout()
         self._apply_tick_density()
         self._fit_legend()
         self._apply_title_budget()
+        self._position_readout()  # last: reads the freshly capped legend band
+
+    def showEvent(self, event) -> None:  # Qt signature
+        super().showEvent(event)
+        # §23.9: a pre-show resize() delivers no resize event when the
+        # panel is shown at the same size, so the readout would keep
+        # its pre-show (legacy) anchor while the legend band is already
+        # live -- re-anchor once actually visible.
+        self._position_readout()
 
     # -- §23.6 adaptive tick-label density -----------------------------------
     def _bottom_axis_available_px(self) -> int:
@@ -176,52 +205,91 @@ class PlotPanel(QWidget):
         ]
         axis.setTicks([rendered])
 
-    # -- §23.7 legend hygiene -------------------------------------------------
+    # -- §23.7 legend hygiene + §23.9 legend placement ------------------------
     def _fit_legend(self) -> None:
-        """Re-fit the legend to the panel geometry (§23.7).
+        """Re-fit the docked legend to the panel geometry (§23.7 + §23.9).
 
         A pyqtgraph legend is unbounded: long series names spill
         sideways over the data and dozens of entries stack past the
-        plot's bottom edge.  Two-stage policy, re-run after every
-        data-adding call and on every geometry change:
+        plot's bottom edge -- and floating INSIDE the view box (the
+        0.13.7 default, probed) it covers data points outright.  The
+        panel docks it below the bottom axis (§23.9) and re-fits it
+        after every data-adding call and on every geometry change:
 
-        1. **label budget** -- each legend label wider than
-           ``min(_LEGEND_MAX_LABEL_PX, 45% of the panel width)`` is
-           elided; the full text is kept behind the panel, so the
-           budget follows the width BOTH ways -- a label elided on a
-           narrow panel is restored verbatim when the panel widens
-           again;
-        2. **column escalation** -- when the entry count exceeds the
-           vertical capacity (the height the bottom axis leaves, at
-           :data:`_LEGEND_ROW_PX` per row), the legend splits into
-           columns, capped at :data:`_LEGEND_MAX_COLS`.
+        1. **label budget** -- each legend label wider than its
+           per-column share of the view column's width (capped by
+           :data:`_LEGEND_MAX_LABEL_PX`) is elided; the full text is
+           kept behind the panel, so the budget follows the width BOTH
+           ways -- a label elided on a narrow panel is restored
+           verbatim when the panel widens again;
+        2. **column escalation** -- entries beyond the band's row
+           capacity split into columns, capped at
+           :data:`_LEGEND_MAX_COLS`; the band itself is capped at
+           :data:`_LEGEND_BAND_FRAC` of the panel height, so the
+           docked legend never eats the plot;
+        3. **hard caps** -- ``maximumHeight`` (the band) and
+           ``maximumWidth`` (the view column) are re-set on every fit:
+           the grid row hugs the legend's contents up to the band, and
+           a wide legend can never widen the grid past the view.
 
-        Display-only: the legend relabels never touch the §21
-        inspector's series keys -- hover metadata, click-to-select and
-        ``attach_metadata()`` keep resolving the full names.
+        An empty legend (the pre-data state, or a freshly ``clear()``ed
+        panel) hides and claims no row at all.  Display-only: the
+        legend relabels never touch the §21 inspector's series keys --
+        hover metadata, click-to-select and ``attach_metadata()`` keep
+        resolving the full names.
         """
         legend = self._plot.plotItem.legend
         if legend is None:
             return
         if not legend.items:
             self._legend_full.clear()
+            # §23.9: an empty legend claims no band -- the plot keeps
+            # the panel's full height until real series land.
+            legend.setMaximumHeight(0)
+            legend.hide()
+            legend.updateSize()
+            self._plot.plotItem.layout.activate()
+            self._position_readout()  # restore the legacy bottom anchor
             return
+        legend.show()
         live_ids = {id(label) for _sample, label in legend.items}
         for stale in [k for k in self._legend_full if k not in live_ids]:
             del self._legend_full[stale]
+        # §23.9 band budget: the docked row may claim at most a fixed
+        # fraction of the panel height, floored so a tiny panel still
+        # shows the minimum two rows.
+        band = max(
+            _LEGEND_MIN_ROWS * _LEGEND_ROW_PX,
+            int(self.height() * _LEGEND_BAND_FRAC),
+        )
+        rows = max(_LEGEND_MIN_ROWS, band // _LEGEND_ROW_PX)
+        cols = min(_LEGEND_MAX_COLS, max(1, math.ceil(len(legend.items) / rows)))
+        if getattr(legend, "columnCount", 1) != cols:
+            legend.setColumnCount(cols)
+        # §23.9 label budget: the per-column share of the view column's
+        # width (the docked legend no longer trades width against the
+        # data -- it must simply fit the row it sits in), still capped
+        # by the absolute ceiling.
+        avail_w = (
+            self.width()
+            - int(self._plot.getAxis("left").width())
+            - int(self._plot.getAxis("right").width())
+        )
         fm = QFontMetrics(self.font())
-        budget = min(_LEGEND_MAX_LABEL_PX, max(80, int(self.width() * 0.45)))
+        share = int(max(_LEGEND_MIN_LABEL_PX, avail_w // max(1, cols) - _LEGEND_SAMPLE_PX))
+        budget = min(_LEGEND_MAX_LABEL_PX, share)
         for _sample, label in legend.items:
             full = self._legend_full.setdefault(id(label), label.text)
             elided = fm.elidedText(full, Qt.TextElideMode.ElideRight, budget)
             if elided != label.text:
                 label.setText(elided or full)
-        avail_h = self.height() - int(self._plot.getAxis("bottom").height()) - 24
-        rows = max(_LEGEND_MIN_ROWS, avail_h // _LEGEND_ROW_PX)
-        cols = min(_LEGEND_MAX_COLS, max(1, math.ceil(len(legend.items) / rows)))
-        if getattr(legend, "columnCount", 1) != cols:
-            legend.setColumnCount(cols)
-            legend.updateSize()
+        legend.updateSize()
+        # §23.9 hard caps: the band never eats the plot, and the row
+        # never widens the grid past the view column.
+        legend.setMaximumHeight(band)
+        legend.setMaximumWidth(max(80, avail_w))
+        self._plot.plotItem.layout.activate()
+        self._position_readout()  # the band moved: re-anchor above it
 
     # -- §23.8 title budget ----------------------------------------------------
     def _apply_title_budget(self) -> None:
@@ -265,7 +333,18 @@ class PlotPanel(QWidget):
     def _position_readout(self) -> None:
         if self._plot.height() <= 0:
             return
-        self._readout.move(6, max(0, self.height() - self._readout.height() - 6))
+        y = self.height() - self._readout.height() - 6
+        # §23.9: with a live legend band under the plot the readout
+        # floats at the view box's bottom edge instead of the panel's --
+        # it must never cover legend entries (scene == widget coords:
+        # the view is frameless and scrollless, probed).
+        legend = self._plot.plotItem.legend
+        if legend is not None and legend.isVisible() and legend.items:
+            vb = self._plot.plotItem.vb
+            bottom = self._plot.mapFromScene(vb.sceneBoundingRect().bottomLeft()).y()
+            if bottom > 0:
+                y = min(y, int(bottom) - self._readout.height() - 6)
+        self._readout.move(6, max(0, y))
         self._readout.setMaximumWidth(max(1, self.width() - 12))
 
     # -- theming -----------------------------------------------------------
@@ -373,6 +452,10 @@ class PlotPanel(QWidget):
         # -- so the data-item list and the InfiniteLine census of a freshly
         # cleared plot stay exactly what the page's tests pin.
         self._inspector.reset()
+        # §23.9: release the legend band for the freshly emptied legend
+        # (pyqtgraph 0.13.7's PlotItem.clear() empties legend.items --
+        # probed and pinned in the §23.7 suite).
+        self._fit_legend()
 
     # -- hover inspection (Part-3 §21, round 232) ------------------------------
     def set_inspection_enabled(self, enabled: bool) -> None:
@@ -395,7 +478,37 @@ class PlotPanel(QWidget):
             self._apply_title_budget()
 
     def add_legend(self) -> None:
-        self._plot.addLegend(size=(10, 10))
+        """Dock a legend BELOW the plot (§23.9).
+
+        pyqtgraph's default ``addLegend()`` floats the legend INSIDE the
+        view box at a (30, 30) offset -- over the data (probed on
+        0.13.7: the legend's scene rect always intersects the view
+        box's).  The panel instead constructs the ``LegendItem``
+        directly -- no ``size`` pin (a pinned size freezes
+        ``updateSize()`` into a no-op, probed: the legacy
+        ``size=(10, 10)`` call left the frame at 10×10 px with the
+        entries rendering outside it) and no offset anchor -- and docks
+        it in the layout row below the bottom axis, in the view column,
+        hugging its contents (``AlignLeft | AlignTop``).  Hard
+        ``maximumHeight``/``maximumWidth`` caps are re-set by
+        ``_fit_legend()`` on every data-adding call and geometry change.
+        """
+        pi = self._plot.plotItem
+        legend = pi.legend
+        if legend is None:
+            legend = pg.LegendItem(offset=None)
+            pi.legend = legend
+            # row 4 = the free grid row under the bottom axis; column 1
+            # = the view column.  An explicit alignment keeps the grid
+            # from stretching the legend to fill its cell (probed:
+            # without it a stretch feedback loop hands the whole panel
+            # to the legend row).
+            pi.layout.addItem(
+                legend, 4, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+            )
+            legend.setMaximumHeight(0)
+            legend.hide()  # empty: the band starts collapsed
+        self._fit_legend()
 
     # -- export (Part-3 §17) --------------------------------------------------
     def export_image(

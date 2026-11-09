@@ -1,3 +1,70 @@
+## [1.2.155] — 2026-11-09
+
+### Added — round 243: Part-3 §23.9 — legend placement vs. data
+
+* The §23.7 follow-up closes: a legend can no longer overlap the plot.
+  pyqtgraph's default `addLegend()` floats the legend INSIDE the view
+  box at a (30, 30) offset — over the data (probed 0.13.7 evidence:
+  the legend's scene rect always intersects the view box's).
+  `add_legend()` instead constructs the `LegendItem` directly and docks
+  it in the layout row BELOW the bottom axis (grid cell (4, 1), the
+  view column, `AlignLeft | AlignTop`) — structurally incapable of
+  covering a data point at any width.
+* **The `size=(10, 10)` pin bug is fixed** — probed: a pinned size
+  freezes `LegendItem.updateSize()` into a no-op, so the legacy call
+  left the legend frame at 10×10 px with the entries rendering outside
+  it (and §23.7's column escalation never visibly resized anything).
+  The legend is now auto-sized and the frame hugs its entries.
+* **`ui/widgets/plot_widget.py`** — `_fit_legend()` re-targeted to the
+  docked row, re-run after every data-adding call and geometry change:
+  - **band budget** — the docked row may claim at most 35% of the
+    panel height (floored at two rows), enforced as a hard
+    `maximumHeight` cap: the band never eats the plot;
+  - **hard width cap** — `maximumWidth` = the view column's width, so
+    a wide legend can never widen the grid past the view (the probed
+    failure mode: an uncapped 3-column legend of long labels pushed
+    the middle grid column to ~1198 px on a 420 px widget, dragging
+    the view box out of the widget entirely);
+  - **label budget** — the per-column SHARE of the view column's width
+    (still capped by the absolute 220 px ceiling), full text kept
+    verbatim behind the panel (`_legend_full`), following the width
+    BOTH ways;
+  - **column escalation** — entries beyond the band's row capacity
+    split into columns, capped at three (unchanged §23.7 policy, now
+    against the band);
+  - an **empty legend hides and claims no row** — `add_legend()`
+    before any series and a freshly `clear()`ed panel keep the plot's
+    full height (`clear()` releases the band);
+  - the **§21 hover readout re-anchors** to the view box's bottom edge
+    whenever a live band sits under the plot (never covering legend
+    entries) and returns to the legacy panel-bottom anchor when the
+    band releases — including through the show-event path (a pre-show
+    `resize()` at the same size delivers no resize event at show
+    time, probed).
+* Probed quirks pinned: without an explicit alignment the grid
+  stretches the legend into its cell and a feedback loop hands the
+  whole panel to the legend row; `PlotItem.clear()` still empties a
+  docked legend (parenting is irrelevant to it); scene == widget
+  coordinates on the frameless, scrollless view (the readout anchor
+  maps 1:1).
+* **tests/ui/test_plot_legend_placement_243.py** — 17 tests: the
+  docking structure (grid cell, parent, no offset anchor,
+  idempotence), the auto-size (pin gone), the never-overlaps-the-view
+  guarantee at three widths (shown-panel legs), the 35% band cap with
+  a usable plot floor, the grid-never-widens pin, the share budget
+  both-ways with `_legend_full` survival, inspector keys surviving
+  docking, column escalation against the band, the empty-legend
+  no-band contract, `clear()` releasing the band, and four readout
+  anchoring legs (above the band, post-show resize, legacy anchor on
+  clear, legacy anchor without a legend).
+* The §23.7 suite re-targeted with the round: the label-budget clause
+  now names the per-column share, and the both-ways restoration leg
+  narrows to 200 px (the docked-row share is wider than the old
+  45%-of-panel budget, so the mid-length name elides later).
+* Honest totals **5,012 = 4,214 collect + 798 doctest**; the
+  eight-chunk gate green (8/8, 0 failing chunks) after the 8/8
+  foreground notebook re-execution at 1.2.155.
+
 ## [1.2.154] — 2026-11-09
 
 ### Added — round 242: Part-3 §23.8 — the plot-title pixel budget

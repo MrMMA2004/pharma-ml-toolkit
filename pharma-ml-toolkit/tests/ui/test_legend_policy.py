@@ -1,4 +1,7 @@
-"""Part-3 §23.7 legend hygiene tests (round 239).
+"""Part-3 §23.7 legend hygiene tests (round 239; the budget and
+escalation policies were re-targeted to the §23.9 docked row by
+round 243 -- the placement itself is pinned in the §23.9 suite,
+``test_plot_legend_placement_243.py``).
 
 Contract, one module (``ui.widgets.plot_widget.PlotPanel``):
 
@@ -6,8 +9,9 @@ Contract, one module (``ui.widgets.plot_widget.PlotPanel``):
   over the data and dozens of entries stack past the plot's bottom
   edge -- so the panel re-fits the legend after every data-adding
   call and on every geometry change:
-  - **label budget**: each legend label wider than
-    ``min(_LEGEND_MAX_LABEL_PX, 45% of the panel width)`` is elided;
+  - **label budget**: each legend label wider than its per-column
+    share of the view column's width (capped by
+    :data:`_LEGEND_MAX_LABEL_PX`) is elided;
     the full text is kept behind the panel, so the budget follows the
     width BOTH ways (a label elided on a narrow panel is restored
     verbatim when the panel widens -- unless the full text itself
@@ -75,7 +79,10 @@ def test_labels_restore_verbatim_when_widened(studio_app) -> None:
     panel.add_legend()
     mid_name = "Dose-normalized CL estimate"  # fits the 220px ceiling
     panel.line(np.arange(5, dtype=float), np.arange(5, dtype=float), label=mid_name)
-    _refit(panel, 280)
+    # 200px: the per-column share (~124px) elides the name; the §23.7
+    # era's 45%-of-panel budget already elided it at 280px, but the
+    # docked-row share is wider, so the both-ways leg narrows further.
+    _refit(panel, 200)
     assert len(_labels(panel)[0]) < len(mid_name)
     _refit(panel, 1000)
     assert _labels(panel)[0] == mid_name
