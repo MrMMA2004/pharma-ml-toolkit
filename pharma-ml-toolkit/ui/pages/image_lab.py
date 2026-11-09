@@ -38,6 +38,12 @@ pixel (row, column, cursor position, value or per-channel values, NaN
 disclosure, the axis labels when the matrix carried them); at rest the
 same line reports the matrix metadata (shape, finite/NaN census,
 value range).  The Performance tab has no matrix, so it carries none.
+Part-3 §23.10 (round 245) extends the same line with the sub-pixel
+mapping disclosure under extreme zoom: when one screen pixel straddles
+several image pixels the readout says so (``1 screen px spans ≤N×M
+image px (one shown)`` -- the shown value is one of them); when one
+image pixel is a big screen block it explains the steady value
+(``1 image px ≈ N×M screen px``); near 1:1 nothing is appended.
 
 All four engine tabs run in a
 :class:`~ui.workers.job_worker.JobWorker`; they are single-shot
@@ -79,6 +85,7 @@ from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.image_panel import (
     GRADIENT_PRESETS,
     ImagePanel,
+    format_scale_note,
     roi_stats_from_values,
 )
 from ..widgets.progress_panel import ProgressPanel
@@ -262,6 +269,12 @@ class ImageLabPage(QWidget):
             parts.append(f"row: {payload['y_label']}")
         if payload["x_label"] is not None:
             parts.append(f"col: {payload['x_label']}")
+        # §23.10: the sub-pixel mapping disclosure under extreme zoom --
+        # the live on-screen size of one image pixel (absent on payloads
+        # built by pixel_at directly; the hover path always carries it).
+        note = format_scale_note(payload.get("image_px_screen"))
+        if note is not None:
+            parts.append(note)
         label.setText("Hover: " + " · ".join(parts))
 
     def _refresh_roi(self, panel: ImagePanel, label: QLabel) -> None:

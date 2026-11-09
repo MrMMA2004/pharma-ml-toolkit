@@ -29,6 +29,21 @@ axis pens, ROI pen); the colormap itself stays a data-driven gradient
 theme guess, so contrast is readable under every theme (16.11's
 rule: a Qt stylesheet never reaches pyqtgraph's own rendering).
 
+Part-3 §23.10 (round 245) -- the sub-pixel mapping disclosure under
+extreme zoom: the §21.4 hover payload now carries
+``image_px_screen``, the on-screen size (device px) of ONE image
+pixel per axis, measured live from the view transform
+(:meth:`view_pixel_scale`).  Zoomed out past ``ZOOMED_OUT_PX`` one
+screen pixel can straddle several image pixels -- the readout then
+discloses that the shown value is ONE of them (the ≤ceil coverage
+note); zoomed in past ``ZOOMED_IN_PX`` one image pixel is a big
+screen block -- the readout then explains why the value holds steady
+inside it.  The note itself is :func:`format_scale_note`, a pure
+function the Image Lab page rides.  The scale refresh rides the next
+pixel transition (the §21.6 debounce keys on the pixel, so a zoom
+with a stationary cursor re-discloses on the next move -- probed,
+not guessed).
+
 The ROI statistics use the probe's own arithmetic -- a bounding-rect
 slice ``values[y0:y1, x0:x1]`` clipped to the matrix, then
 count/mean/min/max over the finite entries -- so the page's tests pin
@@ -63,6 +78,18 @@ GRADIENT_PRESETS: tuple[str, ...] = (
     "grey",
 )
 
+#: Part-3 §23.10 -- the on-screen size (device px) of ONE image pixel
+#: below which the hover readout discloses sub-pixel coverage: a
+#: screen pixel this small straddles more than one image pixel, so the
+#: shown value is one of several under the cursor.
+ZOOMED_OUT_PX = 0.9
+
+#: Part-3 §23.10 -- the scale at/above which one image pixel is a
+#: visible screen block, and the readout explains why the value holds
+#: steady while the cursor moves inside it (the §21.6 debounce plus
+#: a whole pixel under the cursor).
+ZOOMED_IN_PX = 4.0
+
 
 class ImagePanel(QWidget):
     """A themed matrix view: image + histogram/LUT colormap + RectROI."""
@@ -80,8 +107,11 @@ class ImagePanel(QWidget):
     #: NaN-masked), ``channels`` (1 for grayscale, 3/4 for RGB(A)),
     #: ``rgb`` (per-channel values for 3-D input, else ``None``),
     #: ``masked`` (NaN disclosure), ``x_label``/``y_label`` (the axis
-    #: labels at that column/row when ``set_matrix`` carried them), and
-    #: ``shape`` (the displayed matrix shape).
+    #: labels at that column/row when ``set_matrix`` carried them),
+    #: ``shape`` (the displayed matrix shape), and ``image_px_screen``
+    #: (§23.10 -- the (x, y) on-screen size of one image pixel in
+    #: device px, measured at emission time; the sub-pixel disclosure
+    #: refreshes on the next pixel transition after a zoom).
     pixel_hovered = Signal(object)
 
     def __init__(self, parent: QWidget | None = None, title: str = "") -> None:
@@ -297,6 +327,34 @@ class ImagePanel(QWidget):
         """Reset to the default fit-to-view range (§21.2's reset control)."""
         self._view.autoRange()
 
+    def view_pixel_scale(self) -> tuple[float, float] | None:
+        """The §23.10 live scale: one image pixel's on-screen size.
+
+        Returns the (x, y) size in device pixels of ONE image pixel at
+        the CURRENT view range -- ``1 / ViewBox.viewPixelSize()`` per
+        axis, the transform the item renders through (aspect-locked,
+        so the two axes agree except for stray rounding).  ``None``
+        when no matrix is displayed, the view box is not yet wired, or
+        the geometry is degenerate (a zero-sized view pre-show).
+        Values ``< ZOOMED_OUT_PX`` mean a screen pixel straddles
+        several image pixels; values ``>= ZOOMED_IN_PX`` mean one
+        image pixel is a big screen block (see
+        :func:`format_scale_note`).
+        """
+        if self._values is None:
+            return None
+        vb = self._view.getViewBox()
+        if vb is None:
+            return None
+        try:
+            view_px = vb.viewPixelSize()
+        except Exception:  # noqa: BLE001 - degenerate pre-show geometry
+            return None
+        pw, ph = float(view_px[0]), float(view_px[1])
+        if pw <= 0.0 or ph <= 0.0:
+            return None
+        return (1.0 / pw, 1.0 / ph)
+
     def _on_scene_mouse_moved(self, pos) -> None:  # QPointF from pyqtgraph
         if self._values is None:
             return
@@ -306,6 +364,11 @@ class ImagePanel(QWidget):
         if key == self._last_pixel:
             return  # §21.6 debounce: one emission per pixel transition
         self._last_pixel = key
+        if payload is not None:
+            # §23.10: the sub-pixel disclosure rides every real payload
+            # -- measured at emission time, refreshed on the next pixel
+            # transition after a zoom (the debounce keys on the pixel).
+            payload["image_px_screen"] = self.view_pixel_scale()
         self.pixel_hovered.emit(payload)
 
     def _reset_hover(self) -> None:
@@ -385,6 +448,33 @@ class ImagePanel(QWidget):
 
     def values(self) -> np.ndarray | None:
         return self._values
+
+
+def format_scale_note(scale: tuple[float, float] | None) -> str | None:
+    """The §23.10 readout note for a live ``image_px_screen`` scale.
+
+    Pure: ``None`` when the scale is missing, non-positive, near
+    unity (a ~1:1 mapping needs no disclosure), or between the two
+    thresholds.  Below :data:`ZOOMED_OUT_PX` the note discloses the
+    ≤ceil coverage -- how many image pixels one screen pixel can
+    straddle, with the honest "(one shown)"; at/above
+    :data:`ZOOMED_IN_PX` it explains the steady value inside a
+    zoomed-in block.  Per-axis ceil is the correct worst case: a
+    screen pixel ``1/sx`` image units wide touches at most
+    ``ceil(1/sx)`` pixel columns (boundary straddle included).
+    """
+    if not scale:
+        return None
+    sx, sy = float(scale[0]), float(scale[1])
+    if sx <= 0.0 or sy <= 0.0:
+        return None
+    if min(sx, sy) < ZOOMED_OUT_PX:
+        cover_x = int(np.ceil(1.0 / sx))
+        cover_y = int(np.ceil(1.0 / sy))
+        return f"1 screen px spans ≤{cover_x}×{cover_y} image px (one shown)"
+    if min(sx, sy) >= ZOOMED_IN_PX:
+        return f"1 image px ≈ {sx:.0f}×{sy:.0f} screen px (value steady in block)"
+    return None
 
 
 def roi_stats_from_values(

@@ -1,3 +1,46 @@
+## [1.2.157] — 2026-11-09
+
+### Added — round 245: Part-3 §23.10 — the ImagePanel sub-pixel mapping disclosure
+
+* The §23 responsive pass reaches the last untruthful readout: under
+  extreme zoom the §21.4 hover label now discloses what a screen
+  pixel actually covers.  The payload carries `image_px_screen` —
+  the live on-screen size (device px) of ONE image pixel per axis,
+  `1 / ViewBox.viewPixelSize()` measured at emission time
+  (`ImagePanel.view_pixel_scale()`; probe-printed first:
+  `scratch/probe_image_scale_245.py` pinned the fit / zoom-in /
+  zoom-out regimes and the hidden-widget default geometry).
+* **Two honest notes** (`format_scale_note`, pure): zoomed OUT past
+  `ZOOMED_OUT_PX` (0.9) one screen pixel straddles several image
+  pixels — the readout says `1 screen px spans ≤N×M image px (one
+  shown)`, the per-axis **ceil worst case** (a screen pixel `1/sx`
+  image units wide touches at most `ceil(1/sx)` pixel columns,
+  boundary straddle included); zoomed IN past `ZOOMED_IN_PX` (4.0)
+  one image pixel is a big screen block — the readout explains
+  `1 image px ≈ N×M screen px (value steady in block)` so the
+  §21.6-debounced readout no longer looks frozen.  Near 1:1 nothing
+  is appended (a true mapping needs no footnote).
+* The scale refresh rides the next pixel transition — the §21.6
+  debounce keys on `(row, col)` alone, so a zoom with a stationary
+  cursor re-discloses on the next move (pinned: zoom between moves,
+  the next transition carries the new scale, and returning to a
+  previously hovered pixel re-discloses it too).
+* The Image Lab page appends the note to every matrix tab's hover
+  line (payloads built by `pixel_at` directly — no scale key — render
+  unchanged); the `None` reset emission never carries one.
+* **Tests**: `tests/ui/test_image_subpixel_245.py` — 16 tests: the
+  live scale (None without data/after clear, the exact
+  `1/viewPixelSize` arithmetic on a shown panel, the ~99-screen-px
+  zoom-in regime, the sub-pixel zoom-out regime), the pure note
+  (None cases, the ≤ceil coverage strings, the block strings, the
+  exported thresholds with edge legs), the scene path (the payload
+  key, the None reset, the debounce-keys-on-pixel contract with the
+  zoom-refresh legs), and four page legs (zoomed-out appended,
+  zoomed-in appended, near-1:1 silent, missing-key tolerated).
+  The leakage guard caught the round's own probe docstring carrying
+  an absolute home path before any build — fixed at the source.
+  Honest totals **5,028 = 4,230 collect + 798 doctest** (+16).
+
 ## [1.2.156] — 2026-11-09
 
 ### Changed — round 244: the Part-3 lint-backlog close
