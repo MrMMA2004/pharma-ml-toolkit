@@ -75,7 +75,7 @@ from PySide6.QtWidgets import (
 from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
-from ..widgets.responsive import configure_splitter
+from ..widgets.responsive import configure_splitter, wrap_in_scroll
 from ..workers.job_worker import JobRunner
 from .model_analysis import detect_smiles_column, detect_task, numeric_feature_columns
 
@@ -332,11 +332,16 @@ class MLWorkbenchPage(QWidget):
         lay.setContentsMargins(8, 8, 8, 8)
 
         self._tabs = QTabWidget()
-        self._tabs.addTab(self._build_tune_tab(), "Hyperparameter search")
-        self._tabs.addTab(self._build_leaderboards_tab(), "Leaderboards")
-        self._tabs.addTab(self._build_ensemble_tab(), "Ensemble builder")
-        self._tabs.addTab(self._build_persistence_tab(), "Persistence")
-        self._tabs.addTab(self._build_ad_tab(), "Applicability domain")
+        # §23.2 (round 235): every tab body rides the scroll policy --
+        # the probe measured the tuner form at 479 px and Leaderboards
+        # at 775 px minimum against the ~450 px the 860×560 minimum
+        # window leaves, i.e. run buttons and results boards clipped
+        # below the fold.  The wrapper is a no-op while content fits.
+        self._tabs.addTab(wrap_in_scroll(self._build_tune_tab()), "Hyperparameter search")
+        self._tabs.addTab(wrap_in_scroll(self._build_leaderboards_tab()), "Leaderboards")
+        self._tabs.addTab(wrap_in_scroll(self._build_ensemble_tab()), "Ensemble builder")
+        self._tabs.addTab(wrap_in_scroll(self._build_persistence_tab()), "Persistence")
+        self._tabs.addTab(wrap_in_scroll(self._build_ad_tab()), "Applicability domain")
         lay.addWidget(self._tabs)
 
         self._job_buttons = [

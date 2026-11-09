@@ -269,3 +269,90 @@ def test_smiles_render_preserves_canvas_aspect(studio_app) -> None:
         return
     dpr = pixmap.devicePixelRatio()
     assert (pixmap.width() / dpr, pixmap.height() / dpr) == (260.0, 200.0)
+
+
+# -- §23.2 the scroll policy (round 235) --------------------------------------
+
+
+def test_wrap_in_scroll_policy(studio_app) -> None:
+    """The wrapper's contract: widget-resizable, sideways overflow made
+    impossible (not merely scrollable), vertical scrollbars only as
+    needed, frameless, a hard minimum height, and the content carried
+    over as the same instance."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QLabel, QScrollArea
+
+    from ui.widgets.responsive import SCROLL_MIN_PX, wrap_in_scroll
+
+    content = QLabel("form body")
+    area = wrap_in_scroll(content)
+
+    assert isinstance(area, QScrollArea)
+    assert area.widgetResizable() is True
+    assert area.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert area.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAsNeeded
+    assert area.minimumHeight() == SCROLL_MIN_PX
+    assert area.widget() is content  # §23.5: the same instance, remounted
+
+
+def test_wrap_in_scroll_geometry_only(studio_app) -> None:
+    """§23.5: wrapping changes where the content is mounted, never the
+    content itself.  Mounting reparents the body (top-level layout
+    margins become child margins, a pure display-geometry effect), so
+    the honest invariants are: the rows are the same instances in the
+    same order, and mounting never makes the form REQUIRE more space
+    (scrollbars must not engage one pixel earlier than before)."""
+    from PySide6.QtWidgets import QFormLayout, QWidget
+
+    from ui.widgets.responsive import wrap_in_scroll
+
+    body = QWidget()
+    form = QFormLayout(body)
+    rows = [QWidget() for _ in range(6)]
+    for row, child in enumerate(rows):
+        form.addRow(f"parameter {row}:", child)
+
+    min_before = form.minimumSize()
+    area = wrap_in_scroll(body)
+    min_after = form.minimumSize()
+
+    assert area.widget() is body
+    assert form.rowCount() == len(rows)
+    for row, child in enumerate(rows):
+        assert form.itemAt(row, QFormLayout.ItemRole.LabelRole) is not None
+        assert form.itemAt(row, QFormLayout.ItemRole.FieldRole).widget() is child
+    # never more space required after mounting (the margin delta can
+    # only shrink it -- a top-level form reserves window margins that
+    # an embedded one does not need)
+    assert min_after.width() <= min_before.width()
+    assert min_after.height() <= min_before.height()
+
+
+def test_ml_workbench_tab_bodies_scrolled(main_window) -> None:
+    """The structural audit: every ML Workbench tab body rides the
+    scroll policy (the round-235 probe measured the tuner form at
+    479 px and Leaderboards at 775 px minimum against the ~450 px the
+    860x560 minimum window leaves).  A future tab added without the
+    wrapper fails here -- the policy is self-enforcing, not a
+    snapshot."""
+    from PySide6.QtWidgets import QScrollArea
+
+    from ui.pages.ml_workbench import MLWorkbenchPage
+
+    pages = main_window.findChildren(MLWorkbenchPage)
+    assert pages, "the Studio must carry the ML Workbench page"
+    tabs = pages[0]._tabs
+    assert tabs.count() >= 5
+
+    for i in range(tabs.count()):
+        body = tabs.widget(i)
+        assert isinstance(body, QScrollArea), (
+            f"tab '{tabs.tabText(i)}' is not wrapped in the §23.2 scroll policy"
+        )
+        assert body.widgetResizable() is True
+
+    # the content survived the remount: the tuner's board lives inside
+    # the first tab's scroll body, wired to the page as before
+    board = pages[0]._tune_board
+    assert board is not None
+    assert tabs.widget(0).isAncestorOf(board)

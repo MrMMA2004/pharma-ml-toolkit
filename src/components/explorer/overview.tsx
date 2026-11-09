@@ -298,7 +298,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Testing",
     before: "0 tests — changes verified by eyeball",
-    after: "4912 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite, the SHAP/Optuna and XAI absorption suites, the runboard/umap/curation/express quartet, the round-189 hpo/pruning/quantization/harness engines with the gnn/gnnxai/featurize orphan suite, the Part-3 §18 hyperparameter-recommendations suite, the Part-3 §19 cross-validation results suite, the round-226 studio CV-interface port suite, the round-228 ML-Workbench + retirement suite, the round-229 §20 checkpoint engine suite (36 engine + 6 integration + 1 GUI resume-loop tests), the round-230 §24 synthetic-accessibility suite (37 engine + 6 GUI + the web bridge pins), and the round-231 pair: the Qt console-noise filter suite (the user-reported v1.2.142 Windows startup noise, 5 tests incl. a live qInstallMessageHandler round-trip) the Part-3 §22 SMILES-preview suite (12 tests over the real MolDraw2DCairo renderer, hover popup, and detail dialog), and the round-232 pair: the Windows platform decision-matrix suite (7 tests pinning the black-window fix — the headless bootstrap now forces offscreen only on displayless Linux, never on Windows/macOS/Wayland desktops) and the Part-3 §21 hover-inspection suite (15 tests over the ChartInspector: crosshair, real-value readout, cached metadata, bar-body snapping, series toggles, click-to-select), and the round-233 Part-3 §23 responsive-policy suite (13 tests: the splitter audit over all 20 studio splitters — non-collapsible children, minimum extents, chart-side stretch — the 640×480 export legibility floor with vector-scene re-render and preserved aspect, the §23.5 data-integrity pin that exports never touch the plotted data, and the ImagePanel aspect lock) — the Tk playground's 980 coupled tests left with it)",
+    after: "4915 passing pytest cases across every domain (incl. viz, notebook & CLI guards, the no-leakage and database-audit regression guards, the applicability-domain suite, the SHAP/Optuna and XAI absorption suites, the runboard/umap/curation/express quartet, the round-189 hpo/pruning/quantization/harness engines with the gnn/gnnxai/featurize orphan suite, the Part-3 §18 hyperparameter-recommendations suite, the Part-3 §19 cross-validation results suite, the round-226 studio CV-interface port suite, the round-228 ML-Workbench + retirement suite, the round-229 §20 checkpoint engine suite (36 engine + 6 integration + 1 GUI resume-loop tests), the round-230 §24 synthetic-accessibility suite (37 engine + 6 GUI + the web bridge pins), and the round-231 pair: the Qt console-noise filter suite (the user-reported v1.2.142 Windows startup noise, 5 tests incl. a live qInstallMessageHandler round-trip) the Part-3 §22 SMILES-preview suite (12 tests over the real MolDraw2DCairo renderer, hover popup, and detail dialog), and the round-232 pair: the Windows platform decision-matrix suite (7 tests pinning the black-window fix — the headless bootstrap now forces offscreen only on displayless Linux, never on Windows/macOS/Wayland desktops) and the Part-3 §21 hover-inspection suite (15 tests over the ChartInspector: crosshair, real-value readout, cached metadata, bar-body snapping, series toggles, click-to-select), and the round-233 Part-3 §23 responsive-policy suite (13 tests: the splitter audit over all 20 studio splitters — non-collapsible children, minimum extents, chart-side stretch — the 640×480 export legibility floor with vector-scene re-render and preserved aspect, the §23.5 data-integrity pin that exports never touch the plotted data, and the ImagePanel aspect lock), and the round-235 Part-3 §23 scroll-policy slice (3 tests: the wrap_in_scroll contract — widget-resizable, sideways overflow made impossible rather than scrollable, frameless, a hard 240 px region minimum — the §23.5 remount-invariants pin (rows untouched, never more space required), and the structural audit that every ML Workbench tab body rides the scroll policy after the probe measured the tuner form at 479 px and Leaderboards at 775 px minimum against the ~450 px the 860×560 minimum window leaves) — the Tk playground's 980 coupled tests left with it)",
   },
   {
     aspect: "Interface",
@@ -356,8 +356,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "1008";
-  const loc = stats ? fmtInt(stats.totalLines) : "317,082";
+  const fileCount = stats ? fmtInt(stats.files) : "1011";
+  const loc = stats ? fmtInt(stats.totalLines) : "317,447";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
@@ -443,8 +443,8 @@ export function Overview() {
               />
               <StatChip
                 icon={CircleCheck}
-                value="4912"
-                countTo={4912}
+                value="4915"
+                countTo={4915}
                 label="passing tests"
                 hint="pytest suite covering every domain"
               />

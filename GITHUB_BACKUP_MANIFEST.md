@@ -1356,3 +1356,23 @@ the same tree). A concurrent-session note: the master cron job fired
 mid-round (pulled the user's PR #2 merge `240c082`, re-ran the 233
 chunk runner) — no working-tree collision, both suite runs green on
 identical content, and this release commit is the single ship.
+
+## v1.2.147 release-zip homes (2026-11-09, round 235 — the Part-3 §23 slice 2: the scroll policy)
+
+`pharma-ml-toolkit-v1.2.147.zip` — 20,301,559 bytes, sha-256
+`2698ab08e94e187393021ca8e14579950622b1a37bc6369dbb4ff37011eb35a4`,
+1038 entries / 991 files, built with the standing four-home builder
+recipe (`pharma-ml-toolkit/scratch/build_zip_235.py`, predecessor
+v1.2.146 swept from all four homes) — testzip OK per home, **real
+leaks 0** (the first build caught the re-executed ML notebook's
+sandbox venv paths again; the round-137 scrubber neutralised them),
+nested zips NONE.  Placed byte-identical in `download/`,
+`pharma-ml-toolkit/dist-archive/`, `pharma-ml-toolkit/download/`, and
+`upload/`.  Census **1011 files / 317,447 lines** (the round's
+additions: the `wrap_in_scroll` half of the §23 responsive policy,
+the ML Workbench's five tab bodies wired through it, the three
+scroll-policy tests, and the 235 runner + builder scripts).  Honest
+totals **4,915 = 4,117 collect + 798 doctest** (+3).  The round also
+recovered the 22nd sandbox rollback (local wiped to the round-186
+commit; ff-only pull to origin) and verified the v1.2.145 Windows
+GUI fix lineage end-to-end.
