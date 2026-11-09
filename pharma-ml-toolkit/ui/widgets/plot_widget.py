@@ -50,6 +50,18 @@ _LEGEND_MAX_COLS = 3       # the legend never widens past 3 columns
 _LEGEND_MIN_ROWS = 2       # even a tiny plot gets 2 rows per column
 _LEGEND_MAX_LABEL_PX = 220 # absolute ceiling for one legend label
 
+# §23.8 (round 242) title budget: a plot title is the last unbounded
+# string on the panel -- pages compose long titles (method + facts
+# suffixes like "UMAP — trustworthiness 0.87 · a=1.200 b=0.300") and
+# pyqtgraph renders them verbatim, overflowing a narrow panel.  The
+# policy below ellipsizes the RENDERED title to the view column's
+# pixel width (middle elide: titles are centered and BOTH ends carry
+# meaning -- the method up front, the computed facts at the end),
+# while the full string stays on the panel verbatim (attribute +
+# tooltip) and is restored whenever the width lets it fit again.
+_TITLE_PAD_PX = 12  # breathing room around the centered title
+_TITLE_FALLBACK_PT = 9.0  # pyqtgraph 0.13.7's default title size (probed)
+
 
 class PlotPanel(QWidget):
     """A single themed plot with labelled axes and a callable API."""
@@ -91,15 +103,24 @@ class PlotPanel(QWidget):
         # label budget can follow the width BOTH ways; pruned against the
         # live legend items on every fit (clear()/replot never leak ids).
         self._legend_full: dict[int, str] = {}
+        # §23.8: the full, verbatim title behind the rendered one (and
+        # the last string the policy actually rendered, so setTitle is
+        # only touched when the fit CHANGES -- pyqtgraph's setTitle
+        # rebuilds the LabelItem each call).
+        self._title_full = title or ""
+        self._title_rendered: str | None = None
+        if self._title_full:
+            self.setToolTip(self._title_full)
         self._readout.show()
         self.apply_palette(self._palette)
 
     def resizeEvent(self, event) -> None:  # Qt signature
-        """Pin the readout and re-fit the §23.6/§23.7 density policies."""
+        """Pin the readout and re-fit the §23.6/§23.7/§23.8 density policies."""
         super().resizeEvent(event)
         self._position_readout()
         self._apply_tick_density()
         self._fit_legend()
+        self._apply_title_budget()
 
     # -- §23.6 adaptive tick-label density -----------------------------------
     def _bottom_axis_available_px(self) -> int:
@@ -201,6 +222,45 @@ class PlotPanel(QWidget):
         if getattr(legend, "columnCount", 1) != cols:
             legend.setColumnCount(cols)
             legend.updateSize()
+
+    # -- §23.8 title budget ----------------------------------------------------
+    def _apply_title_budget(self) -> None:
+        """Elide the rendered title to the panel's pixel width (§23.8).
+
+        Pages compose long titles (method up front, computed facts at
+        the end) and pyqtgraph renders them verbatim -- on a narrow
+        panel they overflow.  The policy measures the title with the
+        LIVE LabelItem font (probed: pyqtgraph 0.13.7 renders the
+        default title at 9pt Sans Serif and never elides on its own),
+        middle-elides to the view column's width (titles are centered
+        and BOTH ends carry meaning), and keeps the full string
+        verbatim on the panel ("_title_full" + the widget tooltip).
+        The budget follows the width BOTH ways: a title elided narrow
+        is restored verbatim once the full string fits again.  Only
+        pyqtgraph's setTitle is touched when the rendered fit CHANGES
+        (it rebuilds the LabelItem on every call).
+        """
+        title = self._title_full
+        if not title:
+            return
+        title_item = self._plot.getPlotItem().layout.itemAt(0, 1)
+        font = title_item.item.font() if title_item is not None else None
+        if font is None or font.pointSizeF() <= 0:
+            font = self.font()
+            font.setPointSizeF(_TITLE_FALLBACK_PT)
+        metrics = QFontMetrics(font)
+        left = self._plot.getAxis("left")
+        right = self._plot.getAxis("right")
+        avail = self.width() - int(left.width()) - int(right.width()) - _TITLE_PAD_PX
+        if avail <= 0 or metrics.horizontalAdvance(title) <= avail:
+            rendered = title  # fits (or nothing laid out yet): verbatim
+        else:
+            rendered = metrics.elidedText(title, Qt.TextElideMode.ElideMiddle, avail) or title
+        if rendered != self._title_rendered:
+            self._title_rendered = rendered
+            self._plot.setTitle(rendered)
+        if self.toolTip() != title:
+            self.setToolTip(title)
 
     def _position_readout(self) -> None:
         if self._plot.height() <= 0:
@@ -331,7 +391,8 @@ class PlotPanel(QWidget):
         self._plot.setLabel("bottom", x)
         self._plot.setLabel("left", y)
         if title is not None:
-            self._plot.setTitle(title)
+            self._title_full = title
+            self._apply_title_budget()
 
     def add_legend(self) -> None:
         self._plot.addLegend(size=(10, 10))

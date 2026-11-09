@@ -1,3 +1,46 @@
+## [1.2.154] — 2026-11-09
+
+### Added — round 242: Part-3 §23.8 — the plot-title pixel budget
+
+* The §23 responsive pass closes its remaining overflow: a plot
+  title is the last unbounded string on a `PlotPanel`.  Pages compose
+  long titles (method up front, computed facts at the end —
+  "UMAP — trustworthiness 0.87 · a=1.200 b=0.300 · …"), and pyqtgraph
+  renders them verbatim — probed 0.13.7 evidence: the default title
+  font is 9pt Sans Serif, an 83-char title advances 534 px, and the
+  LabelItem NEVER elides on its own, so narrow panels overflow.
+* **`ui/widgets/plot_widget.py`** — `_apply_title_budget()`, hooked
+  into the same geometry-change path as §23.6/§23.7 (`resizeEvent`)
+  and `set_labels(title=…)`:
+  - measured with the LIVE LabelItem font (fallback: the panel font
+    at the probed 9pt), budgeted to the view column's width (panel −
+    left − right axis widths − breathing room);
+  - **middle elide** for titles (unlike the axis labels' right
+    elide): titles are centered and BOTH ends carry meaning — the
+    method up front, the computed facts at the end;
+  - the full string stays verbatim on the panel (`_title_full` +
+    the widget tooltip — hover discloses what was elided);
+  - the budget follows the width BOTH ways — a title elided narrow
+    is restored verbatim once it fits again;
+  - pyqtgraph's `setTitle` is only touched when the rendered fit
+    CHANGES (it rebuilds the LabelItem on every call — pinned by a
+    same-instance test).
+* Probed quirks pinned: pyqtgraph creates the title LabelItem even
+  for titleless panels (empty text), so "no title" is asserted on
+  the text, not the item; titles survive `clear()` (the title
+  describes the panel, not the data).
+* **tests/ui/test_plot_title_budget_242.py** — 12 tests: the narrow
+  elide (policy output == the LabelItem text), verbatim survival in
+  `_title_full` + tooltip, the middle-elide head/tail shape, the
+  wide-panel verbatim render, BOTH-ways width following, the
+  setTitle-rebuild guard, `set_labels` adoption (including a
+  titleless panel's first title), `clear()` survival, the empty-title
+  no-op, a short title fitting narrow, and a shown-panel
+  resize-event end-to-end leg.
+* Honest totals **4,995 = 4,197 collect + 798 doctest**; the
+  eight-chunk gate green (8/8, 0 failing chunks) after the 8/8
+  foreground notebook re-execution at 1.2.154.
+
 ## [1.2.153] — 2026-11-09
 
 ### Added — round 241: Part-3 §21 completion — per-point meta on the remaining scatter surfaces
