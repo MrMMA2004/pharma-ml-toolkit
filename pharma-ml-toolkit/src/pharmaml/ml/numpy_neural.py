@@ -96,8 +96,12 @@ pharmaml.exceptions.ModelError: unknown optimizer 'nope' -- valid optimizers: sg
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 import math
 from collections.abc import Callable, Sequence
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -105,6 +109,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 
 from pharmaml.exceptions import DataValidationError, ModelError
 from pharmaml.logger import get_logger
+from pharmaml.utils.checkpoints import CheckpointManager, PersistenceError
 
 __all__ = [
     "NumpyMLPClassifier",
@@ -180,6 +185,123 @@ def _build_optimizer(
     raise ModelError(
         f"unknown optimizer {name!r} -- valid optimizers: " + ", ".join(OPTIMIZERS)
     )
+
+
+# ---------------------------------------------------------------------------
+# SS20.4 checkpoint payload helpers -- JSON + base64, never pickle (a
+# malicious .json cannot execute on load; arrays ride as base64).
+# ---------------------------------------------------------------------------
+
+
+def _b64_pack(array: np.ndarray) -> dict[str, object]:
+    """One array -> a JSON-safe ``{dtype, shape, data}`` payload."""
+    arr = np.ascontiguousarray(np.asarray(array))
+    return {
+        "dtype": str(arr.dtype),
+        "shape": list(arr.shape),
+        "data": base64.b64encode(arr.tobytes()).decode("ascii"),
+    }
+
+
+def _b64_unpack(payload: object) -> np.ndarray:
+    """Rebuild one :func:`_b64_pack` payload into a fresh array."""
+    if not isinstance(payload, dict):
+        raise TypeError("array payload must be a dict")
+    arr = np.frombuffer(
+        base64.b64decode(payload["data"]), dtype=np.dtype(payload["dtype"])
+    )
+    return arr.reshape([int(s) for s in payload["shape"]]).copy()
+
+
+def _config_fingerprint(estimator: _BaseNumpyMLP) -> str:
+    """SHA-256 over EVERY trajectory-shaping hyperparameter.
+
+    ``epochs``/``patience`` stay budgets -- free to differ between the
+    interrupted and the resuming call -- so they are deliberately NOT
+    fingerprinted (SS20.5).
+    """
+    payload = {
+        "hidden_layers": [int(h) for h in estimator.hidden_layers],
+        "activation": str(estimator.activation),
+        "optimizer": str(estimator.optimizer),
+        "learning_rate": float(estimator.learning_rate),
+        "weight_decay": float(estimator.weight_decay),
+        "momentum": float(estimator.momentum),
+        "batch_size": int(estimator.batch_size),
+        "val_split": float(estimator.val_split),
+        "dropout": float(estimator.dropout),
+        "random_state": int(estimator.random_state),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def _dataset_fingerprint(matrix: np.ndarray, encoded: np.ndarray) -> str:
+    """SHA-256 over X and the encoded y (dtype + shape + raw bytes)."""
+    digest = hashlib.sha256()
+    for arr in (matrix, encoded):
+        a = np.ascontiguousarray(arr)
+        digest.update(str(a.dtype).encode("utf-8"))
+        digest.update(str(a.shape).encode("utf-8"))
+        digest.update(a.tobytes())
+    return digest.hexdigest()
+
+
+def _encode_optimizer_state(state: dict[str, object]) -> dict[str, object]:
+    """``Optimizer.state_dict()`` -> JSON-safe (arrays become base64)."""
+    raw_count = state["step_count"]
+    if not isinstance(raw_count, int) or isinstance(raw_count, bool):
+        raise TypeError(
+            f"optimizer state step_count must be an int, got {type(raw_count).__name__}"
+        )
+    encoded: dict[str, object] = {"step_count": raw_count}
+    for key, value in state.items():
+        if key == "step_count":
+            continue
+        if not isinstance(value, list):
+            raise TypeError(f"optimizer buffer {key!r} must be a list")
+        encoded[key] = [_b64_pack(buf) for buf in value]
+    return encoded
+
+
+def _decode_optimizer_state(payload: dict[str, object]) -> dict[str, object]:
+    """Inverse of :func:`_encode_optimizer_state` (loads raise ModelError)."""
+    decoded: dict[str, object] = {"step_count": payload["step_count"]}
+    for key, value in payload.items():
+        if key == "step_count":
+            continue
+        if not isinstance(value, list):
+            raise TypeError(f"optimizer buffer {key!r} must be a list")
+        decoded[key] = [_b64_unpack(item) for item in value]
+    return decoded
+
+
+def _encode_best_weights(
+    best_state: list[tuple[np.ndarray, np.ndarray | None]] | None,
+) -> list[dict[str, object]] | None:
+    """The early-stopping best snapshot -> JSON-safe layer records."""
+    if best_state is None:
+        return None
+    return [
+        {"w": _b64_pack(w), "b": None if b is None else _b64_pack(b)}
+        for w, b in best_state
+    ]
+
+
+def _decode_best_weights(
+    payload: list[dict[str, object]] | None,
+) -> list[tuple[np.ndarray, np.ndarray | None]] | None:
+    """Inverse of :func:`_encode_best_weights`."""
+    if payload is None:
+        return None
+    restored: list[tuple[np.ndarray, np.ndarray | None]] = []
+    for layer in payload:
+        bias = layer.get("b")
+        restored.append(
+            (_b64_unpack(layer["w"]), None if bias is None else _b64_unpack(bias))
+        )
+    return restored
 
 
 class _MLPNetwork:
@@ -284,6 +406,9 @@ class _BaseNumpyMLP(BaseEstimator):
         val_split: float = 0.15,
         dropout: float = 0.0,
         random_state: int = 42,
+        checkpoint_dir: str | Path | None = None,
+        checkpoint_every: int = 0,
+        checkpoint_resume: bool = True,
     ) -> None:
         self.hidden_layers = tuple(hidden_layers)
         self.activation = activation
@@ -297,6 +422,9 @@ class _BaseNumpyMLP(BaseEstimator):
         self.val_split = val_split
         self.dropout = dropout
         self.random_state = random_state
+        self.checkpoint_dir = checkpoint_dir
+        self.checkpoint_every = checkpoint_every
+        self.checkpoint_resume = checkpoint_resume
 
     # -- validation ------------------------------------------------------ #
 
@@ -391,6 +519,41 @@ class _BaseNumpyMLP(BaseEstimator):
             epoch with ``{'epoch', 'epochs', 'train_loss', 'val_loss',
             'best_val', 'stale'}`` — the playground's Deep Learning tab
             drives its progress bar from it.
+
+        The estimator's ``checkpoint_dir`` / ``checkpoint_every`` /
+        ``checkpoint_resume`` parameters wire the SS20.4 depth: after
+        every ``checkpoint_every`` epochs AND the final epoch the
+        COMPLETE resumable state (weights, optimizer moments + step
+        count, training RNG, early-stopping state, history) is written
+        through the round-229 :class:`CheckpointManager` — atomic,
+        sha-256 self-verified, JSON + base64, never pickle.  A fit
+        interrupted after N epochs and resumed from its checkpoint
+        reaches BIT-IDENTICAL predictions vs the uninterrupted run
+        (``np.array_equal`` — ``allclose`` would hide a rewound Adam
+        bias correction or a shifted batch permutation).  Incompatible
+        or unreadable checkpoints are discarded with a warning and
+        training starts fresh; writes are best-effort and degrade to
+        warnings; ``epochs``/``patience`` stay free budgets.
+
+        Checkpoint round-trip — the interrupted + resumed pair equals
+        the uninterrupted run exactly:
+
+        >>> import numpy as np, tempfile
+        >>> rng = np.random.default_rng(3)
+        >>> Xc = rng.normal(size=(40, 3))
+        >>> yc = Xc @ np.array([1.5, -2.0, 0.5]) + 0.3
+        >>> with tempfile.TemporaryDirectory() as home:
+        ...     part = NumpyMLPRegressor(hidden_layers=(12,), epochs=5,
+        ...         random_state=5, checkpoint_dir=home,
+        ...         checkpoint_every=3).fit(Xc, yc)
+        ...     full = NumpyMLPRegressor(hidden_layers=(12,), epochs=8,
+        ...         random_state=5, checkpoint_dir=home,
+        ...         checkpoint_every=3).fit(Xc, yc)
+        ...     rest = NumpyMLPRegressor(hidden_layers=(12,), epochs=8,
+        ...         random_state=5, checkpoint_dir=home).fit(Xc, yc)
+        ...     bit_exact = bool(np.array_equal(full.predict(Xc), rest.predict(Xc)))
+        >>> bit_exact
+        True
         """
         from pharmaml.ml.autograd import Tensor, cross_entropy, mse_loss
 
@@ -445,13 +608,68 @@ class _BaseNumpyMLP(BaseEstimator):
             float(self.momentum),
         )
 
+        batch = max(1, int(self.batch_size))
+        y_train_col = encoded[train_idx].reshape(-1, 1)
+
+        # -- SS20.4/SS20.5: resumable checkpoints through CheckpointManager --
+        manager: CheckpointManager | None = None
+        if self.checkpoint_dir is not None:
+            try:
+                manager = CheckpointManager(Path(self.checkpoint_dir), name="numpy-mlp")
+            except PersistenceError as exc:
+                _LOG.warning("checkpoint home unusable (%s); training without checkpoints", exc)
+        cfg_fp = _config_fingerprint(self)
+        ds_fp = _dataset_fingerprint(matrix, encoded)
+
         history: list[dict[str, object]] = []
         best_val = float("inf")
         best_state: list[tuple[np.ndarray, np.ndarray | None]] | None = None
         stale = 0
-        batch = max(1, int(self.batch_size))
-        y_train_col = encoded[train_idx].reshape(-1, 1)
-        for epoch in range(1, int(self.epochs) + 1):
+        resumed_epoch = 0
+        if manager is not None and self.checkpoint_resume:
+            try:
+                latest = manager.latest()
+            except OSError as exc:
+                latest = None
+                _LOG.warning("checkpoint scan failed (%s); starting fresh", exc)
+            if latest is not None:
+                state = latest.state
+                if state.get("config_fp") != cfg_fp or state.get("dataset_fp") != ds_fp:
+                    _LOG.warning(
+                        "checkpoint at step %d is for a different config/dataset; "
+                        "starting fresh",
+                        latest.step,
+                    )
+                else:
+                    try:
+                        network.restore(
+                            [
+                                (
+                                    _b64_unpack(layer["w"]),
+                                    None if layer.get("b") is None else _b64_unpack(layer["b"]),
+                                )
+                                for layer in state["weights"]
+                            ]
+                        )
+                        optimizer.load_state_dict(
+                            _decode_optimizer_state(state["optimizer"])
+                        )
+                        rng.bit_generator.state = state["rng_state"]
+                        history = [dict(h) for h in state.get("history", [])]
+                        saved_val = state.get("best_val")
+                        best_val = float("inf") if saved_val is None else float(saved_val)
+                        stale = int(state.get("stale", 0))
+                        best_state = _decode_best_weights(state.get("best_weights"))
+                        resumed_epoch = int(latest.step)
+                        _LOG.info("resumed %s from checkpoint step %d", type(self).__name__, resumed_epoch)
+                    except (KeyError, TypeError, ValueError, ModelError) as exc:
+                        _LOG.warning("checkpoint unreadable (%s); starting fresh", exc)
+                        history = []
+                        best_val = float("inf")
+                        best_state = None
+                        stale = 0
+                        resumed_epoch = 0
+        for epoch in range(resumed_epoch + 1, int(self.epochs) + 1):
             network.training = True
             order = rng.permutation(len(train_idx))
             losses: list[float] = []
@@ -500,7 +718,41 @@ class _BaseNumpyMLP(BaseEstimator):
                         "stale": stale,
                     }
                 )
+            if manager is not None:
+                every = int(self.checkpoint_every)
+                if (every > 0 and epoch % every == 0) or epoch == int(self.epochs):
+                    _write_checkpoint(
+                        manager,
+                        epoch,
+                        int(self.epochs),
+                        type(self).__name__,
+                        network,
+                        optimizer,
+                        rng,
+                        history,
+                        best_val,
+                        best_state,
+                        stale,
+                        cfg_fp,
+                        ds_fp,
+                    )
             if use_val and stale >= int(self.patience):
+                if manager is not None:
+                    _write_checkpoint(
+                        manager,
+                        epoch,
+                        int(self.epochs),
+                        type(self).__name__,
+                        network,
+                        optimizer,
+                        rng,
+                        history,
+                        best_val,
+                        best_state,
+                        stale,
+                        cfg_fp,
+                        ds_fp,
+                    )
                 _LOG.debug(
                     "early stopping at epoch %03d (no val improvement for %d epochs)",
                     epoch,
@@ -543,6 +795,54 @@ class _BaseNumpyMLP(BaseEstimator):
         self._require_fitted()
         Z = (self._prepare_X(X) - self._mean) / self._scale
         return self._network.forward_numpy(Z)
+
+
+def _write_checkpoint(
+    manager: CheckpointManager,
+    epoch: int,
+    total: int,
+    estimator_name: str,
+    network: _MLPNetwork,
+    optimizer: object,
+    rng: np.random.Generator,
+    history: list[dict[str, object]],
+    best_val: float,
+    best_state: list[tuple[np.ndarray, np.ndarray | None]] | None,
+    stale: int,
+    cfg_fp: str,
+    ds_fp: str,
+) -> None:
+    """Persist the COMPLETE resumable state (SS20.4) -- best-effort.
+
+    Any write failure (unusable home, full disk, non-serialisable
+    state) degrades to a log warning; training itself never stops
+    because of a checkpoint problem.
+    """
+    payload = {
+        "schema_note": "numpy-mlp complete resumable state (Part-3 SS20.4)",
+        "config_fp": cfg_fp,
+        "dataset_fp": ds_fp,
+        "weights": _encode_best_weights(network.snapshot()),
+        "optimizer": _encode_optimizer_state(optimizer.state_dict()),  # type: ignore[attr-defined]
+        "rng_state": rng.bit_generator.state,
+        "history": [dict(h) for h in history],
+        "best_val": None if not math.isfinite(best_val) else float(best_val),
+        "stale": int(stale),
+        "best_weights": _encode_best_weights(best_state),
+    }
+    try:
+        manager.save(
+            step=epoch,
+            total=total,
+            state=payload,
+            note=f"{estimator_name} epoch {epoch}",
+        )
+    except (PersistenceError, OSError, TypeError, ValueError, KeyError) as exc:
+        _LOG.warning(
+            "checkpoint write failed at epoch %d (%s); continuing without it",
+            epoch,
+            exc,
+        )
 
 
 def _numpy_cross_entropy(logits: np.ndarray, labels: np.ndarray) -> float:
