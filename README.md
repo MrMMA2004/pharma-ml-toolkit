@@ -39,11 +39,11 @@ PharmaML brings the repetitive parts of a computational-pharmacology workflow in
 | **Desktop & web interfaces** | Explore the same package through the 17-page PharmaML Studio or browse code, APIs, notebooks and downloads in the included web console. |
 
 <p align="center">
-  <a href="pharma-ml-toolkit/docs/assets/web-console-v1.2.159.png">
-    <img src="pharma-ml-toolkit/docs/assets/web-console-v1.2.159.png" width="960" alt="The actual PharmaML v1.2.159 web console showing its verified source download, five thousand eighty-one passing tests and MIT license">
+  <a href="pharma-ml-toolkit/docs/assets/web-console-v1.2.160.png">
+    <img src="pharma-ml-toolkit/docs/assets/web-console-v1.2.160.png" width="960" alt="The actual PharmaML v1.2.160 web console showing its verified source download, five thousand one hundred six passing tests and MIT license">
   </a>
   <br>
-  <sub>The actual <strong>v1.2.159 Next.js console</strong>: source downloads, executed notebooks, API reference and live package statistics. See also the <a href="pharma-ml-toolkit/examples/chart_readability.py">reproducible PK chart example</a>.</sub>
+  <sub>The actual <strong>v1.2.160 Next.js console</strong>: source downloads, executed notebooks, API reference and live package statistics. See also the <a href="pharma-ml-toolkit/examples/chart_readability.py">reproducible PK chart example</a>.</sub>
 </p>
 
 ## Quick start
@@ -118,12 +118,12 @@ pharma-ml-toolkit/
 
 ## Verification and reproducibility
 
-The [v1.2.159 release record](pharma-ml-toolkit/CHANGELOG.md) reports:
+The [v1.2.160 release record](pharma-ml-toolkit/CHANGELOG.md) reports:
 
-- **5,081 collected pytest and doctest cases**—4,273 tests plus 808 doctests—with all nine verification chunks green;
-- **eight executed notebooks refreshed at v1.2.159**, together with their clean no-output twins;
-- a **1,058-file, 326,049-line** release census; and
-- archive integrity verification for the 22,654,468-byte release ZIP.
+- **5,106 collected pytest and doctest cases**—4,297 tests plus 809 doctests—with all nine verification chunks green;
+- **eight executed notebooks refreshed at v1.2.160**, together with their clean no-output twins;
+- a **1,061-file, 326,899-line** release census; and
+- archive integrity verification for the 22,750,159-byte release ZIP.
 
 The test inventory covers domain calculations, data leakage, notebooks, CLI, visualization, web parity and the seventeen Studio pages. See the [testing guide](pharma-ml-toolkit/README.md#testing), [GUI audit](pharma-ml-toolkit/docs/gui/GUI_AUDIT.md) and [changelog](pharma-ml-toolkit/CHANGELOG.md) for the complete release evidence and reproduction commands.
 

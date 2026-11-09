@@ -6,7 +6,7 @@ Run from the repository root after installing Pillow::
     python scripts/build_social_preview.py
 
 The source screenshot is not synthesized or relabelled: it is the verified
-v1.2.159 browser capture copied to ``pharma-ml-toolkit/docs/assets/``.
+browser capture for the current ``VERSION`` under ``pharma-ml-toolkit/docs/assets/``.
 """
 
 from __future__ import annotations
@@ -17,7 +17,8 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "pharma-ml-toolkit/docs/assets/web-console-v1.2.159.png"
+VERSION = (ROOT / "pharma-ml-toolkit/VERSION").read_text(encoding="utf-8").strip()
+SOURCE = ROOT / f"pharma-ml-toolkit/docs/assets/web-console-v{VERSION}.png"
 OUTPUT = ROOT / "pharma-ml-toolkit/docs/assets/github-social-preview.png"
 ROBOTO = Path(os.environ.get("PHARMAML_ROBOTO_DIR", "/usr/share/fonts/truetype/roboto"))
 DEJAVU = Path("/usr/share/fonts/truetype/dejavu")
