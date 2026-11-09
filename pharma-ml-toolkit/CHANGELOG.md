@@ -1,3 +1,37 @@
+## [1.2.151] — 2026-11-09
+
+### Changed — round 239: the Part-3 §23.7 legend hygiene policy
+
+* **`ui/widgets/plot_widget.py`** — a pyqtgraph legend is unbounded:
+  long series names spill sideways over the data and dozens of entries
+  stack past the plot's bottom edge.  `PlotPanel` now re-fits the
+  legend after every data-adding call (`scatter`/`line`/`bars`) and on
+  every geometry change, with a two-stage policy:
+  - **label budget** — each legend label wider than
+    `min(220px, 45% of the panel width)` is elided; the full text is
+    kept behind the panel (`PlotPanel._legend_full`, an id-keyed map
+    pruned against the live legend items on every fit so
+    clear/replot cycles never leak stale ids), so the budget follows
+    the width BOTH ways — a label elided on a narrow panel is
+    restored verbatim when the panel widens, unless the full text
+    itself exceeds the absolute 220 px ceiling no width can lift;
+  - **column escalation** — entries beyond the vertical capacity
+    (the height the bottom axis leaves, 22 px per row) split into
+    columns, capped at three.
+  The relabeling is display-only: the §21 inspector's series keys
+  keep resolving hover metadata, click-to-select and
+  `attach_metadata()` under the FULL names.
+* **pyqtgraph 0.13.7 probe** — `PlotItem.clear()` empties the legend
+  (no stale-entry leak on our side); pinned by a dedicated test so a
+  future pyqtgraph bump that starts leaking fails loudly.
+* **`tests/ui/test_legend_policy.py`** — 11 tests: narrow elision,
+  verbatim restoration on widening, the ceiling-never-lifts leg,
+  short names untouched, column escalation to the 3-cap on 40
+  entries, single-column calm for 3 entries, no-legend no-op,
+  clear/map reset, stale-id pruning, the inspector-keys contract,
+  and fit idempotence.  Honest totals **4,947 = 4,149 collect + 798
+  doctest** (+11); the ui/ tree stays ruff- and mypy-clean.
+
 ## [1.2.150] — 2026-11-09
 
 ### Changed — round 238: the Part-3 §23.6 adaptive tick-label density

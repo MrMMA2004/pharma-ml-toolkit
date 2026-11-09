@@ -40,6 +40,16 @@ _TICK_PAD_PX = 16   # breathing room around a label when sizing a tick
 _MIN_AVAIL_PX = 80  # narrower than this = not laid out yet: keep all ticks
 _MIN_SHARE_PX = 24  # a kept label never gets less than this much room
 
+# §23.7 (round 239) legend hygiene: a legend is also unbounded -- long
+# series names spill sideways over the data and dozens of entries stack
+# past the plot's bottom edge.  The policy below ellipsizes each legend
+# label to a pixel budget and escalates the column count when the
+# entries would stack past the vertical capacity.
+_LEGEND_ROW_PX = 22        # empirical per-row height incl. spacing
+_LEGEND_MAX_COLS = 3       # the legend never widens past 3 columns
+_LEGEND_MIN_ROWS = 2       # even a tiny plot gets 2 rows per column
+_LEGEND_MAX_LABEL_PX = 220 # absolute ceiling for one legend label
+
 
 class PlotPanel(QWidget):
     """A single themed plot with labelled axes and a callable API."""
@@ -77,14 +87,19 @@ class PlotPanel(QWidget):
         # §23.6: the full category tick list behind the bottom axis (or
         # None); the rendered subset is re-derived on every resize.
         self._cat_ticks: list[tuple[float, str]] | None = None
+        # §23.7: id(LabelItem) -> the full, unelided legend text, so the
+        # label budget can follow the width BOTH ways; pruned against the
+        # live legend items on every fit (clear()/replot never leak ids).
+        self._legend_full: dict[int, str] = {}
         self._readout.show()
         self.apply_palette(self._palette)
 
     def resizeEvent(self, event) -> None:  # Qt signature
-        """Pin the readout and re-fit the §23.6 tick density to the width."""
+        """Pin the readout and re-fit the §23.6/§23.7 density policies."""
         super().resizeEvent(event)
         self._position_readout()
         self._apply_tick_density()
+        self._fit_legend()
 
     # -- §23.6 adaptive tick-label density -----------------------------------
     def _bottom_axis_available_px(self) -> int:
@@ -140,6 +155,53 @@ class PlotPanel(QWidget):
         ]
         axis.setTicks([rendered])
 
+    # -- §23.7 legend hygiene -------------------------------------------------
+    def _fit_legend(self) -> None:
+        """Re-fit the legend to the panel geometry (§23.7).
+
+        A pyqtgraph legend is unbounded: long series names spill
+        sideways over the data and dozens of entries stack past the
+        plot's bottom edge.  Two-stage policy, re-run after every
+        data-adding call and on every geometry change:
+
+        1. **label budget** -- each legend label wider than
+           ``min(_LEGEND_MAX_LABEL_PX, 45% of the panel width)`` is
+           elided; the full text is kept behind the panel, so the
+           budget follows the width BOTH ways -- a label elided on a
+           narrow panel is restored verbatim when the panel widens
+           again;
+        2. **column escalation** -- when the entry count exceeds the
+           vertical capacity (the height the bottom axis leaves, at
+           :data:`_LEGEND_ROW_PX` per row), the legend splits into
+           columns, capped at :data:`_LEGEND_MAX_COLS`.
+
+        Display-only: the legend relabels never touch the §21
+        inspector's series keys -- hover metadata, click-to-select and
+        ``attach_metadata()`` keep resolving the full names.
+        """
+        legend = self._plot.plotItem.legend
+        if legend is None:
+            return
+        if not legend.items:
+            self._legend_full.clear()
+            return
+        live_ids = {id(label) for _sample, label in legend.items}
+        for stale in [k for k in self._legend_full if k not in live_ids]:
+            del self._legend_full[stale]
+        fm = QFontMetrics(self.font())
+        budget = min(_LEGEND_MAX_LABEL_PX, max(80, int(self.width() * 0.45)))
+        for _sample, label in legend.items:
+            full = self._legend_full.setdefault(id(label), label.text)
+            elided = fm.elidedText(full, Qt.TextElideMode.ElideRight, budget)
+            if elided != label.text:
+                label.setText(elided or full)
+        avail_h = self.height() - int(self._plot.getAxis("bottom").height()) - 24
+        rows = max(_LEGEND_MIN_ROWS, avail_h // _LEGEND_ROW_PX)
+        cols = min(_LEGEND_MAX_COLS, max(1, math.ceil(len(legend.items) / rows)))
+        if getattr(legend, "columnCount", 1) != cols:
+            legend.setColumnCount(cols)
+            legend.updateSize()
+
     def _position_readout(self) -> None:
         if self._plot.height() <= 0:
             return
@@ -168,6 +230,7 @@ class PlotPanel(QWidget):
         brush = pg.mkBrush(self._palette.series[index % len(self._palette.series)])
         item = self._plot.plot(x, y, pen=pen, symbol=symbol, symbolSize=size, symbolBrush=brush, name=label or None)
         self._inspector.register_series(label, x, y, item, kind="scatter", meta=meta)
+        self._fit_legend()
 
     def line(self, x: np.ndarray, y: np.ndarray, *, label: str = "", width: int = 2, index: int = 0, style: str = "solid", fill: bool = False, meta: Callable[[int], dict[str, Any]] | None = None) -> None:
         pen = pg.mkPen(self._palette.series[index % len(self._palette.series)], width=width)
@@ -181,6 +244,7 @@ class PlotPanel(QWidget):
             kwargs["brush"] = pg.mkBrush(fill_color)
         item = self._plot.plot(x, y, pen=pen, name=label or None, **kwargs)
         self._inspector.register_series(label, x, y, item, kind="line", meta=meta)
+        self._fit_legend()
 
     def vlines(self, xs, *, label: str = "") -> None:
         """Vertical marker lines (dose times, event boundaries).
@@ -224,6 +288,7 @@ class PlotPanel(QWidget):
             meta=meta,
             bar_width=float(width),
         )
+        self._fit_legend()
 
     def histogram(self, values: np.ndarray, *, bins: int | np.ndarray = 30, index: int = 0, range: tuple[float, float] | None = None) -> None:
         counts, edges = np.histogram(values, bins=bins, range=range)
