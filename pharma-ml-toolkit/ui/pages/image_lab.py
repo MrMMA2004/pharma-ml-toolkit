@@ -32,6 +32,13 @@ never a fabricated array:
   pairs/s -- the 16.19 large-dataset number, reported honestly as a
   timing, never asserted as one.
 
+All four matrix tabs carry the Part-3 §21.4 pixel-inspection readout:
+hover any matrix cell and the label under the panel reports the exact
+pixel (row, column, cursor position, value or per-channel values, NaN
+disclosure, the axis labels when the matrix carried them); at rest the
+same line reports the matrix metadata (shape, finite/NaN census,
+value range).  The Performance tab has no matrix, so it carries none.
+
 All four engine tabs run in a
 :class:`~ui.workers.job_worker.JobWorker`; they are single-shot
 engine calls without checkpoint loops, so the progress channel
@@ -198,12 +205,64 @@ class ImageLabPage(QWidget):
             self._refresh_numeric_pickers(numeric)
 
     # -- shared chrome ---------------------------------------------------------
-    def _make_panel(self, title: str) -> tuple[ImagePanel, QLabel]:
+    def _make_panel(self, title: str) -> tuple[ImagePanel, QLabel, QLabel]:
+        """Panel + the ROI readout + the §21.4 hover/pixel readout."""
         panel = ImagePanel(title=title)
         roi_label = QLabel("ROI: — (drag the rectangle over the image)")
         roi_label.setWordWrap(True)
         panel.roi_changed.connect(lambda: self._refresh_roi(panel, roi_label))
-        return panel, roi_label
+        hover_label = QLabel("Hover: — (move the cursor over the image)")
+        hover_label.setWordWrap(True)
+        # §21.4: the pixel payload drives the readout; None restores the
+        # at-rest metadata line (shape / NaN census / value range).
+        panel.pixel_hovered.connect(
+            lambda payload: self._refresh_hover(payload, hover_label, panel)
+        )
+        panel.matrix_changed.connect(
+            lambda: self._refresh_hover(None, hover_label, panel)
+        )
+        return panel, roi_label, hover_label
+
+    def _refresh_hover(
+        self, payload: dict | None, label: QLabel, panel: ImagePanel
+    ) -> None:
+        """§21.4 readout: the pixel under the cursor, or the at-rest facts."""
+        if payload is None:
+            meta = panel.image_metadata()
+            if meta is None:
+                label.setText("Hover: — (move the cursor over the image)")
+                return
+            if meta["channels"] > 1:
+                label.setText(
+                    f"Hover: — Matrix {meta['rows']}x{meta['cols']} "
+                    f"({meta['channels']} channels, {meta['dtype']}) · "
+                    f"min {meta['min']:.6g} · max {meta['max']:.6g}"
+                )
+            else:
+                label.setText(
+                    f"Hover: — Matrix {meta['rows']}x{meta['cols']} · "
+                    f"{meta['finite']} finite / {meta['masked']} masked · "
+                    f"min {meta['min']:.6g} · max {meta['max']:.6g}"
+                )
+            return
+        parts = [
+            (
+                f"Pixel [{payload['row']}, {payload['col']}] "
+                f"(x {payload['x']:.3g}, y {payload['y']:.3g})"
+            )
+        ]
+        if payload["channels"] > 1 and payload["rgb"] is not None:
+            chans = ", ".join(f"{v:.6g}" for v in payload["rgb"])
+            parts.append(f"channels ({chans})")
+        elif payload["masked"]:
+            parts.append("= masked (NaN)")
+        else:
+            parts.append(f"= {payload['value']:.6g}")
+        if payload["y_label"] is not None:
+            parts.append(f"row: {payload['y_label']}")
+        if payload["x_label"] is not None:
+            parts.append(f"col: {payload['x_label']}")
+        label.setText("Hover: " + " · ".join(parts))
 
     def _refresh_roi(self, panel: ImagePanel, label: QLabel) -> None:
         stats = panel.roi_stats()
@@ -339,7 +398,7 @@ class ImageLabPage(QWidget):
         self._sim_report.setWordWrap(True)
         form.addRow("", self._sim_report)
 
-        self._sim_panel, sim_roi = self._make_panel(
+        self._sim_panel, sim_roi, sim_hover = self._make_panel(
             "Molecule x molecule Tanimoto similarity"
         )
         right = QWidget()
@@ -347,6 +406,7 @@ class ImageLabPage(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.addWidget(self._gradient_row(self._sim_panel))
         right_layout.addWidget(self._sim_panel)
+        right_layout.addWidget(sim_hover)
         right_layout.addWidget(sim_roi)
 
         splitter.addWidget(left)
@@ -511,7 +571,7 @@ class ImageLabPage(QWidget):
         self._screen_report.setWordWrap(True)
         form.addRow("", self._screen_report)
 
-        self._screen_panel, screen_roi = self._make_panel(
+        self._screen_panel, screen_roi, screen_hover = self._make_panel(
             "Cell line x compound LN_IC50"
         )
         right = QWidget()
@@ -519,6 +579,7 @@ class ImageLabPage(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.addWidget(self._gradient_row(self._screen_panel))
         right_layout.addWidget(self._screen_panel)
+        right_layout.addWidget(screen_hover)
         right_layout.addWidget(screen_roi)
 
         splitter.addWidget(left)
@@ -618,12 +679,13 @@ class ImageLabPage(QWidget):
         self._exp_report.setWordWrap(True)
         form.addRow("", self._exp_report)
 
-        self._exp_panel, exp_roi = self._make_panel("Numeric column matrix")
+        self._exp_panel, exp_roi, exp_hover = self._make_panel("Numeric column matrix")
         right = QWidget()
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.addWidget(self._gradient_row(self._exp_panel))
         right_layout.addWidget(self._exp_panel)
+        right_layout.addWidget(exp_hover)
         right_layout.addWidget(exp_roi)
 
         splitter.addWidget(left)
@@ -780,13 +842,14 @@ class ImageLabPage(QWidget):
         self._roi_report.setWordWrap(True)
         form.addRow("", self._roi_report)
 
-        self._roi_panel, roi_label = self._make_panel(
+        self._roi_panel, roi_label, roi_hover = self._make_panel(
             "Similarity matrix (the shared ROI demo)"
         )
         right = QWidget()
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.addWidget(self._roi_panel)
+        right_layout.addWidget(roi_hover)
         right_layout.addWidget(roi_label)
 
         splitter.addWidget(left)

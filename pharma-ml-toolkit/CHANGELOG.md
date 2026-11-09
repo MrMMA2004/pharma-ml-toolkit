@@ -1,3 +1,62 @@
+## [1.2.152] — 2026-11-09
+
+### Added — round 240: the Part-3 §21.4 image pixel/channel inspection
+
+* The owner's round instruction: *"Check the contents of these files
+  thoroughly and make sure that everything is executed and checked"* —
+  the six uploaded PDFs (MASTER_PROMPT parts 1/2/3, the Research
+  Repository Catalog, the Prompt Registry, the GitHub Links Registry)
+  re-read end to end; the compliance matrix verified Part-1 closed
+  (v1.2.107 audit evidence), Part-2 §16 closed (round 228, studio.py),
+  the Links Registry's deferred G-3 trio absorbed (round 189,
+  `ml/xai.py`), and Part-3 with ONE documented remaining acceptance
+  line — §21.4's "image coordinates and pixel values can be
+  inspected" — which this release ships.
+* **`ui/widgets/image_panel.py`** — the pixel inspection layer on
+  `ImagePanel`:
+  - `pixel_at(x, y)` — the pure data-coordinate mapping (x indexes
+    columns, y rows, row-major): fractional positions floor onto the
+    pixel, outside/negative coordinates refuse with `None`, a NaN
+    pixel reports `value=None`/`masked=True` (never a fabricated
+    number), and the axis labels `set_matrix` carried ride the
+    payload (`x_label`/`y_label` — hovering the similarity heatmap
+    names both molecules);
+  - the scene wiring — `sigMouseMoved` → `ImageItem.mapFromScene`
+    (the probe-verified round-trip contract,
+    `scratch/probe_image_hover_240.py`) → `pixel_at` → the
+    `pixel_hovered` signal, with per-pixel debouncing (§21.6: a
+    mouse-move storm over one cell emits once) and a `leaveEvent`
+    reset that emits the cursor-left `None` exactly once;
+  - `image_metadata()` — the at-rest facts: shape, dtype, channel
+    count, finite/NaN census, min/max/mean;
+  - `reset_view()` — the §21.2 reset-to-default control for images;
+  - `set_matrix` now also accepts RGB(A) `(h, w, 3|4)` arrays —
+    rendered natively, per-channel hover payloads (`rgb` tuple +
+    `channels` count, §21.4's "RGB or grayscale channel
+    information"); NaN-bearing RGB is refused with a clear error
+    rather than rendered wrong;
+  - `matrix_changed` signal so pages refresh their readouts on every
+    matrix/clear swap.
+* **`ui/pages/image_lab.py`** — every tab's panel carries a hover
+  readout label: hovering reports `Pixel [row, col] (x, y) = value`
+  (plus the row/column axis labels, the masked-NaN disclosure, or the
+  per-channel values on RGB input); at rest the same line reports the
+  matrix metadata (`Matrix RxC · N finite / M masked · min · max`),
+  kept current through `matrix_changed`.
+* **Tests** — `tests/ui/test_image_hover_probe.py`, 20 tests: the
+  pure mapping (exact values, fractional flooring, boundary
+  refusal, NaN disclosure, label riding), metadata + clear reset,
+  the scene path through the identity `mapFromScene` (the
+  chart-inspector idiom: payload emission, silent-no-matrix,
+  same-pixel debounce, outside-emits-None-once, leaveEvent
+  single reset, replot re-arm), the RGB/RGBA per-channel payloads +
+  the honest NaN refusal, `reset_view`, and the page wiring (four
+  readout labels, a real engine payload answered, the at-rest
+  metadata restore).  Honest totals **4,967 = 4,169 collect + 798
+  doctest** (counts re-verified at ship time: 20 new collect-side
+  tests, the doctest floor unchanged); the ui/ tree stays ruff- AND
+  mypy-clean.
+
 ## [1.2.151] — 2026-11-09
 
 ### Changed — round 239: the Part-3 §23.7 legend hygiene policy
