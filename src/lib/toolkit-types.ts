@@ -1170,3 +1170,89 @@ export interface MLShapResponse {
   /** Provenance note — the card renders it verbatim under the bars. */
   splitNote: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* Molecular Dynamics (round 249 — the pharmaml.md web twins)          */
+/* ------------------------------------------------------------------ */
+
+/** Mean / population std / coefficient of variation of one parsed
+ * metric — null exactly when the values carry no spread or no points
+ * (the honest-null discipline: never a made-up number). */
+export interface MdXvgStats {
+  mean: number | null;
+  std: number | null;
+  cv: number | null;
+}
+
+/** One parsed GROMACS export metric from /api/md/xvg: the time axis is
+ * already normalised server-side (long ps axes → ns), energies arrive
+ * in kcal/mol, H-bond counts carry the optional 3-point smoothing. */
+export interface MdXvgSeries {
+  time: number[];
+  values: number[];
+  /** The export file the metric was parsed from. */
+  source: string;
+  /** Human title (e.g. "Ligand RMSD"). */
+  label: string;
+  stats: MdXvgStats;
+}
+
+/** One entity's parsed metrics keyed by metric key (e.g.
+ * "ligand_rmsd") — the study reader's LigandResult.to_dict(). */
+export interface MdXvgEntity {
+  name: string;
+  series: Record<string, MdXvgSeries>;
+}
+
+/** Response of POST /api/md/xvg — the parsed ligand study, the
+ * cross-metric Pearson matrix (null when fewer than two metrics),
+ * the summary CSV and the parser's own warnings, verbatim. */
+export interface MdXvgResponse {
+  ligand: MdXvgEntity;
+  correlations: { labels: string[]; matrix: number[][] } | null;
+  summaryCsv: string;
+  warnings: string[];
+  elapsedSeconds: number;
+  method: string;
+}
+
+/** Response of POST /api/md/trajectory — the deterministic synthetic
+ * alpha-helix (10 residues × N/CA/C, residues 5–7 a flexible loop)
+ * analysed by the real toolkit: RMSD after Kabsch superposition, Rg,
+ * native-contact Q, per-atom/per-residue RMSF, the contact-frequency
+ * map, the PCA projection of the frames and the ANM fluctuations of
+ * the first frame. */
+export interface MdTrajectoryResponse {
+  nFrames: number;
+  nAtoms: number;
+  nResidues: number;
+  seed: number;
+  noise: number;
+  contactCutoff: number;
+  time: number[];
+  rmsd: number[];
+  rg: number[];
+  q: number[];
+  /** Per-atom RMSF (length nAtoms). */
+  rmsf: number[];
+  /** Per-residue RMSF (length nResidues). */
+  rmsfResidues: number[];
+  /** nAtoms × nAtoms contact frequency over the frames (0..1). */
+  contactMap: number[][];
+  pca: {
+    /** One [PC1, PC2] pair per frame. */
+    projection: number[][];
+    explainedVarianceRatio: number[];
+  };
+  /** ANM fluctuations from the first frame (length nAtoms). */
+  anmFluctuations: number[];
+  stats: {
+    rmsdMean: number;
+    rmsdFinal: number;
+    rgMean: number;
+    qMean: number;
+    contactPairs: number;
+  };
+  elapsedSeconds: number;
+  method: string;
+}

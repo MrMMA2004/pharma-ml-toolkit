@@ -1,3 +1,88 @@
+## [1.2.161] — 2026-11-11
+
+### Added — round 249: the `pharmaml.md` package — molecular-dynamics analysis (the uploaded pipeline + the ecosystem vocabulary)
+
+* The user's own GROMACS post-processing script
+  (`upload/MD_analysis.py`, 421 lines) is productionized as the
+  **`pharmaml.md`** package, and the reference stack it belongs to —
+  MDAnalysis/mdtraj (trajectory core), GROMACS/cpptraj/pytraj (the
+  metric vocabulary), getcontacts (contact timelines), gmx_MMPBSA
+  (binding free-energy legs), ProDy (elastic networks),
+  deeptime (PCA/tICA), ProLIF (interaction fingerprints), nglview /
+  pymol-open-source / vmd-python (the viewers the web tab stands in
+  for) and MDAnalysisData — names the honest scope of each module.
+* `md/xvg.py` — the uploaded parsers kept bit-for-bit where they carry
+  intelligence: `parse_xvg` (comment/directive skipping, first two
+  numeric columns) and `parse_ndx_hbnum` (the column-finding heuristic:
+  the *time* column is the first finite, monotonically
+  non-decreasing, non-constant column; the H-bond column the first
+  other finite near-integer column).  One deliberate upgrade: the
+  parse is pure — the script's folded-in 3-point smoothing is now the
+  explicit `XvgSeries.smoothed()`/`moving_average()`, applied by the
+  study reader exactly where the script applied it.  `classify_metric`
+  maps the ten standard GROMACS/MM-PBSA exports (title, axis labels,
+  colour) and infers the kind for unknown names ("energy" tested
+  before "rg" — the word contains those letters).
+* `md/trajectory.py` — `Topology`/`Trajectory` in plain NumPy: a real
+  selection mini-language (`name` with `*`/`?` wildcards, `resname`,
+  `resid` single or `a:b` ranges, `not`, `and`/`or`, parentheses —
+  case-sensitive exactly as MDAnalysis), validated `(T, N, 3)`
+  coordinates with frame slicing and geometric or mass-weighted
+  centering, plus `synthetic_trajectory` — the deterministic
+  alpha-helix-with-flexible-loop demo (seeded noise, slow rotational
+  drift) that drives the tests and the web playground's MD tab.
+* `md/align.py` — the Kabsch theorem (`kabsch_rotation`,
+  `superpose`, rotation/translation-invariant `rmsd`) with the
+  reflection guard for a proper rotation.
+* `md/metrics.py` — the `gmx rms/rmsf/gyrate` timeline suite
+  (`rmsd_trajectory`, `rmsf`, `radius_of_gyration` ± masses),
+  `center_of_mass`, `pairwise_distances`, `contact_map` (frequency
+  over the run, self-contacts excluded by convention),
+  `native_contact_fraction` (the folding Q-value),
+  `radial_distribution_function` (finite-system reference-volume
+  convention, documented) and `dihedral` (the praxeolitic torsion).
+* `md/hbond.py` — the `gmx hbond` criterion in plain NumPy:
+  donor–acceptor distance ≤ 3.5 Å AND donor–H···acceptor angle ≥ 130°,
+  `hbond_timeline` (the `hbnum` series behind the uploaded
+  intermolecular/intramolecular panels) and `salt_bridges`
+  (getcontacts' ionic pairs as a distance criterion).
+* `md/dimred.py` — essential dynamics: `trajectory_pca` (aligned
+  frames, SVD of the centred matrix) and `tica` (the time-lagged
+  eigenproblem solved through the symmetric
+  `C₀^{-1/2}·C_τ,sym·C₀^{-1/2}` form — `numpy.linalg.eigh` only,
+  ridge-regularised, kinetic-variance ratios).
+* `md/enm.py` — ProDy's ANM/GNM: `kirchhoff_matrix`,
+  `gnm_fluctuations` (B-factor profile through the pseudo-inverse),
+  `cross_correlation` (the correlated-domain map), `anm_hessian`
+  (3N×3N with the `−γ·rrᵀ/‖r‖²` pair blocks), `anm_modes` (six
+  rigid-body zero modes skipped, an honest refusal when the network
+  is too disconnected — collinear systems have *more* than six) and
+  `anm_fluctuations`.
+* `md/plif.py` — ProLIF's geometric core over typed coordinates:
+  hydrophobic (4.5 Å), H-bonds in both directions (3.5 Å), ionic
+  (4.0 Å) and π-stacks (centroid 5.5 Å, orientation-checked to
+  |cos| ≥ 0.94 only when both ring-normal arrays are supplied — the
+  honest degradation to distance-only is documented).
+* `md/study.py` — the uploaded pipeline as data:
+  `read_ligand_folder` (known exports parsed, kJ→kcal on energy,
+  ps→ns on long time axes, H-bond smoothing, unparseable files
+  skipped with a logged warning — never fatal), `build_study` (one
+  sub-folder per ligand, `Global_plots` skipped, flat folders become
+  single-ligand studies, broken ligands never sink the campaign),
+  `metric_correlations` (min-length aligned, the script's own rule)
+  and `MDStudy.summary_csv` (the script's
+  `Folder,File,Mean,Stdev,Coefficient_of_Variation` contract,
+  verbatim header).
+* `MDAnalysisError` joins the exception hierarchy; the package root
+  documents and the docs index gains the `pharmaml.md` section (the
+  docs-index guard's REQUIRED_MODULES pins it).
+* 55 tests (`tests/test_md_analysis.py`) + 44 doctests across the
+  package — known-value geometries wherever one exists (a rotation
+  recovers exactly, a two-atom Rg is the separation, a designed
+  contact map is the designed fractions, a collinear chain's
+  ANM refusal is exercised, the tICA slow channel outranks the fast
+  one); ruff zero + mypy clean across 204 files.
+
 ## [1.2.160] — 2026-11-10
 
 ### Added — round 248: Part-3 §20.4/§20.5 — the NumPy trainer's checkpoint depth (from the preserved contract)

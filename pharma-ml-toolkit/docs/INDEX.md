@@ -3,9 +3,10 @@
 Auto-derived from each module's `__all__` exports — the authoritative quick
 reference for the public API. Re-run `python scratch/build_docs_index.py`
 after adding new public functions.
+
 ## `pharmaml`
 
-*PharmaML — a production-ready toolkit for computational pharmacy.*
+*Package root: exceptions + version*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -13,13 +14,14 @@ after adding new public functions.
 | `DependencyError` | class | Raised when an optional dependency is required but not installed. |
 | `DockingError` | class | Raised when a docking preparation or execution step fails. |
 | `DockingParseError` | class | Raised when a docking log/output file cannot be parsed. |
+| `MDAnalysisError` | class | Raised for invalid molecular-dynamics inputs: non-3D coordinate |
 | `PharmaMLError` | class | Base class for all intentional PharmaML errors. |
 | `UnitConversionError` | class | Raised for unknown units or dimensionally invalid conversions. |
 | `__version__` | constant |  |
 
 ## `pharmaml.data`
 
-*Bring your own data: import user files (CSV/TSV/TXT/Excel) into PharmaML.*
+*Bring your own data: load user CSV/TSV/Excel files*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -34,7 +36,7 @@ after adding new public functions.
 
 ## `pharmaml.chem`
 
-*Cheminformatics helpers: conversion, descriptors, the multi-family*
+*Cheminformatics: converters, descriptors, similarity*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -72,9 +74,6 @@ after adding new public functions.
 | `RISM_DESCRIPTOR_COUNT` | constant |  |
 | `SA_SCORE_LIMITATIONS` | constant |  |
 | `SA_SCORE_METHOD` | constant |  |
-| `SAFilterResult` | class | §24.4 filtering outcome: kept AND rejected are both preserved. |
-| `SAScoreBatch` | class | Batch results with the validity accounting (§24.2/24.3). |
-| `SAScoreResult` | class | One molecule's SA score with full validation context (§24.2). |
 | `TOPOLOGICAL_BITS` | constant |  |
 | `UNSUPPORTED_METALS` | constant |  |
 | `AtomEnvironment` | class | One ``(atom, radius)`` hit a Morgan bit fires on. |
@@ -99,6 +98,9 @@ after adding new public functions.
 | `PdbLigandReport` | class | Audit record for one :func:`smiles_to_pdb` conversion. |
 | `RepresentationSpec` | class | One representation: atom scale, bond switch, provenance. |
 | `Residue` | class | A named group of interaction atoms. |
+| `SAFilterResult` | class | §24.4 filtering outcome: kept AND rejected are both preserved. |
+| `SAScoreBatch` | class | Batch results with the validity accounting (§24.2/24.3). |
+| `SAScoreResult` | class | One molecule's SA score with full validation context (§24.2). |
 | `SasaReport` | class | Solvent-accessible surface areas, per atom and total. |
 | `SdfWriteReport` | class | Audit of one :func:`table_to_sdf` conversion. |
 | `SelfiesBatchConversion` | class | Result of :func:`batch_smiles_to_selfies` -- per-row, never row-destructive. |
@@ -189,6 +191,10 @@ after adding new public functions.
 | `rmsd` | function | Root-mean-square deviation between two coordinate stacks. |
 | `rmsf` | function | Per-atom RMS fluctuation over a frame stack. |
 | `rotatable_bonds` | function | Lipinski rotatable bonds — RDKit's default (non-strict) definition. |
+| `sa_score` | function | Score one SMILES string (or an RDKit molecule). |
+| `sa_score_frame` | function | The §24.3 generative-results table: SMILES, SA, validity, order. |
+| `sa_score_summary` | function | Direction-aware batch statistics for interfaces (§24.3). |
+| `sa_scores` | function | Score a batch of SMILES with per-molecule validity (§24.2). |
 | `sasa` | function | Shrake-Rupley solvent-accessible surface area (A^2), per atom. |
 | `sdf_text` | function | A whole SDF text from molecules (2D coordinates, V2000 blocks). |
 | `sdf_to_table` | function | Read an SD file back into a table (SMILES, tags and titles). |
@@ -198,10 +204,6 @@ after adding new public functions.
 | `select_string` | function | NGL's selection string grammar resolved to atom indices. |
 | `select_top_features` | function | Select the top-K features with the rar's two-layer strategy. |
 | `selection_metadata` | function | Build the JSON-ready metadata dict for a feature-selection run. |
-| `sa_score` | function | Score one SMILES string (or an RDKit molecule). |
-| `sa_score_frame` | function | The §24.3 generative-results table: SMILES, SA, validity, order. |
-| `sa_score_summary` | function | Direction-aware batch statistics for interfaces (§24.3). |
-| `sa_scores` | function | Score a batch of SMILES with per-molecule validity (§24.2). |
 | `selfies_alphabet` | function | Sorted set of SELFIES symbols appearing in an iterable of strings. |
 | `selfies_available` | function | Report whether the optional ``selfies`` package is importable. |
 | `selfies_feature_matrix` | function | Featurise a SMILES column as a SELFIES label / one-hot matrix. |
@@ -239,7 +241,7 @@ after adding new public functions.
 
 ## `pharmaml.ml`
 
-*QSAR machine learning: preprocessing, training, evaluation, persistence,*
+*QSAR machine learning: preprocessing → training → evaluation → persistence*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -345,6 +347,7 @@ after adding new public functions.
 | `LSHQueryResult` | class | One approximate query: the key, the candidates, the neighbours. |
 | `Linear` | class | ``y = x @ W.T + b`` with PyTorch's default init bounds. |
 | `LinearGDResult` | class | Outcome of the from-scratch linear regression. |
+| `MOTrial` | class | One multi-objective evaluation: params, the objective vector, the weights. |
 | `MSELoss` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `MechanismResult` | class | One privatised query: the truth, the release, the price. |
 | `MedianPruner` | function | The median pruner: ``PercentilePruner(50)``. |
@@ -353,7 +356,6 @@ after adding new public functions.
 | `MetricSummary` | class | One metric aggregated across folds (mean, std, every fold value). |
 | `ModelInputReport` | class | Verdict of :func:`validate_bundle_input` — the round-trip audit. |
 | `Module` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
-| `MOTrial` | class | One multi-objective evaluation: params, values, weights, scalar. |
 | `MultiObjectiveStudy` | class | The optuna multi-objective study, decomposed onto one sampler. |
 | `NaiveDense` | class | Chollet's ``NaiveDense`` (chapter 2), plain NumPy. |
 | `NaiveSequential` | class | Chollet's ``NaiveSequential``: a stack called like a function. |
@@ -368,7 +370,7 @@ after adding new public functions.
 | `OntologyRow` | class | One term's audit row: size, depth, layer, gene enrichment. |
 | `ParamAdvice` | class | One searchable hyperparameter: its range, prior, role, and deps. |
 | `Parameter` | class | A leaf tensor that always requires grad. |
-| `ParetoReport` | class | The front, its spread, its indicator: the trade-off decision's read. |
+| `ParetoReport` | class | The front, its spread, its indicator: what a trade-off decision reads. |
 | `PcaResult` | class | Typed report of :func:`pca_reduce`. |
 | `PercentilePruner` | class | Prune trials whose running CV mean falls below a percentile. |
 | `PermutationImportance` | class | Permutation feature importances on held-out data. |
@@ -440,7 +442,7 @@ after adding new public functions.
 | `catalog_projects` | function | One category's projects (slug or title), or all 924, score-descending. |
 | `catalog_summary` | function | The snapshot's headline numbers and license distribution. |
 | `catalog_top` | function | The ``n`` highest-scoring projects in a category (or overall). |
-| `chebyshev_scalarize` | function | MOEA/D's Tchebycheff decomposition ``max_j w_j |v_j - ideal_j|``. |
+| `chebyshev_scalarize` | function | The Tchebycheff scalarization ``max_j w_j |v_j - ideal_j|``. |
 | `clean_numeric_frame` | function | Drop non-numeric columns (except the target/keep list). |
 | `commonsense_baseline` | function | Predict "the last observed value" (``evaluate_naive_method``). |
 | `compare_groups` | function | The course's decision flow, end to end, every branch reported. |
@@ -452,7 +454,7 @@ after adding new public functions.
 | `cross_entropy` | function | Softmax cross-entropy: ``mean(−log_softmax[i, label_i])``. |
 | `cross_model_importances` | function | Permutation importances for a WHOLE panel of fitted models. |
 | `cross_validate_model` | function | Cross-validate ONE registry model into a full §19 CVResult. |
-| `crowding_distance` | function | NSGA-II's spread metric (boundary members ``+inf``), per point. |
+| `crowding_distance` | function | NSGA-II's crowding distance (boundaries ``+inf``), per point. |
 | `curve_fit` | function | The scipy-named entry point: (best params, covariance matrix). |
 | `cv_result_from_dict` | function | Rebuild a :class:`CVResult` from :meth:`CVResult.to_dict` output. |
 | `cv_result_to_dict` | function | §19.9 interchange: :class:`CVResult` → JSON-ready dict. |
@@ -464,7 +466,7 @@ after adding new public functions.
 | `describe_tensor` | function | Audit one array with chapter 2's "key attributes" vocabulary. |
 | `design_matrices` | function | Expand a formula against a data frame into the design matrix. |
 | `detect_changepoints` | function | Offline mean-shift changepoints: binary segmentation on the CUSUM. |
-| `dominates` | function | Pareto dominance, all objectives minimized (the optuna convention). |
+| `dominates` | function | Pareto dominance under the optuna convention (all objectives minimized). |
 | `dot_product_attention` | function | Scaled dot-product attention: ``softmax(QKᵀ/√dₖ)·V``. |
 | `dp_sgd_noise_scale` | function | Invert the RDP accountant: the σ that meets (ε, δ) in T steps. |
 | `dp_statistics` | function | Count, sum, mean (+ optional histogram) under one ε budget. |
@@ -486,7 +488,7 @@ after adding new public functions.
 | `has_categorical_columns` | function | Return True when ``X`` is a DataFrame with non-numeric columns. |
 | `hierarchy_report` | function | The peeling audit: per-term rows and the hierarchy's shape. |
 | `hypermodel_from_advice` | function | Compile a recommendation into a tuner-searchable hypermodel. |
-| `hypervolume_2d` | function | The exact 2-D dominated hypervolume (the staircase sweep). |
+| `hypervolume_2d` | function | The exact 2-D dominated hypervolume under minimisation. |
 | `kde_fit` | function | Kernel density estimation (PDSH 05.13) for ONE numeric column. |
 | `kmeans_cluster` | function | k-means clustering (PDSH 05.11), with the elbow AND the silhouette. |
 | `knn_applicability_domain` | function | kNN-distance applicability domain (the upload's step 4-5). |
@@ -517,7 +519,7 @@ after adding new public functions.
 | `paired_dta_features` | function | Build an aligned ECFP + protein matrix from a paired DTA table. |
 | `paired_ttest` | function | Did the paired differences move away from zero? |
 | `param_importances` | function | Random-forest (MDI) hyperparameter importances of a finished search. |
-| `pareto_indices` | function | The non-dominated indices of a point cloud (pairwise, study scale). |
+| `pareto_indices` | function | The non-dominated indices of a point cloud (ascending input order). |
 | `parse_formula` | function | Parse a formula into ``(response, terms)``. |
 | `parse_ontology` | function | Parse the ``drugcell_ont.txt`` three-column format. |
 | `partial_autocorrelation` | function | The partial ACF via Durbin-Levinson: lag-k credit, shorter lags removed. |
@@ -558,7 +560,7 @@ after adding new public functions.
 | `tanh` | function |  |
 | `tensor_primer_report` | function | Walk a table through chapter 2's tensor vocabulary. |
 | `train_model` | function | Train (and optionally grid-search) one registry model. |
-| `tune_model_multi` | function | Cross-validated multi-objective HPO: the accuracy-vs-cost front. |
+| `tune_model_multi` | function | Cross-validated multi-objective HPO over the sklearn registry models. |
 | `two_sample_ttest` | function | Two independent samples: Welch's t (default) or Student's t. |
 | `validate_bundle_input` | function | Audit a new dataset against a saved model bundle before inference. |
 | `validate_space` | function | Compatibility-check a search space before optimization starts. |
@@ -644,7 +646,7 @@ after adding new public functions.
 
 ## `pharmaml.pharma`
 
-*Pharmaceutical calculations: units, PK, PD, dosage design, regulatory-approval filtering.*
+*Pharmaceutical calculations: units, PK, PD, dosage*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -699,7 +701,7 @@ after adding new public functions.
 
 ## `pharmaml.docking`
 
-*Molecular-docking workflows: preparation, execution, parsing, scoring*
+*Molecular docking: preparation, workflow, parsing, scoring*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -789,9 +791,63 @@ after adding new public functions.
 | `write_dpf` | function | Write an AutoDock4 docking parameter file (DPF) for one ligand. |
 | `write_gpf` | function | Write an AutoDock4 grid parameter file (GPF) for one ligand. |
 
+## `pharmaml.md`
+
+*Molecular dynamics: trajectories, metrics, H-bonds, essential dynamics, ENMs, interactions, studies*
+
+| Symbol | Kind | Summary |
+|---|---|---|
+| `KJ_TO_KCAL` | constant |  |
+| `METRIC_FILES` | constant |  |
+| `InteractionFingerprint` | class | One pose's interaction record: counts, bits and residue pairs. |
+| `LigandResult` | class | One ligand's parsed metric series, keyed by metric key. |
+| `MDStudy` | class | A whole MD campaign: one :class:`LigandResult` per ligand folder. |
+| `MetricInfo` | class | Display metadata for one standard MD metric export. |
+| `ProjectionResult` | class | A fitted linear projection: mean, components, explained variance. |
+| `Topology` | class | Per-atom metadata: names, residues and optional masses. |
+| `Trajectory` | class | A stack of frames: ``(n_frames, n_atoms, 3)`` coordinates + topology. |
+| `XvgSeries` | class | One parsed metric series: a 1-D time axis plus 1-D values. |
+| `anm_fluctuations` | function | Per-atom ANM fluctuations summed over every non-trivial mode. |
+| `anm_hessian` | function | The 3N×3N anisotropic network Hessian. |
+| `anm_modes` | function | The slowest non-trivial ANM modes: ``(eigenvalues, mode vectors)``. |
+| `build_study` | function | Build the campaign study from a root folder. |
+| `center_of_mass` | function | Geometric centre, or centre of mass when weights are given. |
+| `classify_metric` | function | Map an export filename to its :class:`MetricInfo`, or ``None``. |
+| `contact_map` | function | Symmetric contact-frequency matrix over the trajectory. |
+| `cross_correlation` | function | Normalised GNM fluctuation cross-correlation matrix. |
+| `dihedral` | function | Torsion angle (degrees) of the bond ``p1–p2`` for atoms ``p0..p3``. |
+| `find_hbonds` | function | Detect one frame's H-bonds: (donor, acceptor) index pairs, sorted. |
+| `gnm_fluctuations` | function | Per-atom GNM mean-square fluctuations (relative, kT/γ units). |
+| `hbond_timeline` | function | Per-frame H-bond counts — the ``hbnum`` series over a trajectory. |
+| `interaction_fingerprint` | function | Compute a pose's protein–ligand interaction fingerprint. |
+| `kabsch_rotation` | function | Optimal rotation ``R`` with ``(mobile − mean)·R ≈ (reference − mean)``. |
+| `kirchhoff_matrix` | function | The GNM Kirchhoff matrix over the contact graph. |
+| `metric_correlations` | function | Correlation matrix across one ligand's metric series. |
+| `metric_stats` | function | Mean, population standard deviation and coefficient of variation. |
+| `moving_average` | function | Centered moving average (``np.convolve`` ``same`` mode). |
+| `native_contact_fraction` | function | Per-frame fraction of native contacts kept (the Q-value). |
+| `pairwise_distances` | function | Full ``(n, n)`` distance matrix for one frame. |
+| `parse_ndx_hbnum` | function | Parse an ``.ndx``-style H-bond count table into an :class:`XvgSeries`. |
+| `parse_xvg` | function | Parse GROMACS ``.xvg`` text (or a file path) into an :class:`XvgSeries`. |
+| `ps_to_ns` | function | Convert a ps time axis to ns. |
+| `radial_distribution_function` | function | Pair radial distribution function g(r) between two point sets. |
+| `radius_of_gyration` | function | Radius of gyration (Å): mass-weighted RMS distance to the centre. |
+| `radius_of_gyration_trajectory` | function | Per-frame radius of gyration (``gmx gyrate``). |
+| `read_ligand_folder` | function | Parse one ligand folder's GROMACS/MM-PBSA exports. |
+| `resolve_atom_indices` | function | Normalise an optional atom selection into a validated index array. |
+| `rmsd` | function | RMSD after optimal superposition (Å, per-atom root mean square). |
+| `rmsd_trajectory` | function | Per-frame RMSD (Å) to the reference, after optimal superposition. |
+| `rmsf` | function | Per-atom root-mean-square fluctuation (Å) about the aligned mean. |
+| `salt_bridges` | function | Charged-opposite pairs within ``cutoff`` Å — the salt-bridge list. |
+| `superpose` | function | Return the mobile coordinates optimally fitted onto the reference. |
+| `synthetic_trajectory` | function | Deterministic demo trajectory: an alpha-helix with a flexible loop. |
+| `tica` | function | Time-lagged independent component analysis of a ``(T, D)`` matrix. |
+| `to_kcal` | function | Convert kJ/mol → kcal/mol (the uploaded binding-energy conversion). |
+| `trajectory_pca` | function | PCA of the trajectory coordinates (essential dynamics). |
+
 ## `pharmaml.viz`
 
-*Visual output for every PharmaML domain — plots, tables, HTML reports.*
+*Visual output for every domain: figures, tables, HTML reports*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -880,7 +936,7 @@ after adding new public functions.
 
 ## `pharmaml.utils.io`
 
-*Robust tabular and filesystem I/O.*
+*Safe tabular I/O helpers*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -893,7 +949,7 @@ after adding new public functions.
 
 ## `pharmaml.utils.validation`
 
-*Input validation guards.*
+*Shared input-validation layer*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -927,11 +983,9 @@ after adding new public functions.
 ## Command-line interface
 
 ```text
-pharmaml models | data inspect | data split | data convert | ml train
-             | ml compare | chem pic50 | chem descriptors | pharma pk
-             | pharma dose | docking prep-ligands | docking prep-protein
-             | docking scan | docking check | generative run
-             | generative corpus
+pharmaml models | data inspect | ml train | ml compare | chem pic50
+             | chem descriptors | pharma pk | pharma dose | docking scan
+             | docking check
 ```
 
 See `pharmaml/cli.py` for every flag, and `README.md` for the full manual.

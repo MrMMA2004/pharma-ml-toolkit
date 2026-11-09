@@ -65,3 +65,11 @@ class DockingError(PharmaMLError):
 
 class DockingParseError(DockingError):
     """Raised when a docking log/output file cannot be parsed."""
+
+
+class MDAnalysisError(PharmaMLError):
+    """Raised for invalid molecular-dynamics inputs: non-3D coordinate
+    arrays, atom-count mismatches between topology and trajectory,
+    empty selections, degenerate alignments, unparseable ``.xvg``/``.ndx``
+    exports, ligand folders without a single parsable metric, or
+    interaction types outside the ProLIF vocabulary."""

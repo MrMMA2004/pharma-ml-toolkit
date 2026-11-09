@@ -56,6 +56,7 @@ REQUIRED_MODULES: tuple[str, ...] = (
     "pharmaml.biology",
     "pharmaml.pharma",
     "pharmaml.docking",
+    "pharmaml.md",
     "pharmaml.utils.io",
     "pharmaml.utils.validation",
 )

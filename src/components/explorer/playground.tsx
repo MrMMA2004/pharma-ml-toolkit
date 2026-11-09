@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  Atom,
   Boxes,
   Brain,
   Calculator,
@@ -24,14 +25,16 @@ import { PkSimulator } from "@/components/explorer/playground/pk-simulator";
 import { LigandReconciler } from "@/components/explorer/playground/ligand-reconciler";
 import { SurgeryCards } from "@/components/explorer/playground/surgery-cards";
 import { SaScoreCard } from "@/components/explorer/playground/sa-score-card";
+import { MdAnalysis } from "@/components/explorer/playground/md-analysis";
 import { SessionReport } from "@/components/explorer/playground/session-report";
 import { CardFinderTrigger } from "@/components/explorer/playground/card-finder";
 import { useToolkitStore } from "@/lib/store";
 
 /** Playground: pharma calculators / PK-PD explorer / ML training / cell line
  * biology / docking parser + consensus rescore + ligand prep / feature
- * factory / ligand-set reconciler. The active sub-tab and the PK/PD state
- * live in the store so both survive switching away and back. */
+ * factory / ligand-set reconciler / molecule surgery / molecular-dynamics
+ * analysis (round 249's pharmaml.md twins). The active sub-tab and the
+ * PK/PD state live in the store so both survive switching away and back. */
 export function Playground() {
   const playgroundTab = useToolkitStore((s) => s.playgroundTab);
   const setPlaygroundTab = useToolkitStore((s) => s.setPlaygroundTab);
@@ -46,7 +49,7 @@ export function Playground() {
           web twin of the desktop Ctrl+F — the dialog itself is mounted at
           the page level so the hotkey works from any top tab. */}
       <div className="flex flex-wrap items-center justify-center gap-2">
-      <TabsList className="thin-scrollbar mx-auto grid h-auto w-full max-w-3xl grid-cols-2 gap-1 overflow-x-auto p-1 sm:grid-cols-4 lg:max-w-fit lg:grid-cols-9">
+      <TabsList className="thin-scrollbar mx-auto grid h-auto w-full max-w-3xl grid-cols-2 gap-1 overflow-x-auto p-1 sm:grid-cols-4 lg:max-w-fit lg:grid-cols-10">
         <TabsTrigger
           value="calculators"
           className="min-h-11 gap-1.5 px-2 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm sm:px-3 sm:text-sm"
@@ -112,6 +115,16 @@ export function Playground() {
           <Dna className="size-4 shrink-0" aria-hidden />
           Surgery
         </TabsTrigger>
+        {/* (round 249) the Molecular Dynamics sub-tab — the pharmaml.md
+            web twins: .xvg/.ndx export parser, trajectory analysis lab
+            and the ecosystem reference grid. */}
+        <TabsTrigger
+          value="md"
+          className="min-h-11 gap-1.5 px-2 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm sm:px-3 sm:text-sm"
+        >
+          <Atom className="size-4 shrink-0" aria-hidden />
+          Molecular Dynamics
+        </TabsTrigger>
       </TabsList>
         <CardFinderTrigger />
       </div>
@@ -157,6 +170,9 @@ export function Playground() {
           <SaScoreCard />
           <SurgeryCards />
         </div>
+      </TabsContent>
+      <TabsContent value="md" className="mt-4 sm:mt-6">
+        <MdAnalysis />
       </TabsContent>
     </Tabs>
   );

@@ -33,7 +33,8 @@ export type PlaygroundTabId =
   | "features"
   | "ligandprep"
   | "reconciler"
-  | "generative";
+  | "generative"
+  | "md";
 
 export interface PlaygroundCardEntry {
   /** Stable slug (also the finder row's React key). */
@@ -276,6 +277,31 @@ export const PLAYGROUND_CARDS: readonly PlaygroundCardEntry[] = [
     match: "Synthetic Accessibility score",
     keywords:
       "sa score sascore ertl schuffenhauer synthetic accessibility ease of synthesis complexity",
+  },
+  /* -- Molecular Dynamics (round 249 — the pharmaml.md web twins) ----- */
+  {
+    id: "md-xvg",
+    tab: "md",
+    title: "GROMACS export parser",
+    blurb: "past .xvg/.ndx → stats, plots, correlations",
+    match: "GROMACS export parser",
+    keywords: "xvg ndx gromacs parser rmsd hbond correlation",
+  },
+  {
+    id: "md-traj",
+    tab: "md",
+    title: "Trajectory analysis lab",
+    blurb: "helix demo: RMSD/Rg/Q, RMSF, contacts, PCA",
+    match: "Trajectory analysis lab",
+    keywords: "trajectory rmsd rmsf rg contact map pca anm essential dynamics",
+  },
+  {
+    id: "md-eco",
+    tab: "md",
+    title: "The MD ecosystem",
+    blurb: "the reference stack behind pharmaml.md",
+    match: "The MD ecosystem",
+    keywords: "mdanalysis mdtraj gromacs prody prolif deeptime ecosystem links",
   },
   /* -- The session-report strip (rides above every sub-tab) ------------- */
   {

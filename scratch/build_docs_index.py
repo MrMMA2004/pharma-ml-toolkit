@@ -12,11 +12,15 @@ MODULES = [
     ("pharmaml.data", "Bring your own data: load user CSV/TSV/Excel files"),
     ("pharmaml.chem", "Cheminformatics: converters, descriptors, similarity"),
     ("pharmaml.ml", "QSAR machine learning: preprocessing → training → evaluation → persistence"),
+    ("pharmaml.generative", "Molecule generation from 0 to 100: objectives, genetic algorithm, RL."),
+    ("pharmaml.biology", "Cell-line biology: drug-response screens, omics and biomarkers."),
     ("pharmaml.pharma", "Pharmaceutical calculations: units, PK, PD, dosage"),
     ("pharmaml.docking", "Molecular docking: preparation, workflow, parsing, scoring"),
+    ("pharmaml.md", "Molecular dynamics: trajectories, metrics, H-bonds, essential dynamics, ENMs, interactions, studies"),
     ("pharmaml.viz", "Visual output for every domain: figures, tables, HTML reports"),
     ("pharmaml.utils.io", "Safe tabular I/O helpers"),
     ("pharmaml.utils.validation", "Shared input-validation layer"),
+    ("pharmaml.utils.checkpoints", "Durable checkpoints for long-running jobs (MASTER_PROMPT Part-3 §20)."),
 ]
 
 lines = [

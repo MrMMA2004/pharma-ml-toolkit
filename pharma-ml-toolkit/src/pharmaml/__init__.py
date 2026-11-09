@@ -17,6 +17,10 @@ tested codebase:
 * :mod:`pharmaml.docking`  -- molecular-docking workflows (ligand and
   grid preparation, AutoDock4/Vina batch execution, result parsing and
   scoring).
+* :mod:`pharmaml.md`      -- molecular-dynamics analysis (GROMACS
+  ``.xvg``/``.ndx`` study parsing, trajectory metrics, hydrogen bonds,
+  PCA/tICA essential dynamics, ANM/GNM elastic networks, protein-ligand
+  interaction fingerprints).
 * :mod:`pharmaml.viz`      -- visual output for every domain: figures
   (confusion matrices, ROC, parity, PK profiles, similarity heat-maps,
   docking rankings ...), multi-format table export and self-contained
@@ -40,17 +44,19 @@ from pharmaml.exceptions import (
     DependencyError,
     DockingError,
     DockingParseError,
+    MDAnalysisError,
     PharmaMLError,
     UnitConversionError,
 )
 
-__version__ = "1.2.160"
+__version__ = "1.2.161"
 
 __all__ = [
     "DataValidationError",
     "DependencyError",
     "DockingError",
     "DockingParseError",
+    "MDAnalysisError",
     "PharmaMLError",
     "UnitConversionError",
     "__version__",
