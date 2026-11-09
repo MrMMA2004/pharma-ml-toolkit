@@ -328,6 +328,46 @@ class ImageLabPage(QWidget):
         form.addRow("", export)
         return row
 
+    def _view_row(self, panel: ImagePanel) -> QWidget:
+        """The §21.4 view controls: the 1:1 original-resolution toggle."""
+        btn_1to1 = QPushButton("1:1 original resolution")
+        btn_1to1.setToolTip(
+            "One image pixel per screen pixel (§21.4), centred on the "
+            "current viewport; a second press restores the fit-to-view "
+            "(§21.2). The achieved scale is reported below."
+        )
+        btn_1to1.clicked.connect(lambda: self._toggle_original_resolution(panel))
+        row = QWidget()
+        form = QFormLayout(row)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.addRow("View (§21.4):", btn_1to1)
+        return row
+
+    def _toggle_original_resolution(self, panel: ImagePanel) -> None:
+        """§21.4's 1:1 toggle: original resolution <-> the §21.2 fit.
+
+        The honest three-way outcome lands in the status line: the
+        achieved scale (MEASURED back by the panel, never assumed) when
+        1:1 lands, the fit-restored notice when it toggles back, and
+        the explicit refusal (hidden geometry / no matrix) -- never a
+        silent no-op.
+        """
+        if panel.is_original_resolution():
+            panel.reset_view()
+            self._status.setText("View: fit-to-view restored (§21.2 autoRange).")
+            return
+        scale = panel.set_original_resolution()
+        if scale is None:
+            self._status.setText(
+                "View: 1:1 unavailable -- show the image first "
+                "(geometry unknown until then)."
+            )
+            return
+        self._status.setText(
+            f"View: 1:1 original resolution -- 1 image px = "
+            f"{scale[0]:.2f}×{scale[1]:.2f} screen px (§21.4)."
+        )
+
     def _export_panel(
         self,
         panel: ImagePanel,
@@ -419,6 +459,7 @@ class ImageLabPage(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.addWidget(self._gradient_row(self._sim_panel))
         right_layout.addWidget(self._sim_panel)
+        right_layout.addWidget(self._view_row(self._sim_panel))
         right_layout.addWidget(sim_hover)
         right_layout.addWidget(sim_roi)
 
@@ -592,6 +633,7 @@ class ImageLabPage(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.addWidget(self._gradient_row(self._screen_panel))
         right_layout.addWidget(self._screen_panel)
+        right_layout.addWidget(self._view_row(self._screen_panel))
         right_layout.addWidget(screen_hover)
         right_layout.addWidget(screen_roi)
 
@@ -698,6 +740,7 @@ class ImageLabPage(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.addWidget(self._gradient_row(self._exp_panel))
         right_layout.addWidget(self._exp_panel)
+        right_layout.addWidget(self._view_row(self._exp_panel))
         right_layout.addWidget(exp_hover)
         right_layout.addWidget(exp_roi)
 
@@ -862,6 +905,7 @@ class ImageLabPage(QWidget):
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.addWidget(self._roi_panel)
+        right_layout.addWidget(self._view_row(self._roi_panel))
         right_layout.addWidget(roi_hover)
         right_layout.addWidget(roi_label)
 

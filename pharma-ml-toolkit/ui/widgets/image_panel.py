@@ -44,6 +44,27 @@ pixel transition (the §21.6 debounce keys on the pixel, so a zoom
 with a stationary cursor re-discloses on the next move -- probed,
 not guessed).
 
+Part-3 §21.4 (round 246) -- the original-resolution view: the TRUE
+1:1 toggle the stretch leg asked for, built on the §23.10 scale
+measurement.  :meth:`set_original_resolution` sets the view range so
+ONE image pixel renders at ONE screen pixel per axis (the
+pixel-perfect "actual size" view): the target range is the view
+box's own (width, height) in px -- recovered from the live
+``viewRange()``/``viewPixelSize()`` pair (the circular arithmetic)
+-- centred on the CURRENT viewport centre (the image-viewer
+convention: the point under the eye stays under the eye), applied
+with ``padding=0``.  The achieved scale is MEASURED back
+(:meth:`view_pixel_scale`), not assumed -- the probe
+(``scratch/probe_image_1to1_246.py``) pinned 1.0000 on both axes
+from the fit / zoom-in / sub-pixel / non-square starts, exact centre
+preservation, idempotence, and that a hidden widget answers a fake
+default geometry (hence the ``isVisible()`` gate: the honest refusal
+-- geometry is unknown until shown).  :meth:`is_original_resolution`
+reports the ≈1:1 state within :data:`RESOLUTION_TOLERANCE` (integer
+view quantisation keeps the achieved scale NEAR 1.0, not always at
+it); the Image Lab page's 1:1 button toggles between this state and
+the §21.2 fit, disclosing the achieved scale in its status line.
+
 The ROI statistics use the probe's own arithmetic -- a bounding-rect
 slice ``values[y0:y1, x0:x1]`` clipped to the matrix, then
 count/mean/min/max over the finite entries -- so the page's tests pin
@@ -89,6 +110,13 @@ ZOOMED_OUT_PX = 0.9
 #: steady while the cursor moves inside it (the §21.6 debounce plus
 #: a whole pixel under the cursor).
 ZOOMED_IN_PX = 4.0
+
+#: Part-3 §21.4 (round 246) -- how far each axis of the live scale
+#: (screen px per image px) may sit from exactly 1.0 and still count
+#: as the original-resolution view.  Integer view quantisation moves
+#: the achieved scale by a fraction of a percent; a band this wide
+#: tolerates that while still excluding every honest zoom state.
+RESOLUTION_TOLERANCE = 0.05
 
 
 class ImagePanel(QWidget):
@@ -326,6 +354,70 @@ class ImagePanel(QWidget):
     def reset_view(self) -> None:
         """Reset to the default fit-to-view range (§21.2's reset control)."""
         self._view.autoRange()
+
+    def set_original_resolution(self) -> tuple[float, float] | None:
+        """§21.4's original-resolution view: 1 image px = 1 screen px.
+
+        Sets the view range so ONE image pixel renders at ONE screen
+        pixel per axis -- the pixel-perfect "actual size" view -- centred
+        on the CURRENT viewport centre (the image-viewer convention:
+        the point under the eye stays under the eye).  The target range
+        is the view box's own (width, height) in px, recovered from the
+        live ``viewRange()``/``viewPixelSize()`` pair (the circular
+        arithmetic) and applied with ``padding=0``; the aspect lock
+        leaves it alone because a range with equal data-units-per-px
+        on both axes already satisfies it.
+
+        Returns the ACHIEVED :meth:`view_pixel_scale` (≈(1.0, 1.0) --
+        measured back, never assumed; integer view quantisation keeps
+        it near, not always at, 1.0), or ``None`` when the view is
+        unavailable: no matrix, the panel not shown (a hidden widget
+        answers a fake default-geometry scale -- the probe pinned
+        ~40 screen px per image px there, so the honest refusal gates
+        on ``isVisible()``), or a degenerate view box.  The state is
+        idempotent (re-apply stays ≈1:1) and is left by user zoom/pan
+        or :meth:`reset_view`.
+        """
+        if self._values is None or not self.isVisible():
+            return None
+        vb = self._view.getViewBox()
+        if vb is None:
+            return None
+        try:
+            view_px = vb.viewPixelSize()
+            (x0, x1), (y0, y1) = vb.viewRange()
+        except Exception:  # noqa: BLE001 - degenerate pre-show geometry
+            return None
+        pw, ph = float(view_px[0]), float(view_px[1])
+        if pw <= 0.0 or ph <= 0.0:
+            return None
+        box_w, box_h = (x1 - x0) / pw, (y1 - y0) / ph
+        if box_w <= 0.0 or box_h <= 0.0:
+            return None
+        cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+        vb.setRange(
+            xRange=[cx - box_w / 2.0, cx + box_w / 2.0],
+            yRange=[cy - box_h / 2.0, cy + box_h / 2.0],
+            padding=0,
+        )
+        return self.view_pixel_scale()
+
+    def is_original_resolution(self) -> bool:
+        """Whether the live scale sits at ≈1:1 per axis.
+
+        ``True`` only when BOTH axes of :meth:`view_pixel_scale` lie
+        within :data:`RESOLUTION_TOLERANCE` of 1.0; ``False`` when the
+        scale is missing (no data / degenerate view) or any honest
+        zoom state sits outside the band.
+        """
+        scale = self.view_pixel_scale()
+        if scale is None:
+            return False
+        sx, sy = scale
+        return (
+            abs(sx - 1.0) <= RESOLUTION_TOLERANCE
+            and abs(sy - 1.0) <= RESOLUTION_TOLERANCE
+        )
 
     def view_pixel_scale(self) -> tuple[float, float] | None:
         """The §23.10 live scale: one image pixel's on-screen size.

@@ -1482,6 +1482,39 @@ doctest** (+16).  Web pins trued 5028 ×6 + census fallbacks
 1046/323,489 + `SHIPPED_TOOLKIT_VERSION` 1.2.157 + the round-245
 clause in the Testing after-string.
 
+## v1.2.158 release-zip homes (2026-11-09, round 246 — the Part-3 §21.4 original-resolution 1:1 view)
+
+`pharma-ml-toolkit-v1.2.158.zip` — 22,394,779 bytes, sha-256
+`c29b17c9845df4b35eea9d7a42873a3fae5cc5cb6a2fec9b68dd1fd5d46444b8`
+(1079 entries / 1032 files, testzip OK per home, real leaks 0 — the
+size grows by the re-executed notebooks, the round-245 QA pair
+riding `scratch/` by the audit-trail design, and the new §21.4
+1:1 suite + probe + the split 4c/4e runner; this round's
+`r246_web_verify.png` rides the NEXT build; the sha is the
+byte-identical four-home state of THIS run).  Built with the
+standing four-home builder recipe (`scratch/build_zip_246.py`,
+predecessor v1.2.157 swept from all four homes — the PREDECESSOR
+constant trued BEFORE the first build this time, the round-244
+lesson applied; the CHANGELOG `[1.2.158]` entry predated the
+build).  The round-137 scrub caught the notebook re-execution's
+`/home/z/` embedding (`complete_ml_workflow.ipynb`, the known
+ritual: scrubbed, verification zero absolute-home matches) BEFORE
+the build — the builder's leak gate then confirmed real leaks 0 on
+the first build.  The gate itself grew to NINE chunks: the round's
++16 tests tipped the single 4c process past the Qt teardown edge
+(SIGSEGV −11 at 74% with every test passing in two halves — the
+round-232 lesson, third verse), so 4c split into 4c (widget suites)
++ 4e (page suites), both halves measured green before the full
+re-run.  Placed byte-identical in `download/`,
+`pharma-ml-toolkit/dist-archive/`, `pharma-ml-toolkit/download/`,
+and `upload/`.  Census **1052 files / 324,397 lines** per the
+canonical walk.  Honest totals **5,044 = 4,246 collect + 798
+doctest** (+16).  Web pins trued 5044 ×6 + census fallbacks
+1052/324,397 + `SHIPPED_TOOLKIT_VERSION` 1.2.158 + the round-246
+clause in the Testing after-string (single quotes inside, the
+round-245 Turbopack lesson applied proactively — the clause's quote
+guard ran before the write).
+
 ## v1.2.156 release-zip homes (2026-11-09, round 244 — the Part-3 lint-backlog close)
 
 `pharma-ml-toolkit-v1.2.156.zip` — 22,068,281 bytes, sha-256

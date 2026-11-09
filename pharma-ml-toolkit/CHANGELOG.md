@@ -1,3 +1,49 @@
+## [1.2.158] — 2026-11-09
+
+### Added — round 246: Part-3 §21.4 — the original-resolution (1:1) view
+
+* The stretch leg the round-245 baseline named first is shipped: a
+  TRUE pixel-perfect toggle, built on the §23.10 scale measurement.
+  `ImagePanel.set_original_resolution()` sets the view range so ONE
+  image pixel renders at ONE screen pixel per axis — the
+  "actual size" view: the target range is the view box's own
+  (width, height) in px, recovered from the live
+  `viewRange()`/`viewPixelSize()` pair (the circular arithmetic),
+  centred on the CURRENT viewport centre (the image-viewer
+  convention), applied with `padding=0`.  The achieved scale is
+  MEASURED back (`view_pixel_scale`), never assumed — the probe
+  (`scratch/probe_image_1to1_246.py`, engine-printed first) pinned
+  1.0000 on BOTH axes from the fit / 2×2 zoom-in (155.7 screen px
+  per image px) / sub-pixel squeeze (0.375) / non-square starts,
+  exact centre preservation, idempotence, `autoRange` leaving unity,
+  and that a hidden widget answers a FAKE default-geometry scale
+  (~40 screen px per image px) — hence the honest `isVisible()`
+  gate: no matrix, hidden panel, or degenerate view box ⇒ `None`.
+* `is_original_resolution()` reports the ≈1:1 state within the
+  exported `RESOLUTION_TOLERANCE` (0.05 — integer view quantisation
+  keeps the achieved scale NEAR 1.0, not always at it); both axes
+  must sit inside the band, and the state tracks the LIVE view (a
+  user zoom after the press flips it back — pinned).
+* The Image Lab page: every matrix tab (similarity / response /
+  explorer / ROI) carries the "1:1 original resolution" button
+  (§21.4 row beside each panel).  The toggle discloses the honest
+  three-way outcome in the status line — the achieved scale
+  (`1 image px = N×M screen px`) when 1:1 lands, the fit-restored
+  notice on the second press (§21.2 autoRange), and the explicit
+  "1:1 unavailable" refusal for hidden geometry.  Never a silent
+  no-op.
+* **Tests**: `tests/ui/test_image_1to1_246.py` — 16 tests: the
+  refusals (no data / after clear / the hidden panel whose raw view
+  would happily lie), the achieved ≈1:1 from the fit / zoom-in /
+  sub-pixel starts, the exact circular arithmetic
+  (`viewPixelSize()` itself ≈1.0 per axis), idempotence,
+  viewport-centre preservation, the state band edges (inclusive,
+  both axes), `reset_view`/user-zoom leaving unity, and three page
+  legs (the golden-path toggle with exactly one live button on the
+  current tab, the achieved-scale disclosure, the out-loud hidden
+  refusal).  Honest totals **5,044 = 4,246 collect + 798 doctest**
+  (+16).
+
 ## [1.2.157] — 2026-11-09
 
 ### Added — round 245: Part-3 §23.10 — the ImagePanel sub-pixel mapping disclosure
