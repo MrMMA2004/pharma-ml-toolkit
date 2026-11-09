@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use PharmaML Toolkit in your research, please cite it as below."
+title: "PharmaML Toolkit: Offline-first pharmaceutical machine learning"
+type: software
+authors:
+  - name: "PharmaML contributors"
+repository-code: "https://github.com/MrMMA2004/pharma-ml-toolkit"
+url: "https://github.com/MrMMA2004/pharma-ml-toolkit"
+license: MIT
+version: 1.2.159
+date-released: 2026-11-10
+abstract: >-
+  PharmaML Toolkit is an offline-first Python package for cheminformatics,
+  QSAR, pharmacokinetics and pharmacodynamics, molecular docking,
+  explainable and generative machine learning, reproducible scientific
+  reports and visualization. It includes a PySide6 desktop Studio,
+  a Next.js web console, executed notebooks and versioned source archives.
+keywords:
+  - pharmaceutical-informatics
+  - cheminformatics
+  - QSAR
+  - pharmacokinetics
+  - pharmacometrics
+  - molecular-docking
+  - explainable-ai
+  - machine-learning
+  - reproducible-research
