@@ -1,9 +1,9 @@
 {
   "job": "MASTER_PROMPT-2h-sync-100x",
-  "runs_completed": 38,
+  "runs_completed": 39,
   "max_runs": 100,
   "interval": "every 2 hours (fixed_rate 7200s)",
   "purpose": "Continue the MASTER_PROMPT and update the GitHub repository (including the latest zip file). Counter is committed to git each run so it survives sandbox rollbacks (the remote is the survivor).",
   "created": "round 194, after the 9th rollback recovery (local wiped to 2eb0ede/round-186; remote survived at 101f5f7/round-193 v1.2.112; recovered via pure fast-forward)",
-  "last_run_note": "2026-11-10: round 247 (counter 38/100, owner-directed best-of-ml-python HPO/AutoML reference) -- multi-objective HPO shipped as ml/multiobjective.py v1.2.159 (the Pareto study: dominates/front/hypervolume_2d/crowding/chebyshev + MultiObjectiveStudy on the existing samplers + tune_model_multi over cross_validate's ledger; 27 tests + 10 doctests, honest totals 5081, census 1058/326,049, zip 22,654,468 B sha 36bfcb02 in four homes, 9/9 chunks green, endpoint exact:true); pickup after rollback #27 which ATE the unpushed prior round-247 snapshot (the SS20.4 checkpoint-depth design contract preserved in the worklog for the next round); the version-carrier miss (pyproject/__init__ left at 1.2.158 by the first release pass) caught via the zip-size endpoint and paid in full (carriers trued, notebooks re-executed, zip rebuilt); the phantom +x bits stripped again (139 files)"
+  "last_run_note": "2026-11-10: round 248 (counter 39/100) -- the Part-3 SS20.4/SS20.5 NumPy-trainer checkpoint depth re-implemented exactly from the worklog-preserved contract (rollback #27 ate the first attempt): fit(checkpoint_dir=, checkpoint_every=, checkpoint_resume=) writes the complete resumable state through the round-229 CheckpointManager, bit-exactness pinned across Adam/SGD-momentum/classifier/chained 5-14-24/dropout/early-stop-continuity; 24 tests + a fit() doctest green, code pushed first (9968de5) per the round-247 lesson, notebooks re-executed at 1.2.160, scrub caught the known ml-workflow leak pre-build, gate 9/9 green, v1.2.160 zip 22,750,159 B sha c6b4d740 in four homes, census 1061/326,899, honest totals 5106 = 4297 + 809, web pins trued x7"
 }

@@ -1515,6 +1515,30 @@ clause in the Testing after-string (single quotes inside, the
 round-245 Turbopack lesson applied proactively — the clause's quote
 guard ran before the write).
 
+## v1.2.160 release-zip homes (2026-11-10, round 248 — the §20.4/§20.5 NumPy-trainer checkpoint depth)
+
+`pharma-ml-toolkit-v1.2.160.zip` — 22,750,159 bytes, sha-256
+`c6b4d7404af4dc57313692e2b6c5210b6c77b49b2d448f3338f935e65d58b6a6`
+(1088 entries / 1041 files, testzip OK per home, real leaks 0 — the
+growth over v1.2.159's 22,654,468 B is the checkpoint-depth wiring
+(`ml/numpy_neural.py` +~180 lines of §20.4/§20.5 integration, the
+`Optimizer.state_dict()`/`load_state_dict()` pair in `ml/autograd.py`,
+the 24-test `tests/test_numpy_neural_checkpoints.py`) plus the eight
+notebooks re-executed at 1.2.160).  Built with the standing four-home
+builder recipe (`scratch/build_zip_248.py`, predecessor v1.2.159
+swept from all four homes).  The round-137 scrub caught the notebook
+re-execution's `/home/z/` embedding (`complete_ml_workflow.ipynb`,
+the known ritual: scrubbed, twins re-synced, verification zero
+absolute-home matches) BEFORE the build.  The gate: NINE chunks, all
+green, first full pass (chunk 2 carries the checkpoint suite by
+name).  Placed byte-identical in `download/`,
+`pharma-ml-toolkit/dist-archive/`, `pharma-ml-toolkit/download/`, and
+`upload/`.  Census **1061 files / 326,899 lines** per the canonical
+walk.  Honest totals **5,106 = 4,297 collect + 809 doctest** (+24
+collect, +1 doctest — the `fit()` bit-exactness example riding chunk
+6).  Web pins trued 5106 x7 + census fallbacks 1061/326,899 +
+`SHIPPED_TOOLKIT_VERSION` 1.2.160.
+
 ## v1.2.159 release-zip homes (2026-11-10, round 247 — multi-objective HPO, the Pareto study)
 
 `pharma-ml-toolkit-v1.2.159.zip` — 22,654,468 bytes, sha-256

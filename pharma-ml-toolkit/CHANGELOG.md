@@ -1,3 +1,47 @@
+## [1.2.160] — 2026-11-10
+
+### Added — round 248: Part-3 §20.4/§20.5 — the NumPy trainer's checkpoint depth (from the preserved contract)
+
+* The §20 backlog's first named item ships, re-implemented exactly
+  from the design contract the worklog preserved after rollback #27
+  ate the first attempt: `fit()` on `NumpyMLPClassifier` /
+  `NumpyMLPRegressor` now accepts `checkpoint_dir`,
+  `checkpoint_every` and `checkpoint_resume`, and writes the
+  **complete** resumable state after every `checkpoint_every` epochs
+  (and at the final epoch — including the early-stopped one) through
+  the round-229 `CheckpointManager`: atomic write-to-temp/
+  `os.replace`, sha-256 self-verification, quarantine-on-corruption,
+  rotation, JSON-only (arrays ride as base64 — never pickle).
+* "Complete" is the §20.4 depth, not the weights-only shortcut:
+  weights, optimizer moment buffers and step count
+  (`Optimizer.state_dict()` / `load_state_dict()` on
+  `_velocity`/`_state`/`_m`/`_v`/`_vmax`, refusing — with
+  `ModelError` — missing step counts, foreign buffer names, and any
+  buffer whose shape does not match the live parameters), the
+  training RNG state (it drives the batch order and the dropout
+  masks), the early-stopping state (best validation loss, stale
+  counter, best weights) and the history so far.
+* The acceptance bar is **bit-exactness**: an interrupted fit
+  resumed from its checkpoint reaches `np.array_equal` predictions
+  against the uninterrupted run — `allclose` would hide a rewound
+  Adam bias correction or a shifted batch permutation. Pinned across
+  Adam, SGD-with-momentum, the classifier path, chained 5→14→24
+  resumes, dropout>0, and early-stopping continuity (the interrupted
+  and uninterrupted runs stop at the SAME epoch with identical
+  histories).
+* §20.5's incompatibility contract: a config fingerprint covers every
+  trajectory-shaping hyperparameter while `epochs`/`patience` stay
+  budgets, free to differ between the interrupted and the resuming
+  call; a dataset fingerprint covers X and the encoded y.
+  Incompatible or unreadable records are discarded with a warning
+  and training starts fresh (never fatal); a checkpoint whose saved
+  epoch already reaches the resuming call's budget restores the
+  finished model and trains nothing; `checkpoint_resume=False`
+  forces a fresh run while still writing checkpoints; broken
+  checkpoint homes degrade to log warnings and training completes.
+  24 tests (`tests/test_numpy_neural_checkpoints.py`) + a `fit()`
+  doctest; the gate's chunk 2 carries the suite by name.
+
 ## [1.2.159] — 2026-11-10
 
 ### Added — round 247: multi-objective HPO — the Pareto study (`ml/multiobjective.py`)

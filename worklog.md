@@ -12024,3 +12024,50 @@ lost design contract is preserved above, implement exactly it)** and §24 SA-in-
 wiring beyond the shipped slices · §21.4 and §23 stay closed · the §-new MOO follow-on
 candidates (not yet backlog items): a Pareto-front viz twin to `plot_pareto_front`, and the
 report's shortlist `prune(k)` mirroring the generative front's crowding pruner.
+
+## Round 248 — 2026-11-10 — Part-3 §20.4/§20.5: the NumPy-trainer checkpoint depth, re-implemented from the preserved contract
+
+**Pickup**: clean pickup at 4536b0a (the round-247 tail — the version-carrier truing fix + the web
+verification screenshot — had landed after the Pareto commit; no rollback this round). The counter
+stood at 38 with the SS20.4 checkpoint depth at the top of the Part-3 backlog, its design contract
+preserved in the round-247 worklog after rollback #27 ate the first implementation.
+
+**The round's work**: the contract re-implemented exactly, without re-derivation. `fit()` on
+`NumpyMLPClassifier`/`NumpyMLPRegressor` gains `checkpoint_dir` / `checkpoint_every` /
+`checkpoint_resume` and writes the COMPLETE resumable state through the round-229
+`CheckpointManager` (atomic os.replace, sha-256 self-verification, quarantine-on-corruption,
+rotation, JSON + base64 — never pickle) after every `checkpoint_every` epochs AND the final epoch,
+including the early-stopped one. Complete is the §20.4 depth: weights, optimizer moment buffers +
+step count (`Optimizer.state_dict()`/`load_state_dict()` restored verbatim onto
+`_velocity/_state/_m/_v/_vmax`, refusing missing/foreign/mismatched buffers with `ModelError`),
+the training RNG state, the early-stopping state and the history. The acceptance bar is
+BIT-EXACTNESS — `np.array_equal`, never `allclose` — pinned across Adam, SGD-with-momentum, the
+classifier path, chained 5→14→24 resumes, dropout>0 and early-stopping continuity. §20.5:
+config + dataset fingerprints (epochs/patience stay free budgets), incompatible/unreadable records
+discarded with a warning (never fatal), budget-reached restores and trains nothing,
+`checkpoint_resume=False` forces fresh while still writing, broken homes degrade to warnings.
+
+**Test-side fights, all honest**: the optimizer unit test forgot the weights ride the network
+snapshot separately (fixed by copying the post-step weights before `load_state_dict`); one assert
+ran after its tempdir cleanup; noise-free synthetic data NEVER triggers early stopping (the
+continuity tests passed vacuously — 0.35 noise + lr 0.05 make the early-stop path deterministic
+and genuinely exercised); and the schema constant is `pharmaml-checkpoint/1`, not `-v1`. Final:
+**24 tests green + a `fit()` doctest**, ruff zero, mypy clean across 194 files.
+
+**Gate + release**: the code was committed and pushed FIRST (9968de5 — the round-247
+lost-snapshot lesson applied), then the eight notebooks re-executed at 1.2.160 (8/8, zero error
+outputs, 205s), the round-137 scrub caught the known `complete_ml_workflow.ipynb` re-exec leak
+BEFORE the build (verification zero), the NINE-chunk gate ran green 9/9, census 1061/326,899,
+honest totals **5,106 = 4,297 collect + 809 doctest** (+24/+1). The v1.2.160 zip built at
+**22,750,159 B, sha `c6b4d7404af4dc57313692e2b6c5210b6c77b49b2d448f3338f935e65d58b6a6`** in four
+byte-identical homes (1088 entries / 1041 files, testzip OK per home, predecessor v1.2.159 swept).
+Web pins trued 5106 ×7 + census fallbacks 1061/326,899 + `SHIPPED_TOOLKIT_VERSION` 1.2.160;
+manifest entry added.
+
+**Baselines for the next round** — v1.2.160 (four homes) · honest totals **5,106 = 4,297 + 809** ·
+census **1061/326,899** · the gate is NINE chunks · counter **39/100** · the lint bar green (ruff
+zero + mypy clean, 194 files) · Part-3 remaining: §24 SA-in-generative wiring beyond the shipped
+slices (the last named item) · §20 checkpoint depth is now CLOSED · §21.4 and §23 stay closed ·
+MOO follow-on candidates (not yet backlog items): the Pareto-front viz twin to
+`plot_pareto_front`, and the report's shortlist `prune(k)` mirroring the generative front's
+crowding pruner.
