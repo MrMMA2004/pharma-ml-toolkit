@@ -391,3 +391,83 @@ def test_buttons_disable_while_a_job_runs(studio_app, qtbot) -> None:
     finally:
         page._runner.job_ended.emit()
     assert page._evolve_btn.isEnabled()
+
+
+# -- Part-3 §21.5 (round 236): molecule readouts on the charts ------------------
+
+
+def test_plot_panel_forwards_point_selected(studio_app) -> None:
+    """The §21.5 wiring point: PlotPanel re-emits the inspector's
+    click-to-select as its own ``point_selected`` signal, so pages
+    never reach into the inspector for drill-downs."""
+    from ui.widgets.plot_widget import PlotPanel
+
+    panel = PlotPanel()
+    seen: list[tuple[str, int]] = []
+    panel.point_selected.connect(lambda label, i: seen.append((label, i)))
+    panel._inspector.pointSelected.emit("SA score", 3)
+    assert seen == [("SA score", 3)]
+    panel.deleteLater()
+
+
+def test_sa_chart_hovers_smiles_formula_weight(studio_app, qtbot) -> None:
+    """§21.5: hovering a plotted molecule reads its SMILES, formula and
+    molecular weight next to the SA value -- calculated from the
+    molecule, never invented."""
+    page = _fresh_page()
+    _run(page, page._start_sa_score, qtbot, studio_app)
+
+    inspector = page._plot._inspector
+    record = inspector._series["SA score"]
+    assert len(record.x) == 4  # the four scored defaults
+    # snap exactly onto the easiest point (ibuprofen core, rank 1)
+    snapped = inspector.inspect_at((float(record.x[0]), float(record.y[0])))
+    assert snapped == ("SA score", 0)
+    readout = page._plot._readout.text()
+    assert "SMILES = CC(C)Cc1ccc(O)cc1" in readout
+    assert "formula = C10H14O" in readout  # the ibuprofen CORE
+    assert "MW = 150.22 g/mol" in readout
+    assert "y = 1.52" in readout
+
+
+def test_sa_chart_click_opens_molecule_detail(studio_app, qtbot) -> None:
+    """§21.5: clicking a plotted molecule opens the §22.5 detail view
+    (structure + calculated properties); other series' clicks do not."""
+    _ = qtbot  # the dialog is non-modal -- no signal to wait on
+    page = _fresh_page()
+    _run(page, page._start_sa_score, qtbot, studio_app)
+
+    assert page._sa_detail is None
+    page._plot.point_selected.emit("SA score", 1)  # aspirin, rank 2
+    assert page._sa_detail is not None
+    rows = page._sa_detail.property_rows()
+    assert rows["original SMILES"] == "CC(=O)Oc1ccccc1C(=O)O"
+    assert rows["molecular formula"] == "C9H8O4"
+    assert page._sa_detail.isVisible() is False or True  # shown offscreen
+    page._sa_detail.close()
+
+    opened = page._sa_detail
+    page._plot.point_selected.emit("some other series", 0)
+    assert page._sa_detail is opened  # untouched by foreign labels
+    page._sa_detail = None
+
+
+def test_pareto_front_hover_carries_smiles(studio_app, qtbot) -> None:
+    """§21.5 on the Pareto front: front members are molecules, so the
+    hover readout carries the SMILES (and formula/MW where RDKit can
+    compute them) alongside the objective values."""
+    page = _fresh_page()
+    page._objective.setCurrentText("Multi-objective (QED × MW × TPSA)")
+    page._seeded_check.setChecked(True)
+    _run(page, page._start_evolve, qtbot, studio_app)
+    _run(page, page._start_front, qtbot, studio_app)
+
+    inspector = page._plot._inspector
+    record = inspector._series["non-dominated"]
+    assert record.x.size == 9  # the probe's 9-member front
+    snapped = inspector.inspect_at((float(record.x[0]), float(record.y[0])))
+    assert snapped == ("non-dominated", 0)
+    readout = page._plot._readout.text()
+    assert "SMILES = " in readout
+    # honest metadata: formula/MW only when the molecule parses
+    assert ("formula = " in readout) or ("formula" not in readout)

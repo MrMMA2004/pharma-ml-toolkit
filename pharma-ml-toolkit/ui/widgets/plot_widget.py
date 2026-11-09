@@ -22,7 +22,7 @@ from typing import Any, Callable
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from ..theme_manager import ChartPalette
@@ -32,6 +32,12 @@ from .image_export import export_widget_grab
 
 class PlotPanel(QWidget):
     """A single themed plot with labelled axes and a callable API."""
+
+    #: §21.5 (round 236): forwarded from the inspector's click-to-select
+    #: so pages can open drill-down views (the molecule detail dialog)
+    #: without reaching into the inspector -- ``(series label, data
+    #: index)`` of the clicked point.
+    point_selected = Signal(str, int)
 
     def __init__(self, parent: QWidget | None = None, title: str = "") -> None:
         super().__init__(parent)
@@ -56,6 +62,7 @@ class PlotPanel(QWidget):
         self._readout.hide()
         self._inspector = ChartInspector(self._plot)
         self._inspector.set_readout(self._readout)
+        self._inspector.pointSelected.connect(self.point_selected)
         self._readout.show()
         self.apply_palette(self._palette)
 

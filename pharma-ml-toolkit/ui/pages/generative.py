@@ -45,6 +45,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -67,8 +68,8 @@ from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
-from ..widgets.smiles_preview import attach_smiles_previews
 from ..widgets.responsive import configure_splitter
+from ..widgets.smiles_preview import SmilesDetailDialog, attach_smiles_previews
 from ..workers.job_worker import JobRunner
 
 _TK = Path(__file__).resolve().parents[2]
@@ -278,6 +279,49 @@ class GenerativeWorkbenchPage(QWidget):
         self._report.setWordWrap(True)
         lay.addWidget(self._report)
 
+        # §21.5 (round 236): clicking a plotted molecule opens its
+        # §22.5 detail view (structure + calculated properties).
+        self._sa_hover: list[str] = []
+        self._sa_detail: SmilesDetailDialog | None = None
+        self._plot.point_selected.connect(self._on_point_selected)
+
+    # -- §21.5: molecule points on the charts ---------------------------------
+    @staticmethod
+    def _molecule_meta(smiles: list[str]) -> Any:
+        """Per-point hover metadata for a molecule scatter (§21.5).
+
+        The readout shows the SMILES plus formula and molecular weight
+        calculated from it -- never invented; molecules RDKit cannot
+        parse answer with the SMILES alone (the SA y-value is already
+        in the readout).  Computed lazily per point and cached by the
+        inspector (§21.6), so plotting 500 candidates costs nothing
+        until the user actually hovers one.
+        """
+
+        def meta(i: int) -> dict[str, Any]:
+            smi = smiles[i] if 0 <= i < len(smiles) else ""
+            rows: dict[str, Any] = {"SMILES": smi}
+            try:
+                from rdkit import Chem
+                from rdkit.Chem import Descriptors, rdMolDescriptors
+
+                mol = Chem.MolFromSmiles(smi) if smi else None
+                if mol is not None:
+                    rows["formula"] = rdMolDescriptors.CalcMolFormula(mol)
+                    rows["MW"] = f"{Descriptors.MolWt(mol):.2f} g/mol"
+            except Exception:  # noqa: BLE001 - hover metadata must never raise
+                pass
+            return rows
+
+        return meta
+
+    def _on_point_selected(self, label: str, index: int) -> None:
+        """§21.5 click-to-detail: the SA scatter's molecule points."""
+        if label != "SA score" or not (0 <= index < len(self._sa_hover)):
+            return
+        self._sa_detail = SmilesDetailDialog(self._sa_hover[index], self)
+        self._sa_detail.show()  # non-modal per §22.5
+
     # -- tab construction -----------------------------------------------------
     def _build_evolve_tab(self) -> QWidget:
         tab = QWidget()
@@ -469,8 +513,10 @@ class GenerativeWorkbenchPage(QWidget):
             "estimate from complexity and fragment familiarity, not a "
             "route plan). Invalid rows keep their reason; the optional "
             "max-SA bound flags rejects without discarding them. "
-            "Hover a SMILES cell for its 2-D structure; click it for the "
-            "detail dialog (canonical SMILES, formula, weight, SA)."
+            "The chart plots every scored molecule (index vs SA): hover "
+            "a point for its SMILES, formula and weight; click it for "
+            "the detail dialog (structure + canonical SMILES + SA). "
+            "Hover a SMILES cell in the table for the 2-D structure."
         )
         hint.setWordWrap(True)
         form.addRow("", hint)
@@ -700,7 +746,15 @@ class GenerativeWorkbenchPage(QWidget):
             x_name, y_name = outcome.objectives[0], outcome.objectives[1]
             xs = frame[x_name].to_numpy(dtype=float)
             ys = frame[y_name].to_numpy(dtype=float)
-            self._plot.scatter(xs, ys, label="non-dominated")
+            # §21.5: front members are molecules -- hover carries the
+            # SMILES/formula/MW readout (click stays SA-chart-only:
+            # the front's drill-down is the shared table beside it).
+            self._plot.scatter(
+                xs,
+                ys,
+                label="non-dominated",
+                meta=self._molecule_meta(list(front.smiles)),
+            )
             self._plot.add_legend()
             self._plot.set_labels(
                 x=x_name,
@@ -995,6 +1049,28 @@ class GenerativeWorkbenchPage(QWidget):
 
     def _render_sa_score(self, outcome: SAScoreOutcome) -> None:
         self._plot.clear()
+        # §21.5 (round 236): one point per SCORED molecule -- hover reads
+        # the SMILES + formula + MW next to the SA value, click opens the
+        # §22.5 detail view.  Invalid rows stay table-only (they have no
+        # SA to plot); x is the table's row index so chart and board
+        # agree on every molecule's identity.
+        frame = outcome.table
+        # the board is sorted easiest-first with integer ranks; invalid
+        # rows ride below with rank "" and NaN SA -- table-only.
+        scored = frame[frame["sa_score"].notna()] if not frame.empty else frame
+        if not scored.empty:
+            ranks = np.asarray([float(r) for r in scored["rank"]])
+            sas = np.asarray([float(s) for s in scored["sa_score"]])
+            self._sa_hover = [str(s) for s in scored["smiles"]]
+            self._plot.scatter(ranks, sas, label="SA score",
+                               meta=self._molecule_meta(self._sa_hover))
+            self._plot.set_labels(
+                x="rank (easiest first)",
+                y="SA score",
+                title=f"Ertl SA · {len(scored)} scored of {len(frame)}",
+            )
+        else:
+            self._sa_hover = []
         self._table.bind_frame(outcome.table)
         self._report.setText(f"{outcome.summary} · scored in {outcome.seconds:.1f}s")
 

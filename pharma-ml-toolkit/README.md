@@ -2123,10 +2123,30 @@ The inspector is theme-aware (the crosshair, marker and readout
 recolour with the ChartPalette) and every piece runs under the
 offscreen page tests.
 
+Round 236 completes §21.5 — **molecule readouts on the charts**:
+`PlotPanel` re-emits the inspector's click as its own
+`point_selected(label, index)` signal, and the Generative page's
+molecule scatters carry per-point metadata — the SA tab plots rank vs
+score (one point per scored molecule) whose hover reads the SMILES,
+the molecular formula and the molecular weight next to the SA value
+(calculated from the molecule with RDKit, never invented; unparseable
+SMILES answer with the SMILES alone), and **clicking a point opens
+the §22.5 molecule-detail dialog** (large 2-D structure + canonical
+SMILES + formula + weight + SA). The multi-objective Pareto front
+carries the same hover readout for every non-dominated member. The
+metadata providers are lazy and cached (§21.6): plotting 500
+candidates costs nothing until one is actually hovered.
+
 #### The responsive pass: splitters, export legibility, aspect (Part-3 §23)
 
 Round 233 (§23 slice 1) makes the layout discipline wired, not
-aspirational — `ui/widgets/responsive.py` is the policy module:
+aspirational — `ui/widgets/responsive.py` is the policy module
+(round 235's slice 2 adds `wrap_in_scroll()`: every ML Workbench tab
+body rides the scroll policy — the round-235 probe measured the
+tuner form at 479 px and Leaderboards at 775 px minimum against the
+~450 px the 860×560 minimum window leaves — widget-resizable,
+sideways overflow made impossible rather than scrollable, frameless
+while the content fits, a hard 240 px region minimum):
 
 * **No splitter child is collapsible** — the studio's 20 splitters
   (every page, the Image Lab's four tabs, the ML Workbench's two, and

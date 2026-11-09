@@ -146,13 +146,14 @@ and §16.18 step 15 **fires**: `playground.py` is retired this round
 carry the new honest totals.
 
 
-## Part-3 progress — round 233: §23 slice 1 (the responsive pass) + round 232's §21 slice 1 (hover inspection) + the Windows black-window fix
+## Part-3 progress — round 236: §21.5 molecule readouts + round 235's §23 slice 2 (the scroll policy) + round 233's §23 slice 1 (the responsive pass) + round 232's §21 slice 1 (hover inspection) + the Windows black-window fix
 
 *The Part-3 backlog after Part-2's completion: §20 checkpoint depth /
 §21 hover tooltips / §22 SMILES previews / §23 responsive pass / §24
 SA-in-generative wiring.  Round 229 landed §20; round 230 landed §24;
 round 231 landed §22; round 232 landed §21 slice 1; round 233 landed
-§23 slice 1.*
+§23 slice 1; round 235 landed §23 slice 2 (the scroll policy); round
+236 landed §21.5.*
 
 - **§20 (pause/resume/stop + checkpoints) — the engine and the
   Leaderboards tab are DONE** (round 229).  `pharmaml.utils.checkpoints`
@@ -205,11 +206,21 @@ round 231 landed §22; round 232 landed §21 slice 1; round 233 landed
   the `pointSelected` drill-down signal (the §21.5 wiring point).
   14 inspector tests + the PlotPanel API
   (`set_inspection_enabled` / `attach_metadata`).
+  **§21.5 molecule readouts — DONE** (round 236):
+  `PlotPanel.point_selected` forwards the inspector's click-to-select
+  so pages never reach into the inspector; the Generative page's SA
+  tab plots rank vs score (one point per scored molecule — hover
+  reads the SMILES, the RDKit-calculated formula and molecular
+  weight next to the SA value; click opens the §22.5 detail dialog),
+  and the multi-objective Pareto front carries the same hover
+  metadata for every non-dominated member.  Providers are lazy and
+  inspector-cached (§21.6).  4 tests in
+  `tests/ui/test_generative_page.py` (the forwarding pin, the hover
+  readout with real numbers, the click-to-detail with the
+  foreign-label guard, the front hover).
   **Remaining §21 depth**: §21.4's image-specific inspection (pixel /
-  channel readout on the Image Lab), per-page metadata adoption
-  (scatter pages attaching sample IDs through `meta=`), and the
-  §21.5 molecule-hover SA/formula readouts on chemistry scatter
-  charts.
+  channel readout on the Image Lab) and per-page metadata adoption
+  on the remaining scatter pages (sample IDs through `meta=`).
 - **§23 (responsive rescaling / overlap prevention) — slice 1 DONE**
   (round 233): `ui/widgets/responsive.py` is the policy module and
   the audit is wired, not aspirational —
@@ -242,10 +253,19 @@ round 231 landed §22; round 232 landed §21 slice 1; round 233 landed
     every live splitter, the floor upscale + already-legible noop +
     no-floor contract, §23.5 data-integrity, the aspect lock and
     the §22 renderer's canvas-aspect contract.
-  * **Remaining §23 depth**: the QScrollArea pass for the tallest
-    forms (the ML Workbench's parameter form is the candidate),
-    adaptive tick/label density audits, and legend-collision
-    handling on the densest charts.
+  * **Slice 2 — the scroll policy — DONE** (round 235):
+    `wrap_in_scroll()` + `SCROLL_MIN_PX` (240) in
+    `ui/widgets/responsive.py`: widget-resizable, horizontal
+    scrollbars OFF (sideways overflow made impossible, not merely
+    scrollable), vertical as needed, frameless + palette-blended
+    (a fitting page is visually unchanged), hard region minimum.
+    All five ML Workbench tab bodies ride it — the probe measured
+    the tuner form at 479 px and Leaderboards at 775 px minimum
+    against the ~450 px the 860×560 minimum window leaves.  3 tests
+    (contract, §23.5 remount invariants, the self-enforcing
+    structural audit).
+  * **Remaining §23 depth**: adaptive tick/label density audits and
+    legend-collision handling on the densest charts.
 - **Round-232 platform fix (the user report)**: `studio.py` opened
   with console noise and NO window on Windows — `ui/headless.py`'s
   displayless probe tested only X11's `DISPLAY` (never set on

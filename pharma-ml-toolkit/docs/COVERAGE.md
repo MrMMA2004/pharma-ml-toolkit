@@ -1825,3 +1825,23 @@ COVERED(≈) · 13 N-A-HONEST · 9 STRETCH.
 | Export legibility floor (§23.3) | `ui/widgets/image_export.py` — `grab_png_bytes(min_size=…)` / `export_widget_grab(min_size=…)` re-render a squeezed `QGraphicsView` from its **vector scene** at floor scale: `LEGIBILITY_FLOOR` 640×480 (`ui/widgets/responsive.py`), text/pens/curves re-drawn crisp (never bitmap-stretched), aspect preserved (§23.4), the pyqtgraph chrome re-filled via `backgroundBrush()` (scene.render skips the view-layer painting). `PlotPanel.export_image` / `ImagePanel.export_image` gained the `min_size` passthrough (default `None` = the §17-tested widget-owns-its-size contract); the Image Lab's user export button passes the floor. |
 | Aspect lock (§23.4) | `ui/widgets/image_panel.py` — `setAspectLocked(True)`: matrix pixels stay square under every resize (a 100×50 correlation renders 2:1 as shaped, fit-to-view, never stretched); the §22 renderer's canvas-aspect contract is pinned alongside (RDKit letterboxes inside the exact requested canvas). |
 | Tests | `tests/ui/test_responsive_policy.py` (+13): the policy contract (horizontal/vertical/empty-noop), the structural audit over every live splitter in a constructed main window (≥19 wired, all non-collapsible, all minimum extents), the floor (upscale-meets-floor + aspect-preserved, already-legible noop, no-floor contract), §23.5 data-integrity (arrays + view ranges byte-identical across an export), the ImagePanel aspect lock, the §22 canvas-aspect contract. Chunk runner `scratch/run_suite_chunks_233.py` (4d gains the new suite). |
+
+## Round 235 (v1.2.147) — the Part-3 §23 slice 2: the scroll policy
+
+*The tallest forms ride a scroll region now — sideways overflow made impossible, a fitting page visually unchanged, display geometry only (§23.5).*
+
+| What | Where it landed |
+| --- | --- |
+| The scroll policy | `ui/widgets/responsive.py::wrap_in_scroll` + `SCROLL_MIN_PX` (240) — widget-resizable, horizontal scrollbars OFF, vertical as needed, frameless + palette-blended, hard region minimum. Wired onto ALL five ML Workbench tab bodies at the addTab sites (probe evidence: tuner 479 px, Leaderboards 775 px vs ~450 px budget at the 860×560 minimum window). |
+| Tests | `tests/ui/test_responsive_policy.py` (+3, 13→16): the wrapper contract, the §23.5 remount invariants (same rows, never more space required), and the structural audit that fails if a future tab skips the wrapper. Chunk runner `scratch/run_suite_chunks_235.py`. |
+
+## Round 236 (v1.2.148) — the Part-3 §21.5 molecule readouts
+
+*Chart points that are molecules read out as molecules — hover carries SMILES/formula/weight, click opens the detail view, nothing fabricated.*
+
+| What | Where it landed |
+| --- | --- |
+| The forwarding signal | `ui/widgets/plot_widget.py::PlotPanel.point_selected` — re-emits the inspector's click-to-select `(label, index)` so pages never reach into the inspector for drill-downs. |
+| The SA chart | `ui/pages/generative.py::_render_sa_score` — rank vs score, one point per scored molecule; hover metadata via the lazy provider (`SMILES`, RDKit `formula`, `MW`); click → the §22.5 `SmilesDetailDialog` with a foreign-label guard; invalid rows stay table-only. |
+| The Pareto front | `_render_front` — the non-dominated scatter carries the same hover metadata per front member. |
+| Tests | `tests/ui/test_generative_page.py` (+4): the forwarding pin, the hover readout with real numbers (C10H14O / 150.22 g/mol for the ibuprofen core), the click-to-detail + guard, the front hover. |

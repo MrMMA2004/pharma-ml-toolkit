@@ -458,3 +458,31 @@ wired policy rather than per-page heroics:
 - 13 tests in `tests/ui/test_responsive_policy.py`; the remaining §23
   depth (QScrollArea for the tallest forms, adaptive tick density,
   legend collisions) stays on the Part-3 backlog.
+
+## Increment 18 (round 235, retroactively documented in round 236) — §23 slice 2: the scroll policy
+
+`wrap_in_scroll()` in `ui/widgets/responsive.py` wraps the tall tab
+bodies: widget-resizable, horizontal scrollbars off (§23.2's "no
+tables overflowing" enforced by making sideways overflow impossible),
+vertical as needed, frameless and palette-blended so a fitting page
+is visually unchanged, and a hard 240 px region minimum.  The
+round-235 probe measured the ML Workbench's tuner form at 479 px and
+its Leaderboards tab at 775 px minimum against the ~450 px the
+860×560 minimum window leaves — over 300 px of run buttons and
+results boards clipped below the fold; all five tab bodies now ride
+the policy.  3 tests in `tests/ui/test_responsive_policy.py`
+(contract, §23.5 remount invariants — mounting reparents the body so
+top-level layout margins become child margins, a pure
+display-geometry effect whose honest invariant is "rows untouched,
+never more space required" — and the self-enforcing structural audit
+that every ML Workbench tab is a policy-carrying QScrollArea).
+
+## Increment 19 (round 236) — §21.5: molecule readouts on the charts
+
+`PlotPanel.point_selected` forwards the inspector's click-to-select;
+the Generative page attaches per-point molecule metadata to its
+scatters — the SA tab's rank-vs-score chart (hover: SMILES, RDKit
+formula, molecular weight next to the SA value; click: the §22.5
+detail dialog) and the multi-objective Pareto front (hover readout
+per non-dominated member).  Providers are lazy and inspector-cached
+(§21.6).  4 tests in `tests/ui/test_generative_page.py`.

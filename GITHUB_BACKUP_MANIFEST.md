@@ -1376,3 +1376,22 @@ totals **4,915 = 4,117 collect + 798 doctest** (+3).  The round also
 recovered the 22nd sandbox rollback (local wiped to the round-186
 commit; ff-only pull to origin) and verified the v1.2.145 Windows
 GUI fix lineage end-to-end.
+
+## v1.2.148 release-zip homes (2026-11-09, round 236 — the Part-3 §21.5 molecule readouts)
+
+`pharma-ml-toolkit-v1.2.148.zip` — 20,311,284 bytes, sha-256
+`7afc0aecf3d16a83b9b3283e522a33151b08e79beac442459516e4b63ce1f68b`,
+1040 entries / 993 files, built with the standing four-home builder
+recipe (`pharma-ml-toolkit/scratch/build_zip_236.py`, predecessor
+v1.2.147 swept from all four homes) — testzip OK per home, **real
+leaks 0** (the re-executed ML notebook's sandbox venv paths scrubbed
+by the round-137 cleaner before the rebuild), nested zips NONE.
+Placed byte-identical in `download/`, `pharma-ml-toolkit/
+dist-archive/`, `pharma-ml-toolkit/download/`, and `upload/`.  Census
+**1013 files / 317,964 lines** (the round's additions: the
+`PlotPanel.point_selected` forwarding, the SA rank-vs-score scatter
+with lazy molecule metadata, the Pareto-front hover metadata, the 4
+tests, the 236 runner + builder, and the retroactive round-235 docs —
+CHANGELOG 1.2.147, GUI_REDESIGN increment 18, GUI_AUDIT's §23
+slice-2 progress).  Honest totals **4,919 = 4,121 collect + 798
+doctest** (+4).

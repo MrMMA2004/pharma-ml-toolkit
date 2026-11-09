@@ -1,3 +1,53 @@
+## [1.2.148] — 2026-11-09
+
+### Added — round 236: the Part-3 §21.5 molecule readouts on the charts
+
+* **`PlotPanel.point_selected`** — the §21.5 wiring point landed:
+  the panel re-emits the inspector's click-to-select as its own
+  `(label, index)` signal, so pages open drill-down views without
+  reaching into the inspector.
+* **The SA chart** — the Generative page's SA tab now plots rank vs
+  score, one point per scored molecule (invalid rows stay
+  table-only).  Hover reads the SMILES, the RDKit-calculated
+  molecular formula and the molecular weight next to the SA value —
+  never invented; unparseable SMILES answer with the SMILES alone.
+  **Clicking a point opens the §22.5 molecule-detail dialog** (large
+  2-D structure + canonical SMILES + formula + weight + SA);
+  foreign-series clicks are guarded off.
+* **The Pareto front** — the multi-objective front scatter carries
+  the same hover metadata for every non-dominated member.
+* Metadata providers are lazy and inspector-cached (§21.6): plotting
+  hundreds of candidates costs nothing until one is hovered.
+* 4 tests (`tests/ui/test_generative_page.py`): the forwarding pin,
+  the hover readout with real numbers, the click-to-detail with the
+  foreign-label guard, the front hover.
+* Docs: GUI_AUDIT's Part-3 progress (§21.5 done), GUI_REDESIGN
+  increments 18 (retroactive: round 235's scroll policy) + 19,
+  README's §21.5 section and §23 scroll-policy note, COVERAGE rows
+  for rounds 235 + 236, and the retroactive CHANGELOG 1.2.147 entry
+  below (round 235 shipped without its CHANGELOG row — reconstructed
+  per the 1.2.144 precedent).
+
+## [1.2.147] — 2026-11-09 *(entry reconstructed in 1.2.148 — round 235 shipped without its CHANGELOG row)*
+
+### Added — round 235: the Part-3 §23 slice 2 — the scroll policy
+
+* **`ui/widgets/responsive.py::wrap_in_scroll`** + `SCROLL_MIN_PX`
+  (240): the tall-form half of the §23.2 discipline —
+  widget-resizable, horizontal scrollbars OFF (sideways overflow
+  made impossible, not merely scrollable), vertical as needed,
+  frameless + palette-blended so a fitting page is visually
+  unchanged, hard region minimum.  All five ML Workbench tab bodies
+  ride it (the round-235 probe: the tuner form needs 479 px and
+  Leaderboards 775 px against the ~450 px the 860×560 minimum
+  window leaves — run buttons and results boards were clipped below
+  the fold).
+* 3 tests (`tests/ui/test_responsive_policy.py`): the contract, the
+  §23.5 remount invariants (rows untouched, never more space
+  required — mounting reparents the body, turning top-level layout
+  margins into child margins), and the self-enforcing structural
+  audit over every ML Workbench tab.
+
 ## [1.2.146] — 2026-11-09
 
 ### Added — round 233: the Part-3 §23 slice 1 — the responsive pass (splitters, export legibility, aspect)
