@@ -26,7 +26,8 @@ from pharmaml.viz.export import export_widget_image
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from PySide6.QtCore import QSize
-    from PySide6.QtWidgets import QWidget
+    from PySide6.QtGui import QPixmap
+    from PySide6.QtWidgets import QGraphicsView, QWidget
 
     from pharmaml.viz.export import ExportResult
 
@@ -51,8 +52,7 @@ def grab_png_bytes(
     aspect, vector-crisp text.  Widgets already at or above the floor,
     and plain non-scene widgets, take the plain grab path unchanged.
     """
-    from PySide6.QtCore import QBuffer, QIODevice, QRectF, Qt
-    from PySide6.QtGui import QPainter, QPixmap
+    from PySide6.QtCore import QBuffer, QIODevice
     from PySide6.QtWidgets import QGraphicsView
 
     pixmap = widget.grab()
@@ -99,8 +99,8 @@ def _scene_grab_at_floor(
         min_size.width() / source.width(),
         min_size.height() / source.height(),
     )
-    target_w = int(math.ceil(source.width() * scale))
-    target_h = int(math.ceil(source.height() * scale))
+    target_w = math.ceil(source.width() * scale)
+    target_h = math.ceil(source.height() * scale)
 
     pixmap = QPixmap(target_w, target_h)
     pixmap.fill(Qt.GlobalColor.transparent)

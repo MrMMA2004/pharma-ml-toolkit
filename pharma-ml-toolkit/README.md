@@ -241,6 +241,15 @@ Engineering notes:
   training, evolution) run in a QThreadPool worker with a live progress
   bar and a cooperative Stop channel; every plot is PyQtGraph-native
   (no matplotlib backend roulette on exotic stacks).
+* **Environment doctor** — `python studio.py --doctor` (round 237) reports
+  the whole launch environment — interpreter, the
+  PySide6/shiboken6 wheel family (versions matched, import probed),
+  the GUI providers and the science stack — with a copy-pasteable fix
+  printed under every failing check, and exits 0/1.  It never starts
+  the GUI and never mutates anything.  When the Qt binding itself is
+  broken (the classic Windows `DLL load failed while importing
+  Shiboken`), Studio exits with code 2 and the diagnosis + reinstall
+  recipe on stderr instead of a traceback wall.
 * **Headless / CI** — `QT_QPA_PLATFORM=offscreen python studio.py` runs
   without a display (`ui/headless.py` preloads the committed EGL stub on
   boxes that have none); the offscreen page tests ride the same path.

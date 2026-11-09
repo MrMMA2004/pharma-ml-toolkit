@@ -17,8 +17,9 @@ through the ``meta=`` callable or ``attach_metadata()``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 import pyqtgraph as pg
@@ -66,7 +67,7 @@ class PlotPanel(QWidget):
         self._readout.show()
         self.apply_palette(self._palette)
 
-    def resizeEvent(self, event) -> None:  # noqa: ANN001 - Qt signature
+    def resizeEvent(self, event) -> None:  # Qt signature
         """Keep the hover readout pinned to the plot's bottom-left corner."""
         super().resizeEvent(event)
         self._position_readout()

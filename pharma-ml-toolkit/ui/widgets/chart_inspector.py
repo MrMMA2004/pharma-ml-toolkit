@@ -23,7 +23,8 @@ axis), and numpy does the point search in one vectorised pass.
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import pyqtgraph as pg
@@ -39,7 +40,7 @@ _READOUT_EMPTY = "—"
 class _SeriesRecord:
     """One plottable series registered for inspection."""
 
-    __slots__ = ("label", "x", "y", "item", "meta", "kind", "bar_width", "_meta_cache")
+    __slots__ = ("_meta_cache", "bar_width", "item", "kind", "label", "meta", "x", "y")
 
     def __init__(
         self,
@@ -86,7 +87,6 @@ class ChartInspector(QObject):
         self._last_snap: tuple[str, int] | None = None
         self._pinned: tuple[str, int] | None = None
 
-        plot_item = plot.getPlotItem()
         # Crosshair + snap marker are both LAZY decorations: they join the
         # plot only on the first hover and leave it on every clear(), so
         # (a) page tests that read listDataItems()[0] see exactly the real
@@ -329,10 +329,10 @@ class ChartInspector(QObject):
             self.set_enabled(not self._enabled)
             return
         label = chosen.data()
-        record = self._series.get(label)
-        if record is not None:
-            visible = not record.item.isVisible()
-            record.item.setVisible(visible)
+        picked = self._series.get(label)
+        if picked is not None:
+            visible = not picked.item.isVisible()
+            picked.item.setVisible(visible)
             if not visible and self._last_snap and self._last_snap[0] == label:
                 self._last_snap = None
 

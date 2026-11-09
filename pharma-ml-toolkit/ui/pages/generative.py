@@ -308,8 +308,8 @@ class GenerativeWorkbenchPage(QWidget):
                 mol = Chem.MolFromSmiles(smi) if smi else None
                 if mol is not None:
                     rows["formula"] = rdMolDescriptors.CalcMolFormula(mol)
-                    rows["MW"] = f"{Descriptors.MolWt(mol):.2f} g/mol"
-            except Exception:  # noqa: BLE001 - hover metadata must never raise
+                    rows["MW"] = f"{Descriptors.MolWt(mol):.2f} g/mol"  # type: ignore[attr-defined]
+            except Exception:  # noqa: BLE001, S110 - hover metadata must never raise (nor log noise on a hover)
                 pass
             return rows
 

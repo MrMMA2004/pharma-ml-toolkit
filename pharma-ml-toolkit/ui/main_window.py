@@ -78,8 +78,8 @@ class MainWindow(QMainWindow):
         from .pages.foundations import FoundationsWorkbenchPage
         from .pages.generative import GenerativeWorkbenchPage
         from .pages.image_lab import ImageLabPage
-        from .pages.model_analysis import ModelAnalysisPage
         from .pages.ml_workbench import MLWorkbenchPage
+        from .pages.model_analysis import ModelAnalysisPage
         from .pages.pkpd import PKPDWorkbenchPage
         from .pages.responseai import ResponseAIWorkbenchPage
         from .pages.settings_page import SettingsPage

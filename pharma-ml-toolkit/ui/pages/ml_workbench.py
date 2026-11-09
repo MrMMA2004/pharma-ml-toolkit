@@ -975,7 +975,7 @@ class MLWorkbenchPage(QWidget):
                     ).latest()
                     if info is not None and int(info.total or 0) > 0:
                         self._bench_resume_note = (
-                            f"checkpoint found: {int(info.step)}/{int(info.total)} "
+                            f"checkpoint found: {int(info.step or 0)}/{int(info.total or 0)} "
                             "families already scored — resuming there"
                         )
                 except Exception:  # noqa: BLE001 -- the note is cosmetic

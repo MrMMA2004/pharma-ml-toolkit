@@ -146,14 +146,16 @@ and §16.18 step 15 **fires**: `playground.py` is retired this round
 carry the new honest totals.
 
 
-## Part-3 progress — round 236: §21.5 molecule readouts + round 235's §23 slice 2 (the scroll policy) + round 233's §23 slice 1 (the responsive pass) + round 232's §21 slice 1 (hover inspection) + the Windows black-window fix
+## Part-3 progress — round 237: the Qt import guard + `--doctor` launch hardening + round 236: §21.5 molecule readouts + round 235's §23 slice 2 (the scroll policy) + round 233's §23 slice 1 (the responsive pass) + round 232's §21 slice 1 (hover inspection) + the Windows black-window fix
 
 *The Part-3 backlog after Part-2's completion: §20 checkpoint depth /
 §21 hover tooltips / §22 SMILES previews / §23 responsive pass / §24
 SA-in-generative wiring.  Round 229 landed §20; round 230 landed §24;
 round 231 landed §22; round 232 landed §21 slice 1; round 233 landed
 §23 slice 1; round 235 landed §23 slice 2 (the scroll policy); round
-236 landed §21.5.*
+236 landed §21.5; round 237 landed the launch-path hardening (the Qt
+import guard + `--doctor`, answering the v1.2.147 Windows Shiboken
+report).*
 
 - **§20 (pause/resume/stop + checkpoints) — the engine and the
   Leaderboards tab are DONE** (round 229).  `pharmaml.utils.checkpoints`

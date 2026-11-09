@@ -1,3 +1,45 @@
+## [1.2.149] — 2026-11-09
+
+### Added — round 237: the Qt import guard + `studio.py --doctor` (the Windows Shiboken report)
+
+* **`ui/qt_import_guard.py`** — the v1.2.147 Windows report
+  (`ImportError: DLL load failed while importing Shiboken`, Miniconda
+  py312) dies inside the binding's own import chain, before any Studio
+  code: a raw traceback gave the user nothing to act on.  `ui.run`
+  now catches the `ImportError` at exactly that import, prints
+  `qt_import_guidance()` — the diagnosis ("environment problem, not a
+  Studio bug"), the two copy-pasteable fix commands built from
+  `sys.executable` (clean uninstall of the whole wheel family
+  PySide6/PySide6-Addons/PySide6-Essentials/shiboken6, then
+  `--upgrade` reinstall), the VC++-redistributable and
+  conda-vs-pip notes — and returns exit code 2.  The
+  `No module named 'PySide6'` family gets the plain-install branch.
+* **`ui/doctor.py` + `--doctor`** — `python studio.py --doctor` runs
+  a 16-check environment self-check: interpreter floor (3.10+),
+  PySide6 and shiboken6 (wheel metadata read FIRST — it survives
+  exactly the DLL-level breakage that kills the import, so the
+  doctor still says "wheel 6.8.3 present but import fails" and
+  detects version mismatch), the exact `QApplication` import Studio
+  performs, the GUI providers, and the science stack (levels mirror
+  `requirements.txt`: Core + GUI are required, the sampled optional
+  sets — rdkit, matplotlib, qdarkstyle — warn).  Every failing check
+  prints its fix; exit 0/1; the doctor never mutates the environment.
+* 7 tests (`tests/ui/test_qt_doctor.py`): both guidance branches,
+  report format + exit codes, the live 16-check collection, the
+  `--doctor` CLI subprocess, and two PYTHONPATH-shadowed end-to-end
+  legs that fake a broken PySide6 (exit 2 + recipe, and the doctor
+  diagnosing it without a traceback).
+* **Lint debt cleared in `ui/`** — the whole `ui/` tree + `studio.py`
+  is now ruff-clean and mypy-clean (19 ruff findings and 7 mypy
+  errors from rounds 233–236 fixed: dead imports/variables,
+  unsorted blocks, `int()`-around-`ceil`, a `_SeriesRecord` name
+  shadow, the `Descriptors.MolWt` rdkit-dynamic ignore per the repo
+  convention, and a `ndarray | None` arithmetic guard in
+  model_analysis).  `studio.py` now carries its executable bit.
+  (src/ and tests/ carry older debt — 90 + 57 findings — recorded as
+  backlog; the requirements.txt "zero-finding" comment was scoped
+  honestly.)
+
 ## [1.2.148] — 2026-11-09
 
 ### Added — round 236: the Part-3 §21.5 molecule readouts on the charts

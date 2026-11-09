@@ -114,8 +114,10 @@ def configure_splitter(
             child.setMinimumWidth(px)
         else:
             child.setMinimumHeight(px)
-        if stretch is not None and i < len(stretch) and stretch[i] is not None:
-            splitter.setStretchFactor(i, int(stretch[i]))
+        if stretch is not None and i < len(stretch):
+            sf = stretch[i]
+            if sf is not None:
+                splitter.setStretchFactor(i, int(sf))
 
 
 def wrap_in_scroll(content: QWidget) -> QScrollArea:

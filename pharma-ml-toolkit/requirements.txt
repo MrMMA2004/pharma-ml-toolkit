@@ -1,10 +1,15 @@
 # PharmaML toolkit — pinned dependency stack.
 #
 # Every version below is the EXACT stack the toolkit's QA chain runs
-# green under (the full pytest suite, ruff, mypy and the executed
-# notebooks — see CHANGELOG). `pip install -r requirements.txt` gives
-# you that same environment; the loose ranges in pyproject.toml stay
-# the compatibility contract, this file is the verified snapshot.
+# green under (the full pytest suite and the executed notebooks — see
+# CHANGELOG). `pip install -r requirements.txt` gives you that same
+# environment; the loose ranges in pyproject.toml stay the
+# compatibility contract, this file is the verified snapshot.
+#
+# Lint baseline (trued in round 237): ui/ + studio.py are ruff- AND
+# mypy-clean; src/ (90) and tests/ (57) still carry older ruff debt
+# (tracked as backlog) — the historical "zero-finding" claim was
+# scoped to the files under active QA at the time it was written.
 #
 # Python: 3.10+ (verified under 3.12).
 

@@ -354,31 +354,39 @@ class ModelAnalysisPage(QWidget):
             (
                 "Calibration curve",
                 self._start_calibration,
-                "The reliability diagram of the last trained CLASSIFIER: "
-                "predicted probability vs observed frequency per bin "
-                "(sklearn.calibration under the job, drawn Qt-native) — "
-                "the honest answer to 'can I trust p = 0.7?'.",
+                (
+                    "The reliability diagram of the last trained CLASSIFIER: "
+                    "predicted probability vs observed frequency per bin "
+                    "(sklearn.calibration under the job, drawn Qt-native) — "
+                    "the honest answer to 'can I trust p = 0.7?'."
+                ),
             ),
             (
                 "Learning curve",
                 self._start_learning_curve,
-                "Train-set size vs CV score (sklearn.learning_curve under "
-                "the job): the honest answer to 'should we assay 500 more "
-                "compounds?' — a curve still climbing means yes, a plateau "
-                "means no. The ± 1 std band edges ride the dashed lines.",
+                (
+                    "Train-set size vs CV score (sklearn.learning_curve under "
+                    "the job): the honest answer to 'should we assay 500 more "
+                    "compounds?' — a curve still climbing means yes, a plateau "
+                    "means no. The ± 1 std band edges ride the dashed lines."
+                ),
             ),
             (
                 "ROC curves",
                 self._start_roc,
-                "One-vs-rest ROC per class of the last trained classifier "
-                "(needs predict_proba); the macro AUC rides the title.",
+                (
+                    "One-vs-rest ROC per class of the last trained classifier "
+                    "(needs predict_proba); the macro AUC rides the title."
+                ),
             ),
             (
                 "PR curve",
                 self._start_pr,
-                "One-vs-rest precision-recall per class of the last trained "
-                "classifier (needs predict_proba); the macro average "
-                "precision rides the title.",
+                (
+                    "One-vs-rest precision-recall per class of the last trained "
+                    "classifier (needs predict_proba); the macro average "
+                    "precision rides the title."
+                ),
             ),
         ):
             btn = QPushButton(label)
@@ -700,7 +708,7 @@ class ModelAnalysisPage(QWidget):
         )
 
     def _render_learning_curve(self, payload) -> None:
-        sizes, train_mean, train_std, val_mean, val_std, scoring = payload
+        sizes, train_mean, _train_std, val_mean, val_std, scoring = payload
         self._diag_plot.clear()
         self._diag_plot.line(sizes, train_mean, label="train", width=2, index=0)
         self._diag_plot.line(sizes, val_mean, label="CV", width=2, index=1)
@@ -727,7 +735,7 @@ class ModelAnalysisPage(QWidget):
         classes = list(run.classes) or sorted(set(y_true))
 
         def job(progress):
-            from sklearn.metrics import roc_curve, roc_auc_score
+            from sklearn.metrics import roc_auc_score, roc_curve
 
             progress(0.2, "scoring probabilities")
             proba = estimator.predict_proba(X_test)
@@ -894,12 +902,17 @@ class ModelAnalysisPage(QWidget):
             if task == "regression":
                 from sklearn.metrics import mean_absolute_error, r2_score
 
+                # The same float arrays the outcome carries (regression
+                # branch); locals keep the metrics arithmetic off the
+                # ndarray-|None union the dataclass allows.
+                y_true = y_test_arr.astype(float)
+                y_hat = y_pred_arr.astype(float)
                 outcome.metric_name = "R² (held-out)"
-                outcome.metric_value = float(r2_score(outcome.y_test, outcome.y_pred))
+                outcome.metric_value = float(r2_score(y_true, y_hat))
                 outcome.metrics = {
                     "r2": outcome.metric_value,
-                    "rmse": float(np.sqrt(np.mean((outcome.y_test - outcome.y_pred) ** 2))),
-                    "mae": float(mean_absolute_error(outcome.y_test, outcome.y_pred)),
+                    "rmse": float(np.sqrt(np.mean((y_true - y_hat) ** 2))),
+                    "mae": float(mean_absolute_error(y_true, y_hat)),
                 }
             else:
                 from sklearn.metrics import (

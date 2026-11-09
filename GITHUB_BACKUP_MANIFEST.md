@@ -1395,3 +1395,22 @@ tests, the 236 runner + builder, and the retroactive round-235 docs —
 CHANGELOG 1.2.147, GUI_REDESIGN increment 18, GUI_AUDIT's §23
 slice-2 progress).  Honest totals **4,919 = 4,121 collect + 798
 doctest** (+4).
+
+## v1.2.149 release-zip homes (2026-11-09, round 237 — the Qt import guard + `studio.py --doctor`)
+
+`pharma-ml-toolkit-v1.2.149.zip` — 20,325,524 bytes, sha-256
+`b827d00ffd460820ca9d1746e3674c4361b6cdbebfedc38c5709cc3103c91b0c`,
+1044 entries / 997 files, built with the standing four-home builder
+recipe (`scratch/build_zip_237.py`, predecessor v1.2.148 swept from
+all four homes) — testzip OK per home, **real leaks 0** (the
+re-executed ML notebook's sandbox venv paths scrubbed by the
+round-137 cleaner before the rebuild), nested zips NONE.  Placed
+byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`.  Census **1017 files /
+318,789 lines** (the round's additions: `ui/qt_import_guard.py` and
+`ui/doctor.py` behind the guarded `QApplication` import + the
+`--doctor` dispatch, the 7-test `tests/ui/test_qt_doctor.py`, the
+237 chunk runner, and the ui/-tree lint cleanup — 19 ruff findings +
+7 mypy errors from rounds 233–236 cleared; studio.py now carries its
+executable bit).  Honest totals **4,926 = 4,128 collect + 798
+doctest** (+7).

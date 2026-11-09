@@ -486,3 +486,31 @@ formula, molecular weight next to the SA value; click: the §22.5
 detail dialog) and the multi-objective Pareto front (hover readout
 per non-dominated member).  Providers are lazy and inspector-cached
 (§21.6).  4 tests in `tests/ui/test_generative_page.py`.
+
+## Increment 20 (round 237) — the Qt import guard + `--doctor`: launch-path hardening
+
+The support pattern behind it: a Windows user (v1.2.147, Miniconda
+py312) hit `ImportError: DLL load failed while importing Shiboken` —
+a break inside the binding's own import chain, before any Studio
+code, which the raw traceback gave them nothing to act on.  Two
+answers shipped:
+
+* **`ui/qt_import_guard.py`** — `ui.run` catches the `ImportError`
+  at the `QApplication` import, prints the diagnosis plus the two
+  copy-pasteable fix commands (built from `sys.executable`: clean
+  uninstall of the whole PySide6/shiboken6 wheel family, then
+  `--upgrade` reinstall; VC++-redist and conda-vs-pip notes; the
+  `--doctor` pointer) and exits 2.  The "No module named 'PySide6'"
+  family takes the plain-install branch.
+* **`ui/doctor.py` + `python studio.py --doctor`** — a 16-check
+  environment self-check (interpreter, PySide6 + shiboken6 with
+  wheel-metadata versions matched, the exact `QApplication` import,
+  GUI providers, science stack; required-vs-optional levels mirror
+  requirements.txt) that prints a fix under every failing check and
+  exits 0/1 without starting the GUI or mutating anything.
+
+7 tests in `tests/ui/test_qt_doctor.py` (both guidance branches,
+report format + exit codes, the live collection, the `--doctor` CLI
+subprocess, and two PYTHONPATH-shadowed broken-PySide6 end-to-end
+legs).  The whole `ui/` tree + `studio.py` is now ruff- and
+mypy-clean (19 + 7 pre-existing findings cleared).

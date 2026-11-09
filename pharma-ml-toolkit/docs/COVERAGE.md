@@ -1845,3 +1845,14 @@ COVERED(≈) · 13 N-A-HONEST · 9 STRETCH.
 | The SA chart | `ui/pages/generative.py::_render_sa_score` — rank vs score, one point per scored molecule; hover metadata via the lazy provider (`SMILES`, RDKit `formula`, `MW`); click → the §22.5 `SmilesDetailDialog` with a foreign-label guard; invalid rows stay table-only. |
 | The Pareto front | `_render_front` — the non-dominated scatter carries the same hover metadata per front member. |
 | Tests | `tests/ui/test_generative_page.py` (+4): the forwarding pin, the hover readout with real numbers (C10H14O / 150.22 g/mol for the ibuprofen core), the click-to-detail + guard, the front hover. |
+
+## Round 237 (v1.2.149) — the Qt import guard + `studio.py --doctor` + the ui/ lint cleanup
+
+*A broken PySide6 install answers with a diagnosis and a fix recipe, not a traceback wall; one command audits the whole launch environment.*
+
+| What | Where it landed |
+| --- | --- |
+| The import guard | `ui/qt_import_guard.py` + the guarded `QApplication` import in `ui/__init__.py::run` — the caught `ImportError` prints `qt_import_guidance()` (diagnosis, the two `sys.executable`-qualified fix commands for the whole PySide6/shiboken6 wheel family, VC++-redist + conda notes) and exits 2; the missing-module family takes the plain-install branch. |
+| The doctor | `ui/doctor.py` + `--doctor` dispatch in `ui.run` — 16 checks (python floor, PySide6/shiboken6 with wheel-metadata versions matched before the import probe, the exact `QApplication` import, GUI providers, science stack), a fix under every failure, exit 0/1, read-only. |
+| Lint cleanup | `ui/` + `studio.py` now ruff- and mypy-clean: 19 ruff findings + 7 mypy errors from rounds 233–236 cleared (dead imports/vars, unsorted blocks, `int(ceil())`, the `_SeriesRecord` shadow, the rdkit `Descriptors.MolWt` ignore per repo convention, the `ndarray \| None` metric guard in model_analysis); `studio.py` carries its executable bit. src/ (90) + tests/ (57) recorded as backlog. |
+| Tests | `tests/ui/test_qt_doctor.py` (+7): both guidance branches, report format + exit codes, the live 16-check collection, the `--doctor` CLI subprocess, and two PYTHONPATH-shadowed broken-PySide6 end-to-end legs (exit 2 + recipe; doctor diagnoses without a traceback). |
