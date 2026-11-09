@@ -1517,8 +1517,8 @@ guard ran before the write).
 
 ## v1.2.159 release-zip homes (2026-11-10, round 247 — multi-objective HPO, the Pareto study)
 
-`pharma-ml-toolkit-v1.2.159.zip` — 22,654,525 bytes, sha-256
-`41211e43ddf226dec04ed81dcace7f65d01abf5b20d6ecaacfc36620ec0a35f4`
+`pharma-ml-toolkit-v1.2.159.zip` — 22,654,468 bytes, sha-256
+`36bfcb02a1ef1b88e54b7c4c32d1487725c4c2ab4c4cbe09770c367158c5870c`
 (1085 entries / 1038 files, testzip OK per home, real leaks 0 — the
 growth over v1.2.158's 22,394,779 B is the re-executed notebooks at
 1.2.159 (the tuning notebook gains section 7, the trade-off demo over
@@ -1540,7 +1540,7 @@ shipped `ds.X`/`ds.y` — the owner's round-24 rule, kept), and the
 docs-index guard pinned the nine new `pharmaml.ml` exports into
 `docs/INDEX.md`.  Placed byte-identical in `download/`,
 `pharma-ml-toolkit/dist-archive/`, `pharma-ml-toolkit/download/`, and
-`upload/`.  Census **1057 files / 325,926 lines** per the canonical
+`upload/`.  Census **1058 files / 326,049 lines** per the canonical
 walk.  Honest totals **5,081 = 4,273 collect + 808 doctest** (+27
 collect, +10 doctests — the module's own doctests riding chunk 6).
 Web pins trued 5081 x7 + census fallbacks 1057/325,926 +

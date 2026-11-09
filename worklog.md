@@ -12005,15 +12005,20 @@ mypy clean across 194 files. Notebooks re-executed at 1.2.159 (8/8, zero error o
 with the tuning notebook gaining section 7 (the trade-off demo — front of 2 of 8 trials on
 ridge-over-alpha, the honest tiny trade-off) and a recap row.
 
-**Release**: VERSION 1.2.159 · zip 22,654,525 B, sha-256
-`41211e43ddf226dec04ed81dcace7f65d01abf5b20d6ecaacfc36620ec0a35f4` in four byte-identical
-homes (predecessor v1.2.158 swept from all four BEFORE the build) · census **1057/325,926** ·
+**Release**: VERSION 1.2.159 · zip 22,654,468 B, sha-256
+`36bfcb02a1ef1b88e54b7c4c32d1487725c4c2ab4c4cbe09770c367158c5870c` in four byte-identical
+homes (the version-carrier miss caught and paid: the first build shipped with pyproject.toml
++ `pharmaml.__version__` still at 1.2.158 — the zip-size endpoint's `readToolkitVersion`
+prefers pyproject, answered 1.2.158/stream, exposed it; both carriers trued, the notebooks
+re-executed at the true version, the round-137 scrub run again, and the zip rebuilt — with one
+builder lesson: PREDECESSOR must never equal the CURRENT name, the sweep then deletes the
+fresh zip from all four homes) · census **1058/326,049** ·
 honest totals **5,081 = 4,273 collect + 808 doctest** (+27/+10) · web pins trued 5081 ×7
 (page.tsx footer + overview StatChip/countTo/after-string + download-panel three sites) +
 fallbacks 1057/325,926 + `SHIPPED_TOOLKIT_VERSION` 1.2.159 · manifest entry added.
 
 **Baselines for the next round** — v1.2.159 (four homes) · honest totals **5,081 = 4,273 + 808**
-· census **1057/325,926** · the gate is NINE chunks · counter **38/100** · the lint bar green
+· census **1058/326,049** · the gate is NINE chunks · counter **38/100** · the lint bar green
 (ruff zero + mypy clean, 194 files) · Part-3 remaining: **§20 checkpoint depth (FIRST — the
 lost design contract is preserved above, implement exactly it)** and §24 SA-in-generative
 wiring beyond the shipped slices · §21.4 and §23 stay closed · the §-new MOO follow-on
