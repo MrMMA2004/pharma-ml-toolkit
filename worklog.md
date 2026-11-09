@@ -10944,3 +10944,107 @@ counter resumes on the next fire) · Part-3 remaining: §23 depth
 (adaptive tick/label density, legend-collision handling) and §21.4
 (image pixel/channel inspection on the Image Lab) + per-page
 metadata adoption on the remaining scatter pages.
+
+## Round 237 (2026-11-09, counter 28/100, cron 515197) — the Qt import guard + `studio.py --doctor`, shipped as v1.2.149 — after the 23rd rollback recovery
+
+**The round's driver**: the owner's Windows report against v1.2.147 —
+`ImportError: DLL load failed while importing Shiboken: The specified
+module could not be found.` (Miniconda py312).  Root cause: NOT a
+toolkit bug — the failure sits inside the PySide6/shiboken6 wheel
+family's own import chain (a broken or half-upgraded install in that
+environment), before any Studio code runs.  The toolkit's honest
+answer, shipped this round: meet the user at exactly that import with
+a diagnosis and a fix recipe, and give them one command that audits
+the whole environment.
+
+**The 23rd rollback recovery** (the standing flow, ~20 min): local
+tree wiped to the round-186 commit 2eb0ede again at 07:15; PAT
+re-extracted from MASTER_PROMPT.pdf lines 688–689 (93 chars), origin
+re-added, 19 blocking untracked files moved to
+/tmp/rollback23-aside, `git pull --ff-only` to **6633025 = round 236
+(v1.2.148, the prior IM session's completed work — its push had
+landed before that session died), venv repaired in the foreground
+(rdkit 2026.09.1 / PySide6 6.8.3), webDevReview 15-min cron
+recreated** (job 517132 — it was missing after the rollback).
+
+**The shipped work**:
+
+* `ui/qt_import_guard.py` + the guarded `QApplication` import in
+  `ui.run`: the caught ImportError prints the diagnosis
+  ("environment problem, not a Studio bug"), the two fix commands
+  built from `sys.executable` (uninstall the whole wheel family
+  PySide6/PySide6-Addons/PySide6-Essentials/shiboken6, then
+  `--upgrade` reinstall), the VC++-redist and
+  conda-vs-pip notes, and the `--doctor` pointer — exit code 2, no
+  traceback.  The `No module named 'PySide6'` family takes the
+  plain-install branch.
+* `ui/doctor.py` + `python studio.py --doctor`: a read-only 16-check
+  environment self-check — python floor (3.10+, 3.12 verified),
+  PySide6 + shiboken6 (wheel metadata read FIRST so a broken DLL
+  import still reports "wheel 6.8.3 present but import fails" and a
+  version mismatch is detectable), the exact QApplication import,
+  pyqtgraph/qt-material, the requirements.txt Core set, and the
+  sampled optionals (rdkit/matplotlib/qdarkstyle warn).  A fix rides
+  every failure; exit 0/1.  Live on this sandbox: 16 OK / 0 warn /
+  0 failed.
+* 7 tests (`tests/ui/test_qt_doctor.py`), including two
+  PYTHONPATH-shadowed end-to-end legs that fake the exact Windows
+  breakage (exit 2 + recipe; the doctor diagnosing it without a
+  traceback).
+* **The ui/ lint debt cleared**: 19 ruff findings + 7 mypy errors
+  from rounds 233–236 fixed (dead imports/variables, unsorted
+  blocks, int()-around-ceil, a `_SeriesRecord` name shadow, the
+  rdkit `Descriptors.MolWt` ignore per repo convention, an
+  `ndarray | None` metric guard in model_analysis, the executable
+  bit restored on studio.py).  src/ (90) + tests/ (57) recorded as
+  backlog; requirements.txt's stale "zero-finding" comment trued.
+* Docs: CHANGELOG 1.2.149, README's doctor bullet +
+  studio.py docstring, GUI_REDESIGN increment 20, GUI_AUDIT's
+  Part-3 header, COVERAGE's round-237 row.
+
+**The gate**: 8/8 chunks green (`scratch/run_suite_chunks_237.py`,
+next-server down per the OOM ritual; chunk 4c gains the doctor
+suite).  Honest totals **4,926 = 4,128 collect + 798 doctest** (+7).
+
+**The intra-round version-chain catch**: after the first zip build
+the `/api/toolkit/zip-size` endpoint answered `exact:false,
+v1.2.148, stream` — `readToolkitVersion()` prefers pyproject.toml,
+and BOTH pyproject and `pharmaml.__version__` still said 1.2.148
+while VERSION said 1.2.149 (the notebooks' freshness guard compares
+against `pharmaml.__version__`, so it would have failed the next
+gate).  Fixed the chain three-way, re-executed the notebooks 8/8
+again, twins regenerated, ML notebook re-scrubbed (zero
+absolute-home matches), zip rebuilt: **20,325,624 B, sha-256
+`654da9e9a099a50701483c236ae568077408cedda8a817953b89941333d7d493`**
+(1044 entries / 997 files, testzip OK per home, real leaks 0,
+embedded pyproject/__init__/VERSION all 1.2.149) byte-identical in
+the four homes; endpoint back to `exact:true, 20325624`.
+
+**The concurrent-cron note**: the recreated webDevReview job fired
+mid-round and its session committed the in-flight code work as a
+UUID-only local commit (0f85992, 07:54 UTC) — absorbed via
+soft-reset into the round's proper conventional commit before any
+push (origin never saw it).
+
+**Health**: dev server restarted after the gate (GET / 200);
+zip-size `exact:true, 20325624, v1.2.149, release`; agent-browser
+pass: badge 1.2.149, hero hydrated (4926 tests · 1017 files ·
+318,789 LOC), the 4926 chip + round-237 clause in the upgrade
+table, download panel "Download pharma-ml-toolkit-v1.2.149.zip /
+19.38 MB / size (exact)", theme dark↔light both ways, mobile
+390×844 zero horizontal scroll, footer intact, zero console/page
+errors.  Census **1017 files / 318,789 lines**; web pins trued
+(4,926 ×6 surfaces, FALLBACK_STATS 1017/318,789, overview
+fallbacks, SHIPPED_TOOLKIT_VERSION 1.2.149).
+
+**Commits & push**: `da4dd3d` (the release) + `33b4c90` (the
+version-chain fix, zip rebuild + manifest correction) pushed and
+verified `origin/main == HEAD == 33b4c90`; worklog + counter ride
+this commit.
+
+**Baselines for the next round** — v1.2.149 (four homes) · honest
+totals **4,926 = 4,128 collect + 798 doctest** · census
+**1017/318,789** · counter **28/100** · Part-3 remaining: §23 depth
+(adaptive tick/label density, legend collisions), §21.4 image
+pixel/channel inspection, per-page `meta=` adoption on the remaining
+scatter pages · lint backlog: src/ 90 + tests/ 57 ruff findings.
