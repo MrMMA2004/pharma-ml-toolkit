@@ -11,6 +11,7 @@ CI must remain deterministic and work without network access or credentials.
 
 from __future__ import annotations
 
+import os
 import re
 import struct
 import sys
@@ -122,4 +123,8 @@ if __name__ == "__main__":
     try:
         main()
     except (OSError, ValueError) as exc:
-        sys.exit(f"GitHub page check failed: {exc}")
+        message = f"GitHub page check failed: {exc}"
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            print(f"::error title=GitHub page validation::{message}", file=sys.stderr)
+            sys.exit(1)
+        sys.exit(message)
