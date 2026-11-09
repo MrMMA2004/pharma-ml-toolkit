@@ -10772,3 +10772,92 @@ totals **4,912 = 4,114 collect + 798 doctest** · census **1008/317,082**
 the tallest forms, adaptive tick/label density, legend-collision
 handling) and §21's remaining depth (image pixel inspection, per-page
 metadata adoption, §21.5 molecule-hover readouts).
+
+## Round 235 (2026-11-09, counter 27/100, cron 515197) — the Part-3 §23 slice 2: the scroll policy, shipped as v1.2.147 — after the 22nd rollback recovery
+
+**Rollback recovery first** (the sandbox came back after two dead
+runs with the tree wiped to the round-186 era): HEAD was `2eb0ede`
+(v1.2.106 era), the counter file was gone, no origin remote, no
+~/.github_token.  Re-added the remote, re-extracted the PAT from
+`upload/MASTER_PROMPT.pdf` lines 688–689 (93 chars, helper
+restored), moved the 19 untracked upload files aside (all proved
+byte-identical to the tracked copies — dropped), `git pull --ff-only`
+to `62f707a` (round 234, v1.2.146).  venv repair re-run (rdkit gone;
+STUDIO-REPAIR-DONE: PySide6 + pyqtgraph 0.13.7 OK).  No concurrent
+session: tree clean, no fresh mtimes, origin static all round.
+
+**The user-facing GUI story re-verified end-to-end**: the
+"studio.py GUI doesn't open" report (v1.2.142, Windows + miniconda
+py312 + PySide6) was root-caused in round 232 — `ui/headless.py`'s
+displayless probe tested only X11's `DISPLAY` (never set on Windows)
+and silently forced `QT_QPA_PLATFORM=offscreen`, so the app ran with
+an invisible window and a forever-blocking `app.exec()`.  The fix
+(platform-aware: offscreen only on displayless Linux; Windows/macOS/
+Wayland keep native) is pinned by 7 decision-matrix tests in
+`tests/ui/test_headless_platform.py`; the Qt console-noise filter
+landed in v1.2.144.  **The user is on v1.2.142 — the answer remains:
+use the latest zip (v1.2.147 now)**.
+
+**The round's work — Part-3 §23 slice 2, the scroll policy**:
+`scratch/probe_mlb_scroll_235.py` measured the ML Workbench tab
+bodies at the 860×560 minimum window: the tuner form needs 479 px
+and Leaderboards **775 px** against the ~450 px available — run
+buttons and results boards clipped below the fold (§23.2's
+"important controls becoming inaccessible" verbatim; the ensemble
+tab had only 10 px headroom).  `ui/widgets/responsive.py` gained
+`wrap_in_scroll()` + `SCROLL_MIN_PX` (240): widget-resizable content
+tracks the viewport width, horizontal scrollbars are OFF (sideways
+overflow made impossible, not merely scrollable), vertical bars as
+needed, frameless + palette-blended so a fitting page is visually
+unchanged, and the region holds a hard minimum height.  All five ML
+Workbench tab bodies ride it at the addTab sites (builders
+untouched).  §23.5 nuance found by the test itself: mounting
+reparents the body, so top-level layout margins become child margins
+(a pure display-geometry effect); the honest invariant pinned is
+"rows untouched, never more space required".
+
+**Tests**: `tests/ui/test_responsive_policy.py` 13 → 16 (the
+wrap_in_scroll contract, the §23.5 remount-invariants pin, the
+structural audit that every ML Workbench tab body is a
+policy-carrying QScrollArea — a future unwrapped tab fails the
+suite, the policy is self-enforcing).  Full gate
+`scratch/run_suite_chunks_235.py`: **8/8 chunks green, 0 failing**
+(next-server DOWN per the OOM ritual; the whole-tests/ui-in-one-
+process ad-hoc run OOM-killed at ~194 tests exactly as the chunking
+exists to prevent — chunk 4d re-verified 50/50 in-budget).  Honest
+totals **4,915 = 4,117 collect + 798 doctest** (+3).
+
+**Release**: VERSION 1.2.147 (four carriers), notebooks 8/8 at
+pharmaml 1.2.147 in 195 s (foreground, error-outputs 0; the ML
+notebook re-picked sandbox venv paths and the round-137 scrubber
+neutralised them before the rebuild).  Zip **20,301,559 B, sha-256
+`2698ab08e94e187393021ca8e14579950622b1a37bc6369dbb4ff37011eb35a4`**
+(1038 entries / 991 files, testzip OK per home, real leaks 0,
+predecessor v1.2.146 swept) byte-identical in the four homes.
+Census **1011 files / 317,447 lines**.  Web pins trued (4,915 ×5
+surfaces, FALLBACK_STATS 1011/317,447, overview fallbacks, the
+round-235 clause appended to the suite after-string,
+SHIPPED_TOOLKIT_VERSION 1.2.147) and the manifest v1.2.147 section
+appended.
+
+**Health**: dev server restarted (Ready in 1125 ms, GET / 200);
+`/api/toolkit/zip-size` answers `exact:true, 20301559, v1.2.147,
+source release`; `/api/toolkit/download` GET 200.  Agent-browser
+pass: badge v1.2.147, hero hydrated (4915 tests · 1011 files ·
+317,447 LOC), the round-235 clause rendering, zero console errors,
+theme dark↔light both ways, footer intact, mobile 390×844 zero
+horizontal scroll.
+
+**Scheduler**: master job 515197 alive; webDevReview job 515969 (per
+round 234).  Counter **27/100** rides the worklog commit.
+
+**Commits & push**: `b4b74f8` (the release commit) pushed and
+verified `origin/main == HEAD == b4b74f8`; worklog + counter follow.
+
+**Baselines for the next round** — v1.2.147 (four homes) · honest
+totals **4,915 = 4,117 collect + 798 doctest** · census
+**1011/317,447** · counter **27/100** · Part-3 remaining: §23 depth
+(adaptive tick/label density, legend-collision handling on the
+densest charts) and §21's remaining depth (image pixel inspection on
+the Image Lab, per-page metadata adoption through `meta=`, the
+§21.5 molecule-hover SA/formula readouts).
