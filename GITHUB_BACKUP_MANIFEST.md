@@ -1456,6 +1456,32 @@ Placed byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
 `ui/widgets/plot_widget.py` + the 239 chunk runner).  Honest totals
 **4,947 = 4,149 collect + 798 doctest** (+11).
 
+## v1.2.157 release-zip homes (2026-11-09, round 245 — the Part-3 §23.10 ImagePanel sub-pixel mapping disclosure)
+
+`pharma-ml-toolkit-v1.2.157.zip` — 22,222,879 bytes, sha-256
+`1ffd642900fb37f34aab1d170da54fcc4ae8194a10cb38ba203e3d880e1886ee`
+(1073 entries / 1026 files, testzip OK per home, real leaks 0 — the
+size grows by the re-executed notebooks, the round-244 QA pair
+riding `scratch/` by the audit-trail design, and the new
+§23.10 suite + probe; this round's `r245_web_verify.png` rides the
+NEXT build; the sha is the byte-identical four-home state of THIS
+run).  Built with the standing four-home builder recipe
+(`scratch/build_zip_245.py`, predecessor v1.2.156 swept from all
+four homes; the CHANGELOG `[1.2.157]` entry predated the build).
+The builder's leak gate caught the notebook re-execution's
+`/home/z/` embedding on the FIRST build (the known ritual: scrub
+with `scrub_home_paths_137.py`, verification zero absolute-home
+matches, second build clean) — AND the suite's own leakage guard
+(`test_leakage.py`) caught the round's probe docstring carrying an
+absolute interpreter path before any build; both fixed at the
+source.  Placed byte-identical in `download/`,
+`pharma-ml-toolkit/dist-archive/`, `pharma-ml-toolkit/download/`,
+and `upload/`.  Census **1046 files / 323,489 lines** per the
+canonical walk.  Honest totals **5,028 = 4,230 collect + 798
+doctest** (+16).  Web pins trued 5028 ×6 + census fallbacks
+1046/323,489 + `SHIPPED_TOOLKIT_VERSION` 1.2.157 + the round-245
+clause in the Testing after-string.
+
 ## v1.2.156 release-zip homes (2026-11-09, round 244 — the Part-3 lint-backlog close)
 
 `pharma-ml-toolkit-v1.2.156.zip` — 22,068,281 bytes, sha-256
