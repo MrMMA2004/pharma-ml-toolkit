@@ -11048,3 +11048,100 @@ totals **4,926 = 4,128 collect + 798 doctest** · census
 (adaptive tick/label density, legend collisions), §21.4 image
 pixel/channel inspection, per-page `meta=` adoption on the remaining
 scatter pages · lint backlog: src/ 90 + tests/ 57 ruff findings.
+
+## Round 238 (2026-11-09, counter 29/100, cron 515197) — the Part-3 §23.6 adaptive tick-label density, shipped as v1.2.150
+
+**Round trip**: the 17:29 cron fired on a tree already carrying rounds
+236/237 (both pushed, v1.2.149, counter 28) — no rollback this round
+(working tree clean, origin/main == HEAD == cbe5e43 at pickup, venv
+imported 1.2.149 clean, token + credential helper in place, dev server
+200).  The round-237 Windows Shiboken answer stood; this round picked
+the next §23 depth item off the round-237 baseline.
+
+**What shipped (§23.6)**: `PlotPanel` category axes no longer smear.
+`bars(labels=...)` used to hand pyqtgraph's `setTicks` the FULL
+category list, and pyqtgraph renders every tick it is handed — a
+40-feature importance chart on a narrow panel collided into an
+unreadable smear.  The new two-stage, width-derived density policy:
+**stride thinning** (the stride guarantees even the widest label +
+padding fits between consecutive kept ticks, so no two rendered
+labels can overlap regardless of their text) and **pixel-budget
+ellipsization** (each kept label is elided to its per-tick share of
+the axis width, so one very long category name cannot spill into its
+neighbour either).  The fit re-runs on every geometry change via the
+`resizeEvent` wiring, measuring the PANEL's own width — the round's
+debug session proved a hidden widget's layout has not propagated to
+the plot child yet (resize events of hidden widgets are deferred to
+show() time, and the child geometry stays stale), so panel width is
+the only early-trustworthy measure; production panels get their first
+fit at show.  Panels narrower than the 80 px pre-layout floor keep
+the full list (real layouts never get that narrow — the §23.2
+splitter floors are 320 px).  **The §21.3 hover contract survives the
+thinning**: the full category list stays behind the panel
+(`PlotPanel._cat_ticks`), so the auto-generated bar hover meta keeps
+resolving the complete, untruncated names for points whose tick was
+thinned away; only the axis rendering thins.  `clear()` resets the
+stored list along with the axis ticks.
+
+**Tests**: new `tests/ui/test_plot_tick_density.py`, 10 tests (stride
+thinning on a 280 px panel with kept ticks on stride multiples, the
+density following the width 280 < 900 px, the per-slot pixel-share
+contract for 200-char labels, the full-list hover meta for
+thinned-away indices, the below-floor full-list state, the `clear()`
+reset, plot-time fits, a shown-panel end-to-end leg pinning the
+resizeEvent re-fit wiring, and tiny category sets never thinned).
+Two implementation lessons landed inside the test loop: pyqtgraph
+0.13.7's `AxisItem` exposes no `tickFont()` getter (the font lives in
+`axis.style['tickFont']`), and tests must not rely on hidden-widget
+resize events (Qt queues them to show(); the hidden-panel helper
+re-applies the policy explicitly and a dedicated shown-panel leg
+covers the event path for real).  Focused runs green; the full
+chunked gate (`scratch/run_suite_chunks_238.py` — the 237 runner plus
+the new suite in chunk 4c) finished **8/8 green**: the only failure
+was chunk 2's `test_executed_outputs_print_shipped_version` pins
+against the not-yet-re-executed notebooks, green again after the
+re-execution.  Honest totals **4,936 = 4,138 collect + 798 doctest**
+(+10); the ui/ tree stays ruff- AND mypy-clean (the one new mypy
+finding — `elidedText` wants int — fixed immediately).
+
+**Release**: version chain three-way synced at pickup bump time
+(`VERSION` + `pyproject.toml` + `pharmaml.__version__` → 1.2.150;
+the round-237 lesson applied BEFORE any zip build this time).  Notebooks
+re-executed 8/8 at 1.2.150 in the foreground (zero error outputs,
+200 s), ML notebook venv paths scrubbed by the round-137 cleaner
+(ZERO absolute-home matches verified), zip built with
+`scratch/build_zip_238.py` (predecessor v1.2.149 swept from all four
+homes) and **rebuilt once intra-round** — the first build predated
+the `[1.2.150]` CHANGELOG entry, so the archive's CHANGELOG head
+still read 1.2.149; the rebuild carries the shipped release note.
+Final zip **20,332,751 B, sha-256
+`0489ea9bb24e1b4fe7bae57ced13b774eee794a2426ce4033e15cc94b11cfdb7`**
+(1046 entries / 999 files, testzip OK per home, real leaks 0,
+nested zips NONE) byte-identical in the four homes.
+
+**Web pins**: SHIPPED_TOOLKIT_VERSION 1.2.150; 4,936 across the six
+surfaces (page badge, download-panel describe/list/chip, overview
+chip + the round-238 §23.6 clause in the Testing after-string); census
+fallbacks **1019 files / 319,164 lines** (page.tsx FALLBACK_STATS +
+overview fileCount/loc; the canonical `scratch/census.py` walk).
+Manifest entry appended with the rebuild note.
+
+**Health**: dev server restarted after the gate (GET / 200);
+zip-size endpoint answered `{"zipBytes":20332751,"version":"1.2.150",
+"exact":true,"source":"release"}`.  agent-browser pass: badge 1.2.150,
+hero hydrated (4936 tests · 1019 files live), the round-238 clause in
+the upgrade table, download panel "Download
+pharma-ml-toolkit-v1.2.150.zip / exact", copy commands intact
+(`python -m pytest`), theme dark↔light both ways, footer intact,
+mobile 390×844 zero horizontal scroll, zero console/page errors.
+
+**Commits & push**: `9983faf` (the §23.6 release) + `4a157ea` (web
+pins + manifest + zip homes) pushed and verified `origin/main ==
+HEAD == 4a157ea`; worklog + counter ride this commit.
+
+**Baselines for the next round** — v1.2.150 (four homes) · honest
+totals **4,936 = 4,138 collect + 798 doctest** · census
+**1019/319,164** · counter **29/100** · Part-3 remaining: §23 depth
+(legend collision/overflow policy), §21.4 image pixel/channel
+inspection, per-page `meta=` adoption on the remaining scatter pages
+· lint backlog: src/ 90 + tests/ 57 ruff findings.
