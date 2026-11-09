@@ -11145,3 +11145,98 @@ totals **4,936 = 4,138 collect + 798 doctest** · census
 (legend collision/overflow policy), §21.4 image pixel/channel
 inspection, per-page `meta=` adoption on the remaining scatter pages
 · lint backlog: src/ 90 + tests/ 57 ruff findings.
+
+## Round 239 (2026-11-09, counter 30/100, cron 515197) — the Part-3 §23.7 legend hygiene, shipped as v1.2.151 — after the 24th rollback recovery
+
+**Round trip — the 24th rollback**: the 18:27 cron opened on a tree
+wiped back to `2eb0ede` (round-186 era, the same rollback point as
+round 194's 10th-rollback lesson): remote gone, `~/.github_token`
+gone, the venv missing rdkit, the counter file gone.  Recovery per
+the standing recipe: PAT re-extracted from `upload/MASTER_PROMPT.pdf`
+lines 688–689 (93 chars joined with no space — the 76-char truncation
+would have been rejected), token + credential helper restored,
+remote re-added, fetch OK; the ff-only pull blocked twice on
+untracked files — 17 moved aside by a porcelain parser (which missed
+the two C-quoted names with spaces, `git`'s `"..."` quoting beat the
+`line[3:].strip()` split — moved by hand), pull landed on `0976876`
+(round-238 tip); all 19 set-aside files proved byte-identical to the
+pulled tree (nothing to restore); `venv_repair.sh` foreground →
+rdkit 2026.09.1 back, tree clean.  **The owner confirmed studio.py
+works** — the round-237 Shiboken fix verified on the user's Windows
+box.
+
+**What shipped (§23.7)**: a pyqtgraph legend is unbounded — long
+series names spill sideways over the data and dozens of entries stack
+past the plot's bottom edge.  The round-238 probe found NO stale-entry
+bug to fix (`PlotItem.clear()` empties the legend in 0.13.7 — now
+pinned so a pyqtgraph bump that starts leaking fails loudly); the
+shipped slice is the density policy: `PlotPanel` re-fits the legend
+after every data-adding call (`scatter`/`line`/`bars`) and on every
+geometry change with (1) a **label budget** — each label wider than
+`min(220px, 45% of the panel width)` elided, the full text kept
+behind the panel in an id-keyed map pruned against the live items on
+every fit (clear/replot never leaks stale ids) so the budget follows
+the width BOTH ways — verbatim restoration on widening, unless the
+full text itself exceeds the absolute 220 px ceiling no width can
+lift; and (2) **column escalation** — entries beyond the vertical
+capacity (the height the bottom axis leaves, 22 px per row) split
+into columns capped at three.  Relabeling is display-only: the §21
+inspector's series keys keep resolving hover metadata,
+click-to-select and `attach_metadata()` under the FULL names.  Two
+probe lessons landed mid-round: pyqtgraph 0.13.7 exposes
+`LegendItem.setColumnCount`/`columnCount` and `LabelItem.text` (no
+private poking needed), and the first smoke run caught a real defect
+— eliding destroyed the original text, making restoration impossible;
+the id-keyed full-text map is the fix.
+
+**Tests**: new `tests/ui/test_legend_policy.py`, 11 tests (narrow
+elision, verbatim restoration on widening, the ceiling-never-lifts
+leg with the map asserting the full text behind the panel, short
+names untouched, column escalation to the 3-cap on 40 stacked
+entries, single-column calm for 3 entries, the no-legend no-op, the
+clear/map reset pin, stale-id pruning across a replot cycle, the
+inspector-keys contract surviving the relabel, and fit idempotence).
+One test-side lesson: `attach_metadata()` requires the series to
+exist first (the round-232 API contract).  Focused runs green (52
+items across the legend/tick/inspector/responsive suites) plus the
+legend-driven pages; the full chunked gate
+(`scratch/run_suite_chunks_239.py` — the 238 runner plus the new
+suite in chunk 4c) finished **8/8 green** after the notebook
+re-execution (chunk 2's version pins were the only failure, as
+planned).  Honest totals **4,947 = 4,149 collect + 798 doctest**
+(+11); the ui/ tree stays ruff- AND mypy-clean.
+
+**Release**: version chain three-way synced at bump time (VERSION +
+pyproject + `pharmaml.__version__` → 1.2.151); notebooks re-executed
+8/8 in the foreground at 1.2.151 (zero error outputs, 199 s), ML
+notebook scrubbed by the round-137 cleaner (ZERO absolute-home
+matches); the CHANGELOG `[1.2.151]` entry predated the zip build —
+no intra-round rebuild this round (the round-238 lesson applied
+proactively).  Final zip **20,339,302 B, sha-256
+`fe003349b5bfc884a2201dbb9e6f8f63ae05709a7c40a73f21384090d10fdad0`**
+(1048 entries / 1001 files, testzip OK per home, real leaks 0,
+nested zips NONE) byte-identical in the four homes, predecessor
+v1.2.150 swept.
+
+**Web pins**: SHIPPED_TOOLKIT_VERSION 1.2.151; 4,947 across the six
+surfaces; census fallbacks **1021 files / 319,620 lines** (canonical
+`scratch/census.py`); manifest entry appended (no rebuild note
+needed).  **Health**: dev server restarted after the gate (GET /
+200); zip-size endpoint `{"zipBytes":20339302,"version":"1.2.151",
+"exact":true,"source":"release"}`; agent-browser pass: badge 1.2.151,
+hero hydrated (4947 tests · 1021 files), the round-239 clause in the
+upgrade table, download panel "Download
+pharma-ml-toolkit-v1.2.151.zip / exact", copy commands intact, theme
+dark↔light both ways, footer intact, mobile 390×844 zero horizontal
+scroll, zero console/page errors.
+
+**Commits & push**: `30d9c1b` (the §23.7 release) + `0b8b33e` (web
+pins + manifest + zip homes) pushed and verified `origin/main ==
+HEAD == 0b8b33e`; worklog + counter ride this commit.
+
+**Baselines for the next round** — v1.2.151 (four homes) · honest
+totals **4,947 = 4,149 collect + 798 doctest** · census
+**1021/319,620** · counter **30/100** · Part-3 remaining: §21.4
+image pixel/channel inspection, per-page `meta=` adoption on the
+remaining scatter pages, §23 leftovers (legend placement vs. data,
+title truncation) · lint backlog: src/ 90 + tests/ 57 ruff findings.
