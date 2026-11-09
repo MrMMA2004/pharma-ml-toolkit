@@ -10861,3 +10861,86 @@ totals **4,915 = 4,117 collect + 798 doctest** · census
 densest charts) and §21's remaining depth (image pixel inspection on
 the Image Lab, per-page metadata adoption through `meta=`, the
 §21.5 molecule-hover SA/formula readouts).
+
+## Round 236 (2026-11-09, the owner's direct IM "Continue MASTER_PROMPT part3" — no cron fire this round, counter stays 27/100) — the Part-3 §21.5 molecule readouts, shipped as v1.2.148
+
+**Picking the slice**: the remaining Part-3 backlog after round 235
+was §23 depth (tick/legend density) and §21's remaining depth — §21.5
+was the highest-leverage: it connects three shipped engines (the
+ChartInspector's click-to-select from round 232, the §22
+MoleculeRenderer + SmilesDetailDialog from round 231, the §24 SA
+engine from round 230) into one user-facing behaviour.
+
+**The work — §21.5, molecule readouts on the charts**:
+* `PlotPanel.point_selected` (NEW signal): re-emits the inspector's
+  click-to-select `(label, index)` — the page-level drill-down hook
+  §21.5 named, without pages reaching into the inspector.
+* The Generative SA tab now PLOTS its result — rank vs score, one
+  point per scored molecule (invalid rows stay table-only; x is the
+  board's rank so chart and table agree on identity).  The hover
+  readout carries the SMILES, the RDKit-calculated molecular formula
+  and the molecular weight beside the SA value — calculated from the
+  molecule, never invented; unparseable SMILES answer with the
+  SMILES alone.
+* **Clicking a plotted molecule opens the §22.5 detail dialog**
+  (large 2-D structure + canonical SMILES + formula + weight + SA),
+  foreign-series clicks guarded off.
+* The multi-objective Pareto front scatter carries the same hover
+  metadata for every non-dominated member.
+* Providers are lazy + inspector-cached (§21.6): plotting hundreds of
+  candidates costs nothing until one is hovered.
+
+**Engineering notes**: the SA render initially read the ENGINE's
+table schema (`index/valid`) — the page's board actually carries
+`rank/smiles/canonical/sa_score/band/status`, caught before any test
+run; the rank-based rewrite matches the board exactly.  One test pin
+self-corrected the honest way: `CC(C)Cc1ccc(O)cc1` is the ibuprofen
+CORE (C10H14O, 150.22 g/mol), not full ibuprofen — RDKit was right,
+the assertion was wrong.
+
+**Tests**: 4 new in `tests/ui/test_generative_page.py` (the
+forwarding pin, the real-number hover, the click-to-detail + guard,
+the front hover).  Full gate `scratch/run_suite_chunks_236.py`:
+**8/8 chunks green** — chunk 2 first failed the notebook
+shipped-version pins exactly as the ritual expects (notebooks still
+carried 1.2.147 outputs), notebooks re-executed at 1.2.148 (8/8 in
+201 s, error-outputs 0), chunk 2 + doctests re-verified green.  The
+ML notebook's sandbox venv paths scrubbed (round-137 cleaner) before
+the zip rebuild.  Honest totals **4,919 = 4,121 collect + 798
+doctest** (+4).
+
+**Docs repaired (the retroactive round-235 gap)**: round 235 shipped
+without its CHANGELOG row, GUI_REDESIGN increment, and GUI_AUDIT
+progress update — all reconstructed this round per the 1.2.144
+precedent: CHANGELOG 1.2.147 entry, GUI_REDESIGN increment 18 (the
+scroll policy) + 19 (§21.5), GUI_AUDIT's §23 slice-2 progress and
+§21.5 DONE, README's §21.5 section + §23 scroll note, COVERAGE rows
+for rounds 235 + 236.
+
+**Release**: VERSION 1.2.148 (four carriers).  Zip **20,311,284 B,
+sha-256 `7afc0aecf3d16a83b9b3283e522a33151b08e79beac442459516e4b63ce1f68b`**
+(1040 entries / 993 files, testzip OK per home, real leaks 0,
+predecessor v1.2.147 swept) byte-identical in the four homes.
+Census **1013 files / 317,964 lines**.  Web pins trued (4,919 ×5
+surfaces, FALLBACK_STATS 1013/317,964, overview fallbacks + the
+round-236 clause, SHIPPED_TOOLKIT_VERSION 1.2.148) and the manifest
+v1.2.148 section appended.
+
+**Health**: dev server restarted after the gate (Ready in 1142 ms,
+GET / 200); `/api/toolkit/zip-size` answers `exact:true, 20311284,
+v1.2.148, source release`.  Agent-browser pass: badge v1.2.148, hero
+hydrated (4919 tests · 1013 files · 317,964 LOC), the 4,919 chip,
+zero console errors, theme dark↔light both ways, mobile 390×844 zero
+horizontal scroll, footer intact.
+
+**Commits & push**: `ae3a297` (the release commit) pushed and
+verified `origin/main == HEAD == ae3a297`; worklog rides this
+follow-up commit.
+
+**Baselines for the next round** — v1.2.148 (four homes) · honest
+totals **4,919 = 4,121 collect + 798 doctest** · census
+**1013/317,964** · counter **27/100** (IM-driven round; the cron
+counter resumes on the next fire) · Part-3 remaining: §23 depth
+(adaptive tick/label density, legend-collision handling) and §21.4
+(image pixel/channel inspection on the Image Lab) + per-page
+metadata adoption on the remaining scatter pages.
