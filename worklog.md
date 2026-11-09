@@ -11361,3 +11361,104 @@ totals **4,967 = 4,169 collect + 798 doctest** · census
 90 + tests/ 57 ruff findings · the standing remainder of §21.4's
 "original-resolution view" (fit-to-view + aspect lock are live; a
 true 1:1 pixel-perfect toggle is the stretch leg).
+
+---
+
+## Round 241 (2026-11-09, counter 32/100) — the Part-3 §21 per-point meta adoption on the remaining scatter surfaces, shipped as v1.2.153
+
+**Rollback recovery first** (the 25th): the sandbox came back at
+`2eb0ede` (round-186 vintage) — remote missing, token gone, counter
+and zips wiped.  The standing drill rebuilt everything: PAT
+re-extracted from `upload/MASTER_PROMPT.pdf`'s two split pdftotext
+lines (93 chars, joined with no space — verified by length and the
+`github_pat_` prefix only, never printed whole), the credential
+helper and `origin` restored, the 20 untracked-file collisions moved
+to `/tmp/rb25-upload` and **all 20 byte-identical** to what the pull
+brought back, `git pull --ff-only` landed `815becb` (round 240's
+corrections commit), venv repaired (`rdkit 2026.09.1 / PySide6
+6.8.3 / pyqtgraph 0.13.7` alive), and the wiped 15-minute
+webDevReview job recreated (job **517993**).  Counter rode in at 31.
+
+One tooling lesson recorded: printing raw file content that contains
+the byte pair `[m` mangles the tool output (a degenerate ANSI
+sequence) — `unsupervised.py`'s `xs[mask]` *looked* like `xsask]`
+through sed/rg/repr while `tokenize`/`py_compile` proved the file
+clean all along.  Never trust a paste over a tokenizer.
+
+**The release — §21.5 per-point meta on every data-bearing scatter**
+(the worklog's first Part-3 remainder): eleven call sites across five
+pages now ride the `meta=` plumbing generative.py pioneered, through
+five new page-local factories:
+
+- `model_analysis.py` — `_parity_meta` (0-based held-out row + signed
+  residual), `_residual_meta` (row + the ACTUAL value — on the
+  residual plot both axes are derivable, the actual is not),
+  `_fold_meta` (1-based fold + signed delta vs mean);
+- `deep_learning.py` — `_parity_meta` (same contract, page-local) and
+  `_embedding_meta` (the 0-based source row, the same index the bound
+  table's row column and the view algebra use);
+- `responseai.py` — `_dose_meta` (the ORIGINAL-scale dose — the 4PL
+  demo's x axis is log10, so the dose itself was invisible),
+  `_pair_residual_meta` (one factory, two call sites: the metrics
+  pairs and the screen pairs), `_row_meta` (the correlated pair);
+- `pkpd.py` — `_sample_meta` (the 1-based sample number);
+- `unsupervised.py` — `_cluster_meta` (the 0-based SOURCE row — the
+  flat index before the cluster mask — plus the member count).
+
+Every provider keeps the standing §21 rules: only facts the plot
+cannot tell, honest keys, lazy per-point computation cached by the
+inspector (§21.6), out-of-range indexes answer `{}`, and a raising
+provider can never kill a hover.
+
+**Tests**: `tests/ui/test_scatter_meta_241.py` — 16 tests: per-factory
+value contracts (signed residuals, 1-based folds/samples,
+original-scale dose, source-row mapping, member counts),
+out-of-range empties, NaN-bearing inputs, the two pages' duplicate
+parity factories sharing one contract, and three inspector-flow pins
+that the metadata reaches the readout verbatim (`residual = -0.5`,
+`dose = 10` not its log, `cluster members = 3` on the flat row).
+Honest totals **4,983 = 4,185 collect + 798 doctest**.  Full gate:
+the 241 chunk runner (test_scatter_meta_241.py joins chunk 4c) —
+**8/8 chunks green, 0 failing** after the 8/8 foreground notebook
+re-execution at 1.2.153 and the round-137 scrub (zero absolute-home
+matches).  `ui/` ruff + mypy clean; `src/`'s 90 ruff findings remain
+the known standing backlog, untouched.
+
+**Ship**: version chain three-way synced to **1.2.153** (VERSION +
+pyproject + `__init__`), the `[1.2.153]` CHANGELOG entry written
+BEFORE the build (the round-238 lesson, no intra-round rebuild this
+time), `scratch/build_zip_241.py` (predecessor sweep built in):
+`pharma-ml-toolkit-v1.2.153.zip` — **20,449,306 bytes, sha-256
+`83a85f11dc3c092f68fdebcb44d1a6c327fc9ec31e9a4bd998292e55a4e97249`**
+(1056 entries / 1009 files, testzip OK per home, real leaks 0),
+byte-identical in all four homes, v1.2.152 swept from all four.
+Census **1029 files / 321,233 lines** (the canonical walk, taken
+after the build so the 241 driver counts).  Web pins trued: 4983
+across the six surfaces (page badge, download-panel
+describe/list/chip, overview chip + the round-241 clause appended to
+the Testing after-string), census fallbacks 1029/321,233, and
+`SHIPPED_TOOLKIT_VERSION` 1.2.153.
+
+**Health**: dev server restarted after the gate (GET / 200); zip-size
+endpoint `{"zipBytes":20449306,"version":"1.2.153","exact":true,
+"source":"release"}`.  agent-browser pass: badge 1.2.153, hero
+hydrated (4983 tests · 1029 files · 321,233 LOC live), the round-241
+clause in the upgrade table, Download ZIP button on v1.2.153, theme
+dark↔light both ways, footer intact, mobile 390×844 AND desktop
+1280×900 zero horizontal scroll, zero console/page errors.
+Screenshot evidence `scratch/r241_web_verify.png`.
+
+**Commits & push**: `5188974` (the §21 meta-adoption release) +
+`2735432` (web pins + manifest + all four zip homes tracked)
+pushed to `origin/main`; HEAD == origin/main == `2735432` verified;
+worklog + counter ride this commit.
+
+**Baselines for the next round** — v1.2.153 (four homes) · honest
+totals **4,983 = 4,185 collect + 798 doctest** · census
+**1029/321,233** · counter **32/100** · Part-3 remaining: §23
+leftovers (legend placement vs. data, title truncation) · lint
+backlog: src/ 90 + tests/ 57 ruff findings · the standing remainder
+of §21.4's "original-resolution view" (fit-to-view + aspect lock are
+live; a true 1:1 pixel-perfect toggle is the stretch leg) · §20
+checkpoint depth and §24 SA-in-generative wiring beyond the shipped
+slices.
