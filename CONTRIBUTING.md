@@ -76,6 +76,7 @@ Use `bun run dev` for local development. Browser-facing code must use relative a
 - Avoid committing generated output larger than necessary. Use GitHub Releases for downloadable release archives.
 - Preserve reproducibility: document random seeds, units, input assumptions and environment-specific limitations.
 - Never claim clinical validation or present research software as clinical decision support.
+- When the release version changes, update `CITATION.cff`, the root README's release evidence and the current application capture. Run `python scripts/check_github_page.py` to verify version carriers, local links and image requirements.
 
 ## Pull request checklist
 

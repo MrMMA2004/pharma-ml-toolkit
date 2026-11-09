@@ -16,6 +16,7 @@
 [Capabilities](#capabilities) ·
 [Examples](#examples-and-documentation) ·
 [Latest release](https://github.com/MrMMA2004/pharma-ml-toolkit/releases/latest) ·
+[Cite this project](CITATION.cff) ·
 [Full user guide](pharma-ml-toolkit/README.md)
 
 </div>
