@@ -11732,3 +11732,101 @@ the ImagePanel pixel readout under extreme zoom (sub-pixel mapping
 disclosure — the next §23 candidate) · the QA-screenshot dir now
 also carries r244_web_verify.png / r244_web_mobile.png from this
 round.
+
+## Round 245 (2026-11-09, counter 36/100, owner-directed "continue") — the Part-3 §23.10 ImagePanel sub-pixel mapping disclosure, shipped as v1.2.157
+
+**Pickup**: clean — no rollback (the tree survived at a43a58c /
+round 244; counter 35, venv OK).  The round-244 baseline's named
+next §23 candidate: the ImagePanel pixel readout under extreme zoom.
+
+**Work — the last untruthful readout closes.**  Under extreme zoom
+the §21.4 hover label could mislead two ways: zoomed OUT, one screen
+pixel straddles several image pixels but the readout shows only one
+value with no hint; zoomed IN, one image pixel is a big screen block
+and the §21.6-debounced readout looks frozen.  Probe-first
+(`scratch/probe_image_scale_245.py`): `ViewBox.viewPixelSize()` (the
+size of one screen pixel in view coordinates; the item transform is
+identity) gives the on-screen size of one image pixel as
+`1/viewPixelSize()` per axis — the fit regime (~3.1 screen px per
+image px at 100×100-in-400px), the 2×2-window zoom-in (~155.7), the
+squeeze regime (0.375: one screen pixel straddles ~2.7 image
+pixels), the cache invalidating across `setRange`, and the
+hidden-widget default geometry (no crash — tests show their panels).
+The shipped slice: `ImagePanel.view_pixel_scale()` (the live
+measurement, None without data / after clear / on degenerate
+pre-show geometry), the payload key `image_px_screen` attached at
+emission time, and `format_scale_note` (pure) — below
+`ZOOMED_OUT_PX` (0.9): `1 screen px spans ≤N×M image px (one
+shown)`, the per-axis **ceil worst case** (a screen pixel `1/sx`
+image units wide touches at most `ceil(1/sx)` pixel columns,
+boundary straddle included); at/above `ZOOMED_IN_PX` (4.0):
+`1 image px ≈ N×M screen px (value steady in block)`; near 1:1
+nothing (a true mapping needs no footnote).  The scale refresh rides
+the next pixel transition (the debounce keys on `(row, col)` alone —
+a zoom with a stationary cursor re-discloses on the next move,
+pinned both directions).  The Image Lab page appends the note to
+every matrix tab's hover line; `pixel_at`-built payloads (no scale
+key) render unchanged; the None reset never carries one.
+
+**Tests**: `tests/ui/test_image_subpixel_245.py` — 16 tests: the
+live scale (None cases, the exact `1/viewPixelSize` arithmetic on a
+shown panel, the ~99-screen-px zoom-in regime — the LUT column and
+axes narrow the view inside the 400px panel, the sub-pixel zoom-out
+regime), the pure note (None cases, the ≤ceil coverage strings, the
+block strings, the exported thresholds with edge legs — the block
+note needs BOTH axes past the threshold), the scene path (the
+payload key, the None reset, the debounce-keys-on-pixel contract
+with zoom-refresh legs), and four page legs.  Two mid-round fixes
+the probes/tests surfaced: `GraphicsLayoutWidget` has no
+`getViewBox()` (the helper rides `image_item().getViewBox()`), and
+the threshold-edge test leg initially used `(4.0, 1.0)` — `min()`
+is the honest gate, so the edge legs use equal axes.  Honest totals
+**5,028 = 4,230 collect + 798 doctest** (+16).
+
+**Gate**: the first 245 run failed chunk 1 on the leakage guard —
+it caught the round's OWN probe docstring carrying an absolute
+interpreter path (`/home/z/…/python`) before any build; fixed at
+the source, and the full re-run is **8/8 chunks green, 0 failing**
+after the 8/8 foreground notebook re-execution at 1.2.157 (200 s,
+zero error outputs) and the round-137 scrub (the builder's leak
+gate caught the notebook re-execution's `/home/z/` embedding on the
+first build — the known ritual; scrubbed, second build clean).
+ruff src/tests/ui zero findings; mypy clean (193 files + the two
+touched UI files).
+
+**Ship**: version chain three-way synced to **1.2.157**; the
+`[1.2.157]` CHANGELOG entry predated the build.
+`scratch/build_zip_245.py` (predecessor v1.2.156 swept from all four
+homes):
+`pharma-ml-toolkit-v1.2.157.zip` — **22,222,879 bytes, sha-256
+`1ffd642900fb37f34aab1d170da54fcc4ae8194a10cb38ba203e3d880e1886ee`**
+(1073 entries / 1026 files, testzip OK per home, real leaks 0),
+byte-identical in all four homes.  Census **1046 files / 323,489
+lines**.  Web pins trued: 5028 ×6, census fallbacks 1046/323,489,
+`SHIPPED_TOOLKIT_VERSION` 1.2.157, the round-245 clause appended to
+the Testing after-string; manifest entry inserted.  **One web
+regression caught and fixed by the health step**: the new clause
+initially embedded unescaped double quotes inside the after-string
+literal — Turbopack's parser refused (`Expected ',', got 'numeric
+literal (1, 1)'`), GET / answered 500; the note phrases now ride
+single quotes per the string's established style, GET / 200
+restored, fix committed and pushed (3746125).
+
+**Health**: dev server restarted after the gate (GET / 200); zip-size
+endpoint `{"zipBytes":22222879,"version":"1.2.157","exact":true,
+"source":"release"}`.  agent-browser pass: badge v1.2.157, the 5028
+chip, hero hydration, Download ZIP click (zip-size 200), theme
+dark↔light, footer, desktop 1280×900 AND mobile 390×844 zero
+horizontal scroll, zero console/page errors.  Evidence
+`scratch/r245_web_verify.png` + `scratch/r245_web_mobile.png` (ride
+the NEXT build per the audit-trail pattern).
+
+**Baselines for the next round** — v1.2.157 (four homes) · honest
+totals **5,028 = 4,230 collect + 798 doctest** · census
+**1046/323,489** · counter **36/100** · the lint bar stays green
+(ruff zero + mypy clean) · Part-3 remaining: §21.4's
+"original-resolution view" (a true 1:1 pixel-perfect toggle is the
+stretch leg — the §23.10 scale measurement is its foundation) · §20
+checkpoint depth and §24 SA-in-generative wiring beyond the shipped
+slices · the §23 responsive pass is now CLOSED for text AND image
+readouts.
