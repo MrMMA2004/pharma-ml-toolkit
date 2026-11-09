@@ -1456,3 +1456,22 @@ Placed byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
 `tests/ui/test_legend_policy.py` behind the §23.7 policy in
 `ui/widgets/plot_widget.py` + the 239 chunk runner).  Honest totals
 **4,947 = 4,149 collect + 798 doctest** (+11).
+
+## v1.2.152 release-zip homes (2026-11-09, round 240 — the Part-3 §21.4 image pixel inspection)
+
+`pharma-ml-toolkit-v1.2.152.zip` — 20,354,109 bytes, sha-256
+`31ef34b3c641cf33b13575bfa346c19173936b0aca73dbaa8ee83cc87a81e10b`
+(1052 entries / 1005 files, testzip OK per home, real leaks 0 — the
+re-executed ML notebook's sandbox venv paths scrubbed by the
+round-137 cleaner before the build, nested zips NONE).  Built with
+the standing four-home builder recipe (`scratch/build_zip_240.py`,
+predecessor v1.2.151 swept from all four homes; the CHANGELOG
+`[1.2.152]` entry predated the build — no intra-round rebuild).
+Placed byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`.  Census **1024 files /
+320,559 lines** (the round's additions: the 20-test
+`tests/ui/test_image_hover_probe.py` behind the §21.4 pixel
+inspection in `ui/widgets/image_panel.py` + the
+`scratch/probe_image_hover_240.py` feasibility probe + the 240 chunk
+runner and build driver).  Honest totals **4,967 = 4,169 collect +
+798 doctest** (+20).
