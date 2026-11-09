@@ -11320,15 +11320,19 @@ matches); the CHANGELOG `[1.2.152]` entry predated the zip build —
 no intra-round rebuild (the round-238 lesson applied proactively);
 the honest-totals split corrected in the entry before the build
 (4,169 + 798, not 4,149 + 818).  Final zip **20,354,109 B, sha-256
-`31ef34b3c641cf33b13575bfa346c19173936b0aca73dbaa8ee83cc87a81e10b`**
+`570724f860dd36d67dc52046f4c5475a02c8d463987b27d4c3e49d27a111c62e`**
+(corr. — the first-recorded `31ef34b3…` was a mid-write read during
+the four-home copies; committed blobs + all four homes verify this
+figure; correction note in the manifest)
 (1052 entries / 1005 files, testzip OK per home, real leaks 0, nested
 zips NONE) byte-identical in the four homes, predecessor v1.2.151
 swept.
 
 **Web pins**: SHIPPED_TOOLKIT_VERSION 1.2.152; 4,967 across the six
-surfaces; census fallbacks **1024 files / 320,559 lines** (canonical
-`scratch/census_210.py`); manifest entry appended (no rebuild note
-needed).  The owner's re-uploaded `MASTER_PROMPT part1.pdf`
+surfaces; census fallbacks re-trued post-push to **1026 files /
+320,658 lines** (canonical `scratch/census_210.py` — the first-recorded
+1024/320,559 was taken mid-flight, before the QA screenshot landed);
+manifest entry appended with the sha + census correction notes.  The owner's re-uploaded `MASTER_PROMPT part1.pdf`
 (byte-identical to the standing MASTER_PROMPT.pdf) tracked with the
 audit corpus.
 
@@ -11351,7 +11355,7 @@ ride this commit.
 
 **Baselines for the next round** — v1.2.152 (four homes) · honest
 totals **4,967 = 4,169 collect + 798 doctest** · census
-**1024/320,559** · counter **31/100** · Part-3 remaining: per-page
+**1026/320,658** · counter **31/100** · Part-3 remaining: per-page
 `meta=` adoption on the remaining scatter pages, §23 leftovers
 (legend placement vs. data, title truncation) · lint backlog: src/
 90 + tests/ 57 ruff findings · the standing remainder of §21.4's

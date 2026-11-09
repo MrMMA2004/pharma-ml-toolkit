@@ -1460,16 +1460,25 @@ Placed byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
 ## v1.2.152 release-zip homes (2026-11-09, round 240 — the Part-3 §21.4 image pixel inspection)
 
 `pharma-ml-toolkit-v1.2.152.zip` — 20,354,109 bytes, sha-256
-`31ef34b3c641cf33b13575bfa346c19173936b0aca73dbaa8ee83cc87a81e10b`
+`570724f860dd36d67dc52046f4c5475a02c8d463987b27d4c3e49d27a111c62e`
 (1052 entries / 1005 files, testzip OK per home, real leaks 0 — the
 re-executed ML notebook's sandbox venv paths scrubbed by the
 round-137 cleaner before the build, nested zips NONE).  Built with
 the standing four-home builder recipe (`scratch/build_zip_240.py`,
 predecessor v1.2.151 swept from all four homes; the CHANGELOG
 `[1.2.152]` entry predated the build — no intra-round rebuild).
+SHA CORRECTED POST-PUSH: the first figure printed here and in the
+`60cab75` commit message (`31ef34b3…`) was a mid-write read taken
+while the four-home copies were in flight; the committed blobs and
+all four homes verify `570724f8…` (this round's cron agent re-hashed
+the shipped bytes and the git blobs — they agree).
 Placed byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
-`pharma-ml-toolkit/download/`, and `upload/`.  Census **1024 files /
-320,559 lines** (the round's additions: the 20-test
+`pharma-ml-toolkit/download/`, and `upload/`.  Census **1026 files /
+320,658 lines** per the canonical walk (re-trued post-push: the
+first-recorded 1024/320,559 was taken mid-flight before the
+`r240_web_verify.png` QA screenshot landed; the fallback pins were
+corrected to the verified walk in the same commit).  The round's
+additions: the 20-test
 `tests/ui/test_image_hover_probe.py` behind the §21.4 pixel
 inspection in `ui/widgets/image_panel.py` + the
 `scratch/probe_image_hover_240.py` feasibility probe + the 240 chunk

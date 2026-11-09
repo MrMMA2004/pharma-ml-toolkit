@@ -356,8 +356,8 @@ export function Overview() {
   const sparkRef = useRef<HTMLDivElement>(null);
   const sparkInView = useInView(sparkRef, { once: true, margin: "-10% 0px" });
 
-  const fileCount = stats ? fmtInt(stats.files) : "1024";
-  const loc = stats ? fmtInt(stats.totalLines) : "320,559";
+  const fileCount = stats ? fmtInt(stats.files) : "1026";
+  const loc = stats ? fmtInt(stats.totalLines) : "320,658";
 
   /* Live metadata for the featured ML workflow notebook in the hero. */
   const notebookMeta = useMemo(
