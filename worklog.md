@@ -11549,3 +11549,92 @@ plot is still possible when the legend column sits inside the view)
 remainder of §21.4's "original-resolution view" (a true 1:1
 pixel-perfect toggle is the stretch leg) · §20 checkpoint depth and
 §24 SA-in-generative wiring beyond the shipped slices.
+
+## round 243 — Part-3 §23.9: legend placement vs. data (v1.2.155)
+
+**Pickup**: clean at `d4ba14d` (round 242's worklog commit, counter
+33/100 riding it) — the four v1.2.154 zip homes byte-identical (sha
+`5fd0c6d3…`), HEAD == origin/main, web pins 4995/1033/321,738/
+SHIPPED 1.2.154 all verified in place before touching anything; dev
+server 200, zip endpoint exact, both cron jobs (515197 master,
+517993 webDevReview) enabled and succeeding; venv healthy
+(rdkit 2026.09.1 / pyqtgraph 0.13.7 / PySide6 6.8.3).  No concurrent
+session mid-flight (clean tree, last mtime ~9 min stale).
+
+**Work — the §23.7 follow-up closes: a legend can no longer overlap
+the plot.**  Probe-first on pyqtgraph 0.13.7: the default
+`addLegend(offset=(30,30))` parents the legend INSIDE the view box
+(the legend's scene rect always intersects the vb's); the PlotItem's
+grid is 4×3 (title / top-axis / left+vb+right / bottom) with row 4
+FREE; and — the surprise find — the legacy `size=(10, 10)` pin in
+`add_legend()` froze `LegendItem.updateSize()` into a no-op (the
+frame stayed 10×10 px with entries rendering outside it, and §23.7's
+column escalation never visibly resized anything).  The fix:
+`add_legend()` constructs the `LegendItem` directly (no size pin, no
+offset anchor) and docks it at grid cell (4, 1) — the row below the
+bottom axis, in the view column — with `AlignLeft | AlignTop` (probed:
+without an explicit alignment the grid stretches the legend into its
+cell and a feedback loop hands the whole panel to the legend row).
+`_fit_legend()` re-targeted to the docked row: a **band budget**
+(maximumHeight = 35% of the panel height, floored at two rows) so the
+band never eats the plot; a **hard maximumWidth** (the view column)
+after probing the uncapped failure mode (a 3-column legend of long
+labels pushed the middle grid column to ~1198 px on a 420 px widget,
+dragging the vb out of the view entirely); the **label budget** is now
+the per-column SHARE of the view column's width (full names still
+survive in `_legend_full`, both-ways restoration kept); column
+escalation unchanged but against the band; an **empty legend hides
+and claims no row** (add_legend pre-data, and `clear()` now calls
+`_fit_legend()` to release the band); and the **§21 hover readout
+re-anchors** to the vb's bottom edge whenever a live band sits under
+the plot — through a new `showEvent` hook (probed: a pre-show
+`resize()` at the same size delivers no resize event at show time,
+which left the readout over the band), through post-show resizes, and
+back to the legacy panel-bottom anchor when the band releases.
+
+**Tests**: `tests/ui/test_plot_legend_placement_243.py` — 17 tests:
+the docking structure (grid cell (4,1), parent ≠ vb, offset None,
+idempotence), the auto-size (pin gone), the never-overlaps-the-view
+guarantee at three widths (shown-panel legs), the 35% band cap with a
+usable-plot floor, the grid-never-widens pin, the share budget
+both-ways with `_legend_full` survival, inspector keys surviving
+docking, escalation against the band, the empty-legend no-band
+contract, `clear()` releasing the band, and four readout anchoring
+legs.  The §23.7 suite re-targeted with the round (the budget clause
+now names the per-column share; the both-ways restoration leg narrows
+to 200 px — the docked-row share is wider than the old 45%-of-panel
+budget).  Honest totals **5,012 = 4,214 collect + 798 doctest**.
+Full gate: the 243 chunk runner (the new suite joins chunk 4c) —
+**8/8 chunks green, 0 failing** after the 8/8 foreground notebook
+re-execution at 1.2.155 + the round-137 scrub (1 file).  ruff + mypy
+clean on the widget.
+
+**Ship**: version chain three-way synced to **1.2.155**, the
+`[1.2.155]` CHANGELOG entry predated the build (no intra-round
+rebuild), `scratch/build_zip_243.py`:
+`pharma-ml-toolkit-v1.2.155.zip` — **21,851,407 bytes, sha-256
+`a42f328593472be44758a091526a2da55182174a47c086fa5a66e1f88b1bb3df`**
+(1064 entries / 1017 files, testzip OK per home, real leaks 0),
+byte-identical in all four homes, v1.2.154 swept.  Census
+**1037 files / 322,457 lines**.  Web pins trued: 5012 ×6, census
+fallbacks 1037/322,457, `SHIPPED_TOOLKIT_VERSION` 1.2.155, the
+round-243 clause appended to the Testing after-string; manifest
+entry inserted.
+
+**Health**: dev server restarted after the gate (GET / 200); zip-size
+endpoint `{"zipBytes":21851407,"version":"1.2.155","exact":true,
+"source":"release"}`.  agent-browser pass: badge 1.2.155, the 5012
+chip, Download ZIP button, theme dark↔light, desktop 1280×900 AND
+mobile 390×844 zero horizontal scroll, zero console/page errors.
+Screenshot evidence `scratch/r243_web_verify.png`.
+
+**Baselines for the next round** — v1.2.155 (four homes) · honest
+totals **5,012 = 4,214 collect + 798 doctest** · census
+**1037/322,457** · counter **34/100** · Part-3 remaining: the lint
+backlog (src/ 90 + tests/ 57 ruff findings — the standing hygiene
+debt) · §21.4's "original-resolution view" (a true 1:1
+pixel-perfect toggle is the stretch leg) · §20 checkpoint depth and
+§24 SA-in-generative wiring beyond the shipped slices · the §23
+responsive pass is now CLOSED for text (ticks, legend labels, titles
+all budgeted) — the next §23 candidate is the ImagePanel's pixel
+readout under extreme zoom (sub-pixel mapping disclosure).
