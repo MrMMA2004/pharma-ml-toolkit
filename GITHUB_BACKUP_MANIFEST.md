@@ -1,4 +1,3 @@
-# GITHUB_BACKUP_MANIFEST.md
 
 No credentials or sensitive values appear in this file (by design, §12.8).
 
@@ -1456,6 +1455,26 @@ Placed byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
 `tests/ui/test_legend_policy.py` behind the §23.7 policy in
 `ui/widgets/plot_widget.py` + the 239 chunk runner).  Honest totals
 **4,947 = 4,149 collect + 798 doctest** (+11).
+
+## v1.2.153 release-zip homes (2026-11-09, round 241 — the Part-3 §21 per-point meta adoption)
+
+`pharma-ml-toolkit-v1.2.153.zip` — 20,449,306 bytes, sha-256
+`83a85f11dc3c092f68fdebcb44d1a6c327fc9ec31e9a4bd998292e55a4e97249`
+(1056 entries / 1009 files, testzip OK per home, real leaks 0 — the
+re-executed ML notebook's sandbox venv paths scrubbed by the
+round-137 cleaner before the build, nested zips NONE).  Built with
+the standing four-home builder recipe (`scratch/build_zip_241.py`,
+predecessor v1.2.152 swept from all four homes; the CHANGELOG
+`[1.2.153]` entry predated the build — no intra-round rebuild).
+Placed byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`.  Census **1029 files /
+321,233 lines** per the canonical walk (grows by the round-241 suite
+file + the 241 driver).  Honest totals **4,983 = 4,185 collect + 798
+doctest**; the eight-chunk gate green (8/8, 0 failing chunks) after
+the 8/8 foreground notebook re-execution at 1.2.153.  Web pins trued
+4983 ×6 (page badge, download-panel describe/list/chip, overview chip
++ the round-241 clause in the Testing after-string) + census fallbacks
+1029/321,233 + `SHIPPED_TOOLKIT_VERSION` 1.2.153.
 
 ## v1.2.152 release-zip homes (2026-11-09, round 240 — the Part-3 §21.4 image pixel inspection)
 
