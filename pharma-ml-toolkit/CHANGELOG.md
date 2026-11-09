@@ -1,3 +1,39 @@
+## [1.2.150] — 2026-11-09
+
+### Changed — round 238: the Part-3 §23.6 adaptive tick-label density
+
+* **`ui/widgets/plot_widget.py`** — a category axis renders EVERY tick
+  it is handed, so a 40-feature importance chart on a narrow panel
+  collided into an unreadable smear.  `bars(labels=...)` now drives a
+  two-stage, width-derived density policy: **stride thinning** (the
+  stride guarantees even the widest label + padding fits between
+  consecutive kept ticks, so no two rendered labels can overlap
+  regardless of text) and **pixel-budget ellipsization** (each kept
+  label is elided to its per-tick share of the axis width, so one
+  very long category name cannot spill into its neighbour either).
+  The fit re-runs on every geometry change (the `resizeEvent` wiring;
+  Qt defers hidden-widget resize events to show time, so production
+  panels get their first fit at show), measuring the panel's own
+  width because a hidden widget's layout has not propagated to the
+  plot child yet.  Panels narrower than the 80 px pre-layout floor
+  keep the full list.
+* **The §21.3 hover contract survives the thinning** — the FULL
+  category list stays behind the panel (`PlotPanel._cat_ticks`), so
+  the auto-generated bar hover meta keeps resolving the complete,
+  untruncated names for points whose tick was thinned away; only the
+  axis rendering thins.  `clear()` resets the stored list along with
+  the axis ticks.
+* **`tests/ui/test_plot_tick_density.py`** — 10 tests: stride
+  thinning on a 280 px panel (stride >= 2, kept ticks on stride
+  multiples), the density following the width (280 px < 900 px
+  rendered count), the per-slot pixel-share contract for 200-char
+  labels, the full-list hover meta for thinned-away indices, the
+  below-floor full-list state, the `clear()` reset, plot-time fits,
+  a shown-panel end-to-end leg pinning the resizeEvent re-fit, and
+  tiny category sets never thinned.  Honest totals **4,936 = 4,138
+  collect + 798 doctest** (+10); the ui/ tree stays ruff- and
+  mypy-clean.
+
 ## [1.2.149] — 2026-11-09
 
 ### Added — round 237: the Qt import guard + `studio.py --doctor` (the Windows Shiboken report)

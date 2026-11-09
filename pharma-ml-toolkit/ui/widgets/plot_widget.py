@@ -17,6 +17,7 @@ through the ``meta=`` callable or ``attach_metadata()``.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -24,11 +25,20 @@ from typing import Any
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from ..theme_manager import ChartPalette
 from .chart_inspector import ChartInspector
 from .image_export import export_widget_grab
+
+# §23.6 (round 238) adaptive tick-label density: a category axis renders
+# EVERY tick it is handed, so 40 feature names on a narrow panel collide
+# into an unreadable smear.  The policy below thins the RENDERED subset
+# (the §21.3 hover meta keeps the full list) and ellipsizes what remains.
+_TICK_PAD_PX = 16   # breathing room around a label when sizing a tick
+_MIN_AVAIL_PX = 80  # narrower than this = not laid out yet: keep all ticks
+_MIN_SHARE_PX = 24  # a kept label never gets less than this much room
 
 
 class PlotPanel(QWidget):
@@ -64,13 +74,71 @@ class PlotPanel(QWidget):
         self._inspector = ChartInspector(self._plot)
         self._inspector.set_readout(self._readout)
         self._inspector.pointSelected.connect(self.point_selected)
+        # §23.6: the full category tick list behind the bottom axis (or
+        # None); the rendered subset is re-derived on every resize.
+        self._cat_ticks: list[tuple[float, str]] | None = None
         self._readout.show()
         self.apply_palette(self._palette)
 
     def resizeEvent(self, event) -> None:  # Qt signature
-        """Keep the hover readout pinned to the plot's bottom-left corner."""
+        """Pin the readout and re-fit the §23.6 tick density to the width."""
         super().resizeEvent(event)
         self._position_readout()
+        self._apply_tick_density()
+
+    # -- §23.6 adaptive tick-label density -----------------------------------
+    def _bottom_axis_available_px(self) -> int:
+        """Pixel width the bottom axis can draw its tick labels into.
+
+        Measured from the PANEL's own width, not the plot widget's:
+        the two are equal once the §23.2 zero-margin layout is live,
+        but the panel's geometry updates immediately even in the
+        pre-layout state where the layout has not propagated to the
+        child yet (a hidden widget defers that to show()).
+        """
+        left = self._plot.getAxis("left")
+        return max(0, self.width() - int(left.width()) - _TICK_PAD_PX)
+
+    def _apply_tick_density(self) -> None:
+        """Re-fit the category tick labels to the axis width (§23.6).
+
+        Two-stage policy, both deterministic and width-driven:
+
+        1. **stride thinning** -- the stride is chosen so that even the
+           widest label (plus padding) fits between consecutive kept
+           ticks, so no two rendered labels can overlap regardless of
+           their text;
+        2. **pixel-budget ellipsization** -- each kept label is elided
+           to its per-tick share of the axis width, so one very long
+           category name cannot spill into its neighbour either.
+
+        The FULL list always stays in ``_cat_ticks`` -- the §21.3 bar
+        hover meta and any explicit ``attach_metadata()`` continue to
+        resolve the complete, untruncated category names; only the
+        axis rendering thins.  A panel narrower than
+        :data:`_MIN_AVAIL_PX` keeps all ticks -- that is the
+        pre-layout state, and real layouts never get that narrow
+        (the §23.2 splitter policy floors are 320 px).
+        """
+        axis = self._plot.getAxis("bottom")
+        if not self._cat_ticks:
+            return
+        avail = self._bottom_axis_available_px()
+        if avail < _MIN_AVAIL_PX:
+            axis.setTicks([list(self._cat_ticks)])
+            return
+        font = axis.style.get("tickFont") or self.font()
+        fm = QFontMetrics(font)
+        worst = max(fm.horizontalAdvance(text) for _, text in self._cat_ticks) + _TICK_PAD_PX
+        max_visible = max(1, int(avail // worst))
+        stride = max(1, math.ceil(len(self._cat_ticks) / max_visible))
+        kept = self._cat_ticks[::stride]
+        share = int(max(_MIN_SHARE_PX, avail / len(kept) - _TICK_PAD_PX))
+        rendered = [
+            (pos, fm.elidedText(text, Qt.TextElideMode.ElideRight, share) or text)
+            for pos, text in kept
+        ]
+        axis.setTicks([rendered])
 
     def _position_readout(self) -> None:
         if self._plot.height() <= 0:
@@ -137,8 +205,9 @@ class PlotPanel(QWidget):
         bg = pg.BarGraphItem(x=x, height=heights, width=width, brush=brush)
         self._plot.addItem(bg)
         if labels:
-            ticks = [(float(i), labels[i]) for i in range(len(labels))]
-            self._plot.getAxis("bottom").setTicks([ticks])
+            # §23.6: store the full list, render the width-fitted subset.
+            self._cat_ticks = [(float(i), str(labels[i])) for i in range(len(labels))]
+            self._apply_tick_density()
             if meta is None:
                 # §21.3 bar charts: category + exact value hover for free.
                 cat_labels = list(labels)
@@ -171,6 +240,7 @@ class PlotPanel(QWidget):
 
     def clear(self) -> None:
         self._plot.clear()
+        self._cat_ticks = None
         self._plot.getAxis("bottom").setTicks(None)
         # The inspector's hover decorations are lazy: plot.clear()
         # removed them along with the data, and nothing is re-added
