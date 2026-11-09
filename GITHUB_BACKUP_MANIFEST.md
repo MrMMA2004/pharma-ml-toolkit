@@ -1420,3 +1420,22 @@ byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
 7 mypy errors from rounds 233–236 cleared; studio.py now carries its
 executable bit).  Honest totals **4,926 = 4,128 collect + 798
 doctest** (+7).
+
+## v1.2.150 release-zip homes (2026-11-09, round 238 — the Part-3 §23.6 adaptive tick-label density)
+
+`pharma-ml-toolkit-v1.2.150.zip` — 20,332,751 bytes, sha-256
+`0489ea9bb24e1b4fe7bae57ced13b774eee794a2426ce4033e15cc94b11cfdb7`
+(1046 entries / 999 files, testzip OK per home, real leaks 0 — the
+re-executed ML notebook's sandbox venv paths scrubbed by the
+round-137 cleaner before the build, nested zips NONE).  Built with
+the standing four-home builder recipe (`scratch/build_zip_238.py`,
+predecessor v1.2.149 swept from all four homes).  *(Rebuilt once
+intra-round: the first build predated the `[1.2.150]` CHANGELOG
+entry, so the archive's CHANGELOG head still read 1.2.149 — the
+rebuild carries the shipped release note.)*  Placed
+byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`.  Census **1019 files /
+319,164 lines** (the round's addition: the 10-test
+`tests/ui/test_plot_tick_density.py` behind the §23.6 policy in
+`ui/widgets/plot_widget.py`).  Honest totals **4,936 = 4,138 collect
++ 798 doctest** (+10).
