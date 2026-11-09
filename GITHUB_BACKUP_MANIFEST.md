@@ -1439,3 +1439,20 @@ byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
 `tests/ui/test_plot_tick_density.py` behind the §23.6 policy in
 `ui/widgets/plot_widget.py`).  Honest totals **4,936 = 4,138 collect
 + 798 doctest** (+10).
+
+## v1.2.151 release-zip homes (2026-11-09, round 239 — the Part-3 §23.7 legend hygiene)
+
+`pharma-ml-toolkit-v1.2.151.zip` — 20,339,302 bytes, sha-256
+`fe003349b5bfc884a2201dbb9e6f8f63ae05709a7c40a73f21384090d10fdad0`
+(1048 entries / 1001 files, testzip OK per home, real leaks 0 — the
+re-executed ML notebook's sandbox venv paths scrubbed by the
+round-137 cleaner before the build, nested zips NONE).  Built with
+the standing four-home builder recipe (`scratch/build_zip_239.py`,
+predecessor v1.2.150 swept from all four homes; the CHANGELOG
+`[1.2.151]` entry predated the build — no intra-round rebuild).
+Placed byte-identical in `download/`, `pharma-ml-toolkit/dist-archive/`,
+`pharma-ml-toolkit/download/`, and `upload/`.  Census **1021 files /
+319,620 lines** (the round's additions: the 11-test
+`tests/ui/test_legend_policy.py` behind the §23.7 policy in
+`ui/widgets/plot_widget.py` + the 239 chunk runner).  Honest totals
+**4,947 = 4,149 collect + 798 doctest** (+11).
