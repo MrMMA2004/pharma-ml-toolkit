@@ -47,6 +47,23 @@ train, test = split_indices(X, y, strategy="group", groups=assay_series,
   shift; do not assume standard exchangeability-based guarantees such as
   [split-conformal coverage](CONFORMAL_REGRESSION.md) apply to that holdout.
 
+## Scaffold cross-validation
+
+`cross_validate_model(..., strategy="scaffold", smiles=smiles)` groups folds
+by scaffold keys computed from the row-aligned SMILES. An optional `groups`
+argument does **not** change a scaffold run, and the result notes that it was
+ignored; choose `strategy="group"` or `"stratified_group"` to use those labels
+instead. Acyclic and invalid SMILES
+share an empty key. Validate structures and check the other leakage units that
+matter for your data. Scaffold-disjoint folds are not necessarily chemically
+independent, and scores need not be lower than random-split scores.
+
+`build_cv_splitter` returns an ordinary sklearn splitter, not one bound to its
+input labels. If calling its `.split()` directly, supply the same aligned
+scaffold keys (e.g. from `scaffold_groups(smiles)`) as `groups`. Passing other
+labels changes the folds. Group labels for grouped cross-validation should be
+validated separately; the holdout group checks above do not apply to CV.
+
 ## Audit exact identifier overlap
 
 Split assignment alone does not establish that compounds, patients or assay

@@ -102,7 +102,7 @@ def test_every_strategy_builds_its_splitter(strategy: str, expected: type) -> No
         strategy=strategy,
         n_folds=3,
         y=y,
-        smiles=RING_SMILES,
+        smiles=RING_SMILES[:len(y)],
         groups=["g0", "g1", "g2", "g3"] * 6,
     )
     assert isinstance(splitter, expected)
@@ -115,8 +115,8 @@ def test_strategy_notes_document_their_limitations() -> None:
     _, notes = build_cv_splitter(
         "regression", strategy="scaffold", n_folds=3, smiles=RING_SMILES
     )
-    assert any("structurally distinct" in note for note in notes)
-    assert any("LOWER scores" in note for note in notes)  # the optimism warning
+    assert any("Distinct scaffolds can still be similar" in note for note in notes)
+    assert any("failed parses" in note for note in notes)
 
 
 def test_scaffold_strategy_groups_by_bemis_murcko() -> None:
@@ -377,7 +377,7 @@ def test_scaffold_folds_never_split_a_scaffold() -> None:
     for train_idx, val_idx in splitter.split(X, y, groups=keys):
         assert set(keys[train_idx]).isdisjoint(set(keys[val_idx]))
     # the limitations note travelled with the result (§19.3)
-    assert any("structurally distinct" in note for note in result.notes)
+    assert any("Distinct scaffolds can still be similar" in note for note in result.notes)
 
 
 def test_pipelines_fit_preprocessing_per_fold(

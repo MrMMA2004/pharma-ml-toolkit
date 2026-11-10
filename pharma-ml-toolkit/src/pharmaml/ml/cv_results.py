@@ -22,9 +22,10 @@ Strategies (§19.3)
 ------------------
 ``kfold`` / ``stratified`` / ``group`` / ``stratified_group`` /
 ``scaffold``.  The molecular strategy groups rows by their Bemis–Murcko
-scaffold (:func:`pharmaml.ml.splits.scaffold_groups`) so closely related
-compounds never straddle a train/valid boundary -- the honest estimate
-of generalisation to structurally *distinct* compounds.  Every strategy
+scaffold (:func:`pharmaml.ml.splits.scaffold_groups`) so identical
+scaffold keys do not straddle a train/validation boundary. Distinct
+scaffolds can still be chemically similar; a scaffold split cannot prove
+independence or generalization to all distinct compounds. Every strategy
 carries a limitations note that travels with the result.
 
 Examples
@@ -274,10 +275,13 @@ def build_cv_splitter(
         Target vector; required by ``stratified`` / ``stratified_group``.
     smiles:
         One SMILES per row; required by ``scaffold`` (Bemis–Murcko keys
-        via :func:`pharmaml.ml.splits.scaffold_groups`).
+        via :func:`pharmaml.ml.splits.scaffold_groups`). When y is supplied,
+        the lengths must match.
     groups:
         One group label per row; required by ``group`` /
-        ``stratified_group``.
+        ``stratified_group``. Not used by ``scaffold``. The returned sklearn
+        splitter is not bound to these labels; callers invoking its ``split``
+        method directly must supply the appropriate aligned groups themselves.
 
     Returns
     -------
@@ -398,6 +402,10 @@ def build_cv_splitter(
             "strategy 'scaffold' needs smiles (one SMILES per row) -- "
             "the Bemis-Murcko scaffold key defines the group"
         )
+    if y is not None and len(smiles) != len(y):
+        raise DataValidationError(
+            "strategy 'scaffold' needs one SMILES per target row"
+        )
     keys = scaffold_groups([str(item) for item in smiles])
     n_groups = len(set(keys))
     if n_groups < n_folds:
@@ -407,11 +415,11 @@ def build_cv_splitter(
             "structural diversity"
         )
     notes.append(
-        "Scaffold CV (GroupKFold over Bemis-Murcko frameworks): closely "
-        "related compounds never straddle train/validation -- the honest "
-        "estimate of generalisation to structurally distinct compounds; "
-        "expect LOWER scores than random CV, that gap is the optimism of "
-        "row-level splitting made visible (the §19.3 directive)."
+        "Scaffold CV (GroupKFold over Bemis-Murcko keys): identical keys "
+        "never straddle train/validation. Distinct scaffolds can still be "
+        "similar, so this does not prove independence or generalisation. "
+        "Acyclic molecules and failed parses share an empty key; validate "
+        "SMILES and audit other leakage units separately."
     )
     return GroupKFold(n_splits=n_folds), notes
 
@@ -905,11 +913,16 @@ def cross_validate_model(
     y_arr = np.asarray(y)
     X_frame = X if isinstance(X, pd.DataFrame) else pd.DataFrame(np.asarray(X))
     fold_groups = None
-    if splitter.__class__.__name__ in ("GroupKFold", "StratifiedGroupKFold"):
+    if strategy == "scaffold":
+        # Do not allow an unrelated groups argument to override the very
+        # scaffold keys used to validate and describe this splitter.
+        assert smiles is not None  # validated by build_cv_splitter
+        fold_groups = np.asarray(scaffold_groups([str(item) for item in smiles]))
         if groups is not None:
-            fold_groups = np.asarray(list(groups))
-        elif smiles is not None:
-            fold_groups = np.asarray(scaffold_groups([str(item) for item in smiles]))
+            notes.append("Scaffold CV ignores groups; only scaffold keys define the folds.")
+    elif (splitter.__class__.__name__ in ("GroupKFold", "StratifiedGroupKFold")
+          and groups is not None):
+        fold_groups = np.asarray(list(groups))
 
     fold_records: list[FoldRecord] = []
     split_iter = (
