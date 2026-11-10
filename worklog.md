@@ -12341,3 +12341,45 @@ twins over `pharmaml.viz`, salt-bridge timelines beside the H-bond card (the API
 exists) · Part-3 remaining: §24 SA-in-generative wiring beyond the shipped slices · the arena
 conformal branch still parked unmerged — its pickup ritual (validate, chunk-assign, true pins,
 gate, release) lands with round 253 if its PR merges.
+
+## Round 253 — 2026-11-10 — rollback #29 recovery, then a second dual-session stand-down: the arena conformal branch is hot again; health + monitoring only
+
+**Pickup — rollback #29**: the tree was back at `2eb0ede` (round-186 era), the counter file
+gone, the origin remote missing, `~/.github_token` gone, and `rdkit` unimportable — the full
+19th/20th-rollback signature.  The proven recovery ritual ran end to end, third time: PAT
+re-derived from `upload/MASTER_PROMPT.pdf` pdftotext lines 688–689 (93 chars, `github_pat_`
+prefix + `xUt0` suffix, joined with no space — the 76-char truncation trap avoided), credential
+helper + origin restored, `git fetch` + `git pull --ff-only origin main` (21 blocking untracked
+upload files moved to `/tmp/pull_aside`, ALL 21 reconciled byte-identical to the pulled copies
+and dropped), 203 commits fast-forwarded to `f966954`; `bash scratch/venv_repair.sh` foreground
+green (`pharmaml 1.2.163` imports).  No conflicts, no local-only work lost.
+
+**The state the pull revealed**: the concurrent session had already shipped round 251 (the
+stand-down, counter 42) AND round 252 (the H-bond timeline as v1.2.163, counter 43) — this
+fire's STEP-0 increment therefore lands the counter at 44 for round 253, not 42.
+
+**The stand-down call — again**: `git fetch` surfaced the arena conformal branch
+(`arena/8696775e-pharma-ml-toolkit`) advancing in real time — `32005f7..e2f1eb3` with the head
+74 seconds old at check time (05:16 → 05:22 → 05:34 → 06:15 UTC, four commits in the hour;
+now 11 ahead of main, still unmerged: conformal files absent from the tree).  Per the owner's
+DUAL-SESSION RULE the toolkit files stay untouched: no feature, no pin truing, no zip work.
+The round-252 baselines' handoff is explicit — "the pickup ritual lands with round 253 if its
+PR merges" — and it has not merged, so the ritual (pull, validate their tests, true the
+version carriers and census pins, chunk-assign their new suites, nine-chunk gate, re-exec the
+notebooks, ship the next zip) carries to round 254.
+
+**What was done instead — the health + monitoring pass**: dev server GET / → 200; the zip-size
+endpoint answers `{"zipBytes":23673301,"version":"1.2.163","exact":true,"source":"release"}`
+and the download route serves `pharma-ml-toolkit-v1.2.163.zip` with a strong ETag — the
+round-252 release holding exactly; the webDevReview 15-min job was found MISSING (only the
+master job rode the scheduler) and was recreated as job 520021 (fixed_rate 900 s,
+Asia/Tehran); master job 515197 verified enabled (status 1, 2-h cadence); the counter file
+rides this commit.
+
+**Watching for**: the conformal branch's merge will move main's collect totals and the docs
+INDEX; if their flow again ships features without release mechanics, round 254 opens with the
+pickup ritual unchanged (their chunk assignments are already pre-planned in round 251's
+entry).  Feature queue unchanged: the PLUMED-style CV helpers (`md/cv.py`), the
+contact-map/PLIF viz twins, salt-bridge timelines beside the H-bond card, §24 SA-in-generative
+beyond the shipped slices.
+
