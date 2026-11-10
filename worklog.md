@@ -13042,8 +13042,11 @@ summary A35/B6/C5/D0/E1/F3; `tests/test_feature_inventory.py` gained
 row-total invariant retold (50 — the D row rides the Dashboard row).
 The web pins swept 5,426 ×7 (page.tsx footer, download-panel ×3,
 overview prose head+tail, overview StatChip pair) with the round-262
-suite appended to the Testing-aspect prose; FALLBACK_STATS 1104/
-334,959; SHIPPED_TOOLKIT_VERSION 1.2.169.
+suite appended to the Testing-aspect prose; FALLBACK_STATS trued to
+the final post-ship walk 1086/334,982; SHIPPED_TOOLKIT_VERSION
+1.2.169; and the E2E snapshot caught ONE more stale prose pin — the
+Interface aspect still said "seventeen verified pages" (eighteen
+since the r258 molecular_dynamics page) — trued in the same pass.
 
 **The flake.**  The first ten-chunk run failed chunk 1 on
 `test_dnn_cross_validation_uses_a_fresh_model_per_fold` — passed
