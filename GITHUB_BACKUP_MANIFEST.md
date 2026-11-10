@@ -1726,33 +1726,48 @@ inspection in `ui/widgets/image_panel.py` + the
 runner and build driver).  Honest totals **4,967 = 4,169 collect +
 798 doctest** (+20).
 
-## v1.2.162 release-zip homes (2026-11-10, round 250 — the MD viz twins: `plot_md_series` / `plot_md_correlation`)
+## v1.2.162 release-zip homes (2026-11-10, round 250 — the MD viz twins + the unioned Studio Molecular-Dynamics page)
 
-`pharma-ml-toolkit-v1.2.162.zip` — 23,436,052 bytes, sha-256
-`33fb5b48f748922424eee3acc8516505dae04ac958f064b3aa5f4c2c77d4f228`
-(1107 entries / 1059 files, testzip OK per home, real leaks 0 — the
+`pharma-ml-toolkit-v1.2.162.zip` — 23,660,651 bytes, sha-256
+`269866da2cbe46c0bc32d278e01b40f12b5a13adef6dff38f6dffc38cbfffd5c`
+(1112 entries / 1064 files, testzip OK per home, real leaks 0 — the
 growth over v1.2.161's 23,420,835 B is the new `viz/md_plots.py`
-module (the uploaded pipeline's two headline matplotlib panels as
-first-class pharmaml figures on the lazy `_compat` contract), the
-29-test `tests/test_viz_md_plots.py`, the `pharmaml.viz` export
-surface (2 new `__all__` entries + the docstring bullet), the docs
-INDEX regeneration (13 modules / 887 symbols — now generated WITH
-`pharmaml.md` after the round-250 generator fix), the CHANGELOG
-round-250 entry, and the eight notebooks re-executed at 1.2.162).
-Built with the standing four-home builder recipe
-(`scratch/build_zip_250.py`, predecessor v1.2.161 swept from all four
-homes).  Round-250 also closed the notebook leak class for good: the
-round-137 no-absolute-path ritual is now code —
-`reexec_notebooks_209.py` scrubs the live venv prefix out of every
-text payload and FAILS the run if any absolute home path survives
-(the sklearn ConvergenceWarning traces were the offenders), so the
-release scanner's `real leaks: 0` is enforced at the source.  Honest
-totals 5,235 = 4,381 collect + 854 doctest (+30 over the 5,207
-round-249 baseline: the 29 new viz-twin tests + the md_plots doctest
-module); the gate is NINE chunks, all green (chunk 1 re-run green
-after the docs-index generator fix that round 250 exposed: the
-committed INDEX documented `pharmaml.md` but the committed generator's
-MODULES tuple did not — regenerated INDEX is 17/14 lines against the
-commit and the parity suite is green).  Web pins trued 5,235 across
-overview/download-panel/page + census fallbacks 1078/329,904 +
+module, the two MD test suites (`tests/test_viz_md_plots.py` 29 tests
++ `tests/test_md_plots.py` 10), the unioned Studio page
+(`ui/pages/molecular_dynamics.py` + `tests/ui/
+test_molecular_dynamics_page.py` + navigation), `docs/
+MD_VISUALIZATION.md`, the docs INDEX regeneration (13 modules / 887
+symbols — now generated WITH `pharmaml.md` after the round-250
+generator fix), the CHANGELOG round-250 entries, and the eight
+notebooks re-executed at 1.2.162).  Built with the standing four-home
+builder recipe (`scratch/build_zip_250.py`, predecessor v1.2.161
+swept from all four homes).  Round 250 was a TWO-half round: the
+morning shipped the viz twins (`plot_md_series` /
+`plot_md_correlation` as stats-dict figures on the lazy `_compat`
+contract); mid-round the arena flow's PR #6 landed a competing
+smaller `md_plots.py` plus a Studio MD page and broke `main` for a
+moment (its `MDStudy.metric_series` edit sat fine, but its toolkit
+`ci.yml` was byte-broken `branches: ain]` and its page test rode no
+gate chunk; the utilities-page index pin 15→16 was missed too).  The
+union resolved it honestly: the released stats-dict API stayed
+canonical and absorbed the arena deltas (mapping comparison input,
+LigandResult acceptance, explicit label overrides, `close=False`
+figure ownership, `N/A`-masked NaN cells, the "axes must match"
+misaligned-abscissa refusal, the ±inf refusal); the Studio page was
+adapted to it; their test file was rewritten to the union contract;
+the workflow and the missed pins were fixed.  Round 250 also closed
+the notebook leak class for good: the round-137 no-absolute-path
+ritual is now code — `reexec_notebooks_209.py` scrubs the live venv
+prefix out of every text payload (str AND list — nbformat reads
+`text` as `str`) and FAILS the run if any absolute home path
+survives, so the release scanner's `real leaks: 0` is enforced at the
+source.  Honest totals **5,255 = 4,401 collect + 854 doctest** (+48
+over the 5,207 round-249 baseline: 29 viz-twin tests + 10 union
+md-plot tests + the md_plots doctest module + the Studio page suite
+and the arena index-pin edits); the gate is NINE chunks, all green
+(twice: once for the morning release, once for the union — chunk 1
+re-run green after the docs-index generator fix, chunk 4e re-run
+green after the utilities index pin).  Ruff zero, mypy clean across
+205 source files.  Census **1084/330,824**.  Web pins trued 5,255
+across overview/download-panel/page + census fallbacks 1084/330,824 +
 `SHIPPED_TOOLKIT_VERSION` 1.2.162.

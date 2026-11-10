@@ -385,6 +385,6 @@ def test_reindex_refuses_bad_ranges(studio_app) -> None:
 
 def test_main_window_carries_the_utilities_page(main_window) -> None:
     main_window.go_to("utilities")
-    assert main_window.pages.currentIndex() == 15  # after Image Lab, before Settings (the ML Workbench moved everyone +1)
+    assert main_window.pages.currentIndex() == 16  # after Image Lab, before Settings (the ML Workbench moved everyone +1, the round-250 Molecular Dynamics page +1 more)
     page = main_window.utilities_page
     assert page._tabs.count() == 5

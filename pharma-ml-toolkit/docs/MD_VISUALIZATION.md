@@ -13,25 +13,29 @@ files such as `ligand_rmsd.xvg` and `ligand_sasa.xvg`.
 
 ```python
 from pharmaml.md import build_study
-from pharmaml.viz import close_figure, plot_md_correlation, plot_md_series, save_figure
+from pharmaml.viz import close_figure, plot_md_correlation, plot_md_series
 
 study = build_study("my_md_study")
-fig = plot_md_series(
+stats = plot_md_series(
     study.metric_series("ligand_rmsd"),
     title="Ligand RMSD by simulation",
     x_label="Time (ns)",  # Replace with the actual units in your data.
     y_label="RMSD (nm)",
+    path="rmsd.svg",  # Also supports PNG and PDF; byte-reproducible.
 )
-save_figure(fig, "rmsd.svg")  # Also supports PNG and PDF.
-close_figure(fig)
+assert stats["labels"] == ["ligand_A"]  # the per-ligand comparison lines
 
 ligand = study.ligand("ligand_A")
 # Select metrics sampled on the same time axis.
-fig = plot_md_correlation({
-    "RMSD": ligand.series["ligand_rmsd"],
-    "SASA": ligand.series["ligand_sasa"],
-})
-save_figure(fig, "correlation.png")
+corr = plot_md_correlation(
+    {"RMSD": ligand.series["ligand_rmsd"],
+     "SASA": ligand.series["ligand_sasa"]},
+    path="correlation.png",
+)
+assert corr["nan_cells"] == 0
+# Keep the figure OPEN instead (the Studio page's contract):
+open_corr = plot_md_correlation(ligand, close=False)
+fig = open_corr["figure"]  # the caller now owns closing it
 close_figure(fig)
 ```
 

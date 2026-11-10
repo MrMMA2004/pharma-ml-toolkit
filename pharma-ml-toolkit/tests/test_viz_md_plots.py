@@ -32,12 +32,6 @@ def _ramp(label: str = "ligand_rmsd", n: int = 20) -> XvgSeries:
     return XvgSeries(time=t, values=0.1 + 0.0005 * t, label=label)
 
 
-def _flat(label: str = "protein_backbone_Rg", n: int = 20) -> XvgSeries:
-    """A constant series — correlates with nothing, honestly."""
-    t = np.arange(0.0, float(100 * n), 100.0)
-    return XvgSeries(time=t, values=np.full(n, 1.4), label=label)
-
-
 class TestPlotMDSeries:
     def test_stats_are_hand_computed(self) -> None:
         stats = plot_md_series(_ramp())
@@ -150,10 +144,11 @@ class TestPlotMDCorrelation:
         assert corr["r"][0, 1] == pytest.approx(-1.0)
 
     def test_constant_series_nan_disclosure(self) -> None:
-        t = np.arange(8.0)
+        t = np.arange(8.0)  # one shared grid — misaligned axes are refused
         corr = plot_md_correlation({
             "a": XvgSeries(time=t, values=t),
-            "flat": _flat(n=8),
+            "flat": XvgSeries(time=t, values=np.full(8, 1.4),
+                              label="protein_backbone_Rg"),
             "c": XvgSeries(time=t, values=t[::-1].copy()),
         })
         k = 3

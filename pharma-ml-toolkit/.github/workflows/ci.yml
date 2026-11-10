@@ -28,7 +28,7 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Lint (ruff)
-        run: ruff check src tests playground.py
+        run: ruff check src tests ui
 
       - name: Type-check (mypy, blocking since 100x-22-c: 0-error baseline)
         run: mypy src/pharmaml

@@ -87,6 +87,7 @@ CHUNKS: list[tuple[str, list[str]]] = [
                      "tests/ui/test_plot_title_budget_242.py",
                      "tests/ui/test_plot_legend_placement_243.py"]),
     ("4e (ui mlworkbench..utilities)", ["tests/ui/test_ml_workbench_page.py",
+                     "tests/ui/test_molecular_dynamics_page.py",
                      "tests/ui/test_model_analysis_page.py",
                      "tests/ui/test_pages_smoke.py", "tests/ui/test_pkpd_page.py",
                      "tests/ui/test_qt_doctor.py",

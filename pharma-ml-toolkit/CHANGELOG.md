@@ -34,6 +34,53 @@
   min-length alignment disclosure, and the constant-series NaN
   disclosure (2k−1 cells for k series).
 
+### Added — round 250, second half: the Studio Molecular-Dynamics page (the arena merge, unioned) + the union API
+
+* The Studio gains a **Molecular Dynamics** page (`ui/pages/
+  molecular_dynamics.py`, merged from the arena flow's PR #6 and
+  unioned with the released viz twins): open a study folder
+  (asynchronously, via the job runner), pick a ligand and metric, edit
+  the axis labels to match the input units, plot the metric or the
+  two-metric Pearson correlation, preview it and export png/svg/pdf.
+  Navigation registers `molecular_dynamics`; the page rides the
+  responsive splitter policy and the §23.5 data-integrity rule (plots
+  never touch the loaded data).
+* The union API — one honest contract instead of two competing ones.
+  `plot_md_series` now also accepts a `{name: XvgSeries}` mapping
+  (the cross-ligand comparison overlay, palette-cycled with legend
+  labels — `MDStudy.metric_series` feeds it directly) plus explicit
+  `x_label`/`y_label` overrides; `plot_md_correlation` accepts a
+  `LigandResult` directly and takes a `title`.  Both return the stats
+  dict (the released `pharmaml.viz` convention) and close their
+  figures — pass `close=False` (the Studio page's contract) to keep
+  the figure open: it rides the dict as `"figure"` and the caller
+  owns closing it.  The honesty rules the union settles on: NaN
+  *values* are tolerated and disclosed (a NaN pair's correlation is a
+  NaN cell — masked in the image, annotated `N/A`, counted in
+  `nan_cells`), ±inf is refused outright (it poisons every statistic),
+  and the correlation heatmap refuses series whose abscissas disagree
+  over the aligned window ("axes must match") — a figure may not
+  correlate observations never taken at the same moments, the one lie
+  the pipeline's crude min-length rule would otherwise let a figure
+  tell.
+* `tests/test_md_plots.py` — rewritten to the union contract: open
+  figures carry actual series values and explicit labels, the mapping
+  comparison draws one labelled line per ligand, the LigandResult
+  heatmap masks the constant-series row and annotates `N/A`, and the
+  refusal matrix (empty/under-supplied mappings, misaligned axes, ±inf)
+  is parametrized.  `tests/ui/test_molecular_dynamics_page.py` — the
+  Studio page walked offscreen: study → plot → export (png/svg/pdf),
+  the misaligned-axes refusal clearing the figure with the honest
+  status message, failed loads clearing previous results, and the
+  navigation registration pin.  The page suite now rides gate chunk 4e
+  (it had been in no chunk).
+* Housekeeping from the merge: the toolkit-level
+  `.github/workflows/ci.yml` was byte-broken (`branches: ain]` — the
+  workflow could never trigger) and still linted the retired
+  `playground.py`; both fixed (`branches: [main]`, ruff over
+  `src tests ui`).  `docs/MD_VISUALIZATION.md` examples trued to the
+  union API.  `docs/INDEX.md` regenerated (13 modules / 887 symbols).
+
 ## [1.2.161] — 2026-11-11
 
 ### Added — round 249: the `pharmaml.md` package — molecular-dynamics analysis (the uploaded pipeline + the ecosystem vocabulary)

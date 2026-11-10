@@ -12199,25 +12199,46 @@ was the bug the survivors exposed) and FAILS the run if any absolute home path s
 executable bits on `.py` files (the EXE002 flood) chmod'd back to 644 — the lint bar is
 filesystem-sensitive and the pull restored +x umask artifacts.
 
-**Validation**: focused suite 30/30 (29 tests + the module doctest); the NINE-chunk gate green
-(1 re-run after the docs-index fix, 2/3/4a/4b/4c/4d/4e/6 green in the daemonized pass); ruff
-`check src/ tests/ ui/` zero findings; mypy clean across **205 source files** (+1); the eight
-notebooks re-executed at 1.2.162 (8/8, zero error outputs, home-path-survivors=0 — the new
-scrubber enforced).  Honest totals **5,235 = 4,381 collect + 854 doctest** (+30 over the 5,207
-round-249 baseline: the 29 viz-twin tests + the md_plots doctest module; the fresh collect-only
-recount also shows the collect split as 4,381 where round-249 pinned 4,354 + the new 29 — ±2 of
-environment-conditional collection, the pins ride the fresh measurement).  Census **1078/329,904**.
+**Validation**: focused suites 45/45 (the morning 29 + doctest, then the union's 10 Studio-
+contract tests on top); the NINE-chunk gate green TWICE (once for the morning release — chunk 1
+re-run after the docs-index fix; once for the union — chunk 4e re-run after the utilities index
+pin the arena merge missed); ruff `check src/ tests/ ui/` zero findings; mypy clean across
+**205 source files** (+1); the eight notebooks re-executed at 1.2.162 (8/8, zero error outputs,
+home-path-survivors=0 — the new scrubber enforced).  Honest totals **5,255 = 4,401 collect +
+854 doctest** (+48 over the 5,207 round-249 baseline: 29 viz-twin tests + 10 union md-plot
+tests + the md_plots doctest module + the Studio page suite and the arena index-pin edits; the
+±2 collect variance against the round-249 pin is environment-conditional collection, the pins
+ride the fresh measurement).  Census **1084/330,824**.
 
-**Release**: the v1.2.162 zip built at **23,436,052 B, sha
-`33fb5b48f748922424eee3acc8516505dae04ac958f064b3aa5f4c2c77d4f228`** (1107 entries / 1059
+**The second half — the arena collision, unioned**: mid-round the arena flow's PR #6 landed a
+competing, smaller `md_plots.py` (114 lines, figure-returning) plus a Studio **Molecular
+Dynamics** page and took `main` for a moment; its merge carried three honest defects — the
+toolkit-level `ci.yml` was byte-broken (`branches: ain]`, the workflow could never trigger) and
+still linted the retired `playground.py`, its new page test rode NO gate chunk, and the
+utilities-page stack-index pin (15→16) was missed.  The union kept the released stats-dict API
+canonical and absorbed the arena deltas instead of forking the surface: `plot_md_series` gains
+mapping comparison input (the cross-ligand overlay `MDStudy.metric_series` feeds) and explicit
+`x_label`/`y_label`; `plot_md_correlation` accepts a `LigandResult` and a `title`; both grow
+`close=False` (the figure rides the returned dict as `"figure"` — the Studio page's ownership
+contract); NaN stays tolerated-and-disclosed (masked cells, `N/A` annotation, `nan_cells`) while
+±inf is refused and misaligned abscissas are refused ("axes must match" — a figure may not
+correlate observations never taken at the same moments).  The Studio page was adapted to the
+union, their test file rewritten to it, the workflow byte-fixed, the page suite added to gate
+chunk 4e, and the missed utilities index pin corrected (the full gate caught it — the arena flow
+never ran the ui chunks).  `docs/MD_VISUALIZATION.md` examples trued; docs INDEX regenerated.
+
+**Release**: the v1.2.162 zip built at **23,660,651 B, sha
+`269866da2cbe46c0bc32d278e01b40f12b5a13adef6dff38f6dffc38cbfffd5c`** (1112 entries / 1064
 files, testzip OK per home, real leaks 0, predecessor v1.2.161 swept from all four homes) in
-four byte-identical homes.  Web pins trued 5,235 ×7 + census fallbacks 1078/329,904 +
+four byte-identical homes.  Web pins trued 5,255 ×7 + census fallbacks 1084/330,824 +
 `SHIPPED_TOOLKIT_VERSION` 1.2.162; the overview suite-history carries the round-250 clause;
-manifest entry added.
+manifest entry added.  Notebooks stayed at their 1.2.162 execution (the union touches no
+notebook-imported surface; the freshness guard pins still hold).
 
-**Baselines for the next round** — v1.2.162 (four homes) · honest totals **5,235 = 4,381 + 854** ·
-census **1078/329,904** · the gate is NINE chunks · counter **41/100** · the lint bar green
-(ruff zero + mypy clean, 205 files) · MD follow-on candidates remaining (not yet backlog items):
-a studio.py MD page behind the shipped `pharmaml.md`, H-bond timeline wiring into the trajectory
-lab, PLUMED-style collective-variable helpers, and a contact-map/PLIF figure twin if a user asks
+**Baselines for the next round** — v1.2.162 (four homes) · honest totals **5,255 = 4,401 + 854** ·
+census **1084/330,824** · the gate is NINE chunks (4e now carries the MD page suite) · counter
+**41/100** · the lint bar green (ruff zero + mypy clean, 205 files) · the Studio MD page and the
+viz twins are SHIPPED (the arena merge is unioned, not forked) · MD follow-on candidates
+remaining (not yet backlog items): H-bond timeline wiring into the web trajectory lab,
+PLUMED-style collective-variable helpers, and a contact-map/PLIF figure twin if a user asks
 · Part-3 remaining: §24 SA-in-generative wiring beyond the shipped slices.

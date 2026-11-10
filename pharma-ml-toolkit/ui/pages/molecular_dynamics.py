@@ -205,9 +205,10 @@ class MolecularDynamicsPage(QWidget):
         key = self._metric.currentText()
         try:
             item = self._study.ligand(self._ligand.currentText()).series[key]
-            fig = plot_md_series(item, title=f"{self._ligand.currentText()} — {key}",
-                                 x_label=self._x_label.text(), y_label=self._y_label.text())
-            self._show_figure(fig)
+            result = plot_md_series(item, title=f"{self._ligand.currentText()} — {key}",
+                                    x_label=self._x_label.text(), y_label=self._y_label.text(),
+                                    close=False)
+            self._show_figure(result["figure"])
         except Exception as exc:  # noqa: BLE001 - shown in the UI
             self._clear_figure()
             self._status.setText(f"Could not plot metric: {exc}")
@@ -222,9 +223,10 @@ class MolecularDynamicsPage(QWidget):
             if first == second:
                 raise ValueError("Select two different metrics")
             ligand = self._study.ligand(self._ligand.currentText())
-            fig = plot_md_correlation({first: ligand.series[first], second: ligand.series[second]},
-                                      title=f"{ligand.name} — metric correlations")
-            self._show_figure(fig)
+            result = plot_md_correlation({first: ligand.series[first], second: ligand.series[second]},
+                                         title=f"{ligand.name} — metric correlations",
+                                         close=False)
+            self._show_figure(result["figure"])
         except Exception as exc:  # noqa: BLE001 - shown in the UI
             self._clear_figure()
             self._status.setText(f"Could not plot correlation: {exc}")
