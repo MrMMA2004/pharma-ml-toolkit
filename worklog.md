@@ -12867,3 +12867,129 @@ feature inventory (the feature→backend→UI→test traceability matrix with
 the six status classes; greenfield)**, then the arena conformal pickup
 ritual the moment PR #9 merges, the contact-map/PLIF viz twins, Part-3
 §24 SA-in-generative beyond the shipped slices.
+## Round 261 — 2026-11-10 — part4 §4.5 Phase-2 shipped as v1.2.168: the truthful feature inventory; the round that raced (and beat) the session-start rsync
+
+User-triggered ("Continue") — and the round opened on **rollback #30's recovery**,
+the fifth time through the proven ritual: the tree sat at the `2eb0ede` anchor
+(Nov 3) with no `origin`, no `~/.github_token`, no venv, no counter file; the PAT
+re-extracted from `upload/MASTER_PROMPT.pdf` lines 688–689 (93 chars joined),
+credential store + remote rebuilt, `git fetch` revealed the concurrent session
+had already shipped **r260 = v1.2.167** (part4 Phase-1, ALL FIVE §4 findings
+repaired — this session's planned queue, landed by the other session 2h25m
+before; verified landed, then built on top), a **211-commit ff-only pull** to
+`9130c6b` (40 colliding untracked files moved aside, all superseded by the
+tracked copies), `scratch/venv_repair.sh` foreground green (`pharmaml 1.2.167`
+imports, PySide6 headless OK).  Arena PR #9 (conformal) checked live via the
+GitHub API: **still open**, head `56e3cf9`, 8h quiet — the pickup ritual keeps
+waiting.
+
+**The work — §4.5 "Establish a truthful feature inventory" (part4 Phase-2)**:
+`docs/FEATURES.md` NEW — every major feature classified into the six honest
+status classes with a **feature-to-backend-to-UI-to-test traceability matrix**,
+every row derived from the LIVE tree (imports grepped per page, the 33-card
+`PLAYGROUND_CARDS` registry parsed, all 27 API routes enumerated, `pytest
+--collect-only` per-file counts summed to exactly 4,526 at the freeze commit):
+18 Studio pages (nav keys from `SECTIONS`, backend imports per page, page-test
+vs backend-test columns separated), 12 web areas (cards + routes + the
+`scripts/*_bridge.py` processes they call), 11 backend packages with live
+file/line counts, and — the §4.5 honesty rule applied in the painful direction
+— the five **backend-only class-C modules listed instead of hidden** (gnn +
+gnnxai, geometric, pruning, quantization, harness: 237 tests, zero pages/
+cards/routes).  Status summary **A 34 / B 7 / C 5 / D 1 / E 1 / F 3**: the B
+rows name their gaps honestly (foundations + responseai backends are tested
+ONLY through their page suites — no focused library tests; dashboard/settings
+are smoke-only; the TS calculator + PK/PD + reconciler cards have no automated
+TS↔Python parity pins — only the unit converter does); D = the §5 nine-card
+workflow dashboard (a stat panel exists; the nine workflow-entry cards are the
+Phase-3 refinement); E = the parked conformal PR #9; F = the external engines
+(Vina execution, real GROMACS/PLUMED trajectories, the DOCKSTRING dataset) and
+the optional-gated imports.  The synthetic-demo register states which
+demonstrations are synthetic (MD trajectories, cell-line tables, docking
+scores, generative oracles) — none claims real-data support.  `pyproject`'s
+placeholder homepage was already trued by r260; CLI counted live: 8 command
+groups / 36 subcommands / 96 tests.
+
+**The drift guard**: `tests/test_feature_inventory.py` NEW — 12 pins that
+keep the matrix honest: the six legend classes + the three §4.5 honesty rules
+verbatim; the 18 nav keys / 33 card ids / 27 route names / 10 package names
+re-derived LIVE from `main_window.py` / `card-directory.ts` / the api tree and
+asserted present in the doc (a new page/card/route fails the release until the
+matrix is trued); the **class-C reverse check** (if a page/card/route starts
+referencing a backend-only module, the classification must be revisited —
+documentation prose excluded per the §4.5 rule that a GUI button, not a
+mention, is the integration evidence); the summary counts pinned
+34/7/5/1/1/3 with row-total consistency (41 A+B rows = 18+12+11); the version
+stamp pinned to the `VERSION` file.
+
+**The race — the platform's session-start rsync**: mid-round, the dev server
+panic'd (EACCES reading `download/.pharma-ml-toolkit-v1.2.125.zip.Ct3ljm`) —
+root-cause: the platform's session-start restore (`rsync -a /tmp/my-project/ →
+/home/z/my-project/`, root, started 13:53, ~70 KB/s) was STILL RUNNING 50
+minutes in, restoring the 11:41 pre-rollback snapshot (a .git-less copy of the
+r259-era live tree — 83 download zips, r259 web pins, v1.2.166 toolkit) over
+the recovered tree in directory order.  `.git` was never at risk (absent from
+the source; no `--delete`), but every working-tree edit made after 13:53 would
+be reverted as the cursor advanced.  Countermeasures, in order: the release
+committed IMMEDIATELY (`git add -u` + explicit new files — a blanket `add -A`
+first tripped on rsync's 600-mode temp files, and a first attempt staged 58k
+`.next/` files because **the live .gitignore had been a local-only file** —
+origin carried only r260's minimal `__pycache__` guard, so the pull had
+reverted the fuller rules; the live version was recovered from the platform
+snapshot and **committed at last**, closing that fragility); pushed
+(`9130c6b..95042f1`); then the missing snapshot files PRE-SEEDED ahead of the
+rsync cursor with local copies at 1.8 MB/s (25× the platform's pace) so the
+generator skips them — download/ went 52 missing → 15 before the two tool-call
+timeouts killed the seeder (partials self-heal: rsync re-copies size
+mismatches).  After the rsync drained (~2h25m): `git checkout` restored the 25 reverted
+paths from the safe commit, **182 resurrected untracked zips swept** from the
+four homes, **135 untracked snapshot files cleaned** under the toolkit (the
+retired `playground.py`, r259-era probe/chunk scratch, live-era test strays —
+the census had briefly read 1239/443,760 before the sweep), disk modes
+realigned (1,078 files de-exec'd — the platform's post-rsync `chmod -R 755`
+recreates the r260 EXE002 debt every restart), **node_modules resurrected**
+with `bun install` after the restore flow deleted it, the corrupted Turbopack
+cache cleared twice, and the endpoints re-verified with the census landing
+EXACTLY on the pin: **1102/334,346**.  The census pin was taken POST-ship (1102/334,346) — the r260
+census (1098) was pre-ship, the ±2 being the two toolkit release homes'
+fresh zips; the zip-home sensitivity of the live walk is now documented in the
+manifest (a future round should exclude release homes from the census walk —
+the §4.3-family weakness, still open).
+
+**The ritual**: version carriers trued 1.2.167 → 1.2.168 in one pass;
+notebooks 8/8 re-executed at 1.2.168 in 206 s (error-outputs=0,
+home-path-survivors=0, dev server down per the OOM ritual); **NINE-chunk gate
+9/9 rc=0 failures=0 on the FIRST pass** (one accidental double-launch of the
+detached runner killed and re-run clean — parallel full-suite runs are an OOM
+trap); zip built by the canonical `tools/build_zip.py` — 524 entries / 479
+files (the +2 = FEATURES.md + the inventory suite), **8,629,953 B, sha-256
+`2a65423c14bee6eab055fee67052a9113a93d9cd5c24653670116d4115924b05`**, four
+byte-identical homes, predecessor v1.2.167 swept from all four, leaks 0;
+honest totals **5,407 = 4,538 collect + 869 doctest** (the 12 new pins ride
+chunk 1); census **1102/334,346** (live post-ship walk, locally replicated
+against `toolkit-fs.ts`'s exact rules and re-verified via the endpoint);
+`ruff check` clean on the new suite, mypy clean; `bun run lint` (after
+`bun install` restored the `.bin` symlinks the sandbox had emptied);
+web pins trued `SHIPPED_TOOLKIT_VERSION` 1.2.168, 5,407 ×7 (hero,
+download-panel ×3, overview ×3) + the r261 suite appended to the overview
+prose + `FALLBACK_STATS` 1102/334,346; CHANGELOG `[1.2.168]`; manifest
+section appended.
+
+**Verification** (agent-browser, mandatory): badge v1.2.168, hero **5,407
+tests / 1102 files / 334,346 LOC**, zip endpoint `exact:true source:release
+8,629,953 B`, zero console/page errors, mobile 390 px no horizontal scroll,
+footer present — after the rsync drain + tree restore + server restart.
+
+**Health**: master 515197 enabled (run_count 52, the 46→47 catch-up still
+pending — no cron-incremented round has landed since r251's 42); the
+webDevReview 15-min job 520604 found **disabled by exec limits again**
+(run_count 1) — deleted and recreated per the standing ritual; the platform's
+96/day vs limit-3 throttling keeps killing it, recorded and accepted.
+
+**Baselines for the next round** — v1.2.168 (four homes) · honest totals
+**5,407 = 4,538 + 869** · census **1102/334,346** · the gate is NINE chunks ·
+counter **46/100** (user-triggered round) · queue: **§5's nine-card dashboard
+mapping (Phase-2 remainder: map the 18 pages + 9 cards to backend/tests/docs,
+then the Phase-3 card build)**, the arena conformal pickup the moment PR #9
+merges (chunk assignments pre-planned in round 251), the contact-map/PLIF viz
+twins, Part-3 §24 SA-in-generative, and the census-walk release-home exclusion
+(the ±2 zip-home sensitivity this round documented).
