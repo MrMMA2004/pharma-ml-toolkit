@@ -12993,3 +12993,77 @@ then the Phase-3 card build)**, the arena conformal pickup the moment PR #9
 merges (chunk assignments pre-planned in round 251), the contact-map/PLIF viz
 twins, Part-3 §24 SA-in-generative, and the census-walk release-home exclusion
 (the ±2 zip-home sensitivity this round documented).
+
+## Round 262 — 2026-11-11 — part4 §5 shipped as v1.2.169: the nine-card dashboard mapping; the scheduled run that recovered rollback #31, cleared a latent id-reuse flake, and grew the gate to ten chunks
+
+**Rollback #31 recovery (scheduled run #47 of 100).**  The sandbox came
+back at the `2eb0ede` round-186 anchor again (no origin remote, no
+token file, counter gone, HEAD four days stale).  PAT re-extracted
+from `upload/MASTER_PROMPT.pdf` lines 688–689 (93 chars, joined with
+no space), origin re-added, credential helper restored, 22 untracked
+upload strays moved to /tmp/aside and every one byte-identical to its
+tracked counterpart, then a pure fast-forward to `282dd9d` (r261,
+v1.2.168).  The concurrent cron runs had already shipped the whole
+planned queue: r260/v1.2.167 (part4 §4 Phase-1, all five findings) and
+r261/v1.2.168 (§4.5 Phase-2).  This round therefore took the NEXT
+queued item — the §5 nine-card dashboard mapping, the Phase-2
+remainder named in the r261 note.  webDevReview job recreated as
+521470 (fixed_rate 900 s; the platform's 96-vs-3 daily limit warning
+re-acknowledged — recorded, not fought).
+
+**§5 nine-card dashboard (v1.2.169).**  `ui/nine_cards.py` (new, ~370
+lines) owns the contract: the NINE_CARDS registry with exactly the
+directive's nine cards in the exact order, each carrying title,
+concise description, a badge visual identity, a capability summary, a
+computed live preview (installed version, example-dataset count, model
+registry count, per-package module walks — nothing fabricated),
+exception-safe optional-dependency probes (shap / torch / rdkit /
+matplotlib, one honest import each — openpyxl correctly absent because
+it is a hard dep), and the class-F boundaries stated on the cards:
+docking execution needs an external Vina binary (never bundled) and MD
+trajectories come from external GROMACS/PLUMED runs.  Entries route to
+17 live SECTIONS keys (settings excluded by the directive's own
+mapping table) — union check pinned.  `ui/pages/dashboard.py` renders
+the grid 3×3 row-major above the surviving stat census and dataset
+index; buttons navigate the real MainWindow through `go_to` (via the
+button's own window chain — `activeWindow()` proved unreliable in
+tests); the page stack stays 18 widgets, zero duplicated
+implementations.
+
+**Evidence.**  `tests/ui/test_nine_cards.py` (14 tests): registry
+shape/order/mapping, live-key coverage, substantive-text floors,
+probe boolean-safety, docking/MD honesty, core-only cards, previews
+numeric-checked, the 3×3 row-major render, entry-button routing
+through a real MainWindow, and the census-plus-cards survival pin.
+FEATURES.md gained §10 (the mapping table with real test-file names —
+every name verified to exist before landing) + the Dashboard row B→A +
+summary A35/B6/C5/D0/E1/F3; `tests/test_feature_inventory.py` gained
+5 pins re-deriving the nine-card mapping from the live source and the
+row-total invariant retold (50 — the D row rides the Dashboard row).
+The web pins swept 5,426 ×7 (page.tsx footer, download-panel ×3,
+overview prose head+tail, overview StatChip pair) with the round-262
+suite appended to the Testing-aspect prose; FALLBACK_STATS 1104/
+334,959; SHIPPED_TOOLKIT_VERSION 1.2.169.
+
+**The flake.**  The first ten-chunk run failed chunk 1 on
+`test_dnn_cross_validation_uses_a_fresh_model_per_fold` — passed
+isolated, failed in-process.  Root cause: the test captured `id(self)`
+without holding references; CPython recycles addresses, so inside a
+300+-test process a freed fold-model's id can be reused by the NEXT
+fold's fresh model, collapsing `len(set(fitted_ids))`.  The capture
+now holds the instances (a strictly stronger check: 3 distinct LIVE
+objects) — chunk 1 green in the re-run.  The gate runner gained chunk
+4f (the nine-card suite gets its own Qt process envelope) — ten
+chunks, docstring trued (and the stale suite246.txt mention with it).
+
+**Release.**  Ten-chunk gate 10/10 exit=0 (server down per the OOM
+ritual; the first-run chunk-1 failure fixed before the official run).
+Notebooks 8/8 at 1.2.169 (205 s, error-outputs=0,
+home-path-survivors=0).  Zip 8,638,922 B sha `82411da4…` four homes,
+predecessor swept, nested zips NONE, real leaks 0.  Honest totals
+**5,426 = 4,557 collect + 869 doctest** (collect-only verified per
+tree), census **1104/334,959** post-ship walk.  Counter 46→47
+(scheduled run).  Arena conformal PR #9 still open all round.
+Next: Phase-3 card polish (responsive/SMILES previews on cards),
+contact-map/PLIF viz twins, §24 SA-in-generative, the conformal
+pickup the moment PR #9 merges.
