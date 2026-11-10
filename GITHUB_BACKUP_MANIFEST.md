@@ -1728,8 +1728,8 @@ runner and build driver).  Honest totals **4,967 = 4,169 collect +
 
 ## v1.2.162 release-zip homes (2026-11-10, round 250 — the MD viz twins + the unioned Studio Molecular-Dynamics page + the arena Pareto/SA PRs)
 
-`pharma-ml-toolkit-v1.2.162.zip` — 23,669,477 bytes, sha-256
-`206107d31614aa94ae191de94b92b6e9c16eaea43e68588f3d9f5ca289d49ad4`
+`pharma-ml-toolkit-v1.2.162.zip` — 23,669,404 bytes, sha-256
+`47942c1a6a44b8519998d9bf3350f8f551de43724f6b974789a5b3ef7f2af748`
 (1117 entries / 1069 files, testzip OK per home, real leaks 0 — the
 growth over v1.2.161's 23,420,835 B is the new `viz/md_plots.py`
 module, the two MD test suites (`tests/test_viz_md_plots.py` 29 tests
@@ -1768,6 +1768,11 @@ md-plot tests + the md_plots doctest module + the Studio page suite
 chunks, all green THREE times (morning release, the PR #6 union,
 and the PR #7/#8 union — chunk 1 re-run after the docs-index fix,
 chunk 4e re-run after the utilities index pin).  Ruff zero, mypy
-clean across 206 source files.  Census **1089/331,356**.  Web pins
+clean across 206 source files.  Census **1089/331,356**.  The round's version-carrier lesson, recorded: the version lives in THREE
+plus files — `VERSION`, `pyproject.toml` [project], and
+`src/pharmaml/__init__.py.__version__` — and round 250's first build missed
+the latter two (the zip-size endpoint answered 1.2.161 exact:false from the
+live-stream fallback until both were trued and the notebooks re-executed at
+1.2.162; the freshness guard is green).  Web pins
 trued 5,277 across overview/download-panel/page + census fallbacks 1089/331,356 +
 `SHIPPED_TOOLKIT_VERSION` 1.2.162.

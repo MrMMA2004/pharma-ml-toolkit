@@ -12231,13 +12231,19 @@ the SA-aware generation CLI objective) — clean merges this time, their 22 test
 pass, INDEX regenerated (889 symbols).  No release mechanics on their side either; the
 round-250 release carries all three unions.
 
-**Release**: the v1.2.162 zip built at **23,669,477 B, sha
-`206107d31614aa94ae191de94b92b6e9c16eaea43e68588f3d9f5ca289d49ad4`** (1117 entries / 1069
+**Release**: the v1.2.162 zip built at **23,669,404 B, sha
+`47942c1a6a44b8519998d9bf3350f8f551de43724f6b974789a5b3ef7f2af748`** (1117 entries / 1069
 files, testzip OK per home, real leaks 0, predecessor v1.2.161 swept from all four homes) in
 four byte-identical homes.  Web pins trued 5,277 ×7 + census fallbacks 1089/331,356 +
 `SHIPPED_TOOLKIT_VERSION` 1.2.162; the overview suite-history carries the round-250 clause;
-manifest entry added.  Notebooks stayed at their 1.2.162 execution (the union touches no
-notebook-imported surface; the freshness guard pins still hold).
+manifest entry added.  The version-carrier lesson, recorded for the next round's ritual: the
+version lives in THREE plus files — `VERSION`, `pyproject.toml` [project]
+version, and `src/pharmaml/__init__.py.__version__` — and this round's first
+build trued only the first (the zip-size endpoint answered 1.2.161
+exact:false source:stream from the live fallback until the web pin check
+exposed it; both carriers trued, the notebooks re-executed at 1.2.162, the
+47-test freshness guard green, the zip rebuilt).  Notebooks re-executed at
+1.2.162 with home-path-survivors=0.
 
 **Baselines for the next round** — v1.2.162 (four homes) · honest totals **5,277 = 4,423 + 854** ·
 census **1089/331,356** · the gate is NINE chunks (4e now carries the MD page suite) · counter
