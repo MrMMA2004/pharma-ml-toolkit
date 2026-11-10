@@ -528,3 +528,71 @@ def synthetic_hbond_trajectory(
         topology=topology,
         time=np.arange(n_frames, dtype=float),
     )
+
+
+def synthetic_salt_bridge_trajectory(
+    n_frames: int = 60,
+    seed: int = 0,
+    noise: float = 0.03,
+) -> Trajectory:
+    """Deterministic salt-bridge demo: two charged pairs that form and
+    break on a designed schedule.
+
+    ``getcontacts``' ionic interaction in four atoms: two independent
+    oppositely-charged pairs — Lys Nζ···Glu Cδ and Arg Nη1···Asp Cγ —
+    whose cation–anion distances oscillate (seeded, phase-shifted)
+    across the :data:`~pharmaml.md.hbond.SALT_BRIDGE_CUTOFF`.  Bridge 2
+    leads bridge 1 by a sixth of a period, so the per-frame count holds
+    a four-frame two-bridge plateau in the middle of the trace — a
+    deliberately different silhouette from the H-bond demo's narrow
+    2-frame peak.  Salt bridges are distance-only (no angle gate), so
+    nothing is isolated: the demo *is* the whole criterion.
+
+    Atoms: ``NZ, CD, NH1, CG`` — pass ``positive=[0, 2]`` and
+    ``negative=[1, 3]`` to
+    :func:`~pharmaml.md.hbond.salt_bridge_timeline`.
+
+    >>> t = synthetic_salt_bridge_trajectory(n_frames=12, seed=0)
+    >>> (len(t), t.n_atoms)
+    (12, 4)
+    >>> import numpy as np
+    >>> from pharmaml.md.hbond import salt_bridge_timeline
+    >>> counts = salt_bridge_timeline(t, positive=[0, 2], negative=[1, 3])
+    >>> [int(c) for c in counts[[0, 6, 9]]]   # none / bridge 2 only / both
+    [0, 1, 2]
+    >>> int((counts > 0).sum()) >= 5          # both bridges work for a living
+    True
+    """
+    if n_frames < 1:
+        raise MDAnalysisError("n_frames must be >= 1")
+    if noise < 0:
+        raise MDAnalysisError("noise must be >= 0")
+
+    phases = (0.0, np.pi / 6.0)
+    offsets = (np.zeros(3), np.array([0.0, 8.0, 0.0]))  # far apart: no cross-pairs
+    frames = np.empty((n_frames, 4, 3))
+    for frame in range(n_frames):
+        for bridge, (phase, offset) in enumerate(zip(phases, offsets)):
+            distance = 4.4 + 1.1 * np.sin(2.0 * np.pi * frame / n_frames + phase)
+            base = np.array(
+                [
+                    [0.0, 0.0, 0.0],          # the cation (NZ / NH1)
+                    [distance, 0.0, 0.0],     # the anion (CD / CG), at the designed distance
+                ]
+            )
+            frames[frame, 2 * bridge : 2 * bridge + 2] = base + offset
+
+    rng = np.random.default_rng(seed)
+    frames = frames + rng.normal(0.0, noise, size=frames.shape)
+
+    topology = Topology(
+        atom_names=["NZ", "CD", "NH1", "CG"],
+        residue_names=["LYS", "GLU", "ARG", "ASP"],
+        residue_ids=[1, 2, 3, 4],
+        masses=np.array([14.007, 12.011, 14.007, 12.011]),
+    )
+    return Trajectory(
+        coords=frames,
+        topology=topology,
+        time=np.arange(n_frames, dtype=float),
+    )

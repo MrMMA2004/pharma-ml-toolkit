@@ -1824,3 +1824,30 @@ INDEX regenerated at 899 symbols).  Notebooks re-executed at 1.2.164
 5,358 = 4,491 collect + 867 doctest (×7) + census fallbacks
 1093/332,850 + `SHIPPED_TOOLKIT_VERSION` 1.2.164; all three version
 carriers trued in one pass.
+
+## v1.2.165 release-zip homes (2026-11-10, round 257 — the salt-bridge timeline)
+
+`pharma-ml-toolkit-v1.2.165.zip` — 23,689,832 bytes, sha-256
+`e131ff7f08c485e9d59748cb31cdf3f82685dff84742d3aad7326448ac5bfa0f`
+(four byte-identical homes, testzip OK per home, real leaks 0 — the
+growth over v1.2.164's 23,582,863 B is the salt-bridge timeline pair:
+`md/hbond.py`'s `salt_bridge_timeline` (the ionic-contact counterpart
+of `hbond_timeline`) + `md/trajectory.py`'s
+`synthetic_salt_bridge_trajectory` (two phase-shifted cation–anion
+pairs — Lys Nζ···Glu Cδ, Arg Nη1···Asp Cγ — oscillating across the
+4.0 Å cutoff, the designed 12-frame schedule
+0,0,0,0,0,0,1,2,2,2,2,1 with its four-frame two-bridge plateau); the
+md_bridge `"saltbridge"` op; the web's fifth MD card over the new
+zod-validated `/api/md/saltbridge` route with the card-directory census
+at 32; five new tests + two new doctests in
+`tests/test_md_analysis.py`; INDEX regenerated at 901 symbols; the
+missing CHANGELOG `[1.2.164]` entry backfilled).  Notebooks re-executed
+at 1.2.165 (8/8, home-path-survivors=0 — the reconstructed
+round-209 scrubber contract, `scratch/reexec_notebooks_257.py`).
+Nine-chunk gate green 0 failing chunks (first pass caught the two
+expected ordering races — the INDEX regen and the notebook version
+prints — both resolved by the release ritual itself, second pass 9/9
+rc=0).  Census **1093/333,097**.  Web pins trued 5,365 = 4,496 collect
++ 869 doctest (×7) + census fallbacks 1093/333,097 +
+`SHIPPED_TOOLKIT_VERSION` 1.2.165; all three version carriers trued
+in one pass.

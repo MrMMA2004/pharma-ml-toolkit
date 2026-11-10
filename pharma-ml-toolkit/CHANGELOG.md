@@ -1,3 +1,68 @@
+## [1.2.165] — 2026-11-10
+
+### Added — round 257: the salt-bridge timeline (`getcontacts`' ionic criterion on a designed demo) — toolkit demo + bridge op + web card
+
+* `md/hbond.py` — `salt_bridge_timeline(traj, positive, negative, *,
+  cutoff=4.0)`: the ionic-contact counterpart of `hbond_timeline` —
+  one number per frame, the size of that frame's `salt_bridges` list;
+  the series a `getcontacts` ionic-contact plot (or `gmx mindist -pi`
+  on charged groups) would draw beside the `hbnum` panel.
+* `md/trajectory.py` —
+  `synthetic_salt_bridge_trajectory(n_frames, seed, noise)`: the demo
+  in four atoms.  Two independent oppositely-charged pairs — Lys
+  Nζ···Glu Cδ and Arg Nη1···Asp Cγ, 8 Å apart so no cross-pairs —
+  whose cation–anion distances oscillate (seeded, phase-shifted by a
+  SIXTH of a period) across the 4.0 Å `SALT_BRIDGE_CUTOFF`, so the
+  count holds a four-frame two-bridge plateau — a deliberately
+  different silhouette from the H-bond demo's narrow 2-frame peak.
+  Salt bridges are distance-only (no angle gate), so the demo *is* the
+  whole criterion; the docstring says so.
+* `scripts/md_bridge.py` — op `"saltbridge"`: the demo →
+  `salt_bridge_timeline` (per-frame counts) + the per-bridge
+  cation–anion distance series + the cutoff + honest per-bridge stats
+  (mean, peak, ≥1-bridge fraction, per-bridge duty fractions, and the
+  leads-by-a-sixth-period boolean) — computed by the real toolkit so
+  web and Python cannot drift.
+* Web — the Molecular Dynamics tab's fifth card, "Salt-bridge
+  timeline": frames/seed/noise controls, a POST to the new
+  zod-validated `/api/md/saltbridge` route, the counts-and-distances
+  chart reusing the house `TimelineChart` (emerald/amber/rose), honest
+  stats chips (incl. the Lys/Arg duty split) and the method footnote.
+  The card-directory census grows 31 → 32 (`md-saltbridge`, the
+  probe's source mapping included) and the parity pins ride.
+* `tests/test_md_analysis.py` — five tests: the designed 12-frame
+  schedule pinned exactly
+  (`[0,0,0,0,0,0,1,2,2,2,2,1]` — frames 0–5 break both, frame 6 forms
+  only bridge 2, frames 7–10 hold both, frame 11 keeps only bridge 1),
+  determinism + the counts re-deriving from the public API + the
+  LYS/GLU/ARG/ASP topology, the validation contract, and the timeline
+  twin (near/far frames + out-of-range/cutoff refusals).
+* Housekeeping — the CHANGELOG's missing `[1.2.164]` entry (the
+  round-255 PLUMED-CV release shipped without one) is backfilled
+  below from its release commit.
+
+## [1.2.164] — 2026-11-10
+
+### Added — round 255: the PLUMED-style collective variables — `md/cv.py`
+
+* `md/cv.py` — the enhanced-sampling CV vocabulary in plain NumPy: the
+  six CV actions (`cv_distance`, `cv_angle`, `cv_dihedral` on designed
+  geometries, `cv_coordination` as the honest hard-switch COORDINATION
+  subset, `cv_rmsd`/`cv_gyration` composed over the metrics module),
+  the `CVTable` COLVAR equivalent with the axes-must-match and
+  finite-only contracts, the `XvgSeries` bridge into the shipped viz
+  twins, and the `plumed.dat` mini-parser with PLUMED's real 1-based
+  semantics, `a-b` range expansion, the `MASS` flag, and honest
+  refusals of everything unsupported (METAD, REFERENCE files, the
+  rational switching keywords) with messages that name the supported
+  set.
+* `tests/test_md_cv.py` — 65 tests (the 3-4-5 apex angle,
+  eclipsed/trans dihedrals, hand-counted coordination fractions,
+  byte-exact COLVAR text, the parser's full refusal matrix) plus 12
+  doctests; docs `MD_COLLECTIVE_VARIABLES.md`; INDEX regenerated at
+  899 symbols; notebooks 8/8 re-executed; the v1.2.164 zip in four
+  byte-identical homes.
+
 ## [1.2.163] — 2026-11-10
 
 ### Added — round 252: the H-bond timeline (`gmx hbond -num` on a designed demo) — toolkit demo + bridge op + web card

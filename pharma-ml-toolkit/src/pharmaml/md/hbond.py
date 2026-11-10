@@ -14,7 +14,9 @@ that criterion over explicit donor/acceptor indices:
   panels;
 * :func:`salt_bridges` — the charged-residue contact pairs
   (ASP/GLU ↔ LYS/ARG) ``getcontacts`` tracks, reduced to a distance
-  criterion over caller-supplied indices.
+  criterion over caller-supplied indices;
+* :func:`salt_bridge_timeline` — per-frame salt-bridge counts, the
+  ionic-contact series beside the ``hbnum`` timeline.
 
 Examples
 --------
@@ -43,6 +45,7 @@ __all__ = [
     "SALT_BRIDGE_CUTOFF",
     "find_hbonds",
     "hbond_timeline",
+    "salt_bridge_timeline",
     "salt_bridges",
 ]
 
@@ -221,3 +224,43 @@ def salt_bridges(
             if float(np.linalg.norm(delta)) <= cutoff:
                 pairs.append((p_idx, n_idx))
     return sorted(set(pairs))
+
+
+def salt_bridge_timeline(
+    traj: Trajectory,
+    positive: Sequence[int],
+    negative: Sequence[int],
+    *,
+    cutoff: float = SALT_BRIDGE_CUTOFF,
+) -> np.ndarray:
+    """Per-frame salt-bridge counts — the ionic-contact series.
+
+    The salt-bridge counterpart of :func:`hbond_timeline`: one number
+    per frame, the size of that frame's :func:`salt_bridges` list —
+    the series a ``getcontacts`` ionic-contact plot (or ``gmx mindist
+    -pi`` on charged groups) would draw beside the ``hbnum`` panel.
+
+    >>> from pharmaml.md.trajectory import Topology, Trajectory
+    >>> near = np.array([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]])
+    >>> far = np.array([[0.0, 0.0, 0.0], [7.0, 0.0, 0.0]])
+    >>> topo = Topology(atom_names=["NZ", "CD"])
+    >>> list(salt_bridge_timeline(Trajectory(np.stack([near, far]), topo),
+    ...                           positive=[0], negative=[1]))
+    [1.0, 0.0]
+    """
+    return np.array(
+        [
+            float(
+                len(
+                    salt_bridges(
+                        frame,
+                        positive,
+                        negative,
+                        cutoff=cutoff,
+                    )
+                )
+            )
+            for frame in traj.coords
+        ],
+        dtype=float,
+    )

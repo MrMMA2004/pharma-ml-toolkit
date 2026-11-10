@@ -43,6 +43,7 @@ const SOURCES: Record<string, string> = {
   "md-xvg": "src/components/explorer/playground/md-analysis.tsx",
   "md-traj": "src/components/explorer/playground/md-analysis.tsx",
   "md-hbond": "src/components/explorer/playground/md-analysis.tsx",
+  "md-saltbridge": "src/components/explorer/playground/md-analysis.tsx",
   "md-eco": "src/components/explorer/playground/md-analysis.tsx",
   "session-report": "src/components/explorer/playground/session-report.tsx",
 };

@@ -1240,6 +1240,36 @@ export interface MdHbondResponse {
   method: string;
 }
 
+/** Response of POST /api/md/saltbridge — the designed two-bridge ionic
+ * demo (getcontacts' criterion) analysed by the real toolkit:
+ * synthetic_salt_bridge_trajectory builds two phase-shifted
+ * cation-anion pairs (Lys NZ···Glu CD, Arg NH1···Asp CG) oscillating
+ * across the 4.0 Å cutoff, salt_bridge_timeline counts per frame, and
+ * the per-bridge distance series ride along for the chart. */
+export interface MdSaltBridgeResponse {
+  nFrames: number;
+  seed: number;
+  noise: number;
+  time: number[];
+  /** Per-frame salt-bridge count from salt_bridge_timeline (0, 1 or 2). */
+  counts: number[];
+  /** Per-bridge cation-anion distance series (2 bridges). */
+  distances: number[][];
+  cutoffs: {
+    distance: number;
+  };
+  stats: {
+    mean: number;
+    max: number;
+    bondedFraction: number;
+    bridge1Fraction: number;
+    bridge2Fraction: number;
+    bridge2LeadsBridge1: boolean;
+  };
+  elapsedSeconds: number;
+  method: string;
+}
+
 /** Response of POST /api/md/trajectory — the deterministic synthetic
  * alpha-helix (10 residues × N/CA/C, residues 5–7 a flexible loop)
  * analysed by the real toolkit: RMSD after Kabsch superposition, Rg,

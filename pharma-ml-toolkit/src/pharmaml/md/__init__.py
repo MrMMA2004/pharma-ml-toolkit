@@ -65,7 +65,12 @@ from pharmaml.md.enm import (
     gnm_fluctuations,
     kirchhoff_matrix,
 )
-from pharmaml.md.hbond import find_hbonds, hbond_timeline, salt_bridges
+from pharmaml.md.hbond import (
+    find_hbonds,
+    hbond_timeline,
+    salt_bridge_timeline,
+    salt_bridges,
+)
 from pharmaml.md.metrics import (
     center_of_mass,
     contact_map,
@@ -91,6 +96,7 @@ from pharmaml.md.trajectory import (
     Trajectory,
     resolve_atom_indices,
     synthetic_hbond_trajectory,
+    synthetic_salt_bridge_trajectory,
     synthetic_trajectory,
 )
 from pharmaml.md.xvg import (
@@ -158,9 +164,11 @@ __all__ = [
     "rmsd",
     "rmsd_trajectory",
     "rmsf",
+    "salt_bridge_timeline",
     "salt_bridges",
     "superpose",
     "synthetic_hbond_trajectory",
+    "synthetic_salt_bridge_trajectory",
     "synthetic_trajectory",
     "tica",
     "to_kcal",

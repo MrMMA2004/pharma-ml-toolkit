@@ -3,9 +3,10 @@
 Auto-derived from each module's `__all__` exports — the authoritative quick
 reference for the public API. Re-run `python scratch/build_docs_index.py`
 after adding new public functions.
+
 ## `pharmaml`
 
-*PharmaML — a production-ready toolkit for computational pharmacy.*
+*Package root: exceptions + version*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -20,7 +21,7 @@ after adding new public functions.
 
 ## `pharmaml.data`
 
-*Bring your own data: import user files (CSV/TSV/TXT/Excel) into PharmaML.*
+*Bring your own data: load user CSV/TSV/Excel files*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -35,7 +36,7 @@ after adding new public functions.
 
 ## `pharmaml.chem`
 
-*Cheminformatics helpers: conversion, descriptors, the multi-family*
+*Cheminformatics: converters, descriptors, similarity*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -240,7 +241,7 @@ after adding new public functions.
 
 ## `pharmaml.ml`
 
-*QSAR machine learning: preprocessing, training, evaluation, persistence,*
+*QSAR machine learning: preprocessing → training → evaluation → persistence*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -646,7 +647,7 @@ after adding new public functions.
 
 ## `pharmaml.pharma`
 
-*Pharmaceutical calculations: units, PK, PD, dosage design, regulatory-approval filtering.*
+*Pharmaceutical calculations: units, PK, PD, dosage*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -701,7 +702,7 @@ after adding new public functions.
 
 ## `pharmaml.docking`
 
-*Molecular-docking workflows: preparation, execution, parsing, scoring*
+*Molecular docking: preparation, workflow, parsing, scoring*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -793,7 +794,7 @@ after adding new public functions.
 
 ## `pharmaml.md`
 
-*Molecular-dynamics analysis — trajectories, metrics, interactions.*
+*Molecular dynamics: trajectories, metrics, H-bonds, essential dynamics, ENMs, interactions, studies*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -847,9 +848,11 @@ after adding new public functions.
 | `rmsd` | function | RMSD after optimal superposition (Å, per-atom root mean square). |
 | `rmsd_trajectory` | function | Per-frame RMSD (Å) to the reference, after optimal superposition. |
 | `rmsf` | function | Per-atom root-mean-square fluctuation (Å) about the aligned mean. |
+| `salt_bridge_timeline` | function | Per-frame salt-bridge counts — the ionic-contact series. |
 | `salt_bridges` | function | Charged-opposite pairs within ``cutoff`` Å — the salt-bridge list. |
 | `superpose` | function | Return the mobile coordinates optimally fitted onto the reference. |
 | `synthetic_hbond_trajectory` | function | Deterministic H-bond demo: two donor–H···acceptor pairs that form |
+| `synthetic_salt_bridge_trajectory` | function | Deterministic salt-bridge demo: two charged pairs that form and |
 | `synthetic_trajectory` | function | Deterministic demo trajectory: an alpha-helix with a flexible loop. |
 | `tica` | function | Time-lagged independent component analysis of a ``(T, D)`` matrix. |
 | `to_kcal` | function | Convert kJ/mol → kcal/mol (the uploaded binding-energy conversion). |
@@ -857,7 +860,7 @@ after adding new public functions.
 
 ## `pharmaml.viz`
 
-*Visual output for every PharmaML domain — plots, tables, HTML reports.*
+*Visual output for every domain: figures, tables, HTML reports*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -949,7 +952,7 @@ after adding new public functions.
 
 ## `pharmaml.utils.io`
 
-*Robust tabular and filesystem I/O.*
+*Safe tabular I/O helpers*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -962,7 +965,7 @@ after adding new public functions.
 
 ## `pharmaml.utils.validation`
 
-*Input validation guards.*
+*Shared input-validation layer*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -996,11 +999,9 @@ after adding new public functions.
 ## Command-line interface
 
 ```text
-pharmaml models | data inspect | data split | data convert | ml train
-             | ml compare | chem pic50 | chem descriptors | pharma pk
-             | pharma dose | docking prep-ligands | docking prep-protein
-             | docking scan | docking check | generative run
-             | generative corpus
+pharmaml models | data inspect | ml train | ml compare | chem pic50
+             | chem descriptors | pharma pk | pharma dose | docking scan
+             | docking check
 ```
 
 See `pharmaml/cli.py` for every flag, and `README.md` for the full manual.

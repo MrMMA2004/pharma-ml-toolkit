@@ -9,6 +9,9 @@ Runs inside the toolkit virtualenv and wires ONLY the public
         contact_map / trajectory_pca / anm_fluctuations
     op "hbond"      -> synthetic_hbond_trajectory -> hbond_timeline +
         the per-bond donor-acceptor distance series (gmx hbond -num)
+    op "saltbridge" -> synthetic_salt_bridge_trajectory ->
+        salt_bridge_timeline + the per-bridge cation-anion distance
+        series (getcontacts' ionic interaction)
     op "xvg"        -> read_ligand_folder semantics over pasted text
         (tempdir) -> series + stats + metric_correlations + summary_csv
 
@@ -17,6 +20,7 @@ Request (stdin, JSON)::
     {"op": "trajectory", "nFrames": 80, "seed": 0, "noise": 0.25,
      "contactCutoff": 4.5}
     {"op": "hbond", "nFrames": 60, "seed": 0, "noise": 0.03}
+    {"op": "saltbridge", "nFrames": 60, "seed": 0, "noise": 0.03}
     {"op": "xvg", "files": [{"name": "ligand_rmsd.xvg", "content": "..."}],
      "smoothHbonds": true}
 
@@ -323,6 +327,90 @@ def run_hbond(request: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def run_salt_bridge(request: dict[str, Any]) -> dict[str, Any]:
+    """`getcontacts` ionic contacts on the designed demo: two
+    phase-shifted cation-anion pairs oscillating across the 4.0 A
+    cutoff (salt bridges are distance-only — no angle gate)."""
+    import numpy as np
+    from pharmaml.md.hbond import SALT_BRIDGE_CUTOFF, salt_bridge_timeline
+    from pharmaml.md.trajectory import synthetic_salt_bridge_trajectory
+
+    n_frames = request.get("nFrames", 60)
+    seed = request.get("seed", 0)
+    noise = request.get("noise", 0.03)
+    if not isinstance(n_frames, int) or isinstance(n_frames, bool):
+        return {"error": "nFrames must be an integer"}
+    if not 4 <= n_frames <= MAX_FRAMES:
+        return {"error": f"nFrames must be in [4, {MAX_FRAMES}]"}
+    if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
+        return {"error": "seed must be a non-negative integer"}
+    if not isinstance(noise, (int, float)) or isinstance(noise, bool):
+        return {"error": "noise must be a number"}
+    if not 0.0 <= float(noise) <= 1.0:
+        return {"error": "noise must be in [0, 1]"}
+
+    started = time.perf_counter()
+    traj = synthetic_salt_bridge_trajectory(
+        n_frames=n_frames, seed=seed, noise=float(noise)
+    )
+    positive = [0, 2]
+    negative = [1, 3]
+    counts = salt_bridge_timeline(
+        traj, positive=positive, negative=negative
+    )
+    distances = [
+        [
+            float(np.linalg.norm(traj.coords[f, a] - traj.coords[f, p]))
+            for f in range(n_frames)
+        ]
+        for p, a in ((0, 1), (2, 3))
+    ]
+
+    def _first_bonded(series: list[float]) -> int:
+        for f, d in enumerate(series):
+            if d <= SALT_BRIDGE_CUTOFF:
+                return f
+        return len(series)
+
+    bridge_fractions = [
+        float(sum(1 for d in series if d <= SALT_BRIDGE_CUTOFF)) / n_frames
+        for series in distances
+    ]
+    payload: dict[str, Any] = {
+        "nFrames": n_frames,
+        "seed": seed,
+        "noise": float(noise),
+        "time": _finite_list(traj.time),
+        "counts": _finite_list(counts),
+        "distances": [
+            [round(v, 4) for v in series] for series in distances
+        ],
+        "cutoffs": {
+            "distance": SALT_BRIDGE_CUTOFF,
+        },
+        "stats": {
+            "mean": float(counts.mean()),
+            "max": int(counts.max()),
+            "bondedFraction": float((counts > 0).mean()),
+            "bridge1Fraction": bridge_fractions[0],
+            "bridge2Fraction": bridge_fractions[1],
+            "bridge2LeadsBridge1": bool(
+                _first_bonded(distances[1]) < _first_bonded(distances[0])
+            ),
+        },
+        "elapsedSeconds": round(time.perf_counter() - started, 3),
+        "method": (
+            "pharmaml.md — the designed two-bridge ionic demo (seeded, "
+            "phase-shifted across the 4.0 A cutoff; salt bridges are "
+            "distance-only, so unlike the H-bond demo there is no angle "
+            "gate to isolate — this is exactly getcontacts' ionic "
+            "criterion); every number computed by the real toolkit: "
+            "synthetic_salt_bridge_trajectory + salt_bridge_timeline"
+        ),
+    }
+    return payload
+
+
 def main() -> int:
     try:
         request = json.load(sys.stdin)
@@ -337,10 +425,12 @@ def main() -> int:
         payload = run_trajectory(request)
     elif op == "hbond":
         payload = run_hbond(request)
+    elif op == "saltbridge":
+        payload = run_salt_bridge(request)
     elif op == "xvg":
         payload = run_xvg(request)
     else:
-        return _error("op must be 'trajectory', 'hbond' or 'xvg'")
+        return _error("op must be 'trajectory', 'hbond', 'saltbridge' or 'xvg'")
 
     if "error" in payload:
         _error_failed = payload["error"]

@@ -304,6 +304,14 @@ export const PLAYGROUND_CARDS: readonly PlaygroundCardEntry[] = [
     keywords: "hbond hbond timeline hydrogen bond gmx hbnum distance cutoff",
   },
   {
+    id: "md-saltbridge",
+    tab: "md",
+    title: "Salt-bridge timeline",
+    blurb: "getcontacts ionic pairs: two designed bridges across the 4.0 Å cutoff",
+    match: "Salt-bridge timeline",
+    keywords: "salt bridge saltbridge ionic contact getcontacts lysine glutamate arginine aspartate charged cutoff",
+  },
+  {
     id: "md-eco",
     tab: "md",
     title: "The MD ecosystem",

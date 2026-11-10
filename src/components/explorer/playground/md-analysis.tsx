@@ -13,6 +13,7 @@ import {
   Grid3x3,
   Info,
   Loader2,
+  Magnet,
   Network,
   Orbit,
   Play,
@@ -39,6 +40,7 @@ import { CHART, ParamSlider } from "@/components/explorer/playground/calc-ui";
 import { copyToClipboard, fmtNum } from "@/lib/format";
 import type {
   MdHbondResponse,
+  MdSaltBridgeResponse,
   MdTrajectoryResponse,
   MdXvgResponse,
   MdXvgSeries,
@@ -49,7 +51,7 @@ import { toast } from "sonner";
 /* Molecular Dynamics (round 249) — the pharmaml.md web twins          */
 /* ------------------------------------------------------------------ */
 /**
- * The "Molecular Dynamics" playground sub-tab, four cards:
+ * The "Molecular Dynamics" playground sub-tab, five cards:
  *
  *  (A) GROMACS export parser — paste .xvg/.ndx exports, one POST runs
  *      the REAL pharmaml.md.study pipeline on the server (the
@@ -64,7 +66,12 @@ import { toast } from "sonner";
  *      two phase-shifted donor–H···acceptor triads oscillate across the
  *      3.5 Å distance cutoff; `synthetic_hbond_trajectory` +
  *      `hbond_timeline` count per frame on the server.
- *  (D) The MD ecosystem — the static reference-card grid of the open
+ *  (D) Salt-bridge timeline — `getcontacts`' ionic criterion on a
+ *      designed two-bridge demo: Lys Nζ···Glu Cδ and Arg Nη1···Asp Cγ
+ *      oscillate across the 4.0 Å cutoff (distance-only, no angle
+ *      gate); `synthetic_salt_bridge_trajectory` +
+ *      `salt_bridge_timeline` count per frame on the server.
+ *  (E) The MD ecosystem — the static reference-card grid of the open
  *      source stack behind pharmaml.md.
  *
  * Charts are hand-rolled inline SVG in the house style of the
@@ -1810,6 +1817,198 @@ function HbondCard() {
 }
 
 /* ------------------------------------------------------------------ */
+/* (D) Salt-bridge timeline card — getcontacts' ionic criterion        */
+/* ------------------------------------------------------------------ */
+
+const SB_DEFAULT_FRAMES = "60";
+const SB_DEFAULT_SEED = "0";
+const SB_DEFAULT_NOISE = 0.03;
+
+function SaltBridgeCard() {
+  const [framesRaw, setFramesRaw] = useState(SB_DEFAULT_FRAMES);
+  const [seedRaw, setSeedRaw] = useState(SB_DEFAULT_SEED);
+  const [noise, setNoise] = useState(SB_DEFAULT_NOISE);
+  const [status, setStatus] = useState<Status>("idle");
+  const [result, setResult] = useState<MdSaltBridgeResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function resetParams() {
+    setFramesRaw(SB_DEFAULT_FRAMES);
+    setSeedRaw(SB_DEFAULT_SEED);
+    setNoise(SB_DEFAULT_NOISE);
+  }
+
+  async function run() {
+    const frames = Number.parseInt(framesRaw, 10);
+    if (!Number.isFinite(frames) || frames < 4 || frames > 200) {
+      setStatus("error");
+      setError("Frames must be an integer in [4, 200].");
+      return;
+    }
+    const seed = Number.parseInt(seedRaw, 10);
+    if (!Number.isFinite(seed) || seed < 0) {
+      setStatus("error");
+      setError("Seed must be a non-negative integer.");
+      return;
+    }
+    setStatus("running");
+    setError(null);
+    try {
+      const data = await postMdJson<MdSaltBridgeResponse>("/api/md/saltbridge", {
+        nFrames: frames,
+        seed,
+        noise,
+      });
+      setResult(data);
+      setStatus("done");
+    } catch (err) {
+      setStatus("error");
+      setError(err instanceof Error ? err.message : "Salt-bridge analysis failed.");
+    }
+  }
+
+  const cutoff = result?.cutoffs.distance ?? 4.0;
+
+  return (
+    <Card data-slot="card">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+          <Magnet className="size-5 shrink-0" aria-hidden="true" />
+          Salt-bridge timeline
+        </CardTitle>
+        <CardDescription>
+          <code className="font-mono text-xs">getcontacts</code> ionic contacts on a designed two-bridge demo:
+          Lys Nζ···Glu Cδ and Arg Nη1···Asp Cγ oscillate across the {cutoff} Å cutoff
+          (salt bridges are distance-only — no angle gate). The server runs the real{" "}
+          <code className="font-mono text-xs">synthetic_salt_bridge_trajectory</code> +{" "}
+          <code className="font-mono text-xs">salt_bridge_timeline</code>.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="space-y-1">
+            <Label htmlFor="sb-frames" className="text-xs text-muted-foreground">
+              Frames (4–200)
+            </Label>
+            <Input
+              id="sb-frames"
+              inputMode="numeric"
+              value={framesRaw}
+              onChange={(e) => setFramesRaw(e.target.value)}
+              className="h-8 font-mono text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="sb-seed" className="text-xs text-muted-foreground">
+              Seed
+            </Label>
+            <Input
+              id="sb-seed"
+              inputMode="numeric"
+              value={seedRaw}
+              onChange={(e) => setSeedRaw(e.target.value)}
+              className="h-8 font-mono text-xs"
+            />
+          </div>
+          <div className="col-span-2 sm:col-span-1">
+            <ParamSlider
+              id="sb-noise"
+              label="Thermal noise σ"
+              unit="Å"
+              min={0}
+              max={0.15}
+              step={0.01}
+              value={noise}
+              onChange={setNoise}
+              format={(v: number) => v.toFixed(2)}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <Button onClick={run} disabled={status === "running"}>
+            {status === "running" ? (
+              <>
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                Counting…
+              </>
+            ) : (
+              <>
+                <Play className="size-4" aria-hidden="true" />
+                Run salt-bridge analysis
+              </>
+            )}
+          </Button>
+          <Button variant="outline" onClick={resetParams} aria-label="Reset salt-bridge parameters to defaults">
+            <RotateCcw className="size-3.5" aria-hidden="true" />
+            Reset
+          </Button>
+        </div>
+
+        {status === "error" && (
+          <Alert variant="destructive">
+            <TriangleAlert className="size-4" aria-hidden="true" />
+            <AlertTitle>Salt-bridge analysis failed</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {result && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              {result.nFrames} frames · seed {result.seed} · noise {result.noise.toFixed(2)} Å ·
+              cutoff {result.cutoffs.distance} Å ·{" "}
+              {result.elapsedSeconds.toFixed(2)} s on the server.
+            </p>
+            <TimelineChart
+              time={result.time}
+              series={[
+                {
+                  label: "Salt bridges",
+                  color: CHART.emerald,
+                  values: result.counts,
+                },
+                {
+                  label: "Lys NZ···Glu CD",
+                  color: CHART.amber,
+                  values: result.distances[0] ?? [],
+                },
+                {
+                  label: "Arg NH1···Asp CG",
+                  color: CHART.rose,
+                  values: result.distances[1] ?? [],
+                },
+              ]}
+              ariaLabel={`Salt-bridge count and cation-anion distances over ${result.nFrames} frames: the count steps between 0 and 2 as the two designed bridges cross the 4.0 angstrom cutoff`}
+            />
+            <div className="flex flex-wrap gap-2">
+              <span className="flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 font-mono text-[11px] tabular-nums">
+                mean {fmtNum(result.stats.mean, 3)} bridges/frame
+              </span>
+              <span className="flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 font-mono text-[11px] tabular-nums">
+                peak {result.stats.max}
+              </span>
+              <span className="flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 font-mono text-[11px] tabular-nums">
+                ≥1 bridge in {Math.round(result.stats.bondedFraction * 100)}% of frames
+              </span>
+              <span className="flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 font-mono text-[11px] tabular-nums">
+                duty Lys {Math.round(result.stats.bridge1Fraction * 100)}% / Arg{" "}
+                {Math.round(result.stats.bridge2Fraction * 100)}%
+              </span>
+            </div>
+            <p className="text-xs leading-snug text-muted-foreground">
+              {result.method} Bridge 2 (Arg Nη1···Asp Cγ) leads bridge 1 by a sixth of a period,
+              so the trace holds a four-frame two-bridge plateau — a deliberately different
+              silhouette from the H-bond card&apos;s narrow 2-frame peak above.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Shell — the Molecular Dynamics sub-tab                              */
 /* ------------------------------------------------------------------ */
 
@@ -1819,6 +2018,7 @@ export function MdAnalysis() {
       <XvgCard />
       <TrajectoryCard />
       <HbondCard />
+      <SaltBridgeCard />
       <EcosystemCard />
     </div>
   );

@@ -55,9 +55,11 @@ from pharmaml.md import (
     rmsd,
     rmsd_trajectory,
     rmsf,
+    salt_bridge_timeline,
     salt_bridges,
     superpose,
     synthetic_hbond_trajectory,
+    synthetic_salt_bridge_trajectory,
     synthetic_trajectory,
     tica,
     to_kcal,
@@ -262,6 +264,37 @@ class TestTopologyAndTrajectory:
         with pytest.raises(MDAnalysisError, match="noise"):
             synthetic_hbond_trajectory(noise=-0.1)
 
+    def test_synthetic_salt_bridge_timeline_matches_design(self) -> None:
+        # The designed schedule: two phase-shifted distance oscillations
+        # across the 4.0 A cutoff — frames 0-5 break both, frame 6 forms
+        # only bridge 2, frames 7-10 hold BOTH (the stretched plateau),
+        # frame 11 keeps only bridge 1 — a deliberately different
+        # silhouette from the H-bond demo's narrow 2-frame peak.
+        demo = synthetic_salt_bridge_trajectory(n_frames=12, seed=0)
+        counts = salt_bridge_timeline(demo, positive=[0, 2], negative=[1, 3])
+        assert [int(c) for c in counts] == [0, 0, 0, 0, 0, 0, 1, 2, 2, 2, 2, 1]
+
+    def test_synthetic_salt_bridge_deterministic_and_self_consistent(self) -> None:
+        first = synthetic_salt_bridge_trajectory(n_frames=30, seed=5)
+        second = synthetic_salt_bridge_trajectory(n_frames=30, seed=5)
+        assert np.array_equal(first.coords, second.coords)
+        # The counts re-derive from the coordinates with the public API.
+        counts = salt_bridge_timeline(first, positive=[0, 2], negative=[1, 3])
+        again = salt_bridge_timeline(first, positive=[0, 2], negative=[1, 3])
+        assert np.array_equal(counts, again)
+        # Both bridges work for a living and neither is ever stuck.
+        assert 6 <= int((counts > 0).sum()) <= 24
+        assert int(counts.max()) == 2
+        # Topology: the four demo atoms are real charged residues.
+        assert first.topology.atom_names == ["NZ", "CD", "NH1", "CG"]
+        assert first.topology.residue_names == ["LYS", "GLU", "ARG", "ASP"]
+
+    def test_synthetic_salt_bridge_validation(self) -> None:
+        with pytest.raises(MDAnalysisError, match="n_frames"):
+            synthetic_salt_bridge_trajectory(n_frames=0)
+        with pytest.raises(MDAnalysisError, match="noise"):
+            synthetic_salt_bridge_trajectory(noise=-0.1)
+
 
 # -------------------------------------------------------------- align ---
 class TestAlignment:
@@ -430,6 +463,26 @@ class TestHydrogenBonds:
         assert salt_bridges_alias(charged, positive=[0], negative=[1, 2]) == [(0, 1)]
         assert salt_bridges(charged, positive=[1], negative=[0]) == [(1, 0)]
         assert salt_bridges(charged, positive=[2], negative=[0]) == []
+
+    def test_salt_bridge_timeline(self) -> None:
+        near = np.array([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]])
+        far = np.array([[0.0, 0.0, 0.0], [7.0, 0.0, 0.0]])
+        topo = Topology(atom_names=["NZ", "CD"])
+        traj = Trajectory(np.stack([near, far, near]), topo)
+        assert list(salt_bridge_timeline(traj, positive=[0], negative=[1])) == [
+            1.0,
+            0.0,
+            1.0,
+        ]
+
+    def test_salt_bridge_timeline_validation(self) -> None:
+        near = np.array([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]])
+        topo = Topology(atom_names=["NZ", "CD"])
+        traj = Trajectory(np.stack([near, near]), topo)
+        with pytest.raises(MDAnalysisError, match="out of range"):
+            salt_bridge_timeline(traj, positive=[0], negative=[9])
+        with pytest.raises(MDAnalysisError, match="cutoff"):
+            salt_bridge_timeline(traj, positive=[0], negative=[1], cutoff=0.0)
 
     def test_hbond_validation(self) -> None:
         frame = np.zeros((3, 3))
