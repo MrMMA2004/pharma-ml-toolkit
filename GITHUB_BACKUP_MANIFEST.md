@@ -1726,11 +1726,11 @@ inspection in `ui/widgets/image_panel.py` + the
 runner and build driver).  Honest totals **4,967 = 4,169 collect +
 798 doctest** (+20).
 
-## v1.2.162 release-zip homes (2026-11-10, round 250 — the MD viz twins + the unioned Studio Molecular-Dynamics page)
+## v1.2.162 release-zip homes (2026-11-10, round 250 — the MD viz twins + the unioned Studio Molecular-Dynamics page + the arena Pareto/SA PRs)
 
-`pharma-ml-toolkit-v1.2.162.zip` — 23,660,651 bytes, sha-256
-`269866da2cbe46c0bc32d278e01b40f12b5a13adef6dff38f6dffc38cbfffd5c`
-(1112 entries / 1064 files, testzip OK per home, real leaks 0 — the
+`pharma-ml-toolkit-v1.2.162.zip` — 23,669,477 bytes, sha-256
+`206107d31614aa94ae191de94b92b6e9c16eaea43e68588f3d9f5ca289d49ad4`
+(1117 entries / 1069 files, testzip OK per home, real leaks 0 — the
 growth over v1.2.161's 23,420,835 B is the new `viz/md_plots.py`
 module, the two MD test suites (`tests/test_viz_md_plots.py` 29 tests
 + `tests/test_md_plots.py` 10), the unioned Studio page
@@ -1756,18 +1756,18 @@ figure ownership, `N/A`-masked NaN cells, the "axes must match"
 misaligned-abscissa refusal, the ±inf refusal); the Studio page was
 adapted to it; their test file was rewritten to the union contract;
 the workflow and the missed pins were fixed.  Round 250 also closed
-the notebook leak class for good: the round-137 no-absolute-path
+the arena flow's PRs #7/#8 (the Pareto-study shortlist figure `viz/multiobjective_plots.py` + the SA-aware generation CLI objective) were merged clean on top and rode the third full gate; the notebook leak class for good: the round-137 no-absolute-path
 ritual is now code — `reexec_notebooks_209.py` scrubs the live venv
 prefix out of every text payload (str AND list — nbformat reads
 `text` as `str`) and FAILS the run if any absolute home path
 survives, so the release scanner's `real leaks: 0` is enforced at the
-source.  Honest totals **5,255 = 4,401 collect + 854 doctest** (+48
+source.  Honest totals **5,277 = 4,423 collect + 854 doctest** (+70
 over the 5,207 round-249 baseline: 29 viz-twin tests + 10 union
 md-plot tests + the md_plots doctest module + the Studio page suite
-and the arena index-pin edits); the gate is NINE chunks, all green
-(twice: once for the morning release, once for the union — chunk 1
-re-run green after the docs-index generator fix, chunk 4e re-run
-green after the utilities index pin).  Ruff zero, mypy clean across
-205 source files.  Census **1084/330,824**.  Web pins trued 5,255
-across overview/download-panel/page + census fallbacks 1084/330,824 +
++ the arena PRs' 22 tests and index-pin edits); the gate is NINE
+chunks, all green THREE times (morning release, the PR #6 union,
+and the PR #7/#8 union — chunk 1 re-run after the docs-index fix,
+chunk 4e re-run after the utilities index pin).  Ruff zero, mypy
+clean across 206 source files.  Census **1089/331,356**.  Web pins
+trued 5,277 across overview/download-panel/page + census fallbacks 1089/331,356 +
 `SHIPPED_TOOLKIT_VERSION` 1.2.162.
