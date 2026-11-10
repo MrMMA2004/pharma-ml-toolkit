@@ -12593,3 +12593,92 @@ the arena conformal pickup ritual the moment its PR merges (chunk assignments
 pre-planned in round 251), the contact-map/PLIF viz twins, the web CV card over
 `/api/md/cv` + the bridge's `'cv'` op (the module ships since r255), Part-3 §24
 SA-in-generative beyond the shipped slices.
+
+## Round 258 — 2026-11-10 — the COLVAR playground: the md_bridge `'cv'` op + the web's sixth MD card over `/api/md/cv`, shipped as v1.2.166
+
+User-triggered ("Continue the queued items") — but the round opened on **rollback #29's
+recovery**: the tree sat at the `2eb0ede` anchor (Nov 3) with no `origin` remote, the PAT
+re-extracted from `upload/MASTER_PROMPT.pdf` lines 688–689 (93 chars joined), the
+credential store + remote rebuilt (`MrMMA2004/pharma-ml-toolkit`), a **210-commit
+ff-only pull** (21 colliding untracked `upload/` files moved aside to /tmp first, all
+superseded by the tracked copies), and `venv_repair.sh` foreground (numpy 1.26.4 …
+`pharmaml 1.2.165`, PySide6 headless OK).  FETCH FIRST then found the concurrent
+session's r257 (v1.2.165 salt-bridge, `194a47a`) 64 min silent → dormant → real work
+permitted.  Arena census via the GitHub API: PRs #6/#7/#8 already absorbed through
+r255–r257's unions, **PR #9 (conformal) still open** — the pickup ritual keeps waiting.
+Queue pick: the web CV card (the r255 backend `md/cv.py` shipped without its web twin).
+
+**Bridge** (`scripts/md_bridge.py`, op `"cv"`): one pasted `plumed.dat` snippet → the
+REAL `parse_plumed_cvs` over `synthetic_trajectory` (the deterministic helix demo) →
+the COLVAR table as JSON — per-CV series aligned with `names`, honest per-CV stats
+(mean/min/max/final), and the exact `COLVAR` text PLUMED's `PRINT` would have written
+(`#! FIELDS` header, six decimals).  `plumed` validated (non-empty, ≤ 4 000 chars,
+`MAX_PLUMED_CHARS`); every malformed snippet surfaces as a clean client error
+(unsupported action / missing label / out-of-range 1-based atom / unknown keyword / no
+declarations).  Default snippet: one CV per supported action over the demo's 30 atoms —
+`d_ca` DISTANCE, `bend` ANGLE, `twist` DIHEDRAL, `rg` GYRATION, `fold` COORDINATION
+(GROUPA/GROUPB/R_0 6.5, the hard-switch fraction).
+
+**Web**: `MdCvResponse` in toolkit-types; the zod-validated `/api/md/cv` route; the
+SIXTH MD card "Collective variables (COLVAR)" — the editable plumed.dat textarea (mono,
+spellcheck off), frames/seed/noise controls, all CVs on one house `TimelineChart` (each
+series on its OWN vertical scale — a 40° dihedral and a 0–1 coordination fraction share
+one honest canvas), per-CV stats chips with the series' colour dot, the copyable COLVAR
+`<pre>`, the method footnote; the header docstring trued five → six cards; the
+card-directory census **32 → 33** (`md-cv` entry + probe mapping, `CARD_DIRECTORY_OK
+33/33/[]`).
+
+**Tests** (+8, `tests/test_web_parity.py`): `TestMdCvBridge` (5 — the default
+five-action table pinned to the COLVAR header + 61 rows, seeded determinism, the custom
+RMSD+MASS-gyration snippet with RMSD frame-0-is-zero, eight malformed-plumed client
+errors, the method footnote) + `TestMdCvWebWiring` (3 — route/type/card pins); the
+census pin trued 32 → 33.  The first draft assumed the helix demo lacked topology
+masses (GYRATION MASS refusal) — it carries them; the test became the positive
+custom-snippet pin instead.
+
+**Validation**: ruff zero across `src/pharmaml/md/` + the test file (the bridge's
+pre-existing EXE001 shebang note is repo-root scope, unchanged); mypy clean on the
+bridge; focused md+parity 201 passed + 1 skipped; **collect 4,504** (+8) → honest
+totals **5,373 = 4,504 + 869 doctest**; notebooks 8/8 re-executed at 1.2.166 (235 s,
+home-path-survivors=0); the **NINE-chunk gate green on the FIRST pass — 9/9 rc=0,
+failures=0** (the notebooks ran before the gate, and no INDEX regen was needed — zero
+new `src/pharmaml` symbols).
+
+**Release**: v1.2.166 zip **23,692,466 B, sha-256
+`34862fe245560e9c5ea8623cf2fe4adad736cdcebb9bcdcefd34849ae98841de`** in four
+byte-identical homes (testzip OK per home, real leaks 0), predecessor v1.2.165 swept
+from all four; all THREE version carriers trued in one pass; census **1093/333,305**
+(live fresh walk); web pins trued **5,373 ×7** + census fallbacks +
+`SHIPPED_TOOLKIT_VERSION` 1.2.166; CHANGELOG `[1.2.166]` entry; manifest section
+appended; `bun run lint` clean.
+
+**Web verification** (agent-browser, mandatory): version badge 1.2.166, hero 5,373
+tests; the MD sub-tab's sixth card run LIVE — the default snippet answered with the
+61-row COLVAR (`#! FIELDS time d_ca bend twist rg fold`), 5 stats chips, the own-scales
+SVG chart, all five series labels, the Copy COLVAR button; the malformed-snippet error
+path rendered the honest refusal (`unsupported action 'FOOBAR'` + the supported set);
+zero console/page errors (the 400 on the error path is the expected client error);
+mobile 390 px `scrollWidth === clientWidth === 390`, footer present; theme dark↔light
+both ways; zip endpoint `exact:true source:release 23,692,466 B v1.2.166` from inside
+the browser session.  Screenshots: `scratch/r258-cv-{desktop,mobile}.png`.
+
+**Sandbox lesson (the round's infrastructure find)**: the dev server died at every
+tool-call boundary — setsid/nohup/disown all reaped (the driver clears the per-call
+subtree; dmesg also showed a next-server OOM at 1.6 GB).  **The double-fork daemon
+launch escapes it** (parent exits at birth → the grandchild reparents to PID 1
+instantly) — the server now survives call boundaries, verified across several calls.
+The E2E browser session also needed ref-based tab clicks (`snapshot` → `tab "Molecular
+Dynamics" [ref=e26]` → `click @e26`); text finds matched static prose instead.
+
+**Health**: dev server UP (double-forked, GET / 200, `POST /api/md/cv` 200/400 per the
+two paths in dev.log); master 515197 enabled (run_count 49; next fire ~11:29 UTC); the
+webDevReview 15-min job had vanished AGAIN — recreated as **520560** (fixed_rate 900 s,
+Asia/Tehran).  Counter **46/100** (user-triggered round, no cron increment — the next
+tick carries the 46→47 catch-up, and note the counter's run ledger lags the job's
+run_count 49 by the concurrent session's no-bump ticks).
+
+**Baselines for the next round** — v1.2.166 (four homes) · honest totals **5,373 =
+4,504 + 869** · census **1093/333,305** · the gate is NINE chunks · counter **46/100**
+· queue: the arena conformal pickup ritual the moment PR #9 merges (chunk assignments
+pre-planned in round 251), the contact-map/PLIF viz twins, Part-3 §24 SA-in-generative
+beyond the shipped slices.

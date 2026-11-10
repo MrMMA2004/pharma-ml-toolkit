@@ -1270,6 +1270,35 @@ export interface MdSaltBridgeResponse {
   method: string;
 }
 
+/** Response of POST /api/md/cv — the COLVAR playground: the pasted
+ * plumed.dat snippet parsed and computed over the deterministic
+ * alpha-helix demo by the real toolkit's parse_plumed_cvs. Every series
+ * rides on one finite-only time axis; `colvar` is the exact text
+ * PLUMED's PRINT would have written (`#! FIELDS` header, six decimals). */
+export interface MdCvResponse {
+  nFrames: number;
+  seed: number;
+  noise: number;
+  nAtoms: number;
+  time: number[];
+  /** CV labels in declaration order (unique, identifier-safe). */
+  names: string[];
+  /** One per-CV series per label, aligned with `names`. */
+  series: number[][];
+  /** Honest per-CV stats over the frames, aligned with `names`. */
+  stats: Array<{
+    label: string;
+    mean: number;
+    min: number;
+    max: number;
+    final: number;
+  }>;
+  /** The COLVAR text (#! FIELDS header + one row per frame). */
+  colvar: string;
+  elapsedSeconds: number;
+  method: string;
+}
+
 /** Response of POST /api/md/trajectory — the deterministic synthetic
  * alpha-helix (10 residues × N/CA/C, residues 5–7 a flexible loop)
  * analysed by the real toolkit: RMSD after Kabsch superposition, Rg,

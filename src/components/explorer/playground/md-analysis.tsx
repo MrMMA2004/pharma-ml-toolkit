@@ -10,6 +10,7 @@ import {
   ExternalLink,
   FileSearch,
   FileText,
+  Gauge,
   Grid3x3,
   Info,
   Loader2,
@@ -36,9 +37,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { CHART, ParamSlider } from "@/components/explorer/playground/calc-ui";
 import { copyToClipboard, fmtNum } from "@/lib/format";
 import type {
+  MdCvResponse,
   MdHbondResponse,
   MdSaltBridgeResponse,
   MdTrajectoryResponse,
@@ -51,7 +54,7 @@ import { toast } from "sonner";
 /* Molecular Dynamics (round 249) — the pharmaml.md web twins          */
 /* ------------------------------------------------------------------ */
 /**
- * The "Molecular Dynamics" playground sub-tab, five cards:
+ * The "Molecular Dynamics" playground sub-tab, six cards:
  *
  *  (A) GROMACS export parser — paste .xvg/.ndx exports, one POST runs
  *      the REAL pharmaml.md.study pipeline on the server (the
@@ -71,7 +74,14 @@ import { toast } from "sonner";
  *      oscillate across the 4.0 Å cutoff (distance-only, no angle
  *      gate); `synthetic_salt_bridge_trajectory` +
  *      `salt_bridge_timeline` count per frame on the server.
- *  (E) The MD ecosystem — the static reference-card grid of the open
+ *  (E) Collective variables (COLVAR) — the PLUMED-style enhanced-
+ *      sampling vocabulary as a playground: edit a plumed.dat snippet
+ *      (DISTANCE / ANGLE / DIHEDRAL / COORDINATION / RMSD / GYRATION)
+ *      and one POST runs the real `parse_plumed_cvs` over the helix
+ *      demo — per-CV timelines on their own honest scales, per-CV
+ *      stats, and the exact COLVAR text PLUMED's PRINT would have
+ *      written, copyable.
+ *  (F) The MD ecosystem — the static reference-card grid of the open
  *      source stack behind pharmaml.md.
  *
  * Charts are hand-rolled inline SVG in the house style of the
@@ -2009,6 +2019,265 @@ function SaltBridgeCard() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Collective variables — the COLVAR playground (round 258)            */
+/* ------------------------------------------------------------------ */
+
+const CV_DEFAULT_FRAMES = "60";
+const CV_DEFAULT_SEED = "0";
+const CV_DEFAULT_NOISE = 0.25;
+const CV_DEFAULT_PLUMED = `# the helix demo: 10 residues x (N, CA, C), atoms 1-30
+d_ca: DISTANCE ATOMS=2,5
+bend: ANGLE ATOMS=2,5,8
+twist: DIHEDRAL ATOMS=1,2,5,8
+rg: GYRATION ATOMS=1-30
+fold: COORDINATION GROUPA=1-15 GROUPB=16-30 R_0=6.5`;
+
+/** Per-CV accents in declaration order (the house palette, cycled —
+ * one colour per collective variable, no blue/indigo). */
+const CV_COLORS = [
+  CHART.emerald,
+  CHART.amber,
+  CHART.rose,
+  CHART.teal,
+  CHART.stone,
+  CHART.emeraldDark,
+];
+
+function CvCard() {
+  const [framesRaw, setFramesRaw] = useState(CV_DEFAULT_FRAMES);
+  const [seedRaw, setSeedRaw] = useState(CV_DEFAULT_SEED);
+  const [noise, setNoise] = useState(CV_DEFAULT_NOISE);
+  const [plumed, setPlumed] = useState(CV_DEFAULT_PLUMED);
+  const [status, setStatus] = useState<Status>("idle");
+  const [result, setResult] = useState<MdCvResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  function resetParams() {
+    setFramesRaw(CV_DEFAULT_FRAMES);
+    setSeedRaw(CV_DEFAULT_SEED);
+    setNoise(CV_DEFAULT_NOISE);
+    setPlumed(CV_DEFAULT_PLUMED);
+  }
+
+  async function run() {
+    const frames = Number.parseInt(framesRaw, 10);
+    if (!Number.isFinite(frames) || frames < 4 || frames > 200) {
+      setStatus("error");
+      setError("Frames must be an integer in [4, 200].");
+      return;
+    }
+    const seed = Number.parseInt(seedRaw, 10);
+    if (!Number.isFinite(seed) || seed < 0) {
+      setStatus("error");
+      setError("Seed must be a non-negative integer.");
+      return;
+    }
+    if (!plumed.trim()) {
+      setStatus("error");
+      setError("The plumed.dat snippet needs at least one CV declaration.");
+      return;
+    }
+    setStatus("running");
+    setError(null);
+    try {
+      const data = await postMdJson<MdCvResponse>("/api/md/cv", {
+        nFrames: frames,
+        seed,
+        noise,
+        plumed,
+      });
+      setResult(data);
+      setStatus("done");
+    } catch (err) {
+      setStatus("error");
+      setError(err instanceof Error ? err.message : "Collective-variable analysis failed.");
+    }
+  }
+
+  async function copyColvar() {
+    if (!result) return;
+    const ok = await copyToClipboard(result.colvar);
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } else {
+      toast.error("Copy failed — the clipboard refused the COLVAR.");
+    }
+  }
+
+  const chartSeries =
+    result?.names.map((name, i) => ({
+      label: name,
+      values: result.series[i] ?? [],
+      color: CV_COLORS[i % CV_COLORS.length],
+    })) ?? [];
+
+  return (
+    <Card data-slot="card">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+          <Gauge className="size-5 shrink-0" aria-hidden="true" />
+          Collective variables (COLVAR)
+        </CardTitle>
+        <CardDescription>
+          The PLUMED-style enhanced-sampling vocabulary as a playground: edit the{" "}
+          <code className="font-mono text-xs">plumed.dat</code> snippet below —{" "}
+          <code className="font-mono text-xs">DISTANCE</code>,{" "}
+          <code className="font-mono text-xs">ANGLE</code>,{" "}
+          <code className="font-mono text-xs">DIHEDRAL</code>,{" "}
+          <code className="font-mono text-xs">COORDINATION</code>,{" "}
+          <code className="font-mono text-xs">RMSD</code>,{" "}
+          <code className="font-mono text-xs">GYRATION</code> — and one POST runs the real{" "}
+          <code className="font-mono text-xs">parse_plumed_cvs</code> over the deterministic helix
+          demo (30 atoms, 1-based PLUMED numbering; unknown keywords are refused, never silently
+          ignored).
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-1">
+          <Label htmlFor="cv-plumed" className="text-xs text-muted-foreground">
+            plumed.dat — one CV per line (label: ACTION KEY=VALUE)
+          </Label>
+          <Textarea
+            id="cv-plumed"
+            value={plumed}
+            onChange={(e) => setPlumed(e.target.value)}
+            spellCheck={false}
+            aria-label="The plumed.dat snippet declaring the collective variables"
+            className="min-h-36 resize-y font-mono text-xs leading-relaxed"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="space-y-1">
+            <Label htmlFor="cv-frames" className="text-xs text-muted-foreground">
+              Frames (4–200)
+            </Label>
+            <Input
+              id="cv-frames"
+              inputMode="numeric"
+              value={framesRaw}
+              onChange={(e) => setFramesRaw(e.target.value)}
+              className="h-8 font-mono text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="cv-seed" className="text-xs text-muted-foreground">
+              Seed
+            </Label>
+            <Input
+              id="cv-seed"
+              inputMode="numeric"
+              value={seedRaw}
+              onChange={(e) => setSeedRaw(e.target.value)}
+              className="h-8 font-mono text-xs"
+            />
+          </div>
+          <div className="col-span-2 sm:col-span-1">
+            <ParamSlider
+              id="cv-noise"
+              label="Thermal noise σ"
+              unit="Å"
+              min={0}
+              max={1}
+              step={0.01}
+              value={noise}
+              onChange={setNoise}
+              format={(v: number) => v.toFixed(2)}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <Button onClick={run} disabled={status === "running"}>
+            {status === "running" ? (
+              <>
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                Computing CVs…
+              </>
+            ) : (
+              <>
+                <Play className="size-4" aria-hidden="true" />
+                Run collective variables
+              </>
+            )}
+          </Button>
+          <Button variant="outline" onClick={resetParams} aria-label="Reset the plumed.dat snippet and parameters to defaults">
+            <RotateCcw className="size-3.5" aria-hidden="true" />
+            Reset
+          </Button>
+        </div>
+
+        {status === "error" && (
+          <Alert variant="destructive">
+            <TriangleAlert className="size-4" aria-hidden="true" />
+            <AlertTitle>Collective-variable analysis failed</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {result && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              {result.nFrames} frames · seed {result.seed} · noise {result.noise.toFixed(2)} Å ·{" "}
+              {result.nAtoms} atoms · {result.names.length} CVs ·{" "}
+              {result.elapsedSeconds.toFixed(2)} s on the server.
+            </p>
+            <TimelineChart
+              time={result.time}
+              series={chartSeries}
+              ariaLabel={`The ${result.names.length} collective variables over ${result.nFrames} frames, each series on its own vertical scale: ${result.names.join(", ")}`}
+            />
+            <div className="flex flex-wrap gap-2">
+              {result.stats.map((s) => (
+                <span
+                  key={s.label}
+                  className="flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 font-mono text-[11px] tabular-nums"
+                >
+                  <span aria-hidden="true" className="size-2 rounded-full" style={{ backgroundColor: CV_COLORS[result.names.indexOf(s.label) % CV_COLORS.length] }} />
+                  {s.label}: mean {fmtNum(s.mean, 3)} · {fmtNum(s.min, 3)}…{fmtNum(s.max, 3)} · final{" "}
+                  {fmtNum(s.final, 3)}
+                </span>
+              ))}
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="cv-colvar" className="text-xs text-muted-foreground">
+                  COLVAR — exactly what PLUMED&apos;s PRINT would have written
+                </Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copyColvar}
+                  aria-label="Copy the COLVAR text to the clipboard"
+                  className="h-7 px-2 text-xs"
+                >
+                  <Copy className="size-3.5" aria-hidden="true" />
+                  {copied ? "Copied" : "Copy COLVAR"}
+                </Button>
+              </div>
+              <pre
+                id="cv-colvar"
+                aria-label="The COLVAR table: one row per frame, time first, every CV in declaration order"
+                className="max-h-40 overflow-y-auto rounded-md border bg-muted/40 p-2 font-mono text-[11px] leading-relaxed"
+              >
+                {result.colvar}
+              </pre>
+            </div>
+            <p className="text-xs leading-snug text-muted-foreground">
+              {result.method} Each series rides its own vertical scale (the legend carries the
+              per-series ranges) — a 40° dihedral and a 0–1 coordination fraction share one honest
+              canvas without lying about magnitudes.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Shell — the Molecular Dynamics sub-tab                              */
 /* ------------------------------------------------------------------ */
 
@@ -2019,6 +2288,7 @@ export function MdAnalysis() {
       <TrajectoryCard />
       <HbondCard />
       <SaltBridgeCard />
+      <CvCard />
       <EcosystemCard />
     </div>
   );

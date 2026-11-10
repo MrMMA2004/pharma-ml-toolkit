@@ -1,3 +1,36 @@
+## [1.2.166] — 2026-11-10
+
+### Added — round 258: the COLVAR playground (the `plumed.dat` mini-parser as a web card) — bridge op + web card
+
+* `scripts/md_bridge.py` — op `"cv"`: one pasted `plumed.dat` snippet →
+  the REAL `parse_plumed_cvs` over `synthetic_trajectory` (the
+  deterministic alpha-helix demo) → the COLVAR table as JSON — per-CV
+  series aligned with `names`, honest per-CV stats (mean / min / max /
+  final), and the exact `COLVAR` text PLUMED's `PRINT` would have
+  written (`#! FIELDS` header, six decimals).  `plumed` is validated
+  (non-empty, ≤ 4 000 chars); every malformed snippet surfaces as a
+  clean client error (unsupported action, missing label, out-of-range
+  1-based atom, unknown keyword, no declarations).  The default
+  snippet declares one CV per supported action over the demo's 30
+  atoms: `d_ca` DISTANCE, `bend` ANGLE, `twist` DIHEDRAL, `rg`
+  GYRATION, `fold` COORDINATION (GROUPA/GROUPB/R_0, the hard-switch
+  fraction).
+* Web — the Molecular Dynamics tab's sixth card, "Collective variables
+  (COLVAR)": an editable `plumed.dat` textarea (mono, spellcheck off)
+  + frames/seed/noise controls, a POST to the new zod-validated
+  `/api/md/cv` route, all CVs on one house `TimelineChart` (each
+  series on its OWN vertical scale — a 40° dihedral and a 0–1
+  coordination fraction share one honest canvas), per-CV stats chips
+  with the series' colour dot, and the copyable `COLVAR` text block.
+* `tests/test_web_parity.py` — `TestMdCvBridge` (the bridge contract:
+  the default five-action table pinned to the COLVAR header, seeded
+  determinism, the RMSD-frame-0-is-zero custom snippet, eight
+  malformed-plumed client errors, the method footnote) +
+  `TestMdCvWebWiring` (route/type/card wiring pins) + the
+  card-directory census trued 32 → 33 (the `md-cv` entry + its probe
+  mapping); +10 tests.
+* Types — `MdCvResponse` in `toolkit-types.ts`.
+
 ## [1.2.165] — 2026-11-10
 
 ### Added — round 257: the salt-bridge timeline (`getcontacts`' ionic criterion on a designed demo) — toolkit demo + bridge op + web card

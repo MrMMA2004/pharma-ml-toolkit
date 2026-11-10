@@ -12,6 +12,10 @@ Runs inside the toolkit virtualenv and wires ONLY the public
     op "saltbridge" -> synthetic_salt_bridge_trajectory ->
         salt_bridge_timeline + the per-bridge cation-anion distance
         series (getcontacts' ionic interaction)
+    op "cv"         -> synthetic_trajectory -> parse_plumed_cvs: a
+        pasted plumed.dat snippet's collective variables computed over
+        the helix demo, returned as the COLVAR table (per-CV series +
+        stats + the exact text PLUMED's PRINT would have written)
     op "xvg"        -> read_ligand_folder semantics over pasted text
         (tempdir) -> series + stats + metric_correlations + summary_csv
 
@@ -21,6 +25,8 @@ Request (stdin, JSON)::
      "contactCutoff": 4.5}
     {"op": "hbond", "nFrames": 60, "seed": 0, "noise": 0.03}
     {"op": "saltbridge", "nFrames": 60, "seed": 0, "noise": 0.03}
+    {"op": "cv", "nFrames": 60, "seed": 0, "noise": 0.25,
+     "plumed": "d: DISTANCE ATOMS=2,5\nrg: GYRATION ATOMS=1-30"}
     {"op": "xvg", "files": [{"name": "ligand_rmsd.xvg", "content": "..."}],
      "smoothHbonds": true}
 
@@ -48,6 +54,18 @@ EXIT_ERROR = 2
 MAX_FILES = 12
 MAX_FILE_CHARS = 200_000
 MAX_FRAMES = 200
+MAX_PLUMED_CHARS = 4_000
+
+# The card's default plumed.dat: one declaration per supported action,
+# all over the helix demo's 30 atoms (10 residues x N, CA, C).
+DEFAULT_PLUMED = (
+    "# the helix demo: 10 residues x (N, CA, C), atoms 1-30\n"
+    "d_ca: DISTANCE ATOMS=2,5\n"
+    "bend: ANGLE ATOMS=2,5,8\n"
+    "twist: DIHEDRAL ATOMS=1,2,5,8\n"
+    "rg: GYRATION ATOMS=1-30\n"
+    "fold: COORDINATION GROUPA=1-15 GROUPB=16-30 R_0=6.5\n"
+)
 
 
 def _clean(value: Any) -> Any:
@@ -411,6 +429,84 @@ def run_salt_bridge(request: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def run_cv(request: dict[str, Any]) -> dict[str, Any]:
+    """The plumed.dat mini-parser on the deterministic helix demo:
+    one pasted ``plumed`` snippet -> the COLVAR table (per-CV series,
+    honest stats, the exact text PLUMED's PRINT would have written)."""
+    from pharmaml.exceptions import MDAnalysisError
+    from pharmaml.md.cv import parse_plumed_cvs
+    from pharmaml.md.trajectory import synthetic_trajectory
+
+    n_frames = request.get("nFrames", 60)
+    seed = request.get("seed", 0)
+    noise = request.get("noise", 0.25)
+    plumed = request.get("plumed", DEFAULT_PLUMED)
+    if not isinstance(n_frames, int) or isinstance(n_frames, bool):
+        return {"error": "nFrames must be an integer"}
+    if not 4 <= n_frames <= MAX_FRAMES:
+        return {"error": f"nFrames must be in [4, {MAX_FRAMES}]"}
+    if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
+        return {"error": "seed must be a non-negative integer"}
+    if not isinstance(noise, (int, float)) or isinstance(noise, bool):
+        return {"error": "noise must be a number"}
+    if not 0.0 <= float(noise) <= 1.0:
+        return {"error": "noise must be in [0, 1]"}
+    if not isinstance(plumed, str) or not plumed.strip():
+        return {"error": "plumed must be a non-empty plumed.dat snippet"}
+    if len(plumed) > MAX_PLUMED_CHARS:
+        return {
+            "error": f"plumed exceeds {MAX_PLUMED_CHARS} characters"
+        }
+
+    started = time.perf_counter()
+    traj = synthetic_trajectory(
+        n_frames=n_frames, seed=seed, noise=float(noise)
+    )
+    try:
+        table = parse_plumed_cvs(traj, plumed)
+    except MDAnalysisError as exc:
+        return {"error": f"plumed: {exc}"}
+
+    series = [
+        [round(float(v), 6) for v in table.series[:, col]]
+        for col in range(table.n_cvs)
+    ]
+    stats = [
+        {
+            "label": name,
+            "mean": float(vals.mean()),
+            "min": float(vals.min()),
+            "max": float(vals.max()),
+            "final": float(vals[-1]),
+        }
+        for name, vals in zip(table.names, (
+            table.series[:, col] for col in range(table.n_cvs)
+        ))
+    ]
+    payload: dict[str, Any] = {
+        "nFrames": n_frames,
+        "seed": seed,
+        "noise": float(noise),
+        "nAtoms": traj.n_atoms,
+        "time": _finite_list(table.time),
+        "names": list(table.names),
+        "series": series,
+        "stats": stats,
+        "colvar": table.to_colvar(),
+        "elapsedSeconds": round(time.perf_counter() - started, 3),
+        "method": (
+            "pharmaml.md.cv — the PLUMED-style collective variables: the "
+            "pasted plumed.dat is parsed by parse_plumed_cvs (labels, "
+            "1-based ATOMS with comma lists and a-b ranges, GROUPA/"
+            "GROUPB/R_0, the MASS flag; unknown keywords are refused, "
+            "never silently ignored) and computed over the deterministic "
+            "synthetic alpha-helix demo; the table is the COLVAR "
+            "equivalent on one finite-only time axis"
+        ),
+    }
+    return payload
+
+
 def main() -> int:
     try:
         request = json.load(sys.stdin)
@@ -427,10 +523,14 @@ def main() -> int:
         payload = run_hbond(request)
     elif op == "saltbridge":
         payload = run_salt_bridge(request)
+    elif op == "cv":
+        payload = run_cv(request)
     elif op == "xvg":
         payload = run_xvg(request)
     else:
-        return _error("op must be 'trajectory', 'hbond', 'saltbridge' or 'xvg'")
+        return _error(
+            "op must be 'trajectory', 'hbond', 'saltbridge', 'cv' or 'xvg'"
+        )
 
     if "error" in payload:
         _error_failed = payload["error"]

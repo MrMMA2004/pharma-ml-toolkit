@@ -312,6 +312,14 @@ export const PLAYGROUND_CARDS: readonly PlaygroundCardEntry[] = [
     keywords: "salt bridge saltbridge ionic contact getcontacts lysine glutamate arginine aspartate charged cutoff",
   },
   {
+    id: "md-cv",
+    tab: "md",
+    title: "Collective variables (COLVAR)",
+    blurb: "edit a plumed.dat: DISTANCE/ANGLE/DIHEDRAL/COORDINATION/RMSD/GYRATION over the helix demo",
+    match: "Collective variables (COLVAR)",
+    keywords: "collective variable colvar plumed metadynamics umbrella sampling enhanced bias distance angle dihedral coordination rmsd gyration",
+  },
+  {
     id: "md-eco",
     tab: "md",
     title: "The MD ecosystem",

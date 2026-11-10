@@ -1017,15 +1017,15 @@ class TestCardFinderParity:
         )
         assert result.returncode == 0, result.stdout + result.stderr
         assert "CARD_DIRECTORY_OK" in result.stdout
-        # the census: 32 cards (24 + the two Surgery entries of
-        # 100x-130 + the SA score card of part3 §24 + the five
-        # Molecular Dynamics entries of rounds 249/252/257), 32
+        # the census: 33 cards (24 + the two Surgery entries of
+        # 100x-130 + the SA score card of part3 §24 + the six
+        # Molecular Dynamics entries of rounds 249/252/257/258), 33
         # unique ids, zero problems
         start = result.stdout.index("{")
         end = result.stdout.index("}", start) + 1
         report = json.loads(result.stdout[start:end])
-        assert report["entries"] == 32, report
-        assert report["ids"] == 32, report
+        assert report["entries"] == 33, report
+        assert report["ids"] == 33, report
         assert report["problems"] == [], report
 
     @needs_card_finder
@@ -1050,6 +1050,181 @@ class TestCardFinderParity:
         styles = (REPO_ROOT / "src" / "app" / "globals.css").read_text(encoding="utf-8")
         assert ".pg-card-flash" in styles
         assert "@keyframes pg-card-flash" in styles
+
+
+class TestMdCvBridge:
+    """Round 258: the COLVAR playground's bridge contract.
+
+    The Molecular Dynamics sub-tab's sixth card mirrors the shipped
+    ``md/cv.py`` (round 255's PLUMED-style collective variables) over
+    the repo-root bridge pattern: one POST pipes a pasted
+    ``plumed.dat`` snippet through ``scripts/md_bridge.py`` op ``cv``
+    — the REAL ``parse_plumed_cvs`` runs over the deterministic helix
+    demo and returns the per-CV series, honest stats and the exact
+    COLVAR text PLUMED's PRINT would have written.  These guards pin
+    the contract: the default five-action snippet, seeded determinism,
+    the COLVAR header format, and the client-error exits for every
+    malformed plumed.dat the web textarea can produce."""
+
+    BRIDGE_PY = REPO_ROOT / "scripts" / "md_bridge.py"
+
+    needs_bridge = pytest.mark.skipif(
+        not BRIDGE_PY.is_file(),
+        reason="web checkout (<repo>/scripts/md_bridge.py) required; "
+        "the zip-only tree skips — its probes live outside the shipped tree",
+    )
+
+    DEFAULT_PLUMED = (
+        "# the helix demo: 10 residues x (N, CA, C), atoms 1-30\n"
+        "d_ca: DISTANCE ATOMS=2,5\n"
+        "bend: ANGLE ATOMS=2,5,8\n"
+        "twist: DIHEDRAL ATOMS=1,2,5,8\n"
+        "rg: GYRATION ATOMS=1-30\n"
+        "fold: COORDINATION GROUPA=1-15 GROUPB=16-30 R_0=6.5\n"
+    )
+
+    def _bridge(self, payload: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+
+    @needs_bridge
+    def test_default_snippet_pins_the_five_action_table(self) -> None:
+        result = self._bridge({"op": "cv"})
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        # one declaration per supported action, in declaration order
+        assert response["names"] == ["d_ca", "bend", "twist", "rg", "fold"]
+        assert response["nAtoms"] == 30
+        assert response["nFrames"] == 60
+        assert len(response["series"]) == 5
+        assert all(len(s) == 60 for s in response["series"])
+        # the COLVAR header is PLUMED's own: FIELDS time + every label
+        assert response["colvar"].splitlines()[0] == (
+            "#! FIELDS time d_ca bend twist rg fold"
+        )
+        assert len(response["colvar"].splitlines()) == 61
+        # honest per-CV stats, aligned with the names
+        assert [s["label"] for s in response["stats"]] == response["names"]
+        d_ca = response["stats"][0]
+        assert d_ca["min"] <= d_ca["mean"] <= d_ca["max"]
+        # the coordination CV is a 0..1 fraction by construction
+        fold = response["stats"][4]
+        assert 0.0 <= fold["min"] and fold["max"] <= 1.0
+
+    @needs_bridge
+    def test_cv_is_deterministic_per_seed(self) -> None:
+        payload = {
+            "op": "cv",
+            "nFrames": 40,
+            "seed": 11,
+            "noise": 0.2,
+            "plumed": self.DEFAULT_PLUMED,
+        }
+        first = self._bridge(payload)
+        second = self._bridge(payload)
+        assert first.returncode == 0 and second.returncode == 0
+        assert json.loads(first.stdout)["series"] == json.loads(second.stdout)["series"]
+
+    @needs_bridge
+    def test_custom_snippet_rides_the_one_based_atoms(self) -> None:
+        result = self._bridge(
+            {"op": "cv", "plumed": "ro: RMSD ATOMS=1-30\nw: GYRATION ATOMS=1-30 MASS"}
+        )
+        # RMSD measures against the trajectory's own first frame (the
+        # honest subset: REFERENCE= files are refused) and GYRATION
+        # MASS rides the demo topology's masses — both compute
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["names"] == ["ro", "w"]
+        assert len(response["series"]) == 2
+        # RMSD at frame 0 is exactly zero (the reference IS frame 0)
+        assert response["series"][0][0] == 0.0
+        assert response["colvar"].splitlines()[0] == "#! FIELDS time ro w"
+
+    @needs_bridge
+    def test_bridge_rejects_malformed_plumed_as_client_errors(self) -> None:
+        for payload, fragment in (
+            ({"op": "cv", "plumed": "x: FOOBAR ATOMS=1,2"}, "unsupported action"),
+            ({"op": "cv", "plumed": "DISTANCE ATOMS=1,2"}, "every CV needs a label"),
+            ({"op": "cv", "plumed": "d: DISTANCE ATOMS=1,99"}, "out of range"),
+            ({"op": "cv", "plumed": "# only comments"}, "no CV declarations"),
+            ({"op": "cv", "plumed": "   "}, "non-empty"),
+            ({"op": "cv", "plumed": "d: DISTANCE ATOMS=1,2\nro: RMSD ATOMS=1-30 COMPONENTS"}, "KEY=VALUE"),
+            ({"op": "cv", "nFrames": 3}, "nFrames"),
+            ({"op": "cv", "seed": -1}, "seed"),
+        ):
+            result = self._bridge(payload)
+            assert result.returncode == 2, (payload, result.stdout)
+            assert fragment in json.loads(result.stdout)["error"], payload
+
+    @needs_bridge
+    def test_method_footnote_names_the_real_api(self) -> None:
+        result = self._bridge({"op": "cv", "plumed": "d: DISTANCE ATOMS=2,5"})
+        assert result.returncode == 0
+        method = json.loads(result.stdout)["method"]
+        assert "parse_plumed_cvs" in method
+        assert "pharmaml.md.cv" in method
+
+
+class TestMdCvWebWiring:
+    """Round 258: the COLVAR playground's static wiring pins.
+
+    The route, the type and the card are three files that must agree:
+    the zod-validated ``/api/md/cv`` route pipes ``op: "cv"`` into
+    ``md_bridge.py``; ``MdCvResponse`` carries the per-CV series, the
+    stats and the COLVAR text; the sixth MD card posts to the route and
+    renders the house TimelineChart.  These pins keep the wiring from
+    silently disappearing between rounds (the live E2E — the card run
+    with the default snippet — rides on top in the release ritual)."""
+
+    ROUTE_TS = REPO_ROOT / "src" / "app" / "api" / "md" / "cv" / "route.ts"
+    TYPES_TS = REPO_ROOT / "src" / "lib" / "toolkit-types.ts"
+    CARD_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "md-analysis.tsx"
+    )
+
+    needs_wiring = pytest.mark.skipif(
+        not ROUTE_TS.is_file(),
+        reason="web checkout (<repo>/src routes) required; the zip-only tree "
+        "skips — its probes live outside the shipped tree",
+    )
+
+    @needs_wiring
+    def test_route_validates_through_the_bridge(self) -> None:
+        route = self.ROUTE_TS.read_text(encoding="utf-8")
+        assert "md_bridge.py" in route
+        assert '"cv"' in route
+        assert "plumed" in route
+        assert "discriminatedUnion" not in route  # single-op route
+
+    @needs_wiring
+    def test_response_type_carries_the_colvar_contract(self) -> None:
+        types = self.TYPES_TS.read_text(encoding="utf-8")
+        assert "export interface MdCvResponse" in types
+        assert "colvar: string;" in types
+        assert "names: string[];" in types
+
+    @needs_wiring
+    def test_card_posts_to_the_cv_route(self) -> None:
+        card = self.CARD_TSX.read_text(encoding="utf-8")
+        assert '"/api/md/cv"' in card
+        assert "MdCvResponse" in card
+        assert "Collective variables (COLVAR)" in card
+        assert "parse_plumed_cvs" in card
+        # the copyable COLVAR + the honest own-scale footnote
+        assert "Copy COLVAR" in card
+        assert "own vertical scale" in card
+        # the card rides in the sub-tab's shell
+        assert "<CvCard />" in card
+        # the default snippet ships all six actions in the textarea
+        for action in ("DISTANCE", "ANGLE", "DIHEDRAL", "COORDINATION", "GYRATION"):
+            assert f": {action} " in card
 
 
 class TestSurgeryBridge:

@@ -1851,3 +1851,23 @@ rc=0).  Census **1093/333,097**.  Web pins trued 5,365 = 4,496 collect
 + 869 doctest (×7) + census fallbacks 1093/333,097 +
 `SHIPPED_TOOLKIT_VERSION` 1.2.165; all three version carriers trued
 in one pass.
+
+## v1.2.166 release-zip homes (2026-11-10, round 258 — the COLVAR playground)
+
+`pharma-ml-toolkit-v1.2.166.zip` — 23,692,466 bytes, sha-256
+`34862fe245560e9c5ea8623cf2fe4adad736cdcebb9bcdcefd34849ae98841de`
+(four byte-identical homes, testzip OK per home, real leaks 0 — the
+growth over v1.2.165's 23,689,832 B is the COLVAR playground wiring:
+the `md_bridge.py` `"cv"` op (the pasted `plumed.dat` parsed by the
+real `parse_plumed_cvs` over the helix demo → per-CV series + honest
+stats + the exact `COLVAR` text), the web's sixth MD card over the new
+zod-validated `/api/md/cv` route (`MdCvResponse`, the editable
+plumed.dat textarea, the own-scales `TimelineChart`, the copyable
+COLVAR block), +8 tests in `tests/test_web_parity.py`
+(`TestMdCvBridge` + `TestMdCvWebWiring`) with the card-directory
+census trued 32 → 33).  Notebooks re-executed at 1.2.166 (8/8,
+home-path-survivors=0).  Nine-chunk gate green on the FIRST pass 9/9
+rc=0, failures=0.  Census **1093/333,305**.  Web pins trued 5,373 =
+4,504 collect + 869 doctest (×7) + census fallbacks 1093/333,305 +
+`SHIPPED_TOOLKIT_VERSION` 1.2.166; all three version carriers trued
+in one pass.  Arena conformal PR still open (unmerged) all round.
