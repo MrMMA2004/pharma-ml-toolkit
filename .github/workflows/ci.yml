@@ -77,6 +77,7 @@ jobs:
           tests/test_pareto_shortlist_plot.py
           tests/test_conformal.py
           tests/test_conformal_classification.py
+          tests/test_coverage_diagnostics.py
           tests/test_applicability_schema.py
           tests/test_splits_integrity.py
           tests/test_evaluation_auc_integrity.py

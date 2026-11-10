@@ -53,9 +53,9 @@ def _validate_alpha(alpha: float) -> float:
 class ConformalIntervals:
     """Prediction intervals and optional empirical evaluation on query rows.
 
-    ``coverage`` and ``n_covered`` are computed only when independent query
-    labels were supplied; they are empirical, not the coverage guarantee.
-    Arrays are ordered exactly like the input to the estimator.
+    ``covered``, ``coverage`` and ``n_covered`` are computed only when
+    independent query labels were supplied; they are empirical, not the
+    coverage guarantee. Arrays follow input order and remain mutable.
     """
 
     prediction: np.ndarray
@@ -66,6 +66,7 @@ class ConformalIntervals:
     n_calibration: int
     coverage: float | None = None
     n_covered: int | None = None
+    covered: np.ndarray | None = None
 
     @property
     def n_test(self) -> int:
@@ -105,16 +106,18 @@ class SplitConformalRegressor:
             raise DataValidationError("interval bounds overflowed; check the prediction scale")
         coverage = None
         n_covered = None
+        covered = None
         if y_true is not None:
             truth = _numeric_vector(y_true, "y_true")
             if truth.size != prediction.size:
                 raise DataValidationError("y_true and predictions must have the same length")
-            n_covered = int(np.count_nonzero((truth >= lower) & (truth <= upper)))
+            covered = (truth >= lower) & (truth <= upper)
+            n_covered = int(np.count_nonzero(covered))
             coverage = n_covered / int(prediction.size)
         return ConformalIntervals(
             prediction=prediction, lower=lower, upper=upper, alpha=self.alpha,
             radius=self.radius, n_calibration=self.n_calibration,
-            coverage=coverage, n_covered=n_covered,
+            coverage=coverage, n_covered=n_covered, covered=covered,
         )
 
 

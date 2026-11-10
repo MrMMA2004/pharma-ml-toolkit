@@ -315,6 +315,8 @@ after adding new public functions.
 | `ConformalPredictionSets` | class | Class membership per query row and optional empirical coverage. |
 | `CorrelationResult` | class | The lag correlation table, with the significance band. |
 | `CoverageEntry` | class | The audit's verdict for one catalogue category. |
+| `CoverageGroup` | class | Empirical coverage, Wilson bounds, and optional mean size for one group. |
+| `CoverageReport` | class | Overall and first-seen-ordered subgroup coverage on held-out observations. |
 | `CrossEntropyLoss` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `DPNoiseScale` | class | The noise multiplier a training plan needs, by bisection. |
 | `DPStatisticsReport` | class | A column's headline statistics, privatised under one ε. |
@@ -456,6 +458,7 @@ after adding new public functions.
 | `compare_models_cv` | function | Cross-validate a model panel into full §19 reports + the board. |
 | `composition_report` | function | Sequential composition: the ε's of queries on the same rows add. |
 | `contrast_matrix` | function | The coding matrix for one categorical factor. |
+| `coverage_by_group` | function | Summarize boolean held-out coverage overall and within observed groups. |
 | `coverage_table` | function | The category-by-category audit, in catalogue order. |
 | `cross_entropy` | function | Softmax cross-entropy: ``mean(−log_softmax[i, label_i])``. |
 | `cross_model_importances` | function | Permutation importances for a WHOLE panel of fitted models. |

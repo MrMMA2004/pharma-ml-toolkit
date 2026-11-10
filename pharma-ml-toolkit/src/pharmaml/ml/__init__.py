@@ -105,6 +105,7 @@ from pharmaml.ml.conformal_classification import (
     SplitConformalClassifier,
     calibrate_split_conformal_classifier,
 )
+from pharmaml.ml.coverage_diagnostics import CoverageGroup, CoverageReport, coverage_by_group
 from pharmaml.ml.cv_results import (
     CLASSIFICATION_CV_METRICS,
     CV_STRATEGIES,
@@ -469,6 +470,8 @@ __all__ = [
     "ConformalPredictionSets",
     "CorrelationResult",
     "CoverageEntry",
+    "CoverageGroup",
+    "CoverageReport",
     "CrossEntropyLoss",
     "DPNoiseScale",
     "DPStatisticsReport",
@@ -610,6 +613,7 @@ __all__ = [
     "compare_models_cv",
     "composition_report",
     "contrast_matrix",
+    "coverage_by_group",
     "coverage_table",
     "cross_entropy",
     "cross_model_importances",

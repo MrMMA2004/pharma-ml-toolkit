@@ -51,5 +51,7 @@ any custom predictor is a regressor.
 - The calibrator holds a reference to the model, not a copy. **Do not refit or
   mutate the model or preprocessing after calibration.** The toolkit cannot
   check that the supplied datasets are disjoint or exchangeable.
+- Use `covered` and interval widths with [coverage diagnostics](COVERAGE_DIAGNOSTICS.md)
+  to inspect empirical subgroup results; marginal coverage is not a subgroup guarantee.
 - This implementation covers single-output regression only. It is research
   software, not a clinical decision-support system.

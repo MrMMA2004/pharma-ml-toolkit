@@ -67,4 +67,6 @@ set; unknown query labels count as uncovered. Without `y_true`, they are
 - The calibrator holds the model by reference. Do not refit or mutate the model
   or its preprocessing after calibration; only a changed `classes_` order is
   explicitly detected. The toolkit cannot verify disjointness or exchangeability.
+- Use `covered` and `set_sizes` with [coverage diagnostics](COVERAGE_DIAGNOSTICS.md)
+  to inspect empirical subgroup results; marginal coverage is not a subgroup guarantee.
 - This is research software, not a clinical decision-support system.
