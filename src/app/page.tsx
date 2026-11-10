@@ -57,7 +57,10 @@ function ThemeToggle() {
   );
 }
 
-const FALLBACK_STATS = { files: 1093, lines: "333,305" };
+/* r259 trued +11: r258 pinned the census before re-executing the notebooks
+ * (docking +7, generative −12, ML +7, tuning +9 = net +11 web-split lines),
+ * so the shipped tree is 333,316 — the live /api/toolkit/tree agrees. */
+const FALLBACK_STATS = { files: 1093, lines: "333,316" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);

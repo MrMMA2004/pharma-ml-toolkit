@@ -12682,3 +12682,99 @@ run_count 49 by the concurrent session's no-bump ticks).
 · queue: the arena conformal pickup ritual the moment PR #9 merges (chunk assignments
 pre-planned in round 251), the contact-map/PLIF viz twins, Part-3 §24 SA-in-generative
 beyond the shipped slices.
+
+## Round 259 — 2026-11-10 — MASTER_PROMPT **part4** ingested + the read-only §4 integrity audit at v1.2.166 (dual-session compliant) + the r258 census pin proven +11 stale and trued
+
+**Trigger**: the owner's IM upload `upload/MASTER_PROMPT part4.pdf` (28 pages,
+"MASTER DEVELOPMENT PROMPT — PharmaML Toolkit v1.2.165" — written against the 165
+archive; every finding re-verified at 166, none assumed).  The concurrent session had
+shipped r258 (v1.2.166, `f7cfde0`) 3 minutes before this round opened → the
+dual-session rule applied: **zero toolkit file edits**; this round ran the doc's own
+§4 "Required First Task: Repository Integrity Audit" entirely READ-ONLY, exactly the
+work the rule permits.
+
+**The §4 audit findings (all verified against the live tree, not the PDF's claims):**
+
+- **§4.1 anti-rollback/release tooling — DEFECT, 2 loci.** `tools/checkpoint.py:288`
+  feeds the retired `playground.py` to the ruff gate and `:291-295` runs
+  `playground.py --self-test` as the "gui self-test" gate — the file left in v1.2.141,
+  so `ship()` aborts today.  `studio.py` has NO CLI surface (no argparse), so the
+  doc's warning holds: no invented `studio.py --self-test`.  The honest replacement
+  gate is `pytest tests/ui -q` (the toolkit `conftest.py` already probes real EGL
+  `RTLD_GLOBAL` first and falls back offscreen).  The ship ritual must also keep the
+  doc's checklist: version consistency, doctests, ruff, mypy (verified scope),
+  backend tests, PySide6 offscreen tests, notebook freshness, zip integrity,
+  backups.
+- **§4.2 ZIP restore compatibility — DEFECT, broken against the live archive.** The
+  v1.2.166 zip is ROOT-LEVEL (0 prefixed entries of 1,275+; `src/`, `scratch/`,
+  `download/`… at the archive root), while `checkpoint.py:375` `restore()` does
+  `Path(member).relative_to("pharma-ml-toolkit")` → `ValueError` on every member:
+  **`--restore` cannot consume the archive it is shipped with.**  Fix per the doc:
+  safe root detection (probe for the prefix), reject absolute/traversal members,
+  never write outside the project dir, dry-run/preview, staging+validation before
+  replacement, preserve user data, verify restored version+integrity, and tests for
+  BOTH layouts plus malicious paths.
+- **§4.3 release packaging — DEFECT, quantified.** The zip ships **475 `scratch/`
+  entries + 129 `download/` entries = 8,701,392 B of historical evidence PNGs (37%
+  of the 23,692,466 B archive) + a `dist-archive/` entry.** Root cause:
+  `scratch/build_zip_210.py`'s `EXCLUDE_DIRS` covers only `.git`/caches/venvs/
+  `artifacts` (+ `.log`/`.zip` suffixes) — **`scratch`/`download`/`dist-archive` are
+  NOT excluded**, so the master prompt's own "exclude scratch/" claim is aspirational,
+  not actual.  Fix: extend the exclusion set (local research history stays — zip-only
+  exclusion, no deletions) and relocate the canonical utilities
+  (`build_zip_210.py`, `reexec_notebooks_257.py`, `run_suite_chunks_250.py`,
+  `venv_repair.sh`) into maintained `tools/` with docs+tests.
+- **§4.4 metadata drift — 3 stale loci + 1 placeholder.** `README.md:332` "all
+  seventeen" and `:348` "the seventeen Studio pages' offscreen suites" — the Studio
+  has **18 pages** (verified: 19 files in `ui/pages/` minus `__init__.py`);
+  `README.md:342` still says "the release version (1.2.125)";
+  `pyproject.toml:105` `Homepage = "https://github.com/example/pharma-ml-toolkit"`
+  is a placeholder — the actual remote is `github.com/MrMMA2004/pharma-ml-toolkit`
+  (confirmed from the master job's own STEP 1 remote-add instruction, not invented).
+  CHANGELOG chronology is OK ([1.2.164]/[165]/[166] all 2026-11-10, the r255 gap
+  backfilled in r257); `GUI_REDESIGN.md:263`'s v1.2.125 is legitimate history.
+- **§4.5 feature inventory — DOES NOT EXIST.** Zero "feature inventory"/"traceability"
+  matches across `docs/` + README.  The doc's Phase-2 deliverable (the
+  feature→backend→UI→test matrix with the six status classes) is greenfield.
+
+**The round's own find — the r258 census pin was +11 lines stale (fixed).** The live
+`/api/toolkit/tree` answered **1093/333,316** vs the shipped pin **1093/333,305**.
+Proven by arithmetic, not guesswork: r258 pinned the census ~09:43, then re-executed
+the 8 notebooks 09:46-09:50 — the re-execution netted **+11 web-split lines**
+(docking +7, generative −12, ML +7, tuning +9; `git show 194a47a:…` vs `f7cfde0:…`
+per notebook).  The web fallback `FALLBACK_STATS` (`src/app/page.tsx:60`) was trued
+**333,305 → 333,316** with a provenance comment (a WEB file — outside the
+dual-session rule's toolkit scope; the concurrent session was 15-min quiet with a
+clean tree; live hero was already correct, only the fetch-failure fallback drifted).
+Corollary fragility logged: the web census WALKS `download/` + `scratch/`
+(`EXCLUDED_DIRS` lacks them) — this round's own E2E screenshot into `download/`
+transiently inflated files 1093→1094 (deleted immediately; census reverted), so
+evidence screenshots must never ride the counted tree — same root cause as §4.3.
+
+**Scope reconciliation with the doc**: §12 says the supplied archive lacks the
+companion Web/API source and Web integration is "outside the verified scope" — true
+for the ZIP alone, but THIS repo carries the full web source (`src/`) and verifies it
+with agent-browser every round, so the web side stays within our verified scope here.
+
+**Verification** (agent-browser, mandatory): badge **v1.2.166**, hero **333,316 LOC
+· 1093 files · 5,373 tests**, zero console/page errors, mobile 390 px no horizontal
+scroll, footer present, zip endpoint `exact:true source:release 23,692,466 B` —
+before and after the one-line web edit; `bun run lint` clean.  No toolkit files
+touched → no version bump, no notebook re-execution, no zip rebuild (STEP 3 correctly
+not triggered).
+
+**Health**: dev server UP (GET / 200); master 515197 enabled (run_count 49, next
+fire ~11:29 UTC — the next tick carries the 46→47 catch-up); the webDevReview
+15-min job 520560 was found **"Disabled due to exec limits exceeded"** — deleted and
+recreated as **520604** (fixed_rate 900 s, Asia/Tehran).  Platform warning noted:
+96 daily executions vs a limit of 3 — these jobs will keep being throttled; nothing
+agent-side can change that quota.
+
+**Baselines for the next round** — v1.2.166 (four homes, unchanged this round) ·
+honest totals **5,373 = 4,504 + 869** · census **1093/333,316** (fallback trued) ·
+the gate is NINE chunks · counter **46/100** · queue: **the part4 §4 Phase-1 repairs
+(4.1 ship gates → 4.2 dual-layout restore → 4.3 zip exclusions + utility relocation
+→ 4.4 metadata trueing → 4.5 the feature inventory)**, then the arena conformal
+pickup ritual the moment PR #9 merges (chunk assignments pre-planned in round 251),
+the contact-map/PLIF viz twins, Part-3 §24 SA-in-generative beyond the shipped
+slices.
