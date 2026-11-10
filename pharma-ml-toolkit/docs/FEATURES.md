@@ -5,7 +5,8 @@ This is the §4.5 deliverable of the MASTER_PROMPT part 4 specification:
 traceability matrix.** All evidence on this page was collected live against the
 working tree (imports grepped, pages/cards/routes enumerated, tests collected
 with `pytest --collect-only`), not copied from prose. Matrix inputs were frozen
-at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.168.
+at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.168. The
+§5 nine-card mapping (§10 below) was derived live at v1.2.169.
 
 ## Status legend (the six §4.5 classes)
 
@@ -41,7 +42,7 @@ underlying calls. All pages additionally ride `tests/ui/test_pages_smoke.py`
 
 | Page (nav key) | Backend | UI tests | Backend tests | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Dashboard (`dashboard`) | `pharmaml` meta, `ml.models` registry | smoke only | — | **B** | Statistics/quick-launch panel. The §5 nine-card workflow dashboard is class **D** (below). |
+| Dashboard (`dashboard`) | `pharmaml` meta, `ml.models` registry, `ui.nine_cards` | `test_nine_cards.py` (14) | — | **A** | Statistics panel + the §5 nine-card workflow-entry grid (exact directive order, live dependency probes, external-engine honesty, real `go_to` routing). Phase-3 visual polish is future work, not a gap. |
 | Data Explorer (`data`) | `utils.io` | `test_data_table.py` (6) | `test_io.py` (69), `test_data_loading.py`, `test_data_provenance.py` | **A** | Page-level depth is the data-table widget; the import/export library side carries 69 focused tests. |
 | Chemistry Workbench (`chemistry`) | `chem.csv_standardize`, `chem.features`, `utils.io` | `test_chemistry_page.py` (13) | `test_chem_*`, `test_descriptors.py` (73), `test_csv_standardize.py` (57), `test_similarity.py`, `test_diversity.py` | **A** | RISM descriptors are opt-in (see §5). |
 | PK/PD Workbench (`pkpd`) | `pharma.pk`, `pkpd.compartments/events/nca_ext/ode` | `test_pkpd_page.py` (18) | `test_pk.py` (49), `test_pd.py`, `test_pkpd_engines.py` (99), `test_dosage.py` (24) | **A** | |
@@ -172,15 +173,48 @@ Counted over the matrix rows above (18 Studio pages, 12 web areas,
 
 | Status | Count | What |
 | --- | --- | --- |
-| **A** | 34 | implemented and tested end-to-end |
-| **B** | 7 | implemented, incompletely tested — dashboard + settings (smoke only), foundations + responseai (page-suite-only backends), TS calculators + PK/PD explorer + reconciler (no automated TS↔Python parity pins) |
+| **A** | 35 | implemented and tested end-to-end (the §5 nine-card workflow dashboard rides the Dashboard row — see §10) |
+| **B** | 6 | implemented, incompletely tested — settings (smoke only), foundations + responseai (page-suite-only backends), TS calculators + PK/PD explorer + reconciler (no automated TS↔Python parity pins) |
 | **C** | 5 | backend-only: gnn(+gnnxai), geometric, pruning, quantization, harness |
-| **D** | 1 | the §5 nine-card workflow dashboard (a stat dashboard exists; the nine workflow-entry cards are the Phase-3 refinement) |
+| **D** | 0 | nothing currently classified **D** — the nine-card workflow dashboard moved to **A** in v1.2.169 (§10) |
 | **E** | 1 | conformal prediction + coverage diagnostics + split audits (PR #9 parked, unmerged — its arena branch carries the work) |
 | **F** | 3 | docking execution (external Vina), real MD data (external GROMACS/PLUMED), DOCKSTRING dataset (external download) |
 
+## 10. The nine-card dashboard mapping (§5 of the directive)
+
+Shipped v1.2.169: the Studio home renders the directive's nine
+high-level cards as navigation and workflow entry points onto the
+existing pages — never duplicated implementations. The single source
+of truth is `ui/nine_cards.py` (`NINE_CARDS`);
+`tests/ui/test_nine_cards.py` (14 tests) pins the exact order, the
+mapping below, live coverage of every specialized page, the
+exception-safe dependency probes, and the `go_to` routing through the
+real MainWindow. The page stack stays 18 widgets.
+
+| # | Card | Entry points (nav keys) | Backend home | Tests |
+| --- | --- | --- | --- | --- |
+| 01 | Introduction | `dashboard` | `pharmaml` meta | `test_nine_cards.py` |
+| 02 | Datasets | `data`, `chemistry`, `utilities` | `utils.io`, `chem.*` | `test_nine_cards.py`, `test_io.py` |
+| 03 | Machine Learning | `models`, `mlworkbench`, `unsupervised`, `bestofml`, `foundations` | `ml.*` | `test_nine_cards.py`, `test_ml_pipeline.py` |
+| 04 | Deep Learning | `deep_learning` | `ml.neural`, class-C `gnn`/`geometric` | `test_nine_cards.py`, `test_gnn.py` |
+| 05 | Generative AI | `generative` | `generative.*` | `test_nine_cards.py`, `test_generative.py` |
+| 06 | Molecular Docking | `docking` | `docking.*` (engine external) | `test_nine_cards.py`, `test_docking.py`, `test_docking_prep.py` |
+| 07 | PK/PD | `pkpd`, `biology`, `responseai` | `pkpd.*`, `pharma.*` | `test_nine_cards.py`, `test_pkpd_engines.py` |
+| 08 | Molecular Dynamics Analysis | `molecular_dynamics` | `md.*` (data external) | `test_nine_cards.py`, `test_md_analysis.py` |
+| 09 | Visualization | `imagelab` | `viz.*` | `test_nine_cards.py`, `test_viz.py` |
+
+The optional-dependency chips are computed live per card
+(`probe_available` — one honest import probe, never a hardcoded
+answer): `shap` (ML explanations), `torch` (DL + generative backends),
+`rdkit` (generative scoring + docking prep), `matplotlib` (figure
+export). The class-F boundaries are stated on the cards themselves:
+docking execution needs an external Vina binary plus receptor PDBQT
+(never bundled — scores are user or external-engine inputs) and MD
+trajectories come from external GROMACS/PLUMED runs (the analysis
+engines are bundled, the simulations are not).
+
 **Maintenance rule**: this file must be re-trued whenever a page, card,
-route, or backend module is added or retired — the
+route, backend module, or §5 nine-card entry is added or retired — the
 `tests/test_feature_inventory.py` suite fails the release if the matrix
-drifts from the live registries (18 pages, 33 cards, 27 routes, the C-list,
-the six legend classes).
+drifts from the live registries (18 pages, 33 cards, 27 routes, the
+9-card mapping, the C-list, the six legend classes).

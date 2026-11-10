@@ -1940,3 +1940,44 @@ MASTER_PROMPT.pdf lines 688–689, 211-commit ff-only pull to
 `9130c6b`, venv repaired) and found the concurrent r260 already
 shipped — this session's planned Phase-1 queue was instead
 verified landed, then Phase-2 §4.5 built on top.
+
+## v1.2.169 release-zip homes (2026-11-11, round 262 — part4 §5: the nine-card dashboard mapping)
+
+`pharma-ml-toolkit-v1.2.169.zip` — 8,638,922 bytes, sha-256
+`82411da4254054201bfbb64a36f0c40fcfcdafe85fda301f53a79f832de3f7e6`
+(four byte-identical homes, nested zips NONE, real leaks 0;
+predecessor v1.2.168 swept from all four).  THE §5 DELIVERABLE:
+`ui/nine_cards.py` — the NINE_CARDS registry as the single source of
+truth: exactly the directive's nine cards in the exact order
+(Introduction → Datasets → Machine Learning → Deep Learning →
+Generative AI → Molecular Docking → PK/PD → Molecular Dynamics
+Analysis → Visualization), each mapped per the directive's table onto
+the existing SECTIONS keys (17 of 18 pages; settings excluded by the
+directive itself), every card carrying title, concise description,
+badge visual identity, capability summary, a computed live preview
+(version, dataset count, registry count, per-package module walks),
+exception-safe optional-dependency probes (shap/torch/rdkit/
+matplotlib — never hardcoded answers), and the class-F honesty on the
+cards themselves (docking: external Vina, never bundled; MD: external
+GROMACS/PLUMED data).  `ui/pages/dashboard.py` renders the grid 3×3
+row-major above the surviving stat census; entry buttons navigate the
+real MainWindow through go_to — the page stack stays 18 widgets, no
+duplicated implementations.  FEATURES.md §10 pins the mapping table;
+Dashboard page row B→A (dedicated tests), summary trued A35/B6/C5/
+D0/E1/F3 (the nine-card D row rides the Dashboard row; total 50).
++19 tests: `tests/ui/test_nine_cards.py` (14 — registry contract,
+live-key routing, the 3×3 row-major render, the go_to leg, the
+honesty pins) + 5 FEATURES.md drift-guard pins re-deriving the
+nine-card mapping from the live source.  ALSO: chunk-1 flake fixed —
+`test_dnn_cross_validation_uses_a_fresh_model_per_fold` captured
+id(self) of freed models (address recycling inside a long pytest
+process collapsed the distinctness set; passes isolated, failed in
+the chunk) — the capture now holds the instances; and the gate runner
+gained chunk 4f for the nine-card suite (ten chunks now).  Ten-chunk
+gate 10/10 exit=0 (chunk 1 green only WITH the fix — first run
+failed it).  Notebooks 8/8 re-executed at 1.2.169 (205 s,
+error-outputs=0, home-path-survivors=0, dev server down per the OOM
+ritual).  Honest totals **5,426 = 4,557 collect + 869 doctest**
+(collect-only verified), census **1104/334,959** (the live post-ship
+walk — +2 files: nine_cards.py + the contract suite), web pins trued
+5,426 ×7 + census fallbacks + `SHIPPED_TOOLKIT_VERSION` 1.2.169.

@@ -22,6 +22,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ui.nine_cards import build_nine_card_grid
+
 _TK = Path(__file__).resolve().parents[2]  # pharma-ml-toolkit/
 
 
@@ -116,6 +118,14 @@ class DashboardPage(QWidget):
         subtitle.setObjectName("studioPageSubtitle")
         lay.addWidget(title)
         lay.addWidget(subtitle)
+
+        # §5: the nine high-level workflow cards — navigation entry points
+        # onto the existing pages, never duplicated implementations.
+        cards_header = QLabel("Workflow cards")
+        cards_header.setObjectName("studioSectionTitle")
+        lay.addWidget(cards_header)
+        cards_host, _frames = build_nine_card_grid()
+        lay.addWidget(cards_host)
 
         try:
             import pharmaml

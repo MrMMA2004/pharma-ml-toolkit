@@ -313,11 +313,16 @@ def test_dnn_cross_validation_uses_a_fresh_model_per_fold(
     rng = np.random.default_rng(11)
     X = pd.DataFrame(rng.normal(size=(36, 3)), columns=["a", "b", "c"])
     y = pd.Series((X["a"] > 0).astype(int).values)
-    fitted_ids: list[int] = []
+    fitted: list[object] = []
     original = neural.DeepMLPClassifier.fit
 
     def counting_fit(self: object, *args: object, **kwargs: object) -> object:
-        fitted_ids.append(id(self))
+        # Hold the instance itself, not id(self): a freed model's address
+        # can be recycled for the NEXT fold's fresh model inside a long
+        # pytest process, collapsing set(fitted_ids) and failing the
+        # distinctness assert on a false positive (caught by the round-262
+        # nine-chunk gate after the sandbox rollback re-laid the heap).
+        fitted.append(self)
         return original(self, *args, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(neural.DeepMLPClassifier, "fit", counting_fit)
@@ -327,8 +332,8 @@ def test_dnn_cross_validation_uses_a_fresh_model_per_fold(
     # 3 folds -> 3 fit calls on 3 DISTINCT model objects (§19.6: never
     # reuse trained weights across folds; a fresh module carries a
     # fresh optimizer and scheduler by construction)
-    assert len(fitted_ids) == 3
-    assert len(set(fitted_ids)) == 3
+    assert len(fitted) == 3
+    assert len({id(m) for m in fitted}) == 3
     assert result.summary().endswith("(3-fold CV)")
     assert result.metrics["accuracy"].mean > 0.5  # the toy is separable
 

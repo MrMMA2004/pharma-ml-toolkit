@@ -2,10 +2,12 @@
 SS-multiobjective suite rides chunk 2's tests/test_m*.py glob) (the 245 pattern; chunk 4c gains
 test_image_1to1_246.py -- the round-246 SS21.4 1:1 view suite).
 
-Chunks the suite into nine batches so no
+Chunks the suite into ten batches so no
 single pytest process has to hold the whole tree (the OOM lesson).
 Chunk 4 (tests/ui) and chunk 5 (playground, Tk under Xvfb) need
-DISPLAY=:99 -- the runner exports it.  Writes /tmp/suite246.txt.
+DISPLAY=:99 -- the runner exports it.  Writes /tmp/suite250.txt.
+(round 262) 4f gains the §5 nine-card suite -- MainWindow + the card
+grid constructions get their own process envelope.
 """
 from __future__ import annotations
 
@@ -98,6 +100,10 @@ CHUNKS: list[tuple[str, list[str]]] = [
                      "tests/ui/test_theme_manager.py",
                      "tests/ui/test_unsupervised_page.py",
                      "tests/ui/test_utilities_page.py"]),
+    # (round 262) the §5 nine-card suite: every test builds the card grid
+    # (and two of them a full MainWindow) -- its own process, like the
+    # other Qt-heavy page suites.
+    ("4f (ui nine-cards)", ["tests/ui/test_nine_cards.py"]),
     # (round 228) chunk 5 ("playground Tk", tests/test_playground.py) is
     # GONE -- playground.py retired; the Studio pages are chunks 4a-4c.
     ("6 (src doctests)", ["src/pharmaml", "--doctest-modules"]),

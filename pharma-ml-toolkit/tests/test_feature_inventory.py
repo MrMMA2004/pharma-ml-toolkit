@@ -20,12 +20,13 @@ TOOLKIT_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = TOOLKIT_ROOT.parent
 DOC = TOOLKIT_ROOT / "docs" / "FEATURES.md"
 MAIN_WINDOW = TOOLKIT_ROOT / "ui" / "main_window.py"
+NINE_CARDS_SRC = TOOLKIT_ROOT / "ui" / "nine_cards.py"
 CARD_DIRECTORY = REPO_ROOT / "src" / "components" / "explorer" / "playground" / "card-directory.ts"
 API_ROOT = REPO_ROOT / "src" / "app" / "api"
 
 BACKEND_ONLY_MODULES = ("gnn", "geometric", "pruning", "quantization", "harness")
 
-STATUS_COUNTS = {"A": 34, "B": 7, "C": 5, "D": 1, "E": 1, "F": 3}
+STATUS_COUNTS = {"A": 35, "B": 6, "C": 5, "D": 0, "E": 1, "F": 3}
 
 
 def _doc() -> str:
@@ -50,6 +51,27 @@ def _route_names() -> list[str]:
         rel = route.relative_to(API_ROOT).parent
         routes.append("(root)" if str(rel) == "." else "/".join(rel.parts))
     return routes
+
+
+def _nine_card_titles() -> list[str]:
+    """The card titles, in registry order, re-derived from the live source."""
+    return _card_constant_titles(NINE_CARDS_SRC.read_text(encoding="utf-8"))
+
+
+def _card_constant_titles(src: str) -> list[str]:
+    titles: list[str] = []
+    for match in re.finditer(r"^CARD_[A-Z_]+ = NineCard\(", src, flags=re.MULTILINE):
+        start = match.end()
+        title = re.search(r'title="([^"]+)"', src[start : start + 400])
+        assert title, "a NineCard constant is missing its title"
+        titles.append(title.group(1))
+    return titles
+
+
+def _nine_card_entry_keys() -> list[str]:
+    """Every nav key the nine cards route to, re-derived from the source."""
+    src = NINE_CARDS_SRC.read_text(encoding="utf-8")
+    return sorted(set(re.findall(r'CardEntry\("([a-z_]+)"', src)))
 
 
 class TestInventoryStructure:
@@ -162,12 +184,48 @@ class TestStatusSummary:
             )
 
     def test_row_total_consistency(self) -> None:
-        """18 pages + 12 web areas + 11 packages = 41 A/B rows; C/D/E/F add
-        10 more (5 backend-only, 1 dashboard, 1 conformal, 3 external)."""
+        """18 pages + 12 web areas + 11 packages = 41 A/B rows; C/E/F add
+        9 more (5 backend-only, 1 conformal, 3 external). The nine-card
+        organization rides the Dashboard page row since v1.2.169 (§10)."""
         assert STATUS_COUNTS["A"] + STATUS_COUNTS["B"] == 41
-        assert sum(STATUS_COUNTS.values()) == 51
+        assert sum(STATUS_COUNTS.values()) == 50
 
     def test_synthetic_demo_register(self) -> None:
         text = _doc()
         for topic in ("MD trajectories", "Cell-line response tables", "Docking scores"):
             assert f"**{topic}**" in text, f"synthetic register missing: {topic}"
+
+
+class TestNineCardMapping:
+    """The §5 nine-card dashboard pins (v1.2.169, FEATURES.md §10).
+
+    The mapping is re-derived from the live `ui/nine_cards.py` source,
+    exactly like the nav keys — the doc may not drift from the registry.
+    """
+
+    def test_registry_has_exactly_nine_cards(self) -> None:
+        titles = _nine_card_titles()
+        assert len(titles) == 9, f"expected 9 cards, found {len(titles)}: {titles}"
+
+    def test_doc_has_the_mapping_section(self) -> None:
+        assert "## 10. The nine-card dashboard mapping" in _doc()
+
+    def test_every_card_title_in_the_doc(self) -> None:
+        text = _doc()
+        for title in _nine_card_titles():
+            assert title in text, f"card '{title}' missing from FEATURES.md"
+
+    def test_every_entry_key_is_live_and_in_the_doc(self) -> None:
+        text = _doc()
+        live = set(_nav_keys())
+        for key in _nine_card_entry_keys():
+            assert key in live, f"nine-card entry '{key}' is not a SECTIONS key"
+            assert f"`{key}`" in text, f"entry '{key}' missing from the §10 table"
+
+    def test_entries_cover_every_specialized_page(self) -> None:
+        entries = set(_nine_card_entry_keys())
+        every_page_but_settings = set(_nav_keys()) - {"settings"}
+        assert entries == every_page_but_settings, (
+            "the nine cards must route to every page (settings stays out "
+            "by the directive's own mapping table)"
+        )
