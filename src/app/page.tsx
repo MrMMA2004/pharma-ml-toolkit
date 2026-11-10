@@ -61,7 +61,7 @@ function ThemeToggle() {
  * test_docking_contacts.py, the demo pose pdbqt), +66 collect tests and
  * the doctest module docstring; census verified by the endpoint-rule
  * walk (1090 = 1087 + 3 new) after the notebook re-execution. */
-const FALLBACK_STATS = { files: 1090, lines: "337,763" };
+const FALLBACK_STATS = { files: 1090, lines: "337,800" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
