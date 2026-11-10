@@ -145,6 +145,11 @@ class ClassificationReport:
 
     Attributes
     ----------
+    roc_auc:
+        ROC-AUC from ``predict_proba`` (binary, or macro one-vs-rest for
+        multiclass). ``None`` when undefined or probability outputs cannot
+        be safely aligned to the observed labels. Without ``classes_``,
+        columns are assumed to follow sorted label order.
     per_class:
         The ``xxx.ipynb`` cell 28 per-class table (the notebook's
         ``precision_recall_fscore_support(average=None)`` dict), keyed by
@@ -441,66 +446,7 @@ def evaluate_model(
         # and sorted() then yields np.int64/np.str_ entries (100x-34,
         # 33-b finding #4)
         labels = sorted(np.unique(np.concatenate([y_true, y_pred])).tolist())
-        try:
-            if hasattr(model, "predict_proba"):
-                proba = model.predict_proba(X_test)
-                if proba.shape[1] == 2:
-                    # 100x-34: locate the positive-class column instead of
-                    # assuming column 1.  roc_auc_score treats the
-                    # sorted-last label of y_true as positive; a conformant
-                    # sklearn estimator lays predict_proba columns out in
-                    # its own (sorted) classes_ order, so column 1 happens
-                    # to match -- but a custom estimator is free to expose
-                    # classes_ in its own order, and then a PERFECT
-                    # classifier reported AUC 0.0 (silently inverted; the
-                    # 100x-34 fail-first probe).  Index the column through
-                    # the estimator's own classes_ when it exposes one;
-                    # without classes_ the sklearn convention (column 1) is
-                    # the only information available.
-                    pos_col = 1
-                    model_classes = getattr(model, "classes_", None)
-                    if model_classes is not None and len(model_classes) == 2:
-                        pos_label = np.unique(y_true)[-1]
-                        for col, cls in enumerate(model_classes):
-                            if cls == pos_label:
-                                pos_col = col
-                                break
-                    roc_auc = float(roc_auc_score(y_true, proba[:, pos_col]))
-                else:
-                    # 100x-35: the multiclass twin of the 100x-34 binary
-                    # fix.  roc_auc_score(labels=labels) maps y_score
-                    # column j onto labels[j] (sorted-union order).  A
-                    # conformant estimator lays proba columns out in its
-                    # own sorted classes_ order, so the mapping coincides
-                    # -- but a custom estimator is free to expose classes_
-                    # in any order, and then score columns get silently
-                    # attached to the wrong classes: a PERFECT 3-class
-                    # classifier with classes_=['c','a','b'] reported
-                    # roc_auc = 0.25 instead of 1.0 (the 100x-35
-                    # fail-first probe).  Permute the columns into the
-                    # labels order through the estimator's own classes_
-                    # when it exposes a matching set; without classes_ the
-                    # sklearn convention (sorted) is the only information
-                    # available.
-                    proba_ovr = proba
-                    model_classes = getattr(model, "classes_", None)
-                    if (
-                        model_classes is not None
-                        and len(model_classes) == proba.shape[1]
-                        and set(model_classes.tolist()) == set(labels)
-                    ):
-                        col_of = {cls: col for col, cls in enumerate(model_classes)}
-                        order = [col_of[cls] for cls in labels]
-                        if order != list(range(len(labels))):
-                            proba_ovr = proba[:, order]
-                    roc_auc = float(
-                        roc_auc_score(y_true, proba_ovr, multi_class="ovr", labels=labels)
-                    )
-            else:
-                roc_auc = None
-        except Exception as exc:  # noqa: BLE001 — AUC undefined for some label setups
-            _LOG.warning("ROC-AUC could not be computed: %s", exc)
-            roc_auc = None
+        roc_auc = _classification_roc_auc(model, X_test, y_true, labels)
 
         # The notebook's per-class table (xxx.ipynb cell 28):
         # precision/recall/f1/support per label, keyed by str(label)
@@ -550,6 +496,50 @@ def evaluate_model(
         )
 
     raise ModelError(f"task must be 'classification' or 'regression', got {task!r}")
+
+
+def _classification_roc_auc(
+    model: Any, X_test: Any, y_true: np.ndarray, labels: list[Any]
+) -> float | None:
+    """Compute AUC only when probability columns can be mapped safely.
+
+    When classes_ is absent, sklearn's sorted-label column convention is
+    assumed. A present but inconsistent classes_ is never ignored.
+    """
+    predict_proba = getattr(model, "predict_proba", None)
+    if not callable(predict_proba) or len(np.unique(y_true)) < 2:
+        return None
+    try:
+        proba = np.asarray(predict_proba(X_test), dtype=float)
+        if proba.ndim != 2 or proba.shape != (len(y_true), len(labels)):
+            raise ValueError("probability shape does not match rows and observed labels")
+        if (
+            not np.isfinite(proba).all()
+            or np.any(proba < 0.0)
+            or np.any(proba > 1.0)
+            or not np.allclose(proba.sum(axis=1), 1.0)
+        ):
+            raise ValueError("probabilities must be finite, in [0, 1], and sum to 1 per row")
+        model_classes = getattr(model, "classes_", None)
+        if model_classes is not None:
+            classes = np.asarray(model_classes)
+            if classes.ndim != 1 or len(classes) != len(labels):
+                raise ValueError("classes_ does not match the probability columns")
+            class_list = classes.tolist()
+            if len(set(class_list)) != len(labels) or set(class_list) != set(labels):
+                raise ValueError("classes_ does not match the observed labels")
+            col_of = {cls: col for col, cls in enumerate(class_list)}
+            proba = proba[:, [col_of[label] for label in labels]]
+        if len(labels) == 2:
+            auc = float(roc_auc_score(y_true, proba[:, 1]))
+        else:
+            auc = float(roc_auc_score(y_true, proba, multi_class="ovr", labels=labels))
+        if not np.isfinite(auc):
+            raise ValueError("ROC-AUC is undefined for these labels")
+        return auc
+    except Exception as exc:  # noqa: BLE001 — third-party estimator or undefined AUC
+        _LOG.warning("ROC-AUC could not be computed: %s", exc)
+        return None
 
 
 def _pearson_r(y_true: np.ndarray, y_pred: np.ndarray) -> float | None:

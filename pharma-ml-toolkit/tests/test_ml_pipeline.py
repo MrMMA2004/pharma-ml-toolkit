@@ -672,13 +672,9 @@ class TestEvaluationEdgeCases:
         report = evaluate_model(clf, X, y, "classification")
         assert report.roc_auc == 1.0
 
-    def test_roc_auc_classes_missing_positive_falls_back(self) -> None:
-        # estimator's classes_ shares no label with y_true (train/test
-        # label-set mismatch): the column lookup misses and the sklearn
-        # convention applies -- column 1 IS the score vector used. Pin
-        # that fallback semantics: column 1 separates the classes
-        # perfectly, column 0 anti-separates (a wrong 'use column 0'
-        # heuristic would report 0.0).
+    def test_roc_auc_classes_missing_positive_is_unavailable(self) -> None:
+        # A declared class mapping that disagrees with the test labels is
+        # ambiguous; never guess which column is the positive class.
         X = np.array([[0.0], [1.0], [0.0], [1.0]])
         y = np.array(["low", "high", "low", "high"])
 
@@ -693,7 +689,7 @@ class TestEvaluationEdgeCases:
                 return np.array([[0.1, 0.9], [0.9, 0.1], [0.1, 0.9], [0.9, 0.1]])
 
         report = evaluate_model(UnrelatedClasses(), X, y, "classification")
-        assert report.roc_auc == 1.0  # column 1 used, per the fallback
+        assert report.roc_auc is None
 
     def test_roc_auc_single_class_y_true_is_none(self) -> None:
         # y_true carries a single label: roc_auc_score raises ("only one
