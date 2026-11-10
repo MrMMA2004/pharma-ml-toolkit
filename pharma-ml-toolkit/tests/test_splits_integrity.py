@@ -95,3 +95,42 @@ def test_scaffold_split_preserves_train_first_when_test_already_nonempty():
     assert_partition(train, test, keys)
     assert list(train) == [0, 1, 2, 3]
     assert list(test) == [4, 5, 6]
+
+
+@pytest.mark.parametrize("invalid", [None, float("nan"), pd.NA, pd.NaT, "", "  ", b" ",
+                                     (), ("site", None), ("", "x"), ["nested"], {"a": 1}])
+def test_group_holdout_rejects_unknown_or_non_scalar_labels(invalid):
+    groups = ["a", invalid, "b", "b"]
+    with pytest.raises(DataValidationError, match="groups row 1.*known group"):
+        split_indices(y=range(4), strategy="group", groups=groups)
+    with pytest.raises(DataValidationError, match="groups row 1.*known group"):
+        make_train_test_split(np.arange(4).reshape(-1, 1), np.arange(4),
+                              strategy="group", groups=groups)
+
+
+@pytest.mark.parametrize("groups", ["abcd", b"abcd", np.array([["a"], ["b"], ["a"], ["b"]]),
+                                    pd.DataFrame({"group": ["a", "b", "a", "b"]})])
+def test_group_holdout_rejects_non_vector_inputs(groups):
+    with pytest.raises(DataValidationError, match="groups"):
+        split_indices(y=range(4), strategy="group", groups=groups)
+
+
+def test_group_holdout_keeps_valid_composite_and_literal_na_labels():
+    groups = pd.Series([("NA", "a"), ("NA", "a"), ("None", "b"), ("None", "b")],
+                       index=[11, 12, 13, 14])
+    train, test = split_indices(y=range(4), strategy="group", groups=groups,
+                                test_size=0.25, random_state=42)
+    assert_partition(train, test, groups.tolist())
+
+
+def test_group_holdout_preserves_string_coercion_and_whitespace():
+    groups = [1, "1", " A", "A"]
+    train, test = split_indices(y=range(4), strategy="group", groups=groups,
+                                test_size=0.5, random_state=42)
+    assert_partition(train, test, [str(g) for g in groups])
+    assert (0 in train) == (1 in train)
+
+
+def test_group_holdout_length_error_is_validation_error():
+    with pytest.raises(DataValidationError, match="one label per row"):
+        split_indices(y=range(4), strategy="group", groups=["a", "b"])

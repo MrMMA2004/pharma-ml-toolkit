@@ -19,8 +19,16 @@ train, test = split_indices(X, y, strategy="group", groups=assay_series,
   `test_size` is a target, not a guarantee: large groups can make the actual
   fraction quite different. A group is reserved for the test side when the
   greedy training assignment would otherwise consume them all. One group alone
-  cannot produce a group-disjoint split. Group labels are converted to strings,
-  so, for example, `1` and `"1"` are treated as the same group.
+  cannot produce a group-disjoint split. For `strategy="group"`, every row
+  needs a known, nonblank label: missing values (including `None`, `NaN`,
+  `pd.NA`, and `NaT`), blank strings and non-scalar labels are rejected.
+  Tuples of nonblank scalar labels can represent composite groups. Labels are
+  converted to strings without trimming, so `1` and `"1"` are treated as the
+  same group and different representations can collide. Literal strings like
+  `"NA"` are valid; file readers can interpret them as missing unless configured
+  otherwise. Validate labels before splitting: a nonmissing but incorrect label
+  can still hide a relationship. This validation is for holdout splits; validate
+  group labels separately when using cross-validation splitters.
 - Scaffold splitting uses the toolkit's SMILES parser and its scaffold keys,
   not RDKit. Acyclic structures and parse failures both produce the empty key
   and are placed in the **same group**. Validate structures before splitting;

@@ -259,6 +259,42 @@ def _validate_test_size(test_size: float) -> float:
     return float(test_size)
 
 
+def _group_keys(groups: Sequence[object], n: int) -> list[str]:
+    """Validate holdout group labels before converting them to strings.
+
+    Missing labels cannot identify a leakage unit, even when all missing
+    rows happen to land on the same side. Report positions, not raw labels.
+    """
+    if isinstance(groups, (str, bytes, pd.DataFrame)):
+        raise DataValidationError("groups must be a 1-D sequence of labels")
+    try:
+        if len(groups) != n:
+            raise DataValidationError("groups must contain one label per row")
+    except TypeError as exc:
+        raise DataValidationError("groups must be a 1-D sequence of labels") from exc
+
+    def valid(value: object) -> bool:
+        if isinstance(value, tuple):
+            return bool(value) and all(valid(part) for part in value)
+        if isinstance(value, (str, bytes)):
+            return bool(value.strip())
+        # Nested containers (including 2-D array rows) are not scalar labels.
+        if not pd.api.types.is_scalar(value):
+            return False
+        missing = pd.isna(value)
+        return isinstance(missing, (bool, np.bool_)) and not bool(missing)
+
+    result: list[str] = []
+    for row, value in enumerate(groups):
+        if not valid(value):
+            raise DataValidationError(
+                f"groups row {row} has a missing, blank or non-scalar label; "
+                "provide a known group for every row"
+            )
+        result.append(str(value))
+    return result
+
+
 def _greedy_group_assignment(
     groups: Sequence[object],
     n_train: int,
@@ -369,8 +405,9 @@ def split_indices(
         ``scaffold``. Acyclic molecules and failed parses share the empty
         scaffold group; validate SMILES before use.
     groups:
-        One group label per row; required by ``group``. Labels are
-        converted to strings before grouping.
+        One known, nonblank group label per row; required by ``group``.
+        Scalar labels and tuples of nonblank scalar labels are converted
+        to strings before grouping. Missing values are rejected.
 
     Raises
     ------
@@ -459,20 +496,20 @@ def split_indices(
         return _greedy_group_assignment(keys, n_train, n_test, order)
 
     if strategy == "group":
-        if groups is None or len(groups) != n:
+        if groups is None:
             raise DataValidationError(
                 "strategy 'group' needs one group label per row -- pass "
                 "groups=[...] aligned with X"
             )
+        keys = _group_keys(groups, n)
         if smiles is not None:
             raise DataValidationError(
                 "smiles= is only used by strategy 'scaffold' (got both)"
             )
         rng = np.random.default_rng(random_state)
-        unique = sorted({str(g) for g in groups}, key=str)
+        unique = sorted(set(keys))
         shuffled = unique[:]
         rng.shuffle(shuffled)
-        keys = [str(g) for g in groups]
         return _greedy_group_assignment(keys, n_train, n_test, list(shuffled))
 
     if strategy == "kennard_stone":
