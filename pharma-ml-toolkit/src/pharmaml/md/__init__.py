@@ -9,8 +9,10 @@ and selections), ``gromacs/gromacs`` / ``Amber-MD/cpptraj`` /
 (contact and H-bond timelines), ``Valdes-Tresanco-MS/gmx_MMPBSA``
 (binding free-energy legs), ``prody/ProDy`` (elastic network models),
 ``deeptime-ml/deeptime`` (PCA/tICA essential dynamics),
-``chemosim-lab/ProLIF`` (protein–ligand interaction fingerprints), and
-the viewing stacks (``nglviewer/nglview``, ``schrodinger/pymol-open-source``,
+``chemosim-lab/ProLIF`` (protein–ligand interaction fingerprints),
+``plumed/plumed2`` (the enhanced-sampling collective-variable
+vocabulary), and the viewing stacks (``nglviewer/nglview``,
+``schrodinger/pymol-open-source``,
 ``Eigenstate/vmd-python``) the web tab stands in for.
 
 Submodules:
@@ -24,6 +26,9 @@ Submodules:
   native contacts (Q), g(r), dihedrals;
 * :mod:`pharmaml.md.hbond` — geometric H-bond detection and salt
   bridges;
+* :mod:`pharmaml.md.cv` — PLUMED-style collective variables (geometry
+  CVs, ``COORDINATION``, the ``plumed.dat`` mini-parser and the
+  ``COLVAR`` table);
 * :mod:`pharmaml.md.dimred` — trajectory PCA and tICA;
 * :mod:`pharmaml.md.enm` — ANM/GNM elastic network models;
 * :mod:`pharmaml.md.plif` — protein–ligand interaction fingerprints;
@@ -40,6 +45,17 @@ Examples
 """
 
 from pharmaml.md.align import kabsch_rotation, rmsd, superpose
+from pharmaml.md.cv import (
+    CVTable,
+    cv_angle,
+    cv_coordination,
+    cv_dihedral,
+    cv_distance,
+    cv_gyration,
+    cv_rmsd,
+    cv_table,
+    parse_plumed_cvs,
+)
 from pharmaml.md.dimred import ProjectionResult, tica, trajectory_pca
 from pharmaml.md.enm import (
     anm_fluctuations,
@@ -94,6 +110,7 @@ from pharmaml.md.xvg import (
 __all__ = [
     "KJ_TO_KCAL",
     "METRIC_FILES",
+    "CVTable",
     "InteractionFingerprint",
     "LigandResult",
     "MDStudy",
@@ -110,6 +127,13 @@ __all__ = [
     "classify_metric",
     "contact_map",
     "cross_correlation",
+    "cv_angle",
+    "cv_coordination",
+    "cv_dihedral",
+    "cv_distance",
+    "cv_gyration",
+    "cv_rmsd",
+    "cv_table",
     "dihedral",
     "find_hbonds",
     "gnm_fluctuations",
@@ -123,6 +147,7 @@ __all__ = [
     "native_contact_fraction",
     "pairwise_distances",
     "parse_ndx_hbnum",
+    "parse_plumed_cvs",
     "parse_xvg",
     "ps_to_ns",
     "radial_distribution_function",

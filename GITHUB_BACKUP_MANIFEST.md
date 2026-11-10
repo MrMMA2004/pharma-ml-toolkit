@@ -1806,3 +1806,21 @@ bridge's pre-existing F821 `LigandResult` annotation and the
 round-250-sweep-stripped exec bit fixed en route); mypy clean across
 the 10 md files.  Census **1089/331,474**.  Web pins trued 5,281 ×7 +
 census fallbacks 1089/331,474 + `SHIPPED_TOOLKIT_VERSION` 1.2.163.
+
+## v1.2.164 release-zip homes (2026-11-10, round 255 — the PLUMED-style collective variables)
+
+`pharma-ml-toolkit-v1.2.164.zip` — 23,582,863 bytes, sha-256
+`edc25e8624a7f50c1d97f868e06b32658f64f5579e31031190f222b50d530905`
+(four byte-identical homes, testzip OK per home, real leaks 0 — the
+growth over v1.2.163's 23,673,301 B is `md/cv.py`, the PLUMED-style
+collective-variable module: the six CV actions (`cv_distance`,
+`cv_angle`, `cv_dihedral`, `cv_coordination` with the honest hard-switch
+subset, `cv_rmsd`, `cv_gyration`), the `CVTable` COLVAR equivalent with
+its axes-must-match and finite-only contracts, and the `plumed.dat`
+mini-parser with PLUMED's real 1-based semantics and honest refusals;
+`tests/test_md_cv.py` at 65 tests; `docs/MD_COLLECTIVE_VARIABLES.md`;
+INDEX regenerated at 899 symbols).  Notebooks re-executed at 1.2.164
+(8/8, home-path-survivors=0).  Census **1093/332,850**.  Web pins trued
+5,358 = 4,491 collect + 867 doctest (×7) + census fallbacks
+1093/332,850 + `SHIPPED_TOOLKIT_VERSION` 1.2.164; all three version
+carriers trued in one pass.

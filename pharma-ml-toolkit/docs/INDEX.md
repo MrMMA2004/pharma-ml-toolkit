@@ -799,6 +799,7 @@ after adding new public functions.
 |---|---|---|
 | `KJ_TO_KCAL` | constant |  |
 | `METRIC_FILES` | constant |  |
+| `CVTable` | class | The ``COLVAR`` equivalent: named CV series on one time axis. |
 | `InteractionFingerprint` | class | One pose's interaction record: counts, bits and residue pairs. |
 | `LigandResult` | class | One ligand's parsed metric series, keyed by metric key. |
 | `MDStudy` | class | A whole MD campaign: one :class:`LigandResult` per ligand folder. |
@@ -815,6 +816,13 @@ after adding new public functions.
 | `classify_metric` | function | Map an export filename to its :class:`MetricInfo`, or ``None``. |
 | `contact_map` | function | Symmetric contact-frequency matrix over the trajectory. |
 | `cross_correlation` | function | Normalised GNM fluctuation cross-correlation matrix. |
+| `cv_angle` | function | ``ANGLE`` — the angle at the middle atom per frame (degrees). |
+| `cv_coordination` | function | ``COORDINATION`` — the fraction of groupA–groupB pairs within ``R_0``. |
+| `cv_dihedral` | function | ``DIHEDRAL`` — the signed torsion per frame (degrees). |
+| `cv_distance` | function | ``DISTANCE`` — the two-atom separation per frame (Å). |
+| `cv_gyration` | function | ``GYRATION`` — the per-frame radius of gyration (Å). |
+| `cv_rmsd` | function | ``RMSD`` — per-frame RMSD (Å) after optimal superposition. |
+| `cv_table` | function | Assemble named CV series onto one validated time axis. |
 | `dihedral` | function | Torsion angle (degrees) of the bond ``p1–p2`` for atoms ``p0..p3``. |
 | `find_hbonds` | function | Detect one frame's H-bonds: (donor, acceptor) index pairs, sorted. |
 | `gnm_fluctuations` | function | Per-atom GNM mean-square fluctuations (relative, kT/γ units). |
@@ -828,6 +836,7 @@ after adding new public functions.
 | `native_contact_fraction` | function | Per-frame fraction of native contacts kept (the Q-value). |
 | `pairwise_distances` | function | Full ``(n, n)`` distance matrix for one frame. |
 | `parse_ndx_hbnum` | function | Parse an ``.ndx``-style H-bond count table into an :class:`XvgSeries`. |
+| `parse_plumed_cvs` | function | Parse a ``plumed.dat`` snippet and compute its CVs over ``traj``. |
 | `parse_xvg` | function | Parse GROMACS ``.xvg`` text (or a file path) into an :class:`XvgSeries`. |
 | `ps_to_ns` | function | Convert a ps time axis to ns. |
 | `radial_distribution_function` | function | Pair radial distribution function g(r) between two point sets. |
