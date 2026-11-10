@@ -12253,3 +12253,35 @@ unioned, not forked) · MD follow-on candidates
 remaining (not yet backlog items): H-bond timeline wiring into the web trajectory lab,
 PLUMED-style collective-variable helpers, and a contact-map/PLIF figure twin if a user asks
 · Part-3 remaining: §24 SA-in-generative wiring beyond the shipped slices.
+
+## Round 251 — 2026-11-10 — dual-session stand-down: the arena conformal branch is mid-flight; health + monitoring only
+
+**Pickup**: clean — no rollback (#28's recovery held end to end): HEAD `4f84cf0` = the round-250
+final push, origin/main equal, the PAT intact, the venv green, counter 41→42 for this fire.
+
+**The stand-down call**: `git fetch` surfaced a fresh arena branch
+(`arena/8696775e-pharma-ml-toolkit`) whose last commit was five minutes old — a session is
+actively preparing PR-style work (1,309 insertions: `ml/conformal.py` +
+`ml/conformal_classification.py`, `ml/evaluation.py` and `ml/splits.py` reworks,
+`ml/applicability.py` schema changes, five new/changed test files, three new docs pages, the
+toolkit `ci.yml` and the docs INDEX).  Per the owner's DUAL-SESSION RULE the toolkit files stay
+untouched this round: no feature, no pin truing, no zip work — the branch isn't merged yet and
+colliding with it (or racing its merge with release mechanics) would repeat the round-250
+three-way dance for no gain.  The round-251 feature candidates (the PLUMED-style
+collective-variable helpers, the H-bond timeline wiring into the web trajectory lab, the
+contact-map figure twin, and the §24 SA-in-generative engine wiring) carry to round 252
+unchanged.
+
+**What was done instead — the health + monitoring pass**: dev server GET / → 200; the
+zip-size endpoint answers `{"zipBytes":23669404,"version":"1.2.162","exact":true,
+"source":"release"}` — the round-250 carrier fix is holding; the webDevReview 15-min job rides
+the scheduler (job 519904, recreated in round 250); the master job 515197 is enabled with the
+2-hour cadence; the counter file rides this commit.
+
+**Watching for**: their PR's merge will move main's collect totals (+~570 test lines worth) and
+touch the docs INDEX — if their flow again skips the release mechanics (their pattern: features
+without a VERSION bump), round 252 opens with the pickup ritual: pull, validate their tests,
+true the version carriers and the census pins, run the nine-chunk gate (their new suites will
+need chunk assignments — `test_conformal*.py` → chunk 1, `test_evaluation_auc_integrity.py` /
+`test_splits_integrity.py` → chunk 1's a-l glob / chunk 3's r-z glob respectively),
+re-exec the notebooks, and ship the next zip.
