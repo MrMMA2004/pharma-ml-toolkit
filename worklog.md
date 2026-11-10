@@ -12523,3 +12523,73 @@ pickup ritual the moment its PR merges (chunk assignments pre-planned); the
 contact-map/PLIF viz twins; salt-bridge timelines beside the H-bond card; the web CV
 card over `/api/md/cv` + the bridge's `'cv'` op; Part-3 §24 SA-in-generative.  Counter
 46/100.
+
+## Round 257 — 2026-11-10 — the salt-bridge timeline: `salt_bridge_timeline` + `synthetic_salt_bridge_trajectory` + the bridge `"saltbridge"` op + the web's fifth MD card, shipped as v1.2.165
+
+User-triggered ("Continue the queued items") — FETCH FIRST found no concurrent
+session mid-flight (last main commit = this session's r256, no fresh mtimes, cold
+pytest cache) and the arena conformal branch still parked (`56e3cf9`, 12 ahead,
+unmerged) → real toolkit work on the queue's next actionable item: the salt-bridge
+timeline beside the H-bond card, following the proven r252 three-part shape.
+
+**Toolkit**: `md/hbond.py` gained `salt_bridge_timeline(traj, positive, negative, *,
+cutoff=4.0)` — the ionic-contact counterpart of `hbond_timeline`, one count per
+frame over the shipped `salt_bridges`; `md/trajectory.py` gained
+`synthetic_salt_bridge_trajectory(n_frames=60, seed=0, noise=0.03)` — four atoms,
+two independent oppositely-charged pairs (Lys Nζ···Glu Cδ, Arg Nη1···Asp Cγ, 8 Å
+apart), cation–anion distances `4.4 + 1.1·sin(2πf/n + phase)` with phases
+`(0, π/6)` — bridge 2 leads by a SIXTH of a period, so the designed 12-frame
+schedule is `[0,0,0,0,0,0,1,2,2,2,2,1]`: a four-frame two-bridge plateau, a
+deliberately different silhouette from the H-bond demo's narrow 2-frame peak.
+Salt bridges are distance-only (no angle gate) — the demo IS the whole criterion,
+and the docstring says so.  Both re-exported through `md/__init__py` (INDEX 899 →
+901 symbols).
+
+**Tests**: five new in `tests/test_md_analysis.py` — the pinned schedule (noise=0
+AND default-noise verified identical before pinning), determinism +
+self-consistency through the public API + the LYS/GLU/ARG/ASP topology,
+validation, and the timeline twin (near/far frames, out-of-range + cutoff
+refusals); plus 2 new doctests.  Focused: 63 passed (+5); md doctests 12 (+2).
+
+**Bridge + web**: `scripts/md_bridge.py` op `"saltbridge"` (per-frame counts +
+per-bridge distance series + cutoff + honest stats: mean, peak, ≥1-bridge
+fraction, per-bridge duty fractions, leads-by-a-sixth-period boolean); the zod-
+validated `/api/md/saltbridge` route; `MdSaltBridgeResponse` in toolkit-types;
+the fifth MD card (Magnet icon, emerald/amber/rose `TimelineChart`, the Lys/Arg
+duty chip, the plateau footnote); card-directory census 31 → 32 with the probe's
+source mapping and the parity pin trued (probe CARD_DIRECTORY_OK, 32/32/[]).
+
+**Validation**: ruff zero across `src/pharmaml/md/` + the test file; mypy clean on
+both touched modules; the NINE-chunk gate green — first pass caught the two
+expected ordering races (chunk 4: INDEX regenerated after the chunk ran; chunk 8:
+notebooks still printing 1.2.164 — both resolved by the release ritual itself),
+second pass **9/9 rc=0, failures=0**.  Notebooks re-executed at 1.2.165 (8/8,
+233 s, home-path-survivors=0 — the round-209 scrubber contract reconstructed as
+`scratch/reexec_notebooks_257.py`, the original was untracked scratch lost to a
+rollback).
+
+**Release**: the v1.2.165 zip built at **23,689,832 B, sha
+`e131ff7f08c485e9d59748cb31cdf3f82685dff84742d3aad7326448ac5bfa0f`** in four
+byte-identical homes, predecessor v1.2.164 swept from all four.  All THREE
+version carriers trued in one pass.  Honest totals **5,365 = 4,496 collect +
+869 doctest** (+5/+2).  Census **1093/333,097**.  Web pins trued 5,365 ×7 +
+census fallbacks + `SHIPPED_TOOLKIT_VERSION` 1.2.165; the round-257 clause
+appended to the overview suite-history.  Housekeeping: the CHANGELOG's missing
+`[1.2.164]` entry (r255 shipped without one) backfilled from its release commit.
+
+**Web verification** (agent-browser, mandatory — cards + pins changed): version
+badge 1.2.165, hero/footer 5,365 tests + 333,097 LOC; the salt-bridge card run
+live — 60 frames, mean 0.783 bridges/frame, peak 2, duty Lys 38 % / Arg 40 %,
+all three series labels + the method footnote rendering; theme toggle both ways
+(dark → light); footer present; mobile 390 px `scrollWidth === clientWidth ===
+390`; zero console/page errors; the zip endpoint answering `exact:true
+source:release` 23,689,832 B from inside the browser session.  Screenshots:
+`scratch/r257-saltbridge-{mobile,desktop}.png`.
+
+**Baselines for the next round** — v1.2.165 (four homes) · honest totals
+**5,365 = 4,496 + 869** · census **1093/333,097** · the gate is NINE chunks ·
+counter **46/100** (this round was user-triggered, no cron increment) · queue:
+the arena conformal pickup ritual the moment its PR merges (chunk assignments
+pre-planned in round 251), the contact-map/PLIF viz twins, the web CV card over
+`/api/md/cv` + the bridge's `'cv'` op (the module ships since r255), Part-3 §24
+SA-in-generative beyond the shipped slices.
