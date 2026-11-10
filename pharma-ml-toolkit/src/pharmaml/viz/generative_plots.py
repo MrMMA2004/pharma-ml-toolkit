@@ -13,7 +13,12 @@ The generative flagship's introspection artifacts, drawn as figures:
   score trajectory, the agent-vs-prior sequence log-probabilities, the
   squared drift the anchor penalises, and the exploration entropy — the
   four diagnostics every :func:`pharmaml.generative.run_rl_optimization`
-  run records in ``history``.
+  run records in ``history``;
+* :func:`plot_sa_distribution` — a generation run's raw Ertl SA-score
+  histogram (part3 section 24.3 "visualizing SA score distributions"):
+  exact :func:`pharmaml.viz.statplots.histogram_stats` bars, the
+  conventional 1-4 drug-like band shaded, the direction and the
+  limitations shipped with the returned payload.
 
 Examples
 --------
@@ -98,15 +103,22 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from pharmaml.exceptions import DataValidationError
 from pharmaml.logger import get_logger
-from pharmaml.viz._compat import PALETTE, new_figure
+from pharmaml.viz._compat import PALETTE, new_figure, save_figure
+from pharmaml.viz.statplots import histogram_stats
 
-__all__ = ["plot_operator_trajectory", "plot_pareto_front", "plot_rl_introspection"]
+__all__ = [
+    "plot_operator_trajectory",
+    "plot_pareto_front",
+    "plot_rl_introspection",
+    "plot_sa_distribution",
+]
 
 _LOG = get_logger(__name__)
 
@@ -644,3 +656,119 @@ def plot_mcts_introspection(
     ax_cache.set_ylabel("cumulative cache hits", fontsize=9)
     ax_cache.set_xlabel("cycle", fontsize=9)
     return fig
+
+
+def plot_sa_distribution(
+    result: Any,
+    path: str | Path | None = None,
+    *,
+    bins: str | int = "auto",
+    color: str = PALETTE[0],
+) -> dict[str, Any]:
+    """Raw Ertl SA-score histogram for one generation run (section 24.3).
+
+    The bars are drawn from :func:`~pharmaml.viz.statplots.histogram_stats`
+    (the same exact-edge contract as :func:`~pharmaml.viz.statplots.plot_histogram`)
+    over the run's *valid* molecules only; the conventional drug-like
+    band 1-4 is shaded so the eye reads the distribution against it.  The
+    x-axis names the direction ("lower = estimated easier to synthesise")
+    and the returned payload carries ``method`` / ``direction`` /
+    ``limitations`` plus ``n_invalid`` -- a favourable SA score is a
+    computational estimate, not evidence a molecule can actually be
+    synthesised (the spec's section 24.5 documentation rule).
+
+    Parameters
+    ----------
+    result:
+        A :class:`~pharmaml.generative.GenerationResult` (duck-typed like
+        the sibling plot functions; only ``smiles`` is read).
+    path:
+        Optional save target; the figure is always also returned.
+    bins:
+        Passed through to :func:`histogram_stats` (``"auto"`` / ``"fd"``
+        / ``"sturges"`` / ``"sqrt"`` or a fixed bin count).
+
+    Returns
+    -------
+    dict
+        :func:`histogram_stats`' keys plus ``n_invalid``, ``method``,
+        ``direction`` and ``limitations``.
+
+    Raises
+    ------
+    DataValidationError
+        When fewer than two valid molecules can be scored (nothing to
+        bin), or the bin rule is invalid.
+    DependencyError
+        When RDKit (or its Contrib SA_Score database) is unavailable.
+
+    Example
+    -------
+    >>> from pharmaml.generative import GenerationResult
+    >>> from pharmaml.viz import close_figure
+    >>> from pharmaml.viz.generative_plots import plot_sa_distribution
+    >>> run = GenerationResult(
+    ...     smiles=["CC(=O)Oc1ccccc1C(=O)O", "CCO", "CCN",
+    ...             "Cn1cnc2c1c(=O)n(C)c(=O)n2C", "not-a-smiles"],
+    ...     scores=[0.8, 0.6, 0.5, 0.4, 0.0])
+    >>> payload = plot_sa_distribution(run)
+    >>> (payload["n"], payload["n_invalid"], round(payload["mean"], 3))
+    (4, 1, 2.008)
+    >>> fig = payload["figure"]
+    >>> (len(fig.axes), fig.axes[0].get_xlabel())
+    (1, 'SA score (lower = estimated easier to synthesise)')
+    >>> [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+    ['conventional drug-like band (1-4)', 'molecules']
+    >>> fig.axes[0].get_title(loc="left")
+    'SA score distribution — n=4, mean=2.01, invalid=1'
+    >>> close_figure(fig)
+    >>> plot_sa_distribution(GenerationResult(smiles=["CCO"], scores=[0.5]))
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DataValidationError: fewer than two valid molecules to score -- a distribution needs at least 2 (got 1)
+    """
+    from pharmaml.chem.sa_scoring import (
+        SA_SCORE_LIMITATIONS,
+        SA_SCORE_METHOD,
+        sa_scores,
+    )
+
+    smiles = list(getattr(result, "smiles", []) or [])
+    batch = sa_scores(smiles)
+    scores = batch.valid_scores
+    if len(scores) < 2:
+        raise DataValidationError(
+            "fewer than two valid molecules to score -- a distribution "
+            f"needs at least 2 (got {len(scores)})"
+        )
+    stats = histogram_stats(scores, bins=bins)
+
+    fig, raw_ax = new_figure(figsize=(7.0, 4.5))
+    ax = np.atleast_1d(raw_ax)[0]
+    ax.bar(
+        stats["centers"], stats["counts"].astype(float),
+        width=0.94 * stats["bin_width"], color=color, edgecolor="white",
+        linewidth=0.6, label="molecules",
+    )
+    ax.axvspan(1.0, 4.0, color=PALETTE[1], alpha=0.12, zorder=0,
+               label="conventional drug-like band (1-4)")
+    ax.set_xlabel("SA score (lower = estimated easier to synthesise)", fontsize=10)
+    ax.set_ylabel("molecules", fontsize=10)
+    ax.set_title(
+        f"SA score distribution — n={stats['n']}, mean={stats['mean']:.3g}, "
+        f"invalid={batch.n_invalid}",
+        fontsize=11, loc="left", pad=10,
+    )
+    ax.legend(fontsize=8, frameon=False)
+    if path is not None:  # figure stays open for the caller either way
+        save_figure(fig, path)
+
+    payload = dict(stats)
+    payload.update(
+        n_invalid=batch.n_invalid,
+        method=SA_SCORE_METHOD,
+        direction="lower = estimated easier to synthesise",
+        limitations=SA_SCORE_LIMITATIONS,
+        figure=fig,
+    )
+    return payload

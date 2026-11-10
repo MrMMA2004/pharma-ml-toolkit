@@ -3,10 +3,9 @@
 Auto-derived from each module's `__all__` exports — the authoritative quick
 reference for the public API. Re-run `python scratch/build_docs_index.py`
 after adding new public functions.
-
 ## `pharmaml`
 
-*Package root: exceptions + version*
+*PharmaML — a production-ready toolkit for computational pharmacy.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -21,7 +20,7 @@ after adding new public functions.
 
 ## `pharmaml.data`
 
-*Bring your own data: load user CSV/TSV/Excel files*
+*Bring your own data: import user files (CSV/TSV/TXT/Excel) into PharmaML.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -36,7 +35,7 @@ after adding new public functions.
 
 ## `pharmaml.chem`
 
-*Cheminformatics: converters, descriptors, similarity*
+*Cheminformatics helpers: conversion, descriptors, the multi-family*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -241,7 +240,7 @@ after adding new public functions.
 
 ## `pharmaml.ml`
 
-*QSAR machine learning: preprocessing → training → evaluation → persistence*
+*QSAR machine learning: preprocessing, training, evaluation, persistence,*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -599,6 +598,7 @@ after adding new public functions.
 | `QedObjective` | class | RDKit QED (quantitative estimate of drug-likeness). |
 | `RawComponentObjective` | class | A REINVENT4 component: raw descriptor value pushed through a transform. |
 | `ReinventOptimizer` | class | Policy-gradient fine-tuning of a SMILES RNN prior. |
+| `SAFilteredCandidates` | class | Section 24.4 outcome: kept AND rejected are both preserved. |
 | `SAScoreObjective` | class | Ertl synthetic-accessibility score as a generation reward (part3 §24.5). |
 | `ScaffoldSimilarityFilter` | class | Bucket by *similar* scaffolds (``scaffold_similarity``). |
 | `ScoreTransform` | class | Base class of the REINVENT4 transform DSL. |
@@ -647,7 +647,7 @@ after adding new public functions.
 
 ## `pharmaml.pharma`
 
-*Pharmaceutical calculations: units, PK, PD, dosage*
+*Pharmaceutical calculations: units, PK, PD, dosage design, regulatory-approval filtering.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -702,19 +702,19 @@ after adding new public functions.
 
 ## `pharmaml.docking`
 
-*Molecular docking: preparation, workflow, parsing, scoring, contact geometry & PLIF fingerprints*
+*Molecular-docking workflows: preparation, execution, parsing, scoring*
 
 | Symbol | Kind | Summary |
 |---|---|---|
-| `CARBOXYLATE_OXYGENS` | constant | Receptor-side oxygen names that mark a carboxylate (the salt-bridge rule). |
+| `CARBOXYLATE_OXYGENS` | constant |  |
 | `DEFAULT_MGL_PYTHON` | constant |  |
 | `DEFAULT_PREPARE_LIGAND4` | constant |  |
 | `DOCKSTRING_OBJECTIVES` | constant |  |
 | `DOCKSTRING_TARGETS` | constant |  |
-| `INTERACTION_CLASSES` | constant | The interaction classes, in classification order (first match wins). |
+| `INTERACTION_CLASSES` | constant |  |
 | `UNSUPPORTED_LIGAND_ATOMS` | constant |  |
 | `AutomorphismCache` | class | spyrmsd's pose-list economy: enumerate the automorphisms once. |
-| `ContactAtom` | class | One parsed ATOM/HETATM record, normalised for contact geometry. |
+| `ContactAtom` | class | One ATOM/HETATM record, parsed for contact geometry. |
 | `ContactRecord` | class | One ligand-receptor atom pair within the cutoff, classified. |
 | `DockingTarget` | class | One DOCKSTRING receptor name and Vina search box (angstrom). |
 | `GridBox` | class | Docking search box geometry. |
@@ -731,14 +731,14 @@ after adding new public functions.
 | `centroid_distance` | function | Euclidean distance between the two geometries' centroids. |
 | `check_docking_completion` | function | Audit a docking tree for missing/failed runs (upgrades checker.py). |
 | `check_torsion_consistency` | function | Compare TORSDOF, active REMARKs and BRANCH counts of a PDBQT. |
-| `classify_interaction` | function | Classify one ligand-receptor atom pair by distance-geometry bands. |
+| `classify_interaction` | function | Classify one ligand-receptor atom pair by distance geometry. |
 | `cleanup_tree` | function | Delete every file not on the allowlist, bottom-up. |
 | `collect_files` | function | Collect matching files from a campaign tree into one folder. |
+| `compute_contacts` | function | All ligand-receptor atom pairs within ``cutoff``, classified. |
 | `compute_grid_box` | function | Compute a grid box enclosing a reference ligand plus padding. |
-| `compute_contacts` | function | Every ligand-receptor atom pair within a cutoff, classified, closest-first. |
-| `contact_matrix` | function | Residue x ligand-atom minimum-distance grid of a docked pose. |
 | `consensus_breakdown` | function | Explain a consensus ranking: per-column units plus the score. |
 | `consensus_rescore` | function | Combine several docking evidence columns into a 0–1 consensus. |
+| `contact_matrix` | function | Minimum-distance grid: receptor residues x ligand atoms. |
 | `convert_pdb_folder_to_pdbqt` | function | Batch-convert a folder of PDB files to PDBQT via MGLTools. |
 | `crop_beyond` | function | DiffDock's ``utils/utils.py::crop_beyond``: the residue-level crop. |
 | `delete_named_files` | function | Delete every file named ``filename`` anywhere under ``directory``. |
@@ -769,9 +769,9 @@ after adding new public functions.
 | `parse_vina_output` | function | Parse the mode table of a Vina output (stdout log or PDBQT REMARKs). |
 | `perturb_torsions` | function | Apply torsion updates to a geometry (``modify_conformer_torsion_angles``). |
 | `plain_rmsd` | function | The plain, no-superposition RMSD (``spyrmsd.rmsd``). |
-| `pose_clusters` | function | Greedy RMSD clustering of poses (the confidence approximation). |
-| `plif_bits` | function | The 0/1 fingerprint twin of :func:`plif_matrix` (1 when any contact of the class). |
+| `plif_bits` | function | The 0/1 fingerprint twin of :func:`plif_matrix`. |
 | `plif_matrix` | function | Per-residue interaction-class counts (the PLIF table). |
+| `pose_clusters` | function | Greedy RMSD clustering of poses (the confidence approximation). |
 | `pose_evaluation_report` | function | The full DiffDock evaluation on one reference vs N poses. |
 | `pose_rmsd_matrix` | function | The pairwise in-place (or Kabsch) RMSD matrix of a pose set. |
 | `prepare_ligand_library` | function | Prepare every ligand of a CSV library into a campaign tree. |
@@ -781,8 +781,8 @@ after adding new public functions.
 | `qed_penalty` | function | DOCKSTRING's ``10 * (1-QED)`` optimization penalty. |
 | `randomize_pose` | function | DiffDock's ``randomize_position``: the diffusion initial state. |
 | `read_gpf` | function | Parse an AutoDock4 grid parameter file (GPF) into a dict. |
-| `read_pdb_atoms` | function | ATOM/HETATM records of a plain PDB text or file (the receptor side). |
-| `read_pdbqt_atoms` | function | ATOM/HETATM records of a PDBQT MODEL block (the pose side). |
+| `read_pdb_atoms` | function | ATOM/HETATM records of a plain PDB text or file. |
+| `read_pdbqt_atoms` | function | ATOM/HETATM records of a PDBQT text or file, one MODEL at a time. |
 | `reindex_by_number` | function | Reindex a frame onto the full ligand-number range. |
 | `rmsd_wrapper` | function | spyrmsd's ``rmsdwrapper``: one reference vs a list of molecules. |
 | `rotatable_masks` | function | The bonds and their rotation masks (``get_transformation_mask``). |
@@ -805,7 +805,7 @@ after adding new public functions.
 
 ## `pharmaml.md`
 
-*Molecular dynamics: trajectories, metrics, H-bonds, essential dynamics, ENMs, interactions, studies*
+*Molecular-dynamics analysis — trajectories, metrics, interactions.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -871,7 +871,7 @@ after adding new public functions.
 
 ## `pharmaml.viz`
 
-*Visual output for every domain: figures, tables, HTML reports*
+*Visual output for every PharmaML domain — plots, tables, HTML reports.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -904,6 +904,7 @@ after adding new public functions.
 | `plot_concentration_profile` | function | Plot one PK profile: linear + semi-log panels with AUC shading. |
 | `plot_confusion_matrix` | function | Heat-map of predicted-vs-true class counts. |
 | `plot_consensus_ranking` | function | Horizontal bars of ligands ranked by the 0–1 consensus. |
+| `plot_contact_map` | function | Residue × ligand-atom minimum-distance grid of a docked pose. |
 | `plot_correlation_heatmap` | function | Feature × feature correlation heatmap (the seaborn-free port). |
 | `plot_cv_scores` | function | Per-fold CV scores as bars with the mean line and ±std band. |
 | `plot_descriptor_distributions` | function | Histogram grid over the numeric columns of a table. |
@@ -931,15 +932,15 @@ after adding new public functions.
 | `plot_pca_variance` | function | Explained-variance ladder -- the "how many components?" answer. |
 | `plot_permutation_heatmap` | function | Cross-model permutation-importance heatmap (features × models). |
 | `plot_permutation_importance` | function | Top-N permutation importances as signed bars with error bars. |
+| `plot_plif_heatmap` | function | Residue × interaction-class PLIF counts (or the 0/1 twin). |
 | `plot_pr_curves` | function | Precision-Recall curves — binary or one-vs-rest multiclass. |
 | `plot_predicted_vs_actual` | function | Parity scatter for regression, with the identity reference line. |
 | `plot_prediction_intervals` | function | Parity scatter with the quantile-regression prediction band. |
-| `plot_contact_map` | function | Residue x ligand-atom minimum-distance heat grid of a docked pose. |
-| `plot_plif_heatmap` | function | Per-residue interaction-class PLIF counts (or the 0/1 bits twin). |
 | `plot_receptor_atom_types` | function | Bar chart of the AutoDock atom-type census of a receptor. |
 | `plot_residuals` | function | Residuals vs predicted (left) and residual histogram (right). |
 | `plot_rl_introspection` | function | One figure per RL run: the score story + the prior-drift diagnostics. |
 | `plot_roc_curves` | function | Receiver-operating curves — binary or one-vs-rest multiclass. |
+| `plot_sa_distribution` | function | Raw Ertl SA-score histogram for one generation run (section 24.3). |
 | `plot_selfies_robustness` | function | The robustness experiment's two validity curves, one figure. |
 | `plot_shap_beeswarm` | function | The SHAP beeswarm in PURE matplotlib -- ``D2.py``'s GAP-5 figure. |
 | `plot_shap_dependence` | function | One feature's value vs its SHAP value, coloured by its partner (100x-160). |
@@ -965,7 +966,7 @@ after adding new public functions.
 
 ## `pharmaml.utils.io`
 
-*Safe tabular I/O helpers*
+*Robust tabular and filesystem I/O.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -978,7 +979,7 @@ after adding new public functions.
 
 ## `pharmaml.utils.validation`
 
-*Shared input-validation layer*
+*Input validation guards.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -1012,9 +1013,11 @@ after adding new public functions.
 ## Command-line interface
 
 ```text
-pharmaml models | data inspect | ml train | ml compare | chem pic50
-             | chem descriptors | pharma pk | pharma dose | docking scan
-             | docking check
+pharmaml models | data inspect | data split | data convert | ml train
+             | ml compare | chem pic50 | chem descriptors | pharma pk
+             | pharma dose | docking prep-ligands | docking prep-protein
+             | docking scan | docking check | generative run
+             | generative corpus
 ```
 
 See `pharmaml/cli.py` for every flag, and `README.md` for the full manual.

@@ -13316,3 +13316,91 @@ notebook re-execution).  Web pins trued 5,512 ×7 +
 
 Next: §24 SA-in-generative wiring, the PR #9 conformal pickup the
 moment it merges, and the Phase-4 gap list from the feature inventory.
+
+## Round 265 — 2026-11-11 — part3 §24.3/24.4 shipped as v1.2.172: the SA results lens on GenerationResult (the r264 next-queue's head)
+
+**Opening state (run 49/100, the counter-gap tail).**  The scratch
+counter read 48/100 with the r264 note; the platform's run_count was
+58 — the firing-gap tail of the rollback-#32 window continues (10
+platform firings have now landed without a live round).  Local ==
+origin/main at `7f9b860` (r264, v1.2.171), clean tree, no concurrent
+IM session mid-flight (the viz/* fresh mtimes and the warm pytest
+cache were r264's own committed work; no processes).  rdkit 2026.09.1
+healthy, dev server up, webDevReview 522062 present but disabled by
+the platform exec limit (re-acknowledged in the manifest, not
+recreated — the 3/day quota).
+
+**The work (the §24.3/24.4 container wiring — the honest remaining
+gap).**  The SA engine (`chem/sa_scoring.py`), the optimization
+objective (`SAScoreObjective`) and the CLI reward wiring
+(`--sa-weight`) all existed; what §24.3/24.4 asked for that nothing
+provided was the **results surface**: the spec's own doc still showed
+a five-line manual `sa_scores` + `filter_by_sa` dance for "raw scores
+or explicit post-run filtering".  This round the
+`GenerationResult` container speaks it natively:
+
+- `sa_frame(sort)` — the leaderboard + the **raw** Ertl `sa_score`
+  column (`NaN` for invalid SMILES) + `sa_valid`; sort
+  `"easiest"`/`"hardest"` with invalid rows last, the `rank` column
+  keeping the objective rank as provenance.  The collision the code
+  family had guarded since the reserved-column rule: a breakdown
+  whose MultiObjective carried the SA *reward* key `sa_score` gets it
+  renamed `sa_score_reward` before the raw column is appended — the
+  CLI's documented reward column never silently clobbers the raw
+  score, and vice versa.
+- `filter_by_sa(min_sa, max_sa)` + `SAFilteredCandidates` — §24.4:
+  inclusive bounds, no constraints = no filtering (`kept is result`),
+  and with constraints the **rejected rows are preserved** in a
+  rank/smiles/score/sa_score/reason table (invalid SMILES rejected
+  only when a constraint is active, with that reason);
+  `n_kept + n_rejected == n_total` always.  Non-finite/non-numeric
+  bounds raise `DataValidationError`.
+- `sa_summary()` — valid-subset statistics with the
+  `n_druglike_band` count (raw SA inside the conventional 1-4 band),
+  `method`/`direction`/`limitations` riding every payload (§24.5's
+  documentation rule).
+- `viz/generative_plots.py` `plot_sa_distribution` — the §24.3
+  distribution figure: exact-edge `histogram_stats` bars, the
+  drug-like band shaded, the direction on the axis, the figure +
+  context in the payload; exported from `pharmaml.viz`.
+
+**The notebook (§9b, "the synthesizability lens").**  The generative
+workflow grew section 9b over the 613-molecule section-4 run: the
+easiest-five table, the inclusive-range filter demo (kept 108 /
+rejected 505 — both sides preserved with reasons, a deliberately
+wide gap the run genuinely spans), the summary payload and the
+distribution figure.  The recap needed no renumbering (the 9b slot).
+
+**The gate (ten chunks, the OOM ritual honoured).**  Dev server down
+first (the 1.5 GB next-server freed, 3.4 GB available).  Chunks
+1/3/4/6/7/8/9/10 green; chunk-2 and chunk-5 each carried
+notebook-freshness guards (five failures total:
+`test_notebook_freshness_green_on_the_live_tree`, the viz
+generative-notebook artifact guard, three
+`test_executed_outputs_print_shipped_version` params) — all five the
+EXPECTED pre-reexec state (VERSION bumped before the notebooks
+re-ran), zero functional failures.  Notebooks 8/8 re-executed at
+1.2.172 in 237 s (server still down; home-path-survivors 0), twins
+regenerated, the five guards re-verified green standalone (the
+r264 precedent: the affected tests re-run with their own commands
+after the tree settles).
+
+**Release (v1.2.172).**  Four carriers bumped together; CHANGELOG
+leads.  Zip **8,883,247 B** sha `c2676af8…` four homes, testzip OK
+per home, composition violations 0, real leaks 0; predecessor
+v1.2.171 swept from all four homes by the r265 builder whose
+PREDECESSOR constant chased the ACTUAL shipped previous version
+(the r264 lesson applied — this time it was already correct in the
+copied shape).  Honest totals **5,547 = 4,673 collect + 874 doctest**
+(collect-only verified; +31 collect +4 doctest over r264), census
+**1091/339,543** (the endpoint-rule walk after the notebook
+re-execution; +1 file = the new suite, the line growth mostly the
+re-executed notebooks' own canonical re-wrap).  Web pins trued
+5,547 ×7 + `FALLBACK_STATS` 1091/339,543 + `SHIPPED_TOOLKIT_VERSION`
+1.2.172.  Docs: GENERATIVE_SA rewritten around the container API,
+README §24 trued to the four wiring points, INDEX regenerated (916
+symbols), FEATURES trued (generative 9,682 L + the 31-test suite;
+viz 16,936 L + the SA distribution), manifest appended.
+
+Next: the PR #9 conformal pickup the moment it merges, the Phase-4
+gap list from the feature inventory.

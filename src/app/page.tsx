@@ -57,11 +57,12 @@ function ThemeToggle() {
   );
 }
 
-/* r264 (the contact-map/PLIF twins): +3 files (docking/contacts.py,
- * test_docking_contacts.py, the demo pose pdbqt), +66 collect tests and
- * the doctest module docstring; census verified by the endpoint-rule
- * walk (1090 = 1087 + 3 new) after the notebook re-execution. */
-const FALLBACK_STATS = { files: 1090, lines: "337,800" };
+/* r265 (the section-24.3/24.4 SA results lens): +1 file
+ * (tests/test_generative_result_sa.py), +31 collect tests and +4
+ * doctests (result.py's three new method docstrings + the
+ * plot_sa_distribution one); census verified by the endpoint-rule walk
+ * (1091 = 1090 + 1 new) after the notebook re-execution. */
+const FALLBACK_STATS = { files: 1091, lines: "339,543" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
@@ -208,7 +209,7 @@ export default function Home() {
             {stats ? `${stats.files} files · ${stats.totalLines.toLocaleString("en-US")} LOC` : `${FALLBACK_STATS.files} files · ${FALLBACK_STATS.lines} LOC`}
             {" · "}
             <span className="ping-ring relative inline-flex size-2 rounded-full bg-primary" aria-hidden />
-            <span className="text-primary">5512 tests</span>
+            <span className="text-primary">5547 tests</span>
           </p>
         </div>
       </footer>

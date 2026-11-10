@@ -5,8 +5,8 @@ This is the §4.5 deliverable of the MASTER_PROMPT part 4 specification:
 traceability matrix.** All evidence on this page was collected live against the
 working tree (imports grepped, pages/cards/routes enumerated, tests collected
 with `pytest --collect-only`), not copied from prose. Matrix inputs were frozen
-at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.171 (the
-r264 twin rows trued live). The §5 nine-card mapping (§10 below) was
+at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.172 (the
+r265 §24.3/24.4 rows trued live). The §5 nine-card mapping (§10 below) was
 derived live at v1.2.169.
 
 ## Status legend (the six §4.5 classes)
@@ -94,8 +94,8 @@ commit. "GUI" = Studio page(s); "Web" = card(s)/route(s) from §2.
 | --- | --- | --- | --- | --- | --- | --- |
 | `chem` | 22 files / 19,957 L | standardize, descriptors (incl. RISM opt-in), tables, similarity, diversity, SELFIES, SA scoring, oracles | Chemistry | `feat-factory`, `gen-sa-score` | `test_chem_*`, `test_descriptors.py` (73), `test_selfies_codec.py`, `test_sa_score.py` | **A** |
 | `ml` | 69 files / 67,251 L | registry (30+ estimator families), train/evaluate, persistence, CV diagnostics, HPO/multiobjective, XAI, drugresponse, unsupervised/manifold, adversarial, privacy, recommend, apriori, annsearch, catalog, runboard, umap, curation | ML Workbench, Model Analysis, Foundations, Best-of ML, Response AI, Deep Learning, Unsupervised | `ml/*` cards + routes | `test_ml_pipeline.py` (211), `test_tuner.py` (118), `test_explain.py` (115), `test_hpo.py` (64) + 20 more suites | **A** (except the §4 C-list) |
-| `viz` | 22 files / 16,802 L | publication plots, interactive (express-layer), MD plots, docking contact-map/PLIF twins, export bundle, PDF reports | every page; Utilities | session report | `test_viz.py` (229), `test_viz_md_plots.py`, `test_export_images.py` | **A** |
-| `generative` | 16 files / 9,365 L | graph surgery, ring topology moves, breeding, MCTS search, SA-constrained generation | Generative | `gen-*` cards | `test_generative.py` (291), `test_mcts.py` (12) | **A** |
+| `viz` | 22 files / 16,936 L | publication plots, interactive (express-layer), MD plots, docking contact-map/PLIF twins, SA-score distributions, export bundle, PDF reports | every page; Utilities | session report | `test_viz.py` (229), `test_viz_md_plots.py`, `test_export_images.py`, `test_generative_result_sa.py` (viz rows) | **A** |
+| `generative` | 16 files / 9,682 L | graph surgery, ring topology moves, breeding, MCTS search, SA-constrained generation, the raw-SA results lens (`sa_frame` / `filter_by_sa` / `sa_summary`) | Generative | `gen-*` cards | `test_generative.py` (291), `test_mcts.py` (12), `test_generative_result_sa.py` (31) | **A** |
 | `pharma` | 19 files / 12,545 L | PK summaries, dosing design, unit conversions, pharmaceutical calculators | PK/PD, Utilities | calculators (TS ports) | `test_pk.py` (49), `test_dosage.py` (24), `test_units.py` (25) | **A** |
 | `docking` | 12 files / 8,266 L | ligand/protein prep (GPF/DPF), output parsing, torsion QA, consensus rescore, DOCKSTRING benchmark boxes, contact geometry + PLIF fingerprints | Docking, Utilities | `dock-*` cards | `test_docking*.py`, `test_docking_contacts.py` (55), `test_pose_rmsd.py` (48) | **A** (engine: class **F**) |
 | `pkpd` | 15 files / 7,201 L | compartment ODEs, events, NCA, PD engines | PK/PD | PK/PD Explorer | `test_pkpd_engines.py` (99) | **A** |

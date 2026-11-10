@@ -25,7 +25,32 @@ the reward alongside all recipe objectives; for a QED-plus-SA run,
 `--pareto-plot` plots that pair. With more objectives the plot uses the
 first two objective columns, not necessarily SA.
 
-For raw scores or explicit post-run filtering, use the separate chemistry API:
+For the raw Ertl score, sorting, filtering and distribution, every run's
+`GenerationResult` speaks part3 §24.3/24.4 natively (round 265's wiring —
+no manual dance needed):
+
+```python
+from pharmaml.viz import plot_sa_distribution
+
+frame = result.sa_frame(sort="easiest")     # leaderboard + raw sa_score (1-10)
+picked = result.filter_by_sa(min_sa=2.0, max_sa=4.0)
+print("accepted:", picked.n_kept, "rejected:", picked.n_rejected)
+print(picked.rejected[["smiles", "reason"]].head())   # both sides preserved
+print(result.sa_summary())                # direction + limitations always ride
+payload = plot_sa_distribution(result)    # histogram, drug-like band shaded
+```
+
+On a run whose `MultiObjective` included the SA reward, `sa_frame()` renames
+that breakdown column to `sa_score_reward` before appending the raw
+`sa_score` — the reward and the raw score never silently clobber each other.
+`filter_by_sa` bounds are inclusive; with neither bound set nothing is
+filtered at all (the spec's "do not permanently discard generated
+candidates unless the user explicitly enables such filtering"), and when a
+filter is active the rejected rows are preserved with per-row reasons —
+`kept + rejected == total`, always.
+
+A CSV read back from disk (or any plain SMILES column) can still use the
+chemistry API directly:
 
 ```python
 import pandas as pd

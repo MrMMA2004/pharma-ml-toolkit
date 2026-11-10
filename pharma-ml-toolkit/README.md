@@ -2078,14 +2078,23 @@ invalid SMILES never crash the batch.  The optional max-SA bound only
 candidates); the summary reports mean ± std, range and the honest
 caveat (a computational estimate, not a route plan).
 
-The score is wired in three places: the **oracle book**
+The score is wired in four places: the **oracle book**
 (`chem.oracles.sa_score` — the fragment table is loaded lazily and a
 Contrib-less RDKit build degrades honestly to the complexity-only
 ranking, and `penalized_logp` now uses the real SA too), the
 generative **evolution objective** (`SAScoreObjective`, where the
 window bounds become the easy/hard reward anchors — §24.5: SA as ONE
-signal in a multi-objective loop, never the sole target), and the
-Studio **Generative tab's "SA score" engine tab** — paste molecules,
+signal in a multi-objective loop, never the sole target), the
+**results container itself** (round 265: `GenerationResult.sa_frame()`
+appends the raw `sa_score` column to any run's leaderboard — sortable
+`"easiest"`/`"hardest"`, a run that optimised the SA reward keeps it
+as a distinct `sa_score_reward` column — while
+`filter_by_sa(min_sa, max_sa)` preserves the rejected rows with
+reasons (`kept + rejected == total`, always), `sa_summary()` reports
+the valid-subset statistics with the drug-like-band count, and
+`plot_sa_distribution()` draws the exact-edge histogram with the
+conventional 1–4 band shaded), and the Studio **Generative tab's
+"SA score" engine tab** — paste molecules,
 set the max-SA bound, get the ranked table (rank / SMILES / canonical
 / score / band / status) with rejects kept in place.
 

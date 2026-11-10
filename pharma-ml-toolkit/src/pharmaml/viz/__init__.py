@@ -42,7 +42,10 @@ layer for **all** toolkit codes:
                   :func:`plot_rl_introspection` (an RL run's prior-drift
                   story: agent-vs-prior log-probabilities, the squared
                   drift the anchor penalises, and the exploration
-                  entropy — four panels over ``history``);
+                  entropy — four panels over ``history``) and
+                  :func:`plot_sa_distribution` (a generation run's raw
+                  Ertl SA-score histogram with the drug-like band
+                  shaded — part3 section 24.3);
 * molecular
   dynamics      — :func:`plot_md_series` (a parsed GROMACS metric as a
                   line chart with a mean reference line and the uploaded
@@ -123,6 +126,7 @@ from pharmaml.viz.generative_plots import (
     plot_operator_trajectory,
     plot_pareto_front,
     plot_rl_introspection,
+    plot_sa_distribution,
 )
 from pharmaml.viz.md_plots import (
     plot_md_correlation,
@@ -258,6 +262,7 @@ __all__ = [
     "plot_residuals",
     "plot_rl_introspection",
     "plot_roc_curves",
+    "plot_sa_distribution",
     "plot_selfies_robustness",
     "plot_shap_beeswarm",
     "plot_shap_dependence",

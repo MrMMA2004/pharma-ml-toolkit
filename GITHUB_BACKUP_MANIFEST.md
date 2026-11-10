@@ -2125,3 +2125,62 @@ round recovered rollback #32 and shipped the r263 queue's first item:
   the new symbols.  webDevReview 522062 (96-vs-3 daily limit
   re-acknowledged).  Next: §24 SA-in-generative wiring, the PR #9
   conformal pickup, the Phase-4 gap list.
+
+## v1.2.172 release-zip homes (2026-11-11, round 265 — part3 §24.3/24.4: the SA results lens on GenerationResult)
+
+`pharma-ml-toolkit-v1.2.172.zip` — 8,883,247 bytes, sha-256
+`c2676af8db050b8f31c40bd36216e3de7ba4b8216a7067e321c421e6c5eb9857`
+(four byte-identical homes, testzip OK per home, composition
+violations 0, real leaks 0; predecessor v1.2.171 swept from all four
+homes by the r265 builder, whose PREDECESSOR constant chased the
+ACTUAL shipped previous version — the r264 lesson applied).  The round
+delivered the r264 next-queue's head:
+
+- `generative/result.py` — `GenerationResult.sa_frame(sort)` (the
+  §24.3 results table: the leaderboard plus the raw Ertl `sa_score`
+  column and `sa_valid`, sortable `"easiest"`/`"hardest"` with
+  invalid rows last; a breakdown carrying the SAScoreObjective's 0-1
+  reward key is renamed `sa_score_reward` so raw and reward never
+  clobber), `filter_by_sa(min_sa, max_sa)` + `SAFilteredCandidates`
+  (the §24.4 inclusive-range filter: no constraints = no filtering,
+  `kept is result`; with constraints the rejected rows are PRESERVED
+  in a rank/smiles/score/sa_score/reason table — `n_kept +
+  n_rejected == n_total` always; non-finite/non-numeric bounds
+  raise `DataValidationError`), and `sa_summary()` (valid-subset
+  statistics + `n_druglike_band` inside the conventional 1-4 band +
+  method/direction/limitations riding every payload).
+- `viz/generative_plots.py` — `plot_sa_distribution` (§24.3 "visualize
+  SA score distributions"): exact-edge `histogram_stats` bars over the
+  valid subset, the drug-like band shaded, the direction on the axis,
+  `figure`/`n_invalid`/`method`/`direction`/`limitations` in the
+  payload; exported from `pharmaml.viz`.
+- `examples/complete_generative_workflow.ipynb` — new section 9b "the
+  synthesizability lens" (the 613-molecule section-4 run through the
+  table, the inclusive-range filter — kept 108 / rejected 505 both
+  preserved with reasons — the summary and the distribution figure);
+  the no-output twin regenerated.
+- `tests/test_generative_result_sa.py` — 31 tests (columns, the
+  hand-checked aspirin/CCO/caffeine values, both sort orders, the
+  reward-rename collision also pinned end-to-end on a real seeded GA
+  run, the nothing-discarded accounting, the no-op/inverted-range/
+  non-finite contracts, empty results, and the figure facts).
+- Docs: GENERATIVE_SA.md (the manual CSV workaround replaced by the
+  container API), README §24 trued to the four wiring points,
+  INDEX regenerated (916 symbols), FEATURES trued (generative 16
+  files / 9,682 L + the new suite; viz 16,936 L), CHANGELOG leads
+  1.2.172; the four version carriers (VERSION, pyproject, dunder,
+  SHIPPED_TOOLKIT_VERSION) all agree at 1.2.172.
+- Gate: ten chunks, failures=2 pre-reexec (the five notebook
+  freshness/artifact guards — expected: VERSION bumped before the
+  notebooks re-ran), zero functional failures; notebooks 8/8
+  re-executed at 1.2.172 in 237 s with the dev server down
+  (home-path-survivors 0), twins regenerated, the five guards
+  re-verified green standalone.  Honest totals **5,547 = 4,673
+  collect + 874 doctest** (collect-only verified), census
+  **1091/339,543** (the endpoint-rule walk after the notebook
+  re-execution).  Web pins trued 5,547 ×7 + `FALLBACK_STATS`
+  1091/339,543 + `SHIPPED_TOOLKIT_VERSION` 1.2.172.
+  webDevReview 522062 disabled by the platform exec limit
+  (re-acknowledged, not recreated).  Next: the PR #9 conformal
+  pickup the moment it merges, the Phase-4 gap list from the feature
+  inventory.

@@ -1,3 +1,49 @@
+## [1.2.172] — 2026-11-11
+### Added — round 265: the section-24.3/24.4 SA wiring on GenerationResult
+
+- `generative/result.py` — `GenerationResult.sa_frame(sort)` — the §24.3
+  results table: the leaderboard with the **raw** Ertl SA score column
+  (`sa_score`, [1, 10], `NaN` for invalid SMILES) plus `sa_valid`,
+  sortable by `"easiest"` / `"hardest"` (invalid rows last, the `rank`
+  column keeps the objective rank as provenance).  A breakdown carrying
+  the SAScoreObjective's 0-1 reward key gets that column renamed to
+  `sa_score_reward` first — raw score and reward never silently clobber
+  each other.
+- `generative/result.py` — `GenerationResult.filter_by_sa(min_sa, max_sa)`
+  + `SAFilteredCandidates` — the §24.4 candidate filter: inclusive
+  bounds, no constraints = no filtering at all (`kept is result`), and
+  when active the **rejected rows are preserved** in a
+  rank/smiles/score/sa_score/reason table — `n_kept + n_rejected ==
+  n_total` always (the spec's "preserve rejected candidate information"
+  rule).  Non-finite or non-numeric bounds raise `DataValidationError`.
+- `generative/result.py` — `GenerationResult.sa_summary()` — the
+  direction-aware distribution payload: valid-subset statistics, the
+  `n_druglike_band` count (raw SA inside the conventional 1-4 band) and
+  the method / direction / limitations copy every interface must ship
+  with the score.
+- `viz/generative_plots.py` — `plot_sa_distribution(result, path)` — the
+  §24.3 distribution figure: exact-edge `histogram_stats` bars over the
+  valid subset, the conventional drug-like band shaded, the direction on
+  the axis, `n_invalid` / `method` / `direction` / `limitations` riding
+  the returned payload (exported from `pharmaml.viz`).
+- `generative/__init__.py` — `SAFilteredCandidates` joins the public
+  surface (alphabetized into `__all__`).
+- `examples/complete_generative_workflow.ipynb` — new section 9b "the
+  synthesizability lens": the raw-SA leaderboard of the 613-molecule
+  section-4 run, the inclusive-range filter demo (kept 108 / rejected
+  505, both preserved with reasons), the summary payload and the
+  distribution figure.
+- `docs/GENERATIVE_SA.md` — the manual CSV-workaround paragraph replaced
+  by the container API; the reward-vs-raw distinction and the
+  nothing-discarded filter contract documented.
+- `tests/test_generative_result_sa.py` — 31 tests: table columns and
+  hand-checked values (aspirin 1.58 / CCO 1.98 / caffeine 2.298), the
+  sort orders with invalid-last, the reward-rename collision path (also
+  exercised end-to-end on a real seeded GA run), the kept+rejected
+  accounting, the no-op / inverted-range / non-finite-bound contracts,
+  the empty-result behaviour, and the figure facts of
+  `plot_sa_distribution`.
+
 ## [1.2.171] — 2026-11-11
 ### Added — round 264: the contact-map / PLIF twins (the pose-level reading)
 
