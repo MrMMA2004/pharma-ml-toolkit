@@ -1908,3 +1908,35 @@ pass.  Agent-browser E2E green (badge 1.2.167, hero 5,395 tests /
 8,618,365 B, mobile 390 no-scroll, footer, theme both ways, zero
 console errors).  Arena conformal PR #9 still open (unmerged) all
 round.
+
+## v1.2.168 release-zip homes (2026-11-10, round 261 — part4 §4.5: the truthful feature inventory)
+
+`pharma-ml-toolkit-v1.2.168.zip` — 8,629,953 bytes, sha-256
+`2a65423c14bee6eab055fee67052a9113a93d9cd5c24653670116d4115924b05`
+(four byte-identical homes, testzip OK per home, real leaks 0;
+predecessor v1.2.167 swept from all four).  THE §4.5 DELIVERABLE:
+`docs/FEATURES.md` — every major feature classified into the six
+honest status classes with a feature-to-backend-to-UI-to-test
+traceability matrix (18 Studio pages with grepped backend imports,
+12 web areas over the 33-card registry + all 27 live API routes
+traced through the bridges, 11 backend packages with live counts,
+the five backend-only modules listed as class C — gnn+gnnxai,
+geometric, pruning, quantization, harness — instead of papered
+over, and the synthetic-demo register stating which demonstrations
+are synthetic).  Status summary A 34 / B 7 / C 5 / D 1 / E 1 / F 3.
++12 tests (`tests/test_feature_inventory.py`): the drift-guard pins
+that re-derive the 18 nav keys / 33 card ids / 27 routes / 10
+packages LIVE from the registries and fail the release if the
+matrix drifts.  Notebooks 8/8 re-executed at 1.2.168 (206 s,
+error-outputs=0, home-path-survivors=0, dev server down per the
+OOM ritual).  Honest totals **5,407 = 4,538 collect + 869 doctest**,
+census **1102/334,346** (the live post-ship walk — two release
+homes now carry the fresh zip; the r260 census was taken pre-ship,
+hence 1098), web pins trued 5,407 ×7 + census fallbacks +
+`SHIPPED_TOOLKIT_VERSION` 1.2.168, all three version carriers in
+one pass.  The round also opened on **rollback #30 recovery** (the
+tree at the `2eb0ede` Nov-3 anchor, PAT re-extracted from
+MASTER_PROMPT.pdf lines 688–689, 211-commit ff-only pull to
+`9130c6b`, venv repaired) and found the concurrent r260 already
+shipped — this session's planned Phase-1 queue was instead
+verified landed, then Phase-2 §4.5 built on top.

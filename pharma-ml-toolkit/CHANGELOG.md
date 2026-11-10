@@ -1,3 +1,42 @@
+## [1.2.168] — 2026-11-10
+
+### Added — round 261: MASTER_PROMPT part4 §4.5, Phase 2 opens — the truthful feature inventory
+
+* `docs/FEATURES.md` NEW — the §4.5 deliverable: every major feature
+  classified into the six honest status classes (implemented+tested /
+  incompletely tested / backend-only / partial / not implemented /
+  blocked-by-optional-dependency-or-external-engine) with a
+  **feature-to-backend-to-UI-to-test traceability matrix** — 18 Studio
+  pages (nav keys from `ui/main_window.py` SECTIONS, backend imports
+  grepped per page), 12 web areas (the 33-card `PLAYGROUND_CARDS`
+  registry + all 27 live API routes traced through the
+  `scripts/*_bridge.py` processes to the real `pharmaml` functions),
+  11 backend packages with live file/line counts, and the five
+  backend-only modules (gnn+gnnxai, geometric, pruning, quantization,
+  harness — 237 tests with no page/card/route) listed as class C
+  instead of papered over.  The three §4.5 honesty rules are applied
+  literally: every UI row was traced to its backend call, every
+  backend-only row to its absence of GUI references, and the synthetic
+  demos (MD trajectories, cell-line tables, docking scores, generative
+  oracles) are registered as synthetic — none claims real-data
+  support.  Status summary: A 34 / B 7 / C 5 / D 1 / E 1 / F 3 — the
+  B rows name their gaps (page-suite-only backends for foundations and
+  responseai, smoke-only dashboard/settings, TS calculator cards
+  without automated TS↔Python parity pins), the D row is the §5
+  nine-card workflow dashboard (Phase 3), the E row is the parked
+  conformal PR #9, the F rows are the external engines (Vina,
+  GROMACS/PLUMED, the DOCKSTRING dataset) and optional-gated imports.
+* `tests/test_feature_inventory.py` NEW — 12 drift-guard pins: the
+  six legend classes + three verbatim honesty rules; the 18 nav keys,
+  33 card ids, 27 route names, and 10 package names re-derived LIVE
+  from the registries and asserted present in the matrix (a new page/
+  card/route fails the release until the matrix is trued); the class-C
+  honesty check in the other direction (if a page/card/route starts
+  referencing a backend-only module, the classification must be
+  revisited — documentation prose excluded per the §4.5 rule); the
+  status-summary counts pinned (34/7/5/1/1/3, row-total consistency
+  41 + 10); the version stamp pinned to the `VERSION` file.
+
 ## [1.2.167] — 2026-11-10
 
 ### Fixed — round 260: MASTER_PROMPT part4 §4, Phase 1 (integrity and recovery) — the audit's five findings repaired
