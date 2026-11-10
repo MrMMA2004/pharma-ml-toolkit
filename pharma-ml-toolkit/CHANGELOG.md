@@ -1,3 +1,41 @@
+## [1.2.170] — 2026-11-11
+### Added — round 263: part4 §8 Phase-3 card polish + the four-carrier version pin
+
+- `ui/nine_cards.py` — the Phase-3 responsive grid: `NineCardGrid`
+  re-flows the SAME card widgets row-major across three, two (below 880
+  logical px) or one (below 560) column. The directive's canonical 3×3
+  stays the default, the §5 order survives every width, no widget is
+  ever rebuilt mid-flight (`reflow` / `current_columns` /
+  `columns_for_width` are public and pinned). `build_nine_card_grid()`
+  keeps its exact signature — the Dashboard page gets the responsive
+  behaviour with zero call-site changes.
+- `ui/nine_cards.py` — the Phase-3 SMILES preview: the Datasets card
+  carries the genuine first row of `examples/data/screening_library.csv`
+  (aspirin) rendered through the Studio's own §22 `MoleculeRenderer`
+  (cached FIFO, 2x devicePixelRatio, honest text refusal when rdkit or
+  a QApplication is absent — never a fabricated structure). The source
+  file, the SMILES and the name are pinned by tests so a rename fails
+  the suite instead of silently blanking the card.
+- `tests/test_version_carriers.py` (7 tests) — the r262 carrier lesson
+  made structural: the release's FOUR version carriers (VERSION,
+  pyproject `[project] version`, `pharmaml.__version__`, the web's
+  `SHIPPED_TOOLKIT_VERSION`) must agree, the CHANGELOG must lead with
+  the version being shipped, and `toolkit-version.ts` may carry exactly
+  one version literal. A half-trued bump now fails the pytest gate
+  instead of surfacing as an `exact:false source:stream` endpoint
+  symptom after the zip is built.
+- +12 UI tests (`tests/ui/test_nine_cards.py` → 26): the threshold
+  contract, the 2/1-column row-major re-flows, frame identity preserved
+  across re-flows (the r262 id-reuse lesson — references held), the
+  ValueError refusal, the synthesized-resize re-flow, the production
+  wiring (exactly one `NineCardGrid` in the real MainWindow), the
+  aspirin source pin, the rendered thumbnail, the "where meaningful"
+  boundary (no gratuitous molecules on other cards), and the honest
+  invalid-SMILES refusal.
+- `docs/FEATURES.md`: the Dashboard row and §10 trued — (26) tests, the
+  Phase-3 paragraph; the row stays **A** (a refinement, not a new
+  feature class).
+
 ## [1.2.169] — 2026-11-11
 ### Added — round 262: MASTER_PROMPT part4 §5, Phase 2 completes — the nine-card dashboard mapping
 

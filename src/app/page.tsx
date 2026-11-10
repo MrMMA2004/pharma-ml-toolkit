@@ -57,12 +57,12 @@ function ThemeToggle() {
   );
 }
 
-/* r262 (part4 §5 release): the nine-card dashboard landed -- +2 files
- * (ui/nine_cards.py + the 14-test contract suite); census verified live
- * via /api/toolkit/tree (post-ship walk AFTER the 43 stale-zip debris
- * sweep + the pyproject version-carrier fix, hence 1086 = 1084 tracked
- * + 2 new). */
-const FALLBACK_STATS = { files: 1086, lines: "334,982" };
+/* r263 (part4 §8 Phase-3 + the carrier pin): +1 file (the
+ * test_version_carriers.py contract suite), the responsive nine-card
+ * grid + the aspirin SMILES preview in ui/nine_cards.py, +12 Phase-3
+ * UI tests, the cellline script-logging leak fixed; census verified
+ * live via /api/toolkit/tree (1087 = 1086 + 1 new). */
+const FALLBACK_STATS = { files: 1087, lines: "335,593" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
@@ -209,7 +209,7 @@ export default function Home() {
             {stats ? `${stats.files} files · ${stats.totalLines.toLocaleString("en-US")} LOC` : `${FALLBACK_STATS.files} files · ${FALLBACK_STATS.lines} LOC`}
             {" · "}
             <span className="ping-ring relative inline-flex size-2 rounded-full bg-primary" aria-hidden />
-            <span className="text-primary">5426 tests</span>
+            <span className="text-primary">5445 tests</span>
           </p>
         </div>
       </footer>

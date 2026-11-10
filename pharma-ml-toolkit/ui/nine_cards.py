@@ -14,6 +14,18 @@ as duplicated implementations.  This module owns that contract:
   installed environment).
 * ``build_nine_card_grid`` — the Qt builder that renders the cards.
 
+Phase-3 (part-4 §8, round 263) — responsive layouts and SMILES previews:
+
+* :class:`NineCardGrid` re-flows the SAME card widgets row-major across
+  three, two or one columns as the window narrows — the directive's
+  canonical 3×3 stays the default, the §5 order survives every width,
+  and no widget is ever rebuilt mid-flight;
+* the Datasets card carries a real molecule thumbnail — the genuine
+  first row of ``examples/data/screening_library.csv`` rendered through
+  the Studio's own §22 :class:`MoleculeRenderer` (cached, honest
+  refusal when rdkit or a QApplication is absent — the card then keeps
+  its text preview and nothing is fabricated).
+
 The cards never remove or duplicate the specialized pages: every entry
 button routes through ``MainWindow.go_to(section)`` onto the page that
 already owns the workflow.  The optional-dependency chips state the
@@ -23,9 +35,12 @@ the MD trajectory data are external, never bundled).
 
 from __future__ import annotations
 
+import csv
 import importlib
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -35,6 +50,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+if TYPE_CHECKING:
+    from PySide6.QtGui import QPixmap, QResizeEvent
 
 
 @dataclass(frozen=True)
@@ -189,6 +207,30 @@ NINE_CARDS: tuple[NineCard, ...] = (
     CARD_VISUALIZATION,
 )
 
+#: Phase-3 responsive thresholds: at/above 880 logical px the directive's
+#: canonical 3×3; from 560 to 879 two columns; below 560 a single column.
+#: The order is row-major at every width — only the column count changes.
+COLUMNS_3_MIN_WIDTH = 880
+COLUMNS_2_MIN_WIDTH = 560
+
+#: The Datasets card's molecule thumbnail (logical px; the §22 renderer
+#: draws at 2x with devicePixelRatio for crisp bonds).
+CARD_PREVIEW_SIZE = QSize(200, 110)
+
+#: The real data source behind the Datasets card's SMILES preview — the
+#: same file the Data Explorer opens.  Pinned by tests so a rename or a
+#: column change fails the suite instead of silently blanking the card.
+PREVIEW_SOURCE_NAME = "examples/data/screening_library.csv"
+
+
+def columns_for_width(width: int) -> int:
+    """The Phase-3 column count for a live widget width (3 / 2 / 1)."""
+    if width >= COLUMNS_3_MIN_WIDTH:
+        return 3
+    if width >= COLUMNS_2_MIN_WIDTH:
+        return 2
+    return 1
+
 
 def probe_available(module: str) -> bool:
     """Exception-safe import probe — the honest optional-dependency answer."""
@@ -249,6 +291,95 @@ def _module_count(*parts: str) -> int:
     return len(list(root.rglob("*.py")))
 
 
+def datasets_preview_smiles() -> tuple[str, str] | None:
+    """The genuine first molecule of the screening library (never invented).
+
+    Phase-3 asks for SMILES previews "where meaningful"; the Datasets
+    card shows the real first row of ``examples/data/screening_library.csv``
+    — the same file the Data Explorer opens.  Returns ``(smiles, name)``
+    or ``None`` when the file, its SMILES column or its first row is
+    gone (the card then keeps its text preview — no fabrication).
+    """
+    path = _toolkit_root() / PREVIEW_SOURCE_NAME
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            columns = [
+                name
+                for name in (reader.fieldnames or [])
+                if name and name.strip().lower() in ("smiles", "smile")
+            ]
+            if not columns:
+                return None
+            column = columns[0]
+            for row in reader:
+                value = (row.get(column) or "").strip()
+                if value:
+                    name = (row.get("name") or "").strip() or "(unnamed)"
+                    return value, name
+    except Exception:  # noqa: BLE001 - moved/renamed file: honest refusal
+        return None
+    return None
+
+
+#: One renderer per process for the card thumbnail — the §22 cache is
+#: shared with every table preview, so repeated dashboard builds hit it.
+_PREVIEW_RENDERER = None
+
+
+def _preview_renderer():
+    global _PREVIEW_RENDERER
+    if _PREVIEW_RENDERER is None:
+        from ui.widgets.smiles_preview import MoleculeRenderer
+
+        _PREVIEW_RENDERER = MoleculeRenderer()
+    return _PREVIEW_RENDERER
+
+
+def _render_preview(smiles: str) -> tuple[QPixmap | None, str | None]:
+    """One structure pixmap via the §22 renderer — honest refusal on any failure."""
+    try:
+        from PySide6.QtGui import QGuiApplication
+
+        if QGuiApplication.instance() is None:
+            return None, "no QApplication"
+        return _preview_renderer().render(smiles, CARD_PREVIEW_SIZE)
+    except Exception as exc:  # noqa: BLE001 - broken environment, honest refusal
+        return None, str(exc)
+
+
+def _datasets_molecule_visual() -> QWidget | None:
+    """The Datasets card's real molecule thumbnail (part-4 Phase-3)."""
+    found = datasets_preview_smiles()
+    if found is None:
+        return None
+    smiles, name = found
+    holder = QWidget()
+    holder.setObjectName("nineCardVisual")
+    lay = QVBoxLayout(holder)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(2)
+    image = QLabel()
+    image.setObjectName("nineCardMolecule")
+    image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    pixmap, error = _render_preview(smiles)
+    if pixmap is not None:
+        image.setPixmap(pixmap)
+    else:
+        # §22.4 honesty: never a placeholder image — the reason, plus the
+        # original SMILES preserved exactly in the caption below.
+        image.setText("structure preview unavailable")
+        image.setWordWrap(True)
+    lay.addWidget(image)
+    caption = QLabel(
+        f"{name} · first row of {PREVIEW_SOURCE_NAME} · SMILES {smiles}"
+    )
+    caption.setObjectName("nineCardPreview")
+    caption.setWordWrap(True)
+    lay.addWidget(caption)
+    return holder
+
+
 def _dependency_chip(card: NineCard) -> str:
     """The honest optional/external indication §5 demands."""
     if card.external and not card.optional:
@@ -264,23 +395,78 @@ def _dependency_chip(card: NineCard) -> str:
     return " · ".join(parts)
 
 
+class NineCardGrid(QWidget):
+    """The nine cards in a responsive row-major grid (part-4 Phase-3).
+
+    The directive's canonical layout is the 3×3; a resize below
+    :data:`COLUMNS_3_MIN_WIDTH` re-flows to two columns and below
+    :data:`COLUMNS_2_MIN_WIDTH` to one — always row-major, always the
+    §5 order.  The re-flow reuses the SAME card widgets (nothing is
+    rebuilt), so frames addressed by ``card_id`` survive every width
+    change and no state is ever lost mid-flight.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._frames: dict[str, QFrame] = {}
+        for card in NINE_CARDS:
+            frame = _build_card(card)
+            frame.setObjectName("nineCard")
+            self._frames[card.card_id] = frame
+        self._grid = QGridLayout(self)
+        self._grid.setSpacing(12)
+        self._columns = 0
+        self._stretch_row: int | None = None
+        self.reflow(3)  # the §5 canonical layout is the default
+
+    def current_columns(self) -> int:
+        """The live column count (3, 2 or 1)."""
+        return self._columns
+
+    def frames(self) -> dict[str, QFrame]:
+        """The stable ``card_id -> QFrame`` map (a copy for safe addressing)."""
+        return dict(self._frames)
+
+    def reflow(self, columns: int) -> None:
+        """Re-lay the SAME frames row-major at 3, 2 or 1 columns."""
+        if columns == self._columns:
+            return
+        if columns not in (1, 2, 3):
+            raise ValueError(f"columns must be 1, 2 or 3 — got {columns!r}")
+        if self._stretch_row is not None:
+            self._grid.setRowStretch(self._stretch_row, 0)
+            self._stretch_row = None
+        for column in range(3):
+            self._grid.setColumnStretch(column, 0)
+        while self._grid.count():
+            self._grid.takeAt(0)
+        for index, card in enumerate(NINE_CARDS):
+            self._grid.addWidget(
+                self._frames[card.card_id], index // columns, index % columns
+            )
+        for column in range(columns):
+            self._grid.setColumnStretch(column, 1)
+        rows = -(-len(NINE_CARDS) // columns)  # ceil — the stretch row follows
+        self._stretch_row = rows
+        self._grid.setRowStretch(rows, 1)
+        self._columns = columns
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - Qt name
+        """Phase-3 responsive pass: re-flow when the width class changes."""
+        super().resizeEvent(event)
+        want = columns_for_width(event.size().width())
+        if want != self._columns:
+            self.reflow(want)
+
+
 def build_nine_card_grid() -> tuple[QWidget, dict[str, QFrame]]:
-    """Render the nine cards row-major (the directive's exact order).
+    """Render the nine cards responsive and row-major (the directive's order).
 
     Returns the grid widget and a ``card_id -> QFrame`` map so tests and
     the dashboard can address individual cards without fragile walks.
     """
-    host = QWidget()
-    grid = QGridLayout(host)
-    grid.setSpacing(12)
-    frames: dict[str, QFrame] = {}
-    for index, card in enumerate(NINE_CARDS):
-        frame = _build_card(card)
-        frame.setObjectName("nineCard")
-        frames[card.card_id] = frame
-        grid.addWidget(frame, index // 3, index % 3)
-    grid.setRowStretch(3, 1)
-    return host, frames
+    host = NineCardGrid()
+    return host, host.frames()
 
 
 def _build_card(card: NineCard) -> QFrame:
@@ -310,6 +496,14 @@ def _build_card(card: NineCard) -> QFrame:
     caps.setObjectName("studioCardDetail")
     caps.setWordWrap(True)
     lay.addWidget(caps, stretch=1)
+
+    # Phase-3 (§8): a dedicated SMILES preview where meaningful — the
+    # Datasets card shows the real first molecule of the screening
+    # library; every other card keeps its computed text preview.
+    if card.card_id == "datasets":
+        visual = _datasets_molecule_visual()
+        if visual is not None:
+            lay.addWidget(visual)
 
     preview = QLabel(live_preview(card.card_id))
     preview.setObjectName("nineCardPreview")
@@ -343,9 +537,16 @@ def _go(section: str, source: QWidget) -> None:
 
 __all__ = [
     "NINE_CARDS",
+    "CARD_PREVIEW_SIZE",
+    "COLUMNS_2_MIN_WIDTH",
+    "COLUMNS_3_MIN_WIDTH",
     "CardEntry",
     "NineCard",
+    "NineCardGrid",
+    "PREVIEW_SOURCE_NAME",
     "build_nine_card_grid",
+    "columns_for_width",
+    "datasets_preview_smiles",
     "live_preview",
     "probe_available",
 ]

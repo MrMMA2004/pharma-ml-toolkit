@@ -42,7 +42,7 @@ underlying calls. All pages additionally ride `tests/ui/test_pages_smoke.py`
 
 | Page (nav key) | Backend | UI tests | Backend tests | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Dashboard (`dashboard`) | `pharmaml` meta, `ml.models` registry, `ui.nine_cards` | `test_nine_cards.py` (14) | — | **A** | Statistics panel + the §5 nine-card workflow-entry grid (exact directive order, live dependency probes, external-engine honesty, real `go_to` routing). Phase-3 visual polish is future work, not a gap. |
+| Dashboard (`dashboard`) | `pharmaml` meta, `ml.models` registry, `ui.nine_cards` | `test_nine_cards.py` (26) | — | **A** | Statistics panel + the §5 nine-card workflow-entry grid (exact directive order, live dependency probes, external-engine honesty, real `go_to` routing) + the Phase-3 polish since v1.2.170: the responsive 3/2/1 re-flow and the real screening-library SMILES preview on the Datasets card. |
 | Data Explorer (`data`) | `utils.io` | `test_data_table.py` (6) | `test_io.py` (69), `test_data_loading.py`, `test_data_provenance.py` | **A** | Page-level depth is the data-table widget; the import/export library side carries 69 focused tests. |
 | Chemistry Workbench (`chemistry`) | `chem.csv_standardize`, `chem.features`, `utils.io` | `test_chemistry_page.py` (13) | `test_chem_*`, `test_descriptors.py` (73), `test_csv_standardize.py` (57), `test_similarity.py`, `test_diversity.py` | **A** | RISM descriptors are opt-in (see §5). |
 | PK/PD Workbench (`pkpd`) | `pharma.pk`, `pkpd.compartments/events/nca_ext/ode` | `test_pkpd_page.py` (18) | `test_pk.py` (49), `test_pd.py`, `test_pkpd_engines.py` (99), `test_dosage.py` (24) | **A** | |
@@ -186,10 +186,20 @@ Shipped v1.2.169: the Studio home renders the directive's nine
 high-level cards as navigation and workflow entry points onto the
 existing pages — never duplicated implementations. The single source
 of truth is `ui/nine_cards.py` (`NINE_CARDS`);
-`tests/ui/test_nine_cards.py` (14 tests) pins the exact order, the
+`tests/ui/test_nine_cards.py` (26 tests) pins the exact order, the
 mapping below, live coverage of every specialized page, the
 exception-safe dependency probes, and the `go_to` routing through the
 real MainWindow. The page stack stays 18 widgets.
+
+Phase-3 polish (§8, v1.2.170): the grid is responsive —
+`NineCardGrid` re-flows the SAME card widgets row-major across three,
+two (below 880 logical px) or one (below 560) columns, always in the
+§5 order, never rebuilding state — and the Datasets card carries a
+real SMILES preview: the genuine first row of
+`examples/data/screening_library.csv` (aspirin) rendered through the
+Studio's own §22 `MoleculeRenderer`, with the honest text refusal
+when rdkit or a QApplication is absent. No other card renders a
+molecule ("where meaningful", not everywhere).
 
 | # | Card | Entry points (nav keys) | Backend home | Tests |
 | --- | --- | --- | --- | --- |

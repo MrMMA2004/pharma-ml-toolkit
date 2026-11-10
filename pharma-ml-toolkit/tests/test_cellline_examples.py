@@ -10,6 +10,7 @@ recoverable through the real ``pharmaml.biology`` workflow.
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 
@@ -34,6 +35,33 @@ from make_synthetic_cellline_data import (
     make_expression_matrix,
     make_response_screen,
 )
+
+
+@pytest.fixture(autouse=True)
+def _restore_script_logging_state():
+    """(round 263) the script-main tests below call ``configure_logging``.
+
+    ``run_cellline_analysis.main`` and the generator CLIs configure the
+    ``pharmaml`` root logger (``propagate=False`` + a console handler
+    bound to THIS test's captured stderr).  Both leak past the test:
+    later ``caplog`` assertions in sibling modules sharing the pytest
+    process capture nothing (records stop at the pharmaml handler; the
+    stale stream then prints ``--- Logging error ---`` noise).  The
+    ten-chunk gate caught this exact shape in round 249b for
+    ``test_format_converters``; this module got the same leak through
+    the example scripts.  The at-import propagate/handlers/level/disable
+    state is restored after every test now.
+    """
+    prev_disable = logging.root.manager.disable
+    pharma_root = logging.getLogger("pharmaml")
+    prev_propagate = pharma_root.propagate
+    prev_handlers = list(pharma_root.handlers)
+    prev_level = pharma_root.level
+    yield
+    logging.disable(prev_disable)
+    pharma_root.propagate = prev_propagate
+    pharma_root.handlers[:] = prev_handlers
+    pharma_root.setLevel(prev_level)
 
 
 @pytest.fixture(scope="module")

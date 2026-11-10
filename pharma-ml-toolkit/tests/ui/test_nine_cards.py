@@ -154,3 +154,145 @@ class TestRenderedGrid:
         labels = " ".join(l.text() for l in dashboard.findChildren(QLabel))
         assert "Workflow cards" in labels
         assert "Example datasets" in labels  # the census sections survive
+
+
+class TestPhase3ResponsiveGrid:
+    """Part-4 §8 Phase-3: responsive layouts — 3/2/1 columns, order kept.
+
+    The directive's canonical 3×3 is the default; narrower windows
+    re-flow row-major to two columns (below 880 logical px) and one
+    (below 560).  The re-flow must reuse the SAME card widgets — a
+    width change can never rebuild state or reorder the §5 sequence.
+    """
+
+    def test_columns_for_width_thresholds(self) -> None:
+        from ui.nine_cards import (
+            COLUMNS_2_MIN_WIDTH,
+            COLUMNS_3_MIN_WIDTH,
+            columns_for_width,
+        )
+
+        assert columns_for_width(1920) == 3
+        assert columns_for_width(COLUMNS_3_MIN_WIDTH) == 3
+        assert columns_for_width(COLUMNS_3_MIN_WIDTH - 1) == 2
+        assert columns_for_width(COLUMNS_2_MIN_WIDTH) == 2
+        assert columns_for_width(COLUMNS_2_MIN_WIDTH - 1) == 1
+        assert columns_for_width(100) == 1
+
+    def test_grid_defaults_to_the_directive_three_columns(self, studio_app) -> None:
+        host, _frames = build_nine_card_grid()
+        assert host.current_columns() == 3
+
+    def test_reflow_two_columns_preserves_row_major_order(self, studio_app) -> None:
+        host, frames = build_nine_card_grid()
+        host.reflow(2)
+        grid = host.layout()
+        for i, card in enumerate(NINE_CARDS):
+            row, col, _, _ = grid.getItemPosition(grid.indexOf(frames[card.card_id]))
+            assert (row, col) == (i // 2, i % 2)
+
+    def test_reflow_one_column_preserves_order(self, studio_app) -> None:
+        host, frames = build_nine_card_grid()
+        host.reflow(1)
+        grid = host.layout()
+        for i, card in enumerate(NINE_CARDS):
+            row, col, _, _ = grid.getItemPosition(grid.indexOf(frames[card.card_id]))
+            assert (row, col) == (i, 0)
+
+    def test_reflow_reuses_the_same_frame_objects(self, studio_app) -> None:
+        # the r262 id-reuse lesson: hold the REFERENCES, compare identity
+        host, frames = build_nine_card_grid()
+        held = list(frames.values())
+        host.reflow(2)
+        host.reflow(1)
+        host.reflow(3)
+        after = host.frames()
+        grid = host.layout()
+        for card in NINE_CARDS:
+            assert after[card.card_id] is frames[card.card_id]
+            assert grid.indexOf(after[card.card_id]) >= 0
+        assert all(grid.indexOf(frame) >= 0 for frame in held)
+
+    def test_reflow_rejects_impossible_column_counts(self, studio_app) -> None:
+        import pytest
+
+        host, _frames = build_nine_card_grid()
+        for bad in (0, 4, -1):
+            with pytest.raises(ValueError):
+                host.reflow(bad)
+
+    def test_resize_event_reflows_by_width_class(self, studio_app) -> None:
+        from PySide6.QtCore import QSize
+        from PySide6.QtGui import QResizeEvent
+
+        host, _frames = build_nine_card_grid()
+        host.resizeEvent(QResizeEvent(QSize(1200, 900), QSize(100, 30)))
+        assert host.current_columns() == 3
+        host.resizeEvent(QResizeEvent(QSize(700, 900), QSize(1200, 900)))
+        assert host.current_columns() == 2
+        host.resizeEvent(QResizeEvent(QSize(400, 900), QSize(700, 900)))
+        assert host.current_columns() == 1
+        host.resizeEvent(QResizeEvent(QSize(1000, 900), QSize(400, 900)))
+        assert host.current_columns() == 3
+
+    def test_dashboard_uses_the_responsive_grid(self, main_window) -> None:
+        from ui.nine_cards import NineCardGrid
+
+        grids = main_window.findChildren(NineCardGrid)
+        assert len(grids) == 1, "the Dashboard page must host exactly one responsive grid"
+
+
+class TestPhase3SmilesPreview:
+    """Part-4 §8 Phase-3: SMILES previews on the cards, where meaningful.
+
+    The Datasets card carries the REAL first molecule of the screening
+    library (the same file the Data Explorer opens) through the §22
+    renderer — cached, honest on refusal, never fabricated.  No other
+    card gets a molecule: §5 says "where meaningful", not "everywhere".
+    """
+
+    def test_preview_source_is_pinned_to_the_real_file(self) -> None:
+        from ui.nine_cards import datasets_preview_smiles
+
+        found = datasets_preview_smiles()
+        assert found is not None, "examples/data/screening_library.csv must stay shippable"
+        smiles, name = found
+        assert name == "aspirin"
+        assert smiles == "CC(=O)Oc1ccccc1C(=O)O"
+
+    def test_datasets_card_carries_the_real_smiles_preview(self, studio_app) -> None:
+        from PySide6.QtWidgets import QLabel
+
+        _host, frames = build_nine_card_grid()
+        frame = frames["datasets"]
+        images = [w for w in frame.findChildren(QLabel) if w.objectName() == "nineCardMolecule"]
+        assert len(images) == 1
+        image = images[0]
+        # rdkit + QApplication are live in this environment: the thumbnail
+        # must be a real rendered pixmap, never a placeholder
+        assert image.pixmap() is not None and not image.pixmap().isNull()
+        captions = " ".join(
+            w.text() for w in frame.findChildren(QLabel) if w.objectName() == "nineCardPreview"
+        )
+        assert "screening_library.csv" in captions
+        assert "aspirin" in captions
+
+    def test_only_the_datasets_card_has_a_molecule_visual(self, studio_app) -> None:
+        from PySide6.QtWidgets import QLabel
+
+        host, frames = build_nine_card_grid()
+        for card_id, frame in frames.items():
+            images = [w for w in frame.findChildren(QLabel) if w.objectName() == "nineCardMolecule"]
+            if card_id == "datasets":
+                assert images, "the Datasets card must carry the SMILES preview"
+            else:
+                assert not images, f"{card_id} must not render a gratuitous molecule"
+
+    def test_render_preview_refuses_invalid_smiles_honestly(self, studio_app) -> None:
+        from ui.nine_cards import _render_preview
+
+        pixmap, error = _render_preview("not-a-smiles")
+        assert pixmap is None
+        assert error and "Invalid SMILES" in error
+        empty_pixmap, empty_error = _render_preview("")
+        assert empty_pixmap is None and empty_error

@@ -1998,3 +1998,57 @@ collect + 869 doctest** (collect-only verified), census **1086/
 fix — endpoint-verified, the fallback and the fresh walk agree),
 web pins trued 5,426 ×7 + census fallbacks +
 `SHIPPED_TOOLKIT_VERSION` 1.2.169.
+
+## v1.2.170 release-zip homes (2026-11-11, round 263 — part4 §8 Phase-3 card polish + the four-carrier version pin)
+
+`pharma-ml-toolkit-v1.2.170.zip` — 8,688,744 bytes, sha-256
+`2cbbbe61d74f7da00f994fc915e0471655908c76adc6930ac7ea19e897ce50db`
+(four byte-identical homes, testzip OK per home, composition
+violations 0 — no scratch/, download/ or dist-archive/ entries, real
+leaks 0; predecessor v1.2.169 swept from all four homes).  The round
+that made the r262 carrier lesson structural and shipped the Phase-3
+card polish:
+
+- `ui/nine_cards.py` — `NineCardGrid`: the SAME card widgets re-flow
+  row-major across three, two (below 880 logical px) or one (below
+  560) column — the directive's canonical 3×3 stays the default, the
+  §5 order survives every width, `build_nine_card_grid()` keeps its
+  exact signature.  The Datasets card carries the REAL first row of
+  `examples/data/screening_library.csv` (aspirin) through the §22
+  `MoleculeRenderer` — cached, 2x devicePixelRatio, honest text
+  refusal when rdkit or a QApplication is absent; the source file,
+  the SMILES and the name are pinned by tests.
+- `tests/test_version_carriers.py` (7 tests): the four carriers
+  (VERSION, pyproject `[project] version`, `pharmaml.__version__`,
+  `SHIPPED_TOOLKIT_VERSION`) must agree, the CHANGELOG must lead with
+  the version being shipped, `toolkit-version.ts` carries exactly one
+  version literal.  All four were bumped together in THIS round's
+  bump commit — the pin's own first enforcement.
+- +12 UI tests (`test_nine_cards.py` → 26): thresholds, 2/1-column
+  re-flows, frame identity preserved across re-flows (references
+  held — the r262 id-reuse lesson), ValueError refusal, synthesized
+  resize re-flow, the production wiring pin, the aspirin source pin,
+  the rendered thumbnail, the "where meaningful" boundary, the honest
+  invalid-SMILES refusal.
+- THE CELL LINE LOGGING LEAK (caught by this round's gate): the new
+  chunk composition put `test_cellline_examples.py` and
+  `test_numpy_neural_checkpoints.py` in one pytest process — the
+  script-main tests called `run_cellline_analysis.main()` →
+  `configure_logging()` → `pharmaml.propagate=False` + a console
+  handler bound to the test's captured stderr, both leaking past the
+  test; every later caplog assertion on a `pharmaml.*` logger then
+  captured nothing (records stop at the stale handler) while stderr
+  filled with `--- Logging error ---` noise.  Fixed with the
+  round-249b pattern: an autouse fixture restores
+  propagate/handlers/level/disable after every test in the module.
+  The scratch tooling (lost to the rollback-#31 restore) was rebuilt:
+  the ten-chunk gate runner (recursive collection + the nine-card
+  suite's own Qt envelope) and the §4.3 zip builder.
+- Ten-chunk gate 10/10 exit=0 (dev server down per the OOM ritual;
+  first run caught the leak above — the fix landed before the
+  official run).  Notebooks 8/8 re-executed at 1.2.170 (235 s,
+  home-path-survivors=0).  Honest totals **5,445 = 4,576 collect +
+  869 doctest** (collect-only verified), census **1087/335,593**.
+  Web pins trued 5,445 ×7 + `FALLBACK_STATS` 1087/335,593 +
+  `SHIPPED_TOOLKIT_VERSION` 1.2.170 — and the overview SSR fallback
+  pair (the r261 straggler that r262 missed twice) finally trued.
