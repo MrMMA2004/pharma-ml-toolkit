@@ -1943,10 +1943,15 @@ verified landed, then Phase-2 §4.5 built on top.
 
 ## v1.2.169 release-zip homes (2026-11-11, round 262 — part4 §5: the nine-card dashboard mapping)
 
-`pharma-ml-toolkit-v1.2.169.zip` — 8,638,922 bytes, sha-256
-`82411da4254054201bfbb64a36f0c40fcfcdafe85fda301f53a79f832de3f7e6`
+`pharma-ml-toolkit-v1.2.169.zip` — 8,639,797 bytes, sha-256
+`e517ebb079d8fa9f5390ce365dde6bc9ad60478687927326c08022b5be94969d`
 (four byte-identical homes, nested zips NONE, real leaks 0;
-predecessor v1.2.168 swept from all four).  THE §5 DELIVERABLE:
+predecessors swept — v1.2.168 by the first build, the resurrected
+v1.2.121 by the second, and 43 stale tracked zips v1.2.85–v1.2.121
+(snapshot-commit debris: download/ ×12, dist-archive/ ×11,
+toolkit download/ ×7, upload/ ×12, download_archive/ ×1 — ~500 MB of
+dead history) removed by hand with only the current release left in
+the four ritual homes).  THE §5 DELIVERABLE:
 `ui/nine_cards.py` — the NINE_CARDS registry as the single source of
 truth: exactly the directive's nine cards in the exact order
 (Introduction → Datasets → Machine Learning → Deep Learning →
@@ -1975,9 +1980,21 @@ process collapsed the distinctness set; passes isolated, failed in
 the chunk) — the capture now holds the instances; and the gate runner
 gained chunk 4f for the nine-card suite (ten chunks now).  Ten-chunk
 gate 10/10 exit=0 (chunk 1 green only WITH the fix — first run
-failed it).  Notebooks 8/8 re-executed at 1.2.169 (205 s,
-error-outputs=0, home-path-survivors=0, dev server down per the OOM
-ritual).  Honest totals **5,426 = 4,557 collect + 869 doctest**
-(collect-only verified), census **1104/334,959** (the live post-ship
-walk — +2 files: nine_cards.py + the contract suite), web pins trued
-5,426 ×7 + census fallbacks + `SHIPPED_TOOLKIT_VERSION` 1.2.169.
+failed it).  Notebooks 8/8 re-executed at 1.2.169 — TWICE: the first
+pass ran before the carrier sweep finished and the freshness gate
+then refused the tree (the notebooks printed 1.2.168); the second
+pass at the true carriers (210 s, error-outputs=0,
+home-path-survivors=0, dev server down per the OOM ritual).  THE
+CARRIER LESSON: the release has FOUR version carriers — VERSION,
+pyproject `[project] version` (the web's `readToolkitVersion()`
+prefers it, so a missed bump silently demotes the zip badge to the
+fallback stream), `pharmaml.__version__` in `__init__.py` (the
+notebooks print it), and the web's `SHIPPED_TOOLKIT_VERSION`; the
+first build trued only two, the zip-size endpoint answered
+`exact:false source:stream` and the freshness gate failed — both
+caught in-round, both green after.  Honest totals **5,426 = 4,557
+collect + 869 doctest** (collect-only verified), census **1086/
+334,982** (the live post-ship walk after the debris sweep + carrier
+fix — endpoint-verified, the fallback and the fresh walk agree),
+web pins trued 5,426 ×7 + census fallbacks +
+`SHIPPED_TOOLKIT_VERSION` 1.2.169.

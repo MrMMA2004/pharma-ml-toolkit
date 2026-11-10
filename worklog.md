@@ -13058,12 +13058,34 @@ chunks, docstring trued (and the stale suite246.txt mention with it).
 
 **Release.**  Ten-chunk gate 10/10 exit=0 (server down per the OOM
 ritual; the first-run chunk-1 failure fixed before the official run).
-Notebooks 8/8 at 1.2.169 (205 s, error-outputs=0,
-home-path-survivors=0).  Zip 8,638,922 B sha `82411da4…` four homes,
-predecessor swept, nested zips NONE, real leaks 0.  Honest totals
-**5,426 = 4,557 collect + 869 doctest** (collect-only verified per
-tree), census **1104/334,959** post-ship walk.  Counter 46→47
-(scheduled run).  Arena conformal PR #9 still open all round.
+Notebooks 8/8 at 1.2.169 — TWICE (210 s on the final pass,
+error-outputs=0, home-path-survivors=0; see the carrier lesson below).
+Zip 8,639,797 B sha `e517ebb0…` four homes, predecessors swept
+(v1.2.168, then the resurrected v1.2.121, then 43 stale tracked zips
+v1.2.85–v1.2.121 — snapshot-commit debris, ~500 MB of dead history —
+removed with only the current release left in the four ritual homes;
+download_archive/ vanished with its v1.2.85), nested zips NONE, real
+leaks 0.  Honest totals **5,426 = 4,557 collect + 869 doctest**
+(collect-only verified per tree), census **1086/334,982** post-ship
+walk (endpoint-verified — the fresh walk and the FALLBACK_STATS
+replica agree to the line).  Counter 46→47 (scheduled run).  Arena
+conformal PR #9 still open all round.
+
+**The carrier lesson (caught in-round, shipped fixed).**  The release
+has FOUR version carriers — VERSION, pyproject `[project] version`,
+`pharmaml.__version__` in `__init__.py`, and the web's
+`SHIPPED_TOOLKIT_VERSION` — and the first build trued only two.  The
+web's `readToolkitVersion()` PREFERS pyproject, so the zip-size
+endpoint answered `exact:false source:stream` (a stale-version lookup
+demoted the exact release path); `__init__.py` still said 1.2.168 so
+the notebooks printed the stale version and the notebook-freshness
+ship gate refused the tree; and the first zip embedded the stale
+pyproject.  A cold `.next` rebuild ruled out compile staleness before
+the real cause surfaced.  All four carriers now true at 1.2.169, the
+notebooks re-executed, the zip rebuilt (`e517ebb0…`), the freshness
+gate green, the endpoint back to `exact:true source:release`.  The
+CHANGELOG documents the lesson; a future r260-style carrier pin in
+the tooling would make it structural.
 Next: Phase-3 card polish (responsive/SMILES previews on cards),
 contact-map/PLIF viz twins, §24 SA-in-generative, the conformal
 pickup the moment PR #9 merges.

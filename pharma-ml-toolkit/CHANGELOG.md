@@ -1,3 +1,41 @@
+## [1.2.169] — 2026-11-11
+### Added — round 262: MASTER_PROMPT part4 §5, Phase 2 completes — the nine-card dashboard mapping
+
+- `ui/nine_cards.py`: the NINE_CARDS registry — exactly the directive's nine
+  high-level cards in the exact order, each mapped per the §5 table onto the
+  existing Studio sections (17 live nav keys; settings excluded by the
+  directive itself), every card carrying a title, concise description, badge
+  visual identity, capability summary, a computed live preview, and
+  exception-safe optional-dependency probes. The class-F boundaries are stated
+  on the cards: docking execution needs an external Vina binary (never
+  bundled); MD trajectories come from external GROMACS/PLUMED runs.
+- `ui/pages/dashboard.py`: the 3×3 workflow-card grid above the surviving
+  stat census and dataset index; entry buttons navigate the real MainWindow
+  through `go_to` — the page stack stays 18 widgets, zero duplicated
+  implementations.
+- `docs/FEATURES.md` §10: the nine-card mapping table; the Dashboard row
+  promoted B→A; status summary trued to A35/B6/C5/D0/E1/F3.
+- +19 tests: `tests/ui/test_nine_cards.py` (14) + 5 FEATURES.md drift-guard
+  pins re-deriving the mapping from the live source.
+- The chunk gate grew to ten batches (4f — the nine-card suite's own Qt
+  process envelope).
+- Fixed a latent flake: `test_dnn_cross_validation_uses_a_fresh_model_per_fold`
+  captured `id(self)` without holding references — CPython address recycling
+  inside a long pytest process collapsed the distinctness set. The capture now
+  holds the instances (a strictly stronger check).
+
+### Fixed — the release hygiene the round caught
+
+- The version-carrier sweep now covers ALL FOUR carriers (VERSION,
+  pyproject `[project] version`, `pharmaml.__version__`, the web's
+  `SHIPPED_TOOLKIT_VERSION`): the first v1.2.169 zip embedded a stale
+  pyproject (the web's `readToolkitVersion()` prefers it) and the notebooks
+  printed 1.2.168 until `__init__.py` was trued — caught by the ship gates
+  and the zip-size endpoint, fixed in-round.
+- 43 stale tracked release zips (v1.2.85–v1.2.121 snapshot debris, ~500 MB)
+  removed from the release homes; only the current release ships in the four
+  ritual homes.
+
 ## [1.2.168] — 2026-11-10
 
 ### Added — round 261: MASTER_PROMPT part4 §4.5, Phase 2 opens — the truthful feature inventory

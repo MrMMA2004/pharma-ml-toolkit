@@ -59,9 +59,10 @@ function ThemeToggle() {
 
 /* r262 (part4 §5 release): the nine-card dashboard landed -- +2 files
  * (ui/nine_cards.py + the 14-test contract suite); census verified live
- * via /api/toolkit/tree (post-ship walk: the two release homes each carry
- * the fresh zip, hence 1104 = 1102 tracked + 2 new). */
-const FALLBACK_STATS = { files: 1104, lines: "334,959" };
+ * via /api/toolkit/tree (post-ship walk AFTER the 43 stale-zip debris
+ * sweep + the pyproject version-carrier fix, hence 1086 = 1084 tracked
+ * + 2 new). */
+const FALLBACK_STATS = { files: 1086, lines: "334,982" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
