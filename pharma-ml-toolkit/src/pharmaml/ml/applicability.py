@@ -67,6 +67,12 @@ True
 >>> float(frame.loc[0, "knn_distance"]) > float(out.distance_threshold)
 True
 
+Descriptor alignment: when both inputs are DataFrames, their unique column
+labels must match exactly in the same order; mismatches are rejected rather
+than silently reordering. When either input is an array, columns are matched
+by position and the caller must ensure their meanings and order agree. This
+check does not verify descriptor units, preprocessing or provenance.
+
 The kNN half alone (no bootstrap fits) is the quick pass:
 
 >>> quick = knn_applicability_domain(x, far, k=5)
@@ -185,6 +191,8 @@ def _numeric_matrix(X: pd.DataFrame | np.ndarray, name: str) -> np.ndarray:
         distance would silently poison every threshold downstream.
     """
     if isinstance(X, pd.DataFrame):
+        if not X.columns.is_unique:
+            raise DataValidationError(f"{name} has duplicate feature names; columns must be unique")
         bad = [str(col) for col in X.columns
                if X[col].dtype.kind not in "fiub"]
         if bad:
@@ -227,6 +235,29 @@ def _numeric_matrix(X: pd.DataFrame | np.ndarray, name: str) -> np.ndarray:
             "domain needs finite descriptors"
         )
     return matrix
+
+
+def _validate_descriptor_schema(
+    X_train: pd.DataFrame | np.ndarray,
+    X_test: pd.DataFrame | np.ndarray,
+    train: np.ndarray,
+    test: np.ndarray,
+) -> None:
+    """Require matching dimensions and, when available, matching column order."""
+    if train.shape[1] != test.shape[1]:
+        raise ModelError(
+            f"X_test has {test.shape[1]} feature(s) but X_train has "
+            f"{train.shape[1]} — the descriptor spaces must match"
+        )
+    if (
+        isinstance(X_train, pd.DataFrame)
+        and isinstance(X_test, pd.DataFrame)
+        and not X_train.columns.equals(X_test.columns)
+    ):
+        raise ModelError(
+            "X_train and X_test feature names and order must match exactly; "
+            "align query columns to the training descriptors"
+        )
 
 
 def _feature_names(X: pd.DataFrame | np.ndarray) -> list[str]:
@@ -403,9 +434,10 @@ def knn_applicability_domain(
     Parameters
     ----------
     X_train:
-        Training descriptor matrix (numeric, finite).
+        Training descriptor matrix (numeric, finite, unique DataFrame columns).
     X_test:
-        Query descriptor matrix — same column count as ``X_train``.
+        Query descriptor matrix — same columns in the same order as
+        ``X_train``. If either input is an array, alignment is positional.
     k:
         Neighbour count (default 5, the upload's value).
     percentile:
@@ -438,11 +470,7 @@ def knn_applicability_domain(
         )
     if not 0.0 < percentile <= 100.0:
         raise ModelError(f"percentile must be in (0, 100], got {percentile}")
-    if train.shape[1] != test.shape[1]:
-        raise ModelError(
-            f"X_test has {test.shape[1]} feature(s) but X_train has "
-            f"{train.shape[1]} — the descriptor spaces must match"
-        )
+    _validate_descriptor_schema(X_train, X_test, train, test)
 
     scaler = StandardScaler()
     train_scaled = scaler.fit_transform(train)
@@ -532,7 +560,8 @@ def bootstrap_uncertainty(
     X_train, y_train:
         The training data ``model`` was fitted on.
     X_test:
-        Query rows for the uncertainty readout.
+        Query rows for the uncertainty readout. DataFrame columns must match
+        training names and order; arrays are matched by position.
     n_models:
         Ensemble size (default 30, the upload's value).
     random_state:
@@ -561,11 +590,7 @@ def bootstrap_uncertainty(
         )
     train = _numeric_matrix(X_train, "X_train")
     test = _numeric_matrix(X_test, "X_test")
-    if train.shape[1] != test.shape[1]:
-        raise ModelError(
-            f"X_test has {test.shape[1]} feature(s) but X_train has "
-            f"{train.shape[1]} — the descriptor spaces must match"
-        )
+    _validate_descriptor_schema(X_train, X_test, train, test)
     y = np.asarray(y_train)
     if y.shape[0] != train.shape[0]:
         raise ModelError(
@@ -741,7 +766,8 @@ def quantile_prediction_intervals(
         carry NaN — a quantile loss has no honest answer for a missing
         target).
     X_test:
-        Query rows — same column count as ``X_train``.
+        Query rows — DataFrame columns must match training names and order;
+        arrays are matched by position.
     y_test:
         Optional true values for the coverage statistic.
     alpha:
@@ -831,11 +857,7 @@ def quantile_prediction_intervals(
         )
     train = _numeric_matrix(X_train, "X_train")
     test = _numeric_matrix(X_test, "X_test")
-    if train.shape[1] != test.shape[1]:
-        raise ModelError(
-            f"X_test has {test.shape[1]} feature(s) but X_train has "
-            f"{train.shape[1]} -- the descriptor spaces must match"
-        )
+    _validate_descriptor_schema(X_train, X_test, train, test)
     y = _numeric_vector(y_train, "y_train", finite=True)
     if y.shape[0] != train.shape[0]:
         raise ModelError(

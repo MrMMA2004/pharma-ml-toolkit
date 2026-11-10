@@ -76,6 +76,7 @@ jobs:
           tests/test_multiobjective_hpo.py
           tests/test_pareto_shortlist_plot.py
           tests/test_conformal.py
+          tests/test_applicability_schema.py
           -o addopts="-q --tb=short"
 
       - name: Smoke-test chart exports
