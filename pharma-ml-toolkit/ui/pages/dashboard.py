@@ -165,8 +165,8 @@ class DashboardPage(QWidget):
             lay.addWidget(holder)
 
         migration = QLabel(
-            "Migration status (directive #16): COMPLETE — all seventeen pages are "
-            "live and verified (increment 14, round 228); the legacy Tkinter "
+            "Migration status (directive #16): COMPLETE — the original seventeen pages were "
+            "verified in increment 14 (round 228); the legacy Tkinter "
             "playground.py is retired and this Studio is THE front end "
             "(python studio.py)."
         )

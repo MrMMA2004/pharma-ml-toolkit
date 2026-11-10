@@ -34,6 +34,7 @@ MODULES: tuple[str, ...] = (
     "pharmaml.biology",
     "pharmaml.pharma",
     "pharmaml.docking",
+    "pharmaml.md",
     "pharmaml.viz",
     "pharmaml.utils.io",
     "pharmaml.utils.validation",
