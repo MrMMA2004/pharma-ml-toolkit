@@ -311,6 +311,7 @@ after adding new public functions.
 | `CiResult` | class | One confidence interval: the estimate and its bounds. |
 | `ComparisonReport` | class | ``compare_groups``: the whole statistics lecture, one record. |
 | `CompositionReport` | class | The ε bill for a sequence of queries. |
+| `ConformalIntervals` | class | Prediction intervals and optional empirical evaluation on query rows. |
 | `CorrelationResult` | class | The lag correlation table, with the significance band. |
 | `CoverageEntry` | class | The audit's verdict for one catalogue category. |
 | `CrossEntropyLoss` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
@@ -398,6 +399,7 @@ after adding new public functions.
 | `SignificanceResult` | class | One test's verdict: statistic, p-value, decision, effect size. |
 | `Softmax` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `SpaceIssue` | class | One compatibility or sanity finding (§18.2 validation). |
+| `SplitConformalRegressor` | class | A fitted model reference and its split-conformal calibration radius. |
 | `TPESearch` | class | Tree-structured Parzen Estimator search — Optuna's flagship sampler. |
 | `TaskFamily` | class | Seeded related regression tasks: one shared prior, per-task draws. |
 | `TaskSplit` | class | One task's support/query split (the inner-loop data contract). |
@@ -437,6 +439,7 @@ after adding new public functions.
 | `build_preprocessor` | function | Build the (impute -> scale) preprocessing pipeline. |
 | `build_stacking` | function | Build a stacking ensemble (upgrades Stacking.py / Stacking reg.py). |
 | `build_voting` | function | Build a voting ensemble (upgrades Voting.py / Voting reg.py). |
+| `calibrate_split_conformal` | function | Calibrate finite split-conformal intervals on held-out regression data. |
 | `capacity_sweep` | function | Train the same data through growing hidden widths (chapter 5). |
 | `catalog_categories` | function | The 35 catalogue sections with live project counts and star totals. |
 | `catalog_projects` | function | One category's projects (slug or title), or all 924, score-descending. |

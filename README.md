@@ -96,6 +96,7 @@ Start with an executed notebook or jump directly to the reference material:
 | [SA-aware generation](pharma-ml-toolkit/docs/GENERATIVE_SA.md) | Add synthetic-accessibility reward and review raw scores and rejected candidates. |
 | [MD visualization guide](pharma-ml-toolkit/docs/MD_VISUALIZATION.md) | Plot metric traces and aligned correlation heatmaps. |
 | [Multi-objective workflow](pharma-ml-toolkit/docs/MULTIOBJECTIVE_WORKFLOW.md) | Plot study trade-offs and shortlist trials by crowding distance. |
+| [Conformal regression intervals](pharma-ml-toolkit/docs/CONFORMAL_REGRESSION.md) | Calibrate and evaluate held-out prediction intervals. |
 | [API & module index](pharma-ml-toolkit/docs/INDEX.md) | Package map and links into the detailed documentation. |
 | [Full user guide](pharma-ml-toolkit/README.md) | Detailed domain coverage, CLI, deployment, testing and troubleshooting. |
 | [Changelog](pharma-ml-toolkit/CHANGELOG.md) | Release history and migration notes. |
