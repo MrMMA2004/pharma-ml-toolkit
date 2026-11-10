@@ -12383,3 +12383,40 @@ entry).  Feature queue unchanged: the PLUMED-style CV helpers (`md/cv.py`), the
 contact-map/PLIF viz twins, salt-bridge timelines beside the H-bond card, §24 SA-in-generative
 beyond the shipped slices.
 
+## Round 254 — 2026-11-10 — double-fire continuation: independent verification of the fresh v1.2.163 while the conformal branch keeps advancing; health + monitoring only
+
+**Pickup**: clean and minutes-old — HEAD `8947c38` (this session's own round-253 push),
+origin/main equal, counter 43→44 already riding it.  This fire is the scheduler's second
+delivery of the same 14:12 tick (the r251→r252 double-fire pattern again), so STEP 0 lands the
+counter at **45** and the round runs as a continuation, not a fresh feature cycle.
+
+**The stand-down holds — confirmed by live monitoring**: the arena conformal branch advanced
+again during this round (`e2f1eb3..56e3cf9`, 06:21 UTC, twelve commits ahead of main, still
+unmerged — a commit every ~5 minutes at 05:16 → 05:22 → 05:34 → 06:15 → 06:21).  With the
+concurrent session demonstrably mid-flight, toolkit files stay untouched.
+
+**What was done instead — the verification pass (the standing mandate, zero footprint)**: the
+round-252 release claims were independently re-derived on the focused subsets —
+`test_md_analysis.py` + `test_md_plots.py` + `test_viz_md_plots.py` + `test_web_parity.py` +
+`test_docs_index.py` → **197 passed, 1 skipped** (the designed 12-frame H-bond schedule, the
+viz-twin contracts, the parity pins, the docs INDEX integrity all green); the md/ + viz/
+doctest sides → **102 passed, 1 skipped**.  One diagnostic detour worth recording: pytest's
+summary line kept vanishing — root cause is the `pyproject.toml` `addopts = "-q --tb=short
+--doctest-modules"` folding into the CLI's `-q` to make **double-quiet, which suppresses the
+summary entirely** (and a bare `-o addopts=` strips `--doctest-modules` too, so a naive
+override silently drops the doctest side — hence the honest totals' "collect + doctest"
+bookkeeping).  The standard invocation is `-o addopts= -q` for suite runs and
+`-o addopts= -q --doctest-modules` when the doctest side is wanted.  One transient exit-1 on
+the first focused run (no failures printed, subsequent identical runs exit 0) — consistent
+with dev-server memory pressure, the known OOM-ritual territory; no flake pinned.
+
+**Health**: dev server GET / → 200; zip-size `exact:true source:release 1.2.163` at
+23,673,301 B (verified earlier this tick, unchanged); webDevReview job 520021 + master 515197
+both ride the scheduler.  The counter file rides this commit.
+
+**Watching for**: unchanged from round 253 — the pickup ritual fires the moment their PR
+merges (their chunk assignments are pre-planned in round 251's entry); the feature queue
+(PLUMED-style CV helpers, contact-map/PLIF twins, salt-bridge timelines, §24) waits for a
+quiet scheduler window.
+
+
