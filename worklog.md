@@ -13393,10 +13393,11 @@ PREDECESSOR constant chased the ACTUAL shipped previous version
 (the r264 lesson applied — this time it was already correct in the
 copied shape).  Honest totals **5,547 = 4,673 collect + 874 doctest**
 (collect-only verified; +31 collect +4 doctest over r264), census
-**1091/339,543** (the endpoint-rule walk after the notebook
-re-execution; +1 file = the new suite, the line growth mostly the
-re-executed notebooks' own canonical re-wrap).  Web pins trued
-5,547 ×7 + `FALLBACK_STATS` 1091/339,543 + `SHIPPED_TOOLKIT_VERSION`
+**1091/340,283** (the endpoint-rule walk -- countLines'
+split("\n").length trailing-newline rule -- after the notebook
+re-execution; +1 file = the new suite, the line growth the
+re-executed notebooks' canonical re-wrap plus the round's own edits).  Web pins trued
+5,547 ×7 + `FALLBACK_STATS` 1091/340,283 + `SHIPPED_TOOLKIT_VERSION`
 1.2.172.  Docs: GENERATIVE_SA rewritten around the container API,
 README §24 trued to the four wiring points, INDEX regenerated (916
 symbols), FEATURES trued (generative 9,682 L + the 31-test suite;

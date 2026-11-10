@@ -2177,9 +2177,9 @@ delivered the r264 next-queue's head:
   (home-path-survivors 0), twins regenerated, the five guards
   re-verified green standalone.  Honest totals **5,547 = 4,673
   collect + 874 doctest** (collect-only verified), census
-  **1091/339,543** (the endpoint-rule walk after the notebook
-  re-execution).  Web pins trued 5,547 ×7 + `FALLBACK_STATS`
-  1091/339,543 + `SHIPPED_TOOLKIT_VERSION` 1.2.172.
+  **1091/340,283** (the endpoint-rule walk, countLines'
+  split("\n").length rule, after the notebook re-execution).  Web pins trued 5,547 ×7 + `FALLBACK_STATS`
+  1091/340,283 + `SHIPPED_TOOLKIT_VERSION` 1.2.172.
   webDevReview 522062 disabled by the platform exec limit
   (re-acknowledged, not recreated).  Next: the PR #9 conformal
   pickup the moment it merges, the Phase-4 gap list from the feature

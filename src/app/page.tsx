@@ -61,8 +61,9 @@ function ThemeToggle() {
  * (tests/test_generative_result_sa.py), +31 collect tests and +4
  * doctests (result.py's three new method docstrings + the
  * plot_sa_distribution one); census verified by the endpoint-rule walk
- * (1091 = 1090 + 1 new) after the notebook re-execution. */
-const FALLBACK_STATS = { files: 1091, lines: "339,543" };
+ * (1091 = 1090 + 1 new; 340,283 as the live /api/toolkit/tree answers --
+ * countLines' split("\n").length rule) after the notebook re-execution. */
+const FALLBACK_STATS = { files: 1091, lines: "340,283" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
