@@ -14,6 +14,7 @@ scans::
     pharmaml ml check   --model artifacts/x.joblib --data new.csv  # round-trip audit
     pharmaml data inspect --data qsar.csv                  # audit your own file
     pharmaml data split  --data qsar.csv --test-size 0.2 --val-size 0.1
+    pharmaml data audit-splits --partition train=train.csv --partition test=test.csv --key compound_id
     pharmaml data convert --data ligands.csv --to sdf      # .smi/.csv/.sdf round-trip
     pharmaml chem pic50  --data activity.xlsx --column "IC50 (nM)"
     pharmaml pharma pk   --data profile.csv --time time_h --conc conc_ng_ml
@@ -121,6 +122,26 @@ def _build_parser() -> argparse.ArgumentParser:
     split.add_argument(
         "--prefix", default=None,
         help="output filename prefix (default: input file stem)",
+    )
+
+    audit_splits = data_sub.add_parser(
+        "audit-splits", help="audit exact identifier overlap across named split files",
+    )
+    audit_splits.add_argument(
+        "--partition", action="append", required=True, metavar="NAME=PATH",
+        help="named CSV/TSV/Excel split file; repeat for at least two partitions",
+    )
+    audit_splits.add_argument(
+        "--key", action="append", required=True, metavar="COLUMN",
+        help="identifier column; repeat for a composite key",
+    )
+    audit_splits.add_argument(
+        "--delimiter", choices=("comma", "tab", "semicolon"), default=None,
+        help="delimiter for text files (default: tab for .tsv, comma otherwise)",
+    )
+    audit_splits.add_argument(
+        "--details-json", default=None, metavar="PATH",
+        help="write shared raw identifiers to a new JSON file (may contain sensitive data)",
     )
 
     convert = data_sub.add_parser(
@@ -1012,6 +1033,113 @@ def _cmd_data_split(args: argparse.Namespace) -> int:
     result.write(out_dir, prefix)
     print(result)
     return 0
+
+
+def _read_split_audit_table(path: Path, delimiter: str | None):
+    """Read identifiers as text without inferring NA values or numeric types."""
+    import csv
+
+    import pandas as pd
+
+    from pharmaml.exceptions import DataValidationError
+
+    if not path.is_file():
+        raise DataValidationError(f"Input file not found: {path}")
+    suffix = path.suffix.lower()
+    separators = {"comma": ",", "tab": "\t", "semicolon": ";"}
+    try:
+        if suffix in {".csv", ".tsv", ".txt"}:
+            sep = separators[delimiter] if delimiter else ("\t" if suffix == ".tsv" else ",")
+            with path.open("r", encoding="utf-8-sig", newline="") as handle:
+                reader = csv.reader(handle, delimiter=sep, strict=True)
+                header = next(reader, [])
+                rows = []
+                for row in reader:
+                    if len(row) != len(header):
+                        raise DataValidationError(
+                            f"Cannot read split file {path}: inconsistent field count "
+                            f"at line {reader.line_num}"
+                        )
+                    rows.append(row)
+            frame = pd.DataFrame(rows, columns=header)
+        elif suffix in {".xlsx", ".xlsm"}:
+            first = pd.read_excel(path, header=None, nrows=1, dtype=str, keep_default_na=False)
+            header = first.iloc[0].tolist() if len(first) else []
+            frame = pd.read_excel(path, dtype=str, keep_default_na=False)
+        else:
+            raise DataValidationError(f"unsupported split file format: {path.suffix}")
+    except DataValidationError:
+        raise
+    except (OSError, UnicodeError, ValueError, ImportError, StopIteration, csv.Error) as exc:
+        raise DataValidationError(f"Cannot read split file {path}: {exc}") from exc
+    if not header or any(not isinstance(name, str) or not name.strip() for name in header):
+        raise DataValidationError(f"Split file {path} has an empty column header")
+    if len(set(header)) != len(header):
+        raise DataValidationError(f"Split file {path} has duplicate column headers")
+    if len(header) != len(frame.columns):
+        raise DataValidationError(f"Split file {path} has an inconsistent header")
+    frame.columns = header
+    return frame
+
+
+def _cmd_data_audit_splits(args: argparse.Namespace) -> int:
+    """Audit exact identifier overlaps without printing raw identifiers."""
+    import json
+    import os
+    import re
+
+    from pharmaml.exceptions import DataValidationError
+    from pharmaml.ml.split_audit import audit_split_overlap
+
+    if len(args.partition) < 2:
+        raise DataValidationError("at least two --partition NAME=PATH arguments are required")
+    if len(set(args.key)) != len(args.key) or any(not key.strip() for key in args.key):
+        raise DataValidationError("--key columns must be nonempty and unique")
+    partitions: dict[str, list[Any]] = {}
+    for specification in args.partition:
+        name, separator, path_text = specification.partition("=")
+        if not separator or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", name) or not path_text:
+            raise DataValidationError("--partition must be NAME=PATH with a simple nonempty name")
+        if name in partitions:
+            raise DataValidationError(f"duplicate partition name: {name}")
+        frame = _read_split_audit_table(Path(path_text), args.delimiter)
+        missing = [key for key in args.key if key not in frame.columns]
+        if missing:
+            raise DataValidationError(f"partition {name!r} is missing key column(s): {', '.join(missing)}")
+        selected = frame.loc[:, args.key]
+        partitions[name] = (selected.iloc[:, 0].tolist() if len(args.key) == 1
+                            else list(selected.itertuples(index=False, name=None)))
+    report = audit_split_overlap(partitions)
+    if args.details_json:
+        output = Path(args.details_json)
+        if output.suffix.lower() != ".json":
+            raise DataValidationError("--details-json must end in .json")
+        payload = {
+            "key_columns": args.key,
+            "partition_names": list(report.partition_names),
+            "shared_keys": [
+                {"key": item.key, "counts": dict(zip(report.partition_names, item.counts, strict=True))}
+                for item in report.shared_keys
+            ],
+        }
+        try:
+            fd = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+        except OSError as exc:
+            raise DataValidationError(f"Cannot write new details file {output}: {exc}") from exc
+    print(f"shared keys: {report.n_shared_keys}")
+    for name, rows, duplicate, overlap in zip(
+        report.partition_names, report.partition_rows, report.duplicate_rows,
+        report.overlap_rows, strict=True,
+    ):
+        print(f"{name}: rows={rows} duplicate_rows={duplicate} overlap_rows={overlap}")
+    print("pairwise shared unique keys:")
+    print(report.pairwise_dataframe().to_string())
+    if args.details_json:
+        print(f"details: {args.details_json} (contains raw identifiers)")
+    return 3 if report.has_overlap else 0
 
 
 def _smi_bridge_frame(path: Path):
@@ -2616,6 +2744,7 @@ _HANDLERS = {
     ("models", None): _cmd_models,
     ("data", "inspect"): _cmd_data_inspect,
     ("data", "split"): _cmd_data_split,
+    ("data", "audit-splits"): _cmd_data_audit_splits,
     ("data", "convert"): _cmd_data_convert,
     ("ml", "train"): _cmd_ml_train,
     ("ml", "compare"): _cmd_ml_compare,

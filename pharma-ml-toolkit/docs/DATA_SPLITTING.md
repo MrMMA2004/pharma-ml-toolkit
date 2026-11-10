@@ -76,3 +76,40 @@ review standardization choices and audit compound, patient, batch and series
 levels separately where appropriate. A clean report is not proof of an
 independent or representative test set. The function reports overlap rather
 than automatically removing records or resolving conflicting labels.
+
+## Audit split files from the command line
+
+```bash
+pharmaml data audit-splits \
+  --partition train=train.csv \
+  --partition calibration=calibration.csv \
+  --partition test=test.csv \
+  --key compound_id
+```
+
+Provide two or more uniquely named partitions (names use letters, numbers, `_`
+and `-`, starting with a letter). Repeat `--key` for composite identifiers,
+for example `--key patient_id --key assay_id`. Every file must contain each
+key column; headers are exact, case-sensitive and must be unique and nonempty.
+Empty partitions, blank or whitespace-only identifiers and malformed rows fail
+the audit. Input is UTF-8 CSV, TSV or TXT, or the first sheet of XLSX/XLSM.
+CSV/TXT default to comma, TSV to tab; use `--delimiter semicolon`, `comma` or
+`tab` to override the delimiter for text files. Quoting follows standard CSV
+rules. Values are compared as text, preserving leading zeroes, literal `NA`,
+case and whitespace; no identifier normalization is performed. Excel numeric
+cells are converted from their stored values, **not their displayed number
+formats**: export identifiers as text to preserve leading zeroes. The Excel
+reader ignores trailing empty rows.
+
+The summary shows duplicate rows, affected overlap rows and unique-key
+intersections, without printing identifiers. Exit status is **0** for no
+overlap, **3** for overlap, **1** for an input or execution error, and **2** for
+argument parsing errors.
+Within-partition duplicates alone do not change the exit status.
+
+To review exact shared keys, add `--details-json shared.json`. This creates a
+new UTF-8 JSON file with raw identifiers and per-partition counts; it refuses
+to overwrite any existing file and uses owner-only permissions on POSIX.
+**The detailed file may contain sensitive identifiers:** protect it and do not
+commit or share it without authorization. An audit reads all keys into memory.
+All exact-match limitations described above still apply.
