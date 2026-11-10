@@ -329,7 +329,7 @@ pharma-ml-toolkit/
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
 ├── studio.py               # THE graphical front end — `python studio.py` opens PharmaML
-│                            # Studio (directive #16 redesign, increments 1–14, all seventeen
+│                            # Studio (directive #16 redesign, increments 1–14, all eighteen
 │                            # pages): sidebar navigation, PyQtGraph scientific plots,
 │                            # Qt-Material/QDarkStyleSheet theming, QThreadPool workers with
 │                            # the cooperative Stop; runs offscreen for CI (`ui/headless.py`
@@ -338,14 +338,15 @@ pharma-ml-toolkit/
 ├── ui/                      # the Studio package: main_window · theme_manager · app_settings · pages/
 │                            # (dashboard · data_explorer · chemistry · pkpd · biology · docking · model_analysis ·
 │                            # ml_workbench · unsupervised · deep_learning · generative · foundations · bestofml ·
-│                            # responseai · imagelab · utilities · settings) · widgets/ · workers/ · native/ — see docs/gui/
-├── VERSION                 # the release version (1.2.125) — `cat VERSION` after extracting
+│                            # responseai · imagelab · molecular_dynamics · utilities · settings) · widgets/ · workers/ · native/ — see docs/gui/
+├── VERSION                 # the release version — `cat VERSION` after extracting (kept in
+│                            # sync with pyproject + src/pharmaml/__init__ by the ship ritual)
 ├── CHANGELOG.md            # what changed in each versioned release
 ├── LICENSE                 # MIT — the pyproject declaration, materialised
 ├── docs/COVERAGE.md        # the one-by-one RAR audit: every original file → its PharmaML surface
 ├── docs/LEAKAGE_AUDIT.md   # the data-leakage audit: the rar's 28 leaky files, the toolkit's guards, the web mirror's fix
 ├── docs/DATA_AUDIT.md     # the database audit: every shipped data file checked for gaps and errors (2 real ones fixed)
-├── tests/                   # Extensive pytest coverage across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards, tests/ui/ — the seventeen Studio pages' offscreen suites + data/ fixtures; the retired Tk playground's 980-test suite left with it in v1.2.141)
+├── tests/                   # Extensive pytest coverage across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards, tests/ui/ — the eighteen Studio pages' offscreen suites + data/ fixtures; the retired Tk playground's 980-test suite left with it in v1.2.141)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~720 KB (audited 526-check clean, docs/DATA_AUDIT.md), every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);

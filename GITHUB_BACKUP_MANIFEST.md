@@ -1871,3 +1871,40 @@ rc=0, failures=0.  Census **1093/333,305**.  Web pins trued 5,373 =
 4,504 collect + 869 doctest (×7) + census fallbacks 1093/333,305 +
 `SHIPPED_TOOLKIT_VERSION` 1.2.166; all three version carriers trued
 in one pass.  Arena conformal PR still open (unmerged) all round.
+
+## v1.2.167 release-zip homes (2026-11-10, round 260 — part4 Phase-1: the §4 integrity repairs)
+
+`pharma-ml-toolkit-v1.2.167.zip` — 8,618,365 bytes, sha-256
+`4947f8e42598b26813edec8a335cdb25baf339f6d7bd7b4803352095bff4d645`
+(four byte-identical homes, testzip OK per home, real leaks 0).  THE
+DIET CHANGE: the release archive stopped shipping the research
+history — `scratch/` (475 probe files), `download/` (129 evidence
+PNGs, 8.7 MB — 37% of the v1.2.166 archive was screenshots) and
+`dist-archive/` are excluded from RELEASE ZIPS only; nothing is
+deleted, all of it stays on disk and in git as provenance
+(MASTER_PROMPT part4 §4.3).  The archive fell 23,692,466 → 8,618,365
+bytes (−64%) with ZERO product code lost.  The canonical build
+utilities moved to `tools/` (`build_zip.py`, `reexec_notebooks.py`,
+`run_suite_chunks.py`, `venv_repair.sh`, `scrub_home_paths.py`) with
+scratch/ forwarder shims keeping the historical invocation paths
+alive.  `tools/checkpoint.py`: the ship gates are real again (no
+retired `playground.py`, the GUI gate is the offscreen pages smoke,
+plus the new notebook-version consistency gate) and `--restore`
+handles BOTH archive layouts with traversal/absolute/backslash
+refusal, `--dry-run` preview, staging + version verification (the
+round-259 audit found it broken against every zip since round 210).
+README/pyproject metadata trued (eighteen pages + molecular_dynamics,
+no stale 1.2.125 example, the real homepage).  +22 tests
+(`tests/test_checkpoint_tooling.py`) + 5 trued in
+`tests/test_leakage.py` (the scrub contract's new canonical path).
+Notebooks 8/8 re-executed at 1.2.167 (home-path-survivors=0, dev
+server down per the OOM ritual).  NINE-chunk gate: first pass 8/9
+(one stale scrub pin, fixed same-round), second pass 9/9 rc=0
+failures=0.  Honest totals **5,395 = 4,526 collect + 869 doctest**,
+census **1098/333,931**, web pins trued 5,395 ×7 + census fallbacks +
+`SHIPPED_TOOLKIT_VERSION` 1.2.167, all three version carriers in one
+pass.  Agent-browser E2E green (badge 1.2.167, hero 5,395 tests /
+1098 files / 333,931 LOC, zip endpoint `exact:true source:release`
+8,618,365 B, mobile 390 no-scroll, footer, theme both ways, zero
+console errors).  Arena conformal PR #9 still open (unmerged) all
+round.

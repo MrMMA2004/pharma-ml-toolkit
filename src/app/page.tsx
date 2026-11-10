@@ -57,10 +57,10 @@ function ThemeToggle() {
   );
 }
 
-/* r259 trued +11: r258 pinned the census before re-executing the notebooks
- * (docking +7, generative −12, ML +7, tuning +9 = net +11 web-split lines),
- * so the shipped tree is 333,316 — the live /api/toolkit/tree agrees. */
-const FALLBACK_STATS = { files: 1093, lines: "333,316" };
+/* r260 (part4 Phase-1 release): the §4 integrity repairs landed --
+ * the +5 files are the tools/ canonical build utilities + the 22-test
+ * tooling suite; census verified live via /api/toolkit/tree. */
+const FALLBACK_STATS = { files: 1098, lines: "333,931" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
@@ -207,7 +207,7 @@ export default function Home() {
             {stats ? `${stats.files} files · ${stats.totalLines.toLocaleString("en-US")} LOC` : `${FALLBACK_STATS.files} files · ${FALLBACK_STATS.lines} LOC`}
             {" · "}
             <span className="ping-ring relative inline-flex size-2 rounded-full bg-primary" aria-hidden />
-            <span className="text-primary">5373 tests</span>
+            <span className="text-primary">5395 tests</span>
           </p>
         </div>
       </footer>

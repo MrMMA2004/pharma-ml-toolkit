@@ -12778,3 +12778,92 @@ the gate is NINE chunks · counter **46/100** · queue: **the part4 §4 Phase-1 
 pickup ritual the moment PR #9 merges (chunk assignments pre-planned in round 251),
 the contact-map/PLIF viz twins, Part-3 §24 SA-in-generative beyond the shipped
 slices.
+
+## Round 260 — 2026-11-10 — part4 Phase-1 shipped as v1.2.167: all five §4 integrity findings repaired (the 37%-lighter archive)
+
+**Trigger**: the owner's "Continue" (user-triggered, no cron increment —
+stays 46/100).  FETCH FIRST showed the concurrent session 23-min quiet
+(tree clean, last commit mine) → toolkit edits permitted.  This round
+executed the queue r259 left: the MASTER_PROMPT part4 §4 Phase-1
+repairs, test-first per the doc's own §11.
+
+**The changes (all five §4 findings fixed):**
+
+- **§4.1** `tools/checkpoint.py` ship gates: ruff no longer feeds the
+  retired `playground.py`; the invented `playground.py --self-test` GUI
+  gate is now `pytest tests/ui/test_pages_smoke.py` (offscreen PySide6,
+  the supported path — `studio.py` has no CLI so nothing was invented);
+  the gate set adds a backend tooling smoke and the NEW in-process
+  notebook-version consistency gate (`_notebook_freshness_problems`).
+- **§4.2** `--restore` reborn: `_restore_archive` + `_safe_member_path`
+  + `_detect_prefix` handle BOTH layouts (root-level regression test
+  pins the round-259 find: every zip since round 210 raised ValueError
+  on every member); absolute/`..`/backslash members refused; `--restore
+  --dry-run` preview (verified live against the real v1.2.166 archive:
+  1,073 members, root-level, zero writes); staging + staged-VERSION
+  verification; user data never deleted.  checkpoint's own builder
+  flipped to root-level arcnames so the two builders cannot drift again.
+- **§4.3** the release zip stopped shipping the research history:
+  `scratch/` + `download/` + `dist-archive/` excluded from RELEASE ZIPS
+  only (nothing deleted — provenance stays in git and on disk).  The
+  archive fell **23,692,466 → 8,618,365 bytes (−64%)**.  The canonical
+  build utilities moved to `tools/` (build_zip, reexec_notebooks,
+  run_suite_chunks, venv_repair, scrub_home_paths) with scratch/
+  forwarder shims — the cron ritual's historical paths still work, and
+  its stale round-225 chunk-runner reference now lands on the canonical
+  NINE-chunk gate.  The web fallback streamer's `ZIP_EXCLUDE_ARGS`
+  gained the same three homes (fallback shape == release shape).
+- **§4.4** README: "seventeen" → eighteen ×2, `molecular_dynamics`
+  added to the documented page list (nav order: after imagelab), the
+  `(1.2.125)` example made version-agnostic; pyproject Homepage = the
+  real origin (`MrMMA2004/pharma-ml-toolkit`, confirmed, not invented);
+  the `[tool.ruff]` comment trued to the new zip policy.
+- **Hygiene**: 129 sandbox-local disk modes realigned to git's 644 (the
+  +x drift made every one an EXE002; `ruff check src tests tools ui
+  studio.py` is zero-findings again, the round-244 convention); the
+  moved utilities lint-clean in their new linted home (10 findings
+  fixed: EXE001 chmod, blind-except narrowed, explicit `check=False`,
+  import order).
+
+**Tests** (test-first): `tests/test_checkpoint_tooling.py` NEW — 22
+tests (dual-layout restore ×10, ship-gate pins ×4, zip policy ×5,
+metadata pins ×3).  One existing pin trued: `tests/test_leakage.py`'s
+scrub-contract test pointed at `scratch/scrub_home_paths_137.py` — now
+the canonical `tools/scrub_home_paths.py` (first gate pass caught it,
+fixed same-round).
+
+**The ritual**: version carriers trued 1.2.166 → 1.2.167 in one pass;
+notebooks 8/8 re-executed at 1.2.167 in 205 s (error-outputs=0,
+home-path-survivors=0 — the first attempt hit DeadKernelError with the
+dev server up: the OOM ritual is REAL, server down → clean run; the
+r258 double-fork launch is now codified as `scratch/dev_daemon.py`
+start/stop, surviving call boundaries); NINE-chunk gate first pass 8/9
+(the stale scrub pin), second pass **9/9 rc=0 failures=0**; zip built
+by the CANONICAL `tools/build_zip.py` — 522 entries / 477 files,
+**8,618,365 B, sha 4947f8e4…**, four byte-identical homes, predecessor
+swept, leaks 0; honest totals **5,395 = 4,526 collect + 869 doctest**
+(collect-only verified), census **1098/333,931** (the +5 files are the
+tools/ relocation net + the tooling suite).
+
+**Web pins trued**: `SHIPPED_TOOLKIT_VERSION` 1.2.167; the 5,395 test
+count ×7 (page.tsx hero, download-panel ×3, overview ×3) with the r260
+suite appended to the overview prose; `FALLBACK_STATS` 1098/333,931;
+`ZIP_EXCLUDE_ARGS` + the three history homes.  `bun run lint` clean.
+
+**Verification** (agent-browser, mandatory): badge **v1.2.167**, hero
+**5,395 tests · 1098 files · 333,931 LOC**, zero console/page errors,
+mobile 390 px no horizontal scroll, footer present, theme both ways,
+zip endpoint `exact:true source:release 8,618,365 B v1.2.167`.
+Screenshots: `scratch/r260-desktop.png` + `r260-desktop-dark.png`.
+
+**Health**: dev server UP via the double-fork daemon (GET / 200);
+master 515197 enabled; webDevReview 520604 alive (recreated r259).
+
+**Baselines for the next round** — v1.2.167 (four homes, 8.6 MB) ·
+honest totals **5,395 = 4,526 + 869** · census **1098/333,931** · the
+gate is NINE chunks (canonical `tools/run_suite_chunks.py`; scratch/
+shims forward) · counter **46/100** · queue: **part4 Phase-2 — the §4.5
+feature inventory (the feature→backend→UI→test traceability matrix with
+the six status classes; greenfield)**, then the arena conformal pickup
+ritual the moment PR #9 merges, the contact-map/PLIF viz twins, Part-3
+§24 SA-in-generative beyond the shipped slices.

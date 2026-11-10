@@ -1,3 +1,81 @@
+## [1.2.167] — 2026-11-10
+
+### Fixed — round 260: MASTER_PROMPT part4 §4, Phase 1 (integrity and recovery) — the audit's five findings repaired
+
+* `tools/checkpoint.py` — §4.1, the ship ritual's gates are real
+  again: the ruff gate no longer feeds the retired `playground.py`
+  (gone since v1.2.141) and the GUI gate is no longer the invented
+  `playground.py --self-test` — it is `pytest tests/ui/test_pages_smoke.py`
+  (the offscreen PySide6 suite the repo actually supports; `studio.py`
+  implements no CLI, so no `studio.py` command was invented).  The
+  gate set: doctests + ruff (`src tests tools ui studio.py`) + mypy
+  (`src`, the verified scope) + a backend tooling smoke +
+  `tests/test_web_parity.py`-style `tests/test_checkpoint_tooling.py`
+  + the pages smoke; PLUS the new in-process notebook-version
+  consistency gate (`_notebook_freshness_problems`: every `1.2.x` a
+  committed notebook prints must equal `VERSION`, and all eight
+  executed workflows must carry the print — part4's release checklist
+  item).
+* `tools/checkpoint.py` — §4.2, `--restore` works again: the shipped
+  zips have been ROOT-LEVEL since round 210 while `restore()` stripped
+  a `pharma-ml-toolkit/` prefix that no member carries — a
+  `ValueError` on every member, i.e. the rollback-recovery path was
+  broken against the very archive it ships with (found by round 259's
+  audit, pinned by a regression test).  The rewrite
+  (`_restore_archive` + `_safe_member_path` + `_detect_prefix`):
+  handles BOTH layouts (auto-detected over file members; a mixed
+  prefix is refused as malformed), rejects absolute / `..` /
+  backslash members outright, adds `--restore --dry-run` (plan
+  preview, zero writes), stages the extraction beside the target and
+  verifies the staged `VERSION` against the archive's own filename
+  version before a single file lands, and never deletes anything the
+  archive does not carry (user data survives a restore).  The zip
+  builder side also flipped to the root-level arcname so the two
+  builders can never drift apart again.
+* `tools/build_zip.py` (canonical, moved from
+  `scratch/build_zip_210.py`) — §4.3, the release archive stopped
+  shipping the research history: `EXCLUDE_DIRS` gains `scratch`,
+  `download`, `dist-archive` (the v1.2.166 archive carried 475 probe
+  files + 129 evidence PNGs = 8.7 MB = 37% of the zip).  Nothing is
+  deleted — scratch/ and download/ stay on disk and in git as
+  provenance; only the archive diet changes.  The canonical build
+  utilities moved out of scratch/ into `tools/` (`build_zip.py`,
+  `reexec_notebooks.py`, `run_suite_chunks.py`, `venv_repair.sh`,
+  `scrub_home_paths.py`) with forwarder shims keeping the historical
+  `scratch/` invocation paths alive (the cron ritual and muscle
+  memory still say `scratch/build_zip_210.py`, `scratch/venv_repair.sh`,
+  `scratch/reexec_notebooks_209.py`, `scratch/run_suite_chunks_250.py`
+  — and the master job's stale round-225 reference now lands on the
+  canonical NINE-chunk gate).  The web fallback streamer's exclusion
+  list gains the same three homes so the on-the-fly archive can never
+  diverge in shape from the release artifact it substitutes for.
+* README.md + pyproject.toml — §4.4, the metadata drift: "all
+  seventeen pages" → eighteen (the Studio has 18 pages; the page list
+  itself even omitted `molecular_dynamics`), the `VERSION` tree entry
+  no longer pins the example at `(1.2.125)`, and the placeholder
+  `Homepage = "https://github.com/example/..."` is replaced by the
+  actual repository (`MrMMA2004/pharma-ml-toolkit`, confirmed from the
+  origin remote — never invented).  The `[tool.ruff]` comment that
+  claimed scratch/ "ships in the ZIP tree for exactly that reason" is
+  trued to the new exclusion policy.
+* `tests/test_checkpoint_tooling.py` — NEW, 22 tests: the §4.2
+  dual-layout restore contract (root-level regression, prefix
+  stripping, mixed/absolute/traversal/backslash refusals, dry-run
+  zero-writes, staged version-mismatch refusal, user-data survival,
+  empty-archive refusal), the §4.1 gate pins (real paths only, no
+  playground, no invented `--self-test`, the offscreen GUI gate, the
+  notebook freshness contract + its stale-print catch), the §4.3 zip
+  policy (both builders exclude the history homes, root-level layout,
+  canonical utilities in `tools/`, the scratch forwarders), and the
+  §4.4 metadata pins (eighteen + `molecular_dynamics` in README, no
+  `(1.2.125)`, the pyproject homepage equals the origin remote).
+* Hygiene: 129 files' disk modes aligned back to git's 100644 (a
+  sandbox-local chmod drift had put the +x bit on non-shebang library
+  and test modules — every one an EXE002 finding; `ruff check src
+  tests tools ui studio.py` is zero-findings again, the round-244
+  convention restored), and the moved build utilities are lint-clean
+  in their new linted home.
+
 ## [1.2.166] — 2026-11-10
 
 ### Added — round 258: the COLVAR playground (the `plumed.dat` mini-parser as a web card) — bridge op + web card
