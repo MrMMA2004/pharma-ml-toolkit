@@ -12420,3 +12420,69 @@ merges (their chunk assignments are pre-planned in round 251's entry); the featu
 quiet scheduler window.
 
 
+
+## Round 255 — 2026-11-10 — the PLUMED-style collective variables: `md/cv.py`, shipped as v1.2.164
+
+**Pickup**: user-directed continuation ("Continue the queued items") on the heels of round
+254's verification pass.  The arena conformal branch was still parked (head `56e3cf9`,
+~9 min quiet, unmerged) — per the round-252 precedent (H-bond timeline shipped while
+conformal parked, zero footprint overlap), the top queued item ran: the PLUMED-style
+collective-variable helpers, whose footprint (`md/` + `tests/` + `docs/` + web pins) does
+not touch the arena's `ml/`/evaluation/splits surface.
+
+**The feature** — `src/pharmaml/md/cv.py`, the enhanced-sampling vocabulary
+(`plumed/plumed2` added to the md package's reference-stack docstring): the six CV
+actions — `cv_distance`, `cv_angle`, `cv_dihedral`, `cv_coordination` (the honest
+hard-switch COORDINATION subset: a pair counts 1 within `r_0`, the fraction over
+|A|·|B| pairs, and PLUMED's rational switching keywords are refused, not approximated),
+`cv_rmsd` and `cv_gyration` composed over the metrics module (Kabsch, `gmx gyrate`,
+mass-weighted); the `CVTable` COLVAR equivalent with the axes-must-match refusal (every
+series must carry the trajectory's frame count), the finite-only contract (NaN/±inf in a
+bias target is refused outright — figures tolerate-and-disclose, a metadynamics CV may
+not), byte-exact `#! FIELDS` COLVAR text, and the `xvg_series()` bridge into the shipped
+viz twins (`plot_md_series(table.xvg_series("d"))` renders a CV exactly like any `.xvg`
+metric); and the `plumed.dat` mini-parser — PLUMED's real semantics at the boundary
+(1-based indices with the atom-0 refusal, `a-b` range expansion, the `MASS` flag requiring
+topology masses, duplicate label/keyword refusals, unknown actions and keywords refused
+with messages naming the supported set).  `md/__init__.py` re-exports the nine new
+symbols; `docs/MD_COLLECTIVE_VARIABLES.md` documents the six actions, the table, the
+parser and the plotting tie-in.
+
+**Tests**: `tests/test_md_cv.py` — 65 tests, the honest-test rule throughout: the 3-4-5
+triangle apex angle (arccos 0.6), eclipsed/trans dihedrals, hand-counted coordination
+fractions with the inclusive cutoff edge, `cv_rmsd`/`cv_gyration` parity with the metrics
+module, byte-exact COLVAR text, the axes-must-match and finite-only refusals, the
+parser's full refusal matrix (atom 0, out-of-range, duplicate labels/keywords, METAD,
+REFERENCE files, the switching keywords, ascending ranges), determinism, and the
+source-level no-matplotlib guard (static text check — a shared pytest process carries
+matplotlib from other suites, so `sys.modules` probing would lie).  Two doctest
+true-ups en route (the 1-frame vs 2-frame COLVAR rows; the arccos trailing digits).
+
+**Validation**: ruff zero across `src/pharmaml/md/` + the new test file; mypy clean on
+`cv.py`; doctests 12/12; focused runs green; the NINE-chunk gate green with **0 failing
+chunks** (the new suite rode chunk 2's `test_m*.py` glob automatically, the new doctests
+chunk 6 — the round-251 chunk-assignment plan needed no edit this time); notebooks
+re-executed at 1.2.164 (8/8, 200 s, home-path-survivors=0) with the dev server down per
+the OOM ritual; INDEX regenerated at **899 symbols** (+9), docs-index suite 30/30.
+
+**Release**: the v1.2.164 zip built at **23,582,863 B, sha
+`edc25e8624a7f50c1d97f868e06b32658f64f5579e31031190f222b50d530905`** in four
+byte-identical homes, predecessor v1.2.163 swept from all four.  All THREE version
+carriers trued in one pass (the round-250 lesson as standing ritual).  Honest totals
+**5,358 = 4,491 collect + 867 doctest** (+65/+12).  Census **1093/332,850**.  Web pins
+trued 5,358 ×7 + census fallbacks 1093/332,850 + `SHIPPED_TOOLKIT_VERSION` 1.2.164; the
+overview suite-history carries the round-255 clause; manifest entry added.
+
+**Web verification** (agent-browser, the pins changed so mandatory): version badge
+1.2.164, hero stats 5,358 tests / 1,093 files, zip endpoint `exact:true source:release`
+23,582,863 B with the strong-ETag download route, theme toggle both ways (dark→light),
+footer present, mobile 390 px `scrollWidth === clientWidth === 390`, zero console
+errors; the round-255 clause confirmed rendering live in the overview cell.
+
+**Baselines for the next round** — v1.2.164 (four homes) · honest totals **5,358 =
+4,491 + 867** · census **1093/332,850** · the gate is NINE chunks · counter **45/100** ·
+queue: the arena conformal pickup ritual the moment its PR merges (chunk assignments
+pre-planned in round 251), the contact-map/PLIF viz twins, salt-bridge timelines beside
+the H-bond card (the API exists — `salt_bridges`), a CV card for the web MD tab over a
+`/api/md/cv` route + the bridge's `'cv'` op (the module now ships), Part-3 §24
+SA-in-generative beyond the shipped slices.
