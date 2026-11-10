@@ -348,6 +348,7 @@ after adding new public functions.
 | `LSHCollection` | class | The usable engine: an :class:`LSHIndex` plus the stored vectors. |
 | `LSHIndex` | class | The random-hyperplane LSH table (Charikar's SimHash engine). |
 | `LSHQueryResult` | class | One approximate query: the key, the candidates, the neighbours. |
+| `LabelConditionalConformalClassifier` | class | A fixed classifier with one split-conformal threshold per label. |
 | `Linear` | class | ``y = x @ W.T + b`` with PyTorch's default init bounds. |
 | `LinearGDResult` | class | Outcome of the from-scratch linear regression. |
 | `MOTrial` | class | One multi-objective evaluation: params, the objective vector, the weights. |
@@ -443,6 +444,7 @@ after adding new public functions.
 | `build_preprocessor` | function | Build the (impute -> scale) preprocessing pipeline. |
 | `build_stacking` | function | Build a stacking ensemble (upgrades Stacking.py / Stacking reg.py). |
 | `build_voting` | function | Build a voting ensemble (upgrades Voting.py / Voting reg.py). |
+| `calibrate_label_conditional_classifier` | function | Calibrate one conformal score threshold per class on held-out rows. |
 | `calibrate_split_conformal` | function | Calibrate finite split-conformal intervals on held-out regression data. |
 | `calibrate_split_conformal_classifier` | function | Calibrate split-conformal label sets on held-out classification rows. |
 | `capacity_sweep` | function | Train the same data through growing hidden widths (chapter 5). |

@@ -11,7 +11,11 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from pharmaml.ml import calibrate_split_conformal_classifier
+from pharmaml.ml import (
+    calibrate_label_conditional_classifier,
+    calibrate_split_conformal_classifier,
+    coverage_by_group,
+)
 
 X, y = make_classification(n_samples=600, n_features=8, n_informative=6,
                            n_classes=3, random_state=4)
@@ -28,6 +32,12 @@ result = calibrated.predict_set(X_test, y_true=y_test)
 print(result.to_dataframe().head())  # prediction_set, set_size, covered
 print("empirical coverage:", result.coverage)
 print("mean set size:", result.mean_set_size)
+
+# Optional: a separate threshold for each class, using the same held-out split.
+by_class = calibrate_label_conditional_classifier(model, X_cal, y_cal, alpha=0.1)
+print(by_class.calibration_summary())  # per-class counts, ranks, thresholds, fallbacks
+class_sets = by_class.predict_set(X_test, y_true=y_test)
+print(coverage_by_group(class_sets.covered, y_test, sizes=class_sets.set_sizes).to_dataframe())
 ```
 
 ## Method and outputs
@@ -49,16 +59,42 @@ provided, `covered`, `n_covered` and `coverage` describe that independent query
 set; unknown query labels count as uncovered. Without `y_true`, they are
 `None`. These are empirical measurements, not guarantees.
 
+## Label-conditional sets
+
+`calibrate_label_conditional_classifier` uses a separate threshold for each
+true class. For a class with `n_c` calibration rows, the threshold is the
+`ceil((n_c + 1) * (1 - alpha))`-th smallest true-class nonconformity score.
+If that rank exceeds `n_c`, including when the class has **no calibration
+rows**, the threshold is 1 and that class is included in every set. This is a
+conservative fallback, not evidence that the classifier is good for that class.
+The `calibration_summary()` table flags these fallbacks and shows each class's
+count and rank; small classes can make sets substantially larger.
+
+Label-conditional coverage of at least `1 - alpha` for a particular known
+class requires calibration and future observations to be exchangeable
+**within that class**, conditional on an independently trained and fixed model.
+The method does not promise coverage for subgroups within a class, for an
+individual, or under distribution shift. The fitted class list must contain the
+possible deployment labels; an unseen label cannot appear in a set. Use
+independent test labels to measure empirical coverage per class and review the
+sample counts; [`coverage_by_group`](COVERAGE_DIAGNOSTICS.md) can help.
+
+The returned `ConformalPredictionSets` has `class_thresholds` in `classes`
+order and its scalar `threshold` is `None`. Marginal sets instead report a
+scalar `threshold` and `class_thresholds` is `None`. Both expose the same
+membership matrix, set sizes, and optional empirical coverage.
+
 ## Interpretation and limitations
 
-- Marginal coverage of at least `1 - alpha` requires exchangeability of the
-  calibration and future observations, an independently trained and fixed
+- The marginal method's coverage of at least `1 - alpha` requires exchangeability
+  of calibration and future observations, an independently trained and fixed
   model, and **all possible labels in the model's fixed class space**. An unseen
   class at deployment is never in a prediction set, even when the threshold is
   1; the guarantee does not apply to that event.
-- The guarantee is marginal across observations, not per class, subgroup or
-  molecule. Class imbalance and small or unrepresentative calibration sets can
-  lead to uninformative or unequal sets. Neither a particular set nor its size
+- Marginal coverage is not per class, subgroup or molecule. The label-conditional
+  method targets known classes separately under the within-class assumptions
+  above, but still not subgroups or individuals. Class imbalance and small or
+  unrepresentative calibration sets can lead to uninformative or unequal sets. Neither a particular set nor its size
   is an individual confidence guarantee. Probabilities need not be calibrated
   for the marginal guarantee, but their quality affects set efficiency.
 - Dataset shift, scaffold or temporal splits, correlated observations, repeated

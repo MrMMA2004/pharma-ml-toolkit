@@ -102,7 +102,9 @@ from pharmaml.ml.conformal import (
 )
 from pharmaml.ml.conformal_classification import (
     ConformalPredictionSets,
+    LabelConditionalConformalClassifier,
     SplitConformalClassifier,
+    calibrate_label_conditional_classifier,
     calibrate_split_conformal_classifier,
 )
 from pharmaml.ml.coverage_diagnostics import CoverageGroup, CoverageReport, coverage_by_group
@@ -503,6 +505,7 @@ __all__ = [
     "LSHCollection",
     "LSHIndex",
     "LSHQueryResult",
+    "LabelConditionalConformalClassifier",
     "Linear",
     "LinearGDResult",
     "MOTrial",
@@ -598,6 +601,7 @@ __all__ = [
     "build_preprocessor",
     "build_stacking",
     "build_voting",
+    "calibrate_label_conditional_classifier",
     "calibrate_split_conformal",
     "calibrate_split_conformal_classifier",
     "capacity_sweep",

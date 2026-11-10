@@ -23,7 +23,9 @@ from pharmaml.ml.conformal import _validate_alpha
 
 __all__ = [
     "ConformalPredictionSets",
+    "LabelConditionalConformalClassifier",
     "SplitConformalClassifier",
+    "calibrate_label_conditional_classifier",
     "calibrate_split_conformal_classifier",
 ]
 
@@ -95,15 +97,18 @@ class ConformalPredictionSets:
     ``membership`` columns correspond to ``classes``; rows follow query input
     order. Sets may be empty or contain multiple labels. ``coverage`` is only
     computed when independent query labels were supplied and is not itself a
-    guarantee. Arrays are not immutable despite the frozen record.
+    guarantee. Marginal calibration reports a scalar ``threshold``;
+    label-conditional calibration reports ``class_thresholds`` in class order
+    and ``threshold`` is None. Arrays remain mutable despite the frozen record.
     """
 
     classes: tuple[Any, ...]
     membership: np.ndarray
     alpha: float
-    threshold: float
+    threshold: float | None
     n_calibration: int
     covered: np.ndarray | None = None
+    class_thresholds: tuple[float, ...] | None = None
 
     @property
     def prediction_sets(self) -> tuple[tuple[Any, ...], ...]:
@@ -138,6 +143,20 @@ class ConformalPredictionSets:
         return frame
 
 
+def _covered_by_membership(
+    membership: np.ndarray, classes: tuple[Any, ...], y_true: Any
+) -> np.ndarray | None:
+    if y_true is None:
+        return None
+    truth = _labels(y_true, "y_true")
+    if len(truth) != len(membership):
+        raise DataValidationError("y_true and predictions must have the same length")
+    column = {label: index for index, label in enumerate(classes)}
+    # A label outside the fitted class space cannot be in any set.
+    return np.array([membership[row, column[label]] if label in column else False
+                     for row, label in enumerate(truth)], dtype=bool)
+
+
 @dataclass(frozen=True)
 class SplitConformalClassifier:
     """Reference to a fixed classifier and its held-out calibration threshold.
@@ -159,15 +178,7 @@ class SplitConformalClassifier:
             raise DataValidationError("model classes_ changed after calibration")
         probabilities = _probabilities(self.model, X, self.classes)
         membership = (1.0 - probabilities) <= self.threshold
-        covered = None
-        if y_true is not None:
-            truth = _labels(y_true, "y_true")
-            if len(truth) != len(probabilities):
-                raise DataValidationError("y_true and predictions must have the same length")
-            column = {label: index for index, label in enumerate(self.classes)}
-            # A label outside the fitted class space cannot be in any set.
-            covered = np.array([membership[row, column[label]] if label in column else False
-                                for row, label in enumerate(truth)], dtype=bool)
+        covered = _covered_by_membership(membership, self.classes, y_true)
         return ConformalPredictionSets(classes=self.classes, membership=membership, alpha=self.alpha,
                                        threshold=self.threshold, n_calibration=self.n_calibration,
                                        covered=covered)
@@ -210,3 +221,96 @@ def calibrate_split_conformal_classifier(
         threshold = float(np.partition(scores, rank - 1)[rank - 1])
     return SplitConformalClassifier(model=model, classes=classes, alpha=alpha, threshold=threshold,
                                     n_calibration=n, rank=rank)
+
+
+@dataclass(frozen=True)
+class LabelConditionalConformalClassifier:
+    """A fixed classifier with one split-conformal threshold per label.
+
+    Thresholds, ranks and calibration counts follow ``classes`` order. The
+    referenced model and preprocessing must not be mutated after calibration.
+    """
+
+    model: Any
+    classes: tuple[Any, ...]
+    alpha: float
+    thresholds: tuple[float, ...]
+    counts: tuple[int, ...]
+    ranks: tuple[int, ...]
+    n_calibration: int
+
+    def calibration_summary(self) -> pd.DataFrame:
+        """Show class counts, ranks, thresholds, and insufficient-data fallbacks."""
+        return pd.DataFrame({
+            "class_label": self.classes,
+            "n_calibration": self.counts,
+            "rank": self.ranks,
+            "threshold": self.thresholds,
+            "fallback_full_class": [rank > count for rank, count in zip(self.ranks, self.counts, strict=True)],
+        })
+
+    def predict_set(self, X: Any, y_true: Any = None) -> ConformalPredictionSets:
+        """Return label-specific prediction sets and optional empirical coverage."""
+        if _model_classes(self.model) != self.classes:
+            raise DataValidationError("model classes_ changed after calibration")
+        probabilities = _probabilities(self.model, X, self.classes)
+        membership = (1.0 - probabilities) <= np.asarray(self.thresholds)
+        covered = _covered_by_membership(membership, self.classes, y_true)
+        return ConformalPredictionSets(
+            classes=self.classes, membership=membership, alpha=self.alpha,
+            threshold=None, n_calibration=self.n_calibration, covered=covered,
+            class_thresholds=self.thresholds,
+        )
+
+
+def calibrate_label_conditional_classifier(
+    model: Any, X_cal: Any, y_cal: Any, *, alpha: float = 0.1
+) -> LabelConditionalConformalClassifier:
+    """Calibrate one conformal score threshold per class on held-out rows.
+
+    For each class c, select the k_c-th smallest score ``1 - P(c | X)`` among
+    calibration rows with true label c, where ``k_c = ceil((n_c + 1) *
+    (1 - alpha))`` and ranks are one-based. If ``k_c > n_c``, including when
+    there are zero examples of c, its threshold is 1 and c is included in
+    every prediction set. Ties are included. The fitted model must expose
+    ``classes_`` and ``predict_proba``; columns must follow ``classes_`` order
+    and calibration labels must belong to that fixed class space. Alignment is
+    positional, not by pandas index.
+
+    Within each class, calibration and future observations must be exchangeable
+    conditional on the independently trained fixed model for class-conditional
+    coverage. This does not imply coverage for subgroups within a class or under
+    distribution shift. The classifier is held by reference, not copied or
+    fitted, and must not be modified after calibration.
+    """
+    alpha = _validate_alpha(alpha)
+    classes = _model_classes(model)
+    truth = _labels(y_cal, "y_cal")
+    probabilities = _probabilities(model, X_cal, classes)
+    if len(truth) != len(probabilities):
+        raise DataValidationError("y_cal and predictions must have the same length")
+    column = {label: index for index, label in enumerate(classes)}
+    if any(label not in column for label in truth):
+        raise DataValidationError("y_cal contains labels absent from model classes_")
+    # Collect row positions in one pass; using object labels preserves the
+    # classifier's exact column mapping even for non-sorted class orders.
+    rows_by_class: list[list[int]] = [[] for _ in classes]
+    for row, label in enumerate(truth):
+        rows_by_class[column[label]].append(row)
+    counts: list[int] = []
+    ranks: list[int] = []
+    thresholds: list[float] = []
+    for col, rows in enumerate(rows_by_class):
+        n = len(rows)
+        rank = math.ceil((n + 1) * (1.0 - alpha))
+        counts.append(n)
+        ranks.append(rank)
+        if rank > n:
+            thresholds.append(1.0)
+        else:
+            scores = 1.0 - probabilities[rows, col]
+            thresholds.append(float(np.partition(scores, rank - 1)[rank - 1]))
+    return LabelConditionalConformalClassifier(
+        model=model, classes=classes, alpha=alpha, thresholds=tuple(thresholds),
+        counts=tuple(counts), ranks=tuple(ranks), n_calibration=len(truth),
+    )
