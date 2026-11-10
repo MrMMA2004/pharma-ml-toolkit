@@ -100,6 +100,11 @@ from pharmaml.ml.conformal import (
     SplitConformalRegressor,
     calibrate_split_conformal,
 )
+from pharmaml.ml.conformal_classification import (
+    ConformalPredictionSets,
+    SplitConformalClassifier,
+    calibrate_split_conformal_classifier,
+)
 from pharmaml.ml.cv_results import (
     CLASSIFICATION_CV_METRICS,
     CV_STRATEGIES,
@@ -461,6 +466,7 @@ __all__ = [
     "ComparisonReport",
     "CompositionReport",
     "ConformalIntervals",
+    "ConformalPredictionSets",
     "CorrelationResult",
     "CoverageEntry",
     "CrossEntropyLoss",
@@ -548,6 +554,7 @@ __all__ = [
     "SignificanceResult",
     "Softmax",
     "SpaceIssue",
+    "SplitConformalClassifier",
     "SplitConformalRegressor",
     "TPESearch",
     "TaskFamily",
@@ -589,6 +596,7 @@ __all__ = [
     "build_stacking",
     "build_voting",
     "calibrate_split_conformal",
+    "calibrate_split_conformal_classifier",
     "capacity_sweep",
     "catalog_categories",
     "catalog_projects",
