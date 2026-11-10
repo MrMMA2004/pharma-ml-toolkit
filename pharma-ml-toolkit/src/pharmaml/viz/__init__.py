@@ -29,6 +29,8 @@ layer for **all** toolkit codes:
                   :func:`plot_consensus_ranking` (the figure twin of
                   the explainable consensus leaderboard),
                   :func:`plot_receptor_atom_types`;
+* molecular dynamics — :func:`plot_md_series` (metric traces),
+                  :func:`plot_md_correlation` (aligned metric heatmap);
 * generative    — :func:`plot_operator_trajectory` (the adaptive GA's
                   operator mix per generation — the "GA that learns"
                   learning curve, synced with the score trajectory every
@@ -109,6 +111,7 @@ from pharmaml.viz.generative_plots import (
     plot_pareto_front,
     plot_rl_introspection,
 )
+from pharmaml.viz.md_plots import plot_md_correlation, plot_md_series
 from pharmaml.viz.ml_plots import (
     plot_applicability_domain,
     plot_calibration_curve,
@@ -218,6 +221,8 @@ __all__ = [
     "plot_learning_curve",
     "plot_manifold_embedding",
     "plot_mcts_introspection",
+    "plot_md_correlation",
+    "plot_md_series",
     "plot_model_comparison",
     "plot_operator_trajectory",
     "plot_optimization_history",

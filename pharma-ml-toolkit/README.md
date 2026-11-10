@@ -114,10 +114,10 @@ python studio.py
 ```
 
 A PySide6 **Studio** window opens with every calculation domain on its
-sidebar — 17 pages (Dashboard, Data Explorer, the Chemistry / PK/PD /
+sidebar — 18 pages (Dashboard, Data Explorer, the Chemistry / PK/PD /
 Biology / Docking / Model Analysis / ML / Unsupervised / Deep Learning /
 Generative / Foundations / Best-of ML / Response AI / Utilities
-workbenches, the Image Lab, Settings) with PyQtGraph scientific plots,
+workbenches, Molecular Dynamics, the Image Lab, Settings) with scientific plots,
 Qt-Material / QDarkStyleSheet theming and QThreadPool workers behind a
 cooperative Stop button (directive #16's complete redesign; see
 `docs/gui/GUI_REDESIGN.md` and the tab-by-tab `docs/gui/GUI_AUDIT.md`).
