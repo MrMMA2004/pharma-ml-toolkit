@@ -38,3 +38,41 @@ train, test = split_indices(X, y, strategy="group", groups=assay_series,
 - A scaffold, group or temporal split can deliberately induce distribution
   shift; do not assume standard exchangeability-based guarantees such as
   [split-conformal coverage](CONFORMAL_REGRESSION.md) apply to that holdout.
+
+## Audit exact identifier overlap
+
+Split assignment alone does not establish that compounds, patients or assay
+series are disjoint. After splitting, compare identifiers across **all**
+training, calibration and test partitions:
+
+```python
+from pharmaml.ml import audit_split_overlap
+
+report = audit_split_overlap({
+    "train": ["compound-1", "compound-1", "compound-2"],
+    "calibration": ["compound-3", "compound-2"],
+    "test": ["compound-4", "compound-1"],
+})
+print(report.has_overlap, report.n_shared_keys)
+print(report.to_dataframe())       # one row per shared key and counts per split
+print(report.pairwise_dataframe())  # intersections count unique keys
+print(report.overlap_rows)         # affected row counts in partition order
+print(report.duplicate_rows)       # repeated rows beyond the first, within each split
+```
+
+Inputs are named, nonempty iterables of identifiers, such as compound IDs,
+patient IDs or `(patient, assay)` tuples. Pandas indexes are not used. Missing,
+empty and unsupported identifiers are rejected. Partition and key order follow
+input order. Python equality is used: `1` and `1.0` match; strings are **not**
+trimmed or canonicalized. A pairwise table's diagonal counts distinct keys in
+that partition; its off-diagonal cells count distinct shared keys, not all row
+pairs. The detailed table includes raw identifiers, which may be sensitive.
+
+The audit detects **exact matches only**. It does not parse SMILES, standardize
+salts, identify equivalent tautomers or detect similar compounds, patients in
+the same family, duplicate records under different identifiers, or leakage from
+preprocessing. Choose identifiers that represent each relevant leakage unit;
+review standardization choices and audit compound, patient, batch and series
+levels separately where appropriate. A clean report is not proof of an
+independent or representative test set. The function reports overlap rather
+than automatically removing records or resolving conflicting labels.

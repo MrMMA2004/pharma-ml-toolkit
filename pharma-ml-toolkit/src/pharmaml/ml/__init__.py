@@ -292,6 +292,7 @@ from pharmaml.ml.sequences import (
     sliding_windows,
     synthetic_series,
 )
+from pharmaml.ml.split_audit import SharedSplitKey, SplitOverlapReport, audit_split_overlap
 from pharmaml.ml.splits import (
     SPLIT_STRATEGIES,
     murcko_scaffold_key,
@@ -556,12 +557,14 @@ __all__ = [
     "Sequential",
     "ShapInteractions",
     "ShapSummary",
+    "SharedSplitKey",
     "Sigmoid",
     "SignificanceResult",
     "Softmax",
     "SpaceIssue",
     "SplitConformalClassifier",
     "SplitConformalRegressor",
+    "SplitOverlapReport",
     "TPESearch",
     "TaskFamily",
     "TaskSplit",
@@ -583,6 +586,7 @@ __all__ = [
     "ann_benchmark",
     "anova_ii",
     "applicability_domain",
+    "audit_split_overlap",
     "autocorrelation",
     "bayesian_search",
     "bce_with_logits",

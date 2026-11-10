@@ -81,6 +81,7 @@ jobs:
           tests/test_coverage_diagnostics.py
           tests/test_applicability_schema.py
           tests/test_splits_integrity.py
+          tests/test_split_overlap_audit.py
           tests/test_evaluation_auc_integrity.py
           -o addopts="-q --tb=short"
 

@@ -399,12 +399,14 @@ after adding new public functions.
 | `Sequential` | class | Modules applied in order. |
 | `ShapInteractions` | class | Pairwise SHAP interaction values of a fitted tree model (100x-160). |
 | `ShapSummary` | class | SHAP values of a fitted tree model over a feature frame. |
+| `SharedSplitKey` | class | One cross-partition key and its row counts, in partition order. |
 | `Sigmoid` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `SignificanceResult` | class | One test's verdict: statistic, p-value, decision, effect size. |
 | `Softmax` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `SpaceIssue` | class | One compatibility or sanity finding (§18.2 validation). |
 | `SplitConformalClassifier` | class | Reference to a fixed classifier and its held-out calibration threshold. |
 | `SplitConformalRegressor` | class | A fitted model reference and its split-conformal calibration radius. |
+| `SplitOverlapReport` | class | Exact-key overlap and duplicate counts for named, nonempty partitions. |
 | `TPESearch` | class | Tree-structured Parzen Estimator search — Optuna's flagship sampler. |
 | `TaskFamily` | class | Seeded related regression tasks: one shared prior, per-task draws. |
 | `TaskSplit` | class | One task's support/query split (the inner-loop data contract). |
@@ -426,6 +428,7 @@ after adding new public functions.
 | `ann_benchmark` | function | Recall@k and candidate compression of LSH against brute force. |
 | `anova_ii` | function | Type-II ANOVA table from the term slices. |
 | `applicability_domain` | function | The uploaded workflow end-to-end, one call. |
+| `audit_split_overlap` | function | Audit exact identifier overlap across two or more named data partitions. |
 | `autocorrelation` | function | The autocorrelation function: which lag carries which memory. |
 | `bayesian_search` | function | The BayesianOptimizationOracle loop, minimising ``objective``. |
 | `bce_with_logits` | function | Binary cross-entropy with logits, the numerically stable form. |
