@@ -78,7 +78,7 @@ def main() -> None:
 
     draw.text((60, 429), "QSAR  ·  PK/PD  ·  DOCKING  ·  XAI", font=font(20, bold=True), fill=mint)
 
-    for x, label, w in ((60, "PYTHON 3.10+", 158), (230, "17 STUDIO PAGES", 188), (430, "MIT", 70)):
+    for x, label, w in ((60, "PYTHON 3.10+", 158), (230, "DESKTOP STUDIO", 188), (430, "MIT", 70)):
         draw.rounded_rectangle((x, 522, x + w, 562), radius=12, fill="#102f30", outline="#28514c", width=1)
         draw.text((x + 14, 533), label, font=font(14, bold=True), fill=pale)
     draw.text((60, 590), "github.com/MrMMA2004/pharma-ml-toolkit", font=font(16), fill=muted)

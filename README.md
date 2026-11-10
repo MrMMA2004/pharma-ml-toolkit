@@ -36,14 +36,14 @@ PharmaML brings the repetitive parts of a computational-pharmacology workflow in
 | **Docking & molecular workflows** | Prepare ligands and receptors, calculate grid boxes, run AutoDock Vina-compatible workflows and analyze docking results. |
 | **Explainable & generative ML** | Inspect feature effects and applicability domains, use deep or ensemble models, and evaluate generated molecular libraries. |
 | **Reports & visualization** | Create accessible Matplotlib figures, HTML/SVG/PDF exports, model cards, dataset reports and reproducible run manifests. |
-| **Desktop & web interfaces** | Explore the same package through the 17-page PharmaML Studio or browse code, APIs, notebooks and downloads in the included web console. |
+| **Desktop & web interfaces** | Explore the package in PharmaML Studio, including MD metric plots, or browse code, APIs, notebooks and downloads in the included web console. |
 
 <p align="center">
-  <a href="pharma-ml-toolkit/docs/assets/web-console-v1.2.160.png">
-    <img src="pharma-ml-toolkit/docs/assets/web-console-v1.2.160.png" width="960" alt="The actual PharmaML v1.2.160 web console showing its verified source download, five thousand one hundred six passing tests and MIT license">
+  <a href="pharma-ml-toolkit/docs/assets/web-console-v1.2.161.png">
+    <img src="pharma-ml-toolkit/docs/assets/web-console-v1.2.161.png" width="960" alt="The actual PharmaML v1.2.161 web console showing its verified source download, five thousand two hundred seven passing tests and MIT license">
   </a>
   <br>
-  <sub>The actual <strong>v1.2.160 Next.js console</strong>: source downloads, executed notebooks, API reference and live package statistics. See also the <a href="pharma-ml-toolkit/examples/chart_readability.py">reproducible PK chart example</a>.</sub>
+  <sub>The actual <strong>v1.2.161 Next.js console</strong>: source downloads, executed notebooks, API reference and live package statistics. See also the <a href="pharma-ml-toolkit/examples/chart_readability.py">reproducible PK chart example</a>.</sub>
 </p>
 
 ## Quick start
@@ -62,12 +62,12 @@ python -m pip install -e .
 # Inspect the command-line interface
 pharmaml --help
 
-# Launch the 17-page PySide6 Studio after enabling the pinned
+# Launch the PySide6 Studio after enabling the pinned
 # "Studio GUI" block in requirements.txt and reinstalling it
 python studio.py
 ```
 
-Prefer a downloaded snapshot? Get the **[latest source ZIP from GitHub Releases](https://github.com/MrMMA2004/pharma-ml-toolkit/releases/latest)**, extract it, enter its `pharma-ml-toolkit/` directory and run the same editable-install command. See the [installation guide](pharma-ml-toolkit/README.md#installation) for optional Studio GUI, cheminformatics, docking, boosting, explainability, deep-learning and development dependencies.
+Prefer a downloaded snapshot? Get the **[latest published source ZIP from GitHub Releases](https://github.com/MrMMA2004/pharma-ml-toolkit/releases/latest)**, extract it, enter its `pharma-ml-toolkit/` directory and run the same editable-install command. See the [installation guide](pharma-ml-toolkit/README.md#installation) for optional Studio GUI, cheminformatics, docking, boosting, explainability, deep-learning and development dependencies.
 
 ### Web console
 
@@ -93,6 +93,7 @@ Start with an executed notebook or jump directly to the reference material:
 | [PK workflow](pharma-ml-toolkit/examples/complete_pk_workflow.ipynb) | Pharmacokinetic calculations and simulations. |
 | [Docking workflow](pharma-ml-toolkit/examples/complete_docking_workflow.ipynb) | Ligand preparation, docking and result analysis. |
 | [Generative workflow](pharma-ml-toolkit/examples/complete_generative_workflow.ipynb) | Molecular generation and evaluation. |
+| [MD visualization guide](pharma-ml-toolkit/docs/MD_VISUALIZATION.md) | Plot metric traces and aligned correlation heatmaps. |
 | [API & module index](pharma-ml-toolkit/docs/INDEX.md) | Package map and links into the detailed documentation. |
 | [Full user guide](pharma-ml-toolkit/README.md) | Detailed domain coverage, CLI, deployment, testing and troubleshooting. |
 | [Changelog](pharma-ml-toolkit/CHANGELOG.md) | Release history and migration notes. |
@@ -118,14 +119,14 @@ pharma-ml-toolkit/
 
 ## Verification and reproducibility
 
-The [v1.2.160 release record](pharma-ml-toolkit/CHANGELOG.md) reports:
+The [v1.2.161 release record](pharma-ml-toolkit/CHANGELOG.md) describes the checked-in archive (which may be newer than the latest published GitHub release):
 
-- **5,106 collected pytest and doctest cases**—4,297 tests plus 809 doctests—with all nine verification chunks green;
-- **eight executed notebooks refreshed at v1.2.160**, together with their clean no-output twins;
-- a **1,061-file, 326,899-line** release census; and
-- archive integrity verification for the 22,750,159-byte release ZIP.
+- **5,207 collected pytest and doctest cases**—4,354 tests plus 853 doctests—with all nine verification chunks green;
+- **eight executed notebooks refreshed at v1.2.161**, together with their clean no-output twins;
+- a **1,075-file, 329,046-line** release census; and
+- archive integrity verification for the 23,420,835-byte release ZIP.
 
-The test inventory covers domain calculations, data leakage, notebooks, CLI, visualization, web parity and the seventeen Studio pages. See the [testing guide](pharma-ml-toolkit/README.md#testing), [GUI audit](pharma-ml-toolkit/docs/gui/GUI_AUDIT.md) and [changelog](pharma-ml-toolkit/CHANGELOG.md) for the complete release evidence and reproduction commands.
+The test inventory covers domain calculations, data leakage, notebooks, CLI, visualization, web parity and Studio pages. See the [testing guide](pharma-ml-toolkit/README.md#testing), [GUI audit](pharma-ml-toolkit/docs/gui/GUI_AUDIT.md) and [changelog](pharma-ml-toolkit/CHANGELOG.md) for the complete release evidence and reproduction commands.
 
 ## Contributing and license
 

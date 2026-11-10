@@ -43,6 +43,7 @@ SECTIONS: list[tuple[str, str]] = [
     ("bestofml", "Best-of ML Workbench"),
     ("responseai", "Response AI Workbench"),
     ("imagelab", "Image Lab"),
+    ("molecular_dynamics", "Molecular Dynamics"),
     ("utilities", "Utilities Workbench"),
     ("settings", "Settings"),
 ]
@@ -80,6 +81,7 @@ class MainWindow(QMainWindow):
         from .pages.image_lab import ImageLabPage
         from .pages.ml_workbench import MLWorkbenchPage
         from .pages.model_analysis import ModelAnalysisPage
+        from .pages.molecular_dynamics import MolecularDynamicsPage
         from .pages.pkpd import PKPDWorkbenchPage
         from .pages.responseai import ResponseAIWorkbenchPage
         from .pages.settings_page import SettingsPage
@@ -117,6 +119,7 @@ class MainWindow(QMainWindow):
         self.imagelab_page = ImageLabPage(
             theme=self.theme, runner=self.runner, data_explorer=self.data_page
         )
+        self.molecular_dynamics_page = MolecularDynamicsPage(runner=self.runner)
         self.utilities_page = UtilitiesWorkbenchPage(theme=self.theme, runner=self.runner)
         self.settings_page = SettingsPage(self.theme)
 
@@ -136,6 +139,7 @@ class MainWindow(QMainWindow):
             self.bestofml_page,
             self.responseai_page,
             self.imagelab_page,
+            self.molecular_dynamics_page,
             self.utilities_page,
             self.settings_page,
         ):

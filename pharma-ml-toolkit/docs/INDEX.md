@@ -895,8 +895,8 @@ after adding new public functions.
 | `plot_learning_curve` | function | Training-set size vs CV score — is more data still buying accuracy? |
 | `plot_manifold_embedding` | function | Scatter an embedding, coloured by a target (the digits-figure pattern). |
 | `plot_mcts_introspection` | function | One figure per MCTS run: score story, search growth, dedup economy. |
-| `plot_md_correlation` | function | Cross-metric Pearson heatmap — the uploaded script's closing panel. |
-| `plot_md_series` | function | Line chart of one parsed MD metric — the uploaded panel, typed. |
+| `plot_md_correlation` | function | Plot a Pearson correlation heatmap for aligned MD metric series. |
+| `plot_md_series` | function | Plot one MD metric series or a named comparison of series. |
 | `plot_model_comparison` | function | Leaderboard as horizontal bars with per-fold std error bars. |
 | `plot_operator_trajectory` | function | One figure per run: score trajectory + the operator mix per generation. |
 | `plot_optimization_history` | function | The objective per trial + the best-so-far step line (100x-160). |
