@@ -818,6 +818,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "your seed molecules -- requires --seeds/--seed-smiles)",
     )
     gen_run.add_argument(
+        "--sa-weight", type=float, default=None, metavar="WEIGHT",
+        help="opt in to the SA reward during GA or RL optimization, with this "
+        "positive weight relative to the recipe's existing objective weights. "
+        "The sa_score breakdown is a 0-1 reward (not the raw 1-10 SA score); "
+        "this is not a synthesis guarantee or an independent hard filter",
+    )
+    gen_run.add_argument(
         "--scaffold", action="store_true", default=False,
         help="GA only: scaffold-preserving mutations -- keep each parent's "
         "Murcko framework verbatim and resample its decorations from the "
@@ -912,7 +919,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     gen_run.add_argument(
         "--pareto", action="store_true", default=False,
-        help="multi-objective recipes only (druglike/novel/similar): after "
+        help="multi-objective recipes (druglike/novel/similar), or qed/logp "
+        "with --sa-weight: after "
         "the leaderboard, extract and print the Pareto front -- the "
         "non-dominated molecules (improving one objective necessarily "
         "sacrifices another; front members can sit arbitrarily deep in "
@@ -2422,6 +2430,9 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
             "mix is fixed, so it has no trajectory to draw; an RL run's "
             "--plot draws its prior-drift introspection instead)"
         )
+    sa_weight = getattr(args, "sa_weight", None)
+    if sa_weight is not None and (not math.isfinite(sa_weight) or sa_weight <= 0):
+        raise DataValidationError("--sa-weight must be a finite positive number")
     pareto = bool(getattr(args, "pareto", False))
     pareto_plot_path = getattr(args, "pareto_plot", None)
     if pareto_plot_path and not pareto:
@@ -2429,7 +2440,7 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
             "--pareto-plot saves the trade-off scatter --pareto extracts; "
             "re-run with --pareto"
         )
-    if pareto and args.recipe in ("qed", "logp"):
+    if pareto and args.recipe in ("qed", "logp") and sa_weight is None:
         raise DataValidationError(
             f"the {args.recipe!r} recipe optimises a single objective -- a "
             "Pareto front needs a multi-objective recipe (druglike, novel "
@@ -2449,9 +2460,23 @@ def _cmd_generative_run(args: argparse.Namespace) -> int:
 
     seeds = _generative_seed_smiles(args)
     objective, description = _generative_objective(args.recipe, seeds)
+    if sa_weight is not None:
+        from pharmaml.generative import MultiObjective, SAScoreObjective
+
+        if isinstance(objective, MultiObjective):
+            objective = MultiObjective(
+                [*objective.objectives, SAScoreObjective()],
+                weights=[*objective.weights, sa_weight],
+            )
+        else:
+            objective = MultiObjective([objective, SAScoreObjective()], weights=[1.0, sa_weight])
+        description += f" + SA reward (weight {sa_weight:g})"
 
     print(f"method   : {args.method} (objective: {description})")
     print(f"budget   : {args.iterations} iteration(s), seed {args.seed}")
+    if sa_weight is not None:
+        print("SA       : sa_score is a 0-1 reward, not raw SA; "
+              "it estimates complexity, not synthesis feasibility")
     if scaffold:
         print("scaffold : on (Murcko framework kept, decorations resampled)")
     if scaffold_hop:

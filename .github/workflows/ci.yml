@@ -85,6 +85,25 @@ jobs:
           test -s artifacts/chart-readability/concentration-profile.pdf
           test -s artifacts/chart-readability/concentration-profile.html
 
+  generative-sa:
+    name: Generative SA
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pharma-ml-toolkit
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install chemistry and test dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install --no-deps -e .
+          python -m pip install -c requirements.txt pytest==9.0.2 rdkit==2026.9.1
+      - name: Test SA scoring and generation integration
+        run: python -m pytest tests/test_sa_score.py tests/test_generative_sa_cli.py -o addopts="-q --tb=short"
+
   studio-md:
     name: Studio MD
     runs-on: ubuntu-latest
