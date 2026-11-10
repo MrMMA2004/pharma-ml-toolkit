@@ -293,7 +293,13 @@ def sa_score(source: str | Any) -> SAScoreResult:
     pharmaml.exceptions.DependencyError
         When RDKit (or its Contrib SA_Score database) is unavailable.
     """
-    from rdkit import Chem
+    try:
+        from rdkit import Chem
+    except ImportError as exc:
+        raise DependencyError(
+            "RDKit is required for SA scoring. Install it with: "
+            "pip install 'pharmaml[chem]'  (or pip install rdkit)"
+        ) from exc
 
     if not isinstance(source, str):
         mol = source

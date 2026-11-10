@@ -85,6 +85,7 @@ import math
 import random
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from numbers import Integral
 from typing import Any
 
 import numpy as np
@@ -97,6 +98,7 @@ __all__ = [
     "MOTrial",
     "MultiObjectiveStudy",
     "ParetoReport",
+    "ParetoShortlist",
     "chebyshev_scalarize",
     "crowding_distance",
     "dominates",
@@ -633,6 +635,36 @@ class ParetoReport:
             ) from None
         return min(self.trials, key=lambda t: t.values[j])
 
+    def prune(self, keep: int) -> ParetoShortlist:
+        """Select up to ``keep`` front members using full-front crowding.
+
+        Larger NSGA-II crowding distances rank first; ties use the original
+        front order. The returned trials retain that original order and their
+        crowding values are measured on the *full* front. If there are more
+        boundary members than slots, only the earliest ones are retained.
+        This is a one-shot selection, not iterative crowding recomputation.
+        Empty fronts return an empty shortlist. The shortlist is distinct from
+        the report: it does not claim the full study's hypervolume as its own.
+
+        ``keep`` must be a positive integer. Trial objects are shared with the
+        report; this operation does not modify the report or study.
+        """
+        if isinstance(keep, bool) or not isinstance(keep, Integral) or keep < 1:
+            raise DataValidationError(f"keep must be a positive integer, got {keep!r}")
+        if len(self.crowding) != len(self.trials):
+            raise DataValidationError("crowding must align with the report's trials")
+        if any(math.isnan(value) for value in self.crowding):
+            raise DataValidationError("crowding distances cannot be NaN")
+        indices = sorted(range(len(self.trials)), key=lambda i: (-self.crowding[i], i))
+        chosen = sorted(indices[:keep])
+        return ParetoShortlist(
+            objective_names=self.objective_names,
+            trials=tuple(self.trials[i] for i in chosen),
+            crowding=tuple(self.crowding[i] for i in chosen),
+            n_front=len(self.trials),
+            n_trials=self.n_trials,
+        )
+
     def to_dataframe(self) -> pd.DataFrame:
         """The tidy frame: number, objectives, scalar, crowding.
 
@@ -655,6 +687,35 @@ class ParetoReport:
             row["crowding"] = crowd
             rows.append(row)
         return pd.DataFrame(rows)
+
+
+@dataclass(frozen=True)
+class ParetoShortlist:
+    """Selected trials and their crowding measured on the original full front.
+
+    ``n_front`` is the size before pruning, and ``n_trials`` counts all
+    study trials. Objectives are minimized. The trial records themselves are
+    shared with the source report. Hypervolume belongs to the full report and
+    is deliberately not carried by this selection.
+    """
+
+    objective_names: tuple[str, ...]
+    trials: tuple[MOTrial, ...]
+    crowding: tuple[float, ...]
+    n_front: int
+    n_trials: int
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """Export selected trial objectives, scalar and full-front crowding."""
+        rows = []
+        for trial, crowd in zip(self.trials, self.crowding):
+            row: dict[str, Any] = {"number": trial.number}
+            for name, value in zip(self.objective_names, trial.values):
+                row[name] = value
+            row["scalar"] = trial.scalar
+            row["crowding"] = crowd
+            rows.append(row)
+        return pd.DataFrame(rows, columns=["number", *self.objective_names, "scalar", "crowding"])
 
 
 # -- the sklearn adapter ------------------------------------------------------ #

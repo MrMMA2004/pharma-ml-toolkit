@@ -370,6 +370,7 @@ after adding new public functions.
 | `ParamAdvice` | class | One searchable hyperparameter: its range, prior, role, and deps. |
 | `Parameter` | class | A leaf tensor that always requires grad. |
 | `ParetoReport` | class | The front, its spread, its indicator: what a trade-off decision reads. |
+| `ParetoShortlist` | class | Selected trials and their crowding measured on the original full front. |
 | `PcaResult` | class | Typed report of :func:`pca_reduce`. |
 | `PercentilePruner` | class | Prune trials whose running CV mean falls below a percentile. |
 | `PermutationImportance` | class | Permutation feature importances on held-out data. |
@@ -924,6 +925,7 @@ after adding new public functions.
 | `plot_signed_correlations` | function | Top-N signed feature-target correlations as a horizontal bar chart. |
 | `plot_similarity_heatmap` | function | Heat-map of a pairwise similarity matrix. |
 | `plot_slice` | function | One param-vs-objective panel per hyperparameter (100x-160). |
+| `plot_study_pareto` | function | Plot completed trials and the full-dimensional Pareto front. |
 | `plot_table_comparison` | function | Overlap breakdown of a ligand-table :class:`TableComparison`. |
 | `plot_timeline` | function | Per-trial duration bars coloured by state (100x-160). |
 | `plot_top_ligands` | function | Horizontal bars of the strongest-binding ligands. |
