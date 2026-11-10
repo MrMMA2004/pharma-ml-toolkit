@@ -13092,3 +13092,116 @@ the tooling would make it structural.
 Next: Phase-3 card polish (responsive/SMILES previews on cards),
 contact-map/PLIF viz twins, §24 SA-in-generative, the conformal
 pickup the moment PR #9 merges.
+
+## Round 263 — 2026-11-11 — part4 §8 Phase-3 shipped as v1.2.170: the responsive nine-card grid + the aspirin SMILES preview + the four-carrier version pin; the round whose gate caught the cell-line logging leak
+
+**Opening state (user-triggered "Continue" round; counter stays 47/100).**
+r262 had completed 16 minutes prior (final commit 4421978 at 18:15 UTC,
+pushed, tree clean, dev server healthy) — the dual-session check passed
+outright.  webDevReview 521585 was found throttled-disabled (the third
+consecutive one; run_count=1) — deleted and recreated as **521761**
+(the 96-vs-3 daily platform limit re-acknowledged, recorded, not
+fought).  The r262 queue named this round's work: Phase-3 card polish
+and "a structural carrier pin in the tooling" — both landed, plus a
+genuinely latent bug fix the new gate composition surfaced.
+
+**The structural carrier pin (the r262 lesson, made structural).**
+`tests/test_version_carriers.py` (7 tests): the release's FOUR version
+carriers — `VERSION`, `pyproject` `[project] version` (the one the
+web's `readToolkitVersion()` prefers), `pharmaml.__version__` (the one
+the notebooks print), and the web's `SHIPPED_TOOLKIT_VERSION` — must
+agree; the CHANGELOG must lead with the version being shipped; and
+`toolkit-version.ts` may carry exactly one version literal.  A
+half-trued bump now fails the pytest gate at bump time instead of
+surfacing as an `exact:false source:stream` endpoint symptom after
+the zip is built.  This round's own bump trued all four in one motion
+(the pin's first enforcement) — and the first zip build answered
+`exact:true source:release` immediately, no r262-style follow-up
+needed.
+
+**The Phase-3 card polish (part4 §8: responsive layouts + SMILES
+previews).**  `ui/nine_cards.py` gained `NineCardGrid`: the SAME card
+widgets re-flow row-major across three, two (below 880 logical px) or
+one (below 560) column — the directive's canonical 3×3 stays the
+default, the §5 order survives every width, no widget is ever rebuilt
+mid-flight (`reflow`/`current_columns`/`columns_for_width` public and
+pinned), and `build_nine_card_grid()` keeps its exact signature so the
+Dashboard page inherits the behaviour with zero call-site changes.
+The Datasets card carries a REAL molecule thumbnail: the genuine first
+row of `examples/data/screening_library.csv` (aspirin,
+`CC(=O)Oc1ccccc1C(=O)O`) through the Studio's own §22
+`MoleculeRenderer` — cached FIFO, 2x devicePixelRatio, honest text
+refusal when rdkit or a QApplication is absent, the source file and
+SMILES pinned by tests.  No other card renders a molecule ("where
+meaningful", not everywhere).  +12 UI tests (26 total in the suite):
+thresholds, 2/1-column re-flows, frame identity preserved across
+re-flows (references held — the r262 id-reuse lesson), ValueError
+refusal, synthesized-resize re-flow, the production wiring pin
+(exactly one `NineCardGrid` in the real MainWindow), the aspirin
+source pin, the rendered thumbnail, the boundary, the honest
+invalid-SMILES refusal.
+
+**THE CELL-LINE LOGGING LEAK — the gate's catch.**  The rebuilt
+ten-chunk gate's first run failed chunk-2 with two
+`test_numpy_neural_checkpoints` resume-contract tests (plus the two
+expected mid-ship notebook-freshness gates).  The diagnosis ladder —
+pairwise bisection (all passing), prefix bisection (all passing),
+leave-one-out (all passing — misleading: the failure is
+composition-dependent and settled in only under the full 14-file
+process), logging-state probes at logstart (identical states in
+failing and passing runs!), a warning-emission probe (the warning WAS
+emitted), and finally a FILE-based checkpoint/fit trace (the
+stderr-based probes had been swallowed by pytest's capture — the
+instrumentation lesson of the round) — landed on the mechanism: the
+new chunk composition put `test_cellline_examples.py` and
+`test_numpy_neural_checkpoints.py` in one pytest process;
+`test_screen_and_expression_must_come_together` calls
+`run_cellline_analysis.main()` → `configure_logging()` →
+`pharmaml.propagate=False` + a console handler bound to that test's
+captured stderr, BOTH leaking past the test (the `_CONFIGURED`
+no-op set makes every later CLI call a no-op, so nothing re-trues
+it).  Every later `caplog` assertion on a `pharmaml.*` logger then
+captured nothing (records stop at the stale pharmaml handler —
+caplog's root handler never sees them) while stderr filled with
+`--- Logging error ---` closed-file noise.  This is the exact
+round-249b failure shape that `test_format_converters` fixed for
+itself — the example scripts re-introduced it through the side door.
+Fixed with the same pattern: an autouse fixture in
+`test_cellline_examples.py` restores propagate/handlers/level/disable
+after every test.  Verified on the exact failing composition.
+
+**Tooling reconstruction.**  scratch/ came back from the rollback-#31
+restore at its round-249/257 shape (all mtimes 16:50:26 — the r260-262
+tooling updates were lost with the platform snapshot; only the git
+tree survived).  Rebuilt: `run_suite_chunks_263.py` (the ten-chunk
+gate — recursive `tests/**/test_*.py` collection, the nine-card suite
+in its own Qt envelope as chunk 9, src-doctests as chunk 10) and
+`build_zip_263.py` (the §4.3 builder: scratch/download/dist-archive
+excluded, composition guard added — verified against the live
+v1.2.169 archive's 527-entry shape).  Both now ride the tree (the
+house pattern — every prior builder is tracked).
+
+**Release (v1.2.170).**  Four carriers bumped together (1.2.170);
+CHANGELOG entry leads; notebooks re-executed 8/8 (235 s,
+home-path-survivors=0) BEFORE the gate so the freshness gates run
+green in it.  Ten-chunk gate **10/10 exit=0** (dev server down per the
+OOM ritual).  Zip **8,688,744 B** sha `2cbbbe61…` four homes, testzip
+OK per home, composition violations 0, real leaks 0, predecessor
+v1.2.169 swept from all four homes.  Honest totals **5,445 = 4,576
+collect + 869 doctest** (collect-only verified); census **1087/
+335,593** — endpoint-verified (the fresh walk matches the
+`FALLBACK_STATS` replica to the line).  Web pins trued 5,445 ×7 +
+`FALLBACK_STATS` 1087/335,593 + `SHIPPED_TOOLKIT_VERSION` 1.2.170 —
+and the overview SSR fallback pair (the r261 straggler that r262
+missed twice, lines 359-360 still saying 1102/334,346) finally trued.
+FEATURES.md: the Dashboard row + §10 trued to (26) tests with the
+Phase-3 paragraph; the row stays **A** (a refinement).  agent-browser
+E2E: badge v1.2.170, hero 5,445/1,087/335,593, zip endpoint
+`exact:true source:release 8,688,744 B`, theme toggle round-trip,
+mobile 390 px zero horizontal scroll, footer present, zero console
+and page errors (desktop + mobile screenshots in scratch/).  Push
+verified: `4421978..93e6bc0`.  Arena conformal PR #9 still open.
+
+Next: contact-map/PLIF viz twins, §24 SA-in-generative wiring, the
+conformal pickup the moment PR #9 merges, and the Phase-4 gap list
+from the feature inventory.
