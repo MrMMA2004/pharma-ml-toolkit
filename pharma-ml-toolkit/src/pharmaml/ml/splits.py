@@ -16,11 +16,10 @@ familiar ``(X_train, X_test, y_train, y_test)`` quartet:
   back to ``random``, the same quiet path preprocessing takes.
 * ``scaffold`` — Bemis–Murcko scaffold grouping: molecules sharing a
   scaffold ALWAYS land on the same side of the split.  The greedy
-  assignment is DeepChem's ``ScaffoldSplitter`` convention: scaffold
-  groups are ordered largest-first and fill the training quota before
-  the test quota, so the test set holds the *rare* scaffolds — the
-  honest generalisation test (a random split's test set is full of
-  close analogues of training molecules; a scaffold split's is not).
+  assignment orders scaffold groups largest-first and fills the training
+  target before the test target, reserving a group for testing. This
+  tends to put rarer scaffolds in the test set, though sizes are only
+  approximate and scaffold disjointness does not guarantee low similarity.
   The scaffold key itself (:func:`murcko_scaffold_key`) is computed by
   the toolkit's own numpy SMILES engine
   (:func:`pharmaml.chem.molgraph.parse_smiles`) — no RDKit needed.
@@ -155,10 +154,10 @@ def murcko_scaffold_key(smiles: str) -> str:
     Parameters
     ----------
     smiles:
-        One SMILES string.  Hostile/unparsable input returns ``""``
-        (an honest "no scaffold" — the caller's grouping then treats
-        the molecule as its own singleton group; it never crashes a
-        split).
+        One SMILES string. Hostile/unparsable input returns ``""``.
+        Acyclic structures also return ``""``; scaffold grouping puts all
+        such rows in the same group. This function does not distinguish
+        invalid from acyclic input; validate structures before splitting.
 
     Examples
     --------
@@ -266,20 +265,24 @@ def _greedy_group_assignment(
     n_test: int,
     order: Sequence[object],
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Assign whole groups to train/test under the DeepChem convention.
+    """Assign whole groups to train/test with a greedy train-first policy.
 
     Groups are consumed in ``order``; the training quota fills first,
     then the test quota; any leftover groups go back to the training
-    side (a two-way split has no validation bucket).  Guarantees: no
-    group spans both sides; both sides non-empty.
+    side. If the quota would consume every group, reserve the final
+    group for testing. Guarantees: no group spans both sides; both sides
+    are non-empty when at least two groups exist. Requested sizes are
+    targets, not exact quotas.
     """
     members: dict[object, list[int]] = {}
     for index, key in enumerate(groups):
         members.setdefault(key, []).append(index)
     train: list[int] = []
     test: list[int] = []
-    for key in order:
-        if len(train) < n_train:
+    for position, key in enumerate(order):
+        if position == len(order) - 1 and not test and train:
+            test.extend(members[key])
+        elif len(train) < n_train:
             train.extend(members[key])
         elif len(test) < n_test:
             test.extend(members[key])
@@ -339,7 +342,9 @@ def split_indices(
     """Core dispatcher: ``(train_indices, test_indices)`` for a strategy.
 
     At least one of ``X`` / ``y`` must be given (its length defines the
-    dataset).  ``random`` and ``stratified`` delegate to sklearn's own
+    dataset). If both are supplied they must have the same length; rows
+    are aligned positionally, not by pandas index. ``random`` and
+    ``stratified`` delegate to sklearn's own
     :func:`~sklearn.model_selection.train_test_split` on an index array,
     so the index semantics match the legacy
     :func:`~pharmaml.ml.preprocessing.make_train_test_split` exactly.
@@ -355,14 +360,17 @@ def split_indices(
     strategy:
         One of :data:`SPLIT_STRATEGIES`.
     test_size:
-        Fraction on (0, 1); ``n_test = ceil(test_size * n)``.
+        Fraction on (0, 1); target ``n_test = ceil(test_size * n)``.
+        Group/scaffold splits keep groups whole, so actual sizes can differ.
     random_state:
         Seed for ``random`` / ``stratified`` / ``group`` shuffles.
     smiles:
         One SMILES per row (aligned with ``X``/``y``); required by
-        ``scaffold``.
+        ``scaffold``. Acyclic molecules and failed parses share the empty
+        scaffold group; validate SMILES before use.
     groups:
-        One group label per row; required by ``group``.
+        One group label per row; required by ``group``. Labels are
+        converted to strings before grouping.
 
     Raises
     ------
@@ -384,7 +392,21 @@ def split_indices(
         raise DataValidationError(
             "X/y must be sized containers (arrays, DataFrames, lists)"
         )
-    n = len(source)
+    try:
+        n = len(source)
+    except TypeError as exc:
+        raise DataValidationError("X/y must be sized containers") from exc
+    if X is not None and y is not None:
+        if not isinstance(y, Sized):
+            raise DataValidationError("X/y must be sized containers")
+        try:
+            n_y = len(y)
+        except TypeError as exc:
+            raise DataValidationError("X/y must be sized containers") from exc
+        if n != n_y:
+            raise DataValidationError(
+                f"X has {n} rows but y has {n_y} values; they must have the same length"
+            )
     if n < 2:
         raise DataValidationError(
             f"a split needs at least two rows, got {n}"
