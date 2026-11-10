@@ -974,7 +974,7 @@ export function DownloadPanel() {
             <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">
               <p className="text-[11px] leading-snug text-muted-foreground">
                 <span className="font-medium text-foreground">Why exact versions?</span> Every pin above is
-                the environment the 2,009-test pytest suite, ruff, mypy and the executed notebooks
+                the environment the 5,547-test pytest suite, ruff, mypy and the executed notebooks
                 actually run green under — installing the same numbers removes an entire class of
                 &quot;works on my machine&quot; before it starts (the numpy 1.26.4 pin in particular: mordred
                 resolves against it).
