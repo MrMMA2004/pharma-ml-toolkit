@@ -12486,3 +12486,40 @@ pre-planned in round 251), the contact-map/PLIF viz twins, salt-bridge timelines
 the H-bond card (the API exists — `salt_bridges`), a CV card for the web MD tab over a
 `/api/md/cv` route + the bridge's `'cv'` op (the module now ships), Part-3 §24
 SA-in-generative beyond the shipped slices.
+
+## Round 256 — 2026-11-10 — the 15:29 scheduled tick landed on a fresh v1.2.164: independent verification pass instead of collision; health + monitoring only
+
+The tick fired at 15:29:57 +08 and found the tree already at the concurrent session's
+round-255 release (`28c1af9` + `bdf9579`, committed 14:57, ~35 min quiet): **v1.2.164,
+the PLUMED-style collective variables (`md/cv.py`)** — queued item #2, shipped by the
+other session while this one slept.  Counter note: the r255 release rode **no counter
+commit** (file still said 45/r254), so this round's commit carries the catch-up
+45→46.  Dual-session rule held: zero toolkit-file edits; the round is a verification +
+health + monitoring pass (and a twin delivery of this very tick remains possible, so
+the zero-footprint posture stays).
+
+**Verification of the v1.2.164 claims — every number reconciled exactly**:
+- Three version carriers all 1.2.164; `pharmaml` imports clean from the repaired venv.
+- Web pins trued: `SHIPPED_TOOLKIT_VERSION "1.2.164"`, hero `5358 tests`, fallback
+  census `1093 / 332,850` — matching the release message's 5,358 = 4,491 + 867.
+- Zip four homes byte-identical at **23,582,863 B**, sha256 prefix **`edc25e86`** as
+  claimed; predecessor v1.2.163 swept from all four.
+- Focused subset (test_md_cv + md_analysis + md_plots + viz_md_plots + web_parity +
+  docs_index): **262 passed + 1 skipped** — precisely r254's 197 + the 65 new CV tests.
+- Doctest side (`src/pharmaml/md/` + `src/pharmaml/viz/`, `-o addopts= -q
+  --doctest-modules`): **114 passed + 1 skipped** — r254's 102 + the 12 new `cv.py`
+  doctests.  The delta bookkeeping reconciles to the digit on both sides.
+- Dev server `GET /` 200; zip-size endpoint `exact:true source:release` 23,582,863 B
+  `version 1.2.164`.
+
+**Scheduler**: master 515197 enabled (next fire ~17:29 +08).  The webDevReview 15-min
+job had vanished again — recreated as **520148** (fixed_rate 900 s, Asia/Tehran, the
+isolated no-code-change review brief).  Arena conformal branch still parked:
+`56e3cf9`, 12 ahead of main, unmerged, ~70 min quiet at round start — the pickup
+ritual keeps waiting for the merge.
+
+**Queue for the next round** (unchanged, per the r255 baselines): the arena conformal
+pickup ritual the moment its PR merges (chunk assignments pre-planned); the
+contact-map/PLIF viz twins; salt-bridge timelines beside the H-bond card; the web CV
+card over `/api/md/cv` + the bridge's `'cv'` op; Part-3 §24 SA-in-generative.  Counter
+46/100.
