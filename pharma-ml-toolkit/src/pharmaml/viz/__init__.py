@@ -98,7 +98,9 @@ from pharmaml.viz.chem_plots import (
 )
 from pharmaml.viz.docking_plots import (
     plot_consensus_ranking,
+    plot_contact_map,
     plot_energy_distribution,
+    plot_plif_heatmap,
     plot_receptor_atom_types,
     plot_top_ligands,
 )
@@ -219,6 +221,7 @@ __all__ = [
     "plot_concentration_profile",
     "plot_confusion_matrix",
     "plot_consensus_ranking",
+    "plot_contact_map",
     "plot_correlation_heatmap",
     "plot_cv_scores",
     # chem figures
@@ -247,6 +250,7 @@ __all__ = [
     "plot_pca_variance",
     "plot_permutation_heatmap",
     "plot_permutation_importance",
+    "plot_plif_heatmap",
     "plot_pr_curves",
     "plot_predicted_vs_actual",
     "plot_prediction_intervals",

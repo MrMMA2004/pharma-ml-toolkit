@@ -13205,3 +13205,114 @@ verified: `4421978..93e6bc0`.  Arena conformal PR #9 still open.
 Next: contact-map/PLIF viz twins, §24 SA-in-generative wiring, the
 conformal pickup the moment PR #9 merges, and the Phase-4 gap list
 from the feature inventory.
+
+## Round 264 — 2026-11-11 — the contact-map / PLIF twins shipped as v1.2.171: the pose-level reading; the round that recovered rollback #32 and caught its own doctest leak
+
+**Opening state (cron run 48/100; platform run_count 56).**  The
+counter's rollback-gap arithmetic, made explicit this round: the
+scratch counter was GONE from disk (the rollback wiped it; it rides
+git, so it came back with the pull), the r263 note on the remote said
+47/100, and the platform's run_count had advanced to 56 — the eight
+firings in between landed on a wiped/rebuilding sandbox and never
+reached a live session, so the counter moved 47 -> 48 once, honestly,
+with the gap recorded in the note instead of silently claimed.
+
+**Rollback #32 (the recovery that framed the round).**  The local
+tree was found at the round-186 era — `2eb0ede` (a UUID-message
+rollback marker), VERSION 1.2.106, worklog and counter absent from
+disk, no `origin` remote, no `~/.github_token`.  The recovery, per
+the sole-survivor doctrine: PAT re-extracted from
+`upload/MASTER_PROMPT.pdf` pdftotext lines 688-689 joined without
+space (93 chars — the length check that catches the truncated read),
+remote re-added, 224 commits fast-forwarded to `c8fe70a` (r263,
+v1.2.170) after moving the conflicting untracked upload files aside
+(every byte-compare came back SAME — nothing lost), rdkit 2026.09.1
+reinstalled via the FOREGROUND venv repair, and webDevReview found
+missing from the scheduler (it rolls back with the sandbox) —
+recreated as **522062** (the 96-vs-3 daily platform limit
+re-acknowledged, recorded, not fought).
+
+**The twins (the r263 queue's first item).**  The archive's docking
+reading stopped at the energy table; this round added the pose-level
+answer to *where* and *how*:
+
+- `pharmaml/docking/contacts.py` — the contact engine: PDB and PDBQT
+  ATOM/HETATM parsing into frozen `ContactAtom` records (element
+  normalisation from AutoDock types, MODEL-block pose selection), the
+  vectorised `compute_contacts` (numpy pairwise distance matrix,
+  every pair within a cutoff, sorted closest-first) and a classifier
+  that is DELIBERATELY conservative — salt bridge (N into carboxylate
+  O within 4.0 A, direction-agnostic), H-bond (any N/O pair within
+  3.5 A; donor/acceptor identity is NOT inferred), hydrophobic (C-C
+  within 4.5 A; no aromatic perception — indole carbons land here),
+  vdw fall-through.  Every band pinned at its boundary by tests; the
+  docstring says what the rules cannot name.
+- The aggregation twins: `contact_matrix` (residue x ligand-atom
+  minimum-distance grid, closest-contact row order, NaN where a pair
+  never touches) and `plif_matrix` / `plif_bits` (per-residue class
+  counts and the 0/1 fingerprint twin — the PLIF spirit reduced to
+  what pure distance geometry supports honestly).
+- `viz/docking_plots.py` — `plot_contact_map` (masked heat grid on
+  the house palette ramp, atom-level variant) + `plot_plif_heatmap`
+  (annotated counts; the bits twin skips annotations).
+- The demo pair: the receptor is the REAL `lysozyme_1aki.pdb` (1,079
+  atoms incl. 78 waters); the pose is `contacts_demo_ligand.pdbqt` —
+  ten synthetic atoms placed clash-free (>= 2.4 A to every receptor
+  atom) at 2.9-4.2 A from real cleft atoms (ASP52/101 carboxylates,
+  ASN59/103 donors, TRP62/63/108 walls) by a seeded sphere-search
+  placement, embedded as builder-owned immutable content in
+  `scratch/build_example_data.py` so the provenance round-trip
+  (notebook orphan guard + `--check`) rides it.  REMARK lines carry
+  the provenance in-file.  The shipped answer: **91 contacts over 25
+  residues — 3 salt, 3 H-bond, 24 hydrophobic, 61 vdw**, closest an
+  ASN103 OD1 H-bond at 3.00 A.
+- Studio: the Docking page's fifth tab, Contacts & PLIF — the map as
+  a class-coloured scatter (four series, one per class; the inspector
+  tooltip carries the exact pair + distance), the PLIF as grouped
+  per-class bars with category labels and hover meta, the full contact
+  table, and the cutoff spin driving the shell honestly (a 6.0 A test
+  admits strictly more contacts than 5.0 A — pinned).
+- The notebook grew its section 13 over the bundled pair (the map +
+  the fingerprint, outputs live after the re-execution); the recap
+  renumbered to 14.  README/INDEX/COVERAGE/FEATURES/CHANGELOG all
+  trued for the new symbols and rows (the docking module 12 files /
+  8,266 L; the FEATURES freeze stamp).
+
+**The gate's catch (this round's own leak — the honest headline).**
+The second ten-chunk run failed chunk-10 on three modules nobody
+touched this round (`generative/pareto`, `generative/result`,
+  `ml/from_scratch`): their doctest floats printed `4.000` where
+`4.0` was expected.  Root cause: MY contacts docstring had
+`pd.set_option("display.float_format", ...)` — a global that leaks
+past every doctest in the same process.  The r263 cellline-logging
+leak's exact pattern, reintroduced by me through the side door the
+example scripts used.  Removed (the line was vestigial — the doctest
+rounded its values manually); chunk-10 re-verified green with the
+exact chunk command.  The first gate run had also failed the
+FEATURES freeze-stamp test (the doc must name the version it ships
+with — trued) and shown chunk-10 transient interference from edits
+made while it ran; the protocol lesson restated: NO TREE EDITS DURING
+THE GATE.
+
+**The notebook OOM (the ritual honoured).**  The first re-execution
+run died on `complete_ml_workflow.ipynb` (kernel died) with the dev
+server up; the retry — server down, 1.9 GB freed — ran 8/8 in 222 s,
+home-path-survivors 0.  The r262 lesson needs no reinforcement.
+
+**Release (v1.2.171).**  Four carriers bumped together; CHANGELOG
+leads.  Zip **8,816,853 B** sha `36f417e9…` four homes, testzip OK
+per home, composition violations 0, real leaks 0; predecessor
+v1.2.170 swept manually from all four homes (the r263 builder's
+PREDECESSOR constant was stale — the one-line lesson the tracked
+`build_zip_264.py` records: chase the ACTUAL shipped previous
+version).  Ten-chunk gate: chunks 1-9 green on the final tree, chunk
+10 green standalone after the docstring-only leak fix (the fix
+postdates the run; the re-verified command is the chunk's own).  New
+tests: **+66** (55 contacts engine + 8 viz twins + 3 Studio) — honest
+totals **5,512 = 4,642 collect + 870 doctest** (collect-only
+verified), census **1090/337,763** (the endpoint-rule walk after the
+notebook re-execution).  Web pins trued 5,512 ×7 +
+`FALLBACK_STATS` 1090/337,763 + `SHIPPED_TOOLKIT_VERSION` 1.2.171.
+
+Next: §24 SA-in-generative wiring, the PR #9 conformal pickup the
+moment it merges, and the Phase-4 gap list from the feature inventory.

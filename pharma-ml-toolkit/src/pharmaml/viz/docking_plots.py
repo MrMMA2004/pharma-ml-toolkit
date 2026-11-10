@@ -12,7 +12,13 @@ module visualises them:
   leaderboard);
 * :func:`plot_receptor_atom_types` — the AutoDock type census of a
   prepared receptor (donors, acceptors, carbons, metals), the figure
-  behind the ``types A×87 C×526 ...`` line ``gpfer.py`` hard-coded.
+  behind the ``types A×87 C×526 ...`` line ``gpfer.py`` hard-coded;
+* :func:`plot_contact_map` — the residue × ligand-atom minimum-
+  distance grid of a docked pose (the matrix view of
+  :func:`~pharmaml.docking.contacts.compute_contacts`);
+* :func:`plot_plif_heatmap` — the residue × interaction-class PLIF
+  counts (or their 0/1 fingerprint twin), the figure behind a
+  pose-comparison workflow.
 
 The first two accept the summary frame produced by
 :func:`~pharmaml.docking.parsing.scan_docking_directory` directly.
@@ -73,6 +79,44 @@ pharmaml.exceptions.DataValidationError: top_n must be a positive integer or Non
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: energy_column 'binding' not found in the summary frame; available: ['folder', 'best_lowest_energy']
+
+>>> from pharmaml.docking.contacts import (
+...     ContactAtom, compute_contacts, plif_matrix)
+>>> ligand = [ContactAtom(1, "N1", "N", "LIG", "L", 1, 0.0, 0.0, 0.0),
+...            ContactAtom(2, "C1", "C", "LIG", "L", 1, 3.0, 0.0, 0.0)]
+>>> receptor = [ContactAtom(1, "OD1", "O", "ASP", "A", 101, 0.0, 3.2, 0.0),
+...             ContactAtom(2, "CZ2", "C", "TRP", "A", 62, 6.0, 3.0, 0.0)]
+>>> contacts = compute_contacts(ligand, receptor, cutoff=5.0)
+>>> fig = plot_contact_map(contacts)
+>>> fig.axes[0].get_title()
+'Contact map — 2 residue(s) × 2 ligand atom(s), 3 contact(s)'
+>>> [t.get_text() for t in fig.axes[0].get_xticklabels()]
+['L:LIG1 N1', 'L:LIG1 C1']
+>>> [t.get_text() for t in fig.axes[0].get_yticklabels()]
+['A:ASP101', 'A:TRP62']
+>>> close_figure(fig)
+>>> fig = plot_contact_map(contacts, atom_level=True)
+>>> fig.axes[0].get_title()
+'Contact map — 2 receptor atom(s) × 2 ligand atom(s), 3 contact(s)'
+>>> close_figure(fig)
+>>> plot_contact_map([])      # an empty contact list is upstream's bug
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: contacts must be a non-empty list of ContactRecord (the contact map has no data -- check the cutoff or the pose)
+>>> fig = plot_plif_heatmap(contacts)
+>>> fig.axes[0].get_title()
+'PLIF interaction fingerprint — 2 residue(s) × 4 classes, 3 contact(s)'
+>>> [t.get_text() for t in fig.axes[0].get_xticklabels()]
+['salt_bridge', 'hbond', 'hydrophobic', 'vdw']
+>>> close_figure(fig)
+>>> fig = plot_plif_heatmap(contacts, bits=True)   # the 0/1 fingerprint twin
+>>> fig.axes[0].get_title()
+'PLIF bits — 2 residue(s) × 4 classes, 3 contact(s)'
+>>> close_figure(fig)
+>>> plot_plif_heatmap(plif_matrix(contacts))
+Traceback (most recent call last):
+...
+pharmaml.exceptions.DataValidationError: contacts must be a list of ContactRecord (got DataFrame)
 """
 
 from __future__ import annotations
@@ -83,12 +127,20 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from pharmaml.docking.contacts import (
+    ContactRecord,
+    contact_matrix,
+    plif_bits,
+    plif_matrix,
+)
 from pharmaml.exceptions import DataValidationError
 from pharmaml.viz._compat import PALETTE, new_figure
 
 __all__ = [
     "plot_consensus_ranking",
+    "plot_contact_map",
     "plot_energy_distribution",
+    "plot_plif_heatmap",
     "plot_receptor_atom_types",
     "plot_top_ligands",
 ]
@@ -540,4 +592,181 @@ def plot_consensus_ranking(
         "consensus (0–1, weighted mean of the _norm units) — higher is stronger"
     )
     ax.set_title(title)
+    return fig
+
+
+# -- contact-map / PLIF twins (docking.contacts views) --------------------------
+
+def _check_contacts(contacts: Any, allow_empty: bool = False) -> list[ContactRecord]:
+    """Validate the contacts argument type (the twins' shared gate)."""
+    if not isinstance(contacts, list):
+        raise DataValidationError(
+            "contacts must be a list of ContactRecord "
+            f"(got {type(contacts).__name__})"
+        )
+    if not contacts and not allow_empty:
+        raise DataValidationError(
+            "contacts must be a non-empty list of ContactRecord (the "
+            "contact map has no data -- check the cutoff or the pose)"
+        )
+    if contacts and not isinstance(contacts[0], ContactRecord):
+        raise DataValidationError(
+            "contacts must be a list of ContactRecord "
+            f"(got {type(contacts[0]).__name__})"
+        )
+    return contacts
+
+
+def plot_contact_map(
+    contacts: list[ContactRecord],
+    atom_level: bool = False,
+    title: str = "Contact map",
+) -> Any:
+    """Residue × ligand-atom minimum-distance grid of a docked pose.
+
+    The matrix view of
+    :func:`~pharmaml.docking.contacts.compute_contacts`: one cell per
+    receptor residue (row, closest-contact order) × ligand atom
+    (column, serial order), the cell painted with the minimum
+    ligand-atom/receptor-atom distance and left blank where that pair
+    never touches.  Close contacts paint dark (the house palette ramp),
+    the no-contact cells stay white -- the classic contact-map reading
+    of a binding pose.
+
+    Parameters
+    ----------
+    contacts:
+        Output of :func:`~pharmaml.docking.contacts.compute_contacts`;
+        a non-empty list, or the typed error below (an empty map is
+        upstream's bug -- cutoff too tight, pose outside the pocket).
+    atom_level:
+        ``False`` (default) aggregates rows by receptor residue (the
+        readable map); ``True`` keeps every receptor atom its own row
+        (the detailed map -- ``A:ASP101 OD1``-style labels).
+    title:
+        Chart title; the counts ride the suffix `` — R × L, N
+    contact(s)``.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``contacts`` is not a list of :class:`~pharmaml.docking.
+        contacts.ContactRecord`, is empty, or ``atom_level`` is not a
+        bool.
+    """
+    _check_contacts(contacts)
+    if not isinstance(atom_level, bool):
+        raise DataValidationError(
+            f"atom_level must be a bool (got {atom_level!r})"
+        )
+    grid = contact_matrix(contacts, atom_level=atom_level)
+    values = grid.to_numpy(dtype=float)
+    masked = np.ma.masked_invalid(values)
+
+    fig, ax = new_figure(figsize=(1.1 + 0.55 * grid.shape[1],
+                                  1.6 + 0.38 * grid.shape[0]))
+    from matplotlib.colors import LinearSegmentedColormap
+    ramp = LinearSegmentedColormap.from_list(
+        "contact_ramp", ["#0F766E", "#14B8A6", "#D9F0EC"])
+    ramp.set_bad("#FFFFFF")
+    im = ax.imshow(masked, cmap=ramp, aspect="auto", vmin=2.5, vmax=5.0)
+    ax.set_xticks(range(grid.shape[1]), list(grid.columns), rotation=45,
+                  ha="right", fontsize=8)
+    ax.set_yticks(range(grid.shape[0]), list(grid.index), fontsize=8)
+    if grid.shape[0] > 22:
+        ax.set_yticks(range(grid.shape[0]), list(grid.index), fontsize=6)
+    row_name = "receptor atom" if atom_level else "receptor residue"
+    unit = "receptor atom" if atom_level else "residue"
+    ax.set_xlabel("ligand atom")
+    ax.set_ylabel(row_name)
+    n = len(contacts)
+    ax.set_title(
+        f"{title} — {grid.shape[0]} {unit}(s) × {grid.shape[1]} "
+        f"ligand atom(s), {n} contact(s)"
+    )
+    cbar = fig.colorbar(im, ax=ax, shrink=0.85)
+    cbar.set_label("contact distance (Å)")
+    ax.grid(False)
+    return fig
+
+
+def plot_plif_heatmap(
+    contacts: list[ContactRecord],
+    bits: bool = False,
+    title: str = "PLIF",
+) -> Any:
+    """Residue × interaction-class PLIF counts (or the 0/1 twin).
+
+    The figure behind a pose-comparison workflow: rows are receptor
+    residues (closest-contact order), columns the interaction classes
+    of :data:`~pharmaml.docking.contacts.INTERACTION_CLASSES`, each
+    cell the count of contacts of that class to that residue -- or, with
+    ``bits=True``, the 1-when-any 0-otherwise bit vector a Tanimoto
+    pose-similarity would run over.
+
+    Parameters
+    ----------
+    contacts:
+        Output of :func:`~pharmaml.docking.contacts.compute_contacts`;
+        a non-empty list, or the typed error below.
+    bits:
+        ``False`` (default) paints the class counts; ``True`` paints
+        the 0/1 fingerprint (the title switches to ``PLIF bits``).
+    title:
+        Chart title; the counts ride the suffix.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If ``contacts`` is not a list of :class:`~pharmaml.docking.
+        contacts.ContactRecord`, is empty, or ``bits`` is not a bool.
+    """
+    _check_contacts(contacts)
+    if not isinstance(bits, bool):
+        raise DataValidationError(f"bits must be a bool (got {bits!r})")
+    frame = plif_bits(contacts) if bits else plif_matrix(contacts)
+    frame = frame.drop(columns=["total"])
+    values = frame.to_numpy(dtype=float)
+
+    fig, ax = new_figure(figsize=(1.4 + 1.05 * frame.shape[1],
+                                  1.6 + 0.38 * frame.shape[0]))
+    from matplotlib.colors import LinearSegmentedColormap, ListedColormap
+    if bits:
+        cmap: object = ListedColormap(["#FFFFFF", "#B45309"])
+    else:
+        cmap = LinearSegmentedColormap.from_list(
+            "plif_ramp", ["#FFFFFF", "#FDE9D9", "#B45309"])
+    im = ax.imshow(values, cmap=cmap, aspect="auto",
+                   vmin=0.0, vmax=max(1.0, float(values.max())))
+    ax.set_xticks(range(frame.shape[1]), list(frame.columns), rotation=30,
+                  ha="right", fontsize=9)
+    ax.set_yticks(range(frame.shape[0]), list(frame.index), fontsize=8)
+    if frame.shape[0] > 22:
+        ax.set_yticks(range(frame.shape[0]), list(frame.index), fontsize=6)
+    ax.set_xlabel("interaction class")
+    ax.set_ylabel("receptor residue")
+    kind = "bits" if bits else "interaction fingerprint"
+    ax.set_title(
+        f"{title} {kind} — {frame.shape[0]} residue(s) × "
+        f"{frame.shape[1]} classes, {len(contacts)} contact(s)"
+    )
+    if not bits:  # annotate the counts (the bits speak for themselves)
+        for i in range(frame.shape[0]):
+            for j in range(frame.shape[1]):
+                if values[i, j] > 0:
+                    ax.text(j, i, int(values[i, j]), ha="center",
+                            va="center", fontsize=8,
+                            color="#7C2D12" if values[i, j] < values.max() / 2
+                            else "#FFFFFF")
+    cbar = fig.colorbar(im, ax=ax, shrink=0.85)
+    cbar.set_label("residue contacts (count)" if not bits else "class touched (0/1)")
+    ax.grid(False)
     return fig

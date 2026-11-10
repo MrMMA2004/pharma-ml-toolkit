@@ -5,8 +5,9 @@ This is the §4.5 deliverable of the MASTER_PROMPT part 4 specification:
 traceability matrix.** All evidence on this page was collected live against the
 working tree (imports grepped, pages/cards/routes enumerated, tests collected
 with `pytest --collect-only`), not copied from prose. Matrix inputs were frozen
-at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.168. The
-§5 nine-card mapping (§10 below) was derived live at v1.2.169.
+at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.171 (the
+r264 twin rows trued live). The §5 nine-card mapping (§10 below) was
+derived live at v1.2.169.
 
 ## Status legend (the six §4.5 classes)
 
@@ -47,7 +48,7 @@ underlying calls. All pages additionally ride `tests/ui/test_pages_smoke.py`
 | Chemistry Workbench (`chemistry`) | `chem.csv_standardize`, `chem.features`, `utils.io` | `test_chemistry_page.py` (13) | `test_chem_*`, `test_descriptors.py` (73), `test_csv_standardize.py` (57), `test_similarity.py`, `test_diversity.py` | **A** | RISM descriptors are opt-in (see §5). |
 | PK/PD Workbench (`pkpd`) | `pharma.pk`, `pkpd.compartments/events/nca_ext/ode` | `test_pkpd_page.py` (18) | `test_pk.py` (49), `test_pd.py`, `test_pkpd_engines.py` (99), `test_dosage.py` (24) | **A** | |
 | Biology Workbench (`biology`) | `biology` (incl. `load_response_table`) | `test_biology_page.py` (13) | `test_biology.py` (93), `test_cellline_examples.py`, `test_variable_genes` parity | **A** | Demo cell-line data is synthetic-but-realistic (see §6). |
-| Docking Workbench (`docking`) | `docking` | `test_docking_page.py` (14) | `test_docking.py`, `test_docking_prep.py` (84), `test_pose_rmsd.py` (48) | **A** | Prep/parse/rescore only — no bundled docking engine (class **F** note in §5). |
+| Docking Workbench (`docking`) | `docking` | `test_docking_page.py` (17) | `test_docking.py`, `test_docking_prep.py` (84), `test_docking_contacts.py` (55), `test_pose_rmsd.py` (48) | **A** | Prep/parse/rescore only — no bundled docking engine (class **F** note in §5). The Contacts & PLIF tab ships the pose-level reading: contact geometry + interaction fingerprints (r264). |
 | Model Analysis (`models`) | `ml.cv_results`, `ml.models`, `ml.training` | `test_model_analysis_page.py` (13) | `test_cv_results.py`, `test_ml_pipeline.py` (211) | **A** | |
 | ML Workbench (`mlworkbench`) | `ml` core, `ml.evaluation`, `ml.persistence`, `ml.tuner`, `utils.checkpoints` | `test_ml_workbench_page.py` (19) | `test_ml_pipeline.py` (211), `test_tuner.py` (118), `test_checkpoints.py` | **A** | Stacking/voting exposed; boosting families optional-gated (§5). |
 | Unsupervised (`unsupervised`) | `ml.manifold`, `ml.unsupervised`, `utils.io` | `test_unsupervised_page.py` (23) | `test_unsupervised.py`, `test_manifold.py`, `test_hierarchical.py` | **A** | |
@@ -93,10 +94,10 @@ commit. "GUI" = Studio page(s); "Web" = card(s)/route(s) from §2.
 | --- | --- | --- | --- | --- | --- | --- |
 | `chem` | 22 files / 19,957 L | standardize, descriptors (incl. RISM opt-in), tables, similarity, diversity, SELFIES, SA scoring, oracles | Chemistry | `feat-factory`, `gen-sa-score` | `test_chem_*`, `test_descriptors.py` (73), `test_selfies_codec.py`, `test_sa_score.py` | **A** |
 | `ml` | 69 files / 67,251 L | registry (30+ estimator families), train/evaluate, persistence, CV diagnostics, HPO/multiobjective, XAI, drugresponse, unsupervised/manifold, adversarial, privacy, recommend, apriori, annsearch, catalog, runboard, umap, curation | ML Workbench, Model Analysis, Foundations, Best-of ML, Response AI, Deep Learning, Unsupervised | `ml/*` cards + routes | `test_ml_pipeline.py` (211), `test_tuner.py` (118), `test_explain.py` (115), `test_hpo.py` (64) + 20 more suites | **A** (except the §4 C-list) |
-| `viz` | 22 files / 16,570 L | publication plots, interactive (express-layer), MD plots, export bundle, PDF reports | every page; Utilities | session report | `test_viz.py` (221), `test_viz_md_plots.py`, `test_export_images.py` | **A** |
+| `viz` | 22 files / 16,802 L | publication plots, interactive (express-layer), MD plots, docking contact-map/PLIF twins, export bundle, PDF reports | every page; Utilities | session report | `test_viz.py` (229), `test_viz_md_plots.py`, `test_export_images.py` | **A** |
 | `generative` | 16 files / 9,365 L | graph surgery, ring topology moves, breeding, MCTS search, SA-constrained generation | Generative | `gen-*` cards | `test_generative.py` (291), `test_mcts.py` (12) | **A** |
 | `pharma` | 19 files / 12,545 L | PK summaries, dosing design, unit conversions, pharmaceutical calculators | PK/PD, Utilities | calculators (TS ports) | `test_pk.py` (49), `test_dosage.py` (24), `test_units.py` (25) | **A** |
-| `docking` | 11 files / 7,538 L | ligand/protein prep (GPF/DPF), output parsing, torsion QA, consensus rescore, DOCKSTRING benchmark boxes | Docking, Utilities | `dock-*` cards | `test_docking*.py`, `test_pose_rmsd.py` (48) | **A** (engine: class **F**) |
+| `docking` | 12 files / 8,266 L | ligand/protein prep (GPF/DPF), output parsing, torsion QA, consensus rescore, DOCKSTRING benchmark boxes, contact geometry + PLIF fingerprints | Docking, Utilities | `dock-*` cards | `test_docking*.py`, `test_docking_contacts.py` (55), `test_pose_rmsd.py` (48) | **A** (engine: class **F**) |
 | `pkpd` | 15 files / 7,201 L | compartment ODEs, events, NCA, PD engines | PK/PD | PK/PD Explorer | `test_pkpd_engines.py` (99) | **A** |
 | `biology` | 6 files / 3,508 L | cell-line response tables, biomarker discovery, variable genes | Biology, Image Lab, Response AI | `bio-biomarkers` | `test_biology.py` (93) | **A** |
 | `md` | 11 files / 3,683 L | synthetic trajectories, RMSD/RMSF, H-bond & salt-bridge timelines, PLUMED-style CVs, XVG parsing | Molecular Dynamics | 6 `md-*` cards, 5 routes | `test_md_analysis.py` (63), `test_md_cv.py` (65) | **A** (data: synthetic — §6) |

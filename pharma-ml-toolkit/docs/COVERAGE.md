@@ -586,6 +586,8 @@ closed in **1.2.58**:
 | `viz.plot_model_comparison` | Data & ML → Leaderboard card's *Plot leaderboard* |
 | `biology.replicate_variability` + `summarize_compounds` | Cell Lines → screen card's two readout buttons |
 | `viz.plot_receptor_atom_types` | Docking → receptor card's *Plot atom types* |
+| `viz.plot_contact_map` | Docking → Contacts & PLIF tab's *Compute contact map* (the notebook §13 twin) |
+| `viz.plot_plif_heatmap` | Docking → Contacts & PLIF tab's *Build PLIF fingerprint* (the notebook §13 twin) |
 | `viz.plot_top_ligands` | Docking → results card's *Plot top ligands* |
 
 ## Library coverage (100x-120) — round 5: the last stragglers

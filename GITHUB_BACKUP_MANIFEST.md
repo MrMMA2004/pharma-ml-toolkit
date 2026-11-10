@@ -2052,3 +2052,76 @@ card polish:
   Web pins trued 5,445 ×7 + `FALLBACK_STATS` 1087/335,593 +
   `SHIPPED_TOOLKIT_VERSION` 1.2.170 — and the overview SSR fallback
   pair (the r261 straggler that r262 missed twice) finally trued.
+
+## v1.2.171 release-zip homes (2026-11-11, round 264 — the contact-map / PLIF twins: the pose-level reading)
+
+`pharma-ml-toolkit-v1.2.171.zip` — 8,816,853 bytes, sha-256
+`36f417e9ea1ebc3cb8393099b94d13769e08bfcbc6df466e8bf28863558e437d`
+(four byte-identical homes, testzip OK per home, composition
+violations 0, real leaks 0; predecessor v1.2.170 swept from all four
+homes — manually, because the r263 builder's PREDECESSOR constant was
+stale, the one lesson recorded in the tracked r264 builder).  The
+round recovered rollback #32 and shipped the r263 queue's first item:
+
+- **Rollback #32 recovery** (the opening state): the local tree was
+  found wiped to the round-186 era (`2eb0ede`, v1.2.106, counter and
+  worklog gone from disk), PAT re-extracted from
+  `upload/MASTER_PROMPT.pdf` lines 688-689 (93 chars), 224 commits
+  fast-forwarded to `c8fe70a` (r263, v1.2.170), every aside-file
+  byte-compare SAME, rdkit 2026.09.1 reinstalled via the foreground
+  venv repair, webDevReview recreated as 522062 after the scheduler
+  rolled back with the sandbox.
+- `pharmaml/docking/contacts.py` — the new pure-python contact
+  engine: `read_pdb_atoms` / `read_pdbqt_atoms` (fixed-column
+  ATOM/HETATM parsing, MODEL-block pose selection, AutoDock-type
+  element normalisation), the vectorised `compute_contacts` (every
+  ligand-receptor pair within a cutoff, sorted closest-first) and the
+  documented distance-geometry classifier — salt bridge (N into
+  carboxylate O ≤ 4.0 A), H-bond (N/O ≤ 3.5), hydrophobic (C-C ≤
+  4.5), vdw fall-through; no force field, no aromatic perception, no
+  protonation guessing.  Plus the aggregation twins:
+  `contact_matrix` (residue x ligand-atom minimum-distance grid) and
+  `plif_matrix`/`plif_bits` (per-residue class counts and the 0/1
+  fingerprint twin a pose comparison would Tanimoto over).
+- `viz/docking_plots.py` — `plot_contact_map` (masked minimum-
+  distance heat grid, house palette ramp) + `plot_plif_heatmap`
+  (annotated class counts, or the bits twin).
+- `examples/data/contacts_demo_ligand.pdbqt` — the demo pose: ten
+  synthetic atoms placed clash-free (≥ 2.4 A) at 2.9-4.2 A from real
+  1AKI cleft atoms by a sphere-search placement; shipped as
+  builder-owned immutable content in `scratch/build_example_data.py`
+  (the provenance round-trip: the notebook-inventory orphan guard and
+  the builder `--check` round-trip both ride it).  The shipped pair
+  answers 91 contacts over 25 residues — 3 salt (ASP52/ASP101 +
+  ASN59), 3 H-bond (ASN103's OD1 shell), 24 hydrophobic (the
+  TRP62/63/108 walls).
+- Studio Docking page — the fifth tab, Contacts & PLIF: the map as a
+  class-coloured scatter over the residue x ligand-atom grid (inspector
+  tooltip = the exact pair + distance), the PLIF as grouped per-class
+  bars, the contact table, the cutoff spin driving the shell
+  honestly.
+- The docking notebook grew section 13 (the map + the fingerprint
+  over the bundled pair, outputs live after the re-execution); the
+  recap renumbered to 14.
+- **The gate's catch (this round's own leak):** the second gate run
+  caught the contacts module docstring setting
+  `pd.set_option("display.float_format", ...)` — a global that leaked
+  into every later doctest in the chunk-10 process (three untouched
+  modules' float rendering drifted `4.0` -> `4.000`).  The r263
+  cellline-leak pattern reintroduced by me; removed, chunk-10
+  re-verified green with the exact chunk command.  Chunks 1-9 were
+  already green on the final tree (the fix was docstring-only).
+- Notebooks 8/8 re-executed at 1.2.171 (222 s; the first run's ML
+  kernel died with the dev server up — the OOM ritual honoured on the
+  retry; home-path-survivors=0).  Ten-chunk gate: 9/10 on the final
+  tree + chunk-10 green standalone (the leak fix landed after the
+  run; a docstring-only change).  Honest totals **5,512 = 4,642
+  collect + 870 doctest** (collect-only verified), census
+  **1090/337,763** (the endpoint-rule walk, notebooks re-executed).
+  Web pins trued 5,512 ×7 + `FALLBACK_STATS` 1090/337,763 +
+  `SHIPPED_TOOLKIT_VERSION` 1.2.171.  FEATURES.md: the docking rows
+  (12 files / 8,266 L; +55 +3 +17 tests) and the viz row
+  (16,802 L; 229 tests) trued; INDEX/COVERAGE/README/CHANGELOG ride
+  the new symbols.  webDevReview 522062 (96-vs-3 daily limit
+  re-acknowledged).  Next: §24 SA-in-generative wiring, the PR #9
+  conformal pickup, the Phase-4 gap list.

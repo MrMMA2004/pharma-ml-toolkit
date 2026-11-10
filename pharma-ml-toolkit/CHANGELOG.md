@@ -1,3 +1,43 @@
+## [1.2.171] — 2026-11-11
+### Added — round 264: the contact-map / PLIF twins (the pose-level reading)
+
+- `docking/contacts.py` — the new pure-python contact engine: PDB and
+  PDBQT ATOM/HETATM parsing into `ContactAtom` records (element
+  normalisation from AutoDock types, MODEL-block pose selection), the
+  vectorised `compute_contacts` (every ligand-receptor pair within a
+  cutoff, sorted closest-first) and a documented distance-geometry
+  classifier — salt bridge (N into carboxylate O, <= 4.0 A), H-bond
+  (N/O pairs <= 3.5 A), hydrophobic (C-C <= 4.5 A), vdw fall-through.
+  No force field, no aromatic perception: the rules are element-and-name
+  distance bands, and everything they cannot name stays `vdw`.
+- `docking/contacts.py` — the aggregation twins: `contact_matrix`
+  (residue x ligand-atom minimum-distance grid, closest-contact row
+  order) and `plif_matrix` / `plif_bits` (per-residue interaction-class
+  counts and the 0/1 fingerprint twin a pose comparison would
+  Tanimoto over).
+- `viz/docking_plots.py` — `plot_contact_map` (masked minimum-distance
+  heat grid with the house palette ramp) and `plot_plif_heatmap`
+  (annotated class counts, or the bits twin).
+- `examples/data/contacts_demo_ligand.pdbqt` — the demo pose: ten
+  synthetic atoms placed clash-free (>= 2.4 A) at 2.9-4.2 A from real
+  1AKI binding-cleft atoms by a sphere-search placement, shipped as
+  builder-owned immutable content (`scratch/build_example_data.py`),
+  REMARK-provenance inside the file. The receptor side is the real
+  lysozyme; the shipped pair answers 91 contacts over 25 residues —
+  3 salt bridges (ASP52/ASP101 carboxylates + ASN59), 3 H-bonds (the
+  ASN103 OD1 shell), 24 hydrophobic (the TRP62/63/108 walls).
+- Studio Docking page — the fifth tab, Contacts & PLIF: the contact map
+  as a class-coloured scatter over the residue x ligand-atom grid (the
+  inspector tooltip carries the exact pair + distance) and the PLIF as
+  grouped per-class bars per residue, plus the full contact table; the
+  cutoff spin drives the shell honestly.
+- The docking notebook grew its section 13 (the map + the fingerprint
+  over the bundled pair) and the recap renumbered to 14.
+- Tests: `test_docking_contacts.py` (55 — every classification band at
+  its boundary, parser legs, hand-checked geometry, the shipped-answer
+  pins), the `TestDockingPlots` twins in `test_viz.py` (8), and the
+  Studio twin tests in `tests/ui/test_docking_page.py` (3).
+
 ## [1.2.170] — 2026-11-11
 ### Added — round 263: part4 §8 Phase-3 card polish + the four-carrier version pin
 

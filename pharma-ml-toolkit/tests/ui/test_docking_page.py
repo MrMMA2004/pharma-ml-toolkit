@@ -48,15 +48,16 @@ def _scan_campaign(page, qtbot, studio_app) -> None:
 # -- construction ---------------------------------------------------------------
 
 
-def test_page_constructs_with_four_engine_tabs(studio_app) -> None:
+def test_page_constructs_with_five_engine_tabs(studio_app) -> None:
     page = _fresh_page()
-    assert page._tabs.count() == 4
+    assert page._tabs.count() == 5
     titles = [page._tabs.tabText(i) for i in range(page._tabs.count())]
     assert titles == [
         "Campaign summary",
         "Cluster analysis",
         "Ligand library",
         "DOCKSTRING lab",
+        "Contacts & PLIF",
     ]
 
 
@@ -273,3 +274,66 @@ def test_palette_application(studio_app) -> None:
     page = DockingWorkbenchPage()
     page.apply_palette(ChartPalette(background="#111111", foreground="#eeeeee"))
     assert True
+
+
+# -- the contacts & PLIF twins (r264) ----------------------------------------------
+
+
+def test_contact_map_real_numbers(studio_app, qtbot) -> None:
+    """The shipped demo pair, engine-first: 91 contacts over 25 residues,
+    the closest an ASN103 H-bond at 3.0 A -- every number the job prints
+    was printed by compute_contacts on this exact bundled data first."""
+    page = _fresh_page()
+    page._start_contacts()
+    qtbot.waitSignal(page._runner.job_ended, timeout=120_000).wait()
+    _settle(qtbot, studio_app)
+
+    text = page.report_text()
+    assert "91 pair(s) within 5 A of 25 residue(s)" in text
+    assert "closest: A:ASN103 OD1 -- O2 3.00 A (hbond)" in text
+
+    frame = page.model_frame()
+    assert frame is not None
+    assert len(frame) == 91
+    assert set(frame["interaction"]) <= {"salt_bridge", "hbond", "hydrophobic", "vdw"}
+    assert int((frame["interaction"] == "salt_bridge").sum()) == 3
+    assert int((frame["interaction"] == "hydrophobic").sum()) == 24
+    # the table is closest-first (compute_contacts' sort contract)
+    distances = frame["distance (A)"].to_numpy(dtype=float)
+    assert distances[0] == distances.min()
+
+
+def test_contact_map_cutoff_widens_the_shell(studio_app, qtbot) -> None:
+    """The spin drives the shell honestly: 6 A admits strictly more
+    contacts than 5 A over the same pair."""
+    page = _fresh_page()
+    page._cutoff_spin.setValue(6.0)
+    page._start_contacts()
+    qtbot.waitSignal(page._runner.job_ended, timeout=120_000).wait()
+    _settle(qtbot, studio_app)
+    assert "within 6 A" in page.report_text()
+    frame = page.model_frame()
+    assert frame is not None and len(frame) > 91
+
+
+def test_plif_real_numbers(studio_app, qtbot) -> None:
+    """The PLIF twin: 25 residue rows x 4 class columns, the class totals
+    the counts frame prints -- 3/3/24/61 over 91 contacts."""
+    page = _fresh_page()
+    page._start_plif()
+    qtbot.waitSignal(page._runner.job_ended, timeout=120_000).wait()
+    _settle(qtbot, studio_app)
+
+    text = page.report_text()
+    assert "91 contact(s) classified over 25 residue(s)" in text
+    assert "salt_bridge 3 / hbond 3 / hydrophobic 24 / vdw 61" in text
+
+    frame = page.model_frame()
+    assert frame is not None
+    assert list(frame.columns) == ["salt_bridge", "hbond", "hydrophobic", "vdw"]
+    assert len(frame) == 25
+    assert int(frame["salt_bridge"].sum()) == 3
+    assert int(frame["hydrophobic"].sum()) == 24
+    # ASP101 keeps a salt bridge; TRP62/63/108 are the hydrophobic walls
+    assert int(frame.loc["A:ASP101", "salt_bridge"]) == 1
+    assert int(frame.loc["A:TRP108", "hydrophobic"]) == 8

@@ -979,6 +979,46 @@ def _drift_report() -> int:
     return 0
 
 
+
+# -- the contact-map/PLIF demo pose (r264) --------------------------------
+# Ten synthetic atoms placed clash-free (>= 2.4 A) at 2.9-4.2 A from
+# real 1AKI binding-cleft atoms by the r264 sphere-search placement
+# (seed 20261111, one-shot; embedded here as immutable content the way
+# the campaign README is -- the geometry IS the deliverable).  The
+# receptor side is examples/data/lysozyme_1aki.pdb; the REMARK lines
+# inside carry the provenance.
+CONTACTS_DEMO_LIGAND_PDBQT = (
+    b"REMARK  contacts_demo_ligand -- SYNTHETIC ligand-pose geometry for the\n"
+    b"REMARK  contact-map/PLIF demo: ten atoms placed at 2.9-4.2 A from real\n"
+    b"REMARK  1AKI atoms (ASP52/101 carboxylates, ASN59/103 donors, TRP62/63/108\n"
+    b"REMARK  walls, VAL109/ALA107 carbons), clash-free (no receptor atom closer\n"
+    b"REMARK  than 2.4 A). Not a bonded molecule -- a documented geometry demo,\n"
+    b"REMARK  the twin of the synthetic r.dlg campaign. Receptor side:\n"
+    b"REMARK  examples/data/lysozyme_1aki.pdb (real hen egg-white lysozyme, 1.5 A).\n"
+    b"ATOM      1   N1 LIG L   1      22.400  37.419  12.054  1.00  0.00    0.000 NA\n"
+    b"ATOM      2   N2 LIG L   1      16.981  27.436  -3.992  1.00  0.00    0.000 NA\n"
+    b"ATOM      3   O2 LIG L   1      15.833  26.612  13.856  1.00  0.00    0.000 OA\n"
+    b"ATOM      4   N3 LIG L   1      13.150  28.904   7.502  1.00  0.00    0.000 ND\n"
+    b"ATOM      5   C4 LIG L   1      12.879  35.184   2.240  1.00  0.00    0.000  C\n"
+    b"ATOM      6   C5 LIG L   1      19.582  31.320   1.114  1.00  0.00    0.000  C\n"
+    b"ATOM      7   C6 LIG L   1      26.593  23.046   2.990  1.00  0.00    0.000  C\n"
+    b"ATOM      8   N4 LIG L   1      18.082  32.433  -0.803  1.00  0.00    0.000 ND\n"
+    b"ATOM      9   C7 LIG L   1      18.579  31.761   4.768  1.00  0.00    0.000  C\n"
+    b"ATOM     10   C8 LIG L   1      14.850  24.554  -4.476  1.00  0.00    0.000  C\n"
+    b"TER\n"
+)
+
+PIN_CONTACTS_DEMO_BYTES = 1303
+
+
+@_owned
+def build_contacts_demo_ligand() -> None:
+    data = CONTACTS_DEMO_LIGAND_PDBQT
+    _check(len(data) == PIN_CONTACTS_DEMO_BYTES,
+           f"contacts_demo_ligand.pdbqt is {len(data)} B, pinned {PIN_CONTACTS_DEMO_BYTES} B")
+    _write_if_changed(DATA_DIR / "contacts_demo_ligand.pdbqt", data)
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else list(argv)
     unknown = [a for a in argv if a != "--check"]
@@ -988,6 +1028,7 @@ def main(argv: list[str] | None = None) -> None:
     _reset_stats()
     CHECK_ONLY["active"] = check_only
     ensure_pdbs()
+    build_contacts_demo_ligand()
     build_qsar_classification()
     build_screening_library()
     build_library_with_descriptors()

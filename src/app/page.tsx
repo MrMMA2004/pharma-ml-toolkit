@@ -57,12 +57,11 @@ function ThemeToggle() {
   );
 }
 
-/* r263 (part4 §8 Phase-3 + the carrier pin): +1 file (the
- * test_version_carriers.py contract suite), the responsive nine-card
- * grid + the aspirin SMILES preview in ui/nine_cards.py, +12 Phase-3
- * UI tests, the cellline script-logging leak fixed; census verified
- * live via /api/toolkit/tree (1087 = 1086 + 1 new). */
-const FALLBACK_STATS = { files: 1087, lines: "335,593" };
+/* r264 (the contact-map/PLIF twins): +3 files (docking/contacts.py,
+ * test_docking_contacts.py, the demo pose pdbqt), +66 collect tests and
+ * the doctest module docstring; census verified by the endpoint-rule
+ * walk (1090 = 1087 + 3 new) after the notebook re-execution. */
+const FALLBACK_STATS = { files: 1090, lines: "337,763" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
@@ -209,7 +208,7 @@ export default function Home() {
             {stats ? `${stats.files} files · ${stats.totalLines.toLocaleString("en-US")} LOC` : `${FALLBACK_STATS.files} files · ${FALLBACK_STATS.lines} LOC`}
             {" · "}
             <span className="ping-ring relative inline-flex size-2 rounded-full bg-primary" aria-hidden />
-            <span className="text-primary">5445 tests</span>
+            <span className="text-primary">5512 tests</span>
           </p>
         </div>
       </footer>

@@ -1,6 +1,6 @@
-"""Docking Workbench: campaigns, clusters, DOCKSTRING boxes, libraries (audit row 5).
+"""Docking Workbench: campaigns, clusters, DOCKSTRING boxes, libraries, contacts (audit row 5).
 
-The Studio's increment-5 page (the playground Docking tab). Four of the
+The Studio's increment-5 page (the playground Docking tab). Five of the
 tab's engines, each wired to the SAME public backend APIs the cards
 call -- nothing on this page is fabricated, and nothing here needs the
 external engine binaries (vina/autodock4/AutoGrid stay the cards' job):
@@ -30,8 +30,17 @@ external engine binaries (vina/autodock4/AutoGrid stay the cards' job):
   boxes), ``get_target`` config previews, and ``parse_search_box``
   validation of a custom six-key config -- the same registry the
   playground's DOCKSTRING card prints.
+- **Contacts & PLIF** -- the pose-level reading (r264): the real
+  1AKI lysozyme (``read_pdb_atoms``) meets the bundled synthetic pose
+  (``read_pdbqt_atoms``, ten clash-free atoms in the binding cleft,
+  REMARK-provenance), ``compute_contacts`` classifies the 5 A shell,
+  and the twin cards answer *where* and *how* -- the contact map
+  (class-coloured scatter over the residue × ligand-atom grid, the
+  inspector tooltip carries the exact pair + distance) and the PLIF
+  fingerprint (grouped per-class bars per residue, the table rides the
+  counts + the 0/1 bits twin).
 
-All four heavy paths run in a :class:`~ui.workers.job_worker.JobWorker`.
+All five heavy paths run in a :class:`~ui.workers.job_worker.JobWorker`.
 They are single-shot engine calls without checkpoint loops, so the
 progress channel reports honestly but the cooperative Stop only lands
 for checkpoint-wired jobs -- the same disclosure the PK/PD and Biology
@@ -48,6 +57,7 @@ import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
+    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QPlainTextEdit,
@@ -76,6 +86,17 @@ _CAMPAIGN_PATH = _TK / "examples" / "data" / "docking_campaign"
 #: The ligand library the preparation card loads (8 valid SMILES +
 #: 2 deliberately invalid rows).
 _LIBRARY_PATH = _TK / "examples" / "data" / "ligand_library.csv"
+
+#: The contacts & PLIF twin's receptor side: the real hen egg-white
+#: lysozyme (PDB entry 1AKI, 1.5 A, public domain; the same file the
+#: docking notebook prepares in its section 2).
+_RECEPTOR_PDB = _TK / "examples" / "data" / "lysozyme_1aki.pdb"
+
+#: The twin's pose side: ten synthetic atoms placed clash-free (>= 2.4 A)
+#: at 2.9-4.2 A from real binding-cleft atoms -- a documented geometry
+#: demo (the twin of the synthetic r.dlg campaign), REMARK-provenance
+#: inside the file itself.
+_POSE_PDBQT = _TK / "examples" / "data" / "contacts_demo_ligand.pdbqt"
 
 #: The rescore card's evidence columns, in its own order.
 _EVIDENCE_COLUMNS = ("best_lowest_energy", "best_num_in_cluster", "ligand_efficiency")
@@ -122,6 +143,41 @@ class RegistryOutcome:
 
 
 @dataclass
+class ContactsOutcome:
+    """What the contact-map job hands back (all real numbers).
+
+    ``series`` holds one entry per interaction class -- the class name
+    plus its (x, y) point arrays over the residue x ligand-atom grid
+    and the per-point tooltip rows -- so the GUI thread only draws.
+    """
+
+    table: pd.DataFrame = field(default_factory=pd.DataFrame)
+    series: tuple[tuple[str, object, object, list[str]], ...] = ()
+    residues: tuple[str, ...] = ()
+    ligand_atoms: tuple[str, ...] = ()
+    n_contacts: int = 0
+    n_residues: int = 0
+    closest_pair: str = ""
+    closest_distance: float = 0.0
+    closest_interaction: str = ""
+    cutoff: float = 5.0
+    seconds: float = 0.0
+
+
+@dataclass
+class PlifOutcome:
+    """What the PLIF job hands back (the counts and their 0/1 twin)."""
+
+    counts: pd.DataFrame = field(default_factory=pd.DataFrame)
+    bits: pd.DataFrame = field(default_factory=pd.DataFrame)
+    labels: tuple[str, ...] = ()
+    class_totals: tuple[int, ...] = ()
+    n_contacts: int = 0
+    cutoff: float = 5.0
+    seconds: float = 0.0
+
+
+@dataclass
 class LibraryOutcome:
     """What the library-audit job hands back."""
 
@@ -159,6 +215,7 @@ class DockingWorkbenchPage(QWidget):
         self._tabs.addTab(self._build_cluster_tab(), "Cluster analysis")
         self._tabs.addTab(self._build_library_tab(), "Ligand library")
         self._tabs.addTab(self._build_dockstring_tab(), "DOCKSTRING lab")
+        self._tabs.addTab(self._build_contacts_tab(), "Contacts & PLIF")
         lay.addWidget(self._tabs)
 
         self._progress = ProgressPanel()
@@ -273,6 +330,47 @@ class DockingWorkbenchPage(QWidget):
         form.addRow("", hint)
         return tab
 
+    def _build_contacts_tab(self) -> QWidget:
+        tab = QWidget()
+        form = QFormLayout(tab)
+        self._receptor_combo = QComboBox()
+        self._receptor_combo.addItem("lysozyme_1aki.pdb (real 1AKI, bundled)")
+        form.addRow("receptor:", self._receptor_combo)
+        self._pose_combo = QComboBox()
+        self._pose_combo.addItem("contacts_demo_ligand.pdbqt (synthetic pose, bundled)")
+        form.addRow("pose:", self._pose_combo)
+        self._cutoff_spin = QDoubleSpinBox()
+        self._cutoff_spin.setDecimals(1)
+        self._cutoff_spin.setRange(3.0, 8.0)
+        self._cutoff_spin.setSingleStep(0.5)
+        self._cutoff_spin.setValue(5.0)
+        self._cutoff_spin.setToolTip(
+            "the contact shell in angstroms -- the classification bands "
+            "(salt 4.0 / H-bond 3.5 / hydrophobic 4.5) stay fixed")
+        form.addRow("contact shell (A):", self._cutoff_spin)
+        self._contacts_btn = QPushButton("Compute contact map")
+        self._contacts_btn.setMinimumHeight(34)
+        self._contacts_btn.clicked.connect(self._start_contacts)
+        form.addRow("", self._contacts_btn)
+        self._plif_btn = QPushButton("Build PLIF fingerprint")
+        self._plif_btn.setMinimumHeight(34)
+        self._plif_btn.clicked.connect(self._start_plif)
+        form.addRow("", self._plif_btn)
+        hint = QLabel(
+            "The pose-level reading: read_pdb_atoms on the real lysozyme "
+            "+ read_pdbqt_atoms on the bundled synthetic pose (ten atoms "
+            "placed clash-free in the 1AKI cleft, REMARK-provenance in "
+            "the file), compute_contacts classifies every pair in the "
+            "shell (salt bridge / H-bond / hydrophobic / vdw distance "
+            "bands), the map is one class-coloured point per contact over "
+            "the residue x ligand-atom grid (hover = the exact pair), and "
+            "the PLIF twin aggregates it per residue -- the 0/1 bits are "
+            "the fingerprint a pose comparison would Tanimoto over."
+        )
+        hint.setWordWrap(True)
+        form.addRow("", hint)
+        return tab
+
     # -- job plumbing -----------------------------------------------------------
     def _on_started(self, name: str) -> None:
         for btn in (
@@ -280,6 +378,8 @@ class DockingWorkbenchPage(QWidget):
             self._cluster_btn,
             self._library_btn,
             self._registry_btn,
+            self._contacts_btn,
+            self._plif_btn,
         ):
             btn.setEnabled(False)
         self._report.setText(f"Running {name}…")
@@ -290,6 +390,8 @@ class DockingWorkbenchPage(QWidget):
             self._cluster_btn,
             self._library_btn,
             self._registry_btn,
+            self._contacts_btn,
+            self._plif_btn,
         ):
             btn.setEnabled(True)
 
@@ -601,6 +703,190 @@ class DockingWorkbenchPage(QWidget):
 
         target = get_target(name)
         self._report.setText(f"{name} config:\n{target.config_text().strip()}")
+
+    # -- contacts & PLIF (r264) --------------------------------------------------------
+    def _start_contacts(self) -> None:
+        if self._busy_check():
+            return
+        cutoff = float(self._cutoff_spin.value())
+
+        def job(progress) -> ContactsOutcome:
+            import numpy as np
+
+            from pharmaml.docking import (
+                INTERACTION_CLASSES,
+                compute_contacts,
+                plif_matrix,
+                read_pdb_atoms,
+                read_pdbqt_atoms,
+            )
+
+            started = _time.monotonic()
+            progress(0.25, "reading the real 1AKI receptor")
+            receptor = read_pdb_atoms(_RECEPTOR_PDB)
+            pose = read_pdbqt_atoms(_POSE_PDBQT)
+            progress(0.6, f"classifying the {cutoff:g} A shell")
+            contacts = compute_contacts(pose, receptor, cutoff=cutoff)
+            residues = [str(i) for i in plif_matrix(contacts).index]
+            ligand_atoms = [f"{a.residue_key} {a.name}" for a in pose]
+            rank = {key: i for i, key in enumerate(residues)}
+
+            table = pd.DataFrame(
+                {
+                    "residue": [c.receptor_atom.residue_key for c in contacts],
+                    "receptor atom": [c.receptor_atom.name for c in contacts],
+                    "ligand atom": [c.ligand_atom.name for c in contacts],
+                    "distance (A)": [c.distance for c in contacts],
+                    "interaction": [c.interaction for c in contacts],
+                }
+            )
+            series = []
+            for cls in INTERACTION_CLASSES:
+                xs, ys, tips = [], [], []
+                for c in contacts:
+                    if c.interaction != cls:
+                        continue
+                    xs.append(ligand_atoms.index(f"{c.ligand_atom.residue_key} {c.ligand_atom.name}"))
+                    ys.append(rank[c.receptor_atom.residue_key])
+                    tips.append(
+                        f"{c.receptor_atom.label} -- {c.ligand_atom.name} "
+                        f"{c.distance:.2f} A ({cls})"
+                    )
+                if xs:
+                    series.append((cls, np.array(xs, dtype=float),
+                                   np.array(ys, dtype=float), tips))
+            first = contacts[0]
+            progress(1.0, "done")
+            return ContactsOutcome(
+                table=table,
+                series=tuple(series),
+                residues=tuple(residues),
+                ligand_atoms=tuple(ligand_atoms),
+                n_contacts=len(contacts),
+                n_residues=len(residues),
+                closest_pair=f"{first.receptor_atom.label} -- {first.ligand_atom.name}",
+                closest_distance=float(first.distance),
+                closest_interaction=str(first.interaction),
+                cutoff=cutoff,
+                seconds=_time.monotonic() - started,
+            )
+
+        self._runner.submit(
+            "contact map",
+            job,
+            on_finished=self._contacts_done,
+            on_failed=self._failed,
+        )
+
+    def _contacts_done(self, outcome: object) -> None:
+        import numpy as np
+
+        assert isinstance(outcome, ContactsOutcome)
+        self._table.bind_frame(outcome.table)
+        self._plot.clear()
+        for i, (cls, xs, ys, tips) in enumerate(outcome.series):
+            self._plot.scatter(
+                xs, ys, label=cls, symbol="o",
+                size=8, index=i,
+                meta=lambda _i, _tips=list(tips): {"contact": _tips[_i]},
+            )
+        if not outcome.series:
+            self._plot.scatter(np.array([0.0]), np.array([0.0]), size=1)
+        self._plot.set_labels(
+            x="ligand atom (pose order)",
+            y="receptor residue (closest-contact rank)",
+            title=(
+                f"Contact map -- {outcome.n_contacts} contact(s) over "
+                f"{outcome.n_residues} residue(s), shell {outcome.cutoff:g} A"
+            ),
+        )
+        self._report.setText(
+            f"Contacts -- {outcome.n_contacts} pair(s) within "
+            f"{outcome.cutoff:g} A of {outcome.n_residues} residue(s) -- "
+            f"closest: {outcome.closest_pair} "
+            f"{outcome.closest_distance:.2f} A ({outcome.closest_interaction}) -- "
+            f"{outcome.seconds:.1f}s"
+        )
+
+    def _start_plif(self) -> None:
+        if self._busy_check():
+            return
+        cutoff = float(self._cutoff_spin.value())
+
+        def job(progress) -> PlifOutcome:
+            from pharmaml.docking import (
+                INTERACTION_CLASSES,
+                compute_contacts,
+                plif_bits,
+                plif_matrix,
+                read_pdb_atoms,
+                read_pdbqt_atoms,
+            )
+
+            started = _time.monotonic()
+            progress(0.3, "contacts first -- the PLIF aggregates them")
+            receptor = read_pdb_atoms(_RECEPTOR_PDB)
+            pose = read_pdbqt_atoms(_POSE_PDBQT)
+            contacts = compute_contacts(pose, receptor, cutoff=cutoff)
+            progress(0.7, "residue x class counts + the 0/1 twin")
+            counts = plif_matrix(contacts)
+            bits = plif_bits(contacts)
+            progress(1.0, "done")
+            return PlifOutcome(
+                counts=counts,
+                bits=bits,
+                labels=tuple(str(i) for i in counts.index),
+                class_totals=tuple(int(counts[c].sum()) for c in INTERACTION_CLASSES),
+                n_contacts=len(contacts),
+                cutoff=cutoff,
+                seconds=_time.monotonic() - started,
+            )
+
+        self._runner.submit(
+            "PLIF fingerprint",
+            job,
+            on_finished=self._plif_done,
+            on_failed=self._failed,
+        )
+
+    def _plif_done(self, outcome: object) -> None:
+        import numpy as np
+
+        assert isinstance(outcome, PlifOutcome)
+        counts = outcome.counts.drop(columns=["total"])
+        self._table.bind_frame(counts)
+        self._plot.clear()
+        n = len(counts)
+        x = np.arange(n, dtype=float)
+        width = 0.22
+        for i, cls in enumerate(counts.columns):
+            heights = counts[cls].to_numpy(dtype=float)
+            self._plot.bars(
+                heights,
+                x=x + (i - 1.5) * width,
+                width=width,
+                index=i,
+                labels=[str(v) for v in counts.index] if i == 0 else None,
+                meta=lambda idx, _cls=str(cls), _h=heights: {
+                    "class": _cls, "contacts": int(_h[idx]),
+                },
+            )
+        self._plot.set_labels(
+            x="receptor residue (closest-contact order)",
+            y="contacts of the class",
+            title=(
+                f"PLIF fingerprint -- {len(counts)} residue(s), "
+                f"{len(counts.columns)} classes, {outcome.n_contacts} contact(s)"
+            ),
+        )
+        totals = " / ".join(
+            f"{c} {t}" for c, t in zip(counts.columns, outcome.class_totals)
+        )
+        self._report.setText(
+            f"PLIF -- {outcome.n_contacts} contact(s) classified over "
+            f"{len(counts)} residue(s): {totals} -- the 0/1 bits twin rides "
+            f"the table's counts -- {outcome.seconds:.1f}s"
+        )
 
     def _validate_box(self) -> None:
         """Instant: parse_search_box validation of the pasted config."""

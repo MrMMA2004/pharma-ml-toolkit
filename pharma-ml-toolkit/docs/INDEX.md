@@ -702,16 +702,20 @@ after adding new public functions.
 
 ## `pharmaml.docking`
 
-*Molecular docking: preparation, workflow, parsing, scoring*
+*Molecular docking: preparation, workflow, parsing, scoring, contact geometry & PLIF fingerprints*
 
 | Symbol | Kind | Summary |
 |---|---|---|
+| `CARBOXYLATE_OXYGENS` | constant | Receptor-side oxygen names that mark a carboxylate (the salt-bridge rule). |
 | `DEFAULT_MGL_PYTHON` | constant |  |
 | `DEFAULT_PREPARE_LIGAND4` | constant |  |
 | `DOCKSTRING_OBJECTIVES` | constant |  |
 | `DOCKSTRING_TARGETS` | constant |  |
+| `INTERACTION_CLASSES` | constant | The interaction classes, in classification order (first match wins). |
 | `UNSUPPORTED_LIGAND_ATOMS` | constant |  |
 | `AutomorphismCache` | class | spyrmsd's pose-list economy: enumerate the automorphisms once. |
+| `ContactAtom` | class | One parsed ATOM/HETATM record, normalised for contact geometry. |
+| `ContactRecord` | class | One ligand-receptor atom pair within the cutoff, classified. |
 | `DockingTarget` | class | One DOCKSTRING receptor name and Vina search box (angstrom). |
 | `GridBox` | class | Docking search box geometry. |
 | `GridParameters` | class | Parsed AutoDock4 grid parameter file (GPF) content. |
@@ -727,9 +731,12 @@ after adding new public functions.
 | `centroid_distance` | function | Euclidean distance between the two geometries' centroids. |
 | `check_docking_completion` | function | Audit a docking tree for missing/failed runs (upgrades checker.py). |
 | `check_torsion_consistency` | function | Compare TORSDOF, active REMARKs and BRANCH counts of a PDBQT. |
+| `classify_interaction` | function | Classify one ligand-receptor atom pair by distance-geometry bands. |
 | `cleanup_tree` | function | Delete every file not on the allowlist, bottom-up. |
 | `collect_files` | function | Collect matching files from a campaign tree into one folder. |
 | `compute_grid_box` | function | Compute a grid box enclosing a reference ligand plus padding. |
+| `compute_contacts` | function | Every ligand-receptor atom pair within a cutoff, classified, closest-first. |
+| `contact_matrix` | function | Residue x ligand-atom minimum-distance grid of a docked pose. |
 | `consensus_breakdown` | function | Explain a consensus ranking: per-column units plus the score. |
 | `consensus_rescore` | function | Combine several docking evidence columns into a 0–1 consensus. |
 | `convert_pdb_folder_to_pdbqt` | function | Batch-convert a folder of PDB files to PDBQT via MGLTools. |
@@ -763,6 +770,8 @@ after adding new public functions.
 | `perturb_torsions` | function | Apply torsion updates to a geometry (``modify_conformer_torsion_angles``). |
 | `plain_rmsd` | function | The plain, no-superposition RMSD (``spyrmsd.rmsd``). |
 | `pose_clusters` | function | Greedy RMSD clustering of poses (the confidence approximation). |
+| `plif_bits` | function | The 0/1 fingerprint twin of :func:`plif_matrix` (1 when any contact of the class). |
+| `plif_matrix` | function | Per-residue interaction-class counts (the PLIF table). |
 | `pose_evaluation_report` | function | The full DiffDock evaluation on one reference vs N poses. |
 | `pose_rmsd_matrix` | function | The pairwise in-place (or Kabsch) RMSD matrix of a pose set. |
 | `prepare_ligand_library` | function | Prepare every ligand of a CSV library into a campaign tree. |
@@ -772,6 +781,8 @@ after adding new public functions.
 | `qed_penalty` | function | DOCKSTRING's ``10 * (1-QED)`` optimization penalty. |
 | `randomize_pose` | function | DiffDock's ``randomize_position``: the diffusion initial state. |
 | `read_gpf` | function | Parse an AutoDock4 grid parameter file (GPF) into a dict. |
+| `read_pdb_atoms` | function | ATOM/HETATM records of a plain PDB text or file (the receptor side). |
+| `read_pdbqt_atoms` | function | ATOM/HETATM records of a PDBQT MODEL block (the pose side). |
 | `reindex_by_number` | function | Reindex a frame onto the full ligand-number range. |
 | `rmsd_wrapper` | function | spyrmsd's ``rmsdwrapper``: one reference vs a list of molecules. |
 | `rotatable_masks` | function | The bonds and their rotation masks (``get_transformation_mask``). |
@@ -923,6 +934,8 @@ after adding new public functions.
 | `plot_pr_curves` | function | Precision-Recall curves — binary or one-vs-rest multiclass. |
 | `plot_predicted_vs_actual` | function | Parity scatter for regression, with the identity reference line. |
 | `plot_prediction_intervals` | function | Parity scatter with the quantile-regression prediction band. |
+| `plot_contact_map` | function | Residue x ligand-atom minimum-distance heat grid of a docked pose. |
+| `plot_plif_heatmap` | function | Per-residue interaction-class PLIF counts (or the 0/1 bits twin). |
 | `plot_receptor_atom_types` | function | Bar chart of the AutoDock atom-type census of a receptor. |
 | `plot_residuals` | function | Residuals vs predicted (left) and residual histogram (right). |
 | `plot_rl_introspection` | function | One figure per RL run: the score story + the prior-drift diagnostics. |
