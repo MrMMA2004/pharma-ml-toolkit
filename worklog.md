@@ -12154,3 +12154,70 @@ the shipped slices · §20/§21.4/§23 stay closed · MD follow-on candidates (n
 items): viz twins for the MD metrics (`plot_md_series`/`plot_md_correlation` over
 pharmaml.viz), a studio.py MD page behind the shipped `pharmaml.md`, H-bond timeline wiring
 into the trajectory lab, and PLUMED-style collective-variable helpers.
+
+## Round 250 — 2026-11-10 — the MD viz twins: `plot_md_series` / `plot_md_correlation` over `pharmaml.viz`, shipped as v1.2.162
+
+**Pickup**: hard rollback #28 — the local tree was back at the round-186 era (`2eb0ede`), counter
+file gone, remote/credential state wiped.  The recovery ritual held end to end: PAT re-derived
+from `upload/MASTER_PROMPT.pdf` lines 688–689 (93 chars, `github_pat_` prefix verified), the
+credential helper restored, `origin` re-added, ff-only pull to `24b9041` (the round-249 head,
+counter 40).  The untracked survivors (`upload/MD_analysis.py`, the registry PDFs, the old zips)
+were moved aside, reconciled byte-identical against the pulled tree after the merge, and the
+aside copies dropped.  No concurrent session was mid-flight (last remote commit 08:11 +08:00,
+this fire 11:33 +08:00).  Counter incremented 40→41 for this fire — the round-247/248/249
+increments were consumed by the arena flow's own rounds (remote counter rode each commit).
+
+**The round's work**: the round-249 worklog's first MD follow-on candidate, taken — the uploaded
+pipeline's two headline matplotlib panels as first-class Python figures, so scripts, notebooks
+and HTML reports tell the same story the web Molecular-Dynamics tab does, from the same
+computed-once numbers.  `viz/md_plots.py` (the ~60th viz module): `plot_md_series` draws one
+`XvgSeries` with a mean reference line and the uploaded centered moving average as an explicit
+`smooth_window` overlay (validated integer ≥ 2, never longer than the series — a one-point
+average is a no-op, not a smoothing); title/axis labels/colour resolve through the ten-metric
+`classify_metric` (label first — the study reader keys folders by the filename stem — then
+source), with the web-named metric colours mapped onto the house `PALETTE` and explicit
+overrides winning.  `plot_md_correlation` draws the cross-metric Pearson heatmap over a ligand's
+`{name: XvgSeries}` mapping — computed by the pipeline's own `metric_correlations` (min-length
+alignment, the uploaded rule), so the figure cannot drift from `pharmaml.md`'s numbers —
+annotated cell by cell, with a constant series' NaN row disclosed as `nan_cells` (2k−1 for k
+series) instead of being papered over.  Both save byte-reproducible png/svg/pdf through the lazy
+`_compat` layer and close their figures; importing the module never imports matplotlib.  The
+pair rides `pharmaml.viz`'s `__all__` + docstring bullet; the honest scope (GROMACS/MDAnalysis/
+mdtraj stay external) is stated once in the module docstring.
+
+**The two fights, both honest**: (1) the docs-index drift the regeneration exposed — the
+committed INDEX documented `pharmaml.md` but the committed generator's MODULES tuple did not
+(the round-249 arena flow shipped a hand-edited INDEX); the test's own prescribed fix applied
+(`pharmaml.md` into `scratch/build_docs_index.py` MODULES), regenerated INDEX is 13 modules /
+887 symbols and the parity suite is green — chunk 1 re-run green after the mid-gate fix.
+(2) the notebook leak the release scanner caught — sklearn ConvergenceWarning stream traces
+carry the live venv prefix, and the round-137 no-absolute-path ritual existed only as
+convention.  It is code now: `reexec_notebooks_209.py` scrubs every text payload (str AND
+list-of-lines — nbformat reads `text` as `str`, the first scrub pass's isinstance-list guard
+was the bug the survivors exposed) and FAILS the run if any absolute home path survives, so
+`real leaks: 0` is enforced at the source.  Also normalized: the fresh checkout's stray
+executable bits on `.py` files (the EXE002 flood) chmod'd back to 644 — the lint bar is
+filesystem-sensitive and the pull restored +x umask artifacts.
+
+**Validation**: focused suite 30/30 (29 tests + the module doctest); the NINE-chunk gate green
+(1 re-run after the docs-index fix, 2/3/4a/4b/4c/4d/4e/6 green in the daemonized pass); ruff
+`check src/ tests/ ui/` zero findings; mypy clean across **205 source files** (+1); the eight
+notebooks re-executed at 1.2.162 (8/8, zero error outputs, home-path-survivors=0 — the new
+scrubber enforced).  Honest totals **5,235 = 4,381 collect + 854 doctest** (+30 over the 5,207
+round-249 baseline: the 29 viz-twin tests + the md_plots doctest module; the fresh collect-only
+recount also shows the collect split as 4,381 where round-249 pinned 4,354 + the new 29 — ±2 of
+environment-conditional collection, the pins ride the fresh measurement).  Census **1078/329,904**.
+
+**Release**: the v1.2.162 zip built at **23,436,052 B, sha
+`33fb5b48f748922424eee3acc8516505dae04ac958f064b3aa5f4c2c77d4f228`** (1107 entries / 1059
+files, testzip OK per home, real leaks 0, predecessor v1.2.161 swept from all four homes) in
+four byte-identical homes.  Web pins trued 5,235 ×7 + census fallbacks 1078/329,904 +
+`SHIPPED_TOOLKIT_VERSION` 1.2.162; the overview suite-history carries the round-250 clause;
+manifest entry added.
+
+**Baselines for the next round** — v1.2.162 (four homes) · honest totals **5,235 = 4,381 + 854** ·
+census **1078/329,904** · the gate is NINE chunks · counter **41/100** · the lint bar green
+(ruff zero + mypy clean, 205 files) · MD follow-on candidates remaining (not yet backlog items):
+a studio.py MD page behind the shipped `pharmaml.md`, H-bond timeline wiring into the trajectory
+lab, PLUMED-style collective-variable helpers, and a contact-map/PLIF figure twin if a user asks
+· Part-3 remaining: §24 SA-in-generative wiring beyond the shipped slices.

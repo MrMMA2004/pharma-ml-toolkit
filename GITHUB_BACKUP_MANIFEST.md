@@ -1725,3 +1725,34 @@ inspection in `ui/widgets/image_panel.py` + the
 `scratch/probe_image_hover_240.py` feasibility probe + the 240 chunk
 runner and build driver).  Honest totals **4,967 = 4,169 collect +
 798 doctest** (+20).
+
+## v1.2.162 release-zip homes (2026-11-10, round 250 — the MD viz twins: `plot_md_series` / `plot_md_correlation`)
+
+`pharma-ml-toolkit-v1.2.162.zip` — 23,436,052 bytes, sha-256
+`33fb5b48f748922424eee3acc8516505dae04ac958f064b3aa5f4c2c77d4f228`
+(1107 entries / 1059 files, testzip OK per home, real leaks 0 — the
+growth over v1.2.161's 23,420,835 B is the new `viz/md_plots.py`
+module (the uploaded pipeline's two headline matplotlib panels as
+first-class pharmaml figures on the lazy `_compat` contract), the
+29-test `tests/test_viz_md_plots.py`, the `pharmaml.viz` export
+surface (2 new `__all__` entries + the docstring bullet), the docs
+INDEX regeneration (13 modules / 887 symbols — now generated WITH
+`pharmaml.md` after the round-250 generator fix), the CHANGELOG
+round-250 entry, and the eight notebooks re-executed at 1.2.162).
+Built with the standing four-home builder recipe
+(`scratch/build_zip_250.py`, predecessor v1.2.161 swept from all four
+homes).  Round-250 also closed the notebook leak class for good: the
+round-137 no-absolute-path ritual is now code —
+`reexec_notebooks_209.py` scrubs the live venv prefix out of every
+text payload and FAILS the run if any absolute home path survives
+(the sklearn ConvergenceWarning traces were the offenders), so the
+release scanner's `real leaks: 0` is enforced at the source.  Honest
+totals 5,235 = 4,381 collect + 854 doctest (+30 over the 5,207
+round-249 baseline: the 29 new viz-twin tests + the md_plots doctest
+module); the gate is NINE chunks, all green (chunk 1 re-run green
+after the docs-index generator fix that round 250 exposed: the
+committed INDEX documented `pharmaml.md` but the committed generator's
+MODULES tuple did not — regenerated INDEX is 17/14 lines against the
+commit and the parity suite is green).  Web pins trued 5,235 across
+overview/download-panel/page + census fallbacks 1078/329,904 +
+`SHIPPED_TOOLKIT_VERSION` 1.2.162.

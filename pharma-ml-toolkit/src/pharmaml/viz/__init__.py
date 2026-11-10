@@ -40,6 +40,16 @@ layer for **all** toolkit codes:
                   story: agent-vs-prior log-probabilities, the squared
                   drift the anchor penalises, and the exploration
                   entropy — four panels over ``history``);
+* molecular
+  dynamics      — :func:`plot_md_series` (a parsed GROMACS metric as a
+                  line chart with a mean reference line and the uploaded
+                  pipeline's centered moving average as an explicit
+                  overlay, styled by the ten-metric classifier) and
+                  :func:`plot_md_correlation` (the cross-metric Pearson
+                  heatmap over a ligand's ``{name: XvgSeries}`` mapping,
+                  computed by the pipeline's own min-length-aligned
+                  :func:`pharmaml.md.study.metric_correlations` — the
+                  Python twins of the web Molecular-Dynamics tab);
 * everywhere    — :class:`HTMLReport` (self-contained report with
                   embedded figures), :func:`export_table`
                   (csv/tsv/markdown/json/html), :func:`save_pdf_report`
@@ -108,6 +118,10 @@ from pharmaml.viz.generative_plots import (
     plot_operator_trajectory,
     plot_pareto_front,
     plot_rl_introspection,
+)
+from pharmaml.viz.md_plots import (
+    plot_md_correlation,
+    plot_md_series,
 )
 from pharmaml.viz.ml_plots import (
     plot_applicability_domain,
@@ -218,6 +232,8 @@ __all__ = [
     "plot_learning_curve",
     "plot_manifold_embedding",
     "plot_mcts_introspection",
+    "plot_md_correlation",
+    "plot_md_series",
     "plot_model_comparison",
     "plot_operator_trajectory",
     "plot_optimization_history",

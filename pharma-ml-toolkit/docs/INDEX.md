@@ -3,10 +3,9 @@
 Auto-derived from each module's `__all__` exports — the authoritative quick
 reference for the public API. Re-run `python scratch/build_docs_index.py`
 after adding new public functions.
-
 ## `pharmaml`
 
-*Package root: exceptions + version*
+*PharmaML — a production-ready toolkit for computational pharmacy.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -21,7 +20,7 @@ after adding new public functions.
 
 ## `pharmaml.data`
 
-*Bring your own data: load user CSV/TSV/Excel files*
+*Bring your own data: import user files (CSV/TSV/TXT/Excel) into PharmaML.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -36,7 +35,7 @@ after adding new public functions.
 
 ## `pharmaml.chem`
 
-*Cheminformatics: converters, descriptors, similarity*
+*Cheminformatics helpers: conversion, descriptors, the multi-family*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -241,7 +240,7 @@ after adding new public functions.
 
 ## `pharmaml.ml`
 
-*QSAR machine learning: preprocessing → training → evaluation → persistence*
+*QSAR machine learning: preprocessing, training, evaluation, persistence,*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -646,7 +645,7 @@ after adding new public functions.
 
 ## `pharmaml.pharma`
 
-*Pharmaceutical calculations: units, PK, PD, dosage*
+*Pharmaceutical calculations: units, PK, PD, dosage design, regulatory-approval filtering.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -701,7 +700,7 @@ after adding new public functions.
 
 ## `pharmaml.docking`
 
-*Molecular docking: preparation, workflow, parsing, scoring*
+*Molecular-docking workflows: preparation, execution, parsing, scoring*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -793,7 +792,7 @@ after adding new public functions.
 
 ## `pharmaml.md`
 
-*Molecular dynamics: trajectories, metrics, H-bonds, essential dynamics, ENMs, interactions, studies*
+*Molecular-dynamics analysis — trajectories, metrics, interactions.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -847,7 +846,7 @@ after adding new public functions.
 
 ## `pharmaml.viz`
 
-*Visual output for every domain: figures, tables, HTML reports*
+*Visual output for every PharmaML domain — plots, tables, HTML reports.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -896,6 +895,8 @@ after adding new public functions.
 | `plot_learning_curve` | function | Training-set size vs CV score — is more data still buying accuracy? |
 | `plot_manifold_embedding` | function | Scatter an embedding, coloured by a target (the digits-figure pattern). |
 | `plot_mcts_introspection` | function | One figure per MCTS run: score story, search growth, dedup economy. |
+| `plot_md_correlation` | function | Cross-metric Pearson heatmap — the uploaded script's closing panel. |
+| `plot_md_series` | function | Line chart of one parsed MD metric — the uploaded panel, typed. |
 | `plot_model_comparison` | function | Leaderboard as horizontal bars with per-fold std error bars. |
 | `plot_operator_trajectory` | function | One figure per run: score trajectory + the operator mix per generation. |
 | `plot_optimization_history` | function | The objective per trial + the best-so-far step line (100x-160). |
@@ -936,7 +937,7 @@ after adding new public functions.
 
 ## `pharmaml.utils.io`
 
-*Safe tabular I/O helpers*
+*Robust tabular and filesystem I/O.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -949,7 +950,7 @@ after adding new public functions.
 
 ## `pharmaml.utils.validation`
 
-*Shared input-validation layer*
+*Input validation guards.*
 
 | Symbol | Kind | Summary |
 |---|---|---|
@@ -983,9 +984,11 @@ after adding new public functions.
 ## Command-line interface
 
 ```text
-pharmaml models | data inspect | ml train | ml compare | chem pic50
-             | chem descriptors | pharma pk | pharma dose | docking scan
-             | docking check
+pharmaml models | data inspect | data split | data convert | ml train
+             | ml compare | chem pic50 | chem descriptors | pharma pk
+             | pharma dose | docking prep-ligands | docking prep-protein
+             | docking scan | docking check | generative run
+             | generative corpus
 ```
 
 See `pharmaml/cli.py` for every flag, and `README.md` for the full manual.

@@ -1,3 +1,39 @@
+## [1.2.162] — 2026-11-10
+
+### Added — round 250: the MD viz twins (`plot_md_series` / `plot_md_correlation`)
+
+* The round-249 follow-on candidate, taken: the uploaded pipeline's two
+  headline matplotlib panels come back as first-class Python figures on
+  the shared `pharmaml.viz` contract, so scripts, notebooks and the
+  HTML reports tell the same story the web Molecular-Dynamics tab does
+  — from the same computed-once numbers.
+* `viz/md_plots.py` — `plot_md_series` draws one parsed metric series
+  (`XvgSeries`) with a mean reference line and the uploaded centered
+  moving average available as an explicit `smooth_window` overlay
+  (validated: integer ≥ 2, never longer than the series); title/axis
+  labels/colour resolve through the ten-metric classifier
+  (`classify_metric`), with explicit overrides winning.
+  `plot_md_correlation` draws the cross-metric Pearson heatmap over a
+  ligand's `{name: XvgSeries}` mapping — computed by the pipeline's own
+  `metric_correlations` (min-length alignment, the uploaded rule), so
+  the figure cannot drift from `pharmaml.md`'s numbers — annotated cell
+  by cell, with a constant series' NaN row disclosed as `nan_cells`
+  instead of being papered over.  Both save byte-reproducible
+  png/svg/pdf via the lazy `_compat` layer and close their figures.
+* `pharmaml.viz` exports the pair (`__all__` + docstring bullet); the
+  numbers stay numpy-first — importing the module never imports
+  matplotlib, as everywhere in `pharmaml.viz`.
+* `tests/test_viz_md_plots.py` — 29 tests: hand-computed ramp stats
+  (exact population std 0.05·√(399/12)), classifier-driven styling
+  (known export, substring-inferred `replica_energy_2`, honest
+  generics), title/colour overrides, the overlay checked against
+  `moving_average` itself, byte-reproducible saves (identical sha of
+  two saves, png/svg/pdf), NaN-aware stats, the full validation
+  contract (window bounds, non-series inputs, under-supplied
+  mappings, common length < 2), designed ±1 correlations, the
+  min-length alignment disclosure, and the constant-series NaN
+  disclosure (2k−1 cells for k series).
+
 ## [1.2.161] — 2026-11-11
 
 ### Added — round 249: the `pharmaml.md` package — molecular-dynamics analysis (the uploaded pipeline + the ecosystem vocabulary)

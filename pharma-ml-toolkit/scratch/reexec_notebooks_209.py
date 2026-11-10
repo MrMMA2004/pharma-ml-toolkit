@@ -22,6 +22,7 @@ os.environ["PYTHONPATH"] = str(TOOLKIT / "src")
 
 import nbformat  # noqa: E402
 from nbclient import NotebookClient  # noqa: E402
+from typing import Any  # noqa: E402
 
 EXAMPLES = TOOLKIT / "examples"
 EXECUTED = (
@@ -39,6 +40,45 @@ VERSION = (TOOLKIT / "VERSION").read_text().strip()
 print(f"re-executing {len(EXECUTED)} notebooks at pharmaml {VERSION}", flush=True)
 
 started = time.time()
+
+# The round-137 ritual, as code (the round-250 find): executed notebooks
+# must ship ZERO builder-absolute paths — sklearn's ConvergenceWarning
+# traces carry the live venv prefix (``~/.venv/...``), which leaks
+# the build machine and is meaningless on a fresh install.  Scrub the
+# known prefix to a relative form, then verify nothing survived.
+_HOME = Path.home()  # noqa: S108 - the scrub TARGET, never a source
+_VENV_SITE = str(_HOME / ".venv" / "lib")  # noqa: S108
+
+
+def _scrub_text(text: str) -> str:
+    return text.replace(_VENV_SITE, "«venv»/lib").replace(str(_HOME), "«home»")
+
+
+def _scrub_payload(value: Any) -> Any:
+    """Scrub one output payload — nbformat reads ``text`` as ``str`` or list."""
+    if isinstance(value, str):
+        return _scrub_text(value)
+    if isinstance(value, list):
+        return _scrub_text("".join(value)).splitlines(keepends=True)
+    return value
+
+
+def _scrub_notebook(nb: nbformat.NotebookNode) -> int:
+    for cell in nb.cells:
+        if cell.cell_type != "code":
+            continue
+        for out in cell.get("outputs", []):
+            if "text" in out:
+                out["text"] = _scrub_payload(out["text"])
+            data = out.get("data")
+            if data:
+                for key in list(data.keys()):
+                    data[key] = _scrub_payload(data[key])
+    # verify: no absolute home path may survive anywhere in the JSON
+    dumped = nbformat.writes(nb)
+    return dumped.count(str(_HOME))
+
+
 for name in EXECUTED:
     path = EXAMPLES / f"{name}.ipynb"
     nb = nbformat.read(path, as_version=4)
@@ -50,6 +90,7 @@ for name in EXECUTED:
     )
     t0 = time.time()
     client.execute()
+    surviving = _scrub_notebook(nb)
     nbformat.write(nb, path)
     # sanity: any error output?
     errors = [
@@ -62,10 +103,13 @@ for name in EXECUTED:
     size = path.stat().st_size
     print(
         f"  {name}: {time.time() - t0:.0f}s, {size:,} B, "
-        f"error-outputs={len(errors) or 0}{errors[:2]}",
+        f"error-outputs={len(errors) or 0}{errors[:2]}, "
+        f"home-path-survivors={surviving}",
         flush=True,
     )
     if errors:
         sys.exit(f"FATAL: {name} produced error outputs")
+    if surviving:
+        sys.exit(f"FATAL: {name} still carries {surviving} absolute home path(s)")
 
 print(f"all {len(EXECUTED)} notebooks executed in {time.time() - started:.0f}s", flush=True)
