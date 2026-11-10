@@ -1,3 +1,35 @@
+## [1.2.163] — 2026-11-10
+
+### Added — round 252: the H-bond timeline (`gmx hbond -num` on a designed demo) — toolkit demo + bridge op + web card
+
+* `md/trajectory.py` — `synthetic_hbond_trajectory(n_frames, seed, noise)`:
+  the `gmx hbond -num` picture in six atoms.  Two independent
+  donor–H···acceptor triads (D1/H1/A1, D2/H2/A2, 8 Å apart so no
+  cross-pairs) whose donor···acceptor distances oscillate — seeded,
+  phase-shifted by a quarter period — across the 3.5 Å
+  `HBOND_DISTANCE_CUTOFF`, so `hbond_timeline` traces an honest
+  0 → 1 → 2 → 1 → 0 count pattern (the exact schedule is a pinned
+  test).  Each hydrogen rides 1.0 Å from its donor ALONG the
+  donor–acceptor axis, keeping the D–H···A angle ≈180°: the demo
+  isolates the criterion's distance gate on purpose, and the docstring
+  says so.
+* `scripts/md_bridge.py` — op `"hbond"`: the demo → `hbond_timeline`
+  (per-frame counts) + the per-bond donor–acceptor distance series +
+  the cutoffs used + stats (mean count, peak, bonded fraction) — the
+  `gmx hbond -num` contract the web card renders, computed by the real
+  toolkit so web and Python cannot drift.
+* Web — the Molecular Dynamics tab's fourth card, "H-bond timeline":
+  frames/seed/noise controls, a POST to the new zod-validated
+  `/api/md/hbond` route, the counts-and-distances chart reusing the
+  house `TimelineChart`, honest stats chips and the method footnote.
+  The card-directory census grows 30 → 31 (`md-hbond`, the probe's
+  source mapping included) and the parity pins ride.
+* `tests/test_md_analysis.py` — three tests: the designed 12-frame
+  schedule pinned exactly (`[0,0,0,0,1,1,1,2,2,1,1,1]` — frame 0
+  breaks both, frame 6 keeps only bond 2, frame 9 only bond 1),
+  determinism + the counts re-deriving from the public API + the
+  topology, and the validation contract.
+
 ## [1.2.162] — 2026-11-10
 
 ### Added — round 250: the MD viz twins (`plot_md_series` / `plot_md_correlation`)

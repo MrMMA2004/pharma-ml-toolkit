@@ -1017,15 +1017,15 @@ class TestCardFinderParity:
         )
         assert result.returncode == 0, result.stdout + result.stderr
         assert "CARD_DIRECTORY_OK" in result.stdout
-        # the census: 30 cards (24 + the two Surgery entries of
-        # 100x-130 + the SA score card of part3 §24 + the three
-        # Molecular Dynamics entries of round 249), 30 unique ids,
-        # zero problems
+        # the census: 31 cards (24 + the two Surgery entries of
+        # 100x-130 + the SA score card of part3 §24 + the four
+        # Molecular Dynamics entries of rounds 249/252), 31 unique
+        # ids, zero problems
         start = result.stdout.index("{")
         end = result.stdout.index("}", start) + 1
         report = json.loads(result.stdout[start:end])
-        assert report["entries"] == 30, report
-        assert report["ids"] == 30, report
+        assert report["entries"] == 31, report
+        assert report["ids"] == 31, report
         assert report["problems"] == [], report
 
     @needs_card_finder

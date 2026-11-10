@@ -38,6 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CHART, ParamSlider } from "@/components/explorer/playground/calc-ui";
 import { copyToClipboard, fmtNum } from "@/lib/format";
 import type {
+  MdHbondResponse,
   MdTrajectoryResponse,
   MdXvgResponse,
   MdXvgSeries,
@@ -48,7 +49,7 @@ import { toast } from "sonner";
 /* Molecular Dynamics (round 249) — the pharmaml.md web twins          */
 /* ------------------------------------------------------------------ */
 /**
- * The "Molecular Dynamics" playground sub-tab, three cards:
+ * The "Molecular Dynamics" playground sub-tab, four cards:
  *
  *  (A) GROMACS export parser — paste .xvg/.ndx exports, one POST runs
  *      the REAL pharmaml.md.study pipeline on the server (the
@@ -59,7 +60,11 @@ import { toast } from "sonner";
  *      analysed by the real toolkit (RMSD after Kabsch superposition,
  *      Rg, native-contact Q, RMSF, contact map, PCA, ANM) behind four
  *      inner tabs.
- *  (C) The MD ecosystem — the static reference-card grid of the open
+ *  (C) H-bond timeline — `gmx hbond -num` on a designed two-bond demo:
+ *      two phase-shifted donor–H···acceptor triads oscillate across the
+ *      3.5 Å distance cutoff; `synthetic_hbond_trajectory` +
+ *      `hbond_timeline` count per frame on the server.
+ *  (D) The MD ecosystem — the static reference-card grid of the open
  *      source stack behind pharmaml.md.
  *
  * Charts are hand-rolled inline SVG in the house style of the
@@ -1617,6 +1622,194 @@ function EcosystemCard() {
 }
 
 /* ------------------------------------------------------------------ */
+/* (C) H-bond timeline card — gmx hbond -num on the designed demo       */
+/* ------------------------------------------------------------------ */
+
+const HB_DEFAULT_FRAMES = "60";
+const HB_DEFAULT_SEED = "0";
+const HB_DEFAULT_NOISE = 0.03;
+
+function HbondCard() {
+  const [framesRaw, setFramesRaw] = useState(HB_DEFAULT_FRAMES);
+  const [seedRaw, setSeedRaw] = useState(HB_DEFAULT_SEED);
+  const [noise, setNoise] = useState(HB_DEFAULT_NOISE);
+  const [status, setStatus] = useState<Status>("idle");
+  const [result, setResult] = useState<MdHbondResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function resetParams() {
+    setFramesRaw(HB_DEFAULT_FRAMES);
+    setSeedRaw(HB_DEFAULT_SEED);
+    setNoise(HB_DEFAULT_NOISE);
+  }
+
+  async function run() {
+    const frames = Number.parseInt(framesRaw, 10);
+    if (!Number.isFinite(frames) || frames < 4 || frames > 200) {
+      setStatus("error");
+      setError("Frames must be an integer in [4, 200].");
+      return;
+    }
+    const seed = Number.parseInt(seedRaw, 10);
+    if (!Number.isFinite(seed) || seed < 0) {
+      setStatus("error");
+      setError("Seed must be a non-negative integer.");
+      return;
+    }
+    setStatus("running");
+    setError(null);
+    try {
+      const data = await postMdJson<MdHbondResponse>("/api/md/hbond", {
+        nFrames: frames,
+        seed,
+        noise,
+      });
+      setResult(data);
+      setStatus("done");
+    } catch (err) {
+      setStatus("error");
+      setError(err instanceof Error ? err.message : "H-bond analysis failed.");
+    }
+  }
+
+  const cutoff = result?.cutoffs.distance ?? 3.5;
+
+  return (
+    <Card data-slot="card">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+          <Activity className="size-5 shrink-0" aria-hidden="true" />
+          H-bond timeline
+        </CardTitle>
+        <CardDescription>
+          <code className="font-mono text-xs">gmx hbond -num</code> on a designed two-bond demo:
+          two donor–H···acceptor triads oscillate across the {cutoff} Å distance cutoff
+          (phase-shifted, so bond 2 leads bond 1). The server runs the real{" "}
+          <code className="font-mono text-xs">synthetic_hbond_trajectory</code> +{" "}
+          <code className="font-mono text-xs">hbond_timeline</code>.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="space-y-1">
+            <Label htmlFor="hb-frames" className="text-xs text-muted-foreground">
+              Frames (4–200)
+            </Label>
+            <Input
+              id="hb-frames"
+              inputMode="numeric"
+              value={framesRaw}
+              onChange={(e) => setFramesRaw(e.target.value)}
+              className="h-8 font-mono text-xs"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="hb-seed" className="text-xs text-muted-foreground">
+              Seed
+            </Label>
+            <Input
+              id="hb-seed"
+              inputMode="numeric"
+              value={seedRaw}
+              onChange={(e) => setSeedRaw(e.target.value)}
+              className="h-8 font-mono text-xs"
+            />
+          </div>
+          <div className="col-span-2 sm:col-span-1">
+            <ParamSlider
+              id="hb-noise"
+              label="Thermal noise σ"
+              unit="Å"
+              min={0}
+              max={0.15}
+              step={0.01}
+              value={noise}
+              onChange={setNoise}
+              format={(v: number) => v.toFixed(2)}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <Button onClick={run} disabled={status === "running"}>
+            {status === "running" ? (
+              <>
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                Counting…
+              </>
+            ) : (
+              <>
+                <Play className="size-4" aria-hidden="true" />
+                Run H-bond analysis
+              </>
+            )}
+          </Button>
+          <Button variant="outline" onClick={resetParams} aria-label="Reset H-bond parameters to defaults">
+            <RotateCcw className="size-3.5" aria-hidden="true" />
+            Reset
+          </Button>
+        </div>
+
+        {status === "error" && (
+          <Alert variant="destructive">
+            <TriangleAlert className="size-4" aria-hidden="true" />
+            <AlertTitle>H-bond analysis failed</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {result && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              {result.nFrames} frames · seed {result.seed} · noise {result.noise.toFixed(2)} Å ·
+              cutoffs {result.cutoffs.distance} Å / {result.cutoffs.angle}° ·{" "}
+              {result.elapsedSeconds.toFixed(2)} s on the server.
+            </p>
+            <TimelineChart
+              time={result.time}
+              series={[
+                {
+                  label: "H-bonds",
+                  color: CHART.teal,
+                  values: result.counts,
+                },
+                {
+                  label: "bond 1 D···A",
+                  color: CHART.amber,
+                  values: result.distances[0] ?? [],
+                },
+                {
+                  label: "bond 2 D···A",
+                  color: CHART.rose,
+                  values: result.distances[1] ?? [],
+                },
+              ]}
+              ariaLabel={`H-bond count and donor-acceptor distances over ${result.nFrames} frames: the count steps between 0 and 2 as the two designed bonds cross the 3.5 angstrom cutoff`}
+            />
+            <div className="flex flex-wrap gap-2">
+              <span className="flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 font-mono text-[11px] tabular-nums">
+                mean {fmtNum(result.stats.mean, 3)} H-bonds/frame
+              </span>
+              <span className="flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 font-mono text-[11px] tabular-nums">
+                peak {result.stats.max}
+              </span>
+              <span className="flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1 font-mono text-[11px] tabular-nums">
+                ≥1 bond in {Math.round(result.stats.bondedFraction * 100)}% of frames
+              </span>
+            </div>
+            <p className="text-xs leading-snug text-muted-foreground">
+              {result.method} Each hydrogen rides its donor–acceptor axis, so the D–H···A angle
+              stays ≈180° and the distance gate is isolated on purpose — this demo shows the
+              criterion&apos;s distance half, not both gates fighting.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Shell — the Molecular Dynamics sub-tab                              */
 /* ------------------------------------------------------------------ */
 
@@ -1625,6 +1818,7 @@ export function MdAnalysis() {
     <div className="space-y-4 sm:space-y-6">
       <XvgCard />
       <TrajectoryCard />
+      <HbondCard />
       <EcosystemCard />
     </div>
   );

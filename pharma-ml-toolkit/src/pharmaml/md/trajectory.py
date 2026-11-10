@@ -459,3 +459,72 @@ def synthetic_trajectory(
         topology=topology,
         time=np.arange(n_frames, dtype=float),
     )
+
+
+def synthetic_hbond_trajectory(
+    n_frames: int = 60,
+    seed: int = 0,
+    noise: float = 0.03,
+) -> Trajectory:
+    """Deterministic H-bond demo: two donor–H···acceptor pairs that form
+    and break on a designed schedule.
+
+    ``gmx hbond -num``'s picture in six atoms: two independent
+    heavy-donor/hydrogen/acceptor triads whose donor···acceptor
+    distances oscillate (seeded, phase-shifted) across the
+    :data:`~pharmaml.md.hbond.HBOND_DISTANCE_CUTOFF` — bond 2 leads
+    bond 1 by a quarter period, so the per-frame count traces an honest
+    0 → 1 → 2 → 1 → 0 pattern instead of a flat line.  The hydrogen of
+    each triad rides 1.0 Å from its donor *along the donor–acceptor
+    axis*, so the donor–H···acceptor angle stays ~180° and the distance
+    criterion alone gates the bond — the demo isolates one gate of the
+    geometric criterion on purpose (say so when you show it).
+
+    Atoms: ``D1, H1, A1, D2, H2, A2`` — pass ``donors=[(0, 1), (3, 4)]``
+    and ``acceptors=[2, 5]`` to :func:`~pharmaml.md.hbond.hbond_timeline`.
+
+    >>> t = synthetic_hbond_trajectory(n_frames=12, seed=0)
+    >>> (len(t), t.n_atoms)
+    (12, 6)
+    >>> import numpy as np
+    >>> from pharmaml.md.hbond import hbond_timeline
+    >>> counts = hbond_timeline(t, donors=[(0, 1), (3, 4)], acceptors=[2, 5])
+    >>> [int(c) for c in counts[[0, 6, 9]]]   # none / bond 2 only / bond 1 only
+    [0, 1, 1]
+    >>> int((counts > 0).sum()) >= 6         # both bonds work for a living
+    True
+    """
+    if n_frames < 1:
+        raise MDAnalysisError("n_frames must be >= 1")
+    if noise < 0:
+        raise MDAnalysisError("noise must be >= 0")
+
+    phases = (0.0, np.pi / 2.0)
+    offsets = (np.zeros(3), np.array([0.0, 8.0, 0.0]))  # far apart: no cross-pairs
+    frames = np.empty((n_frames, 6, 3))
+    for frame in range(n_frames):
+        for bond, (phase, offset) in enumerate(zip(phases, offsets)):
+            distance = 3.9 + 1.1 * np.sin(2.0 * np.pi * frame / n_frames + phase)
+            base = np.array(
+                [
+                    [0.0, 0.0, 0.0],          # D_k — the donor heavy atom
+                    [1.0, 0.0, 0.0],          # H_k — 1.0 Å along the axis
+                    [distance, 0.0, 0.0],     # A_k — at the designed distance
+                ]
+            )
+            frames[frame, 3 * bond : 3 * bond + 3] = base + offset
+
+    rng = np.random.default_rng(seed)
+    frames = frames + rng.normal(0.0, noise, size=frames.shape)
+
+    topology = Topology(
+        atom_names=["D1", "H1", "A1", "D2", "H2", "A2"],
+        residue_names=["HBD"] * 6,
+        residue_ids=[1, 1, 1, 2, 2, 2],
+        masses=np.array([12.011, 1.008, 15.999] * 2),
+    )
+    return Trajectory(
+        coords=frames,
+        topology=topology,
+        time=np.arange(n_frames, dtype=float),
+    )

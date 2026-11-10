@@ -1776,3 +1776,33 @@ live-stream fallback until both were trued and the notebooks re-executed at
 1.2.162; the freshness guard is green).  Web pins
 trued 5,277 across overview/download-panel/page + census fallbacks 1089/331,356 +
 `SHIPPED_TOOLKIT_VERSION` 1.2.162.
+
+## v1.2.163 release-zip homes (2026-11-10, round 252 — the H-bond timeline: `gmx hbond -num` on a designed demo)
+
+`pharma-ml-toolkit-v1.2.163.zip` — 23,673,301 bytes, sha-256
+`89ccdad414e3ca4d73524ac77ca6845cffa6348b2ad66ccae37acbc5e1aa15ef`
+(1118 entries / 1070 files, testzip OK per home, real leaks 0 — the
+growth over v1.2.162's 23,669,404 B is `synthetic_hbond_trajectory`
+in `md/trajectory.py` (the designed two-bond H-bond demo: two
+phase-shifted D–H···A triads oscillating across the 3.5 Å distance
+cutoff, hydrogens riding the donor–acceptor axis so the demo isolates
+the distance gate on purpose), the bridge's `"hbond"` op, the web
+H-bond timeline card over the new `/api/md/hbond` route, the
+card-directory census 31 with the probe's `md-hbond` source mapping,
+the CHANGELOG round-252 entry, three new MD tests, the docs INDEX
+regeneration (890 symbols) and the eight notebooks re-executed at
+1.2.163).  Built with the standing four-home builder recipe
+(`scratch/build_zip_252.py`, predecessor v1.2.162 swept from all four
+homes).  Round 252 picked the first round-250 MD follow-on candidate
+(the H-bond timeline wiring) as a web+toolkit twin while the arena
+conformal branch stood parked (its head unmoved for 30+ minutes, its
+19-file footprint confined to ml/ + docs/ — zero overlap with this
+round's md/ + scripts/ + web files).  Honest totals **5,281 = 4,426
+collect + 855 doctest** (+4 over the 5,277 round-250 baseline); the
+nine-chunk gate green (chunks 1+2 re-run after the ritual's INDEX
+regeneration and the notebook re-execution — the freshness guard
+caught the 1.2.162 prints exactly as designed); ruff zero (the
+bridge's pre-existing F821 `LigandResult` annotation and the
+round-250-sweep-stripped exec bit fixed en route); mypy clean across
+the 10 md files.  Census **1089/331,474**.  Web pins trued 5,281 ×7 +
+census fallbacks 1089/331,474 + `SHIPPED_TOOLKIT_VERSION` 1.2.163.

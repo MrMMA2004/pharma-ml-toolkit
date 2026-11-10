@@ -12285,3 +12285,59 @@ true the version carriers and the census pins, run the nine-chunk gate (their ne
 need chunk assignments — `test_conformal*.py` → chunk 1, `test_evaluation_auc_integrity.py` /
 `test_splits_integrity.py` → chunk 1's a-l glob / chunk 3's r-z glob respectively),
 re-exec the notebooks, and ship the next zip.
+
+## Round 252 — 2026-11-10 — the H-bond timeline: `synthetic_hbond_trajectory` + the bridge `"hbond"` op + the web's fourth MD card, shipped as v1.2.163
+
+**Pickup**: clean again (the round-251 recovery held): HEAD `1c24e79`, origin/main equal, PAT
+intact, venv green.  This fire landed 27 seconds after the previous one (a scheduler
+double-fire) — counted honestly as its own run, counter 42→43.
+
+**The dual-session call, refined**: the arena conformal branch (`arena/8696775e`, 1,309
+insertions over ml/ + docs/ + ci.yml + README) had been parked for 30+ minutes — its head
+unmoved, its PR unmerged.  A second consecutive stand-down would have burned four hours of
+cadence, so this round took the first round-250 MD follow-on candidate in a footprint with ZERO
+overlap against their 19 files: `md/`, the repo-root `scripts/`, the Next.js app.
+
+**The round's work — the H-bond timeline as one honest twin, end to end**: the trajectory lab
+could already count native contacts, but nothing on the web showed `gmx hbond -num` — the
+series behind the uploaded pipeline's `hbnum` panels — computed from an actual trajectory.
+`md/trajectory.py` gains `synthetic_hbond_trajectory`: six atoms, two independent D–H···A
+triads placed 8 Å apart (the first implementation put them on the same origin and
+`find_hbonds`' all-pairs sweep honestly doubled every count — the designed schedule caught it),
+each triad's donor···acceptor distance oscillating seeded and phase-shifted across the 3.5 Å
+cutoff so `hbond_timeline` traces 0 → 1 → 2 → 1 → 0; every hydrogen rides 1.0 Å along its
+donor–acceptor axis, keeping the angle ≈180° — the demo isolates the distance gate on purpose
+and says so.  The bridge gains op `"hbond"` (counts + per-bond distance series + cutoffs +
+stats — the `gmx hbond -num` contract); the web gains the Molecular Dynamics tab's fourth card
+("H-bond timeline": frames/seed/noise controls, the counts-and-distances chart on the house
+`TimelineChart`, honest chips, the method footnote) over a new zod-validated `/api/md/hbond`
+route.  The card-directory census grows 30 → 31 (`md-hbond` with the probe's source mapping —
+the probe itself flagged the missing mapping, the census fight's own tooling working as
+designed) and `tests/test_web_parity.py`'s pins ride.
+
+**Validation**: MD suite + doctests 63 green (the designed 12-frame schedule pinned exactly:
+`[0,0,0,0,1,1,1,2,2,1,1,1]` — frame 0 breaks both bonds, frame 6 keeps only bond 2, frame 9
+only bond 1); the card probe `CARD_DIRECTORY_OK` at 31/31; bridge smoke green for all three ops
+plus the error paths; ruff zero across src/tests/ui AND the bridge (the sweep-stripped exec bit
+restored, the pre-existing F821 `LigandResult` annotation fixed via TYPE_CHECKING); mypy clean
+across the 10 md files; the NINE-chunk gate green (chunks 1+2 re-run after the ritual's INDEX
+regeneration and the notebook re-execution — the freshness guard caught the 1.2.162 prints
+exactly as the round-250 lesson predicted it would); notebooks 8/8 at 1.2.163,
+home-path-survivors=0.  Honest totals **5,281 = 4,426 collect + 855 doctest** (+4).  Census
+**1089/331,474**.
+
+**Release**: the v1.2.163 zip built at **23,673,301 B, sha
+`89ccdad414e3ca4d73524ac77ca6845cffa6348b2ad66ccae37acbc5e1aa15ef`** (1118 entries / 1070
+files, testzip OK per home, real leaks 0, predecessor v1.2.162 swept from all four homes) in
+four byte-identical homes.  All THREE version carriers trued in one pass this time (VERSION,
+pyproject, `__version__` — the round-250 lesson applied as ritual, not as fix).  Web pins trued
+5,281 ×7 + census fallbacks 1089/331,474 + `SHIPPED_TOOLKIT_VERSION` 1.2.163; the overview
+suite-history carries the round-252 clause; manifest entry added.
+
+**Baselines for the next round** — v1.2.163 (four homes) · honest totals **5,281 = 4,426 + 855** ·
+census **1089/331,474** · the gate is NINE chunks · counter **43/100** · MD follow-on candidates
+remaining: PLUMED-style collective-variable helpers (`md/cv.py`), the contact-map/PLIF figure
+twins over `pharmaml.viz`, salt-bridge timelines beside the H-bond card (the API already
+exists) · Part-3 remaining: §24 SA-in-generative wiring beyond the shipped slices · the arena
+conformal branch still parked unmerged — its pickup ritual (validate, chunk-assign, true pins,
+gate, release) lands with round 253 if its PR merges.

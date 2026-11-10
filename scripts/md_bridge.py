@@ -7,6 +7,8 @@ Runs inside the toolkit virtualenv and wires ONLY the public
     op "trajectory" -> synthetic_trajectory -> rmsd_trajectory / rmsf /
         radius_of_gyration_trajectory / native_contact_fraction /
         contact_map / trajectory_pca / anm_fluctuations
+    op "hbond"      -> synthetic_hbond_trajectory -> hbond_timeline +
+        the per-bond donor-acceptor distance series (gmx hbond -num)
     op "xvg"        -> read_ligand_folder semantics over pasted text
         (tempdir) -> series + stats + metric_correlations + summary_csv
 
@@ -14,6 +16,7 @@ Request (stdin, JSON)::
 
     {"op": "trajectory", "nFrames": 80, "seed": 0, "noise": 0.25,
      "contactCutoff": 4.5}
+    {"op": "hbond", "nFrames": 60, "seed": 0, "noise": 0.03}
     {"op": "xvg", "files": [{"name": "ligand_rmsd.xvg", "content": "..."}],
      "smoothHbonds": true}
 
@@ -30,7 +33,10 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pharmaml.md import LigandResult
 
 EXIT_OK = 0
 EXIT_ERROR = 2
@@ -157,7 +163,7 @@ def run_trajectory(request: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_xvg(request: dict[str, Any]) -> dict[str, Any]:
-    from pharmaml.md import LigandResult, metric_correlations, read_ligand_folder
+    from pharmaml.md import metric_correlations, read_ligand_folder
     from pharmaml.md.xvg import classify_metric
 
     files = request.get("files")
@@ -242,6 +248,81 @@ def _summary_csv(ligand: LigandResult) -> str:
     return "\n".join(lines) + "\n"
 
 
+def run_hbond(request: dict[str, Any]) -> dict[str, Any]:
+    """`gmx hbond -num` on the designed demo: two phase-shifted
+    donor-H...acceptor pairs oscillating across the 3.5 A cutoff."""
+    import numpy as np
+    from pharmaml.md.hbond import (
+        HBOND_ANGLE_CUTOFF,
+        HBOND_DISTANCE_CUTOFF,
+        hbond_timeline,
+    )
+    from pharmaml.md.trajectory import synthetic_hbond_trajectory
+
+    n_frames = request.get("nFrames", 60)
+    seed = request.get("seed", 0)
+    noise = request.get("noise", 0.03)
+    if not isinstance(n_frames, int) or isinstance(n_frames, bool):
+        return {"error": "nFrames must be an integer"}
+    if not 4 <= n_frames <= MAX_FRAMES:
+        return {"error": f"nFrames must be in [4, {MAX_FRAMES}]"}
+    if not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
+        return {"error": "seed must be a non-negative integer"}
+    if not isinstance(noise, (int, float)) or isinstance(noise, bool):
+        return {"error": "noise must be a number"}
+    if not 0.0 <= float(noise) <= 1.0:
+        return {"error": "noise must be in [0, 1]"}
+
+    started = time.perf_counter()
+    traj = synthetic_hbond_trajectory(
+        n_frames=n_frames, seed=seed, noise=float(noise)
+    )
+    donors = [(0, 1), (3, 4)]
+    acceptors = [2, 5]
+    counts = hbond_timeline(traj, donors=donors, acceptors=acceptors)
+    distances = [
+        [
+            float(np.linalg.norm(traj.coords[f, a] - traj.coords[f, d]))
+            for f in range(n_frames)
+        ]
+        for d, a in ((0, 2), (3, 5))
+    ]
+
+    payload: dict[str, Any] = {
+        "nFrames": n_frames,
+        "seed": seed,
+        "noise": float(noise),
+        "time": _finite_list(traj.time),
+        "counts": _finite_list(counts),
+        "distances": [
+            [round(v, 4) for v in series] for series in distances
+        ],
+        "cutoffs": {
+            "distance": HBOND_DISTANCE_CUTOFF,
+            "angle": HBOND_ANGLE_CUTOFF,
+        },
+        "stats": {
+            "mean": float(counts.mean()),
+            "max": int(counts.max()),
+            "bondedFraction": float((counts > 0).mean()),
+            "bond0Fraction": float((counts >= 1).mean()),
+            "bond1LeadsBond0": bool(
+                sum(1 for c in counts if c == 2) > 0
+            ),
+        },
+        "elapsedSeconds": round(time.perf_counter() - started, 3),
+        "method": (
+            "pharmaml.md — the designed two-bond demo (seeded, "
+            "phase-shifted across the 3.5 A cutoff; each hydrogen "
+            "rides its donor-acceptor axis so the angle criterion "
+            "stays ~180 degrees and the distance gate is isolated); "
+            "every number computed by the real toolkit: "
+            "synthetic_hbond_trajectory + hbond_timeline"
+        ),
+    }
+    return payload
+
+
 def main() -> int:
     try:
         request = json.load(sys.stdin)
@@ -254,10 +335,12 @@ def main() -> int:
     op = request.get("op")
     if op == "trajectory":
         payload = run_trajectory(request)
+    elif op == "hbond":
+        payload = run_hbond(request)
     elif op == "xvg":
         payload = run_xvg(request)
     else:
-        return _error("op must be 'trajectory' or 'xvg'")
+        return _error("op must be 'trajectory', 'hbond' or 'xvg'")
 
     if "error" in payload:
         _error_failed = payload["error"]

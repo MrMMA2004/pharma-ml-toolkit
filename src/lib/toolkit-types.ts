@@ -1216,6 +1216,30 @@ export interface MdXvgResponse {
   method: string;
 }
 
+export interface MdHbondResponse {
+  nFrames: number;
+  seed: number;
+  noise: number;
+  time: number[];
+  /** Per-frame H-bond count from hbond_timeline (0, 1 or 2). */
+  counts: number[];
+  /** Per-bond donor-acceptor distance series (2 bonds). */
+  distances: number[][];
+  cutoffs: {
+    distance: number;
+    angle: number;
+  };
+  stats: {
+    mean: number;
+    max: number;
+    bondedFraction: number;
+    bond0Fraction: number;
+    bond1LeadsBond0: boolean;
+  };
+  elapsedSeconds: number;
+  method: string;
+}
+
 /** Response of POST /api/md/trajectory — the deterministic synthetic
  * alpha-helix (10 residues × N/CA/C, residues 5–7 a flexible loop)
  * analysed by the real toolkit: RMSD after Kabsch superposition, Rg,

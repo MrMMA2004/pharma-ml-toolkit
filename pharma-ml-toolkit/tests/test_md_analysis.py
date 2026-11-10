@@ -57,6 +57,7 @@ from pharmaml.md import (
     rmsf,
     salt_bridges,
     superpose,
+    synthetic_hbond_trajectory,
     synthetic_trajectory,
     tica,
     to_kcal,
@@ -232,6 +233,34 @@ class TestTopologyAndTrajectory:
         assert float(np.mean(loop_fl)) > float(np.mean(helix_fl))
         with pytest.raises(MDAnalysisError, match="n_frames"):
             synthetic_trajectory(n_frames=0)
+
+    def test_synthetic_hbond_timeline_matches_design(self) -> None:
+        # The designed schedule: two phase-shifted distance oscillations
+        # across the 3.5 A cutoff — frame 0 breaks both, frame 6 keeps
+        # only bond 2, frame 9 only bond 1, frames 7-8 keep both.
+        demo = synthetic_hbond_trajectory(n_frames=12, seed=0)
+        counts = hbond_timeline(demo, donors=[(0, 1), (3, 4)], acceptors=[2, 5])
+        assert [int(c) for c in counts] == [0, 0, 0, 0, 1, 1, 1, 2, 2, 1, 1, 1]
+
+    def test_synthetic_hbond_deterministic_and_self_consistent(self) -> None:
+        first = synthetic_hbond_trajectory(n_frames=30, seed=5)
+        second = synthetic_hbond_trajectory(n_frames=30, seed=5)
+        assert np.array_equal(first.coords, second.coords)
+        # The counts re-derive from the coordinates with the public API.
+        counts = hbond_timeline(first, donors=[(0, 1), (3, 4)], acceptors=[2, 5])
+        again = hbond_timeline(first, donors=[(0, 1), (3, 4)], acceptors=[2, 5])
+        assert np.array_equal(counts, again)
+        # Both bonds work for a living and neither is ever stuck.
+        assert 5 <= int((counts > 0).sum()) <= 25
+        assert int(counts.max()) == 2
+        # Topology: the six demo atoms, donors before acceptors.
+        assert first.topology.atom_names == ["D1", "H1", "A1", "D2", "H2", "A2"]
+
+    def test_synthetic_hbond_validation(self) -> None:
+        with pytest.raises(MDAnalysisError, match="n_frames"):
+            synthetic_hbond_trajectory(n_frames=0)
+        with pytest.raises(MDAnalysisError, match="noise"):
+            synthetic_hbond_trajectory(noise=-0.1)
 
 
 # -------------------------------------------------------------- align ---

@@ -74,6 +74,7 @@ from pharmaml.md.trajectory import (
     Topology,
     Trajectory,
     resolve_atom_indices,
+    synthetic_hbond_trajectory,
     synthetic_trajectory,
 )
 from pharmaml.md.xvg import (
@@ -134,6 +135,7 @@ __all__ = [
     "rmsf",
     "salt_bridges",
     "superpose",
+    "synthetic_hbond_trajectory",
     "synthetic_trajectory",
     "tica",
     "to_kcal",

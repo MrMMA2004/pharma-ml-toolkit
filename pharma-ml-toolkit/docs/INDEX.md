@@ -840,6 +840,7 @@ after adding new public functions.
 | `rmsf` | function | Per-atom root-mean-square fluctuation (Å) about the aligned mean. |
 | `salt_bridges` | function | Charged-opposite pairs within ``cutoff`` Å — the salt-bridge list. |
 | `superpose` | function | Return the mobile coordinates optimally fitted onto the reference. |
+| `synthetic_hbond_trajectory` | function | Deterministic H-bond demo: two donor–H···acceptor pairs that form |
 | `synthetic_trajectory` | function | Deterministic demo trajectory: an alpha-helix with a flexible loop. |
 | `tica` | function | Time-lagged independent component analysis of a ``(T, D)`` matrix. |
 | `to_kcal` | function | Convert kJ/mol → kcal/mol (the uploaded binding-energy conversion). |

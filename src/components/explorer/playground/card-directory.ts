@@ -296,6 +296,14 @@ export const PLAYGROUND_CARDS: readonly PlaygroundCardEntry[] = [
     keywords: "trajectory rmsd rmsf rg contact map pca anm essential dynamics",
   },
   {
+    id: "md-hbond",
+    tab: "md",
+    title: "H-bond timeline",
+    blurb: "gmx hbond -num: two designed bonds across the 3.5 Å cutoff",
+    match: "H-bond timeline",
+    keywords: "hbond hbond timeline hydrogen bond gmx hbnum distance cutoff",
+  },
+  {
     id: "md-eco",
     tab: "md",
     title: "The MD ecosystem",
