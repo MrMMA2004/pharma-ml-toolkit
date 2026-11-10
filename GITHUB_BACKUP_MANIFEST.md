@@ -1515,6 +1515,47 @@ clause in the Testing after-string (single quotes inside, the
 round-245 Turbopack lesson applied proactively — the clause's quote
 guard ran before the write).
 
+## v1.2.161 release-zip homes (2026-11-11, round 249 — the `pharmaml.md` package: molecular-dynamics analysis)
+
+`pharma-ml-toolkit-v1.2.161.zip` — 23,420,835 bytes, sha-256
+`45c36a6f5899f54d9bb666a4a5c08f9cdf4ee627129a06a1f9ab7c346ca0a697`
+(1103 entries / 1055 files, testzip OK per home, real leaks 0 — the
+growth over v1.2.160's 22,750,159 B is the new `pharmaml.md` package
+(10 modules, ~2,820 lines: xvg, trajectory, align, metrics, hbond,
+dimred, enm, plif, study, `__init__`), the 55-test
+`tests/test_md_analysis.py`, the docs INDEX `pharmaml.md` section
+(+112 lines), the CHANGELOG round-249 entry, and the eight notebooks
+re-executed at 1.2.161).  Built with the standing four-home builder
+recipe (`scratch/build_zip_249.py`, predecessor v1.2.160 swept from
+all four homes).  The round-249 feature productionizes the user's own
+GROMACS post-processing script (`upload/MD_analysis.py`) against the
+reference stack the user linked (MDAnalysis/mdtraj, GROMACS,
+cpptraj/pytraj, PLUMED, ProLIF, getcontacts, gmx_MMPBSA, ProDy,
+deeptime, nglview, pymol-open-source, vmd-python, MDAnalysisData);
+the web twin is the 10th playground sub-tab ("Molecular Dynamics":
+the GROMACS export parser, the trajectory analysis lab, the ecosystem
+card) over `/api/md/xvg` + `/api/md/trajectory` bridge routes.  The
+gate: NINE chunks — chunk-4's three honest fights, all fixed and
+re-verified green in isolation: (1) the card-directory parity census
+27→30 cards (three MD entries) + the probe's `md` tab mapping;
+(2)+(3) `test_format_converters`' DOUBLE logging leak into
+`test_numpy_neural_checkpoints` — the module-level
+`logging.disable(CRITICAL)` (scoped by the round-249 fixture) AND the
+CLI tests' `configure_logging()` flipping `pharmaml`.propagate to
+False with a console handler bound to that test's captured stderr
+(now the at-import propagate/handlers/level are restored after every
+test; the two resume-contract caplog assertions had been silently
+empty, with "--- Logging error ---" noise on a closed stream).
+Placed byte-identical in `download/`,
+`pharma-ml-toolkit/dist-archive/`, `pharma-ml-toolkit/download/`, and
+`upload/`.  Census **1075 files / 329,046 lines** per the canonical
+walk.  Honest totals **5,207 = 4,354 collect + 853 doctest** (+57
+collect: the 55 MD tests plus two docs-index parametrization legs;
++44 doctest across the package).  Web pins trued 5207 ×7 (the flow's
+first 5,205 projection missed the two parametrization legs — the
+collect-only recount caught it) + census fallbacks 1075/329,046 +
+`SHIPPED_TOOLKIT_VERSION` 1.2.161.
+
 ## v1.2.160 release-zip homes (2026-11-10, round 248 — the §20.4/§20.5 NumPy-trainer checkpoint depth)
 
 `pharma-ml-toolkit-v1.2.160.zip` — 22,750,159 bytes, sha-256

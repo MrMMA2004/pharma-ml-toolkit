@@ -26,7 +26,18 @@ from pharmaml.exceptions import DataValidationError, ModelError
 from pharmaml.ml.models import MODEL_ALIASES, resolve_model_name
 from pharmaml.ml.preprocessing import build_preprocessor, has_categorical_columns
 
-logging.disable(logging.CRITICAL)
+
+# (round-249) the module-level ``logging.disable(logging.CRITICAL)``
+# this fixture replaces leaked for the WHOLE pytest process and silently
+# broke ``caplog`` assertions in sibling modules sharing a pytest process
+# (the nine-chunk gate caught it).  Same silence, correct scope: applied
+# around each test of THIS module only, previous level restored after.
+@pytest.fixture(autouse=True)
+def _quiet_module_logging():
+    prev = logging.root.manager.disable
+    logging.disable(logging.CRITICAL)
+    yield
+    logging.disable(prev)
 
 
 # ---------------------------------------------------------------------------

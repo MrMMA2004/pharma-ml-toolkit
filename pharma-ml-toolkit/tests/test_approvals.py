@@ -17,7 +17,19 @@ import pytest
 from pharmaml.exceptions import DataValidationError
 from pharmaml.pharma.approvals import filter_approved_drugs
 
-logging.disable(logging.CRITICAL)
+
+# (round-249) the module-level ``logging.disable(logging.CRITICAL)``
+# this fixture replaces leaked for the WHOLE pytest process and silently
+# broke ``caplog`` assertions in sibling modules sharing a pytest process
+# (the nine-chunk gate caught it: test_format_converters before
+# test_numpy_neural_checkpoints).  Same silence, correct scope: applied
+# around each test of THIS module only, previous level restored after.
+@pytest.fixture(autouse=True)
+def _quiet_module_logging():
+    prev = logging.root.manager.disable
+    logging.disable(logging.CRITICAL)
+    yield
+    logging.disable(prev)
 
 
 def _dgidb_frame() -> pd.DataFrame:

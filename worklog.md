@@ -12071,3 +12071,86 @@ slices (the last named item) · §20 checkpoint depth is now CLOSED · §21.4 an
 MOO follow-on candidates (not yet backlog items): the Pareto-front viz twin to
 `plot_pareto_front`, and the report's shortlist `prune(k)` mirroring the generative front's
 crowding pruner.
+
+## Round 249 — 2026-11-11 — the `pharmaml.md` package: molecular-dynamics analysis (the user's uploaded pipeline + the linked ecosystem)
+
+**Pickup**: clean pickup at 04955d7 (the round-248 web verification tail).  The counter stood at
+39/100 with Part-3 down to §24 leftovers — then the user's direct instruction arrived with new
+material: "Use the uploaded code and GitHub links to make Molecular Dynamic Analysis tab",
+fifteen repository links (MDAnalysis, mdtraj, GROMACS, cpptraj, pytraj, PLUMED ×2, ProLIF,
+getcontacts, gmx_MMPBSA, ProDy, deeptime, nglview, pymol-open-source, vmd-python,
+MDAnalysisData) and `upload/MD_analysis.py` — the user's own 421-line GROMACS
+post-processing script (.xvg/.ndx parsing, kJ→kcal, ps→ns, per-ligand stats, correlation
+heatmaps, global plots, CSV).  User direction wins over the backlog: round 249 became the
+molecular-dynamics round.
+
+**The round's work — `pharmaml.md`, ten modules, ~2,820 lines, pure NumPy**:
+`md/xvg.py` keeps the uploaded parsers bit-for-bit where they carry intelligence
+(`parse_ndx_hbnum`'s column-finding heuristic: the time column is the first finite,
+monotone, non-constant column; the H-bond column the first other finite near-integer
+column) with the folded-in 3-point smoothing upgraded to an explicit
+`XvgSeries.smoothed()`/`moving_average()`; `classify_metric` maps the ten standard
+GROMACS/MM-PBSA exports ("energy" tested before "rg" — the word contains those letters).
+`md/trajectory.py` is the MDAnalysis/mdtraj core: Topology/Trajectory with a real selection
+mini-language (name with `*`/`?` wildcards, resname, resid single or `a:b` ranges, not,
+and/or, parentheses — case-sensitive as MDAnalysis) plus `synthetic_trajectory`, the
+deterministic alpha-helix-with-flexible-loop demo (seeded noise, slow drift) behind the
+tests and the web lab.  `md/align.py` is the Kabsch theorem with the reflection guard;
+`md/metrics.py` the `gmx rms/rmsf/gyrate` timeline suite, contact maps (frequency over the
+run, self-contacts excluded), native-contact Q, g(r) with the documented finite-system
+reference-volume convention, and the praxeolitic dihedral; `md/hbond.py` the `gmx hbond`
+criterion (heavy-atom distance ≤ 3.5 Å AND D-H···A angle ≥ 130°) plus getcontacts' salt
+bridges; `md/dimred.py` trajectory PCA and tICA (the time-lagged eigenproblem through the
+symmetric `C₀^{-1/2}·C_τ,sym·C₀^{-1/2}` form — `numpy.linalg.eigh` only);
+`md/enm.py` ProDy's ANM/GNM (Kirchhoff, fluctuations through the pseudo-inverse,
+cross-correlation, the 3N×3N Hessian, six-zero-mode skipping with an honest refusal for
+collinear systems — they have more than six); `md/plif.py` ProLIF's geometric core over
+typed coordinates (both H-bond directions, ionic pairs, π-stacks orientation-checked only
+when both ring-normal arrays are supplied); `md/study.py` the uploaded pipeline as data
+(`read_ligand_folder` with the script's conversions, `build_study` with `Global_plots`
+skipped and broken ligands never fatal, `metric_correlations` min-length aligned, and the
+script's `Folder,File,Mean,Stdev,Coefficient_of_Variation` CSV contract verbatim).
+
+**Web twin**: the 10th playground sub-tab — a 1,631-line `md-analysis.tsx` with the
+GROMACS export parser card (editable .xvg/.ndx file list, "Load demo study", per-metric
+stats + line charts + the correlation heatmap + CSV copy/download), the trajectory
+analysis lab (frames/seed/noise/cutoff controls; Timelines / RMSF / 30×30 contact map /
+essential-dynamics inner tabs — PCA scatter coloured by frame, ANM bars), and the
+ecosystem card linking all fifteen repositories — over `/api/md/xvg` +
+`/api/md/trajectory` zod-validated routes and a new `scripts/md_bridge.py` (the
+stdin→stdout JSON contract; the trajectory op runs the REAL toolkit functions, so web and
+Python cannot drift).  Built by the frontend sub-agent (Task r249-web) and
+browser-verified end-to-end by it: all four inner tabs, the demo study, dark mode, mobile
+390 px zero horizontal scroll.
+
+**Gate fights, three honest ones, all in chunk-4 and all closed**: (1) the
+card-directory parity probe census — 27→30 cards, the probe's `md` tab + source mappings
+pinned; (2)+(3) `test_format_converters`' DOUBLE logging leak into
+`test_numpy_neural_checkpoints` (the gate's new chunk pairing exposed it): the module-level
+`logging.disable(CRITICAL)` was already scoped by the round-249 fixture, but the CLI tests'
+`configure_logging()` also flipped `pharmaml`.propagate to False and left a console handler
+bound to a closed captured stderr — the two resume-contract caplog assertions had been
+silently empty with "--- Logging error ---" noise; the at-import
+propagate/handlers/level are restored after every test now.  Chunk-4 re-verified green in
+isolation (509 passed).  Final: NINE chunks green, ruff zero, mypy clean across **204
+files**.
+
+**Release**: the eight notebooks re-executed at 1.2.161 (8/8, zero error outputs, zero
+`/home/z/` matches — the round-137 ritual verified), census **1075/329,046**, honest
+totals **5,207 = 4,354 collect + 853 doctest** (+57 collect — the 55 MD tests plus two
+docs-index parametrization legs the arena flow's 5,205 projection missed; the
+collect-only recount caught and trued it; +44 doctest).  The v1.2.161 zip built at
+**23,420,835 B, sha `45c36a6f5899f54d9bb666a4a5c08f9cdf4ee627129a06a1f9ab7c346ca0a697`**
+(1103 entries / 1055 files, testzip OK per home, real leaks 0, predecessor v1.2.160 swept)
+in four byte-identical homes.  Web pins trued 5207 ×7 + census fallbacks 1075/329,046 +
+`SHIPPED_TOOLKIT_VERSION` 1.2.161; manifest entry added.  The feature code itself was
+committed and pushed FIRST as 2212568 (the arena flow's commit carried the whole round's
+implementation — the round-248 lost-snapshot lesson held).
+
+**Baselines for the next round** — v1.2.161 (four homes) · honest totals **5,207 = 4,354 + 853** ·
+census **1075/329,046** · the gate is NINE chunks · counter **40/100** · the lint bar green
+(ruff zero + mypy clean, 204 files) · Part-3 remaining: §24 SA-in-generative wiring beyond
+the shipped slices · §20/§21.4/§23 stay closed · MD follow-on candidates (not yet backlog
+items): viz twins for the MD metrics (`plot_md_series`/`plot_md_correlation` over
+pharmaml.viz), a studio.py MD page behind the shipped `pharmaml.md`, H-bond timeline wiring
+into the trajectory lab, and PLUMED-style collective-variable helpers.

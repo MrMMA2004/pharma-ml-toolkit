@@ -29,7 +29,33 @@ from pharmaml.chem.converters import (
 from pharmaml.cli import main
 from pharmaml.exceptions import DataValidationError, DependencyError
 
-logging.disable(logging.CRITICAL)
+
+# (round-249) the module-level ``logging.disable(logging.CRITICAL)``
+# this fixture replaces leaked for the WHOLE pytest process and silently
+# broke ``caplog`` assertions in sibling modules sharing a pytest process
+# (the nine-chunk gate caught it: test_format_converters before
+# test_numpy_neural_checkpoints).  Same silence, correct scope: applied
+# around each test of THIS module only, previous level restored after.
+# (round-249b) the same gate caught the SECOND leak from this module:
+# the CLI tests below call ``pharmaml.cli.main`` -> ``configure_logging``,
+# which flips ``pharmaml``.propagate to False and attaches a console
+# handler bound to THIS test's captured stderr — after the test both
+# leak (caplog sees nothing in later modules; emits hit a closed
+# stream and print "--- Logging error ---" noise).  The at-import
+# propagate/handlers/level are restored after every test now.
+@pytest.fixture(autouse=True)
+def _quiet_module_logging():
+    prev = logging.root.manager.disable
+    pharma_root = logging.getLogger("pharmaml")
+    prev_propagate = pharma_root.propagate
+    prev_handlers = list(pharma_root.handlers)
+    prev_level = pharma_root.level
+    logging.disable(logging.CRITICAL)
+    yield
+    logging.disable(prev)
+    pharma_root.propagate = prev_propagate
+    pharma_root.handlers[:] = prev_handlers
+    pharma_root.setLevel(prev_level)
 
 ETHANOL = "CCO"
 BENZENE = "c1ccccc1"

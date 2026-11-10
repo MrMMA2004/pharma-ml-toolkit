@@ -1327,19 +1327,19 @@ function TrajectoryCard() {
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <div className="rounded-md border bg-muted/40 p-2 text-center">
                 <p className="text-base font-semibold tabular-nums">
-                  {fmtNum(result.stats.rmsdMean, 3)} Å
+                  {result.stats.rmsdMean.toFixed(3)} Å
                 </p>
                 <p className="text-[11px] leading-tight text-muted-foreground">RMSD mean</p>
               </div>
               <div className="rounded-md border bg-muted/40 p-2 text-center">
                 <p className="text-base font-semibold tabular-nums">
-                  {fmtNum(result.stats.rgMean, 3)} Å
+                  {result.stats.rgMean.toFixed(3)} Å
                 </p>
                 <p className="text-[11px] leading-tight text-muted-foreground">Rg mean</p>
               </div>
               <div className="rounded-md border bg-muted/40 p-2 text-center">
                 <p className="text-base font-semibold tabular-nums">
-                  {fmtNum(result.stats.qMean, 3)}
+                  {result.stats.qMean.toFixed(3)}
                 </p>
                 <p className="text-[11px] leading-tight text-muted-foreground">Q mean</p>
               </div>

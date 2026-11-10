@@ -202,7 +202,7 @@ def run_xvg(request: dict[str, Any]) -> dict[str, Any]:
         except Exception as exc:  # noqa: BLE001 - surfaced to the web UI
             return {"error": f"no parsable metric in the pasted files: {exc}"}
         for path in sorted(folder.iterdir()):
-            if path.name not in ligand.series and classify_metric(path.name):
+            if path.stem not in ligand.series and classify_metric(path.name):
                 # Present in input, absent from the result: it was skipped.
                 warnings.append(f"skipped {path.name} (unparseable or empty)")
 

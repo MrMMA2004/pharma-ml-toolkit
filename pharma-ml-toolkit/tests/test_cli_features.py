@@ -20,7 +20,32 @@ import pytest
 
 from pharmaml.cli import main
 
-logging.disable(logging.CRITICAL)
+
+# (round-249) the module-level ``logging.disable(logging.CRITICAL)``
+# this fixture replaces leaked for the WHOLE pytest process and silently
+# broke ``caplog`` assertions in sibling modules sharing a pytest process
+# (the nine-chunk gate caught it: test_format_converters before
+# test_numpy_neural_checkpoints).  Same silence, correct scope: applied
+# around each test of THIS module only, previous level restored after.
+@pytest.fixture(autouse=True)
+def _quiet_module_logging():
+    prev = logging.root.manager.disable
+    pharma_root = logging.getLogger("pharmaml")
+    prev_propagate = pharma_root.propagate
+    prev_handlers = list(pharma_root.handlers)
+    prev_level = pharma_root.level
+    logging.disable(logging.CRITICAL)
+    yield
+    logging.disable(prev)
+    # (round-249b) this module's CLI tests call main() ->
+    # configure_logging(), which flips pharmaml.propagate to False and
+    # attaches a console handler bound to THIS test's captured stderr;
+    # both would leak into sibling modules sharing the process (the
+    # gate caught it via test_format_converters -> the §20.5 caplog
+    # assertions).  Restore the at-import state after every test.
+    pharma_root.propagate = prev_propagate
+    pharma_root.handlers[:] = prev_handlers
+    pharma_root.setLevel(prev_level)
 
 
 @pytest.fixture()
