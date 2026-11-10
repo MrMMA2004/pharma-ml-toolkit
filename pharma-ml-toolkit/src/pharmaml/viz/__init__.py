@@ -29,6 +29,7 @@ layer for **all** toolkit codes:
                   :func:`plot_consensus_ranking` (the figure twin of
                   the explainable consensus leaderboard),
                   :func:`plot_receptor_atom_types`;
+* multi-objective ML — :func:`plot_study_pareto` (full-objective front);
 * molecular dynamics — :func:`plot_md_series` (metric traces),
                   :func:`plot_md_correlation` (aligned metric heatmap);
 * generative    — :func:`plot_operator_trajectory` (the adaptive GA's
@@ -153,6 +154,7 @@ from pharmaml.viz.ml_plots import (
     plot_timeline,
     plot_training_history,
 )
+from pharmaml.viz.multiobjective_plots import plot_study_pareto
 from pharmaml.viz.pharma_plots import (
     plot_concentration_profile,
     plot_dose_accumulation,
@@ -250,6 +252,7 @@ __all__ = [
     "plot_signed_correlations",
     "plot_similarity_heatmap",
     "plot_slice",
+    "plot_study_pareto",
     "plot_table_comparison",
     "plot_timeline",
     "plot_top_ligands",
