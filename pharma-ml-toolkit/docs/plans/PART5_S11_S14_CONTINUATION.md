@@ -29,7 +29,7 @@ passed.
 | --- | --- | --- | --- |
 | R1 (done) | Security kit (this doc set) + registry reconciliation + `.gitignore` gap | precondition | pushed `a31dbac` |
 | R2 (done) | Checkpoint schema v1 — formal envelope + validator + conformance tests | §13 first half | pushed; 29 new tests + §20 regressions + doctests green; ruff + mypy clean |
-| R3 | §11 nine-card live previews — real evidence per card, honest empty states | §11 (P3) | per-card focused tests + empty-state tests |
+| R3 (done) | §11 nine-card live previews — real evidence per card, honest empty states | §11 (P3) | pushed; 44 new tests (32 evidence + 12 wiring) + 26 part-4 pins green; randomness-ban source scan green; docs/NINE_CARD_EVIDENCE.md |
 | R4 | §12 audit-first GUI gap table + first confirmed fixes | §12 (P3) | `docs/GUI_GAP_AUDIT.md` + focused GUI tests |
 | R5 | §14 report schema v2 — fold profile results + gates into the release audit artifact | §14 (P0/1) | report generated for the next ship |
 | R6 | First §13 extension on the schema: descriptor batches (exact-restore proof) | §13 second half | bit-identical continuation test |

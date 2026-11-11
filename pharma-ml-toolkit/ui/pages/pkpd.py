@@ -142,6 +142,9 @@ class RegimenOutcome:
     t_max: float = 0.0
     auc: float = 0.0
     seconds: float = 0.0
+    # part5 §11: the model + regimen parameters (ka/cl/v2/q/v3, dose_mg,
+    # tau_h) so a saved curve can always be read WITH its parameters.
+    parameters: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -355,6 +358,11 @@ class PKPDWorkbenchPage(QWidget):
                 t_max=float(times[int(concentration.argmax())]),
                 auc=auc,
                 seconds=_time.monotonic() - started,
+                parameters={
+                    key: float(values[key])
+                    for key in ("ka", "cl", "v2", "q", "v3", "dose_mg", "tau_h")
+                    if key in values
+                },
             )
 
         self._runner.submit(
@@ -366,6 +374,30 @@ class PKPDWorkbenchPage(QWidget):
 
     def _regimen_done(self, outcome: object) -> None:
         assert isinstance(outcome, RegimenOutcome)
+        # part5 §11: the real curve, units and parameters become a saved
+        # run (best-effort) — the PK/PD card's evidence.
+        try:
+            from pharmaml.studio import record_run
+
+            record_run(
+                "pkpd",
+                f"regimen · {outcome.route}",
+                {
+                    "route": outcome.route,
+                    "n_doses": len(outcome.events),
+                    "c_max": float(outcome.c_max),
+                    "t_max": float(outcome.t_max),
+                    "auc": float(outcome.auc),
+                    "duration_h": float(outcome.duration_h),
+                    "parameters": dict(outcome.parameters),
+                    "curve": {
+                        "times_h": [float(t) for t in outcome.times],
+                        "concentration_mg_per_L": [float(c) for c in outcome.concentration],
+                    },
+                },
+            )
+        except Exception:  # noqa: BLE001, S110 -- the record must never fail the render
+            pass
         self._table.bind_frame(outcome.events)
         self._plot.clear()
         self._plot.line(outcome.times, outcome.concentration, label="central concentration")

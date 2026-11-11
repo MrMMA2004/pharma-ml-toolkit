@@ -176,6 +176,10 @@ class MainWindow(QMainWindow):
             action.triggered.connect(lambda _checked=False, idx=i - 1: self._go(SECTIONS[idx][0]))
             self.addAction(action)
 
+        # part5 §11: the nine cards read the live page state through one
+        # provider — every dashboard visit re-reads real evidence.
+        self.dashboard_page.set_card_context(self._card_context)
+
         # -- restore persisted state --------------------------------------------
         self.theme.restore_state()
         saved_nav = self.settings.nav()
@@ -202,6 +206,23 @@ class MainWindow(QMainWindow):
     def go_to(self, section: str) -> None:
         """Public navigation API (tests and page cross-links)."""
         self._go(section)
+
+    # -- §11 evidence context --------------------------------------------------------
+    def _card_context(self) -> dict[str, object]:
+        """Live page state for the nine-card previews (GUI-thread snapshot).
+
+        Deliberately plain data: the Data Explorer's loaded frame and its
+        user-picked plot column, the MD page's actually-loaded study, and
+        the ML Workbench's benchmark checkpoint home — the collectors in
+        ``pharmaml.studio.evidence`` do the reading, this only snapshots.
+        """
+        return {
+            "data_frame": self.data_page.frame(),
+            "data_source": self.data_page.source(),
+            "data_column": self.data_page.active_column(),
+            "md_study": self.molecular_dynamics_page.study(),
+            "ml_checkpoint_dir": self.mlworkbench_page.bench_checkpoint_dir(),
+        }
 
     # -- theming -------------------------------------------------------------------
     def _on_theme(self, provider: str, name: str, palette: ChartPalette) -> None:

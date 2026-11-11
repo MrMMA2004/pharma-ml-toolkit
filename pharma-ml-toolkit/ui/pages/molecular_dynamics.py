@@ -153,6 +153,10 @@ class MolecularDynamicsPage(QWidget):
             "verify data and axis labels."
         )
 
+    def study(self) -> MDStudy | None:
+        """The actually-loaded study (the §11 evidence context reads it)."""
+        return self._study
+
     def _load_failed(self, message: str) -> None:
         self._open_btn.setEnabled(True)
         self._status.setText(f"Could not load study: {message.splitlines()[0]}")
@@ -252,6 +256,17 @@ class MolecularDynamicsPage(QWidget):
             self._status.setText(f"Could not export figure: {exc}")
             return
         self._status.setText(f"Saved figure to {path}")
+        # part5 §11: the real export becomes a saved run (best-effort).
+        try:
+            from pharmaml.studio import record_run
+
+            record_run(
+                "viz-export",
+                Path(path).name,
+                {"name": Path(path).name, "path": str(path), "kind": "md figure"},
+            )
+        except Exception:  # noqa: BLE001, S110 -- the record must never fail the export
+            pass
 
     def closeEvent(self, event) -> None:
         self._clear_figure()

@@ -170,3 +170,7 @@ class DataExplorerPage(QWidget):
 
     def source(self) -> str:
         return self._source
+
+    def active_column(self) -> str:
+        """The column the explorer currently plots (the §11 target pick)."""
+        return self._column_combo.currentText()

@@ -672,6 +672,28 @@ class DeepLearningWorkbenchPage(QWidget):
         )
 
     def _render_train(self, outcome: TrainOutcome) -> None:
+        # part5 §11: the run's REAL history (epoch/train_loss/val_loss per
+        # epoch, from the trained network) becomes a saved run — the DL
+        # card's evidence. Best-effort by contract, never fails the render.
+        try:
+            from pharmaml.studio import record_run
+
+            record_run(
+                "dl-training",
+                f"{outcome.estimator_name} on {outcome.target}",
+                {
+                    "engine": outcome.engine,
+                    "task": outcome.task,
+                    "target": outcome.target,
+                    "n_train": outcome.n_train,
+                    "n_test": outcome.n_test,
+                    "epochs_run": outcome.epochs_run,
+                    "epochs_asked": outcome.epochs_asked,
+                    "history": [dict(point) for point in outcome.network.history_],
+                },
+            )
+        except Exception:  # noqa: BLE001, S110 -- the record must never fail the render
+            pass
         self._plot.clear()
         self._last_run = outcome
         report = outcome.report

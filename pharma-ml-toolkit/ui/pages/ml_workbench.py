@@ -1016,6 +1016,39 @@ class MLWorkbenchPage(QWidget):
             if self._bench_resume_note:
                 note = f"{self._bench_resume_note}; {note}"
             self._bench_status.setText(note)
+            # part5 §11: the finished board becomes a saved evaluation —
+            # the ML card's real evidence. Best-effort by contract.
+            try:
+                from pharmaml.studio import record_run
+
+                best_row = None
+                if metric_column is not None:
+                    finite = board[board[metric_column].notna()]
+                    if not finite.empty:
+                        best_row = finite.loc[finite[metric_column].idxmax()]
+                record_run(
+                    "ml-evaluation",
+                    f"family benchmark · {target} ({folds}-fold CV)",
+                    {
+                        "eval_kind": "cv",
+                        "folds": folds,
+                        "families": len(board),
+                        "metric": (
+                            str(metric_column)[: -len("_mean")] if metric_column else "score"
+                        ),
+                        "best_mean": (
+                            float(best_row[metric_column]) if best_row is not None else None
+                        ),
+                        "best_family": (
+                            str(best_row["family"]) if best_row is not None else None
+                        ),
+                        "target": target,
+                        "task": task,
+                        "n_failed": int(n_nan),
+                    },
+                )
+            except Exception:  # noqa: BLE001, S110 -- the record must never fail the board
+                pass
 
         self._submit(f"benchmarking feature families ({task})", job, done, self._bench_status)
 
@@ -1846,3 +1879,7 @@ class MLWorkbenchPage(QWidget):
     def report_text(self) -> str:
         """The tuner card's summary line (the page's primary status)."""
         return self._tune_summary.text()
+
+    def bench_checkpoint_dir(self) -> Path | None:
+        """The benchmark checkpoint home (the §11 evidence context reads it)."""
+        return self._bench_checkpoint_dir

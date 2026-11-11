@@ -37,8 +37,9 @@ from __future__ import annotations
 
 import csv
 import importlib
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
@@ -52,6 +53,8 @@ from PySide6.QtWidgets import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from PySide6.QtGui import QPixmap, QResizeEvent
 
 
@@ -242,38 +245,26 @@ def probe_available(module: str) -> bool:
     return True
 
 
-def live_preview(card_id: str) -> str:
-    """A real, computed one-line summary for the card (never fabricated)."""
+def live_preview(card_id: str, context: Mapping[str, Any] | None = None) -> str:
+    """A real, computed summary for the card (never fabricated).
+
+    part5 §11: previews come from actual loaded files, persisted runs, or
+    parsed campaign outputs — :func:`pharmaml.studio.collect_evidence`
+    gathers them (``context`` carries the live page state: the loaded
+    dataset, the loaded MD study, the benchmark checkpoint dir).  A card
+    without data shows its precise empty state instead of a module count.
+    """
     try:
         if card_id == "introduction":
             import pharmaml
 
             return f"pharmaml {pharmaml.__version__} installed in this environment"
-        if card_id == "datasets":
-            root = _toolkit_root() / "examples" / "data"
-            files = [p for p in sorted(root.iterdir()) if p.is_file()] if root.is_dir() else []
-            return f"{len(files)} example datasets on disk, ready for Data Explorer"
-        if card_id == "machine-learning":
-            registry = importlib.import_module("pharmaml.ml.models")
-            return f"{len(registry.MODEL_REGISTRY)} models in the live registry"
-        if card_id == "deep-learning":
-            count = _module_count("src", "pharmaml", "ml")
-            return f"{count} modules under pharmaml.ml"
-        if card_id == "generative-ai":
-            count = _module_count("src", "pharmaml", "generative")
-            return f"{count} modules under pharmaml.generative"
-        if card_id == "molecular-docking":
-            count = _module_count("src", "pharmaml", "docking")
-            return f"{count} modules under pharmaml.docking (prep/parse/rescore)"
-        if card_id == "pkpd":
-            count = _module_count("src", "pharmaml", "pkpd")
-            return f"{count} modules under pharmaml.pkpd"
-        if card_id == "molecular-dynamics-analysis":
-            count = _module_count("src", "pharmaml", "md")
-            return f"{count} modules under pharmaml.md"
-        if card_id == "visualization":
-            count = _module_count("src", "pharmaml", "viz")
-            return f"{count} modules under pharmaml.viz"
+        from pharmaml.studio import collect_evidence
+
+        board = collect_evidence(context)
+        evidence = board.get(card_id)
+        if evidence is not None:
+            return evidence.text()
     except Exception:  # noqa: BLE001 - a broken install must not break the home
         return "live preview unavailable in this environment"
     return ""
@@ -283,13 +274,6 @@ def _toolkit_root():
     from pathlib import Path
 
     return Path(__file__).resolve().parents[1]
-
-
-def _module_count(*parts: str) -> int:
-    root = _toolkit_root().joinpath(*parts)
-    if not root.is_dir():
-        return 0
-    return len(list(root.rglob("*.py")))
 
 
 def datasets_preview_smiles() -> tuple[str, str] | None:
@@ -363,7 +347,7 @@ def _datasets_molecule_visual() -> QWidget | None:
     image = QLabel()
     image.setObjectName("nineCardMolecule")
     image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    pixmap, error = _render_preview(smiles)
+    pixmap, _error = _render_preview(smiles)
     if pixmap is not None:
         image.setPixmap(pixmap)
     else:
@@ -405,15 +389,34 @@ class NineCardGrid(QWidget):
     §5 order.  The re-flow reuses the SAME card widgets (nothing is
     rebuilt), so frames addressed by ``card_id`` survive every width
     change and no state is ever lost mid-flight.
+
+    part5 §11: the preview line per card is a :class:`QLabel` addressed
+    by objectName ``nineCardLivePreview``; :meth:`refresh_evidence`
+    re-reads the real sources and updates the SAME labels in place
+    (the §8 widget-reuse contract, now for the evidence text too).
     """
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        context_provider: Callable[[], Mapping[str, Any] | None] | None = None,
+    ) -> None:
         super().__init__(parent)
+        self._context_provider = context_provider
         self._frames: dict[str, QFrame] = {}
+        context = self._snapshot_context()
         for card in NINE_CARDS:
-            frame = _build_card(card)
+            frame = _build_card(card, context)
             frame.setObjectName("nineCard")
             self._frames[card.card_id] = frame
+        self._previews: dict[str, QLabel] = {}
+        for card in NINE_CARDS:
+            labels = [
+                widget
+                for widget in self._frames[card.card_id].findChildren(QLabel)
+                if widget.objectName() == "nineCardLivePreview"
+            ]
+            self._previews[card.card_id] = labels[0]
         self._grid = QGridLayout(self)
         self._grid.setSpacing(12)
         self._columns = 0
@@ -427,6 +430,37 @@ class NineCardGrid(QWidget):
     def frames(self) -> dict[str, QFrame]:
         """The stable ``card_id -> QFrame`` map (a copy for safe addressing)."""
         return dict(self._frames)
+
+    def preview_labels(self) -> dict[str, QLabel]:
+        """The stable ``card_id -> preview QLabel`` map (§11 evidence text)."""
+        return dict(self._previews)
+
+    def set_card_context(
+        self, provider: Callable[[], Mapping[str, Any] | None] | None
+    ) -> None:
+        """Wire (or clear) the live page-state provider, then refresh."""
+        self._context_provider = provider
+        self.refresh_evidence()
+
+    def refresh_evidence(self) -> None:
+        """Re-read the §11 evidence sources into the SAME preview labels.
+
+        The collectors are deliberately cheap (in-memory frames, tiny
+        JSON run records, one checkpoint read) so this runs on the GUI
+        thread without a worker round-trip; the heavy jobs that CREATE
+        the evidence stay in the pages' ``QThreadPool`` workers.
+        """
+        context = self._snapshot_context()
+        for card_id, label in self._previews.items():
+            label.setText(live_preview(card_id, context))
+
+    def _snapshot_context(self) -> Mapping[str, Any] | None:
+        if self._context_provider is None:
+            return None
+        try:
+            return self._context_provider() or None
+        except Exception:  # noqa: BLE001 - provider must not break the home
+            return None
 
     def reflow(self, columns: int) -> None:
         """Re-lay the SAME frames row-major at 3, 2 or 1 columns."""
@@ -452,7 +486,7 @@ class NineCardGrid(QWidget):
         self._grid.setRowStretch(rows, 1)
         self._columns = columns
 
-    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - Qt name
+    def resizeEvent(self, event: QResizeEvent) -> None:
         """Phase-3 responsive pass: re-flow when the width class changes."""
         super().resizeEvent(event)
         want = columns_for_width(event.size().width())
@@ -460,17 +494,19 @@ class NineCardGrid(QWidget):
             self.reflow(want)
 
 
-def build_nine_card_grid() -> tuple[QWidget, dict[str, QFrame]]:
+def build_nine_card_grid(
+    context_provider: Callable[[], Mapping[str, Any] | None] | None = None,
+) -> tuple[QWidget, dict[str, QFrame]]:
     """Render the nine cards responsive and row-major (the directive's order).
 
     Returns the grid widget and a ``card_id -> QFrame`` map so tests and
     the dashboard can address individual cards without fragile walks.
     """
-    host = NineCardGrid()
+    host = NineCardGrid(context_provider=context_provider)
     return host, host.frames()
 
 
-def _build_card(card: NineCard) -> QFrame:
+def _build_card(card: NineCard, context: Mapping[str, Any] | None = None) -> QFrame:
     frame = QFrame()
     frame.setFrameShape(QFrame.Shape.StyledPanel)
     frame.setMinimumHeight(210)
@@ -506,8 +542,8 @@ def _build_card(card: NineCard) -> QFrame:
         if visual is not None:
             lay.addWidget(visual)
 
-    preview = QLabel(live_preview(card.card_id))
-    preview.setObjectName("nineCardPreview")
+    preview = QLabel(live_preview(card.card_id, context))
+    preview.setObjectName("nineCardLivePreview")
     preview.setWordWrap(True)
     lay.addWidget(preview)
 
@@ -537,14 +573,14 @@ def _go(section: str, source: QWidget) -> None:
 
 
 __all__ = [
-    "NINE_CARDS",
     "CARD_PREVIEW_SIZE",
     "COLUMNS_2_MIN_WIDTH",
     "COLUMNS_3_MIN_WIDTH",
+    "NINE_CARDS",
+    "PREVIEW_SOURCE_NAME",
     "CardEntry",
     "NineCard",
     "NineCardGrid",
-    "PREVIEW_SOURCE_NAME",
     "build_nine_card_grid",
     "columns_for_width",
     "datasets_preview_smiles",

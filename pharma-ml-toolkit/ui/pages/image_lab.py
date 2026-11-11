@@ -425,6 +425,27 @@ class ImageLabPage(QWidget):
         if result.warnings:
             note += " -- " + "; ".join(result.warnings)
         self._status.setText(note)
+        # part5 §11: the real export (path/format/dimensions/bytes) becomes
+        # a saved run — the Visualization card's evidence. Best-effort.
+        try:
+            from pharmaml.studio import record_run
+
+            record_run(
+                "viz-export",
+                _Path(result.path).name,
+                {
+                    "name": _Path(result.path).name,
+                    "path": str(result.path),
+                    "format": str(result.format),
+                    "width": int(result.width),
+                    "height": int(result.height),
+                    "size_bytes": int(result.size_bytes),
+                    "warnings": list(result.warnings),
+                    "kind": "image panel",
+                },
+            )
+        except Exception:  # noqa: BLE001, S110 -- the record must never fail the export
+            pass
 
     # -- tab 1: similarity heatmap ----------------------------------------------
     def _build_similarity_tab(self) -> QWidget:

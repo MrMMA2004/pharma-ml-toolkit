@@ -739,6 +739,24 @@ class GenerativeWorkbenchPage(QWidget):
         )
 
     def _render_front(self, outcome: FrontOutcome) -> None:
+        # part5 §11: the real front becomes a saved run (best-effort).
+        try:
+            from pharmaml.studio import record_run
+
+            n_front = len(outcome.front.to_dataframe()) if outcome.front is not None else 0
+            record_run(
+                "generative",
+                "Pareto front · " + ", ".join(outcome.objectives),
+                {
+                    "kind": "pareto-front",
+                    "objectives": list(outcome.objectives),
+                    "n_front": n_front,
+                    "n_total": int(outcome.n_total),
+                    "deepest": int(outcome.deepest),
+                },
+            )
+        except Exception:  # noqa: BLE001, S110 -- the record must never fail the render
+            pass
         self._plot.clear()
         front = outcome.front
         frame = front.to_dataframe()
@@ -1073,6 +1091,37 @@ class GenerativeWorkbenchPage(QWidget):
             self._sa_hover = []
         self._table.bind_frame(outcome.table)
         self._report.setText(f"{outcome.summary} · scored in {outcome.seconds:.1f}s")
+        # part5 §11: the batch's real SA stats — recomputed from the actual
+        # outcome table, so the record can never drift from what was shown.
+        try:
+            from pharmaml.studio import record_run
+
+            scored_values = (
+                frame["sa_score"].dropna().to_numpy(dtype=float)
+                if not frame.empty
+                else np.zeros(0)
+            )
+            canonical = (
+                frame["canonical"].replace("", np.nan).dropna()
+                if not frame.empty
+                else pd.Series(dtype=object)
+            )
+            record_run(
+                "generative",
+                "SA batch",
+                {
+                    "kind": "sa-batch",
+                    "n_scored": int(scored_values.size),
+                    "n_invalid": int((frame["band"] == "invalid").sum()) if not frame.empty else 0,
+                    "unique": int(canonical.nunique()),
+                    "mean": float(scored_values.mean()) if scored_values.size else None,
+                    "std": float(scored_values.std()) if scored_values.size else None,
+                    "min": float(scored_values.min()) if scored_values.size else None,
+                    "max": float(scored_values.max()) if scored_values.size else None,
+                },
+            )
+        except Exception:  # noqa: BLE001, S110 -- the record must never fail the render
+            pass
 
     # -- shared finishers --------------------------------------------------------------
     def _failed(self, message: str) -> None:

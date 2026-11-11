@@ -471,6 +471,24 @@ class DockingWorkbenchPage(QWidget):
 
     def _campaign_done(self, outcome: object) -> None:
         assert isinstance(outcome, CampaignOutcome)
+        # part5 §11: the parsed campaign becomes a saved run (best-effort).
+        try:
+            from pharmaml.studio import record_run
+
+            record_run(
+                "docking",
+                "campaign scan",
+                {
+                    "n_folders": int(outcome.n_folders),
+                    "n_ok": int(outcome.n_ok),
+                    "n_missing": int(outcome.n_missing),
+                    "n_incomplete": int(outcome.n_incomplete),
+                    "top_ligand": str(outcome.top_ligand),
+                    "top_score": float(outcome.top_score),
+                },
+            )
+        except Exception:  # noqa: BLE001, S110 -- the record must never fail the render
+            pass
         # cross-tab state, written on the GUI thread only
         self._scan = outcome.scan
         self._ok_frame = outcome.ranked

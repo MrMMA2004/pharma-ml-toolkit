@@ -125,6 +125,7 @@ class DashboardPage(QWidget):
         cards_header.setObjectName("studioSectionTitle")
         lay.addWidget(cards_header)
         cards_host, _frames = build_nine_card_grid()
+        self._cards_host = cards_host
         lay.addWidget(cards_host)
 
         try:
@@ -187,3 +188,12 @@ class DashboardPage(QWidget):
 
         scroll.setWidget(body)
         outer.addWidget(scroll)
+
+    def set_card_context(self, provider) -> None:
+        """Wire the live page-state provider for the §11 card previews."""
+        self._cards_host.set_card_context(provider)
+
+    def showEvent(self, event) -> None:
+        """Every visit re-reads the §11 evidence (same labels, fresh text)."""
+        super().showEvent(event)
+        self._cards_host.refresh_evidence()
