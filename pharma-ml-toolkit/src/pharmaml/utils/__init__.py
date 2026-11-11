@@ -1,5 +1,12 @@
 """Shared I/O, validation and checkpointing helpers."""
 
+from pharmaml.utils.checkpoint_schema import (
+    ENVELOPE_SCHEMA_VERSION,
+    OPERATION_REGISTRY,
+    PENDING_OPERATION_TYPES,
+    OperationSpec,
+    validate_checkpoint,
+)
 from pharmaml.utils.checkpoints import (
     CheckpointInfo,
     CheckpointManager,
@@ -20,14 +27,19 @@ from pharmaml.utils.validation import (
 )
 
 __all__ = [
+    "ENVELOPE_SCHEMA_VERSION",
+    "OPERATION_REGISTRY",
+    "PENDING_OPERATION_TYPES",
     "CheckpointInfo",
     "CheckpointManager",
+    "OperationSpec",
     "default_directory",
     "ensure_directory",
     "looks_continuous",
     "read_table",
     "require_columns",
     "safe_filename",
+    "validate_checkpoint",
     "validate_concentration_series",
     "validate_positive",
     "validate_smiles_syntax",

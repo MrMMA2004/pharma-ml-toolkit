@@ -61,6 +61,13 @@ from pathlib import Path
 from typing import Any
 
 from pharmaml.exceptions import PersistenceError
+from pharmaml.utils.checkpoint_schema import (
+    ENVELOPE_KEY,
+    OperationSpec,
+)
+from pharmaml.utils.checkpoint_schema import (
+    build_envelope as _build_envelope,
+)
 
 SCHEMA = "pharmaml-checkpoint/1"
 
@@ -77,6 +84,17 @@ class CheckpointInfo:
     elapsed_s: float
     path: Path
     integrity: str
+    envelope: dict[str, Any] | None = None
+
+    @property
+    def resumable(self) -> bool:
+        """True only when the §13 v2 envelope is present and intact.
+
+        Legacy checkpoints (envelope is ``None``) are readable and their
+        state is returned unchanged, but they are not resumable under
+        the Part-5 §13 contract.
+        """
+        return self.envelope is not None
 
 
 def default_directory(name: str) -> Path:
@@ -170,16 +188,27 @@ class CheckpointManager:
         total: int | None = None,
         state: dict[str, Any] | None = None,
         note: str = "",
+        *,
+        operation: OperationSpec | None = None,
+        inputs: tuple[Path | str, ...] | list[Path | str] = (),
     ) -> CheckpointInfo:
         """Atomically persist one checkpoint and rotate older ones.
+
+        With ``operation`` (Part-5 §13), the record additionally carries
+        the v2 resumable-operation envelope: registered operation class,
+        input fingerprints, implementation fingerprint, toolkit version and
+        ``resume_unit == step``.  Without it the save is a legacy checkpoint
+        — identical to before, and reported as not §13-resumable.
 
         Raises
         ------
         PersistenceError
             If ``step`` is not a non-negative int, ``state`` is not a
-            dict, or the state is not JSON-serialisable -- the caller
-            decides whether that is fatal (the toolkit's own wiring
-            degrades it to a log warning and keeps computing).
+            dict, the state claims the reserved ``envelope`` key, the
+            operation is not registry-backed, or the state is not
+            JSON-serialisable -- the caller decides whether that is fatal
+            (the toolkit's own wiring degrades it to a log warning and
+            keeps computing).
         """
         if not isinstance(step, int) or isinstance(step, bool) or step < 0:
             raise PersistenceError(
@@ -191,6 +220,14 @@ class CheckpointManager:
             raise PersistenceError(
                 f"checkpoint state must be a dict, got {type(state).__name__}"
             )
+        if ENVELOPE_KEY in state:
+            raise PersistenceError(
+                f"state key {ENVELOPE_KEY!r} is reserved for the §13 "
+                "envelope; pass operation= to save() instead"
+            )
+        envelope: dict[str, Any] | None = None
+        if operation is not None:
+            envelope = _build_envelope(operation, step=step, inputs=inputs)
         record: dict[str, Any] = {
             "schema": SCHEMA,
             "name": self._name,
@@ -201,6 +238,8 @@ class CheckpointManager:
             "elapsed_s": round(time.monotonic() - self._t0, 3),
             "state": state,
         }
+        if envelope is not None:
+            record[ENVELOPE_KEY] = envelope
         try:
             record["integrity"] = hashlib.sha256(_canonical(record)).hexdigest()
             blob = json.dumps(
@@ -254,6 +293,7 @@ class CheckpointManager:
             elapsed_s=float(record.get("elapsed_s", 0.0)),
             path=path,
             integrity=str(record.get("integrity", "")),
+            envelope=record.get(ENVELOPE_KEY),
         )
 
     def _validate(self, path: Path) -> CheckpointInfo:

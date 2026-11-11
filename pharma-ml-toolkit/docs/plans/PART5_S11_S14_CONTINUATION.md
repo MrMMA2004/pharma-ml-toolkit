@@ -27,8 +27,8 @@ passed.
 
 | Round | Scope | Part 5 hook | Exit gate |
 | --- | --- | --- | --- |
-| R1 (done) | Security kit (this doc set) + registry reconciliation + `.gitignore` gap | precondition | pushed |
-| R2 | Checkpoint schema v1 — formal envelope + validator + conformance tests | §13 first half | `tests/test_checkpoint_schema.py` green |
+| R1 (done) | Security kit (this doc set) + registry reconciliation + `.gitignore` gap | precondition | pushed `a31dbac` |
+| R2 (done) | Checkpoint schema v1 — formal envelope + validator + conformance tests | §13 first half | pushed; 29 new tests + §20 regressions + doctests green; ruff + mypy clean |
 | R3 | §11 nine-card live previews — real evidence per card, honest empty states | §11 (P3) | per-card focused tests + empty-state tests |
 | R4 | §12 audit-first GUI gap table + first confirmed fixes | §12 (P3) | `docs/GUI_GAP_AUDIT.md` + focused GUI tests |
 | R5 | §14 report schema v2 — fold profile results + gates into the release audit artifact | §14 (P0/1) | report generated for the next ship |

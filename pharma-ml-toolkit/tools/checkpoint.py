@@ -152,6 +152,28 @@ def _newest_zip(on_disk: bool = True) -> Path | None:
     return max(candidates, key=lambda pair: pair[0])[1] if candidates else None
 
 
+def validate(target: str) -> int:
+    """Part-5 §13 checkpoint conformance check (read-only).
+
+    Exit codes: 0 = valid v2 envelope; 1 = invalid or legacy (a legacy
+    checkpoint is storage-valid but not §13-resumable — the report says
+    which); 4 = the pharmaml package could not be imported.
+    """
+    if str(ROOT / "src") not in sys.path:
+        sys.path.insert(0, str(ROOT / "src"))
+    try:
+        from pharmaml.utils.checkpoint_schema import (
+            describe_report,
+            validate_checkpoint,
+        )
+    except ImportError as exc:
+        print(f"cannot import the toolkit schema module: {exc}", file=sys.stderr)
+        return 4
+    report = validate_checkpoint(target)
+    print(describe_report(report))
+    return 0 if report.ok else 1
+
+
 def doctor(verbose: bool = True) -> int:
     """Read-only probe.  0 = healthy, 2 = rollback, 3 = venv packages."""
     problems: list[str] = []
@@ -836,6 +858,11 @@ def main() -> int:
     group.add_argument("--light", action="store_true", help="commit work-in-progress")
     group.add_argument("--commit", metavar="MSG", help="the full ship ritual")
     group.add_argument("--restore", action="store_true", help="recover from rollback")
+    group.add_argument(
+        "--validate", metavar="CHECKPOINT_JSON",
+        help="validate one checkpoint file against the Part-5 §13 v2 envelope "
+        "(read-only; exit 0 only when fully valid)",
+    )
     parser.add_argument(
         "--dry-run", action="store_true",
         help="with --restore: preview the member -> target plan, write nothing",
@@ -856,6 +883,8 @@ def main() -> int:
         return light()
     if args.restore:
         return restore(dry_run=args.dry_run, **limits)
+    if args.validate is not None:
+        return validate(args.validate)
     return ship(args.commit)
 
 
