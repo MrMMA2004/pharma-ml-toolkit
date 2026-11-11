@@ -73,6 +73,7 @@ jobs:
         run: >-
           python -m pytest
           tests/test_checkpoint_restore_transaction.py
+          tests/test_release_audit.py
           tests/test_data_loading.py
           tests/test_pk.py
           tests/test_md_plots.py
@@ -124,9 +125,17 @@ jobs:
         if: failure()
         run: |
           python - <<'PY'
+          import contextlib
+          import io
           import os
           from pathlib import Path
           import xml.etree.ElementTree as ET
+          import numpy as np
+          runtime = io.StringIO()
+          with contextlib.redirect_stdout(runtime):
+              np.show_runtime()
+          text = runtime.getvalue().replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+          print(f'::notice::NumPy runtime for portability failure: {text}')
           report = Path(os.environ['RUNNER_TEMP']) / 'portability.xml'
           if report.is_file():
               for case in ET.parse(report).iter('testcase'):

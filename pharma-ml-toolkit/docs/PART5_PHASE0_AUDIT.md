@@ -38,7 +38,7 @@ that the entire prompt has been completed.
 | Bounded ZIP validation and exception rollback | **Partially implemented** | Root-level and historical prefixed archives are checked for unsafe or colliding paths, special files, size/ratio limits, CRC and required version carriers. Existing destinations are backed up and verified; caught install, mkdir, journal and verification failures roll back. Fault tests compare file bytes, modes and mtimes. Actual disk exhaustion, power loss, process kill and restart recovery remain untested. |
 | Recovery information | **Partially implemented** | A sibling private recovery directory contains staged files, backup hashes and a journal; incomplete rollback retains it. Crash recovery is manual, not an automatic or crash-atomic transaction. Concurrent writers are unsupported. |
 | Real archive smoke | **Completed and verified** | The available v1.2.172 ZIP was dry-run and restored into an isolated temporary directory; every restored member's SHA-256 matched the ZIP and an unrelated user file survived. This does not test the unavailable v1.2.173 archive. |
-| Release ZIP QA report | **Partially implemented** | A static machine-readable report and manifest were produced for the existing v1.2.172 ZIP, not a new release build. Full profile results, standalone test suite and a reusable release-report generator remain outstanding. |
+| Release ZIP QA report | **Partially implemented** | A read-only archive auditor now produces machine-readable manifests and a human-readable summary, with explicit not-executed statuses. The report covers the old v1.2.172 archive, not a new release; comprehensive documentation, profile and full release certification remain outstanding. |
 | Standalone release portability and canonical builders | **Partially implemented** | Original data, index and notebook-stripping generators now ship in `tools/`; checkout-only CLI forwarders preserve their historical paths. An explicitly selected targeted standalone profile and isolated candidate ZIP regression passed; the full release suite remains untested. See the continuation evidence below and [standalone testing](STANDALONE_TESTING.md). |
 | Dependency profiles and CI | **Partially implemented** | Named targeted profiles and a GUI test extra are documented; local core, chemistry and Meeko/gemmi preparation selections ran. A chemistry/preparation CI job and GUI extra installation have been added; broader profiles remain incomplete. The CI portability failure is traced to example-data byte drift on the GitHub runner; root cause and a safe cross-platform remedy remain under investigation. See continuation evidence below. |
 | Estimator validation / scikit-learn compatibility | **Not implemented** | `_estimator_type` assumptions remain in `ml/conformal.py` and `ml/dalex.py`; the PDF's 1.8-specific failure has not yet been reproduced locally. Pinned scikit-learn is 1.5.2; the declared range remains `>=1.3`. |
@@ -190,3 +190,52 @@ byte-identity guard was **not** relaxed and generated data was not replaced.
 On commit 7fd4a09, the other seven jobs, including Chemistry and docking
 preparation and Studio MD, passed; the Generative SA job remains red. Real
 docking engines were not executed.
+
+## Continuation — reusable read-only archive audit
+
+`tools/audit_release.py` produces a machine-readable report and human-readable
+summary without publishing or overwriting an existing output directory. It
+checks bounded path/collision validation, CRC, toolkit version carriers,
+exclusions, sorted file sizes/SHA-256, engine MD5 references, recursive data
+counts, archive stability and an isolated restore with per-file hash comparison
+and an unrelated sentinel. Its own report explicitly marks test profiles,
+real engines and backup verification as not executed. The engine references
+come from the archive itself, not an independent authenticity source. Details
+and limitations are in [RELEASE_AUDIT.md](RELEASE_AUDIT.md).
+
+The original v1.2.172 archive was audited to the separate workspace directory
+`/home/user/pharma-part5-audit-v1.2.172-final/`: 531 entries, 486 files,
+8,883,247 bytes, SHA-256
+`c2676af8db050b8f31c40bd36216e3de7ba4b8216a7067e321c421e6c5eb9857`;
+all eight archive checks passed and 45 example-data files were counted
+recursively (16 top-level). This command did not rebuild or overwrite the
+archive or independently reverify the earlier backup. It did not run engines
+or test profiles. A separate temporary candidate also contained the audit tool,
+which successfully audited the old archive from the extracted standalone tree.
+
+Focused audit, restore-fault and checkpoint-tooling tests reported **74 passed,
+0 failed, 0 skipped**; Ruff passed. On commit b092837, all eight GitHub jobs
+passed, including the previously failing Generative SA job. The preceding
+runner reported data-builder byte drift, so this green rerun does not establish
+cross-platform reproducibility or explain the earlier failure. No tolerance or
+data was changed to hide it. Full release certification, v1.2.173 inputs and
+real engine execution remain outstanding.
+
+A further read-only numerical experiment reproduced the **same two filenames**
+from the failed runner without changing any data: with
+`OPENBLAS_CORETYPE=Haswell OPENBLAS_NUM_THREADS=1 NPY_DISABLE_CPU_FEATURES=AVX512F`,
+the builder reported drift in `qsar_multiclass.csv` and `pk_profile.csv`. Comparing
+the in-memory frames against round-trip CSV parsing showed eight changed numeric
+values in the former (largest absolute difference `4.440892098500626e-16`) and
+12 in the latter (largest `8.881784197001252e-16`); categorical labels and
+shapes were unchanged in this local experiment. This demonstrates a reproducible
+CPU-dispatch/BLAS sensitivity locally; the failed CI runner's exact runtime was
+not captured, so it does not establish that the same cause applied there. A
+future portability failure now annotates the NumPy runtime to aid diagnosis.
+No tolerance was substituted for the byte-identity check, and no generated
+scientific data or model semantics were changed. A portable byte-identical
+regeneration strategy across supported hardware remains unresolved.
+The combined audit, isolated-portability, restore-fault, checkpoint, provenance,
+index and notebook-variant selection subsequently reported **235 passed, 0
+failed, 0 skipped**. A separate SHA-256 check again matched the original ZIP and
+its existing local backup; this remains a local copy, not an off-site backup.
