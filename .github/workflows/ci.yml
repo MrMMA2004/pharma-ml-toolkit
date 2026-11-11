@@ -72,6 +72,7 @@ jobs:
       - name: Run focused core tests
         run: >-
           python -m pytest
+          tests/test_checkpoint_restore_transaction.py
           tests/test_data_loading.py
           tests/test_pk.py
           tests/test_md_plots.py

@@ -26,9 +26,10 @@ Modes
                 (root-level, the round-210+ ritual, and the historical
                 ``pharma-ml-toolkit/`` prefix), refuses absolute /
                 traversal / backslash members outright, stages the
-                extraction and verifies the version before a single
-                file lands, and never deletes anything the archive
-                does not carry (user data survives).
+                extraction and verifies metadata, backs up overwritten
+                files and rolls back failed installs. Files absent from
+                the archive are preserved. A crash may require manual
+                recovery from the retained sibling journal/backups.
 --restore --dry-run
                 preview the member -> target plan; writes nothing.
 
@@ -46,13 +47,17 @@ Design lessons baked in (see docs/RESUME.md for the full ledger):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -456,144 +461,341 @@ def ship(message: str) -> int:
     return 0
 
 
-def _safe_member_path(member: str, prefix: str | None) -> Path | None:
-    """Normalize one archive member to a safe relative path.
+# Bounds apply before testzip/decompression. Callers can lower or raise them
+# deliberately for an independently trusted archive.
+RESTORE_LIMITS = {
+    "max_members": 10_000,
+    "max_file_size": 256 * 1024 * 1024,
+    "max_total_size": 2 * 1024 * 1024 * 1024,
+    "max_ratio": 1000.0,
+}
+_REQUIRED_RESTORE_FILES = ("VERSION", "pyproject.toml", "src/pharmaml/__init__.py")
 
-    Returns None for anything that could escape the target root:
-    absolute paths, ``..`` segments, and Windows-style backslash
-    separators (which PurePosixPath would not split -- the member
-    would extract as a literal filename on POSIX but traverse on
-    win32, so it is refused on every platform).
-    """
+
+def _safe_member_path(member: str, prefix: str | None) -> Path | None:
+    """Reject ambiguous, platform-dependent or traversal paths, not normalize them."""
+    if "\\" in member or member.startswith("/") or "\x00" in member:
+        return None
+    if prefix and not member.startswith(prefix):
+        return None
     rel = member[len(prefix):] if prefix else member
-    if "\\" in member:
+    rel = rel.removesuffix("/")
+    parts = rel.split("/")
+    if (not rel or any(part in ("", ".", "..") for part in parts)
+            or any(":" in part or part.endswith((" ", ".")) for part in parts)
+            or any(re.fullmatch(r"(?i)(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?", part)
+                   for part in parts)):
         return None
     path = PurePosixPath(rel)
-    if path.is_absolute() or ".." in path.parts or not path.parts:
-        return None
     return Path(*path.parts)
 
 
 def _detect_prefix(names: list[str]) -> str | None:
-    """Which archive layout is this?  All members under
-    ``pharma-ml-toolkit/`` -> the prefixed layout; none -> root-level.
-    SOME but not all -> malformed, refuses via the empty-file check in
-    _restore_archive (the caller distinguishes)."""
+    """Detect root-level or historical prefixed layout; reject mixed files."""
     files = [name for name in names if not name.endswith("/")]
     prefixed = [name for name in files if name.startswith("pharma-ml-toolkit/")]
     if files and len(prefixed) == len(files):
         return "pharma-ml-toolkit/"
     if prefixed:
-        return ""  # mixed: malformed sentinel (empty prefix, not None)
+        return ""
     return None
 
 
-def _restore_archive(archive_path: Path, root: Path, dry_run: bool = False) -> int:
-    """Unpack one release zip over ``root`` -- safely (round-260 §4.2).
+def _restore_plan(archive: zipfile.ZipFile, limits: dict[str, int | float]):
+    """Validate *all* entries and size bounds before any decompression."""
+    infos = archive.infolist()
+    if len(infos) > limits["max_members"]:
+        raise ValueError("archive member-count limit exceeded")
+    prefix = _detect_prefix([info.filename for info in infos])
+    if prefix == "":
+        raise ValueError("mixed archive layouts")
+    nodes: dict[str, tuple[str, str]] = {}
+    explicit: set[str] = set()
+    raw: set[str] = set()
+    plan: list[tuple[zipfile.ZipInfo, Path]] = []
+    total = 0
+    for info in infos:
+        name = info.filename
+        if name in raw:
+            raise ValueError(f"duplicate raw member name: {name!r}")
+        raw.add(name)
+        mode = (info.external_attr >> 16) & 0xFFFF
+        kind = stat.S_IFMT(mode)
+        if kind not in (0, stat.S_IFREG, stat.S_IFDIR):
+            raise ValueError(f"special-file or symlink archive member: {name!r}")
+        if kind == stat.S_IFDIR and not info.is_dir() or kind == stat.S_IFREG and info.is_dir():
+            raise ValueError(f"inconsistent archive member type: {name!r}")
+        if info.flag_bits & 1:
+            raise ValueError(f"encrypted archive member: {name!r}")
+        if info.is_dir() and info.file_size:
+            raise ValueError(f"directory contains unexpected data: {name!r}")
+        metadata_name = name[len(prefix):] if prefix and name.startswith(prefix) else name
+        if metadata_name in _REQUIRED_RESTORE_FILES and info.file_size > 1024 * 1024:
+            raise ValueError(f"version metadata is unexpectedly large: {name!r}")
+        if info.file_size > limits["max_file_size"]:
+            raise ValueError(f"per-file size limit exceeded: {name!r}")
+        total += info.file_size
+        if total > limits["max_total_size"]:
+            raise ValueError("archive total-size limit exceeded")
+        if info.file_size and (not info.compress_size or info.file_size / info.compress_size > limits["max_ratio"]):
+            raise ValueError(f"compression-ratio limit exceeded: {name!r}")
+        if prefix and name == prefix and info.is_dir():
+            continue
+        rel = _safe_member_path(name, prefix)
+        if rel is None:
+            raise ValueError(f"unsafe archive path: {name!r}")
+        parts = rel.parts
+        for i in range(1, len(parts) + 1):
+            path = "/".join(parts[:i])
+            normalized = unicodedata.normalize("NFC", path)
+            key = normalized.casefold()
+            node_kind = "dir" if i < len(parts) or info.is_dir() else "file"
+            if key in nodes and nodes[key] != (path, node_kind):
+                raise ValueError(f"normalized, case-fold, or file/directory collision: {name!r}")
+            nodes[key] = (path, node_kind)
+            if i == len(parts):
+                if key in explicit:
+                    raise ValueError(f"duplicate normalized archive member: {name!r}")
+                explicit.add(key)
+        if not info.is_dir():
+            plan.append((info, rel))
+    if not plan:
+        raise ValueError("archive carries no files")
+    if not set(_REQUIRED_RESTORE_FILES).issubset({rel.as_posix() for _, rel in plan}):
+        raise ValueError("archive is missing VERSION or required package metadata")
+    return prefix, plan
 
-    * both layouts: root-level (the shipped one) and the historical
-      ``pharma-ml-toolkit/`` prefix (auto-detected over FILE members);
-    * refuses absolute / traversal / backslash members outright;
-    * ``--dry-run`` previews the member -> target plan, writes nothing;
-    * stages the extraction beside the target and verifies the staged
-      VERSION against the archive's own filename version before a
-      single file lands on the tree;
-    * never deletes anything the archive does not carry -- user data
-      survives a restore.
 
-    Returns 0 on success (or a clean dry run), 4 on any refusal.
-    """
+def _validate_restore_versions(values: dict[str, bytes], archive_path: Path) -> str:
     try:
-        archive = zipfile.ZipFile(archive_path)
-    except (OSError, zipfile.BadZipFile) as exc:
-        print(f"restore: {archive_path.name} is not a readable zip: {exc}")
+        version = values["VERSION"].decode("utf-8").strip()
+        project = values["pyproject.toml"].decode("utf-8")
+        init = values["src/pharmaml/__init__.py"].decode("utf-8")
+    except (KeyError, UnicodeError) as exc:
+        raise ValueError("missing or invalid UTF-8 version metadata") from exc
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise ValueError("invalid VERSION in archive")
+    project_section = re.search(r"(?ms)^\[project\]\s*$([\s\S]*?)(?=^\[|\Z)", project)
+    py_versions = re.findall(r'''(?m)^version\s*=\s*["']([^"']+)["']''', project_section.group(1)) if project_section else []
+    init_versions = re.findall(r'''(?m)^__version__\s*=\s*["']([^"']+)["']''', init)
+    if py_versions != [version] or init_versions != [version]:
+        raise ValueError("archive package version carriers disagree, are missing, or are duplicated")
+    expected = _zip_version(archive_path)
+    if expected and tuple(map(int, version.split("."))) != expected:
+        raise ValueError(f"archive filename version disagrees with VERSION {version}")
+    return version
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _check_restore_target(root: Path, rel: Path) -> None:
+    """Refuse symlink ancestors or non-regular destination files."""
+    current = root
+    for part in rel.parts[:-1]:
+        current = current / part
+        if current.is_symlink() or current.exists() and not current.is_dir():
+            raise ValueError(f"unsafe target parent: {current}")
+        if current.exists() and current.stat().st_dev != root.stat().st_dev:
+            raise ValueError(f"target parent is on a different filesystem: {current}")
+    target = root / rel
+    if target.is_symlink() or target.exists() and not target.is_file():
+        raise ValueError(f"unsafe target file: {target}")
+
+
+def _backup_restore_file(source: Path, backup: Path) -> None:
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, backup)
+    if (_sha256(source) != _sha256(backup)
+            or stat.S_IMODE(source.stat().st_mode) != stat.S_IMODE(backup.stat().st_mode)
+            or source.stat().st_mtime_ns != backup.stat().st_mtime_ns):
+        raise OSError(f"backup verification failed: {source}")
+
+
+def _restore_mkdir(path: Path) -> None:
+    path.mkdir()
+
+
+def _restore_install(staged: Path, target: Path) -> None:
+    os.replace(staged, target)
+
+
+def _verify_restore_tree(root: Path, expected_hashes: dict[str, str], archive_path: Path) -> None:
+    for rel, digest in expected_hashes.items():
+        target = root / rel
+        _check_restore_target(root, Path(rel))
+        if not target.is_file() or _sha256(target) != digest:
+            raise OSError(f"installed file verification failed: {rel}")
+    values = {name: (root / name).read_bytes() for name in _REQUIRED_RESTORE_FILES}
+    _validate_restore_versions(values, archive_path)
+
+
+def _write_restore_journal(path: Path, journal: dict) -> None:
+    # Replaced atomically; recovery files are retained when rollback fails.
+    temp = path.with_suffix(".tmp")
+    temp.write_text(json.dumps(journal, indent=2), encoding="utf-8")
+    os.replace(temp, path)
+
+
+def _restore_archive(
+    archive_path: Path, root: Path, dry_run: bool = False, *,
+    max_members: int = 10_000, max_file_size: int = 256 * 1024 * 1024,
+    max_total_size: int = 2 * 1024 * 1024 * 1024, max_ratio: float = 1000.0,
+) -> int:
+    """Validate, stage, back up and install an archive with exception rollback.
+
+    Existing files outside the archive are untouched. A failed rollback keeps
+    the sibling recovery directory and its journal for manual recovery. This
+    is not crash-atomic: power loss, concurrent writers, and an unavailable
+    filesystem can require manual recovery; do not run concurrent restores.
+    """
+    limits = {"max_members": max_members, "max_file_size": max_file_size,
+              "max_total_size": max_total_size, "max_ratio": max_ratio}
+    if any(not isinstance(v, (int, float)) or isinstance(v, bool)
+           or not math.isfinite(v) or v <= 0 for v in limits.values()):
+        print("restore: REFUSED -- limits must be positive")
         return 4
-    with archive:
-        bad = archive.testzip()
-        if bad is not None:
-            print(f"restore: CRC failure on {bad} -- archive corrupt")
+    if not root.is_dir() or root.is_symlink():
+        print("restore: REFUSED -- target root must be an existing non-symlink directory")
+        return 4
+    root = root.absolute()
+    try:
+        if root.stat().st_dev != root.parent.stat().st_dev:
+            print("restore: REFUSED -- root and recovery directory must share a filesystem")
             return 4
-        names = archive.namelist()
-        prefix = _detect_prefix(names)
-        if prefix == "":
-            prefixed = sum(1 for n in names if n.startswith("pharma-ml-toolkit/"))
-            print(
-                f"restore: REFUSED -- mixed layout ({prefixed} of {len(names)} "
-                "members carry the prefix); the archive is malformed"
-            )
-            return 4
-        plan: list[tuple[str, Path]] = []
-        rejected: list[str] = []
-        for member in names:
-            if member.endswith("/"):
-                continue
-            rel = _safe_member_path(member, prefix)
-            if rel is None:
-                rejected.append(member)
-                continue
-            target = root / rel
-            # the containment guarantee, checked rather than assumed
-            if root.resolve() not in target.resolve().parents:
-                rejected.append(member)
-                continue
-            plan.append((member, target))
-        if rejected:
-            print(f"restore: REFUSED -- {len(rejected)} unsafe member(s):")
-            for member in rejected[:5]:
-                print(f"  ! {member}")
-            return 4
-        if not plan:
-            print("restore: REFUSED -- the archive carries no files")
-            return 4
-        layout = prefix or "root-level"
-        if dry_run:
-            print(f"restore (dry run): {len(plan)} member(s), layout: {layout}")
-            for member, target in plan[:10]:
-                print(f"  {member} -> {target}")
-            if len(plan) > 10:
-                print(f"  ... and {len(plan) - 10} more")
-            return 0
-        # staging + validation before replacing a single file
-        expected = re.search(r"v(\d+\.\d+\.\d+)\.zip$", archive_path.name)
-        staged_version: str | None = None
-        staging = Path(tempfile.mkdtemp(prefix=".restore-staging-", dir=str(root.parent)))
-        try:
-            for member, target in plan:
-                staged = staging / target.relative_to(root)
+    except OSError as exc:
+        print(f"restore: REFUSED -- cannot inspect target filesystem: {exc}")
+        return 4
+    recovery: Path | None = None
+    keep_recovery = False
+    attempted: list[tuple[Path, bool]] = []
+    created_dirs: list[Path] = []
+    backup_hashes: dict[str, str] = {}
+    backup_metadata: dict[str, tuple[int, int]] = {}
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            prefix, plan = _restore_plan(archive, limits)
+            for _, rel in plan:
+                _check_restore_target(root, rel)
+            bad = archive.testzip()
+            if bad is not None:
+                raise ValueError(f"CRC failure on {bad}")
+            required = {rel.as_posix(): archive.read(info) for info, rel in plan
+                        if rel.as_posix() in _REQUIRED_RESTORE_FILES}
+            version = _validate_restore_versions(required, archive_path)
+            if dry_run:
+                print(f"restore (dry run): {len(plan)} member(s), layout: {prefix or 'root-level'}, version {version}")
+                for info, rel in plan[:10]:
+                    print(f"  {info.filename} -> {root / rel}")
+                if len(plan) > 10:
+                    print(f"  ... and {len(plan) - 10} more")
+                return 0
+            recovery = Path(tempfile.mkdtemp(prefix=".restore-recovery-", dir=str(root.parent)))
+            stage, backups = recovery / "staged", recovery / "backups"
+            hashes: dict[str, str] = {}
+            existing: dict[str, bool] = {}
+            for info, rel in plan:
+                staged = stage / rel
                 staged.parent.mkdir(parents=True, exist_ok=True)
-                with archive.open(member) as source, open(staged, "wb") as sink:
+                with archive.open(info) as source, staged.open("wb") as sink:
                     shutil.copyfileobj(source, sink)
-            staged_version_file = staging / "VERSION"
-            if staged_version_file.is_file():
-                staged_version = staged_version_file.read_text().strip()
-            if (
-                expected is not None
-                and staged_version is not None
-                and staged_version != expected.group(1)
-            ):
-                print(
-                    f"restore: REFUSED -- archive name says v{expected.group(1)} "
-                    f"but its VERSION member says {staged_version}"
-                )
-                return 4
-            for member, target in plan:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(staging / target.relative_to(root), target)
-        finally:
-            shutil.rmtree(staging, ignore_errors=True)
-    print(
-        f"restore: {len(plan)} file(s) landed (layout: {layout}"
-        + (f", version {staged_version}" if staged_version else "")
-        + ")"
-    )
-    return 0
+                if staged.stat().st_size != info.file_size:
+                    raise OSError(f"staged size mismatch: {rel}")
+                hashes[rel.as_posix()] = _sha256(staged)
+            _validate_restore_versions({name: (stage / name).read_bytes() for name in _REQUIRED_RESTORE_FILES}, archive_path)
+            for _, rel in plan:
+                _check_restore_target(root, rel)
+                target = root / rel
+                existed = target.is_file()
+                existing[rel.as_posix()] = existed
+                if existed:
+                    _backup_restore_file(target, backups / rel)
+                    backup_hashes[rel.as_posix()] = _sha256(backups / rel)
+                    file_stat = (backups / rel).stat()
+                    backup_metadata[rel.as_posix()] = (stat.S_IMODE(file_stat.st_mode), file_stat.st_mtime_ns)
+            journal: dict = {"root": str(root), "archive": str(archive_path.absolute()),
+                             "version": version, "existing": existing,
+                             "backup_sha256": backup_hashes, "backup_metadata": backup_metadata,
+                             "attempted": [], "created_dirs": []}
+            journal_path = recovery / "journal.json"
+            _write_restore_journal(journal_path, journal)
+            for _, rel in plan:
+                _check_restore_target(root, rel)
+                target = root / rel
+                parents: list[Path] = []
+                parent = target.parent
+                while parent != root and not parent.exists():
+                    parents.append(parent)
+                    parent = parent.parent
+                for directory in reversed(parents):
+                    created_dirs.append(directory)
+                    journal["created_dirs"].append(str(directory.relative_to(root)))
+                    _write_restore_journal(journal_path, journal)
+                    _restore_mkdir(directory)
+                had_file = existing[rel.as_posix()]
+                if had_file and (_sha256(target) != _sha256(backups / rel)):
+                    raise OSError(f"target changed during restore: {rel}")
+                if not had_file and target.exists():
+                    raise OSError(f"target appeared during restore: {rel}")
+                attempted.append((rel, had_file))
+                journal["attempted"].append(rel.as_posix())
+                _write_restore_journal(journal_path, journal)
+                _restore_install(stage / rel, target)
+            _verify_restore_tree(root, hashes, archive_path)
+        print(f"restore: {len(plan)} file(s) landed (layout: {prefix or 'root-level'}, version {version})")
+        return 0
+    except BaseException as exc:
+        errors = []
+        if recovery is not None:
+            for rel, existed in reversed(attempted):
+                try:
+                    if existed:
+                        rollback_copy = recovery / "rollback" / rel
+                        rollback_copy.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(recovery / "backups" / rel, rollback_copy)
+                        os.replace(rollback_copy, root / rel)
+                        restored_stat = (root / rel).stat()
+                        if (_sha256(root / rel) != backup_hashes[rel.as_posix()]
+                                or (stat.S_IMODE(restored_stat.st_mode), restored_stat.st_mtime_ns)
+                                != backup_metadata[rel.as_posix()]):
+                            raise OSError("restored backup verification failed")
+                    else:
+                        (root / rel).unlink(missing_ok=True)
+                except OSError as rollback_exc:
+                    errors.append(f"{rel}: {rollback_exc}")
+            for directory in reversed(created_dirs):
+                try:
+                    if directory.exists():
+                        directory.rmdir()
+                except OSError as rollback_exc:
+                    errors.append(f"{directory}: {rollback_exc}")
+        if errors:
+            keep_recovery = True
+            print(f"restore: ROLLBACK INCOMPLETE -- retain recovery directory {recovery}")
+            for error in errors:
+                print(f"  ! {error}")
+        print(f"restore: REFUSED or failed -- {exc}")
+        if not isinstance(exc, Exception):
+            raise
+        return 4
+    finally:
+        if recovery is not None and not keep_recovery:
+            shutil.rmtree(recovery, ignore_errors=True)
 
 
-def restore(dry_run: bool = False) -> int:
+def restore(dry_run: bool = False, **limits: float) -> int:
     """Unpack the newest surviving zip over the tree, then light-commit."""
     newest = _newest_zip()
     if newest is None:
         print("restore: no surviving archive found")
+        return 4
+    if not newest.is_file() and dry_run:
+        print(f"restore: {newest} is not on disk; dry run will not materialise it")
         return 4
     if not newest.is_file():
         # tracked in git but gone from disk -- materialise it first
@@ -603,7 +805,7 @@ def restore(dry_run: bool = False) -> int:
         return 4
     mode = " (dry run)" if dry_run else ""
     print(f"restore: unpacking {newest.name} over {ROOT}{mode}")
-    rc = _restore_archive(newest, ROOT, dry_run=dry_run)
+    rc = _restore_archive(newest, ROOT, dry_run=dry_run, **limits)
     if rc != 0 or dry_run:
         return rc
     return light()
@@ -620,7 +822,14 @@ def main() -> int:
         "--dry-run", action="store_true",
         help="with --restore: preview the member -> target plan, write nothing",
     )
+    parser.add_argument("--max-members", type=int, default=None, help="restore archive member limit")
+    parser.add_argument("--max-file-size", type=int, default=None, help="restore per-file uncompressed bytes")
+    parser.add_argument("--max-total-size", type=int, default=None, help="restore total uncompressed bytes")
+    parser.add_argument("--max-ratio", type=float, default=None, help="restore maximum compression ratio")
     args = parser.parse_args()
+    limits = {name: getattr(args, name) for name in RESTORE_LIMITS if getattr(args, name) is not None}
+    if limits and not args.restore:
+        parser.error("restore limits only make sense together with --restore")
     if args.dry_run and not args.restore:
         parser.error("--dry-run only makes sense together with --restore")
     if args.doctor:
@@ -628,7 +837,7 @@ def main() -> int:
     if args.light:
         return light()
     if args.restore:
-        return restore(dry_run=args.dry_run)
+        return restore(dry_run=args.dry_run, **limits)
     return ship(args.commit)
 
 

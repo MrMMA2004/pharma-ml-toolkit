@@ -50,6 +50,12 @@ cp = _load_module(TOOLKIT / "tools" / "checkpoint.py", "checkpoint_under_test")
 
 
 def _make_zip(path: Path, entries: dict[str, str]) -> Path:
+    entries = dict(entries)
+    for prefix in ("", "pharma-ml-toolkit/"):
+        if prefix + "VERSION" in entries:
+            version = entries[prefix + "VERSION"].strip()
+            entries.setdefault(prefix + "pyproject.toml", f'[project]\nversion = "{version}"\n')
+            entries.setdefault(prefix + "src/pharmaml/__init__.py", f'__version__ = "{version}"\n')
     with zipfile.ZipFile(path, "w") as zf:
         for name, text in entries.items():
             zf.writestr(name, text)
@@ -83,7 +89,7 @@ class TestRestoreDualLayout:
         # builder) -- every member under pharma-ml-toolkit/.
         arc = _make_zip(tmp_path / "pharma-ml-toolkit-v9.9.8.zip", {
             "pharma-ml-toolkit/VERSION": "9.9.8\n",
-            "pharma-ml-toolkit/src/pharmaml/__init__.py": "x = 1\n",
+            "pharma-ml-toolkit/src/pharmaml/__init__.py": "__version__ = '9.9.8'\n",
         })
         target = tmp_path / "tree"
         target.mkdir()
@@ -139,7 +145,7 @@ class TestRestoreDualLayout:
     def test_dry_run_writes_nothing(self, tmp_path: Path) -> None:
         arc = _make_zip(tmp_path / "pharma-ml-toolkit-v9.9.9.zip", {
             "VERSION": "9.9.9\n",
-            "src/pharmaml/__init__.py": "x = 1\n",
+            "src/pharmaml/__init__.py": "__version__ = '9.9.9'\n",
         })
         target = tmp_path / "tree"
         target.mkdir()
@@ -152,7 +158,7 @@ class TestRestoreDualLayout:
         # malformed and must never reach the tree.
         arc = _make_zip(tmp_path / "pharma-ml-toolkit-v9.9.9.zip", {
             "VERSION": "1.0.0\n",  # lies about itself
-            "src/pharmaml/__init__.py": "x = 1\n",
+            "src/pharmaml/__init__.py": "__version__ = '1.0.0'\n",
         })
         target = tmp_path / "tree"
         target.mkdir()
