@@ -13480,3 +13480,86 @@ the platform exec limit (re-acknowledged, not recreated — the 3/day
 quota).  Next: the Phase-4 gap list (cards for the newly-landed
 conformal/coverage/split-audit trio — the inventory's fresh C rows),
 the Part-3 §20-24 backlog.
+
+## Round 267 (100x-64) — 2026-11-12: the arena/7e4a40b3 absorption, v1.2.174, and the hydration fix
+
+**The rollback.**  Bash died with the 35th session's end; the 36th
+opened on a rolled-back sandbox — no remote, no token, no counter,
+local main 250 commits behind at the r186 snapshot (2eb0ede).  The
+ritual ran end to end: the PAT re-extracted from MASTER_PROMPT.pdf
+(two-line join, 93 chars), the helper + origin restored, the ff-pull
+unblocked by moving the untracked upload/ aside to /tmp (all ten
+compared byte-identical after), the venv repaired (rdkit gone again;
+the round-196 script, foreground).
+
+**The absorption.**  A NEW arena branch had appeared on the remote
+since the r266 cleanup: `arena/7e4a40b3-pharma-ml-toolkit`, forked
+from `732f553` (the r266 main-only state) with **13 genuinely
+unabsorbed commits** (69 files, +7,126/−1,810).  Forensics: merge-tree
+clean (zero conflicts), the main-side delta just the r266 ship
+commits, the valuable payload real — the Part-5 engine-discovery suite
+over the bundled `engines/` (vina/autodock4/autogrid4: discovery,
+launch prerequisites, the platform data-drift diagnostic), the
+checkpoint transaction/build-safety rework, the release-audit /
+docs-index / example-data / drift-diagnostic / notebook-strip tooling,
+the estimator-compatibility validation, the suite-portability markers
+(`checkout_only`/`web_checkout_only`), the GitHub-page check scripts,
+and the FEATURES.md docking-boundary correction — main's "never
+bundled" was itself drift: `engines/*.exe` ships in the tree.  Real
+three-way merge (`5396954`), the owner's directive delivered again.
+Focused 172 + adjacent suites green before the gate; the branch ref
+deleted after the push landed — **the remote is main-only** (again).
+
+**The gate.**  The ten-chunk runner (r263 shape, dev server down):
+8/10 green first pass, both failures named and fixed at the source —
+(a) `test_every_extra_package_appears_pinned_somewhere`: the branch's
+new `gui-test` extra (PySide6/pyqtgraph/qt-material/qdarkstyle/
+pytest/pytest-qt) demanded pins the strict `# name==version` parser
+could see; the Studio-GUI block's trailing-comment pin style never
+parsed (the block predates the extra; the contract only now reaches
+it) — reformatted to strict form, prose moved to adjacent non-pin
+lines; (b) `test_shipped_tree_carries_no_absolute_home_paths`: the
+branch's `docs/PART5_PHASE0_AUDIT.md` carried `/home/user` ×4 — the
+r265 scrub contract did its job; neutral placeholders in.  Both files
+re-verified green.
+
+**The ship.**  Carriers 1.2.174 ×4 (VERSION, pyproject, dunder,
+SHIPPED_TOOLKIT_VERSION), notebooks re-executed 8/8 (234 s, zero
+home-path survivors), the FEATURES.md freeze stamp trued (+zip
+rebuilt — the first build's bytes predated the stamp), the release
+`pharma-ml-toolkit-v1.2.174.zip` — 8,884,591 bytes, sha-256
+`bf8dbfb58e2d0d07ecc79c3f36f28595d33d59890f439cb242e992c7525b54e7`,
+four byte-identical homes, testzip OK per home, composition
+violations 0, real leaks 0, predecessor v1.2.173 swept (the builder's
+PREDECESSOR pointed at the actual previous ship this time).  Honest
+totals **5,909 = 5,035 collect + 874 doctest** (collect-only
+verified); census **1129/348,052** (the live endpoint walk, post-CHANGELOG;
++19 files/+5,023 lines — exactly the merge).  Web pins trued: 5909
+×8 (hero, download-panel ×4, overview value+countTo+provenance head),
+FALLBACK_STATS 1129/348,052, the provenance chain's round-267
+sentence, SHIPPED_TOOLKIT_VERSION 1.2.174.  CHANGELOG leads 1.2.174;
+the manifest's v1.2.174 section written.
+
+**The E2E find (the standing mandate).**  agent-browser's mandatory
+sweep caught a real one: **every CodeBlock tripped React's hydration
+mismatch for dark-mode visitors** — the prism style branched on
+`resolvedTheme` (SSR undefined→oneLight, dark client→oneDark), so the
+`<pre>` style attribute could never match.  Fixed at the component
+(the mount-gate: first client render matches SSR, oneDark one effect
+later).  Clean reload: zero console errors.  Also caught mid-E2E: the
+provenance cell head and FALLBACK_STATS lagging the post-CHANGELOG
+census (5789→5909 head, 348,019→348,052) — trued before the final
+push.  Badge v1.2.174, hero 1129/348,052/5,909, copy toast, theme
+round-trip, footer live, mobile 390px no-scroll — all verified; the
+evidence rides `scratch/e2e-r267-{desktop,mobile}.png` (the r266
+convention).
+
+**The pushes.**  `f52dc46..4cfd953` (the ship) then the web-fix
+commit; `origin/main == HEAD` verified both times;
+`arena/7e4a40b3-pharma-ml-toolkit` deleted.  The scheduler: the
+master job enabled (run_count 77 platform-side — the counter stays
+self-contained at 64); webDevReview recreated as 524664 after the
+list showed none (the platform's 3/day exec-limit warning re-
+acknowledged — the r266 pattern).  Next: the Phase-4 gap list (the
+conformal trio's cards), the Part-3 §20-24 backlog, and the branch
+watch — the arena system grows new refs between rounds.
