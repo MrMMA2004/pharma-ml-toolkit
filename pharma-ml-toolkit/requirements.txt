@@ -85,11 +85,16 @@ tqdm==4.67.1
 # pinned scientific stack:
 #   pip install PySide6==6.8.3 pyqtgraph==0.13.7 qt-material==2.17 \
 #               qdarkstyle==3.2.3 pytest-qt==4.5.0 -c <(echo numpy==1.26.4)
-# PySide6==6.8.3          # Qt 6.8 LTS; PySide6 6.9+ wheels still OK but
+# PySide6==6.8.3
+#                         # Qt 6.8 LTS; PySide6 6.9+ wheels still OK but
 #                         # 6.8.3 is the verified pin (Python 3.12)
-# pyqtgraph==0.13.7       # LAST numpy-1.x line: 0.14 requires numpy>=2.2,
+# pyqtgraph==0.13.7
+#                         # LAST numpy-1.x line: 0.14 requires numpy>=2.2,
 #                         # this stack pins 1.26.4 (mordred constraint)
-# qt-material==2.17       # primary Material Design provider (density via
+# qt-material==2.17
+#                         # primary Material Design provider (density via
 #                         # the extra={'density_scale': ...} template dict)
-# qdarkstyle==3.2.3       # verified alternative dark provider (via qtpy)
-# pytest-qt==4.5.0        # GUI test harness (qapp/qtbot fixtures)
+# qdarkstyle==3.2.3
+#                         # verified alternative dark provider (via qtpy)
+# pytest-qt==4.5.0
+#                         # GUI test harness (qapp/qtbot fixtures)

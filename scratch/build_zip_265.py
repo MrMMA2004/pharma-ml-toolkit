@@ -23,7 +23,7 @@ REPO = Path("/home/z/my-project")
 TOOLKIT = REPO / "pharma-ml-toolkit"
 VERSION = (TOOLKIT / "VERSION").read_text().strip()
 NAME = f"pharma-ml-toolkit-v{VERSION}.zip"
-PREDECESSOR = "pharma-ml-toolkit-v1.2.171.zip"
+PREDECESSOR = "pharma-ml-toolkit-v1.2.173.zip"
 
 EXCLUDES = [
     # the route's canonical list (toolkit-fs.ts ZIP_EXCLUDE_ARGS)

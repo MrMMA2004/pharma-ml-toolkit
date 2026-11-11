@@ -1,3 +1,36 @@
+## [1.2.174] — 2026-11-12
+### Added — round 267: the arena/7e4a40b3 absorption — engine discovery, checkpoint hardening, release tooling
+
+- `tests/test_engine_discovery_part5.py` — the engine-discovery suite (243
+  tests) over the bundled `engines/` runtimes (vina, autodock4, autogrid4):
+  discovery, launch prerequisites, and the platform data-drift diagnostic —
+  the Part-5 checkpoint verification the branch recorded.
+- `tools/checkpoint.py` — the transactional rework: the restore contract
+  staged+rolled-back, the ZIP builder refuses to clobber existing releases
+  (`tests/test_checkpoint_build_safety.py`, `test_checkpoint_restore_transaction.py`).
+- `tools/audit_release.py` — the read-only release-archive evidence audit;
+  `tools/build_docs_index.py` — the generated docs index (regenerated);
+  `tools/build_example_data.py` — the example-data builder;
+  `tools/diagnose_data_drift.py` — the platform-specific drift diagnostic;
+  `tools/strip_notebook_outputs.py` — the output scrubber.
+- `tests/test_estimator_compatibility.py` — conformal/coverage estimators
+  validated across sklearn versions (the r266 suite's compatibility leg).
+- Suite portability: `tests/conftest.py` + the `checkout_only` /
+  `web_checkout_only` markers — tests needing the Git checkout or the
+  companion web tree skip cleanly in the standalone (zip) profile.
+- Root `scripts/check_github_page.py` + `scripts/build_social_preview.py` +
+  `tests/test_github_page.py` — the landing-page checks (10 tests).
+- `docs/FEATURES.md` — the docking-boundary language trued to the bundled
+  engines reality (the source/ZIP ships Windows engines; native builds or
+  Wine may be needed) — the drift the branch caught and main's drift-guard
+  now pins.
+- `requirements.txt` — the Studio-GUI block's pins reformatted to the strict
+  `# name==version` form the pin-contract test parses; the new `gui-test`
+  extra (PySide6/pyqtgraph/qt-material/qdarkstyle/pytest/pytest-qt) is now
+  covered by the contract.
+- Hygiene: the `PART5_PHASE0_AUDIT.md` home-path leak scrubbed (the
+  ten-chunk gate's second catch this round).
+
 ## [1.2.173] — 2026-11-11
 ### Added — round 266: the arena branch absorption -- the conformal & split-integrity suite lands (arena/8696775e, 12 commits)
 

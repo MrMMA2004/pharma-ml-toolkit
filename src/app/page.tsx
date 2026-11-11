@@ -57,12 +57,12 @@ function ThemeToggle() {
   );
 }
 
-/* r266 (the arena/8696775e absorption): +19 files (4 new ml modules,
- * 5 docs pages, 10 test files), +242 collect tests (4,915 total); census
- * verified by the endpoint-rule walk (1110 = 1091 + 19 new; 343,029 as the
- * live /api/toolkit/tree answers -- countLines' split("\n").length rule)
- * after the notebook re-execution. */
-const FALLBACK_STATS = { files: 1110, lines: "343,029" };
+/* r267 (the arena/7e4a40b3 absorption): +19 files (5 new tools, 7 new
+ * test files, 2 new root scripts+test, checkpoint/docs rework), +120
+ * collect tests (5,035 total); census verified by the endpoint-rule walk
+ * (1129 = 1110 + 19 new; 348,019 as the live /api/toolkit/tree answers --
+ * countLines' split("\n").length rule) after the notebook re-execution. */
+const FALLBACK_STATS = { files: 1129, lines: "348,019" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
@@ -209,7 +209,7 @@ export default function Home() {
             {stats ? `${stats.files} files · ${stats.totalLines.toLocaleString("en-US")} LOC` : `${FALLBACK_STATS.files} files · ${FALLBACK_STATS.lines} LOC`}
             {" · "}
             <span className="ping-ring relative inline-flex size-2 rounded-full bg-primary" aria-hidden />
-            <span className="text-primary">5789 tests</span>
+            <span className="text-primary">5909 tests</span>
           </p>
         </div>
       </footer>

@@ -2242,3 +2242,39 @@ directive, delivered end to end:
   not recreated).  Next: the Phase-4 gap list from the feature
   inventory (the §4 C-list: cards for the newly-landed conformal /
   coverage / split-audit trio), Part-3 §20-24 backlog.
+
+## v1.2.174 release-zip homes (2026-11-12, round 267 — the arena/7e4a40b3 absorption: engine discovery, checkpoint hardening, release tooling)
+
+`pharma-ml-toolkit-v1.2.174.zip` — 8,884,591 bytes, sha-256
+`bf8dbfb58e2d0d07ecc79c3f36f28595d33d59890f439cb242e992c7525b54e7`
+(four byte-identical homes, testzip OK per home, composition
+violations 0, real leaks 0; predecessor v1.2.173 swept from all four
+homes — the r265 builder's PREDECESSOR constant pointed at the actual
+previous ship this time).  The round was the branch-absorption
+directive again, one new arena branch after the r266 cleanup:
+
+- Forensics: `arena/7e4a40b3-pharma-ml-toolkit` forked from `732f553`
+  (the r266 main-only state) and carried 13 genuinely-unabsorbed
+  commits (69 files, +7,126/−1,810): the Part-5 engine-discovery suite
+  over the bundled `engines/`, the checkpoint transaction/build-safety
+  rework, the release-audit/docs-index/example-data/drift-diagnostic/
+  notebook-strip tooling, the estimator-compatibility validation, the
+  suite-portability markers, the GitHub-page check scripts, and the
+  FEATURES.md docking-boundary correction (main's "never bundled" was
+  drift — `engines/*.exe` ships in the tree).
+- The absorption: clean three-way merge (`5396954`, zero conflicts by
+  merge-tree before and after), the round-266 ship commits the only
+  main-side delta.  Focused (172) + adjacent (web parity, nine cards,
+  feature inventory, notebooks) green before the gate.
+- The ten-chunk gate: 8/10 chunks green first pass; two named findings,
+  both fixed at the source — the requirements-pin contract demanding
+  strict `# name==version` lines once `gui-test` was declared (the
+  Studio-GUI block's trailing-comment style never parsed), and the
+  PART5_PHASE0_AUDIT.md `/home/user` leak (the r265 scrub contract).
+  Full suite re-verified on the fixed files; honest totals
+  5,909 = 5,035 collect + 874 doctest (collect-only verified).
+- Carriers 1.2.174 ×4, notebooks re-executed 8/8 (234 s,
+  home-path-survivors 0), census 1129/348,019 (live walk, +19 files
+  /+4,990 lines — exactly the merge), web pins trued (5909 ×7,
+  FALLBACK_STATS 1129/348,019, provenance sentence, SHIPPED_TOOLKIT_
+  VERSION), CHANGELOG leads 1.2.174.

@@ -80,7 +80,7 @@ const INSTALL_STEPS: InstallStep[] = [
   },
   {
     title: "Verify the install",
-    description: "5789 tests should pass and the CLI answers with its version.",
+    description: "5909 tests should pass and the CLI answers with its version.",
     commands: ["python -m pytest", "pharmaml --version", "cat VERSION"],
   },
 ];
@@ -309,7 +309,7 @@ function collectDirSummary(
 ): Array<{ name: string; files: number; size: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "5789 pytest cases across all domains",
+    tests: "5909 pytest cases across all domains",
     examples: "eight executed notebooks + seven no-output twins + runnable demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
@@ -601,7 +601,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="5789" countTo={5789} label="passing tests" />
+          <StatChip icon={CircleCheck} value="5909" countTo={5909} label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}
@@ -974,7 +974,7 @@ export function DownloadPanel() {
             <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">
               <p className="text-[11px] leading-snug text-muted-foreground">
                 <span className="font-medium text-foreground">Why exact versions?</span> Every pin above is
-                the environment the 5,789-test pytest suite, ruff, mypy and the executed notebooks
+                the environment the 5,909-test pytest suite, ruff, mypy and the executed notebooks
                 actually run green under — installing the same numbers removes an entire class of
                 &quot;works on my machine&quot; before it starts (the numpy 1.26.4 pin in particular: mordred
                 resolves against it).

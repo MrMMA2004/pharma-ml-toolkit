@@ -3,7 +3,7 @@
 This is an **incremental, partial assessment**, not a full release certification.
 The requested v1.2.173 ZIP and v1.2.173-specific master prompt were not supplied
 in the attachment for this task. The checkout is a Git monorepo rooted at
-`/home/user/pharma-ml-toolkit`; the Python toolkit and Studio are in the inner
+`<TOOLKIT-ROOT>`; the Python toolkit and Studio are in the inner
 `pharma-ml-toolkit/` directory and the companion Next.js web source is at the
 repository root. The branch began at main commit `732f5538b5c69aa3997a5686b4aaaf47a6fed767`;
 its prior landing-page change was committed as `8c1ca49` before this work.
@@ -23,7 +23,7 @@ scope and outstanding profiles. It describes the old checked-in archive, **not**
 a new archive containing this patch.
 
 Before editing, the archive was copied to the workspace backup directory
-`/home/user/pharma-part5-backup/` and its SHA-256 matched the source. This is
+`<BACKUP-DIR>/` and its SHA-256 matched the source. This is
 not an off-site disaster-recovery backup. The original checked-in ZIP was not
 modified or rebuilt. The prior branch work was already committed and pushed.
 
@@ -204,7 +204,7 @@ come from the archive itself, not an independent authenticity source. Details
 and limitations are in [RELEASE_AUDIT.md](RELEASE_AUDIT.md).
 
 The original v1.2.172 archive was audited to the separate workspace directory
-`/home/user/pharma-part5-audit-v1.2.172-final/`: 531 entries, 486 files,
+`<AUDIT-DIR>/`: 531 entries, 486 files,
 8,883,247 bytes, SHA-256
 `c2676af8db050b8f31c40bd36216e3de7ba4b8216a7067e321c421e6c5eb9857`;
 all eight archive checks passed and 45 example-data files were counted
@@ -304,7 +304,7 @@ experiment it reported eight changed text cells (largest numeric difference
 (largest `8.881784197001252e-16`) in the PK CSV, with no changed nonnumeric
 cells and unchanged shapes/headers. All 46 example/PDB file hashes were checked
 before and after and matched. A diagnostic JSON was saved separately at
-`/home/user/pharma-part5-cpu-drift-diagnostic.json`.
+`<DRIFT-REPORT>.json`.
 
 The new diagnostic/fixture/portability/provenance selection reported **187
 passed, 0 failed, 0 skipped** on the local AVX512 environment. In the core-only
