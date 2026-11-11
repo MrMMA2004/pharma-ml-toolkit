@@ -41,7 +41,7 @@ that the entire prompt has been completed.
 | Release ZIP QA report | **Partially implemented** | A read-only archive auditor now produces machine-readable manifests and a human-readable summary, with explicit not-executed statuses. The report covers the old v1.2.172 archive, not a new release; comprehensive documentation, profile and full release certification remain outstanding. |
 | Standalone release portability and canonical builders | **Partially implemented** | Original data, index and notebook-stripping generators now ship in `tools/`; checkout-only CLI forwarders preserve their historical paths. An explicitly selected targeted standalone profile and isolated candidate ZIP regression passed; the full release suite remains untested. See the continuation evidence below and [standalone testing](STANDALONE_TESTING.md). |
 | Dependency profiles and CI | **Partially implemented** | Named targeted profiles and a GUI test extra are documented; local core, chemistry and Meeko/gemmi preparation selections ran. A chemistry/preparation CI job and GUI extra installation have been added; broader profiles remain incomplete. The CI portability failure is traced to example-data byte drift on the GitHub runner; root cause and a safe cross-platform remedy remain under investigation. See continuation evidence below. |
-| Estimator validation / scikit-learn compatibility | **Partially implemented** | The 1.8 classifier failure was reproduced and fixed with sklearn type/fitted-state APIs and an explicit legacy-custom fallback. Focused and adjacent local tests passed on 1.3.0, 1.3.2, 1.5.2 and 1.8.0; the new compatibility CI matrix is pending. Full-suite and all combinations in the declared open-ended range are not certified. |
+| Estimator validation / scikit-learn compatibility | **Partially implemented** | The 1.8 classifier failure was reproduced and fixed with sklearn type/fitted-state APIs and an explicit legacy-custom fallback. Focused and adjacent local tests passed on 1.3.0, 1.3.2, 1.5.2 and 1.8.0; the new compatibility CI matrix passed on commit 89c3cde. Full-suite and all combinations in the declared open-ended range are not certified. |
 | Engine discovery and actual docking | **Not implemented** | `docking/workflow.py` has engine lookup APIs; the current engine README and feature inventory make conflicting claims. Search-order and runtime behavior were not changed or fully tested. No binary was executed. |
 | Documentation and scientific feature inventory | **Partially implemented** | The example count mismatch and current-Tkinter and bundled-engine claims were located; the broader reconciliation and feature inventory have not been completed. |
 | Dashboard, visualization and resumable jobs | **Not implemented** | Existing Studio architecture is preserved. No GUI behavior or scientific output was changed or tested. |
@@ -270,7 +270,7 @@ and documentation checks reported **290 passed, 0 failed, 0 skipped** (three
 single-class metric warnings); the DALEX/conformal doctest selection on 1.8.0
 reported **1 passed, 0 failed, 0 skipped**. Ruff passed for changed code and
 mypy reported no issues in 213 source files. CI now has a separate Python 3.11
-matrix for scikit-learn 1.3.0, 1.5.2 and 1.8.0; its results are pending.
-These are selected tests, not proof of the full open-ended dependency range or
-full release suite. At the start of this phase all eight previous CI jobs passed
-on 6f49111; cross-platform example-data byte reproducibility remains unresolved.
+matrix for scikit-learn 1.3.0, 1.5.2 and 1.8.0; all three jobs passed on
+commit 89c3cde, as did the eight other jobs in that run. These are selected
+tests, not proof of the full open-ended dependency range or full release suite.
+Cross-platform example-data byte reproducibility remains unresolved.
