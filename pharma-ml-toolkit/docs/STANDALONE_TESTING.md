@@ -26,9 +26,11 @@ python -m pytest --standalone-release tests/test_data_provenance.py tests/test_c
 ```
 
 This selection also requires pytest, nbformat and the pinned RDKit. The option
-skips only tests marked `checkout_only`; they remain active by default in a full
-checkout, so a missing shim or Git origin there is still a failure. Other tests
-may independently skip when optional components or the web source are absent.
+skips tests marked `checkout_only` and `web_checkout_only`; they remain active
+by default in a full checkout, so missing checkout shims, Git origin or companion
+web files still fail the relevant default checks. Other tests may independently
+skip when optional components or the web source are absent. The portability
+regression also exercises web and version-carrier tests in an isolated tree.
 This selection is a targeted portability profile, **not** the full release suite
 or proof of engine execution. See the [Part 5 audit](PART5_PHASE0_AUDIT.md) for
 actual observed results and remaining work.

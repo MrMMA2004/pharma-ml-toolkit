@@ -25,6 +25,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         for item in items:
             if item.get_closest_marker("checkout_only"):
                 item.add_marker(skip)
+            if item.get_closest_marker("web_checkout_only"):
+                item.add_marker(pytest.mark.skip(reason="requires companion Web Console source tree"))
 
 
 def pdbqt_atom(serial: int, name: str, x: float, y: float, z: float, atom_type: str) -> str:

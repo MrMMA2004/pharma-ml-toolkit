@@ -59,3 +59,14 @@ def test_standalone_archive_profile(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "2 skipped" in result.stdout, result.stdout + result.stderr
+    web_guard = subprocess.run(
+        base + ["tests/test_web_parity.py::TestSessionReportKeyboard::test_the_pin_contract_is_a_toggle"],
+        cwd=standalone, env=env, text=True, capture_output=True, check=False,
+    )
+    assert web_guard.returncode == 1 and "1 failed" in web_guard.stdout, web_guard.stdout + web_guard.stderr
+    web = subprocess.run(
+        base + ["--standalone-release", "tests/test_web_parity.py", "tests/test_version_carriers.py", "-rs"],
+        cwd=standalone, env=env, text=True, capture_output=True, check=False,
+    )
+    assert web.returncode == 0, web.stdout + web.stderr
+    assert "requires companion Web Console source tree" in web.stdout, web.stdout + web.stderr

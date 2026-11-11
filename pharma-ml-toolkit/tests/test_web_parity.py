@@ -1559,6 +1559,7 @@ class TestSessionReportKeyboard:
         assert "prev === traceIndex ? null : prev" in report
         assert "onKeyDown={traceKeyDown(traceIndex)}" in report
 
+    @pytest.mark.web_checkout_only
     def test_the_pin_contract_is_a_toggle(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # Enter AND Space toggle; Escape only clears THIS trace's pin
@@ -1572,6 +1573,7 @@ class TestSessionReportKeyboard:
         # the readout precedence: a PIN outlives the focus that set it
         assert "pinnedTrace ?? focusedTrace" in report
 
+    @pytest.mark.web_checkout_only
     def test_the_readout_strip_confesses_itself(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the visible strip (the honest keyboard replacement for a
@@ -1581,6 +1583,7 @@ class TestSessionReportKeyboard:
         # the pin's own confession names both keys
         assert "pinned (Esc clears, Enter toggles)" in report
 
+    @pytest.mark.web_checkout_only
     def test_focus_emphasis_mirrors_the_hover_emphasis(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the emphasis classes grew their focus-visible twins, exactly
@@ -1588,6 +1591,7 @@ class TestSessionReportKeyboard:
         assert "group-focus-visible:stroke-2" in report
         assert "group-focus-visible:fill-primary/25" in report
 
+    @pytest.mark.web_checkout_only
     def test_the_type_is_imported_not_namespaced(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # KeyboardEvent rides the type import (no React namespace);
@@ -1597,6 +1601,7 @@ class TestSessionReportKeyboard:
             ' type KeyboardEvent } from "react"'
         ) in report
 
+    @pytest.mark.web_checkout_only
     def test_the_escape_layering_holds_the_dialog(self) -> None:
         """(100x-135, E2E-caught) Radix closes the dialog on Escape at
         the document-CAPTURE phase -- before any trace group's own
@@ -1678,6 +1683,7 @@ class TestSessionReportPinStore:
         # traded for this browser key)
         assert ts["storageKey"] == "pharmaml.reportPinnedTrace", ts
 
+    @pytest.mark.web_checkout_only
     def test_the_component_reads_the_store_through_the_hook(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the hook: subscribe + THIS figure's snapshot + the null server
@@ -1696,6 +1702,7 @@ class TestSessionReportPinStore:
         # the caption confesses the persistence
         assert "a pin is remembered per" in report
 
+    @pytest.mark.web_checkout_only
     def test_the_store_file_pins_its_own_contract(self) -> None:
         store = self.STORE_TS.read_text(encoding="utf-8")
         # the exported surface the component + probe consume
@@ -1766,6 +1773,7 @@ class TestPreviewContentsTwin:
         # the file-twin parity: the derivation IS the file's block
         assert ts["fileTwinParity"] is True, ts
 
+    @pytest.mark.web_checkout_only
     def test_the_collector_exports_the_contents_contract(self) -> None:
         collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
         assert "export function sessionReportContents(" in collector
@@ -1774,6 +1782,7 @@ class TestPreviewContentsTwin:
         assert "title-page material" in collector
         assert "the noise rule" in collector
 
+    @pytest.mark.web_checkout_only
     def test_the_component_carries_the_strip_and_the_jump(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the strip: sticky at the top of the scroll area, labelled as
@@ -1845,6 +1854,7 @@ class TestPreviewContentsCensus:
         # [] and the strip (census included) never renders
         assert ts["metricsOnlyYieldsEmpty"] is True, ts
 
+    @pytest.mark.web_checkout_only
     def test_the_collector_exports_the_census_contract(self) -> None:
         collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
         assert "export function sessionContentsCensus(" in collector
@@ -1854,6 +1864,7 @@ class TestPreviewContentsCensus:
         assert "metrics are excluded by construction" in collector
         assert "the probe pins the wording" in collector
 
+    @pytest.mark.web_checkout_only
     def test_the_component_carries_the_census_line(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the strip's header row: the title on the left, the census on
@@ -1926,6 +1937,7 @@ class TestPreviewContentsSpotlight:
         # metrics can never be a spotlight target
         assert ts["metricsNeverALeg"] is True, ts
 
+    @pytest.mark.web_checkout_only
     def test_the_collector_exports_the_spotlight_contract(self) -> None:
         collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
         assert "export function contentsCensusLegs(" in collector
@@ -1935,6 +1947,7 @@ class TestPreviewContentsSpotlight:
         assert "click can spotlight exactly that kind's lines" in collector
         assert "nothing remembered: stay quiet" in collector
 
+    @pytest.mark.web_checkout_only
     def test_the_component_carries_the_spotlight_and_confession(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the legs render inside the strip (the census's clickable form)
@@ -2002,6 +2015,7 @@ class TestPreviewKeyboardSpotlight:
         # non-digits always pass — the keydown owns only the census digits
         assert ts["allNonDigitsPassed"] is True, ts
 
+    @pytest.mark.web_checkout_only
     def test_the_collector_exports_the_keyboard_contract(self) -> None:
         collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
         assert "export function spotlightKeyAction(" in collector
@@ -2010,6 +2024,7 @@ class TestPreviewKeyboardSpotlight:
         assert "two paths can never disagree because they share this map" in collector
         assert "the digits" in collector and "count the line's legs" in collector
 
+    @pytest.mark.web_checkout_only
     def test_the_component_carries_the_keydown_and_the_reset(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the keydown rides the open dialog, through the pure map

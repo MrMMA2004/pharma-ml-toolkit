@@ -40,7 +40,7 @@ that the entire prompt has been completed.
 | Real archive smoke | **Completed and verified** | The available v1.2.172 ZIP was dry-run and restored into an isolated temporary directory; every restored member's SHA-256 matched the ZIP and an unrelated user file survived. This does not test the unavailable v1.2.173 archive. |
 | Release ZIP QA report | **Partially implemented** | A static machine-readable report and manifest were produced for the existing v1.2.172 ZIP, not a new release build. Full profile results, standalone test suite and a reusable release-report generator remain outstanding. |
 | Standalone release portability and canonical builders | **Partially implemented** | Original data, index and notebook-stripping generators now ship in `tools/`; checkout-only CLI forwarders preserve their historical paths. An explicitly selected targeted standalone profile and isolated candidate ZIP regression passed; the full release suite remains untested. See the continuation evidence below and [standalone testing](STANDALONE_TESTING.md). |
-| Dependency profiles and CI | **Partially implemented** | Named targeted profiles and a GUI test extra are documented; local core, chemistry and Meeko/gemmi preparation selections ran. A chemistry/preparation CI job and GUI extra installation have been added; broader profiles remain incomplete. The CI portability failure on 45d3480 is under investigation. See continuation evidence below. |
+| Dependency profiles and CI | **Partially implemented** | Named targeted profiles and a GUI test extra are documented; local core, chemistry and Meeko/gemmi preparation selections ran. A chemistry/preparation CI job and GUI extra installation have been added; broader profiles remain incomplete. The CI portability failure is traced to example-data byte drift on the GitHub runner; root cause and a safe cross-platform remedy remain under investigation. See continuation evidence below. |
 | Estimator validation / scikit-learn compatibility | **Not implemented** | `_estimator_type` assumptions remain in `ml/conformal.py` and `ml/dalex.py`; the PDF's 1.8-specific failure has not yet been reproduced locally. Pinned scikit-learn is 1.5.2; the declared range remains `>=1.3`. |
 | Engine discovery and actual docking | **Not implemented** | `docking/workflow.py` has engine lookup APIs; the current engine README and feature inventory make conflicting claims. Search-order and runtime behavior were not changed or fully tested. No binary was executed. |
 | Documentation and scientific feature inventory | **Partially implemented** | The example count mismatch and current-Tkinter and bundled-engine claims were located; the broader reconciliation and feature inventory have not been completed. |
@@ -130,8 +130,8 @@ and its backup still have SHA-256
 Named targeted commands and requirements are in [TEST_PROFILES.md](TEST_PROFILES.md).
 The `gui-test` extra declares the PySide6, PyQtGraph, theme and pytest-qt
 requirements; CI installs this extra with explicit pins. An additional CI job
-is configured to run descriptor and receptor/ligand preparation tests with
-RDKit, Mordred, Meeko and gemmi. Its result is pending, not assumed.
+runs descriptor and receptor/ligand preparation tests with RDKit, Mordred,
+Meeko and gemmi; that job passed on commit 7fd4a09.
 
 Local Python 3.11.2 results:
 
@@ -164,3 +164,29 @@ failure details as GitHub annotations to support diagnosis on its next run;
 this failure is not considered resolved merely because local reproduction passed.
 The v1.2.173 inputs, full release profile and real docking engine execution
 remain unavailable/unverified.
+
+### Follow-up — broader standalone selection and CI failure diagnosis
+
+A broader extracted-candidate run including web-parity and version-carrier
+tests initially reported **184 passed, 15 failed, 64 skipped**: 15 tests
+assumed the excluded Web Console source was present. These tests now carry
+an explicit `web_checkout_only` marker and skip only under the selected
+standalone profile, with a specific reason. Default full-checkout behavior is
+unchanged; the temporary-archive regression verifies a representative missing
+web file still fails without the flag. Re-running that broader selection in a
+fresh extracted candidate yielded **184 passed, 0 failed, 79 skipped**. The
+79 include absent web/Bun tests and the two checkout-only guards; these are not
+passes. This is still not the full release suite.
+
+The CI failure on commits 45d3480 and 7fd4a09 was diagnosed using the added
+JUnit annotations: the isolated data builder reports byte drift in
+`qsar_multiclass.csv` and `pk_profile.csv` on GitHub's runner, causing three
+provenance assertions to fail within the portability regression. The same
+check passes in the local pinned environment. As an additional local
+experiment, disabling NumPy CPU features (`AVX512F,AVX2,FMA3`) caused
+`pk_profile.csv` byte drift; this suggests platform-dependent numerical output
+may be involved but does not establish the precise CI root cause. The
+byte-identity guard was **not** relaxed and generated data was not replaced.
+On commit 7fd4a09, the other seven jobs, including Chemistry and docking
+preparation and Studio MD, passed; the Generative SA job remains red. Real
+docking engines were not executed.
