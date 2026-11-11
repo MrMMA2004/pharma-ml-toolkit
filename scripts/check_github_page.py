@@ -15,6 +15,7 @@ import os
 import re
 import struct
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,12 +60,22 @@ def check_local_links(path: Path) -> int:
             if anchor not in anchors:
                 fail(f"missing heading anchor {ref} in {path.relative_to(ROOT)}")
             continue
-        target = ref.split("#", 1)[0]
+        target, _, fragment = ref.partition("#")
         if not target:
             continue
         resolved = path.parent / target
         if not resolved.exists():
             fail(f"missing local link in {path.relative_to(ROOT)}: {ref}")
+        if fragment and resolved.suffix.lower() == ".md":
+            headings = re.findall(
+                r"^#{1,6}\s+(.+)$", resolved.read_text(encoding="utf-8"), re.MULTILINE
+            )
+            anchors = [
+                re.sub(r"[^a-z0-9 -]", "", heading.lower()).replace(" ", "-")
+                for heading in headings
+            ]
+            if fragment not in anchors:
+                fail(f"missing heading anchor in {path.relative_to(ROOT)}: {ref}")
         checked += 1
     return checked
 
@@ -78,27 +89,52 @@ def main() -> None:
         ROOT / "pharma-ml-toolkit/pyproject.toml": r'^version\s*=\s*"([^"]+)"',
         ROOT / "pharma-ml-toolkit/src/pharmaml/__init__.py": r'^__version__\s*=\s*"([^"]+)"',
         ROOT / "src/lib/toolkit-version.ts": r'SHIPPED_TOOLKIT_VERSION\s*=\s*"([^"]+)"',
-        ROOT / "CITATION.cff": r"^version:\s*(\S+)",
     }
     for path, pattern in carriers.items():
         actual = version_from(path, pattern)
         if actual != version:
             fail(f"{path.relative_to(ROOT)} has {actual}, expected {version}")
-    print(f"release carriers: {version} (VERSION, package, web and CITATION.cff)")
+    citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
+    citation_version = re.search(r"^version:[ \t]*([^\n]*)", citation, re.MULTILINE)
+    if citation_version:
+        cited = citation_version.group(1).split("#", 1)[0].strip().strip("\"'")
+        if cited != version:
+            fail(f"CITATION.cff has {cited}, expected {version}")
+    print(f"release carriers: {version} (VERSION, package and web; citation version optional)")
 
     readme = ROOT / "README.md"
     text = readme.read_text(encoding="utf-8")
-    expected_record = f"The [v{version} release record](pharma-ml-toolkit/CHANGELOG.md)"
-    if expected_record not in text:
-        fail(f"README release evidence is not linked to v{version}")
-    screenshot = ROOT / f"pharma-ml-toolkit/docs/assets/web-console-v{version}.png"
+    if "](pharma-ml-toolkit/CHANGELOG.md)" not in text:
+        fail("README must link the source changelog")
+    capture = re.search(
+        r'<img\s+[^>]*src="(pharma-ml-toolkit/docs/assets/web-console-v(\d+\.\d+\.\d+)\.png)"',
+        text,
+    )
+    if not capture:
+        fail("README must embed a versioned application capture")
+    screenshot = ROOT / capture.group(1)
+    captured_version = capture.group(2)
     if not screenshot.is_file():
-        fail(f"current application capture is missing: {screenshot.relative_to(ROOT)}")
-    if f"pharma-ml-toolkit/docs/assets/web-console-v{version}.png" not in text:
-        fail("README does not embed the current application capture")
+        fail(f"application capture is missing: {screenshot.relative_to(ROOT)}")
+    if tuple(map(int, captured_version.split("."))) > tuple(map(int, version.split("."))):
+        fail("application capture is newer than the checkout")
+    if captured_version != version and not re.search(
+        rf"historical\s+v{re.escape(captured_version)}\s+capture", text, re.IGNORECASE
+    ):
+        fail(f"older capture v{captured_version} must be labeled historical")
     archive = ROOT / f"download/pharma-ml-toolkit-v{version}.zip"
     if not archive.is_file():
         fail(f"current release archive is missing: {archive.relative_to(ROOT)}")
+
+    hero_path = "pharma-ml-toolkit/docs/assets/github-hero.svg"
+    if not re.search(rf'<img\s+[^>]*src="{re.escape(hero_path)}"[^>]*alt="[^"\s][^"]*"', text):
+        fail("README must embed the hero illustration with alternative text")
+    try:
+        hero = ET.parse(ROOT / hero_path).getroot()
+    except ET.ParseError as exc:
+        raise ValueError(f"hero illustration is invalid SVG: {exc}") from exc
+    if hero.tag != "{http://www.w3.org/2000/svg}svg" or not hero.get("viewBox"):
+        fail("hero illustration must be a responsive SVG with a viewBox")
 
     social = ROOT / "pharma-ml-toolkit/docs/assets/github-social-preview.png"
     if png_size(social) != (1280, 640):
@@ -106,7 +142,7 @@ def main() -> None:
     capture_size = png_size(screenshot)
     if capture_size[0] < 1000 or capture_size[1] < 600:
         fail(f"application capture is too small for the README: {capture_size}")
-    print(f"images: application {capture_size[0]}x{capture_size[1]}, social 1280x640")
+    print(f"images: application v{captured_version} {capture_size[0]}x{capture_size[1]}, social 1280x640")
 
     documents = [readme, ROOT / "CONTRIBUTING.md", ROOT / "SECURITY.md", ROOT / "CODE_OF_CONDUCT.md"]
     total = sum(check_local_links(path) for path in documents)
