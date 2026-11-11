@@ -373,7 +373,11 @@ uses a unique private staging directory, verifies ZIP CRC and atomically
 creates the final name without replacement using a same-filesystem hard link.
 Existing targets, concurrent target creation and unavailable hard links fail
 closed; an integrity failure leaves no published ZIP. Focused plus adjacent
-checkpoint/restore tests: **76 passed, 0 failed, 0 skipped**. The existing
+checkpoint, restore, release-audit and drift-diagnostic tests: **86 passed, 0
+failed, 0 skipped**. A broader portability/provenance/index/notebook and
+checkpoint selection: **247 passed, 0 failed, 0 skipped** on the local
+pinned chemistry stack. Source-walk errors also fail closed rather than
+silently producing an incomplete archive. The existing
 v1.2.172 archive and its separate workspace backup have not been replaced.
 The later `--commit` safe-copy and retention operations and the independent
 `tools/build_zip.py` publication ritual remain unmodified and **not certified
