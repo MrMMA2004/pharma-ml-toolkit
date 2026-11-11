@@ -41,7 +41,7 @@ that the entire prompt has been completed.
 | Release ZIP QA report | **Partially implemented** | A read-only archive auditor now produces machine-readable manifests and a human-readable summary, with explicit not-executed statuses. The report covers the old v1.2.172 archive, not a new release; comprehensive documentation, profile and full release certification remain outstanding. |
 | Standalone release portability and canonical builders | **Partially implemented** | Original data, index and notebook-stripping generators now ship in `tools/`; checkout-only CLI forwarders preserve their historical paths. An explicitly selected targeted standalone profile and isolated candidate ZIP regression passed; the full release suite remains untested. See the continuation evidence below and [standalone testing](STANDALONE_TESTING.md). |
 | Dependency profiles and CI | **Partially implemented** | Named targeted profiles and a GUI test extra are documented; local core, chemistry and Meeko/gemmi preparation selections ran. A chemistry/preparation CI job and GUI extra installation have been added; broader profiles remain incomplete. The CI portability failure is traced to example-data byte drift on the GitHub runner; root cause and a safe cross-platform remedy remain under investigation. See continuation evidence below. |
-| Estimator validation / scikit-learn compatibility | **Not implemented** | `_estimator_type` assumptions remain in `ml/conformal.py` and `ml/dalex.py`; the PDF's 1.8-specific failure has not yet been reproduced locally. Pinned scikit-learn is 1.5.2; the declared range remains `>=1.3`. |
+| Estimator validation / scikit-learn compatibility | **Partially implemented** | The 1.8 classifier failure was reproduced and fixed with sklearn type/fitted-state APIs and an explicit legacy-custom fallback. Focused and adjacent local tests passed on 1.3.0, 1.3.2, 1.5.2 and 1.8.0; the new compatibility CI matrix is pending. Full-suite and all combinations in the declared open-ended range are not certified. |
 | Engine discovery and actual docking | **Not implemented** | `docking/workflow.py` has engine lookup APIs; the current engine README and feature inventory make conflicting claims. Search-order and runtime behavior were not changed or fully tested. No binary was executed. |
 | Documentation and scientific feature inventory | **Partially implemented** | The example count mismatch and current-Tkinter and bundled-engine claims were located; the broader reconciliation and feature inventory have not been completed. |
 | Dashboard, visualization and resumable jobs | **Not implemented** | Existing Studio architecture is preserved. No GUI behavior or scientific output was changed or tested. |
@@ -239,3 +239,38 @@ The combined audit, isolated-portability, restore-fault, checkpoint, provenance,
 index and notebook-variant selection subsequently reported **235 passed, 0
 failed, 0 skipped**. A separate SHA-256 check again matched the original ZIP and
 its existing local backup; this remains a local copy, not an off-site backup.
+
+## Continuation — estimator validation and compatibility (targeted)
+
+On Python 3.11 with scikit-learn 1.8.0, the existing conformal regression
+selection reproduced the reported failure: **16 passed, 1 failed, 0 skipped**,
+because an unfitted classifier reached `predict` and leaked `NotFittedError`.
+A new focused regression module initially exposed **6 passed, 16 failed, 0
+skipped** under 1.8.0, including fitted classifiers accepted as regressors and
+DALEX using hard class labels instead of binary probabilities.
+
+The implementation now uses sklearn's classifier/regressor and fitted-state
+APIs for supported estimator instances and Pipelines. It rejects recognized
+classifiers and unknown/invalid sklearn types, translates `NotFittedError` to
+`DataValidationError` with the cause, checks input/prediction row alignment,
+and preserves unrelated computational exceptions. A narrowly documented
+legacy `_estimator_type` fallback protects older lightweight custom predictors;
+untagged predict-only objects remain supported but cannot be proven to be
+regressors. Untagged `predict_proba` objects are rejected as ambiguous. DALEX
+uses the second binary probability column for recognized classifiers and
+requires an explicit prediction function for other classifier conventions.
+No model is fit or refit by calibration, and the conformal rank and coverage
+formula are unchanged. See [CONFORMAL_REGRESSION.md](CONFORMAL_REGRESSION.md).
+
+The same five-module estimator/conformal/coverage selection reported **136
+passed, 0 failed, 0 skipped** in each of four separate Python 3.11 environments
+using scikit-learn 1.3.0, 1.3.2, 1.5.2 and 1.8.0. The pinned 1.5.2 core stack
+was not changed. A broader pinned-core selection including splitting, evaluation
+and documentation checks reported **290 passed, 0 failed, 0 skipped** (three
+single-class metric warnings); the DALEX/conformal doctest selection on 1.8.0
+reported **1 passed, 0 failed, 0 skipped**. Ruff passed for changed code and
+mypy reported no issues in 213 source files. CI now has a separate Python 3.11
+matrix for scikit-learn 1.3.0, 1.5.2 and 1.8.0; its results are pending.
+These are selected tests, not proof of the full open-ended dependency range or
+full release suite. At the start of this phase all eight previous CI jobs passed
+on 6f49111; cross-platform example-data byte reproducibility remains unresolved.

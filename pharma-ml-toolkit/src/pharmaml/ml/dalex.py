@@ -102,6 +102,7 @@ _trapezoid: Any = getattr(np, "trapezoid", None) or getattr(np, "trapz", None)
 
 from pharmaml.exceptions import DataValidationError, ModelError
 from pharmaml.logger import get_logger
+from pharmaml.ml._estimator_compat import estimator_kind
 
 _LOG = get_logger(__name__)
 
@@ -109,14 +110,16 @@ __all__ = ["Explainer"]
 
 
 def _default_predict_function(model: Any) -> Callable[[pd.DataFrame], np.ndarray]:
-    """DALEX's ``yhat`` default: predict, or positive-class proba."""
-    estimator_type = getattr(model, "_estimator_type", "")
-    if estimator_type == "classifier":
+    """DALEX's ``yhat`` default: predict, or binary class-column-1 probability."""
+    if estimator_kind(model) == "classifier":
+        if not callable(getattr(model, "predict_proba", None)):
+            raise DataValidationError("classifier must provide predict_proba or an explicit predict_function")
+
         def predict_proba_positive(data: pd.DataFrame) -> np.ndarray:
-            matrix = model.predict_proba(data)
-            if matrix.ndim == 2 and matrix.shape[1] == 2:
-                return np.asarray(matrix[:, 1], dtype=float)
-            return np.asarray(matrix, dtype=float)
+            matrix = np.asarray(model.predict_proba(data), dtype=float)
+            if matrix.ndim != 2 or matrix.shape != (len(data), 2):
+                raise DataValidationError("classifier predict_proba must return a binary probability matrix")
+            return matrix[:, 1]
         return predict_proba_positive
     return lambda data: np.asarray(model.predict(data), dtype=float)
 
@@ -129,7 +132,10 @@ class Explainer:
     ``predict_function``, precalculated ``y_hat`` and ``residuals``,
     the ``label`` (default: the model's class name) and the detected
     ``model_type`` (``'regression'`` when ``y`` is continuous,
-    ``'classification'`` when ``y`` is binary).
+    ``'classification'`` when ``y`` is binary). The default for recognized
+    classifiers uses column 1 of a two-column ``predict_proba`` result (the
+    second entry in sklearn's ``classes_``). Supply ``predict_function``
+    explicitly for other class conventions or classifiers without probabilities.
     """
 
     def __init__(

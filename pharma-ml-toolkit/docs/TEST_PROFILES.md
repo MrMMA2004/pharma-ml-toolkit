@@ -11,6 +11,7 @@ are the versions exercised in this phase, not claims about every supported versi
 | Profile | Additional dependencies | Targeted command |
 | --- | --- | --- |
 | Core backend | `pytest==9.0.2`; no GUI, RDKit, Mordred, Meeko or gemmi | `python -m pytest tests/test_data_loading.py tests/test_pk.py tests/test_conformal.py -o addopts="-q --tb=short"` |
+| scikit-learn compatibility | pytest; core pins with a deliberate `--no-deps` replacement of scikit-learn to 1.3.0, 1.5.2 or 1.8.0 in separate environments | `python -m pytest tests/test_estimator_compatibility.py tests/test_conformal.py tests/test_conformal_classification.py tests/test_label_conditional_conformal.py tests/test_coverage_diagnostics.py -o addopts="-q --tb=short"` |
 | Cheminformatics | pytest; `rdkit==2026.9.1`, `mordred==1.2.0` | `python -m pytest tests/test_descriptors.py -o addopts="-q --tb=short"` |
 | Docking preparation | pytest; `rdkit==2026.9.1`, `meeko==0.8.0`, `gemmi==0.7.5` | `python -m pytest tests/test_docking_prep.py -o addopts="-q --tb=short"` |
 | Desktop Studio | install `.[gui-test]`; pinned CI versions in workflow; `matplotlib==3.10.9`; OS Qt/GL libraries | `QT_QPA_PLATFORM=offscreen PYQTGRAPH_QT_LIB=PySide6 python -m pytest tests/ui/test_molecular_dynamics_page.py tests/ui/test_main_window.py -o addopts="-q --tb=short"` |

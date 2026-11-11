@@ -32,9 +32,23 @@ included when evaluating coverage. If that rank exceeds `n`, there is no finite
 radius with the requested finite-sample guarantee; the function raises an error
 rather than clipping the rank. For example, `alpha=0.1` needs at least nine
 calibration rows. Data and predictions must be finite one-dimensional vectors.
-Align rows before calling: arrays and pandas objects are matched by position,
-not by index. Recognized classifiers are rejected, but the caller must ensure
-any custom predictor is a regressor.
+`X_cal` and query inputs must expose a row count, and row counts must match
+predictions and labels. Align rows before calling: arrays and pandas objects are
+matched by position, not by index.
+
+Scikit-learn estimators and Pipelines must identify as regressors and pass
+`check_is_fitted`. Invalid or unknown estimator tags fail closed; recognized
+classifiers are rejected before prediction. Custom sklearn estimators should
+use the supported mixin order (for example, `RegressorMixin, BaseEstimator`)
+and communicate their fitted state using the sklearn protocol. A stateless
+custom estimator can implement `__sklearn_is_fitted__`. Lightweight custom
+objects with `predict` remain supported without sklearn inheritance; a custom
+object with `predict_proba` but no declared type is rejected as ambiguous.
+The toolkit cannot infer whether every untagged predict-only object is a
+classifier: callers must ensure such a predictor represents regression and is
+ready to use. A scikit-learn `NotFittedError` is translated to
+`DataValidationError` with its cause preserved; unrelated prediction errors are
+not swallowed.
 
 **Interpretation and limitations**
 
