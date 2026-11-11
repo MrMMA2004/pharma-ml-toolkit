@@ -6,6 +6,7 @@ the config-driven Vina batch (``others/Vina/*``)."""
 from __future__ import annotations
 
 import logging
+import struct
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
@@ -1139,6 +1140,8 @@ class TestRunAutodock4Completion:
             raise DockingError(f"executable {name!r} not found on PATH")
 
         monkeypatch.setattr(workflow_mod, "_require_executable", no_engine)
+        monkeypatch.setattr(workflow_mod, "_bundled_engine_dirs", lambda: ())
+        monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
         result = run_autodock4(work, skip_existing=True)
         assert result.ok is False
         assert result.log_file is None
@@ -1314,8 +1317,8 @@ class TestEngineFolderResolution:
     The three uploaded executables -- ``vina.exe`` (PE32+), ``autogrid4.exe``
     and ``autodock4.exe`` (PE32 i386) -- are the engines the campaign
     runner must drive on machines where nothing is on PATH.  The resolver
-    checks the engine folder first (both the bare ``name`` and the
-    ``name.exe`` spelling), PATH last; a Windows PE binary resolved on a
+    checks the engine folder first, then PATH, then verified bundled engines;
+    both bare and ``.exe`` spellings are searched. A Windows PE binary on a
     non-Windows host is routed through ``wine`` by its MZ magic, not by
     its file name (renamed copies still route correctly).
     """
@@ -1347,6 +1350,7 @@ class TestEngineFolderResolution:
 
     def test_locate_missing_everywhere_returns_none(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
+        monkeypatch.setattr(workflow_mod, "_bundled_engine_dirs", lambda: ())
         assert workflow_mod.locate_engine_binary("vina", tmp_path) is None
 
     def test_engine_argv_routes_a_pe_binary_through_wine(
@@ -1355,7 +1359,7 @@ class TestEngineFolderResolution:
         engines = tmp_path / "engines"
         engines.mkdir()
         exe = engines / "vina.exe"
-        exe.write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+        exe.write_bytes(b"MZ" + b"\x00" * 58 + struct.pack("<I", 64) + b"PE\x00\x00" + struct.pack("<H", 0x8664))
         monkeypatch.setattr(workflow_mod.os, "name", "posix")
         monkeypatch.setattr(
             workflow_mod.shutil,
@@ -1369,7 +1373,7 @@ class TestEngineFolderResolution:
     ) -> None:
         engines = tmp_path / "engines"
         engines.mkdir()
-        (engines / "vina.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+        (engines / "vina.exe").write_bytes(b"MZ" + b"\x00" * 58 + struct.pack("<I", 64) + b"PE\x00\x00" + struct.pack("<H", 0x8664))
         monkeypatch.setattr(workflow_mod.os, "name", "posix")
         monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
         with pytest.raises(DockingError, match="wine"):
@@ -1379,14 +1383,14 @@ class TestEngineFolderResolution:
         self, tmp_path, monkeypatch
     ) -> None:
         monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
+        monkeypatch.setattr(workflow_mod, "_bundled_engine_dirs", lambda: ())
         with pytest.raises(DockingError, match="engine folder"):
             workflow_mod.engine_argv("vina", tmp_path / "engines")
 
     def test_engine_argv_without_folder_keeps_the_path_only_gate(
         self, monkeypatch
     ) -> None:
-        # engine_dir=None is the historical behaviour: _require_executable
-        # (PATH only) -- the hook every pre-existing test monkeypatches.
+        # Preserve the historical PATH resolver hook for existing callers.
         monkeypatch.setattr(
             workflow_mod, "_require_executable", lambda name: f"/fake/bin/{name}"
         )
@@ -1430,6 +1434,7 @@ class TestEngineFolderRuns:
         self, tmp_path, monkeypatch
     ) -> None:
         monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
+        monkeypatch.setattr(workflow_mod, "_bundled_engine_dirs", lambda: ())
         with pytest.raises(DockingError, match="engine folder"):
             workflow_mod.run_vina(
                 tmp_path / "r.pdbqt",
@@ -1516,6 +1521,7 @@ class TestSmilesArrayEngineFolder:
         self, tmp_path, monkeypatch
     ) -> None:
         monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
+        monkeypatch.setattr(workflow_mod, "_bundled_engine_dirs", lambda: ())
         with pytest.raises(DockingError, match="engine folder"):
             dock_smiles_array(
                 ["CCO"],

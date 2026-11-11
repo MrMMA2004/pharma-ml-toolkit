@@ -1,4 +1,6 @@
-"""Re-execute all 8 notebooks at the shipped version, then regenerate the 7 twins.
+"""Re-execute all 8 notebooks at the shipped version.
+
+Afterwards run ``python tools/strip_notebook_outputs.py`` to refresh the 7 twins.
 
 The round-209 ship step. Worker-capped, dev-server-stopped (the OOM ritual):
 every notebook's setup cell must print ``pharmaml <shipped version>`` or the

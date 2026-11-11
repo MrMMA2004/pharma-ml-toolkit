@@ -8,7 +8,7 @@ the file the builder writes".  Three legs, each pinned here:
    (catches a notebook pointing at a stale path after a rename).
 2. **No orphans** — every top-level entry under ``examples/data`` must be
    loaded by at least one notebook (catches data the demos forgot).
-3. **Builder round-trip** — ``scratch/build_example_data.py --check``
+3. **Builder round-trip** — ``tools/build_example_data.py --check``
    re-generates the whole inventory in memory and proves the files on
    disk are byte-identical to the builder output, with no unclaimed
    orphans; the planted-drift test proves the gate actually fires.
@@ -36,7 +36,7 @@ import pytest
 TOOLKIT_ROOT = Path(__file__).resolve().parents[1]
 DATA = TOOLKIT_ROOT / "examples" / "data"
 EXAMPLES = TOOLKIT_ROOT / "examples"
-BUILDER = TOOLKIT_ROOT / "scratch" / "build_example_data.py"
+BUILDER = TOOLKIT_ROOT / "tools" / "build_example_data.py"
 
 # The eight EXECUTED notebooks (the _no_output twins carry identical
 # source and would only double-count).
@@ -76,7 +76,7 @@ def _notebook_data_references() -> dict[str, set[str]]:
 
 
 def _load_builder():
-    """Import scratch/build_example_data.py as a module (main() is __main__-guarded)."""
+    """Import tools/build_example_data.py as a module (main() is __main__-guarded)."""
     spec = importlib.util.spec_from_file_location("build_example_data", BUILDER)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -185,7 +185,14 @@ class TestDocsDataReferences:
         inventory the notebooks and the disk scan answer to.
         """
         builder = _load_builder()
-        builder.main(["--check"])  # populates STATS on the real tree (no drift)
+        # This is an ownership check, not the separate byte-identity gate.
+        # A platform-dependent byte drift must not prevent us from inspecting
+        # the generated ownership map; the strict round-trip test still fails.
+        try:
+            builder.main(["--check"])
+        except SystemExit as exc:
+            if exc.code != 1 or not builder.STATS["drift"]:
+                raise
         owned: set[str] = set()
         for p in builder.STATS["paths"]:
             try:
@@ -271,7 +278,7 @@ class TestBuilderRoundTrip:
     def test_check_mode_flags_planted_drift(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """One flipped byte must produce exactly one drift line and exit 1.
+        """One changed file must add exactly one drift line and exit 1.
 
         Runs against a COPY under tmp_path — the real tree is never
         touched, and the missing-file branch is exercised by pointing
@@ -291,21 +298,32 @@ class TestBuilderRoundTrip:
         missing = [d for d in builder.STATS["drift"] if "is missing from" in d]
         assert missing, "empty data dir must report missing files"
 
-        # byte-flip leg: exactly one drift entry
+        # Compare with the untouched copy first. Existing platform-specific
+        # numerical drift is not the planted defect and is still a failure in
+        # test_check_mode_reports_no_drift. Use a fixed-text file whose builder
+        # bytes do not depend on BLAS/CPU floating-point dispatch.
         monkeypatch.setattr(builder, "DATA_DIR", sandbox)
-        victim = sandbox / "qsar_regression.csv"
+        try:
+            builder.main(["--check"])
+        except SystemExit as exc:
+            if exc.code != 1 or not builder.STATS["drift"]:
+                raise
+        before = list(builder.STATS["drift"])
+        victim = sandbox / "seed_molecules.csv"
+        assert not any(str(victim) in line for line in before)
         original = victim.read_bytes()
         victim.write_bytes(original + b"drift\n")
         with pytest.raises(SystemExit) as excinfo:
             builder.main(["--check"])
         assert excinfo.value.code == 1
         drift = builder.STATS["drift"]
-        assert len(drift) == 1, f"expected exactly the planted drift, got {drift}"
-        assert "qsar_regression.csv" in drift[0]
-        assert "differs from" in drift[0]
-        # 100x-116 attribution: the drift line names the owning builder
-        # function — a pointer to rerun, not just a file name.
-        assert "owner: build_qsar_multiclass_and_regression" in drift[0]
+        assert all(line in drift for line in before), "baseline drift unexpectedly disappeared"
+        planted = [line for line in drift if line not in before]
+        assert len(planted) == 1, f"expected exactly one new drift, got {planted}"
+        assert "seed_molecules.csv" in planted[0]
+        assert "differs from" in planted[0]
+        # The drift line names the owning builder, making it actionable.
+        assert "owner: build_seed_molecules" in planted[0]
         # the empty-dir leg's missing-file lines carry owners too
         assert all("(owner:" in d for d in missing), (
             f"missing-file drift lines lost their owner attribution: {missing[:2]}"

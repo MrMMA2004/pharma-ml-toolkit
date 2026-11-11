@@ -139,7 +139,7 @@ shipped environment and tested green; these rows are about what happens
 | Torch DNN / residual DNN | optional import in `ml/neural.py` | clean refusal; the numpy MLP remains available |
 | SHAP explanations | `ml/explain.py` + `scripts/shap_bridge.py` | clean refusal; permutation importances remain |
 | `meeko`/`gemmi` prep paths | `docking/receptor.py`, `chem/standardize.py` | fallback parsers; prep card reports the limitation |
-| **Docking execution itself** | external Vina binary + receptor PDBQT (never bundled) | the toolkit ships prep/parse/rescore/consensus; **scores are user or external-engine inputs** — a target-table entry is not a docking result (the `dockstring.py` docstring's own contract) |
+| **Docking execution itself** | compatible Vina runtime + user-supplied receptor PDBQT | the source/ZIP bundles Windows engines; native builds or Wine may be needed; Studio focuses on prep/parse/rescore/consensus; **scores are user or engine-generated inputs** — a target-table entry is not a docking result (the `dockstring.py` docstring's own contract) |
 | **Real MD trajectories** | external GROMACS/PLUMED (never bundled) | analysis runs on the deterministic synthetic demos; XVG/COLVAR parsers accept real exports when the user supplies them |
 | DOCKSTRING 260k-ligand dataset | external download | only the 58 target boxes + benchmark objectives ship |
 
@@ -214,7 +214,7 @@ molecule ("where meaningful", not everywhere).
 | 03 | Machine Learning | `models`, `mlworkbench`, `unsupervised`, `bestofml`, `foundations` | `ml.*` | `test_nine_cards.py`, `test_ml_pipeline.py` |
 | 04 | Deep Learning | `deep_learning` | `ml.neural`, class-C `gnn`/`geometric` | `test_nine_cards.py`, `test_gnn.py` |
 | 05 | Generative AI | `generative` | `generative.*` | `test_nine_cards.py`, `test_generative.py` |
-| 06 | Molecular Docking | `docking` | `docking.*` (engine external) | `test_nine_cards.py`, `test_docking.py`, `test_docking_prep.py` |
+| 06 | Molecular Docking | `docking` | `docking.*` (platform-dependent engine runtime) | `test_nine_cards.py`, `test_docking.py`, `test_docking_prep.py` |
 | 07 | PK/PD | `pkpd`, `biology`, `responseai` | `pkpd.*`, `pharma.*` | `test_nine_cards.py`, `test_pkpd_engines.py` |
 | 08 | Molecular Dynamics Analysis | `molecular_dynamics` | `md.*` (data external) | `test_nine_cards.py`, `test_md_analysis.py` |
 | 09 | Visualization | `imagelab` | `viz.*` | `test_nine_cards.py`, `test_viz.py` |
@@ -224,8 +224,9 @@ The optional-dependency chips are computed live per card
 answer): `shap` (ML explanations), `torch` (DL + generative backends),
 `rdkit` (generative scoring + docking prep), `matplotlib` (figure
 export). The class-F boundaries are stated on the cards themselves:
-docking execution needs an external Vina binary plus receptor PDBQT
-(never bundled — scores are user or external-engine inputs) and MD
+docking execution needs a compatible engine runtime plus user-supplied receptor
+PDBQT (source/ZIP includes Windows engines; native builds or Wine may be
+needed, and scores are user or engine-generated inputs). MD
 trajectories come from external GROMACS/PLUMED runs (the analysis
 engines are bundled, the simulations are not).
 

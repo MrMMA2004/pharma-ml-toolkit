@@ -153,8 +153,9 @@ CARD_DOCKING = NineCard(
     "and consensus rescoring; DOCKSTRING benchmark boxes for targets.",
     entries=(CardEntry("docking", "Open Docking Workbench"),),
     optional=(("rdkit", "the chemistry prep paths"),),
-    external="Execution needs an external Vina binary + receptor PDBQT — never bundled "
-    "(class F): scores are user or external-engine inputs.",
+    external="Source/ZIP includes Windows Vina and AutoDock engines; execution needs a compatible runtime "
+    "and user-supplied receptor PDBQT. Studio focuses on preparation and analysis; "
+    "scores are user or engine-generated inputs.",
 )
 
 CARD_PKPD = NineCard(

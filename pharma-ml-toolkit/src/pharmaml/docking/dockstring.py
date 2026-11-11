@@ -13,8 +13,9 @@ catalog's missing *benchmark* boundary without duplicating the engine:
   including its corrected selective-JAK2 equation (``LCK median = -8.1``)
   and ``10 * (1-QED)`` penalty.
 
-Receptor PDBQT files, Vina itself and the 260k-ligand DOCKSTRING dataset are
-not bundled.  Scores are user/external-engine inputs; a target-table entry
+Receptor PDBQT files and the 260k-ligand DOCKSTRING dataset are not bundled.
+The source/ZIP includes a Windows Vina executable; other platforms require a
+compatible native engine or Wine. Scores are user/engine-generated inputs; a target-table entry
 is not a docking result or scientific validation.  NaN scores propagate just
 as upstream's ``safe_dock_function`` contract requires.
 

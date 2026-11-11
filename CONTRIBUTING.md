@@ -76,7 +76,8 @@ Use `bun run dev` for local development. Browser-facing code must use relative a
 - Avoid committing generated output larger than necessary. Use GitHub Releases for downloadable release archives.
 - Preserve reproducibility: document random seeds, units, input assumptions and environment-specific limitations.
 - Never claim clinical validation or present research software as clinical decision support.
-- When the release version changes, update `CITATION.cff`, the root README's release evidence and the current application capture. Run `python scripts/check_github_page.py` to verify version carriers, local links and image requirements.
+- Run `python scripts/check_github_page.py` and `python -m unittest discover -s tests -p 'test_github_page.py'` for landing-page changes. Keep screenshots labeled with their actual captured version; if `CITATION.cff` names a version, keep it aligned with the checkout. Update links and evidence rather than relabeling old screenshots as current.
+- Regenerate the decorative social card with `python scripts/build_social_preview.py` (requires Pillow). GitHub does not pick it up from a commit: upload `pharma-ml-toolkit/docs/assets/github-social-preview.png` under **Settings → General → Social preview** if you have repository admin access.
 
 ## Pull request checklist
 

@@ -50,6 +50,12 @@ cp = _load_module(TOOLKIT / "tools" / "checkpoint.py", "checkpoint_under_test")
 
 
 def _make_zip(path: Path, entries: dict[str, str]) -> Path:
+    entries = dict(entries)
+    for prefix in ("", "pharma-ml-toolkit/"):
+        if prefix + "VERSION" in entries:
+            version = entries[prefix + "VERSION"].strip()
+            entries.setdefault(prefix + "pyproject.toml", f'[project]\nversion = "{version}"\n')
+            entries.setdefault(prefix + "src/pharmaml/__init__.py", f'__version__ = "{version}"\n')
     with zipfile.ZipFile(path, "w") as zf:
         for name, text in entries.items():
             zf.writestr(name, text)
@@ -83,7 +89,7 @@ class TestRestoreDualLayout:
         # builder) -- every member under pharma-ml-toolkit/.
         arc = _make_zip(tmp_path / "pharma-ml-toolkit-v9.9.8.zip", {
             "pharma-ml-toolkit/VERSION": "9.9.8\n",
-            "pharma-ml-toolkit/src/pharmaml/__init__.py": "x = 1\n",
+            "pharma-ml-toolkit/src/pharmaml/__init__.py": "__version__ = '9.9.8'\n",
         })
         target = tmp_path / "tree"
         target.mkdir()
@@ -139,7 +145,7 @@ class TestRestoreDualLayout:
     def test_dry_run_writes_nothing(self, tmp_path: Path) -> None:
         arc = _make_zip(tmp_path / "pharma-ml-toolkit-v9.9.9.zip", {
             "VERSION": "9.9.9\n",
-            "src/pharmaml/__init__.py": "x = 1\n",
+            "src/pharmaml/__init__.py": "__version__ = '9.9.9'\n",
         })
         target = tmp_path / "tree"
         target.mkdir()
@@ -152,7 +158,7 @@ class TestRestoreDualLayout:
         # malformed and must never reach the tree.
         arc = _make_zip(tmp_path / "pharma-ml-toolkit-v9.9.9.zip", {
             "VERSION": "1.0.0\n",  # lies about itself
-            "src/pharmaml/__init__.py": "x = 1\n",
+            "src/pharmaml/__init__.py": "__version__ = '1.0.0'\n",
         })
         target = tmp_path / "tree"
         target.mkdir()
@@ -280,9 +286,11 @@ class TestZipPolicy:
     def test_canonical_utilities_live_in_tools(self) -> None:
         # part4 §4.3: canonical build utilities move out of scratch/
         for name in ("build_zip.py", "reexec_notebooks.py", "run_suite_chunks.py",
-                     "venv_repair.sh", "scrub_home_paths.py"):
+                     "venv_repair.sh", "scrub_home_paths.py", "build_example_data.py",
+                     "build_docs_index.py", "strip_notebook_outputs.py"):
             assert (TOOLKIT / "tools" / name).is_file(), name
 
+    @pytest.mark.checkout_only
     def test_scratch_forwarders_keep_the_historical_paths(self) -> None:
         # the cron ritual + muscle memory invoke the scratch/ paths;
         # the shims must forward to the canonical tools/ copies.
@@ -292,6 +300,9 @@ class TestZipPolicy:
             "run_suite_chunks_225.py": "run_suite_chunks.py",
             "run_suite_chunks_250.py": "run_suite_chunks.py",
             "venv_repair.sh": "venv_repair.sh",
+            "build_example_data.py": "build_example_data.py",
+            "build_docs_index.py": "build_docs_index.py",
+            "strip_notebook_outputs.py": "strip_notebook_outputs.py",
         }
         for shim, target in forwarding.items():
             text = (TOOLKIT / "scratch" / shim).read_text(encoding="utf-8")
@@ -316,6 +327,13 @@ class TestMetadataDrift:
         text = (TOOLKIT / "README.md").read_text(encoding="utf-8")
         assert "(1.2.125)" not in text
 
+    def test_pyproject_homepage_is_valid_without_git(self) -> None:
+        text = (TOOLKIT / "pyproject.toml").read_text(encoding="utf-8")
+        match = re.search(r'Homepage\s*=\s*"([^"]+)"', text)
+        assert match, "pyproject must declare a project Homepage"
+        assert match.group(1) == "https://github.com/MrMMA2004/pharma-ml-toolkit"
+
+    @pytest.mark.checkout_only
     def test_pyproject_homepage_is_the_real_remote(self) -> None:
         text = (TOOLKIT / "pyproject.toml").read_text(encoding="utf-8")
         match = re.search(r'Homepage\s*=\s*"([^"]+)"', text)

@@ -21,8 +21,12 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator
+from sklearn.exceptions import NotFittedError
+from sklearn.utils.validation import check_is_fitted
 
 from pharmaml.exceptions import DataValidationError
+from pharmaml.ml._estimator_compat import estimator_kind
 
 __all__ = ["ConformalIntervals", "SplitConformalRegressor", "calibrate_split_conformal"]
 
@@ -38,6 +42,24 @@ def _numeric_vector(value: Any, name: str) -> np.ndarray:
     if not np.isfinite(array).all():
         raise DataValidationError(f"{name} must contain only finite values")
     return array
+
+
+def _row_count(X: Any, name: str) -> int:
+    try:
+        shape = getattr(X, "shape", None)
+        count = int(shape[0]) if shape is not None and len(shape) > 0 else len(X)
+    except (TypeError, ValueError, IndexError, OverflowError) as exc:
+        raise DataValidationError(f"{name} must expose a sample count") from exc
+    if count < 1:
+        raise DataValidationError(f"{name} must be nonempty")
+    return count
+
+
+def _predict(model: Any, X: Any) -> Any:
+    try:
+        return model.predict(X)
+    except NotFittedError as exc:
+        raise DataValidationError("model must be fitted before prediction") from exc
 
 
 def _validate_alpha(alpha: float) -> float:
@@ -97,8 +119,11 @@ class SplitConformalRegressor:
     rank: int
 
     def predict_interval(self, X: Any, y_true: Any = None) -> ConformalIntervals:
-        """Predict symmetric intervals; optionally evaluate on separate labels."""
-        prediction = _numeric_vector(self.model.predict(X), "model predictions")
+        """Predict symmetric intervals on sized rows; optionally evaluate on separate labels."""
+        n_rows = _row_count(X, "X")
+        prediction = _numeric_vector(_predict(self.model, X), "model predictions")
+        if prediction.size != n_rows:
+            raise DataValidationError("X and model predictions must have the same length")
         with np.errstate(over="ignore", invalid="ignore"):
             lower = prediction - self.radius
             upper = prediction + self.radius
@@ -128,8 +153,13 @@ def calibrate_split_conformal(
 
     ``model`` must already be fitted and expose ``predict(X)``. Its predictions
     and ``y_cal`` must be finite, nonempty, aligned one-dimensional vectors;
-    alignment is positional and pandas indexes are not checked. Recognized
-    classifiers are rejected; custom predictors must represent regression.
+    ``X_cal`` must expose its row count. Alignment is positional and pandas
+    indexes are not checked. Sklearn estimators, including Pipelines, must
+    identify as regressors and pass sklearn's fitted-state check; unknown or
+    invalid estimator tags fail closed. Recognized classifiers and ambiguous
+    untagged predictors with ``predict_proba`` are rejected. Lightweight
+    untagged predictors without ``predict_proba`` remain supported, but the
+    caller must ensure they represent regression and are ready to predict.
     For ``n`` calibration samples, the radius is the ``k``-th smallest
     absolute residual, where ``k = ceil((n + 1) * (1 - alpha))`` (1-based).
     When ``k > n``, a finite interval cannot provide the requested
@@ -143,17 +173,29 @@ def calibrate_split_conformal(
     alpha = _validate_alpha(alpha)
     if not callable(getattr(model, "predict", None)):
         raise DataValidationError("model must have a callable predict method")
-    if getattr(model, "_estimator_type", None) == "classifier":
+    kind = estimator_kind(model)
+    if kind == "classifier":
         raise DataValidationError("model must be a regressor, not a classifier")
+    if kind is None and callable(getattr(model, "predict_proba", None)):
+        raise DataValidationError("ambiguous predictor with predict_proba may be a classifier")
+    if isinstance(model, BaseEstimator) or callable(getattr(model, "__sklearn_tags__", None)):
+        try:
+            check_is_fitted(model)
+        except NotFittedError as exc:
+            raise DataValidationError("model must be fitted before calibration") from exc
+        except (TypeError, AttributeError) as exc:
+            raise DataValidationError("invalid sklearn estimator or estimator tags") from exc
     truth = _numeric_vector(y_cal, "y_cal")
     n = int(truth.size)
+    if _row_count(X_cal, "X_cal") != n:
+        raise DataValidationError("X_cal and y_cal must have the same length")
     rank = math.ceil((n + 1) * (1.0 - alpha))
     if rank > n:
         raise DataValidationError(
             f"{n} calibration samples cannot give finite intervals at alpha={alpha:g}; "
             "increase calibration size or choose a larger alpha"
         )
-    prediction = _numeric_vector(model.predict(X_cal), "calibration predictions")
+    prediction = _numeric_vector(_predict(model, X_cal), "calibration predictions")
     if prediction.size != n:
         raise DataValidationError("y_cal and calibration predictions must have the same length")
     with np.errstate(over="ignore", invalid="ignore"):
