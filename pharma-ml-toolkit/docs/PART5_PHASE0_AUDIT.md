@@ -313,3 +313,32 @@ environment the diagnostic, release-audit and restore-fault selection reported
 emits the diagnostic if strict portability fails; it does not change the test
 status. A cross-hardware byte-identical generation strategy remains unresolved,
 and no release has been certified.
+
+
+## Continuation — engine discovery and launch prerequisites
+
+The backend now searches explicit binary paths, explicit engine folders, PATH,
+then checksum- and PE-machine-validated source/ZIP bundled engines. PATH
+precedes bundled engines to avoid replacing existing native installations.
+Installed wheels can only use package-local engines when explicitly packaged;
+the current wheel does not promise them. PE files require a supported x86 host
+and Wine on non-Windows; finding Wine is not a runtime capability test. SMILES
+preflight now checks those prerequisites, and relative engine and batch file
+paths are anchored before changing the subprocess working directory. Engine
+launch `OSError`s are reported as failed runs. Documentation and card text
+distinguish bundled Windows files from actual Studio functionality and data.
+
+The local chemistry environment ran engine discovery, campaign, docking,
+preparation and feature-inventory tests: **278 passed, 0 failed, 0 skipped**
+(5 warnings). A core-only selection ran **237 passed, 0 failed, 0 skipped**. A broader
+chemistry/docking CI selection subsequently ran **442 passed, 0 failed, 0
+skipped** (335 warnings).
+An earlier core-only attempt included an unguarded RDKit pose test and stopped
+during collection with one missing-RDKit error; no tests ran in that attempt.
+Subprocess calls in the new discovery/launch tests are mocked; **actual engine
+execution remains not executed / platform blocked** because this Linux host has
+no Wine. Windows execution, Wine's 32-bit support, actual scores and the
+full release suite remain unverified. The updated Studio card assertion was
+not run locally because `libGL.so.1` is missing; it is included in the Studio
+CI job. These are targeted results, not release certification. The existing baseline matrix above describes the original audit,
+not this continuation.

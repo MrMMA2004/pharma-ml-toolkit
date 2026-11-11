@@ -8,7 +8,7 @@ The directive's mapping table and exact card order live in
 * the mapping covers every specialized page (settings stays out by the
   directive's own table) and duplicates none;
 * the optional-dependency chips state the real boundaries — docking's
-  external Vina engine and MD's external trajectory data included;
+  bundled Windows docking engines and MD's external trajectory data included;
 * the rendered grid navigates the real MainWindow (entry buttons route
   through ``go_to``; the page stack stays 18 widgets — cards are entry
   points, never duplicated implementations).
@@ -87,10 +87,12 @@ class TestHonesty:
         assert probe_available("definitely-not-importable-xyz") is False
         assert probe_available("PySide6.QtWidgets") is True
 
-    def test_docking_card_declares_the_external_engine(self) -> None:
+    def test_docking_card_declares_engine_and_runtime_boundaries(self) -> None:
         docking = next(c for c in NINE_CARDS if c.title == "Molecular Docking")
-        assert "Vina" in docking.external
-        assert "never bundled" in docking.external
+        assert "Windows Vina" in docking.external
+        assert "compatible runtime" in docking.external
+        assert "user-supplied receptor" in docking.external
+        assert "Studio focuses on preparation and analysis" in docking.external
 
     def test_md_card_declares_the_external_data_source(self) -> None:
         md = next(c for c in NINE_CARDS if c.title == "Molecular Dynamics Analysis")

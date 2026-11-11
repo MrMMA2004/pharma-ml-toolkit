@@ -54,7 +54,7 @@ from typing import Any
 from pharmaml.docking.parsing import parse_dlg_cluster_table, parse_vina_output
 from pharmaml.docking.preparation import GridBox, smiles_to_pdbqt, write_dpf, write_gpf
 from pharmaml.docking.receptor import distribute_receptor
-from pharmaml.docking.workflow import locate_engine_binary, run_autodock4, run_vina
+from pharmaml.docking.workflow import engine_argv, run_autodock4, run_vina
 from pharmaml.exceptions import DataValidationError, DockingError
 from pharmaml.logger import get_logger
 from pharmaml.utils.io import ensure_directory
@@ -276,16 +276,10 @@ def dock_smiles_array(
             "must match"
         )
     binaries = ("vina",) if engine == "vina" else ("autogrid4", "autodock4")
-    missing = [
-        name for name in binaries if locate_engine_binary(name, engine_dir) is None
-    ]
-    if missing:
-        raise DockingError(
-            f"the {engine} engine needs {', '.join(missing)} on PATH -- "
-            "install AutoDock Tools / Vina first, or point the engine "
-            "folder at their .exe builds (vina.exe / autogrid4.exe / "
-            "autodock4.exe)"
-        )
+    # Check launch prerequisites before ligand preparation. Finding a Windows
+    # executable alone does not establish that Wine is available or functional.
+    for name in binaries:
+        engine_argv(name, engine_dir)
     workers = max(1, min(workers, len(rows)))
     report = _progress_sink(progress)
 

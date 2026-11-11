@@ -262,7 +262,7 @@ roster — PCA variance ladder + loadings, k-means/mini-batch/GMM/hierarchical
 clustering with the soft responsibilities, KDE density over the
 histogram twin, and all five manifolds. The Docking Workbench (increment 5, v1.2.125) brings four of the playground
 Docking tab's engines, each wired to the same public backend APIs the
-cards call, none needing the external engine binaries: the campaign
+cards call, none executing the bundled Windows or installed native engine binaries: the campaign
 summary (`check_docking_completion` + `scan_docking_directory` over
 the bundled synthetic AutoDock4 campaign — 14 folders: 12 complete
 runs, one missing log, one interrupted before clustering — then the

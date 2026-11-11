@@ -2,8 +2,9 @@
 
 The Studio's increment-5 page (the playground Docking tab). Five of the
 tab's engines, each wired to the SAME public backend APIs the cards
-call -- nothing on this page is fabricated, and nothing here needs the
-external engine binaries (vina/autodock4/AutoGrid stay the cards' job):
+call -- nothing on this page is fabricated, and none of these workflows
+execute an engine. The source/ZIP includes Windows engine binaries; actual
+execution requires a compatible runtime and appropriate inputs:
 
 - **Campaign summary** -- ``check_docking_completion`` +
   ``scan_docking_directory`` over the bundled synthetic AutoDock4

@@ -199,8 +199,8 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install --no-deps -e .
           python -m pip install -c requirements.txt pytest==9.0.2 rdkit==2026.9.1 mordred==1.2.0 meeko==0.8.0 gemmi==0.7.5
-      - name: Run descriptor and receptor/ligand preparation tests
-        run: python -m pytest tests/test_descriptors.py tests/test_docking_prep.py -o addopts="-q --tb=short"
+      - name: Run descriptor, preparation, and docking workflow tests
+        run: python -m pytest tests/test_descriptors.py tests/test_docking_prep.py tests/test_engine_discovery_part5.py tests/test_campaign.py tests/test_docking.py tests/test_docking_contacts.py tests/test_pose_rmsd.py -o addopts="-q --tb=short"
 
   studio-md:
     name: Studio MD
@@ -227,6 +227,7 @@ jobs:
         run: >-
           python -m pytest
           tests/ui/test_molecular_dynamics_page.py
+          tests/ui/test_nine_cards.py::TestHonesty::test_docking_card_declares_engine_and_runtime_boundaries
           tests/ui/test_main_window.py
           tests/ui/test_foundations_page.py::test_main_window_carries_the_foundations_section
           tests/ui/test_bestofml_page.py::test_main_window_carries_the_bestofml_section
