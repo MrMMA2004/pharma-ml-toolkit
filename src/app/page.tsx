@@ -60,9 +60,9 @@ function ThemeToggle() {
 /* r267 (the arena/7e4a40b3 absorption): +19 files (5 new tools, 7 new
  * test files, 2 new root scripts+test, checkpoint/docs rework), +120
  * collect tests (5,035 total); census verified by the endpoint-rule walk
- * (1129 = 1110 + 19 new; 348,019 as the live /api/toolkit/tree answers --
+ * (1129 = 1110 + 19 new; 348,052 as the live /api/toolkit/tree answers --
  * countLines' split("\n").length rule) after the notebook re-execution. */
-const FALLBACK_STATS = { files: 1129, lines: "348,019" };
+const FALLBACK_STATS = { files: 1129, lines: "348,052" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);

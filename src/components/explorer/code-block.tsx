@@ -95,7 +95,15 @@ export function CodeBlock({
   const [copiedLine, setCopiedLine] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const style = resolvedTheme === "dark" ? oneDark : oneLight;
+  /* The prism style must not branch on the theme until after mount:
+   * SSR always renders oneLight (resolvedTheme is undefined server-side),
+   * so a dark-resolved client would otherwise produce a different <pre>
+   * style attribute and trip React's hydration mismatch (the r267 E2E
+   * catch). Gate on `mounted` — the first client render matches SSR,
+   * then dark users get oneDark one effect later. */
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const style = mounted && resolvedTheme === "dark" ? oneDark : oneLight;
   const grammar = REGISTERED_GRAMMARS.has(language) ? language : undefined;
   const label = LANGUAGE_LABELS[language] ?? language;
   const hasHighlight = highlightLine !== null && highlightLine > 0;
