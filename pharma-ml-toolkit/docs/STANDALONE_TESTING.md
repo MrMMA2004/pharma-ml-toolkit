@@ -15,6 +15,11 @@ The data check needs the scientific dependencies used to build the inventory;
 for the verified v1.2.172 baseline use `requirements.txt` and RDKit 2026.9.1.
 It is an audit, not a data-generation command. Other RDKit versions may report
 legitimate byte drift and should not be treated as equivalent without evaluation.
+Even with the same pinned dependencies, CPU and BLAS dispatch have been observed
+to produce byte differences in numeric CSVs; see the Part 5 audit. To describe
+such differences without writing files or weakening the strict check, run
+`python tools/diagnose_data_drift.py` (JSON to stdout; nonzero when the strict
+check fails). Its numerical descriptions do **not** declare files equivalent.
 The scratch paths in a full checkout are command-line compatibility forwarders;
 they are not present in a ZIP.
 

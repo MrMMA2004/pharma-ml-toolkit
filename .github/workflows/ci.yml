@@ -74,6 +74,7 @@ jobs:
           python -m pytest
           tests/test_checkpoint_restore_transaction.py
           tests/test_release_audit.py
+          tests/test_data_drift_diagnostic.py
           tests/test_data_loading.py
           tests/test_pk.py
           tests/test_md_plots.py
@@ -127,8 +128,11 @@ jobs:
           python - <<'PY'
           import contextlib
           import io
+          import json
           import os
           from pathlib import Path
+          import subprocess
+          import sys
           import xml.etree.ElementTree as ET
           import numpy as np
           runtime = io.StringIO()
@@ -136,6 +140,14 @@ jobs:
               np.show_runtime()
           text = runtime.getvalue().replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
           print(f'::notice::NumPy runtime for portability failure: {text}')
+          probe = subprocess.run([sys.executable, 'tools/diagnose_data_drift.py'], text=True, capture_output=True, check=False)
+          try:
+              diagnostic = json.loads(probe.stdout)
+              detail = json.dumps({'exit': probe.returncode, 'differences': diagnostic['generated_files_with_byte_drift']})
+              detail = detail[:20000].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::notice::Strict data drift diagnostic (no tolerance applied): {detail}')
+          except (ValueError, KeyError):
+              print(f'::notice::Data drift diagnostic did not produce JSON; exit {probe.returncode}')
           report = Path(os.environ['RUNNER_TEMP']) / 'portability.xml'
           if report.is_file():
               for case in ET.parse(report).iter('testcase'):

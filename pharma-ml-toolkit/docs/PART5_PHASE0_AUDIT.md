@@ -274,3 +274,42 @@ matrix for scikit-learn 1.3.0, 1.5.2 and 1.8.0; all three jobs passed on
 commit 89c3cde, as did the eight other jobs in that run. These are selected
 tests, not proof of the full open-ended dependency range or full release suite.
 Cross-platform example-data byte reproducibility remains unresolved.
+
+## Continuation — strict data-drift diagnosis
+
+On the documentation-only commit ceb5b94, **10 CI jobs passed and the
+Generative SA job failed** again at the strict standalone provenance check.
+Its NumPy-runtime annotation identified OpenBLAS architecture `Zen`, no AVX512F,
+NumPy 1.26.4 and Python 3.11.18. The failing filenames were again
+`qsar_multiclass.csv` and `pk_profile.csv`. This closely matches the controlled
+local CPU-dispatch experiment, but does not prove every mechanism affecting
+those files. The strict byte-identity test remains active and still fails on
+this runtime; no CSV, hash or numerical tolerance has been changed to pass it.
+
+Two adjacent test fixtures were made independent of existing byte drift: the
+documentation ownership test now checks the ownership map even if the separate
+strict drift gate fails, and the planted-drift test compares before/after drift
+against a deterministic fixed-text file. On the controlled Zen/no-AVX512
+configuration the full provenance module reported **9 passed, 1 failed, 0
+skipped**, with the sole failure still the actual byte-identical check. It does
+not hide or accept the existing drift.
+
+`tools/diagnose_data_drift.py` runs the original builder in `--check` mode and
+reports the differing CSV cells, schema and NumPy runtime without writing data
+or replacing the strict result with a tolerance. It returns the original
+nonzero status on drift; its numeric summaries are descriptive, not evidence of
+byte identity or scientific equivalence. In the controlled local Zen/no-AVX512
+experiment it reported eight changed text cells (largest numeric difference
+`4.440892098500626e-16`) in the multiclass CSV and 12 changed text cells
+(largest `8.881784197001252e-16`) in the PK CSV, with no changed nonnumeric
+cells and unchanged shapes/headers. All 46 example/PDB file hashes were checked
+before and after and matched. A diagnostic JSON was saved separately at
+`/home/user/pharma-part5-cpu-drift-diagnostic.json`.
+
+The new diagnostic/fixture/portability/provenance selection reported **187
+passed, 0 failed, 0 skipped** on the local AVX512 environment. In the core-only
+environment the diagnostic, release-audit and restore-fault selection reported
+**54 passed, 0 failed, 0 skipped**. Ruff passed. The CI failure handler now
+emits the diagnostic if strict portability fails; it does not change the test
+status. A cross-hardware byte-identical generation strategy remains unresolved,
+and no release has been certified.
