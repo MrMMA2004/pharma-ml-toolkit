@@ -39,8 +39,8 @@ Design lessons baked in (see docs/RESUME.md for the full ledger):
   rollback, untracked ones (v1.2.98-v1.2.103) did not;
 * keep the newest TWO zips tracked, ``git rm`` the older ones (the
   download/ folder must stay lean; history keeps the blobs);
-* build the archive OUTSIDE download/, testzip it, then move it in
-  (the nested-zip trap, round-179's recipe);
+* build in private staging, CRC-check, then publish without replacing an
+  existing path; archive staging and research-history directories are excluded;
 * the venv is part of the sandbox state: doctor probes the optional
   packages and names the exact install command when they vanish.
 """
@@ -259,42 +259,60 @@ def _gate(label: str, *args: str, env: dict[str, str] | None = None) -> bool:
 
 
 def _build_zip(version: str) -> Path | None:
-    """Round-179's archive recipe, self-contained: build OUTSIDE download/."""
+    """Build and CRC-check a new root-level ZIP, without replacing any file.
+
+    Staging uses a unique private directory in the output filesystem. An
+    exclusive hard link publishes the verified ZIP atomically without clobbering
+    an existing path, including a dangling symlink or a concurrent creator.
+    Filesystems without hard-link support fail closed. This protects only this
+    build step; the separate ship ritual's safe-copy and retention steps have
+    additional side effects and are not certified by this function.
+    """
+    if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version) is None:
+        print(f"zip FAILED: invalid release version {version!r}")
+        return None
     name = f"pharma-ml-toolkit-v{version}.zip"
-    staging = REPO / f".zip-staging-{version}"
-    target = staging / name
-    staging.mkdir(parents=True, exist_ok=True)
-    count = 0
-    with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
-        for dirpath, dirnames, filenames in os.walk(ROOT):
-            rel = Path(dirpath).relative_to(ROOT)
-            parts = set(rel.parts)
-            if parts & ZIP_EXCLUDE_DIRS or any(
-                part.endswith(ZIP_EXCLUDE_DIR_SUFFIX) for part in parts
-            ):
-                dirnames[:] = []
-                continue
-            dirnames[:] = sorted(dirnames)
-            for filename in sorted(filenames):
-                if Path(filename).suffix in ZIP_EXCLUDE_SUFFIXES:
-                    continue
-                source = Path(dirpath) / filename
-                # root-level arcname: the layout the round-210+
-                # four-home ritual ships (restore handles both, but
-                # the two builders must not drift apart again)
-                arcname = rel / filename
-                archive.write(source, arcname)
-                count += 1
-    with zipfile.ZipFile(target) as probe:
-        bad = probe.testzip()
-        if bad is not None:
-            print(f"zip FAILED integrity: {bad}")
-            shutil.rmtree(staging, ignore_errors=True)
-            return None
-    DOWNLOAD.mkdir(parents=True, exist_ok=True)
     final = DOWNLOAD / name
-    shutil.move(str(target), str(final))
-    shutil.rmtree(staging, ignore_errors=True)
+    if os.path.lexists(final):
+        print(f"zip FAILED: refusing to overwrite {final}")
+        return None
+    count = 0
+    try:
+        DOWNLOAD.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".checkpoint-zip-", dir=DOWNLOAD) as staging:
+            stage = Path(staging)
+            target = stage / name
+            def fail_walk(error: OSError) -> None:
+                raise error
+
+            with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
+                for dirpath, dirnames, filenames in os.walk(ROOT, onerror=fail_walk):
+                    folder = Path(dirpath)
+                    rel = folder.relative_to(ROOT)
+                    parts = set(rel.parts)
+                    if (folder == stage or parts & ZIP_EXCLUDE_DIRS or any(
+                        part.endswith(ZIP_EXCLUDE_DIR_SUFFIX) for part in parts
+                    )):
+                        dirnames[:] = []
+                        continue
+                    dirnames[:] = sorted(dirnames)
+                    for filename in sorted(filenames):
+                        if Path(filename).suffix in ZIP_EXCLUDE_SUFFIXES:
+                            continue
+                        source = folder / filename
+                        archive.write(source, rel / filename)
+                        count += 1
+            with zipfile.ZipFile(target) as probe:
+                bad = probe.testzip()
+                if bad is not None:
+                    print(f"zip FAILED integrity: {bad}")
+                    return None
+            # Source and destination are on the same filesystem. Unlike
+            # rename/replace, link refuses an existing name atomically.
+            os.link(target, final)
+    except (OSError, zipfile.BadZipFile) as exc:
+        print(f"zip FAILED: {exc}")
+        return None
     print(f"zip: {final.name} ({count} files, {final.stat().st_size:,} bytes)")
     return final
 

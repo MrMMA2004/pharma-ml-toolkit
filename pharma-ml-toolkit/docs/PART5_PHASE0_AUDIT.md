@@ -349,3 +349,33 @@ Generative SA failed its strict portability test on the same two CSV drifts
 and also exposed a stale generated `docs/INDEX.md` after the docking docstring
 changes. The index has been regenerated and its focused identity test passes
 locally; strict cross-platform CSV drift remains unresolved. No data was changed.
+
+
+## Continuation — controlled floating-point attribution and ZIP build safety
+
+CI on 50bb25a reported **11 jobs passed, 0 failed**. This does not resolve
+the intermittent strict data drift. In a local pinned-stack experiment, with
+the checkout's 1.2.172 CSVs unchanged, forcing OpenBLAS `Zen` (or `Haswell`)
+while leaving NumPy SIMD unchanged reproduced the 8 QSAR cell differences and
+no PK differences. Disabling NumPy `AVX512F` while leaving BLAS unchanged
+reproduced the 12 PK differences and no QSAR differences. Combining both
+settings reproduced both sets. This isolates the observed configuration
+dependence, not a proof of all underlying operations or cross-platform
+equivalence. Scientific recipes, release data and the strict byte check remain
+unchanged; forcing unsupported hardware, rounding output or copying old bytes
+would not be a justified general fix.
+
+A separate synthetic-fixture regression reproduced the checkpoint ZIP builder
+overwriting an existing same-version ZIP, deleting an unrelated file in its
+fixed staging directory, replacing a dangling symlink, and mishandling an
+invalid version: **4 failed** before the fix. The individual build step now
+uses a unique private staging directory, verifies ZIP CRC and atomically
+creates the final name without replacement using a same-filesystem hard link.
+Existing targets, concurrent target creation and unavailable hard links fail
+closed; an integrity failure leaves no published ZIP. Focused plus adjacent
+checkpoint/restore tests: **76 passed, 0 failed, 0 skipped**. The existing
+v1.2.172 archive and its separate workspace backup have not been replaced.
+The later `--commit` safe-copy and retention operations and the independent
+`tools/build_zip.py` publication ritual remain unmodified and **not certified
+safe**; see [RELEASE_AUDIT](RELEASE_AUDIT.md). This change is not a release
+build or full release certification.

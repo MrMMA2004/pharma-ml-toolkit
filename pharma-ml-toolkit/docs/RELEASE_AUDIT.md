@@ -32,3 +32,17 @@ backup results.
 The audit extracts only to its own temporary directory. Do not invoke the
 existing publishing ritual merely to obtain an audit: it has overwrite and
 retention behavior and requires an independently reviewed safe release plan.
+
+## Checkpoint build and publication limits
+
+The checkpoint tool's individual ZIP build step now uses a private staging
+directory, CRC-checks the result and refuses to replace an existing output;
+publication uses an exclusive hard link and fails closed if the filesystem
+does not support it. It does not clean or reuse the old fixed staging directory.
+This is **not** a safety certification for either publishing ritual: checkpoint
+`--commit` also edits version carriers, writes safe copies and retires old
+archives, while `tools/build_zip.py` can scrub the source tree, replace files
+and delete predecessor copies. Do not run either against valuable releases
+until their full publication and retention behavior is independently reviewed
+and protected by verified backups. Neither step is crash-durable or guarded
+against hostile concurrent changes.
