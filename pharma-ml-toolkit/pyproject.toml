@@ -88,6 +88,16 @@ reports = [
     # only exporting needs it (same contract as matplotlib).
     "Pillow>=10.0",
 ]
+# Offscreen Studio testing; install alongside the pinned core stack when
+# reproducing CI. This does not install optional chemistry or docking packages.
+gui-test = [
+    "PySide6>=6.8,<7",
+    "pyqtgraph>=0.13.7,<0.14",
+    "qt-material>=2.17,<3",
+    "qdarkstyle>=3.2,<4",
+    "pytest>=7.4",
+    "pytest-qt>=4.5,<5",
+]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",

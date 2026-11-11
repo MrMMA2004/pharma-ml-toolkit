@@ -40,7 +40,7 @@ that the entire prompt has been completed.
 | Real archive smoke | **Completed and verified** | The available v1.2.172 ZIP was dry-run and restored into an isolated temporary directory; every restored member's SHA-256 matched the ZIP and an unrelated user file survived. This does not test the unavailable v1.2.173 archive. |
 | Release ZIP QA report | **Partially implemented** | A static machine-readable report and manifest were produced for the existing v1.2.172 ZIP, not a new release build. Full profile results, standalone test suite and a reusable release-report generator remain outstanding. |
 | Standalone release portability and canonical builders | **Partially implemented** | Original data, index and notebook-stripping generators now ship in `tools/`; checkout-only CLI forwarders preserve their historical paths. An explicitly selected targeted standalone profile and isolated candidate ZIP regression passed; the full release suite remains untested. See the continuation evidence below and [standalone testing](STANDALONE_TESTING.md). |
-| Dependency profiles and CI | **Partially implemented** | The focused restore regression module was added to the existing Python CI matrix. GUI, Meeko/docking, chemistry, notebook, web parity, standalone and full-release profiles have not been provisioned or run in this phase. |
+| Dependency profiles and CI | **Partially implemented** | Named targeted profiles and a GUI test extra are documented; local core, chemistry and Meeko/gemmi preparation selections ran. A chemistry/preparation CI job and GUI extra installation have been added; broader profiles remain incomplete. The CI portability failure on 45d3480 is under investigation. See continuation evidence below. |
 | Estimator validation / scikit-learn compatibility | **Not implemented** | `_estimator_type` assumptions remain in `ml/conformal.py` and `ml/dalex.py`; the PDF's 1.8-specific failure has not yet been reproduced locally. Pinned scikit-learn is 1.5.2; the declared range remains `>=1.3`. |
 | Engine discovery and actual docking | **Not implemented** | `docking/workflow.py` has engine lookup APIs; the current engine README and feature inventory make conflicting claims. Search-order and runtime behavior were not changed or fully tested. No binary was executed. |
 | Documentation and scientific feature inventory | **Partially implemented** | The example count mismatch and current-Tkinter and bundled-engine claims were located; the broader reconciliation and feature inventory have not been completed. |
@@ -124,3 +124,43 @@ portability regression reported **228 passed, 0 failed, 0 skipped**. The old
 scratch data-builder command also passed `--check`; both the original archive
 and its backup still have SHA-256
 `c2676af8db050b8f31c40bd36216e3de7ba4b8216a7067e321c421e6c5eb9857`.
+
+## Continuation — test profiles and dependency evidence
+
+Named targeted commands and requirements are in [TEST_PROFILES.md](TEST_PROFILES.md).
+The `gui-test` extra declares the PySide6, PyQtGraph, theme and pytest-qt
+requirements; CI installs this extra with explicit pins. An additional CI job
+is configured to run descriptor and receptor/ligand preparation tests with
+RDKit, Mordred, Meeko and gemmi. Its result is pending, not assumed.
+
+Local Python 3.11.2 results:
+
+- Core-only environment (pinned core and pytest 9.0.2; no RDKit, Mordred,
+  Meeko, gemmi or GUI): **104 passed, 0 failed, 0 skipped** in data-loading,
+  PK and conformal selections.
+- RDKit 2026.9.1 + Mordred 1.2.0 descriptor selection: **73 passed, 0 failed,
+  0 skipped** (329 deprecation warnings).
+- RDKit 2026.9.1 + Meeko 0.8.0 + gemmi 0.7.5 preparation selection: **84
+  passed, 0 failed, 0 skipped** (5 warnings). This prepares inputs; it is not
+  execution of Vina, AutoGrid or AutoDock.
+- Local GUI selection: **blocked before collection**, since native
+  `libGL.so.1` is absent even after the Python GUI extra installed; no GUI
+  tests were claimed as executed.
+- An attempted web-parity selection without optional dependencies produced
+  **49 passed, 5 failed, 27 skipped** (the five bridge failures lacked RDKit).
+  With RDKit and matplotlib it produced **50 passed, 4 failed, 27 skipped**:
+  four rendering bridge tests could not import the system `libXrender.so.1`;
+  Bun-dependent tests were skipped. Web parity is not certified.
+- Checkout portability/provenance/index/notebook selection after the profile
+  changes: **184 passed, 0 failed, 0 skipped**. Metadata validation now runs
+  without Git as well as the separate checkout-only origin comparison.
+
+On the previously pushed commit 45d3480, six GitHub CI jobs passed and the
+Generative SA job failed in the newly added portability step. GitHub's job
+log download host was inaccessible in this sandbox; the exact failing case was
+not available from the API. Reproduction with the same pinned Python packages
+and an archived clean source tree passed locally. The workflow now emits test
+failure details as GitHub annotations to support diagnosis on its next run;
+this failure is not considered resolved merely because local reproduction passed.
+The v1.2.173 inputs, full release profile and real docking engine execution
+remain unavailable/unverified.

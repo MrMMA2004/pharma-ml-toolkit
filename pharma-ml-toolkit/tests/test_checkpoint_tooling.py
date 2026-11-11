@@ -327,6 +327,12 @@ class TestMetadataDrift:
         text = (TOOLKIT / "README.md").read_text(encoding="utf-8")
         assert "(1.2.125)" not in text
 
+    def test_pyproject_homepage_is_valid_without_git(self) -> None:
+        text = (TOOLKIT / "pyproject.toml").read_text(encoding="utf-8")
+        match = re.search(r'Homepage\s*=\s*"([^"]+)"', text)
+        assert match, "pyproject must declare a project Homepage"
+        assert match.group(1) == "https://github.com/MrMMA2004/pharma-ml-toolkit"
+
     @pytest.mark.checkout_only
     def test_pyproject_homepage_is_the_real_remote(self) -> None:
         text = (TOOLKIT / "pyproject.toml").read_text(encoding="utf-8")
