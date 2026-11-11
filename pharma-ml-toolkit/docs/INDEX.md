@@ -760,7 +760,7 @@ after adding new public functions.
 | `distribute_files` | function | Copy each file into every immediate sub-directory of ``target_dir``. |
 | `distribute_receptor` | function | Copy a prepared receptor into every ligand folder of a campaign. |
 | `dock_smiles_array` | function | Dock every SMILES of an array against one receptor, simultaneously. |
-| `engine_argv` | function | The argv prefix that launches one engine binary on this host. |
+| `engine_argv` | function | Resolve an engine and validate its launch prefix; no execution occurs. |
 | `evaluate_objective` | function | Evaluate one named original objective from precomputed docking scores. |
 | `extract_pdbqt_atom_types` | function | Collect sorted unique AutoDock atom types from a PDBQT ligand. |
 | `extract_pocket` | function | The MOAD pocket selection: residues near the ligand. |
@@ -774,7 +774,7 @@ after adding new public functions.
 | `ligand_efficiency_series` | function | Vectorised ligand-efficiency column for a docking summary table. |
 | `list_file_names` | function | List the stems of all files with ``extension`` in a directory. |
 | `load_ligand_csv` | function | Load a ligand library from CSV/TSV (or Excel). |
-| `locate_engine_binary` | function | Resolve a docking engine binary: the engine folder first, PATH last. |
+| `locate_engine_binary` | function | Locate an engine, but do not claim it is runnable on the current host. |
 | `min_intra_distance` | function | The minimum pairwise atom distance (the self-clash metric). |
 | `parse_dlg_cluster_table` | function | Parse the ``CLUSTERING HISTOGRAM`` table of an AutoDock4 DLG. |
 | `parse_dlg_summary` | function | Summarise one DLG: best cluster, most populated cluster, extremes. |

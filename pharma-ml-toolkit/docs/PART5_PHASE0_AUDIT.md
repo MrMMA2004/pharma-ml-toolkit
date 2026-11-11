@@ -342,3 +342,10 @@ full release suite remain unverified. The updated Studio card assertion was
 not run locally because `libGL.so.1` is missing; it is included in the Studio
 CI job. These are targeted results, not release certification. The existing baseline matrix above describes the original audit,
 not this continuation.
+
+CI run 43011012196 on commit 49912d6: **10 jobs passed, 1 failed**.
+Chemistry/docking and Studio (including the revised card assertion) passed.
+Generative SA failed its strict portability test on the same two CSV drifts
+and also exposed a stale generated `docs/INDEX.md` after the docking docstring
+changes. The index has been regenerated and its focused identity test passes
+locally; strict cross-platform CSV drift remains unresolved. No data was changed.
