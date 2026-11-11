@@ -59,6 +59,13 @@ tool-results/
 upload/Command.txt
 upload/Command.docx
 upload/MASTER_PROMPT.docx
+# 2026-11-12 security hardening: the two vectors that actually leaked
+# (part1 PDF §12.1 carries the PAT font-encoded; so does its text extraction)
+upload/MASTER_PROMPT part*.pdf
+scratch/pdf-extract/MASTER_PROMPT*.txt
+*.token
+*.key
+*.pid
 
 # python build cache (r260 guard)
 __pycache__/
