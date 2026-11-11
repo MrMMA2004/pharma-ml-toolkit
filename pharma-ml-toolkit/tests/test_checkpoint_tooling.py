@@ -286,9 +286,11 @@ class TestZipPolicy:
     def test_canonical_utilities_live_in_tools(self) -> None:
         # part4 §4.3: canonical build utilities move out of scratch/
         for name in ("build_zip.py", "reexec_notebooks.py", "run_suite_chunks.py",
-                     "venv_repair.sh", "scrub_home_paths.py"):
+                     "venv_repair.sh", "scrub_home_paths.py", "build_example_data.py",
+                     "build_docs_index.py", "strip_notebook_outputs.py"):
             assert (TOOLKIT / "tools" / name).is_file(), name
 
+    @pytest.mark.checkout_only
     def test_scratch_forwarders_keep_the_historical_paths(self) -> None:
         # the cron ritual + muscle memory invoke the scratch/ paths;
         # the shims must forward to the canonical tools/ copies.
@@ -298,6 +300,9 @@ class TestZipPolicy:
             "run_suite_chunks_225.py": "run_suite_chunks.py",
             "run_suite_chunks_250.py": "run_suite_chunks.py",
             "venv_repair.sh": "venv_repair.sh",
+            "build_example_data.py": "build_example_data.py",
+            "build_docs_index.py": "build_docs_index.py",
+            "strip_notebook_outputs.py": "strip_notebook_outputs.py",
         }
         for shim, target in forwarding.items():
             text = (TOOLKIT / "scratch" / shim).read_text(encoding="utf-8")
@@ -322,6 +327,7 @@ class TestMetadataDrift:
         text = (TOOLKIT / "README.md").read_text(encoding="utf-8")
         assert "(1.2.125)" not in text
 
+    @pytest.mark.checkout_only
     def test_pyproject_homepage_is_the_real_remote(self) -> None:
         text = (TOOLKIT / "pyproject.toml").read_text(encoding="utf-8")
         match = re.search(r'Homepage\s*=\s*"([^"]+)"', text)

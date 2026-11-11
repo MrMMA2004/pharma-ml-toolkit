@@ -8,7 +8,7 @@ the file the builder writes".  Three legs, each pinned here:
    (catches a notebook pointing at a stale path after a rename).
 2. **No orphans** — every top-level entry under ``examples/data`` must be
    loaded by at least one notebook (catches data the demos forgot).
-3. **Builder round-trip** — ``scratch/build_example_data.py --check``
+3. **Builder round-trip** — ``tools/build_example_data.py --check``
    re-generates the whole inventory in memory and proves the files on
    disk are byte-identical to the builder output, with no unclaimed
    orphans; the planted-drift test proves the gate actually fires.
@@ -36,7 +36,7 @@ import pytest
 TOOLKIT_ROOT = Path(__file__).resolve().parents[1]
 DATA = TOOLKIT_ROOT / "examples" / "data"
 EXAMPLES = TOOLKIT_ROOT / "examples"
-BUILDER = TOOLKIT_ROOT / "scratch" / "build_example_data.py"
+BUILDER = TOOLKIT_ROOT / "tools" / "build_example_data.py"
 
 # The eight EXECUTED notebooks (the _no_output twins carry identical
 # source and would only double-count).
@@ -76,7 +76,7 @@ def _notebook_data_references() -> dict[str, set[str]]:
 
 
 def _load_builder():
-    """Import scratch/build_example_data.py as a module (main() is __main__-guarded)."""
+    """Import tools/build_example_data.py as a module (main() is __main__-guarded)."""
     spec = importlib.util.spec_from_file_location("build_example_data", BUILDER)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

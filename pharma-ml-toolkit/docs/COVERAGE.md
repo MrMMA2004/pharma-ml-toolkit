@@ -460,7 +460,7 @@ one probe (`scratch/probe_provenance_roundtrip_115.py`):
    `docking_campaign/`). The inventory can never silently grow a file the
    demos forgot.
 3. **Builder `--check`** — the non-mutating drift audit
-   (`scratch/build_example_data.py --check`): every owned file re-generated
+   (`tools/build_example_data.py --check`): every owned file re-generated
    in memory and byte-compared (42 files), missing files and orphans
    flagged (`disk == owned`, 43 files under `examples/data`), PDB size
    pins checked without a network fetch, and the full `verify()` content

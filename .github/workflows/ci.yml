@@ -116,6 +116,10 @@ jobs:
           python -m pip install -c requirements.txt pytest==9.0.2 rdkit==2026.9.1
       - name: Test SA scoring and generation integration
         run: python -m pytest tests/test_sa_score.py tests/test_generative_sa_cli.py -o addopts="-q --tb=short"
+      - name: Test release portability and checkout-only guards
+        run: >-
+          python -m pytest tests/test_release_portability.py tests/test_checkpoint_tooling.py
+          -o addopts="-q --tb=short"
 
   studio-md:
     name: Studio MD

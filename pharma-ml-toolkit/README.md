@@ -27,19 +27,20 @@ exceptions, input validation, and pytest coverage** (**extensive pytest and doct
   missing packages raise an informative `DependencyError` instead of crashing at import time.
 * **Runs anywhere**: local, Docker (`Dockerfile` included), or CI (GitHub Actions workflow included).
 * **Deterministic examples**: the executed notebooks run entirely on the shipped
-  `examples/data/` inventory (43 files — every input table, the demo receptor and the demo
-  docking campaign; see the tree below), regenerated deterministically by
-  `scratch/build_example_data.py`; the example scripts keep their fixed seeds — no external
+  `examples/data/` inventory (45 files recursively — every input table, the demo receptor and
+  the demo docking campaign; see the tree below), regenerated deterministically by
+  `tools/build_example_data.py`; the example scripts keep their fixed seeds — no external
   datasets required. A pytest freshness guard also pins every executed notebook's
   committed outputs to the *shipped* version (the setup cell prints
   `pharmaml <version>`), so the committed evidence can never silently predate the
-  tree that ships it — after a version bump, `scratch/reexecute_all_notebooks_64.py`
-  re-runs all eight notebooks (~3 min) and regenerates the no-output twins.
+  tree that ships it — after a version bump, `tools/reexec_notebooks.py`
+  re-runs all eight notebooks (runtime depends on the environment); then run
+  `python tools/strip_notebook_outputs.py` to regenerate the no-output twins.
 * **Safety**: pharmaceutical functions validate every input (positive doses, ordered time series,
   bounded fractions) and raise `DataValidationError` on bad values rather than returning nonsense.
 * **Research-catalog provenance**: `docs/GITHUB_RESEARCH_CATALOG_AUDIT.md` records the live, one-by-one disposition of all 140 catalog repositories, including absorbed features, playground surfaces and explicit non-parity boundaries.
 * **Docs stay in sync with code**: `docs/INDEX.md` is auto-generated from each module's `__all__`
-  and docstrings (`python scratch/build_docs_index.py` from the repo root); a drift-guard test
+  and docstrings (`python tools/build_docs_index.py` from the toolkit root); a drift-guard test
   (`tests/test_docs_index.py`) fails whenever the index and the live package diverge, so the
   documented symbol list can never silently rot.
 * **Explorer dataset parity**: the companion web app's dataset preview route (`/api/ml/dataset`)
@@ -350,7 +351,7 @@ pharma-ml-toolkit/
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~720 KB (audited 526-check clean, docs/DATA_AUDIT.md), every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
-│                            #   regenerate deterministically via scratch/build_example_data.py
+│                            #   regenerate deterministically via tools/build_example_data.py
 │       ├── qsar_classification.csv        # ML §1      420 × 11 (active 118 / weak 155 / inactive 147)
 │       ├── screening_library.csv          # ML §2       79-row SMILES library (77 valid + 2 planted invalid)
 │       ├── library_with_descriptors.csv   # ML §3       77 × 10 (8 key descriptors + activity)
@@ -373,7 +374,7 @@ pharma-ml-toolkit/
 │       └── walkthrough_multiclass.csv     # walkthrough  300 × 9, 3 classes
 │                            # Provenance: every file is byte-identical to what the corresponding
 │                            #   notebook cell originally generated (same seeds, same code path — see
-│                            #   the map in scratch/build_example_data.py). PDBs come from RCSB entries
+│                            #   the map in tools/build_example_data.py). PDBs come from RCSB entries
 │                            #   1AKI/1CRN (public domain; tests/data/1crn.pdb is the second one) and
 │                            #   are re-downloaded only when missing.
 ├── docs/                    # INDEX.md — auto-generated module/API index

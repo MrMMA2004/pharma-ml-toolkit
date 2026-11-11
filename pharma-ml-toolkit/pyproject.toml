@@ -112,6 +112,7 @@ pharmaml = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "src"]
+markers = ["checkout_only: requires checkout-only files or Git remote metadata"]
 pythonpath = ["src"]
 # --doctest-modules (100x-22-c): every docstring example is a tested
 # contract -- a bare `pytest` (and CI) now collects the 19 doctest items

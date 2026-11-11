@@ -1,7 +1,7 @@
 # Module index
 
 Auto-derived from each module's `__all__` exports — the authoritative quick
-reference for the public API. Re-run `python scratch/build_docs_index.py`
+reference for the public API. Re-run `python tools/build_docs_index.py`
 after adding new public functions.
 ## `pharmaml`
 

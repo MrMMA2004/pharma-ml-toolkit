@@ -3,7 +3,7 @@
 Five guard families live here:
 
 * ``TestNoOutputVariants`` — the ``*_no_output.ipynb`` twins are derived
-  artifacts (scratch/strip_notebook_outputs.py): identical cell sources to
+  artifacts (tools/strip_notebook_outputs.py): identical cell sources to
   the executed original, every output stripped, plus one inserted
   explanation note.  These tests pin all three properties so the twins can
   never silently fork from the notebooks readers actually read.
@@ -11,7 +11,7 @@ Five guard families live here:
   24): "Jupyter files must work entirely based on the files I give them
   and not create their own sample data."  Every executed notebook loads
   its demo data from the shipped ``examples/data/`` inventory (built
-  byte-identically by ``scratch/build_example_data.py``, whose provenance
+  byte-identically by ``tools/build_example_data.py``, whose provenance
   map names the exact notebook cell each file came from) — the parametrized
   guard below keeps it that way.
 * ``test_executed_outputs_print_shipped_version`` — the freshness guard
@@ -105,7 +105,7 @@ class TestNoOutputVariants:
         ]
         assert variant_sources == original_sources, (
             f"{name}_no_output.ipynb drifted from {name}.ipynb — "
-            "re-run scratch/strip_notebook_outputs.py"
+            "re-run tools/strip_notebook_outputs.py"
         )
 
     def test_variant_is_actually_smaller(self, name: str):
@@ -125,7 +125,7 @@ def test_executed_outputs_print_shipped_version(name: str):
     cell; the committed stream output records the version that actually
     produced the outputs.  A mismatch means the outputs predate the
     shipped tree (e.g. 1.0.0-era outputs shipped with 1.2.x code) — after
-    any version bump, re-run scratch/reexecute_all_notebooks_64.py and
+    any version bump, re-run tools/reexec_notebooks.py and
     regenerate the twins so the committed evidence stays honest.
     """
     from pharmaml import __version__
@@ -151,8 +151,8 @@ def test_executed_outputs_print_shipped_version(name: str):
     assert not stale, (
         f"{name}: committed outputs print pharmaml {sorted(stale)} but "
         f"the shipped tree is {__version__} — re-run "
-        "scratch/reexecute_all_notebooks_64.py (then the twins via "
-        "scratch/strip_notebook_outputs.py)"
+        "tools/reexec_notebooks.py (then the twins via "
+        "tools/strip_notebook_outputs.py)"
     )
 
 
@@ -318,7 +318,7 @@ def test_walkthrough_similarity_heatmap_is_committed():
     ]
     assert figures, (
         "the §9 heat-map cell carries no committed figure — re-execute "
-        "the notebook (scratch/reexecute_all_notebooks_64.py)"
+        "the notebook (tools/reexec_notebooks.py)"
     )
     # the committed PNG is a real figure, not a stray stub: it decodes,
     # wears the PNG magic, and is big enough to be a rendered heat-map
@@ -360,7 +360,7 @@ def test_walkthrough_similarity_heatmap_is_committed():
 # Post-conversion each of those cells loads the corresponding shipped file
 # instead (e.g. ml cell 3 -> data/qsar_classification.csv, docking cell 29
 # -> data/docking_campaign/ + its ligands.csv manifest, generative cell 8
-# -> data/seed_molecules.csv) — see scratch/build_example_data.py for the
+# -> data/seed_molecules.csv) — see tools/build_example_data.py for the
 # full provenance map and scratch/reexecute_notebooks_26.py for the
 # conversion driver.  ZERO allowlist entries: a hit is always a failure.
 BANNED_FABRICATION_TOKENS = (
@@ -393,5 +393,5 @@ def test_no_inline_fabrication(name: str, token: str):
     assert not hits, (
         f"{name}.ipynb fabricates input data inline (token {token!r} in "
         f"cell {hits}) — load the corresponding shipped file from "
-        "examples/data/ instead (see scratch/build_example_data.py)"
+        "examples/data/ instead (see tools/build_example_data.py)"
     )

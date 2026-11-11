@@ -12,6 +12,21 @@ import pytest
 from sklearn.datasets import make_classification
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--standalone-release", action="store_true", default=False,
+        help="Skip tests requiring checkout-only files or Git remote metadata",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if config.getoption("--standalone-release"):
+        skip = pytest.mark.skip(reason="requires checkout-only files or Git remote metadata")
+        for item in items:
+            if item.get_closest_marker("checkout_only"):
+                item.add_marker(skip)
+
+
 def pdbqt_atom(serial: int, name: str, x: float, y: float, z: float, atom_type: str) -> str:
     """Column-aligned PDBQT ATOM record (cols 31-54 = xyz)."""
     return (
