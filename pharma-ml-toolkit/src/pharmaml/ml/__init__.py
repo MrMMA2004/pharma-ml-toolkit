@@ -95,6 +95,19 @@ from pharmaml.ml.catalog import (
     coverage_table,
     search_catalog,
 )
+from pharmaml.ml.conformal import (
+    ConformalIntervals,
+    SplitConformalRegressor,
+    calibrate_split_conformal,
+)
+from pharmaml.ml.conformal_classification import (
+    ConformalPredictionSets,
+    LabelConditionalConformalClassifier,
+    SplitConformalClassifier,
+    calibrate_label_conditional_classifier,
+    calibrate_split_conformal_classifier,
+)
+from pharmaml.ml.coverage_diagnostics import CoverageGroup, CoverageReport, coverage_by_group
 from pharmaml.ml.cv_results import (
     CLASSIFICATION_CV_METRICS,
     CV_STRATEGIES,
@@ -279,6 +292,7 @@ from pharmaml.ml.sequences import (
     sliding_windows,
     synthetic_series,
 )
+from pharmaml.ml.split_audit import SharedSplitKey, SplitOverlapReport, audit_split_overlap
 from pharmaml.ml.splits import (
     SPLIT_STRATEGIES,
     murcko_scaffold_key,
@@ -455,8 +469,12 @@ __all__ = [
     "CiResult",
     "ComparisonReport",
     "CompositionReport",
+    "ConformalIntervals",
+    "ConformalPredictionSets",
     "CorrelationResult",
     "CoverageEntry",
+    "CoverageGroup",
+    "CoverageReport",
     "CrossEntropyLoss",
     "DPNoiseScale",
     "DPStatisticsReport",
@@ -488,6 +506,7 @@ __all__ = [
     "LSHCollection",
     "LSHIndex",
     "LSHQueryResult",
+    "LabelConditionalConformalClassifier",
     "Linear",
     "LinearGDResult",
     "MOTrial",
@@ -538,10 +557,14 @@ __all__ = [
     "Sequential",
     "ShapInteractions",
     "ShapSummary",
+    "SharedSplitKey",
     "Sigmoid",
     "SignificanceResult",
     "Softmax",
     "SpaceIssue",
+    "SplitConformalClassifier",
+    "SplitConformalRegressor",
+    "SplitOverlapReport",
     "TPESearch",
     "TaskFamily",
     "TaskSplit",
@@ -563,6 +586,7 @@ __all__ = [
     "ann_benchmark",
     "anova_ii",
     "applicability_domain",
+    "audit_split_overlap",
     "autocorrelation",
     "bayesian_search",
     "bce_with_logits",
@@ -581,6 +605,9 @@ __all__ = [
     "build_preprocessor",
     "build_stacking",
     "build_voting",
+    "calibrate_label_conditional_classifier",
+    "calibrate_split_conformal",
+    "calibrate_split_conformal_classifier",
     "capacity_sweep",
     "catalog_categories",
     "catalog_projects",
@@ -594,6 +621,7 @@ __all__ = [
     "compare_models_cv",
     "composition_report",
     "contrast_matrix",
+    "coverage_by_group",
     "coverage_table",
     "cross_entropy",
     "cross_model_importances",

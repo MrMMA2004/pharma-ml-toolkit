@@ -311,8 +311,12 @@ after adding new public functions.
 | `CiResult` | class | One confidence interval: the estimate and its bounds. |
 | `ComparisonReport` | class | ``compare_groups``: the whole statistics lecture, one record. |
 | `CompositionReport` | class | The ε bill for a sequence of queries. |
+| `ConformalIntervals` | class | Prediction intervals and optional empirical evaluation on query rows. |
+| `ConformalPredictionSets` | class | Class membership per query row and optional empirical coverage. |
 | `CorrelationResult` | class | The lag correlation table, with the significance band. |
 | `CoverageEntry` | class | The audit's verdict for one catalogue category. |
+| `CoverageGroup` | class | Empirical coverage, Wilson bounds, and optional mean size for one group. |
+| `CoverageReport` | class | Overall and first-seen-ordered subgroup coverage on held-out observations. |
 | `CrossEntropyLoss` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `DPNoiseScale` | class | The noise multiplier a training plan needs, by bisection. |
 | `DPStatisticsReport` | class | A column's headline statistics, privatised under one ε. |
@@ -344,6 +348,7 @@ after adding new public functions.
 | `LSHCollection` | class | The usable engine: an :class:`LSHIndex` plus the stored vectors. |
 | `LSHIndex` | class | The random-hyperplane LSH table (Charikar's SimHash engine). |
 | `LSHQueryResult` | class | One approximate query: the key, the candidates, the neighbours. |
+| `LabelConditionalConformalClassifier` | class | A fixed classifier with one split-conformal threshold per label. |
 | `Linear` | class | ``y = x @ W.T + b`` with PyTorch's default init bounds. |
 | `LinearGDResult` | class | Outcome of the from-scratch linear regression. |
 | `MOTrial` | class | One multi-objective evaluation: params, the objective vector, the weights. |
@@ -394,10 +399,14 @@ after adding new public functions.
 | `Sequential` | class | Modules applied in order. |
 | `ShapInteractions` | class | Pairwise SHAP interaction values of a fitted tree model (100x-160). |
 | `ShapSummary` | class | SHAP values of a fitted tree model over a feature frame. |
+| `SharedSplitKey` | class | One cross-partition key and its row counts, in partition order. |
 | `Sigmoid` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `SignificanceResult` | class | One test's verdict: statistic, p-value, decision, effect size. |
 | `Softmax` | class | The container protocol: recursive ``parameters()``, ``__call__``. |
 | `SpaceIssue` | class | One compatibility or sanity finding (§18.2 validation). |
+| `SplitConformalClassifier` | class | Reference to a fixed classifier and its held-out calibration threshold. |
+| `SplitConformalRegressor` | class | A fitted model reference and its split-conformal calibration radius. |
+| `SplitOverlapReport` | class | Exact-key overlap and duplicate counts for named, nonempty partitions. |
 | `TPESearch` | class | Tree-structured Parzen Estimator search — Optuna's flagship sampler. |
 | `TaskFamily` | class | Seeded related regression tasks: one shared prior, per-task draws. |
 | `TaskSplit` | class | One task's support/query split (the inner-loop data contract). |
@@ -419,6 +428,7 @@ after adding new public functions.
 | `ann_benchmark` | function | Recall@k and candidate compression of LSH against brute force. |
 | `anova_ii` | function | Type-II ANOVA table from the term slices. |
 | `applicability_domain` | function | The uploaded workflow end-to-end, one call. |
+| `audit_split_overlap` | function | Audit exact identifier overlap across two or more named data partitions. |
 | `autocorrelation` | function | The autocorrelation function: which lag carries which memory. |
 | `bayesian_search` | function | The BayesianOptimizationOracle loop, minimising ``objective``. |
 | `bce_with_logits` | function | Binary cross-entropy with logits, the numerically stable form. |
@@ -437,6 +447,9 @@ after adding new public functions.
 | `build_preprocessor` | function | Build the (impute -> scale) preprocessing pipeline. |
 | `build_stacking` | function | Build a stacking ensemble (upgrades Stacking.py / Stacking reg.py). |
 | `build_voting` | function | Build a voting ensemble (upgrades Voting.py / Voting reg.py). |
+| `calibrate_label_conditional_classifier` | function | Calibrate one conformal score threshold per class on held-out rows. |
+| `calibrate_split_conformal` | function | Calibrate finite split-conformal intervals on held-out regression data. |
+| `calibrate_split_conformal_classifier` | function | Calibrate split-conformal label sets on held-out classification rows. |
 | `capacity_sweep` | function | Train the same data through growing hidden widths (chapter 5). |
 | `catalog_categories` | function | The 35 catalogue sections with live project counts and star totals. |
 | `catalog_projects` | function | One category's projects (slug or title), or all 924, score-descending. |
@@ -450,6 +463,7 @@ after adding new public functions.
 | `compare_models_cv` | function | Cross-validate a model panel into full §19 reports + the board. |
 | `composition_report` | function | Sequential composition: the ε's of queries on the same rows add. |
 | `contrast_matrix` | function | The coding matrix for one categorical factor. |
+| `coverage_by_group` | function | Summarize boolean held-out coverage overall and within observed groups. |
 | `coverage_table` | function | The category-by-category audit, in catalogue order. |
 | `cross_entropy` | function | Softmax cross-entropy: ``mean(−log_softmax[i, label_i])``. |
 | `cross_model_importances` | function | Permutation importances for a WHOLE panel of fitted models. |
