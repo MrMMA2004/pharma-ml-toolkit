@@ -1,9 +1,7 @@
 {
-  "job": "MASTER_PROMPT-2h-sync-100x",
-  "runs_completed": 49,
-  "max_runs": 100,
-  "interval": "every 2 hours (fixed_rate 7200s)",
-  "purpose": "Continue the MASTER_PROMPT and update the GitHub repository (including the latest zip file). Counter is committed to git each run so it survives sandbox rollbacks (the remote is the survivor).",
-  "created": "round 194, after the 9th rollback recovery (local wiped to 2eb0ede/round-186; remote survived at 101f5f7/round-193 v1.2.112; recovered via pure fast-forward)",
-  "last_run_note": "2026-11-11: round 265 (cron run 49/100; platform run_count 58 at start -- the firing-gap tail of the rollback-#32 window continues) -- part3 24.3/24.4 shipped as v1.2.172: the SA results lens on GenerationResult (sa_frame/sa_summary/filter_by_sa + SAFilteredCandidates, plot_sa_distribution, notebook section 9b, 31 tests; gate ten chunks zero functional failures, notebooks 8/8 re-executed, zip 8,883,247 B four homes, totals 5,547 = 4,673 collect + 874 doctest, census 1091/339,543, pins trued, pushed)."
+  "runs_completed": 63,
+  "last_run": "2026-11-11",
+  "last_run_note": "rollback-recovery round: bash restored after 2 dead sessions; PAT re-extracted (93-char, ~/.github_token); remote re-added + fetched; local main ff'd 230 commits to v1.2.172 (16ffdb7); arena/8696775e absorbed by real merge (conformal+split-integrity suite, 12 commits, focused+adjacent tests green); arena/c44913ab absorbed via -s ours (xai.py byte-identical blob faab4503 already in main; playground resurrection superseded by round-228 retirement); pushed 16ffdb7..732f553; all 9 arena branches deleted -- origin now main-only; health: GET / 200, zip exact:true 8,883,247 B v1.2.172",
+  "created": "2026-11-08",
+  "note": "counter recreated after sandbox rollback wiped it; runs_completed aligned with platform run_count (63) of job 515197 MASTER_PROMPT-2h-sync-100x"
 }

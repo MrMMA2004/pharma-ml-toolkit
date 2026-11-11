@@ -833,7 +833,7 @@ def quantile_prediction_intervals(
     >>> quantile_prediction_intervals(x2, y, pd.DataFrame({"b": [1.0]}))
     Traceback (most recent call last):
     ...
-    pharmaml.exceptions.ModelError: X_test has 1 feature(s) but X_train has 2 -- the descriptor spaces must match
+    pharmaml.exceptions.ModelError: X_test has 1 feature(s) but X_train has 2 — the descriptor spaces must match
     >>> quantile_prediction_intervals(x, y, x.iloc[:2], y.iloc[:3])
     Traceback (most recent call last):
     ...

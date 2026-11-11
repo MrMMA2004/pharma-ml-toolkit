@@ -92,7 +92,7 @@ Bad input is named, not crashed on:
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: unknown split strategy 'nope' -- valid strategies: random, stratified, scaffold, group, kennard_stone, temporal
->>> make_train_test_split(X, y, strategy="scaffold")
+>>> make_train_test_split(X.iloc[:5], y, strategy="scaffold")
 Traceback (most recent call last):
 ...
 pharmaml.exceptions.DataValidationError: strategy 'scaffold' needs one SMILES per row -- pass smiles=[...] aligned with X

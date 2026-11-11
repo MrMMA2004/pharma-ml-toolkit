@@ -1,3 +1,36 @@
+## [1.2.173] — 2026-11-11
+### Added — round 266: the arena branch absorption -- the conformal & split-integrity suite lands (arena/8696775e, 12 commits)
+
+- `ml/conformal.py` — split-conformal regression intervals: the finite-sample
+  marginal coverage guarantee (`conformalize` on any fitted regressor, the
+  quantile residual calibration, `predict_intervals` with alpha-exact width).
+- `ml/conformal_classification.py` — split-conformal classification sets
+  (`predict_set` with the score-threshold dance) plus **label-conditional**
+  conformal sets (per-class calibration, the conditional validity that
+  marginal sets only promise on average).
+- `ml/coverage_diagnostics.py` — subgroup coverage diagnostics: empirical
+  coverage per subgroup vs the nominal, the shortfall table.
+- `ml/split_audit.py` + the `pharmaml split-audit` CLI workflow — the
+  identifier-overlap audit across data splits (leakage detection before
+  training, machine-readable report).
+- `ml/splits.py` / `ml/cv_results.py` — scaffold-key cross-validation (groups
+  defined by scaffold keys, not row order) with unknown-group-label rejection
+  in holdout splits and feasible-group-split preservation.
+- `ml/applicability.py` — applicability descriptor schema validation.
+- `ml/evaluation.py` — the ROC-AUC class-probability mapping fix.
+- Five new docs pages (DATA_SPLITTING, CONFORMAL_REGRESSION,
+  CONFORMAL_CLASSIFICATION, COVERAGE_DIAGNOSTICS, CLASSIFICATION_EVALUATION)
+  and ten new test files (~1.2k test lines; focused + adjacent suites green
+  before the gate).
+- The absorption ledger: 9 `arena/*` remote branches existed; 7 carried zero
+  unique commits (stale PR refs, deleted outright); `arena/8696775e` carried
+  the 12 genuinely-unabsorbed commits above (real three-way merge, clean);
+  `arena/c44913ab` was recorded via `-s ours` — its XAI-registry payload
+  (xai.py, test_xai_registry.py) was already in main **byte-identical**
+  (same git blob `faab4503`), and its only other delta was the resurrection
+  of the playground (retired round 228 in favour of studio.py). All 9 branch
+  refs deleted; the remote is `main`-only.
+
 ## [1.2.172] — 2026-11-11
 ### Added — round 265: the section-24.3/24.4 SA wiring on GenerationResult
 

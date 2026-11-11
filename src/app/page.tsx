@@ -57,13 +57,12 @@ function ThemeToggle() {
   );
 }
 
-/* r265 (the section-24.3/24.4 SA results lens): +1 file
- * (tests/test_generative_result_sa.py), +31 collect tests and +4
- * doctests (result.py's three new method docstrings + the
- * plot_sa_distribution one); census verified by the endpoint-rule walk
- * (1091 = 1090 + 1 new; 340,283 as the live /api/toolkit/tree answers --
- * countLines' split("\n").length rule) after the notebook re-execution. */
-const FALLBACK_STATS = { files: 1091, lines: "340,283" };
+/* r266 (the arena/8696775e absorption): +19 files (4 new ml modules,
+ * 5 docs pages, 10 test files), +242 collect tests (4,915 total); census
+ * verified by the endpoint-rule walk (1110 = 1091 + 19 new; 343,029 as the
+ * live /api/toolkit/tree answers -- countLines' split("\n").length rule)
+ * after the notebook re-execution. */
+const FALLBACK_STATS = { files: 1110, lines: "343,029" };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
@@ -210,7 +209,7 @@ export default function Home() {
             {stats ? `${stats.files} files · ${stats.totalLines.toLocaleString("en-US")} LOC` : `${FALLBACK_STATS.files} files · ${FALLBACK_STATS.lines} LOC`}
             {" · "}
             <span className="ping-ring relative inline-flex size-2 rounded-full bg-primary" aria-hidden />
-            <span className="text-primary">5547 tests</span>
+            <span className="text-primary">5789 tests</span>
           </p>
         </div>
       </footer>

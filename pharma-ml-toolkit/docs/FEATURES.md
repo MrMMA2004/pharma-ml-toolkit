@@ -5,8 +5,10 @@ This is the §4.5 deliverable of the MASTER_PROMPT part 4 specification:
 traceability matrix.** All evidence on this page was collected live against the
 working tree (imports grepped, pages/cards/routes enumerated, tests collected
 with `pytest --collect-only`), not copied from prose. Matrix inputs were frozen
-at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.172 (the
-r265 §24.3/24.4 rows trued live). The §5 nine-card mapping (§10 below) was
+at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.173 (the
+r266 arena absorption landed the former E-row conformal/coverage/split-audit
+suite from `arena/8696775e`; the r265 §24.3/24.4 rows were trued live). The §5
+nine-card mapping (§10 below) was
 derived live at v1.2.169.
 
 ## Status legend (the six §4.5 classes)
@@ -117,6 +119,9 @@ surface (and CLI where noted) — listed here instead of being papered over:
 | `ml/pruning.py` | `test_pruning.py` (48) | magnitude/structured network pruning | Deep Learning page stops at train/runboard/umap/curation/xai |
 | `ml/quantization.py` | `test_quantization.py` (50) | int8/fp16-style quantisation arithmetic | same |
 | `ml/harness.py` | `test_harness.py` (56) | offline sharded-training harness (ZeRO stages + early stopping) | same |
+| `ml/conformal.py` + `ml/conformal_classification.py` | `test_conformal.py` (17) + `test_conformal_classification.py` (35) | split-conformal regression intervals, classification sets, label-conditional sets | landed v1.2.173 (arena/8696775e, 12 commits); no card built yet |
+| `ml/coverage_diagnostics.py` | `test_coverage_diagnostics.py` (34) | subgroup empirical-vs-nominal coverage shortfall table | same |
+| `ml/split_audit.py` | `test_split_overlap_audit.py` (34) + `test_cli_split_audit.py` (13) | identifier-overlap audit across data splits + the `pharmaml split-audit` CLI | same |
 
 Internal plumbing that is tested but intentionally not user-facing(classified under its parent feature, listed for honesty):
 `ml/split_categorical` (stratified splits), `ml/scoring_transforms`,
@@ -176,9 +181,9 @@ Counted over the matrix rows above (18 Studio pages, 12 web areas,
 | --- | --- | --- |
 | **A** | 35 | implemented and tested end-to-end (the §5 nine-card workflow dashboard rides the Dashboard row — see §10) |
 | **B** | 6 | implemented, incompletely tested — settings (smoke only), foundations + responseai (page-suite-only backends), TS calculators + PK/PD explorer + reconciler (no automated TS↔Python parity pins) |
-| **C** | 5 | backend-only: gnn(+gnnxai), geometric, pruning, quantization, harness |
+| **C** | 8 | backend-only: gnn(+gnnxai), geometric, pruning, quantization, harness, conformal(+conformal_classification), coverage_diagnostics, split_audit |
 | **D** | 0 | nothing currently classified **D** — the nine-card workflow dashboard moved to **A** in v1.2.169 (§10) |
-| **E** | 1 | conformal prediction + coverage diagnostics + split audits (PR #9 parked, unmerged — its arena branch carries the work) |
+| **E** | 0 | nothing currently classified **E** — the conformal/coverage/split-audit suite landed in v1.2.173 (the `arena/8696775e` absorption, formerly "PR #9 parked") and moved to **C** |
 | **F** | 3 | docking execution (external Vina), real MD data (external GROMACS/PLUMED), DOCKSTRING dataset (external download) |
 
 ## 10. The nine-card dashboard mapping (§5 of the directive)
