@@ -45,3 +45,14 @@ generation and docking require separate validation. The script requires Windows.
 
 For interrupted release publication, see
 [read-only recovery inventory](INTERRUPTED_RELEASE_RECOVERY.md).
+
+The Windows docking integration job also uses the toolkit's `run_vina`,
+`run_vina_batch`, `write_gpf`, `write_dpf`, and `run_autodock4` on synthetic
+fixtures. It checks nonempty outputs, a finite reported score and generated
+maps where applicable; see the job result before claiming success. These
+fixtures are not a real receptor or ligand, and neither scientific validity
+nor input/engine reproducibility has been established. Vina batch captures
+console output as its log rather than relying on the unsupported Vina 1.2
+`--log` option. A two-file pose/log promotion is not crash-atomic. Resume's
+existing-file heuristic does not verify inputs or provenance: use a new output
+directory if the configuration, ligand, receptor, engine or seed changes.

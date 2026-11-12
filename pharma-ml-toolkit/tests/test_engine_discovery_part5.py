@@ -162,12 +162,17 @@ def test_batch_passes_absolute_paths_with_config_cwd(tmp_path, monkeypatch):
     (tmp_path / "ligands" / "a.pdbqt").write_text("ligand")
     monkeypatch.setattr(workflow, "_require_executable", lambda _: "/fake/vina")
     commands = []
-    monkeypatch.setattr(workflow.subprocess, "run", lambda cmd, **kw: commands.append((cmd, kw)))
+    def fake_run(cmd, **kw):
+        commands.append((cmd, kw))
+        Path(cmd[cmd.index("--out") + 1]).write_text("pose")
+        return subprocess.CompletedProcess(cmd, 0, b"log", b"")
+    monkeypatch.setattr(workflow.subprocess, "run", fake_run)
     result = workflow.run_vina_batch("config/vina.conf", "ligands", out_dir="output")
     assert len(result) == len(commands) == 1
     cmd, kwargs = commands[0]
     assert kwargs["cwd"] == Path("config")
-    for flag in ("--config", "--ligand", "--out", "--log"):
+    assert result[0].ok and "--log" not in cmd
+    for flag in ("--config", "--ligand", "--out"):
         assert Path(cmd[cmd.index(flag) + 1]).is_absolute()
 
 

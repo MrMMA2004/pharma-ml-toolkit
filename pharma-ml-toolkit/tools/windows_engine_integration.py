@@ -68,7 +68,7 @@ def main() -> int:
                                     "--log", str(work / "probe.log")], cwd=work,
                                    capture_output=True, text=True, errors="replace", timeout=120, check=False)
             failures.append(f"toolkit run_vina_batch failed: {batch_error}; direct probe exit "
-                            f"{probe.returncode}, stdout {probe.stdout[-1500:]}, stderr {probe.stderr[-1500:]}")
+                            f"{probe.returncode}, stdout {probe.stdout[-1500:]}, stderr {probe.stderr[:1500]}")
 
         write_gpf(ligand, receptor_file=receptor.name,
                   box=GridBox(0, 0, 0, npts=(20, 20, 20)), receptor_types="C")
