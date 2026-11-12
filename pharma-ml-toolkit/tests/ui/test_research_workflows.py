@@ -359,3 +359,57 @@ def test_reproducibility_compares_training_records(qtbot, studio_app, tmp_path, 
     result = json.loads(dialog._result.toPlainText())
     assert not result["same_dataset_sha256"] and result["same_split"]
     assert "not proof" in result["notice"]
+
+
+def test_preparation_dialog_review_confirm_and_invalidation(qtbot, studio_app, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    from ui.pages.preparation_dialog import PreparationDialog
+
+    output = tmp_path / "new-output"
+    plan = {"schema": "pharmaml-preparation-plan/1", "output_dir": str(output),
+            "review": {"rows": 2, "invalid_smiles": 1}}
+    called = []
+
+    def review(receptor, table, out, **options):
+        called.append(("review", receptor, table, out, options))
+        return plan
+
+    def prepare(reviewed):
+        assert reviewed == plan
+        called.append(("prepare",))
+        output.mkdir()
+        return {"status": "completed_with_failures", "ligands": {"prepared": 1, "failed": 1}}
+
+    monkeypatch.setattr("pharmaml.docking.campaign_preparation.build_preparation_plan", review)
+    monkeypatch.setattr("pharmaml.docking.campaign_preparation.prepare_reviewed_inputs", prepare)
+    dialog = PreparationDialog(JobRunner())
+    qtbot.addWidget(dialog)
+    dialog._receptor.setText(str(tmp_path / "receptor.pdb"))
+    dialog._table.setText(str(tmp_path / "ligands.csv"))
+    dialog._output.setText(str(output))
+    dialog._start_review()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Review complete"), timeout=10000)
+    assert dialog._prepare.isEnabled() and not output.exists()
+    monkeypatch.setattr("ui.pages.preparation_dialog.QMessageBox.question",
+                        lambda *args, **kwargs: QMessageBox.StandardButton.No)
+    dialog._confirm_prepare()
+    assert not output.exists() and len(called) == 1
+    monkeypatch.setattr("ui.pages.preparation_dialog.QMessageBox.question",
+                        lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+    dialog._confirm_prepare()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Preparation completed_with_failures"), timeout=10000)
+    assert output.is_dir() and not dialog._prepare.isEnabled() and len(called) == 2
+    dialog._chain.setText("A")
+    assert not dialog._result.toPlainText() and not dialog._prepare.isEnabled()
+
+
+def test_preparation_dialog_reachable(qtbot, studio_app):
+    from ui.pages.docking import DockingWorkbenchPage
+    from ui.pages.preparation_dialog import PreparationDialog
+
+    page = DockingWorkbenchPage()
+    qtbot.addWidget(page)
+    page._preparation_btn.click()
+    assert isinstance(page._preparation_dialog, PreparationDialog)
+    page._preparation_dialog.close()

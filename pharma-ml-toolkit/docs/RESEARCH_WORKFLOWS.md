@@ -111,6 +111,48 @@ do not choose models or thresholds using the evaluation set. Dependence,
 missing descriptors, feature scaling and high-dimensional distance effects can
 change interpretation. Full individual predictions are not included.
 
+## Prepare docking inputs in Studio
+
+Under **Docking Workbench → Campaign summary → Prepare docking inputs…**,
+select a receptor (PDB, PDBQT or mmCIF), a CSV/TSV/Excel ligand table with a
+SMILES column, and a **new** output directory whose parent already exists.
+SMILES and name columns can be specified or auto-detected. Choose the optional
+single-character PDB chain, water removal, non-water HETATM retention and
+ligand embedding seed. Review lists source hashes, chosen columns, counts of
+syntactically valid/invalid SMILES and required RDKit/Meeko (and for mmCIF,
+gemmi) versions. Review is read-only; it does not establish receptor quality,
+chemical suitability, correct charges or a docking box.
+
+After separately confirming, the workflow rechecks source/dependency
+fingerprints, creates the directory exclusively, snapshots both input files,
+prepares `receptor.pdbqt` and one ligand PDBQT per numbered directory under
+`ligands/`, and records a `preparation.json` audit with source choices,
+receptor cleaning, per-ligand outcomes and output hashes. Invalid SMILES and
+individual preparation failures are included; `completed_with_failures` means
+some ligands were not prepared, not that the whole input succeeded. The
+original table, failure CSV and audit can include sensitive structures, names,
+paths and errors. Do not share them without review. A failed run or crash can
+leave a partial folder or stale/partial manifest; there is no resume, stop or
+crash-atomic guarantee. Closing the dialog does not stop a running job. The
+checks assume trusted, quiescent files, not adversarial concurrent writers.
+
+Receptor cleaning can alter scientific meaning: by default waters and
+non-protein HETATM (including many cofactors/ions) are removed, first MODEL and
+first alternate locations are retained, and PDB hydrogens are replaced through
+Meeko. Existing PDBQT input is re-filtered rather than retyped; inspect charges
+and chemistry. Bad residues are not automatically deleted. The ligand path
+performs one seeded 3D embedding/optimization, not protonation, tautomer
+selection, or exhaustive conformer sampling. Check structures and biological
+context independently; reproducibility across versions or hardware is not
+certified. Install `pharmaml[docking]` for preparation.
+
+Preparation does not write a Vina config, choose a box, validate engine output,
+or launch docking. After inspecting the prepared files, create a separate
+Vina config referring to `receptor.pdbqt`, choose the box explicitly, and use
+the review/launch workflow below with the prepared `ligands/` folder. Never
+point the launch output at the preparation folder; launch requires a different
+new directory.
+
 ## Vina campaign review and launch in Studio
 
 Under **Docking Workbench → Campaign summary → Review / launch Vina campaign…**,
@@ -325,8 +367,8 @@ limitations.
 
 ## Still to build
 
-A guided docking **preparation** workflow, provenance integration across other
-model and Studio training runs, generalized safe resume,
+Provenance integration across other model and Studio training runs, generalized
+safe resume, broader docking preparation/chemistry review,
 broader classification validation, multiclass recalibration and applicability methods, and a
 full reproducibility certification system are not delivered here. Existing docking engines and
 campaign APIs, label-conditional conformal APIs, and proof-backed checkpoints
