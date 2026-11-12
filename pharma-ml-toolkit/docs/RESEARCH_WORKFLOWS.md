@@ -1,8 +1,7 @@
 # Incremental research workflow additions
 
-These are narrow tools, not a complete validation platform. Commands below
-print JSON; the toolkit does not write reports unless you choose to redirect
-output. Hash and checkpoint inspections assume files are stable while read.
+These are narrow tools, not a complete validation platform. CLI commands below
+print JSON; the CLI does not write reports unless you choose to redirect output. Hash and checkpoint inspections assume files are stable while read.
 
 ## Data quality in Studio
 
@@ -184,6 +183,17 @@ Existing `tools/diagnose_data_drift.py` performs a separate, read-only generated
 CSV comparison; environment inspection does not modify any results or strict
 byte comparison policy.
 
+In Studio, **Utilities Workbench → Reproducibility & checkpoint diagnostics…**
+provides environment details, checkpoint inspection and the checkout's
+`tools/diagnose_data_drift.py` strict generated-data check. The latter runs in
+an isolated child process and requires the diagnostic script, example data and
+its dependencies; installations without them report failure rather than a
+fictitious clean result. Exit 1 is reported as **strict byte drift**, even when
+numeric differences are tiny; no rounding, tolerance or data rewrite is applied.
+The job cannot be stopped or resumed. The checks assume the files are not
+concurrently modified and do not establish numerical or scientific equivalence.
+Reports can contain sensitive paths and environment information.
+
 ## Checkpoint inspection
 
 ```sh
@@ -205,7 +215,7 @@ limitations.
 
 A guided docking campaign **launcher/preparation** workflow, provenance
 integration across other model runs, generalized safe resume,
-broader classification validation/probability recalibration and applicability methods, and consolidated
-reproducibility dashboard are not delivered here. Existing docking engines and
+broader classification validation/probability recalibration and applicability methods, and a
+full reproducibility certification system are not delivered here. Existing docking engines and
 campaign APIs, label-conditional conformal APIs, and proof-backed checkpoints
 remain available independently; they are not equivalent to those additions.

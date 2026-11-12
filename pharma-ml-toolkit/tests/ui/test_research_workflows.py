@@ -175,3 +175,50 @@ def test_nested_validation_real_and_stop(qtbot, studio_app, tmp_path, monkeypatc
         release.set()
     qtbot.waitUntil(lambda: dialog._status.text().startswith("Cancelled"), timeout=10000)
     assert not dialog._result.toPlainText() and "no resume" in dialog._status.text()
+
+
+def test_reproducibility_dialog_environment_checkpoint_and_drift(qtbot, studio_app, tmp_path, monkeypatch):
+    from pharmaml.utils.checkpoint_schema import OperationSpec
+    from pharmaml.utils.checkpoints import CheckpointManager
+    from ui.pages.reproducibility_dialog import ReproducibilityDialog
+
+    dialog = ReproducibilityDialog(JobRunner())
+    qtbot.addWidget(dialog)
+    dialog._show_environment()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Diagnostic complete"), timeout=10000)
+    assert "packages" in json.loads(dialog._result.toPlainText())
+    data = tmp_path / "data.csv"
+    data.write_text("first")
+    checkpoint = CheckpointManager(tmp_path / "jobs", "job").save(
+        step=2, state={}, inputs=[data],
+        operation=OperationSpec(operation_type="numpy_mlp_training", operation_id="demo"))
+    before = checkpoint.path.read_bytes()
+    dialog._checkpoint.setText(str(checkpoint.path))
+    dialog._inputs.setPlainText(str(data))
+    dialog._show_checkpoint()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Diagnostic complete"), timeout=10000)
+    assert json.loads(dialog._result.toPlainText())["input_status"] == "match"
+    data.write_text("changed")
+    dialog._show_checkpoint()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Checkpoint warning"), timeout=10000)
+    assert json.loads(dialog._result.toPlainText())["input_status"].startswith("changed")
+    assert checkpoint.path.read_bytes() == before
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "diagnose_data_drift.py").write_text(
+        "import json, sys\nprint(json.dumps({'strict_check_exit_code': 1, 'strict_drift': ['drift']}))\nsys.exit(1)\n")
+    monkeypatch.setattr("ui.pages.reproducibility_dialog._TOOLKIT", tmp_path)
+    dialog._show_drift()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("STRICT BYTE DRIFT"), timeout=10000)
+    assert json.loads(dialog._result.toPlainText())["strict_check_exit_code"] == 1
+
+
+def test_reproducibility_dashboard_reachable(qtbot, studio_app):
+    from ui.pages.reproducibility_dialog import ReproducibilityDialog
+    from ui.pages.utilities import UtilitiesWorkbenchPage
+
+    page = UtilitiesWorkbenchPage()
+    qtbot.addWidget(page)
+    page._diagnostics_btn.click()
+    assert isinstance(page._diagnostics_dialog, ReproducibilityDialog)
+    page._diagnostics_dialog.close()
