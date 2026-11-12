@@ -74,6 +74,7 @@ jobs:
           python -m pytest
           tests/test_checkpoint_restore_transaction.py
           tests/test_checkpoint_build_safety.py
+          tests/test_checkpoint_ship_safety.py
           tests/test_release_audit.py
           tests/test_data_drift_diagnostic.py
           tests/test_data_loading.py

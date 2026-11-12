@@ -395,12 +395,58 @@ def _notebook_freshness_problems() -> list[str]:
     return problems
 
 
+def _copy_release_exclusive(source: Path, destination: Path) -> None:
+    """Copy, hash-verify, and publish a new backup without replacing any path.
+
+    Staging and the destination share a filesystem; hard links are required.
+    Existing files and even dangling symlinks are never overwritten. A later
+    failure may leave earlier verified copies in place for manual recovery.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if os.path.lexists(destination):
+        raise FileExistsError(f"refusing to overwrite release copy {destination}")
+    before = _sha256(source)
+    with tempfile.TemporaryDirectory(prefix=".release-copy-", dir=destination.parent) as stage:
+        staged = Path(stage) / destination.name
+        shutil.copy2(source, staged)
+        if _sha256(staged) != before or _sha256(source) != before:
+            raise OSError(f"release copy verification failed: {destination}")
+        os.link(staged, destination)
+
+
+def _has_independent_retention_copy(stale: Path) -> bool:
+    """Only retire a file when the separate backup is regular, distinct, and matches."""
+    backup = OFFSITE_DIR / stale.name
+    try:
+        return (
+            not stale.is_symlink() and stale.is_file()
+            and not backup.is_symlink() and backup.is_file()
+            and not os.path.samefile(stale, backup)
+            and _sha256(stale) == _sha256(backup)
+        )
+    except OSError:
+        return False
+
+
 def ship(message: str) -> int:
     """The full ritual: gates + zip + retention + commit."""
     status = doctor(verbose=True)
     if status == 2:
         return 2
     version = _version()
+    if re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version) is None:
+        print(f"ship aborted: invalid release version {version!r}")
+        return 4
+    name = f"pharma-ml-toolkit-v{version}.zip"
+    # Abort before touching version carriers or building if a destination exists.
+    destinations = [home / name for home in (DOWNLOAD, ARCHIVE_DIR, OFFSITE_DIR)]
+    if len({path.resolve() for path in destinations}) != len(destinations):
+        print("ship aborted: release destinations overlap")
+        return 4
+    for destination in destinations:
+        if os.path.lexists(destination):
+            print(f"ship aborted: refusing to overwrite {destination}")
+            return 4
 
     # notebook version consistency gates FIRST (fast, in-process --
     # the round-260 §4.1 release checklist item)
@@ -441,16 +487,15 @@ def ship(message: str) -> int:
     # (beyond any git accident).  A failure in the steps below can
     # never cost the fresh zip.
     try:
-        ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(archive, ARCHIVE_DIR / archive.name)
-        OFFSITE_DIR.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(archive, OFFSITE_DIR / archive.name)
-        print(
-            f"safe-copy: {archive.name} -> {ARCHIVE_DIR.relative_to(REPO)} "
-            f"+ {OFFSITE_DIR}"
-        )
+        _copy_release_exclusive(archive, ARCHIVE_DIR / archive.name)
+        _copy_release_exclusive(archive, OFFSITE_DIR / archive.name)
+        digest = _sha256(archive)
+        if any(_sha256(home / archive.name) != digest for home in (ARCHIVE_DIR, OFFSITE_DIR)):
+            raise OSError("published safe-copy verification failed")
+        print(f"verified safe-copies: {archive.name} -> {ARCHIVE_DIR} + {OFFSITE_DIR}")
     except OSError as exc:
-        print(f"safe-copy FAILED (the zip itself is safe in download/): {exc}")
+        print(f"safe-copy FAILED; ship stopped before retention/commit: {exc}")
+        return 4
 
     # retention: newest KEEP_ZIPS stay tracked; older ones leave index+disk
     zips = sorted(
@@ -458,6 +503,9 @@ def ship(message: str) -> int:
         key=lambda path: _zip_version(path) or (0, 0, 0),
     )
     for stale in zips[:-KEEP_ZIPS]:
+        if not _has_independent_retention_copy(stale):
+            print(f"retention skipped: no independent matching backup for {stale}")
+            continue
         print(f"retire: {stale.name}")
         _git("rm", "-q", "--cached", str(stale), check=False)
         stale.unlink(missing_ok=True)
@@ -469,6 +517,9 @@ def ship(message: str) -> int:
         key=lambda path: _zip_version(path) or (0, 0, 0),
     )
     for stale in archive_zips[:-KEEP_ARCHIVE]:
+        if not _has_independent_retention_copy(stale):
+            print(f"retention skipped: no independent matching backup for {stale}")
+            continue
         print(f"retire (archive): {stale.name}")
         _git("rm", "-q", "--cached", str(stale), check=False)
         stale.unlink(missing_ok=True)

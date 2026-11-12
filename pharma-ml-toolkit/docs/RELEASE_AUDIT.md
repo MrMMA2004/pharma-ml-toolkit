@@ -39,10 +39,17 @@ The checkpoint tool's individual ZIP build step now uses a private staging
 directory, CRC-checks the result and refuses to replace an existing output;
 publication uses an exclusive hard link and fails closed if the filesystem
 does not support it. It does not clean or reuse the old fixed staging directory.
-This is **not** a safety certification for either publishing ritual: checkpoint
-`--commit` also edits version carriers, writes safe copies and retires old
-archives, while `tools/build_zip.py` can scrub the source tree, replace files
-and delete predecessor copies. Do not run either against valuable releases
-until their full publication and retention behavior is independently reviewed
-and protected by verified backups. Neither step is crash-durable or guarded
-against hostile concurrent changes.
+Checkpoint `--commit` now refuses pre-existing output names, stages and
+SHA-256-verifies both safe copies, and aborts before retention and commit if a
+copy fails. Older archives are retired only when a separate, non-symlink,
+non-hardlinked copy in its configured backup directory matches their SHA-256;
+otherwise retention is skipped for that archive. Successfully created copies
+are retained if a later copy fails and must be reviewed manually before retry.
+Version carriers can already have been edited before a later failure. The
+backups can share a machine or filesystem and are not a disaster-recovery plan.
+
+This is **not** a safety certification for either publishing ritual:
+`tools/build_zip.py` can still scrub the source tree, replace files and delete
+predecessor copies. Neither full ship operation is crash-atomic, crash-durable,
+or safe against hostile concurrent changes. Do not run either against valuable
+releases without independent backups and a reviewed recovery plan.
