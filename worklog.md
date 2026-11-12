@@ -13771,3 +13771,59 @@ rule; the carriers gate + notebook-freshness guard + the zip-name
 derivation (build_zip reads VERSION) already enforce it mechanically —
 a same-version re-ship now fails `test_version_carriers` (zip VERSION
 vs pyproject) or the freshness guard before it can leave the tree.
+
+## R6 (§13 second half) — the descriptor batch earns registration — 2026-11-12
+
+**The first §13 extension on the v2 schema.**  The master prompt
+sequences it: schema first (R2), then extensions one class at a time,
+each earning its registry row only with a bit-exact resume proof.
+`compute_feature_frame` is the first: the descriptor batch's "complete
+state" serializes exactly — per-row float vectors (b64-packed, the
+numpy_neural `_b64_pack` contract), the drop ledger, and the
+fingerprints (families + conformers + column width; the full input
+list) that make a resume EXACT rather than assumed.
+
+**The wiring.**  Keyword-only `checkpoint_dir` / `checkpoint_every` /
+`checkpoint_resume` on `compute_feature_frame` — the three existing
+call sites (dta.py, training.py, doctests) untouched and byte-
+identical.  Without `checkpoint_dir` the historical loop runs as
+before (the no-checkpoint twin test pins `partial_results is None`).
+With it: a checkpoint at every `checkpoint_every` chunk boundaries
+(the final chunk always records completion), a resume that skips the
+completed prefix, a stale config/dataset checkpoint refused with a
+warning (exact restore or nothing), and — the §13 rule the round-205
+stop path lacked — a cooperative stop that now PRESERVES the partial
+`(frame, report)` on `JobCancelled.partial_results` (new optional
+attribute; `JobCancelled` construction stays backward-compatible).
+
+**The proofs.**  `tests/test_descriptor_batch_resumability.py` (11
+tests): the registry proof `test_resumed_batch_is_bit_exact`
+(interrupted + resumed == uninterrupted, bit for bit: frame, columns,
+index, report — against BOTH the checkpoint-writing fresh run and the
+checkpoint-less historical call), the partial-checkpoint tail test
+(stop at 50/120, resume recomputes only past 75, result bit-exact),
+preserve-on-cancel (the partial rows are a bit-exact subset of the
+full run's rows, drop ledger consistent), stale-config and stale-
+dataset refusals, the v2 envelope on every checkpoint
+(`validate_checkpoint` green, `resume_unit == step`), the registry
+entry pinning THIS proof, `checkpoint_every` validation + thinning,
+and the manager stem.  Test-logic bugs found and fixed while writing
+them (a stop lambda that returned True and never cancelled; the
+zero-padded step filename parse) — the implementation itself needed
+no changes after the first green run of the main proof.
+
+**Registration.**  `descriptor_batch` moved from
+`PENDING_OPERATION_TYPES` to `OPERATION_REGISTRY` (unit: molecules
+featurized; policy: preserve; implementation: pharmaml.chem.features;
+proof: the bit-exact test's node id).  Five candidates remain pending,
+each earning its row in its own round.  CHECKPOINT_SCHEMA.md rules +
+registry table updated.
+
+**Collateral.**  FEATURES.md freeze stamp trued to 1.2.175 (missed in
+the bump — the inventory test caught it); fpdf2 re-pinned 2.9.0 →
+2.8.5 in the venv (2.9.0's tightened `set_page_background` signature
+broke mypy on report.py; 2.8.5 is the requirements.txt pin).
+
+Gates: 593 passed / 0 failed on the focused battery (features,
+descriptors, inventory, resumability, schema, tooling, numpy-neural,
+pipeline, CLI + module doctests); ruff clean; mypy clean (217 files).

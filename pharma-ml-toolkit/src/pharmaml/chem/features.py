@@ -168,6 +168,10 @@ True
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
+import os
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -802,12 +806,73 @@ def _morgan_scaffold_computer(
     return scaffold_vector
 
 
+
+# -- (round 6, §13) resumable-checkpoint helpers --------------------------------
+#
+# The descriptor batch's "complete state" (§13's requirement before a
+# Pause/Resume may exist): the per-row float vectors computed so far, the
+# dropped (row, smiles) pairs, and the fingerprints that make a resume
+# EXACT rather than assumed -- config (families/n_conformers) and dataset
+# (the full input list).  Vectors ride as base64-packed float64 so the
+# JSON round-trip is bit-exact (the numpy_neural `_b64_pack` contract).
+
+
+def _pack_vector(array: np.ndarray) -> dict[str, object]:
+    """One float vector -> a JSON-safe bit-exact ``{dtype, shape, data}``."""
+    contiguous = np.ascontiguousarray(np.asarray(array, dtype=float))
+    return {
+        "dtype": str(contiguous.dtype),
+        "shape": list(contiguous.shape),
+        "data": base64.b64encode(contiguous.tobytes()).decode("ascii"),
+    }
+
+
+def _unpack_vector(payload: object) -> np.ndarray:
+    """Rebuild one :func:`_pack_vector` payload into a fresh array."""
+    if not isinstance(payload, dict):
+        raise TypeError(f"packed vector must be a dict, got {type(payload).__name__}")
+    dtype = np.dtype(str(payload["dtype"]))
+    shape = tuple(int(dim) for dim in payload["shape"])
+    raw = base64.b64decode(str(payload["data"]), validate=True)
+    if raw and len(raw) != int(np.prod(shape)) * dtype.itemsize:
+        raise ValueError("packed vector payload size mismatch")
+    return np.frombuffer(raw, dtype=dtype).reshape(shape).copy()
+
+
+def _batch_config_fingerprint(
+    families: Sequence[str], n_conformers: int, width: int
+) -> str:
+    """SHA-256 over the batch's config: family set, conformer count, and
+    the resulting column width (a resume must land the same columns)."""
+    blob = json.dumps(
+        {"families": list(families), "n_conformers": int(n_conformers), "width": int(width)},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _batch_dataset_fingerprint(smiles_list: Sequence[str]) -> str:
+    """SHA-256 over the exact input list -- a resume against different
+    data is detected, not guessed at (the envelope rule 3, applied
+    in-batch for callers with no on-disk input artifacts)."""
+    digest = hashlib.sha256()
+    for text in smiles_list:
+        digest.update(text.encode("utf-8"))
+        digest.update(b"\x00")  # delimiter: no concatenation ambiguity
+    return digest.hexdigest()
+
+
 def compute_feature_frame(
     smiles: Sequence[str],
     families: Iterable[str] = FEATURE_FAMILIES,
     n_conformers: int = 3,
     n_jobs: int = 1,
     progress: Callable[..., Any] | None = None,
+    *,
+    checkpoint_dir: str | os.PathLike[str] | None = None,
+    checkpoint_every: int = 1,
+    checkpoint_resume: bool = True,
 ) -> tuple[pd.DataFrame, FeatureReport]:
     """Compute a multi-family feature matrix for a batch of SMILES.
 
@@ -845,6 +910,29 @@ def compute_feature_frame(
         unaffected).  The GUI's Stop button and its live memory
         watchdog speak through this channel, so a run-away batch can
         be halted BEFORE the OS would kill the whole window.
+    checkpoint_dir:
+        (part5-continuation round 6, §13) Optional directory for
+        resumable checkpoints: one envelope-carrying checkpoint per
+        ``checkpoint_every`` chunk boundaries, carrying every completed
+        row's exact float vector, the dropped pairs, and the
+        config/dataset fingerprints.  A later call with the same
+        ``smiles``/``families``/``n_conformers`` resumes from the newest
+        valid checkpoint -- completed molecules are NEVER recomputed and
+        the resumed ``frame``/``report`` are bit-identical to an
+        uninterrupted run (the registered proof test pins this).  A
+        checkpoint from a different config or input list is refused with
+        a warning and the batch starts fresh (exact restore or nothing).
+        ``None`` (the default) keeps the historical checkpoint-less
+        behaviour byte for byte.
+    checkpoint_every:
+        How many chunk boundaries between checkpoint saves (1 = every
+        chunk; the chunk size itself stays the internal 25-molecule
+        dispatch unit).  Must be a positive int.
+    checkpoint_resume:
+        When ``True`` (default) and ``checkpoint_dir`` is given, resume
+        from the newest valid checkpoint whose fingerprints match.
+        ``False`` still writes checkpoints but always computes from
+        scratch -- the fresh-run twin the resume tests compare against.
 
     Returns
     -------
@@ -1048,6 +1136,147 @@ def compute_feature_frame(
     chunk = max(1, min(25, total))
     results: list[tuple[int, str, np.ndarray | None, str]] = []
     done = 0
+
+    # -- (round 6, §13) the resumable wrapper around the same loop ------
+    #
+    # When ``checkpoint_dir`` is given the batch becomes a §13 operation:
+    # checkpoints carry the complete state (every completed row's exact
+    # vector + the dropped pairs + the fingerprints), a resume replays
+    # them and skips the completed prefix, and a cooperative stop
+    # PRESERVES the partial results on the exception instead of
+    # discarding them.  Without ``checkpoint_dir`` none of this code
+    # runs -- the loop below is the historical one, byte for byte.
+    if checkpoint_dir is not None:
+        if (
+            not isinstance(checkpoint_every, int)
+            or isinstance(checkpoint_every, bool)
+            or checkpoint_every < 1
+        ):
+            raise ValueError(
+                f"checkpoint_every must be a positive int, got {checkpoint_every!r}"
+            )
+        from pharmaml.utils.checkpoint_schema import OperationSpec
+        from pharmaml.utils.checkpoints import CheckpointManager, PersistenceError
+
+        try:
+            manager = CheckpointManager(
+                checkpoint_dir, name="descriptor-batch"
+            )
+            spec = OperationSpec(
+                operation_type="descriptor_batch", operation_id=f"features-{id(smiles_list):x}"
+            )
+        except PersistenceError as exc:
+            _LOG.warning(
+                "checkpoint home unusable (%s); computing without checkpoints", exc
+            )
+            manager = None  # type: ignore[assignment]
+            spec = None  # type: ignore[assignment]
+        config_fp = _batch_config_fingerprint(requested, int(n_conformers), len(columns))
+        dataset_fp = _batch_dataset_fingerprint(smiles_list)
+        if manager is not None and checkpoint_resume:
+            try:
+                latest = manager.latest()
+            except OSError as exc:  # pragma: no cover - scan failure
+                latest = None
+                _LOG.warning("checkpoint scan failed (%s); starting fresh", exc)
+            if latest is not None and latest.resumable:
+                state = latest.state
+                if (
+                    state.get("config_fp") != config_fp
+                    or state.get("dataset_fp") != dataset_fp
+                ):
+                    _LOG.warning(
+                        "descriptor-batch checkpoint at step %d is for a different "
+                        "config/dataset; starting fresh (exact restore or nothing)",
+                        latest.step,
+                    )
+                else:
+                    try:
+                        results = [
+                            (
+                                int(entry["row"]),
+                                str(entry["text"]),
+                                None if entry.get("vector") is None
+                                else _unpack_vector(entry["vector"]),
+                                str(entry.get("error", "")),
+                            )
+                            for entry in state["rows"]
+                        ]
+                        done = int(latest.step)
+                        _LOG.info(
+                            "descriptor batch resumed from checkpoint step %d (%d/%d "
+                            "molecules already computed)",
+                            done,
+                            done,
+                            total,
+                        )
+                    except (KeyError, TypeError, ValueError) as exc:
+                        _LOG.warning(
+                            "checkpoint payload unreadable (%s); starting fresh", exc
+                        )
+                        results = []
+                        done = 0
+
+        boundaries_since_save = 0
+        for start in range(done, total, chunk):
+            batch = pairs[start : start + chunk]
+            if int(n_jobs) != 1 and len(batch) > 1:
+                from joblib import Parallel, delayed  # sklearn's own dependency
+
+                results.extend(
+                    Parallel(n_jobs=int(n_jobs), prefer="threads")(
+                        delayed(compute_one)(pair) for pair in batch
+                    )
+                )
+            else:
+                results.extend(compute_one(pair) for pair in batch)
+            done += len(batch)
+            boundaries_since_save += 1
+            if (
+                manager is not None
+                and spec is not None
+                and (start + chunk >= total or boundaries_since_save >= checkpoint_every)
+            ):
+                boundaries_since_save = 0
+                try:
+                    manager.save(
+                        step=done,
+                        total=total,
+                        state={
+                            "config_fp": config_fp,
+                            "dataset_fp": dataset_fp,
+                            "rows": [
+                                {
+                                    "row": row,
+                                    "text": text,
+                                    "vector": None if vector is None else _pack_vector(vector),
+                                    "error": error,
+                                }
+                                for row, text, vector, error in results
+                            ],
+                        },
+                        note=f"descriptor batch {done}/{total} molecules",
+                        operation=spec,
+                    )
+                except (PersistenceError, OSError, TypeError, ValueError) as exc:
+                    _LOG.warning(
+                        "checkpoint write failed at %d/%d (%s); continuing without it",
+                        done,
+                        total,
+                        exc,
+                    )
+            # (round 205) the cooperative stop -- now §13-complete: the
+            # partial results ride the exception (the data contract
+            # permits it: rows are independent, order is preserved).
+            if progress is not None and progress(done, total, "feature factory") is False:
+                raise JobCancelled(
+                    f"feature batch cancelled after {done}/{total} molecules "
+                    "-- stopped at a checkpoint by the caller",
+                    partial_results=_partial_frame_and_report(results, columns, family_widths),
+                )
+
+        return _finish_batch(results, columns, family_widths)
+
     for start in range(0, total, chunk):
         batch = pairs[start : start + chunk]
         if int(n_jobs) != 1 and len(batch) > 1:
@@ -1073,6 +1302,29 @@ def compute_feature_frame(
                 "-- stopped at a checkpoint by the caller"
             )
 
+    return _finish_batch(results, columns, family_widths)
+
+
+def _partial_frame_and_report(
+    results: Sequence[tuple[int, str, np.ndarray | None, str]],
+    columns: list[str],
+    family_widths: dict[str, int],
+) -> tuple[pd.DataFrame, FeatureReport]:
+    """(round 6, §13) The preserved partial ``(frame, report)`` on cancel."""
+    return _finish_batch(list(results), columns, family_widths)
+
+
+def _finish_batch(
+    results: Sequence[tuple[int, str, np.ndarray | None, str]],
+    columns: list[str],
+    family_widths: dict[str, int],
+) -> tuple[pd.DataFrame, FeatureReport]:
+    """Assemble the final ``(frame, report)`` from completed row results.
+
+    Shared by the plain loop, the resumable loop and the cancel path so
+    all three produce byte-identical output for the same rows (the
+    §13 exact-restore contract: one assembly, no divergent twins).
+    """
     rows: list[np.ndarray] = []
     valid_smiles: list[str] = []
     valid_positions: list[int] = []

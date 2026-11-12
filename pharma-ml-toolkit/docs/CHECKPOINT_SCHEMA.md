@@ -55,12 +55,12 @@ resume would start from the wrong unit.)
    only types present in `OPERATION_REGISTRY`. Registry membership requires
    a referenced pytest node id proving bit-exact resume for that class
    (`RegistryEntry.exact_restore_proof`).
-2. **Pending §13 classes are refused.** `descriptor_batch`,
-   `similarity_campaign`, `hpo`, `generative_search`, `docking_batch`,
-   `preprocessing` are listed in `PENDING_OPERATION_TYPES` and rejected with
-   an explicit "not yet registered" error until their proof round lands
-   (planned rounds R6+ in
-   `docs/plans/PART5_S11_S14_CONTINUATION.md`).
+2. **Pending §13 classes are refused.** The candidates not yet in
+   the registry — `similarity_campaign`, `hpo`, `generative_search`,
+   `docking_batch`, `preprocessing` — are listed in
+   `PENDING_OPERATION_TYPES` and rejected with an explicit "not yet
+   registered" error until their proof round lands (planned rounds R7+
+   in `docs/plans/PART5_S11_S14_CONTINUATION.md`).
 3. **Exact restore or nothing.** `restore_exact` must be `True`
    (construction-time and on-disk validation). §13: "Never present a
    Stop/Resume action that cannot safely resume."
@@ -89,9 +89,18 @@ resume would start from the wrong unit.)
 | --- | --- | --- | --- | --- |
 | `numpy_mlp_training` | training epochs | preserve | `tests/test_numpy_neural_checkpoints.py::TestBitExactResume::test_adam_regressor_resume_is_bit_exact` | `pharmaml.ml.numpy_neural` |
 | `benchmark_family_scoring` | descriptor families scored | preserve | `tests/test_numpy_neural_checkpoints.py::TestBitExactResume::test_sgd_momentum_resume_is_bit_exact` | `pharmaml.ml.training` |
+| `descriptor_batch` | molecules featurized | preserve | `tests/test_descriptor_batch_resumability.py::TestDescriptorBatchResume::test_resumed_batch_is_bit_exact` | `pharmaml.chem.features` |
 
-The six §13 candidates are pending; each earns its row in its own round
-(descriptor batches first), exactly as the master prompt sequences it.
+The first of the six §13 candidates earned its row in round 6: the
+descriptor batch (`compute_feature_frame(checkpoint_dir=...)`)
+checkpoints every chunk boundary with its complete state (per-row float
+vectors, the drop ledger, config + dataset fingerprints), resumes by
+skipping the completed prefix, refuses a stale config/dataset
+checkpoint (exact restore or nothing), and preserves the partial
+`(frame, report)` on a cooperative stop via
+`JobCancelled.partial_results`. The five remaining candidates are
+pending; each earns its row in its own round, exactly as the master
+prompt sequences it.
 
 ## Using it
 

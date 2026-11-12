@@ -146,13 +146,25 @@ OPERATION_REGISTRY: dict[str, RegistryEntry] = {
         ),
         implementation="pharmaml.ml.training",
     ),
+    # (part5-continuation round 6, §13) the first of the six pending
+    # candidates to EARN registration: the descriptor batch's complete
+    # state (per-row vectors + drops + fingerprints) serializes and
+    # restores exactly, proven by the bit-identical resume test below.
+    "descriptor_batch": RegistryEntry(
+        unit_description="molecules featurized",
+        partial_results_policy="preserve",
+        exact_restore_proof=(
+            "tests/test_descriptor_batch_resumability.py::"
+            "TestDescriptorBatchResume::test_resumed_batch_is_bit_exact"
+        ),
+        implementation="pharmaml.chem.features",
+    ),
 }
 
 #: The §13 candidate classes, in the master prompt's own order.  Each may
 #: register only after its round lands the exact-restore proof test; until
 #: then OperationSpec(operation_type=<any of these>) raises.
 PENDING_OPERATION_TYPES: tuple[str, ...] = (
-    "descriptor_batch",
     "similarity_campaign",
     "hpo",
     "generative_search",

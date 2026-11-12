@@ -51,8 +51,21 @@ class JobCancelled(PharmaMLError):
     byte-identically.
     """
 
-    def __init__(self, message: str = "job cancelled at a checkpoint") -> None:
+    def __init__(
+        self,
+        message: str = "job cancelled at a checkpoint",
+        *,
+        partial_results: object | None = None,
+    ) -> None:
         super().__init__(message)
+        # (part5-continuation round 6, §13) "preserve completed partial
+        # results after cancellation whenever the operation's data
+        # contract permits": resumable operations attach the exact
+        # partial payload their contract defines (the descriptor batch
+        # attaches its ``(frame, report)``-shaped partial).  Callers who
+        # ignore it behave exactly as before; the GUI's Stop handling
+        # can surface it once the resume wiring lands there.
+        self.partial_results = partial_results
 
 
 class PersistenceError(PharmaMLError):
