@@ -250,6 +250,9 @@ class DockingWorkbenchPage(QWidget):
         self._campaign_btn.setMinimumHeight(34)
         self._campaign_btn.clicked.connect(self._start_campaign)
         form.addRow("", self._campaign_btn)
+        self._wizard_btn = QPushButton("Review a Vina campaign…")
+        self._wizard_btn.clicked.connect(self._show_campaign_wizard)
+        form.addRow("", self._wizard_btn)
         hint = QLabel(
             "check_docking_completion + scan_docking_directory over the "
             "bundled 14-folder AutoDock4 campaign, then the rescore card's "
@@ -401,6 +404,17 @@ class DockingWorkbenchPage(QWidget):
             self._report.setText("A job is already running — Stop it first.")
             return True
         return False
+
+    def _show_campaign_wizard(self) -> None:
+        from .campaign_wizard import CampaignReviewWizard
+
+        wizard = getattr(self, "_campaign_wizard", None)
+        if wizard is None:
+            wizard = CampaignReviewWizard(self._runner, self)
+            self._campaign_wizard = wizard
+        wizard.show()
+        wizard.raise_()
+        wizard.activateWindow()
 
     # -- campaign summary --------------------------------------------------------------
     def _start_campaign(self) -> None:

@@ -1,0 +1,91 @@
+"""Offscreen UI tests with real backends and isolated synthetic inputs."""
+from __future__ import annotations
+
+import json
+
+import numpy as np
+import pandas as pd
+
+from ui.pages.campaign_wizard import CampaignReviewWizard
+from ui.pages.uncertainty_dialog import UncertaintyDialog
+from ui.workers.job_worker import JobRunner
+
+
+def test_uncertainty_dialog_uses_three_files_and_clears_stale_report(qtbot, studio_app, tmp_path):
+    runner = JobRunner()
+    dialog = UncertaintyDialog(runner)
+    qtbot.addWidget(dialog)
+    for index, (name, start, n) in enumerate((("train", 0, 20), ("calibration", 20, 10), ("test", 30, 10))):
+        x = np.arange(start, start + n, dtype=float)
+        frame = pd.DataFrame({"id": [f"{i:04d}" for i in range(start, start+n)], "x": x,
+                              "y": 2*x+1, "group": ["A", "B"] * (n // 2)})
+        path = tmp_path / f"{index}.csv"
+        frame.to_csv(path, index=False)
+        dialog._paths[name].setText(str(path))
+    dialog._features.setPlainText("x")
+    dialog._target.setText("y")
+    dialog._key.setText("id")
+    dialog._group.setText("group")
+    dialog._start()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Evaluation complete"), timeout=10000)
+    report = json.loads(dialog._result.toPlainText())
+    assert report["n_train"] == 20 and report["n_calibration"] == 10 and report["n_test"] == 10
+    assert len(report["subgroups"]) == 2 and "no conditional guarantee" in report["limitations"]
+    dialog._paths["test"].setText(dialog._paths["train"].text())
+    assert not dialog._result.toPlainText()
+    dialog._start()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Evaluation failed"), timeout=10000)
+    assert "overlap" in dialog._status.text()
+    assert not dialog._result.toPlainText()
+
+
+def test_uncertainty_missing_fields_and_busy_job(qtbot, studio_app):
+    dialog = UncertaintyDialog(JobRunner())
+    qtbot.addWidget(dialog)
+    dialog._start()
+    assert "Select all three" in dialog._status.text()
+    assert not dialog._runner.busy
+
+
+def test_campaign_review_wizard_no_side_effects_and_clears_report(qtbot, studio_app, tmp_path, monkeypatch):
+    config = tmp_path / "box.conf"
+    receptor = tmp_path / "r.pdbqt"
+    receptor.write_text("receptor")
+    ligands = tmp_path / "ligands"
+    ligands.mkdir()
+    (ligands / "l.pdbqt").write_text("ligand")
+    config.write_text("receptor = r.pdbqt\ncenter_x = 0\ncenter_y = 1\ncenter_z = 2\n"
+                      "size_x = 10\nsize_y = 11\nsize_z = 12\n")
+    monkeypatch.setattr("pharmaml.docking.campaign_preview.engine_argv", lambda *args: ["/bin/sh"])
+    wizard = CampaignReviewWizard(JobRunner())
+    qtbot.addWidget(wizard)
+    wizard._config.setText(str(config))
+    wizard._ligands.setText(str(ligands))
+    out = tmp_path / "output"
+    wizard._output.setText(str(out))
+    wizard._start()
+    qtbot.waitUntil(lambda: wizard._status.text().startswith("Review only"), timeout=10000)
+    result = json.loads(wizard._result.toPlainText())
+    assert result["size_angstrom"] == [10, 11, 12]
+    assert result["executed"] is False and result["ligands"] == 1 and not out.exists()
+    wizard._output.setText(str(ligands))
+    assert not wizard._result.toPlainText()
+    wizard._start()
+    qtbot.waitUntil(lambda: wizard._status.text().startswith("Review failed"), timeout=10000)
+    assert "must not overlap" in wizard._status.text()
+
+
+def test_dialogs_are_reachable_from_studio_pages(qtbot, studio_app):
+    from ui.pages.docking import DockingWorkbenchPage
+    from ui.pages.model_analysis import ModelAnalysisPage
+
+    docking = DockingWorkbenchPage()
+    model = ModelAnalysisPage()
+    qtbot.addWidget(docking)
+    qtbot.addWidget(model)
+    docking._wizard_btn.click()
+    model._uncertainty_btn.click()
+    assert isinstance(docking._campaign_wizard, CampaignReviewWizard)
+    assert isinstance(model._uncertainty_dialog, UncertaintyDialog)
+    docking._campaign_wizard.close()
+    model._uncertainty_dialog.close()

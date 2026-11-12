@@ -54,3 +54,22 @@ def test_cli_report_and_overlap_error(tmp_path, capsys):
     args[args.index("--test") + 1] = paths[0]
     assert main(args) == 1
     assert "overlap" in capsys.readouterr().err
+
+
+def test_file_workflow_preserves_literal_identifier_strings(tmp_path):
+    from pharmaml.ml.uncertainty_workbench import regression_uncertainty_from_files
+
+    train, cal, test = datasets()
+    train.loc[0, "id"] = "001"
+    cal.loc[0, "id"] = "1"
+    paths = []
+    for index, data in enumerate((train, cal, test)):
+        path = tmp_path / f"{index}.csv"
+        data.to_csv(path, index=False)
+        paths.append(path)
+    report = regression_uncertainty_from_files(*paths, features=["x"], target="y", key="id")
+    assert report["n_test"] == 10  # 001 is not silently merged with 1
+    cal.loc[0, "id"] = "001"
+    cal.to_csv(paths[1], index=False)
+    with pytest.raises(DataValidationError, match="overlap"):
+        regression_uncertainty_from_files(*paths, features=["x"], target="y", key="id")

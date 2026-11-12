@@ -1071,50 +1071,10 @@ def _cmd_data_split(args: argparse.Namespace) -> int:
 
 
 def _read_split_audit_table(path: Path, delimiter: str | None):
-    """Read identifiers as text without inferring NA values or numeric types."""
-    import csv
+    """Compatibility wrapper around the identifier-preserving reader."""
+    from pharmaml.utils.identifier_table import read_identifier_table
 
-    import pandas as pd
-
-    from pharmaml.exceptions import DataValidationError
-
-    if not path.is_file():
-        raise DataValidationError(f"Input file not found: {path}")
-    suffix = path.suffix.lower()
-    separators = {"comma": ",", "tab": "\t", "semicolon": ";"}
-    try:
-        if suffix in {".csv", ".tsv", ".txt"}:
-            sep = separators[delimiter] if delimiter else ("\t" if suffix == ".tsv" else ",")
-            with path.open("r", encoding="utf-8-sig", newline="") as handle:
-                reader = csv.reader(handle, delimiter=sep, strict=True)
-                header = next(reader, [])
-                rows = []
-                for row in reader:
-                    if len(row) != len(header):
-                        raise DataValidationError(
-                            f"Cannot read split file {path}: inconsistent field count "
-                            f"at line {reader.line_num}"
-                        )
-                    rows.append(row)
-            frame = pd.DataFrame(rows, columns=header)
-        elif suffix in {".xlsx", ".xlsm"}:
-            first = pd.read_excel(path, header=None, nrows=1, dtype=str, keep_default_na=False)
-            header = first.iloc[0].tolist() if len(first) else []
-            frame = pd.read_excel(path, dtype=str, keep_default_na=False)
-        else:
-            raise DataValidationError(f"unsupported split file format: {path.suffix}")
-    except DataValidationError:
-        raise
-    except (OSError, UnicodeError, ValueError, ImportError, StopIteration, csv.Error) as exc:
-        raise DataValidationError(f"Cannot read split file {path}: {exc}") from exc
-    if not header or any(not isinstance(name, str) or not name.strip() for name in header):
-        raise DataValidationError(f"Split file {path} has an empty column header")
-    if len(set(header)) != len(header):
-        raise DataValidationError(f"Split file {path} has duplicate column headers")
-    if len(header) != len(frame.columns):
-        raise DataValidationError(f"Split file {path} has an inconsistent header")
-    frame.columns = header
-    return frame
+    return read_identifier_table(path, delimiter)
 
 
 def _cmd_research(args: argparse.Namespace) -> int:
@@ -1174,19 +1134,11 @@ def _cmd_ml_conformal_report(args: argparse.Namespace) -> int:
     """Evaluate fixed ridge on independently supplied calibration and test files."""
     import json
 
-    import pandas as pd
+    from pharmaml.ml.uncertainty_workbench import regression_uncertainty_from_files
 
-    from pharmaml.ml.uncertainty_workbench import regression_uncertainty_report
-
-    frames = [_read_split_audit_table(Path(name), None)
-              for name in (args.train, args.calibration, args.test)]
-    for frame in frames:
-        for column in [*args.features, args.target]:
-            if column in frame.columns:
-                frame[column] = pd.to_numeric(frame[column], errors="raise")
-    report = regression_uncertainty_report(
-        *frames, features=args.features, target=args.target, key=args.key,
-        group=args.group, alpha=args.alpha,
+    report = regression_uncertainty_from_files(
+        args.train, args.calibration, args.test, features=args.features, target=args.target,
+        key=args.key, group=args.group, alpha=args.alpha,
     )
     print(json.dumps(report, indent=2, default=str, allow_nan=False))
     return 0

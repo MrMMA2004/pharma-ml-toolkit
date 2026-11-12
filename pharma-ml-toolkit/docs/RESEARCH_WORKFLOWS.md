@@ -44,8 +44,31 @@ Exact disjointness is not independence. Marginal conformal coverage relies on
 exchangeability; subgroup coverage is empirical, **not** a conditional coverage
 guarantee. Wilson intervals assume independent evaluation observations and
 common coverage within groups; small groups, correlations, subgroup selection
-and shift can invalidate comparisons. This command is regression-only, uses
-one fixed model, and has no Studio uncertainty page yet.
+and shift can invalidate comparisons. This workflow is regression-only and uses one fixed model. In Studio, open
+**Model Analysis → Uncertainty…** and select the same three separate files;
+list one numeric feature name per line. The Studio dialog runs in the shared
+background runner and does not reuse the current trained model. This operation
+is not cancellable or resumable. Editing any input clears the previous report.
+
+## Vina campaign review in Studio
+
+Under **Docking Workbench → Campaign summary → Review a Vina campaign…**,
+the wizard selects a Vina config, a prepared ligand directory and an output
+directory, then reviews the engine launch prefix, receptor and six search-box
+values in Å. It rejects ambiguous duplicate config directives, missing or
+empty inputs, overlapping input/output trees and a receptor in the ligand
+tree. It reports the existing batch runner's recursive `.pdbqt` census and
+file-presence-based skip count. This is a **read-only review**, not a launcher,
+preparation wizard, engine runtime test or scientific validation; no files or
+results are written. It does not confirm that the molecules are chemically
+valid or that a discovered engine works. Recheck after changing inputs.
+
+A nonempty output directory may contain unrelated or outdated results. The
+batch skip check uses only pose/log presence, not input, config, engine or seed
+provenance; pose/log promotion is not crash-atomic. Use a fresh output directory
+and independently review results. Extra config directives and paths may be
+sensitive when sharing the review. AutoGrid and Vina box conventions are not
+implicitly converted; this wizard displays the Vina config's explicit sizes.
 
 ## Nested validation
 
@@ -101,7 +124,7 @@ limitations.
 
 ## Still to build
 
-The proposed guided docking campaign wizard, uncertainty GUI, integrated
+A guided docking campaign **launcher/preparation** workflow, integrated
 experiment comparison/provenance for actual runs, generalized safe resume,
 classification validation/calibration/applicability reports, and consolidated
 reproducibility dashboard are not delivered here. Existing docking engines and

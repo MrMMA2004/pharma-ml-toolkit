@@ -375,6 +375,9 @@ class ModelAnalysisPage(QWidget):
         buttons = QHBoxLayout()
         buttons.addWidget(self._train_btn)
         buttons.addWidget(self._compare_btn)
+        self._uncertainty_btn = QPushButton("Uncertainty…")
+        self._uncertainty_btn.clicked.connect(self._show_uncertainty)
+        buttons.addWidget(self._uncertainty_btn)
         buttons.addStretch(1)
         form.addRow("", buttons)
         lay.addLayout(form)
@@ -489,6 +492,18 @@ class ModelAnalysisPage(QWidget):
         self._rebuild_param_rows(self._model_combo.currentText())
 
     # -- data ---------------------------------------------------------------
+    def _show_uncertainty(self) -> None:
+        from .uncertainty_dialog import UncertaintyDialog
+
+        # Keep one instance per page, including while a background job finishes.
+        dialog = getattr(self, "_uncertainty_dialog", None)
+        if dialog is None:
+            dialog = UncertaintyDialog(self._runner, self)
+            self._uncertainty_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
     def _load_dataset(self, name: str) -> None:
         self._target_combo.clear()
         if name == "(table from Data Explorer)":

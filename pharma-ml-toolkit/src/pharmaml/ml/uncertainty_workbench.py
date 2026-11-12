@@ -6,6 +6,7 @@ independence, exchangeability or absence of chemical similarity leakage.
 from __future__ import annotations
 
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -80,3 +81,20 @@ def regression_uncertainty_report(
                         "coverage is descriptive, with no conditional guarantee. Wilson intervals "
                         "assume independent observations with common within-group coverage."),
     }
+
+
+def regression_uncertainty_from_files(
+    train: str | Path, calibration: str | Path, test: str | Path, *,
+    features: list[str], target: str, key: str, group: str | None = None,
+    alpha: float = 0.1,
+) -> dict[str, Any]:
+    """Read IDs as literal text, then fit/calibrate/evaluate using separate files."""
+    from pharmaml.utils.identifier_table import read_identifier_table
+
+    frames = [read_identifier_table(Path(path), None) for path in (train, calibration, test)]
+    for frame in frames:
+        for column in [*features, target]:
+            if column in frame.columns:
+                frame[column] = pd.to_numeric(frame[column], errors="raise")
+    return regression_uncertainty_report(*frames, features=features, target=target,
+                                         key=key, group=group, alpha=alpha)
