@@ -48,3 +48,47 @@ def test_cli_nested(tmp_path, capsys):
     assert main(["ml", "nested-ridge", "--data", str(path), "--features", "x",
                  "--target", "y", "--group", "group"]) == 0
     assert len(json.loads(capsys.readouterr().out)["folds"]) == 3
+
+
+def test_cancellation_occurs_only_at_outer_fold_boundaries(monkeypatch):
+    from sklearn.model_selection import GridSearchCV
+
+    from pharmaml.exceptions import JobCancelled
+
+    fits = []
+    original = GridSearchCV.fit
+
+    def spy(self, *args, **kwargs):
+        fits.append(1)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(GridSearchCV, "fit", spy)
+    progress = []
+
+    def stop_after_first(done, total):
+        progress.append((done, total))
+        return done < 1
+
+    with pytest.raises(JobCancelled, match="fold boundary"):
+        nested_ridge_validation(frame(), features=["x"], target="y", group="group", on_fold=stop_after_first)
+    assert progress == [(0, 3), (1, 3)] and len(fits) == 1
+
+
+def test_file_workflow_tracks_hash_and_refuses_changed_input(tmp_path, monkeypatch):
+    from pharmaml.ml.validation_workbench import nested_ridge_from_file
+    from pharmaml.utils import identifier_table
+
+    path = tmp_path / "input.csv"
+    frame().to_csv(path, index=False)
+    result = nested_ridge_from_file(path, features=["x"], target="y", group="group")
+    assert len(result["provenance"]["input"]["sha256"]) == 64
+    original = identifier_table.read_identifier_table
+
+    def change(path, delimiter):
+        parsed = original(path, delimiter)
+        path.write_text(path.read_text() + "\n")
+        return parsed
+
+    monkeypatch.setattr(identifier_table, "read_identifier_table", change)
+    with pytest.raises(DataValidationError, match="changed while reading"):
+        nested_ridge_from_file(path, features=["x"], target="y", group="group")

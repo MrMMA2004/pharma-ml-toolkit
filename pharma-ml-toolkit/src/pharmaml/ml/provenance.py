@@ -92,15 +92,18 @@ def compare_uncertainty_reports(first: dict[str, Any], second: dict[str, Any]) -
                        or not isinstance(files[part].get("sha256"), str)
                        for part in ("train", "calibration", "test"))
                 or not isinstance(record.get("parameters"), dict)
+                or not isinstance(record["parameters"].get("workflow"), str)
                 or not isinstance(record.get("environment"), dict)):
             raise DataValidationError("invalid or unsupported uncertainty-run provenance")
         provenance.append(record)
     a, b = provenance
     same_inputs = {part: a["inputs"][part]["sha256"] == b["inputs"][part]["sha256"]
                    for part in ("train", "calibration", "test")}
-    return {"same_input_bytes_by_partition": same_inputs,
+    same_workflow = a["parameters"]["workflow"] == b["parameters"]["workflow"]
+    return {"same_input_bytes_by_partition": same_inputs, "same_workflow": same_workflow,
             "same_parameters": a["parameters"] == b["parameters"],
             "same_environment": a["environment"] == b["environment"],
-            "metrics": {key: {"first": first.get(key), "second": second.get(key)}
-                        for key in ("coverage", "mean_width", "n_test")},
+            "metrics": ({key: {"first": first.get(key), "second": second.get(key)}
+                         for key in ("coverage", "mean_width", "mean_set_size", "n_empty_sets", "n_test")}
+                        if same_workflow else None),
             "notice": "Unsigned records; matching metadata does not prove reproducibility, independence or validity."}

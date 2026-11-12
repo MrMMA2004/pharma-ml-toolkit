@@ -92,6 +92,7 @@ def test_campaign_review_wizard_no_side_effects_and_clears_report(qtbot, studio_
 def test_dialogs_are_reachable_from_studio_pages(qtbot, studio_app):
     from ui.pages.docking import DockingWorkbenchPage
     from ui.pages.model_analysis import ModelAnalysisPage
+    from ui.pages.validation_dialog import ValidationDialog
 
     docking = DockingWorkbenchPage()
     model = ModelAnalysisPage()
@@ -99,7 +100,75 @@ def test_dialogs_are_reachable_from_studio_pages(qtbot, studio_app):
     qtbot.addWidget(model)
     docking._wizard_btn.click()
     model._uncertainty_btn.click()
+    model._validation_btn.click()
     assert isinstance(docking._campaign_wizard, CampaignReviewWizard)
     assert isinstance(model._uncertainty_dialog, UncertaintyDialog)
+    assert isinstance(model._validation_dialog, ValidationDialog)
     docking._campaign_wizard.close()
     model._uncertainty_dialog.close()
+    model._validation_dialog.close()
+
+
+def test_classification_uncertainty_dialog(qtbot, studio_app, tmp_path):
+    dialog = UncertaintyDialog(JobRunner())
+    qtbot.addWidget(dialog)
+    dialog._task.setCurrentIndex(1)
+    for index, (name, start, n) in enumerate((("train", 0, 20), ("calibration", 20, 10), ("test", 30, 10))):
+        x = np.arange(start, start + n, dtype=float)
+        frame = pd.DataFrame({"id": [f"id{i}" for i in range(start, start+n)], "x": x,
+                              "label": ["A", "B"] * (n // 2), "group": ["g1", "g2"] * (n // 2)})
+        path = tmp_path / f"{index}.csv"
+        frame.to_csv(path, index=False)
+        dialog._paths[name].setText(str(path))
+    dialog._features.setPlainText("x")
+    dialog._target.setText("label")
+    dialog._key.setText("id")
+    dialog._group.setText("group")
+    dialog._start()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Evaluation complete"), timeout=10000)
+    report = json.loads(dialog._result.toPlainText())
+    assert report["task"] == "classification" and len(report["class_coverage"]) == 2
+    assert report["provenance"]["parameters"]["workflow"] == "split-conformal-logistic"
+    dialog._task.setCurrentIndex(0)
+    assert not dialog._result.toPlainText() and not dialog._save.isEnabled()
+
+
+def test_nested_validation_real_and_stop(qtbot, studio_app, tmp_path, monkeypatch):
+    import threading
+
+    from pharmaml.exceptions import JobCancelled
+    from ui.pages.validation_dialog import ValidationDialog
+
+    dialog = ValidationDialog(JobRunner())
+    qtbot.addWidget(dialog)
+    x = np.arange(36, dtype=float)
+    path = tmp_path / "data.csv"
+    pd.DataFrame({"x": x, "y": 2*x+1, "group": [f"g{i//3}" for i in range(36)]}).to_csv(path, index=False)
+    dialog._data.setText(str(path))
+    dialog._features.setPlainText("x")
+    dialog._target.setText("y")
+    dialog._group.setText("group")
+    dialog._start()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Nested validation complete"), timeout=10000)
+    report = json.loads(dialog._result.toPlainText())
+    assert len(report["folds"]) == 3 and report["group"] == "group"
+    assert report["provenance"]["input"]["sha256"] and dialog._progress.value() == 100
+    started, release = threading.Event(), threading.Event()
+
+    def delayed(*args, on_fold, **kwargs):
+        started.set()
+        if not release.wait(5):
+            raise RuntimeError("timeout")
+        if on_fold(1, 3) is False:
+            raise JobCancelled("at boundary")
+        return {}
+
+    monkeypatch.setattr("pharmaml.ml.validation_workbench.nested_ridge_from_file", delayed)
+    dialog._start()
+    try:
+        qtbot.waitUntil(started.is_set, timeout=5000)
+        dialog._request_stop()
+    finally:
+        release.set()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Cancelled"), timeout=10000)
+    assert not dialog._result.toPlainText() and "no resume" in dialog._status.text()

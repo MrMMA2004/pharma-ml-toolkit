@@ -1,6 +1,8 @@
 """Narrow, nested-CV ridge regression validation with fold-local preprocessing."""
 from __future__ import annotations
 
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -10,19 +12,23 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import GridSearchCV, GroupKFold, KFold
 from sklearn.pipeline import Pipeline
 
-from pharmaml.exceptions import DataValidationError
+from pharmaml.exceptions import DataValidationError, JobCancelled
 from pharmaml.ml.preprocessing import build_preprocessor
 
 
 def nested_ridge_validation(
     frame: pd.DataFrame, *, features: list[str], target: str, group: str | None = None,
     outer_folds: int = 3, inner_folds: int = 3, seed: int = 42,
+    on_fold: Callable[[int, int], bool | None] | None = None,
 ) -> dict[str, Any]:
     """Estimate a ridge tuning procedure using nested folds and training-only preprocessing.
 
     Group mode keeps the supplied groups disjoint in both outer and inner folds.
     Without groups, shuffled row folds do not prevent compound/patient leakage.
     Fixed grid, metric and seed are declared here; this is not a final model.
+    The optional callback receives completed outer folds and total at each
+    boundary; False raises JobCancelled. A current fold is not interrupted,
+    partial records are not persisted and this operation is not resumable.
     """
     if not isinstance(frame, pd.DataFrame) or frame.empty or not frame.columns.is_unique:
         raise DataValidationError("data must be a nonempty table with unique columns")
@@ -53,6 +59,8 @@ def nested_ridge_validation(
         outer = KFold(n_splits=outer_folds, shuffle=True, random_state=seed)
     X, y = frame[features], frame[target]
     records = []
+    if on_fold is not None and on_fold(0, outer_folds) is False:
+        raise JobCancelled("nested CV cancelled before the first fold")
     for fold, (training, evaluation) in enumerate(outer.split(X, y, groups), 1):
         X_train, y_train = X.iloc[training], y.iloc[training]
         if X_train.isna().all().any():
@@ -72,6 +80,8 @@ def nested_ridge_validation(
         records.append({"fold": fold, "train_rows": len(training), "test_rows": len(evaluation),
                         "mae": float(mean_absolute_error(y.iloc[evaluation], predictions)),
                         "selected_alpha": float(search.best_params_["estimator__alpha"])})
+        if on_fold is not None and on_fold(fold, outer_folds) is False:
+            raise JobCancelled("nested CV cancelled at an outer fold boundary")
     scores = [row["mae"] for row in records]
     return {"model": "ridge", "metric": "mean_absolute_error", "features": features,
             "target": target, "group": group, "outer_folds": outer_folds, "inner_folds": inner_folds,
@@ -80,3 +90,32 @@ def nested_ridge_validation(
             "limitations": ("Nested CV estimates this fixed tuning procedure, not a final fitted model. "
                             "Fold scores can be correlated; group choice and independence are the "
                             "user's responsibility. Row splits do not prevent related-compound leakage.")}
+
+
+def nested_ridge_from_file(
+    data: str | Path, *, features: list[str], target: str, group: str | None = None,
+    outer_folds: int = 3, inner_folds: int = 3, seed: int = 42,
+    on_fold: Callable[[int, int], bool | None] | None = None,
+) -> dict[str, Any]:
+    """Read ID/group columns as text, capture file hash and run nested validation."""
+    from pharmaml.ml.provenance import environment_snapshot, fingerprint_file
+    from pharmaml.utils.identifier_table import read_identifier_table
+
+    path = Path(data)
+    before = fingerprint_file(path)
+    frame = read_identifier_table(path, None)
+    after = fingerprint_file(path)
+    if before != after:
+        raise DataValidationError("input changed while reading; retry with a stable file")
+    for column in [*features, target]:
+        if column in frame.columns:
+            frame[column] = pd.to_numeric(frame[column], errors="raise")
+    result = nested_ridge_validation(frame, features=features, target=target, group=group,
+                                     outer_folds=outer_folds, inner_folds=inner_folds,
+                                     seed=seed, on_fold=on_fold)
+    result["provenance"] = {
+        "schema": "pharmaml-nested-ridge-run/1", "input": after,
+        "environment": environment_snapshot(),
+        "notice": "File hash assumes a stable read; records are unsigned and not proof of validity.",
+    }
+    return result

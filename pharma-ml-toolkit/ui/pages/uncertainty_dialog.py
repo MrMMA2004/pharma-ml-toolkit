@@ -1,10 +1,11 @@
-"""Held-out regression uncertainty using three explicitly selected tables."""
+"""Held-out uncertainty using three explicitly selected tables."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QDoubleSpinBox,
     QFileDialog,
@@ -22,23 +23,29 @@ from ..workers.job_worker import JobRunner
 
 
 class UncertaintyDialog(QDialog):
-    """Fit a fixed ridge model only on train, calibrate and evaluate on separate files."""
+    """Fit a fixed model only on train, calibrate and evaluate on separate files."""
 
     def __init__(self, runner: JobRunner, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Held-out regression uncertainty")
+        self.setWindowTitle("Held-out uncertainty")
         self.resize(760, 700)
         self._runner = runner
         self._revision = 0
         self._last_report: object | None = None
         layout = QVBoxLayout(self)
         intro = QLabel("Select separate, independent train, calibration and test files. "
-                       "This fits a new ridge model; it does not reuse the current trained model.")
+                       "This fits a new model; it does not reuse the current trained model.")
         intro.setWordWrap(True)
         layout.addWidget(intro)
         form = QFormLayout()
         self._paths: dict[str, QLineEdit] = {}
         self._controls: list[QWidget] = []
+        self._task = QComboBox()
+        self._task.addItem("Regression — ridge intervals", "regression")
+        self._task.addItem("Classification — logistic prediction sets", "classification")
+        self._task.currentIndexChanged.connect(self._invalidate)
+        form.addRow("Task:", self._task)
+        self._controls.append(self._task)
         for name in ("train", "calibration", "test"):
             row = QHBoxLayout()
             field = QLineEdit()
@@ -94,7 +101,7 @@ class UncertaintyDialog(QDialog):
         self._result.setReadOnly(True)
         layout.addWidget(self._result, 1)
         note = QLabel("Exact IDs must be disjoint. Similarity leakage and exchangeability are "
-                      "not checked; subgroup coverage is descriptive, not guaranteed. "
+                      "not checked; class and subgroup coverage are descriptive, not guaranteed. "
                       "This job cannot be stopped or resumed.")
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -120,7 +127,14 @@ class UncertaintyDialog(QDialog):
             control.setEnabled(enabled)
 
     def _start(self) -> None:
-        from pharmaml.ml.uncertainty_workbench import regression_uncertainty_from_files
+        from pharmaml.ml.uncertainty_workbench import (
+            classification_uncertainty_from_files,
+            regression_uncertainty_from_files,
+        )
+
+        task = self._task.currentData()
+        evaluate = (classification_uncertainty_from_files if task == "classification"
+                    else regression_uncertainty_from_files)
 
         paths = [field.text().strip() for field in self._paths.values()]
         features = [line.strip() for line in self._features.toPlainText().splitlines() if line.strip()]
@@ -137,8 +151,8 @@ class UncertaintyDialog(QDialog):
         self._status.setText("Running; fitting and preprocessing use training only.")
         self._enable(False)
         worker = self._runner.submit(
-            "Regression uncertainty",
-            lambda _progress: regression_uncertainty_from_files(
+            f"{task.title()} uncertainty",
+            lambda _progress: evaluate(
                 *(Path(path) for path in paths), features=features, target=target,
                 key=key, group=group, alpha=alpha),
             on_finished=lambda result: self._finished(result, revision),

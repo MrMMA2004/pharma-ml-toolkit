@@ -44,7 +44,7 @@ Exact disjointness is not independence. Marginal conformal coverage relies on
 exchangeability; subgroup coverage is empirical, **not** a conditional coverage
 guarantee. Wilson intervals assume independent evaluation observations and
 common coverage within groups; small groups, correlations, subgroup selection
-and shift can invalidate comparisons. This workflow is regression-only and uses one fixed model. In Studio, open
+and shift can invalidate comparisons. This regression workflow uses one fixed model. In Studio, open
 **Model Analysis → Uncertainty…** and select the same three separate files;
 list one numeric feature name per line. The Studio dialog runs in the shared
 background runner and does not reuse the current trained model. This operation
@@ -53,6 +53,36 @@ Use **Save report…** to create a new JSON file (existing files are never
 replaced), and **Compare saved reports…** to inspect input-hash, parameter,
 environment and summary differences. A failed save can leave a partial new
 file; inspect it before reuse. Reports can contain sensitive subgroup labels.
+
+## Held-out classification uncertainty
+
+Choose **Classification — logistic prediction sets** in the same Studio
+dialog, or run:
+
+```sh
+pharmaml ml conformal-classification --train train.csv --calibration cal.csv \
+  --test test.csv --features descriptor1 descriptor2 --target class_label \
+  --key compound_id --group assay_group --alpha 0.1
+```
+
+This fixed logistic-regression classifier and its median imputer and scaler
+are fit on training only. A separate calibration set produces marginal
+split-conformal prediction sets, and the separate test set reports coverage,
+set-size counts (including empty and multiple-label sets), per-class and
+optional subgroup summaries. File-based labels are read as nonempty literal
+strings; the direct DataFrame API also requires nonempty string labels. Train
+must contain at least two classes; calibration and test labels must occur in
+training. Exact ID overlap is refused. When the calibration sample is too small
+for the requested finite quantile, the method uses the full class set and
+reports `full_set_fallback`; this is conservative but uninformative.
+
+Coverage is **marginal**, not class-conditional or subgroup-conditional, and
+requires exchangeability and a complete fixed class space. Exact IDs do not
+rule out related compounds or other leakage. Small or correlated groups and
+adaptive group selection undermine Wilson interval interpretation. Do not use
+test data for model or threshold selection. This workflow does not provide
+probability calibration curves, label-conditional conformal calibration,
+classification nested CV, or scientific validation of the model.
 
 ## Vina campaign review in Studio
 
@@ -89,6 +119,13 @@ compounds or patients. Supply enough groups for both fold levels. This does not
 produce a final fitted model and does not address calibration, applicability
 domain, classification, or every split strategy. Fold estimates may be
 correlated; nested CV is not a substitute for an untouched external evaluation.
+
+In Studio, **Model Analysis → Nested validation…** runs this regression-only
+workflow in the shared background runner. Progress counts completed outer folds.
+**Stop at next fold boundary** is cooperative: it cannot interrupt an active
+fold, and cancelled partial results are not saved or resumable. The file-based
+report records a hash checked around parsing and the environment; the hash is
+not a race-free snapshot and does not prove independence or reproducibility.
 
 ## Provenance and reproducibility diagnostics
 
@@ -140,7 +177,7 @@ limitations.
 
 A guided docking campaign **launcher/preparation** workflow, provenance
 integration across other model runs, generalized safe resume,
-classification validation/calibration/applicability reports, and consolidated
+broader classification validation/probability-calibration/applicability reports, and consolidated
 reproducibility dashboard are not delivered here. Existing docking engines and
-campaign APIs, conformal classification APIs, and proof-backed checkpoints
+campaign APIs, label-conditional conformal APIs, and proof-backed checkpoints
 remain available independently; they are not equivalent to those additions.

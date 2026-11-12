@@ -201,16 +201,18 @@ def _build_parser() -> argparse.ArgumentParser:
     nested.add_argument("--inner-folds", type=int, default=3)
     nested.add_argument("--seed", type=int, default=42)
 
-    uncertainty = ml_sub.add_parser(
-        "conformal-report", help="held-out ridge regression uncertainty and subgroup coverage",
-    )
-    for split_name in ("train", "calibration", "test"):
-        uncertainty.add_argument(f"--{split_name}", required=True, help=f"{split_name} CSV/TSV/Excel")
-    uncertainty.add_argument("--features", nargs="+", required=True, help="numeric feature columns")
-    uncertainty.add_argument("--target", required=True)
-    uncertainty.add_argument("--key", required=True, help="exact leakage-unit ID; must be disjoint")
-    uncertainty.add_argument("--group", default=None, help="optional prespecified test subgroup column")
-    uncertainty.add_argument("--alpha", type=float, default=0.1)
+    for command, description in (
+        ("conformal-report", "held-out ridge regression intervals and subgroup coverage"),
+        ("conformal-classification", "held-out logistic prediction sets and subgroup coverage"),
+    ):
+        uncertainty = ml_sub.add_parser(command, help=description)
+        for split_name in ("train", "calibration", "test"):
+            uncertainty.add_argument(f"--{split_name}", required=True, help=f"{split_name} CSV/TSV/Excel")
+        uncertainty.add_argument("--features", nargs="+", required=True, help="numeric feature columns")
+        uncertainty.add_argument("--target", required=True)
+        uncertainty.add_argument("--key", required=True, help="exact leakage-unit ID; must be disjoint")
+        uncertainty.add_argument("--group", default=None, help="optional prespecified test subgroup column")
+        uncertainty.add_argument("--alpha", type=float, default=0.1)
 
     train = ml_sub.add_parser("train", help="train one model end-to-end")
     train.add_argument("--data", required=True, help="CSV/Excel with features+target")
@@ -1124,28 +1126,27 @@ def _cmd_research(args: argparse.Namespace) -> int:
 def _cmd_ml_nested_ridge(args: argparse.Namespace) -> int:
     import json
 
-    import pandas as pd
+    from pharmaml.ml.validation_workbench import nested_ridge_from_file
 
-    from pharmaml.ml.validation_workbench import nested_ridge_validation
-
-    frame = _read_split_audit_table(Path(args.data), None)
-    for column in [*args.features, args.target]:
-        if column in frame.columns:
-            frame[column] = pd.to_numeric(frame[column], errors="raise")
-    result = nested_ridge_validation(frame, features=args.features, target=args.target,
-                                     group=args.group, outer_folds=args.outer_folds,
-                                     inner_folds=args.inner_folds, seed=args.seed)
+    result = nested_ridge_from_file(args.data, features=args.features, target=args.target,
+                                    group=args.group, outer_folds=args.outer_folds,
+                                    inner_folds=args.inner_folds, seed=args.seed)
     print(json.dumps(result, indent=2, allow_nan=False))
     return 0
 
 
 def _cmd_ml_conformal_report(args: argparse.Namespace) -> int:
-    """Evaluate fixed ridge on independently supplied calibration and test files."""
+    """Evaluate a fixed model on independently supplied calibration and test files."""
     import json
 
-    from pharmaml.ml.uncertainty_workbench import regression_uncertainty_from_files
+    from pharmaml.ml.uncertainty_workbench import (
+        classification_uncertainty_from_files,
+        regression_uncertainty_from_files,
+    )
 
-    report = regression_uncertainty_from_files(
+    evaluate = (classification_uncertainty_from_files if args.ml_command == "conformal-classification"
+                else regression_uncertainty_from_files)
+    report = evaluate(
         args.train, args.calibration, args.test, features=args.features, target=args.target,
         key=args.key, group=args.group, alpha=args.alpha,
     )
@@ -2824,6 +2825,7 @@ _HANDLERS = {
     ("research", "checkpoint"): _cmd_research,
     ("ml", "nested-ridge"): _cmd_ml_nested_ridge,
     ("ml", "conformal-report"): _cmd_ml_conformal_report,
+    ("ml", "conformal-classification"): _cmd_ml_conformal_report,
     ("ml", "train"): _cmd_ml_train,
     ("ml", "compare"): _cmd_ml_compare,
     ("ml", "check"): _cmd_ml_check,

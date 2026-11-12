@@ -378,6 +378,9 @@ class ModelAnalysisPage(QWidget):
         self._uncertainty_btn = QPushButton("Uncertainty…")
         self._uncertainty_btn.clicked.connect(self._show_uncertainty)
         buttons.addWidget(self._uncertainty_btn)
+        self._validation_btn = QPushButton("Nested validation…")
+        self._validation_btn.clicked.connect(self._show_validation)
+        buttons.addWidget(self._validation_btn)
         buttons.addStretch(1)
         form.addRow("", buttons)
         lay.addLayout(form)
@@ -492,6 +495,17 @@ class ModelAnalysisPage(QWidget):
         self._rebuild_param_rows(self._model_combo.currentText())
 
     # -- data ---------------------------------------------------------------
+    def _show_validation(self) -> None:
+        from .validation_dialog import ValidationDialog
+
+        dialog = getattr(self, "_validation_dialog", None)
+        if dialog is None:
+            dialog = ValidationDialog(self._runner, self)
+            self._validation_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
     def _show_uncertainty(self) -> None:
         from .uncertainty_dialog import UncertaintyDialog
 
