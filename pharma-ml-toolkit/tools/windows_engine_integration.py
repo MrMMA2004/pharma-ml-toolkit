@@ -93,6 +93,15 @@ def main() -> int:
                           "x_grid_points_31": points_ok}))
         if not points_ok:
             failures.append("AutoGrid did not report 31 x-grid points for npts 30")
+        map_path = work / "r.C.map"
+        if map_path.is_file():
+            header = map_path.read_text(encoding="utf-8", errors="replace").splitlines()[:8]
+            # Surface the actual map metadata in annotations even on success.
+            notice = json.dumps({"stage": "AutoGrid map header", "lines": header})
+            print("::notice::" + notice.replace("%", "%25"))
+            expected = ("SPACING 0.375", "NELEMENTS 30 30 30", "CENTER 0.000 0.000 0.000")
+            if not all(any(line.strip() == value for line in header) for value in expected):
+                failures.append("AutoGrid map header differs from expected center, spacing or npts: " + repr(header))
         maps_ok = all((work / name).is_file() and (work / name).stat().st_size > 0
                       for name in ("r.C.map", "r.e.map", "r.d.map", "r.maps.fld"))
         log = work / "r.dlg"
@@ -108,6 +117,24 @@ def main() -> int:
                 if path.is_file():
                     tails.append(f"{name} tail: {path.read_text(encoding='utf-8', errors='replace')[-3000:]}")
             failures.append(f"AutoGrid4/AutoDock4 failed: {ad.error}; " + " ".join(tails))
+        # Probe odd npts separately without assuming the engine accepts or
+        # rounds it. This is descriptive, not a substitute for validation.
+        odd = work / "odd-grid"
+        odd.mkdir()
+        (odd / "r.pdbqt").write_bytes(receptor.read_bytes())
+        odd_ligand = odd / "l.pdbqt"
+        odd_ligand.write_bytes(ad_ligand.read_bytes())
+        write_gpf(odd_ligand, receptor_file="r.pdbqt",
+                  box=GridBox(0, 0, 0, npts=(21, 21, 21)), receptor_types="C")
+        odd_proc = subprocess.run([str(engines / "autogrid4.exe"), "-p", "r.gpf", "-l", "r.glg"],
+                                  cwd=odd, capture_output=True, timeout=60, check=False)
+        odd_log = (odd / "r.glg").read_text(encoding="utf-8", errors="replace") if (odd / "r.glg").is_file() else ""
+        odd_match = re.search(r"Number of grid points in x-direction:\s*(\d+)", odd_log)
+        odd_header = (odd / "r.C.map").read_text(encoding="utf-8", errors="replace").splitlines()[:8] if (odd / "r.C.map").is_file() else []
+        notice = json.dumps({"stage": "odd npts probe", "gpf_npts": 21, "exit": odd_proc.returncode,
+                             "x_grid_points": int(odd_match.group(1)) if odd_match else None,
+                             "map_header": odd_header, "log_tail": odd_log[-500:]})
+        print("::notice::" + notice.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
     for failure in failures:
         escaped = failure.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         print(f"::error::{escaped}")
