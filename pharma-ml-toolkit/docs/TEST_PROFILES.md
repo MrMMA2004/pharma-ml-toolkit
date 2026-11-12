@@ -32,3 +32,17 @@ docking preparation selection, a focused Studio selection, and a web build.
 The broader notebook, web parity, full GUI and full source/release profiles are
 not implied by those jobs. For observed results and unexecuted work, see
 [Part 5 audit](PART5_PHASE0_AUDIT.md).
+
+## Windows bundled-engine smoke
+
+CI invokes `python tools/windows_engine_smoke.py` on Windows: it verifies bundled
+binary hashes, invokes AutoGrid4 and AutoDock4 help only, and attempts a Vina
+docking run on a deliberately artificial tiny PDBQT geometry. The latter checks
+process exit, a finite reported score and a pose record, not chemical validity,
+reproducibility across engines, the toolkit runner, or biological accuracy.
+The logs, not this description, establish what actually ran. AutoGrid4/AutoDock4
+full map generation and docking require separate prepared fixtures and are not
+validated by their help invocations. The script refuses non-Windows hosts.
+
+For interrupted release publication, see
+[read-only recovery inventory](INTERRUPTED_RELEASE_RECOVERY.md).

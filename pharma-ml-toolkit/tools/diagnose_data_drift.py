@@ -12,6 +12,8 @@ import csv
 import io
 import json
 import math
+import os
+import platform
 import sys
 from pathlib import Path
 from typing import Any
@@ -34,11 +36,20 @@ def compare_csv(actual: bytes, generated: bytes) -> dict[str, Any]:
         "non_numeric_cells_with_changed_text": 0,
         "numeric_nonfinite_or_overflow": 0,
         "max_absolute_numeric_difference": 0.0,
+        "changed_cells_by_column": {},
+        "sample_changes": [],
     }
-    for left, right in zip(old[1:], new[1:]):
-        for a, b in zip(left, right):
+    for row_number, (left, right) in enumerate(zip(old[1:], new[1:]), start=2):
+        for index, (a, b) in enumerate(zip(left, right)):
             if a == b:
                 continue
+            # Column index disambiguates duplicate header names.
+            column = f"{index}:{old[0][index] if old and index < len(old[0]) else '?'}"
+            counts = result["changed_cells_by_column"]
+            counts[column] = counts.get(column, 0) + 1
+            if len(result["sample_changes"]) < 5:
+                result["sample_changes"].append({"csv_row": row_number, "column": column,
+                                                 "stored": a, "generated": b})
             try:
                 x, y = float(a), float(b)
             except ValueError:
@@ -98,6 +109,16 @@ def diagnose() -> dict[str, Any]:
         "strict_drift": list(builder.STATS["drift"]),
         "generated_files_with_byte_drift": comparisons,
         "numpy_runtime": runtime.getvalue(),
+        "environment": {
+            "python": sys.version,
+            "platform": platform.platform(),
+            "machine": platform.machine(),
+            "numpy": np.__version__,
+            "thread_and_cpu_overrides": {name: os.environ.get(name) for name in (
+                "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
+                "NUMEXPR_NUM_THREADS", "OPENBLAS_CORETYPE", "NPY_DISABLE_CPU_FEATURES",
+            )},
+        },
         "builder_output": output.getvalue(),
     }
 

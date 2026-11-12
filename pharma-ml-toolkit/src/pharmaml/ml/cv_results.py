@@ -67,7 +67,7 @@ from __future__ import annotations
 
 import hashlib
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -862,8 +862,13 @@ def cross_validate_model(
         (``balanced_accuracy`` when no proba metric survives) and R²
         for regression.
     best_params:
-        Hyperparameters the model ran at (``{}`` = registry defaults);
-        recorded verbatim for §19.9 persistence.
+        Fixed estimator hyperparameters applied to every fold (``{}`` or
+        ``None`` uses registry defaults). Accept bare estimator keys as
+        returned by :func:`~pharmaml.ml.training.train_model`, or keys
+        prefixed with ``est__``; do not supply both spellings of a key.
+        The supplied mapping is recorded verbatim. If parameters were selected
+        using these same folds, the result is not an unbiased estimate of the
+        tuning procedure; use nested CV or a separate untouched test set.
     return_train_scores:
         Include train-side metric mirrors (§19.2 "training scores
         where appropriate").
@@ -883,6 +888,21 @@ def cross_validate_model(
     started = time.perf_counter()
 
     pipeline = _build_pipeline(X, key, task)
+    if best_params is not None:
+        if not isinstance(best_params, Mapping):
+            raise ModelError("best_params must be a mapping of estimator parameters")
+        parameters: dict[str, Any] = {}
+        for name, value in best_params.items():
+            if not isinstance(name, str) or not name:
+                raise ModelError("best_params keys must be non-empty parameter names")
+            estimator_name = name.removeprefix("est__")
+            if estimator_name in parameters:
+                raise ModelError(f"duplicate estimator parameter {estimator_name!r}")
+            parameters[estimator_name] = value
+        try:
+            pipeline.named_steps["est"].set_params(**parameters)
+        except (TypeError, ValueError) as exc:
+            raise ModelError(f"invalid estimator parameter in best_params: {exc}") from exc
     splitter, notes = build_cv_splitter(
         task,
         strategy=strategy,
