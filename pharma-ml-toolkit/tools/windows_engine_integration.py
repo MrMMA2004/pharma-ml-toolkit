@@ -77,8 +77,8 @@ def main() -> int:
         ad_ligand.write_text("ROOT\n" + "".join(atom(i + 1, *p) for i, p in enumerate([
             (0, 0, 0), (1.4, 0, 0), (0, 1.4, 0)
         ])) + "ENDROOT\nTORSDOF 0\n", encoding="ascii")
-        write_gpf(ad_ligand, receptor_file=receptor.name,
-                  box=GridBox(0, 0, 0, npts=(30, 30, 30)), receptor_types="C")
+        ad_box = GridBox(0, 0, 0, npts=(30, 30, 30))
+        write_gpf(ad_ligand, receptor_file=receptor.name, box=ad_box, receptor_types="C")
         dpf = write_dpf(ad_ligand, receptor_file=receptor.name, ga_run=1, ga_pop_size=10,
                         ga_num_evals=500, ga_num_generations=20, sw_max_its=10, ls_search_freq=0)
         dpf.write_text(dpf.read_text(encoding="utf-8").replace("seed pid time", "seed 123 456"),
@@ -102,6 +102,17 @@ def main() -> int:
             expected = ("SPACING 0.375", "NELEMENTS 30 30 30", "CENTER 0.000 0.000 0.000")
             if not all(any(line.strip() == value for line in header) for value in expected):
                 failures.append("AutoGrid map header differs from expected center, spacing or npts: " + repr(header))
+            matched = ad_box.as_vina_kwargs(convention="autogrid")
+            if (matched["size_x"], matched["size_y"], matched["size_z"]) != (11.25, 11.25, 11.25):
+                failures.append("opt-in Vina size does not match the 30-interval map extent")
+            matched_result = run_vina(
+                receptor, ligand, work / "matched.pdbqt",
+                (matched["center_x"], matched["center_y"], matched["center_z"]),
+                (matched["size_x"], matched["size_y"], matched["size_z"]),
+                exhaustiveness=1, cpu=1, seed=42, engine_dir=engines, timeout_s=120,
+            )
+            if not matched_result.ok or not score_and_pose(work / "matched.pdbqt"):
+                failures.append(f"Vina with opt-in matching geometry failed: {matched_result.error}")
         maps_ok = all((work / name).is_file() and (work / name).stat().st_size > 0
                       for name in ("r.C.map", "r.e.map", "r.d.map", "r.maps.fld"))
         log = work / "r.dlg"
@@ -117,8 +128,8 @@ def main() -> int:
                 if path.is_file():
                     tails.append(f"{name} tail: {path.read_text(encoding='utf-8', errors='replace')[-3000:]}")
             failures.append(f"AutoGrid4/AutoDock4 failed: {ad.error}; " + " ".join(tails))
-        # Probe odd npts separately without assuming the engine accepts or
-        # rounds it. This is descriptive, not a substitute for validation.
+        # Pin the specific odd-npts behavior observed for this hashed binary.
+        # It does not establish behavior of other AutoGrid builds.
         odd = work / "odd-grid"
         odd.mkdir()
         (odd / "r.pdbqt").write_bytes(receptor.read_bytes())
@@ -135,6 +146,9 @@ def main() -> int:
                              "x_grid_points": int(odd_match.group(1)) if odd_match else None,
                              "map_header": odd_header, "log_tail": odd_log[-500:]})
         print("::notice::" + notice.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"))
+        if (odd_proc.returncode != 0 or not odd_match or odd_match.group(1) != "21"
+                or "NELEMENTS 20 20 20" not in odd_header):
+            failures.append("bundled AutoGrid odd npts behavior differed from the observed 21-to-20 reduction")
     for failure in failures:
         escaped = failure.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         print(f"::error::{escaped}")

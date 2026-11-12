@@ -492,3 +492,33 @@ synthetic Vina single/batch and AutoGrid/AutoDock integration. Prior runs
 showed data-byte drift and an AutoDock timeout on an earlier one-atom fixture;
 the green run does not prove either cross-hardware reproducibility or general
 engine reliability. Toy poses and energies are not a scientific benchmark.
+
+
+### Further continuation: reproducibility, recovery, geometry
+
+On this local x86-64/SkylakeX NumPy 1.26.4/OpenBLAS environment, the default
+strict data check passed. Forcing OpenBLAS Zen alone produced the 8 QSAR
+numeric-text differences and no PK difference; disabling NumPy AVX512F alone
+produced the 12 PK differences and no QSAR difference. Combining both settings
+reproduced 8 QSAR / 12 PK differences with the same maxima and first changed
+cells recorded in CI. This controlled experiment supports two distinct
+dispatch-sensitive paths; it does not establish equivalence or guarantee the
+cause of every CI failure. Neither CSV data, numerical formulas nor strict
+byte checks were modified. The strict check remains intermittent across hosts.
+
+[Windows CI 43250800692](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/runs/43250800692/job/131295734198)
+confirmed a 30-interval map at spacing 0.375 with CENTER 0 and NELEMENTS 30,
+and observed requested odd `npts 21` produce NELEMENTS 20 and 21 points.
+The opt-in `GridBox.as_vina_kwargs(convention="autogrid")` predicts even
+AutoGrid extents and rejects odd npts; legacy behavior remains the default.
+`write_gpf` warns, without modifying the input, for odd npts. Actual map headers
+and engine limits must still be inspected. The Windows toy workflow is not a
+biological benchmark and does not validate other engine versions.
+
+The new explicit `resume_release.py` defaults to a read-only plan, requires an
+expected hash and a distinct backup outside publication homes, and only with
+`--execute` publishes missing copies via no-clobber staged links. A synthetic
+end-to-end SIGKILL rehearsal recovered a four-home interrupted publication and
+preserved the predecessor. It is not crash-atomic or race-resistant; a later
+failure can leave partial copies, and the tool does not run release gates or
+retention. No actual release was modified. See the recovery guide.

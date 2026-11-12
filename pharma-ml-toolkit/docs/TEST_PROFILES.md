@@ -56,3 +56,26 @@ console output as its log rather than relying on the unsupported Vina 1.2
 `--log` option. A two-file pose/log promotion is not crash-atomic. Resume's
 existing-file heuristic does not verify inputs or provenance: use a new output
 directory if the configuration, ligand, receptor, engine or seed changes.
+
+### AutoGrid and Vina geometry
+
+The same `GridBox` historically writes `npts` to AutoGrid but uses
+`(npts - 1) * spacing` for Vina. The bundled AutoGrid test showed `npts 30`
+produces a map with `NELEMENTS 30` and 31 grid points; `npts 21` was silently
+reduced to `NELEMENTS 20`. Other engine builds may differ. To explicitly request
+the predicted AutoGrid span as Vina kwargs for **positive even** `npts`:
+
+```python
+from pharmaml.docking.preparation import GridBox
+box = GridBox(0, 0, 0, npts=(30, 30, 30), spacing=0.375)
+legacy = box.as_vina_kwargs()                         # 10.875 Å, unchanged
+matched = box.as_vina_kwargs(convention="autogrid")   # 11.25 Å
+```
+
+The opt-in rejects odd/invalid values, but it predicts rather than validates an
+engine map: inspect `NELEMENTS`, `SPACING` and `CENTER` in that actual map,
+including engine size limits and any precision effects. `write_gpf` warns on
+odd npts but preserves the requested file. Existing `size`, `compute_grid_box`,
+and `dock_smiles_array` defaults remain unchanged; the opt-in does not silently
+update them. Changing the search box can change docking results. Neither toy
+geometry nor matching dimensions validates scientific docking accuracy.
