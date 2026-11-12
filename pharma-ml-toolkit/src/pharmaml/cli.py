@@ -296,6 +296,37 @@ def _build_parser() -> argparse.ArgumentParser:
     compare.add_argument(
         "--out-dir", default="reports", help="directory for --plot artifacts"
     )
+    compare.add_argument(
+        "--significance", action="store_true",
+        help="also test every model against the leaderboard leader, paired on "
+        "the per-fold scores and corrected for multiplicity — is the lead real?",
+    )
+    compare.add_argument(
+        "--significance-test", choices=["paired_t", "wilcoxon"], default="paired_t",
+        help="with --significance: the paired test (default: paired_t)",
+    )
+    compare.add_argument(
+        "--correction", choices=["fdr_bh", "bonferroni", "holm"], default="fdr_bh",
+        help="with --significance: the multiplicity correction across the "
+        "challenger family (default: fdr_bh)",
+    )
+    compare.add_argument(
+        "--alpha", type=float, default=0.05,
+        help="with --significance: the family-wide significance level "
+        "(default: 0.05)",
+    )
+    compare.add_argument(
+        "--power", action="store_true",
+        help="with --significance: also report the fold-count power — the "
+        "minimum detectable effect and whether the panel had the power to "
+        "resolve what it saw (answers 'how many folds would I need?')",
+    )
+    compare.add_argument(
+        "--target-power", type=float, default=0.8,
+        help="with --power: the power the minimum detectable effect is read "
+        "at (default: 0.8)",
+    )
+
 
     check = ml_sub.add_parser(
         "check", help="audit a saved model against a new dataset"
@@ -314,6 +345,267 @@ def _build_parser() -> argparse.ArgumentParser:
         help="drop this column (the training target) before the audit — "
         "handy when re-checking the very CSV the model was trained on",
     )
+
+    predict = ml_sub.add_parser(
+        "predict", help="apply a saved model to new data (batch scoring)"
+    )
+    predict.add_argument(
+        "--model", required=True,
+        help="a .joblib bundle written by a previous `ml train` run",
+    )
+    predict.add_argument(
+        "--data", required=True,
+        help="the CSV/Excel to score (feature columns only)",
+    )
+    predict.add_argument(
+        "--target", default=None,
+        help="optional true-label column to also score against (adds the "
+        "held-out metrics for that column); dropped before prediction. "
+        "With --calibration-data it instead names the label column of the "
+        "calibration table",
+    )
+    predict.add_argument(
+        "--out", default=None,
+        help="write the scored table to this path (csv/xlsx); "
+        "default <data-stem>_predictions.csv beside the input",
+    )
+    predict.add_argument(
+        "--conformal", type=float, default=None, metavar="ALPHA",
+        help="also emit split-conformal prediction intervals/sets at "
+        "miscoverage ALPHA (e.g. 0.1 for 90%%): --data is split into "
+        "calibration/query halves, the intervals are calibrated on one "
+        "and the empirical coverage is measured on the other",
+    )
+    predict.add_argument(
+        "--calibration-data", default=None,
+        help="with --conformal: a separate labelled CSV/Excel to calibrate "
+        "on (target required) instead of splitting --data",
+    )
+    predict.add_argument("--seed", type=int, default=42, help="split seed")
+    predict.add_argument(
+        "--no-domain-check", action="store_true",
+        help="skip the applicability-domain check (the bundle records the "
+        "training feature box; by default rows outside it are flagged in an "
+        "in_domain column)",
+    )
+    predict.add_argument(
+        "--no-drift-check", action="store_true",
+        help="skip the distribution-shift check (the bundle records a "
+        "per-feature training sketch; by default the batch's PSI drift "
+        "against it is printed)",
+    )
+
+    card = ml_sub.add_parser(
+        "card", help="generate a model card (provenance + limitations) for a bundle"
+    )
+    card.add_argument(
+        "--model", required=True,
+        help="a .joblib bundle written by a previous `ml train` run",
+    )
+    card.add_argument(
+        "--out", default=None,
+        help="write the card to this path (.md/.html/.json); default "
+        "<model-stem>_card.md beside the bundle",
+    )
+    card.add_argument(
+        "--train-data", default=None,
+        help="optional training CSV/Excel: records the per-feature "
+        "applicability-domain box and the training row count",
+    )
+    card.add_argument("--target", default=None, help="target column (auto-detected)")
+
+    drift = ml_sub.add_parser(
+        "drift",
+        help="distribution shift — has a new batch moved away from the training data?",
+    )
+    drift.add_argument(
+        "--model", default=None,
+        help="a .joblib bundle: compare --data against the per-feature "
+        "sketch it recorded at train time (PSI only, no training frame "
+        "needed)",
+    )
+    drift.add_argument(
+        "--train-data", default=None,
+        help="the original training table: compare --data against it "
+        "directly (PSI + two-sample KS); give either this or --model",
+    )
+    drift.add_argument(
+        "--data", required=True,
+        help="the new batch to check (CSV/Excel)",
+    )
+    drift.add_argument(
+        "--target", default=None,
+        help="target column to drop from both sides before comparing "
+        "(auto-dropped when --model recorded one)",
+    )
+    drift.add_argument(
+        "--bins", type=int, default=10,
+        help="PSI quantile bins over the reference (default 10)",
+    )
+    drift.add_argument(
+        "--warn-psi", type=float, default=0.1,
+        help="PSI at or above which a feature reads 'moderate' (default 0.1)",
+    )
+    drift.add_argument(
+        "--shift-psi", type=float, default=0.2,
+        help="PSI at or above which a feature reads 'shifted' (default 0.2)",
+    )
+    drift.add_argument(
+        "--out", default=None,
+        help="write the per-feature drift table to this path (csv/tsv/md/json/html)",
+    )
+
+    calibrate = ml_sub.add_parser(
+        "calibrate",
+        help="probability calibration — are a classifier's probabilities honest?",
+    )
+    calibrate.add_argument(
+        "--model", default=None,
+        help="a .joblib bundle written by a previous `ml train` run; the "
+        "calibration is measured on --data (or --calibration-data) and, "
+        "with --out-model, the bundle is recalibrated and re-saved",
+    )
+    calibrate.add_argument(
+        "--data", default=None,
+        help="labelled CSV/Excel to measure calibration on (and, without "
+        "--calibration-data, the rows the recalibration is fitted on)",
+    )
+    calibrate.add_argument(
+        "--estimator", default="random_forest",
+        help="without --model: the classifier family to train on --data and "
+        "measure on a held-out split (default random_forest)",
+    )
+    calibrate.add_argument(
+        "--calibration-data", default=None,
+        help="with --model: a separate labelled table to fit the "
+        "recalibration on, so the report stays on held-out --data",
+    )
+    calibrate.add_argument(
+        "--target", default=None,
+        help="the label column (auto-detected from the bundle, or the "
+        "last column when training a fresh model)",
+    )
+    calibrate.add_argument(
+        "--method", choices=["isotonic", "sigmoid"], default="isotonic",
+        help="recalibration map (isotonic needs a few hundred rows; "
+        "sigmoid/Platt is steadier on small sets)",
+    )
+    calibrate.add_argument(
+        "--bins", type=int, default=10,
+        help="equal-width probability bins for the reliability table (default 10)",
+    )
+    calibrate.add_argument(
+        "--out", default=None,
+        help="write the reliability table to this path (csv/tsv/md/json/html)",
+    )
+    calibrate.add_argument(
+        "--out-model", default=None,
+        help="write a recalibrated bundle to this path (.joblib)",
+    )
+    calibrate.add_argument(
+        "--plot", default=None,
+        help="save the reliability diagram (predicted vs observed) to this "
+        "path (.png/.svg/.pdf)",
+    )
+
+    decide = ml_sub.add_parser(
+        "decide",
+        help="decision-curve analysis — does acting on the model beat the defaults?",
+    )
+    decide.add_argument(
+        "--model", required=True,
+        help="a .joblib classification bundle written by a previous `ml train` run",
+    )
+    decide.add_argument(
+        "--data", required=True,
+        help="labelled CSV/Excel to score and analyse (CSV/Excel)",
+    )
+    decide.add_argument(
+        "--target", default=None,
+        help="the label column (auto-detected from the bundle)",
+    )
+    decide.add_argument(
+        "--cost-ratio", type=float, default=1.0,
+        help="false-positive : true-positive cost ratio (default 1; e.g. 5 "
+        "means one missed positive is worth five false alarms)",
+    )
+    decide.add_argument(
+        "--threshold", type=float, default=None,
+        help="report the net benefit at this single threshold probability "
+        "instead of a swept grid",
+    )
+    decide.add_argument(
+        "--thresholds", default=None,
+        help="comma-separated explicit threshold grid (each in [0, 1))",
+    )
+    decide.add_argument(
+        "--points", type=int, default=100,
+        help="number of grid points when neither --threshold nor "
+        "--thresholds is given (default 100)",
+    )
+    decide.add_argument(
+        "--criterion", choices=["youden", "f1", "cost"], default=None,
+        help="also report the held-out optimal threshold for this criterion "
+        "(youden: sensitivity+specificity-1; f1; cost: expected value)",
+    )
+    decide.add_argument(
+        "--out", default=None,
+        help="write the net-benefit table to this path (csv/tsv/md/json/html)",
+    )
+    decide.add_argument(
+        "--plot", default=None,
+        help="save the decision curve (net benefit vs threshold) to this path",
+    )
+
+    subgroup = ml_sub.add_parser(
+        "subgroup",
+        help="stratified performance audit — which subgroups does the model fail?",
+    )
+    subgroup.add_argument(
+        "--model", required=True,
+        help="a .joblib bundle written by a previous `ml train` run",
+    )
+    subgroup.add_argument(
+        "--data", required=True,
+        help="labelled CSV/Excel to score and stratify (CSV/Excel)",
+    )
+    subgroup.add_argument(
+        "--by", required=True,
+        help="the column to stratify by (e.g. assay, series, site, batch)",
+    )
+    subgroup.add_argument(
+        "--target", default=None,
+        help="the label column (auto-detected from the bundle)",
+    )
+    subgroup.add_argument(
+        "--min-group-size", type=int, default=10,
+        help="subgroups smaller than this are reported but flagged "
+        "insufficient (default 10)",
+    )
+    subgroup.add_argument(
+        "--metric", default=None,
+        help="also name the worst group for this metric (e.g. accuracy, "
+        "rmse); default is chosen per task",
+    )
+    subgroup.add_argument(
+        "--scan", action="store_true",
+        help="test every subgroup's gap versus the rest and correct for "
+        "multiple comparisons (reports raw and adjusted p-values)",
+    )
+    subgroup.add_argument(
+        "--correction", default="fdr_bh",
+        choices=["fdr_bh", "bonferroni", "holm"],
+        help="multiple-comparison method for --scan (default fdr_bh)",
+    )
+    subgroup.add_argument(
+        "--out", default=None,
+        help="write the per-subgroup table to this path (csv/tsv/md/json/html)",
+    )
+    subgroup.add_argument(
+        "--plot", default=None,
+        help="save the subgroup bar chart for --metric (or the task default)",
+    )
+
 
     tune = ml_sub.add_parser(
         "tune", help="keras-tuner-style hyperparameter search (RandomSearch/Hyperband)"
@@ -1462,6 +1754,12 @@ def _cmd_ml_train(args: argparse.Namespace) -> int:
     )
     report = evaluate_model(result.model, X_test, y_test, dataset.task)
 
+    # (r13) the provenance the predict/card/drift/calibrate/decide/subgroup
+    # subcommands consume: the training target column, the per-feature
+    # training box, and the drift quantile sketch.
+    from pharmaml.ml.drift import feature_distributions_from_frame
+    from pharmaml.ml.persistence import feature_ranges_from_frame
+
     config = PipelineConfig()
     model_path = config.output_path(f"{result.name}_{dataset.task}.joblib")
     save_model(
@@ -1472,6 +1770,11 @@ def _cmd_ml_train(args: argparse.Namespace) -> int:
         features=dataset.feature_names,
         best_params=result.best_params,
         metrics=report.as_dict(),
+        target=dataset.target,
+        feature_ranges=feature_ranges_from_frame(X_train, dataset.feature_names),
+        feature_distributions=feature_distributions_from_frame(
+            X_train, dataset.feature_names
+        ),
     )
     print(f"dataset:  {dataset.n_samples} rows x {dataset.n_features} features")
     if dataset.class_counts:
@@ -1527,6 +1830,9 @@ def _cmd_ml_compare(args: argparse.Namespace) -> int:
     from pharmaml.ml.training import compare_models
 
     dataset = _load_cli_dataset(args)
+    if args.significance:
+        return _compare_with_significance(args, dataset)
+
     leaderboard = compare_models(
         dataset.X, dataset.y, dataset.task, models=args.models, cv=args.cv
     )
@@ -1646,6 +1952,832 @@ def _tune_hypermodels() -> dict[tuple[str, str], Any]:
 _TUNE_RESOURCES: dict[str, str] = {"ann": "max_iter", "dnn": "epochs"}
 
 
+
+
+def _compare_with_significance(args: argparse.Namespace, dataset) -> int:
+    """The ``--significance`` branch of `ml compare`.
+
+    Runs the richer §19 CV panel (:func:`compare_models_cv`, which keeps
+    the per-fold scores), prints its leaderboard, then the paired verdict
+    of every challenger against the leader — corrected across the
+    challenger family so a model that looks ahead alone can be demoted.
+    """
+    from pharmaml.ml.comparison import model_comparison_test
+    from pharmaml.ml.cv_results import compare_models_cv
+
+    results, board = compare_models_cv(
+        dataset.X, dataset.y, dataset.task, args.models, n_folds=args.cv
+    )
+    print(board.to_string(index=False))
+
+    comparison = model_comparison_test(
+        results,
+        alpha=args.alpha,
+        correction=args.correction,
+        test=args.significance_test,
+    )
+    print()
+    print(f"leader:   {comparison.leader}  ({comparison.label} {comparison.leader_mean:.4f})")
+    print(
+        f"{'model':<22} {'mean':>10}  {'diff':>9}  {'verdict':<8} q"
+        f"   ({comparison.correction}, α {comparison.alpha:g})"
+    )
+    for row in comparison.rows:
+        print(row.line())
+    for note in comparison.notes:
+        print(f"note: {note}")
+    print(f"\n{comparison.summary()}")
+
+    power_line: str | None = None
+    if args.power:
+        if comparison.test == "wilcoxon":
+            print(
+                "\nnote: the power figures assume the paired t-test; the "
+                "signed-rank panel is a different curve — run 'paired_t' for a "
+                "power reading"
+            )
+        else:
+            report = comparison.power(target_power=args.target_power)
+            power_line = report.line()
+            print(f"\npower: {power_line}")
+            if report.observed_effect is not None and not report.sufficient:
+                print(
+                    "       the observed effect is below the panel's detection "
+                    "floor — an 'on par' verdict here is underpowered, not "
+                    "evidence of equivalence"
+                )
+
+    if args.out:
+        from pharmaml.utils.io import write_table
+
+        path = write_table(board, args.out)
+        print(f"\nleaderboard -> {path}")
+        verdict_path = write_table(
+            comparison.to_frame(), Path(args.out).with_name("verdicts.csv")
+        )
+        print(f"verdicts    -> {verdict_path}")
+
+    if args.plot or args.pdf_report:
+        from pharmaml.viz import ml_plots, save_visual_bundle
+
+        figure = ml_plots.plot_model_comparison(board)
+        subtitle = str(args.data)
+        if power_line:
+            subtitle = f"{subtitle} · {power_line}"
+        written = save_visual_bundle(
+            figures={"model_comparison": figure},
+            tables={"leaderboard": board, "verdicts": comparison.to_frame()},
+            out_dir=args.out_dir,
+            title="pharmaml ml compare --significance",
+            subtitle=subtitle,
+            pdf_report=args.pdf_report,
+        )
+        print(f"plot:     {Path(args.out_dir) / 'report.html'} (+{len(written) - 1} files)")
+        if args.pdf_report:
+            print(f"pdf:      {Path(args.out_dir) / 'report.pdf'}")
+    return 0
+
+
+def _cmd_ml_check(args: argparse.Namespace) -> int:
+    """`ml check` — the round-trip audit before inference.
+
+    Prints the bundle's provenance block, then the feature-contract
+    verdict; exit 1 when the audit fails (CI-friendly: run it between
+    a regenerated CSV and a predict step).  ``--target`` drops the
+    training-label column first, so re-checking the original training
+    CSV works out of the box.
+    """
+    from pharmaml.ml.persistence import load_model, validate_bundle_input
+    from pharmaml.utils.io import read_table
+
+    _, metadata = load_model(args.model)
+    print(f"model:    {metadata.get('name', '<unknown>')} ({metadata.get('task', '?')})")
+    print(
+        f"trained:  {metadata.get('trained_at', '?')} "
+        f"(pharmaml {metadata.get('pharmaml_version', '?')}, "
+        f"sklearn {metadata.get('sklearn_version', '?')})"
+    )
+    features = metadata.get("features")
+    if isinstance(features, list) and features:
+        preview = ", ".join(str(name) for name in features[:6])
+        more = "…" if len(features) > 6 else ""
+        print(f"features: {len(features)} ({preview}{more})")
+    else:
+        print("features: (not recorded — the count contract is checked)")
+
+    frame = read_table(args.data)
+    if args.target is not None:
+        if args.target not in frame.columns:
+            print(
+                f"error: --target {args.target!r} is not a column of "
+                f"{args.data} (columns: {', '.join(map(str, frame.columns))})",
+                file=sys.stderr,
+            )
+            return 1
+        frame = frame.drop(columns=[args.target])
+    report = validate_bundle_input(args.model, frame)
+    print(f"data:     {Path(args.data).name} — {len(frame):,} rows x "
+          f"{len(frame.columns)} columns")
+    print(report)
+    if not report.ok and report.extra and args.target is None:
+        print(
+            "hint: if one of the extra columns is the training target, "
+            "pass --target <column> to drop it before the audit"
+        )
+    return 0 if report.ok else 1
+
+
+def _bundle_feature_frame(frame, metadata):
+    """Select and order a raw table's columns to a bundle's feature contract.
+
+    Returns ``(X, missing, extra)``.  ``missing`` columns are the bundle
+    features absent from ``frame`` (a hard error at the call site);
+    ``extra`` columns are present in ``frame`` but not used by the model
+    (kept in the output table, never fed to the estimator).
+    """
+    features = metadata.get("features")
+    if isinstance(features, list) and features:
+        missing = [name for name in features if name not in frame.columns]
+        extra = [name for name in frame.columns if name not in features]
+        if missing:
+            return frame, missing, extra
+        return frame.loc[:, features], missing, extra
+    # No recorded names (older bundle): fall back to the numeric columns,
+    # which is exactly what training consumed by default.
+    numeric = frame.select_dtypes(include="number")
+    if numeric.shape[1] == 0:
+        return numeric, list(frame.columns), []
+    return numeric, [], [name for name in frame.columns if name not in numeric.columns]
+
+
+def _cmd_ml_predict(args: argparse.Namespace) -> int:
+    """`ml predict` — apply a saved bundle to a fresh table.
+
+    Loads the bundle, aligns the input columns to the bundle's recorded
+    feature contract (the same contract `ml check` audits), predicts, and
+    writes a scored table.  ``--target`` optionally scores against a true
+    label; ``--conformal`` adds split-conformal prediction intervals
+    (regression) or prediction sets (classification) with a reported
+    empirical coverage.
+    """
+    import numpy as np
+
+    from pharmaml.ml.persistence import load_model
+    from pharmaml.utils.io import read_table
+
+    model, metadata = load_model(args.model)
+    task = metadata.get("task", "regression")
+    name = metadata.get("name", Path(args.model).stem)
+    frame = read_table(args.data)
+
+    truth = None
+    # With --calibration-data, --target names the *calibration* label, so it
+    # must not be validated against (or dropped from) the query table here.
+    if args.calibration_data is None and args.target is not None:
+        if args.target not in frame.columns:
+            print(
+                f"error: --target {args.target!r} is not a column of "
+                f"{args.data} (columns: {', '.join(map(str, frame.columns))})",
+                file=sys.stderr,
+            )
+            return 1
+        truth = frame[args.target].to_numpy()
+        frame = frame.drop(columns=[args.target])
+    else:
+        recorded = metadata.get("target")
+        if recorded and recorded in frame.columns:
+            frame = frame.drop(columns=[recorded])
+            print(f"dropped:  {recorded!r} (the recorded training target)")
+
+    X, missing, extra = _bundle_feature_frame(frame, metadata)
+    if missing:
+        print(
+            f"error: the bundle needs feature(s) missing from {args.data}: "
+            f"{', '.join(map(str, missing))}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.conformal is None:
+        predictions = np.asarray(model.predict(X))
+        out = frame.copy()
+        out["prediction"] = predictions
+        if truth is not None:
+            print(f"model:    {name} ({task})")
+            print(f"rows:     {len(frame):,} x {X.shape[1]} feature(s)")
+            _print_predict_metrics(model, X, truth, task)
+        else:
+            print(f"model:    {name} ({task})")
+            print(f"rows:     {len(frame):,} x {X.shape[1]} feature(s)")
+        _annotate_domain(out, metadata, frame, args)
+        _annotate_drift(metadata, frame, args)
+        if extra:
+            print(f"note:     {len(extra)} input column(s) not used by the "
+                  f"model kept in the output: {', '.join(map(str, extra[:6]))}"
+                  + ("…" if len(extra) > 6 else ""))
+        return _write_predictions(out, args)
+
+    return _predict_with_conformal(args, model, metadata, X, frame, truth)
+
+
+def _annotate_domain(out, metadata, frame, args) -> None:
+    """Add an ``in_domain`` column and print the applicability verdict.
+
+    Uses the box the bundle recorded at train time (``feature_ranges``);
+    bundles saved before that get no column and no message, so the
+    absence of a check is never mistaken for a passing one.
+    """
+    if getattr(args, "no_domain_check", False):
+        return
+    from pharmaml.ml.applicability import check_domain_box
+
+    report = check_domain_box(metadata, frame)
+    if report is None:
+        return
+    out["in_domain"] = report.in_domain
+    print(f"{report}")
+
+
+def _annotate_drift(metadata, frame, args) -> None:
+    """Print the batch-level distribution-shift verdict, if recorded.
+
+    The per-row ``in_domain`` flag says whether each compound sits inside
+    the training box; this says whether the *batch* as a whole has drifted
+    from the training distribution.  Uses the quantile sketch the bundle
+    recorded (``feature_distributions``); bundles saved before that get no
+    message, so the absence of a check is never mistaken for a passing one.
+    """
+    if getattr(args, "no_drift_check", False):
+        return
+    from pharmaml.ml.drift import drift_from_metadata
+
+    report = drift_from_metadata(metadata, frame)
+    if report is None:
+        return
+    print(f"{report}")
+
+
+def _print_predict_metrics(model, X, truth, task) -> None:
+    """Print held-out metrics for `--target` rows (best-effort)."""
+    from pharmaml.ml.evaluation import evaluate_model
+
+    try:
+        report = evaluate_model(model, X, truth, task)
+    except Exception as exc:  # noqa: BLE001 — scoring is a bonus, not the task
+        print(f"metrics:  (skipped — {exc})")
+        return
+    print(f"metrics:  {report}")
+
+
+def _write_predictions(out, args) -> int:
+    """Write the scored table and return the exit code."""
+    from pharmaml.utils.io import write_table
+
+    if args.out:
+        path = args.out
+    else:
+        source = Path(args.data)
+        path = str(source.with_name(f"{source.stem}_predictions.csv"))
+    written = write_table(out, path)
+    print(f"scored:   {written}")
+    return 0
+
+
+def _predict_with_conformal(args, model, metadata, X, frame, truth) -> int:
+    """The ``--conformal ALPHA`` branch of `ml predict`."""
+    import numpy as np
+
+    from pharmaml.ml.conformal import ConformalClassifier, ConformalRegressor
+    from pharmaml.utils.io import read_table
+
+    alpha = float(args.conformal)
+    task = metadata.get("task", "regression")
+    held_out_truth = None
+
+    if args.calibration_data:
+        cal_frame = read_table(args.calibration_data)
+        # With --calibration-data, --target names the label in the
+        # *calibration* table (per the parser help) — not the query's.
+        if args.target is None or args.target not in cal_frame.columns:
+            print(
+                "error: --calibration-data needs the true label; pass "
+                "--target naming the calibration table's label column",
+                file=sys.stderr,
+            )
+            return 1
+        y_cal = cal_frame[args.target].to_numpy()
+        X_cal, cal_missing, _ = _bundle_feature_frame(cal_frame, metadata)
+        if cal_missing:
+            print(
+                f"error: the bundle needs feature(s) missing from "
+                f"{args.calibration_data}: {', '.join(map(str, cal_missing))}",
+                file=sys.stderr,
+            )
+            return 1
+        X_query = X
+        if truth is not None:
+            held_out_truth = truth
+    else:
+        if truth is None:
+            print(
+                "error: --conformal needs labelled rows to calibrate on — "
+                "pass --target (naming the label column of --data) or "
+                "--calibration-data",
+                file=sys.stderr,
+            )
+            return 1
+        from sklearn.model_selection import train_test_split
+
+        # Keep the DataFrame (not a bare array) so a fitted sklearn
+        # Pipeline sees the same feature names it was trained with.
+        X_cal, X_query, y_cal, y_query = train_test_split(
+            X, np.asarray(truth), test_size=0.5, random_state=args.seed
+        )
+        held_out_truth = y_query
+
+    if task == "classification":
+        classifier = ConformalClassifier(model, alpha=alpha).calibrate(X_cal, y_cal)
+        sets = classifier.predict_set(X_query)
+        coverage = (
+            classifier.coverage(X_query, held_out_truth)
+            if held_out_truth is not None else None
+        )
+        out = frame.loc[X_query.index].copy()
+        out["prediction_set"] = [", ".join(map(str, s)) for s in sets]
+        out["set_size"] = [len(s) for s in sets]
+        width_note = f"mean set size: {np.mean([len(s) for s in sets]):.2f}"
+    else:
+        regressor = ConformalRegressor(model, alpha=alpha).calibrate(X_cal, y_cal)
+        lower, upper = regressor.predict_interval(X_query)
+        out = frame.loc[X_query.index].copy()
+        out["prediction"] = np.asarray(model.predict(X_query))
+        out["lower"] = lower
+        out["upper"] = upper
+        coverage = (
+            regressor.coverage(X_query, held_out_truth)
+            if held_out_truth is not None else None
+        )
+        width_note = f"mean width:   {np.mean(upper - lower):.3f}"
+
+    print(f"model:    {metadata.get('name', Path(args.model).stem)} ({task})")
+    print(f"conformal: alpha={alpha:.2f} (target coverage {1 - alpha:.0%})")
+    if coverage is not None:
+        print(f"coverage: {coverage:.1%} empirical on the held-out half")
+    elif args.calibration_data:
+        print("coverage: (not measured — the query is scored against a "
+              "separate calibration table)")
+    else:
+        print("coverage: (not measured — the query carries no true labels; "
+              "pass --target to check the guarantee)")
+    print(f"{width_note}")
+    if args.calibration_data:
+        print(f"scored:   {len(out):,} row(s) "
+              f"(calibrated on {len(y_cal):,} separate row(s))")
+    else:
+        print(f"scored:   {len(out):,} row(s) "
+              f"(the calibration half is withheld from the output)")
+    _annotate_domain(out, metadata, frame.loc[X_query.index], args)
+    _annotate_drift(metadata, frame.loc[X_query.index], args)
+    return _write_predictions(out, args)
+
+
+def _cmd_ml_card(args: argparse.Namespace) -> int:
+    """`ml card` — render a model card for a saved bundle."""
+    from pharmaml.ml.model_card import write_model_card
+    from pharmaml.ml.persistence import load_model
+    from pharmaml.utils.io import read_table
+
+    training_frame = None
+    if args.train_data:
+        frame = read_table(args.train_data)
+        # Never let the label column leak into the applicability-domain box:
+        # prefer the explicit --target, else the target the bundle recorded.
+        _, metadata = load_model(args.model)
+        target = args.target or metadata.get("target")
+        if target is not None and target in frame.columns:
+            frame = frame.drop(columns=[target])
+        training_frame = frame
+
+    out = args.out or str(Path(args.model).with_name(f"{Path(args.model).stem}_card.md"))
+    written = write_model_card(args.model, out, training_frame=training_frame)
+    print(f"card:     {written}")
+    if training_frame is None:
+        print("note:     pass --train-data to record the applicability-domain box")
+    return 0
+
+
+def _cmd_ml_drift(args: argparse.Namespace) -> int:
+    """`ml drift` — distribution shift between a new batch and the training data.
+
+    Two reference sources, mirroring `ml check`/`ml predict`:
+    ``--model`` uses the per-feature quantile sketch the bundle recorded
+    at train time (PSI only, no training frame needed); ``--train-data``
+    compares against the raw training table (PSI + two-sample KS).  The
+    exit code is 0 whether or not a shift is found — drift is a warning
+    to act on, not an audit failure.
+    """
+    from pharmaml.ml.drift import detect_drift, drift_from_metadata
+    from pharmaml.ml.persistence import load_model
+    from pharmaml.utils.io import read_table
+
+    if bool(args.model) == bool(args.train_data):
+        print(
+            "error: pass exactly one of --model (the bundle's sketch) or "
+            "--train-data (the raw training table)",
+            file=sys.stderr,
+        )
+        return 1
+
+    frame = read_table(args.data)
+
+    def _drop_target(table, target):
+        if target is not None and target in table.columns:
+            return table.drop(columns=[target]), str(target)
+        return table, None
+
+    if args.model:
+        _, metadata = load_model(args.model)
+        target = args.target or metadata.get("target")
+        frame, dropped = _drop_target(frame, target)
+        report = drift_from_metadata(
+            metadata, frame, warn_psi=args.warn_psi, shift_psi=args.shift_psi
+        )
+        if report is None:
+            print(
+                "error: this bundle carries no distribution sketch — retrain "
+                "with this version, or pass --train-data for the raw comparison",
+                file=sys.stderr,
+            )
+            return 1
+        label = f"bundle {metadata.get('name', Path(args.model).stem)}"
+    else:
+        reference = read_table(args.train_data)
+        reference, _ = _drop_target(reference, args.target)
+        frame, dropped = _drop_target(frame, args.target)
+        report = detect_drift(
+            reference,
+            frame,
+            bins=args.bins,
+            warn_psi=args.warn_psi,
+            shift_psi=args.shift_psi,
+        )
+        label = Path(args.train_data).name
+
+    print(f"model:    {label}")
+    print(f"batch:    {Path(args.data).name} — {report.n_rows:,} row(s)")
+    if dropped:
+        print(f"dropped:  '{dropped}' before comparing")
+    print(f"{report}")
+
+    if args.out:
+        from pharmaml.utils.io import write_table
+
+        written = write_table(report.to_frame(), args.out)
+        print(f"table:    {written}")
+    return 0
+
+
+def _cmd_ml_calibrate(args: argparse.Namespace) -> int:
+    """`ml calibrate` — measure (and optionally fix) probability calibration.
+
+    Two flows, mirroring `ml drift`:
+
+    * ``--model`` loads a bundle, predicts on ``--data`` (labelled) and
+      reports Brier / ECE / MCE; with ``--out-model`` it fits a
+      recalibration map (isotonic or Platt) on ``--calibration-data``
+      (or ``--data``) and saves the wrapped estimator.
+    * no ``--model`` trains a fresh classifier on ``--data`` and measures
+      its calibration on a held-out split — the quick "is this family
+      honest out of the box?" probe.
+
+    Binary targets only (calibration is defined per class); the exit code
+    is 0 whether or not the model is miscalibrated — this is a diagnostic.
+    """
+    from pharmaml.ml.calibration import calibration_report, recalibrate
+    from pharmaml.ml.persistence import load_model, save_model
+    from pharmaml.utils.io import read_table
+
+    plot_model = plot_X = plot_y = None
+    if args.model:
+        model, metadata = load_model(args.model)
+        if str(metadata.get("task", "regression")) != "classification":
+            print(
+                "error: calibration needs a classification bundle (this one "
+                f"is {metadata.get('task', 'regression')!r})",
+                file=sys.stderr,
+            )
+            return 1
+        frame = read_table(args.data)
+        target = args.target or metadata.get("target")
+        if target is None or target not in frame.columns:
+            print(
+                f"error: the label column {target!r} is not in {args.data} — "
+                "pass --target",
+                file=sys.stderr,
+            )
+            return 1
+        y_true = frame[target].to_numpy()
+        features = metadata.get("features")
+        X = frame[list(features)] if features else frame.select_dtypes("number")
+        report = calibration_report(model, X, y_true, n_bins=args.bins)
+        plot_model, plot_X, plot_y = model, X, y_true
+        print(f"model:    {metadata.get('name', Path(args.model).stem)} (classification)")
+        print(f"data:     {Path(args.data).name} — {report.n_samples:,} row(s)")
+        print(f"{report}")
+
+        if args.out_model:
+            cal_frame = read_table(args.calibration_data) if args.calibration_data else frame
+            if target not in cal_frame.columns:
+                print(
+                    f"error: --calibration-data has no {target!r} column",
+                    file=sys.stderr,
+                )
+                return 1
+            y_cal = cal_frame[target].to_numpy()
+            X_cal = cal_frame[list(features)] if features else cal_frame.select_dtypes("number")
+            calibrated = recalibrate(model, X_cal, y_cal, method=args.method)
+            out = Path(args.out_model)
+            save_model(
+                calibrated, out,
+                name=str(metadata.get("name", Path(args.model).stem)) + "_calibrated",
+                task="classification",
+                features=features,
+                target=target,
+                metrics={"calibration_method": args.method},
+            )
+            print(f"recal:    {args.method} map fitted on "
+                  f"{len(cal_frame):,} row(s) -> {out}")
+    else:
+        if not args.data:
+            print("error: pass --model or --data", file=sys.stderr)
+            return 1
+        dataset = _load_cli_dataset(args)
+        if dataset.task != "classification":
+            print(
+                "error: calibration needs a classification target; "
+                f"{args.data} was read as {dataset.task!r}",
+                file=sys.stderr,
+            )
+            return 1
+        from pharmaml.ml.preprocessing import make_train_test_split
+
+        x_train, x_test, y_train, y_test = make_train_test_split(dataset.X, dataset.y)
+        from pharmaml.ml.training import train_model
+
+        trained = train_model(args.estimator, "classification", x_train, y_train,
+                              tune=False, cv=2)
+        report = calibration_report(trained.model, x_test, y_test, n_bins=args.bins)
+        plot_model, plot_X, plot_y = trained.model, x_test, y_test
+        print(f"model:    {args.estimator} (trained on the 80% split)")
+        print(f"data:     {Path(args.data).name} — {report.n_samples:,} held-out row(s)")
+        print(f"{report}")
+        if args.out_model:
+            # Fit the map on the held-out split: those are the only rows the
+            # base model did not train on, so its predictions there are the
+            # out-of-sample ones a calibration map must learn from.
+            calibrated = recalibrate(
+                trained.model, x_test, y_test, method=args.method
+            )
+            out = Path(args.out_model)
+            save_model(
+                calibrated, out,
+                name=f"{args.estimator}_calibrated",
+                task="classification",
+                features=dataset.feature_names,
+                target=dataset.target,
+                metrics={"calibration_method": args.method},
+            )
+            print(f"recal:    {args.method} map fitted on the held-out split -> {out}")
+
+    if args.out:
+        from pharmaml.utils.io import write_table
+
+        written = write_table(report.to_frame(), args.out)
+        print(f"table:    {written}")
+    if args.plot and plot_model is not None:
+        from pharmaml.viz import close_figure, save_figure
+        from pharmaml.viz.ml_plots import plot_calibration_curve
+
+        figure = plot_calibration_curve(plot_model, plot_X, plot_y, n_bins=args.bins)
+        written = save_figure(figure, args.plot)
+        close_figure(figure)
+        print(f"figure:   {written} (reliability diagram)")
+    return 0
+
+
+def _cmd_ml_decide(args: argparse.Namespace) -> int:
+    """`ml decide` — decision-curve analysis: is acting on the model worth it?
+
+    Loads a classification bundle, scores a labelled table, and reports the
+    net benefit (net true positives per subject) against the "treat all"
+    and "treat none" defaults — at one threshold, an explicit grid, or a
+    swept grid.  The honest verdict is which threshold range, if any, the
+    model's curve clears "treat all"; when it never does, the command says
+    so.  `--criterion` adds the held-out optimal threshold.  Exit code 0
+    either way — this is a diagnostic, like `ml drift` / `ml calibrate`.
+    """
+    import numpy as np
+
+    from pharmaml.ml.decision import decision_curve_from_scores, optimal_threshold
+    from pharmaml.ml.persistence import load_model
+    from pharmaml.utils.io import read_table
+
+    model, metadata = load_model(args.model)
+    if str(metadata.get("task", "regression")) != "classification":
+        print(
+            "error: decision-curve analysis needs a classification bundle "
+            f"(this one is {metadata.get('task', 'regression')!r})",
+            file=sys.stderr,
+        )
+        return 1
+    if not hasattr(model, "predict_proba"):
+        print(
+            "error: the bundle's model exposes no predict_proba — decision "
+            "analysis needs calibrated probabilities",
+            file=sys.stderr,
+        )
+        return 1
+
+    frame = read_table(args.data)
+    target = args.target or metadata.get("target")
+    if target is None or target not in frame.columns:
+        print(
+            f"error: the label column {target!r} is not in {args.data} — "
+            "pass --target",
+            file=sys.stderr,
+        )
+        return 1
+    features = metadata.get("features")
+    X = frame[list(features)] if features else frame.select_dtypes("number")
+    proba = np.asarray(model.predict_proba(X))
+    if proba.ndim != 2 or proba.shape[1] != 2:
+        print(
+            "error: decision-curve analysis is binary; the model's "
+            "predict_proba is not 2-column",
+            file=sys.stderr,
+        )
+        return 1
+    y_true = frame[target].to_numpy()
+    classes = getattr(model, "classes_", None)
+    positive = classes[1] if classes is not None and len(classes) == 2 else np.unique(y_true)[-1]
+    y_binary = (y_true == positive).astype(int)
+    scores = proba[:, 1]
+
+    if args.threshold is not None and args.thresholds is not None:
+        print("error: pass --threshold or --thresholds, not both", file=sys.stderr)
+        return 1
+    if args.threshold is not None:
+        thresholds = [args.threshold]
+    elif args.thresholds is not None:
+        try:
+            thresholds = [float(t) for t in args.thresholds.split(",") if t.strip()]
+        except ValueError:
+            print("error: --thresholds must be comma-separated numbers", file=sys.stderr)
+            return 1
+    else:
+        thresholds = None
+
+    curve = decision_curve_from_scores(
+        y_binary, scores, thresholds=thresholds, n_points=args.points,
+        cost_ratio=args.cost_ratio,
+    )
+    label = metadata.get("name", Path(args.model).stem)
+    print(f"model:    {label} (classification)")
+    print(f"data:     {Path(args.data).name} — {curve.n_samples:,} row(s)")
+    print(f"{curve}")
+
+    if args.criterion is not None:
+        chosen = optimal_threshold(
+            y_binary, scores, criterion=args.criterion, cost_ratio=args.cost_ratio
+        )
+        nb = curve.net_benefit_at(chosen)
+        print(
+            f"optimal:  {args.criterion} threshold {chosen:.4f} "
+            f"(net benefit {nb:+.4f} at the nearest grid point)"
+        )
+
+    if args.out:
+        from pharmaml.utils.io import write_table
+
+        written = write_table(curve.to_frame(), args.out)
+        print(f"table:    {written}")
+    if args.plot:
+        from pharmaml.viz import close_figure, save_figure
+        from pharmaml.viz.ml_plots import plot_decision_curve
+
+        figure = plot_decision_curve(
+            curve, title=f"Decision curve — {label}"
+        )
+        written = save_figure(figure, args.plot)
+        close_figure(figure)
+        print(f"figure:   {written} (decision curve)")
+    return 0
+
+
+
+
+def _report_uniform(report, metric: str) -> None:
+    """Note when every subgroup scored alike — so "no worst group" is explicit."""
+    values = [
+        group.metrics[metric]
+        for group in report.subgroups
+        if group.sufficient and group.metrics.get(metric) is not None
+    ]
+    if len(values) >= 2 and max(values) - min(values) < 1e-12:
+        print(f"note:     every sufficient subgroup scored {metric}={values[0]:.4f} "
+              "(no dispersion to report)")
+
+
+#: Hypermodel registry for `ml tune`: (estimator token, task) -> builder.
+def _cmd_ml_subgroup(args: argparse.Namespace) -> int:
+    """`ml subgroup` — stratified performance: which groups does the model fail?
+
+    Loads a bundle, scores a labelled table, and reports the headline
+    metrics per value of ``--by`` alongside the overall row, so a subgroup
+    that underperforms the aggregate is read off, not assumed.  ``--metric``
+    names the worst group for that metric; ``--plot`` draws the bar chart.
+    Exit code 0 either way — this is a diagnostic, like `ml drift`.
+    """
+    from pharmaml.exceptions import DataValidationError
+    from pharmaml.ml.persistence import load_model
+    from pharmaml.ml.subgroups import subgroup_report
+    from pharmaml.utils.io import read_table
+
+    model, metadata = load_model(args.model)
+    task = str(metadata.get("task", "regression"))
+    frame = read_table(args.data)
+    target = args.target or metadata.get("target")
+    if target is None or target not in frame.columns:
+        print(
+            f"error: the label column {target!r} is not in {args.data} — "
+            "pass --target",
+            file=sys.stderr,
+        )
+        return 1
+    if args.by not in frame.columns:
+        print(
+            f"error: --by {args.by!r} is not a column of {args.data} "
+            f"(columns: {', '.join(map(str, frame.columns))})",
+            file=sys.stderr,
+        )
+        return 1
+
+    features = metadata.get("features")
+    X = frame[list(features)] if features else frame.select_dtypes("number")
+    y_true = frame[target].to_numpy()
+    groups = frame[args.by].to_numpy()
+    report = subgroup_report(
+        model, X, y_true, groups,
+        task=task, min_group_size=args.min_group_size, column=args.by,
+    )
+    label = metadata.get("name", Path(args.model).stem)
+    print(f"model:    {label} ({task})")
+    print(f"data:     {Path(args.data).name} — {report.overall.get('n_samples'):,} row(s)")
+    print(f"{report}")
+
+    default_metric = "accuracy" if task == "classification" else "rmse"
+    metric = args.metric or default_metric
+    try:
+        worst = report.worst_group(metric)
+    except DataValidationError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    flag = "" if worst.sufficient else " (insufficient — n below --min-group-size)"
+    print(f"worst:    {worst.value!r} by {metric} "
+          f"({worst.metrics.get(metric):.4f}, n={worst.n}){flag}")
+    _report_uniform(report, metric)
+
+    if args.scan:
+        from pharmaml.ml.subgroups import subgroup_gap_scan
+
+        gaps = subgroup_gap_scan(
+            model, X, y_true, groups,
+            task=task, metric=metric, min_group_size=args.min_group_size,
+            correction=args.correction,
+        )
+        print(f"scan:     {len(gaps)} subgroup(s), {args.correction} correction")
+        for gap in gaps:
+            print(f"  {gap}")
+        survivors = [gap.value for gap in gaps if gap.fdr_significant]
+        if survivors:
+            print(f"  significant after correction: {', '.join(survivors)}")
+        else:
+            print("  no subgroup is significant after correction")
+
+    if args.out:
+        from pharmaml.utils.io import write_table
+
+        written = write_table(report.to_frame(), args.out)
+        print(f"table:    {written}")
+    if args.plot:
+        from pharmaml.viz import close_figure, save_figure
+        from pharmaml.viz.ml_plots import plot_subgroup_performance
+
+        figure = plot_subgroup_performance(report, metric, title=f"{metric} by {args.by}")
+        written = save_figure(figure, args.plot)
+        close_figure(figure)
+        print(f"figure:   {written} (subgroup bars)")
+    return 0
 def _cmd_ml_tune(args: argparse.Namespace) -> int:
     """`ml tune` — keras-tuner-style hyperparameter search.
 
@@ -2921,6 +4053,12 @@ _HANDLERS = {
     ("ml", "train"): _cmd_ml_train,
     ("ml", "compare"): _cmd_ml_compare,
     ("ml", "check"): _cmd_ml_check,
+    ("ml", "predict"): _cmd_ml_predict,
+    ("ml", "card"): _cmd_ml_card,
+    ("ml", "drift"): _cmd_ml_drift,
+    ("ml", "calibrate"): _cmd_ml_calibrate,
+    ("ml", "decide"): _cmd_ml_decide,
+    ("ml", "subgroup"): _cmd_ml_subgroup,
     ("ml", "tune"): _cmd_ml_tune,
     ("ml", "ad"): _cmd_ml_ad,
     ("chem", "pic50"): _cmd_chem_pic50,

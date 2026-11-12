@@ -1043,3 +1043,141 @@ def applicability_domain(
     result.uncertainty_kind = boot.kind
     result.fit_seconds = boot.fit_seconds
     return result
+
+
+@dataclass(slots=True)
+class DomainBox:
+    """The per-feature min/max box a model was fitted inside.
+
+    A cheap, first-pass applicability domain: a query row is
+    ``in_domain`` when every recorded feature falls within the training
+    range (inclusive).  This is the box a bundle can carry without
+    keeping the training data — a full kNN/leverage domain
+    (:func:`knn_applicability_domain`) is stricter but needs the
+    training descriptors at hand.
+
+    Attributes
+    ----------
+    ranges:
+        ``{feature: {"min": lo, "max": hi}}`` for the features recorded.
+    n_features:
+        Number of features in the box.
+    """
+
+    ranges: dict[str, dict[str, float]]
+    n_features: int
+
+    @classmethod
+    def from_metadata(cls, metadata: dict[str, Any]) -> DomainBox | None:
+        """Build the box from a bundle's metadata, or ``None`` if absent."""
+        ranges = metadata.get("feature_ranges")
+        if not isinstance(ranges, dict) or not ranges:
+            return None
+        clean: dict[str, dict[str, float]] = {}
+        for name, bounds in ranges.items():
+            if (
+                isinstance(bounds, dict)
+                and isinstance(bounds.get("min"), (int, float))
+                and isinstance(bounds.get("max"), (int, float))
+            ):
+                clean[str(name)] = {
+                    "min": float(bounds["min"]),
+                    "max": float(bounds["max"]),
+                }
+        if not clean:
+            return None
+        return cls(ranges=clean, n_features=len(clean))
+
+    def check(self, frame: pd.DataFrame) -> DomainReport:
+        """Flag every row of ``frame`` outside the box.
+
+        A row is out-of-domain when any recorded feature is below its
+        training minimum or above its maximum.  Features absent from
+        ``frame`` are ignored (the bundle's feature contract handles
+        those separately); ``NaN`` in a present feature counts as
+        out-of-domain, since a missing descriptor cannot be shown to be
+        inside the box.
+        """
+        import pandas as pd
+
+        n_rows = len(frame)
+        below: dict[str, int] = {}
+        above: dict[str, int] = {}
+        out_mask = np.zeros(n_rows, dtype=bool)
+        for name, bounds in self.ranges.items():
+            if name not in frame.columns:
+                continue
+            values = pd.to_numeric(frame[name], errors="coerce").to_numpy(dtype=float)
+            low = values < bounds["min"]
+            high = values > bounds["max"]
+            nan = np.isnan(values)
+            if low.any():
+                below[name] = int(low.sum())
+            if high.any():
+                above[name] = int(high.sum())
+            out_mask |= low | high | nan
+        n_out = int(out_mask.sum())
+        return DomainReport(
+            n_rows=n_rows,
+            n_out=int(n_out),
+            out_mask=out_mask,
+            below=below,
+            above=above,
+            box=self,
+        )
+
+
+@dataclass(slots=True)
+class DomainReport:
+    """Outcome of checking a frame against a :class:`DomainBox`."""
+
+    n_rows: int
+    n_out: int
+    out_mask: np.ndarray
+    below: dict[str, int]
+    above: dict[str, int]
+    box: DomainBox
+
+    @property
+    def in_domain(self) -> np.ndarray:
+        """Boolean mask: ``True`` where the row is inside the box."""
+        return ~self.out_mask
+
+    @property
+    def fraction_out(self) -> float:
+        return self.n_out / self.n_rows if self.n_rows else 0.0
+
+    def __str__(self) -> str:
+        if self.n_out == 0:
+            return (
+                f"applicability: all {self.n_rows} row(s) inside the "
+                f"{self.box.n_features}-feature training box"
+            )
+        offenders: list[str] = []
+        for name, _count in sorted(
+            {**self.below, **self.above}.items(), key=lambda item: -item[1]
+        ):
+            parts = []
+            if name in self.below:
+                parts.append(f"{self.below[name]} below")
+            if name in self.above:
+                parts.append(f"{self.above[name]} above")
+            offenders.append(f"{name} ({', '.join(parts)})")
+        head = (
+            f"applicability: {self.n_out}/{self.n_rows} row(s) "
+            f"({self.fraction_out:.0%}) outside the training box"
+        )
+        return head + "\n  " + "\n  ".join(offenders[:8])
+
+
+def check_domain_box(metadata: dict[str, Any], frame: pd.DataFrame) -> DomainReport | None:
+    """Check ``frame`` against a bundle's recorded box, if it has one.
+
+    Returns ``None`` when the bundle predates box recording (no
+    ``feature_ranges`` in its metadata), so callers can stay silent
+    rather than imply a check that did not run.
+    """
+    box = DomainBox.from_metadata(metadata)
+    if box is None:
+        return None
+    return box.check(frame)

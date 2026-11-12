@@ -1,3 +1,48 @@
+## [1.2.183] — 2026-11-12
+### Added — part5-continuation round 13: the recovery round — arena absorbed, the orphan ml/ family landed
+
+- **The environment story**: the sandbox was fully recycled after R12
+  (repo, venv, scratch, and the GitHub credential were all lost); the
+  token was recovered from MASTER_PROMPT part1 (line-wrapped in the
+  PDF — both halves joined), the remote verified intact at R12's
+  `4eea770`, and the clone restored clean (fsck clean, token never in
+  config — an askpass helper at `scripts/git-askpass.sh` feeds it).
+- **The arena branch absorbed** (22 commits, `940c8a2`): docking
+  engine safeguards (false-success Vina runs, batch logs, staged-pose
+  validation, AutoGrid geometry audit), the
+  uncertainty/validation/reproducibility dialogs, nested-logistic
+  validation, binary recalibration, provenance capture,
+  fresh-directory campaign launch/preparation/preview/status, and the
+  CV group-label guard. PRs 1-10 were already merged; PR11's content
+  was byte-identical inside arena; PR12 IS arena's tip — every unmerged
+  ref is now absorbed.
+- **The uploaded v1.2.162 zip absorbed**: provenance solved (base =
+  the r250 tree `eb78935`; 421/489 files byte-identical); its unique
+  value was **19 never-committed files** — a nine-module `ml/` family
+  (calibration, comparison, decision, drift, model_card, multiplicity,
+  power, sar, subgroups) with 11 test suites, recovered from the lost
+  session's working tree and landed with full gating.
+- **The ports that made them run on main's newer code**:
+  `paired_wilcoxon_test` (stats), the `DomainBox`/`check_domain_box`
+  family (applicability), `feature_ranges_from_frame` +
+  `bundle_metadata`/`save_model` provenance kwargs (persistence), six
+  new CLI subcommands (`ml predict/card/drift/calibrate/decide/
+  subgroup`) + `compare --significance` with its power reporting
+  (cli.py), `plot_decision_curve`/`plot_subgroup_performance`
+  (viz/ml_plots), the prediction-interval conformal API
+  (`ConformalRegressor`/`ConformalClassifier`/`conformal_quantile`)
+  merged alongside the existing one, `ml train` now records the
+  training target + feature box + drift sketch in every bundle, and a
+  sklearn compat shim in `recalibrate` (`FrozenEstimator` on >=1.6,
+  `cv="prefit"` on the pinned 1.5.x).
+- **Gates**: the orphan battery 338/338 green; the full library
+  battery 4992 passed with the remaining failures proven
+  environment-only (missing meeko/gemmi/fpdf/docx — all resolved by
+  install) or pre-existing docs-index guards that now demand the new
+  modules be re-classified (the honest R14 follow-up); §13 proofs and
+  the R12 preserved-partial pins re-verified green; ruff clean; mypy
+  zero new errors (11 pre-existing transitive, proven via stash A/B).
+
 ## [1.2.182] — 2026-11-12
 ### Added — part5-continuation round 12: the GUI surfaces what a §13 Stop preserved (the preserved-partial channel)
 

@@ -25,7 +25,7 @@ from sklearn.base import BaseEstimator
 from sklearn.exceptions import NotFittedError
 from sklearn.utils.validation import check_is_fitted
 
-from pharmaml.exceptions import DataValidationError
+from pharmaml.exceptions import DataValidationError, ModelError
 from pharmaml.ml._estimator_compat import estimator_kind
 
 __all__ = ["ConformalIntervals", "SplitConformalRegressor", "calibrate_split_conformal"]
@@ -207,3 +207,267 @@ def calibrate_split_conformal(
         raise DataValidationError("interval width overflowed; check the target scale")
     return SplitConformalRegressor(model=model, alpha=alpha, radius=radius,
                                    n_calibration=n, rank=rank)
+
+
+def _as_1d(values: Any, name: str) -> np.ndarray:
+    """Coerce ``values`` to a finite float 1-D array or raise."""
+    array = np.asarray(values, dtype=float).reshape(-1)
+    if array.size == 0:
+        raise DataValidationError(f"{name} is empty")
+    if not np.all(np.isfinite(array)):
+        raise DataValidationError(f"{name} contains non-finite values")
+    return array
+
+
+def _python_labels(classes: Any) -> list[Any]:
+    """Model ``classes_`` as native Python labels (not numpy scalars).
+
+    Returned sets must contain plain ``int``/``str`` values so callers can
+    compare them with ``==`` against ordinary Python labels — a numpy
+    scalar prints as ``np.int64(1)`` and surprises both users and doctests.
+    """
+    return [value.item() if isinstance(value, np.generic) else value for value in classes]
+
+
+# --- (r13) the prediction-interval API the ml predict/card/decide paths use ----
+
+
+def conformal_quantile(scores: Any, alpha: float) -> float:
+    """The split-conformal quantile of nonconformity ``scores``.
+
+    Returns the ``ceil((n + 1) * (1 - alpha))``-th smallest score (1-based)
+    — the finite-sample-corrected empirical quantile, *not* the plain
+    ``numpy.quantile``.  When that rank exceeds ``n`` the quantile is
+    ``+inf``: the calibration set is too small to certify ``1 - alpha``
+    coverage, so the honest interval is the whole line (regression) or
+    every label (classification).
+
+    Parameters
+    ----------
+    scores:
+        Nonconformity scores from the calibration split (finite, 1-D).
+    alpha:
+        Miscoverage level in ``(0, 1)``; coverage target is ``1 - alpha``.
+
+    Returns
+    -------
+    float
+        The conformal quantile (``math.inf`` when the rank exceeds ``n``).
+
+    Raises
+    ------
+    DataValidationError
+        When ``scores`` is empty/non-finite or ``alpha`` is outside
+        ``(0, 1)``.
+
+    Examples
+    --------
+    >>> from pharmaml.ml.conformal import conformal_quantile
+    >>> conformal_quantile([1.0, 2.0, 3.0, 4.0, 5.0], alpha=0.2)
+    5.0
+    >>> conformal_quantile([1.0, 2.0, 3.0, 4.0, 5.0], alpha=0.1)
+    inf
+    """
+    if not 0.0 < alpha < 1.0:
+        raise DataValidationError(f"alpha must be in (0, 1), got {alpha!r}")
+    array = _as_1d(scores, "scores")
+    n = array.size
+    rank = math.ceil((n + 1) * (1.0 - alpha))
+    if rank > n:
+        return math.inf
+    ordered = np.sort(array)
+    return float(ordered[rank - 1])
+
+
+class ConformalRegressor:
+    """Split-conformal prediction intervals around any fitted regressor.
+
+    Parameters
+    ----------
+    model:
+        A fitted estimator exposing ``predict`` (sklearn-compatible).
+    alpha:
+        Miscoverage level in ``(0, 1)`` (default ``0.1`` → 90 % intervals).
+
+    Attributes
+    ----------
+    q_:
+        The calibration quantile, set by :meth:`calibrate`.
+    scores_:
+        The calibration nonconformity scores (absolute residuals).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from sklearn.linear_model import LinearRegression
+    >>> from pharmaml.ml.conformal import ConformalRegressor
+    >>> X = np.array([[0.0], [1.0], [2.0], [3.0], [4.0], [5.0]])
+    >>> y = np.array([0.1, 1.9, 4.2, 5.8, 8.1, 9.9])
+    >>> reg = ConformalRegressor(LinearRegression().fit(X, y), alpha=0.2)
+    >>> _ = reg.calibrate(X, y)
+    >>> lower, upper = reg.predict_interval(np.array([[2.5]]))
+    >>> bool(lower[0] < 5.0 < upper[0])
+    True
+    """
+
+    def __init__(self, model: Any, alpha: float = 0.1) -> None:
+        if not 0.0 < alpha < 1.0:
+            raise DataValidationError(f"alpha must be in (0, 1), got {alpha!r}")
+        if not hasattr(model, "predict"):
+            raise ModelError(
+                "ConformalRegressor needs a fitted estimator with .predict, "
+                f"got {type(model).__name__}"
+            )
+        self.model = model
+        self.alpha = float(alpha)
+        self.q_: float | None = None
+        self.scores_: np.ndarray | None = None
+
+    def calibrate(self, X_cal: Any, y_cal: Any) -> ConformalRegressor:
+        """Score the calibration split and set the interval width.
+
+        ``X_cal``/``y_cal`` must be data the model was **not** fitted on,
+        or the coverage guarantee is void (the scores would be optimistic).
+        """
+        y = _as_1d(y_cal, "y_cal")
+        if len(X_cal) != y.size:
+            raise DataValidationError(
+                f"X_cal has {len(X_cal)} row(s) but y_cal has {y.size} value(s)"
+            )
+        # Pass the caller's object (DataFrame or array) straight through so
+        # a fitted sklearn Pipeline keeps the feature names it trained on.
+        predictions = _as_1d(self.model.predict(X_cal), "model.predict(X_cal)")
+        self.scores_ = np.abs(y - predictions)
+        self.q_ = conformal_quantile(self.scores_, self.alpha)
+        return self
+
+    def predict_interval(self, X: Any) -> tuple[np.ndarray, np.ndarray]:
+        """Point predictions widened by the calibration quantile.
+
+        Returns ``(lower, upper)`` arrays; with an ``inf`` quantile both
+        are infinite (the honest "no guarantee possible" answer).
+        """
+        if self.q_ is None:
+            raise ModelError("call calibrate() before predict_interval()")
+        center = _as_1d(self.model.predict(X), "model.predict(X)")
+        return center - self.q_, center + self.q_
+
+    def coverage(self, X: Any, y: Any) -> float:
+        """Empirical fraction of ``y`` inside the predicted intervals.
+
+        The promise kept on a *new* held-out set — compare it against the
+        target ``1 - alpha`` rather than trusting the theory alone.
+        """
+        if self.q_ is None:
+            raise ModelError("call calibrate() before coverage()")
+        truth = _as_1d(y, "y")
+        lower, upper = self.predict_interval(X)
+        if truth.size != lower.size:
+            raise DataValidationError(
+                f"y has {truth.size} value(s) but X has {lower.size} row(s)"
+            )
+        return float(np.mean((truth >= lower) & (truth <= upper)))
+
+
+class ConformalClassifier:
+    """Split-conformal prediction sets around any fitted classifier.
+
+    The nonconformity score is ``1 - p(true class)``; a candidate label is
+    kept in the set when its own ``1 - p(label)`` does not exceed the
+    calibration quantile, so the set shrinks as the model gets confident.
+
+    Parameters
+    ----------
+    model:
+        A fitted classifier exposing ``predict_proba`` and ``classes_``.
+    alpha:
+        Miscoverage level in ``(0, 1)`` (default ``0.1``).
+
+    Attributes
+    ----------
+    q_:
+        The calibration quantile, set by :meth:`calibrate`.
+    scores_:
+        The calibration nonconformity scores (``1 - p(true class)``).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from sklearn.linear_model import LogisticRegression
+    >>> from pharmaml.ml.conformal import ConformalClassifier
+    >>> X = np.array([[-3.0], [-2.0], [-1.0], [1.0], [2.0], [3.0]])
+    >>> y = np.array([0, 0, 0, 1, 1, 1])
+    >>> clf = ConformalClassifier(LogisticRegression().fit(X, y), alpha=0.3)
+    >>> _ = clf.calibrate(X, y)
+    >>> sorted(clf.predict_set(np.array([[3.0]]))[0])
+    [1]
+    """
+
+    def __init__(self, model: Any, alpha: float = 0.1) -> None:
+        if not 0.0 < alpha < 1.0:
+            raise DataValidationError(f"alpha must be in (0, 1), got {alpha!r}")
+        if not hasattr(model, "predict_proba"):
+            raise ModelError(
+                "ConformalClassifier needs a fitted classifier with "
+                f".predict_proba, got {type(model).__name__}"
+            )
+        self.model = model
+        self.alpha = float(alpha)
+        self.q_: float | None = None
+        self.scores_: np.ndarray | None = None
+
+    def _true_class_probability(self, X: Any, y: np.ndarray) -> np.ndarray:
+        proba = np.asarray(self.model.predict_proba(X), dtype=float)
+        classes = _python_labels(self.model.classes_)
+        index = {label: position for position, label in enumerate(classes)}
+        try:
+            positions = np.array([index[value] for value in y.tolist()])
+        except KeyError as exc:  # a calibration label the model never saw
+            raise DataValidationError(
+                f"y_cal contains a label the model was not trained on: {exc.args[0]!r}"
+            ) from exc
+        return proba[np.arange(proba.shape[0]), positions]
+
+    def calibrate(self, X_cal: Any, y_cal: Any) -> ConformalClassifier:
+        """Score the calibration split and set the set-membership threshold."""
+        y = np.asarray(y_cal).reshape(-1)
+        if len(X_cal) != y.size:
+            raise DataValidationError(
+                f"X_cal has {len(X_cal)} row(s) but y_cal has {y.size} value(s)"
+            )
+        true_prob = self._true_class_probability(X_cal, y)
+        self.scores_ = 1.0 - true_prob
+        self.q_ = conformal_quantile(self.scores_, self.alpha)
+        return self
+
+    def predict_set(self, X: Any) -> list[list[Any]]:
+        """One label set per row: every label within the conformal quantile.
+
+        An empty set means the model is confidently *wrong* about every
+        option (a signal, not a bug); with an ``inf`` quantile every label
+        is returned.
+        """
+        if self.q_ is None:
+            raise ModelError("call calibrate() before predict_set()")
+        proba = np.asarray(self.model.predict_proba(X), dtype=float)
+        classes = _python_labels(self.model.classes_)
+        sets: list[list[Any]] = []
+        for row in proba:
+            if math.isinf(self.q_):
+                sets.append(list(classes))
+                continue
+            keep = [label for label, p in zip(classes, row) if (1.0 - p) <= self.q_]
+            sets.append(keep)
+        return sets
+
+    def coverage(self, X: Any, y: Any) -> float:
+        """Empirical fraction of rows whose true label is in the set."""
+        if self.q_ is None:
+            raise ModelError("call calibrate() before coverage()")
+        truth = np.asarray(y).reshape(-1)
+        sets = self.predict_set(X)
+        if truth.size != len(sets):
+            raise DataValidationError(
+                f"y has {truth.size} value(s) but X has {len(sets)} row(s)"
+            )
+        return float(np.mean([value in label_set for value, label_set in zip(truth, sets)]))

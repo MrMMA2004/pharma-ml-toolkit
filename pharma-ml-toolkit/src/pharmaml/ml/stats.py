@@ -410,6 +410,72 @@ def paired_ttest(
     )
 
 
+def paired_wilcoxon_test(
+    before: Any,
+    after: Any,
+    *,
+    alpha: float = DEFAULT_ALPHA,
+) -> SignificanceResult:
+    """The rank-based paired test: the non-parametric twin of ``paired_ttest``.
+
+    Where :func:`paired_ttest` compares the paired differences' *mean*
+    against zero, this compares their *median* via the Wilcoxon
+    signed-rank statistic — the right choice when the fold-to-fold
+    differences are skewed or carry outliers (a single fold where one
+    model collapses is exactly that case).  Effect size: the matched-pairs
+    rank-biserial correlation ``r = (W+ − W−) / (W+ + W−)``, the standard
+    companion to the test (0 = no consistent direction, ±1 = every
+    non-zero pair points one way).
+
+    Raises
+    ------
+    DataValidationError
+        On length mismatches, fewer than two pairs, or an all-zero
+        difference vector (the signed-rank test is undefined when no pair
+        moves — scipy would raise a bare ``ValueError``).
+
+    Examples
+    --------
+    >>> from pharmaml.ml.stats import paired_wilcoxon_test
+    >>> # eight pairs, every second model strictly worse -> a real win
+    >>> a = [0.90, 0.88, 0.92, 0.85, 0.91, 0.87, 0.93, 0.89]
+    >>> b = [0.80, 0.79, 0.83, 0.74, 0.82, 0.78, 0.84, 0.81]
+    >>> result = paired_wilcoxon_test(a, b)
+    >>> result.significant, round(result.effect_value, 3)
+    (True, 1.0)
+    """
+    alpha = _check_alpha(alpha)
+    a = _as_values(before, caller="paired_wilcoxon_test (before)")
+    b = _as_values(after, caller="paired_wilcoxon_test (after)")
+    if a.size != b.size:
+        raise DataValidationError(f"paired samples disagree ({a.size} vs {b.size})")
+    differences = a - b
+    nonzero = differences[differences != 0.0]
+    if nonzero.size == 0:
+        raise DataValidationError(
+            "every pair is identical — the signed-rank test is undefined "
+            "when no pair moves"
+        )
+    result = scipy_stats.wilcoxon(a, b)
+    # Rank-biserial: on the |d| ranks, the share of the rank mass whose
+    # difference is positive minus the share whose difference is negative.
+    ranks = scipy_stats.rankdata(np.abs(nonzero))
+    w_plus = float(ranks[nonzero > 0.0].sum())
+    w_minus = float(ranks[nonzero < 0.0].sum())
+    total = w_plus + w_minus
+    effect = (w_plus - w_minus) / total if total > 0 else 0.0
+    return SignificanceResult(
+        test="Wilcoxon signed-rank test",
+        statistic=float(result.statistic),
+        p_value=float(result.pvalue),
+        df=None,
+        alpha=alpha,
+        significant=bool(result.pvalue < alpha),
+        effect_name="matched-pairs rank-biserial r",
+        effect_value=float(effect),
+    )
+
+
 def two_sample_ttest(
     a: Any,
     b: Any,
