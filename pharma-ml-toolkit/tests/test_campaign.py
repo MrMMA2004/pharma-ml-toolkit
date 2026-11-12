@@ -1417,7 +1417,11 @@ class TestEngineFolderRuns:
         receptor.write_text("ROOT\n", encoding="utf-8")
         ligand = tmp_path / "l.pdbqt"
         ligand.write_text("ATOM\n", encoding="utf-8")
-        commands = self._record(monkeypatch)
+        commands = []
+        def fake_success(cmd, **_kwargs):
+            commands.append(list(cmd))
+            Path(cmd[cmd.index("--out") + 1]).write_text("fake pose", encoding="utf-8")
+        monkeypatch.setattr(workflow_mod.subprocess, "run", fake_success)
         result = workflow_mod.run_vina(
             receptor,
             ligand,

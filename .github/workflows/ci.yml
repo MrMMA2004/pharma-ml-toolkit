@@ -79,6 +79,7 @@ jobs:
           tests/test_release_recovery_status.py
           tests/test_cv_parameters_integrity.py
           tests/test_cv_group_labels_integrity.py
+          tests/test_vina_output_integrity.py
           tests/test_release_audit.py
           tests/test_data_drift_diagnostic.py
           tests/test_data_loading.py

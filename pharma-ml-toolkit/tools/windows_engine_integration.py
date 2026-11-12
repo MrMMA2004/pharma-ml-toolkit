@@ -11,6 +11,7 @@ import json
 import math
 import os
 import re
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -31,7 +32,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="pharmaml-engine-integration-") as folder:
         work = Path(folder)
         receptor, ligand = work / "r.pdbqt", work / "l.pdbqt"
-        receptor.write_text("".join(atom(i + 1, *p) for i, p in enumerate([
+        receptor.write_text("".join(atom(i + 1, *p)[:70] + f"{0.1:6.3f}" + atom(i + 1, *p)[76:] for i, p in enumerate([
             (4, 0, 0), (-4, 0, 0), (0, 4, 0), (0, -4, 0), (0, 0, 4), (0, 0, -4)
         ])), encoding="ascii")
         ligand.write_text("ROOT\n" + atom(1, 0, 0, 0) + "ENDROOT\nTORSDOF 0\n", encoding="ascii")
@@ -62,7 +63,12 @@ def main() -> int:
         batch_error = batch[0].error if batch else "no batch results"
         print(json.dumps({"stage": "toolkit run_vina_batch", "ok": batch_ok, "error": batch_error}))
         if not batch_ok:
-            failures.append(f"toolkit run_vina_batch failed: {batch_error}")
+            probe = subprocess.run([str(engines / "vina.exe"), "--config", str(config),
+                                    "--ligand", str(ligands / ligand.name), "--out", str(work / "probe.pdbqt"),
+                                    "--log", str(work / "probe.log")], cwd=work,
+                                   capture_output=True, text=True, errors="replace", timeout=120, check=False)
+            failures.append(f"toolkit run_vina_batch failed: {batch_error}; direct probe exit "
+                            f"{probe.returncode}, stdout {probe.stdout[-1500:]}, stderr {probe.stderr[-1500:]}")
 
         write_gpf(ligand, receptor_file=receptor.name,
                   box=GridBox(0, 0, 0, npts=(20, 20, 20)), receptor_types="C")

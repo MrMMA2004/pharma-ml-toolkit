@@ -92,6 +92,7 @@ import platform
 import shutil
 import struct
 import subprocess
+import tempfile
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -542,6 +543,10 @@ def run_vina(
     Returns
     -------
     DockingRunResult
+        A zero exit is not sufficient: a new non-empty output must exist.
+        Output is staged next to the destination and only replaces an older
+        file after successful execution. This does not validate the pose or
+        score scientifically and does not provide crash durability.
     """
     import time
 
@@ -553,7 +558,6 @@ def run_vina(
         *prefix,
         "--receptor", str(receptor),
         "--ligand", str(ligand),
-        "--out", str(out_path),
         "--center_x", f"{center[0]:.4f}",
         "--center_y", f"{center[1]:.4f}",
         "--center_z", f"{center[2]:.4f}",
@@ -570,7 +574,13 @@ def run_vina(
 
     started = time.perf_counter()
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=timeout_s)
+        with tempfile.TemporaryDirectory(prefix=".vina-run-", dir=out_path.parent) as folder:
+            staged = Path(folder) / "pose.pdbqt"
+            subprocess.run([*cmd, "--out", str(staged)], check=True, capture_output=True, timeout=timeout_s)
+            if not staged.is_file() or staged.is_symlink() or staged.stat().st_size == 0:
+                return DockingRunResult(out_path.parent, False, None, time.perf_counter() - started,
+                                        "Vina produced no new non-empty pose file")
+            os.replace(staged, out_path)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
         return DockingRunResult(out_path.parent, False, None, time.perf_counter() - started, str(exc))
     return DockingRunResult(out_path.parent, True, out_path, time.perf_counter() - started)
