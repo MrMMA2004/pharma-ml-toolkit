@@ -378,6 +378,9 @@ class ModelAnalysisPage(QWidget):
         self._uncertainty_btn = QPushButton("Uncertainty…")
         self._uncertainty_btn.clicked.connect(self._show_uncertainty)
         buttons.addWidget(self._uncertainty_btn)
+        self._calibration_btn = QPushButton("Probability recalibration…")
+        self._calibration_btn.clicked.connect(self._show_calibration)
+        buttons.addWidget(self._calibration_btn)
         self._validation_btn = QPushButton("Nested validation…")
         self._validation_btn.clicked.connect(self._show_validation)
         buttons.addWidget(self._validation_btn)
@@ -495,6 +498,17 @@ class ModelAnalysisPage(QWidget):
         self._rebuild_param_rows(self._model_combo.currentText())
 
     # -- data ---------------------------------------------------------------
+    def _show_calibration(self) -> None:
+        from .calibration_dialog import CalibrationDialog
+
+        dialog = getattr(self, "_calibration_dialog", None)
+        if dialog is None:
+            dialog = CalibrationDialog(self._runner, self)
+            self._calibration_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
     def _show_validation(self) -> None:
         from .validation_dialog import ValidationDialog
 

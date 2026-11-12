@@ -218,6 +218,14 @@ def _build_parser() -> argparse.ArgumentParser:
         uncertainty.add_argument("--diagnostics", action="store_true",
                                  help="include optional held-out probability and kNN distance diagnostics")
 
+    recalibrate = ml_sub.add_parser("calibrate-binary", help="held-out binary probability recalibration report")
+    for part in ("train", "calibration", "test"):
+        recalibrate.add_argument(f"--{part}", required=True, help=f"independent {part} CSV/TSV/Excel")
+    recalibrate.add_argument("--features", nargs="+", required=True, help="numeric feature columns")
+    recalibrate.add_argument("--target", required=True)
+    recalibrate.add_argument("--key", required=True, help="exact leakage-unit ID; must be disjoint")
+    recalibrate.add_argument("--positive-label", required=True, help="exact text of positive class")
+
     train = ml_sub.add_parser("train", help="train one model end-to-end")
     train.add_argument("--data", required=True, help="CSV/Excel with features+target")
     train.add_argument("--target", default=None, help="target column (auto-detected)")
@@ -1138,6 +1146,19 @@ def _cmd_ml_nested_ridge(args: argparse.Namespace) -> int:
                                     group=args.group, outer_folds=args.outer_folds,
                                     inner_folds=args.inner_folds, seed=args.seed)
     print(json.dumps(result, indent=2, allow_nan=False))
+    return 0
+
+
+def _cmd_ml_calibrate_binary(args: argparse.Namespace) -> int:
+    import json
+
+    from pharmaml.ml.probability_calibration import binary_probability_calibration_from_files
+
+    report = binary_probability_calibration_from_files(
+        args.train, args.calibration, args.test, features=args.features, target=args.target,
+        key=args.key, positive_label=args.positive_label,
+    )
+    print(json.dumps(report, indent=2, allow_nan=False))
     return 0
 
 
@@ -2831,6 +2852,7 @@ _HANDLERS = {
     ("research", "checkpoint"): _cmd_research,
     ("ml", "nested-ridge"): _cmd_ml_nested_ridge,
     ("ml", "nested-logistic"): _cmd_ml_nested_ridge,
+    ("ml", "calibrate-binary"): _cmd_ml_calibrate_binary,
     ("ml", "conformal-report"): _cmd_ml_conformal_report,
     ("ml", "conformal-classification"): _cmd_ml_conformal_report,
     ("ml", "train"): _cmd_ml_train,

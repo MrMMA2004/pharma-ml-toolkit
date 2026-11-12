@@ -146,6 +146,43 @@ logs can be sensitive and may consume substantial disk space. AutoGrid-to-Vina
 box conversions are not implicit. This workflow does not prepare PDBQT inputs,
 validate chemistry or establish biological accuracy.
 
+## Binary probability recalibration (separate from conformal)
+
+```sh
+pharmaml ml calibrate-binary --train training.csv --calibration probability_cal.csv \
+  --test test.csv --features descriptor1 descriptor2 --target activity \
+  --key compound_id --positive-label active
+```
+
+Studio offers the same workflow under **Model Analysis → Probability
+recalibration…**. Specify the exact text of the positive class; the input reader
+preserves literal label and identifier text. The new base model is a binary
+logistic regression fitted with median imputation and scaling **only on train**.
+A second L2-regularized logistic sigmoid (C=1) is fitted to the base model's
+decision score **only on the separate probability-calibration file**. Both
+training and probability-calibration data must contain both classes; test must
+contain only those classes. A convergence warning aborts rather than silently
+reporting an unconverged fit. This is a fixed procedure, not automatic model or
+calibration-method selection.
+
+The report compares uncalibrated and recalibrated test-set binary Brier score
+(range 0–1) and log loss, plus fixed-bin one-vs-rest reliability summaries. The
+existing multiclass Brier sum shown in the reliability section is twice the
+binary Brier score. Class counts, ID-duplicate counts, settings, input hashes
+and environment are recorded. Test labels are never used for fitting or
+selection. No model or per-row predictions are saved. The Studio report can be
+saved to a **new** JSON file; a failed save may leave a partial file.
+
+This is **probability** calibration, not conformal calibration. For a
+subsequent conformal procedure, use an additional independent conformal
+calibration partition and a separate evaluation set; this report does not
+connect its model to the conformal workflow. Exact ID-disjoint checks cannot
+prove independence or detect related compounds. Small, dependent or shifted
+samples make evaluation unstable; do not repeatedly tune on the test set.
+Recalibration may worsen performance and cannot guarantee future calibration.
+Input hashes assume stable files during reading; reports are unsigned and can
+contain sensitive metadata. The job cannot be stopped or resumed.
+
 ## Nested validation
 
 ```sh
@@ -247,7 +284,7 @@ limitations.
 
 A guided docking **preparation** workflow, provenance integration across other
 model runs, generalized safe resume,
-broader classification validation/probability recalibration and applicability methods, and a
+broader classification validation, multiclass recalibration and applicability methods, and a
 full reproducibility certification system are not delivered here. Existing docking engines and
 campaign APIs, label-conditional conformal APIs, and proof-backed checkpoints
 remain available independently; they are not equivalent to those additions.

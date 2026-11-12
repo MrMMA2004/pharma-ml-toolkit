@@ -292,3 +292,48 @@ def test_nested_logistic_validation_in_studio(qtbot, studio_app, tmp_path):
     assert dialog._progress.value() == 100
     dialog._task.setCurrentIndex(0)
     assert not dialog._result.toPlainText()
+
+
+def test_binary_calibration_dialog(qtbot, studio_app, tmp_path, monkeypatch):
+    from ui.pages.calibration_dialog import CalibrationDialog
+
+    dialog = CalibrationDialog(JobRunner())
+    qtbot.addWidget(dialog)
+    for name, n in (("train", 60), ("calibration", 40), ("test", 30)):
+        x = np.arange(n, dtype=float)
+        path = tmp_path / f"{name}.csv"
+        pd.DataFrame({"id": [f"{name}_{i}" for i in range(n)], "x": x,
+                      "y": np.where(x % 2, "01", "1")}).to_csv(path, index=False)
+        dialog._paths[name].setText(str(path))
+    dialog._features.setPlainText("x")
+    dialog._target.setText("y")
+    dialog._key.setText("id")
+    dialog._positive.setText("01")
+    dialog._start()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Evaluation complete"), timeout=10000)
+    report = json.loads(dialog._result.toPlainText())
+    assert report["positive_label"] == "01" and report["n_probability_calibration"] == 40
+    assert report["recalibrated"]["binary_brier"] >= 0 and dialog._save.isEnabled()
+    saved = tmp_path / "report.json"
+    monkeypatch.setattr("ui.pages.calibration_dialog.QFileDialog.getSaveFileName",
+                        lambda *args, **kwargs: (str(saved), "JSON"))
+    dialog._save_report()
+    before = saved.read_bytes()
+    dialog._save_report()
+    assert saved.read_bytes() == before and "never replaced" in dialog._status.text()
+    dialog._positive.setText("unknown")
+    assert not dialog._save.isEnabled() and not dialog._result.toPlainText()
+    dialog._start()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Evaluation failed"), timeout=10000)
+    assert "positive label" in dialog._status.text()
+
+
+def test_binary_calibration_dialog_reachable(qtbot, studio_app):
+    from ui.pages.calibration_dialog import CalibrationDialog
+    from ui.pages.model_analysis import ModelAnalysisPage
+
+    page = ModelAnalysisPage()
+    qtbot.addWidget(page)
+    page._calibration_btn.click()
+    assert isinstance(page._calibration_dialog, CalibrationDialog)
+    page._calibration_dialog.close()
