@@ -268,3 +268,27 @@ print('synthetic vina log')
     result = json.loads((output / "campaign.json").read_text())
     assert result["status"] == "completed" and len(result["results"]) == 1
     assert not wizard._launch.isEnabled() and (output / result["results"][0]["pose"]).is_file()
+
+
+def test_nested_logistic_validation_in_studio(qtbot, studio_app, tmp_path):
+    from ui.pages.validation_dialog import ValidationDialog
+
+    dialog = ValidationDialog(JobRunner())
+    qtbot.addWidget(dialog)
+    x = np.arange(72)
+    path = tmp_path / "classes.csv"
+    pd.DataFrame({"x": (x % 2) * 3 + x / 200, "label": np.where(x % 2, "01", "1"),
+                  "group": [f"g{i // 6}" for i in x]}).to_csv(path, index=False)
+    dialog._data.setText(str(path))
+    dialog._features.setPlainText("x")
+    dialog._target.setText("label")
+    dialog._group.setText("group")
+    dialog._task.setCurrentIndex(1)
+    dialog._start()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Nested validation complete"), timeout=15000)
+    report = json.loads(dialog._result.toPlainText())
+    assert report["task"] == "classification" and report["classes"] == ["01", "1"]
+    assert len(report["folds"]) == 3 and report["provenance"]["input"]["sha256"]
+    assert dialog._progress.value() == 100
+    dialog._task.setCurrentIndex(0)
+    assert not dialog._result.toPlainText()

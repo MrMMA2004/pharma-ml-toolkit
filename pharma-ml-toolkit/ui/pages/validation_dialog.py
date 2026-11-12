@@ -1,10 +1,11 @@
-"""Nested regression validation with honest fold-level progress and stop."""
+"""Nested regression and classification validation with fold-boundary stop."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QFileDialog,
     QFormLayout,
@@ -23,21 +24,24 @@ from ..workers.job_worker import JobRunner
 
 
 class ValidationDialog(QDialog):
-    """Nested ridge CV; stopping is cooperative at outer fold boundaries only."""
+    """Nested CV; stopping is cooperative at outer fold boundaries only."""
 
     def __init__(self, runner: JobRunner, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Nested ridge validation")
+        self.setWindowTitle("Nested validation")
         self.resize(730, 650)
         self._runner = runner
         self._revision = 0
         self._running_own = False
         layout = QVBoxLayout(self)
-        description = QLabel("Nested CV evaluates a fixed ridge tuning procedure, not a final fitted model. "
+        description = QLabel("Nested CV evaluates a fixed tuning procedure, not a final fitted model. "
                              "Choose leakage-unit groups whenever rows are related.")
         description.setWordWrap(True)
         layout.addWidget(description)
         form = QFormLayout()
+        self._task = QComboBox()
+        self._task.addItems(["Regression (ridge)", "Classification (logistic)"])
+        form.addRow("Task:", self._task)
         row = QHBoxLayout()
         self._data = QLineEdit()
         browse = QPushButton("Browse…")
@@ -61,10 +65,11 @@ class ValidationDialog(QDialog):
         self._seed.setValue(42)
         form.addRow("Outer folds:", self._outer)
         form.addRow("Inner folds:", self._inner)
-        form.addRow("Seed (row split only):", self._seed)
+        form.addRow("Seed:", self._seed)
         layout.addLayout(form)
-        self._controls: tuple[QWidget, ...] = (self._data, browse, self._features, self._target,
+        self._controls: tuple[QWidget, ...] = (self._task, self._data, browse, self._features, self._target,
                                                 self._group, self._outer, self._inner, self._seed)
+        self._task.currentIndexChanged.connect(self._invalidate)
         for field in (self._data, self._target, self._group):
             field.textChanged.connect(self._invalidate)
         self._features.textChanged.connect(self._invalidate)
@@ -90,7 +95,8 @@ class ValidationDialog(QDialog):
         layout.addWidget(self._result, 1)
         warning = QLabel("Preprocessing and tuning are inside each fold. Without a group column, "
                          "random row folds can leak related compounds. Stop cannot interrupt an active fold; "
-                         "cancelled partial results are not saved or resumable.")
+                         "cancelled partial results are not saved or resumable. Classification requires "
+                         "every class in every inner and outer fold; group folds are not stratified.")
         warning.setWordWrap(True)
         layout.addWidget(warning)
 
@@ -114,8 +120,10 @@ class ValidationDialog(QDialog):
         self._stop.setEnabled(not enabled)
 
     def _start(self) -> None:
+        from pharmaml.ml.nested_classification import nested_logistic_from_file
         from pharmaml.ml.validation_workbench import nested_ridge_from_file
 
+        evaluate = nested_logistic_from_file if self._task.currentIndex() == 1 else nested_ridge_from_file
         path = self._data.text().strip()
         features = [line.strip() for line in self._features.toPlainText().splitlines() if line.strip()]
         target, group = self._target.text().strip(), self._group.text().strip() or None
@@ -132,7 +140,7 @@ class ValidationDialog(QDialog):
         self._running_own = True
 
         def run(progress):
-            return nested_ridge_from_file(
+            return evaluate(
                 Path(path), features=features, target=target, group=group,
                 outer_folds=outer, inner_folds=inner, seed=seed,
                 on_fold=lambda done, total: progress(done / total, f"Completed {done}/{total} outer folds"),

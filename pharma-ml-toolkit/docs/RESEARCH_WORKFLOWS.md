@@ -151,23 +151,40 @@ validate chemistry or establish biological accuracy.
 ```sh
 pharmaml ml nested-ridge --data training.csv --features descriptor1 descriptor2 \
   --target activity --group compound_id --outer-folds 3 --inner-folds 3
+pharmaml ml nested-logistic --data classes.csv --features descriptor1 descriptor2 \
+  --target class --group compound_id --outer-folds 3 --inner-folds 3
 ```
 
 Outer folds evaluate the procedure; each outer training fold runs an inner grid
-search over ridge alpha values 0.1, 1, and 10, with preprocessing fitted inside
-each fold. Output is per-fold and mean MAE. With `--group`, both inner and outer
-folds keep groups disjoint; without it, shuffled row folds can leak related
-compounds or patients. Supply enough groups for both fold levels. This does not
-produce a final fitted model and does not address calibration, applicability
-domain, classification, or every split strategy. Fold estimates may be
-correlated; nested CV is not a substitute for an untouched external evaluation.
+search. Ridge regression tunes alpha (0.1, 1, 10), and reports per-fold and mean
+MAE. Logistic classification tunes C (0.1, 1, 10) with `balanced_accuracy`
+(mean class recall), reporting per-fold and unweighted mean balanced accuracy,
+per-fold accuracy and confusion matrices (rows true, columns predicted, listed
+class order). Median imputation and scaling are fitted inside each training fold,
+never on an evaluation fold. Logistic uses a fixed 2000-iteration limit and
+fails rather than silently accepting a convergence warning.
 
-In Studio, **Model Analysis → Nested validation…** runs this regression-only
-workflow in the shared background runner. Progress counts completed outer folds.
-**Stop at next fold boundary** is cooperative: it cannot interrupt an active
-fold, and cancelled partial results are not saved or resumable. The file-based
-report records a hash checked around parsing and the environment; the hash is
-not a race-free snapshot and does not prove independence or reproducibility.
+Classification requires at least two nonempty string class labels. File reads
+preserve literal text (for example `01` and `1` are different classes). It
+prechecks that **every** class appears in every inner and outer training and
+evaluation fold and that no training fold has an entirely missing feature; if
+this is impossible with the selected data and fold counts it refuses the run.
+Row splits use shuffled stratification. Group splits use deterministic GroupKFold
+at both levels, which is **not stratified** and can fail even if another group
+allocation might work. With `--group`, both workflows keep groups disjoint;
+without it, row folds can leak related compounds or patients. Users are
+responsible for selecting leakage-unit groups and appropriate features. Split
+checks cannot prove independence. Fold scores can be correlated, small classes
+make them unstable, and the unweighted fold mean does not weight by fold size.
+Neither workflow produces a final fitted model, calibrates probabilities, or
+substitutes for an untouched external evaluation.
+
+In Studio, **Model Analysis → Nested validation…** offers both tasks in the
+shared background runner. Progress counts completed outer folds. **Stop at next
+fold boundary** is cooperative: it cannot interrupt an active fold, and
+cancelled partial results are not saved or resumable. The file-based report
+records a hash checked around parsing and the environment; the hash is not a
+race-free snapshot and does not prove independence or reproducibility.
 
 ## Provenance and reproducibility diagnostics
 

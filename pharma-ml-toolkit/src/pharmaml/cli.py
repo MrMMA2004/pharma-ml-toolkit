@@ -192,14 +192,16 @@ def _build_parser() -> argparse.ArgumentParser:
     ml_parser = subparsers.add_parser("ml", help="machine-learning workflows")
     ml_sub = ml_parser.add_subparsers(dest="ml_command", required=True)
 
-    nested = ml_sub.add_parser("nested-ridge", help="nested ridge regression cross-validation")
-    nested.add_argument("--data", required=True)
-    nested.add_argument("--features", nargs="+", required=True)
-    nested.add_argument("--target", required=True)
-    nested.add_argument("--group", default=None, help="optional leakage-unit grouping column")
-    nested.add_argument("--outer-folds", type=int, default=3)
-    nested.add_argument("--inner-folds", type=int, default=3)
-    nested.add_argument("--seed", type=int, default=42)
+    for name, description in (("nested-ridge", "nested ridge regression cross-validation"),
+                              ("nested-logistic", "nested logistic classification cross-validation")):
+        nested = ml_sub.add_parser(name, help=description)
+        nested.add_argument("--data", required=True)
+        nested.add_argument("--features", nargs="+", required=True)
+        nested.add_argument("--target", required=True)
+        nested.add_argument("--group", default=None, help="optional leakage-unit grouping column")
+        nested.add_argument("--outer-folds", type=int, default=3)
+        nested.add_argument("--inner-folds", type=int, default=3)
+        nested.add_argument("--seed", type=int, default=42)
 
     for command, description in (
         ("conformal-report", "held-out ridge regression intervals and subgroup coverage"),
@@ -1128,9 +1130,11 @@ def _cmd_research(args: argparse.Namespace) -> int:
 def _cmd_ml_nested_ridge(args: argparse.Namespace) -> int:
     import json
 
+    from pharmaml.ml.nested_classification import nested_logistic_from_file
     from pharmaml.ml.validation_workbench import nested_ridge_from_file
 
-    result = nested_ridge_from_file(args.data, features=args.features, target=args.target,
+    evaluate = nested_logistic_from_file if args.ml_command == "nested-logistic" else nested_ridge_from_file
+    result = evaluate(args.data, features=args.features, target=args.target,
                                     group=args.group, outer_folds=args.outer_folds,
                                     inner_folds=args.inner_folds, seed=args.seed)
     print(json.dumps(result, indent=2, allow_nan=False))
@@ -2826,6 +2830,7 @@ _HANDLERS = {
     ("research", "environment"): _cmd_research,
     ("research", "checkpoint"): _cmd_research,
     ("ml", "nested-ridge"): _cmd_ml_nested_ridge,
+    ("ml", "nested-logistic"): _cmd_ml_nested_ridge,
     ("ml", "conformal-report"): _cmd_ml_conformal_report,
     ("ml", "conformal-classification"): _cmd_ml_conformal_report,
     ("ml", "train"): _cmd_ml_train,
