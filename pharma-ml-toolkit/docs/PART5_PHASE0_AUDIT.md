@@ -456,3 +456,40 @@ restore, leakage and archive-audit selection: **126 passed, 0 failed, 0
 skipped**. The candidate report and summary are outside the repository.
 Neither those targeted results nor the audit certify the full release or
 execute the bundled docking engines.
+
+
+## Follow-up: CV integrity, recovery inventory and Windows engine smoke
+
+Follow-up source change based on v1.2.174: `cross_validate_model` previously
+recorded `best_params` without applying them. Regression tests reproduced three
+folds using Ridge alpha 1.0 despite recording 1000.0, and independently computed
+the differing fold scores. It now applies fixed estimator parameters, rejects
+unknown or duplicate spellings, and warns that choosing parameters on the same
+data requires nested CV or a separate untouched test set. Existing reports made
+with non-default recorded parameters should be treated as suspect and rerun.
+Grouped CV now rejects missing or blank group labels before fitting and validates
+alignment when targets are supplied. The raw sklearn splitter returned by
+`build_cv_splitter` is not bound to those labels; external callers must supply
+the same validated labels themselves. Stratification is an attempt, not a
+guarantee of class representation.
+
+| Scope | Observed follow-up result | Boundary |
+| --- | --- | --- |
+| Scientific and release focused selection | 368 passed, 0 failed, 0 skipped, 1 deselected | Torch-dependent DNN test deselected (torch absent); not a full suite. |
+| Docs, notebook variants, release portability checkout | 151 passed, 0 failed, 0 skipped | Does not certify other profiles. |
+| Read-only interrupted release inventory | 4 synthetic tests passed | No automated resume, crash durability, off-site backup, or hostile-race protection. See [recovery guide](INTERRUPTED_RELEASE_RECOVERY.md). |
+| Bundled engines on Windows CI, commit `4134ee1` | [Smoke job passed](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/runs/43228310666/job/131217184164) | Vina executed on synthetic non-biological geometry and output a finite score and pose. AutoGrid4 and AutoDock4 only invoked for help; no map generation or docking validated. Not a runner integration or accuracy test. |
+| CI, commit `4134ee1` | 11 jobs passed, 1 failed | [Run 43228310666](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/runs/43228310666): Generative SA failed strict standalone example-data byte drift; inner selection 30 passed, 1 failed, 2 skipped. |
+| Existing release and local backup | SHA-256 `bf8dbfb58e2d0d07ecc79c3f36f28595d33d59890f439cb242e992c7525b54e7` matched in root download, dist archive and local backup | Backup is on the same machine, not off-site. No release was republished. |
+
+The updated diagnostic recorded CI drift in `pk_profile.csv` (12 numeric-text
+cells, all `conc_ng_ml`, max absolute difference `8.881784197001252e-16`) and
+`qsar_multiclass.csv` (8 numeric-text cells across 8 descriptors, max
+`4.440892098500626e-16`); shapes and headers match and no changed nonnumeric
+cells were observed. In the local pinned Python/NumPy environment default CPU
+dispatch passed the strict check, but `OPENBLAS_CORETYPE=Zen` reproduced the
+eight QSAR cells, without the PK drift. `Haswell` also reproduced those QSAR
+cells; disabling AVX2/FMA3 in NumPy while forcing Zen did not remove them. This
+is evidence of dispatch sensitivity, not a complete cause for every CI drift,
+or proof of scientific equivalence. No values, generation semantics or strict
+byte guard were changed. A reproducible cross-hardware policy remains open.

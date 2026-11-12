@@ -32,6 +32,7 @@ def test_reported_parameters_are_applied_in_each_fold(dataset, monkeypatch):
     )
     assert observed == [1000.0] * 3
     assert result.best_params == {"alpha": 1000.0}
+    assert any("nested CV" in note for note in result.notes)
 
 
 def test_parameterized_cv_scores_match_independent_fold_calculation(dataset):

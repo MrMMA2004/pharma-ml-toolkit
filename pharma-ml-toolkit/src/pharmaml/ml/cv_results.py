@@ -93,7 +93,7 @@ from pharmaml.ml.models import (
     resolve_model_name,
 )
 from pharmaml.ml.preprocessing import build_preprocessor, has_categorical_columns
-from pharmaml.ml.splits import scaffold_groups
+from pharmaml.ml.splits import _group_keys, scaffold_groups
 
 __all__ = [
     "CLASSIFICATION_CV_METRICS",
@@ -355,6 +355,9 @@ def build_cv_splitter(
             raise DataValidationError(
                 f"strategy {strategy!r} needs groups (one label per row)"
             )
+        # Validate before NumPy can silently coerce None/NaN into strings.
+        # Keep sklearn's original labels for actual grouping.
+        _group_keys(groups, len(y) if y is not None else len(groups))
         group_values = np.asarray(list(groups))
         if group_values.ndim != 1:
             raise DataValidationError("groups must be a 1-D sequence of labels")
@@ -387,9 +390,9 @@ def build_cv_splitter(
                 f"in the rarest class (found {int(counts.min())})"
             )
         notes[-1] = (
-            "StratifiedGroupKFold: class proportions balanced AND whole "
-            "groups never straddle train/validation -- the honest default "
-            "when both replicate leakage and class skew are concerns."
+            "StratifiedGroupKFold: attempts to balance class proportions while "
+            "keeping whole groups together. Stratification is not guaranteed: "
+            "inspect class counts in every fold and audit other leakage units."
         )
         return (
             StratifiedGroupKFold(n_splits=n_folds, shuffle=True, random_state=seed),
@@ -914,6 +917,12 @@ def cross_validate_model(
     )
     panel, metric_notes = _select_metrics(task, y, pipeline, metrics)
     notes = notes + metric_notes
+    if best_params:
+        notes.append(
+            "CV evaluated fixed supplied hyperparameters; if they were selected "
+            "using these data, scores are not an unbiased estimate of tuning. "
+            "Use nested CV or a separate untouched test set."
+        )
 
     if primary is None:
         primary = _PRIMARY_DEFAULTS[task]
