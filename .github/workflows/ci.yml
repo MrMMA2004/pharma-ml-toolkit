@@ -247,7 +247,7 @@ jobs:
           python -m pip install --no-deps -e .
           python -m pip install -c requirements.txt pytest==9.0.2 rdkit==2026.9.1 mordred==1.2.0 meeko==0.8.0 gemmi==0.7.5
       - name: Run descriptor, preparation, and docking workflow tests
-        run: python -m pytest tests/test_descriptors.py tests/test_docking_prep.py tests/test_engine_discovery_part5.py tests/test_campaign.py tests/test_campaign_preview.py tests/test_campaign_launch.py tests/test_campaign_preparation.py tests/test_docking.py tests/test_docking_contacts.py tests/test_pose_rmsd.py -o addopts="-q --tb=short"
+        run: python -m pytest tests/test_descriptors.py tests/test_docking_prep.py tests/test_engine_discovery_part5.py tests/test_campaign.py tests/test_campaign_preview.py tests/test_campaign_launch.py tests/test_campaign_status.py tests/test_campaign_preparation.py tests/test_docking.py tests/test_docking_contacts.py tests/test_pose_rmsd.py -o addopts="-q --tb=short"
 
   studio-md:
     name: Studio MD

@@ -682,6 +682,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="visual bundle output directory (default ./reports)",
     )
 
+    status = docking_sub.add_parser("campaign-status", help="read-only reviewed Vina campaign inspection")
+    status.add_argument("--dir", required=True, help="reviewed Vina campaign output directory")
+    status.add_argument("--check-originals", action="store_true",
+                        help="also read/hash original input and engine paths recorded in the manifest")
+
     campaign = docking_sub.add_parser(
         "campaign",
         help="campaign-tree file management (distribute / cleanup / delete-named / list / reindex)",
@@ -2329,6 +2334,16 @@ def _cmd_docking_rescore(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_docking_campaign_status(args: argparse.Namespace) -> int:
+    import json
+
+    from pharmaml.docking.campaign_status import inspect_vina_campaign
+
+    result = inspect_vina_campaign(args.dir, check_originals=args.check_originals)
+    print(json.dumps(result, indent=2, allow_nan=False))
+    return 0  # Readable inspection, not an assertion that the campaign is complete or safe.
+
+
 def _cmd_docking_campaign(args: argparse.Namespace) -> int:
     """Dispatch ``pharmaml docking campaign <verb>`` sub-commands."""
     from pharmaml.docking import (
@@ -2927,6 +2942,7 @@ _HANDLERS = {
     ("docking", "vina-scan"): _cmd_docking_vina_scan,
     ("docking", "rescore"): _cmd_docking_rescore,
     ("docking", "campaign"): _cmd_docking_campaign,
+    ("docking", "campaign-status"): _cmd_docking_campaign_status,
     ("biology", "response-audit"): _cmd_biology_response_audit,
     ("biology", "top-biomarkers"): _cmd_biology_top_biomarkers,
     ("generative", "run"): _cmd_generative_run,

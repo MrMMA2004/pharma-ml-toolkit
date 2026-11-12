@@ -22,6 +22,7 @@ def main() -> int:
     if os.name != "nt":
         raise SystemExit("Windows required; integration engines not executed")
     from pharmaml.docking.campaign_launch import build_vina_launch_plan, launch_vina_campaign
+    from pharmaml.docking.campaign_status import inspect_vina_campaign
     from pharmaml.docking.preparation import GridBox, write_dpf, write_gpf
     from pharmaml.docking.workflow import run_autodock4, run_vina, run_vina_batch
 
@@ -79,6 +80,13 @@ def main() -> int:
         print(json.dumps({"stage": "reviewed Vina campaign", "ok": launch_ok}))
         if not launch_ok:
             failures.append("reviewed Vina campaign did not produce the expected synthetic pose")
+        inspection = inspect_vina_campaign(work / "reviewed-campaign", check_originals=True)
+        inspection_ok = (inspection["recorded_status"] == "completed"
+                         and inspection["progress"]["success_output_pairs_matching"] == 1
+                         and all(value == "match" for value in inspection["snapshots"].values()))
+        print(json.dumps({"stage": "inspect reviewed campaign", "ok": inspection_ok}))
+        if not inspection_ok:
+            failures.append("reviewed Vina campaign inspection failed: " + json.dumps(inspection))
 
         # A three-atom synthetic ligand avoids the negative degrees of freedom
         # of a single atom in AutoDock. Pin this smoke fixture's seeds; production

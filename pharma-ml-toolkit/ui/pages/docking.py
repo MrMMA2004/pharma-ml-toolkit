@@ -254,6 +254,9 @@ class DockingWorkbenchPage(QWidget):
         self._preparation_btn = QPushButton("Prepare docking inputs…")
         self._preparation_btn.clicked.connect(self._show_preparation)
         form.addRow("", self._preparation_btn)
+        self._campaign_status_btn = QPushButton("Inspect Vina campaign progress…")
+        self._campaign_status_btn.clicked.connect(self._show_campaign_status)
+        form.addRow("", self._campaign_status_btn)
         self._wizard_btn = QPushButton("Review / launch Vina campaign…")
         self._wizard_btn.clicked.connect(self._show_campaign_wizard)
         form.addRow("", self._wizard_btn)
@@ -408,6 +411,17 @@ class DockingWorkbenchPage(QWidget):
             self._report.setText("A job is already running — Stop it first.")
             return True
         return False
+
+    def _show_campaign_status(self) -> None:
+        from .campaign_status_dialog import CampaignStatusDialog
+
+        dialog = getattr(self, "_campaign_status_dialog", None)
+        if dialog is None:
+            dialog = CampaignStatusDialog(self._runner, self)
+            self._campaign_status_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def _show_preparation(self) -> None:
         from .preparation_dialog import PreparationDialog

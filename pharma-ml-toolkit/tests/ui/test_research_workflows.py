@@ -413,3 +413,31 @@ def test_preparation_dialog_reachable(qtbot, studio_app):
     page._preparation_btn.click()
     assert isinstance(page._preparation_dialog, PreparationDialog)
     page._preparation_dialog.close()
+
+
+def test_campaign_status_dialog_read_only_and_reachable(qtbot, studio_app, tmp_path, monkeypatch):
+    from ui.pages.docking import DockingWorkbenchPage
+
+    page = DockingWorkbenchPage()
+    qtbot.addWidget(page)
+    page._campaign_status_btn.click()
+    dialog = page._campaign_status_dialog
+    observed = []
+
+    def inspect(path, *, check_originals):
+        observed.append((path, check_originals))
+        return {"recorded_status": "cancelled", "progress": {"not_recorded": 1},
+                "notice": "No resume is available."}
+
+    monkeypatch.setattr("pharmaml.docking.campaign_status.inspect_vina_campaign", inspect)
+    dialog._path.setText(str(tmp_path))
+    dialog._start()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Inspection complete"), timeout=10000)
+    assert json.loads(dialog._result.toPlainText())["recorded_status"] == "cancelled"
+    assert observed == [(str(tmp_path), False)]
+    dialog._originals.setChecked(True)
+    assert not dialog._result.toPlainText()
+    dialog._start()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Inspection complete"), timeout=10000)
+    assert observed[-1] == (str(tmp_path), True) and "No resume" in dialog._status.text()
+    dialog.close()

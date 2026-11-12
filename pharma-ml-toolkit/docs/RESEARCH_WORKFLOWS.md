@@ -188,6 +188,44 @@ logs can be sensitive and may consume substantial disk space. AutoGrid-to-Vina
 box conversions are not implicit. This workflow does not prepare PDBQT inputs,
 validate chemistry or establish biological accuracy.
 
+## Inspecting an interrupted Vina campaign
+
+```sh
+pharmaml docking campaign-status --dir /path/to/campaign
+# Optional: also read and hash original input and engine paths in the manifest
+pharmaml docking campaign-status --dir /path/to/campaign --check-originals
+```
+
+Studio offers the same read-only inspection at **Docking Workbench → Campaign
+summary → Inspect Vina campaign progress…**. It applies only to the
+review-first Vina launcher described above. It reports the manifest's recorded
+status, counts of recorded successful/failed and unrecorded ligands, and
+whether recorded successful pose/log pairs still match their fingerprints. It
+also checks the copied source config, receptor and ligand snapshots, verifies
+the generated config against the recorded plan (line endings normalized), and
+lists unrecorded files/directories under `results/`. A recorded `running` status
+may be stale after a crash; inspection cannot determine whether a process is
+still active. A pose or log not recorded in the manifest is **not** promoted to
+completed, even if both files exist. Missing/changed files are reported rather
+than silently repaired, deleted or quarantined.
+
+Optionally checking originals reads and hashes the **external paths named by
+the manifest**, compares planned ligands and engine-prefix files, and reports
+new/missing ligand names. Only use this option with a trusted manifest and
+paths; engine resolution itself is not re-run. With the option off, originals
+are not read. Symlinks inside campaign outputs are refused. The CLI returns
+zero for a readable inspection even when it reports missing, changed, failed,
+unfinished or unrecorded items; inspect the JSON rather than treating exit zero
+as successful docking. Both UI and CLI may disclose names and paths.
+
+Inspection and fingerprints assume a trusted, quiescent filesystem. Manifests
+are unsigned and can be edited; a matching record does not prove the engine
+ran, the original config and plan agreed, output validity, reproducibility or
+safe recovery. The current launcher still offers **no resume**; keep or back up
+partial results and, after investigation, make a new review/run in a different
+new output directory. The inspector does not signal, stop or restart a process.
+Generalized recovery remains unavailable.
+
 ## Binary probability recalibration (separate from conformal)
 
 ```sh
