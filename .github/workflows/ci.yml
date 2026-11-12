@@ -259,5 +259,8 @@ jobs:
       - name: Lint web console
         run: bun run lint
 
+      - name: Verify code theme server rendering
+        run: bun run tests/code-block-ssr.tsx
+
       - name: Build web console
         run: bun run build
