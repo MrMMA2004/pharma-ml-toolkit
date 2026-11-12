@@ -67,7 +67,7 @@ from __future__ import annotations
 
 import hashlib
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -93,7 +93,7 @@ from pharmaml.ml.models import (
     resolve_model_name,
 )
 from pharmaml.ml.preprocessing import build_preprocessor, has_categorical_columns
-from pharmaml.ml.splits import scaffold_groups
+from pharmaml.ml.splits import _group_keys, scaffold_groups
 
 __all__ = [
     "CLASSIFICATION_CV_METRICS",
@@ -355,6 +355,9 @@ def build_cv_splitter(
             raise DataValidationError(
                 f"strategy {strategy!r} needs groups (one label per row)"
             )
+        # Validate before NumPy can silently coerce None/NaN into strings.
+        # Keep sklearn's original labels for actual grouping.
+        _group_keys(groups, len(y) if y is not None else len(groups))
         group_values = np.asarray(list(groups))
         if group_values.ndim != 1:
             raise DataValidationError("groups must be a 1-D sequence of labels")
@@ -387,9 +390,9 @@ def build_cv_splitter(
                 f"in the rarest class (found {int(counts.min())})"
             )
         notes[-1] = (
-            "StratifiedGroupKFold: class proportions balanced AND whole "
-            "groups never straddle train/validation -- the honest default "
-            "when both replicate leakage and class skew are concerns."
+            "StratifiedGroupKFold: attempts to balance class proportions while "
+            "keeping whole groups together. Stratification is not guaranteed: "
+            "inspect class counts in every fold and audit other leakage units."
         )
         return (
             StratifiedGroupKFold(n_splits=n_folds, shuffle=True, random_state=seed),
@@ -862,8 +865,13 @@ def cross_validate_model(
         (``balanced_accuracy`` when no proba metric survives) and R²
         for regression.
     best_params:
-        Hyperparameters the model ran at (``{}`` = registry defaults);
-        recorded verbatim for §19.9 persistence.
+        Fixed estimator hyperparameters applied to every fold (``{}`` or
+        ``None`` uses registry defaults). Accept bare estimator keys as
+        returned by :func:`~pharmaml.ml.training.train_model`, or keys
+        prefixed with ``est__``; do not supply both spellings of a key.
+        The supplied mapping is recorded verbatim. If parameters were selected
+        using these same folds, the result is not an unbiased estimate of the
+        tuning procedure; use nested CV or a separate untouched test set.
     return_train_scores:
         Include train-side metric mirrors (§19.2 "training scores
         where appropriate").
@@ -883,6 +891,21 @@ def cross_validate_model(
     started = time.perf_counter()
 
     pipeline = _build_pipeline(X, key, task)
+    if best_params is not None:
+        if not isinstance(best_params, Mapping):
+            raise ModelError("best_params must be a mapping of estimator parameters")
+        parameters: dict[str, Any] = {}
+        for name, value in best_params.items():
+            if not isinstance(name, str) or not name:
+                raise ModelError("best_params keys must be non-empty parameter names")
+            estimator_name = name.removeprefix("est__")
+            if estimator_name in parameters:
+                raise ModelError(f"duplicate estimator parameter {estimator_name!r}")
+            parameters[estimator_name] = value
+        try:
+            pipeline.named_steps["est"].set_params(**parameters)
+        except (TypeError, ValueError) as exc:
+            raise ModelError(f"invalid estimator parameter in best_params: {exc}") from exc
     splitter, notes = build_cv_splitter(
         task,
         strategy=strategy,
@@ -894,6 +917,12 @@ def cross_validate_model(
     )
     panel, metric_notes = _select_metrics(task, y, pipeline, metrics)
     notes = notes + metric_notes
+    if best_params:
+        notes.append(
+            "CV evaluated fixed supplied hyperparameters; if they were selected "
+            "using these data, scores are not an unbiased estimate of tuning. "
+            "Use nested CV or a separate untouched test set."
+        )
 
     if primary is None:
         primary = _PRIMARY_DEFAULTS[task]

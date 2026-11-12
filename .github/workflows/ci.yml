@@ -75,6 +75,10 @@ jobs:
           tests/test_checkpoint_restore_transaction.py
           tests/test_checkpoint_build_safety.py
           tests/test_checkpoint_ship_safety.py
+          tests/test_build_zip_safety.py
+          tests/test_release_recovery_status.py
+          tests/test_cv_parameters_integrity.py
+          tests/test_cv_group_labels_integrity.py
           tests/test_release_audit.py
           tests/test_data_drift_diagnostic.py
           tests/test_data_loading.py
@@ -101,6 +105,21 @@ jobs:
           test -s artifacts/chart-readability/concentration-profile.svg
           test -s artifacts/chart-readability/concentration-profile.pdf
           test -s artifacts/chart-readability/concentration-profile.html
+
+  windows-engine-smoke:
+    name: Windows bundled engine smoke
+    runs-on: windows-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: pharma-ml-toolkit
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Invoke bundled engines and dock a synthetic Vina toy
+        run: python tools/windows_engine_smoke.py
 
   generative-sa:
     name: Generative SA
@@ -145,7 +164,7 @@ jobs:
           probe = subprocess.run([sys.executable, 'tools/diagnose_data_drift.py'], text=True, capture_output=True, check=False)
           try:
               diagnostic = json.loads(probe.stdout)
-              detail = json.dumps({'exit': probe.returncode, 'differences': diagnostic['generated_files_with_byte_drift']})
+              detail = json.dumps({'exit': probe.returncode, 'environment': diagnostic['environment'], 'differences': diagnostic['generated_files_with_byte_drift']})
               detail = detail[:20000].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
               print(f'::notice::Strict data drift diagnostic (no tolerance applied): {detail}')
           except (ValueError, KeyError):

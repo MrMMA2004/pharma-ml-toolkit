@@ -419,3 +419,27 @@ environment: **95 passed, 0 failed, 0 skipped**. A broader targeted selection
 covering portability, provenance, checkpoint, documentation and notebook tests
 with RDKit 2026.9.1: **261 passed, 0 failed, 0 skipped**. No production
 release or full suite is certified by these results.
+
+## v1.2.176 continuation baseline
+
+The current branch started at consolidated main `f0f40a19f829354164761f84ed606743a5b43595`,
+not the prior PR branch. Closed, unmerged PR #11 contained follow-up changes not
+present in that baseline; the CV parameter and group-label fixes, four-home ZIP
+safeguards, recovery inventory, drift diagnostics and Windows smoke were restored
+selectively. Other new baseline changes (including checkpoint schema validation)
+were retained. The source fixes are **not** included in the existing v1.2.176 ZIP.
+
+Both baseline ZIP copies and a separate local backup have SHA-256
+`da2ba527083cec7672f7799977df45deeaea82477cd63a2c5ee36db9afad63ed`.
+The backup is on the same machine, not off-site. The read-only archive audit
+reported eight scoped checks passed, 597 entries / 547 files; it did not execute
+any test profile or engine and is not a release certification. No release was
+republished. The historical Windows job from the closed PR executed Vina on toy
+geometry; that result was not an execution of this new v1.2.176 archive.
+
+On this branch the restored focused CV/release selection passed 190 tests;
+provenance, notebook variants, docs-index and checkout release-portability
+selection passed 161 tests, with pinned RDKit 2026.9.1. These are targeted
+selections, not full profile certification. See [test profiles](TEST_PROFILES.md)
+for requirements and [recovery inventory](INTERRUPTED_RELEASE_RECOVERY.md) for
+manual interrupted-publication guidance.
