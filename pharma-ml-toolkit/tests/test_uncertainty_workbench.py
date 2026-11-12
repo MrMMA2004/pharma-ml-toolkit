@@ -73,3 +73,53 @@ def test_file_workflow_preserves_literal_identifier_strings(tmp_path):
     cal.to_csv(paths[1], index=False)
     with pytest.raises(DataValidationError, match="overlap"):
         regression_uncertainty_from_files(*paths, features=["x"], target="y", key="id")
+
+
+def test_run_provenance_compare_and_changed_read(tmp_path, monkeypatch, capsys):
+    import copy
+    import json
+
+    from pharmaml.ml.provenance import compare_uncertainty_reports
+    from pharmaml.ml.uncertainty_workbench import regression_uncertainty_from_files
+    from pharmaml.utils import identifier_table
+
+    paths = []
+    for index, data in enumerate(datasets()):
+        path = tmp_path / f"{index}.csv"
+        data.to_csv(path, index=False)
+        paths.append(path)
+    report = regression_uncertainty_from_files(*paths, features=["x"], target="y", key="id")
+    provenance = report["provenance"]
+    assert set(provenance["inputs"]) == {"train", "calibration", "test"}
+    assert provenance["parameters"]["workflow"] == "split-conformal-ridge"
+    assert len(provenance["inputs"]["train"]["sha256"]) == 64
+    other = copy.deepcopy(report)
+    other["provenance"]["inputs"]["test"]["sha256"] = "changed"
+    other["coverage"] = 0.5
+    comparison = compare_uncertainty_reports(report, other)
+    assert comparison["same_input_bytes_by_partition"] == {"train": True, "calibration": True, "test": False}
+    assert comparison["same_parameters"] and comparison["metrics"]["coverage"]["second"] == 0.5
+    reports = []
+    for name, data in (("first.json", report), ("second.json", other)):
+        path = tmp_path / name
+        path.write_text(json.dumps(data))
+        reports.append(str(path))
+    assert main(["research", "compare-uncertainty", *reports]) == 0
+    assert not json.loads(capsys.readouterr().out)["same_input_bytes_by_partition"]["test"]
+    original = identifier_table.read_identifier_table
+
+    def changing_read(path, delimiter):
+        frame = original(path, delimiter)
+        path.write_text(path.read_text() + "\n")
+        return frame
+
+    monkeypatch.setattr(identifier_table, "read_identifier_table", changing_read)
+    with pytest.raises(DataValidationError, match="changed while reading"):
+        regression_uncertainty_from_files(*paths, features=["x"], target="y", key="id")
+
+
+def test_compare_uncertainty_rejects_reports_without_provenance():
+    from pharmaml.ml.provenance import compare_uncertainty_reports
+
+    with pytest.raises(DataValidationError, match="lacks uncertainty-run provenance"):
+        compare_uncertainty_reports({}, {})

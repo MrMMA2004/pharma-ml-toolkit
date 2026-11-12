@@ -30,6 +30,7 @@ class UncertaintyDialog(QDialog):
         self.resize(760, 700)
         self._runner = runner
         self._revision = 0
+        self._last_report: object | None = None
         layout = QVBoxLayout(self)
         intro = QLabel("Select separate, independent train, calibration and test files. "
                        "This fits a new ridge model; it does not reuse the current trained model.")
@@ -76,7 +77,16 @@ class UncertaintyDialog(QDialog):
         layout.addLayout(form)
         self._run = QPushButton("Evaluate independent partitions")
         self._run.clicked.connect(self._start)
-        layout.addWidget(self._run)
+        buttons = QHBoxLayout()
+        buttons.addWidget(self._run)
+        self._save = QPushButton("Save report…")
+        self._save.setEnabled(False)
+        self._save.clicked.connect(self._save_report)
+        buttons.addWidget(self._save)
+        self._compare = QPushButton("Compare saved reports…")
+        self._compare.clicked.connect(self._compare_reports)
+        buttons.addWidget(self._compare)
+        layout.addLayout(buttons)
         self._status = QLabel("No report yet.")
         self._status.setWordWrap(True)
         layout.addWidget(self._status)
@@ -98,10 +108,14 @@ class UncertaintyDialog(QDialog):
     def _invalidate(self, *_args: object) -> None:
         self._revision += 1
         self._result.clear()
+        self._last_report = None
+        self._save.setEnabled(False)
         self._status.setText("Inputs changed; run the evaluation again.")
 
     def _enable(self, enabled: bool) -> None:
         self._run.setEnabled(enabled)
+        self._compare.setEnabled(enabled)
+        self._save.setEnabled(enabled and self._last_report is not None)
         for control in self._controls:
             control.setEnabled(enabled)
 
@@ -118,6 +132,7 @@ class UncertaintyDialog(QDialog):
             self._status.setText("Select all three files and specify features, target and leakage-unit ID.")
             return
         revision = self._revision
+        self._last_report = None
         self._result.clear()
         self._status.setText("Running; fitting and preprocessing use training only.")
         self._enable(False)
@@ -137,6 +152,8 @@ class UncertaintyDialog(QDialog):
         self._enable(True)
         if revision != self._revision:
             return
+        self._last_report = result
+        self._save.setEnabled(True)
         self._result.setPlainText(json.dumps(result, indent=2, default=str, allow_nan=False))
         self._status.setText("Evaluation complete. Review assumptions and subgroup sizes below.")
 
@@ -145,3 +162,56 @@ class UncertaintyDialog(QDialog):
         if revision == self._revision:
             self._result.clear()
             self._status.setText(f"Evaluation failed: {error.splitlines()[0]}")
+
+    def _save_report(self) -> None:
+        if self._last_report is None:
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Save uncertainty report (new file)", "",
+                                             "JSON (*.json);;All files (*)",
+                                             options=QFileDialog.Option.DontConfirmOverwrite)
+        if not path:
+            return
+        try:
+            with Path(path).open("x", encoding="utf-8") as handle:
+                json.dump(self._last_report, handle, indent=2, default=str, allow_nan=False)
+                handle.write("\n")
+        except (OSError, ValueError, TypeError) as exc:
+            self._status.setText(f"Could not save report (existing files are never replaced): {exc}")
+            return
+        self._status.setText("Report saved. Review for sensitive data before sharing.")
+
+    def _compare_reports(self) -> None:
+        first, _ = QFileDialog.getOpenFileName(self, "First uncertainty report", "", "JSON (*.json)")
+        if not first:
+            return
+        second, _ = QFileDialog.getOpenFileName(self, "Second uncertainty report", "", "JSON (*.json)")
+        if not second:
+            return
+        from pharmaml.ml.provenance import compare_uncertainty_reports
+
+        def compare(_progress):
+            with Path(first).open(encoding="utf-8") as handle:
+                a = json.load(handle)
+            with Path(second).open(encoding="utf-8") as handle:
+                b = json.load(handle)
+            return compare_uncertainty_reports(a, b)
+
+        revision = self._revision
+        self._last_report = None
+        self._result.clear()
+        self._status.setText("Comparing saved reports…")
+        self._enable(False)
+        worker = self._runner.submit(
+            "Compare uncertainty reports", compare,
+            on_finished=lambda result: self._comparison_finished(result, revision),
+            on_failed=lambda error: self._failed(error, revision),
+        )
+        if worker is None:
+            self._enable(True)
+            self._status.setText("Another Studio job is running; try again later.")
+
+    def _comparison_finished(self, result: object, revision: int) -> None:
+        self._enable(True)
+        if revision == self._revision:
+            self._result.setPlainText(json.dumps(result, indent=2, default=str, allow_nan=False))
+            self._status.setText("Comparison complete; matching metadata does not prove reproducibility.")

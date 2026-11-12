@@ -89,12 +89,36 @@ def regression_uncertainty_from_files(
     alpha: float = 0.1,
 ) -> dict[str, Any]:
     """Read IDs as literal text, then fit/calibrate/evaluate using separate files."""
+    from pharmaml.ml.provenance import environment_snapshot, fingerprint_file
     from pharmaml.utils.identifier_table import read_identifier_table
 
-    frames = [read_identifier_table(Path(path), None) for path in (train, calibration, test)]
+    paths = {"train": Path(train), "calibration": Path(calibration), "test": Path(test)}
+    # Read and hash around each parse. This catches ordinary modifications, not
+    # adversarial changes or mutation that is reverted during the read.
+    fingerprints = {}
+    frames = []
+    for name, path in paths.items():
+        before = fingerprint_file(path)
+        frame = read_identifier_table(path, None)
+        after = fingerprint_file(path)
+        if before != after:
+            raise DataValidationError(f"{name} input changed while reading; retry with stable files")
+        fingerprints[name] = after
+        frames.append(frame)
     for frame in frames:
         for column in [*features, target]:
             if column in frame.columns:
                 frame[column] = pd.to_numeric(frame[column], errors="raise")
-    return regression_uncertainty_report(*frames, features=features, target=target,
-                                         key=key, group=group, alpha=alpha)
+    report = regression_uncertainty_report(*frames, features=features, target=target,
+                                           key=key, group=group, alpha=alpha)
+    report["provenance"] = {
+        "schema": "pharmaml-uncertainty-run/1", "inputs": fingerprints,
+        "parameters": {"workflow": "split-conformal-ridge", "features": list(features),
+                       "target": target, "key": key, "group": group, "alpha": alpha,
+                       "partitions": "user-supplied train/calibration/test",
+                       "ridge_parameters": Ridge().get_params(deep=False),
+                       "preprocessing": "median imputation and standard scaling"},
+        "environment": environment_snapshot(),
+        "notice": "Input hashes assume stable files; records are unsigned and do not prove independence."
+    }
+    return report

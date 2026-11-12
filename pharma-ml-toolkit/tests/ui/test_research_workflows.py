@@ -11,7 +11,7 @@ from ui.pages.uncertainty_dialog import UncertaintyDialog
 from ui.workers.job_worker import JobRunner
 
 
-def test_uncertainty_dialog_uses_three_files_and_clears_stale_report(qtbot, studio_app, tmp_path):
+def test_uncertainty_dialog_uses_three_files_and_clears_stale_report(qtbot, studio_app, tmp_path, monkeypatch):
     runner = JobRunner()
     dialog = UncertaintyDialog(runner)
     qtbot.addWidget(dialog)
@@ -31,6 +31,20 @@ def test_uncertainty_dialog_uses_three_files_and_clears_stale_report(qtbot, stud
     report = json.loads(dialog._result.toPlainText())
     assert report["n_train"] == 20 and report["n_calibration"] == 10 and report["n_test"] == 10
     assert len(report["subgroups"]) == 2 and "no conditional guarantee" in report["limitations"]
+    assert report["provenance"]["parameters"]["workflow"] == "split-conformal-ridge"
+    saved = tmp_path / "report.json"
+    monkeypatch.setattr("ui.pages.uncertainty_dialog.QFileDialog.getSaveFileName",
+                        lambda *args, **kwargs: (str(saved), "JSON"))
+    dialog._save_report()
+    saved_contents = saved.read_bytes()
+    assert json.loads(saved_contents)["n_test"] == 10
+    dialog._save_report()
+    assert saved.read_bytes() == saved_contents and "never replaced" in dialog._status.text()
+    monkeypatch.setattr("ui.pages.uncertainty_dialog.QFileDialog.getOpenFileName",
+                        lambda *args, **kwargs: (str(saved), "JSON"))
+    dialog._compare_reports()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Comparison complete"), timeout=10000)
+    assert json.loads(dialog._result.toPlainText())["same_parameters"]
     dialog._paths["test"].setText(dialog._paths["train"].text())
     assert not dialog._result.toPlainText()
     dialog._start()

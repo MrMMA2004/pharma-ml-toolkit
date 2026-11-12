@@ -49,6 +49,10 @@ and shift can invalidate comparisons. This workflow is regression-only and uses 
 list one numeric feature name per line. The Studio dialog runs in the shared
 background runner and does not reuse the current trained model. This operation
 is not cancellable or resumable. Editing any input clears the previous report.
+Use **Save report…** to create a new JSON file (existing files are never
+replaced), and **Compare saved reports…** to inspect input-hash, parameter,
+environment and summary differences. A failed save can leave a partial new
+file; inspect it before reuse. Reports can contain sensitive subgroup labels.
 
 ## Vina campaign review in Studio
 
@@ -100,7 +104,17 @@ strategy, and selected software/environment details. They are **not** generated
 by model training and do not prove the recorded setup was used; they omit many
 sources of numerical drift, dependencies, data transformations and randomness.
 The comparison is descriptive and treats a matching record as no proof of
-reproducibility. Do not include sensitive parameters in shared reports.
+reproducibility.
+
+The file-based uncertainty workflow also includes **automatically captured**
+input hashes, used parameters and environment in its report, distinct from the
+user-declared manifest. Save two CLI reports and compare them with
+`pharmaml research compare-uncertainty first.json second.json`. The file reader
+hashes before and after each read and refuses an observed change, but this is
+not a race-free snapshot and assumes files are stable (a change reverted during
+reading can go undetected). The reports are unsigned, omit other influences,
+and matching metadata or metrics do not prove validity or reproducibility.
+Other training workflows do not yet produce this provenance automatically. Do not include sensitive parameters in shared reports.
 Existing `tools/diagnose_data_drift.py` performs a separate, read-only generated
 CSV comparison; environment inspection does not modify any results or strict
 byte comparison policy.
@@ -124,8 +138,8 @@ limitations.
 
 ## Still to build
 
-A guided docking campaign **launcher/preparation** workflow, integrated
-experiment comparison/provenance for actual runs, generalized safe resume,
+A guided docking campaign **launcher/preparation** workflow, provenance
+integration across other model runs, generalized safe resume,
 classification validation/calibration/applicability reports, and consolidated
 reproducibility dashboard are not delivered here. Existing docking engines and
 campaign APIs, conformal classification APIs, and proof-backed checkpoints

@@ -180,6 +180,9 @@ def _build_parser() -> argparse.ArgumentParser:
     comparison = research_sub.add_parser("compare", help="compare two saved manifest JSON documents")
     comparison.add_argument("first")
     comparison.add_argument("second")
+    run_comparison = research_sub.add_parser("compare-uncertainty", help="compare two file-based uncertainty reports")
+    run_comparison.add_argument("first")
+    run_comparison.add_argument("second")
     research_sub.add_parser("environment", help="print selected runtime and numerical environment details")
     checkpoint = research_sub.add_parser("checkpoint", help="read-only checkpoint and input fingerprint inspection")
     checkpoint.add_argument("path", help="existing checkpoint JSON")
@@ -1082,7 +1085,12 @@ def _cmd_research(args: argparse.Namespace) -> int:
     import json
 
     from pharmaml.exceptions import DataValidationError
-    from pharmaml.ml.provenance import compare_manifests, environment_snapshot, experiment_manifest
+    from pharmaml.ml.provenance import (
+        compare_manifests,
+        compare_uncertainty_reports,
+        environment_snapshot,
+        experiment_manifest,
+    )
 
     if args.research_command == "checkpoint":
         from pharmaml.ml.checkpoint_diagnostics import inspect_checkpoint
@@ -1103,7 +1111,8 @@ def _cmd_research(args: argparse.Namespace) -> int:
             first = json.load(handle)
         with Path(args.second).open(encoding="utf-8") as handle:
             second = json.load(handle)
-        result = compare_manifests(first, second)
+        result = (compare_uncertainty_reports(first, second)
+                  if args.research_command == "compare-uncertainty" else compare_manifests(first, second))
     print(json.dumps(result, indent=2, allow_nan=False))
     if (args.research_command == "checkpoint"
             and (not result["valid_envelope"] or result["input_status"].startswith("changed")
@@ -2810,6 +2819,7 @@ _HANDLERS = {
     ("data", "convert"): _cmd_data_convert,
     ("research", "manifest"): _cmd_research,
     ("research", "compare"): _cmd_research,
+    ("research", "compare-uncertainty"): _cmd_research,
     ("research", "environment"): _cmd_research,
     ("research", "checkpoint"): _cmd_research,
     ("ml", "nested-ridge"): _cmd_ml_nested_ridge,
