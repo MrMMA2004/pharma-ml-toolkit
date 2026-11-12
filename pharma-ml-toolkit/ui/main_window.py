@@ -89,7 +89,7 @@ class MainWindow(QMainWindow):
         from .pages.utilities import UtilitiesWorkbenchPage
 
         self.dashboard_page = DashboardPage()
-        self.data_page = DataExplorerPage(theme=self.theme)
+        self.data_page = DataExplorerPage(theme=self.theme, runner=self.runner)
         self.chemistry_page = ChemistryWorkbenchPage(theme=self.theme, runner=self.runner, data_explorer=self.data_page)
         self.pkpd_page = PKPDWorkbenchPage(theme=self.theme, runner=self.runner)
         self.biology_page = BiologyWorkbenchPage(theme=self.theme, runner=self.runner)

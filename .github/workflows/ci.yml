@@ -224,7 +224,10 @@ jobs:
         run: >-
           python -m pytest tests/test_estimator_compatibility.py tests/test_conformal.py
           tests/test_conformal_classification.py tests/test_label_conditional_conformal.py
-          tests/test_coverage_diagnostics.py -o addopts="-q --tb=short"
+          tests/test_coverage_diagnostics.py tests/test_research_audit.py
+          tests/test_uncertainty_workbench.py tests/test_research_provenance.py
+          tests/test_validation_workbench.py tests/test_checkpoint_diagnostics.py
+          -o addopts="-q --tb=short"
 
   chemistry-docking:
     name: Chemistry and docking preparation
@@ -270,6 +273,7 @@ jobs:
         run: >-
           python -m pytest
           tests/ui/test_molecular_dynamics_page.py
+          tests/ui/test_data_audit_page.py
           tests/ui/test_nine_cards.py::TestHonesty::test_docking_card_declares_engine_and_runtime_boundaries
           tests/ui/test_main_window.py
           tests/ui/test_foundations_page.py::test_main_window_carries_the_foundations_section

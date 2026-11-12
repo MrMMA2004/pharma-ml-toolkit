@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QSplitter,
     QVBoxLayout,
@@ -29,6 +30,7 @@ from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.responsive import configure_splitter
+from ..workers.job_worker import JobRunner
 
 _TK = Path(__file__).resolve().parents[2]
 
@@ -36,9 +38,12 @@ _TK = Path(__file__).resolve().parents[2]
 class DataExplorerPage(QWidget):
     """Open real tables, inspect them, plot a column's distribution."""
 
-    def __init__(self, parent: QWidget | None = None, theme: ThemeManager | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, theme: ThemeManager | None = None,
+                 runner: JobRunner | None = None) -> None:
         super().__init__(parent)
         self._theme = theme
+        self._runner = runner or JobRunner(self)
+        self._audit_generation = 0
         self._frame: pd.DataFrame | None = None
         self._source: str = ""
 
@@ -79,6 +84,23 @@ class DataExplorerPage(QWidget):
         self._stats_label.setObjectName("studioStatus")
         self._stats_label.setWordWrap(True)
         right_lay.addWidget(self._stats_label)
+        right_lay.addWidget(QLabel("Data quality / exact split audit:"))
+        audit_options = QHBoxLayout()
+        self._audit_target = QComboBox()
+        self._audit_key = QComboBox()
+        self._audit_split = QComboBox()
+        for title, combo in (("Class", self._audit_target), ("Key", self._audit_key),
+                             ("Split", self._audit_split)):
+            audit_options.addWidget(QLabel(title))
+            audit_options.addWidget(combo)
+        right_lay.addLayout(audit_options)
+        self._audit_button = QPushButton("Run data audit")
+        self._audit_button.clicked.connect(self._run_audit)
+        right_lay.addWidget(self._audit_button)
+        self._audit_output = QPlainTextEdit()
+        self._audit_output.setReadOnly(True)
+        self._audit_output.setPlaceholderText("Select optional columns, then run the audit.")
+        right_lay.addWidget(self._audit_output)
         splitter.addWidget(right)
         splitter.setSizes([640, 420])
         configure_splitter(splitter, stretch=(0, 1))
@@ -121,9 +143,12 @@ class DataExplorerPage(QWidget):
         except Exception as exc:  # noqa: BLE001 - surfaced to the user
             self._status.setText(f"Could not read {path.name}: {exc}")
             self._frame = None
+            self._source = ""
+            self._reset_audit([])
             self._table.bind_frame(None, note=f"Could not read {path.name}")
             return
         self._frame = frame
+        self._reset_audit([str(c) for c in frame.columns])
         self._source = str(path)
         self._table.bind_frame(frame, note="No dataset loaded")
         self._status.setText(f"{path.name} — {self._table.statusHint}")
@@ -134,6 +159,70 @@ class DataExplorerPage(QWidget):
         self._column_combo.blockSignals(False)
         if numeric:
             self._plot_column(0)
+
+    def _reset_audit(self, columns: list[str]) -> None:
+        self._audit_generation += 1
+        self._audit_enabled(True)
+        for combo in (self._audit_target, self._audit_key, self._audit_split):
+            combo.clear()
+            combo.addItem("(none)", None)
+            for column in columns:
+                combo.addItem(column, column)
+        self._audit_output.clear()
+
+    def _run_audit(self) -> None:
+        from pharmaml.ml.research_audit import audit_dataset
+
+        if self._frame is None:
+            self._audit_output.setPlainText("Load a dataset first.")
+            return
+        generation = self._audit_generation
+        frame = self._frame
+        target = self._audit_target.currentData()
+        key = self._audit_key.currentData()
+        partition = self._audit_split.currentData()
+        self._audit_output.setPlainText("Running audit…")
+        self._audit_enabled(False)
+        worker = self._runner.submit(
+            "Data quality audit",
+            lambda _progress: audit_dataset(frame, target=target, key=key, partition=partition),
+            on_finished=lambda report: self._audit_finished(report, generation),
+            on_failed=lambda message: self._audit_failed(message, generation),
+        )
+        if worker is None:
+            self._audit_enabled(True)
+            self._audit_output.setPlainText("Another Studio job is running; try again when it finishes.")
+
+    def _audit_enabled(self, enabled: bool) -> None:
+        for widget in (self._audit_target, self._audit_key, self._audit_split, self._audit_button):
+            widget.setEnabled(enabled)
+
+    def _audit_failed(self, message: str, generation: int) -> None:
+        if generation == self._audit_generation:
+            self._audit_enabled(True)
+            self._audit_output.setPlainText(f"Audit failed: {message}")
+
+    def _audit_finished(self, report, generation: int) -> None:
+        if generation != self._audit_generation:
+            return
+        self._audit_enabled(True)
+        missing = ", ".join(f"{name}: {count}" for name, count in report.missing_by_column.items())
+        lines = [f"Rows: {report.rows}; columns: {report.columns}",
+                 f"Missing cells by column: {missing}",
+                 f"Duplicate rows (extra occurrences): {report.duplicate_rows}"]
+        if report.duplicate_keys is not None:
+            lines.append(f"Duplicate keys (extra occurrences): {report.duplicate_keys}; "
+                         f"missing or blank keys: {report.missing_keys}")
+        if report.class_counts is not None:
+            lines.append("Class counts: " + ", ".join(f"{k}: {v}" for k, v in report.class_counts))
+        if report.shared_keys is not None:
+            lines.extend([f"Rows by partition: {report.partition_rows}",
+                          (f"Shared exact keys: {report.shared_keys}; "
+                          f"rows with cross-partition overlap: {report.overlap_rows}")])
+        else:
+            lines.append("Split overlap: not audited.")
+        lines.append(report.limitations)
+        self._audit_output.setPlainText("\n".join(lines))
 
     # -- plotting -------------------------------------------------------------------
     def _plot_column(self, index: int) -> None:

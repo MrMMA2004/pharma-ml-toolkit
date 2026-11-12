@@ -170,9 +170,44 @@ def _build_parser() -> argparse.ArgumentParser:
         help="output path (default: input stem + target extension)",
     )
 
+    # ---- research diagnostics (read-only output) ----------------------
+    research_parser = subparsers.add_parser("research", help="read-only provenance and environment diagnostics")
+    research_sub = research_parser.add_subparsers(dest="research_command", required=True)
+    manifest = research_sub.add_parser("manifest", help="fingerprint a dataset and declare a run setup")
+    manifest.add_argument("--data", required=True)
+    manifest.add_argument("--split-strategy", required=True)
+    manifest.add_argument("--parameter", action="append", default=[], metavar="NAME=VALUE")
+    comparison = research_sub.add_parser("compare", help="compare two saved manifest JSON documents")
+    comparison.add_argument("first")
+    comparison.add_argument("second")
+    research_sub.add_parser("environment", help="print selected runtime and numerical environment details")
+    checkpoint = research_sub.add_parser("checkpoint", help="read-only checkpoint and input fingerprint inspection")
+    checkpoint.add_argument("path", help="existing checkpoint JSON")
+    checkpoint.add_argument("--input", action="append", default=[], help="complete set of recorded input files; repeat")
+
     # ---- ml ----------------------------------------------------------
     ml_parser = subparsers.add_parser("ml", help="machine-learning workflows")
     ml_sub = ml_parser.add_subparsers(dest="ml_command", required=True)
+
+    nested = ml_sub.add_parser("nested-ridge", help="nested ridge regression cross-validation")
+    nested.add_argument("--data", required=True)
+    nested.add_argument("--features", nargs="+", required=True)
+    nested.add_argument("--target", required=True)
+    nested.add_argument("--group", default=None, help="optional leakage-unit grouping column")
+    nested.add_argument("--outer-folds", type=int, default=3)
+    nested.add_argument("--inner-folds", type=int, default=3)
+    nested.add_argument("--seed", type=int, default=42)
+
+    uncertainty = ml_sub.add_parser(
+        "conformal-report", help="held-out ridge regression uncertainty and subgroup coverage",
+    )
+    for split_name in ("train", "calibration", "test"):
+        uncertainty.add_argument(f"--{split_name}", required=True, help=f"{split_name} CSV/TSV/Excel")
+    uncertainty.add_argument("--features", nargs="+", required=True, help="numeric feature columns")
+    uncertainty.add_argument("--target", required=True)
+    uncertainty.add_argument("--key", required=True, help="exact leakage-unit ID; must be disjoint")
+    uncertainty.add_argument("--group", default=None, help="optional prespecified test subgroup column")
+    uncertainty.add_argument("--alpha", type=float, default=0.1)
 
     train = ml_sub.add_parser("train", help="train one model end-to-end")
     train.add_argument("--data", required=True, help="CSV/Excel with features+target")
@@ -1080,6 +1115,81 @@ def _read_split_audit_table(path: Path, delimiter: str | None):
         raise DataValidationError(f"Split file {path} has an inconsistent header")
     frame.columns = header
     return frame
+
+
+def _cmd_research(args: argparse.Namespace) -> int:
+    """Print diagnostics only; the user may redirect the JSON themselves."""
+    import json
+
+    from pharmaml.exceptions import DataValidationError
+    from pharmaml.ml.provenance import compare_manifests, environment_snapshot, experiment_manifest
+
+    if args.research_command == "checkpoint":
+        from pharmaml.ml.checkpoint_diagnostics import inspect_checkpoint
+
+        result = inspect_checkpoint(args.path, inputs=args.input)
+    elif args.research_command == "environment":
+        result = environment_snapshot()
+    elif args.research_command == "manifest":
+        parameters = {}
+        for item in args.parameter:
+            name, sep, value = item.partition("=")
+            if not sep or not name.strip() or name in parameters:
+                raise DataValidationError("parameters must have unique nonempty NAME=VALUE entries")
+            parameters[name] = value
+        result = experiment_manifest(args.data, parameters=parameters, split_strategy=args.split_strategy)
+    else:
+        with Path(args.first).open(encoding="utf-8") as handle:
+            first = json.load(handle)
+        with Path(args.second).open(encoding="utf-8") as handle:
+            second = json.load(handle)
+        result = compare_manifests(first, second)
+    print(json.dumps(result, indent=2, allow_nan=False))
+    if (args.research_command == "checkpoint"
+            and (not result["valid_envelope"] or result["input_status"].startswith("changed")
+                 or result["implementation_status"].startswith("changed"))):
+        return 1
+    return 0
+
+
+def _cmd_ml_nested_ridge(args: argparse.Namespace) -> int:
+    import json
+
+    import pandas as pd
+
+    from pharmaml.ml.validation_workbench import nested_ridge_validation
+
+    frame = _read_split_audit_table(Path(args.data), None)
+    for column in [*args.features, args.target]:
+        if column in frame.columns:
+            frame[column] = pd.to_numeric(frame[column], errors="raise")
+    result = nested_ridge_validation(frame, features=args.features, target=args.target,
+                                     group=args.group, outer_folds=args.outer_folds,
+                                     inner_folds=args.inner_folds, seed=args.seed)
+    print(json.dumps(result, indent=2, allow_nan=False))
+    return 0
+
+
+def _cmd_ml_conformal_report(args: argparse.Namespace) -> int:
+    """Evaluate fixed ridge on independently supplied calibration and test files."""
+    import json
+
+    import pandas as pd
+
+    from pharmaml.ml.uncertainty_workbench import regression_uncertainty_report
+
+    frames = [_read_split_audit_table(Path(name), None)
+              for name in (args.train, args.calibration, args.test)]
+    for frame in frames:
+        for column in [*args.features, args.target]:
+            if column in frame.columns:
+                frame[column] = pd.to_numeric(frame[column], errors="raise")
+    report = regression_uncertainty_report(
+        *frames, features=args.features, target=args.target, key=args.key,
+        group=args.group, alpha=args.alpha,
+    )
+    print(json.dumps(report, indent=2, default=str, allow_nan=False))
+    return 0
 
 
 def _cmd_data_audit_splits(args: argparse.Namespace) -> int:
@@ -2746,6 +2856,12 @@ _HANDLERS = {
     ("data", "split"): _cmd_data_split,
     ("data", "audit-splits"): _cmd_data_audit_splits,
     ("data", "convert"): _cmd_data_convert,
+    ("research", "manifest"): _cmd_research,
+    ("research", "compare"): _cmd_research,
+    ("research", "environment"): _cmd_research,
+    ("research", "checkpoint"): _cmd_research,
+    ("ml", "nested-ridge"): _cmd_ml_nested_ridge,
+    ("ml", "conformal-report"): _cmd_ml_conformal_report,
     ("ml", "train"): _cmd_ml_train,
     ("ml", "compare"): _cmd_ml_compare,
     ("ml", "check"): _cmd_ml_check,
