@@ -203,13 +203,30 @@ OPERATION_REGISTRY: dict[str, RegistryEntry] = {
         ),
         implementation="pharmaml.generative.genetic",
     ),
+    # (part5-continuation round 10, §13) the fifth candidate to EARN
+    # registration: the docking batch's complete state is the per-ligand
+    # completion ledger -- every finished entry's full row -- plus the
+    # fingerprint that closes the two gaps the R9 audit flagged (the
+    # FULL smiles list and the receptor PDBQT content checksum).
+    # Finished ligands are PRESERVED verbatim, never re-run: a real
+    # docking engine is stochastic by nature, so "preserve" (not
+    # re-execute) is the honest exactness contract, proven bit-identical
+    # against a deterministic fake engine.
+    "docking_batch": RegistryEntry(
+        unit_description="ligands docked",
+        partial_results_policy="preserve",
+        exact_restore_proof=(
+            "tests/test_docking_batch_resumability.py::"
+            "TestDockingBatchResume::test_resumed_batch_is_bit_exact"
+        ),
+        implementation="pharmaml.docking.smiles_docking",
+    ),
 }
 
 #: The §13 candidate classes, in the master prompt's own order.  Each may
 #: register only after its round lands the exact-restore proof test; until
 #: then OperationSpec(operation_type=<any of these>) raises.
 PENDING_OPERATION_TYPES: tuple[str, ...] = (
-    "docking_batch",
     "preprocessing",
 )
 

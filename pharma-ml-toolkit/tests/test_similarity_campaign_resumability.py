@@ -195,8 +195,8 @@ class TestSimilarityCampaignResume:
         # the rest
         assert "hpo" in OPERATION_REGISTRY
         assert "generative_search" in OPERATION_REGISTRY
-        with pytest.raises(Exception, match="docking_batch"):
-            OperationSpec(operation_type="docking_batch", operation_id="x")
+        with pytest.raises(Exception, match="preprocessing"):
+            OperationSpec(operation_type="preprocessing", operation_id="x")
 
     def test_checkpoint_every_validation(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="checkpoint_every"):

@@ -1,3 +1,37 @@
+## [1.2.180] — 2026-11-12
+### Added — part5-continuation round 10: the docking batch earns §13 registration (the per-ligand ledger, preserve semantics)
+
+- `dock_smiles_array(checkpoint_dir=..., checkpoint_every=...,
+  checkpoint_resume=...)` — the fifth §13 extension on the v2
+  checkpoint schema: the resume unit is the LIGAND.  The checkpoint
+  is the per-ligand completion ledger — every finished entry's full
+  row (score, poses, seconds, output, error, folder) — written every
+  `checkpoint_every` finished ligands and at completion.  Finished
+  ligands are PRESERVED verbatim, never re-run: a real docking engine
+  is stochastic by nature, so "preserve" (not re-execute) is the
+  honest exactness contract, proven bit-identical against a
+  deterministic fake engine (the proof suite monkeypatches the
+  existing `smiles_to_pdbqt` / `run_vina` seams — no real Vina
+  binary runs in the tests).
+- The fingerprint closes the two gaps the R9 audit flagged: the FULL
+  smiles list + names (a shortened, extended, reordered or renamed
+  dataset refuses to resume — exact restore or nothing) and the
+  receptor PDBQT content checksum (an edited receptor refuses too).
+- A cooperative stop (`progress` returning `False`) raises
+  `JobCancelled` with the partial result frame on
+  `partial_results`; with `workers > 1` the engine run proceeds in
+  waves of `workers` so the stop lands at a clean barrier — the
+  submitted subprocesses of a running wave always finish.
+  Preparation failures are FINAL and ledgered: a failed ligand's
+  error row is preserved verbatim on resume, never re-prepared.
+- `docking_batch` registered in `OPERATION_REGISTRY` (proof
+  pinned); one §13 candidate remains pending (preprocessing).
+- `tests/test_docking_batch_resumability.py` — the 11-test proof
+  suite, led by the registry proof
+  `test_resumed_batch_is_bit_exact`.
+- `docs/CHECKPOINT_SCHEMA.md` registry + rules updated;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R10 row marked done.
+
 ## [1.2.179] — 2026-11-12
 ### Added — part5-continuation round 9: generative search earns §13 registration (the adaptive-books restore)
 

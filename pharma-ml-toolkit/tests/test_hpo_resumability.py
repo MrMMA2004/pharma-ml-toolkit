@@ -257,11 +257,13 @@ class TestHPOResume:
         assert entry.implementation == "pharmaml.ml.hpo"
         assert "test_resumed_study_is_bit_exact" in entry.exact_restore_proof
         assert entry.unit_description == "trials evaluated"
-        # (round 9) generative_search has since earned its own round:
-        # the pending frontier is docking_batch now
+        # (round 9) generative_search and (round 10) docking_batch
+        # have since earned their own rounds: preprocessing is the
+        # pending frontier now
         assert "generative_search" in OPERATION_REGISTRY
-        with pytest.raises(Exception, match="docking_batch"):
-            OperationSpec(operation_type="docking_batch", operation_id="x")
+        assert "docking_batch" in OPERATION_REGISTRY
+        with pytest.raises(Exception, match="preprocessing"):
+            OperationSpec(operation_type="preprocessing", operation_id="x")
 
     def test_checkpoint_every_validation(self, tmp_path: Path) -> None:
         X, y = _data()

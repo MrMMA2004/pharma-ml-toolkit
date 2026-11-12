@@ -55,10 +55,10 @@ resume would start from the wrong unit.)
    only types present in `OPERATION_REGISTRY`. Registry membership requires
    a referenced pytest node id proving bit-exact resume for that class
    (`RegistryEntry.exact_restore_proof`).
-2. **Pending §13 classes are refused.** The candidates not yet in
-   the registry — `docking_batch`, `preprocessing` — are listed in
+2. **Pending §13 classes are refused.** The candidate not yet in
+   the registry — `preprocessing` — is listed in
    `PENDING_OPERATION_TYPES` and rejected with an explicit "not yet
-   registered" error until their proof round lands (planned rounds R10+
+   registered" error until its proof round lands (planned round R11
    in `docs/plans/PART5_S11_S14_CONTINUATION.md`).
 3. **Exact restore or nothing.** `restore_exact` must be `True`
    (construction-time and on-disk validation). §13: "Never present a
@@ -92,6 +92,7 @@ resume would start from the wrong unit.)
 | `similarity_campaign` | references scanned | preserve | `tests/test_similarity_campaign_resumability.py::TestSimilarityCampaignResume::test_resumed_campaign_is_bit_exact` | `pharmaml.chem.similarity` |
 | `hpo` | trials evaluated | preserve | `tests/test_hpo_resumability.py::TestHPOResume::test_resumed_study_is_bit_exact` | `pharmaml.ml.hpo` |
 | `generative_search` | generations evolved | preserve | `tests/test_generative_search_resumability.py::TestGenerativeSearchResume::test_resumed_search_is_bit_exact` | `pharmaml.generative.genetic` |
+| `docking_batch` | ligands docked | preserve | `tests/test_docking_batch_resumability.py::TestDockingBatchResume::test_resumed_batch_is_bit_exact` | `pharmaml.docking.smiles_docking` |
 
 The first of the six §13 candidates earned its row in round 6: the
 descriptor batch (`compute_feature_frame(checkpoint_dir=...)`)
@@ -122,9 +123,17 @@ trajectory; the round-8 lesson carried over) restores so the resumed
 evolution is bit-identical to the uninterrupted run (`elapsed_s`
 aside, wall-clock by nature), and a cooperative stop attaches the
 partial `GenerationResult` in BOTH the checkpointed and the
-checkpoint-less mode. The two remaining candidates are pending; each
-earns its row in its own round, exactly as the master prompt
-sequences it.
+checkpoint-less mode. Round 10 added the fifth:
+`dock_smiles_array(checkpoint_dir=...)` — the resume unit is the
+LIGAND (the per-ligand completion ledger; finished ligands are
+PRESERVED verbatim, never re-run — a real engine is stochastic by
+nature, so "preserve", not re-execute, is the honest exactness
+contract, proven bit-identical against a deterministic fake engine).
+Its fingerprint closes the two gaps the R9 audit flagged: the FULL
+smiles list + names (a reordered or edited dataset refuses) and the
+receptor PDBQT content checksum (an edited receptor refuses). The
+one remaining candidate is pending; it earns its row in its own
+round, exactly as the master prompt sequences it.
 
 ## Using it
 

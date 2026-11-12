@@ -261,9 +261,11 @@ class TestGenerativeSearchResume:
             "test_resumed_search_is_bit_exact" in entry.exact_restore_proof
         )
         assert entry.unit_description == "generations evolved"
-        # the pending frontier has moved to docking_batch
-        with pytest.raises(Exception, match="docking_batch"):
-            OperationSpec(operation_type="docking_batch", operation_id="x")
+        # (round 10) docking_batch has since earned its own round:
+        # the pending frontier is preprocessing alone now
+        assert "docking_batch" in OPERATION_REGISTRY
+        with pytest.raises(Exception, match="preprocessing"):
+            OperationSpec(operation_type="preprocessing", operation_id="x")
 
     def test_checkpoint_every_validation(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="checkpoint_every"):

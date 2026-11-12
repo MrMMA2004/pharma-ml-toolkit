@@ -244,7 +244,11 @@ class TestValidateCheckpoint:
         info = mgr.save(step=1, state={}, operation=_spec())
         _reseal(
             info.path,
-            lambda r: r[ENVELOPE_KEY]["operation"].__setitem__("type", "docking_batch"),
+            # (round 10) docking_batch is registered now -- the
+            # tamper target must be a genuinely unregistered type
+            lambda r: r[ENVELOPE_KEY]["operation"].__setitem__(
+                "type", "preprocessing"
+            ),
         )
         report = validate_checkpoint(info.path)
         assert not report.ok

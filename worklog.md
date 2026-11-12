@@ -14057,3 +14057,65 @@ close).
 in this sandbox ("No such tool available" — retried again this turn);
 the every-2h "continue" task cannot be created from here.  Two §13
 candidates remain: docking_batch, then preprocessing.
+
+## R10 (§13 second half) — the docking batch earns registration (the per-ligand ledger, preserve semantics) — 2026-11-12
+
+**The round.** R10 registers the fifth §13 candidate:
+`dock_smiles_array(checkpoint_dir=…)`.  The resume unit is the
+LIGAND: the per-ligand entry dict is the complete state, so the
+checkpoint is the completion ledger.  Finished ligands are PRESERVED
+verbatim, never re-run — a real engine is stochastic by nature, so
+"preserve" (not re-execute) is the honest exactness contract; the
+proof runs against a deterministic fake engine through the existing
+monkeypatch seams (`smiles_mod.smiles_to_pdbqt` /
+`smiles_mod.run_vina`), so no real Vina binary runs in the tests
+(the §14 archive audit pins the real engine checksums separately).
+
+**The R9-gap closures.** The fingerprint now covers the FULL smiles
+list + names (shortened / extended / reordered / renamed all refuse)
+and the receptor PDBQT content checksum (an edited receptor
+refuses) — both gaps the R9 audit flagged for this round, each with
+its own refusal test.
+
+**The implementation.** `pharmaml/docking/smiles_docking.py`: the
+prep loop skips ledgered ligands (their rows preserved verbatim);
+preparation failures are final and ledgered (never re-prepared);
+the engine run's per-ligand completions fill the ledger and save
+every `checkpoint_every`; with `workers > 1` the run proceeds in
+waves so a cooperative stop lands at a clean barrier (submitted
+subprocesses always finish); `_entries_frame` gives the final and
+partial frames the same ranked shape.  Three proof-suite findings on
+the way, all test-design rather than implementation bugs: the
+fresh-twin comparison must either run in the same campaign root or
+compare path-independent columns (ledgered rows carry the original
+out_dir paths — preserve semantics), the shortened-dataset variant
+re-docks its own length, and the threaded test wasn't passing
+workers=2 at all.  One real tamper-target fix in the schema suite
+(docking_batch is registered now — the on-disk tamper test aims at
+preprocessing instead).
+
+**The proof suite.** `tests/test_docking_batch_resumability.py` —
+11 tests: the registry proof (same-root resume re-docks NOTHING,
+frame identical), tail-only resume with engine-call counting,
+cancel-preserve (partial frame with 2 finished rows), stale dataset
+(4 variants), stale receptor, envelope, registry pin,
+every-validation, every-thinning, threaded barrier, and
+preparation-failure ledgering.  Frontier flipped in five older
+suites (R6-R9 + the schema tamper test).
+
+**The ship (v1.2.180, from main).** Four carriers bumped together;
+CHANGELOG leads 1.2.180; CHECKPOINT_SCHEMA.md registry row + rules;
+plan doc R10 row + status note.  ruff clean (full src + all touched
+suites); mypy 217 files zero errors; notebooks re-executed 8/8 at
+1.2.180 (171 s), twins stripped; audit battery run AFTER the ritual:
+1260 passed / 0 failed / 2 skipped.  Ship-safety + portability
+16/0.  Zip `pharma-ml-toolkit-v1.2.180.zip` — 9,176,666 bytes,
+sha-256
+`896f91f312ae5eb8c312215eb985ffd73e51a81bb55f7ec38af6d4f849b94ee6`,
+four byte-identical homes, predecessor 179 swept from all four.  §14
+audit under `docs/release-audits/v1.2.180-part5-r10-*`: all eight
+archive checks passed; limitations recorded honestly (the preserve
+vs re-execute contract, the path-carrying rows, the not-fingerprinted
+campaign folders, the wave-barrier stop latency).
+
+**Standing notes.** One §13 candidate remains: preprocessing (R11).
