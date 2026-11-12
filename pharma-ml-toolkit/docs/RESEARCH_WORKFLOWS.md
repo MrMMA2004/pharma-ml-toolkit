@@ -81,8 +81,36 @@ requires exchangeability and a complete fixed class space. Exact IDs do not
 rule out related compounds or other leakage. Small or correlated groups and
 adaptive group selection undermine Wilson interval interpretation. Do not use
 test data for model or threshold selection. This workflow does not provide
-probability calibration curves, label-conditional conformal calibration,
+probability recalibration, label-conditional conformal calibration,
 classification nested CV, or scientific validation of the model.
+
+## Optional held-out model diagnostics
+
+Select **Include kNN distance and classification probability diagnostics**
+in the uncertainty dialog, or add `--diagnostics` to either uncertainty CLI
+command. These checks use the same previously held-out test set and do not
+change the fitted model, conformal thresholds or prediction sets. They can be
+expensive on large descriptor tables; they are off by default and the job is
+not cancellable or resumable.
+
+For classification, the report includes a multiclass Brier score defined as
+mean **sum** of squared errors over classes per observation (range 0–2, including
+binary), and one-vs-rest reliability tables for ten fixed probability bins.
+Bins are left-inclusive and right-exclusive, except the final bin includes 1;
+empty bins are omitted. These are empirical evaluation summaries, not fitted
+probability calibration, and small or dependent test samples can mislead.
+
+For either task, kNN distances use the fitted train-only median imputer and a
+separate train-fitted scaler/index, with `k=5` and the 95th percentile of
+leave-self-out training distances as the reference threshold. The report
+counts test rows inside/outside and describes their empirical conformal coverage.
+At least six training rows are required; otherwise the diagnostic is marked
+unavailable rather than silently changing `k`. This is a descriptor-distance
+heuristic, **not** evidence of molecular similarity or prediction reliability,
+nor a coverage/safety guarantee. Treat slice counts and coverage as descriptive;
+do not choose models or thresholds using the evaluation set. Dependence,
+missing descriptors, feature scaling and high-dimensional distance effects can
+change interpretation. Full individual predictions are not included.
 
 ## Vina campaign review in Studio
 
@@ -177,7 +205,7 @@ limitations.
 
 A guided docking campaign **launcher/preparation** workflow, provenance
 integration across other model runs, generalized safe resume,
-broader classification validation/probability-calibration/applicability reports, and consolidated
+broader classification validation/probability recalibration and applicability methods, and consolidated
 reproducibility dashboard are not delivered here. Existing docking engines and
 campaign APIs, label-conditional conformal APIs, and proof-backed checkpoints
 remain available independently; they are not equivalent to those additions.

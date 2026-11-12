@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDoubleSpinBox,
@@ -81,6 +82,11 @@ class UncertaintyDialog(QDialog):
         self._alpha.valueChanged.connect(self._invalidate)
         form.addRow("Alpha:", self._alpha)
         self._controls.append(self._alpha)
+        self._diagnostics = QCheckBox("Include kNN distance and classification probability diagnostics")
+        self._diagnostics.setToolTip("Optional; kNN can be expensive. Diagnostics are descriptive, not a safety guarantee.")
+        self._diagnostics.stateChanged.connect(self._invalidate)
+        form.addRow("Diagnostics:", self._diagnostics)
+        self._controls.append(self._diagnostics)
         layout.addLayout(form)
         self._run = QPushButton("Evaluate independent partitions")
         self._run.clicked.connect(self._start)
@@ -141,6 +147,7 @@ class UncertaintyDialog(QDialog):
         target, key = self._target.text().strip(), self._key.text().strip()
         group = self._group.text().strip() or None
         alpha = self._alpha.value()
+        diagnostics = self._diagnostics.isChecked()
         if not all(paths) or not features or not target or not key:
             self._result.clear()
             self._status.setText("Select all three files and specify features, target and leakage-unit ID.")
@@ -154,7 +161,7 @@ class UncertaintyDialog(QDialog):
             f"{task.title()} uncertainty",
             lambda _progress: evaluate(
                 *(Path(path) for path in paths), features=features, target=target,
-                key=key, group=group, alpha=alpha),
+                key=key, group=group, alpha=alpha, diagnostics=diagnostics),
             on_finished=lambda result: self._finished(result, revision),
             on_failed=lambda error: self._failed(error, revision),
         )

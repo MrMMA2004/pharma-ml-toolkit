@@ -224,7 +224,7 @@ jobs:
         run: >-
           python -m pytest tests/test_estimator_compatibility.py tests/test_conformal.py
           tests/test_conformal_classification.py tests/test_label_conditional_conformal.py
-          tests/test_coverage_diagnostics.py tests/test_research_audit.py
+          tests/test_coverage_diagnostics.py tests/test_heldout_diagnostics.py tests/test_research_audit.py
           tests/test_uncertainty_workbench.py tests/test_classification_workbench.py
           tests/test_research_provenance.py
           tests/test_validation_workbench.py tests/test_checkpoint_diagnostics.py

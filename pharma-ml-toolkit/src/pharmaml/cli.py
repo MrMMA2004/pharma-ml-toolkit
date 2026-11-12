@@ -213,6 +213,8 @@ def _build_parser() -> argparse.ArgumentParser:
         uncertainty.add_argument("--key", required=True, help="exact leakage-unit ID; must be disjoint")
         uncertainty.add_argument("--group", default=None, help="optional prespecified test subgroup column")
         uncertainty.add_argument("--alpha", type=float, default=0.1)
+        uncertainty.add_argument("--diagnostics", action="store_true",
+                                 help="include optional held-out probability and kNN distance diagnostics")
 
     train = ml_sub.add_parser("train", help="train one model end-to-end")
     train.add_argument("--data", required=True, help="CSV/Excel with features+target")
@@ -1148,7 +1150,7 @@ def _cmd_ml_conformal_report(args: argparse.Namespace) -> int:
                 else regression_uncertainty_from_files)
     report = evaluate(
         args.train, args.calibration, args.test, features=args.features, target=args.target,
-        key=args.key, group=args.group, alpha=args.alpha,
+        key=args.key, group=args.group, alpha=args.alpha, diagnostics=args.diagnostics,
     )
     print(json.dumps(report, indent=2, default=str, allow_nan=False))
     return 0

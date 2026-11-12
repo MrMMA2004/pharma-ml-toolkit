@@ -105,3 +105,28 @@ def test_different_workflows_do_not_compare_incommensurate_metrics(tmp_path):
     comparison = compare_uncertainty_reports(classification, regression)
     assert not comparison["same_workflow"] and comparison["metrics"] is None
     assert not comparison["same_parameters"]
+
+
+def test_optional_diagnostics_holdout_and_cli(tmp_path, capsys):
+    train, calibration, test = data()
+    plain = classification_uncertainty_report(train, calibration, test, features=["x"],
+                                               target="target", key="id")
+    diagnostic = classification_uncertainty_report(train, calibration, test, features=["x"],
+                                                    target="target", key="id", diagnostics=True)
+    assert "probability_diagnostics" not in plain and "applicability" not in plain
+    assert diagnostic["coverage"] == plain["coverage"] and diagnostic["threshold"] == plain["threshold"]
+    probability = diagnostic["probability_diagnostics"]
+    assert 0 <= probability["multiclass_brier_sum"] <= 2
+    assert all(sum(row["n"] for row in group["bins"]) == len(test) for group in probability["per_class"])
+    assert diagnostic["applicability"]["status"] == "computed"
+    paths = []
+    for index, frame in enumerate((train, calibration, test)):
+        path = tmp_path / f"{index}.csv"
+        frame.to_csv(path, index=False)
+        paths.append(str(path))
+    assert main(["ml", "conformal-classification", "--train", paths[0], "--calibration", paths[1],
+                 "--test", paths[2], "--features", "x", "--target", "target", "--key", "id",
+                 "--diagnostics"]) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["probability_diagnostics"]["n_test"] == 10
+    assert output["provenance"]["parameters"]["diagnostics"] is True

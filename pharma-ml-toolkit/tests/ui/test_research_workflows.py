@@ -124,9 +124,12 @@ def test_classification_uncertainty_dialog(qtbot, studio_app, tmp_path):
     dialog._target.setText("label")
     dialog._key.setText("id")
     dialog._group.setText("group")
+    dialog._diagnostics.setChecked(True)
     dialog._start()
     qtbot.waitUntil(lambda: dialog._status.text().startswith("Evaluation complete"), timeout=10000)
     report = json.loads(dialog._result.toPlainText())
+    assert report["probability_diagnostics"]["n_test"] == 10
+    assert report["applicability"]["status"] == "computed"
     assert report["task"] == "classification" and len(report["class_coverage"]) == 2
     assert report["provenance"]["parameters"]["workflow"] == "split-conformal-logistic"
     dialog._task.setCurrentIndex(0)

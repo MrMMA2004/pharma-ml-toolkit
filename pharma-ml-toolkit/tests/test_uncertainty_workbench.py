@@ -123,3 +123,12 @@ def test_compare_uncertainty_rejects_reports_without_provenance():
 
     with pytest.raises(DataValidationError, match="lacks uncertainty-run provenance"):
         compare_uncertainty_reports({}, {})
+
+
+def test_opt_in_regression_distance_diagnostic():
+    plain = regression_uncertainty_report(*datasets(), features=["x"], target="y", key="id")
+    result = regression_uncertainty_report(*datasets(), features=["x"], target="y", key="id", diagnostics=True)
+    assert "applicability" not in plain
+    assert result["radius"] == plain["radius"] and result["coverage"] == plain["coverage"]
+    assert result["applicability"]["n_test"] == 10
+    assert "not a chemical" in result["applicability"]["limitations"]

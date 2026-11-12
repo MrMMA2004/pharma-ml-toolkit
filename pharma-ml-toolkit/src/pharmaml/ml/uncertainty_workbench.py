@@ -18,6 +18,10 @@ from pharmaml.exceptions import DataValidationError
 from pharmaml.ml.conformal import calibrate_split_conformal
 from pharmaml.ml.conformal_classification import calibrate_split_conformal_classifier
 from pharmaml.ml.coverage_diagnostics import coverage_by_group
+from pharmaml.ml.heldout_diagnostics import (
+    classification_probability_diagnostics,
+    distance_domain_diagnostics,
+)
 from pharmaml.ml.preprocessing import build_preprocessor
 from pharmaml.ml.split_audit import audit_split_overlap
 
@@ -65,7 +69,7 @@ def _validate_partitions(
 def regression_uncertainty_report(
     train: pd.DataFrame, calibration: pd.DataFrame, test: pd.DataFrame, *,
     features: list[str], target: str, key: str, group: str | None = None,
-    alpha: float = 0.1,
+    alpha: float = 0.1, diagnostics: bool = False,
 ) -> dict[str, Any]:
     """Fit ridge and preprocessing on training only; calibrate and evaluate separately.
 
@@ -85,7 +89,7 @@ def regression_uncertainty_report(
     if group is not None:
         subgroup = coverage_by_group(result.covered, test[group].to_numpy(),
                                      sizes=result.upper - result.lower)
-    return {
+    report: dict[str, Any] = {
         "task": "regression", "model": "ridge (median imputation and scaling fitted on train only)",
         "features": list(features), "target": target, "key": key, "group": group,
         "alpha": alpha, "n_train": len(train), "n_calibration": len(calibration),
@@ -98,12 +102,15 @@ def regression_uncertainty_report(
                         "coverage is descriptive, with no conditional guarantee. Wilson intervals "
                         "assume independent observations with common within-group coverage."),
     }
+    if diagnostics:
+        report["applicability"] = distance_domain_diagnostics(model, train, test, features, covered=result.covered)
+    return report
 
 
 def classification_uncertainty_report(
     train: pd.DataFrame, calibration: pd.DataFrame, test: pd.DataFrame, *,
     features: list[str], target: str, key: str, group: str | None = None,
-    alpha: float = 0.1,
+    alpha: float = 0.1, diagnostics: bool = False,
 ) -> dict[str, Any]:
     """Fit logistic regression on train, then calibrate sets and evaluate separately.
 
@@ -130,7 +137,7 @@ def classification_uncertainty_report(
     classes = coverage_by_group(result.covered, test[target].to_numpy(), sizes=sizes)
     subgroup = (coverage_by_group(result.covered, test[group].to_numpy(), sizes=sizes)
                 if group is not None else None)
-    return {
+    report: dict[str, Any] = {
         "task": "classification", "model": "logistic regression (train-only imputation and scaling)",
         "features": list(features), "target": target, "key": key, "group": group,
         "alpha": alpha, "n_train": len(train), "n_calibration": len(calibration), "n_test": len(test),
@@ -148,31 +155,37 @@ def classification_uncertainty_report(
                         "conditional guarantees. Empty and multi-label sets are possible. Wilson "
                         "intervals assume independent observations with common within-group coverage."),
     }
+    if diagnostics:
+        report["probability_diagnostics"] = classification_probability_diagnostics(
+            model.predict_proba(test[features]), test[target].to_numpy(), list(result.classes))
+        report["applicability"] = distance_domain_diagnostics(model, train, test, features, covered=result.covered)
+    return report
 
 
 def regression_uncertainty_from_files(
     train: str | Path, calibration: str | Path, test: str | Path, *,
     features: list[str], target: str, key: str, group: str | None = None,
-    alpha: float = 0.1,
+    alpha: float = 0.1, diagnostics: bool = False,
 ) -> dict[str, Any]:
     """Read IDs as literal text, then fit/calibrate/evaluate using separate files."""
     return _uncertainty_from_files(train, calibration, test, features=features, target=target,
-                                   key=key, group=group, alpha=alpha, task="regression")
+                                   key=key, group=group, alpha=alpha, task="regression", diagnostics=diagnostics)
 
 
 def classification_uncertainty_from_files(
     train: str | Path, calibration: str | Path, test: str | Path, *,
     features: list[str], target: str, key: str, group: str | None = None,
-    alpha: float = 0.1,
+    alpha: float = 0.1, diagnostics: bool = False,
 ) -> dict[str, Any]:
     """Read IDs and class labels as literal text and run held-out classification."""
     return _uncertainty_from_files(train, calibration, test, features=features, target=target,
-                                   key=key, group=group, alpha=alpha, task="classification")
+                                   key=key, group=group, alpha=alpha, task="classification", diagnostics=diagnostics)
 
 
 def _uncertainty_from_files(
     train: str | Path, calibration: str | Path, test: str | Path, *,
     features: list[str], target: str, key: str, group: str | None, alpha: float, task: str,
+    diagnostics: bool,
 ) -> dict[str, Any]:
     from pharmaml.ml.provenance import environment_snapshot, fingerprint_file
     from pharmaml.utils.identifier_table import read_identifier_table
@@ -195,7 +208,8 @@ def _uncertainty_from_files(
             if column in frame.columns:
                 frame[column] = pd.to_numeric(frame[column], errors="raise")
     evaluator = regression_uncertainty_report if task == "regression" else classification_uncertainty_report
-    report = evaluator(*frames, features=features, target=target, key=key, group=group, alpha=alpha)
+    report = evaluator(*frames, features=features, target=target, key=key, group=group, alpha=alpha,
+                       diagnostics=diagnostics)
     estimator = Ridge() if task == "regression" else LogisticRegression(max_iter=1000, random_state=0)
     report["provenance"] = {
         "schema": "pharmaml-uncertainty-run/1", "inputs": fingerprints,
@@ -205,7 +219,8 @@ def _uncertainty_from_files(
                        "partitions": "user-supplied train/calibration/test",
                        **({"ridge_parameters": estimator.get_params(deep=False)} if task == "regression"
                           else {"logistic_parameters": estimator.get_params(deep=False)}),
-                       "preprocessing": "median imputation and standard scaling"},
+                       "preprocessing": "median imputation and standard scaling",
+                       **({"diagnostics": True} if diagnostics else {})},
         "environment": environment_snapshot(),
         "notice": "Input hashes assume stable files; records are unsigned and do not prove independence."
     }
