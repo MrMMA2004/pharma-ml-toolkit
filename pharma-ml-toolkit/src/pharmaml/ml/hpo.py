@@ -66,12 +66,17 @@ Successive halving keeps the top ``1/eta`` at every rung:
 from __future__ import annotations
 
 import math
+import os
 import random
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import numpy as np
+
+from pharmaml.logger import get_logger
+
+_LOG = get_logger(__name__)
 
 __all__ = [
     "CategoricalParam",
@@ -541,6 +546,69 @@ class HPOStudy:
             self.history.append(trial)
         return self.history[-n_trials:]
 
+    # -- (part5-continuation round 8, §13) resumable-study accessors -------- #
+    #
+    # The study's "complete state" (§13's requirement before a Pause/
+    # Resume may exist): the finished trials AND the sampler's RNG
+    # state.  The naive resume -- replaying the trial history into a
+    # fresh engine -- is NOT bit-exact: every ask() draws from the
+    # engine's ``random.Random``, whose state advances per trial, so a
+    # resumed TPE would propose different candidates than the
+    # uninterrupted run.  Capturing the RNG state alongside the
+    # history makes the resume exact (proven by the round-8 tests).
+
+    def capture_state(self) -> dict[str, Any]:
+        """The complete resumable state: trial history + RNG state.
+
+        The RNG state (``random.Random.getstate()`` -- a 625-int
+        tuple) rides as a plain list; ``restore_state`` rebuilds it
+        with ``setstate``.  Together with the trials this is
+        everything a bit-exact resume needs.
+        """
+        rng_state = self._engine.rng.getstate()
+        return {
+            "trials": [
+                {
+                    "number": t.number,
+                    "params": dict(t.params),
+                    "value": t.value,
+                    "state": t.state,
+                }
+                for t in self._engine.trials
+            ],
+            "rng_state": [rng_state[0], list(rng_state[1]), rng_state[2]],
+        }
+
+    def restore_state(self, state: Mapping[str, Any]) -> None:
+        """Rebuild the study from a :meth:`capture_state` payload.
+
+        Raises
+        ------
+        ValueError
+            If the payload is malformed (missing keys, non-numeric
+            values) -- the caller treats this as "start fresh".
+        """
+        trials: list[Trial] = []
+        for entry in state["trials"]:
+            value = entry.get("value")
+            trials.append(
+                Trial(
+                    number=int(entry["number"]),
+                    params=dict(entry["params"]),
+                    value=None if value is None else float(value),
+                    state=str(entry["state"]),
+                )
+            )
+        self._engine._trials = trials
+        self.history = list(trials)
+        version, internal, gauss = state["rng_state"]
+        # gauss_next is None until the first gaussian draw consumed it;
+        # round-trip it as-is (setstate accepts None there)
+        gauss_value: float | None = None if gauss is None else float(gauss)
+        self._engine.rng.setstate(
+            (int(version), tuple(int(x) for x in internal), gauss_value)
+        )
+
     def best(self) -> Trial:
         return self._engine.best()
 
@@ -586,6 +654,10 @@ def tune_model(
     n_trials: int = 20,
     sampler: str = "tpe",
     seed: int = 0,
+    progress: Callable[..., Any] | None = None,
+    checkpoint_dir: str | os.PathLike[str] | None = None,
+    checkpoint_every: int = 1,
+    checkpoint_resume: bool = True,
 ) -> TuneReport:
     """Cross-validated HPO over the sklearn registry models.
 
@@ -594,6 +666,18 @@ def tune_model(
     kwargs on top of ``random_state=seed``), scores it with the
     toolkit's cross-validated pipeline convention, and negates the
     score so *smaller is better* inside the study (the optuna rule).
+
+    (part5-continuation round 8, §13) With ``checkpoint_dir`` the
+    study becomes a resumable §13 operation: every
+    ``checkpoint_every`` completed trials, an envelope-carrying
+    checkpoint captures the COMPLETE state -- the finished trials AND
+    the sampler's RNG state (without the latter a resumed TPE would
+    propose different candidates; exact restore or nothing).  A later
+    call with the same model/space/data resumes from the newest valid
+    checkpoint: completed trials are never re-evaluated and the
+    resumed report is bit-identical to an uninterrupted run.  A
+    cooperative stop (``progress`` returning ``False``) preserves the
+    partial report on :class:`~pharmaml.exceptions.JobCancelled`.
 
     >>> import numpy as np
     >>> from pharmaml.ml.hpo import SearchSpace, tune_model
@@ -608,7 +692,7 @@ def tune_model(
     """
     from sklearn.model_selection import cross_val_score  # local: keeps import lazy
 
-    from pharmaml.exceptions import ModelError
+    from pharmaml.exceptions import JobCancelled, ModelError
     from pharmaml.ml.models import build_model
 
     # probe once: estimators like KNN have no random_state knob
@@ -628,12 +712,183 @@ def tune_model(
     study = HPOStudy(
         objective=objective, space=space, sampler=sampler, seed=seed
     )
-    study.run(n_trials)
+
+    # -- (round 8, §13) the resumable wrapper around the trial loop ------
+    if checkpoint_dir is not None:
+        if (
+            not isinstance(checkpoint_every, int)
+            or isinstance(checkpoint_every, bool)
+            or checkpoint_every < 1
+        ):
+            raise ValueError(
+                f"checkpoint_every must be a positive int, got {checkpoint_every!r}"
+            )
+        import hashlib
+        import json
+
+        from pharmaml.utils.checkpoint_schema import OperationSpec
+        from pharmaml.utils.checkpoints import CheckpointManager, PersistenceError
+
+        try:
+            manager = CheckpointManager(checkpoint_dir, name="hpo-study")
+            spec = OperationSpec(
+                operation_type="hpo",
+                operation_id=f"tune-{name}-{seed}",
+            )
+        except PersistenceError as exc:
+            _LOG.warning(
+                "checkpoint home unusable (%s); tuning without checkpoints", exc
+            )
+            manager = None  # type: ignore[assignment]
+            spec = None  # type: ignore[assignment]
+
+        # config fingerprint: everything that shapes the search EXCEPT the
+        # data -- model name, space bounds, sampler, seed, cv, n_trials
+        def _space_blob() -> list[dict[str, Any]]:
+            blob: list[dict[str, Any]] = []
+            for pname, spec_ in space.specs.items():
+                entry: dict[str, Any] = {"name": pname, "kind": type(spec_).__name__}
+                if isinstance(spec_, FloatParam):
+                    entry.update(low=spec_.low, high=spec_.high, log=spec_.log)
+                elif isinstance(spec_, IntParam):
+                    entry.update(low=spec_.low, high=spec_.high)
+                elif isinstance(spec_, CategoricalParam):
+                    entry.update(choices=[repr(c) for c in spec_.choices])
+                blob.append(entry)
+            return blob
+
+        config_fp = hashlib.sha256(
+            json.dumps(
+                {
+                    "model": name,
+                    "task": task,
+                    "cv": int(cv),
+                    "n_trials": int(n_trials),
+                    "sampler": sampler,
+                    "seed": int(seed),
+                    "space": _space_blob(),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+
+        # dataset fingerprint: shape + a content digest of X and y (the
+        # adapter consumes numpy arrays / DataFrames alike)
+        def _array_digest(a: Any) -> str:
+            arr = np.asarray(a)
+            digest = hashlib.sha256()
+            digest.update(f"{arr.dtype}:{arr.shape}".encode())
+            digest.update(np.ascontiguousarray(arr).tobytes())
+            return digest.hexdigest()
+
+        try:
+            dataset_fp = hashlib.sha256(
+                (_array_digest(X) + ":" + _array_digest(y)).encode()
+            ).hexdigest()
+        except (TypeError, ValueError):
+            dataset_fp = "opaque-dataset"
+
+        done = 0
+        if manager is not None and checkpoint_resume:
+            try:
+                latest = manager.latest()
+            except OSError:  # pragma: no cover - scan failure
+                latest = None
+                _LOG.warning("checkpoint scan failed; starting fresh")
+            if latest is not None and latest.resumable:
+                st = latest.state
+                if (
+                    st.get("config_fp") != config_fp
+                    or st.get("dataset_fp") != dataset_fp
+                ):
+                    _LOG.warning(
+                        "hpo checkpoint at step %d is for a different "
+                        "config/dataset; starting fresh (exact restore or "
+                        "nothing)",
+                        latest.step,
+                    )
+                else:
+                    try:
+                        study.restore_state(st)
+                        done = len(study.trials)
+                        _LOG.info(
+                            "hpo study resumed from checkpoint step %d (%d "
+                            "trials already evaluated)",
+                            latest.step,
+                            done,
+                        )
+                    except (KeyError, TypeError, ValueError) as exc:
+                        _LOG.warning(
+                            "checkpoint payload unreadable (%s); starting fresh", exc
+                        )
+
+        boundaries_since_save = 0
+        for _ in range(done, n_trials):
+            trial = study._engine.ask_and_run(objective)
+            study.history.append(trial)
+            done += 1
+            boundaries_since_save += 1
+            if (
+                manager is not None
+                and spec is not None
+                and (done >= n_trials or boundaries_since_save >= checkpoint_every)
+            ):
+                boundaries_since_save = 0
+                try:
+                    manager.save(
+                        step=done,
+                        total=n_trials,
+                        state={
+                            "config_fp": config_fp,
+                            "dataset_fp": dataset_fp,
+                            **study.capture_state(),
+                        },
+                        note=f"hpo study {done}/{n_trials} trials",
+                        operation=spec,
+                    )
+                except (PersistenceError, OSError, TypeError, ValueError) as exc:
+                    _LOG.warning(
+                        "checkpoint write failed at %d/%d (%s); continuing "
+                        "without it",
+                        done,
+                        n_trials,
+                        exc,
+                    )
+            if progress is not None and progress(done, n_trials, "hpo study") is False:
+                raise JobCancelled(
+                    f"hpo study cancelled after {done}/{n_trials} trials -- "
+                    "stopped at a checkpoint by the caller",
+                    partial_results=TuneReport(
+                        best_params=dict(study.best().params) if study.trials else {},
+                        best_score=-float(study.best().value or math.inf) if study.trials else -math.inf,
+                        n_trials=len(study.trials),
+                        history=list(study.trials),
+                        task=task,
+                    ),
+                )
+    else:
+        # the checkpoint-less path: the historical loop, plus the
+        # round-205 progress contract
+        for i in range(n_trials):
+            trial = study._engine.ask_and_run(objective)
+            study.history.append(trial)
+            if (
+                progress is not None
+                and progress(i + 1, n_trials, "hpo study") is False
+            ):
+                from pharmaml.exceptions import JobCancelled
+
+                raise JobCancelled(
+                    f"hpo study cancelled after {i + 1}/{n_trials} trials -- "
+                    "stopped at a checkpoint by the caller"
+                )
+
     best = study.best()
     return TuneReport(
         best_params=dict(best.params),
         best_score=-float(best.value or math.inf),
-        n_trials=n_trials,
+        n_trials=len(study.trials),
         history=list(study.trials),
         task=task,
     )

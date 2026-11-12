@@ -173,13 +173,26 @@ OPERATION_REGISTRY: dict[str, RegistryEntry] = {
         ),
         implementation="pharmaml.chem.similarity",
     ),
+    # (part5-continuation round 8, §13) the third candidate to EARN
+    # registration: the HPO study's complete state is the trial history
+    # AND the sampler's RNG state (without the latter a resumed TPE
+    # would propose different candidates -- the naive history replay
+    # is NOT bit-exact, proven by the round's tests).
+    "hpo": RegistryEntry(
+        unit_description="trials evaluated",
+        partial_results_policy="preserve",
+        exact_restore_proof=(
+            "tests/test_hpo_resumability.py::"
+            "TestHPOResume::test_resumed_study_is_bit_exact"
+        ),
+        implementation="pharmaml.ml.hpo",
+    ),
 }
 
 #: The §13 candidate classes, in the master prompt's own order.  Each may
 #: register only after its round lands the exact-restore proof test; until
 #: then OperationSpec(operation_type=<any of these>) raises.
 PENDING_OPERATION_TYPES: tuple[str, ...] = (
-    "hpo",
     "generative_search",
     "docking_batch",
     "preprocessing",

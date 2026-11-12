@@ -1,3 +1,37 @@
+## [1.2.178] — 2026-11-12
+### Added — part5-continuation round 8: HPO studies earn §13 registration (the RNG-state lesson)
+
+- `tune_model(checkpoint_dir=..., checkpoint_every=...,
+  checkpoint_resume=...)` — the third §13 extension on the v2
+  checkpoint schema: the trial loop's checkpoints carry the study's
+  COMPLETE state, which for HPO is the trial history AND the sampler's
+  RNG state.  The round's specific finding: replaying the trial
+  history alone is NOT bit-exact — every TPE `ask()` draws candidates
+  from the engine's `random.Random`, whose state advances per trial,
+  so a resumed study would propose different parameters than the
+  uninterrupted run.  The proof suite pins that distinction with its
+  own test (naive replay diverges; RNG-state restore matches).  A
+  resume is bit-identical to BOTH the uninterrupted study and the
+  checkpoint-less call; a stale config (model/space/sampler/seed/cv/
+  n_trials) or dataset checkpoint is refused with a warning (exact
+  restore or nothing); a cooperative stop preserves the partial
+  `TuneReport` on `JobCancelled.partial_results`; without
+  `checkpoint_dir` the call keeps the historical behaviour (plus the
+  round-205 progress contract, `partial_results=None` on stop).
+- `HPOStudy.capture_state()` / `restore_state()` — the
+  trial-history-plus-RNG-state envelope accessors (JSON-safe; the
+  Mersenne state rides as a plain list, `gauss_next` round-trips
+  `None` as-is).
+- `hpo` registered in `OPERATION_REGISTRY` (proof pinned); three §13
+  candidates remain pending (generative_search, docking_batch,
+  preprocessing), each earning its row in its own round.
+- `tests/test_hpo_resumability.py` — the 12-test proof suite, led by
+  the registry proof `test_resumed_study_is_bit_exact` and the
+  RNG-state distinction test
+  `test_resume_requires_the_rng_state_not_just_history`.
+- `docs/CHECKPOINT_SCHEMA.md` registry + rules updated;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R8 row marked done.
+
 ## [1.2.177] — 2026-11-12
 ### Added — part5-continuation round 7: similarity campaigns earn §13 registration
 

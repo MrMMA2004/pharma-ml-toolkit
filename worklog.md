@@ -13939,3 +13939,61 @@ zero errors.
 in this sandbox ("No such tool available" — retried every turn); the
 every-2h "continue" task the user requested cannot be created from
 here and must be re-issued where the scheduler is wired up.
+
+## R8 (§13 second half) — the HPO study earns registration (the RNG-state lesson) — 2026-11-12
+
+**The round.** R8 follows R6/R7's pattern for the third §13 candidate,
+with a lesson the first two rounds did not need: `tune_model`'s trial
+history is NOT the complete state.  Every TPE `ask()` draws candidates
+from the engine's `random.Random`, whose state advances per trial —
+so a naive resume (rebuild engine, replay history) proposes DIFFERENT
+parameters than the uninterrupted run (demonstrated in-repo before any
+code was written: 12-trial uninterrupted vs 6+6 history-replay
+diverged).  The complete state is history + RNG state, and
+`random.Random.getstate()` serialises to JSON (a 625-int tuple; the
+third element `gauss_next` is `None` until the first gaussian draw —
+`int(None)` crashed the first `restore_state` attempt, caught by the
+proof suite and fixed to round-trip `None` as-is).
+
+**The implementation.** `tune_model(checkpoint_dir=…,
+checkpoint_every=…, checkpoint_resume=…)` in `pharmaml/ml/hpo.py`:
+per-trial envelope checkpoints via new `HPOStudy.capture_state()` /
+`restore_state()` accessors; a config fingerprint over
+model/space/sampler/seed/cv/n_trials (space bounds serialised per
+ParamSpec kind) and a dataset fingerprint over X/y dtype+shape+bytes;
+stale either refuses with a warning; a cooperative stop preserves the
+partial `TuneReport` on `JobCancelled.partial_results`; without
+`checkpoint_dir` the historical behaviour (plus the round-205 progress
+contract).  `hpo` registered in `OPERATION_REGISTRY`; three candidates
+remain (generative_search, docking_batch, preprocessing).  The R6/R7
+frontier tests flipped to the new truth (generative_search is the
+head now).
+
+**The proof suite.** `tests/test_hpo_resumability.py` — 12 tests, led
+by `test_resumed_study_is_bit_exact` and the round's signature
+`test_resume_requires_the_rng_state_not_just_history` (naive replay
+diverges; RNG-state restore matches the uninterrupted run bit for
+bit).  Two test-side fixes on the way: the rotation assertion (the
+storage layer keeps only the newest 3 — steps 9/12/14 for every=3,
+not all five) and a dead helper removed (ruff RUF059).
+
+**The ship (v1.2.178, from main).** Four carriers bumped together,
+CHANGELOG leads 1.2.178, CHECKPOINT_SCHEMA.md registry row + rules
+updated, plan R8 row marked done.  ruff clean on full src + the three
+proof suites (4 findings fixed); mypy 217 files zero errors;
+notebooks re-executed 8/8 at 1.2.178 (188 s, zero error outputs, zero
+home-path survivors), 7 twins stripped, freshness + variants guards
+green.  One scheduling self-inflicted wound, honestly recorded: the
+first audit-battery run overlapped the notebook ritual rewriting
+examples/ mid-read (8 variants failures); the clean rerun after the
+ritual was 647 passed / 0 failed / 2 skipped.  Ship-safety +
+portability 16/0.  Zip `pharma-ml-toolkit-v1.2.178.zip` — 9,083,864
+bytes, sha-256
+`90628d97dd15f532a2bd99ce87be81cec8d381fff5aaa51447420edc87406a0b`,
+four byte-identical homes, predecessor 177 swept from all four.  §14
+audit under `docs/release-audits/v1.2.178-part5-r8-*`: all eight
+archive checks passed.
+
+**Standing notes.** The cron/scheduled-task tool remains unavailable
+in this sandbox ("No such tool available" — retried again this round);
+the every-2h "continue" task cannot be created from here.

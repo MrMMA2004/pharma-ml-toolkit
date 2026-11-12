@@ -56,10 +56,10 @@ resume would start from the wrong unit.)
    a referenced pytest node id proving bit-exact resume for that class
    (`RegistryEntry.exact_restore_proof`).
 2. **Pending §13 classes are refused.** The candidates not yet in
-   the registry — `hpo`, `generative_search`,
+   the registry — `generative_search`,
    `docking_batch`, `preprocessing` — are listed in
    `PENDING_OPERATION_TYPES` and rejected with an explicit "not yet
-   registered" error until their proof round lands (planned rounds R8+
+   registered" error until their proof round lands (planned rounds R9+
    in `docs/plans/PART5_S11_S14_CONTINUATION.md`).
 3. **Exact restore or nothing.** `restore_exact` must be `True`
    (construction-time and on-disk validation). §13: "Never present a
@@ -91,6 +91,7 @@ resume would start from the wrong unit.)
 | `benchmark_family_scoring` | descriptor families scored | preserve | `tests/test_numpy_neural_checkpoints.py::TestBitExactResume::test_sgd_momentum_resume_is_bit_exact` | `pharmaml.ml.training` |
 | `descriptor_batch` | molecules featurized | preserve | `tests/test_descriptor_batch_resumability.py::TestDescriptorBatchResume::test_resumed_batch_is_bit_exact` | `pharmaml.chem.features` |
 | `similarity_campaign` | references scanned | preserve | `tests/test_similarity_campaign_resumability.py::TestSimilarityCampaignResume::test_resumed_campaign_is_bit_exact` | `pharmaml.chem.similarity` |
+| `hpo` | trials evaluated | preserve | `tests/test_hpo_resumability.py::TestHPOResume::test_resumed_study_is_bit_exact` | `pharmaml.ml.hpo` |
 
 The first of the six §13 candidates earned its row in round 6: the
 descriptor batch (`compute_feature_frame(checkpoint_dir=...)`)
@@ -107,8 +108,15 @@ and the scan-config + dataset fingerprints; a resume replays them
 (bit-identical to both the uninterrupted campaign AND the one-shot
 `similarity_scan`), a cooperative stop preserves the partial frame on
 `JobCancelled.partial_results`, and a stale config/dataset checkpoint
-is refused. The four remaining candidates are pending; each earns its
-row in its own round, exactly as the master prompt sequences it.
+is refused. Round 8 added the third: `tune_model(checkpoint_dir=...)`
+— and the round's specific lesson is that the trial history ALONE is
+not the complete state: the TPE sampler draws candidates from its
+`random.Random`, so the checkpoint carries the RNG state too
+(`HPOStudy.capture_state()` / `restore_state()`), making the resumed
+study bit-identical to the uninterrupted one where a naive
+history-only replay demonstrably diverges. The three remaining
+candidates are pending; each earns its row in its own round, exactly
+as the master prompt sequences it.
 
 ## Using it
 

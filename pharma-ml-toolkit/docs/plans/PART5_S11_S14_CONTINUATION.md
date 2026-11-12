@@ -34,6 +34,7 @@ passed.
 | R5 (done) | §14 report schema v2 — fold profile results + gates into the release audit artifact | §14 (P0/1) | pushed; `--profile-results` (schema pharmaml-profile-results/2, fail-closed honest-labelling validation) folds per-profile counts/gates/backup/limitations into report.json + SUMMARY.md from one source; 22 new tests (28 in the suite); the validator's collected-before-compare ordering bug caught by the new tests and fixed; a real report shipped under docs/release-audits/v1.2.174-part5-r5-* |
 | R6 (done) | First §13 extension on the schema: descriptor batches (exact-restore proof) | §13 second half | pushed; `compute_feature_frame(checkpoint_dir=…)` — chunk-boundary envelope checkpoints carrying the complete state (per-row b64 float vectors, drop ledger, config+dataset fingerprints); resume skips the completed prefix bit-identically; stale config/dataset refuses (exact restore or nothing); cooperative stop preserves the partial `(frame, report)` on `JobCancelled.partial_results` (§13 "whenever the data contract permits"); `descriptor_batch` registered in OPERATION_REGISTRY with the proof node; 11-test proof suite; focused battery 593 passed (features/descriptors/schema/tooling/numpy-neural/pipeline/cli + doctests); ruff + mypy clean |
 | R7 (done) | Second §13 extension: similarity campaigns (exact-restore proof) | §13 second half | pushed; `run_similarity_campaign(checkpoint_dir=…)` — the `similarity_scan` math in a 25-reference chunk loop with envelope checkpoints carrying the long-format similarity rows + dropped-reference ledger + scan-config/dataset fingerprints; a resume is bit-identical to BOTH the uninterrupted campaign and the one-shot `similarity_scan`; stale config/dataset refuses; cooperative stop preserves the partial frame on `JobCancelled.partial_results`; `similarity_campaign` registered in OPERATION_REGISTRY with the proof node; 11-test proof suite; focused battery 107 passed (similarity/descriptor-batch/schema/tooling + doctests); ruff + mypy clean |
+| R8 (done) | Third §13 extension: HPO studies (exact-restore proof, RNG-state lesson) | §13 second half | pushed; `tune_model(checkpoint_dir=…)` — the trial loop with envelope checkpoints carrying the COMPLETE state: trial history AND the sampler's RNG state (`HPOStudy.capture_state()/restore_state()`); without the RNG state a resumed TPE demonstrably diverges (naive history replay pinned by its own test); a resume is bit-identical to the uninterrupted study AND the checkpoint-less call; stale config (model/space/sampler/seed/cv/n_trials) or dataset refuses (exact restore or nothing); cooperative stop preserves the partial TuneReport on `JobCancelled.partial_results`; `hpo` registered in OPERATION_REGISTRY with the proof node; 12-test proof suite; focused battery 282 passed (hpo/presets/multiobjective/resumability×3/schema/tooling/numpy-neural/carriers + doctests); ruff + mypy clean |
 
 Ordering rationale: the schema precedes the previews and the extension (the
 master prompt demands the schema be defined and tested **before** extending
@@ -148,8 +149,14 @@ similarity campaign: `run_similarity_campaign(checkpoint_dir=...)` in
 `pharmaml/chem/similarity.py`, registered as `similarity_campaign` with its
 proof suite `tests/test_similarity_campaign_resumability.py` (11 tests,
 led by the bit-exact resume proof against both the uninterrupted twin and
-the one-shot `similarity_scan`). Four candidates remain: hpo,
-generative_search, docking_batch, preprocessing.**
+the one-shot `similarity_scan`). Round 8 followed for HPO:
+`tune_model(checkpoint_dir=...)` in `pharmaml/ml/hpo.py`, registered as
+`hpo` with its proof suite `tests/test_hpo_resumability.py` (12 tests) —
+the round's lesson: the trial history alone is NOT the complete state
+(the TPE sampler's RNG advances per trial), so the checkpoints carry
+the RNG state too and a naive history-only replay is proven to
+diverge. Three candidates remain: generative_search, docking_batch,
+preprocessing.**
 
 ## Definition of done (this continuation)
 
