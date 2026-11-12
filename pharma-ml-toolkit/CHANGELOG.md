@@ -1,3 +1,41 @@
+## [1.2.181] — 2026-11-12
+### Added — part5-continuation round 11: the chunked preprocessing earns §13 registration — THE REGISTRY IS COMPLETE
+
+- `apply_preprocessor_chunked(frame, *, impute_strategy="median",
+  scale=True, encode_categorical=False, chunk_rows=500, progress=...,
+  checkpoint_dir=..., checkpoint_every=..., checkpoint_resume=...)`
+  in `pharmaml.ml.preprocessing` — the sixth and last §13 extension
+  on the v2 checkpoint schema: the standard (impute -> scale ->
+  encode) pipeline is fitted ONCE on the full table and applied
+  `chunk_rows` at a time.  The exactness contract rests on two
+  verified properties: the fit is DETERMINISTIC given the table (a
+  resume refits instead of deserializing sklearn state) and
+  ``transform`` is ROW-PURE (the transform of a slice equals the
+  slice of the transform).  The checkpoint is therefore only the
+  completed chunks' transformed rows — a resume skips them
+  bit-exactly, equal to BOTH the uninterrupted chunked run AND the
+  one-shot ``fit_transform``.
+- The fingerprint covers the strategy knobs AND the table itself
+  (columns, dtypes, shape, a content checksum): a value edit, a
+  column rename, or a shape edit all refuse to resume (exact restore
+  or nothing).
+- A cooperative stop preserves the partial ``(frame, report)`` on
+  ``JobCancelled.partial_results`` — the completed rows transformed,
+  the pending rows absent.  A complete-run checkpoint restores with
+  ZERO chunks re-transformed (the smoke-caught complete-ledger
+  double-append bug, fixed before the proofs landed).
+- **With round 11 all six §13 candidate classes are registered**
+  (descriptor_batch R6, similarity_campaign R7, hpo R8,
+  generative_search R9, docking_batch R10, preprocessing R11) and
+  `PENDING_OPERATION_TYPES` is empty — the §13 candidate sequence is
+  COMPLETE.  The gate stays armed for any future class.
+- `tests/test_preprocessing_resumability.py` — the 10-test proof
+  suite, led by the registry proof
+  `test_resumed_table_is_bit_exact` and the completion assertion
+  `test_registry_complete_and_pins_the_proof_test`.
+- `docs/CHECKPOINT_SCHEMA.md` registry + rules updated;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R11 row marked done.
+
 ## [1.2.180] — 2026-11-12
 ### Added — part5-continuation round 10: the docking batch earns §13 registration (the per-ligand ledger, preserve semantics)
 

@@ -55,11 +55,14 @@ resume would start from the wrong unit.)
    only types present in `OPERATION_REGISTRY`. Registry membership requires
    a referenced pytest node id proving bit-exact resume for that class
    (`RegistryEntry.exact_restore_proof`).
-2. **Pending §13 classes are refused.** The candidate not yet in
-   the registry — `preprocessing` — is listed in
-   `PENDING_OPERATION_TYPES` and rejected with an explicit "not yet
-   registered" error until its proof round lands (planned round R11
-   in `docs/plans/PART5_S11_S14_CONTINUATION.md`).
+2. **Unknown operation classes are refused.** (round 11) the §13
+   registry is COMPLETE — all six candidate classes earned their
+   registration (descriptor_batch R6, similarity_campaign R7, hpo
+   R8, generative_search R9, docking_batch R10, preprocessing R11) —
+   so `PENDING_OPERATION_TYPES` is empty.  The gate stays armed: a
+   type not in `OPERATION_REGISTRY` is rejected with an explicit
+   error, so any future candidate class must earn its proof round
+   before it can claim resumability.
 3. **Exact restore or nothing.** `restore_exact` must be `True`
    (construction-time and on-disk validation). §13: "Never present a
    Stop/Resume action that cannot safely resume."
@@ -93,6 +96,7 @@ resume would start from the wrong unit.)
 | `hpo` | trials evaluated | preserve | `tests/test_hpo_resumability.py::TestHPOResume::test_resumed_study_is_bit_exact` | `pharmaml.ml.hpo` |
 | `generative_search` | generations evolved | preserve | `tests/test_generative_search_resumability.py::TestGenerativeSearchResume::test_resumed_search_is_bit_exact` | `pharmaml.generative.genetic` |
 | `docking_batch` | ligands docked | preserve | `tests/test_docking_batch_resumability.py::TestDockingBatchResume::test_resumed_batch_is_bit_exact` | `pharmaml.docking.smiles_docking` |
+| `preprocessing` | chunks transformed | preserve | `tests/test_preprocessing_resumability.py::TestPreprocessingResume::test_resumed_table_is_bit_exact` | `pharmaml.ml.preprocessing` |
 
 The first of the six §13 candidates earned its row in round 6: the
 descriptor batch (`compute_feature_frame(checkpoint_dir=...)`)
@@ -131,9 +135,17 @@ nature, so "preserve", not re-execute, is the honest exactness
 contract, proven bit-identical against a deterministic fake engine).
 Its fingerprint closes the two gaps the R9 audit flagged: the FULL
 smiles list + names (a reordered or edited dataset refuses) and the
-receptor PDBQT content checksum (an edited receptor refuses). The
-one remaining candidate is pending; it earns its row in its own
-round, exactly as the master prompt sequences it.
+receptor PDBQT content checksum (an edited receptor refuses). Round
+11 completed the registry with `apply_preprocessor_chunked()`: the
+chunked (impute -> scale -> encode) transform rests on two verified
+properties — the fit is DETERMINISTIC given the table (a resume
+refits instead of deserializing sklearn state) and transform is
+ROW-PURE (the transform of a slice equals the slice of the
+transform) — so the checkpoint is the completed chunks' transformed
+rows and a resume skips them bit-exactly; the fingerprint covers the
+strategy knobs AND the table itself (columns, dtypes, shape, content
+checksum). With that, all six §13 classes the schema header names
+are registered and the pending list is empty.
 
 ## Using it
 

@@ -1,0 +1,99 @@
+{
+  "schema": "pharmaml-profile-results/2",
+  "generated_by": "part5-continuation round 11 (§13 second half) — the v1.2.181 ship from main; with it the §13 registry is COMPLETE",
+  "environment": {
+    "platform": "Linux 5.10 sandbox, offscreen Qt (QT_QPA_PLATFORM=offscreen via ui/headless.py EGL stub)",
+    "python": "3.12.16",
+    "stack": "PySide6 6.8.3, pyqtgraph 0.13.7, rdkit 2026.9.1, scikit-learn 1.5.2, numpy 1.26.4, torch 2.15.0+cpu, tqdm, openpyxl, python-docx"
+  },
+  "profiles": [
+    {
+      "name": "R11 audit battery (hpo ×4, generative-search proofs + regression, similarity ×2, descriptor-batch, docking-batch proofs + docking + campaign + engine-discovery + docking-prep regression, preprocessing proofs, schema, tooling, numpy-neural, pipeline, notebook-variants, carriers + doctests)",
+      "command": "python -m pytest tests/test_hpo.py tests/test_hpo_presets.py tests/test_multiobjective_hpo.py tests/test_hpo_resumability.py tests/test_generative_search_resumability.py tests/test_generative.py tests/test_generative_result_sa.py tests/test_similarity.py tests/test_similarity_campaign_resumability.py tests/test_descriptor_batch_resumability.py tests/test_docking_batch_resumability.py tests/test_docking.py tests/test_campaign.py tests/test_engine_discovery_part5.py tests/test_docking_prep.py tests/test_preprocessing_resumability.py tests/test_checkpoint_schema.py tests/test_checkpoint_tooling.py tests/test_numpy_neural_checkpoints.py tests/test_ml_pipeline.py tests/test_notebook_variants.py tests/test_version_carriers.py src/pharmaml/ml/hpo.py src/pharmaml/generative/genetic.py src/pharmaml/chem/similarity.py src/pharmaml/docking/smiles_docking.py src/pharmaml/ml/preprocessing.py src/pharmaml/utils/checkpoint_schema.py src/pharmaml/utils/checkpoints.py --doctest-modules",
+      "outcome_counts": {
+        "passed": 1273,
+        "failed": 0,
+        "skipped": 2,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "notes": "run on main at the 1.2.181 bump, AFTER the notebook ritual completed (the round-8 scheduling rule); ALL SIX §13 proof suites ride this battery (94 tests across descriptor-batch, similarity-campaign, hpo, generative-search, docking-batch, preprocessing), plus the doctests of every touched module (including the new apply_preprocessor_chunked docstring example)"
+    },
+    {
+      "name": "Ship safety + release portability",
+      "command": "python -m pytest tests/test_checkpoint_ship_safety.py tests/test_release_portability.py",
+      "outcome_counts": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "notes": "post-bump sanity on main"
+    },
+    {
+      "name": "Notebook re-execution at ship (8/8)",
+      "command": "python tools/reexec_notebooks.py && python tools/strip_notebook_outputs.py",
+      "outcome_counts": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "notes": "8/8 executed at pharmaml 1.2.181 in 168s; zero error outputs, zero home-path survivors; the 7 no-output twins regenerated; freshness + variants guards green in the audit battery"
+    },
+    {
+      "name": "Offscreen GUI battery (round-5 recorded evidence)",
+      "command": "python -m pytest tests/ -k gui --no-header -q",
+      "outcome_counts": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 532
+      },
+      "notes": "not executed this round; the round-5 recorded evidence (532/532 green at 1.2.174) carries the GUI leg; R11 touches no GUI code (the preprocessing chunk loop is headless)"
+    }
+  ],
+  "gates": [
+    {
+      "name": "ruff (full src + all seven touched suites)",
+      "outcome": "passed",
+      "detail": "preprocessing.py, checkpoint_schema.py and all touched test suites clean"
+    },
+    {
+      "name": "mypy src/pharmaml",
+      "outcome": "passed",
+      "detail": "217 files, zero errors"
+    },
+    {
+      "name": "Four-carrier version pin (round-263)",
+      "outcome": "passed",
+      "detail": "VERSION, pyproject, __version__, SHIPPED_TOOLKIT_VERSION all 1.2.181 in one change"
+    },
+    {
+      "name": "Notebook freshness",
+      "outcome": "passed",
+      "detail": "8/8 re-executed at 1.2.181, twins stripped, guard green"
+    },
+    {
+      "name": "§13 registry completeness (this round's milestone)",
+      "outcome": "passed",
+      "detail": "all six candidate classes registered with pinned proof nodes; PENDING_OPERATION_TYPES empty; the unknown-type gate armed (time_travel refused in the proof suite)"
+    }
+  ],
+  "backup_and_recovery": {
+    "status": "verified this round (push below re-verifies the remote)",
+    "evidence": "main carries R10 (4123cad) verified on the remote at round start; the R11 commit pushed to origin/main; the v1.2.181 zip written to all four homes",
+    "power_loss_recovery": "not verified by this round"
+  },
+  "limitations": [
+    "The §13 candidate sequence is COMPLETE (all six classes registered), but the registered resumability is library-side only: the GUI does not yet surface JobCancelled.partial_results or offer Pause/Resume buttons for any registered class",
+    "The preprocessing exactness contract assumes the sklearn pipeline's fit is deterministic given the table (verified for SimpleImputer/StandardScaler/OneHotEncoder in this round's recon; a future transformer with non-deterministic fit would break the refit-on-resume contract and must not be added to build_preprocessor without a new proof",
+    "The checkpoint payload is the transformed rows as JSON floats — bit-exact in CPython (repr round-trip), but the payload size grows linearly with the table (a 1M-row x 500-col table would checkpoint ~4 GB of JSON); the intended use is the large-but-not-huge QSAR table regime",
+    "A resume refits the pipeline on the full table before skipping completed chunks: the fit cost is re-paid on every resume (seconds for QSAR-scale tables; the alternative — serializing fitted sklearn state — was rejected as version-fragile)",
+    "chunk-aligned cancel: the partial ledger holds whole chunks; a stop mid-chunk (not possible via the progress contract, which fires on boundaries) would need row-level ledgering",
+    "The offscreen GUI battery was not re-run for 181 (round-5 recorded evidence carries it; R11 touches no GUI code)"
+  ]
+}

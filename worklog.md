@@ -14119,3 +14119,67 @@ vs re-execute contract, the path-carrying rows, the not-fingerprinted
 campaign folders, the wave-barrier stop latency).
 
 **Standing notes.** One §13 candidate remains: preprocessing (R11).
+
+## R11 (§13 second half) — the chunked preprocessing earns registration — THE REGISTRY IS COMPLETE — 2026-11-12
+
+**The round.** R11 registers the sixth and last §13 candidate:
+`apply_preprocessor_chunked(checkpoint_dir=…)` in
+`pharmaml/ml/preprocessing.py`.  The recon found NO chunked
+preprocessor existed (the module is sklearn fit/transform), so the
+round builds the resumable apply path.  Two properties verified up
+front carry the exactness contract: the pipeline's fit is
+DETERMINISTIC given the table (a resume refits instead of
+deserializing version-fragile sklearn state) and `transform` is
+ROW-PURE (the transform of a slice equals the slice of the
+transform).  The checkpoint is therefore only the completed chunks'
+transformed rows; the fingerprint covers the strategy knobs AND the
+table itself (columns, dtypes, shape, content checksum).
+
+**The bug the smoke test caught before the proofs.** A complete-run
+checkpoint holds all 37 rows; `start_chunk = 37 // 10 = 3` (not
+chunk-aligned), so the resume re-transformed rows 30:37 and
+APPENDED them again — 44 rows out.  The fix: a complete ledger
+(`len(done_rows) == total_rows`) sets `start_chunk = total_chunks`
+and the loop is skipped entirely (zero chunks re-transformed, pinned
+by the registry proof).  Non-aligned partial ledgers refuse
+(readable-payload guard); oversized ledgers refuse too.
+
+**The proof suite.** `tests/test_preprocessing_resumability.py` —
+10 tests: the registry proof (resume transforms NOTHING, bit-equal
+to the fresh run AND the one-shot fit_transform), tail-only resume
+(the cancel fires after chunk 2's rows but before its save — the
+newest saved boundary is chunk 1; boundary semantics), cancel-
+preserve (partial (frame, report) with the exact prefix rows),
+stale table (value edit / column rename / shape edit all refuse),
+stale config (mean vs median refuses), envelope, the COMPLETION
+assertion (all six classes registered, PENDING empty, unknown types
+still refused), chunk_rows/every validation, every-thinning, and
+the categorical (one-hot) round trip.  The frontier assertions in
+the five older suites retired to completion assertions; two
+obsolete schema-suite assumptions updated (the pending list may be
+empty now; the tamper target is `time_travel`).
+
+**The ship (v1.2.181, from main).** Four carriers bumped together;
+CHANGELOG leads 1.2.181; CHECKPOINT_SCHEMA.md registry row + rules
+(the pending-classes rule became the unknown-classes rule — the
+gate stays armed); plan doc R11 row + the §13-COMPLETE status
+note.  ruff clean (full src + seven suites); mypy 217 files zero
+errors; notebooks re-executed 8/8 at 1.2.181 (168 s), twins
+stripped; audit battery AFTER the ritual: 1273 passed / 0 failed /
+2 skipped (all six proof suites ride it — 94 proof tests).  Ship-
+safety + portability 16/0.  Zip `pharma-ml-toolkit-v1.2.181.zip` —
+9,224,767 bytes, sha-256
+`9b8fbde309ee17e42a228b44505ee5a9dcd8f7711f1a560321a0b82b6b495556`,
+four byte-identical homes, predecessor 180 swept from all four.
+§14 audit under `docs/release-audits/v1.2.181-part5-r11-*`: all
+eight archive checks passed; limitations recorded honestly (the
+deterministic-fit assumption for future transformers, the JSON
+payload size regime, the refit cost per resume, library-side-only
+resumability).
+
+**The milestone.** ALL SIX §13 candidate classes the schema header
+names are now registered with pinned exact-restore proofs:
+descriptor_batch (R6), similarity_campaign (R7), hpo (R8),
+generative_search (R9), docking_batch (R10), preprocessing (R11).
+`PENDING_OPERATION_TYPES` is empty; the unknown-type gate stays
+armed.  The §13 candidate sequence is COMPLETE.

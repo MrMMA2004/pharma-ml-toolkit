@@ -22,7 +22,7 @@ from pharmaml.exceptions import JobCancelled
 from pharmaml.utils.checkpoint_schema import (
     ENVELOPE_KEY,
     OPERATION_REGISTRY,
-    OperationSpec,
+    PENDING_OPERATION_TYPES,
     validate_checkpoint,
 )
 from pharmaml.utils.checkpoints import CheckpointManager
@@ -195,8 +195,11 @@ class TestSimilarityCampaignResume:
         # the rest
         assert "hpo" in OPERATION_REGISTRY
         assert "generative_search" in OPERATION_REGISTRY
-        with pytest.raises(Exception, match="preprocessing"):
-            OperationSpec(operation_type="preprocessing", operation_id="x")
+        # (round 11) preprocessing has since earned its own round:
+        # ALL SIX §13 classes are registered -- the registry is
+        # complete and the pending list is empty
+        assert "preprocessing" in OPERATION_REGISTRY
+        assert PENDING_OPERATION_TYPES == ()
 
     def test_checkpoint_every_validation(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="checkpoint_every"):

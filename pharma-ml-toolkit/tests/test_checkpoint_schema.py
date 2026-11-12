@@ -80,8 +80,11 @@ class TestOperationSpec:
         assert spec.restore_exact is True
 
     def test_pending_section13_class_is_rejected_until_proven(self) -> None:
-        # every §13 candidate must be refused: earning registration is the point
-        assert PENDING_OPERATION_TYPES, "the §13 candidate list must not be empty"
+        # (round 11) the §13 registry is COMPLETE: all six candidate
+        # classes have earned their registration, so the pending list
+        # is empty and this refusal loop is vacuous.  The gate stays
+        # armed: a future candidate would list itself here and be
+        # refused until its proof round lands.
         for pending in PENDING_OPERATION_TYPES:
             assert pending not in OPERATION_REGISTRY
             with pytest.raises(PersistenceError, match="candidate"):
@@ -244,10 +247,11 @@ class TestValidateCheckpoint:
         info = mgr.save(step=1, state={}, operation=_spec())
         _reseal(
             info.path,
-            # (round 10) docking_batch is registered now -- the
-            # tamper target must be a genuinely unregistered type
+            # (round 11) preprocessing is registered now too -- the
+            # registry is COMPLETE, so the tamper target is a type that
+            # has never been registered at all
             lambda r: r[ENVELOPE_KEY]["operation"].__setitem__(
-                "type", "preprocessing"
+                "type", "time_travel"
             ),
         )
         report = validate_checkpoint(info.path)

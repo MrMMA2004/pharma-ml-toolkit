@@ -221,14 +221,32 @@ OPERATION_REGISTRY: dict[str, RegistryEntry] = {
         ),
         implementation="pharmaml.docking.smiles_docking",
     ),
+    # (part5-continuation round 11, §13) the sixth and LAST candidate to
+    # EARN registration -- with it, all six §13 classes the schema
+    # header names are registered.  The chunked preprocessing's state
+    # is the completed chunks' transformed rows; the exactness contract
+    # rests on two verified properties: the pipeline's fit is
+    # DETERMINISTIC given the table (a resume refits instead of
+    # deserializing sklearn state) and transform is ROW-PURE (the
+    # transform of a slice equals the slice of the transform).  The
+    # fingerprint covers the strategy knobs AND the table itself
+    # (columns, dtypes, shape, content checksum) -- any edit refuses.
+    "preprocessing": RegistryEntry(
+        unit_description="chunks transformed",
+        partial_results_policy="preserve",
+        exact_restore_proof=(
+            "tests/test_preprocessing_resumability.py::"
+            "TestPreprocessingResume::test_resumed_table_is_bit_exact"
+        ),
+        implementation="pharmaml.ml.preprocessing",
+    ),
 }
 
-#: The §13 candidate classes, in the master prompt's own order.  Each may
-#: register only after its round lands the exact-restore proof test; until
-#: then OperationSpec(operation_type=<any of these>) raises.
-PENDING_OPERATION_TYPES: tuple[str, ...] = (
-    "preprocessing",
-)
+#: (round 11) EMPTY: all six §13 candidate classes have earned their
+#: registration (descriptor_batch R6, similarity_campaign R7, hpo R8,
+#: generative_search R9, docking_batch R10, preprocessing R11).  The
+#: gate stays armed for any future class the schema grows.
+PENDING_OPERATION_TYPES: tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------
