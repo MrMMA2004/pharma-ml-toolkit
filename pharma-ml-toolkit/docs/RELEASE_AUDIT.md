@@ -29,9 +29,9 @@ backup, full test profiles or an actual engine invocation. Consult the
 [Part 5 audit](PART5_PHASE0_AUDIT.md) for the separate observed profile and
 backup results.
 
-The audit extracts only to its own temporary directory. Do not invoke the
-existing publishing ritual merely to obtain an audit: it has overwrite and
-retention behavior and requires an independently reviewed safe release plan.
+The audit extracts only to its own temporary directory. Do not invoke a
+publishing ritual merely to obtain an audit: publication and retention have
+side effects and require an independently reviewed safe release plan.
 
 ## Checkpoint build and publication limits
 

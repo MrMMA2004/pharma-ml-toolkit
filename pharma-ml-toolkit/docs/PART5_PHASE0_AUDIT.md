@@ -419,3 +419,40 @@ environment: **95 passed, 0 failed, 0 skipped**. A broader targeted selection
 covering portability, provenance, checkpoint, documentation and notebook tests
 with RDKit 2026.9.1: **261 passed, 0 failed, 0 skipped**. No production
 release or full suite is certified by these results.
+
+
+## Continuation — four-home publisher safety and isolated rehearsal
+
+Five tests using synthetic files reproduced that `tools/build_zip.py` could
+overwrite an existing release, delete a pre-existing root-level staging file,
+remove the only predecessor copy, modify source during its path scrub and
+publish despite scrub failure. All five failed against the old implementation.
+The revised builder copies and hashes source inputs to private staging, runs
+the scrub there, checks CRC/leaks, publishes four no-clobber hash-verified
+copies, and preserves predecessor copies unless a matching independent backup
+exists outside the four homes. Injected failures cover partial publication,
+corruption, races, unreadable files, symlinks, mismatched/aliased backups and
+scrub failure. Retention remains conditional; publication is not crash-atomic,
+not protected against hostile concurrent writers, and needs hard links. A
+failed later publication leaves earlier copies in place for manual review.
+The scrub is a subprocess, not a security sandbox, and no longer edits the
+source tree or excluded scratch. See [RELEASE_AUDIT](RELEASE_AUDIT.md).
+
+A disposable rehearsal used a Git archive of commit `016376d` with the revised
+builder and its tests copied in; the pre-existing release ZIPs were excluded
+from that temporary checkout. A first isolated attempt with existing copies
+correctly refused to overwrite them. The final isolated rehearsal produced four
+matching temporary ZIPs (571 entries / 526 files / 8,848,141 bytes; SHA-256
+`6100d0b3b050b353b35fc3a938a100512418de6efd90300cbf8f2c68de985dcc`),
+passed the eight scoped read-only archive-audit checks, and left the original
+v1.2.174 source, distribution and separate workspace backup at SHA-256
+`bf8dbfb58e2d0d07ecc79c3f36f28595d33d59890f439cb242e992c7525b54e7`.
+The candidate uses the same version label as the existing release but is a
+temporary test artifact, not a published or replacement ZIP. In a fresh
+isolated extraction with an editable install resolving to that extraction,
+targeted standalone tests reported **269 passed, 0 failed, 2 skipped**. The
+two checkout-only skips are not passes. Local focused build, checkpoint,
+restore, leakage and archive-audit selection: **126 passed, 0 failed, 0
+skipped**. The candidate report and summary are outside the repository.
+Neither those targeted results nor the audit certify the full release or
+execute the bundled docking engines.
