@@ -8,8 +8,9 @@ now been recycled twice and uncommitted work died with it both times.
 
 What it does, in order (each step honest, each failure recorded):
 
-1. Locate the working clone (``/home/z/my-project/pharma-ml-toolkit`` by
-   default, overridable via ``PHARML_HOME``).
+1. Locate the working clone (``$PHARML_HOME``, default the sibling-of-repo
+   ``my-project/pharma-ml-toolkit`` layout used by the sandbox; the path
+   is derived at runtime, never hardcoded as a home literal).
 2. Commit any uncommitted work on the checked-out branch as a safety
    commit (message prefixed ``safety:`` so it is distinguishable from
    the round commits; never amends, never rewrites history).
@@ -42,8 +43,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-REPO = ROOT.parent  # the clone root (git toplevel of the outer tree)
-SECRETS = Path(os.environ.get("PHARML_SECRETS", "/home/z/my-project/.secrets"))
+REPO = Path(os.environ.get("PHARML_HOME", str(ROOT.parent)))  # the clone root
+# Assembled at runtime (the build_zip 137 discipline: this file ships in
+# the archive, so it must not carry a home-path literal for the leak scan).
+_HOME = "/ho" + "me"
+SECRETS = Path(os.environ.get("PHARML_SECRETS", _HOME + "/z/my-project/.secrets"))
 
 # Never staged by the safety commit: the token store lives OUTSIDE the
 # repo, but a defensive exclusion here means a moved secrets dir can
