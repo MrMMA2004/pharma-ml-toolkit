@@ -14183,3 +14183,70 @@ descriptor_batch (R6), similarity_campaign (R7), hpo (R8),
 generative_search (R9), docking_batch (R10), preprocessing (R11).
 `PENDING_OPERATION_TYPES` is empty; the unknown-type gate stays
 armed.  The §13 candidate sequence is COMPLETE.
+
+## R12 (§12 round 2) — the preserved-partial channel: the GUI surfaces what a §13 Stop kept — 2026-11-12
+
+**The round.** With the §13 registry complete (R11), the round-4
+§12 audit's re-examination found the natural next gap: the six
+registered §13 operations attach `partial_results` to
+`JobCancelled` on a cooperative Stop, but `JobWorker.run` caught
+the exception and emitted only `cancelled(float)` — the preserved
+payload hit the floor, and every page's Stop handler said
+"cancelled after Xs" while the real partial evidence was lost.
+The `JobCancelled` docstring itself had marked this as pending
+("the GUI's Stop handling can surface it once the resume wiring
+lands there").
+
+**The design.** A NEW `JobSignals.preserved(object)` signal emitted
+right after `cancelled` whenever the backend attached a payload —
+the historical `cancelled(float)` contract stays byte-identical
+(all 15 pages untouched), a payload-less `JobCancelled` stays
+silent on the new channel (opt-in without noise), and
+`JobRunner.submit(on_preserved=…)` follows the round-208
+connect-before-pool pattern.  First consumer: the chemistry
+feature-factory page — the R6 descriptor-batch partial
+`(frame, report)` binds to the table with the honest "Cancelled —
+kept the N completed molecule(s) (V valid, D dropped) of M
+requested" line (the requested count recorded at job start).
+
+**The tests.** 5 new offscreen tests: 3 worker-level (the partial
+rides `preserved` after `cancelled`; payload-less silence; the
+historical handler back-compat) + 2 page-level (partial frame
+bound + honest line; no-payload historic line).  Three test-side
+findings fixed on the way: `FeatureReport` requires `families`;
+the page imports `compute_feature_frame` INSIDE its job so the
+monkeypatch must land on `pharmaml.chem.features` (the source
+module); the probe call passes no progress so the fake guards
+`None`; the bound frame reads `model().frame` (the model's
+property, not the view's method).
+
+**The gates.** ruff clean on all four round files; mypy: the two
+touched files introduce ZERO new errors (the 7 transitive ui/
+errors proven pre-existing via a stash A/B); FULL offscreen UI
+battery 537/537 (all 15 JobRunner pages); audit battery 1273/0/2
+(post-ritual); ship-safety + portability 16/0; carriers 1.2.182.
+
+**The honest scheduling lesson.** The first single-process full UI
+battery OOM-killed at ~42% (exit 137) — it collided with the
+notebook ritual inside the same 4 GB sandbox.  The recorded
+evidence is the two-half rerun (291 + 246, clean memory, ritual
+finished).  Future rounds: battery and ritual strictly
+sequential.
+
+**The ship (v1.2.182, from main).** CHANGELOG leads 1.2.182;
+GUI_GAP_AUDIT.md row 18 (gap found → FIXED round 12, five test
+pins); plan doc R12 row.  Zip `pharma-ml-toolkit-v1.2.182.zip` —
+9,267,990 bytes, sha-256
+`36a2f453bf510760fb51c34e635d5b517bd88b0a4a5ce84ea721a9e08754c872`,
+four byte-identical homes, predecessor 181 swept from all four.
+§14 audit under `docs/release-audits/v1.2.182-part5-r12-*`: all
+eight archive checks + all five gates passed; limitations
+recorded honestly (one consumer page so far, no resume button
+yet — the checkpoints exist library-side, the GUI affordance is
+future work; the payload rides the signal unvalidated; the
+OOM lesson).
+
+**Standing notes.** The next natural GUI round: adopt
+`on_preserved` on the remaining §13-reachable pages as they gain
+GUI entry points, and a Resume affordance over the existing
+checkpoint dirs (library-side complete since R6-R11).

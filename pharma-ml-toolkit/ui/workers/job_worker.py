@@ -38,6 +38,14 @@ class JobSignals(QObject):
     finished = Signal(object)
     failed = Signal(str)
     cancelled = Signal(float)
+    # (part5-continuation round 12, §12) the preserved-partial channel:
+    # emitted right after ``cancelled`` whenever the backend's
+    # ``JobCancelled`` carried a ``partial_results`` payload (the six
+    # registered §13 operations attach one on a cooperative Stop).  A
+    # separate signal keeps every historical ``cancelled(float)``
+    # handler byte-identical -- pages opt in by connecting
+    # ``preserved``; the payload rides the object role unmodified.
+    preserved = Signal(object)
 
 
 class JobWorker(QRunnable):
@@ -78,7 +86,15 @@ class JobWorker(QRunnable):
             from pharmaml.exceptions import JobCancelled
 
             if isinstance(exc, JobCancelled):
+                # (round 12) §13 "preserve": the cancelled emission keeps
+                # its historical float payload; when the backend attached
+                # a partial_results payload it rides the new ``preserved``
+                # signal immediately after -- pages that opt in surface
+                # it, every historical handler stays byte-identical.
+                partial = getattr(exc, "partial_results", None)
                 self.signals.cancelled.emit(time.monotonic() - self._t0)
+                if partial is not None:
+                    self.signals.preserved.emit(partial)
                 return
             self.signals.failed.emit(f"{type(exc).__name__}: {exc}\n{traceback.format_exc(limit=3)}")
             return
@@ -125,6 +141,7 @@ class JobRunner(QObject):
         on_failed: Callable[[str], None] | None = None,
         on_cancelled: Callable[[float], None] | None = None,
         on_progress: Callable[[int, str], None] | None = None,
+        on_preserved: Callable[[object], None] | None = None,
     ) -> JobWorker | None:
         """Start ``job`` unless one is already running (returns the worker).
 
@@ -137,6 +154,12 @@ class JobRunner(QObject):
         ``submit`` closes that window. The runner's own finishers stay
         the first connections, so ``job_ended`` still fires before the
         page's result slot (the ordering the offscreen tests settle on).
+
+        (round 12) ``on_preserved`` receives the ``partial_results``
+        payload a §13-registered backend attached to its
+        ``JobCancelled`` — emitted after ``cancelled``, so a page can
+        both show the honest "cancelled after Xs" line and surface
+        what the contract preserved.
         """
         if self._busy:
             return None
@@ -155,6 +178,8 @@ class JobRunner(QObject):
             worker.signals.failed.connect(on_failed)
         if on_cancelled is not None:
             worker.signals.cancelled.connect(on_cancelled)
+        if on_preserved is not None:
+            worker.signals.preserved.connect(on_preserved)
         if on_progress is not None:
             worker.signals.progress.connect(on_progress)
         self._pool.start(worker)

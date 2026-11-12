@@ -216,3 +216,106 @@ def test_finished_slots_survive_the_worker_gc_race(studio_app, qtbot) -> None:
         _time.sleep(0.01)
     assert order == ["job_ended", "first", "late"], order
     assert not runner.busy
+
+
+# ---------------------------------------------------------------------------
+# (part5-continuation round 12, §12/§13) the preserved-partial channel
+# ---------------------------------------------------------------------------
+def test_cancelled_partial_rides_the_preserved_signal(
+    studio_app, qtbot
+) -> None:
+    """A JobCancelled with partial_results emits preserved right after
+    cancelled: the six registered §13 operations attach their payload
+    on a cooperative stop, and the worker must hand it to the GUI
+    thread instead of dropping it on the floor."""
+    from ui.workers.job_worker import JobRunner
+
+    runner = JobRunner()
+    cancelled: list[float] = []
+    preserved: list[object] = []
+    done = qtbot.waitSignal(runner.job_ended, timeout=10_000)
+
+    payload = {"kept": 12, "of": 40}  # any object rides the channel
+
+    def job(progress):
+        for i in range(1, 101):
+            if not progress(i / 100, f"checkpoint {i}/100"):
+                raise JobCancelled("user stop", partial_results=payload)
+            time.sleep(0.005)
+        return "completed"
+
+    worker = runner.submit(
+        "partial", job,
+        on_cancelled=cancelled.append,
+        on_preserved=preserved.append,
+    )
+    assert worker is not None
+    worker.request_stop()
+    done.wait()
+    _drain()
+    assert cancelled  # the historical float payload still fires
+    assert preserved == [payload]  # and the partial rode through
+
+
+def test_cancelled_without_partial_stays_silent(
+    studio_app, qtbot
+) -> None:
+    """A JobCancelled with NO payload (the historical convention, the
+    five non-§13 backends) emits cancelled only -- on_preserved
+    handlers never fire, so pages opt in without noise."""
+    from ui.workers.job_worker import JobRunner
+
+    runner = JobRunner()
+    cancelled: list[float] = []
+    preserved: list[object] = []
+    done = qtbot.waitSignal(runner.job_ended, timeout=10_000)
+
+    def job(progress):
+        for i in range(1, 101):
+            if not progress(i / 100, f"checkpoint {i}/100"):
+                raise JobCancelled("user stop")  # no partial_results
+            time.sleep(0.005)
+        return "completed"
+
+    worker = runner.submit(
+        "silent", job,
+        on_cancelled=cancelled.append,
+        on_preserved=preserved.append,
+    )
+    assert worker is not None
+    worker.request_stop()
+    done.wait()
+    _drain()
+    assert cancelled
+    assert preserved == []
+
+
+def test_historical_cancelled_handlers_stay_byte_identical(
+    studio_app, qtbot
+) -> None:
+    """Back-compat pin: a submit call WITHOUT on_preserved (every one
+    of the 15 pages today) behaves exactly as before -- the cancelled
+    handler receives its float, nothing else fires."""
+    from ui.workers.job_worker import JobRunner
+
+    runner = JobRunner()
+    cancelled: list[float] = []
+    done = qtbot.waitSignal(runner.job_ended, timeout=10_000)
+
+    def job(progress):
+        for i in range(1, 101):
+            if not progress(i / 100, f"checkpoint {i}/100"):
+                raise JobCancelled(
+                    "user stop", partial_results={"kept": 3}
+                )
+            time.sleep(0.005)
+        return "completed"
+
+    worker = runner.submit(
+        "legacy", job, on_cancelled=cancelled.append
+    )
+    assert worker is not None
+    worker.request_stop()
+    done.wait()
+    _drain()
+    assert cancelled and isinstance(cancelled[0], float)

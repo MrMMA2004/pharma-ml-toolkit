@@ -180,6 +180,9 @@ class ChemistryWorkbenchPage(QWidget):
         lay.addWidget(splitter, stretch=1)
 
         self._report = QLabel("No chemistry run yet.")
+        # (round 12) the requested molecule count behind the pending
+        # feature batch -- the preserved-partial line reports against it
+        self._pending_n_total = 0
         self._report.setObjectName("studioStatus")
         self._report.setWordWrap(True)
         lay.addWidget(self._report)
@@ -278,6 +281,9 @@ class ChemistryWorkbenchPage(QWidget):
         if self._runner.busy:
             self._report.setText("A job is already running — Stop it first.")
             return
+        # (round 12) the preserved-partial line reports against this
+        # requested count when a cooperative stop lands mid-batch
+        self._pending_n_total = len(smiles)
         preset = self._families_combo.currentText()
         families = _FAMILY_PRESETS[preset]
         n_jobs = int(self._jobs_combo.currentText())
@@ -351,6 +357,7 @@ class ChemistryWorkbenchPage(QWidget):
             on_finished=self._features_done,
             on_failed=self._failed,
             on_cancelled=self._cancelled,
+            on_preserved=self._features_preserved,
         )
 
     def _features_done(self, outcome: object) -> None:
@@ -399,6 +406,31 @@ class ChemistryWorkbenchPage(QWidget):
 
     def _cancelled(self, seconds: float) -> None:
         self._report.setText(f"Cancelled after {seconds:.0f} s (cooperative stop).")
+
+    def _features_preserved(self, partial: object) -> None:
+        """(round 12, §12/§13) surface what the descriptor batch preserved.
+
+        The R6 contract attaches the partial ``(frame, report)`` to
+        ``JobCancelled`` on a cooperative stop; the runner's
+        ``preserved`` channel hands it to the page.  The partial frame
+        is bound to the table (the completed rows are real, validated
+        feature vectors) and the report line states exactly how many
+        of the requested molecules survived the stop -- honest
+        partial evidence, never a silent drop.
+        """
+        import pandas as pd
+
+        if not isinstance(partial, tuple) or len(partial) != 2:
+            return  # not this backend's payload: nothing to surface
+        frame, report = partial
+        if not isinstance(frame, pd.DataFrame) or frame.empty:
+            return  # nothing had completed before the stop
+        self._table.bind_frame(frame, note="Partial batch — stopped by request")
+        self._report.setText(
+            f"Cancelled — kept the {len(frame)} completed molecule(s) "
+            f"({report.n_valid} valid, {len(report.dropped)} dropped) of "
+            f"{self._pending_n_total} requested."
+        )
 
     def apply_palette(self, palette: ChartPalette) -> None:
         self._plot.apply_palette(palette)

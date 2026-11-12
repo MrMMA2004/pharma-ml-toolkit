@@ -1,3 +1,33 @@
+## [1.2.182] — 2026-11-12
+### Added — part5-continuation round 12: the GUI surfaces what a §13 Stop preserved (the preserved-partial channel)
+
+- `ui/workers/job_worker.py` — the round-4 §12 audit's row 18
+  (confirmed in this round's re-audit): the six registered §13
+  operations attach `partial_results` to `JobCancelled` on a
+  cooperative Stop, but the worker caught the exception and emitted
+  only `cancelled(float)`, dropping the payload on the floor —
+  every page's Stop handler said "cancelled after Xs" while the
+  preserved evidence was lost.  New `JobSignals.preserved(object)`
+  emits right after `cancelled` whenever the backend attached a
+  payload; the historical `cancelled(float)` contract is untouched
+  (all 15 pages byte-identical, pinned by a dedicated back-compat
+  test), and a `JobCancelled` WITHOUT a payload stays silent on the
+  new channel.
+- `JobRunner.submit(on_preserved=…)` — the opt-in hook, connected
+  before the runnable enters the pool (the round-208 pattern).
+- First consumer: the chemistry feature-factory page.  A Stop
+  mid-batch now binds the R6 descriptor-batch partial
+  `(frame, report)` to the table (the completed rows are real,
+  validated feature vectors) with the honest "Cancelled — kept the
+  N completed molecule(s) (V valid, D dropped) of M requested"
+  line; the page records the requested count when the job starts.
+- 5 new offscreen tests: 3 worker-level (the partial rides
+  `preserved` after `cancelled`; no-payload silence; the historical
+  handler back-compat) and 2 page-level (the partial frame bound +
+  the honest line; the no-payload historic line preserved).
+- `docs/GUI_GAP_AUDIT.md` row 18;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R12 row marked done.
+
 ## [1.2.181] — 2026-11-12
 ### Added — part5-continuation round 11: the chunked preprocessing earns §13 registration — THE REGISTRY IS COMPLETE
 

@@ -240,3 +240,90 @@ def test_palette_application(studio_app) -> None:
     page = ChemistryWorkbenchPage()
     page.apply_palette(ChartPalette(background="#111111", foreground="#eeeeee"))
     assert True
+
+
+# ---------------------------------------------------------------------------
+# (part5-continuation round 12, §12/§13) the preserved-partial surfacing
+# ---------------------------------------------------------------------------
+def test_feature_stop_surfaces_the_preserved_partial(
+    studio_app, qtbot, monkeypatch
+) -> None:
+    """A cooperative stop mid feature batch binds the preserved partial
+    frame to the table and states exactly what was kept (round 12).
+
+    The backend is monkeypatched to the §13 cancel contract: after the
+    first chunk completes it raises JobCancelled carrying the partial
+    ``(frame, report)`` — exactly what the R6 descriptor batch does on
+    a real stop. The page must surface it, not drop it.
+    """
+    import ui.pages.chemistry as chem
+    from pharmaml.chem.features import FeatureReport
+    from pharmaml.exceptions import JobCancelled
+
+    partial_frame = pd.DataFrame(
+        {"original_index": [0, 1], "MolWt": [46.07, 94.11]}
+    )
+    partial_report = FeatureReport(
+        smiles=["CCO", "c1ccccc1O"], dropped=[], families={"descriptors": 2}
+    )
+
+    def fake_compute(smiles, families=None, n_jobs=1, progress=None):
+        # the probe call passes no progress; the batch call passes the
+        # page's adapter -- only report when there is one
+        if progress is not None:
+            progress(1, len(smiles), "computing")
+        raise JobCancelled(
+            "user stop", partial_results=(partial_frame, partial_report)
+        )
+
+    # the page imports the function INSIDE its job, so the patch lands
+    # on the source module the import resolves from
+    import pharmaml.chem.features as features_mod
+
+    monkeypatch.setattr(features_mod, "compute_feature_frame", fake_compute)
+    monkeypatch.setattr(
+        chem, "_meminfo_mb", lambda name: None
+    )  # guards stand down
+
+    page = _page_with_frame(_tiny_frame())
+    assert page._pending_n_total == 0  # set on start, not on construct
+    page._start_features()
+    qtbot.waitSignal(page._runner.job_ended, timeout=60_000).wait()
+    _settle(qtbot, studio_app)
+    # the requested count was recorded for the preserved line
+    assert page._pending_n_total == 5
+    # the honest cancelled line + the preserved counts
+    assert "Cancelled" in page.report_text()
+    assert "kept the 2 completed molecule(s)" in page.report_text()
+    assert "5 requested" in page.report_text()
+    # the partial frame is REAL evidence on the table (frame is the
+    # model's property; bind_frame handed it over)
+    bound = page._table.model().frame
+    assert bound is not None
+    assert len(bound) == 2
+
+
+def test_feature_stop_without_payload_keeps_the_historic_line(
+    studio_app, qtbot, monkeypatch
+) -> None:
+    """A JobCancelled with NO payload (a non-§13-style backend) keeps
+    the historical 'Cancelled after Xs' line and binds nothing."""
+    import ui.pages.chemistry as chem
+    from pharmaml.exceptions import JobCancelled
+
+    def fake_compute(smiles, families=None, n_jobs=1, progress=None):
+        if progress is not None:
+            progress(0.5, "computing")
+        raise JobCancelled("user stop")
+
+    import pharmaml.chem.features as features_mod
+
+    monkeypatch.setattr(features_mod, "compute_feature_frame", fake_compute)
+    monkeypatch.setattr(chem, "_meminfo_mb", lambda name: None)
+
+    page = _page_with_frame(_tiny_frame())
+    page._start_features()
+    qtbot.waitSignal(page._runner.job_ended, timeout=60_000).wait()
+    _settle(qtbot, studio_app)
+    assert "Cancelled after" in page.report_text()
+    assert "kept the" not in page.report_text()
