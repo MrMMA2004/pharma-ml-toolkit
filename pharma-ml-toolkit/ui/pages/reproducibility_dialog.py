@@ -98,7 +98,7 @@ class ReproducibilityDialog(QDialog):
     def _submit(self, name: str, job) -> None:
         revision = self._revision
         self._result.clear()
-        self._status.setText(f"Running {name}; no files are modified.")
+        self._status.setText(f"Running {name}; no data or checkpoints are modified.")
         self._enable(False)
         worker = self._runner.submit(name, lambda _progress: job(),
                                      on_finished=lambda result: self._finished(name, result, revision),

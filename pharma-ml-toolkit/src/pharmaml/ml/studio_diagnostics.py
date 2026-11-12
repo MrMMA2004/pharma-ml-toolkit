@@ -24,7 +24,7 @@ def run_example_drift_diagnostic(script: Path | str, *, timeout_s: float = 120) 
     if not path.is_file():
         raise DataValidationError("example-data diagnostic script is unavailable in this installation")
     try:
-        completed = subprocess.run([sys.executable, str(path.resolve())], cwd=path.resolve().parent.parent,
+        completed = subprocess.run([sys.executable, "-B", str(path.resolve())], cwd=path.resolve().parent.parent,
                                    capture_output=True, text=True, timeout=timeout_s, check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise DataValidationError(f"example-data diagnostic could not complete: {exc}") from exc
