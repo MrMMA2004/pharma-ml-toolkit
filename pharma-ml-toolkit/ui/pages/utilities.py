@@ -188,6 +188,9 @@ class UtilitiesWorkbenchPage(QWidget):
         self._tabs.addTab(self._build_tools_tab(), "Campaign tools")
         self._tabs.addTab(self._build_reindex_tab(), "Reindex")
         lay.addWidget(self._tabs)
+        self._diagnostics_btn = QPushButton("Reproducibility & checkpoint diagnostics…")
+        self._diagnostics_btn.clicked.connect(self._show_diagnostics)
+        lay.addWidget(self._diagnostics_btn)
 
         self._progress = ProgressPanel()
         self._progress.attach(self._runner)
@@ -213,6 +216,17 @@ class UtilitiesWorkbenchPage(QWidget):
         self._report.setObjectName("studioStatus")
         self._report.setWordWrap(True)
         lay.addWidget(self._report)
+
+    def _show_diagnostics(self) -> None:
+        from .reproducibility_dialog import ReproducibilityDialog
+
+        dialog = getattr(self, "_diagnostics_dialog", None)
+        if dialog is None:
+            dialog = ReproducibilityDialog(self._runner, self)
+            self._diagnostics_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     # -- tab construction -------------------------------------------------------
     def _build_merge_tab(self) -> QWidget:

@@ -170,9 +170,64 @@ def _build_parser() -> argparse.ArgumentParser:
         help="output path (default: input stem + target extension)",
     )
 
+    # ---- research diagnostics (read-only output) ----------------------
+    research_parser = subparsers.add_parser("research", help="read-only provenance and environment diagnostics")
+    research_sub = research_parser.add_subparsers(dest="research_command", required=True)
+    manifest = research_sub.add_parser("manifest", help="fingerprint a dataset and declare a run setup")
+    manifest.add_argument("--data", required=True)
+    manifest.add_argument("--split-strategy", required=True)
+    manifest.add_argument("--parameter", action="append", default=[], metavar="NAME=VALUE")
+    comparison = research_sub.add_parser("compare", help="compare two saved manifest JSON documents")
+    comparison.add_argument("first")
+    comparison.add_argument("second")
+    run_comparison = research_sub.add_parser("compare-uncertainty", help="compare two file-based uncertainty reports")
+    run_comparison.add_argument("first")
+    run_comparison.add_argument("second")
+    training_comparison = research_sub.add_parser("compare-training", help="compare two observed CLI training records")
+    training_comparison.add_argument("first")
+    training_comparison.add_argument("second")
+    research_sub.add_parser("environment", help="print selected runtime and numerical environment details")
+    checkpoint = research_sub.add_parser("checkpoint", help="read-only checkpoint and input fingerprint inspection")
+    checkpoint.add_argument("path", help="existing checkpoint JSON")
+    checkpoint.add_argument("--input", action="append", default=[], help="complete set of recorded input files; repeat")
+
     # ---- ml ----------------------------------------------------------
     ml_parser = subparsers.add_parser("ml", help="machine-learning workflows")
     ml_sub = ml_parser.add_subparsers(dest="ml_command", required=True)
+
+    for name, description in (("nested-ridge", "nested ridge regression cross-validation"),
+                              ("nested-logistic", "nested logistic classification cross-validation")):
+        nested = ml_sub.add_parser(name, help=description)
+        nested.add_argument("--data", required=True)
+        nested.add_argument("--features", nargs="+", required=True)
+        nested.add_argument("--target", required=True)
+        nested.add_argument("--group", default=None, help="optional leakage-unit grouping column")
+        nested.add_argument("--outer-folds", type=int, default=3)
+        nested.add_argument("--inner-folds", type=int, default=3)
+        nested.add_argument("--seed", type=int, default=42)
+
+    for command, description in (
+        ("conformal-report", "held-out ridge regression intervals and subgroup coverage"),
+        ("conformal-classification", "held-out logistic prediction sets and subgroup coverage"),
+    ):
+        uncertainty = ml_sub.add_parser(command, help=description)
+        for split_name in ("train", "calibration", "test"):
+            uncertainty.add_argument(f"--{split_name}", required=True, help=f"{split_name} CSV/TSV/Excel")
+        uncertainty.add_argument("--features", nargs="+", required=True, help="numeric feature columns")
+        uncertainty.add_argument("--target", required=True)
+        uncertainty.add_argument("--key", required=True, help="exact leakage-unit ID; must be disjoint")
+        uncertainty.add_argument("--group", default=None, help="optional prespecified test subgroup column")
+        uncertainty.add_argument("--alpha", type=float, default=0.1)
+        uncertainty.add_argument("--diagnostics", action="store_true",
+                                 help="include optional held-out probability and kNN distance diagnostics")
+
+    recalibrate = ml_sub.add_parser("calibrate-binary", help="held-out binary probability recalibration report")
+    for part in ("train", "calibration", "test"):
+        recalibrate.add_argument(f"--{part}", required=True, help=f"independent {part} CSV/TSV/Excel")
+    recalibrate.add_argument("--features", nargs="+", required=True, help="numeric feature columns")
+    recalibrate.add_argument("--target", required=True)
+    recalibrate.add_argument("--key", required=True, help="exact leakage-unit ID; must be disjoint")
+    recalibrate.add_argument("--positive-label", required=True, help="exact text of positive class")
 
     train = ml_sub.add_parser("train", help="train one model end-to-end")
     train.add_argument("--data", required=True, help="CSV/Excel with features+target")
@@ -188,6 +243,8 @@ def _build_parser() -> argparse.ArgumentParser:
     train.add_argument("--test-size", type=float, default=0.2)
     train.add_argument("--cv", type=int, default=5)
     train.add_argument("--no-tune", action="store_true", help="skip grid search")
+    train.add_argument("--run-record", default=None, metavar="NEW_JSON",
+                       help="opt in to an observed training record at a new JSON path (never replaces it)")
     train.add_argument(
         "--keep-categorical", action="store_true",
         help="keep string feature columns and one-hot encode them "
@@ -625,6 +682,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="visual bundle output directory (default ./reports)",
     )
 
+    status = docking_sub.add_parser("campaign-status", help="read-only reviewed Vina campaign inspection")
+    status.add_argument("--dir", required=True, help="reviewed Vina campaign output directory")
+    status.add_argument("--check-originals", action="store_true",
+                        help="also read/hash original input and engine paths recorded in the manifest")
+
     campaign = docking_sub.add_parser(
         "campaign",
         help="campaign-tree file management (distribute / cleanup / delete-named / list / reindex)",
@@ -1036,50 +1098,103 @@ def _cmd_data_split(args: argparse.Namespace) -> int:
 
 
 def _read_split_audit_table(path: Path, delimiter: str | None):
-    """Read identifiers as text without inferring NA values or numeric types."""
-    import csv
+    """Compatibility wrapper around the identifier-preserving reader."""
+    from pharmaml.utils.identifier_table import read_identifier_table
 
-    import pandas as pd
+    return read_identifier_table(path, delimiter)
+
+
+def _cmd_research(args: argparse.Namespace) -> int:
+    """Print diagnostics only; the user may redirect the JSON themselves."""
+    import json
 
     from pharmaml.exceptions import DataValidationError
+    from pharmaml.ml.provenance import (
+        compare_manifests,
+        compare_uncertainty_reports,
+        environment_snapshot,
+        experiment_manifest,
+    )
 
-    if not path.is_file():
-        raise DataValidationError(f"Input file not found: {path}")
-    suffix = path.suffix.lower()
-    separators = {"comma": ",", "tab": "\t", "semicolon": ";"}
-    try:
-        if suffix in {".csv", ".tsv", ".txt"}:
-            sep = separators[delimiter] if delimiter else ("\t" if suffix == ".tsv" else ",")
-            with path.open("r", encoding="utf-8-sig", newline="") as handle:
-                reader = csv.reader(handle, delimiter=sep, strict=True)
-                header = next(reader, [])
-                rows = []
-                for row in reader:
-                    if len(row) != len(header):
-                        raise DataValidationError(
-                            f"Cannot read split file {path}: inconsistent field count "
-                            f"at line {reader.line_num}"
-                        )
-                    rows.append(row)
-            frame = pd.DataFrame(rows, columns=header)
-        elif suffix in {".xlsx", ".xlsm"}:
-            first = pd.read_excel(path, header=None, nrows=1, dtype=str, keep_default_na=False)
-            header = first.iloc[0].tolist() if len(first) else []
-            frame = pd.read_excel(path, dtype=str, keep_default_na=False)
+    if args.research_command == "checkpoint":
+        from pharmaml.ml.checkpoint_diagnostics import inspect_checkpoint
+
+        result = inspect_checkpoint(args.path, inputs=args.input)
+    elif args.research_command == "environment":
+        result = environment_snapshot()
+    elif args.research_command == "manifest":
+        parameters = {}
+        for item in args.parameter:
+            name, sep, value = item.partition("=")
+            if not sep or not name.strip() or name in parameters:
+                raise DataValidationError("parameters must have unique nonempty NAME=VALUE entries")
+            parameters[name] = value
+        result = experiment_manifest(args.data, parameters=parameters, split_strategy=args.split_strategy)
+    else:
+        with Path(args.first).open(encoding="utf-8") as handle:
+            first = json.load(handle)
+        with Path(args.second).open(encoding="utf-8") as handle:
+            second = json.load(handle)
+        if args.research_command == "compare-training":
+            from pharmaml.ml.training_provenance import compare_training_records
+
+            result = compare_training_records(first, second)
+        elif args.research_command == "compare-uncertainty":
+            result = compare_uncertainty_reports(first, second)
         else:
-            raise DataValidationError(f"unsupported split file format: {path.suffix}")
-    except DataValidationError:
-        raise
-    except (OSError, UnicodeError, ValueError, ImportError, StopIteration, csv.Error) as exc:
-        raise DataValidationError(f"Cannot read split file {path}: {exc}") from exc
-    if not header or any(not isinstance(name, str) or not name.strip() for name in header):
-        raise DataValidationError(f"Split file {path} has an empty column header")
-    if len(set(header)) != len(header):
-        raise DataValidationError(f"Split file {path} has duplicate column headers")
-    if len(header) != len(frame.columns):
-        raise DataValidationError(f"Split file {path} has an inconsistent header")
-    frame.columns = header
-    return frame
+            result = compare_manifests(first, second)
+    print(json.dumps(result, indent=2, allow_nan=False))
+    if (args.research_command == "checkpoint"
+            and (not result["valid_envelope"] or result["input_status"].startswith("changed")
+                 or result["implementation_status"].startswith("changed"))):
+        return 1
+    return 0
+
+
+def _cmd_ml_nested_ridge(args: argparse.Namespace) -> int:
+    import json
+
+    from pharmaml.ml.nested_classification import nested_logistic_from_file
+    from pharmaml.ml.validation_workbench import nested_ridge_from_file
+
+    evaluate = nested_logistic_from_file if args.ml_command == "nested-logistic" else nested_ridge_from_file
+    result = evaluate(args.data, features=args.features, target=args.target,
+                                    group=args.group, outer_folds=args.outer_folds,
+                                    inner_folds=args.inner_folds, seed=args.seed)
+    print(json.dumps(result, indent=2, allow_nan=False))
+    return 0
+
+
+def _cmd_ml_calibrate_binary(args: argparse.Namespace) -> int:
+    import json
+
+    from pharmaml.ml.probability_calibration import binary_probability_calibration_from_files
+
+    report = binary_probability_calibration_from_files(
+        args.train, args.calibration, args.test, features=args.features, target=args.target,
+        key=args.key, positive_label=args.positive_label,
+    )
+    print(json.dumps(report, indent=2, allow_nan=False))
+    return 0
+
+
+def _cmd_ml_conformal_report(args: argparse.Namespace) -> int:
+    """Evaluate a fixed model on independently supplied calibration and test files."""
+    import json
+
+    from pharmaml.ml.uncertainty_workbench import (
+        classification_uncertainty_from_files,
+        regression_uncertainty_from_files,
+    )
+
+    evaluate = (classification_uncertainty_from_files if args.ml_command == "conformal-classification"
+                else regression_uncertainty_from_files)
+    report = evaluate(
+        args.train, args.calibration, args.test, features=args.features, target=args.target,
+        key=args.key, group=args.group, alpha=args.alpha, diagnostics=args.diagnostics,
+    )
+    print(json.dumps(report, indent=2, default=str, allow_nan=False))
+    return 0
 
 
 def _cmd_data_audit_splits(args: argparse.Namespace) -> int:
@@ -1321,9 +1436,25 @@ def _cmd_ml_train(args: argparse.Namespace) -> int:
     from pharmaml.ml.preprocessing import make_train_test_split
     from pharmaml.ml.training import train_model
 
+    record_path = None
+    before = None
+    actual_stratification: list[bool] = []
+    if args.run_record:
+        from pharmaml.ml.provenance import fingerprint_file
+        from pharmaml.ml.training_provenance import prepare_record_path
+
+        record_path = prepare_record_path(args.run_record)
+        before = fingerprint_file(args.data)
     dataset = _load_cli_dataset(args)
+    if record_path is not None:
+        from pharmaml.exceptions import DataValidationError
+
+        after = fingerprint_file(args.data)
+        if before != after:
+            raise DataValidationError("training input changed while reading; retry with a stable file")
     X_train, X_test, y_train, y_test = make_train_test_split(
-        dataset.X, dataset.y, test_size=args.test_size
+        dataset.X, dataset.y, test_size=args.test_size,
+        on_split=actual_stratification.append if record_path is not None else None,
     )
 
     result = train_model(
@@ -1368,6 +1499,26 @@ def _cmd_ml_train(args: argparse.Namespace) -> int:
         print(f"plots:    {bundle_dir / 'report.html'} (+{len(written) - 1} files)")
         if args.pdf_report:
             print(f"pdf:      {bundle_dir / 'report.pdf'}")
+    if record_path is not None:
+        from pharmaml.exceptions import DataValidationError
+        from pharmaml.ml.training_provenance import make_training_record, write_new_record
+
+        record = make_training_record(
+            dataset=dataset, dataset_fingerprint=after, model_path=model_path, result=result, report=report,
+            requested_model=args.model, requested_task=args.task, keep_categorical=args.keep_categorical,
+            test_size=args.test_size, cv=args.cv, tune_requested=not args.no_tune,
+            stratified=actual_stratification[0], X_train=X_train, X_test=X_test,
+        )
+        try:
+            final_input = fingerprint_file(args.data)
+            record["source_status_after_run"] = "match" if final_input == after else "changed"
+        except DataValidationError:
+            record["source_status_after_run"] = "unavailable"
+        if record["source_status_after_run"] != "match":
+            print("warning: training source changed or became unavailable after parsing; inspect run record",
+                  file=sys.stderr)
+        write_new_record(record_path, record)
+        print(f"run record: {record_path}")
     return 0
 
 
@@ -2183,6 +2334,16 @@ def _cmd_docking_rescore(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_docking_campaign_status(args: argparse.Namespace) -> int:
+    import json
+
+    from pharmaml.docking.campaign_status import inspect_vina_campaign
+
+    result = inspect_vina_campaign(args.dir, check_originals=args.check_originals)
+    print(json.dumps(result, indent=2, allow_nan=False))
+    return 0  # Readable inspection, not an assertion that the campaign is complete or safe.
+
+
 def _cmd_docking_campaign(args: argparse.Namespace) -> int:
     """Dispatch ``pharmaml docking campaign <verb>`` sub-commands."""
     from pharmaml.docking import (
@@ -2746,6 +2907,17 @@ _HANDLERS = {
     ("data", "split"): _cmd_data_split,
     ("data", "audit-splits"): _cmd_data_audit_splits,
     ("data", "convert"): _cmd_data_convert,
+    ("research", "manifest"): _cmd_research,
+    ("research", "compare"): _cmd_research,
+    ("research", "compare-uncertainty"): _cmd_research,
+    ("research", "compare-training"): _cmd_research,
+    ("research", "environment"): _cmd_research,
+    ("research", "checkpoint"): _cmd_research,
+    ("ml", "nested-ridge"): _cmd_ml_nested_ridge,
+    ("ml", "nested-logistic"): _cmd_ml_nested_ridge,
+    ("ml", "calibrate-binary"): _cmd_ml_calibrate_binary,
+    ("ml", "conformal-report"): _cmd_ml_conformal_report,
+    ("ml", "conformal-classification"): _cmd_ml_conformal_report,
     ("ml", "train"): _cmd_ml_train,
     ("ml", "compare"): _cmd_ml_compare,
     ("ml", "check"): _cmd_ml_check,
@@ -2770,6 +2942,7 @@ _HANDLERS = {
     ("docking", "vina-scan"): _cmd_docking_vina_scan,
     ("docking", "rescore"): _cmd_docking_rescore,
     ("docking", "campaign"): _cmd_docking_campaign,
+    ("docking", "campaign-status"): _cmd_docking_campaign_status,
     ("biology", "response-audit"): _cmd_biology_response_audit,
     ("biology", "top-biomarkers"): _cmd_biology_top_biomarkers,
     ("generative", "run"): _cmd_generative_run,

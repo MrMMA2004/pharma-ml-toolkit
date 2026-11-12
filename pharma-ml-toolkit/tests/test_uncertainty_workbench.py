@@ -1,0 +1,134 @@
+import numpy as np
+import pandas as pd
+import pytest
+
+from pharmaml.cli import main
+from pharmaml.exceptions import DataValidationError
+from pharmaml.ml.uncertainty_workbench import regression_uncertainty_report
+
+
+def datasets():
+    def frame(start, n):
+        x = np.arange(start, start+n, dtype=float)
+        return pd.DataFrame({"id": [f"c{i}" for i in range(start, start+n)],
+                             "x": x, "y": x*2+1, "group": ["A", "B"]*(n//2)})
+    return [frame(0, 20), frame(20, 10), frame(30, 10)]
+
+
+def test_separate_partitions_and_subgroups():
+    report = regression_uncertainty_report(*datasets(), features=["x"], target="y", key="id", group="group")
+    assert report["n_train"] == 20 and report["n_calibration"] == report["n_test"] == 10
+    assert sum(group["n_test"] for group in report["subgroups"]) == 10
+    assert "no conditional guarantee" in report["limitations"]
+
+
+def test_overlap_and_reserved_features_refused():
+    train, cal, test = datasets()
+    test.loc[0, "id"] = train.loc[0, "id"]
+    with pytest.raises(DataValidationError, match="overlap"):
+        regression_uncertainty_report(train, cal, test, features=["x"], target="y", key="id")
+    with pytest.raises(DataValidationError, match="exclude"):
+        regression_uncertainty_report(*datasets(), features=["x", "y"], target="y", key="id")
+
+
+def test_insufficient_calibration_and_missing_groups_refused():
+    train, cal, test = datasets()
+    with pytest.raises(DataValidationError, match="calibration samples"):
+        regression_uncertainty_report(train, cal[:2], test, features=["x"], target="y", key="id")
+    test.loc[0, "group"] = None
+    with pytest.raises(DataValidationError):
+        regression_uncertainty_report(train, cal, test, features=["x"], target="y", key="id", group="group")
+
+
+def test_cli_report_and_overlap_error(tmp_path, capsys):
+    import json
+    paths = []
+    for i, frame in enumerate(datasets()):
+        path = tmp_path / f"{i}.csv"
+        frame.to_csv(path, index=False)
+        paths.append(str(path))
+    args = ["ml", "conformal-report", "--train", paths[0], "--calibration", paths[1],
+            "--test", paths[2], "--features", "x", "--target", "y", "--key", "id", "--group", "group"]
+    assert main(args) == 0
+    assert json.loads(capsys.readouterr().out)["n_test"] == 10
+    args[args.index("--test") + 1] = paths[0]
+    assert main(args) == 1
+    assert "overlap" in capsys.readouterr().err
+
+
+def test_file_workflow_preserves_literal_identifier_strings(tmp_path):
+    from pharmaml.ml.uncertainty_workbench import regression_uncertainty_from_files
+
+    train, cal, test = datasets()
+    train.loc[0, "id"] = "001"
+    cal.loc[0, "id"] = "1"
+    paths = []
+    for index, data in enumerate((train, cal, test)):
+        path = tmp_path / f"{index}.csv"
+        data.to_csv(path, index=False)
+        paths.append(path)
+    report = regression_uncertainty_from_files(*paths, features=["x"], target="y", key="id")
+    assert report["n_test"] == 10  # 001 is not silently merged with 1
+    cal.loc[0, "id"] = "001"
+    cal.to_csv(paths[1], index=False)
+    with pytest.raises(DataValidationError, match="overlap"):
+        regression_uncertainty_from_files(*paths, features=["x"], target="y", key="id")
+
+
+def test_run_provenance_compare_and_changed_read(tmp_path, monkeypatch, capsys):
+    import copy
+    import json
+
+    from pharmaml.ml.provenance import compare_uncertainty_reports
+    from pharmaml.ml.uncertainty_workbench import regression_uncertainty_from_files
+    from pharmaml.utils import identifier_table
+
+    paths = []
+    for index, data in enumerate(datasets()):
+        path = tmp_path / f"{index}.csv"
+        data.to_csv(path, index=False)
+        paths.append(path)
+    report = regression_uncertainty_from_files(*paths, features=["x"], target="y", key="id")
+    provenance = report["provenance"]
+    assert set(provenance["inputs"]) == {"train", "calibration", "test"}
+    assert provenance["parameters"]["workflow"] == "split-conformal-ridge"
+    assert len(provenance["inputs"]["train"]["sha256"]) == 64
+    other = copy.deepcopy(report)
+    other["provenance"]["inputs"]["test"]["sha256"] = "changed"
+    other["coverage"] = 0.5
+    comparison = compare_uncertainty_reports(report, other)
+    assert comparison["same_input_bytes_by_partition"] == {"train": True, "calibration": True, "test": False}
+    assert comparison["same_parameters"] and comparison["metrics"]["coverage"]["second"] == 0.5
+    reports = []
+    for name, data in (("first.json", report), ("second.json", other)):
+        path = tmp_path / name
+        path.write_text(json.dumps(data))
+        reports.append(str(path))
+    assert main(["research", "compare-uncertainty", *reports]) == 0
+    assert not json.loads(capsys.readouterr().out)["same_input_bytes_by_partition"]["test"]
+    original = identifier_table.read_identifier_table
+
+    def changing_read(path, delimiter):
+        frame = original(path, delimiter)
+        path.write_text(path.read_text() + "\n")
+        return frame
+
+    monkeypatch.setattr(identifier_table, "read_identifier_table", changing_read)
+    with pytest.raises(DataValidationError, match="changed while reading"):
+        regression_uncertainty_from_files(*paths, features=["x"], target="y", key="id")
+
+
+def test_compare_uncertainty_rejects_reports_without_provenance():
+    from pharmaml.ml.provenance import compare_uncertainty_reports
+
+    with pytest.raises(DataValidationError, match="lacks uncertainty-run provenance"):
+        compare_uncertainty_reports({}, {})
+
+
+def test_opt_in_regression_distance_diagnostic():
+    plain = regression_uncertainty_report(*datasets(), features=["x"], target="y", key="id")
+    result = regression_uncertainty_report(*datasets(), features=["x"], target="y", key="id", diagnostics=True)
+    assert "applicability" not in plain
+    assert result["radius"] == plain["radius"] and result["coverage"] == plain["coverage"]
+    assert result["applicability"]["n_test"] == 10
+    assert "not a chemical" in result["applicability"]["limitations"]

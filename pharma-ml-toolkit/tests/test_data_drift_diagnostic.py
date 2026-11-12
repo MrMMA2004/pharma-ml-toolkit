@@ -26,6 +26,10 @@ def test_comparison_describes_numeric_and_categorical_changes(diagnostic):
     )
     assert report["same_header"] and report["same_shape"]
     assert report["numeric_cells_with_changed_text"] == 2
+    assert report["changed_cells_by_column"] == {"0:x": 2, "1:class": 1}
+    assert report["sample_changes"][0] == {
+        "csv_row": 2, "column": "0:x", "stored": "1.0", "generated": "1.000000000000001"
+    }
     assert report["non_numeric_cells_with_changed_text"] == 1
     assert 0 < report["max_absolute_numeric_difference"] < 1e-14
 

@@ -419,3 +419,106 @@ environment: **95 passed, 0 failed, 0 skipped**. A broader targeted selection
 covering portability, provenance, checkpoint, documentation and notebook tests
 with RDKit 2026.9.1: **261 passed, 0 failed, 0 skipped**. No production
 release or full suite is certified by these results.
+
+## v1.2.176 continuation baseline
+
+The current branch started at consolidated main `f0f40a19f829354164761f84ed606743a5b43595`,
+not the prior PR branch. Closed, unmerged PR #11 contained follow-up changes not
+present in that baseline; the CV parameter and group-label fixes, four-home ZIP
+safeguards, recovery inventory, drift diagnostics and Windows smoke were restored
+selectively. Other new baseline changes (including checkpoint schema validation)
+were retained. The source fixes are **not** included in the existing v1.2.176 ZIP.
+
+Both baseline ZIP copies and a separate local backup have SHA-256
+`da2ba527083cec7672f7799977df45deeaea82477cd63a2c5ee36db9afad63ed`.
+The backup is on the same machine, not off-site. The read-only archive audit
+reported eight scoped checks passed, 597 entries / 547 files; it did not execute
+any test profile or engine and is not a release certification. No release was
+republished. The historical Windows job from the closed PR executed Vina on toy
+geometry; that result was not an execution of this new v1.2.176 archive.
+
+On this branch the restored focused CV/release selection passed 190 tests;
+provenance, notebook variants, docs-index and checkout release-portability
+selection passed 161 tests, with pinned RDKit 2026.9.1. These are targeted
+selections, not full profile certification. See [test profiles](TEST_PROFILES.md)
+for requirements and [recovery inventory](INTERRUPTED_RELEASE_RECOVERY.md) for
+manual interrupted-publication guidance.
+
+### Continuation evidence and limitations
+
+- The **actual** v1.2.176 ZIP was extracted after the archive audit into an
+  isolated temporary directory. The documented targeted standalone profile
+  passed 180 tests and skipped 2 with pinned dependencies on this machine; it
+  does not include source changes made after that ZIP was published.
+- Local scientific/release selection: 390 passed, 1 deselected (Torch absent).
+  Docking/preparation selection after installing Meeko and gemmi: 273 passed.
+  An earlier run without those optional packages failed 25, errored 2, skipped
+  3 and passed 240; this was a dependency-incomplete profile, not a pass.
+- A new subprocess SIGKILL test kills the disposable four-home publisher just
+  after its first final copy; that copy remained CRC-valid, the predecessor and
+  its matching backup survived, and a retry refused the existing name. This is
+  one controlled interruption point, not proof of power-loss durability, safe
+  concurrency or automatic recovery.
+- The Windows integration job on `ae102ee` executed all three bundled engines
+  using toolkit APIs; the AutoGrid/AutoDock synthetic map/finite-energy check
+  passed, while Vina batch failed. The bundled Vina identified itself as 1.2.7,
+  and the batch workflow's legacy `--log` option was incompatible. The batch
+  runner now captures stdout/stderr and verifies staged nonempty pose output.
+  Job `ee9d336` passed the Vina checks and AutoGrid map generation, but the
+  AutoDock toy run timed out; its one-atom randomized fixture was then revised.
+  These are artificial smoke fixtures, not chemical or biological validation.
+- Run `43247657601` had 11 jobs passed and 2 failed: the AutoDock toy timeout
+  and the unchanged strict byte check (`qsar_multiclass.csv`: 8 numeric-text
+  cells; `pk_profile.csv`: 12). No tolerance or data change was applied.
+  A green run on a different runner does not resolve cross-hardware drift.
+
+### AutoGrid geometry interpretation
+
+The bundled AutoGrid4 log from the Windows toy run in
+[CI 43247657601](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/runs/43247657601/job/131284558269)
+reported **21** grid points per axis for `npts 20`, i.e. one more point
+than the input value. The existing `GridBox.size` calculation instead treats
+`npts` as a point count, giving `(npts - 1) * spacing` for Vina. For this
+tested even case, that legacy Vina size is one spacing interval smaller than
+the corresponding AutoGrid span. No geometry or numeric default has been
+changed; this is a compatibility-preserving warning, not a completed geometry
+fix. Review boxes and generated engine logs explicitly before comparing or
+reusing results across Vina and AutoDock. Odd `npts` behavior and other engines
+have not been validated here.
+
+[CI 43248360240](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/runs/43248360240)
+passed all 13 jobs on commit `791cb4a`, including the revised deterministic
+synthetic Vina single/batch and AutoGrid/AutoDock integration. Prior runs
+showed data-byte drift and an AutoDock timeout on an earlier one-atom fixture;
+the green run does not prove either cross-hardware reproducibility or general
+engine reliability. Toy poses and energies are not a scientific benchmark.
+
+
+### Further continuation: reproducibility, recovery, geometry
+
+On this local x86-64/SkylakeX NumPy 1.26.4/OpenBLAS environment, the default
+strict data check passed. Forcing OpenBLAS Zen alone produced the 8 QSAR
+numeric-text differences and no PK difference; disabling NumPy AVX512F alone
+produced the 12 PK differences and no QSAR difference. Combining both settings
+reproduced 8 QSAR / 12 PK differences with the same maxima and first changed
+cells recorded in CI. This controlled experiment supports two distinct
+dispatch-sensitive paths; it does not establish equivalence or guarantee the
+cause of every CI failure. Neither CSV data, numerical formulas nor strict
+byte checks were modified. The strict check remains intermittent across hosts.
+
+[Windows CI 43250800692](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/runs/43250800692/job/131295734198)
+confirmed a 30-interval map at spacing 0.375 with CENTER 0 and NELEMENTS 30,
+and observed requested odd `npts 21` produce NELEMENTS 20 and 21 points.
+The opt-in `GridBox.as_vina_kwargs(convention="autogrid")` predicts even
+AutoGrid extents and rejects odd npts; legacy behavior remains the default.
+`write_gpf` warns, without modifying the input, for odd npts. Actual map headers
+and engine limits must still be inspected. The Windows toy workflow is not a
+biological benchmark and does not validate other engine versions.
+
+The new explicit `resume_release.py` defaults to a read-only plan, requires an
+expected hash and a distinct backup outside publication homes, and only with
+`--execute` publishes missing copies via no-clobber staged links. A synthetic
+end-to-end SIGKILL rehearsal recovered a four-home interrupted publication and
+preserved the predecessor. It is not crash-atomic or race-resistant; a later
+failure can leave partial copies, and the tool does not run release gates or
+retention. No actual release was modified. See the recovery guide.

@@ -2,9 +2,10 @@
 
 The Studio's increment-5 page (the playground Docking tab). Five of the
 tab's engines, each wired to the SAME public backend APIs the cards
-call -- nothing on this page is fabricated, and none of these workflows
-execute an engine. The source/ZIP includes Windows engine binaries; actual
-execution requires a compatible runtime and appropriate inputs:
+call -- nothing on this page is fabricated. The five original analysis
+paths do not execute engines; the separate review wizard can optionally
+launch a user-confirmed Vina batch. The source/ZIP includes Windows engine
+binaries; execution requires a compatible runtime and appropriate inputs:
 
 - **Campaign summary** -- ``check_docking_completion`` +
   ``scan_docking_directory`` over the bundled synthetic AutoDock4
@@ -250,6 +251,15 @@ class DockingWorkbenchPage(QWidget):
         self._campaign_btn.setMinimumHeight(34)
         self._campaign_btn.clicked.connect(self._start_campaign)
         form.addRow("", self._campaign_btn)
+        self._preparation_btn = QPushButton("Prepare docking inputs…")
+        self._preparation_btn.clicked.connect(self._show_preparation)
+        form.addRow("", self._preparation_btn)
+        self._campaign_status_btn = QPushButton("Inspect Vina campaign progress…")
+        self._campaign_status_btn.clicked.connect(self._show_campaign_status)
+        form.addRow("", self._campaign_status_btn)
+        self._wizard_btn = QPushButton("Review / launch Vina campaign…")
+        self._wizard_btn.clicked.connect(self._show_campaign_wizard)
+        form.addRow("", self._wizard_btn)
         hint = QLabel(
             "check_docking_completion + scan_docking_directory over the "
             "bundled 14-folder AutoDock4 campaign, then the rescore card's "
@@ -401,6 +411,39 @@ class DockingWorkbenchPage(QWidget):
             self._report.setText("A job is already running — Stop it first.")
             return True
         return False
+
+    def _show_campaign_status(self) -> None:
+        from .campaign_status_dialog import CampaignStatusDialog
+
+        dialog = getattr(self, "_campaign_status_dialog", None)
+        if dialog is None:
+            dialog = CampaignStatusDialog(self._runner, self)
+            self._campaign_status_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _show_preparation(self) -> None:
+        from .preparation_dialog import PreparationDialog
+
+        dialog = getattr(self, "_preparation_dialog", None)
+        if dialog is None:
+            dialog = PreparationDialog(self._runner, self)
+            self._preparation_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _show_campaign_wizard(self) -> None:
+        from .campaign_wizard import CampaignReviewWizard
+
+        wizard = getattr(self, "_campaign_wizard", None)
+        if wizard is None:
+            wizard = CampaignReviewWizard(self._runner, self)
+            self._campaign_wizard = wizard
+        wizard.show()
+        wizard.raise_()
+        wizard.activateWindow()
 
     # -- campaign summary --------------------------------------------------------------
     def _start_campaign(self) -> None:

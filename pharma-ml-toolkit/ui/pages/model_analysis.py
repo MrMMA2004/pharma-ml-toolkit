@@ -375,6 +375,15 @@ class ModelAnalysisPage(QWidget):
         buttons = QHBoxLayout()
         buttons.addWidget(self._train_btn)
         buttons.addWidget(self._compare_btn)
+        self._uncertainty_btn = QPushButton("Uncertainty…")
+        self._uncertainty_btn.clicked.connect(self._show_uncertainty)
+        buttons.addWidget(self._uncertainty_btn)
+        self._calibration_btn = QPushButton("Probability recalibration…")
+        self._calibration_btn.clicked.connect(self._show_calibration)
+        buttons.addWidget(self._calibration_btn)
+        self._validation_btn = QPushButton("Nested validation…")
+        self._validation_btn.clicked.connect(self._show_validation)
+        buttons.addWidget(self._validation_btn)
         buttons.addStretch(1)
         form.addRow("", buttons)
         lay.addLayout(form)
@@ -489,6 +498,40 @@ class ModelAnalysisPage(QWidget):
         self._rebuild_param_rows(self._model_combo.currentText())
 
     # -- data ---------------------------------------------------------------
+    def _show_calibration(self) -> None:
+        from .calibration_dialog import CalibrationDialog
+
+        dialog = getattr(self, "_calibration_dialog", None)
+        if dialog is None:
+            dialog = CalibrationDialog(self._runner, self)
+            self._calibration_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _show_validation(self) -> None:
+        from .validation_dialog import ValidationDialog
+
+        dialog = getattr(self, "_validation_dialog", None)
+        if dialog is None:
+            dialog = ValidationDialog(self._runner, self)
+            self._validation_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _show_uncertainty(self) -> None:
+        from .uncertainty_dialog import UncertaintyDialog
+
+        # Keep one instance per page, including while a background job finishes.
+        dialog = getattr(self, "_uncertainty_dialog", None)
+        if dialog is None:
+            dialog = UncertaintyDialog(self._runner, self)
+            self._uncertainty_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
     def _load_dataset(self, name: str) -> None:
         self._target_combo.clear()
         if name == "(table from Data Explorer)":

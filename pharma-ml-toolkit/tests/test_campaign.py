@@ -735,6 +735,8 @@ class TestRunVinaBatch:
 
         def fake_run(cmd, **_kwargs):
             commands.append(list(cmd))
+            Path(cmd[cmd.index("--out") + 1]).write_text("poses", encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, b"log", b"")
 
         monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
 
@@ -752,15 +754,13 @@ class TestRunVinaBatch:
             assert "--config" in cmd and str(conf) in cmd
             assert "--ligand" in cmd
             assert "--out" in cmd
-            assert "--log" in cmd
+            assert "--log" not in cmd
         ligands_used = [cmd[cmd.index("--ligand") + 1] for cmd in commands]
         assert sorted(Path(p).name for p in ligands_used) == ["1.pdbqt", "2.pdbqt"]
-        out_names = {cmd[cmd.index("--out") + 1] for cmd in commands}
-        assert out_names == {
-            str(out_dir / "1_out.pdbqt"), str(out_dir / "2_out.pdbqt"),
-        }
-        log_names = {cmd[cmd.index("--log") + 1] for cmd in commands}
-        assert log_names == {str(out_dir / "1.log"), str(out_dir / "2.log")}
+        out_names = {Path(cmd[cmd.index("--out") + 1]).name for cmd in commands}
+        assert out_names == {"1_out.pdbqt", "2_out.pdbqt"}
+        assert {result.log_file.name for result in results} == {"1.log", "2.log"}
+        assert all(result.log_file.read_bytes() == b"log" for result in results)
 
     def test_parallel_batch_produces_same_results(self, tmp_path, monkeypatch) -> None:
         conf = self._make_batch(tmp_path)
@@ -836,8 +836,7 @@ class TestVinaBatchResume:
             commands.append(list(cmd))
             out = Path(cmd[cmd.index("--out") + 1])
             out.write_text("poses", encoding="utf-8")
-            log = Path(cmd[cmd.index("--log") + 1])
-            log.write_text("log", encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, b"log", b"")
 
         monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
 
@@ -964,6 +963,8 @@ class TestRound2Fixes:
 
         def fake_run(cmd, **_kwargs):
             commands.append(list(cmd))
+            Path(cmd[cmd.index("--out") + 1]).write_text("poses", encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, b"log", b"")
 
         monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
 
@@ -971,8 +972,7 @@ class TestRound2Fixes:
         assert len(results) == 2 and all(r.ok for r in results)
         out_names = {Path(cmd[cmd.index("--out") + 1]).name for cmd in commands}
         assert out_names == {"l_out.pdbqt", "beta_l_out.pdbqt"}
-        log_names = {Path(cmd[cmd.index("--log") + 1]).name for cmd in commands}
-        assert log_names == {"l.log", "beta_l.log"}
+        assert {result.log_file.name for result in results} == {"l.log", "beta_l.log"}
 
     def test_collect_files_invalid_pattern_raises_docking_error(
         self, tmp_path
@@ -1186,6 +1186,8 @@ class TestVinaBatchRunsInConfigDirectory:
 
         def fake_run(cmd, **kwargs):
             seen.append(kwargs.get("cwd"))
+            Path(cmd[cmd.index("--out") + 1]).write_text("poses", encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, b"log", b"")
 
         monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
         results = run_vina_batch(conf, ligands, out_dir=tmp_path / "out")
@@ -1252,8 +1254,7 @@ class TestVinaBatchProgress:
         def fake_run(cmd, **_kwargs) -> None:
             out_pdbqt = Path(cmd[cmd.index("--out") + 1])
             out_pdbqt.write_text("poses", encoding="utf-8")
-            log = Path(cmd[cmd.index("--log") + 1])
-            log.write_text("log", encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, b"log", b"")
 
         monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
         before = vina_batch_progress(ligands, out)
@@ -1417,7 +1418,11 @@ class TestEngineFolderRuns:
         receptor.write_text("ROOT\n", encoding="utf-8")
         ligand = tmp_path / "l.pdbqt"
         ligand.write_text("ATOM\n", encoding="utf-8")
-        commands = self._record(monkeypatch)
+        commands = []
+        def fake_success(cmd, **_kwargs):
+            commands.append(list(cmd))
+            Path(cmd[cmd.index("--out") + 1]).write_text("fake pose", encoding="utf-8")
+        monkeypatch.setattr(workflow_mod.subprocess, "run", fake_success)
         result = workflow_mod.run_vina(
             receptor,
             ligand,
@@ -1489,7 +1494,12 @@ class TestEngineFolderRuns:
         ligands = tmp_path / "ligands"
         ligands.mkdir()
         (ligands / "l.pdbqt").write_text("ATOM\n", encoding="utf-8")
-        commands = self._record(monkeypatch)
+        commands = []
+        def fake_success(cmd, **_kwargs):
+            commands.append(list(cmd))
+            Path(cmd[cmd.index("--out") + 1]).write_text("pose", encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, b"log", b"")
+        monkeypatch.setattr(workflow_mod.subprocess, "run", fake_success)
         results = run_vina_batch(
             conf, ligands, out_dir=tmp_path / "out", engine_dir=engines
         )

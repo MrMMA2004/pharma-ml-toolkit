@@ -92,6 +92,7 @@ import platform
 import shutil
 import struct
 import subprocess
+import tempfile
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -542,6 +543,10 @@ def run_vina(
     Returns
     -------
     DockingRunResult
+        A zero exit is not sufficient: a new non-empty output must exist.
+        Output is staged next to the destination and only replaces an older
+        file after successful execution. This does not validate the pose or
+        score scientifically and does not provide crash durability.
     """
     import time
 
@@ -553,7 +558,6 @@ def run_vina(
         *prefix,
         "--receptor", str(receptor),
         "--ligand", str(ligand),
-        "--out", str(out_path),
         "--center_x", f"{center[0]:.4f}",
         "--center_y", f"{center[1]:.4f}",
         "--center_z", f"{center[2]:.4f}",
@@ -570,7 +574,13 @@ def run_vina(
 
     started = time.perf_counter()
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=timeout_s)
+        with tempfile.TemporaryDirectory(prefix=".vina-run-", dir=out_path.parent) as folder:
+            staged = Path(folder) / "pose.pdbqt"
+            subprocess.run([*cmd, "--out", str(staged)], check=True, capture_output=True, timeout=timeout_s)
+            if not staged.is_file() or staged.is_symlink() or staged.stat().st_size == 0:
+                return DockingRunResult(out_path.parent, False, None, time.perf_counter() - started,
+                                        "Vina produced no new non-empty pose file")
+            os.replace(staged, out_path)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
         return DockingRunResult(out_path.parent, False, None, time.perf_counter() - started, str(exc))
     return DockingRunResult(out_path.parent, True, out_path, time.perf_counter() - started)
@@ -731,7 +741,10 @@ def run_vina_batch(
     resolved relative to the config's own directory, and every ligand
     found recursively under ``ligands_dir`` is docked with the config
     file itself (``--config``), producing ``<name>_out.pdbqt`` and
-    ``<name>.log`` in ``out_dir``.  ``max_parallel > 1`` runs the
+    ``<name>.log`` in ``out_dir``. The log contains captured engine output;
+    Vina 1.2 does not accept the old ``--log`` flag. Output is staged and
+    checked for nonempty content, not scientific validity. Promotion of the
+    pose and log is not a crash-atomic two-file transaction. ``max_parallel > 1`` runs the
     subprocesses through a ``ThreadPoolExecutor`` (subprocesses
     release the GIL, so threads are enough).
 
@@ -741,7 +754,10 @@ def run_vina_batch(
     and are non-empty is not started again (a zero-byte log marks a
     crashed job, exactly like ``niggavina.py``'s empty-log cleanup) --
     an interrupted campaign re-runs in seconds, docking only the
-    remainder.
+    remainder. The skip check is only a file-presence heuristic: it does not
+    prove a completed docking, validate content, or match the current inputs,
+    configuration, engine, or seed. Use a fresh output directory when those
+    change and independently inspect results.
 
     Parameters
     ----------
@@ -818,21 +834,27 @@ def run_vina_batch(
                 and log_file.is_file() and log_file.stat().st_size > 0:
             _LOG.info("skipping %s (already docked)", ligand.name)
             return DockingRunResult(out, True, log_file, 0.0, None, True)
-        cmd = [
-            *prefix,
-            "--config", str(conf.resolve()),
-            "--ligand", str(ligand.resolve()),
-            "--out", str(out_pdbqt.resolve()),
-            "--log", str(log_file.resolve()),
-        ]
         try:
-            subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                timeout=timeout_s,
-                cwd=conf.parent,
-            )
+            with tempfile.TemporaryDirectory(prefix=".vina-batch-", dir=out.resolve()) as folder:
+                stage = Path(folder)
+                staged_pose = stage / out_pdbqt.name
+                staged_log = stage / log_file.name
+                cmd = [
+                    *prefix,
+                    "--config", str(conf.resolve()),
+                    "--ligand", str(ligand.resolve()),
+                    "--out", str(staged_pose),
+                ]
+                process = subprocess.run(
+                    cmd, check=True, capture_output=True, timeout=timeout_s, cwd=conf.parent,
+                )
+                if not staged_pose.is_file() or staged_pose.is_symlink() or staged_pose.stat().st_size == 0:
+                    return DockingRunResult(out, False, None, time.perf_counter() - started,
+                                            "Vina produced no new non-empty pose file")
+                captured = (process.stdout or b"") + (process.stderr or b"")
+                staged_log.write_bytes(captured or b"Vina exited successfully with no console output.\n")
+                os.replace(staged_pose, out_pdbqt)
+                os.replace(staged_log, log_file)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
             return DockingRunResult(
                 out, False, None, time.perf_counter() - started, str(exc)
