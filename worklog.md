@@ -13661,3 +13661,64 @@ not-executed-with-cause, the standing convention.
 **Next.** R5 (§14): `tools/audit_release.py --profile-results` so the
 next ship's report carries the per-profile honest counts and the
 gates table from one source of truth.
+
+## part5-continuation Round 5 — 2026-11-12 — §14 report schema v2: the profile-results fold
+
+**Session start.** This recycle spared the workspace (the first one since
+the watchdog went live): the clone sat at `d530244` (round 4 shipped),
+venv + secrets intact, tree clean. No recovery needed; the round went
+straight to work.
+
+**The §14 gap.** `tools/audit_release.py` (round 267's honest tool) ran
+eight archive checks but stubbed the §14 evidence bullets —
+`test_profiles: "not executed by this audit"`, `backup_and_recovery:
+"not verified"`, generic limitations. §14 demands the release report
+carry the exact per-profile passed/failed/skipped/blocked/not-executed
+counts, the gates, backup/recovery status and the runtime/platform
+limitations.
+
+**The design (extend, never fork).** `--profile-results <json>`: a
+separately recorded evidence file, schema
+`pharmaml-profile-results/2`. The audit itself still never runs tests —
+everything from the file is labelled *recorded evidence; not executed
+by this audit*, preserving the not-a-certification scope. The loader
+validates fail-closed for honest labelling BEFORE any output exists:
+unique non-empty profile names; a recorded command per profile; all
+five outcome counts as ints ≥ 0; the counts must sum to the recorded
+`collected` (recomputed by the audit); unknown top-level/per-profile/
+outcome keys rejected; gate outcomes limited to passed/failed/not run;
+`limitations` a list of strings. Profiles ride the report separately —
+**no merged total anywhere** — and a failing or not-executed profile
+never fails the archive audit (recorded, not certified). SUMMARY.md
+gains the profiles/gates/backup/limitations sections rendered from the
+same report.json (one source of truth).
+
+**The round's own bug, caught by its own tests.** The first validator
+draft wrote the recomputed `collected` into the entry BEFORE comparing
+it — the sum check was dead code and the new mismatch test failed
+against a live run. Fixed (capture the recorded value first), pinned by
+`test_profile_results_recorded_total_must_match_the_counts`; the
+arithmetically-impossible `total==0 and passed>0` guard was removed as
+dead code in the same pass (the sum check subsumes it).
+
+**Tests.** `tests/test_release_audit.py` 6 → 28: the valid fold
+(per-profile verbatim counts, no total key, failing profile does not
+fail the audit, gates/backup/limitations render), 18 parametrized
+refusal cases (each with the precise stderr reason, and the output dir
+proving absent — fail closed, no partial report), backward compat
+(no input → the honest placeholders stand), the unreadable-file refusal,
+the sum-check regression. ruff clean on both files.
+
+**The real report.** Generated against the shipped v1.2.174 zip with
+the round's actual evidence: the 532/532 offscreen GUI battery, the
+28-test release-audit suite, the two honest not-executed-with-cause
+profiles (real-display: no X server, 532; engines: Windows PE
+binaries, 12), three gates (ruff, mypy, zip integrity), the
+session-backup verification (live safety commits `38917dd`/`1890c2c` +
+the 4-hourly watchdog; power-loss explicitly not verified), five
+limitations. All eight archive checks passed; RC=0. Artifacts persisted
+under `docs/release-audits/v1.2.174-part5-r5-*` (input evidence +
+report.json + SUMMARY.md) and referenced from RELEASE_AUDIT.md.
+
+**Next.** R6 (§13 second half): wire `OperationSpec` into the
+descriptor-batch path and prove the bit-identical pause/resume.

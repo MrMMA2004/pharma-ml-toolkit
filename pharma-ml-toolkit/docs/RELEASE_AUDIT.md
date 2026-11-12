@@ -7,6 +7,33 @@ publish, replace or delete a release. From the toolkit root:
 python tools/audit_release.py /path/to/pharma-ml-toolkit-v1.2.172.zip --output-dir /path/to/new-audit-directory
 ```
 
+## Folding in recorded test-profile evidence (part5-continuation round 5, §14)
+
+The `--profile-results <json>` option folds a **separately recorded** evidence
+file into the report — the audit itself still never runs tests, engines,
+backups or recoveries; everything from the file is labelled *recorded
+evidence; not executed by this audit*. The file must carry
+`"schema": "pharmaml-profile-results/2"` and is validated fail-closed for
+honest labelling before any output is written:
+
+- every profile needs a unique non-empty name, a recorded command, and all
+  five outcome counts (`passed` / `failed` / `skipped` / `blocked` /
+  `not_executed`, each an int ≥ 0);
+- the counts must sum to the recorded `collected` total (the audit
+  recomputes it — a drifted total refuses the whole file);
+- unknown top-level, per-profile or outcome keys are rejected (a typo must
+  never silently drop evidence);
+- gate outcomes must be `passed` / `failed` / `not run`.
+
+Profiles are recorded **separately and never merged** — no cross-profile
+total exists anywhere in the report, and a failing or not-executed profile
+does not fail the archive audit (it is honestly recorded, not certified).
+`SUMMARY.md` renders the per-profile counts, the gates table, the
+backup/recovery status and the runtime/platform/scientific limitations
+from the same single source (`report.json`). See
+`docs/release-audits/v1.2.174-part5-r5-*` for a shipped example (input
+evidence, machine-readable report, rendered summary).
+
 The output directory must not already exist. Its `report.json` records the
 archive size and SHA-256, entry and file counts, sorted per-file sizes and
 SHA-256 hashes, version carriers, exclusion-policy hits, example-data count,

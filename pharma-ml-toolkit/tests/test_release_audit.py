@@ -102,3 +102,148 @@ def test_existing_output_directory_is_never_overwritten(tmp_path: Path) -> None:
     result = _run(archive, output)
     assert result.returncode != 0
     assert sentinel.read_text(encoding="utf-8") == "keep this"
+
+
+# -- part5-continuation round 5 (§14): --profile-results evidence folding --------
+
+
+def _valid_profile_results() -> dict:
+    return {
+        "schema": "pharmaml-profile-results/2",
+        "generated_by": "test",
+        "environment": {"platform": "test"},
+        "profiles": [
+            {
+                "name": "gui-offscreen",
+                "command": "pytest tests/ui -k offscreen",
+                "outcome_counts": {"passed": 10, "failed": 1, "skipped": 2,
+                                   "blocked": 0, "not_executed": 3},
+                "collected": 16,
+                "notes": "probe",
+            },
+            {
+                "name": "engines",
+                "command": "(none)",
+                "outcome_counts": {"passed": 0, "failed": 0, "skipped": 0,
+                                   "blocked": 0, "not_executed": 7},
+            },
+        ],
+        "gates": [
+            {"name": "ruff", "outcome": "passed", "detail": "clean"},
+            {"name": "real-display", "outcome": "not run"},
+        ],
+        "backup_and_recovery": {"status": "verified", "evidence": "live runs"},
+        "limitations": ["offscreen only", "engines not executable"],
+    }
+
+
+def _write_results(tmp_path: Path, data: object) -> Path:
+    target = tmp_path / "profile-results.json"
+    target.write_text(json.dumps(data), encoding="utf-8")
+    return target
+
+
+def _run_with_profiles(archive: Path, output: Path, results: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), str(archive), "--output-dir", str(output),
+         "--profile-results", str(results)],
+        capture_output=True, text=True, check=False,
+    )
+
+
+def test_profile_results_fold_into_report_and_summary(tmp_path: Path) -> None:
+    archive = _zip(tmp_path / "source.zip")
+    results = _write_results(tmp_path, _valid_profile_results())
+    outcome = _run_with_profiles(archive, tmp_path / "report", results)
+    assert outcome.returncode == 0, outcome.stdout + outcome.stderr
+    report = json.loads((tmp_path / "report/report.json").read_text())
+    profiles = report["test_profiles"]
+    assert profiles["schema"] == "pharmaml-profile-results/2"
+    assert profiles["status"] == "recorded evidence; not executed by this audit"
+    assert [p["name"] for p in profiles["profiles"]] == ["gui-offscreen", "engines"]
+    # counts ride per profile, verbatim -- never merged into any total
+    assert profiles["profiles"][0]["outcome_counts"]["failed"] == 1
+    assert profiles["profiles"][1]["outcome_counts"]["not_executed"] == 7
+    assert "total" not in json.dumps(profiles)
+    # a failing profile does not fail the archive audit (recorded, not certified)
+    assert report["archive_checks_passed"] is True
+    assert report["gates"][1] == {"name": "real-display", "outcome": "not run"}
+    assert report["backup_and_recovery"]["status"] == "verified"
+    assert "engines not executable" in report["limitations"]
+    summary = (tmp_path / "report/SUMMARY.md").read_text()
+    assert "recorded evidence; not executed by this audit" in summary
+    assert "10 passed, 1 failed, 2 skipped, 0 blocked, 3 not-executed" in summary
+    assert "7 not-executed" in summary
+    assert "**not run**" in summary
+    assert "Backup and recovery" in summary
+
+
+def test_without_profile_results_the_placeholders_stay(tmp_path: Path) -> None:
+    """Backward compatibility: no input file, the honest defaults stand."""
+    archive = _zip(tmp_path / "source.zip")
+    result = _run(archive, tmp_path / "report")
+    assert result.returncode == 0
+    report = json.loads((tmp_path / "report/report.json").read_text())
+    assert report["test_profiles"] == {"status": "not executed by this audit"}
+    assert report["backup_and_recovery"] == {"status": "not verified by this audit"}
+    summary = (tmp_path / "report/SUMMARY.md").read_text()
+    assert "not executed by this audit" in summary
+
+
+@pytest.mark.parametrize("mutate, reason", [
+    (lambda d: d.update(schema="wrong/1"), "schema must be"),
+    (lambda d: d.update(profiles=[]), "non-empty list"),
+    (lambda d: d["profiles"][0].update(name=""), "unique non-empty"),
+    (lambda d: d["profiles"][1].update(name="gui-offscreen"), "unique non-empty"),
+    (lambda d: d["profiles"][0].pop("command"), "recorded command is required"),
+    (lambda d: d["profiles"][0].update(command="  "), "recorded command is required"),
+    (lambda d: d["profiles"][0]["outcome_counts"].pop("blocked"), "missing outcome keys"),
+    (lambda d: d["profiles"][0]["outcome_counts"].update(flaked=1), "unknown outcome keys"),
+    (lambda d: d["profiles"][0]["outcome_counts"].update(passed=-1), "int >= 0"),
+    (lambda d: d["profiles"][0]["outcome_counts"].update(passed=True), "int >= 0"),
+    (lambda d: d["profiles"][0].update(collected=99), "counts sum to"),
+    (lambda d: d.update(totals={"passed": 12}), "unknown top-level keys"),
+    (lambda d: d["profiles"][0].update(extra=1), "unknown keys"),
+    (lambda d: d.update(gates=[{"name": "x", "outcome": "maybe"}]), "passed/failed/not run"),
+    (lambda d: d.update(gates=[{"name": "x", "outcome": "passed", "why": "?"}]), "malformed gate"),
+    (lambda d: d.update(backup_and_recovery="nope"), "must be an object"),
+    (lambda d: d.update(limitations="nope"), "list of strings"),
+    (lambda d: d.update(limitations=[1, 2]), "list of strings"),
+])
+def test_profile_results_validation_refuses_dishonest_files(
+    tmp_path: Path, mutate, reason: str
+) -> None:
+    """Every dishonest or malformed shape fails the whole input file with the
+    precise reason -- never a silent degrade, never partial acceptance."""
+    archive = _zip(tmp_path / "source.zip")
+    data = _valid_profile_results()
+    mutate(data)
+    results = _write_results(tmp_path, data)
+    outcome = _run_with_profiles(archive, tmp_path / "report", results)
+    assert outcome.returncode != 0
+    assert reason in outcome.stderr
+    # the audit refuses BEFORE writing any output (fail closed, no partial report)
+    assert not (tmp_path / "report").exists()
+
+
+def test_profile_results_unreadable_file_fails_closed(tmp_path: Path) -> None:
+    archive = _zip(tmp_path / "source.zip")
+    results = tmp_path / "bad.json"
+    results.write_text("{not json", encoding="utf-8")
+    outcome = _run_with_profiles(archive, tmp_path / "report", results)
+    assert outcome.returncode != 0
+    assert "unreadable" in outcome.stderr
+    assert not (tmp_path / "report").exists()
+
+
+def test_profile_results_recorded_total_must_match_the_counts(tmp_path: Path) -> None:
+    """The recorded ``collected`` is cross-checked against the sum of the
+    five outcome buckets -- a drifted or inflated total refuses the file."""
+    archive = _zip(tmp_path / "source.zip")
+    data = _valid_profile_results()
+    # engines profile: 7 not-executed rides in the counts; claim 9 collected
+    data["profiles"][1]["collected"] = 9
+    results = _write_results(tmp_path, data)
+    outcome = _run_with_profiles(archive, tmp_path / "report", results)
+    assert outcome.returncode != 0
+    assert "counts sum to 7, not 9" in outcome.stderr

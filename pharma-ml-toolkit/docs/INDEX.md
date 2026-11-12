@@ -1013,6 +1013,8 @@ after adding new public functions.
 | `Any` | class | Special type indicating an unconstrained type. |
 | `CheckpointInfo` | class | One validated checkpoint record (the contents of one JSON file). |
 | `CheckpointManager` | class | Write, validate, rotate and clear checkpoint files for one job. |
+| `ENVELOPE_KEY` | constant |  |
+| `OperationSpec` | class | The identity of one resumable job (§13's "complete state" header). |
 | `Path` | class | PurePath subclass that can make system calls. |
 | `PersistenceError` | class | Raised when saving/loading model artifacts fails. |
 | `SCHEMA` | constant |  |
