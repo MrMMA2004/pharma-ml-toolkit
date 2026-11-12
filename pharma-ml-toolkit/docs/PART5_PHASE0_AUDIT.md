@@ -417,5 +417,5 @@ loss and the separate `build_zip.py` publication ritual remain limitations.
 Focused ship/build/restore/tooling/archive-audit tests in the current core
 environment: **95 passed, 0 failed, 0 skipped**. A broader targeted selection
 covering portability, provenance, checkpoint, documentation and notebook tests
-with RDKit 2026.9.1: **259 passed, 0 failed, 0 skipped**. No production
+with RDKit 2026.9.1: **261 passed, 0 failed, 0 skipped**. No production
 release or full suite is certified by these results.
