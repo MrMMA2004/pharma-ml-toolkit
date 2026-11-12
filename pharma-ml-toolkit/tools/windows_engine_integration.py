@@ -1,7 +1,7 @@
 """Exercise bundled Vina, AutoGrid4 and AutoDock4 through toolkit APIs.
 
 Windows only; runs in an ephemeral directory with synthetic, non-biological
-one-carbon ligand/receptor fixtures. It is an integration smoke, not a chemical
+artificial carbon-only ligand/receptor fixtures. It is an integration smoke, not a chemical
 benchmark. It makes no changes to the checked-in data or release archives.
 """
 from __future__ import annotations
@@ -70,10 +70,19 @@ def main() -> int:
             failures.append(f"toolkit run_vina_batch failed: {batch_error}; direct probe exit "
                             f"{probe.returncode}, stdout {probe.stdout[-1500:]}, stderr {probe.stderr[:1500]}")
 
-        write_gpf(ligand, receptor_file=receptor.name,
-                  box=GridBox(0, 0, 0, npts=(20, 20, 20)), receptor_types="C")
-        write_dpf(ligand, receptor_file=receptor.name, ga_run=1, ga_pop_size=10,
-                  ga_num_evals=2500, ga_num_generations=100, sw_max_its=10)
+        # A three-atom synthetic ligand avoids the negative degrees of freedom
+        # of a single atom in AutoDock. Pin this smoke fixture's seeds; production
+        # defaults are deliberately not modified.
+        ad_ligand = work / "ad_ligand.pdbqt"
+        ad_ligand.write_text("ROOT\n" + "".join(atom(i + 1, *p) for i, p in enumerate([
+            (0, 0, 0), (1.4, 0, 0), (0, 1.4, 0)
+        ])) + "ENDROOT\nTORSDOF 0\n", encoding="ascii")
+        write_gpf(ad_ligand, receptor_file=receptor.name,
+                  box=GridBox(0, 0, 0, npts=(30, 30, 30)), receptor_types="C")
+        dpf = write_dpf(ad_ligand, receptor_file=receptor.name, ga_run=1, ga_pop_size=10,
+                        ga_num_evals=500, ga_num_generations=20, sw_max_its=10, ls_search_freq=0)
+        dpf.write_text(dpf.read_text(encoding="utf-8").replace("seed pid time", "seed 123 456"),
+                       encoding="utf-8")
         ad = run_autodock4(work, engine_dir=engines, timeout_s=120, skip_existing=False)
         maps_ok = all((work / name).is_file() and (work / name).stat().st_size > 0
                       for name in ("r.C.map", "r.e.map", "r.d.map", "r.maps.fld"))

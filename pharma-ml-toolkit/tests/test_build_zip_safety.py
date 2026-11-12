@@ -222,3 +222,55 @@ def test_corruption_after_publication_prevents_retention(publisher, monkeypatch)
     assert publisher.main() != 0
     assert old.read_bytes() == b"old"
     assert all((home / publisher.NAME).is_file() for home in publisher.HOMES)
+
+
+@pytest.mark.skipif(__import__("os").name == "nt", reason="SIGKILL rehearsal requires POSIX")
+def test_sigkill_after_first_publication_preserves_partial_and_predecessor(publisher, tmp_path):
+    """Real subprocess death after publication, within disposable fake homes only."""
+    import os
+    import subprocess
+    import sys
+
+    name = "pharma-ml-toolkit-v1.0.0.zip"
+    old = publisher.HOMES[0] / name
+    old.write_bytes(b"historical release")
+    (publisher.OFFSITE_DIR / name).write_bytes(b"historical release")
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    script = r'''
+import importlib.util, os, signal, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("publisher_rehearsal", sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+base = Path(sys.argv[2]); m.ROOT = base / "toolkit"; m.REPO = base
+m.VERSION = "9.9.9"; m.NAME = "pharma-ml-toolkit-v9.9.9.zip"
+m.HOMES = (base / "download", m.ROOT / "dist-archive", m.ROOT / "download", base / "upload")
+m.OFFSITE_DIR = base / "safe-backup"
+if sys.argv[3] == "kill":
+    original = m._publish_copy
+    def kill_after_publish(src, dst, digest):
+        original(src, dst, digest)
+        os.kill(os.getpid(), signal.SIGKILL)
+    m._publish_copy = kill_after_publish
+raise SystemExit(m.main())
+'''
+    tool = Path(__file__).resolve().parents[1] / "tools/build_zip.py"
+    env = dict(os.environ, TMPDIR=str(scratch))
+    killed = subprocess.run([sys.executable, "-c", script, str(tool), str(tmp_path), "kill"],
+                            env=env, capture_output=True, check=False)
+    assert killed.returncode == -9
+    partial = publisher.HOMES[0] / publisher.NAME
+    assert partial.is_file()
+    with zipfile.ZipFile(partial) as archive:
+        assert archive.testzip() is None
+        assert archive.read("data.txt") == b"original\n"
+    assert all(not (home / publisher.NAME).exists() for home in publisher.HOMES[1:])
+    assert old.read_bytes() == b"historical release"
+    assert (publisher.OFFSITE_DIR / name).read_bytes() == b"historical release"
+    before = partial.read_bytes()
+    retry = subprocess.run([sys.executable, "-c", script, str(tool), str(tmp_path), "retry"],
+                           env=env, capture_output=True, check=False)
+    assert retry.returncode != 0 and b"refusing to overwrite" in retry.stdout
+    assert partial.read_bytes() == before and old.read_bytes() == b"historical release"
+    assert all(not (home / publisher.NAME).exists() for home in publisher.HOMES[1:])

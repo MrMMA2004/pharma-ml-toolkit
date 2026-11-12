@@ -443,3 +443,31 @@ selection passed 161 tests, with pinned RDKit 2026.9.1. These are targeted
 selections, not full profile certification. See [test profiles](TEST_PROFILES.md)
 for requirements and [recovery inventory](INTERRUPTED_RELEASE_RECOVERY.md) for
 manual interrupted-publication guidance.
+
+### Continuation evidence and limitations
+
+- The **actual** v1.2.176 ZIP was extracted after the archive audit into an
+  isolated temporary directory. The documented targeted standalone profile
+  passed 180 tests and skipped 2 with pinned dependencies on this machine; it
+  does not include source changes made after that ZIP was published.
+- Local scientific/release selection: 390 passed, 1 deselected (Torch absent).
+  Docking/preparation selection after installing Meeko and gemmi: 273 passed.
+  An earlier run without those optional packages failed 25, errored 2, skipped
+  3 and passed 240; this was a dependency-incomplete profile, not a pass.
+- A new subprocess SIGKILL test kills the disposable four-home publisher just
+  after its first final copy; that copy remained CRC-valid, the predecessor and
+  its matching backup survived, and a retry refused the existing name. This is
+  one controlled interruption point, not proof of power-loss durability, safe
+  concurrency or automatic recovery.
+- The Windows integration job on `ae102ee` executed all three bundled engines
+  using toolkit APIs; the AutoGrid/AutoDock synthetic map/finite-energy check
+  passed, while Vina batch failed. The bundled Vina identified itself as 1.2.7,
+  and the batch workflow's legacy `--log` option was incompatible. The batch
+  runner now captures stdout/stderr and verifies staged nonempty pose output.
+  Job `ee9d336` passed the Vina checks and AutoGrid map generation, but the
+  AutoDock toy run timed out; its one-atom randomized fixture was then revised.
+  These are artificial smoke fixtures, not chemical or biological validation.
+- Run `43247657601` had 11 jobs passed and 2 failed: the AutoDock toy timeout
+  and the unchanged strict byte check (`qsar_multiclass.csv`: 8 numeric-text
+  cells; `pk_profile.csv`: 12). No tolerance or data change was applied.
+  A green run on a different runner does not resolve cross-hardware drift.
