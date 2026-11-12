@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PrismLight as SyntaxHighlighter } from "react-syntax-highlighter";
 import python from "react-syntax-highlighter/dist/esm/languages/prism/python";
 import toml from "react-syntax-highlighter/dist/esm/languages/prism/toml";
@@ -29,6 +29,12 @@ SyntaxHighlighter.registerLanguage("docker", docker);
 SyntaxHighlighter.registerLanguage("ini", ini);
 SyntaxHighlighter.registerLanguage("bash", bash);
 SyntaxHighlighter.registerLanguage("json", json);
+
+// A stable, immutable client snapshot lets React match the server render during
+// hydration and then select the real client theme without an effect-set state.
+const subscribeHydration = () => () => {};
+const clientHydrationSnapshot = () => true;
+const serverHydrationSnapshot = () => false;
 
 /** Grammar ids registered with Prism — anything else renders as plain text. */
 const REGISTERED_GRAMMARS = new Set([
@@ -99,10 +105,11 @@ export function CodeBlock({
    * SSR always renders oneLight (resolvedTheme is undefined server-side),
    * so a dark-resolved client would otherwise produce a different <pre>
    * style attribute and trip React's hydration mismatch (the r267 E2E
-   * catch). Gate on `mounted` — the first client render matches SSR,
-   * then dark users get oneDark one effect later. */
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+   * catch). The server snapshot stays false during hydration; React then
+   * switches to the true client snapshot for the resolved theme. */
+  const mounted = useSyncExternalStore(
+    subscribeHydration, clientHydrationSnapshot, serverHydrationSnapshot,
+  );
   const style = mounted && resolvedTheme === "dark" ? oneDark : oneLight;
   const grammar = REGISTERED_GRAMMARS.has(language) ? language : undefined;
   const label = LANGUAGE_LABELS[language] ?? language;

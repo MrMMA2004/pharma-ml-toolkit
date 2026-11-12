@@ -74,6 +74,7 @@ jobs:
           python -m pytest
           tests/test_checkpoint_restore_transaction.py
           tests/test_checkpoint_build_safety.py
+          tests/test_checkpoint_ship_safety.py
           tests/test_release_audit.py
           tests/test_data_drift_diagnostic.py
           tests/test_data_loading.py
@@ -257,6 +258,9 @@ jobs:
 
       - name: Lint web console
         run: bun run lint
+
+      - name: Verify code theme server rendering
+        run: bun run tests/code-block-ssr.tsx
 
       - name: Build web console
         run: bun run build

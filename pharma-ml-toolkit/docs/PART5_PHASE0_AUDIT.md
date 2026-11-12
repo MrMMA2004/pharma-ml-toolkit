@@ -383,3 +383,39 @@ The later `--commit` safe-copy and retention operations and the independent
 `tools/build_zip.py` publication ritual remain unmodified and **not certified
 safe**; see [RELEASE_AUDIT](RELEASE_AUDIT.md). This change is not a release
 build or full release certification.
+
+
+## Continuation — new v1.2.174 baseline and checkpoint safe copies
+
+The subsequent branch began at main commit `e2f88d1`, with source version
+**1.2.174**, not the earlier v1.2.172. The prior baseline observations above
+are historical, not proof of this newer release. The available root download
+and toolkit dist-archive copies of v1.2.174 both have SHA-256
+`bf8dbfb58e2d0d07ecc79c3f36f28595d33d59890f439cb242e992c7525b54e7`.
+A separate, newly created workspace backup was verified against the root copy;
+it is not off-site and does not survive every workspace loss. A read-only
+archive audit of the root copy reported **8 passed, 0 failed** for the
+auditor's scoped checks, 569 entries / 524 files / 8,884,591 bytes, 45
+recursive example-data files, matching recorded engine MD5s, and an isolated
+restore with every member hash checked. Engine execution and test profiles
+were not executed by that audit; it is not release certification. Its JSON
+manifest and summary were written outside the repository.
+
+Synthetic ship fixtures reproduced four failures in the old checkpoint ship
+path: a same-version safe copy could be overwritten, a failed copy did not
+stop retention/commit, and retention could delete the only or a different
+version of a backup. The checkpoint ritual now refuses existing output names,
+uses staged, SHA-256-verified no-clobber safe copies and stops before retention
+and Git commit on copy failure. Retention keeps its existing count policy only
+for archives with an independent matching configured backup; it skips unsafe
+retirements. Mock Git and synthetic archives were used: no real ship, commit,
+retention sweep or release build was run for this test. All created copies
+remain on a partial failure; version carriers may already have changed and
+recovery is manual. Filesystem/hard-link support, concurrent writers, power
+loss and the separate `build_zip.py` publication ritual remain limitations.
+
+Focused ship/build/restore/tooling/archive-audit tests in the current core
+environment: **95 passed, 0 failed, 0 skipped**. A broader targeted selection
+covering portability, provenance, checkpoint, documentation and notebook tests
+with RDKit 2026.9.1: **261 passed, 0 failed, 0 skipped**. No production
+release or full suite is certified by these results.
