@@ -1,0 +1,105 @@
+{
+  "schema": "pharmaml-profile-results/2",
+  "generated_by": "part5-continuation round 6 (\u00a713 second half) \u2014 the v1.2.176 ship from consolidated main",
+  "environment": {
+    "platform": "Linux 5.10 sandbox, offscreen Qt (QT_QPA_PLATFORM=offscreen via ui/headless.py EGL stub)",
+    "python": "3.12.16",
+    "stack": "PySide6 6.8.3, pyqtgraph 0.13.7, rdkit 2026.9.1, scikit-learn 1.5.2, numpy 1.26.4, torch 2.15.0+cpu, tqdm, openpyxl, python-docx"
+  },
+  "profiles": [
+    {
+      "name": "R6 focused battery (features/descriptors/inventory/resumability/schema/tooling/numpy-neural/pipeline/cli + doctests)",
+      "command": "python -m pytest tests/test_features.py tests/test_descriptors.py tests/test_feature_inventory.py tests/test_descriptor_batch_resumability.py tests/test_checkpoint_schema.py tests/test_checkpoint_tooling.py tests/test_numpy_neural_checkpoints.py tests/test_ml_pipeline.py tests/test_cli_features.py src/pharmaml/chem/features.py src/pharmaml/utils/checkpoint_schema.py src/pharmaml/utils/checkpoints.py src/pharmaml/exceptions.py --doctest-modules",
+      "outcome_counts": {
+        "passed": 593,
+        "failed": 0,
+        "skipped": 17,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "notes": "pre-merge run on part5-continuation at 9b5d7e7; zero failures"
+    },
+    {
+      "name": "Post-consolidation sanity on main (absorbed arena suite + R6 + portability)",
+      "command": "python -m pytest tests/test_checkpoint_ship_safety.py tests/test_checkpoint_tooling.py tests/test_descriptor_batch_resumability.py tests/test_release_portability.py",
+      "outcome_counts": {
+        "passed": 50,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "notes": "run on merged main at edaece3 after the arena absorption"
+    },
+    {
+      "name": "Version carriers + feature inventory gates",
+      "command": "python -m pytest tests/test_version_carriers.py tests/test_feature_inventory.py",
+      "outcome_counts": {
+        "passed": 24,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "notes": "four carriers at 1.2.176 + the inventory freeze stamp trued"
+    },
+    {
+      "name": "Notebook re-execution at ship (8/8)",
+      "command": "python tools/reexec_notebooks.py && python tools/strip_notebook_outputs.py",
+      "outcome_counts": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "notes": "8/8 executed at pharmaml 1.2.176; the 7 no-output twins regenerated; freshness guards green"
+    },
+    {
+      "name": "Offscreen GUI battery (round-5 recorded evidence)",
+      "command": "python -m pytest tests/ -k gui --no-header -q",
+      "outcome_counts": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 532
+      },
+      "notes": "not executed this round; the round-5 recorded evidence (532/532 green at 1.2.174) carries the GUI leg; R6 touches no GUI code (the descriptor-batch loop is headless)"
+    }
+  ],
+  "gates": [
+    {
+      "name": "ruff (changed files)",
+      "outcome": "passed",
+      "detail": "features.py, checkpoint_schema.py, exceptions.py, test suite clean"
+    },
+    {
+      "name": "mypy src/pharmaml",
+      "outcome": "passed",
+      "detail": "217 files, zero errors (fpdf2 re-pinned 2.8.5 first)"
+    },
+    {
+      "name": "Four-carrier version pin (round-263)",
+      "outcome": "passed",
+      "detail": "VERSION, pyproject, __version__, SHIPPED_TOOLKIT_VERSION all 1.2.176 in one change"
+    },
+    {
+      "name": "Notebook freshness",
+      "outcome": "passed",
+      "detail": "8/8 re-executed at 1.2.176, twins stripped, guard green"
+    }
+  ],
+  "backup_and_recovery": {
+    "status": "verified this round (session backup task)",
+    "evidence": "session_backup.py verified on consolidated main (branch-agnostic, cycle green: clean tree, in sync); watchdog loop live since 11:13Z; the R6 + consolidation commits pushed to origin/main (9b5d7e7, edaece3)",
+    "power_loss_recovery": "not verified by this round"
+  },
+  "limitations": [
+    "Five \u00a713 operation classes remain pending (similarity_campaign, hpo, generative_search, docking_batch, preprocessing) \u2014 each needs its own exact-restore proof round",
+    "The GUI does not yet surface JobCancelled.partial_results or offer a resume action for descriptor batches \u2014 the API is library-side only this round",
+    "The offscreen GUI battery was not re-run for 176 (round-5 recorded evidence carries it; R6 touches no GUI code)",
+    "Notebook re-execution environment pins: fpdf2 2.8.5, meeko 0.8.0, gemmi 0.7.5 (per requirements.txt)",
+    "Branch consolidation deleted part5-continuation and arena/* from local and remote after verified absorption into main"
+  ]
+}

@@ -1,3 +1,32 @@
+## [1.2.176] — 2026-11-12
+### Added — part5-continuation round 6: descriptor batches earn §13 registration; branch consolidation
+
+- `compute_feature_frame(checkpoint_dir=..., checkpoint_every=...,
+  checkpoint_resume=...)` — the first §13 extension on the v2
+  checkpoint schema: chunk-boundary envelope-carrying checkpoints with
+  the batch's complete state (b64-packed per-row float vectors, the
+  drop ledger, config + dataset fingerprints).  A resume skips the
+  completed prefix; a stale config/dataset checkpoint is refused with
+  a warning (exact restore or nothing); existing call sites untouched.
+- `JobCancelled.partial_results` (optional) — a cooperative stop in
+  the checkpointed path preserves the partial `(frame, report)` on
+  the exception (§13 "preserve completed partial results after
+  cancellation whenever the operation's data contract permits").
+  Construction and the checkpoint-less path stay byte-identical.
+- `descriptor_batch` registered in `OPERATION_REGISTRY` (proof
+  pinned); five §13 candidates remain pending, each earning its row
+  in its own round.
+- `tests/test_descriptor_batch_resumability.py` — the 11-test proof
+  suite, led by the registry proof
+  `test_resumed_batch_is_bit_exact` (interrupted + resumed ==
+  uninterrupted, bit for bit).
+- Branch consolidation (user instruction): `arena/8fbb4283` absorbed
+  (its checkpoint ship-safety suite, the release-safety test count,
+  the hydration-safe CodeBlock theme ride in unchanged), and all
+  other branches deleted — local and remote carry only `main`.
+- `docs/CHECKPOINT_SCHEMA.md` registry + rules updated;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R6 row marked done.
+
 ## [1.2.175] — 2026-11-12
 ### Added — part5-continuation round 5: release report schema v2 (§14) + the version-bump rule
 

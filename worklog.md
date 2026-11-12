@@ -13827,3 +13827,45 @@ broke mypy on report.py; 2.8.5 is the requirements.txt pin).
 Gates: 593 passed / 0 failed on the focused battery (features,
 descriptors, inventory, resumability, schema, tooling, numpy-neural,
 pipeline, CLI + module doctests); ruff clean; mypy clean (217 files).
+
+## Branch consolidation + the v1.2.176 ship (R6) — 2026-11-12
+
+**The instruction.** "Absorb all the branches, move your work to main
+branch then delete other branches."  Survey first: `main` at `e2f88d1`
+(11 behind part5-continuation, fast-forwardable); `arena/
+8fbb4283-pharma-ml-toolkit` carrying 3 unabsorbed commits (the
+checkpoint ship-safety suite + release-audit doc + CI leg, the
+release-safety test count, the hydration-safe CodeBlock theme with its
+SSR test); a stray `origin/HEAD`-style ref that was never a branch.
+Both branches descend from `e2f88d1`; merge-tree reported zero
+conflicts.
+
+**The absorption.** `main` fast-forwarded to `9b5d7e7` (R6), then the
+arena branch merged `--no-ff` as `edaece3` — its three commits ride in
+unchanged, both lineages verified present via `--contains`/
+`--is-ancestor`, and a 50-test sanity battery on the merge result
+green (ship-safety + tooling + resumability + portability).  Pushed
+main.  Then the deletions: `part5-continuation` and
+`arena/8fbb4283-pharma-ml-toolkit` deleted local + remote;
+`git fetch --prune` clean.  Local and remote now carry ONLY `main`.
+
+**Backup tooling.** `tools/session_backup.py` was already
+branch-agnostic (`git rev-parse HEAD`); a cycle verified on main:
+clean tree, in sync, nothing to back up.  The watchdog loop is live.
+
+**The ship (v1.2.176, from main).**  Four carriers bumped together
+(scripts/bump_version.py), CHANGELOG leads with 1.2.176, FEATURES.md
+freeze stamp trued.  Notebooks re-executed 8/8 at 1.2.176 (171 s,
+zero error outputs, zero home-path survivors), 7 twins stripped,
+freshness + variants guards green (119/119).  Zip
+`pharma-ml-toolkit-v1.2.176.zip` — 9,045,169 bytes, sha-256
+`da2ba527083cec7672f7799977df45deeaea82477cd63a2c5ee36db9afad63ed`,
+597 entries / 547 files, four byte-identical homes, testzip OK,
+scrub zero absolute-home matches, stale version strings NONE, the R6
+resumability suite and the absorbed arena ship-safety suite both ride
+the archive, predecessor 175 swept from all four homes.  §14 audit
+report generated and persisted under
+`docs/release-audits/v1.2.176-part5-r6-*` (all eight archive checks
+passed; the evidence file carries the R6 focused battery 593/0/17,
+the post-consolidation 50/0, the carriers+inventory 24/0, the
+notebook 8/8, and the honestly-not-executed GUI profile with cause).
