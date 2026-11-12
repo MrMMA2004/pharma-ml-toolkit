@@ -1,3 +1,35 @@
+## [1.2.179] — 2026-11-12
+### Added — part5-continuation round 9: generative search earns §13 registration (the adaptive-books restore)
+
+- `GeneticOptimizer.optimize(checkpoint_dir=...,
+  checkpoint_every=..., checkpoint_resume=..., progress=...)` —
+  the fourth §13 extension on the v2 checkpoint schema: at every
+  generation boundary the checkpoint captures the COMPLETE state —
+  the population, the produced-molecules book, the per-generation
+  history, the sampler's RNG state (the round-8 lesson carried over:
+  every tournament / mutation / crossover draw advances the rng, so a
+  history-only replay would propose different offspring), and on
+  adaptive runs the three operator credit books (reward windows,
+  tallies, best offspring) plus the trajectory.  A resume is
+  bit-identical to BOTH the uninterrupted run and the
+  checkpoint-less call (`elapsed_s` aside, which is wall-clock by
+  nature); a stale config checkpoint — any GA knob or the
+  objective's class identity differing — is refused with a warning
+  (exact restore or nothing).  A cooperative stop attaches the
+  partial `GenerationResult` on `JobCancelled.partial_results` in
+  BOTH the checkpointed and the checkpoint-less mode (strictly
+  richer than the round-205 `None` convention — the partial is
+  computable from the loop state alone).
+- `generative_search` registered in `OPERATION_REGISTRY` (proof
+  pinned); two §13 candidates remain pending (docking_batch,
+  preprocessing), each earning its row in its own round.
+- `tests/test_generative_search_resumability.py` — the 10-test proof
+  suite, led by the registry proof
+  `test_resumed_search_is_bit_exact` and the adaptive-mode restore
+  test `test_adaptive_search_resumes_bit_exact`.
+- `docs/CHECKPOINT_SCHEMA.md` registry + rules updated;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R9 row marked done.
+
 ## [1.2.178] — 2026-11-12
 ### Added — part5-continuation round 8: HPO studies earn §13 registration (the RNG-state lesson)
 

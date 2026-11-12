@@ -187,13 +187,28 @@ OPERATION_REGISTRY: dict[str, RegistryEntry] = {
         ),
         implementation="pharmaml.ml.hpo",
     ),
+    # (part5-continuation round 9, §13) the fourth candidate to EARN
+    # registration: the generative search's complete state (the
+    # population + produced book + per-generation history + the RNG
+    # state +, on adaptive runs, the three operator credit books and
+    # the trajectory) serializes and restores exactly.  The round-8
+    # lesson carried over: the RNG state rides in the checkpoint, and
+    # a naive history-only replay is proven to diverge.
+    "generative_search": RegistryEntry(
+        unit_description="generations evolved",
+        partial_results_policy="preserve",
+        exact_restore_proof=(
+            "tests/test_generative_search_resumability.py::"
+            "TestGenerativeSearchResume::test_resumed_search_is_bit_exact"
+        ),
+        implementation="pharmaml.generative.genetic",
+    ),
 }
 
 #: The §13 candidate classes, in the master prompt's own order.  Each may
 #: register only after its round lands the exact-restore proof test; until
 #: then OperationSpec(operation_type=<any of these>) raises.
 PENDING_OPERATION_TYPES: tuple[str, ...] = (
-    "generative_search",
     "docking_batch",
     "preprocessing",
 )

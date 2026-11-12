@@ -56,10 +56,9 @@ resume would start from the wrong unit.)
    a referenced pytest node id proving bit-exact resume for that class
    (`RegistryEntry.exact_restore_proof`).
 2. **Pending §13 classes are refused.** The candidates not yet in
-   the registry — `generative_search`,
-   `docking_batch`, `preprocessing` — are listed in
+   the registry — `docking_batch`, `preprocessing` — are listed in
    `PENDING_OPERATION_TYPES` and rejected with an explicit "not yet
-   registered" error until their proof round lands (planned rounds R9+
+   registered" error until their proof round lands (planned rounds R10+
    in `docs/plans/PART5_S11_S14_CONTINUATION.md`).
 3. **Exact restore or nothing.** `restore_exact` must be `True`
    (construction-time and on-disk validation). §13: "Never present a
@@ -92,6 +91,7 @@ resume would start from the wrong unit.)
 | `descriptor_batch` | molecules featurized | preserve | `tests/test_descriptor_batch_resumability.py::TestDescriptorBatchResume::test_resumed_batch_is_bit_exact` | `pharmaml.chem.features` |
 | `similarity_campaign` | references scanned | preserve | `tests/test_similarity_campaign_resumability.py::TestSimilarityCampaignResume::test_resumed_campaign_is_bit_exact` | `pharmaml.chem.similarity` |
 | `hpo` | trials evaluated | preserve | `tests/test_hpo_resumability.py::TestHPOResume::test_resumed_study_is_bit_exact` | `pharmaml.ml.hpo` |
+| `generative_search` | generations evolved | preserve | `tests/test_generative_search_resumability.py::TestGenerativeSearchResume::test_resumed_search_is_bit_exact` | `pharmaml.generative.genetic` |
 
 The first of the six §13 candidates earned its row in round 6: the
 descriptor batch (`compute_feature_frame(checkpoint_dir=...)`)
@@ -114,9 +114,17 @@ not the complete state: the TPE sampler draws candidates from its
 `random.Random`, so the checkpoint carries the RNG state too
 (`HPOStudy.capture_state()` / `restore_state()`), making the resumed
 study bit-identical to the uninterrupted one where a naive
-history-only replay demonstrably diverges. The three remaining
-candidates are pending; each earns its row in its own round, exactly
-as the master prompt sequences it.
+history-only replay demonstrably diverges. Round 9 added the fourth:
+`GeneticOptimizer.optimize(checkpoint_dir=...)` — the generation
+boundary's complete state (population, produced book, history, RNG
+state, and on adaptive runs the three operator credit books +
+trajectory; the round-8 lesson carried over) restores so the resumed
+evolution is bit-identical to the uninterrupted run (`elapsed_s`
+aside, wall-clock by nature), and a cooperative stop attaches the
+partial `GenerationResult` in BOTH the checkpointed and the
+checkpoint-less mode. The two remaining candidates are pending; each
+earns its row in its own round, exactly as the master prompt
+sequences it.
 
 ## Using it
 

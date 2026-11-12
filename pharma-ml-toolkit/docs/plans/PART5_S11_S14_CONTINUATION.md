@@ -35,6 +35,7 @@ passed.
 | R6 (done) | First §13 extension on the schema: descriptor batches (exact-restore proof) | §13 second half | pushed; `compute_feature_frame(checkpoint_dir=…)` — chunk-boundary envelope checkpoints carrying the complete state (per-row b64 float vectors, drop ledger, config+dataset fingerprints); resume skips the completed prefix bit-identically; stale config/dataset refuses (exact restore or nothing); cooperative stop preserves the partial `(frame, report)` on `JobCancelled.partial_results` (§13 "whenever the data contract permits"); `descriptor_batch` registered in OPERATION_REGISTRY with the proof node; 11-test proof suite; focused battery 593 passed (features/descriptors/schema/tooling/numpy-neural/pipeline/cli + doctests); ruff + mypy clean |
 | R7 (done) | Second §13 extension: similarity campaigns (exact-restore proof) | §13 second half | pushed; `run_similarity_campaign(checkpoint_dir=…)` — the `similarity_scan` math in a 25-reference chunk loop with envelope checkpoints carrying the long-format similarity rows + dropped-reference ledger + scan-config/dataset fingerprints; a resume is bit-identical to BOTH the uninterrupted campaign and the one-shot `similarity_scan`; stale config/dataset refuses; cooperative stop preserves the partial frame on `JobCancelled.partial_results`; `similarity_campaign` registered in OPERATION_REGISTRY with the proof node; 11-test proof suite; focused battery 107 passed (similarity/descriptor-batch/schema/tooling + doctests); ruff + mypy clean |
 | R8 (done) | Third §13 extension: HPO studies (exact-restore proof, RNG-state lesson) | §13 second half | pushed; `tune_model(checkpoint_dir=…)` — the trial loop with envelope checkpoints carrying the COMPLETE state: trial history AND the sampler's RNG state (`HPOStudy.capture_state()/restore_state()`); without the RNG state a resumed TPE demonstrably diverges (naive history replay pinned by its own test); a resume is bit-identical to the uninterrupted study AND the checkpoint-less call; stale config (model/space/sampler/seed/cv/n_trials) or dataset refuses (exact restore or nothing); cooperative stop preserves the partial TuneReport on `JobCancelled.partial_results`; `hpo` registered in OPERATION_REGISTRY with the proof node; 12-test proof suite; focused battery 282 passed (hpo/presets/multiobjective/resumability×3/schema/tooling/numpy-neural/carriers + doctests); ruff + mypy clean |
+| R9 (done) | Fourth §13 extension: generative search (exact-restore proof, adaptive books) | §13 second half | pushed; `GeneticOptimizer.optimize(checkpoint_dir=…)` — generation-boundary envelope checkpoints carrying the COMPLETE state: population + produced book + history + the RNG state (round-8 lesson carried over) + the three operator credit books and trajectory on adaptive runs; a resume is bit-identical to the uninterrupted run AND the checkpoint-less call (elapsed_s aside, wall-clock by nature); stale config (any GA knob or the objective identity) refuses (exact restore or nothing); a cooperative stop attaches the partial GenerationResult on `JobCancelled.partial_results` in BOTH modes (strictly richer than the round-205 None convention); `generative_search` registered in OPERATION_REGISTRY with the proof node; 10-test proof suite; focused battery 295 passed + generative regression 322 passed; ruff + mypy clean |
 
 Ordering rationale: the schema precedes the previews and the extension (the
 master prompt demands the schema be defined and tested **before** extending
@@ -155,8 +156,16 @@ the one-shot `similarity_scan`). Round 8 followed for HPO:
 the round's lesson: the trial history alone is NOT the complete state
 (the TPE sampler's RNG advances per trial), so the checkpoints carry
 the RNG state too and a naive history-only replay is proven to
-diverge. Three candidates remain: generative_search, docking_batch,
-preprocessing.**
+diverge. Round 9 followed for the generative search:
+`GeneticOptimizer.optimize(checkpoint_dir=...)` in
+`pharmaml/generative/genetic.py`, registered as `generative_search`
+with its proof suite `tests/test_generative_search_resumability.py`
+(10 tests) — the generation boundary's complete state (population,
+produced book, history, RNG state, the three adaptive operator credit
+books + trajectory) restores bit-exactly (`elapsed_s` aside), and the
+cooperative stop attaches the partial `GenerationResult` in both the
+checkpointed and the checkpoint-less mode. Two candidates remain:
+docking_batch, preprocessing.**
 
 ## Definition of done (this continuation)
 

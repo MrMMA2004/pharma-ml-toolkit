@@ -13997,3 +13997,63 @@ archive checks passed.
 **Standing notes.** The cron/scheduled-task tool remains unavailable
 in this sandbox ("No such tool available" — retried again this round);
 the every-2h "continue" task cannot be created from here.
+
+## R9 (§13 second half) — the generative search earns registration (the adaptive-books restore) — 2026-11-12
+
+**The round.** R9 registers the fourth §13 candidate:
+`GeneticOptimizer.optimize(checkpoint_dir=…)`.  The recon audited
+what actually advances per generation (the R8 lesson as a checklist):
+the rng (every tournament / mutation / crossover draw), the
+population, the produced-molecules book, the history, the two attempt
+counters — and, on adaptive runs, the three `_OperatorBook` credit
+books (reward deques, tallies, best-offspring) plus the trajectory.
+Everything is JSON-safe; the resume point is the start of generation
+G with all of it restored.
+
+**The implementation.** Generation-boundary envelope checkpoints in
+`pharmaml/generative/genetic.py` (config fingerprint over every GA
+knob AND the objective's class identity — a LogP-band run refuses a
+Qed checkpoint); the round-8 RNG-state lesson carried over verbatim;
+adaptive runs restore the books and trajectory so the resumed operator
+mix evolves identically; the cooperative stop attaches a partial
+`GenerationResult` (built by the new `_partial_result` helper) in
+BOTH the checkpointed and the checkpoint-less mode — a deliberate,
+strictly richer deviation from the round-205 `None` convention, since
+the partial is computable from the loop state alone.  Two bugs caught
+by the proof suite on the way: `start_generation` left unbound on the
+`checkpoint_resume=False` path (UnboundLocalError), and the
+`except/else` misplacement around the restore try.  The
+`LogPBandObjective(lo, hi)` signature tripped the stale-config test
+first run.  The last-generation boundary carries no new state (the
+final generation produces no offspring), so the every=2 rotation
+assertion reads [6, 8, 9] for 10 generations.
+
+**The proof suite.** `tests/test_generative_search_resumability.py`
+— 10 tests: the registry proof (resume == uninterrupted ==
+checkpoint-less, elapsed_s aside), tail-only resume, the adaptive
+restore (books + trajectory + stats equality), cancel-preserve,
+stale-config (seed / objective / mutation mode), envelope, registry
+pin, every-validation, every-thinning, and the checkpoint-less
+partial.  The R6/R7/R8 frontier tests flipped to docking_batch.
+
+**The ship (v1.2.179, from main).** Four carriers bumped together;
+CHANGELOG leads 1.2.179; CHECKPOINT_SCHEMA.md registry row + rules;
+plan doc R9 row + status note.  ruff clean (full src + four proof
+suites); mypy 217 files zero errors; notebooks re-executed 8/8 at
+1.2.179 (173 s, zero error outputs, zero home-path survivors), 7
+twins stripped; audit battery run AFTER the ritual (round-8's
+scheduling lesson applied): 982 passed / 0 failed / 2 skipped.
+Ship-safety + portability 16/0.  Zip `pharma-ml-toolkit-v1.2.179.zip`
+— 9,129,575 bytes, sha-256
+`4146a0ea5a9124fac85095ed1a767adfc4d8a81444b978a98b52c81d553ca1f7`,
+four byte-identical homes, predecessor 178 swept from all four.  §14
+audit under `docs/release-audits/v1.2.179-part5-r9-*`: all eight
+archive checks passed; limitations recorded honestly (the config
+fingerprint covers the objective class, not instance data; corpus and
+seed_smiles are not fingerprinted — flagged for the docking round to
+close).
+
+**Standing notes.** The cron/scheduled-task tool remains unavailable
+in this sandbox ("No such tool available" — retried again this turn);
+the every-2h "continue" task cannot be created from here.  Two §13
+candidates remain: docking_batch, then preprocessing.

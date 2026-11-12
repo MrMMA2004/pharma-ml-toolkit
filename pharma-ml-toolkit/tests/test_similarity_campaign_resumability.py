@@ -190,11 +190,13 @@ class TestSimilarityCampaignResume:
         assert "test_resumed_campaign_is_bit_exact" in entry.exact_restore_proof
         assert entry.unit_description == "references scanned"
         # (round 8) the NEXT candidate has since earned its own round:
-        # hpo is registered -- the pending frontier has moved on to
-        # generative_search and the rest
+        # hpo is registered -- and (round 9) generative_search after
+        # it; the pending frontier has moved on to docking_batch and
+        # the rest
         assert "hpo" in OPERATION_REGISTRY
-        with pytest.raises(Exception, match="generative_search"):
-            OperationSpec(operation_type="generative_search", operation_id="x")
+        assert "generative_search" in OPERATION_REGISTRY
+        with pytest.raises(Exception, match="docking_batch"):
+            OperationSpec(operation_type="docking_batch", operation_id="x")
 
     def test_checkpoint_every_validation(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="checkpoint_every"):
