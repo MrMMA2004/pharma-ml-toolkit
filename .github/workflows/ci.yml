@@ -77,6 +77,7 @@ jobs:
           tests/test_checkpoint_ship_safety.py
           tests/test_build_zip_safety.py
           tests/test_release_recovery_status.py
+          tests/test_resume_release.py
           tests/test_cv_parameters_integrity.py
           tests/test_cv_group_labels_integrity.py
           tests/test_vina_output_integrity.py

@@ -25,12 +25,35 @@ candidate are flagged: they are not independent backups. The inventory assumes
 no concurrent changes and does not protect against hostile filesystem races.
 
 Preserve mismatching copies and investigate rather than selecting a winner by
-version or timestamp. If copies match, verify the intended source, archive audit,
-backup location, and all homes independently; choose any manual recovery action
-only after review and authorization. A missing copy should be restored with an
-exclusive no-clobber method and verified by hash; never replace existing files.
-Keep a verified independent backup outside all publication homes, preferably on
-separate storage. A matching copy on the same disk is not off-site or protection
+version or timestamp. Verify source provenance, archive audit, backup location,
+and all homes independently; review and authorize any recovery action first.
+
+`tools/resume_release.py` offers an explicitly invoked recovery operation after
+that review. By default it is a **read-only plan**. Supply the trusted candidate,
+a separate regular-file backup outside all publication homes, the independently
+recorded SHA-256, and every intended destination (all parents must already exist;
+all destination names must be the same versioned release name):
+
+```sh
+python tools/resume_release.py --candidate /path/to/candidate.zip \
+  --backup /path/outside/homes/backup.zip --sha256 <verified-64-char-sha256> \
+  /path/home-one/pharma-ml-toolkit-vX.Y.Z.zip \
+  /path/home-two/pharma-ml-toolkit-vX.Y.Z.zip
+```
+
+Once the plan, provenance and backup are reviewed, repeat with `--execute` to
+publish **only missing** names using verified staged copies and exclusive links.
+Existing matching copies are left untouched; any mismatching file, symlink,
+aliased backup or invalid ZIP aborts preflight. The command never builds,
+commits, retires predecessors or replaces existing paths. Already-published
+copies remain if a later step fails; stop and inventory again. It requires hard
+link support in each home, assumes no concurrent writers, and is neither
+crash-atomic nor power-loss durable. CRC and matching hashes do not prove archive
+safety, source provenance, or release readiness. A controlled SIGKILL rehearsal
+in synthetic homes exercised one interruption and successful recovery; it is not
+proof of all failure modes. Do not use this operation to choose among conflicting
+archives. Keep a verified independent backup outside all publication homes,
+preferably on separate storage. A matching copy on the same disk is not off-site or protection
 against disk loss. Existing retention rules only retire predecessors with a
 matching independent configured backup; they are not a backup strategy.
 
