@@ -337,3 +337,25 @@ def test_binary_calibration_dialog_reachable(qtbot, studio_app):
     page._calibration_btn.click()
     assert isinstance(page._calibration_dialog, CalibrationDialog)
     page._calibration_dialog.close()
+
+
+def test_reproducibility_compares_training_records(qtbot, studio_app, tmp_path, monkeypatch):
+    from ui.pages.reproducibility_dialog import ReproducibilityDialog
+
+    record = {"schema": "pharmaml-cli-training-run/1", "dataset": {"sha256": "dataset"},
+              "input_processing": {}, "split": {"train_ordered_clean_row_indices_sha256": "train",
+                                                 "test_ordered_clean_row_indices_sha256": "test"},
+              "training": {}, "model_artifact": {"sha256": "model"}, "environment": {}}
+    first, second = tmp_path / "one.json", tmp_path / "two.json"
+    first.write_text(json.dumps(record))
+    record["dataset"]["sha256"] = "different"
+    second.write_text(json.dumps(record))
+    choices = iter([(str(first), "JSON"), (str(second), "JSON")])
+    monkeypatch.setattr("ui.pages.reproducibility_dialog.QFileDialog.getOpenFileName", lambda *a, **k: next(choices))
+    dialog = ReproducibilityDialog(JobRunner())
+    qtbot.addWidget(dialog)
+    dialog._show_training_comparison()
+    qtbot.waitUntil(lambda: dialog._status.text().startswith("Diagnostic complete"), timeout=10000)
+    result = json.loads(dialog._result.toPlainText())
+    assert not result["same_dataset_sha256"] and result["same_split"]
+    assert "not proof" in result["notice"]

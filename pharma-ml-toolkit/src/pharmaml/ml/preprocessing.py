@@ -278,6 +278,7 @@ def make_train_test_split(
     random_state: int = 42,
     stratify: bool = True,
     min_class_count: int = 2,
+    on_split: Callable[[bool], None] | None = None,
 ):
     """Stratified train/test split with automatic fallback.
 
@@ -289,6 +290,10 @@ def make_train_test_split(
     fallback.  For categorical targets with a rare class a plain split
     is used and a warning is logged (the legacy scripts crashed
     outright on single-member classes).
+
+    ``on_split``, when supplied, is called after a successful split with the
+    actual stratification flag (which can differ from the requested flag after
+    fallback). It does not receive row data.
 
     Returns
     -------
@@ -339,7 +344,7 @@ def make_train_test_split(
                 )
                 use_stratify = False
     try:
-        return train_test_split(
+        split = train_test_split(
             X,
             y,
             test_size=test_size,
@@ -354,6 +359,9 @@ def make_train_test_split(
         # so the module's typed-error contract holds for the whole
         # split, not just the pre-checked inputs.
         raise DataValidationError(f"invalid split configuration: {exc}") from exc
+    if on_split is not None:
+        on_split(use_stratify)
+    return split
 
 
 def remove_outliers_iqr(

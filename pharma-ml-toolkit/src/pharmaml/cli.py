@@ -183,6 +183,9 @@ def _build_parser() -> argparse.ArgumentParser:
     run_comparison = research_sub.add_parser("compare-uncertainty", help="compare two file-based uncertainty reports")
     run_comparison.add_argument("first")
     run_comparison.add_argument("second")
+    training_comparison = research_sub.add_parser("compare-training", help="compare two observed CLI training records")
+    training_comparison.add_argument("first")
+    training_comparison.add_argument("second")
     research_sub.add_parser("environment", help="print selected runtime and numerical environment details")
     checkpoint = research_sub.add_parser("checkpoint", help="read-only checkpoint and input fingerprint inspection")
     checkpoint.add_argument("path", help="existing checkpoint JSON")
@@ -240,6 +243,8 @@ def _build_parser() -> argparse.ArgumentParser:
     train.add_argument("--test-size", type=float, default=0.2)
     train.add_argument("--cv", type=int, default=5)
     train.add_argument("--no-tune", action="store_true", help="skip grid search")
+    train.add_argument("--run-record", default=None, metavar="NEW_JSON",
+                       help="opt in to an observed training record at a new JSON path (never replaces it)")
     train.add_argument(
         "--keep-categorical", action="store_true",
         help="keep string feature columns and one-hot encode them "
@@ -1125,8 +1130,14 @@ def _cmd_research(args: argparse.Namespace) -> int:
             first = json.load(handle)
         with Path(args.second).open(encoding="utf-8") as handle:
             second = json.load(handle)
-        result = (compare_uncertainty_reports(first, second)
-                  if args.research_command == "compare-uncertainty" else compare_manifests(first, second))
+        if args.research_command == "compare-training":
+            from pharmaml.ml.training_provenance import compare_training_records
+
+            result = compare_training_records(first, second)
+        elif args.research_command == "compare-uncertainty":
+            result = compare_uncertainty_reports(first, second)
+        else:
+            result = compare_manifests(first, second)
     print(json.dumps(result, indent=2, allow_nan=False))
     if (args.research_command == "checkpoint"
             and (not result["valid_envelope"] or result["input_status"].startswith("changed")
@@ -1420,9 +1431,25 @@ def _cmd_ml_train(args: argparse.Namespace) -> int:
     from pharmaml.ml.preprocessing import make_train_test_split
     from pharmaml.ml.training import train_model
 
+    record_path = None
+    before = None
+    actual_stratification: list[bool] = []
+    if args.run_record:
+        from pharmaml.ml.provenance import fingerprint_file
+        from pharmaml.ml.training_provenance import prepare_record_path
+
+        record_path = prepare_record_path(args.run_record)
+        before = fingerprint_file(args.data)
     dataset = _load_cli_dataset(args)
+    if record_path is not None:
+        from pharmaml.exceptions import DataValidationError
+
+        after = fingerprint_file(args.data)
+        if before != after:
+            raise DataValidationError("training input changed while reading; retry with a stable file")
     X_train, X_test, y_train, y_test = make_train_test_split(
-        dataset.X, dataset.y, test_size=args.test_size
+        dataset.X, dataset.y, test_size=args.test_size,
+        on_split=actual_stratification.append if record_path is not None else None,
     )
 
     result = train_model(
@@ -1467,6 +1494,26 @@ def _cmd_ml_train(args: argparse.Namespace) -> int:
         print(f"plots:    {bundle_dir / 'report.html'} (+{len(written) - 1} files)")
         if args.pdf_report:
             print(f"pdf:      {bundle_dir / 'report.pdf'}")
+    if record_path is not None:
+        from pharmaml.exceptions import DataValidationError
+        from pharmaml.ml.training_provenance import make_training_record, write_new_record
+
+        record = make_training_record(
+            dataset=dataset, dataset_fingerprint=after, model_path=model_path, result=result, report=report,
+            requested_model=args.model, requested_task=args.task, keep_categorical=args.keep_categorical,
+            test_size=args.test_size, cv=args.cv, tune_requested=not args.no_tune,
+            stratified=actual_stratification[0], X_train=X_train, X_test=X_test,
+        )
+        try:
+            final_input = fingerprint_file(args.data)
+            record["source_status_after_run"] = "match" if final_input == after else "changed"
+        except DataValidationError:
+            record["source_status_after_run"] = "unavailable"
+        if record["source_status_after_run"] != "match":
+            print("warning: training source changed or became unavailable after parsing; inspect run record",
+                  file=sys.stderr)
+        write_new_record(record_path, record)
+        print(f"run record: {record_path}")
     return 0
 
 
@@ -2848,6 +2895,7 @@ _HANDLERS = {
     ("research", "manifest"): _cmd_research,
     ("research", "compare"): _cmd_research,
     ("research", "compare-uncertainty"): _cmd_research,
+    ("research", "compare-training"): _cmd_research,
     ("research", "environment"): _cmd_research,
     ("research", "checkpoint"): _cmd_research,
     ("ml", "nested-ridge"): _cmd_ml_nested_ridge,

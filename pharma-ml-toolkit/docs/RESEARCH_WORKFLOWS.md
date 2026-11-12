@@ -223,6 +223,49 @@ cancelled partial results are not saved or resumable. The file-based report
 records a hash checked around parsing and the environment; the hash is not a
 race-free snapshot and does not prove independence or reproducibility.
 
+## Observed `ml train` run records (opt-in)
+
+```sh
+pharmaml ml train --data training.csv --target activity --model rf --no-tune \
+  --run-record run1.json
+pharmaml research compare-training run1.json run2.json
+```
+
+`--run-record` is optional and requires a **new `.json` path in an existing
+parent directory**. Before training it fingerprints the input file around the
+actual dataset load and refuses an ordinary change during parsing. After a
+successful train, evaluation, model save and any requested visual report, it
+records the input hash, resolved target/task/features and dropped columns,
+actual holdout stratification/fallback, seed, row counts and ordered split-index
+hashes, fitted pipeline settings and selected parameters, tuning/CV details,
+held-out metrics, saved-model byte hash and runtime environment. Unsupported or
+deeply nested parameter values are explicitly tagged as omitted; such records
+are incomplete. A second file hash after the run is marked `match`, `changed`
+or `unavailable`; the latter two emit a warning. Split-index hashes identify
+ordered positions in the **cleaned table after missing-target rows are dropped**,
+not original source line numbers or molecular IDs.
+
+The existing `ml train` model save remains unchanged: it writes under
+`./artifacts/` and **can replace an existing model**. Only the optional JSON
+record is new-file-only. The exclusive record write happens after the model
+and any report have already been written: failures or a competing writer can
+leave an overwritten model and no record, or a partial record. This is not a
+transaction, snapshot, resume system or signed audit log; it assumes a trusted,
+quiescent filesystem. Input hashes around reading catch ordinary changes, not
+adversarial races or changes reverted between reads. Random row splits can
+leak related compounds or patients; recorded hashes do not establish split
+independence. Do not repeatedly tune against held-out metrics. The serialized
+model's hash includes bundle metadata (such as training time) and can differ
+even for equivalent fitted models. Records may expose sensitive settings,
+column names and environment details. Untrusted joblib models must never be
+loaded; the comparison command reads JSON only.
+
+Studio **Utilities Workbench → Reproducibility diagnostics → Compare training
+records…** compares two such JSON files in the background; it does not train a
+model or require loading its artifact. Matching records do not establish
+scientific validity or reproducibility. This integration covers the CLI `ml
+train` path only, not the Studio training path or other model workflows.
+
 ## Provenance and reproducibility diagnostics
 
 ```sh
@@ -283,7 +326,7 @@ limitations.
 ## Still to build
 
 A guided docking **preparation** workflow, provenance integration across other
-model runs, generalized safe resume,
+model and Studio training runs, generalized safe resume,
 broader classification validation, multiclass recalibration and applicability methods, and a
 full reproducibility certification system are not delivered here. Existing docking engines and
 campaign APIs, label-conditional conformal APIs, and proof-backed checkpoints

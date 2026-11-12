@@ -44,6 +44,9 @@ class ReproducibilityDialog(QDialog):
         self._drift.clicked.connect(self._show_drift)
         buttons.addWidget(self._environment)
         buttons.addWidget(self._drift)
+        self._compare_training = QPushButton("Compare training records…")
+        self._compare_training.clicked.connect(self._show_training_comparison)
+        buttons.addWidget(self._compare_training)
         layout.addLayout(buttons)
         note = QLabel("Example-data drift requires checkout tools and data; the check runs in a child "
                       "process and may take time. These jobs cannot be stopped or resumed.")
@@ -67,7 +70,7 @@ class ReproducibilityDialog(QDialog):
         self._inspect.clicked.connect(self._show_checkpoint)
         form.addRow("", self._inspect)
         layout.addLayout(form)
-        self._controls: tuple[QWidget, ...] = (self._environment, self._drift, self._checkpoint,
+        self._controls: tuple[QWidget, ...] = (self._environment, self._drift, self._compare_training, self._checkpoint,
                                                browse, self._inputs, self._inspect)
         self._status = QLabel("Choose a diagnostic; no checks have run.")
         self._status.setWordWrap(True)
@@ -117,6 +120,24 @@ class ReproducibilityDialog(QDialog):
 
         script = _TOOLKIT / "tools" / "diagnose_data_drift.py"
         self._submit("Strict example-data drift", lambda: run_example_drift_diagnostic(script))
+
+    def _show_training_comparison(self) -> None:
+        first, _ = QFileDialog.getOpenFileName(self, "First training run record", "", "JSON (*.json)")
+        if not first:
+            return
+        second, _ = QFileDialog.getOpenFileName(self, "Second training run record", "", "JSON (*.json)")
+        if not second:
+            return
+        from pharmaml.ml.training_provenance import compare_training_records
+
+        def compare():
+            with Path(first).open(encoding="utf-8") as handle:
+                left = json.load(handle)
+            with Path(second).open(encoding="utf-8") as handle:
+                right = json.load(handle)
+            return compare_training_records(left, right)
+
+        self._submit("Training record comparison", compare)
 
     def _show_checkpoint(self) -> None:
         from pharmaml.ml.checkpoint_diagnostics import inspect_checkpoint
