@@ -13722,3 +13722,52 @@ report.json + SUMMARY.md) and referenced from RELEASE_AUDIT.md.
 
 **Next.** R6 (§13 second half): wire `OperationSpec` into the
 descriptor-batch path and prove the bit-identical pause/resume.
+
+## v1.2.175 — 2026-11-12 — the version-bump rule (user instruction) + the re-ship
+
+**The instruction.** "Whenever you update the zip file update its version
+too."  Round 5's ship (`dabd730`) had refreshed the zip content under the
+SAME version (`v1.2.174`, sha `064bdd49…` after `78e73c1d…` at the same
+name) — exactly the half-versioned re-ship the rule now forbids.  This
+session remediates: the round-5 content re-ships as **v1.2.175**, and
+every future zip-content change bumps the version in the same change.
+
+**The four-carrier lesson, re-learned the honest way.**  The first bump
+touched three carriers (VERSION, pyproject, `__version__`); the
+round-263 carriers gate failed within a minute — the FOURTH carrier
+(the web tree's `SHIPPED_TOOLKIT_VERSION` in
+`<repo>/src/lib/toolkit-version.ts`) was still 1.2.174.  The gate did
+exactly what round 263 built it for.  Persisted
+`scripts/bump_version.py` — the four-carrier bump in one command — so
+the next bump cannot half-happen again.
+
+**The notebook-freshness chain.**  With VERSION at 1.2.175, the eight
+executed notebooks' committed banners printed 1.2.174 — the
+`test_notebook_freshness_green_on_the_live_tree` guard failed as
+designed.  The canonical ritual (round 209): re-execute all 8 at the
+shipped version, then strip the 7 twins.  The sandbox venv had lost the
+notebook profiles' optional dependencies (nbformat, nbclient, ipykernel,
+fpdf2, meeko, gemmi — each demanded honestly via DependencyError mid-
+run); installed at their pins (fpdf2 2.9.0, meeko 0.8.0, gemmi 0.7.5).
+A first surgical banner-patch attempt was REVERTED in favor of the real
+re-execution — committed outputs must be real outputs.  8/8 executed at
+1.2.175 (170 s, zero error outputs, zero home-path survivors), twins
+stripped, ship-gates + portability + carriers suites green (13/13 on
+the focused battery, 56/56 with portability).
+
+**The ship.**  Zip `pharma-ml-toolkit-v1.2.175.zip` — 8,998,489 bytes,
+sha-256 `bce9826a06b0f3c4bbbb6af9ab9b83d43725138b035bdbf0b302a2216c6b60a8`,
+592 entries / 542 files, four byte-identical homes, testzip OK,
+leak-scan 0 (scrub before build: zero absolute-home matches), stale
+version strings in the zip: NONE, VERSION carrier inside the zip: 1.2.175.
+Predecessor v1.2.174 swept from all four homes by the builder's
+retention policy.  A fresh §14 audit report generated for 175 and
+persisted under `docs/release-audits/v1.2.175-part5-r5-*` (evidence
+file updated with the notebook re-execution profile and the four-carrier
+gate; all eight archive checks passed).
+
+**The rule, made structural.**  CHANGELOG 1.2.175 entry records the
+rule; the carriers gate + notebook-freshness guard + the zip-name
+derivation (build_zip reads VERSION) already enforce it mechanically —
+a same-version re-ship now fails `test_version_carriers` (zip VERSION
+vs pyproject) or the freshness guard before it can leave the tree.

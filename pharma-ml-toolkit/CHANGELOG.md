@@ -1,3 +1,38 @@
+## [1.2.175] — 2026-11-12
+### Added — part5-continuation round 5: release report schema v2 (§14) + the version-bump rule
+
+- `tools/audit_release.py --profile-results <json>` — folds a separately
+  recorded evidence file (schema `pharmaml-profile-results/2`) into
+  `report.json` + `SUMMARY.md` from one source of truth: the exact
+  per-profile passed / failed / skipped / blocked / not-executed counts,
+  the gates, the backup/recovery status and the runtime/platform +
+  scientific limitations. The audit itself still never runs tests —
+  everything from the file is labelled *recorded evidence; not executed
+  by this audit*.
+- Fail-closed honest-labelling validation before any output exists:
+  unique non-empty profile names, a recorded command per profile, five
+  outcome counts as ints ≥ 0 summing to the recorded `collected`
+  (recomputed by the audit), unknown keys rejected at every level, gate
+  outcomes limited to passed / failed / not run. Profiles ride the
+  report separately — no merged total anywhere.
+- `tests/test_release_audit.py` 6 → 28 tests, including 18 parametrized
+  refusal cases and the sum-check regression that caught the validator's
+  collected-before-compare ordering bug (a dead check) — fixed and
+  pinned.
+- `docs/release-audits/v1.2.174-part5-r5-*` — a real shipped report (the
+  532/532 offscreen GUI battery, two not-executed-with-cause profiles,
+  three gates, the backup verification, five limitations); documented in
+  `docs/RELEASE_AUDIT.md`.
+- `docs/INDEX.md` regenerated: round 2's `checkpoint_schema` exports
+  (`OperationSpec`, `ENVELOPE_KEY`) had never been re-indexed — caught by
+  the portability suite while running this round's gates.
+- **The version-bump rule (user instruction, this release):** whenever
+  the zip content changes, the version is bumped in the same change —
+  no same-version re-ships. This release itself is the first
+  application: round 5's zip had shipped as a same-version refresh
+  (`dabd730`, sha `064bdd49…` under `v1.2.174`); `1.2.175` re-ships it
+  under a properly bumped version.
+
 ## [1.2.174] — 2026-11-12
 ### Added — round 267: the arena/7e4a40b3 absorption — engine discovery, checkpoint hardening, release tooling
 
