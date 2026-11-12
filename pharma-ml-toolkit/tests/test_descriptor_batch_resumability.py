@@ -194,8 +194,12 @@ class TestDescriptorBatchResume:
         assert entry.implementation == "pharmaml.chem.features"
         assert "test_resumed_batch_is_bit_exact" in entry.exact_restore_proof
         assert entry.unit_description == "molecules featurized"
-        with pytest.raises(Exception, match="similarity_campaign"):
-            OperationSpec(operation_type="similarity_campaign", operation_id="x")
+        # (round 7) the NEXT candidate has since earned its own round:
+        # similarity_campaign is registered -- the pending frontier has
+        # moved on to hpo and the rest
+        assert "similarity_campaign" in OPERATION_REGISTRY
+        with pytest.raises(Exception, match="hpo"):
+            OperationSpec(operation_type="hpo", operation_id="x")
 
     def test_checkpoint_every_validation(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="checkpoint_every"):

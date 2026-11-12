@@ -159,13 +159,26 @@ OPERATION_REGISTRY: dict[str, RegistryEntry] = {
         ),
         implementation="pharmaml.chem.features",
     ),
+    # (part5-continuation round 7, §13) the second candidate to EARN
+    # registration: the similarity campaign's complete state (the
+    # long-format similarity rows + the dropped-reference ledger +
+    # the scan-config and dataset fingerprints) serializes and
+    # restores exactly, proven by its bit-identical resume test.
+    "similarity_campaign": RegistryEntry(
+        unit_description="references scanned",
+        partial_results_policy="preserve",
+        exact_restore_proof=(
+            "tests/test_similarity_campaign_resumability.py::"
+            "TestSimilarityCampaignResume::test_resumed_campaign_is_bit_exact"
+        ),
+        implementation="pharmaml.chem.similarity",
+    ),
 }
 
 #: The §13 candidate classes, in the master prompt's own order.  Each may
 #: register only after its round lands the exact-restore proof test; until
 #: then OperationSpec(operation_type=<any of these>) raises.
 PENDING_OPERATION_TYPES: tuple[str, ...] = (
-    "similarity_campaign",
     "hpo",
     "generative_search",
     "docking_batch",

@@ -13869,3 +13869,73 @@ report generated and persisted under
 passed; the evidence file carries the R6 focused battery 593/0/17,
 the post-consolidation 50/0, the carriers+inventory 24/0, the
 notebook 8/8, and the honestly-not-executed GUI profile with cause).
+
+## R7 (§13 second half) — the similarity campaign earns registration — 2026-11-12
+
+**The environment.** A second sandbox recycle took the tree, the venv,
+the token store and RESTORE_NEEDED.md; `/tmp/my-project/` (bundles,
+venvs, scripts) survived AGAIN — the /tmp persistence pattern held
+twice in a row.  The user then authorized the GitHub token from
+MASTER_PROMPT part1 (it was line-wrapped across two PDF lines, 76+17
+chars — plain `pdftotext` extraction truncates it; `-layout` mode
+recovers both halves and the concatenation authenticates as
+MrMMA2004).  Fresh clone of the private repo at `f0f40a1` (v1.2.176),
+R6 suites 18/18 green on arrival, venv restored to
+`/home/z/my-project/venvs/core` (durable this time).
+
+**The round.** R7 follows R6's pattern for the second §13 candidate:
+`run_similarity_campaign(checkpoint_dir=…)` in
+`pharmaml/chem/similarity.py` — the `similarity_scan` math in a
+25-reference chunk loop (target fingerprints computed once and shared
+across chunks), whose checkpoints carry the campaign's complete state:
+the long-format similarity rows, the dropped-reference ledger, and the
+scan-config + dataset fingerprints (threshold/fingerprint/n_bits/radius
++ both input lists).  A resume replays them bit-identically to BOTH
+the uninterrupted campaign and the one-shot `similarity_scan` (the
+proof pins both equalities); a stale config/dataset checkpoint is
+refused with a warning; a cooperative stop preserves the partial
+long-format frame on `JobCancelled.partial_results`; without
+`checkpoint_dir` the call stays chunked-but-checkpoint-less
+(`partial_results=None`, the round-205 convention).  The registry
+refused the operation until the proof test existed — verified live
+("not yet registered" at the first smoke test), then
+`similarity_campaign` registered in `OPERATION_REGISTRY` with the
+proof node pinned; `PENDING_OPERATION_TYPES` now four (hpo,
+generative_search, docking_batch, preprocessing).  The R6 proof test's
+"similarity_campaign still pending" assertion flipped to the new
+truth (registered; hpo is the frontier now).
+
+**The proof suite.**
+`tests/test_similarity_campaign_resumability.py` — 11 tests, led by
+`test_resumed_campaign_is_bit_exact`.  One test-side fix on the way:
+the cancel-preserve assertion originally expected refs < 30, but the
+cancel fires at the first boundary with done ≥ 30 — the second chunk
+boundary (done=50), so refs 0..49 legitimately ride the partial; the
+assertion now pins the real boundary semantics (max ref < 50), and
+the partial is verified bit-exact against the full scan restricted to
+the same references.  A doctest expectation was corrected the same
+way (4 kept pairs at threshold 0.25, not 3).
+
+**The ship (v1.2.177, from main).** Four carriers bumped together,
+CHANGELOG leads 1.2.177, CHECKPOINT_SCHEMA.md registry row + rules
+updated, plan R7 row marked done.  Notebooks re-executed 8/8 at
+1.2.177 (400 s, zero error outputs, zero home-path survivors — the
+first run wedged in kernel CLEANUP after a successful execute; the
+restart completed clean), 7 twins stripped, freshness + variants
+guards green (119/119).  Zip `pharma-ml-toolkit-v1.2.177.zip` —
+9,039,779 bytes, sha-256
+`4899aa82a62890dd5ecfd8237f8e75e2db7682ecb97381952063ea747d02d82d`,
+601 entries / 551 files, four byte-identical homes, predecessor 176
+swept from all four.  §14 audit under
+`docs/release-audits/v1.2.177-part5-r7-*`: all eight archive checks
+passed; the evidence file carries the R7 focused battery 564/0/5
+(similarity/descriptor-batch/schema/tooling/numpy-neural/pipeline/cli/
+notebook-variants/carriers + doctests), ship-safety + portability
+16/0, notebooks 8/8, and the honestly-not-executed GUI profile with
+cause.  ruff clean on full src + both proof suites; mypy 217 files
+zero errors.
+
+**Standing notes.** The cron/scheduled-task tool remains unavailable
+in this sandbox ("No such tool available" — retried every turn); the
+every-2h "continue" task the user requested cannot be created from
+here and must be re-issued where the scheduler is wired up.

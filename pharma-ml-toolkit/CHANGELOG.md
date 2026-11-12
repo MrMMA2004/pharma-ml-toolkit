@@ -1,3 +1,30 @@
+## [1.2.177] — 2026-11-12
+### Added — part5-continuation round 7: similarity campaigns earn §13 registration
+
+- `run_similarity_campaign(checkpoint_dir=..., checkpoint_every=...,
+  checkpoint_resume=...)` in `pharmaml.chem.similarity` — the second
+  §13 extension on the v2 checkpoint schema: the `similarity_scan`
+  math wrapped in a 25-reference chunk loop whose checkpoints carry
+  the campaign's complete state (the long-format similarity rows, the
+  dropped-reference ledger, scan-config + dataset fingerprints).  A
+  resume replays them — bit-identical to BOTH the uninterrupted
+  campaign and the one-shot `similarity_scan` on the same inputs; a
+  stale config/dataset checkpoint is refused with a warning (exact
+  restore or nothing); a cooperative stop preserves the partial
+  long-format frame on `JobCancelled.partial_results`; without
+  `checkpoint_dir` the call is chunked-but-checkpoint-less (the
+  round-205 contract, `partial_results=None` on stop).  The target
+  fingerprints are computed once and shared across reference chunks.
+- `similarity_campaign` registered in `OPERATION_REGISTRY` (proof
+  pinned); four §13 candidates remain pending (hpo,
+  generative_search, docking_batch, preprocessing), each earning its
+  row in its own round.
+- `tests/test_similarity_campaign_resumability.py` — the 11-test
+  proof suite, led by the registry proof
+  `test_resumed_campaign_is_bit_exact`.
+- `docs/CHECKPOINT_SCHEMA.md` registry + rules updated;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R7 row marked done.
+
 ## [1.2.176] — 2026-11-12
 ### Added — part5-continuation round 6: descriptor batches earn §13 registration; branch consolidation
 
