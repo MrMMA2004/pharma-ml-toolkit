@@ -21,6 +21,7 @@ from windows_engine_smoke import EXPECTED, ROOT, atom
 def main() -> int:
     if os.name != "nt":
         raise SystemExit("Windows required; integration engines not executed")
+    from pharmaml.docking.campaign_launch import build_vina_launch_plan, launch_vina_campaign
     from pharmaml.docking.preparation import GridBox, write_dpf, write_gpf
     from pharmaml.docking.workflow import run_autodock4, run_vina, run_vina_batch
 
@@ -69,6 +70,15 @@ def main() -> int:
                                    capture_output=True, text=True, errors="replace", timeout=120, check=False)
             failures.append(f"toolkit run_vina_batch failed: {batch_error}; direct probe exit "
                             f"{probe.returncode}, stdout {probe.stdout[-1500:]}, stderr {probe.stderr[:1500]}")
+
+        launch_plan = build_vina_launch_plan(config, ligands, work / "reviewed-campaign",
+                                             vina_bin=str(engines / "vina.exe"))
+        launched = launch_vina_campaign(launch_plan, timeout_s=120)
+        launch_ok = (launched["status"] == "completed" and len(launched["results"]) == 1
+                     and score_and_pose(work / "reviewed-campaign" / launched["results"][0]["pose"]))
+        print(json.dumps({"stage": "reviewed Vina campaign", "ok": launch_ok}))
+        if not launch_ok:
+            failures.append("reviewed Vina campaign did not produce the expected synthetic pose")
 
         # A three-atom synthetic ligand avoids the negative degrees of freedom
         # of a single atom in AutoDock. Pin this smoke fixture's seeds; production

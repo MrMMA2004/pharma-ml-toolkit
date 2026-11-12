@@ -111,25 +111,40 @@ do not choose models or thresholds using the evaluation set. Dependence,
 missing descriptors, feature scaling and high-dimensional distance effects can
 change interpretation. Full individual predictions are not included.
 
-## Vina campaign review in Studio
+## Vina campaign review and launch in Studio
 
-Under **Docking Workbench → Campaign summary → Review a Vina campaign…**,
-the wizard selects a Vina config, a prepared ligand directory and an output
-directory, then reviews the engine launch prefix, receptor and six search-box
-values in Å. It rejects ambiguous duplicate config directives, missing or
-empty inputs, overlapping input/output trees and a receptor in the ligand
-tree. It reports the existing batch runner's recursive `.pdbqt` census and
-file-presence-based skip count. This is a **read-only review**, not a launcher,
-preparation wizard, engine runtime test or scientific validation; no files or
-results are written. It does not confirm that the molecules are chemically
-valid or that a discovered engine works. Recheck after changing inputs.
+Under **Docking Workbench → Campaign summary → Review / launch Vina campaign…**,
+select an existing Vina config, prepared PDBQT ligand directory, and a **new,
+non-existing** output directory (type the new path; its parent must exist).
+Review displays the receptor, explicit Vina box in Å, engine launch prefix,
+input fingerprints and output census. Review itself is read-only and does not
+prove the engine works or the files are chemically valid. Unsupported config
+directives, unavailable engines, missing inputs, overlapping trees or an
+existing output directory prevent launch, while a read-only review may still
+be shown. Launch supports `exhaustiveness`, `num_modes`, `cpu`, `seed`, and
+`energy_range`; other directives must be removed or handled elsewhere.
 
-A nonempty output directory may contain unrelated or outdated results. The
-batch skip check uses only pose/log presence, not input, config, engine or seed
-provenance; pose/log promotion is not crash-atomic. Use a fresh output directory
-and independently review results. Extra config directives and paths may be
-sensitive when sharing the review. AutoGrid and Vina box conventions are not
-implicitly converted; this wizard displays the Vina config's explicit sizes.
+After a successful review, **Launch reviewed campaign…** requires a separate
+confirmation. It rechecks the plan, exclusively creates the new output directory,
+then copies and verifies the config, receptor, and ligands against their reviewed
+hashes. These snapshots remain in `inputs/`; unique numbered poses and logs are
+in `results/`, and `campaign.json` records per-ligand status and output hashes.
+The engine runs sequentially with the reviewed box and supported options. A
+fixed seed is recommended; if omitted, the plan explicitly warns that engine
+randomness is not controlled. Only execute a trusted engine with scientifically
+prepared input. Inspect poses, logs and scores independently.
+
+Stop is cooperative **between ligands**; it cannot interrupt a running engine
+process (the per-ligand timeout is one hour). Closing the wizard does not stop
+the job. No skip-existing or resume is offered. Failure, cancellation or a crash
+can leave snapshots, partial outputs, stale `campaign.json` status, or temporary
+files; pose/log promotion and the manifest are **not** one crash-atomic transaction
+and are not power-loss durable. A new output directory is required for each run.
+The checks assume a trusted, quiescent filesystem and cannot prevent adversarial
+concurrent changes or engine side effects. Input snapshots, manifest, paths and
+logs can be sensitive and may consume substantial disk space. AutoGrid-to-Vina
+box conversions are not implicit. This workflow does not prepare PDBQT inputs,
+validate chemistry or establish biological accuracy.
 
 ## Nested validation
 
@@ -213,8 +228,8 @@ limitations.
 
 ## Still to build
 
-A guided docking campaign **launcher/preparation** workflow, provenance
-integration across other model runs, generalized safe resume,
+A guided docking **preparation** workflow, provenance integration across other
+model runs, generalized safe resume,
 broader classification validation/probability recalibration and applicability methods, and a
 full reproducibility certification system are not delivered here. Existing docking engines and
 campaign APIs, label-conditional conformal APIs, and proof-backed checkpoints

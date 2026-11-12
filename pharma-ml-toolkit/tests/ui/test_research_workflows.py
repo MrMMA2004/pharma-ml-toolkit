@@ -80,8 +80,8 @@ def test_campaign_review_wizard_no_side_effects_and_clears_report(qtbot, studio_
     wizard._start()
     qtbot.waitUntil(lambda: wizard._status.text().startswith("Review only"), timeout=10000)
     result = json.loads(wizard._result.toPlainText())
-    assert result["size_angstrom"] == [10, 11, 12]
-    assert result["executed"] is False and result["ligands"] == 1 and not out.exists()
+    assert result["preview"]["size_angstrom"] == [10, 11, 12]
+    assert result["preview"]["executed"] is False and result["preview"]["ligands"] == 1 and not out.exists()
     wizard._output.setText(str(ligands))
     assert not wizard._result.toPlainText()
     wizard._start()
@@ -222,3 +222,49 @@ def test_reproducibility_dashboard_reachable(qtbot, studio_app):
     page._diagnostics_btn.click()
     assert isinstance(page._diagnostics_dialog, ReproducibilityDialog)
     page._diagnostics_dialog.close()
+
+
+def test_campaign_launch_requires_confirmation_and_runs_snapshot(qtbot, studio_app, tmp_path, monkeypatch):
+    import os
+    import sys
+
+    from PySide6.QtWidgets import QMessageBox
+
+    if os.name == "nt":
+        return  # Windows engine launch is exercised by the dedicated synthetic integration.
+    engine = tmp_path / "vina"
+    engine.write_text(f"#!{sys.executable}\n" + '''import pathlib, sys
+args = sys.argv[1:]
+pathlib.Path(args[args.index('--out') + 1]).write_text('synthetic pose')
+print('synthetic vina log')
+''')
+    engine.chmod(0o755)
+    receptor = tmp_path / "r.pdbqt"
+    receptor.write_text("receptor")
+    ligands = tmp_path / "ligands"
+    ligands.mkdir()
+    (ligands / "a.pdbqt").write_text("ligand")
+    config = tmp_path / "vina.conf"
+    config.write_text("receptor = r.pdbqt\ncenter_x = 0\ncenter_y = 0\ncenter_z = 0\n"
+                      "size_x = 10\nsize_y = 10\nsize_z = 10\nseed = 42\n")
+    output = tmp_path / "new-output"
+    wizard = CampaignReviewWizard(JobRunner())
+    qtbot.addWidget(wizard)
+    wizard._config.setText(str(config))
+    wizard._ligands.setText(str(ligands))
+    wizard._output.setText(str(output))
+    wizard._engine.setText(str(engine))
+    wizard._start()
+    qtbot.waitUntil(lambda: wizard._status.text().startswith("Review only"), timeout=10000)
+    assert wizard._launch.isEnabled() and not output.exists()
+    monkeypatch.setattr("ui.pages.campaign_wizard.QMessageBox.question",
+                        lambda *args, **kwargs: QMessageBox.StandardButton.No)
+    wizard._confirm_launch()
+    assert not output.exists() and wizard._launch.isEnabled()
+    monkeypatch.setattr("ui.pages.campaign_wizard.QMessageBox.question",
+                        lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+    wizard._confirm_launch()
+    qtbot.waitUntil(lambda: wizard._status.text().startswith("Campaign completed"), timeout=10000)
+    result = json.loads((output / "campaign.json").read_text())
+    assert result["status"] == "completed" and len(result["results"]) == 1
+    assert not wizard._launch.isEnabled() and (output / result["results"][0]["pose"]).is_file()

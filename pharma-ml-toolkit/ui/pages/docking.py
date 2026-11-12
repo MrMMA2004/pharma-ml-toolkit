@@ -2,9 +2,10 @@
 
 The Studio's increment-5 page (the playground Docking tab). Five of the
 tab's engines, each wired to the SAME public backend APIs the cards
-call -- nothing on this page is fabricated, and none of these workflows
-execute an engine. The source/ZIP includes Windows engine binaries; actual
-execution requires a compatible runtime and appropriate inputs:
+call -- nothing on this page is fabricated. The five original analysis
+paths do not execute engines; the separate review wizard can optionally
+launch a user-confirmed Vina batch. The source/ZIP includes Windows engine
+binaries; execution requires a compatible runtime and appropriate inputs:
 
 - **Campaign summary** -- ``check_docking_completion`` +
   ``scan_docking_directory`` over the bundled synthetic AutoDock4
@@ -250,7 +251,7 @@ class DockingWorkbenchPage(QWidget):
         self._campaign_btn.setMinimumHeight(34)
         self._campaign_btn.clicked.connect(self._start_campaign)
         form.addRow("", self._campaign_btn)
-        self._wizard_btn = QPushButton("Review a Vina campaign…")
+        self._wizard_btn = QPushButton("Review / launch Vina campaign…")
         self._wizard_btn.clicked.connect(self._show_campaign_wizard)
         form.addRow("", self._wizard_btn)
         hint = QLabel(
