@@ -282,7 +282,7 @@ class TestPhase3SmilesPreview:
     def test_only_the_datasets_card_has_a_molecule_visual(self, studio_app) -> None:
         from PySide6.QtWidgets import QLabel
 
-        host, frames = build_nine_card_grid()
+        _host, frames = build_nine_card_grid()
         for card_id, frame in frames.items():
             images = [w for w in frame.findChildren(QLabel) if w.objectName() == "nineCardMolecule"]
             if card_id == "datasets":

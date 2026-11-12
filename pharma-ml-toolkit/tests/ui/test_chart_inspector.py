@@ -126,11 +126,45 @@ class TestMouseWiring:
         panel._inspector._on_mouse_moved(QPointF(1.0, 1.0))
         assert panel._inspector._vline.isVisible()
         assert panel._inspector._hline.isVisible()
+        # §12 dense-plot coalescing (round 4): the search runs once the
+        # ~15 ms settle elapses; the readout catches up then, not on the
+        # move itself.  Drain the timer synchronously (tests don't spin
+        # the event loop) and the readout must be live.
+        assert panel._inspector._settle_timer.isActive()
+        panel._inspector._run_pending_inspect()
+        assert panel._inspector._pending_view is None
+        assert not panel._inspector._settle_timer.isActive()
         assert panel._readout.text() != "—"
-        # Leaving the plot hides the decorations again.
+        # Leaving the plot hides the decorations again AND cancels the
+        # queued search (an outside move can never run a stale inspect).
         panel._inspector._on_mouse_moved(QPointF(1e12, 1e12))
         assert not panel._inspector._vline.isVisible()
+        assert not panel._inspector._settle_timer.isActive()
+        assert panel._inspector._pending_view is None
         assert panel._readout.text() == "—"
+
+    def test_mouse_move_burst_runs_one_search(self, panel, monkeypatch):
+        """§12 dense-plot debounce: a burst of moves coalesces to ONE
+        deferred ``inspect_at`` -- only the last position matters."""
+        _stub_scene_to_view(panel, monkeypatch)
+        panel.line(np.array([0.0, 1.0, 2.0]), np.array([0.0, 1.0, 4.0]), label="a")
+        calls: list[tuple[float, float]] = []
+        original = panel._inspector.inspect_at
+
+        def counting(view_xy):
+            calls.append((float(view_xy[0]), float(view_xy[1])))
+            return original(view_xy)
+
+        monkeypatch.setattr(panel._inspector, "inspect_at", counting)
+        for x in (0.95, 0.96, 0.97, 0.98, 0.99):
+            panel._inspector._on_mouse_moved(QPointF(x, 1.0))
+        # Nothing ran yet -- the whole burst is one pending target.
+        assert calls == []
+        assert panel._inspector._pending_view == (0.99, 1.0)
+        panel._inspector._run_pending_inspect()
+        assert calls == [(0.99, 1.0)]  # exactly one search, last position
+        # snapped to the nearest real point inside the tolerance window
+        assert "x = 1" in panel._readout.text()
 
     def test_click_emits_point_selected(self, panel, monkeypatch):
         _stub_scene_to_view(panel, monkeypatch)
@@ -149,6 +183,29 @@ class TestMouseWiring:
         panel._inspector._on_mouse_moved(QPointF(1.0, 1.0))
         assert not panel._inspector._vline.isVisible()
         assert panel._readout.text() == "—"
+
+    def test_dense_series_move_storm_runs_bounded_searches(self, panel, monkeypatch):
+        """§12 (round 4): a 100k-point series under a 200-move storm
+        runs ONE nearest-point search (the settle window), not 200 --
+        the metadata calculation behind the readout is debounced, so
+        dense plots stay interactive."""
+        _stub_scene_to_view(panel, monkeypatch)
+        xs = np.linspace(0.0, 1.0, 100_000)
+        panel.line(xs, np.sin(xs * 50.0), label="dense")
+        panel.scatter(xs[::100], np.cos(xs[::100] * 50.0), label="sparse")
+        calls: list[tuple[float, float]] = []
+        original = panel._inspector.inspect_at
+
+        def counting(view_xy):
+            calls.append((float(view_xy[0]), float(view_xy[1])))
+            return original(view_xy)
+
+        monkeypatch.setattr(panel._inspector, "inspect_at", counting)
+        for i in range(200):
+            panel._inspector._on_mouse_moved(QPointF(0.5 + i * 1e-4, 0.5))
+        assert calls == []  # nothing during the storm
+        panel._inspector._run_pending_inspect()
+        assert len(calls) == 1  # exactly one search after the settle
 
 
 class TestSeriesTogglesAndClear:

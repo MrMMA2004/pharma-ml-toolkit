@@ -96,6 +96,13 @@ Deep Learning / Generative suites (`test_umap_after_a_run_real_numbers`,
 `test_ga_multi_objective_seeded_real_numbers`,
 `test_pareto_front_real_numbers`,
 `test_pareto_front_hover_carries_smiles`) fail **identically on the
-pristine tree** under this sandbox's torch 2.15.0+cpu / numpy 2.1.3 —
-pre-existing environment-version drift, recorded here as failed-with-
-cause, not as regressions and not as passed.
+pristine tree** — pre-existing environment-version drift, recorded
+here as failed-with-cause, not as regressions and not as passed.
+*(Round-4 correction: the driver was measured to be the rdkit
+patch drift — this round's sandbox ran 2026.09.2 where the
+requirements pin is 2026.9.1, and `mutation="topology"` validates a
+different ring-system set between the two builds: 260 vs 276 seeded
+uniques under otherwise-identical seeds. With the pin restored the
+whole family goes green — 81/81 on the drift suites, 532/532 on the
+full UI battery. The torch/numpy versions this paragraph originally
+named were co-present but not the cause.)*

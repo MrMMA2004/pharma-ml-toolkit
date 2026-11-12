@@ -61,7 +61,8 @@ def _run(cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None 
     if env:
         merged.update(env)
     return subprocess.run(
-        cmd, cwd=str(cwd or REPO), capture_output=True, text=True, env=merged, timeout=600
+        cmd, cwd=str(cwd or REPO), capture_output=True, text=True, env=merged,
+        timeout=600, check=False,
     )
 
 
@@ -136,8 +137,10 @@ def main() -> int:
             "git", "commit", "-m",
             f"safety: periodic backup commit {_utcnow()}",
             "-m",
-            f"uncommitted work preserved by the session backup task; "
-            f"{len(dirty)} path(s) staged",
+            (
+                f"uncommitted work preserved by the session backup task; "
+                f"{len(dirty)} path(s) staged"
+            ),
         ]
     )
     if commit.returncode != 0:

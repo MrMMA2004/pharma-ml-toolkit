@@ -28,7 +28,7 @@ from typing import Any
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import QObject, QPointF, Qt, Signal
+from PySide6.QtCore import QObject, QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPen
 
 from ..theme_manager import ChartPalette
@@ -115,6 +115,18 @@ class ChartInspector(QObject):
         # The readout label is owned by PlotPanel (it sits in its layout).
         self._readout: Any = None  # QLabel, injected by PlotPanel
 
+        # §12 dense-plot coalescing (round 4): a mouse-move storm over a
+        # dense series runs the vectorised nearest-point search on EVERY
+        # event; the crosshair tracks each move, but the SEARCH (and the
+        # metadata readout rebuild behind it) runs once per settle window.
+        # programmatic inspect_at() stays synchronous for tests/pins.
+        self._hover_settle_ms = 15
+        self._pending_view: tuple[float, float] | None = None
+        self._settle_timer = QTimer(self)
+        self._settle_timer.setSingleShot(True)
+        self._settle_timer.setInterval(self._hover_settle_ms)
+        self._settle_timer.timeout.connect(self._run_pending_inspect)
+
         self.apply_palette(self._palette)
 
     # -- wiring ---------------------------------------------------------------
@@ -154,12 +166,16 @@ class ChartInspector(QObject):
         self._series.clear()
         self._last_snap = None
         self._pinned = None
+        self._pending_view = None
+        self._settle_timer.stop()
         self._hide_extras()
 
     # -- inspection control ----------------------------------------------------
     def set_enabled(self, enabled: bool) -> None:
         self._enabled = bool(enabled)
         if not enabled:
+            self._pending_view = None
+            self._settle_timer.stop()
             self._hide_extras()
             self._render_readout(_READOUT_EMPTY)
 
@@ -193,14 +209,40 @@ class ChartInspector(QObject):
             if self._pinned is None:
                 self._hide_extras()
                 self._render_readout(_READOUT_EMPTY)
+            self._pending_view = None  # a left/outside move cancels the queue
+            self._settle_timer.stop()
             return
         self._ensure_decorations_added()
         view_pos = vb.mapSceneToView(scene_pos)
+        # the crosshair rides every move (cheap; smooth visual feedback),
+        # the search is coalesced (§12 dense-plot debounce).
         self._vline.setPos(view_pos.x())
         self._hline.setPos(view_pos.y())
         self._vline.show()
         self._hline.show()
-        self.inspect_at((view_pos.x(), view_pos.y()))
+        self._queue_inspect((view_pos.x(), view_pos.y()))
+
+    def _queue_inspect(self, view_xy: tuple[float, float]) -> None:
+        """Coalesce a mouse-move burst into one deferred search.
+
+        Every move overwrites the pending target (only the LAST position
+        matters); the timer restarts, so the search runs once, ~15 ms
+        after the burst settles.  ``inspect_at`` itself stays
+        synchronous -- tests, pins and programmatic callers keep their
+        exact behaviour.
+        """
+        self._pending_view = (float(view_xy[0]), float(view_xy[1]))
+        self._settle_timer.start()
+
+    def _run_pending_inspect(self) -> None:
+        if self._pending_view is None:
+            return
+        # stop() clears active even when the timeout fired (tests and
+        # event-loop drains may reach this after the timer already went
+        # off), keeping isActive() a truthful "a search is queued".
+        self._settle_timer.stop()
+        self.inspect_at(self._pending_view)
+        self._pending_view = None
 
     def inspect_at(self, view_xy: tuple[float, float]) -> tuple[str, int] | None:
         """Snap to the nearest visible real data point and update the UI.

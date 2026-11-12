@@ -251,22 +251,92 @@ class MolecularDynamicsPage(QWidget):
             self._status.setText("Plot a figure before exporting.")
             return
         try:
-            save_figure(self._figure, path)
+            saved = save_figure(self._figure, path)
         except Exception as exc:  # noqa: BLE001 - shown in the UI
             self._status.setText(f"Could not export figure: {exc}")
             return
-        self._status.setText(f"Saved figure to {path}")
+        # §12 (part5 round 4): every exported image is reopened and
+        # validated for format + dimensions + nonzero size before
+        # success is reported -- the same §17.4 discipline the raster
+        # engine applies, extended to the vector/PDF figure paths the
+        # MD page owns.  A failed validation is an honest failure line,
+        # never a "Saved" over a broken file.
+        check = self._validate_export(saved)
+        if not check["ok"]:
+            self._status.setText(f"Export FAILED for {saved}: {check['reason']}")
+            return
+        size = Path(saved).stat().st_size
+        note = f"Saved figure to {saved} ({check['format']}"
+        if check.get("width"):
+            note += f", {check['width']}x{check['height']}"
+        note += f", {size:,} bytes, validated)"
+        self._status.setText(note)
         # part5 §11: the real export becomes a saved run (best-effort).
         try:
             from pharmaml.studio import record_run
 
             record_run(
                 "viz-export",
-                Path(path).name,
-                {"name": Path(path).name, "path": str(path), "kind": "md figure"},
+                Path(saved).name,
+                {
+                    "name": Path(saved).name,
+                    "path": str(saved),
+                    "format": check["format"],
+                    "width": check.get("width"),
+                    "height": check.get("height"),
+                    "size_bytes": int(size),
+                    "kind": "md figure",
+                },
             )
         except Exception:  # noqa: BLE001, S110 -- the record must never fail the export
             pass
+
+    @staticmethod
+    def _validate_export(path: Path) -> dict:
+        """§12 reopen-check for a saved MD figure (never raises)."""
+        from pharmaml.viz.export import sniff_format
+
+        target = Path(path)
+        report: dict = {"ok": False, "reason": "", "format": None,
+                        "width": None, "height": None}
+        try:
+            if not target.is_file():
+                report["reason"] = "file does not exist after save"
+                return report
+            size = target.stat().st_size
+            if size == 0:
+                report["reason"] = "file is empty"
+                return report
+            sniffed = sniff_format(target)
+            if sniffed == "unknown" and target.suffix.lower() == ".pdf":
+                # PDF is a matplotlib-native figure format (no raster
+                # magic bytes): accept a real %PDF header, else refuse.
+                head = target.read_bytes()[:1024]
+                if head.startswith(b"%PDF"):
+                    report.update(ok=True, format="PDF")
+                    return report
+                report["reason"] = "not a readable PDF (missing %PDF header)"
+                return report
+            if sniffed == "unknown":
+                report["reason"] = "magic bytes match no supported format"
+                return report
+            report["format"] = sniffed
+            if sniffed == "SVG":
+                report.update(ok=True, width=None, height=None)
+                return report
+            try:
+                from PIL import Image
+
+                with Image.open(target) as reopened:
+                    reopened.load()
+                    report["width"], report["height"] = reopened.width, reopened.height
+            except Exception as exc:  # noqa: BLE001 - reopen failure
+                report["reason"] = f"reopen failed: {exc}"
+                return report
+            report["ok"] = True
+        except Exception as exc:  # noqa: BLE001 - the check itself must not raise
+            report["reason"] = f"validation error: {exc}"
+        return report
 
     def closeEvent(self, event) -> None:
         self._clear_figure()
