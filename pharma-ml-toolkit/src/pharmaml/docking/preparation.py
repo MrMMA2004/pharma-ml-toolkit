@@ -128,10 +128,13 @@ class GridBox:
     center_x/y/z:
         Box centre in Å.
     npts:
-        Number of grid points per axis.  AutoDock's fencepost
-        convention: ``points = Å / spacing + 1`` -- the end points sit
-        ON grid nodes, so the box edge length is ``(npts - 1) *
-        spacing`` (see the :attr:`size` property).
+        Values written to AutoGrid's ``npts`` directive. The legacy
+        :attr:`size` property treats these as grid-point counts, but the
+        bundled AutoGrid4 was observed to interpret ``npts 20`` as 21 grid
+        points. Consequently the legacy Vina size and the generated AutoGrid
+        span differ by one spacing interval for that tested even value.
+        Check engine logs and explicitly review box dimensions; the existing
+        calculation is retained for compatibility, not asserted equivalent.
     spacing:
         Grid spacing in Å (0.375 is the AutoDock default).
     """
@@ -146,11 +149,11 @@ class GridBox:
     def size(self) -> tuple[float, float, float]:
         """Box edge lengths in Å along (x, y, z).
 
-        Fencepost arithmetic: ``npts`` grid points at ``spacing`` span
-        ``(npts - 1) * spacing`` Å per axis -- 60 points at 0.375 Å
-        cover 22.125 Å, not 22.5 -- matching the AutoDock convention
-        documented on :attr:`npts`.  The value feeds Vina's
-        ``--size_x/y/z`` arguments via :meth:`as_vina_kwargs`.
+        Legacy calculation ``(npts - 1) * spacing`` per axis; feeds Vina's
+        ``--size_x/y/z`` via :meth:`as_vina_kwargs`. The bundled AutoGrid4
+        was observed to use one more grid point than the even ``npts`` value
+        in the GPF. Thus this legacy size is not necessarily the AutoGrid
+        span. It is retained unchanged to avoid silently changing Vina boxes.
         """
         return tuple(
             (n - 1) * self.spacing for n in self.npts

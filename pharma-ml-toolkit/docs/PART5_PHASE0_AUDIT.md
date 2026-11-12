@@ -471,3 +471,24 @@ manual interrupted-publication guidance.
   and the unchanged strict byte check (`qsar_multiclass.csv`: 8 numeric-text
   cells; `pk_profile.csv`: 12). No tolerance or data change was applied.
   A green run on a different runner does not resolve cross-hardware drift.
+
+### AutoGrid geometry interpretation
+
+The bundled AutoGrid4 log from the Windows toy run in
+[CI 43247657601](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/runs/43247657601/job/131284558269)
+reported **21** grid points per axis for `npts 20`, i.e. one more point
+than the input value. The existing `GridBox.size` calculation instead treats
+`npts` as a point count, giving `(npts - 1) * spacing` for Vina. For this
+tested even case, that legacy Vina size is one spacing interval smaller than
+the corresponding AutoGrid span. No geometry or numeric default has been
+changed; this is a compatibility-preserving warning, not a completed geometry
+fix. Review boxes and generated engine logs explicitly before comparing or
+reusing results across Vina and AutoDock. Odd `npts` behavior and other engines
+have not been validated here.
+
+[CI 43248360240](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/runs/43248360240)
+passed all 13 jobs on commit `791cb4a`, including the revised deterministic
+synthetic Vina single/batch and AutoGrid/AutoDock integration. Prior runs
+showed data-byte drift and an AutoDock timeout on an earlier one-atom fixture;
+the green run does not prove either cross-hardware reproducibility or general
+engine reliability. Toy poses and energies are not a scientific benchmark.

@@ -201,7 +201,11 @@ def dock_smiles_array(
         Search box centre ``(x, y, z)`` in Å.
     size:
         Search box edge lengths in Å (Vina); for AutoDock4 the box is
-        quantised to ``npts = round(size / spacing) + 1`` grid points.
+        quantised to ``npts = round(size / spacing) + 1`` as the legacy
+        GPF directive. Bundled AutoGrid4 was observed to interpret even npts
+        as intervals, yielding one more grid point; the actual AutoGrid span
+        can therefore differ from the requested Vina size. Inspect the grid
+        log and specify geometry deliberately rather than assuming equivalence.
     spacing:
         AutoDock4 grid spacing (Å).
     exhaustiveness:

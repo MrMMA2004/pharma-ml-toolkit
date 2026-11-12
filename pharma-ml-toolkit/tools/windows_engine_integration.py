@@ -84,6 +84,15 @@ def main() -> int:
         dpf.write_text(dpf.read_text(encoding="utf-8").replace("seed pid time", "seed 123 456"),
                        encoding="utf-8")
         ad = run_autodock4(work, engine_dir=engines, timeout_s=120, skip_existing=False)
+        glg = work / "r.glg"
+        grid_log = glg.read_text(encoding="utf-8", errors="replace") if glg.is_file() else ""
+        # Verify the real engine's fencepost interpretation rather than inferring it
+        # from toolkit-generated files. 30 GPF intervals should yield 31 points.
+        points_ok = bool(re.search(r"Number of grid points in x-direction:\s*31\b", grid_log))
+        print(json.dumps({"stage": "AutoGrid npts interpretation", "gpf_npts": 30,
+                          "x_grid_points_31": points_ok}))
+        if not points_ok:
+            failures.append("AutoGrid did not report 31 x-grid points for npts 30")
         maps_ok = all((work / name).is_file() and (work / name).stat().st_size > 0
                       for name in ("r.C.map", "r.e.map", "r.d.map", "r.maps.fld"))
         log = work / "r.dlg"
