@@ -14250,3 +14250,73 @@ OOM lesson).
 `on_preserved` on the remaining §13-reachable pages as they gain
 GUI entry points, and a Resume affordance over the existing
 checkpoint dirs (library-side complete since R6-R11).
+
+## R13 (§recovery + absorption) — the token, the branches, the zip — 2026-11-12
+
+**The recovery.** Sandbox fully recycled after R12 (repo, venv,
+scratch, credential all lost).  The token was recovered from
+MASTER_PROMPT part1 — LINE-WRAPPED across two PDF lines (76 + 17
+chars = 93; the first attempt with half the token failed auth, the
+lesson: pdftotext output must be joined across wraps).  Remote
+verified intact at R12's 4eea770; clean clone; token scrubbed from
+config (askpass helper scripts/git-askpass.sh, wired via
+core.askpass — the credential never enters git config).
+
+**The refs absorbed.** main + arena/8fcd579d-pharma-ml-toolkit + 12
+PR refs + 3 tags.  PRs 1-10 already merged; PR11's content
+byte-identical inside arena (different SHAs, same blobs); PR12 IS
+arena's tip.  The arena branch (22 commits since f0f40a1) merged as
+940c8a2: docking engine safeguards, the
+uncertainty/validation/reproducibility dialogs, nested-logistic
+validation, binary recalibration, provenance capture, the campaign
+launch/preparation/preview/status family, the CV group-label guard.
+Auto-merge resolved the two overlap files (docstring + on_split
+callback); §13 proofs 50/50, arena suites 88/88 on the staged tree.
+
+**The zip absorbed.** v1.2.162 provenance: base = eb78935 (r250)
+subtree, 421/489 files byte-identical, 37 differ (stripped
+notebooks, post-162 docs), 10 zip-only files already on main
+(r249-r251 material), 2 on arena (conformal), and 19 NEVER-COMMITTED
+files — the lost session's WIP ml/ family (calibration, comparison,
+decision, drift, model_card, multiplicity, power, sar, subgroups +
+11 test suites).  Safety-scanned (no network/exec surface),
+import-tested, then landed.
+
+**The ports** (zip-era code onto main's newer modules — never the
+reverse): paired_wilcoxon_test (stats.py); DomainBox/DomainReport/
+check_domain_box (applicability.py); feature_ranges_from_frame +
+bundle_metadata/save_model feature_ranges/feature_distributions
+kwargs (persistence.py); six CLI subcommands (ml predict/card/drift/
+calibrate/decide/subgroup) + compare --significance/--power with
+_report_uniform (cli.py); plot_decision_curve/
+plot_subgroup_performance (viz/ml_plots.py); the
+prediction-interval conformal API (ConformalRegressor/
+ConformalClassifier/conformal_quantile + _as_1d/_python_labels,
+merged alongside the existing split-conformal API); ml train now
+records target + feature box + drift sketch per bundle; sklearn shim
+in recalibrate (FrozenEstimator >= 1.6, cv="prefit" on pinned 1.5).
+
+**The honest incident.** A `git stash push` captured the whole staged
+merge (not just the over-copied orphans) and the follow-up stash drop
+looked fatal — recovered via fsck's dangling commit f4d1fa8, fully
+audited (71 new files, 91 changed, ZERO regressions to main's newer
+content), then redone cleanly.
+
+**The gates.** Orphan battery 338/338.  Full library battery 4992
+passed; the residual failures were proven environment-only (meeko/
+gemmi/fpdf/python-docx missing — all resolved by install; the bridge
+tests additionally need PYTHONPATH=src for subprocesses in a fresh
+venv) or pre-existing docs-index guards.  §13 proofs re-verified;
+carriers 7/7; ship-safety 14/14; ruff clean; mypy zero new errors
+(11 pre-existing transitive, stash A/B proven).  v1.2.183 zip
+9,531,726 B sha 9c0272a9…; §14 audit all eight checks passed
+(a38e670).
+
+**Deferred to R14 (recorded, not hidden).** (1) The docs-index
+guards demand the nine new modules be classified in INDEX.md (3
+assert failures).  (2) The GUI worker/chemistry smoke was green at
+R12 but not re-run after this round's conformal import merge.  (3)
+The notebook ritual (8/8 re-exec) was not run this round — the venv
+was rebuilt mid-round; run it before the next zip if notebooks
+touch the new modules.  (4) The standing GUI Resume affordance
+round remains queued.
