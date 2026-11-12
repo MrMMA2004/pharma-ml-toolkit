@@ -121,6 +121,25 @@ jobs:
       - name: Invoke bundled engines and dock a synthetic Vina toy
         run: python tools/windows_engine_smoke.py
 
+  windows-engine-integration:
+    name: Windows docking integration (synthetic)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: pharma-ml-toolkit
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install toolkit core
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install --no-deps -e .
+      - name: Exercise bundled engines via toolkit workflows
+        run: python tools/windows_engine_integration.py
+
   generative-sa:
     name: Generative SA
     runs-on: ubuntu-latest
