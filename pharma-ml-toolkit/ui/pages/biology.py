@@ -43,6 +43,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -246,14 +247,15 @@ class BiologyWorkbenchPage(QWidget):
         form = QFormLayout(tab)
         self._mad_n = QLineEdit("10")
         form.addRow("top N genes:", self._mad_n)
+        self._add_expression_row(form)
         self._mad_btn = QPushButton("Rank by MAD")
         self._mad_btn.setMinimumHeight(34)
         self._mad_btn.clicked.connect(self._start_mad)
         form.addRow("", self._mad_btn)
         hint = QLabel(
-            "most_variable_genes on the bundled expression matrix (23 lines "
-            "x 300 genes): the N genes with the highest median absolute "
-            "deviation, MAD recomputed from the frame."
+            "most_variable_genes on the expression matrix (bundled: 23 "
+            "lines x 300 genes): the N genes with the highest median "
+            "absolute deviation, MAD recomputed from the frame."
         )
         hint.setWordWrap(True)
         form.addRow("", hint)
@@ -269,6 +271,7 @@ class BiologyWorkbenchPage(QWidget):
         form.addRow("correlation:", self._method_combo)
         self._topn_entry = QLineEdit("8")
         form.addRow("top N biomarkers:", self._topn_entry)
+        self._add_expression_row(form)
         self._marker_btn = QPushButton("Correlate & rank")
         self._marker_btn.setMinimumHeight(34)
         self._marker_btn.clicked.connect(self._start_markers)
@@ -283,6 +286,74 @@ class BiologyWorkbenchPage(QWidget):
         return tab
 
     # -- job plumbing -----------------------------------------------------------
+    def _add_expression_row(self, form: QFormLayout) -> None:
+        """The shared expression-matrix path row (R29-d).
+
+        Both the MAD and biomarker flows read from ONE user-visible
+        path: the bundled matrix by default, any CSV via Browse.
+        Editing the path drops the shared normalize cache so the
+        next run reloads (and re-normalizes) the new file.
+        """
+        if getattr(self, "_expr_edit", None) is not None:
+            form.addRow("expression matrix:", self._expr_edit)
+            return
+        from ..font_loader import set_mono
+
+        row = QWidget()
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self._expr_edit = QLineEdit(str(_EXPRESSION_PATH))
+        set_mono(self._expr_edit)  # a path is technical text
+        browse = QPushButton("Browse…")
+        browse.clicked.connect(self._browse_expression)
+        lay.addWidget(self._expr_edit, stretch=1)
+        lay.addWidget(browse)
+        form.addRow("expression matrix:", row)
+        self._expr_edit.editingFinished.connect(self._expression_path_changed)
+        self._expr_preview = QLabel(self._expression_preview_text())
+        self._expr_preview.setObjectName("studioStatus")
+        self._expr_preview.setWordWrap(True)
+        form.addRow("", self._expr_preview)
+
+    def _browse_expression(self) -> None:
+        from PySide6.QtWidgets import QFileDialog
+
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Open an expression matrix (CSV)", str(_EXPRESSION_PATH.parent),
+            "CSV files (*.csv);;All files (*)")
+        if path:
+            self._expr_edit.setText(path)
+            self._expression_path_changed()
+
+    def _expression_path_changed(self) -> None:
+        """New path → new preview + invalidate the normalize cache."""
+        self._expr_norm = None
+        self._expr_preview.setText(self._expression_preview_text())
+
+    def _expression_preview_text(self) -> str:
+        """Shape + first lines of the current expression matrix.
+
+        Honest and cheap: reads only the header row and the index
+        column, never the full matrix (the job threads do that).
+        """
+        path = self._expression_path()
+        if not path.exists():
+            return f"expression matrix — not found: {path.name}"
+        try:
+            header = pd.read_csv(path, index_col=0, nrows=2)
+        except Exception as exc:  # malformed CSV: say so, don't crash
+            return f"expression matrix — unreadable ({exc.__class__.__name__})"
+        n_cols = header.shape[1]
+        lines = list(header.index[:3])
+        more = f" + {len(header.index) - len(lines)} more" if len(header.index) > len(lines) else ""
+        preview = ", ".join(str(line) for line in lines)
+        return f"expression matrix — {n_cols} genes · lines: {preview}{more}"
+
+    def _expression_path(self) -> Path:
+        """The current expression path (default when the field is blank)."""
+        text = self._expr_edit.text().strip()
+        return Path(text) if text else _EXPRESSION_PATH
+
     def _on_started(self, name: str) -> None:
         for btn in (self._audit_btn, self._matrix_btn, self._mad_btn, self._marker_btn):
             btn.setEnabled(False)
@@ -479,7 +550,7 @@ class BiologyWorkbenchPage(QWidget):
             return
         if self._busy_check():
             return
-        expression_path = _EXPRESSION_PATH
+        expression_path = self._expression_path()
 
         def job(progress) -> MadGenesOutcome:
             from pharmaml.biology import most_variable_genes
@@ -549,7 +620,7 @@ class BiologyWorkbenchPage(QWidget):
             return
         method = self._method_combo.currentText()
         matrix = self._matrix
-        expression_path = _EXPRESSION_PATH
+        expression_path = self._expression_path()
         norm_cache = self._expr_norm
 
         def job(progress) -> BiomarkerOutcome:

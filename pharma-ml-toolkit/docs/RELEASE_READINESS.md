@@ -42,12 +42,12 @@ All probed dependencies import cleanly in this environment (the Qt rows are prob
 
 ## 3. Test evidence
 
-- Suites discovered: **197** (52 UI, 145 library)
-- Tests collected: **5989**
+- Suites discovered: **201** (56 UI, 145 library)
+- Tests collected: **6021**
 
 | Suite chunk (as actually run) | Result |
 | --- | --- |
-| `round 28 targeted suites` | tokens 20/20 + theme 15/15 + fonts 8/8 + affected UI 180/180, 0 failed (nine_card_first: 20 green + 21st alone; OOM ceiling pre-existing at R27 tip) |
+| `round 29 targeted suites` | mono 8/8 + discipline 9/9 + screenshots 7/7 + biology path 8/8 + affected sweeps 219/219, 0 failed |
 
 Chunkening follows §14.2 (low-memory constraints): suites
 run sequentially in small groups; nothing was skipped in
@@ -55,10 +55,10 @@ bulk and no skipped test is claimed as passed.
 
 ## 4. Version carriers (§15)
 
-- VERSION: `1.2.198`
-- pyproject.toml: `1.2.198`
-- src/pharmaml/__init__.py: `1.2.198`
-- CHANGELOG.md leads with: `1.2.198`
+- VERSION: `1.2.199`
+- pyproject.toml: `1.2.199`
+- src/pharmaml/__init__.py: `1.2.199`
+- CHANGELOG.md leads with: `1.2.199`
 - Agreement: **yes**
 
 ## 5. Release-archive verification (§14)

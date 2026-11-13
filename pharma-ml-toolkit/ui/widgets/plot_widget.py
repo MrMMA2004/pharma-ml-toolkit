@@ -38,9 +38,31 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
+from ..design_tokens import MARKER_DISCIPLINE_LIGHT
 from ..theme_manager import ChartPalette
 from .chart_inspector import ChartInspector
 from .image_export import export_widget_grab
+
+#: R29-b shapes for series whose color needs a non-color encoding.
+#: pyqtgraph's recognised symbol names, cycled by series index.
+_DISCIPLINE_SYMBOLS: tuple[str, ...] = ("t", "s", "d", "p", "x")
+
+
+def _needs_marker(palette: ChartPalette, color: str) -> bool:
+    """Whether this series must carry a non-color encoding (§5).
+
+    Only in LIGHT themes: the discipline set is exactly the Okabe-Ito
+    colors under 3:1 on white (ui.design_tokens).  Dark palettes flag
+    nothing — every color holds on the Midnight canvas.
+    """
+    if palette.dark:
+        return False
+    return color in MARKER_DISCIPLINE_LIGHT
+
+
+def _discipline_symbol(index: int) -> str:
+    """A stable marker shape per series index for flagged series."""
+    return _DISCIPLINE_SYMBOLS[index % len(_DISCIPLINE_SYMBOLS)]
 
 # §23.6 (round 238) adaptive tick-label density: a category axis renders
 # EVERY tick it is handed, so 40 feature names on a narrow panel collide
@@ -96,6 +118,11 @@ class PlotPanel(QWidget):
     def __init__(self, parent: QWidget | None = None, title: str = "") -> None:
         super().__init__(parent)
         self._palette = ChartPalette()
+        # R29-b: how many flagged series this panel has drawn — the
+        # marker-shape cycle keys on it so co-plotted low-contrast
+        # series always take DIFFERENT shapes (raw index 1 and 6
+        # would collide on the 5-shape cycle).
+        self._discipline_count = 0
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self._plot = pg.PlotWidget()
@@ -367,20 +394,36 @@ class PlotPanel(QWidget):
     def scatter(self, x: np.ndarray, y: np.ndarray, *, label: str = "", symbol: str = "o", size: int = 6, index: int = 0, meta: Callable[[int], dict[str, Any]] | None = None) -> None:
         pen = pg.mkPen(None)
         brush = pg.mkBrush(self._palette.series[index % len(self._palette.series)])
+        # R29-b: a flagged (low-contrast) light-theme scatter takes a
+        # distinct SHAPE per flagged series, not just the caller's
+        # default — color never carries class identity alone (§5).
+        if _needs_marker(self._palette,
+                         self._palette.series[index % len(self._palette.series)]):
+            symbol = _discipline_symbol(self._discipline_count)
+            self._discipline_count += 1
         item = self._plot.plot(x, y, pen=pen, symbol=symbol, symbolSize=size, symbolBrush=brush, name=label or None)
         self._inspector.register_series(label, x, y, item, kind="scatter", meta=meta)
         self._fit_legend()
 
     def line(self, x: np.ndarray, y: np.ndarray, *, label: str = "", width: int = 2, index: int = 0, style: str = "solid", fill: bool = False, meta: Callable[[int], dict[str, Any]] | None = None) -> None:
-        pen = pg.mkPen(self._palette.series[index % len(self._palette.series)], width=width)
+        color = self._palette.series[index % len(self._palette.series)]
+        pen = pg.mkPen(color, width=width)
         if style == "dash":
             pen.setStyle(Qt.PenStyle.DashLine)
         kwargs: dict[str, object] = {}
         if fill:  # area-under-the-curve shading (NCA profiles)
-            fill_color = pg.mkColor(self._palette.series[index % len(self._palette.series)])
+            fill_color = pg.mkColor(color)
             fill_color.setAlpha(70)
             kwargs["fillLevel"] = 0.0
             kwargs["brush"] = pg.mkBrush(fill_color)
+        # part7 §5 / R29-b marker discipline: in LIGHT theme a series
+        # whose color sits below 3:1 on white must carry a non-color
+        # encoding — the line gains a marker at fixed intervals.
+        if _needs_marker(self._palette, color):
+            kwargs["symbol"] = _discipline_symbol(self._discipline_count)
+            kwargs["symbolSize"] = 7
+            kwargs["symbolBrush"] = pg.mkBrush(color)
+            self._discipline_count += 1
         item = self._plot.plot(x, y, pen=pen, name=label or None, **kwargs)
         self._inspector.register_series(label, x, y, item, kind="line", meta=meta)
         self._fit_legend()
@@ -445,6 +488,7 @@ class PlotPanel(QWidget):
     def clear(self) -> None:
         self._plot.clear()
         self._cat_ticks = None
+        self._discipline_count = 0  # shape cycle restarts with the data
         self._plot.getAxis("bottom").setTicks(None)
         # The inspector's hover decorations are lazy: plot.clear()
         # removed them along with the data, and nothing is re-added

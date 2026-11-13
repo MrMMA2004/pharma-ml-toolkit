@@ -107,6 +107,24 @@ def _qt_weight(token_weight: int) -> QFont.Weight:
     }.get(token_weight, QFont.Weight.Normal)
 
 
+def set_mono(widget, point_size: int | None = None,
+             weight: int = SCALE.WEIGHT_REGULAR) -> None:
+    """Set a technical-content widget to the mono face (part7 §3.2).
+
+    An EXPLICIT QFont beats the stylesheet, so SMILES readouts, log
+    panes and identifier fields stay mono under every theme provider
+    (qt-material and qdarkstyle ship no such rule).  Call on any
+    QWidget; no-op for non-widget input.
+    """
+    if widget is None:
+        return
+    try:
+        widget.setFont(mono_font(point_size, weight))
+    except AttributeError:
+        pass
+
+
 __all__ = [
-    "has_inter", "has_mono", "mono_font", "register_fonts", "ui_font",
+    "has_inter", "has_mono", "mono_font", "register_fonts", "set_mono",
+    "ui_font",
 ]

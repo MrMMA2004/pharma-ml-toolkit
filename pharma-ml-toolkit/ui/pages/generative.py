@@ -64,6 +64,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..font_loader import set_mono
 from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView
 from ..widgets.plot_widget import PlotPanel
@@ -506,6 +507,7 @@ class GenerativeWorkbenchPage(QWidget):
             "NC(=O)c3ccccc3)O)OC(=O)C"          # the taxane-style complex
         )
         self._sa_molecules.setPlaceholderText("one SMILES per line")
+        set_mono(self._sa_molecules)  # SMILES stay mono under every provider
         form.addRow("molecules:", self._sa_molecules)
         self._sa_max = QLineEdit("")
         self._sa_max.setPlaceholderText("blank = no filter (e.g. 4.0)")

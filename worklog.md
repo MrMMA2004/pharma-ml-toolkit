@@ -14687,3 +14687,51 @@ alone, 20 green before the kill in both runs.
 Suites: tokens 20/20, theme manager 15/15, fonts 8/8, affected
 UI sweeps 180/180, launch smoke end-to-end (fonts register,
 studio/light applies, MainWindow builds). v1.2.198 shipped.
+
+## R29 (part7 adoption round) — 2026-11-13
+
+R28 built the identity (tokens, studio provider, bundled fonts);
+R29 made the application actually WEAR it. Four additions, each
+with a discovery worth recording.
+
+Mono adoption (set_mono on six technical widgets) surfaced the
+three-provider font contract: an explicit QWidget.setFont is NOT
+provider-independent in Qt — a stylesheet that targets the class
+with a font-family (qt-material's Roboto) overrides it at polish
+time. So the honest contract is: studio QSS rule + native explicit
+font + foreign provider ownership, with an explicit re-set winning
+until the next polish. Pinned in test_mono_adoption rather than
+papered over.
+
+Marker discipline turned R28's data set into rendering behavior:
+flagged light-theme lines gain symbols, scatters take distinct
+shapes. The subtle bug found by the first test run: keying the
+shape cycle on the raw series index collides (indices 1 and 6 both
+map to slot 1 on a 5-shape cycle) — the cycle now keys on a
+per-panel counter of flagged series, reset on clear().
+
+Screenshot regression is the pixel check R28 deferred. Two traps:
+(1) MainWindow.__init__ calls theme.restore_state(), so a test
+that hand-applies a theme gets it silently replaced by the
+persisted one — the harness now persists the preference first and
+lets the app's real restore flow apply it; (2) the "canvas" is
+not uniform — the bottom strip is the Deep Navy status bar, and in
+DARK theme the home scroll viewport paints the elevated surface
+(#263D4D), which is the §2.2 surface ladder working as specified.
+The final assertions encode the layout truth: ivory canvas + white
+cards + navy status (light); midnight strip + elevated surface
+(dark). Grabs verified content-rich programmatically.
+
+Biology: the two hardcoded expression-matrix reads are now one
+shared path row (mono field, Browse, cheap preview reading only
+the header + two rows). Cache invalidation on change is the load-
+bearing detail — the biomarker flow caches the normalized matrix,
+and a stale cache from the old file would poison a new-path run.
+
+Incidents: two sweep commands named nonexistent test files
+(exit-4, my commands); one junk line in a test (caught before
+run); the "malformed CSV" test initially used text pandas happily
+parses — replaced with binary junk that genuinely fails.
+
+Suites: 219/219 affected sweeps, all four new files green.
+v1.2.199 shipped.

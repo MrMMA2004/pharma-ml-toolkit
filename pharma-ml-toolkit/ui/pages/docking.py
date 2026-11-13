@@ -70,6 +70,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..font_loader import set_mono
 from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView, PandasTableModel
 from ..widgets.plot_widget import PlotPanel
@@ -326,6 +327,7 @@ class DockingWorkbenchPage(QWidget):
         self._box_edit = QPlainTextEdit()
         self._box_edit.setMaximumHeight(120)
         self._box_edit.setPlaceholderText("paste a six-key Vina config…")
+        set_mono(self._box_edit)  # config keys/coords are technical text
         form.addRow("custom box:", self._box_edit)
         self._box_btn = QPushButton("Validate custom box")
         self._box_btn.setMinimumHeight(34)

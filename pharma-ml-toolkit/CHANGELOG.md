@@ -1,3 +1,50 @@
+## [1.2.199] — 2026-11-13
+### Added — part7 round 29 (adoption: mono fonts, marker discipline, screenshot regression, biology path)
+
+- **Mono-font adoption (§3.2)** — `set_mono()` in ui/font_loader
+  pins JetBrains Mono on technical widgets with an explicit QFont:
+  the generative page's SMILES batch input, the docking page's Vina
+  box-config editor, and four data-explorer log panes (audit, split
+  audit, split ranges, SAR).  Pinned in tests as the three-provider
+  font contract: studio styles mono via QSS, native keeps the
+  explicit ctor-time QFont, and a foreign provider (qt-material)
+  owns its fonts at polish time — Roboto replaces the ctor font and
+  an explicit re-set wins until the next polish (provider
+  semantics, §16.10, not a leak).
+- **Marker discipline in PlotPanel (§5)** — R28's data-level
+  discipline set is now enforced in rendering: a LIGHT-theme series
+  whose color sits below 3:1 on white (Orange, Purple, Sky Blue,
+  Yellow) gains a non-color encoding — `line()` draws a symbol+brush
+  and `scatter()` takes a distinct shape.  The shape cycle keys on a
+  per-panel `_discipline_count` (not the raw series index — indices
+  1 and 6 would collide on the 5-shape cycle) and resets on
+  `clear()` with the data.  Dark themes flag nothing.
+- **Screenshot regression (§9 pixel-level)** — real offscreen grabs
+  of the MainWindow home under studio light and dark
+  (tests/ui/test_theme_screenshots.py, PNGs in build/theme-shots).
+  Light asserts the Warm Ivory canvas, white card surfaces and the
+  Deep Navy status strip; dark asserts the Midnight background and
+  the elevated-surface viewport (#263D4D — the §2.2 surface ladder
+  verified at pixels, not just in QSS text).  Grabs verified
+  content-rich (1,654 / 1,424 unique colors).  The harness drives
+  the app's REAL restore flow (preference persisted first, the
+  window's own `theme.restore_state()` applies it) after finding
+  that hand-applying a theme gets replaced by the constructor.
+- **Biology expression-matrix path (R29-d)** — the MAD and
+  biomarker tabs now share ONE path row instead of two hardcoded
+  `_EXPRESSION_PATH` reads: mono-styled field defaulting to the
+  bundled 23x300 matrix, Browse, and a live preview that reads only
+  the header + first rows (never the full file; job threads do
+  that) showing gene count and first cell lines.  Editing the path
+  drops the shared normalize cache so runs always use the file in
+  the field; missing files and unreadable CSVs report in the
+  preview instead of crashing.
+- **Tests**: test_mono_adoption.py (8), test_marker_discipline.py
+  (9), test_theme_screenshots.py (7), test_biology_expression_path
+  (8).  Affected sweeps: 219/219 (theme/font/token/mono/discipline
+  core 60; biology 13+8; generative 31; docking 17; audit 3;
+  plots 39; smoke+cards 34; screenshots 7).
+
 ## [1.2.198] — 2026-11-13
 ### Added — part7 round 28 (visual identity: tokens, studio theme, fonts)
 

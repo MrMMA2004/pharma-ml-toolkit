@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..font_loader import set_mono
 from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView
 from ..widgets.plot_widget import PlotPanel
@@ -101,6 +102,7 @@ class DataExplorerPage(QWidget):
         self._audit_output = QPlainTextEdit()
         self._audit_output.setReadOnly(True)
         self._audit_output.setPlaceholderText("Select optional columns, then run the audit.")
+        set_mono(self._audit_output)  # numerical audit log
         right_lay.addWidget(self._audit_output)
 
         # part6 Phase 3, batch 4: the exact split-overlap audit panel
@@ -113,6 +115,7 @@ class DataExplorerPage(QWidget):
         right_lay.addWidget(QLabel("id column:"))
         right_lay.addWidget(self._split_audit_column)
         self._split_audit_ranges = QPlainTextEdit()
+        set_mono(self._split_audit_ranges)  # ranges are numeric literals
         self._split_audit_ranges.setPlaceholderText(
             "train: 0-251\ncalibration: 252-335\ntest: 336-419\n\n"
             "(one 'name: lo-hi' row-range per partition — indices are "
@@ -132,6 +135,7 @@ class DataExplorerPage(QWidget):
         )
         right_lay.addWidget(self._split_audit_btn)
         self._split_audit_output = QPlainTextEdit()
+        set_mono(self._split_audit_output)  # split ranges, numerical log
         self._split_audit_output.setReadOnly(True)
         self._split_audit_output.setPlaceholderText(
             "Name the id column and the row ranges, then audit."
@@ -174,6 +178,7 @@ class DataExplorerPage(QWidget):
         )
         right_lay.addWidget(self._sar_btn)
         self._sar_output = QPlainTextEdit()
+        set_mono(self._sar_output)  # SAR rule log
         self._sar_output.setReadOnly(True)
         self._sar_output.setPlaceholderText(
             "Pick a SMILES column and a numeric activity column, then find "
