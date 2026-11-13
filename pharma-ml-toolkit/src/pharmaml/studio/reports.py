@@ -230,6 +230,27 @@ def build_run_report(record: Mapping[str, Any]) -> HTMLReport:
     )
     for name in _SECTION_ORDER:
         report.add_text(sections[name], heading=name)
+    # §17D figure embedding (R27): the Plots section's text stays the
+    # honest inventory; every figure that EXISTS on disk as a PNG is
+    # then embedded as its own page (base64, self-contained).  A
+    # recorded path whose file is gone stays a text line with the
+    # reason — never a broken image or a silent omission.
+    summary = record.get("summary") or {}
+    if isinstance(summary, Mapping):
+        artifacts = summary.get("figures") or summary.get("plots")
+        if isinstance(artifacts, list):
+            for raw in artifacts:
+                p = Path(str(raw))
+                if p.suffix.lower() == ".png" and p.is_file():
+                    report.add_image(p, caption=f"exported figure: {p.name}")
+                elif p.exists():
+                    report.add_text(
+                        f"- recorded figure not embedded (not a PNG or "
+                        f"unreadable): {p}", heading="Plots")
+                else:
+                    report.add_text(
+                        f"- recorded figure file missing: {p}",
+                        heading="Plots")
     return report
 
 

@@ -1,3 +1,35 @@
+## [1.2.197] — 2026-11-13
+### Added — part6 round 27 (§17D figures + deeper forms + layout consumer)
+
+- **`HTMLReport.add_image(path, caption, max_bytes)`** — embed an
+  existing PNG file inline (base64): the §17D run-report path embeds
+  the file's own bytes, because a re-render would need the
+  workflow's live state the run record deliberately does not carry.
+  A missing file, a non-PNG file, or one over the 8 MiB cap raises
+  with the reason rather than silently degrading.
+- **§17D reports embed exported figures** — `build_run_report` now
+  follows the Plots section's text inventory with one anchored
+  figure page per recorded PNG that exists on disk.  A recorded path
+  whose file is gone stays an honest text line ("recorded figure
+  file missing: …") — never a broken image or a silent omission.
+- **Deeper template forms** — the response template's compound combo
+  lists the screen's actual compound VALUES (the column the backend
+  joins on, capped at 200 distinct); every SMILES-column combo
+  auto-detects the picked CSV's header (case-insensitive; the
+  header's real columns are always offered); docking's `(auto)`
+  passes `None` so the backend's own candidate resolution decides;
+  the descriptor form resolves `(auto)` against the header at run
+  time (its stage indexes `frame[smiles_col]` directly).
+- **Layout-preference consumer** — the utilities page restores its
+  last-opened tab from `workspace.layout_preference` (stored as a
+  tab NAME, not an index, so adding a tab later can never restore
+  the wrong page) and saves on every tab change.
+- **Tests**: `tests/test_report_figures.py` (5 — the file's own
+  bytes embedded, missing/non-PNG honesty, report wiring, the
+  no-figures case unchanged), the templates suite grew to 13
+  (compound values, header auto-detect, case-insensitive resolve),
+  the utilities suite to 19 (tab restore round-trip).
+
 ## [1.2.196] — 2026-11-13
 ### Added — part6 round 26 (§17E + §17G + card-integrated forms): §17 checklist closed
 

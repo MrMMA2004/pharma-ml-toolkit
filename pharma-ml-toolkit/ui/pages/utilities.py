@@ -190,6 +190,25 @@ class UtilitiesWorkbenchPage(QWidget):
         self._tabs.addTab(self._build_reindex_tab(), "Reindex")
         self._templates_tab = WorkflowTemplatesTab()
         self._tabs.addTab(self._templates_tab, "Workflow templates")
+        # §17G layout preference: restore the last-opened tab (the
+        # preference is a tab NAME, not an index — adding a tab later
+        # can never restore the wrong page)
+        from pharmaml.studio.workspace import (
+            layout_preference,
+            set_layout_preference,
+        )
+
+        remembered = layout_preference("utilities.tab", "")
+        index = -1
+        for i in range(self._tabs.count()):
+            if self._tabs.tabText(i) == remembered:
+                index = i
+                break
+        if index >= 0:
+            self._tabs.setCurrentIndex(index)
+        self._tabs.currentChanged.connect(
+            lambda i: set_layout_preference(
+                "utilities.tab", self._tabs.tabText(i)))
         lay.addWidget(self._tabs)
         self._diagnostics_btn = QPushButton("Reproducibility & checkpoint diagnostics…")
         self._diagnostics_btn.clicked.connect(self._show_diagnostics)

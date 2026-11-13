@@ -390,3 +390,25 @@ def test_main_window_carries_the_utilities_page(main_window) -> None:
     assert main_window.pages.currentIndex() == 16  # after Image Lab, before Settings (the ML Workbench moved everyone +1, the round-250 Molecular Dynamics page +1 more)
     page = main_window.utilities_page
     assert page._tabs.count() == 6  # round 24: + the §17A Workflow-templates tab
+
+
+def test_utilities_tab_order_is_remembered(qtbot, studio_app,
+                                           monkeypatch, tmp_path) -> None:
+    """§17G layout preference: the last-opened tab comes back."""
+    monkeypatch.setenv("PHARML_STUDIO_WORKSPACE",
+                       str(tmp_path / "ws.json"))
+    from ui.pages.utilities import UtilitiesWorkbenchPage
+
+    page = UtilitiesWorkbenchPage()
+    qtbot.addWidget(page)
+    labels = [page._tabs.tabText(i) for i in range(page._tabs.count())]
+    assert page._tabs.currentWidget() is page._tabs.widget(0)
+    # switch to the Workflow templates tab (by name, not index)
+    page._tabs.setCurrentIndex(labels.index("Workflow templates"))
+    # a freshly built page restores it
+    page2 = UtilitiesWorkbenchPage()
+    qtbot.addWidget(page2)
+    labels2 = [page2._tabs.tabText(i) for i in range(page2._tabs.count())]
+    assert page2._tabs.tabText(page2._tabs.currentIndex()) == \
+        "Workflow templates"
+    assert labels2 == labels  # the tab SET never changes

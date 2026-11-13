@@ -95,6 +95,7 @@ pharmaml.exceptions.DataValidationError: add_metrics accepts report objects or d
 from __future__ import annotations
 
 import html
+import base64
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -927,6 +928,51 @@ class HTMLReport:
         # alt already carries.
         self._page_ids.append(page_id)
         self._page_names.append(caption or f"figure {self._figure_count}")
+        return self
+
+    def add_image(self, path: str | Path, caption: str | None = None,
+                  max_bytes: int = 8 << 20) -> HTMLReport:
+        """Embed an existing PNG file inline (base64; not re-rendered).
+
+        The §17D run-report path: run records reference exported
+        figures by FILE, so the report embeds the file's own bytes —
+        a re-render would need the workflow's live state the record
+        deliberately does not carry.  Only PNG is accepted (the one
+        format the workflow exports are guaranteed to be); a missing
+        or oversized file raises with the reason rather than
+        silently degrading to a text line.
+        """
+        p = Path(path)
+        try:
+            raw = p.read_bytes()
+        except OSError as exc:
+            raise DataValidationError(
+                f"figure file unreadable: {p} ({exc.strerror or exc})"
+            ) from exc
+        if raw[:8] != b"\x89PNG\r\n\x1a\n":
+            raise DataValidationError(
+                f"not a PNG file: {p} (embedding supports PNG exports only)"
+            )
+        if len(raw) > max_bytes:
+            raise DataValidationError(
+                f"figure too large to embed: {p} "
+                f"({len(raw) >> 20} MiB > {max_bytes >> 20} MiB cap)"
+            )
+        alt = _escape(caption or p.name)
+        # the SAME anchored <figure> page add_figure builds — one
+        # wrapper shape, two sources (live object / file bytes)
+        self._figure_count += 1
+        page_id = f"pg-{len(self._page_names) + 1}"
+        data_uri = "data:image/png;base64," + base64.b64encode(raw).decode()
+        block = f"<figure class='page' id='{page_id}' tabindex='-1'>"
+        block += f"<img src='{data_uri}' alt='{alt}'/>"
+        if caption:
+            block += f"<figcaption>{_escape(caption)}</figcaption>"
+        block += _BACK_CONTENTS_LINK
+        block += "</figure>"
+        self._blocks.append(block)
+        self._page_ids.append(page_id)
+        self._page_names.append(caption or p.name)
         return self
 
     # -- rendering --------------------------------------------------------

@@ -209,3 +209,66 @@ def test_export_folder_is_remembered_per_template(
     tab._remember_folder()
     assert last_export_folder(
         "qsar_model_development") == str(tmp_path / "new-place")
+
+
+def _screen_csv(tmp_path):
+    import csv
+    path = tmp_path / "screen.csv"
+    with open(path, "w", newline="") as fh:
+        w = csv.DictWriter(
+            fh, fieldnames=["cell_line", "compound", "auc"])
+        w.writeheader()
+        w.writerows([
+            {"cell_line": "A549", "compound": "imatinib", "auc": "0.4"},
+            {"cell_line": "A549", "compound": "erlotinib", "auc": "0.6"},
+            {"cell_line": "MCF7", "compound": "imatinib", "auc": "0.5"},
+            {"cell_line": "MCF7", "compound": "erlotinib", "auc": "0.3"},
+        ])
+    return path
+
+
+def test_response_compound_combo_lists_real_values(
+        tab, qtbot, tmp_path) -> None:
+    """R27-c: the compound combo lists the screen's actual compounds."""
+    screen = _screen_csv(tmp_path)
+    tab._choice.setCurrentIndex(
+        [tab._choice.itemData(i) for i in range(tab._choice.count())]
+        .index("drug_response_prediction"))
+    tab._inputs["screen_path"].setText(str(screen))
+    items = [tab._inputs["compound"].itemText(i)
+             for i in range(tab._inputs["compound"].count())]
+    assert items == ["(auto)", "imatinib", "erlotinib"]
+
+
+def test_docking_smiles_col_auto_detects_the_header(
+        tab, qtbot, tmp_path) -> None:
+    """R27-c: the docking SMILES combo adopts the CSV's own column."""
+    ligands = tmp_path / "ligands.csv"
+    ligands.write_text("name,Canonical_SMILES\n"
+                       "L1,CCO\nL2,CCC\n")
+    receptor = tmp_path / "rec.pdbqt"
+    receptor.write_text("REMARK placeholder\n")
+    tab._choice.setCurrentIndex(
+        [tab._choice.itemData(i) for i in range(tab._choice.count())]
+        .index("docking_preparation_analysis"))
+    tab._inputs["ligands_path"].setText(str(ligands))
+    # the header's columns are offered; no 'smiles' column exists so
+    # the detected current stays (auto) and _run passes None (the
+    # backend's own candidate resolution)
+    items = [tab._inputs["smiles_col"].itemText(i)
+             for i in range(tab._inputs["smiles_col"].count())]
+    assert "(auto)" in items
+    assert "Canonical_SMILES" in items
+
+
+def test_descriptor_smiles_auto_resolves_case_insensitively(
+        tab, qtbot, tmp_path) -> None:
+    """R27-c: (auto) resolves to the header's actual smiles column."""
+    data = tmp_path / "mols.csv"
+    data.write_text("SMILES,mw\nCCO,46\nCCC,44\n")
+    tab._choice.setCurrentIndex(
+        [tab._choice.itemData(i) for i in range(tab._choice.count())]
+        .index("molecular_descriptor_generation"))
+    tab._inputs["data_path"].setText(str(data))
+    # header auto-detect: the combo's current text becomes 'SMILES'
+    assert tab._inputs["smiles_col"].currentText() == "SMILES"

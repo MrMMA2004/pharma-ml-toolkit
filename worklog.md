@@ -14622,3 +14622,31 @@ noise from clearing rows; harmless, not suppressed).
 Suites: resource monitor 6/6, workspace gaps 5/5, templates 10/10,
 full affected sweep (phase4/5, utilities, templates, monitor, gaps)
 60/60. v1.2.196 shipped.
+
+## R27 (part6 §17D figures, deeper forms, layout consumer) — 2026-11-13
+
+Three builds, all closing loops round 26 opened. First, §17D figure
+embedding: HTMLReport.add_image embeds an existing PNG's own bytes
+(base64) — no re-render, because the run record deliberately does
+not carry the workflow's live state; the report follows the Plots
+text inventory with real figure pages, and missing files stay text
+lines with the reason. Second, the deeper forms: the response
+compound combo lists the screen's actual compound values, and the
+SMILES-column combos auto-detect from any CSV header (docking's
+(auto) → None lets the backend's candidate resolution decide; the
+descriptor form resolves at run time because its stage indexes
+frame[smiles_col] directly). Third, the first layout-preference
+consumer: the utilities page restores its last-opened tab, stored
+as a name so a future tab insertion can never restore the wrong
+page.
+
+Incidents: one precedence bug found by the docking header test —
+`["(auto)"] + columns if detected else [...]` parsed as
+`(["(auto)"] + columns) if detected else [...]`, so the header's
+columns were dropped exactly when no smiles column existed. Fixed
+to always offer the real columns. Also one mangled line from an
+over-eager Edit (a swallowed newline) — caught by py_compile before
+it could ship, then repaired properly.
+
+Suites: figures 5/5, templates 13/13, utilities 19/19, full
+affected sweep 80/80. v1.2.197 shipped.

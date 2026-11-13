@@ -135,8 +135,9 @@ class WorkflowTemplatesTab(QWidget):
             lines.append(f"(chain preview unavailable: {exc})")
         self._stages.setPlainText("\n".join(lines))
         self._build_form_for(name)
-        # fill the target/compound combo live as the path is typed/picked
-        for key in ("data_path", "screen_path"):
+        # fill the target/compound/SMILES combos live as the path is
+        # typed or picked (every template's data field, one handler)
+        for key in ("data_path", "screen_path", "ligands_path"):
             field = self._inputs.get(key)
             if isinstance(field, QLineEdit):
                 field.textChanged.connect(self._refresh_target_combo)
@@ -255,14 +256,14 @@ class WorkflowTemplatesTab(QWidget):
                 self._inputs["_data_field"] = field
             smiles = QComboBox()
             smiles.setEditable(True)
-            smiles.setToolTip("the SMILES column (default: smiles/SMILES)")
+            smiles.setToolTip(
+                "the SMILES column; (auto) uses the column the CSV's "
+                "header actually names (smiles or SMILES)")
+            smiles.addItem("(auto)")
             smiles.addItem("smiles")
             smiles.addItem("SMILES")
-            if name == "molecular_descriptor_generation":
-                self._form_layout.addRow("SMILES column:", smiles)
-                self._inputs["smiles_col"] = smiles
-            else:
-                self._inputs["smiles_col"] = smiles
+            self._form_layout.addRow("SMILES column:", smiles)
+            self._inputs["smiles_col"] = smiles
         elif name == "drug_response_prediction":
             screen = self._add_path_row(
                 "response screen CSV:",
@@ -293,7 +294,10 @@ class WorkflowTemplatesTab(QWidget):
                 "Pick the receptor PDBQT")
             smiles = QComboBox()
             smiles.setEditable(True)
-            smiles.setToolTip("the SMILES column (default: SMILES)")
+            smiles.setToolTip(
+                "the SMILES column; (auto) uses the column the CSV's "
+                "header actually names (smiles or SMILES)")
+            smiles.addItem("(auto)")
             smiles.addItem("SMILES")
             smiles.addItem("smiles")
             self._form_layout.addRow("SMILES column:", smiles)
@@ -312,24 +316,68 @@ class WorkflowTemplatesTab(QWidget):
         except (OSError, StopIteration, UnicodeError):
             return []
 
+    def _csv_column_values(self, path: str, column: str,
+                           limit: int = 200) -> list[str]:
+        """Distinct values of one column (best-effort, capped)."""
+        try:
+            import csv
+
+            with open(path, newline="", encoding="utf-8", errors="replace") as fh:
+                reader = csv.DictReader(fh)
+                if column not in (reader.fieldnames or []):
+                    return []
+                seen: list[str] = []
+                for row in reader:
+                    value = str(row.get(column, "")).strip()
+                    if value and value not in seen:
+                        seen.append(value)
+                        if len(seen) >= limit:
+                            break
+                return seen
+        except (OSError, UnicodeError, csv.Error):
+            return []
+
     def _refresh_target_combo(self) -> None:
-        """Fill the target/compound combos with the picked CSV's columns."""
-        field = self._inputs.get("data_path") or self._inputs.get("screen_path")
-        if not isinstance(field, QLineEdit):
-            return
-        combo = self._inputs.get("target") or self._inputs.get("compound")
-        if not isinstance(combo, QComboBox):
+        """Fill the target/compound/SMILES combos from the picked CSV."""
+        # whichever data field THIS template carries drives the peek
+        for key in ("data_path", "screen_path", "ligands_path"):
+            field = self._inputs.get(key)
+            if isinstance(field, QLineEdit) and field.text().strip():
+                break
+        else:
             return
         path = field.text().strip()
-        if not path:
-            return
+        combo = self._inputs.get("target")
+        if isinstance(combo, QComboBox):
+            self._fill_combo(combo, ["(auto)"] + [
+                c for c in self._csv_columns(path)
+                if c and c.lower() not in ("smiles",)])
+        # the response template's compound combo lists the screen's
+        # actual compound VALUES (the column the backend joins on)
+        compound = self._inputs.get("compound")
+        if isinstance(compound, QComboBox):
+            values = self._csv_column_values(path, "compound")
+            self._fill_combo(compound, ["(auto)"] + values)
+        # every SMILES-column combo auto-detects its CSV's header
+        for key in ("smiles_col",):
+            smiles = self._inputs.get(key)
+            if isinstance(smiles, QComboBox):
+                columns = self._csv_columns(path)
+                lower = {c.lower(): c for c in columns}
+                detected = lower.get("smiles", "")
+                # the header's real columns are always offered; the
+                # generic pair only when the peek read nothing
+                items = ["(auto)"] + (columns or ["smiles", "SMILES"])
+                self._fill_combo(smiles, items)
+                if detected:
+                    smiles.setCurrentText(detected)
+
+    def _fill_combo(self, combo: QComboBox, items: list[str]) -> None:
+        """Replace a combo's items, keeping the current choice when alive."""
         keep = combo.currentText()
         combo.blockSignals(True)
         combo.clear()
-        combo.addItem("(auto)")
-        for column in self._csv_columns(path):
-            if column and column.lower() not in ("smiles",):
-                combo.addItem(column)
+        combo.addItems(items)
         index = combo.findText(keep)
         combo.setCurrentIndex(index if index >= 0 else 0)
         combo.blockSignals(False)
@@ -416,10 +464,15 @@ class WorkflowTemplatesTab(QWidget):
                 data = required("data_path", "the dataset CSV")
                 if not data:
                     return
+                # the descriptor stage indexes frame[smiles_col] —
+                # (auto) resolves to the header's actual column now
+                smiles = combo("smiles_col") or ""
+                if smiles in ("", "(auto)"):
+                    columns = {c.lower(): c for c in self._csv_columns(data)}
+                    smiles = columns.get("smiles", "smiles")
                 pipe = build_template(
                     name, out_dir=out_dir, data_path=data,
-                    smiles_col=combo("smiles_col", "smiles"),
-                    kind="morgan")
+                    smiles_col=smiles, kind="morgan")
             elif name == "drug_response_prediction":
                 screen = required("screen_path", "the response screen CSV")
                 if not screen:
@@ -444,7 +497,7 @@ class WorkflowTemplatesTab(QWidget):
                 pipe = build_template(
                     name, out_dir=out_dir, ligands_path=ligands,
                     receptor_pdbqt=receptor,
-                    smiles_col=combo("smiles_col", "SMILES"))
+                    smiles_col=combo("smiles_col"))
             else:
                 raise ValueError(name)
         except Exception as exc:  # noqa: BLE001 - honest inline error
