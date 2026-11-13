@@ -14320,3 +14320,43 @@ The notebook ritual (8/8 re-exec) was not run this round — the venv
 was rebuilt mid-round; run it before the next zip if notebooks
 touch the new modules.  (4) The standing GUI Resume affordance
 round remains queued.
+
+## R14 (part6 Phase 0) — the capability map — 2026-11-13
+
+**The recovery (recycle #2).** Sandbox recycled again after R13.  The
+fresh GitHub_token.pdf carried the same fine-grained PAT line-wrapped
+74+19=93 chars — this time with a form-feed between the halves (the
+joiner now strips \f as well).  Remote verified intact at e81985d;
+clean clone (fsck clean, askpass wired, token never in config); venv
+rebuilt with the full stack.
+
+**The round.** MASTER_PROMPT part6 opened the nine-card-first
+enhancement architecture (six phases, baseline v1.2.183 — exactly
+what R13 shipped).  This round executed Phase 0 honestly:
+
+- Launch chain verified: studio.py → ui.run → MainWindow with 18
+  SECTIONS and the §5 nine-card grid embedded INSIDE DashboardPage.
+  The cards are real, exact-order, live-probed, and route through
+  go_to() — but the app is still sidebar-first.  The inversion is
+  Phase 1.
+- The 18 pages mapped to their live-imported backends (import grep,
+  not prose); 92 ml modules / 74,074 lines; 62 CLI parser sites;
+  555 UI + 4,514 library test functions counted live.
+- docs/CAPABILITY_MAP.md written (scripts/build_capability_map.py
+  regenerates it from the tree): the page→backend→card table, the
+  honest C-list (19 backend-only modules — the 8 documented groups
+  plus the 9 R13 statistical modules, all with zero UI references),
+  the §3.2 integration gate, and the six-phase migration plan.
+- The R13 deferral closed: FEATURES.md re-stamped, the calibration
+  dialog's note reworded (the class-C word-guard false-positived on
+  "conformal" in an honesty note; the dialog actually integrates
+  probability_calibration) — test_feature_inventory green again.
+
+**Gates.** carriers 7/7, feature inventory 17/17, docs-index 30/30,
+pages smoke 38/38, nine cards 26/26, main window 15/15 — 88/88 on
+the doc + UI battery at 1.2.184.
+
+**Next (Phase 1).** Invert MainWindow so the nine-card home is the
+default screen; sidebar → optional advanced mode; Settings to a
+global menu; registry validation tests (exact order, routes, Other
+semantics).  The map's §7 gap list is the backlog.

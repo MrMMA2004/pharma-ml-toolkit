@@ -1,3 +1,32 @@
+## [1.2.184] — 2026-11-13
+### Added — part6 round 14 (Phase 0): the capability map — the nine-card-first audit lands
+
+- **The environment story (recycle #2):** the sandbox was recycled
+  again after R13; the token was re-recovered from the fresh
+  GitHub_token.pdf (line-wrapped 74+19=93 chars — with a form-feed
+  between the halves this time; the joiner now strips \f too), the
+  remote verified intact at e81985d, clean clone, venv rebuilt.
+- **Phase 0 of the nine-card-first architecture (MASTER_PROMPT
+  part6):** the full backend capability audit.  Launch chain verified
+  (studio.py → ui.run → MainWindow; the §5 nine-card grid lives
+  INSIDE DashboardPage of the 18-page sidebar app — the inversion is
+  Phase 1); 18 pages mapped to their live-imported backends; 92 ml
+  modules / 74,074 lines censused; 62 CLI parser sites; 555 UI +
+  4,514 library test functions counted.
+- **docs/CAPABILITY_MAP.md** — the Phase-0 deliverable: the auditable
+  page→backend→card table, the honest C-list of 19 backend-only
+  modules (the 8 documented groups + the 9 R13-landed statistical
+  modules, all with zero UI references), the §3.2 integration gate
+  restated, and the six-phase migration plan.
+- **The R13 deferral closed:** FEATURES.md re-stamped to the shipping
+  version, and the calibration dialog's honesty note reworded so the
+  class-C word-guard no longer false-positives on "conformal" (the
+  dialog integrates probability_calibration, a different module) —
+  test_feature_inventory 17/17 green again.
+- **Baseline gates on the restored tree:** carriers 7/7, main window
+  + nine cards 41/41, pages smoke 38/38, docs-index 30/30, feature
+  inventory 17/17.
+
 ## [1.2.183] — 2026-11-12
 ### Added — part5-continuation round 13: the recovery round — arena absorbed, the orphan ml/ family landed
 

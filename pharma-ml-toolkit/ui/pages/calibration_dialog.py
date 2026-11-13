@@ -78,8 +78,9 @@ class CalibrationDialog(QDialog):
         self._result = QPlainTextEdit()
         self._result.setReadOnly(True)
         layout.addWidget(self._result, 1)
-        note = QLabel("Exact IDs must be disjoint, but that does not prove independence. This is not "
-                      "conformal calibration: a later conformal analysis requires another independent "
+        note = QLabel("Exact IDs must be disjoint, but that does not prove independence. This is "
+                      "probability recalibration, not distribution-free interval calibration: a "
+                      "later interval/set analysis requires another independent "
                       "calibration set and separate evaluation. Recalibration can worsen probabilities.")
         note.setWordWrap(True)
         layout.addWidget(note)

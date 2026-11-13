@@ -9,7 +9,7 @@ inventory, not a current certification: counts and grades have not been
 revalidated against every current UI and dependency profile. See
 [Part 5 audit](PART5_PHASE0_AUDIT.md) and [test profiles](TEST_PROFILES.md)
 for scoped evidence and engine limitations. Matrix inputs were frozen
-at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.176 (the
+at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.184 (the
 r266 arena absorption landed the former E-row conformal/coverage/split-audit
 suite from `arena/8696775e`; the r265 §24.3/24.4 rows were trued live). The §5
 nine-card mapping (§10 below) was
