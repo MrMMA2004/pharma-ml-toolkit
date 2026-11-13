@@ -15,7 +15,9 @@ warning (never fatal), broken homes degrade to warnings.
 from __future__ import annotations
 
 import json
+import logging
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -234,12 +236,32 @@ class TestResumeContract:
             files = list(Path(home).glob("numpy-mlp.step-*.json"))
             assert any("step-000009" in f.name for f in files)
 
+    @contextmanager
+    def _logs_visible(self):
+        """Re-enable propagation on the ``pharmaml`` logger for caplog.
+
+        When CLI tests run earlier in the same process they call
+        ``configure_logging``, which sets ``propagate=False`` on the
+        ``pharmaml`` root logger; pytest's caplog handler lives on the
+        true root logger, so records only reach it while propagation
+        is on (restored on exit).  Same dance as
+        ``tests/test_docking.py`` and ``tests/test_ml_pipeline.py``.
+        """
+        pharma_root = logging.getLogger("pharmaml")
+        prev_propagate = pharma_root.propagate
+        pharma_root.propagate = True
+        try:
+            yield
+        finally:
+            pharma_root.propagate = prev_propagate
+
     def test_incompatible_config_discards_with_warning(self, caplog):
         X, y = _regression_data()
         with tempfile.TemporaryDirectory() as home:
             _fit(X, y, 5, checkpoint_dir=home)
-            with caplog.at_level("WARNING", logger="pharmaml.ml.numpy_neural"):
-                full = _fit(X, y, 9, learning_rate=1e-2, checkpoint_dir=home)
+            with self._logs_visible():
+                with caplog.at_level("WARNING", logger="pharmaml.ml.numpy_neural"):
+                    full = _fit(X, y, 9, learning_rate=1e-2, checkpoint_dir=home)
         assert "different config/dataset" in caplog.text
         assert full.n_iter_ == 9  # started fresh, ran every epoch
 
@@ -248,8 +270,9 @@ class TestResumeContract:
         with tempfile.TemporaryDirectory() as home:
             _fit(X, y, 5, checkpoint_dir=home)
             X2, y2 = _regression_data(50)
-            with caplog.at_level("WARNING", logger="pharmaml.ml.numpy_neural"):
-                full = _fit(X2, y2, 9, checkpoint_dir=home)
+            with self._logs_visible():
+                with caplog.at_level("WARNING", logger="pharmaml.ml.numpy_neural"):
+                    full = _fit(X2, y2, 9, checkpoint_dir=home)
         assert "different config/dataset" in caplog.text
         assert full.n_iter_ == 9
 

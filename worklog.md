@@ -14511,3 +14511,29 @@ QLabel-without-QApplication abort moved to the UI suite.
 
 tests: backends 11/11 + ui 7/7; gates 81/81; UI battery 705 across all
 46 suites; library spot-checks (studio/io) 118.
+
+## R23 (part6 Phase 6 + sandbox restore) — 2026-11-13
+
+The sandbox was FULLY recycled after R22 (workspace, venvs, /tmp all
+gone). Restore: v1.2.192 zip from /tmp/my-project/download + git
+history from the GitHub remote (MrMMA2004/pharma-ml-toolkit @ 9a59b3e),
+venv rebuilt on the pinned stack. Restore artifacts fixed en route:
+(1) the restore's token-in-remote-URL was caught by the metadata-drift
+gate and scrubbed; (2) eight notebooks' printed versions refreshed;
+(3) editable install restored for CLI subprocess tests; (4) torch/
+shap/catboost installed (numpy re-pinned to 1.26.4 after the shap
+resolver drift — the documented requirements.txt caveat).
+
+Phase 6 deliverables:
+- tools/release_readiness.py: gathers EVERYTHING §16 names →
+  docs/RELEASE_READINESS.md (18-dep honest matrix, 60-cap coverage,
+  186-suite/5880-test inventory, carrier agreement, archive status;
+  "not gathered" sections name their gathering command).
+- tests/test_phase6_readiness.py: 6 pins on the mechanism (a
+  None-render bug was caught and fixed by them).
+- Full §14.2-chunkened evidence: library 5234/13/0 (10 chunks),
+  UI 589/0 (46 suites; nine_card_first per-class after an OOM kill),
+  gates+notes 240. All recorded into the report.
+
+v1.2.193 shipped: carriers, notebooks, FEATURES stamp, README
+RELEASE_READINESS row.

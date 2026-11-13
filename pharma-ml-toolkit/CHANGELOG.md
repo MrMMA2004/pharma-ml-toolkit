@@ -1,3 +1,42 @@
+## [1.2.193] — 2026-11-13
+### Added — part6 round 23 (Phase 6): comprehensive verification + the evidence-based release-readiness report
+
+- **`tools/release_readiness.py`** — one command gathers every piece
+  of release evidence part6 §16 names and renders
+  `docs/RELEASE_READINESS.md`: the §12 dependency matrix (18 probed,
+  honest installed/not-installed/broken statuses, Qt rows probed
+  under the committed EGL-stub bootstrap so they match what the
+  suites exercise), live capability coverage (60 integrated, 0 test
+  gaps), the full suite inventory (185 suites / 5874 tests
+  collected), version-carrier agreement, and the §14 archive-audit
+  status. Sections without evidence say "not gathered" and name the
+  gathering command — nothing converts absence into a pass.
+- **`tests/test_phase6_readiness.py` (6 pins)** — the readiness
+  MECHANISM is pinned: matrix covers every optional family with the
+  honest vocabulary; capability counts match the live registry; the
+  suite inventory equals the on-disk test files; carriers agree;
+  every section renders with real numbers; empty evidence renders as
+  "not gathered" (a None-render bug was caught and fixed by these
+  pins).
+- **Full-suite evidence, §14.2-chunkened** on the restored 4 GiB
+  sandbox: library 5234 passed / 13 skipped / 0 failed (10 sequential
+  chunks over 139 suites); UI 589 passed / 0 failed (46 suites,
+  nine_card_first run per-class after an OOM kill of the chunked
+  form — no test silently dropped); gates 81/81. Recorded into the
+  report via `--record`.
+- **Restore round** (context): the sandbox was fully recycled after
+  R22; the workspace was restored from the GitHub remote (`9a59b3e`)
+  + the v1.2.192 archive, the venv rebuilt on the pinned stack
+  (numpy 1.26.4, PySide6 6.8.3, rdkit 2026.9.1, torch 2.14.1+cpu,
+  shap 0.54.1, catboost 1.2.8 — numpy re-pinned after the shap
+  resolver drift, per the requirements.txt caveat). Three
+  restore-artifacts fixed en route: the token embedded in the git
+  remote URL (scrubbed; the metadata-drift gate caught it), stale
+  notebook version prints (refreshed), and a missing
+  `_pharmaml_logs_visible` guard in `test_numpy_neural_checkpoints`
+  (the documented caplog-propagation dance, applied per the
+  test_docking/test_ml_pipeline precedent).
+
 ## [1.2.192] — 2026-11-13
 ### Added — part6 round 22 (Phase 5): contextual help, memory-aware presets, GUI dependency diagnostics
 
