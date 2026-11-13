@@ -72,6 +72,11 @@ def run(argv: list[str] | None = None) -> int:
     app = QApplication(argv if argv is not None else [])
     app.setApplicationName("PharmaML Studio")
     app.setOrganizationName("PharmaML")
+    # part7 §3.3: register the bundled Inter/JetBrains Mono before
+    # any widget exists; the fallback chains cover a missing bundle
+    from .font_loader import register_fonts
+
+    register_fonts()
     settings = AppSettings()
     theme = ThemeManager(app, settings.settings())
     window = MainWindow(theme)

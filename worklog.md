@@ -14650,3 +14650,40 @@ it could ship, then repaired properly.
 
 Suites: figures 5/5, templates 13/13, utilities 19/19, full
 affected sweep 80/80. v1.2.197 shipped.
+
+## R28 (part7 visual identity) — 2026-11-13
+
+Part7's spec is a design system, and its §8 insists on inspection
+before modification — which the round honored: the existing
+provider architecture (ThemeManager, ChartPalette, 12+
+apply_palette consumers, objectName'd cards) was mapped first and
+kept, not replaced. The identity landed as three additive layers:
+ui/design_tokens.py (both spec color tables verbatim, typography
+chains + scale, layout rhythm, Okabe-Ito with dark variant),
+ui/studio_theme.py (QSS generated from the tokens, registered as
+a fourth provider with studio/light as the fresh-install default
+— persisted choices untouched), and ui/font_loader.py + fonts/
+(bundled SIL-OFL Inter and JetBrains Mono with full fallback
+chains, registered before any widget exists).
+
+The interesting part was honesty under programmatic WCAG checks:
+the spec's own Slate-on-Ivory pair measures 4.34:1 (under its own
+AA target), Okabe-Ito's Dark Gray vanishes on the dark canvas,
+and three palette pairs sit under 1.25 luminance contrast. Rather
+than quietly editing the spec's hexes, each collision got an
+explicit resolution recorded in tests: secondary text pinned to
+surfaces, a dark-variant gray swap, hue-based distinctness with a
+marker-discipline set for the low-contrast light colors.
+
+Incidents: one garbage Edit on the token tests (nonsense
+pytest.warns scaffolding) reverted immediately; a stray paren
+killed the first docs-sync script before any write (verified, then
+re-run); a couple of nonexistent test paths in sweep commands
+(exit-4, my commands). test_nine_card_first.py hits the 4 GB
+sandbox memory ceiling at test 21 — confirmed IDENTICAL at the
+R27 tip (stash/apply), so pre-existing; the 21st test passes
+alone, 20 green before the kill in both runs.
+
+Suites: tokens 20/20, theme manager 15/15, fonts 8/8, affected
+UI sweeps 180/180, launch smoke end-to-end (fonts register,
+studio/light applies, MainWindow builds). v1.2.198 shipped.

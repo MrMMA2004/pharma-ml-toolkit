@@ -1,3 +1,45 @@
+## [1.2.198] — 2026-11-13
+### Added — part7 round 28 (visual identity: tokens, studio theme, fonts)
+
+- **`ui/design_tokens.py`** — the centralized token system (part7
+  §2/§3/§5/§6): both color tables verbatim (light: Warm Ivory
+  #F3F5F1 / Deep Navy #172F43 / Electric Lime #C6E84B + all spec
+  tokens; dark: Midnight #101B24 / Slate Navy / Forest Slate),
+  Inter + JetBrains Mono fallback chains and the §3.4 type scale,
+  spacing/radius/border rhythm, the Okabe-Ito scientific palette
+  (SEPARATE from the interface accent) with a dark variant and a
+  programmatic marker-discipline set, and WCAG contrast utilities.
+- **The studio theme provider** (`ui/studio_theme.py`) — the
+  application QSS generated FROM the tokens: shared widget classes
+  + the nine-card objectNames, hover/selected/focused/disabled
+  states, primary-vs-secondary button hierarchy (lime fills carry
+  the navy foreground per §2.3), mono styling for text areas.
+  Registered as a fourth ThemeManager provider ('studio', light
+  and dark); studio/light is the fresh-install default while every
+  persisted choice is preserved; the ChartPalette path now emits
+  Okabe-Ito series with theme-matched axes for PyQtGraph.
+- **Bundled fonts** (`ui/font_loader.py` + `fonts/`) — Inter
+  (Regular/Medium/SemiBold/Bold) and JetBrains Mono (Regular),
+  both SIL OFL 1.1 (licenses bundled), registered at startup via
+  QFontDatabase; `ui_font()`/`mono_font()` construct fonts with
+  the full fallback chains so a missing bundle degrades to
+  Segoe UI/Arial and Cascadia/Consolas rather than failing.
+- **Honest contrast resolutions** (found by the new programmatic
+  WCAG tests, all logged): Slate #64748B on Warm Ivory measures
+  4.34:1 — under AA — so canvas metadata is promoted to primary
+  text and the secondary token is pinned to surface use (4.76:1);
+  Okabe-Ito Dark Gray #333333 vanishes on Midnight (1.4:1) so the
+  dark variant swaps it for #CCCCCC; and pairwise distinctness of
+  an 8-color palette is delivered by hue (three pairs sit under
+  1.25 luminance contrast) with the light-theme low-contrast
+  colors exactly enumerated as marker-discipline.
+- **Tests**: `tests/ui/test_design_tokens.py` (20), the theme
+  manager suite grew to 15 (studio themes/default/QSS identity/
+  round-trip/persistence/bad-theme), `tests/ui/test_font_loader.py`
+  (8). Affected UI sweeps: 180/180. `test_nine_card_first.py` hits
+  the sandbox 4 GB memory ceiling at test 21 — verified identical
+  at the R27 tip (pre-existing), with the 21st test passing alone.
+
 ## [1.2.197] — 2026-11-13
 ### Added — part6 round 27 (§17D figures + deeper forms + layout consumer)
 

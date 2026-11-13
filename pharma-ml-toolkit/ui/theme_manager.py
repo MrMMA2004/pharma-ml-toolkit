@@ -23,7 +23,14 @@ from dataclasses import dataclass, field
 from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtWidgets import QApplication
 
-PROVIDERS: tuple[str, ...] = ("qt-material", "qdarkstyle", "native")
+from .studio_theme import STUDIO_THEMES
+
+PROVIDERS: tuple[str, ...] = ("studio", "qt-material", "qdarkstyle", "native")
+
+# part7 visual identity: the studio provider is the default for
+# fresh installs (Deep Navy + Warm Ivory + Electric Lime, light and
+# dark).  Persisted provider choices keep whatever the user saved.
+STUDIO_DEFAULT = "light"
 
 # Curated, toolkit-branded subset of qt-material's theme list (teal is
 # the toolkit accent; blue/indigo families deliberately not offered).
@@ -93,6 +100,21 @@ _LIGHT_PALETTES: dict[str, ChartPalette] = {
 
 def _palette_for(provider: str, theme: str) -> ChartPalette:
     """Map provider+theme to a chart palette (dark themes get dark plots)."""
+    if provider == "studio":
+        # part7 §5: the scientific palette is SEPARATE from the
+        # interface accent — Okabe-Ito series on theme-matched axes
+        from .design_tokens import tokens as color_tokens
+        from .studio_theme import studio_chart_series
+
+        t = color_tokens(theme)
+        return ChartPalette(
+            background=t.background if theme == "dark" else "w",
+            foreground=t.text if theme == "dark" else "k",
+            grid=(52, 73, 87) if theme == "dark" else (200, 200, 200),
+            accent=t.accent,
+            series=studio_chart_series(theme),
+            dark=theme == "dark",
+        )
     if provider == "qt-material":
         dark = theme.startswith("dark_")
         return _DARK_PALETTES["qt-material"] if dark else _LIGHT_PALETTES["qt-material"]
@@ -117,8 +139,8 @@ class ThemeManager(QObject):
         super().__init__()
         self._app = app
         self._settings = settings
-        self._provider = "qt-material"
-        self._theme = MATERIAL_DEFAULT
+        self._provider = "studio"
+        self._theme = STUDIO_DEFAULT
         self._density_scale = 0
 
     # -- queries ---------------------------------------------------------
@@ -140,6 +162,8 @@ class ThemeManager(QObject):
     @staticmethod
     def available_themes(provider: str) -> tuple[str, ...]:
         """Theme names offered for a provider (16.9.1 curated list)."""
+        if provider == "studio":
+            return STUDIO_THEMES
         if provider == "qt-material":
             return MATERIAL_THEMES
         if provider == "qdarkstyle":
@@ -163,7 +187,12 @@ class ThemeManager(QObject):
         # applying the next one so providers never compete.
         self._app.setStyleSheet("")
 
-        if provider == "qt-material":
+        if provider == "studio":
+            from .studio_theme import apply_studio
+
+            apply_studio(self._app, theme if theme in STUDIO_THEMES
+                         else STUDIO_DEFAULT)
+        elif provider == "qt-material":
             from qt_material import apply_stylesheet
 
             # qt-material 2.17 carries density through the template `extra`
@@ -195,8 +224,8 @@ class ThemeManager(QObject):
 
     def restore_state(self) -> ChartPalette:
         """Apply the persisted theme (or the default when unset)."""
-        provider = "qt-material"
-        theme: str | None = MATERIAL_DEFAULT
+        provider = "studio"
+        theme: str | None = STUDIO_DEFAULT
         density = 0
         if self._settings is not None:
             stored_provider = self._settings.value("theme/provider", "")
