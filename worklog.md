@@ -14411,3 +14411,17 @@ is the honest boundary.
 Next (Phase 3, batch 2): comparison + multiplicity + power +
 coverage_diagnostics + subgroups (the ML stats cluster), then the DL
 cluster (geometric, gnn, gnnxai, pruning, quantization, harness).
+
+## R18 (part6 Phase 3, batch 2) — the ML statistics cluster — 2026-11-13
+
+Five more Statistical-tools workflows (comparison test, p-value
+correction, power report, coverage by group, subgroup audit) plus the
+model-card writer on Persistence. All over canonical backends; 13-pin
+suite on real data (real CV panel, real saved bundle for the card).
+Registry 43 integrated / 9 api. Discovered while testing:
+model_comparison_test's rows are the CHALLENGERS only (the leader is
+the baseline), so a 2-model panel yields 1 row — pinned that.
+
+Next (Phase 3, batch 3): the Deep Learning cluster — geometric, gnn +
+gnnxai, pruning, quantization, harness (Deep Learning page forms),
+then sar and split_audit (Datasets page) close the C-list entirely.

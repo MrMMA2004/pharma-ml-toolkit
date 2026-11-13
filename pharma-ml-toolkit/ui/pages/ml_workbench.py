@@ -357,11 +357,17 @@ class MLWorkbenchPage(QWidget):
             self._persist_open_btn,
             self._persist_predict_btn,
             self._persist_write_btn,
+            self._persist_card_btn,
             self._ad_btn,
             self._stat_conformal_btn,
             self._stat_calibration_btn,
             self._stat_decision_btn,
             self._stat_drift_btn,
+            self._stat_compare_btn,
+            self._stat_correct_btn,
+            self._stat_power_btn,
+            self._stat_coverage_btn,
+            self._stat_subgroup_btn,
             self._stat_export_btn,
         ]
 
@@ -1394,6 +1400,16 @@ class MLWorkbenchPage(QWidget):
             "rows) as a CSV."
         )
         buttons.addWidget(self._persist_write_btn)
+        self._persist_card_btn = QPushButton("Write model card…")
+        self._persist_card_btn.clicked.connect(self._write_model_card)
+        self._persist_card_btn.setToolTip(
+            "Build and write the model card for the loaded bundle — "
+            "markdown or HTML by the chosen suffix. The card carries the "
+            "bundle's provenance: name, task, feature contract, training "
+            "stack versions, and (when the current dataset matches) the "
+            "per-feature min/max applicability box."
+        )
+        buttons.addWidget(self._persist_card_btn)
         form.addRow("", buttons)
         lay.addLayout(form)
         self._persist_status = self._status_label(
@@ -1624,6 +1640,38 @@ class MLWorkbenchPage(QWidget):
             self._persist_status.setText(f"Predictions written to {written}")
 
         self._submit("saving predictions", job, done, self._persist_status)
+
+    def _write_model_card(self) -> None:
+        """Write the model card (markdown or HTML) for the loaded bundle."""
+        if self._bundle is None:
+            self._persist_status.setText(
+                "Open a model bundle first — the card documents a saved "
+                "bundle's provenance."
+            )
+            return
+        _model, _metadata, bundle_path = self._bundle
+        path, _filter = QFileDialog.getSaveFileName(
+            self,
+            "Write model card",
+            str(bundle_path.with_suffix(".md")),
+            "Markdown (*.md);;HTML (*.html)",
+        )
+        if not path:
+            return
+        frame, _target, _task = self._training_context()
+
+        def job(progress: Any) -> Any:
+            from pharmaml.ml.model_card import write_model_card
+
+            progress(0.5, "assembling the card from the bundle")
+            return write_model_card(
+                bundle_path, path, training_frame=frame
+            )
+
+        def done(written: Any) -> None:
+            self._persist_status.setText(f"Model card written to {written}")
+
+        self._submit("writing the model card", job, done, self._persist_status)
 
     # -- tab 5: applicability domain -------------------------------------------------
     def _build_ad_tab(self) -> QWidget:
@@ -1977,6 +2025,9 @@ class MLWorkbenchPage(QWidget):
         )
         form.addRow("", self._stat_drift_btn)
 
+        # part6 Phase 3, batch 2: the ML statistics cluster's five rows
+        self._build_statistics_batch2_form(form)
+
         lay.addLayout(form)
         self._stat_status = self._status_label(
             "the statistical tools reuse a trained run (conformal needs "
@@ -2006,6 +2057,10 @@ class MLWorkbenchPage(QWidget):
         )
         lay.addWidget(self._stat_export_btn, alignment=Qt.AlignmentFlag.AlignLeft)
         self._stat_frame: pd.DataFrame | None = None
+        # batch 2: the coverage diagnostics audit the last conformal
+        # run's covered flag, so the tab keeps the result object.
+        self._stat_conformal_last: Any = None
+        self._refresh_stat_group_columns()
         return tab
 
     def _stat_model_and_split(
@@ -2102,6 +2157,7 @@ class MLWorkbenchPage(QWidget):
         def done(result: Any) -> None:
             table = result.to_dataframe()
             self._stat_frame = table
+            self._stat_conformal_last = result  # the coverage workflow audits this
             columns = [str(column) for column in table.columns]
             shown = table.head(200)
             rows = [
@@ -2379,6 +2435,609 @@ class MLWorkbenchPage(QWidget):
             self._stat_status.setText(f"Export failed — {error}")
             return
         self._stat_status.setText(f"Result written to {path}")
+
+    # -- part6 Phase 3, batch 2: the ML statistics cluster ---------------
+    # Five more §3.2 workflows over canonical backends: the model
+    # comparison test, multiplicity correction, the power picture,
+    # coverage-by-group diagnostics and the subgroup audit.  The model
+    # card (the cluster's sixth member) lives on the Persistence tab
+    # where the bundles are.
+
+    def _build_statistics_batch2_form(self, form: QFormLayout) -> None:
+        """The batch-2 form rows (added under the batch-1 rows)."""
+        self._stat_models = QLineEdit()
+        self._stat_models.setText("ridge, random_forest, gradient_boosting")
+        self._stat_models.setToolTip(
+            "Comma-separated model keys for the comparison test — the "
+            "panel runs under one shared splitter so the boards are "
+            "comparable, then every model is tested against the leader."
+        )
+        form.addRow("comparison panel:", self._stat_models)
+        self._stat_folds = QSpinBox()
+        self._stat_folds.setRange(2, 10)
+        self._stat_folds.setValue(5)
+        self._stat_folds.setToolTip("Cross-validation folds shared by the whole panel.")
+        form.addRow("folds:", self._stat_folds)
+        self._stat_correction = QComboBox()
+        for token in ("fdr_bh", "bonferroni", "holm"):
+            self._stat_correction.addItem(token)
+        self._stat_correction.setToolTip(
+            "Multiplicity correction for the comparison family (also the "
+            "method behind the standalone p-value corrector)."
+        )
+        form.addRow("correction:", self._stat_correction)
+
+        self._stat_paste = QLineEdit()
+        self._stat_paste.setPlaceholderText(
+            "paste raw p-values, comma- or space-separated"
+        )
+        self._stat_paste.setToolTip(
+            "The standalone multiplicity corrector: any family of raw "
+            "p-values, adjusted with the correction above."
+        )
+        form.addRow("p-value family:", self._stat_paste)
+
+        run_row = QHBoxLayout()
+        self._stat_compare_btn = QPushButton("Comparison test")
+        self._stat_compare_btn.setMinimumHeight(30)
+        self._stat_compare_btn.clicked.connect(self._start_stat_comparison)
+        self._stat_compare_btn.setToolTip(
+            "Cross-validate the panel, then test every model against the "
+            "leader with the family corrected: differences, adjusted "
+            "p-values and the on-par/better/worse verdicts."
+        )
+        run_row.addWidget(self._stat_compare_btn)
+        self._stat_correct_btn = QPushButton("Correct p-values")
+        self._stat_correct_btn.setMinimumHeight(30)
+        self._stat_correct_btn.clicked.connect(self._start_stat_multiplicity)
+        self._stat_correct_btn.setToolTip(
+            "Benjamini-Hochberg / Bonferroni / Holm adjustment of the "
+            "pasted family — the q-values, same length and order."
+        )
+        run_row.addWidget(self._stat_correct_btn)
+        self._stat_power_btn = QPushButton("Power report")
+        self._stat_power_btn.setMinimumHeight(30)
+        self._stat_power_btn.clicked.connect(self._start_stat_power)
+        self._stat_power_btn.setToolTip(
+            "The fold-count power picture: the minimum detectable effect "
+            "at the target power, the observed effect's power when given, "
+            "and the power curve across fold counts."
+        )
+        run_row.addWidget(self._stat_power_btn)
+        form.addRow("panel tools:", run_row)
+
+        self._stat_group_column = QComboBox()
+        self._stat_group_column.setEditable(True)
+        self._stat_group_column.setToolTip(
+            "The subgroup/coverage grouping column — any dataset column "
+            "(categorical or binned numeric). Refreshed when a dataset "
+            "loads; free text also works."
+        )
+        form.addRow("group column:", self._stat_group_column)
+        self._stat_mingroup = QSpinBox()
+        self._stat_mingroup.setRange(2, 200)
+        self._stat_mingroup.setValue(10)
+        self._stat_mingroup.setToolTip(
+            "Minimum rows per subgroup; smaller groups stay listed but "
+            "are flagged insufficient (and excluded from the gap tests)."
+        )
+        form.addRow("min group size:", self._stat_mingroup)
+        self._stat_effect = QDoubleSpinBox()
+        self._stat_effect.setRange(0.0, 5.0)
+        self._stat_effect.setDecimals(2)
+        self._stat_effect.setSingleStep(0.1)
+        self._stat_effect.setValue(0.0)
+        self._stat_effect.setToolTip(
+            "Optional observed standardized effect for the power report "
+            "(0 = report only the minimum detectable effect and curve)."
+        )
+        form.addRow("observed effect:", self._stat_effect)
+
+        run_row2 = QHBoxLayout()
+        self._stat_coverage_btn = QPushButton("Coverage by group")
+        self._stat_coverage_btn.setMinimumHeight(30)
+        self._stat_coverage_btn.clicked.connect(self._start_stat_coverage)
+        self._stat_coverage_btn.setToolTip(
+            "Coverage diagnostics for the last conformal run: per-group "
+            "empirical coverage with Wilson intervals, against the "
+            "nominal level."
+        )
+        run_row2.addWidget(self._stat_coverage_btn)
+        self._stat_subgroup_btn = QPushButton("Subgroup audit")
+        self._stat_subgroup_btn.setMinimumHeight(30)
+        self._stat_subgroup_btn.clicked.connect(self._start_stat_subgroups)
+        self._stat_subgroup_btn.setToolTip(
+            "Stratified performance per subgroup plus the multiplicity-"
+            "corrected gap scan (every subgroup vs the rest)."
+        )
+        run_row2.addWidget(self._stat_subgroup_btn)
+        form.addRow("group tools:", run_row2)
+
+    def _refresh_stat_group_columns(self) -> None:
+        """Re-list the grouping choices from the loaded dataset."""
+        frame, _target, _task = self._training_context()
+        if frame is None:
+            return
+        current = self._stat_group_column.currentText()
+        self._stat_group_column.clear()
+        self._stat_group_column.addItems([str(column) for column in frame.columns])
+        if current:
+            index = self._stat_group_column.findText(current)
+            if index >= 0:
+                self._stat_group_column.setCurrentIndex(index)
+            else:
+                self._stat_group_column.setCurrentText(current)
+
+    def _start_stat_comparison(self) -> None:
+        """The panel comparison test: CV + family-corrected tests."""
+        frame, target, task = self._training_context()
+        if frame is None or not target:
+            self._stat_status.setText(
+                "Load a dataset on the Model Analysis page first — the "
+                "comparison test cross-validates the current dataset's panel."
+            )
+            return
+        models = [
+            token.strip()
+            for token in self._stat_models.text().split(",")
+            if token.strip()
+        ]
+        if len(models) < 2:
+            self._stat_status.setText(
+                "The comparison test needs at least two models in the panel "
+                "— there is nothing to compare against the leader otherwise."
+            )
+            return
+        n_folds = int(self._stat_folds.value())
+        correction = self._stat_correction.currentText()
+        smiles = detect_smiles_column(frame)
+        numeric, dropped = numeric_feature_columns(frame, target)
+        if not numeric:
+            self._stat_status.setText(
+                "Every non-target column is non-numeric"
+                + (f" ({', '.join(dropped)})" if dropped else "")
+                + " — the comparison test needs descriptor columns."
+            )
+            return
+        label = f"{len(models)} models, {target}"
+
+        def job(progress: Any) -> Any:
+            from pharmaml.ml.comparison import model_comparison_test
+            from pharmaml.ml.cv_results import compare_models_cv
+
+            def on_model(info: dict[str, Any]) -> None:
+                progress(
+                    (info.get("index", 0) + 1) / max(1, int(info.get("total", 1))),
+                    f"cross-validating {info.get('model', 'model')}",
+                )
+
+            results, _board = compare_models_cv(
+                frame[numeric],
+                frame[target],
+                task,
+                models=models,
+                n_folds=n_folds,
+                smiles=frame[smiles] if smiles else None,
+                on_model=on_model,
+            )
+            progress(0.9, "testing the family against the leader")
+            return model_comparison_test(results, alpha=0.05, correction=correction)
+
+        def done(result: Any) -> None:
+            rows = []
+            for row in result.rows:
+                rows.append(
+                    [
+                        row.model,
+                        f"{row.mean:.4g}",
+                        f"{row.difference:+.4g}",
+                        "—" if row.adjusted_p is None else f"{row.adjusted_p:.4g}",
+                        row.note,
+                    ]
+                )
+            _populate_table(
+                self._stat_table,
+                ["model", f"mean {result.metric}", "vs leader", "adjusted p", "verdict"],
+                rows,
+            )
+            self._stat_frame = pd.DataFrame(
+                [
+                    {
+                        "model": r.model,
+                        "mean": r.mean,
+                        "leader_mean": r.leader_mean,
+                        "difference": r.difference,
+                        "adjusted_p": r.adjusted_p,
+                        "note": r.note,
+                    }
+                    for r in result.rows
+                ]
+            )
+            better = sum(1 for r in result.rows if "better" in r.note)
+            self._stat_status.setText(
+                f"leader {result.leader} ({result.leader_mean:.4g} {result.metric}) "
+                f"· {result.n_folds} folds · {result.test} test · {result.correction} "
+                f"correction · {better} model(s) beat it — the rest are on par "
+                "within the family correction"
+            )
+            self._stat_plot.clear()
+            names = [r.model for r in result.rows]
+            means = np.asarray([r.mean for r in result.rows], dtype=float)
+            self._stat_plot.bars(means, labels=names)
+            self._stat_plot.set_labels(
+                x="model", y=f"mean {result.metric}",
+                title=f"Panel means — leader {result.leader}",
+            )
+
+        self._submit(f"comparison test ({label})", job, done, self._stat_status)
+
+    def _start_stat_multiplicity(self) -> None:
+        """Standalone p-value family correction."""
+        raw = self._stat_paste.text().replace(",", " ").split()
+        if not raw:
+            self._stat_status.setText(
+                "Paste the raw p-values first — comma- or space-separated."
+            )
+            return
+        try:
+            p_values = [float(token) for token in raw]
+        except ValueError:
+            self._stat_status.setText(
+                "Those are not numbers — paste p-values like 0.03, 0.12, 0.001."
+            )
+            return
+        method = self._stat_correction.currentText()
+
+        def job(progress: Any) -> Any:
+            from pharmaml.ml.multiplicity import correct_p_values
+
+            progress(0.5, f"adjusting {len(p_values)} p-values ({method})")
+            return correct_p_values(p_values, method=method)
+
+        def done(adjusted: Any) -> None:
+            rows = [
+                [str(index + 1), f"{raw_value:.4g}", f"{adj_value:.4g}"]
+                for index, (raw_value, adj_value) in enumerate(zip(p_values, adjusted))
+            ]
+            _populate_table(self._stat_table, ["#", "raw p", f"adjusted ({method})"], rows)
+            self._stat_frame = pd.DataFrame(
+                {
+                    "raw_p": p_values,
+                    "adjusted_p": [float(value) for value in adjusted],
+                }
+            )
+            significant = sum(1 for value in adjusted if value < 0.05)
+            self._stat_status.setText(
+                f"{len(p_values)} p-values adjusted ({method}) — "
+                f"{significant} remain significant at 0.05"
+            )
+            self._stat_plot.clear()
+            positions = np.arange(1, len(p_values) + 1, dtype=float)
+            self._stat_plot.scatter(positions, np.asarray(p_values), label="raw")
+            self._stat_plot.scatter(
+                positions, np.asarray(adjusted, dtype=float), label="adjusted"
+            )
+            span = np.array([1.0, float(max(len(p_values), 1))])
+            self._stat_plot.line(
+                span, np.array([0.05, 0.05]), label="0.05", width=1, index=1, style="dash",
+            )
+            self._stat_plot.set_labels(
+                x="hypothesis #", y="p-value", title=f"{method} adjustment",
+            )
+
+        self._submit(f"p-value correction ({method})", job, done, self._stat_status)
+
+    def _start_stat_power(self) -> None:
+        """The fold-count power picture."""
+        n_folds = int(self._stat_folds.value())
+        effect = float(self._stat_effect.value())
+        observed = effect if effect > 0.0 else None
+
+        def job(progress: Any) -> Any:
+            from pharmaml.ml.power import power_report
+
+            progress(0.5, "solving the minimum detectable effect")
+            return power_report(n_folds, observed_effect=observed)
+
+        def done(result: Any) -> Any:
+            mde = result.mde
+            needed = None
+            if observed is not None:
+                from pharmaml.ml.power import folds_for_power
+
+                needed = folds_for_power(observed)
+            rows = [
+                ["folds", str(result.n_folds)],
+                ["alpha", f"{result.alpha:g}"],
+                ["target power", f"{result.target_power:g}"],
+                ["minimum detectable |d|", f"{mde:.4g}"],
+            ]
+            if result.observed_effect is not None:
+                rows.append(["observed |d|", f"{result.observed_effect:.4g}"])
+                rows.append(
+                    ["observed power", f"{result.observed_power:.1%}"]
+                    if result.observed_power is not None
+                    else ["observed power", "—"]
+                )
+                rows.append(
+                    [
+                        "verdict",
+                        "sufficient folds" if result.sufficient else
+                        f"under-powered (needs ~{needed} folds)",
+                    ]
+                )
+            _populate_table(self._stat_table, ["quantity", "value"], rows)
+            self._stat_frame = pd.DataFrame(rows, columns=["quantity", "value"])
+            headline = (
+                f"MDE {mde:.3g} at {result.target_power:.0%} power over "
+                f"{result.n_folds} folds"
+            )
+            if result.observed_power is not None:
+                headline += (
+                    f" · observed effect {result.observed_effect:.3g} runs at "
+                    f"{result.observed_power:.1%} power"
+                    + ("" if result.sufficient else f" — need ~{needed} folds")
+                )
+            self._stat_status.setText(headline)
+            # the power curve across fold counts, from the same solver
+            self._stat_plot.clear()
+            from pharmaml.ml.power import paired_power
+
+            fold_range = np.arange(2, 31, dtype=float)
+            curve = np.asarray(
+                [paired_power(observed if observed is not None else mde, int(n)) for n in fold_range]
+            )
+            self._stat_plot.line(fold_range, curve, label="power", width=2)
+            self._stat_plot.line(
+                fold_range, np.full_like(fold_range, result.target_power),
+                label="target", width=1, index=1, style="dash",
+            )
+            effect_label = observed if observed is not None else mde
+            self._stat_plot.set_labels(
+                x="folds", y="power",
+                title=f"Paired power at |d| = {effect_label:.3g}",
+            )
+
+        self._submit(f"power report ({n_folds} folds)", job, done, self._stat_status)
+
+    def _start_stat_coverage(self) -> None:
+        """Coverage diagnostics, grouped, for the last conformal run."""
+        intervals = self._stat_conformal_last
+        if intervals is None:
+            self._stat_status.setText(
+                "Run Conformal intervals first — the coverage diagnostics "
+                "audit ITS covered flag per group."
+            )
+            return
+        covered = np.asarray(intervals.covered, dtype=bool)
+        if covered.size == 0:
+            self._stat_status.setText(
+                "The last conformal run had no labels — its coverage is "
+                "undefined. Rerun it with a labelled held-out split."
+            )
+            return
+        frame, target, _task = self._training_context()
+        column = self._stat_group_column.currentText().strip()
+        if frame is None or not column or column not in frame.columns:
+            self._stat_status.setText(
+                "Name a grouping column from the loaded dataset first — "
+                "coverage is audited per group."
+            )
+            return
+        n_test = len(intervals.prediction)
+        if len(frame) < n_test:
+            self._stat_status.setText(
+                f"The dataset has {len(frame)} rows but the run scored "
+                f"{n_test} — reload the dataset the run was trained on."
+            )
+            return
+        # the conformal rows follow the held-out split's row order, which
+        # is the 25% test share of the frame's own split (random_state
+        # 42) — rebuild that split and take the test side's group labels
+        # the same way the tab's other sources do.
+        from sklearn.model_selection import train_test_split
+
+        _tr, test_rows = train_test_split(
+            np.arange(len(frame)), test_size=0.25, random_state=42
+        )
+        if len(test_rows) != n_test:
+            self._stat_status.setText(
+                "The run's held-out row count does not match a 25% split "
+                "of the current dataset — reload the dataset it was run on."
+            )
+            return
+        groups = frame[column].iloc[test_rows].to_numpy()
+        confidence = 1.0 - float(self._stat_alpha.value())
+
+        def job(progress: Any) -> Any:
+            from pharmaml.ml.coverage_diagnostics import coverage_by_group
+
+            progress(0.5, "summarizing coverage per group")
+            return coverage_by_group(covered, groups, confidence=confidence)
+
+        def done(result: Any) -> None:
+            rows = []
+            for g in (result.overall, *result.groups):
+                rows.append(
+                    [
+                        str(g.group),
+                        str(g.n_test),
+                        str(g.n_covered),
+                        f"{g.coverage:.1%}",
+                        f"[{g.lower:.1%}, {g.upper:.1%}]",
+                    ]
+                )
+            _populate_table(
+                self._stat_table,
+                ["group", "n", "covered", "coverage", f"{result.confidence:.0%} Wilson CI"],
+                rows,
+            )
+            self._stat_frame = pd.DataFrame(
+                [
+                    {
+                        "group": str(g.group),
+                        "n_test": g.n_test,
+                        "n_covered": g.n_covered,
+                        "coverage": g.coverage,
+                        "lower": g.lower,
+                        "upper": g.upper,
+                    }
+                    for g in (result.overall, *result.groups)
+                ]
+            )
+            self._stat_status.setText(
+                f"overall coverage {result.overall.coverage:.1%} "
+                f"(nominal {confidence:.0%}) over {result.overall.n_test} rows · "
+                f"{len(result.groups)} groups"
+            )
+            self._stat_plot.clear()
+            names = [str(g.group) for g in result.groups] or ["overall"]
+            coverages = (
+                np.asarray([g.coverage for g in result.groups], dtype=float)
+                if result.groups
+                else np.asarray([result.overall.coverage])
+            )
+            self._stat_plot.bars(coverages, labels=names)
+            self._stat_plot.line(
+                np.arange(len(names), dtype=float),
+                np.full(len(names), confidence),
+                label="nominal", width=1, index=1, style="dash",
+            )
+            self._stat_plot.set_labels(
+                x="group", y="coverage", title="Coverage by group",
+            )
+
+        self._submit(f"coverage diagnostics ({column})", job, done, self._stat_status)
+
+    def _start_stat_subgroups(self) -> None:
+        """Stratified performance + the corrected gap scan."""
+        resolved = self._stat_model_and_split()
+        if resolved is None:
+            return
+        model, x_test, y_test, task, label = resolved
+        frame, _target, _task2 = self._training_context()
+        column = self._stat_group_column.currentText().strip()
+        if frame is None or not column or column not in frame.columns:
+            self._stat_status.setText(
+                "Name a grouping column from the loaded dataset first — "
+                "the subgroup audit stratifies the held-out rows by it."
+            )
+            return
+        if len(frame) < len(x_test):
+            self._stat_status.setText(
+                f"The dataset has {len(frame)} rows but the run's split "
+                f"scored {len(x_test)} — reload the dataset it was run on."
+            )
+            return
+        from sklearn.model_selection import train_test_split
+
+        _tr, test_rows = train_test_split(
+            np.arange(len(frame)), test_size=0.25, random_state=42
+        )
+        if len(test_rows) != len(x_test):
+            self._stat_status.setText(
+                "The run's held-out row count does not match a 25% split "
+                "of the current dataset — reload the dataset it was run on."
+            )
+            return
+        groups = frame[column].iloc[test_rows].to_numpy()
+        min_group_size = int(self._stat_mingroup.value())
+
+        def job(progress: Any) -> Any:
+            from pharmaml.ml.subgroups import subgroup_gap_scan, subgroup_report
+
+            progress(0.4, "scoring the subgroups")
+            report = subgroup_report(
+                model, x_test, y_test, groups, task=task, min_group_size=min_group_size
+            )
+            progress(0.8, "scanning the gaps (family-corrected)")
+            gaps = subgroup_gap_scan(
+                model, x_test, y_test, groups, task=task, min_group_size=min_group_size
+            )
+            return report, gaps
+
+        def done(result: Any) -> None:
+            report, gaps = result
+            rows = []
+            for s in report.subgroups:
+                metric_bits = [
+                    f"{name}={value:.3g}" if value is not None else f"{name}=—"
+                    for name, value in s.metrics.items()
+                ]
+                rows.append(
+                    [
+                        s.value,
+                        str(s.n),
+                        "yes" if s.sufficient else "NO",
+                        " · ".join(metric_bits[:3]),
+                    ]
+                )
+            _populate_table(
+                self._stat_table,
+                ["subgroup", "n", "sufficient", "held-out metrics"],
+                rows,
+            )
+            self._stat_frame = pd.concat(
+                [
+                    pd.DataFrame(
+                        [
+                            {
+                                "subgroup": s.value,
+                                "n": s.n,
+                                "sufficient": s.sufficient,
+                                **s.metrics,
+                            }
+                            for s in report.subgroups
+                        ]
+                    ),
+                    pd.DataFrame(
+                        [
+                            {
+                                "subgroup": g.value,
+                                "metric": g.metric,
+                                "n": g.n,
+                                "delta": g.delta,
+                                "direction": g.direction,
+                                "fdr_p": g.fdr_p_value,
+                                "significant": g.fdr_significant,
+                            }
+                            for g in gaps
+                        ]
+                    ),
+                ],
+                ignore_index=True,
+            )
+            significant = sum(1 for g in gaps if g.fdr_significant)
+            primary = (
+                report.metric_names[0] if report.metric_names else "metric"
+            )
+            self._stat_status.setText(
+                f"{len(report.subgroups)} subgroups over {primary} · "
+                f"{len(gaps)} gaps tested (fdr_bh) — {significant} significant · "
+                f"source {label} · column {column}"
+            )
+            self._stat_plot.clear()
+            names = [s.value for s in report.subgroups]
+            values = np.asarray(
+                [
+                    s.metrics.get(primary) if s.metrics.get(primary) is not None else np.nan
+                    for s in report.subgroups
+                ],
+                dtype=float,
+            )
+            self._stat_plot.bars(values, labels=names)
+            overall = report.overall.get(primary)
+            if overall is not None:
+                self._stat_plot.line(
+                    np.arange(len(names), dtype=float),
+                    np.full(len(names), overall),
+                    label="overall", width=1, index=1, style="dash",
+                )
+            self._stat_plot.set_labels(
+                x="subgroup", y=primary, title=f"Subgroup {primary} vs overall",
+            )
+
+        self._submit(f"subgroup audit ({column})", job, done, self._stat_status)
 
     # -- theming / test surface ---------------------------------------------------
     def apply_palette(self, palette: ChartPalette) -> None:

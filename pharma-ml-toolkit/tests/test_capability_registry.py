@@ -31,24 +31,20 @@ from pharmaml.studio.capability_registry import (
 _TK = Path(__file__).resolve().parents[1]
 
 #: The class-C backend-only modules still awaiting their GUI workflow
-#: (the Phase-0 audit's 19, minus the four that landed in v1.2.187:
-#: conformal, calibration, decision, drift — all ML Workbench now).
+#: (the Phase-0 audit's 19, minus ten that landed: v1.2.187 conformal/
+#: calibration/decision/drift, v1.2.188 comparison/multiplicity/power/
+#: coverage_diagnostics/subgroups/model_card — all ML Workbench or
+#: Persistence now).
 C_LIST_ASSIGNMENTS: dict[str, str] = {
-    "pharmaml.ml.comparison": "machine-learning",
     "pharmaml.ml.conformal_classification": "machine-learning",
-    "pharmaml.ml.coverage_diagnostics": "machine-learning",
     "pharmaml.ml.geometric": "deep-learning",
     "pharmaml.ml.gnn": "deep-learning",
     "pharmaml.ml.gnnxai": "deep-learning",
     "pharmaml.ml.harness": "deep-learning",
-    "pharmaml.ml.model_card": "machine-learning",
-    "pharmaml.ml.multiplicity": "machine-learning",
-    "pharmaml.ml.power": "machine-learning",
     "pharmaml.ml.pruning": "deep-learning",
     "pharmaml.ml.quantization": "deep-learning",
     "pharmaml.ml.sar": "machine-learning",
     "pharmaml.ml.split_audit": "datasets",
-    "pharmaml.ml.subgroups": "machine-learning",
 }
 
 

@@ -26,10 +26,14 @@ API_ROOT = REPO_ROOT / "src" / "app" / "api"
 
 BACKEND_ONLY_MODULES = (
     "gnn", "geometric", "pruning", "quantization", "harness",
-    "conformal_classification", "coverage_diagnostics", "split_audit",
+    "conformal_classification", "split_audit",
 )
 
-STATUS_COUNTS = {"A": 36, "B": 6, "C": 7, "D": 0, "E": 0, "F": 3}
+#: v1.2.188: comparison/multiplicity/power/coverage_diagnostics/
+#: subgroups/model_card left the class-C table (the ML statistics
+#: cluster rides the ML Workbench + Persistence A rows — no new page),
+#: so A grows by six module-workflows and C loses the whole cluster.
+STATUS_COUNTS = {"A": 42, "B": 6, "C": 1, "D": 0, "E": 0, "F": 3}
 
 
 def _doc() -> str:
@@ -187,13 +191,14 @@ class TestStatusSummary:
             )
 
     def test_row_total_consistency(self) -> None:
-        """18 pages + 12 web areas + 11 packages = 42 A/B rows; C/E/F add
-        10 more (7 backend-only, 3 external) — the v1.2.187 statistical
-        tools moved conformal/calibration/decision/drift from C to the
-        ML Workbench's A row (the registry carries the same flip). The
-        nine-card organization rides the Dashboard page row since
-        v1.2.169 (§10)."""
-        assert STATUS_COUNTS["A"] + STATUS_COUNTS["B"] == 42
+        """18 pages + 12 web areas + 11 packages = 42 A/B FEATURE rows; C/E/F
+        add 4 more (1 backend-only cluster row, 3 external) — v1.2.187-188
+        moved the whole ML statistics cluster onto the ML Workbench's and
+        Persistence's existing A rows (no new pages, so A's count grows
+        without the FEATURE row count changing; the registry's 43
+        integrated rows carry the per-module flip). The nine-card
+        organization rides the Dashboard page row since v1.2.169 (§10)."""
+        assert STATUS_COUNTS["A"] + STATUS_COUNTS["B"] == 48
         assert sum(STATUS_COUNTS.values()) == 52
 
     def test_synthetic_demo_register(self) -> None:

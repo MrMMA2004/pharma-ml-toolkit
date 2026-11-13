@@ -1,3 +1,38 @@
+## [1.2.188] — 2026-11-13
+### Added — part6 round 18 (Phase 3, batch 2): the ML statistics cluster
+
+- **Statistical tools tab, five more workflows** (§3.2 bar met; the
+  GUI calls the canonical backends, §3.3):
+  - **Comparison test** — cross-validates a model panel under one
+    shared splitter (`compare_models_cv`), then tests every model
+    against the leader with the family corrected
+    (`model_comparison_test`): differences, adjusted p-values,
+    on-par/better/worse verdicts, panel-means bar figure.
+  - **p-value correction** — the standalone multiplicity corrector:
+    any pasted family, Benjamini-Hochberg / Bonferroni / Holm
+    (`correct_p_values`), raw-vs-adjusted scatter.
+  - **Power report** — the fold-count power picture
+    (`power_report` + `paired_power` + `folds_for_power`): minimum
+    detectable effect, observed effect's power and the sufficiency
+    verdict, power curve across fold counts.
+  - **Coverage by group** — per-group empirical coverage with Wilson
+    intervals against the nominal level, audited over the last
+    conformal run's covered flag (`coverage_by_group`).
+  - **Subgroup audit** — stratified held-out metrics per subgroup
+    plus the multiplicity-corrected gap scan, every subgroup vs the
+    rest (`subgroup_report` + `subgroup_gap_scan`).
+- **Persistence tab: "Write model card…"** — builds and writes the
+  loaded bundle's model card, markdown or HTML by suffix
+  (`write_model_card`), provenance and applicability box included.
+- **Registry:** six rows flipped `api` → `integrated` — **43
+  integrated / 9 api**; the C-list pin shrank to 9 (the Deep
+  Learning cluster, conformal_classification, sar, split_audit);
+  FEATURES.md class-C table + counts re-synced (A=42, C=1).
+- **Tests:** `tests/ui/test_ml_statistics_batch2.py` — 13 pins:
+  construction, six honest refusals, and the six real workflows on
+  the real example data (a genuinely saved + reopened bundle for the
+  model card, both .md and .html).
+
 ## [1.2.187] — 2026-11-13
 ### Added — part6 round 17 (Phase 3, batch 1): the statistical tools
 
