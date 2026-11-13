@@ -30,17 +30,12 @@ from pharmaml.studio.capability_registry import (
 
 _TK = Path(__file__).resolve().parents[1]
 
-#: The class-C backend-only modules still awaiting their GUI workflow
-#: (the Phase-0 audit's 19, minus sixteen that landed: v1.2.187 the
-#: statistical tools, v1.2.188 the ML statistics cluster, v1.2.189 the
-#: Deep Learning cluster on the Workbench's Efficiency + GNN labs).
-#: Three rows remain: the classification-set sibling, SAR fingerprints
-#: and the split-overlap audit.
-C_LIST_ASSIGNMENTS: dict[str, str] = {
-    "pharmaml.ml.conformal_classification": "machine-learning",
-    "pharmaml.ml.sar": "machine-learning",
-    "pharmaml.ml.split_audit": "datasets",
-}
+#: The class-C backend-only modules still awaiting their GUI workflow.
+#: EMPTY since v1.2.190 (part6 Phase 3, batch 4 — the closer): the
+#: classification-set sibling, SAR matched pairs and the split-overlap
+#: audit landed (ML Workbench Statistical tools + the Data Explorer's
+#: two new panels), so every backend module now has a GUI workflow.
+C_LIST_ASSIGNMENTS: dict[str, str] = {}
 
 
 class TestRule1ValidIdentifiers:

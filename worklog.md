@@ -14443,3 +14443,23 @@ qsar/sar substring false positive with word-boundary matching.
 Next (Phase 3, batch 4 — the closer): sar on the Datasets page,
 conformal_classification beside the regression conformal card, and
 split_audit on the Data Explorer — C-list to zero.
+
+## R20 (part6 Phase 3, batch 4 — the closer) — 2026-11-13
+
+Sandbox was recycled before this round (repo + venvs gone); recovered
+by re-cloning origin at 91e58e2 (the token PDF wraps the token across
+two lines with a trailing form feed — strip control chars before use)
+and rebuilding the pinned venv (numpy 1.26.4, PySide6 6.8.3,
+pytest-qt, torch 2.15 cpu, qt-material + qdarkstyle for the theme
+smokes).
+
+The last three class-C backends landed: the conformal-classification
+card (split + label-conditional side by side) on the Workbench's
+Statistical tools tab, and the split-overlap audit + SAR matched-pairs
+panels on the Data Explorer. Registry now 52/52 integrated — zero api
+rows; the FEATURES.md class-C table is empty; C-list pin and inventory
+guard re-pinned to zero (A=46, C=0).
+
+Phase 3 is DONE: every backend module has a GUI workflow. Next: the
+part6 remaining scope (whatever the master prompt's §4+ queue holds —
+check PROJECT_AUDIT_PROGRESS.md for the unstarted sections).

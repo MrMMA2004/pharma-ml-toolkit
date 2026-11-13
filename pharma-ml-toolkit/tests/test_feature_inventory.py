@@ -24,15 +24,14 @@ NINE_CARDS_SRC = TOOLKIT_ROOT / "ui" / "nine_cards.py"
 CARD_DIRECTORY = REPO_ROOT / "src" / "components" / "explorer" / "playground" / "card-directory.ts"
 API_ROOT = REPO_ROOT / "src" / "app" / "api"
 
-BACKEND_ONLY_MODULES = (
-    "conformal_classification", "sar", "split_audit",
-)
+BACKEND_ONLY_MODULES: tuple[str, ...] = ()
 
-#: v1.2.189: the Deep Learning cluster (geometric/gnn/gnnxai/pruning/
-#: quantization/harness) left the class-C table — the Efficiency lab
-#: and GNN lab ride the Deep Learning page's existing A row (no new
-#: page, so the FEATURE row count holds while the module count grows).
-STATUS_COUNTS = {"A": 43, "B": 6, "C": 3, "D": 0, "E": 0, "F": 3}
+#: v1.2.190 (part6 Phase 3, batch 4 — the closer): the last three
+#: class-C modules left the table — the classification conformal card
+#: rides the ML Workbench's Statistical tools tab, and the split-overlap
+#: audit + SAR matched-pairs panels ride the Data Explorer. Every
+#: backend module now has a GUI workflow.
+STATUS_COUNTS = {"A": 46, "B": 6, "C": 0, "D": 0, "E": 0, "F": 3}
 
 
 def _doc() -> str:
@@ -193,14 +192,15 @@ class TestStatusSummary:
             )
 
     def test_row_total_consistency(self) -> None:
-        """18 pages + 12 web areas + 11 packages = 49 A/B FEATURE rows; E/F
-        add 6 more (3 backend-only, 3 external) — v1.2.187-189 moved the statistical
-        tools, the ML statistics cluster AND the Deep Learning cluster
-        onto existing pages' A rows (no new pages, so the module count
-        grows without the page count changing; the registry's 49
-        integrated rows carry the per-module flip). The nine-card
-        organization rides the Dashboard page row since v1.2.169 (§10)."""
-        assert STATUS_COUNTS["A"] + STATUS_COUNTS["B"] == 49
+        """18 pages + 12 web areas + 11 packages = 52 A/B FEATURE rows; E/F
+        add 3 more (3 external) — v1.2.187-190 moved the statistical
+        tools, the ML statistics cluster, the Deep Learning cluster AND
+        the last three class-C modules onto existing pages' A rows (no
+        new pages, so the module count grows without the page count
+        changing; the registry's 52 integrated rows carry the per-module
+        flip). The nine-card organization rides the Dashboard page row
+        since v1.2.169 (§10)."""
+        assert STATUS_COUNTS["A"] + STATUS_COUNTS["B"] == 52
         assert sum(STATUS_COUNTS.values()) == 55
 
     def test_synthetic_demo_register(self) -> None:

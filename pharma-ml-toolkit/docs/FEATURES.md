@@ -9,7 +9,7 @@ inventory, not a current certification: counts and grades have not been
 revalidated against every current UI and dependency profile. See
 [Part 5 audit](PART5_PHASE0_AUDIT.md) and [test profiles](TEST_PROFILES.md)
 for scoped evidence and engine limitations. Matrix inputs were frozen
-at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.189 (the
+at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.190 (the
 r266 arena absorption landed the former E-row conformal/coverage/split-audit
 suite from `arena/8696775e`; the r265 §24.3/24.4 rows were trued live). The §5
 nine-card mapping (§10 below) was
@@ -119,18 +119,16 @@ commit. "GUI" = Studio page(s); "Web" = card(s)/route(s) from §2.
 These modules have real implementations and real tests, and **no** Studio
 page, web card, or API route references them. They are importable library
 surface (and CLI where noted) — listed here instead of being papered over.
-(`ml/conformal.py` left this table in v1.2.187, the ML statistics
-cluster in v1.2.188 and the Deep Learning cluster in v1.2.189 — the
-Workbench's new Efficiency lab runs pruning + quantization + the ZeRO
-planner, and its GNN lab runs the motif train-and-explain chain. Three
-rows remain: the classification-set sibling, SAR fingerprints and the
-split-overlap audit.)
+**EMPTY since v1.2.190** — every backend module has a GUI workflow
+(`ml/conformal.py` left in v1.2.187, the ML statistics cluster in
+v1.2.188, the Deep Learning cluster in v1.2.189, and v1.2.190's batch-4
+closer: the classification conformal card on the Workbench's Statistical
+tools tab plus the split-overlap audit and SAR matched-pairs panels on
+the Data Explorer).
 
 | Module | Tests | What it does | Why no GUI |
 | --- | --- | --- | --- |
-| `ml/conformal_classification.py` | `test_conformal_classification.py` (35) | classification sets, label-conditional sets | sibling of the landed regression card |
-| `ml/sar.py` | `test_sar.py` (33) | SAR fingerprint similarity / read-across | awaiting its Datasets-page form |
-| `ml/split_audit.py` | `test_split_overlap_audit.py` (34) + `test_cli_split_audit.py` (13) | identifier-overlap audit across data splits + the `pharmaml split-audit` CLI | same |
+| *(none — the class-C table is empty)* | | | |
 
 Internal plumbing that is tested but intentionally not user-facing(classified under its parent feature, listed for honesty):
 `ml/split_categorical` (stratified splits), `ml/scoring_transforms`,
@@ -184,13 +182,13 @@ dev server down, foreground run, error-outputs=0, home-path-survivors=0).
 ## 9. Status summary
 
 Counted over the matrix rows above (18 Studio pages, 12 web areas,
-11 backend packages, 5 backend-only modules):
+11 backend packages, 0 backend-only modules):
 
 | Status | Count | What |
 | --- | --- | --- |
-| **A** | 43 | implemented and tested end-to-end (the §5 nine-card workflow dashboard rides the Dashboard row — see §10) |
+| **A** | 46 | implemented and tested end-to-end (the §5 nine-card workflow dashboard rides the Dashboard row — see §10; A grows by three in v1.2.190 as the last class-C modules ride the ML Workbench and Data Explorer rows) |
 | **B** | 6 | implemented, incompletely tested — settings (smoke only), foundations + responseai (page-suite-only backends), TS calculators + PK/PD explorer + reconciler (no automated TS↔Python parity pins) |
-| **C** | 3 | backend-only: conformal_classification + sar + split_audit — see §4 |
+| **C** | 0 | backend-only — none since v1.2.190 (see §4: the class-C table is empty) |
 | **D** | 0 | nothing currently classified **D** — the nine-card workflow dashboard moved to **A** in v1.2.169 (§10) |
 | **E** | 0 | nothing currently classified **E** — the conformal/coverage/split-audit suite landed in v1.2.173 (the `arena/8696775e` absorption, formerly "PR #9 parked") and moved to **C** |
 | **F** | 3 | docking execution (external Vina), real MD data (external GROMACS/PLUMED), DOCKSTRING dataset (external download) |

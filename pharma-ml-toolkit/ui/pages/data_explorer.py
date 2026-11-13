@@ -16,6 +16,7 @@ import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
+    QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -101,6 +102,86 @@ class DataExplorerPage(QWidget):
         self._audit_output.setReadOnly(True)
         self._audit_output.setPlaceholderText("Select optional columns, then run the audit.")
         right_lay.addWidget(self._audit_output)
+
+        # part6 Phase 3, batch 4: the exact split-overlap audit panel
+        right_lay.addWidget(QLabel("Exact split-overlap audit (ml.split_audit):"))
+        self._split_audit_column = QComboBox()
+        self._split_audit_column.setToolTip(
+            "The identifier column to audit across the partitions below "
+            "(e.g. compound_id or SMILES). Refreshed when a dataset loads."
+        )
+        right_lay.addWidget(QLabel("id column:"))
+        right_lay.addWidget(self._split_audit_column)
+        self._split_audit_ranges = QPlainTextEdit()
+        self._split_audit_ranges.setPlaceholderText(
+            "train: 0-251\ncalibration: 252-335\ntest: 336-419\n\n"
+            "(one 'name: lo-hi' row-range per partition — indices are "
+            "0-based, hi exclusive; overlapping ranges are exactly what "
+            "this audit is for)"
+        )
+        self._split_audit_ranges.setMaximumHeight(88)
+        right_lay.addWidget(QLabel("partitions (row ranges):"))
+        right_lay.addWidget(self._split_audit_ranges)
+        self._split_audit_btn = QPushButton("Audit split overlap")
+        self._split_audit_btn.clicked.connect(self._run_split_audit)
+        self._split_audit_btn.setToolTip(
+            "Exact identifier overlap across the named partitions: shared "
+            "keys, per-partition row counts, duplicates and the pairwise "
+            "overlap matrix. No SMILES canonicalization or fuzzy matching "
+            "— exact keys only."
+        )
+        right_lay.addWidget(self._split_audit_btn)
+        self._split_audit_output = QPlainTextEdit()
+        self._split_audit_output.setReadOnly(True)
+        self._split_audit_output.setPlaceholderText(
+            "Name the id column and the row ranges, then audit."
+        )
+        right_lay.addWidget(self._split_audit_output)
+        self._split_audit_frame: pd.DataFrame | None = None
+
+        # part6 Phase 3, batch 4: the SAR matched-pairs panel (ml.sar)
+        right_lay.addWidget(QLabel("SAR matched pairs & activity cliffs (ml.sar):"))
+        sar_cols = QHBoxLayout()
+        self._sar_smiles = QComboBox()
+        self._sar_smiles.setToolTip("The SMILES column to fragment.")
+        self._sar_activity = QComboBox()
+        self._sar_activity.setToolTip(
+            "The numeric activity/property column — cliffs are pairs whose "
+            "delta clears the threshold (the default 1.0 = one pIC50 log "
+            "unit)."
+        )
+        sar_cols.addWidget(QLabel("smiles:"))
+        sar_cols.addWidget(self._sar_smiles, stretch=1)
+        sar_cols.addWidget(QLabel("activity:"))
+        sar_cols.addWidget(self._sar_activity, stretch=1)
+        right_lay.addLayout(sar_cols)
+        self._sar_min_delta = QDoubleSpinBox()
+        self._sar_min_delta.setRange(0.01, 100.0)
+        self._sar_min_delta.setDecimals(2)
+        self._sar_min_delta.setSingleStep(0.25)
+        self._sar_min_delta.setValue(1.0)
+        self._sar_min_delta.setToolTip(
+            "The cliff threshold on |activity delta| (1.0 = one log unit)."
+        )
+        right_lay.addWidget(QLabel("cliff threshold (|delta| >=):"))
+        right_lay.addWidget(self._sar_min_delta)
+        self._sar_btn = QPushButton("Find matched pairs & cliffs")
+        self._sar_btn.clicked.connect(self._run_sar)
+        self._sar_btn.setToolTip(
+            "Single-cut fragment every molecule, group by shared context: "
+            "all matched molecular pairs (one substituent swap, delta "
+            "always >= 0) and the activity cliffs among them."
+        )
+        right_lay.addWidget(self._sar_btn)
+        self._sar_output = QPlainTextEdit()
+        self._sar_output.setReadOnly(True)
+        self._sar_output.setPlaceholderText(
+            "Pick a SMILES column and a numeric activity column, then find "
+            "the matched pairs."
+        )
+        self._sar_output.setMaximumHeight(150)
+        right_lay.addWidget(self._sar_output)
+        self._sar_frame: pd.DataFrame | None = None
         splitter.addWidget(right)
         splitter.setSizes([640, 420])
         configure_splitter(splitter, stretch=(0, 1))
@@ -169,6 +250,34 @@ class DataExplorerPage(QWidget):
             for column in columns:
                 combo.addItem(column, column)
         self._audit_output.clear()
+        # the split-overlap panel's id column rides the same refresh
+        current = self._split_audit_column.currentText()
+        self._split_audit_column.clear()
+        self._split_audit_column.addItems(columns)
+        if current:
+            index = self._split_audit_column.findText(current)
+            if index >= 0:
+                self._split_audit_column.setCurrentIndex(index)
+        self._split_audit_output.clear()
+        # the SAR panel's smiles/activity columns too
+        smiles_current = self._sar_smiles.currentText()
+        self._sar_smiles.clear()
+        self._sar_smiles.addItems(columns)
+        activity_current = self._sar_activity.currentText()
+        self._sar_activity.clear()
+        self._sar_activity.addItems(
+            [c for c in columns if pd.api.types.is_numeric_dtype(self._frame[c])]
+            if self._frame is not None else columns
+        )
+        for combo, text in (
+            (self._sar_smiles, smiles_current),
+            (self._sar_activity, activity_current),
+        ):
+            if text:
+                index = combo.findText(text)
+                if index >= 0:
+                    combo.setCurrentIndex(index)
+        self._sar_output.clear()
 
     def _run_audit(self) -> None:
         from pharmaml.ml.research_audit import audit_dataset
@@ -223,6 +332,182 @@ class DataExplorerPage(QWidget):
             lines.append("Split overlap: not audited.")
         lines.append(report.limitations)
         self._audit_output.setPlainText("\n".join(lines))
+
+    # -- exact split-overlap audit (part6 Phase 3, batch 4) -----------------------
+    def _parse_partition_ranges(self, text: str, n_rows: int) -> dict[str, list]:
+        """Parse 'name: lo-hi' lines into {name: [keys]} over the frame."""
+        partitions: dict[str, list] = {}
+        for raw in text.splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            if ":" not in line:
+                raise ValueError(f"missing ':' in {line!r}")
+            name, _, span = line.partition(":")
+            name = name.strip()
+            if not name:
+                raise ValueError(f"empty partition name in {line!r}")
+            if name in partitions:
+                raise ValueError(f"duplicate partition name {name!r}")
+            if "-" not in span:
+                raise ValueError(f"missing '-' range in {line!r}")
+            lo_text, _, hi_text = span.partition("-")
+            try:
+                lo, hi = int(lo_text.strip()), int(hi_text.strip())
+            except ValueError as exc:
+                raise ValueError(f"non-integer range in {line!r}") from exc
+            if lo < 0 or hi <= lo or lo >= n_rows:
+                raise ValueError(f"range {lo}-{hi} outside the table (0..{n_rows - 1})")
+            hi = min(hi, n_rows)
+            partitions[name] = list(range(lo, hi))
+        if len(partitions) < 2:
+            raise ValueError("name at least two partitions (e.g. train + test)")
+        return partitions
+
+    def _run_split_audit(self) -> None:
+        from pharmaml.ml.split_audit import audit_split_overlap
+
+        if self._frame is None:
+            self._split_audit_output.setPlainText("Load a dataset first.")
+            return
+        column = self._split_audit_column.currentText()
+        if not column or column not in self._frame.columns:
+            self._split_audit_output.setPlainText("Pick the identifier column to audit.")
+            return
+        frame = self._frame
+        try:
+            partitions = self._parse_partition_ranges(
+                self._split_audit_ranges.toPlainText(), len(frame)
+            )
+        except ValueError as exc:
+            self._split_audit_output.setPlainText(f"Check the partitions — {exc}")
+            return
+        values = frame[column].tolist()
+        keys = {name: [values[i] for i in rows] for name, rows in partitions.items()}
+        self._split_audit_output.setPlainText("Auditing split overlap…")
+        worker = self._runner.submit(
+            "Exact split-overlap audit",
+            lambda _progress: audit_split_overlap(keys),
+            on_finished=lambda report: self._split_audit_finished(report),
+            on_failed=lambda message: self._split_audit_output.setPlainText(
+                f"Audit failed: {message}"
+            ),
+        )
+        if worker is None:
+            self._split_audit_output.setPlainText(
+                "Another Studio job is running; try again when it finishes."
+            )
+
+    def _split_audit_finished(self, report) -> None:
+        lines = [f"Partitions: " + ", ".join(
+            f"{name}={rows:,}" for name, rows in zip(report.partition_names, report.partition_rows)
+        )]
+        lines.append(
+            "Duplicates within a partition (extra occurrences): "
+            + ", ".join(
+                f"{name}={extra:,}"
+                for name, extra in zip(report.partition_names, report.duplicate_rows)
+            )
+        )
+        if report.has_overlap:
+            lines.append(
+                f"CROSS-PARTITION OVERLAP: {report.n_shared_keys:,} shared key(s), "
+                f"{sum(report.overlap_rows):,} row(s) involved"
+            )
+            pairwise = report.pairwise_dataframe()
+            lines.append("Pairwise overlap matrix:")
+            lines.append(pairwise.to_string())
+            lines.append("Shared keys:")
+            lines.append(report.to_dataframe().head(50).to_string(index=False))
+        else:
+            lines.append("No cross-partition overlap — the splits are disjoint.")
+        lines.append(
+            "(exact-key audit: no SMILES canonicalization, no fuzzy matching)"
+        )
+        self._split_audit_output.setPlainText("\n".join(lines))
+        pairwise = report.pairwise_dataframe()
+        self._split_audit_frame = pairwise
+        self._plot.clear()
+        names = list(report.partition_names)
+        counts = [float(pairwise.iloc[i].sum() - pairwise.iloc[i, i]) for i in range(len(names))]
+        self._plot.bars(np.asarray(counts), labels=names)
+        self._plot.set_labels(
+            x="partition", y="shared keys", title="Exact split-overlap audit"
+        )
+
+    # -- SAR matched pairs & activity cliffs (part6 Phase 3, batch 4) --------------
+    def _run_sar(self) -> None:
+        from pharmaml.ml.sar import activity_cliffs, matched_pairs
+
+        if self._frame is None:
+            self._sar_output.setPlainText("Load a dataset first.")
+            return
+        smiles_col = self._sar_smiles.currentText()
+        activity_col = self._sar_activity.currentText()
+        if not smiles_col or smiles_col not in self._frame.columns:
+            self._sar_output.setPlainText("Pick the SMILES column.")
+            return
+        if not activity_col or activity_col not in self._frame.columns:
+            self._sar_output.setPlainText("Pick the numeric activity column.")
+            return
+        if not pd.api.types.is_numeric_dtype(self._frame[activity_col]):
+            self._sar_output.setPlainText(
+                f"{activity_col!r} is not numeric — the activity column must "
+                "be numeric (cliffs are a delta on it)."
+            )
+            return
+        frame = self._frame
+        min_delta = float(self._sar_min_delta.value())
+        self._sar_output.setPlainText("Fragmenting and matching…")
+        worker = self._runner.submit(
+            "SAR matched pairs",
+            lambda _progress: (
+                matched_pairs(frame, smiles_col, activity_col),
+                activity_cliffs(frame, smiles_col, activity_col, min_delta=min_delta),
+            ),
+            on_finished=lambda result: self._sar_finished(result, min_delta),
+            on_failed=lambda message: self._sar_output.setPlainText(
+                f"Matched-pairs run failed: {message}"
+            ),
+        )
+        if worker is None:
+            self._sar_output.setPlainText(
+                "Another Studio job is running; try again when it finishes."
+            )
+
+    def _sar_finished(self, result, min_delta: float) -> None:
+        pairs, cliffs = result
+        self._sar_frame = pairs
+        lines = [cliffs.summary()]
+        lines.append(
+            f"Columns: {', '.join(str(c) for c in pairs.columns)}"
+        )
+        if pairs.empty:
+            lines.append(
+                "No matched pairs — no two molecules share a fragmentation "
+                "context (try a larger or more homogeneous table)."
+            )
+        else:
+            lines.append("Top 10 pairs by activity delta:")
+            top = pairs.sort_values("delta", ascending=False).head(10)
+            lines.append(top.to_string(index=False))
+            lines.append(
+                "(every pair is one substituent swap; delta >= 0 because the "
+                "lower-activity side is listed first)"
+            )
+        self._sar_output.setPlainText("\n".join(lines))
+        self._plot.clear()
+        if not pairs.empty:
+            deltas = np.asarray(pairs["delta"], dtype=float)
+            counts, edges = np.histogram(deltas, bins=min(20, max(5, len(deltas) // 8)))
+            centers = (edges[:-1] + edges[1:]) / 2.0
+            self._plot.bars(counts.astype(float), labels=[
+                f"{c:.2f}" for c in centers
+            ])
+            self._plot.set_labels(
+                x="activity delta", y="pairs",
+                title=f"Matched-pair deltas (cliffs at |delta| >= {min_delta:g})",
+            )
 
     # -- plotting -------------------------------------------------------------------
     def _plot_column(self, index: int) -> None:

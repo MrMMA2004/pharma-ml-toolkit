@@ -1,3 +1,38 @@
+## [1.2.190] — 2026-11-13
+### Added — part6 round 20 (Phase 3, batch 4 — the closer): the last three class-C backends
+
+- **ML Workbench, Statistical tools tab: "Conformal label sets"** — the
+  classification mirror of the regression conformal card
+  (`ml.conformal_classification`): both calibration schemes run side by
+  side over the same held-out rows — the marginal split-conformal
+  threshold and the label-conditional per-class thresholds — with the
+  verbatim per-row prediction sets, set sizes, empirical coverage for
+  both schemes, and the set-size plot. A regression source refuses
+  honestly.
+- **Data Explorer: "Exact split-overlap audit" panel**
+  (`ml.split_audit`) — pick the identifier column, name the partitions
+  as `name: lo-hi` row ranges, audit: shared keys, per-partition row
+  counts, within-partition duplicates, the pairwise overlap matrix and
+  the top shared keys; exact keys only (no canonicalization, no fuzzy
+  matching). Range parsing refuses colons-less lines, single
+  partitions and out-of-table ranges.
+- **Data Explorer: "SAR matched pairs & activity cliffs" panel**
+  (`ml.sar`) — pick a SMILES column and a numeric activity column
+  (the picker filters to numeric), set the cliff threshold: all
+  matched molecular pairs (single-cut fragmentation, one substituent
+  swap, delta >= 0) with the cliffs among them, the top-10 pairs by
+  delta and the delta histogram.
+- **Registry: the last three rows flipped `api` → `integrated` — 52
+  integrated / 0 api.** The class-C table in FEATURES.md is **empty**:
+  every backend module now has a GUI workflow (A=46, C=0); the
+  C-list pin and the inventory guard re-pinned to zero.
+- **Tests:** `tests/ui/test_phase3_batch4.py` — 10 pins over the real
+  backends and the bundled tables: the conformal card's refusals +
+  105-row end-to-end with export, the split audit's clean (252/84/84
+  disjoint) and dirty (5 leaked ids) paths, and the SAR panel's
+  numeric-only filtering + the 408-pairs/96-cliffs run on
+  `library_with_descriptors.csv`.
+
 ## [1.2.189] — 2026-11-13
 ### Added — part6 round 19 (Phase 3, batch 3): the Deep Learning cluster
 

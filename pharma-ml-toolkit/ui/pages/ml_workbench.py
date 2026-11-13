@@ -360,6 +360,7 @@ class MLWorkbenchPage(QWidget):
             self._persist_card_btn,
             self._ad_btn,
             self._stat_conformal_btn,
+            self._stat_conformal_cls_btn,
             self._stat_calibration_btn,
             self._stat_decision_btn,
             self._stat_drift_btn,
@@ -1987,6 +1988,16 @@ class MLWorkbenchPage(QWidget):
             "radius and the empirical coverage on the same split."
         )
         run_row.addWidget(self._stat_conformal_btn)
+        self._stat_conformal_cls_btn = QPushButton("Conformal label sets")
+        self._stat_conformal_cls_btn.setMinimumHeight(30)
+        self._stat_conformal_cls_btn.clicked.connect(self._start_stat_conformal_cls)
+        self._stat_conformal_cls_btn.setToolTip(
+            "Prediction sets for a CLASSIFICATION model: the marginal "
+            "split-conformal scheme and the label-conditional scheme "
+            "calibrated on the held-out rows, side by side — set sizes, "
+            "empirical coverage and the per-row sets."
+        )
+        run_row.addWidget(self._stat_conformal_cls_btn)
         self._stat_calibration_btn = QPushButton("Calibration report")
         self._stat_calibration_btn.setMinimumHeight(30)
         self._stat_calibration_btn.clicked.connect(self._start_stat_calibration)
@@ -2186,6 +2197,111 @@ class MLWorkbenchPage(QWidget):
             )
 
         self._submit(f"conformal intervals ({label})", job, done, self._stat_status)
+
+    def _start_stat_conformal_cls(self) -> None:
+        """Conformal label sets on the held-out split (classification).
+
+        part6 Phase 3, batch 4 — the classification mirror of the
+        regression conformal card above: both calibration schemes from
+        ``ml.conformal_classification`` run side by side over the same
+        held-out rows, so the marginal (split) and label-conditional
+        guarantees can be compared directly.
+        """
+        resolved = self._stat_model_and_split()
+        if resolved is None:
+            return
+        model, x_test, y_test, task, label = resolved
+        if task == "regression":
+            self._stat_status.setText(
+                "Conformal label sets are a classification tool — this source "
+                "is regression. Train a classifier (or switch the source)."
+            )
+            return
+        alpha = float(self._stat_alpha.value())
+
+        def job(progress: Any) -> Any:
+            from pharmaml.ml.conformal_classification import (
+                calibrate_label_conditional_classifier,
+                calibrate_split_conformal_classifier,
+            )
+
+            progress(0.3, "calibrating the marginal threshold on held-out rows")
+            split = calibrate_split_conformal_classifier(model, x_test, y_test, alpha=alpha)
+            progress(0.6, "calibrating one threshold per class")
+            conditional = calibrate_label_conditional_classifier(
+                model, x_test, y_test, alpha=alpha
+            )
+            progress(0.85, "scoring the held-out rows under both schemes")
+            return (
+                split.predict_set(x_test, y_true=y_test),
+                conditional.predict_set(x_test, y_true=y_test),
+            )
+
+        def done(result: Any) -> None:
+            split, conditional = result
+            classes = [str(c) for c in split.classes]
+            membership = np.asarray(split.membership)
+            cond_membership = np.asarray(conditional.membership)
+            sizes = membership.sum(axis=1)
+            cond_sizes = cond_membership.sum(axis=1)
+            covered = np.asarray(split.covered)
+            cond_covered = np.asarray(conditional.covered)
+            # the verbatim per-row table: both schemes' sets as label lists
+            table = pd.DataFrame(
+                {
+                    "true": [_cell_text(v, limit=18) for v in np.asarray(y_test)],
+                    "split_set": [
+                        "{" + ", ".join(c for c, m in zip(classes, row) if m) or "∅"
+                        for row in membership
+                    ],
+                    "split_size": sizes,
+                    "cond_set": [
+                        "{" + ", ".join(c for c, m in zip(classes, row) if m) or "∅"
+                        for row in cond_membership
+                    ],
+                    "cond_size": cond_sizes,
+                }
+            )
+            self._stat_frame = table
+            shown = table.head(200)
+            _populate_table(
+                self._stat_table,
+                [str(c) for c in shown.columns],
+                [
+                    [_cell_text(v, limit=30) for v in record]
+                    for record in shown.to_numpy().tolist()
+                ],
+            )
+            self._stat_status.setText(
+                f"split: threshold {split.threshold:.3f}, coverage "
+                f"{covered.mean():.1%}, mean set {sizes.mean():.2f} · "
+                f"label-conditional: coverage {cond_covered.mean():.1%}, "
+                f"mean set {cond_sizes.mean():.2f} · {len(table)} held-out "
+                f"rows · source {label}"
+            )
+            self._stat_plot.clear()
+            positions = np.arange(1, len(sizes) + 1, dtype=float)
+            order = np.argsort(sizes)
+            self._stat_plot.scatter(
+                positions, sizes[order].astype(float), label="split set size"
+            )
+            self._stat_plot.line(
+                positions,
+                cond_sizes[order].astype(float),
+                label="label-conditional",
+                width=1,
+                index=1,
+                style="dash",
+            )
+            self._stat_plot.set_labels(
+                x="held-out row (sorted by split set size)",
+                y="prediction-set size",
+                title=f"Conformal label sets at alpha={alpha:g}",
+            )
+
+        self._submit(
+            f"conformal label sets ({label})", job, done, self._stat_status
+        )
 
     def _start_stat_calibration(self) -> None:
         """Reliability diagnostics (classification)."""
