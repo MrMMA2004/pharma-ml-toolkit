@@ -211,6 +211,17 @@ NINE_CARDS: tuple[NineCard, ...] = (
     CARD_VISUALIZATION,
 )
 
+# part6 §6 (Phase 2): the card ORDER is owned by the pure-Python
+# capability registry under src/pharmaml/studio/; this module owns the
+# card PRESENTATION (titles, badges, entries).  The two sources must
+# never diverge — this check fails the import loudly if they do.
+from pharmaml.studio.capability_registry import CARD_ORDER as _REGISTRY_CARD_ORDER  # noqa: E402
+
+assert tuple(c.card_id for c in NINE_CARDS) == _REGISTRY_CARD_ORDER, (
+    "ui/nine_cards.py and pharmaml.studio.capability_registry disagree on the "
+    "nine primary cards — fix the divergence before shipping (part6 §2.1/§6)"
+)
+
 #: Phase-3 responsive thresholds: at/above 880 logical px the directive's
 #: canonical 3×3; from 560 to 879 two columns; below 560 a single column.
 #: The order is row-major at every width — only the column count changes.

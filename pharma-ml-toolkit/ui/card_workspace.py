@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from .nine_cards import NINE_CARDS, NineCard
+from pharmaml.studio.capability_registry import capabilities_for_card
 
 #: Section keys whose workflows the Advanced sidebar and Ctrl+1..9 cover;
 #: the workspace itself always shows every card entry.
@@ -78,6 +79,25 @@ class CardWorkspace(QWidget):
         caps.setObjectName("studioSectionTitle")
         caps.setWordWrap(True)
         lay.addWidget(caps, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        # -- the registry's capability list for this card (part6 §6) ------
+        # Status is honest: integrated rows are live today; api rows are
+        # the Phase-3 targets (real backend + tests, GUI form pending).
+        card_caps = capabilities_for_card(card.card_id)
+        if card_caps:
+            status_words = {
+                "integrated": "ready",
+                "api": "Phase 3",
+                "cli": "Phase 3",
+                "blocked": "unavailable",
+            }
+            listing = " · ".join(
+                f"{cap.name} ({status_words[cap.status]})" for cap in card_caps
+            )
+            cap_list = QLabel(listing)
+            cap_list.setObjectName("nineCardLivePreview")
+            cap_list.setWordWrap(True)
+            lay.addWidget(cap_list)
 
         # -- workflow entries -----------------------------------------------
         entries_header = QLabel("Workflows in this card")

@@ -14378,3 +14378,21 @@ was missing from the rebuilt venv (recovery gap) — installed.
 
 Next (Phase 2): the full capability→card assignment audit, the
 registry under src/pharmaml/studio/, and the Other-card decision.
+
+## R16 (part6 Phase 2) — the complete capability registry — 2026-11-13
+
+First cleared the R15 debt: v1.2.185 zip rebuilt + §14 audit 8/8.
+Then Phase 2: src/pharmaml/studio/capability_registry.py — 52
+capabilities, every backend module/symbol/test verified by script
+against the live tree (not prose).  The 19 C-list modules all carry
+primary cards now; NO Other card (§2.3 rule 8, pinned by test).
+tests/test_capability_registry.py = the eleven §6.2 rules, 27 pins;
+they caught 4 real gaps during writing (4 page rows missing, 1 symbol
+in the wrong module).  ui/nine_cards.py asserts registry agreement at
+import; CardWorkspace lists capabilities with honest status;
+CAPABILITY_MAP.md regenerated from the registry by the updated
+generator script.
+
+Next (Phase 3): the GUI forms for the 19 api rows — forms → execution
+→ results → export, each calling the existing backend (§3.3: one
+canonical implementation, never a GUI reimplementation).

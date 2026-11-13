@@ -11,19 +11,18 @@ capability→card mapping and the migration plan for Phases 1-6.
 
 ```
 studio.py → ui.run() → MainWindow
-  ├─ Navigation sidebar (18 SECTIONS, collapsible, dominant default)
-  └─ QStackedWidget(18 pages)
-       └─ DashboardPage → build_nine_card_grid()  ← the §5 grid is a
-                                                    widget INSIDE the
-                                                    dashboard page
+  ├─ TopBar (Home / Back / location / jobs / Settings / Advanced)
+  └─ mode stack: NineCardHome (default) → CardWorkspaces ×9 →
+       QStackedWidget(18 pages, unchanged)
+       (the 18-section sidebar rides only behind the Advanced toggle)
 ```
 
-The nine cards exist, are in the directive's exact order, carry live
-dependency probes and real evidence previews, and every entry button
-routes through `MainWindow.go_to(section)` — but they live *inside* the
-Dashboard page of an 18-page sidebar application.  Part6 §2.1 requires
-the inverse: the nine-card home as the primary screen with the sidebar
-demoted to an optional advanced mode.  That inversion is Phase 1.
+Since v1.2.185 (Phase 1) the Studio opens on the nine-card home;
+`MainWindow.go_to(section)` remains the single routing API and all 18
+pages are preserved.  Since v1.2.186 (Phase 2) the card ORDER and the
+capability assignments live in the pure-Python registry
+`src/pharmaml/studio/capability_registry.py` (Qt-free, §6);
+`ui/nine_cards.py` asserts agreement at import time.
 
 ## 2. The eighteen pages and their verified backends
 
@@ -48,8 +47,8 @@ demoted to an optional advanced mode.  That inversion is Phase 1.
 | `utilities` | chem, chem.converters, docking, pharma, utils.io, viz | 02 Datasets + cross-card utilities |
 | `settings_page` | — | 01 Introduction (global menu) |
 
-Tests: 555 UI test functions across
-39 UI suites; page smoke
+Tests: 576 UI test functions across
+40 UI suites; page smoke
 coverage via `tests/ui/test_pages_smoke.py`.
 
 ## 3. Backend census
@@ -57,45 +56,53 @@ coverage via `tests/ui/test_pages_smoke.py`.
 - `src/pharmaml/ml/`: **92 modules**,
 74,074 lines.
 - CLI: **62** `add_parser` sites (16 command groups).
-- Library tests: 4514 test functions across
-137 suites.
+- Library tests: 4541 test functions across
+138 suites.
 - `src/pharmaml/studio/` (runs + evidence): the §11 real-evidence
   backend already exists — Phase 4 extends, not replaces, it.
 
-## 4. Backend-only capabilities (the honest C-list)
+## 4. Backend-only capabilities — now ASSIGNED (Phase 2 complete)
 
-No Studio page, dialog, web card, or API route references these
-modules (verified by import grep + the `test_feature_inventory.py`
-word-match guard).  They have real implementations and real tests.
-Phase 3 gives each its GUI workflow under the owning card:
+The Phase-0 audit found these modules referenced by no Studio page.
+As of v1.2.186 every one carries its **primary card assignment**
+(part6 §6.1) in the machine-checkable registry
+`src/pharmaml/studio/capability_registry.py`; the 11 §6.2 validation
+rules are pinned by `tests/test_capability_registry.py` (27 pins).
+Status `api` means the backend and its tests are real, and the GUI
+form is the Phase-3 work:
 
-| Module | What it does | Owning card (Phase 3 target) |
-| --- | --- | --- |
-| `ml/calibration.py` | probability calibration reports/recalibration | 03 Machine Learning (Phase 3) |
-| `ml/comparison.py` | paired model-comparison tests + corrections | 03 Machine Learning (Phase 3) |
-| `ml/conformal.py` | split-conformal regression intervals | 03 Machine Learning (Phase 3) |
-| `ml/conformal_classification.py` | classification/label-conditional prediction sets | 03 Machine Learning (Phase 3) |
-| `ml/coverage_diagnostics.py` | empirical-vs-nominal coverage shortfall table | 03 Machine Learning (Phase 3) |
-| `ml/decision.py` | decision-curve analysis | 03 Machine Learning (Phase 3) |
-| `ml/drift.py` | distribution-shift detection (PSI/quantile sketches) | 03 Machine Learning (Phase 3) |
-| `ml/geometric.py` | geometric deep-learning primitives | 04 Deep Learning (Phase 3) |
-| `ml/gnn.py` | GNN featuriser/trainer + XAI registry | 04 Deep Learning (Phase 3) |
-| `ml/gnnxai.py` | GNN explainability | 04 Deep Learning (Phase 3) |
-| `ml/harness.py` | offline sharded-training harness (ZeRO + early stopping) | 04 Deep Learning (Phase 3) |
-| `ml/model_card.py` | model cards / provenance sheets | 03 Machine Learning (Phase 3) |
-| `ml/multiplicity.py` | multiple-comparison corrections | 03 Machine Learning (Phase 3) |
-| `ml/power.py` | fold-count power analysis | 03 Machine Learning (Phase 3) |
-| `ml/pruning.py` | magnitude/structured network pruning | 04 Deep Learning (Phase 3) |
-| `ml/quantization.py` | int8/fp16-style quantisation arithmetic | 04 Deep Learning (Phase 3) |
-| `ml/sar.py` | MMP / activity cliffs / R-groups | 03 Machine Learning (Phase 3) |
-| `ml/split_audit.py` | identifier-overlap audit across splits | 02 Datasets (Phase 3) |
-| `ml/subgroups.py` | subgroup performance audits | 03 Machine Learning (Phase 3) |
+| Module | What it does | Primary card | Route (Phase-3 form) |
+| --- | --- | --- | --- |
+| `pharmaml.ml.split_audit` | Identifier-overlap audit across splits | datasets | data |
+| `pharmaml.ml.calibration` | Probability calibration + recalibration | machine-learning | mlworkbench |
+| `pharmaml.ml.comparison` | Paired model-comparison tests | machine-learning | mlworkbench |
+| `pharmaml.ml.conformal` | Split-conformal regression intervals | machine-learning | mlworkbench |
+| `pharmaml.ml.conformal_classification` | Conformal classification sets | machine-learning | mlworkbench |
+| `pharmaml.ml.coverage_diagnostics` | Coverage-shortfall diagnostics | machine-learning | mlworkbench |
+| `pharmaml.ml.decision` | Decision-curve analysis | machine-learning | mlworkbench |
+| `pharmaml.ml.drift` | Distribution-shift detection | machine-learning | mlworkbench |
+| `pharmaml.ml.model_card` | Model cards / provenance sheets | machine-learning | models |
+| `pharmaml.ml.multiplicity` | Multiple-comparison corrections | machine-learning | mlworkbench |
+| `pharmaml.ml.power` | Fold-count power analysis | machine-learning | mlworkbench |
+| `pharmaml.ml.sar` | MMP / activity cliffs / R-groups | machine-learning | mlworkbench |
+| `pharmaml.ml.subgroups` | Subgroup performance audits | machine-learning | mlworkbench |
+| `pharmaml.ml.geometric` | Geometric deep-learning primitives | deep-learning | deep_learning |
+| `pharmaml.ml.gnn` | GNN training + graph featurisation | deep-learning | deep_learning |
+| `pharmaml.ml.gnnxai` | GNN explainability | deep-learning | deep_learning |
+| `pharmaml.ml.harness` | Offline sharded-training harness | deep-learning | deep_learning |
+| `pharmaml.ml.pruning` | Magnitude/structured pruning | deep-learning | deep_learning |
+| `pharmaml.ml.quantization` | Quantisation arithmetic | deep-learning | deep_learning |
 
-The part6 §14.1 requirement 'the eight previously documented
-Backend-only capability groups' maps to the first ten rows (gnn+gnnxai
-count as one group, conformal+conformal_classification as one); the
-nine r13-landed statistical modules extend the same list and are
-handled by the same Phase-3 pass.
+### The Other-card decision (part6 §2.3)
+
+After the full assignment pass, **no Other card is created** (§2.3
+rule 8): every genuine user-facing capability above has a logical
+home — 13 modules under Machine Learning, 5 under Deep Learning, 1
+under Datasets — and the remaining Studio sections (biology,
+foundations, best-of-ml, responseai) are integrated pages with real
+backends, already reachable.  The decision is pinned by
+`TestRule3OtherPosition` so it can only change through a new,
+justified assignment audit, never by drift.
 
 ## 5. What counts as integrated (§3.2, restated as the gate)
 
@@ -106,14 +113,16 @@ preserves metadata/provenance.  Import presence, a button, or a
 synthetic demo is NOT integration.  Phase 6's coverage tests enforce
 this against the registry, not against prose.
 
+Registry coverage (live): **52 capabilities**, 19 api, 33 integrated; orphans 0; test gaps 0; Other card absent.
+
 ## 6. Migration plan (Phases 1-6)
 
-- **Phase 1 — nine-card-first shell:** invert MainWindow so the
+- **Phase 1 — nine-card-first shell (DONE, v1.2.185):** invert MainWindow so the
   nine-card home is the default screen; sidebar becomes an optional
   advanced mode; Home/Back + history; Settings via global menu;
   all 18 pages preserved as card workspaces; registry validation
   tests (exact order, Other-last, routes valid).
-- **Phase 2 — full capability assignment:** every public capability
+- **Phase 2 — full capability assignment (DONE, v1.2.186):** every public capability
   mapped to exactly one primary card (§6.1 unique ownership); the
   C-list above reclassified as it lands; `Other` added last only if
   genuinely unassignable capabilities remain.
@@ -130,13 +139,12 @@ this against the registry, not against prose.
   end-to-end workflow tests per card, dependency-matrix verification,
   documentation + screenshots, release validation.
 
-## 7. Phase-0 gaps found (recorded, not yet fixed)
+## 7. Gaps (1-3 CLOSED; 4-5 are the Phase-4 targets)
 
-1. The nine-card grid is Dashboard-embedded, not the main screen
-   (Phase 1 target).
-2. `settings` is the only section no card references (must move to a
-   global application menu per §2.1/§5.2).
-3. The 19 backend-only modules in §4 above have no GUI route.
+1. CLOSED v1.2.185 (Phase 1): the nine-card grid IS the main screen.
+2. CLOSED v1.2.185 (Phase 1): Settings lives on the global top bar.
+3. CLOSED v1.2.186 (Phase 2): all 19 backend-only modules carry
+   primary-card assignments in the registry; GUI forms = Phase 3.
 4. No global capability search exists yet (Phase 4).
 5. No shared project/session layer beyond `studio.runs` evidence
    collectors (Phase 4).

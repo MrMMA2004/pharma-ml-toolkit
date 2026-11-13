@@ -1,3 +1,40 @@
+## [1.2.186] — 2026-11-13
+### Added — part6 round 16 (Phase 2): the complete capability registry
+
+- **`src/pharmaml/studio/capability_registry.py`** — the single source
+  of truth for feature registration (part6 §6): 52 capabilities, each
+  with a stable ID, verified backend module + public API symbols, the
+  primary card (§6.1 unique ownership), the Studio route, dependency/
+  engine declarations, an honest status (integrated / api / cli /
+  blocked) and test references.  Pure Python, Qt-free (pinned by a
+  subprocess test); `ui/nine_cards.py` asserts agreement with the
+  registry's card order at import time, so the two sources can never
+  drift apart.
+- **The full capability→card assignment:** every user-facing capability
+  now has exactly one primary card.  The 19 class-C backend-only
+  modules from the Phase-0 audit are assigned — 13 to Machine
+  Learning, 5 to Deep Learning, 1 to Datasets — with their Phase-3
+  GUI targets recorded honestly (`status: api`).
+- **The Other-card decision (§2.3):** NO Other card.  After the
+  assignment pass nothing user-facing remains homeless, so rule 8
+  applies; the decision is pinned by
+  `TestRule3OtherPosition` and can only change through a new,
+  justified audit.
+- **`tests/test_capability_registry.py`** — 27 pins implementing the
+  eleven §6.2 validation rules (identifiers, directive order,
+  Other-last, routes resolve, backend references real, no orphans,
+  unique ownership, all pages reachable, deps/engines disclosed,
+  statuses honest, tests referenced) plus the automated coverage
+  summary.  The rules caught four real gaps while being written
+  (biology/foundations/bestofml/responseai rows missing, an XvgSeries
+  symbol living in the wrong module) — fixed, all 52 rows now
+  verified against the live tree.
+- **Card workspaces** list their card's capabilities from the registry
+  with per-capability status (ready / Phase 3).
+- **`docs/CAPABILITY_MAP.md`** regenerated from the live registry: §4
+  is now the assignment table, gaps 1-3 are closed, the migration
+  plan marks Phases 1-2 done.
+
 ## [1.2.185] — 2026-11-13
 ### Added — part6 round 15 (Phase 1): the nine-card-first shell lands
 

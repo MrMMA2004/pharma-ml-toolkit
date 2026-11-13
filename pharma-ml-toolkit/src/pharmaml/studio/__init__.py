@@ -30,6 +30,18 @@ from pharmaml.studio.evidence import (
     pkpd_evidence,
     viz_evidence,
 )
+from pharmaml.studio.capability_registry import (
+    CAPABILITIES,
+    CARD_ORDER,
+    OTHER_CARD_PRESENT,
+    SECTION_KEYS,
+    Capability,
+    RegistrySummary,
+    capabilities_for_card,
+    card_route_target,
+    find,
+    summary,
+)
 from pharmaml.studio.runs import (
     RUN_SCHEMA,
     latest_runs,
@@ -39,9 +51,19 @@ from pharmaml.studio.runs import (
 )
 
 __all__ = [
+    "CAPABILITIES",
+    "CARD_ORDER",
     "EMPTY_STATES",
+    "OTHER_CARD_PRESENT",
     "RUN_SCHEMA",
+    "SECTION_KEYS",
+    "Capability",
     "CardEvidence",
+    "RegistrySummary",
+    "capabilities_for_card",
+    "card_route_target",
+    "find",
+    "summary",
     "collect_evidence",
     "dataset_evidence",
     "dl_evidence",
