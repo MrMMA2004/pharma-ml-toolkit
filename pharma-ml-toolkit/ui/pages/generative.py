@@ -381,6 +381,13 @@ class GenerativeWorkbenchPage(QWidget):
         self._seed_spin.setValue(42)
         knobs_lay.addWidget(QLabel("seed:"))
         knobs_lay.addWidget(self._seed_spin)
+        # §17 F (Phase 5): the search-budget knobs explain themselves
+        from pharmaml.studio import apply_help as _help
+
+        _help(self._mcts_iterations, "mcts_iterations")
+        _help(self._rl_iterations, "epochs")
+        _help(self._seed_spin, "random_seed")
+        _help(self._generations, "population_size")
         form.addRow("budget:", knobs)
         self._evolve_btn = QPushButton("Evolve")
         self._evolve_btn.setMinimumHeight(34)

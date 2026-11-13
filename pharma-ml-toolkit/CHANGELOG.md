@@ -1,3 +1,39 @@
+## [1.2.192] — 2026-11-13
+### Added — part6 round 22 (Phase 5): contextual help, memory-aware presets, GUI dependency diagnostics
+
+- **Contextual scientific help (§17 F)** — `pharmaml.studio.glossary`: 45
+  short, unit-bearing explanations for the parameters, metrics and
+  algorithms the Studio's controls actually use (RMSD's Å and alignment
+  caveat, AUC's PK-vs-ROC disambiguation, conformal's exchangeability
+  assumption, CL's mL/min, SA score's heuristic nature…). Pure, no Qt;
+  `apply_help(widget, key)` puts ONE authoritative explanation on every
+  control that uses a term. Wired onto the four thinnest pages: PK/PD
+  (7 controls), Molecular Dynamics (3), Docking (2), Generative (4).
+- **Memory-aware execution presets (§17 E)** —
+  `pharmaml.utils.resources`: an HONEST resource probe (cgroup v2
+  `memory.max`, cgroup v1 `memory.limit_in_bytes`, `/proc/meminfo`
+  `MemAvailable`; the tighter bound wins; `None` when nothing is
+  readable — psutil deliberately not a dependency). Two presets over
+  the two real knobs (joblib `n_jobs`, streaming `chunk_rows`):
+  Balanced (all cores, 50k chunks) and Low-memory/eco (1 worker, 10k
+  chunks) with their trade spelled out. The low-memory RECOMMENDATION
+  fires only on evidenced memory under 2 GiB — an unknown size is
+  never treated as low. Settings gains the preset picker + a live
+  probe readout that says "GPUs are not probed".
+- **Dependency diagnostics in the GUI (§12)** — the Settings page now
+  renders the same 16 checks as `studio.py --doctor` live, with the
+  fix line for every failing check (never silently hidden).
+- **Accessibility** — the top bar's location/job labels announce with
+  context ("Current location: …", "Job status: idle"), and toast
+  notifications announce their severity.
+- **Registry:** 3 Phase-5 rows (glossary, presets, doctor panel) —
+  60 integrated / 0 api.
+- **Tests:** `tests/test_phase5_backends.py` (11) + `tests/ui/test_phase5.py`
+  (7): glossary length/unit/typo pins, probe honesty (unknown→None,
+  tighter-bound intersection, sentinel rejection), preset fallback +
+  evidence-gated recommendation, settings surfaces, tooltips on the
+  four pages, accessible names.
+
 ## [1.2.191] — 2026-11-13
 ### Added — part6 round 21 (Phase 4): global search, shared workspace, unified job center
 

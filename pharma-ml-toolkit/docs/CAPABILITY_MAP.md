@@ -45,10 +45,10 @@ capability assignments live in the pure-Python registry
 | `image_lab` | biology, chem.descriptors, chem.similarity, studio, viz.export | 09 Visualization |
 | `molecular_dynamics` | md, studio, viz, viz.export | 08 Molecular Dynamics Analysis |
 | `utilities` | chem, chem.converters, docking, pharma, utils.io, viz | 02 Datasets + cross-card utilities |
-| `settings_page` | — | 01 Introduction (global menu) |
+| `settings_page` | utils.resources | 01 Introduction (global menu) |
 
-Tests: 629 UI test functions across
-45 UI suites; page smoke
+Tests: 636 UI test functions across
+46 UI suites; page smoke
 coverage via `tests/ui/test_pages_smoke.py`.
 
 ## 3. Backend census
@@ -56,8 +56,8 @@ coverage via `tests/ui/test_pages_smoke.py`.
 - `src/pharmaml/ml/`: **92 modules**,
 74,074 lines.
 - CLI: **62** `add_parser` sites (16 command groups).
-- Library tests: 4541 test functions across
-138 suites.
+- Library tests: 4552 test functions across
+139 suites.
 - `src/pharmaml/studio/` (runs + evidence): the §11 real-evidence
   backend already exists — Phase 4 extends, not replaces, it.
 
@@ -94,7 +94,7 @@ preserves metadata/provenance.  Import presence, a button, or a
 synthetic demo is NOT integration.  Phase 6's coverage tests enforce
 this against the registry, not against prose.
 
-Registry coverage (live): **57 capabilities**, 57 integrated; orphans 0; test gaps 0; Other card absent.
+Registry coverage (live): **60 capabilities**, 60 integrated; orphans 0; test gaps 0; Other card absent.
 
 ## 6. Migration plan (Phases 1-6)
 

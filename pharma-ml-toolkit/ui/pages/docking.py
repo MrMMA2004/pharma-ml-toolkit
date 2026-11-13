@@ -367,6 +367,11 @@ class DockingWorkbenchPage(QWidget):
         self._plif_btn.setMinimumHeight(34)
         self._plif_btn.clicked.connect(self._start_plif)
         form.addRow("", self._plif_btn)
+        # §17 F (Phase 5): the scientific reading of the outputs
+        from pharmaml.studio import apply_help as _help
+
+        _help(self._plif_btn, "plif")
+        _help(self._pose_combo, "binding_mode")
         hint = QLabel(
             "The pose-level reading: read_pdb_atoms on the real lysozyme "
             "+ read_pdbqt_atoms on the bundled synthetic pose (ten atoms "

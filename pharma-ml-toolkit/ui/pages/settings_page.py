@@ -36,6 +36,80 @@ class SettingsPage(QWidget):
         title.setObjectName("studioPageTitle")
         lay.addWidget(title)
 
+        # -- execution preset + resource readout (§17 E, Phase 5) ------------
+        perf_title = QLabel("Execution & resources")
+        perf_title.setObjectName("studioPageTitle")
+        lay.addWidget(perf_title)
+        self._preset_combo = QComboBox()
+        from pharmaml.utils.resources import (
+            PRESETS, preset_for_low_memory, snapshot, stored_preset,
+        )
+
+        for preset in PRESETS:
+            self._preset_combo.addItem(f"{preset.label} — {preset.trades}",
+                                       preset.key)
+        # the recommendation is only as confident as the memory evidence
+        recommended = preset_for_low_memory()
+        self._preset_combo.setCurrentIndex(
+            next((i for i in range(self._preset_combo.count())
+                  if self._preset_combo.itemData(i) == recommended), 0)
+        )
+        if recommended == "eco":
+            hint = (" (recommended: this machine's available memory was "
+                    "evidenced under 2 GiB)")
+        else:
+            hint = ""
+        self._preset_combo.setToolTip(
+            "The resource policy for background jobs: worker count and "
+            "the streaming reader's chunk size" + hint
+        )
+        self._preset_combo.currentIndexChanged.connect(self._preset_changed)
+        preset_form = QFormLayout()
+        preset_form.addRow("Execution preset:", self._preset_combo)
+        lay.addLayout(preset_form)
+
+        snap = snapshot()
+        readout = QLabel(
+            f"Live probe: {snap.cpu_count} CPUs · "
+            f"available memory {snap.memory_gib()} "
+            f"(source: {snap.memory_source}). GPUs are not probed — "
+            "no GPU claim is made without evidence."
+        )
+        readout.setObjectName("studioMigrationNote")
+        readout.setWordWrap(True)
+        lay.addWidget(readout)
+
+        # -- dependency transparency (§12, Phase 5): the doctor in the GUI --
+        dep_title = QLabel("Dependency diagnostics")
+        dep_title.setObjectName("studioPageTitle")
+        lay.addWidget(dep_title)
+        from ..doctor import collect_checks
+
+        checks = collect_checks()
+        ok = sum(1 for c in checks if c.status == "OK")
+        dep_summary = QLabel(
+            f"Environment doctor: {ok}/{len(checks)} checks passed "
+            "(the same checks as `python studio.py --doctor`)."
+        )
+        dep_summary.setObjectName("studioMigrationNote")
+        dep_summary.setWordWrap(True)
+        lay.addWidget(dep_summary)
+        self._doctor_detail = QLabel()
+        self._doctor_detail.setWordWrap(True)
+        from PySide6.QtCore import Qt
+
+        self._doctor_detail.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        failed_lines = [
+            f"✗ {c.name}: {c.fix or c.detail}" for c in checks if c.status != "OK"
+        ]
+        if failed_lines:
+            self._doctor_detail.setText("\n".join(failed_lines))
+        else:
+            self._doctor_detail.setText("All launch-environment checks pass.")
+        lay.addWidget(self._doctor_detail)
+
         form = QFormLayout()
         self._provider_combo = QComboBox()
         for provider in PROVIDERS:
@@ -90,6 +164,20 @@ class SettingsPage(QWidget):
     def _provider_changed(self, _provider: str) -> None:
         self._repopulate_themes()
         self._apply()
+
+    def _preset_changed(self, index: int) -> None:
+        """Persist the §17 E execution preset (session echo + QSettings)."""
+        from pharmaml.utils.resources import find_preset, store_preset
+
+        key = self._preset_combo.itemData(index) if index >= 0 else "balanced"
+        preset = find_preset(str(key))
+        store_preset(preset.key)
+        try:  # the durable store; failures never block the switch
+            from PySide6.QtCore import QSettings
+
+            QSettings().setValue("execution/preset", preset.key)
+        except Exception:  # noqa: BLE001 - settings must never block launch
+            pass
 
     def _apply(self) -> None:
         density = self._density_combo.currentData()

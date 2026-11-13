@@ -68,6 +68,14 @@ class MolecularDynamicsPage(QWidget):
         self._second_metric = QComboBox()
         self._x_label = QLineEdit("Time / index")
         self._y_label = QLineEdit("Value")
+        # §17 F (Phase 5): the metric choices carry their glossary
+        # explanations, so a hover states the unit and the caveat
+        # (alignment for RMSD, average-structure for RMSF…).
+        from pharmaml.studio import apply_help as _help
+
+        _help(self._metric, "rmsd")
+        _help(self._second_metric, "rmsf")
+        _help(self._ligand, "plif")
         form.addRow("Ligand:", self._ligand)
         form.addRow("Metric:", self._metric)
         form.addRow("Second metric:", self._second_metric)

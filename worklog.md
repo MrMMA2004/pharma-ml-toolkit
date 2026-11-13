@@ -14486,3 +14486,28 @@ Also fixed a registry gap: gen.rl + gen.mcts rows (real since
 v1.2.107, never registered). Registry now 57 integrated / 0 api.
 
 Suite 13/13; gates 51/51; UI battery 620 across all 45 suites.
+
+## R22 (part6 Phase 5) — 2026-11-13
+
+The refinement phase, over the pinned responsive/chart/viz/preview
+infrastructure (§11 already test-covered):
+
+1. §17 F contextual help: pharmaml.studio.glossary (45 entries, pure,
+   unit-bearing, honest caveats) + apply_help() on the four thinnest
+   pages (pkpd 7, MD 3, docking 2, generative 4 controls).
+2. §17 E memory-aware presets: pharmaml.utils.resources — honest probe
+   (cgroup v2/v1 + MemAvailable, tighter bound, None when unknown, no
+   psutil dep), balanced/eco presets over n_jobs+chunk_rows with
+   spelled-out trades, evidence-gated low-memory recommendation;
+   Settings preset picker + live readout ("GPUs are not probed").
+3. §12 GUI dependency diagnostics: the Settings page renders the 16
+   doctor checks live with fixes for failures.
+4. Accessibility: accessibleNames on the top bar's location/jobs
+   labels; severity-announcing toasts.
+
+Bugs caught by the new tests (never shipped): tooltip-before-create
+ordering on 2 pages; doctor status vocabulary ("OK" not "ok");
+QLabel-without-QApplication abort moved to the UI suite.
+
+tests: backends 11/11 + ui 7/7; gates 81/81; UI battery 705 across all
+46 suites; library spot-checks (studio/io) 118.

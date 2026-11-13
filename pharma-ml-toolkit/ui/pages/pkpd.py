@@ -224,9 +224,18 @@ class PKPDWorkbenchPage(QWidget):
     def _build_regimen_tab(self) -> QWidget:
         tab = QWidget()
         form = QFormLayout(tab)
+        # §17 F (Phase 5): the glossary owns every parameter's short
+        # explanation, so the PK terms say the same thing everywhere.
+        from pharmaml.studio import apply_help as _help
+
         self._regimen_entries: dict[str, QLineEdit] = {}
+        # the glossary keys for the two-compartment fields that carry a
+        # scientific meaning worth a hover: CL and the dosing interval
+        _field_help = {"cl": "clearance", "tau_h": "half_life"}
         for key, label, default in _REGIMEN_FIELDS:
             entry = QLineEdit(default)
+            if key in _field_help:
+                _help(entry, _field_help[key])
             self._regimen_entries[key] = entry
             form.addRow(f"{label}:", entry)
         self._route_combo = QComboBox()
@@ -241,9 +250,13 @@ class PKPDWorkbenchPage(QWidget):
     def _build_nca_tab(self) -> QWidget:
         tab = QWidget()
         form = QFormLayout(tab)
+        from pharmaml.studio import apply_help as _help
+
         self._nca_times = QLineEdit(_NCA_DEFAULT_TIMES)
+        _help(self._nca_times, "half_life")
         form.addRow("times (h):", self._nca_times)
         self._nca_concs = QLineEdit(_NCA_DEFAULT_CONCS)
+        _help(self._nca_concs, "auc_pk")
         form.addRow("concentrations:", self._nca_concs)
         self._nca_dose = QLineEdit()
         self._nca_dose.setPlaceholderText("optional")
@@ -263,9 +276,13 @@ class PKPDWorkbenchPage(QWidget):
     def _build_events_tab(self) -> QWidget:
         tab = QWidget()
         form = QFormLayout(tab)
+        from pharmaml.studio import apply_help as _help
+
         self._ev_dose = QLineEdit("500")
+        _help(self._ev_dose, "mabel_dose")
         form.addRow("dose (mg):", self._ev_dose)
         self._ev_ii = QLineEdit("12")
+        _help(self._ev_ii, "half_life")
         form.addRow("interval (h):", self._ev_ii)
         self._ev_until = QLineEdit("72")
         form.addRow("until (h):", self._ev_until)

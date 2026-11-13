@@ -28,6 +28,9 @@ class NotificationBar(QLabel):
     def __init__(self, text: str, kind: str = "info", parent: QWidget | None = None) -> None:
         super().__init__(text, parent)
         bg, fg = KIND_STYLES.get(kind, KIND_STYLES["info"])
+        # Phase 5 accessibility: screen readers announce the toast as a
+        # notification of its severity, not as an anonymous label.
+        self.setAccessibleName(f"{kind.title()} notification: {text}")
         self.setStyleSheet(
             f"QLabel {{ background: {bg}; color: {fg}; border-radius: 6px;"
             " padding: 8px 12px; font-weight: 600; }}"

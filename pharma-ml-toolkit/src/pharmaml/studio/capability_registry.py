@@ -109,6 +109,10 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability("intro.search", "Global capability search / command palette", "ui.search_index", "build_search_index, search", "introduction", "dashboard", "integrated", tests=("tests/ui/test_phase4.py",)),
     Capability("intro.workspace", "Shared session workspace (recents + registries)", "pharmaml.studio.workspace", "note, entries, summary_counts", "introduction", "dashboard", "integrated", tests=("tests/ui/test_phase4.py",)),
     Capability("intro.job_center", "Unified job center (live job + run history)", "ui.widgets.job_center", "JobCenterDialog", "introduction", "dashboard", "integrated", tests=("tests/ui/test_phase4.py",)),
+    # -- Phase 5 (part6 §16/§17 E-F): contextual help, presets, diagnostics ----
+    Capability("intro.glossary", "Contextual scientific help (glossary tooltips)", "pharmaml.studio.glossary", "GLOSSARY, apply_help", "introduction", "settings", "integrated", tests=("tests/test_phase5_backends.py", "tests/ui/test_phase5.py")),
+    Capability("intro.presets", "Memory-aware execution presets + resource probe", "pharmaml.utils.resources", "snapshot, PRESETS, preset_for_low_memory", "introduction", "settings", "integrated", tests=("tests/test_phase5_backends.py", "tests/ui/test_phase5.py")),
+    Capability("intro.doctor_panel", "Dependency diagnostics panel (GUI doctor)", "ui.pages.settings_page", "SettingsPage", "introduction", "settings", "integrated", tests=("tests/ui/test_phase5.py",)),
     # -- Card 02 · Datasets --------------------------------------------------
     Capability("data.ingest", "CSV/TSV/Excel ingestion", "pharmaml.utils.io", "read_table, write_table", "datasets", "data", "integrated", tests=("tests/ui/test_pages_smoke.py::test_data_explorer_loads_real_csv", "tests/ui/test_pages_smoke.py::test_data_explorer_reads_excel_too")),
     Capability("data.profile", "Profiling + quality reports", "pharmaml.data_profiling", "profile_frame, profile_alerts", "datasets", "data", "integrated", tests=("tests/test_csv_standardize.py",)),

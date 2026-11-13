@@ -96,10 +96,16 @@ class TopBar(QWidget):
 
     def set_location(self, text: str) -> None:
         self.location.setText(text)
+        # Phase 5 accessibility: the location/jobs labels are read out
+        # with context by screen readers, not as bare text fragments.
+        self.location.setAccessibleName(f"Current location: {text}")
 
     def set_jobs(self, text: str) -> None:
         """Empty string means idle; MainWindow writes real runner state."""
         self.jobs_label.setText(text)
+        self.jobs_label.setAccessibleName(
+            f"Job status: {text}" if text else "Job status: idle"
+        )
 
     def set_back_enabled(self, enabled: bool) -> None:
         self.back_btn.setEnabled(enabled)

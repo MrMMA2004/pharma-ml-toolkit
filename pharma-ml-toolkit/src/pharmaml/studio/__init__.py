@@ -49,6 +49,13 @@ from pharmaml.studio.runs import (
     run_families,
     runs_root,
 )
+from pharmaml.studio.glossary import (
+    GLOSSARY,
+    apply_help,
+    explanation,
+    missing_keys,
+    tooltip_text,
+)
 from pharmaml.studio.workspace import (
     WorkspaceEntry,
     current_project,
@@ -61,6 +68,11 @@ from pharmaml.studio.workspace import (
 
 __all__ = [
     "CAPABILITIES",
+    "GLOSSARY",
+    "apply_help",
+    "explanation",
+    "missing_keys",
+    "tooltip_text",
     "CARD_ORDER",
     "EMPTY_STATES",
     "OTHER_CARD_PRESENT",
