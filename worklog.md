@@ -14425,3 +14425,21 @@ the baseline), so a 2-model panel yields 1 row — pinned that.
 Next (Phase 3, batch 3): the Deep Learning cluster — geometric, gnn +
 gnnxai, pruning, quantization, harness (Deep Learning page forms),
 then sar and split_audit (Datasets page) close the C-list entirely.
+
+## R19 (part6 Phase 3, batch 3) — the Deep Learning cluster — 2026-11-13
+
+Efficiency lab (pruning one-shot + Zhu-Gupta ramp with a retrace
+callback, the 3-method quantization report, the ZeRO Table-3 planner)
+and GNN lab (motif dataset → GCN/SAGE/GAT classifier → edge
+explanation with motif recovery + fidelity) as two new tabs on the
+Deep Learning Workbench. 6-pin suite over the real backends; registry
+49 integrated / 3 api; C-list pin 3. Two honest-numbers corrections
+during testing: NF4's bpw on a 128x8 weight is 4.15625 (block-scales
+amortize differently than the docstring's 8x8 example), and the ZeRO
+arithmetic is fp16 (2/2/12 MB per rank at stage 0), not fp32 — both
+pinned from live backend runs, not the prose. Also fixed the guard's
+qsar/sar substring false positive with word-boundary matching.
+
+Next (Phase 3, batch 4 — the closer): sar on the Datasets page,
+conformal_classification beside the regression conformal card, and
+split_audit on the Data Explorer — C-list to zero.

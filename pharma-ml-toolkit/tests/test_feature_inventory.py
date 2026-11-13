@@ -25,15 +25,14 @@ CARD_DIRECTORY = REPO_ROOT / "src" / "components" / "explorer" / "playground" / 
 API_ROOT = REPO_ROOT / "src" / "app" / "api"
 
 BACKEND_ONLY_MODULES = (
-    "gnn", "geometric", "pruning", "quantization", "harness",
-    "conformal_classification", "split_audit",
+    "conformal_classification", "sar", "split_audit",
 )
 
-#: v1.2.188: comparison/multiplicity/power/coverage_diagnostics/
-#: subgroups/model_card left the class-C table (the ML statistics
-#: cluster rides the ML Workbench + Persistence A rows — no new page),
-#: so A grows by six module-workflows and C loses the whole cluster.
-STATUS_COUNTS = {"A": 42, "B": 6, "C": 1, "D": 0, "E": 0, "F": 3}
+#: v1.2.189: the Deep Learning cluster (geometric/gnn/gnnxai/pruning/
+#: quantization/harness) left the class-C table — the Efficiency lab
+#: and GNN lab ride the Deep Learning page's existing A row (no new
+#: page, so the FEATURE row count holds while the module count grows).
+STATUS_COUNTS = {"A": 43, "B": 6, "C": 3, "D": 0, "E": 0, "F": 3}
 
 
 def _doc() -> str:
@@ -167,13 +166,16 @@ class TestBackendOnlyHonesty:
             ]
             if p.name not in prose
         ]
+        import re as _re
+
         for mod in BACKEND_ONLY_MODULES:
+            pattern = _re.compile(rf"\b{mod}\b")
             for page in pages:
-                assert mod not in page.read_text(encoding="utf-8"), (
+                assert not pattern.search(page.read_text(encoding="utf-8")), (
                     f"{mod} now referenced by {page.name} — re-classify it"
                 )
             for web in web_files:
-                assert mod not in web.read_text(encoding="utf-8"), (
+                assert not pattern.search(web.read_text(encoding="utf-8")), (
                     f"{mod} now referenced by {web.name} — re-classify it"
                 )
 
@@ -191,15 +193,15 @@ class TestStatusSummary:
             )
 
     def test_row_total_consistency(self) -> None:
-        """18 pages + 12 web areas + 11 packages = 42 A/B FEATURE rows; C/E/F
-        add 4 more (1 backend-only cluster row, 3 external) — v1.2.187-188
-        moved the whole ML statistics cluster onto the ML Workbench's and
-        Persistence's existing A rows (no new pages, so A's count grows
-        without the FEATURE row count changing; the registry's 43
+        """18 pages + 12 web areas + 11 packages = 49 A/B FEATURE rows; E/F
+        add 6 more (3 backend-only, 3 external) — v1.2.187-189 moved the statistical
+        tools, the ML statistics cluster AND the Deep Learning cluster
+        onto existing pages' A rows (no new pages, so the module count
+        grows without the page count changing; the registry's 49
         integrated rows carry the per-module flip). The nine-card
         organization rides the Dashboard page row since v1.2.169 (§10)."""
-        assert STATUS_COUNTS["A"] + STATUS_COUNTS["B"] == 48
-        assert sum(STATUS_COUNTS.values()) == 52
+        assert STATUS_COUNTS["A"] + STATUS_COUNTS["B"] == 49
+        assert sum(STATUS_COUNTS.values()) == 55
 
     def test_synthetic_demo_register(self) -> None:
         text = _doc()

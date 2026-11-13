@@ -262,6 +262,9 @@ class DeepLearningWorkbenchPage(QWidget):
         self._tabs.addTab(self._build_runboard_tab(), "Runboard")
         self._tabs.addTab(self._build_umap_tab(), "UMAP map")
         self._tabs.addTab(self._build_curation_tab(), "Curation")
+        # part6 Phase 3, batch 3: the efficiency + GNN labs
+        self._tabs.addTab(self._build_efficiency_tab(), "Efficiency lab")
+        self._tabs.addTab(self._build_gnn_lab_tab(), "GNN lab")
         lay.addWidget(self._tabs)
 
         self._progress = ProgressPanel()
@@ -519,6 +522,519 @@ class DeepLearningWorkbenchPage(QWidget):
             return "classification"
         return "classification" if column.nunique() <= 10 else "regression"
 
+    # -- tab construction (part6 Phase 3, batch 3: the efficiency + GNN labs) ----
+    def _build_efficiency_tab(self) -> QWidget:
+        """The efficiency lab: pruning, quantization and the ZeRO planner.
+
+        part6 Phase 3, batch 3 — three §3.2 workflows over the canonical
+        backends (``ml.pruning``, ``ml.quantization``, ``ml.harness``):
+        a tape MLP gets magnitude-pruned along Zhu & Gupta's ramp, a
+        weight block gets the three-method quantization report, and a
+        model size gets the ZeRO Table-3 memory arithmetic across
+        stages 0-3.
+        """
+        tab = QWidget()
+        form = QFormLayout(tab)
+
+        self._eff_params = QSpinBox()
+        self._eff_params.setRange(2, 4096)
+        self._eff_params.setValue(256)
+        self._eff_params.setToolTip(
+            "The tape MLP's hidden size: Linear(in, hidden) + ReLU + "
+            "Linear(hidden, out), seeded — the pruning and quantization "
+            "subject."
+        )
+        form.addRow("hidden size:", self._eff_params)
+        self._eff_sparsity = QDoubleSpinBox()
+        self._eff_sparsity.setRange(0.05, 0.95)
+        self._eff_sparsity.setDecimals(2)
+        self._eff_sparsity.setSingleStep(0.05)
+        self._eff_sparsity.setValue(0.5)
+        self._eff_sparsity.setToolTip(
+            "Target sparsity for the one-shot prune (and the ramp's "
+            "final level for the iterative loop)."
+        )
+        form.addRow("target sparsity:", self._eff_sparsity)
+        self._eff_scope = QComboBox()
+        for token in ("local", "global"):
+            self._eff_scope.addItem(token)
+        self._eff_scope.setToolTip(
+            "local: each Linear layer pruned to the target on its own; "
+            "global: one threshold across all layers (small layers "
+            "can vanish entirely)."
+        )
+        form.addRow("prune scope:", self._eff_scope)
+        self._eff_steps = QSpinBox()
+        self._eff_steps.setRange(1, 10)
+        self._eff_steps.setValue(4)
+        self._eff_steps.setToolTip(
+            "The gradual ramp's levels for the iterative loop (1 = one-shot)."
+        )
+        form.addRow("ramp steps:", self._eff_steps)
+
+        run_row = QWidget()
+        run_lay = QHBoxLayout(run_row)
+        run_lay.setContentsMargins(0, 0, 0, 0)
+        self._eff_prune_btn = QPushButton("Prune")
+        self._eff_prune_btn.clicked.connect(self._start_eff_prune)
+        self._eff_prune_btn.setToolTip(
+            "Magnitude-prune the tape MLP one-shot, then walk the gradual "
+            "sparsity ramp with a retrain callback between levels — the "
+            "per-layer report, the schedule and the recorded losses."
+        )
+        run_lay.addWidget(self._eff_prune_btn)
+        self._eff_quant_btn = QPushButton("Quantize")
+        self._eff_quant_btn.clicked.connect(self._start_eff_quant)
+        self._eff_quant_btn.setToolTip(
+            "The three-method quantization report over the MLP's first "
+            "Linear weight: NF4 (block 64 + double quant), int8 "
+            "per-tensor and int8 per-channel — bits per weight, RMSE, "
+            "relative error."
+        )
+        run_lay.addWidget(self._eff_quant_btn)
+        self._eff_zero_btn = QPushButton("ZeRO planner")
+        self._eff_zero_btn.clicked.connect(self._start_eff_zero)
+        self._eff_zero_btn.setToolTip(
+            "The ZeRO Table-3 memory arithmetic for this parameter count "
+            "across stages 0-3 and the chosen world size — what each "
+            "stage partitions, in bytes."
+        )
+        run_lay.addWidget(self._eff_zero_btn)
+        form.addRow("run:", run_row)
+
+        self._eff_world = QSpinBox()
+        self._eff_world.setRange(1, 64)
+        self._eff_world.setValue(4)
+        self._eff_world.setToolTip("Simulated ranks for the ZeRO planner.")
+        form.addRow("world size:", self._eff_world)
+        self._eff_millions = QDoubleSpinBox()
+        self._eff_millions.setRange(0.1, 1000.0)
+        self._eff_millions.setDecimals(1)
+        self._eff_millions.setSingleStep(1.0)
+        self._eff_millions.setValue(1.0)
+        self._eff_millions.setToolTip(
+            "The ZeRO planner's model size in millions of parameters "
+            "(fp32 training: params + grads + an 8-byte Adam state pair)."
+        )
+        form.addRow("ZeRO model (M params):", self._eff_millions)
+
+        hint = QLabel(
+            "the efficiency lab: ml.pruning's magnitude mask + Zhu-Gupta "
+            "ramp (tape MLP), ml.quantization's NF4/int8 report over the "
+            "same weight, and ml.harness's ZeRO memory arithmetic — "
+            "results land in the shared table/plot below."
+        )
+        hint.setWordWrap(True)
+        form.addRow("", hint)
+        return tab
+
+    def _build_gnn_lab_tab(self) -> QWidget:
+        """The GNN lab: motif dataset -> classifier -> explanation.
+
+        part6 Phase 3, batch 3 — the geometric-deep-learning entry
+        point (``ml.geometric`` + ``ml.gnnxai``'s fidelity arithmetic
+        inside): the GNNExplainer synthetic motif dataset, a GCN/SAGE/
+        GAT classifier trained on it, and a per-class edge-score
+        explanation with the fidelity pair and the probability walk."
+        """
+        tab = QWidget()
+        form = QFormLayout(tab)
+
+        self._gnn_motif = QComboBox()
+        for token in ("house", "cycle"):
+            self._gnn_motif.addItem(token)
+        self._gnn_motif.setToolTip(
+            "The GNNExplainer synthetic's motif: a 5-node house (square "
+            "plus roof) or a 6-node cycle, attached to half the random "
+            "base graphs."
+        )
+        form.addRow("motif:", self._gnn_motif)
+        self._gnn_graphs = QSpinBox()
+        self._gnn_graphs.setRange(20, 400)
+        self._gnn_graphs.setValue(120)
+        self._gnn_graphs.setSingleStep(20)
+        self._gnn_graphs.setToolTip("How many synthetic graphs to generate.")
+        form.addRow("graphs:", self._gnn_graphs)
+        self._gnn_layer = QComboBox()
+        for token in ("gcn", "sage", "gat"):
+            self._gnn_layer.addItem(token)
+        self._gnn_layer.setToolTip("The convolution kind behind both layers.")
+        form.addRow("convolution:", self._gnn_layer)
+        self._gnn_epochs = QSpinBox()
+        self._gnn_epochs.setRange(20, 500)
+        self._gnn_epochs.setValue(200)
+        self._gnn_epochs.setSingleStep(50)
+        self._gnn_epochs.setToolTip("Training epochs over the collated graphs.")
+        form.addRow("epochs:", self._gnn_epochs)
+        self._gnn_sparsity = QDoubleSpinBox()
+        self._gnn_sparsity.setRange(0.1, 0.9)
+        self._gnn_sparsity.setDecimals(2)
+        self._gnn_sparsity.setSingleStep(0.05)
+        self._gnn_sparsity.setValue(0.7)
+        self._gnn_sparsity.setToolTip(
+            "The explanation's edge-sparsity: the fraction of edges the "
+            "hard mask removes (DIG's control_sparsity)."
+        )
+        form.addRow("explain sparsity:", self._gnn_sparsity)
+        self._gnn_seed = QSpinBox()
+        self._gnn_seed.setRange(0, 999999)
+        self._gnn_seed.setValue(27)
+        self._gnn_seed.setToolTip("Deterministic seed for the classifier.")
+        form.addRow("seed:", self._gnn_seed)
+
+        self._gnn_train_btn = QPushButton("Train & explain")
+        self._gnn_train_btn.setMinimumHeight(34)
+        self._gnn_train_btn.clicked.connect(self._start_gnn_lab)
+        self._gnn_train_btn.setToolTip(
+            "Generate the motif dataset, fit the graph classifier, then "
+            "explain graph #0: per-edge gate scores, the hard mask, the "
+            "probability walk (origin -> masked -> maskout -> zero) and "
+            "the fidelity pair — plus how many of the true motif edges "
+            "the mask kept."
+        )
+        form.addRow("", self._gnn_train_btn)
+        hint = QLabel(
+            "ml.geometric's motif_dataset + GNNClassifier + gnn_explain "
+            "(the gnnxai fidelity arithmetic inside): train on the "
+            "synthetic motif graphs, then read which edges the "
+            "explanation blames for the label."
+        )
+        hint.setWordWrap(True)
+        form.addRow("", hint)
+        return tab
+
+    # -- efficiency lab jobs --------------------------------------------------------
+    def _eff_network(self, hidden: int):
+        """The seeded tape MLP every efficiency workflow shares."""
+        from pharmaml.ml.autograd import Linear, ReLU, Sequential
+
+        return Sequential(Linear(8, hidden, seed=7), ReLU(), Linear(hidden, 4, seed=11))
+
+    def _start_eff_prune(self) -> None:
+        """One-shot + gradual magnitude pruning over the tape MLP."""
+        if self._busy_check():
+            return
+        hidden = int(self._eff_params.value())
+        sparsity = float(self._eff_sparsity.value())
+        scope = self._eff_scope.currentText()
+        steps = int(self._eff_steps.value())
+
+        def job(progress):
+            from pharmaml.ml.pruning import (
+                apply_magnitude_pruning,
+                iterative_prune_and_retrain,
+                sparsity_schedule,
+            )
+
+            started = _time.monotonic()
+            progress(0.2, "one-shot magnitude prune")
+            fresh = self._eff_network(hidden)
+            report = apply_magnitude_pruning(fresh, sparsity, scope=scope)
+            progress(0.6, "walking the gradual ramp")
+            schedule = sparsity_schedule(0.0, sparsity, steps)
+            losses: list[float] = []
+
+            def retrain(module) -> float:
+                # the honest minimal retrace: the masked forward's loss on
+                # a fixed batch (deterministic, no training loop here —
+                # the ramp's own arithmetic is the subject)
+                from pharmaml.ml.autograd import Tensor
+
+                rng = np.random.default_rng(3)
+                batch = Tensor(rng.normal(size=(16, 8)), requires_grad=False)
+                target = np.zeros((16, 4))
+                out = module.forward(batch)
+                value = float(np.mean((np.asarray(out.data) - target) ** 2))
+                losses.append(value)
+                return value
+
+            net, ramp_report, _recorded = iterative_prune_and_retrain(
+                fresh, retrain, target_sparsity=sparsity, steps=steps, scope=scope
+            )
+            progress(1.0, "done")
+            return report, ramp_report, schedule, _time.monotonic() - started
+
+        def render(result) -> None:
+            report, ramp_report, schedule, seconds = result
+            rows = []
+            for layer in report.layers:
+                rows.append(
+                    {
+                        "layer": layer.name,
+                        "shape": "x".join(str(s) for s in layer.shape),
+                        "n_weights": layer.n_weights,
+                        "n_zeroed": layer.n_zeroed,
+                        "sparsity": round(layer.sparsity, 4),
+                    }
+                )
+            table = pd.DataFrame(rows)
+            table["kind"] = "one-shot"
+            ramp_rows = pd.DataFrame(
+                [
+                    {
+                        "layer": layer.name,
+                        "shape": "x".join(str(s) for s in layer.shape),
+                        "n_weights": layer.n_weights,
+                        "n_zeroed": layer.n_zeroed,
+                        "sparsity": round(layer.sparsity, 4),
+                        "kind": "ramp-final",
+                    }
+                    for layer in ramp_report.layers
+                ]
+            )
+            full = pd.concat([table, ramp_rows], ignore_index=True)
+            self._table.bind_frame(full)
+            self._report.setText(
+                f"one-shot {report.achieved_sparsity:.1%} ({scope}) · ramp "
+                f"{' -> '.join(f'{level:.0%}' for level in schedule)} · "
+                f"final {ramp_report.achieved_sparsity:.1%} · "
+                f"{len(report.layers)} Linear layers · pruned in {seconds:.1f}s"
+            )
+            self._plot.clear()
+            levels = np.arange(len(schedule), dtype=float)
+            self._plot.line(
+                levels, np.asarray(schedule, dtype=float), label="ramp", width=2
+            )
+            self._plot.line(
+                levels,
+                np.full(len(schedule), report.achieved_sparsity),
+                label="one-shot", width=1, index=1, style="dash",
+            )
+            self._plot.set_labels(
+                x="ramp step", y="sparsity",
+                title=f"Magnitude pruning ({scope}) — target {sparsity:.0%}",
+            )
+
+        self._runner.submit(
+            "efficiency: pruning",
+            job,
+            on_finished=render,
+            on_failed=self._failed,
+            on_cancelled=self._cancelled,
+        )
+
+    def _start_eff_quant(self) -> None:
+        """The three-method quantization report over the MLP's weight."""
+        if self._busy_check():
+            return
+        hidden = int(self._eff_params.value())
+
+        def job(progress):
+            from pharmaml.ml.quantization import quantization_report
+
+            started = _time.monotonic()
+            progress(0.3, "extracting the first Linear weight")
+            net = self._eff_network(hidden)
+            weight = np.asarray(net.layers[0].weight.data)
+            reports = {}
+            for index, method in enumerate(("nf4", "int8", "int8_channel")):
+                progress(0.3 + 0.2 * (index + 1), f"quantizing ({method})")
+                reports[method] = quantization_report(weight, method=method)
+            progress(1.0, "done")
+            return reports, weight.shape, _time.monotonic() - started
+
+        def render(result) -> None:
+            reports, shape, seconds = result
+            rows = []
+            for method, r in reports.items():
+                rows.append(
+                    {
+                        "method": method,
+                        "shape": "x".join(str(s) for s in r.shape),
+                        "n_weights": r.n_weights,
+                        "bits_per_weight": round(r.bits_per_weight, 3),
+                        "rmse": float(f"{r.rmse:.3g}"),
+                        "relative_error": round(r.relative_error, 4),
+                    }
+                )
+            self._table.bind_frame(pd.DataFrame(rows))
+            self._report.setText(
+                f"weight {shape[0]}x{shape[1]} · nf4 {reports['nf4'].bits_per_weight} "
+                f"bpw (rmse {reports['nf4'].rmse:.3g}) vs int8_channel "
+                f"{reports['int8_channel'].bits_per_weight} bpw (rmse "
+                f"{reports['int8_channel'].rmse:.3g}) · reported in {seconds:.1f}s"
+            )
+            self._plot.clear()
+            methods = list(reports)
+            positions = np.arange(len(methods), dtype=float)
+            self._plot.bars(
+                np.asarray([reports[m].relative_error for m in methods]),
+                labels=[f"{m}\n{reports[m].bits_per_weight}bpw" for m in methods],
+            )
+            self._plot.set_labels(
+                x="method", y="relative error",
+                title="Quantization error by method",
+            )
+
+        self._runner.submit(
+            "efficiency: quantization",
+            job,
+            on_finished=render,
+            on_failed=self._failed,
+            on_cancelled=self._cancelled,
+        )
+
+    def _start_eff_zero(self) -> None:
+        """The ZeRO Table-3 memory plan across stages 0-3."""
+        if self._busy_check():
+            return
+        millions = float(self._eff_millions.value())
+        world = int(self._eff_world.value())
+        n_params = int(millions * 1_000_000)
+
+        def job(progress):
+            from pharmaml.ml.harness import zero_memory_model
+
+            started = _time.monotonic()
+            progress(0.5, "the Table-3 arithmetic")
+            stages = {stage: zero_memory_model(n_params, world_size=world, stage=stage) for stage in range(4)}
+            progress(1.0, "done")
+            return stages, _time.monotonic() - started
+
+        def render(result) -> None:
+            stages, seconds = result
+            rows = []
+            for stage, z in stages.items():
+                rows.append(
+                    {
+                        "stage": stage,
+                        "partitioned": {0: "nothing", 1: "optimizer", 2: "grads+optimizer", 3: "params+grads+optimizer"}[stage],
+                        "params_MB": round(z.params_bytes / 1e6, 1),
+                        "grads_MB": round(z.grads_bytes / 1e6, 1),
+                        "optimizer_MB": round(z.optimizer_bytes / 1e6, 1),
+                        "total_MB": round(
+                            (z.params_bytes + z.grads_bytes + z.optimizer_bytes) / 1e6, 1
+                        ),
+                    }
+                )
+            self._table.bind_frame(pd.DataFrame(rows))
+            zero_total = stages[0].params_bytes + stages[0].grads_bytes + stages[0].optimizer_bytes
+            stage3 = stages[3]
+            s3_total = stage3.params_bytes + stage3.grads_bytes + stage3.optimizer_bytes
+            self._report.setText(
+                f"{millions:g}M params · world size {world} · stage 0 {zero_total/1e6:.0f} MB "
+                f"-> stage 3 {s3_total/1e6:.0f} MB per rank ({1 - s3_total/zero_total:.0%} saved) "
+                f"· planned in {seconds:.1f}s"
+            )
+            self._plot.clear()
+            self._plot.bars(
+                np.asarray([stages[s].params_bytes / 1e6 for s in range(4)]), labels=[f"stage {s}" for s in range(4)]
+            )
+            self._plot.set_labels(
+                x="ZeRO stage", y="params MB per rank",
+                title=f"ZeRO partitioning — {millions:g}M params, {world} ranks",
+            )
+
+        self._runner.submit(
+            "efficiency: ZeRO planner",
+            job,
+            on_finished=render,
+            on_failed=self._failed,
+            on_cancelled=self._cancelled,
+        )
+
+    # -- GNN lab job ---------------------------------------------------------------
+    def _start_gnn_lab(self) -> None:
+        """Motif dataset -> graph classifier -> edge explanation."""
+        if self._busy_check():
+            return
+        motif = self._gnn_motif.currentText()
+        n_graphs = int(self._gnn_graphs.value())
+        layer_kind = self._gnn_layer.currentText()
+        epochs = int(self._gnn_epochs.value())
+        explain_sparsity = float(self._gnn_sparsity.value())
+        seed = int(self._gnn_seed.value())
+
+        def job(progress):
+            from pharmaml.ml.geometric import GNNClassifier, gnn_explain, motif_dataset
+
+            started = _time.monotonic()
+            progress(0.1, f"generating {n_graphs} {motif} graphs")
+            graphs = motif_dataset(n_graphs=n_graphs, seed=0, motif=motif)
+            progress(0.15, f"training the {layer_kind} classifier")
+            model = GNNClassifier(
+                graphs[0].x.shape[1], 16, 2, layer_kind=layer_kind, seed=seed
+            )
+            model.fit(graphs, epochs=epochs, lr=0.05)
+            accuracy = model.score(graphs)
+            progress(0.85, "explaining graph #0")
+            target = graphs[0]
+            explanation = gnn_explain(
+                model,
+                target.x,
+                target.edge_index,
+                y=target.y,
+                epochs=min(100, epochs),
+                sparsity=explain_sparsity,
+                seed=seed,
+            )
+            # motif recovery: how many true motif edges survive the mask
+            house = {frozenset(edge) for edge in target.motif_edges}
+            hard = explanation.hard_mask[int(target.y)]
+            kept_edges = [
+                frozenset((int(a), int(b)))
+                for a, b, keep in zip(
+                    explanation.edge_index[0], explanation.edge_index[1], hard
+                )
+                if keep
+            ]
+            kept_house = sum(1 for e in kept_edges if e in house)
+            progress(1.0, "done")
+            return (
+                explanation, accuracy, len(graphs), kept_house, len(house),
+                len(kept_edges), target.y, list(target.motif_edges),
+                _time.monotonic() - started,
+            )
+
+        def render(result) -> None:
+            (
+                explanation, accuracy, n, kept_house, n_house, kept, label,
+                motif_edges, seconds,
+            ) = result
+            scores = explanation.edge_scores[int(label)]
+            hard = explanation.hard_mask[int(label)]
+            edges = list(zip(explanation.edge_index[0], explanation.edge_index[1]))
+            truth = {frozenset(edge) for edge in motif_edges}
+            top = np.argsort(scores)[::-1][:12]
+            rows = []
+            for index in top:
+                a, b = int(edges[index][0]), int(edges[index][1])
+                rows.append(
+                    {
+                        "edge": f"{a}-{b}",
+                        "score": round(float(scores[index]), 4),
+                        "kept": bool(hard[index]),
+                        "in_true_motif": frozenset((a, b)) in truth,
+                    }
+                )
+            self._table.bind_frame(pd.DataFrame(rows))
+            probs = explanation.probs
+            self._report.setText(
+                f"train accuracy {accuracy:.0%} over {n} graphs · label {label} · "
+                f"kept {kept} edges ({explanation.sparsity:.0%} removed) · "
+                f"motif edges in mask {kept_house}/{n_house} · "
+                f"fidelity {explanation.fidelity:+.3f} / {explanation.fidelity_inv:+.3f} · "
+                f"p(origin) {probs['origin']:.2f} -> p(masked) {probs['masked']:.2f} · "
+                f"{seconds:.1f}s"
+            )
+            self._plot.clear()
+            order = np.argsort(scores)
+            self._plot.scatter(
+                np.arange(len(order), dtype=float), np.asarray(scores)[order], label="edge score"
+            )
+            self._plot.set_labels(
+                x="edge (sorted)", y="gate score",
+                title=f"Explanation edge scores — label {label}",
+            )
+
+        self._runner.submit(
+            "GNN lab: motif train + explain",
+            job,
+            on_finished=render,
+            on_failed=self._failed,
+            on_cancelled=self._cancelled,
+        )
+
     # -- job plumbing -----------------------------------------------------------
     def _buttons(self) -> tuple[QPushButton, ...]:
         return (
@@ -530,6 +1046,10 @@ class DeepLearningWorkbenchPage(QWidget):
             self._outliers_btn,
             self._uniqueness_btn,
             self._similarity_btn,
+            self._eff_prune_btn,
+            self._eff_quant_btn,
+            self._eff_zero_btn,
+            self._gnn_train_btn,
         )
 
     def _on_started(self, name: str) -> None:

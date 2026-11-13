@@ -31,18 +31,13 @@ from pharmaml.studio.capability_registry import (
 _TK = Path(__file__).resolve().parents[1]
 
 #: The class-C backend-only modules still awaiting their GUI workflow
-#: (the Phase-0 audit's 19, minus ten that landed: v1.2.187 conformal/
-#: calibration/decision/drift, v1.2.188 comparison/multiplicity/power/
-#: coverage_diagnostics/subgroups/model_card — all ML Workbench or
-#: Persistence now).
+#: (the Phase-0 audit's 19, minus sixteen that landed: v1.2.187 the
+#: statistical tools, v1.2.188 the ML statistics cluster, v1.2.189 the
+#: Deep Learning cluster on the Workbench's Efficiency + GNN labs).
+#: Three rows remain: the classification-set sibling, SAR fingerprints
+#: and the split-overlap audit.
 C_LIST_ASSIGNMENTS: dict[str, str] = {
     "pharmaml.ml.conformal_classification": "machine-learning",
-    "pharmaml.ml.geometric": "deep-learning",
-    "pharmaml.ml.gnn": "deep-learning",
-    "pharmaml.ml.gnnxai": "deep-learning",
-    "pharmaml.ml.harness": "deep-learning",
-    "pharmaml.ml.pruning": "deep-learning",
-    "pharmaml.ml.quantization": "deep-learning",
     "pharmaml.ml.sar": "machine-learning",
     "pharmaml.ml.split_audit": "datasets",
 }

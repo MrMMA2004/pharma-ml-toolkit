@@ -9,7 +9,7 @@ inventory, not a current certification: counts and grades have not been
 revalidated against every current UI and dependency profile. See
 [Part 5 audit](PART5_PHASE0_AUDIT.md) and [test profiles](TEST_PROFILES.md)
 for scoped evidence and engine limitations. Matrix inputs were frozen
-at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.188 (the
+at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.189 (the
 r266 arena absorption landed the former E-row conformal/coverage/split-audit
 suite from `arena/8696775e`; the r265 §24.3/24.4 rows were trued live). The §5
 nine-card mapping (§10 below) was
@@ -62,7 +62,7 @@ underlying calls. All pages additionally ride `tests/ui/test_pages_smoke.py`
 | Model Analysis (`models`) | `ml.cv_results`, `ml.models`, `ml.training` | `test_model_analysis_page.py` (13) | `test_cv_results.py`, `test_ml_pipeline.py` (211) | **A** | |
 | ML Workbench (`mlworkbench`) | `ml` core, `ml.evaluation`, `ml.persistence`, `ml.tuner`, `ml.conformal`, `ml.calibration`, `ml.decision`, `ml.drift`, `ml.comparison`, `ml.multiplicity`, `ml.power`, `ml.coverage_diagnostics`, `ml.subgroups`, `utils.checkpoints` | `test_ml_workbench_page.py` (19) + `test_ml_statistical_tools.py` (11) + `test_ml_statistics_batch2.py` (13) | `test_ml_pipeline.py` (211), `test_tuner.py` (118), `test_conformal.py`, `test_calibration.py`, `test_decision.py`, `test_drift.py` | **A** | Stacking/voting exposed; the v1.2.187–188 Statistical tools tab (conformal intervals, calibration report, decision curve, drift detection, comparison test, p-value correction, power report, coverage by group, subgroup audit) + the v1.2.188 model-card writer (model_card module); boosting families optional-gated (§5). |
 | Unsupervised (`unsupervised`) | `ml.manifold`, `ml.unsupervised`, `utils.io` | `test_unsupervised_page.py` (23) | `test_unsupervised.py`, `test_manifold.py`, `test_hierarchical.py` | **A** | |
-| Deep Learning (`deep_learning`) | `ml.neural`, `ml.numpy_neural`, `ml.runboard`, `ml.curation` | `test_deep_learning_page.py` (27) | `test_neural.py` (95), `test_numpy_neural_checkpoints.py`, `test_runboard.py`, `test_umap.py`, `test_curation.py` | **A** | Torch optional-gated (§5). Pruning/quantization/GNN/harness are class **C** (§4). |
+| Deep Learning (`deep_learning`) | `ml.neural`, `ml.numpy_neural`, `ml.runboard`, `ml.curation`, `ml.pruning`, `ml.quantization`, `ml.harness`, `ml.geometric`, `ml.gnn`, `ml.gnnxai` | `test_deep_learning_page.py` (27) + `test_dl_efficiency_lab.py` (6) | `test_neural.py` (95), `test_numpy_neural_checkpoints.py`, `test_runboard.py`, `test_umap.py`, `test_curation.py`, `test_pruning.py` (48), `test_quantization.py` (50), `test_harness.py` (56), `test_geometric.py` (36), `test_gnn.py` (48) | **A** | Torch optional-gated (§5). The v1.2.189 Efficiency lab (pruning + quantization + ZeRO planner) and GNN lab (motif train + explain) closed the Deep Learning cluster. |
 | Generative Workbench (`generative`) | `generative`, `chem.oracles`, `chem.sa_scoring` | `test_generative_page.py` (31) | `test_generative.py` (291), `test_mcts.py` (12), `test_sa_score.py`, `test_generative_sa_cli.py` | **A** | MCTS moves are Studio-only (no web twin). |
 | Foundations (`foundations`) | `ml.stats`, `ml.inferential`, `profiling` | `test_foundations_page.py` (13) — end-to-end (`_start_stats()` runs the real Welch ANOVA / Tukey / Games-Howell / `profile_dataset`) | none dedicated | **B** | No focused library suite for `ml.stats`/`ml.inferential`/`profiling`; the 13 page tests are the only direct pins. |
 | Best-of ML (`bestofml`) | `ml.adversarial/annsearch/apriori/catalog/privacy/recommend` | `test_bestofml_page.py` (19) | `test_campaign.py` (111), `test_catalog_foldins.py` (27), plus per-module suites | **A** | Six absorbed engines, four cards each. |
@@ -119,21 +119,17 @@ commit. "GUI" = Studio page(s); "Web" = card(s)/route(s) from §2.
 These modules have real implementations and real tests, and **no** Studio
 page, web card, or API route references them. They are importable library
 surface (and CLI where noted) — listed here instead of being papered over.
-(`ml/conformal.py` left this table in v1.2.187 and the ML statistics
-cluster in v1.2.188 — comparison, multiplicity, power, coverage
-diagnostics, subgroups all run on the ML Workbench's Statistical tools
-tab, and model cards write from the Persistence tab. The remaining rows
-are the Deep Learning cluster, split_audit and the classification-set
-siblings.)
+(`ml/conformal.py` left this table in v1.2.187, the ML statistics
+cluster in v1.2.188 and the Deep Learning cluster in v1.2.189 — the
+Workbench's new Efficiency lab runs pruning + quantization + the ZeRO
+planner, and its GNN lab runs the motif train-and-explain chain. Three
+rows remain: the classification-set sibling, SAR fingerprints and the
+split-overlap audit.)
 
 | Module | Tests | What it does | Why no GUI |
 | --- | --- | --- | --- |
-| `ml/gnn.py` + `ml/gnnxai.py` | `test_gnn.py` (48) | graph neural network featuriser/trainer + its XAI registry | absorbed r2xx; no card built yet |
-| `ml/geometric.py` | `test_geometric.py` (36) | geometric-deep-learning primitives | same |
-| `ml/pruning.py` | `test_pruning.py` (48) | magnitude/structured network pruning | Deep Learning page stops at train/runboard/umap/curation/xai |
-| `ml/quantization.py` | `test_quantization.py` (50) | int8/fp16-style quantisation arithmetic | same |
-| `ml/harness.py` | `test_harness.py` (56) | offline sharded-training harness (ZeRO stages + early stopping) | same |
 | `ml/conformal_classification.py` | `test_conformal_classification.py` (35) | classification sets, label-conditional sets | sibling of the landed regression card |
+| `ml/sar.py` | `test_sar.py` (33) | SAR fingerprint similarity / read-across | awaiting its Datasets-page form |
 | `ml/split_audit.py` | `test_split_overlap_audit.py` (34) + `test_cli_split_audit.py` (13) | identifier-overlap audit across data splits + the `pharmaml split-audit` CLI | same |
 
 Internal plumbing that is tested but intentionally not user-facing(classified under its parent feature, listed for honesty):
@@ -192,9 +188,9 @@ Counted over the matrix rows above (18 Studio pages, 12 web areas,
 
 | Status | Count | What |
 | --- | --- | --- |
-| **A** | 42 | implemented and tested end-to-end (the §5 nine-card workflow dashboard rides the Dashboard row — see §10) |
+| **A** | 43 | implemented and tested end-to-end (the §5 nine-card workflow dashboard rides the Dashboard row — see §10) |
 | **B** | 6 | implemented, incompletely tested — settings (smoke only), foundations + responseai (page-suite-only backends), TS calculators + PK/PD explorer + reconciler (no automated TS↔Python parity pins) |
-| **C** | 1 | backend-only: gnn(+gnnxai), geometric, pruning, quantization, harness (the Deep Learning cluster, one row) + conformal_classification + split_audit — see §4 |
+| **C** | 3 | backend-only: conformal_classification + sar + split_audit — see §4 |
 | **D** | 0 | nothing currently classified **D** — the nine-card workflow dashboard moved to **A** in v1.2.169 (§10) |
 | **E** | 0 | nothing currently classified **E** — the conformal/coverage/split-audit suite landed in v1.2.173 (the `arena/8696775e` absorption, formerly "PR #9 parked") and moved to **C** |
 | **F** | 3 | docking execution (external Vina), real MD data (external GROMACS/PLUMED), DOCKSTRING dataset (external download) |
@@ -225,7 +221,7 @@ molecule ("where meaningful", not everywhere).
 | 01 | Introduction | `dashboard` | `pharmaml` meta | `test_nine_cards.py` |
 | 02 | Datasets | `data`, `chemistry`, `utilities` | `utils.io`, `chem.*` | `test_nine_cards.py`, `test_io.py` |
 | 03 | Machine Learning | `models`, `mlworkbench`, `unsupervised`, `bestofml`, `foundations` | `ml.*` | `test_nine_cards.py`, `test_ml_pipeline.py` |
-| 04 | Deep Learning | `deep_learning` | `ml.neural`, class-C `gnn`/`geometric` | `test_nine_cards.py`, `test_gnn.py` |
+| 04 | Deep Learning | `deep_learning` | `ml.neural`, `ml.pruning`/`ml.quantization`/`ml.harness` (Efficiency lab), `ml.geometric`/`ml.gnn`/`ml.gnnxai` (GNN lab) | `test_nine_cards.py`, `test_dl_efficiency_lab.py` |
 | 05 | Generative AI | `generative` | `generative.*` | `test_nine_cards.py`, `test_generative.py` |
 | 06 | Molecular Docking | `docking` | `docking.*` (platform-dependent engine runtime) | `test_nine_cards.py`, `test_docking.py`, `test_docking_prep.py` |
 | 07 | PK/PD | `pkpd`, `biology`, `responseai` | `pkpd.*`, `pharma.*` | `test_nine_cards.py`, `test_pkpd_engines.py` |

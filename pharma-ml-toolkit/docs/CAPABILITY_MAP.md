@@ -37,7 +37,7 @@ capability assignments live in the pure-Python registry
 | `model_analysis` | ml, ml.cv_results, ml.models, ml.training, utils.io | 03 Machine Learning |
 | `ml_workbench` | ml, ml.calibration, ml.comparison, ml.conformal, ml.coverage_diagnostics, ml.cv_results, ml.decision, ml.drift, ml.evaluation, ml.model_card, ml.models, ml.multiplicity, ml.persistence, ml.power, ml.subgroups, ml.tuner, studio, utils.checkpoints, utils.io | 03 Machine Learning |
 | `unsupervised` | ml.manifold, ml.unsupervised, utils.io | 03 Machine Learning (exploration) |
-| `deep_learning` | exceptions, ml, ml.curation, ml.neural, ml.numpy_neural, ml.runboard, ml.splits, ml.umap, ml.xai, studio, utils.io | 04 Deep Learning |
+| `deep_learning` | exceptions, ml, ml.autograd, ml.curation, ml.geometric, ml.harness, ml.neural, ml.numpy_neural, ml.pruning, ml.quantization, ml.runboard, ml.splits, ml.umap, ml.xai, studio, utils.io | 04 Deep Learning |
 | `generative` | chem.oracles, chem.sa_scoring, generative, studio | 05 Generative AI |
 | `foundations` | ml.inferential, ml.stats, profiling | 03 Machine Learning (walkthroughs) |
 | `bestofml` | ml.adversarial, ml.annsearch, ml.apriori, ml.catalog, ml.privacy, ml.recommend, ml.sequences, ml.timeseries | 03 Machine Learning (sweeps) |
@@ -47,8 +47,8 @@ capability assignments live in the pure-Python registry
 | `utilities` | chem, chem.converters, docking, pharma, utils.io, viz | 02 Datasets + cross-card utilities |
 | `settings_page` | — | 01 Introduction (global menu) |
 
-Tests: 600 UI test functions across
-42 UI suites; page smoke
+Tests: 606 UI test functions across
+43 UI suites; page smoke
 coverage via `tests/ui/test_pages_smoke.py`.
 
 ## 3. Backend census
@@ -76,12 +76,6 @@ form is the Phase-3 work:
 | `pharmaml.ml.split_audit` | Identifier-overlap audit across splits | datasets | data |
 | `pharmaml.ml.conformal_classification` | Conformal classification sets | machine-learning | mlworkbench |
 | `pharmaml.ml.sar` | MMP / activity cliffs / R-groups | machine-learning | mlworkbench |
-| `pharmaml.ml.geometric` | Geometric deep-learning primitives | deep-learning | deep_learning |
-| `pharmaml.ml.gnn` | GNN training + graph featurisation | deep-learning | deep_learning |
-| `pharmaml.ml.gnnxai` | GNN explainability | deep-learning | deep_learning |
-| `pharmaml.ml.harness` | Offline sharded-training harness | deep-learning | deep_learning |
-| `pharmaml.ml.pruning` | Magnitude/structured pruning | deep-learning | deep_learning |
-| `pharmaml.ml.quantization` | Quantisation arithmetic | deep-learning | deep_learning |
 
 ### The Other-card decision (part6 §2.3)
 
@@ -103,7 +97,7 @@ preserves metadata/provenance.  Import presence, a button, or a
 synthetic demo is NOT integration.  Phase 6's coverage tests enforce
 this against the registry, not against prose.
 
-Registry coverage (live): **52 capabilities**, 9 api, 43 integrated; orphans 0; test gaps 0; Other card absent.
+Registry coverage (live): **52 capabilities**, 3 api, 49 integrated; orphans 0; test gaps 0; Other card absent.
 
 ## 6. Migration plan (Phases 1-6)
 

@@ -60,11 +60,14 @@ def _train_numpy(page, qtbot, studio_app):
 # -- construction ---------------------------------------------------------------
 
 
-def test_page_constructs_with_four_engine_tabs(studio_app) -> None:
+def test_page_constructs_with_six_engine_tabs(studio_app) -> None:
     page = _fresh_page()
-    assert page._tabs.count() == 4
+    assert page._tabs.count() == 6
     titles = [page._tabs.tabText(i) for i in range(page._tabs.count())]
-    assert titles == ["Train & evaluate", "Runboard", "UMAP map", "Curation"]
+    assert titles == [
+        "Train & evaluate", "Runboard", "UMAP map", "Curation",
+        "Efficiency lab", "GNN lab",
+    ]
 
 
 def test_default_dataset_loads_with_the_regression_target(studio_app) -> None:

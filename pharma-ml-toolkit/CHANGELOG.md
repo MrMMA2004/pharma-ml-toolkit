@@ -1,3 +1,41 @@
+## [1.2.189] — 2026-11-13
+### Added — part6 round 19 (Phase 3, batch 3): the Deep Learning cluster
+
+- **Deep Learning Workbench: "Efficiency lab" tab** (§3.2 bar met; the
+  GUI calls the canonical backends, §3.3):
+  - **Prune** — a seeded tape MLP magnitude-pruned one-shot, then along
+    Zhu & Gupta's cubic ramp with a retrace callback between levels
+    (`apply_magnitude_pruning` + `iterative_prune_and_retrain` +
+    `sparsity_schedule`): the per-layer report table (one-shot vs
+    ramp-final) and the ramp figure.
+  - **Quantize** — the same network's first Linear weight through the
+    three-method report (`quantization_report`): NF4 (block 64 +
+    double quant), int8 per-tensor, int8 per-channel — bits per
+    weight, RMSE, relative error, with the error bars.
+  - **ZeRO planner** — the Table-3 memory arithmetic for a model size
+    across stages 0-3 and a chosen world size (`zero_memory_model`):
+    what each stage partitions, in MB per rank.
+- **Deep Learning Workbench: "GNN lab" tab** — the geometric-deep-
+  learning entry point: the GNNExplainer synthetic motif dataset
+  (house/cycle), a GCN/SAGE/GAT classifier trained on it, then the
+  edge explanation of graph #0 (`motif_dataset` + `GNNClassifier` +
+  `gnn_explain`, the `gnnxai` fidelity arithmetic inside): top-12
+  scored edges with the true-motif flag, the probability walk
+  (origin → masked → maskout → zero), the fidelity pair and motif
+  recovery.
+- **Registry:** six rows flipped `api` → `integrated` — **49
+  integrated / 3 api**; the C-list pin shrank to 3
+  (conformal_classification, sar, split_audit); FEATURES.md class-C
+  table + counts re-synced (A=43, C=3). Fixed an inventory-guard
+  substring bug found by the flip: `sar` matched inside `qsar` — the
+  no-GU honesty check now matches module tokens on word boundaries.
+- **Tests:** `tests/ui/test_dl_efficiency_lab.py` — 6 pins over the
+  real backends: construction defaults, the three efficiency
+  workflows (exact global-50% sparsity, the honest NF4 bpw 4.156 on a
+  128×8 weight, the real 2/2/12 MB stage-0 ZeRO arithmetic), the GNN
+  motif workflow (accuracy ≥ 65%, motif recovery, fidelity), and the
+  busy-guard refusal while a job runs.
+
 ## [1.2.188] — 2026-11-13
 ### Added — part6 round 18 (Phase 3, batch 2): the ML statistics cluster
 
