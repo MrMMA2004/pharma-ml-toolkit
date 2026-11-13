@@ -342,6 +342,9 @@ class MLWorkbenchPage(QWidget):
         self._tabs.addTab(wrap_in_scroll(self._build_ensemble_tab()), "Ensemble builder")
         self._tabs.addTab(wrap_in_scroll(self._build_persistence_tab()), "Persistence")
         self._tabs.addTab(wrap_in_scroll(self._build_ad_tab()), "Applicability domain")
+        self._tabs.addTab(
+            wrap_in_scroll(self._build_statistical_tab()), "Statistical tools"
+        )
         lay.addWidget(self._tabs)
 
         self._job_buttons = [
@@ -355,6 +358,11 @@ class MLWorkbenchPage(QWidget):
             self._persist_predict_btn,
             self._persist_write_btn,
             self._ad_btn,
+            self._stat_conformal_btn,
+            self._stat_calibration_btn,
+            self._stat_decision_btn,
+            self._stat_drift_btn,
+            self._stat_export_btn,
         ]
 
         self._progress = ProgressPanel()
@@ -1870,10 +1878,512 @@ class MLWorkbenchPage(QWidget):
 
         self._submit(f"applicability domain ({label})", job, done, self._ad_status)
 
+    # -- tab 6: statistical tools ----------------------------------------------------
+    # part6 Phase 3 batch 1: the four statistical backends (conformal
+    # intervals, probability calibration, decision curves, drift
+    # detection) get real GUI workflows — form → validation → worker →
+    # the canonical backend → results + figure + export (§3.2/§3.3: one
+    # canonical implementation, never a GUI reimplementation).
+    def _build_statistical_tab(self) -> QWidget:
+        tab = QWidget()
+        lay = QVBoxLayout(tab)
+        lay.setContentsMargins(0, 0, 0, 0)
+        form = QFormLayout()
+
+        self._stat_source = QComboBox()
+        for token in ("Model Analysis run", "Workbench ensemble", "Loaded bundle"):
+            self._stat_source.addItem(token)
+        self._stat_source.setToolTip(
+            "Where the fitted model and its held-out split come from — the "
+            "same three sources the applicability-domain tab uses."
+        )
+        form.addRow("model source:", self._stat_source)
+
+        self._stat_alpha = QDoubleSpinBox()
+        self._stat_alpha.setRange(0.01, 0.4)
+        self._stat_alpha.setDecimals(2)
+        self._stat_alpha.setSingleStep(0.01)
+        self._stat_alpha.setValue(0.10)
+        self._stat_alpha.setToolTip(
+            "Conformal miscoverage alpha: the intervals target 1-alpha "
+            "empirical coverage (0.10 = 90% intervals)."
+        )
+        form.addRow("conformal alpha:", self._stat_alpha)
+
+        self._stat_bins = QSpinBox()
+        self._stat_bins.setRange(2, 50)
+        self._stat_bins.setValue(10)
+        self._stat_bins.setToolTip(
+            "Equal-width probability bins for the reliability diagram."
+        )
+        form.addRow("calibration bins:", self._stat_bins)
+
+        self._stat_cost = QDoubleSpinBox()
+        self._stat_cost.setRange(0.05, 20.0)
+        self._stat_cost.setDecimals(2)
+        self._stat_cost.setSingleStep(0.05)
+        self._stat_cost.setValue(1.0)
+        self._stat_cost.setToolTip(
+            "Decision-curve cost ratio: how many false positives one "
+            "missed positive costs (1.0 = the classical curve)."
+        )
+        form.addRow("cost ratio (FP per FN):", self._stat_cost)
+
+        run_row = QHBoxLayout()
+        self._stat_conformal_btn = QPushButton("Conformal intervals")
+        self._stat_conformal_btn.setMinimumHeight(30)
+        self._stat_conformal_btn.clicked.connect(self._start_stat_conformal)
+        self._stat_conformal_btn.setToolTip(
+            "Split-conformal intervals for a REGRESSION model: calibrate "
+            "the radius on held-out rows, then report the interval, the "
+            "radius and the empirical coverage on the same split."
+        )
+        run_row.addWidget(self._stat_conformal_btn)
+        self._stat_calibration_btn = QPushButton("Calibration report")
+        self._stat_calibration_btn.setMinimumHeight(30)
+        self._stat_calibration_btn.clicked.connect(self._start_stat_calibration)
+        self._stat_calibration_btn.setToolTip(
+            "Reliability diagnostics for a CLASSIFICATION model: Brier "
+            "score, ECE/MCE and the binned reliability diagram."
+        )
+        run_row.addWidget(self._stat_calibration_btn)
+        self._stat_decision_btn = QPushButton("Decision curve")
+        self._stat_decision_btn.setMinimumHeight(30)
+        self._stat_decision_btn.clicked.connect(self._start_stat_decision)
+        self._stat_decision_btn.setToolTip(
+            "Net-benefit decision curve for a CLASSIFICATION model: the "
+            "model's benefit against treat-all and treat-none over the "
+            "threshold range."
+        )
+        run_row.addWidget(self._stat_decision_btn)
+        form.addRow("model tools:", run_row)
+
+        self._stat_drift_reference = QLineEdit()
+        self._stat_drift_reference.setPlaceholderText(
+            "reference (training) CSV — blank = the current dataset"
+        )
+        form.addRow("drift reference:", self._stat_drift_reference)
+        self._stat_drift_current = QLineEdit()
+        self._stat_drift_current.setPlaceholderText("current (new batch) CSV — required")
+        form.addRow("drift current:", self._stat_drift_current)
+
+        self._stat_drift_btn = QPushButton("Detect drift")
+        self._stat_drift_btn.setMinimumHeight(30)
+        self._stat_drift_btn.clicked.connect(self._start_stat_drift)
+        self._stat_drift_btn.setToolTip(
+            "Per-feature distribution-shift audit of the current batch "
+            "against the reference: PSI (and two-sample KS when "
+            "available), with stable / moderate / shifted verdicts."
+        )
+        form.addRow("", self._stat_drift_btn)
+
+        lay.addLayout(form)
+        self._stat_status = self._status_label(
+            "the statistical tools reuse a trained run (conformal needs "
+            "regression, calibration and decision curves need "
+            "classification), or compare two CSVs for drift."
+        )
+        lay.addWidget(self._stat_status)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._stat_table = self._make_board(minimum_height=170)
+        self._stat_table.setToolTip(
+            "The tool's result table: conformal intervals per held-out "
+            "row, reliability bins, decision-curve points, or the "
+            "per-feature drift verdicts."
+        )
+        splitter.addWidget(self._stat_table)
+        self._stat_plot = PlotPanel(title="Statistical tools")
+        splitter.addWidget(self._stat_plot)
+        splitter.setSizes([520, 420])
+        configure_splitter(splitter, stretch=(0, 1))
+        lay.addWidget(splitter, stretch=1)
+
+        self._stat_export_btn = QPushButton("Export last result (CSV)")
+        self._stat_export_btn.setMinimumHeight(30)
+        self._stat_export_btn.clicked.connect(self._export_stat_result)
+        self._stat_export_btn.setToolTip(
+            "Write the last tool's result table to a CSV of your choice."
+        )
+        lay.addWidget(self._stat_export_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+        self._stat_frame: pd.DataFrame | None = None
+        return tab
+
+    def _stat_model_and_split(
+        self,
+    ) -> tuple[Any, Any, Any, Any, str, str] | None:
+        """Resolve the selected source into (model, X, y, task, label).
+
+        Uses the SAME three sources as the applicability-domain tab so
+        the two tools never disagree about what was trained.  Returns
+        None after explaining the problem on the status label.
+        """
+        source = self._stat_source.currentText()
+        frame, target, _task = self._training_context()
+
+        if source == "Model Analysis run":
+            run = getattr(self._model_analysis, "last_run", None)
+            outcome = run() if callable(run) else None
+            if outcome is None or getattr(outcome, "estimator", None) is None:
+                self._stat_status.setText(
+                    "Train a model on the Model Analysis page first — the "
+                    "statistical tools reuse its fitted estimator and "
+                    "held-out split (or switch the source)."
+                )
+                return None
+            model = outcome.estimator
+            x_test, y_test = outcome.X_test, outcome.y_test
+            task = str(outcome.task)
+            label = f"{outcome.model} ({task})"
+        elif source == "Workbench ensemble":
+            if self._ens_last is None:
+                self._stat_status.setText(
+                    "Train an ensemble on the Ensemble builder tab first — "
+                    "the tools reuse its split (or switch the source)."
+                )
+                return None
+            estimator, _report, task, _members, name, _xtr, _ytr, xte, yte, _tgt = self._ens_last
+            model, x_test, y_test, label = estimator, xte, yte, name
+        else:  # loaded bundle
+            if self._bundle is None:
+                self._stat_status.setText(
+                    "Open a model bundle on the Persistence tab first — the "
+                    "bundle mode scores the loaded model over the current "
+                    "dataset's held-out share."
+                )
+                return None
+            if frame is None or not target:
+                self._stat_status.setText(
+                    "Load a dataset on the Model Analysis page first — the "
+                    "bundle mode splits the CURRENT dataset for the tools."
+                )
+                return None
+            model, metadata, _bundle_path = self._bundle
+            task = str(metadata.get("task", "regression"))
+            label = str(metadata.get("name", "bundle"))
+            numeric, dropped = numeric_feature_columns(frame, target)
+            if not numeric:
+                self._stat_status.setText(
+                    "Every non-target column is non-numeric"
+                    + (f" ({', '.join(dropped)})" if dropped else "")
+                    + " — the bundle mode needs numeric descriptor columns."
+                )
+                return None
+            from sklearn.model_selection import train_test_split
+
+            stratify = None if task == "regression" else frame[target].astype(str).to_numpy()
+            _x_train, x_test, _y_train, y_test = train_test_split(
+                frame[numeric], frame[target], test_size=0.25, random_state=42,
+                stratify=stratify,
+            )
+        return model, x_test, y_test, task, label
+
+    def _start_stat_conformal(self) -> None:
+        """Split-conformal intervals on the held-out split (regression)."""
+        resolved = self._stat_model_and_split()
+        if resolved is None:
+            return
+        model, x_test, y_test, task, label = resolved
+        if task != "regression":
+            self._stat_status.setText(
+                "Conformal intervals are a regression tool — this source is "
+                f"{task}. Train a regression model (or switch the source)."
+            )
+            return
+        alpha = float(self._stat_alpha.value())
+
+        def job(progress: Any) -> Any:
+            from pharmaml.ml.conformal import calibrate_split_conformal
+
+            progress(0.3, "calibrating the interval radius on held-out rows")
+            calibrated = calibrate_split_conformal(model, x_test, y_test, alpha=alpha)
+            progress(0.8, "scoring the held-out rows")
+            return calibrated.predict_interval(x_test, y_true=y_test)
+
+        def done(result: Any) -> None:
+            table = result.to_dataframe()
+            self._stat_frame = table
+            columns = [str(column) for column in table.columns]
+            shown = table.head(200)
+            rows = [
+                [_cell_text(value, limit=26) for value in record]
+                for record in shown.to_numpy().tolist()
+            ]
+            _populate_table(self._stat_table, columns, rows)
+            coverage = (
+                f" · empirical coverage {result.coverage:.1%}"
+                if result.coverage is not None
+                else ""
+            )
+            self._stat_status.setText(
+                f"radius {result.radius:.4g} for {1 - alpha:.0%} intervals "
+                f"({result.n_test} held-out rows){coverage} · source {label}"
+            )
+            self._stat_plot.clear()
+            positions = np.arange(1, result.n_test + 1, dtype=float)
+            self._stat_plot.scatter(positions, np.asarray(result.prediction), label="prediction")
+            lower = np.asarray(result.lower)
+            upper = np.asarray(result.upper)
+            self._stat_plot.line(positions, lower, label="lower", width=1, index=1, style="dash")
+            self._stat_plot.line(positions, upper, label="upper", width=1, index=1, style="dash")
+            self._stat_plot.set_labels(
+                x="held-out row", y="predicted", title=f"Split-conformal {1 - alpha:.0%} intervals"
+            )
+
+        self._submit(f"conformal intervals ({label})", job, done, self._stat_status)
+
+    def _start_stat_calibration(self) -> None:
+        """Reliability diagnostics (classification)."""
+        resolved = self._stat_model_and_split()
+        if resolved is None:
+            return
+        model, x_test, y_test, task, label = resolved
+        if task != "classification":
+            self._stat_status.setText(
+                "Calibration reports are a classification tool — this source "
+                f"is {task}. Train a classification model (or switch the source)."
+            )
+            return
+        n_bins = int(self._stat_bins.value())
+
+        def job(progress: Any) -> Any:
+            from pharmaml.ml.calibration import calibration_report
+
+            progress(0.5, "scoring the held-out rows")
+            return calibration_report(model, x_test, y_test, n_bins=n_bins)
+
+        def done(result: Any) -> None:
+            rows = [
+                [
+                    f"{b.lower:.2f}–{b.upper:.2f}",
+                    str(b.count),
+                    f"{b.mean_predicted:.3f}",
+                    f"{b.fraction_positive:.3f}",
+                ]
+                for b in result.bins
+                if b.count
+            ]
+            _populate_table(
+                self._stat_table,
+                ["bin", "count", "mean predicted", "fraction positive"],
+                rows,
+            )
+            self._stat_frame = pd.DataFrame(
+                [
+                    {
+                        "bin_lower": b.lower,
+                        "bin_upper": b.upper,
+                        "count": b.count,
+                        "mean_predicted": b.mean_predicted,
+                        "fraction_positive": b.fraction_positive,
+                    }
+                    for b in result.bins
+                ]
+            )
+            self._stat_status.setText(
+                f"Brier {result.brier:.4f} · ECE {result.ece:.4f} · MCE "
+                f"{result.mce:.4f} · base rate {result.base_rate:.3f} · "
+                f"{result.n_samples} held-out rows · source {label}"
+            )
+            self._stat_plot.clear()
+            self._stat_plot.scatter(
+                np.asarray([b.mean_predicted for b in result.bins if b.count]),
+                np.asarray([b.fraction_positive for b in result.bins if b.count]),
+                label="observed",
+            )
+            span = np.array([0.0, 1.0])
+            self._stat_plot.line(span, span, label="perfect", width=1, index=1, style="dash")
+            self._stat_plot.set_labels(
+                x="predicted probability", y="observed fraction",
+                title=f"Reliability diagram ({n_bins} bins)",
+            )
+
+        self._submit(f"calibration report ({label})", job, done, self._stat_status)
+
+    def _start_stat_decision(self) -> None:
+        """Net-benefit decision curve (classification)."""
+        resolved = self._stat_model_and_split()
+        if resolved is None:
+            return
+        model, x_test, y_test, task, label = resolved
+        if task != "classification":
+            self._stat_status.setText(
+                "Decision curves are a classification tool — this source is "
+                f"{task}. Train a classification model (or switch the source)."
+            )
+            return
+        cost_ratio = float(self._stat_cost.value())
+
+        def job(progress: Any) -> Any:
+            from pharmaml.ml.decision import decision_curve
+
+            progress(0.5, "sweeping the threshold range")
+            return decision_curve(model, x_test, y_test, cost_ratio=cost_ratio)
+
+        def done(result: Any) -> None:
+            points = result.points
+            rows = [
+                [
+                    f"{p.threshold:.3f}",
+                    f"{p.net_benefit:.4f}",
+                    f"{p.standardized_net_benefit:.4f}",
+                    f"{p.treat_all_net_benefit:.4f}",
+                ]
+                for p in points[:: max(1, len(points) // 100)]
+            ]
+            _populate_table(
+                self._stat_table,
+                ["threshold", "net benefit", "standardized", "treat-all"],
+                rows,
+            )
+            self._stat_frame = pd.DataFrame(
+                [
+                    {
+                        "threshold": p.threshold,
+                        "net_benefit": p.net_benefit,
+                        "standardized_net_benefit": p.standardized_net_benefit,
+                        "treat_all_net_benefit": p.treat_all_net_benefit,
+                    }
+                    for p in points
+                ]
+            )
+            best = max(points, key=lambda p: p.net_benefit)
+            self._stat_status.setText(
+                f"best net benefit {best.net_benefit:.4f} at threshold "
+                f"{best.threshold:.3f} · base rate {result.base_rate:.3f} · "
+                f"{result.n_samples} held-out rows · cost ratio {cost_ratio:g} · "
+                f"source {label}"
+            )
+            self._stat_plot.clear()
+            thresholds = np.asarray([p.threshold for p in points])
+            self._stat_plot.line(
+                thresholds, np.asarray([p.net_benefit for p in points]),
+                label="model", width=2,
+            )
+            self._stat_plot.line(
+                thresholds, np.asarray([p.treat_all_net_benefit for p in points]),
+                label="treat all", width=1, index=1, style="dash",
+            )
+            self._stat_plot.line(
+                thresholds, np.zeros_like(thresholds),
+                label="treat none", width=1, index=1, style="dot",
+            )
+            self._stat_plot.set_labels(
+                x="threshold probability", y="net benefit",
+                title="Decision curve — model vs treat-all/treat-none",
+            )
+
+        self._submit(f"decision curve ({label})", job, done, self._stat_status)
+
+    def _start_stat_drift(self) -> None:
+        """Per-feature drift audit of a current batch vs a reference."""
+        from pharmaml.utils.io import read_table
+
+        current_path = self._stat_drift_current.text().strip()
+        if not current_path:
+            self._stat_status.setText(
+                "Name the current (new batch) CSV first — drift compares it "
+                "against the reference."
+            )
+            return
+        reference_path = self._stat_drift_reference.text().strip()
+
+        def job(progress: Any) -> Any:
+            from pharmaml.ml.drift import detect_drift
+
+            progress(0.2, "reading the two tables")
+            reference = (
+                read_table(reference_path)
+                if reference_path
+                else self._training_context()[0]
+            )
+            current = read_table(current_path)
+            if reference is None:
+                raise ValueError(
+                    "no reference available — name a reference CSV or load "
+                    "the current dataset on the Model Analysis page"
+                )
+            progress(0.6, "comparing feature distributions")
+            return detect_drift(reference, current)
+
+        def done(result: Any) -> None:
+            rows = [
+                [
+                    f.name,
+                    f"{f.psi:.4f}",
+                    "—" if f.ks_statistic is None else f"{f.ks_statistic:.3f}",
+                    "—" if f.ks_pvalue is None else f"{f.ks_pvalue:.3g}",
+                    f"{f.reference_mean:.4g}",
+                    f"{f.current_mean:.4g}",
+                    f.verdict,
+                ]
+                for f in result.features
+            ]
+            _populate_table(
+                self._stat_table,
+                ["feature", "psi", "ks stat", "ks p", "ref mean", "cur mean", "verdict"],
+                rows,
+            )
+            self._stat_frame = pd.DataFrame(
+                [
+                    {
+                        "feature": f.name,
+                        "psi": f.psi,
+                        "ks_statistic": f.ks_statistic,
+                        "ks_pvalue": f.ks_pvalue,
+                        "reference_mean": f.reference_mean,
+                        "current_mean": f.current_mean,
+                        "verdict": f.verdict,
+                    }
+                    for f in result.features
+                ]
+            )
+            shifted = sum(1 for f in result.features if f.verdict == "shifted")
+            moderate = sum(1 for f in result.features if f.verdict == "moderate")
+            self._stat_status.setText(
+                f"{len(result.features)} features compared · {shifted} shifted · "
+                f"{moderate} moderate · source {result.source} · "
+                f"thresholds psi {result.warn_psi:g}/{result.shift_psi:g}"
+            )
+            self._stat_plot.clear()
+            if result.features:
+                names = [f.name for f in result.features]
+                psis = np.asarray([f.psi for f in result.features])
+                positions = np.arange(len(names), dtype=float)
+                self._stat_plot.scatter(positions, psis, label="psi")
+                for psi_level, name in ((result.warn_psi, "warn"), (result.shift_psi, "shift")):
+                    self._stat_plot.line(
+                        positions,
+                        np.full_like(positions, psi_level),
+                        label=name, width=1, index=1, style="dash",
+                    )
+                self._stat_plot.set_labels(
+                    x="feature (see table)", y="psi",
+                    title="Population stability index per feature",
+                )
+
+        self._submit("drift detection", job, done, self._stat_status)
+
+    def _export_stat_result(self) -> None:
+        """Write the last statistical tool's result table to CSV."""
+        if self._stat_frame is None:
+            self._stat_status.setText("Run a statistical tool first — there is no result table yet.")
+            return
+        path, _filter = QFileDialog.getSaveFileName(
+            self, "Export statistical result", "statistical-result.csv", "CSV (*.csv)"
+        )
+        if not path:
+            return
+        try:
+            self._stat_frame.to_csv(path, index=False)
+        except OSError as error:
+            self._stat_status.setText(f"Export failed — {error}")
+            return
+        self._stat_status.setText(f"Result written to {path}")
+
     # -- theming / test surface ---------------------------------------------------
     def apply_palette(self, palette: ChartPalette) -> None:
         """Re-colour every PlotPanel under the active theme."""
-        for plot in (self._stack_plot, self._ens_plot, self._ad_plot):
+        for plot in (self._stack_plot, self._ens_plot, self._ad_plot, self._stat_plot):
             plot.apply_palette(palette)
 
     def report_text(self) -> str:

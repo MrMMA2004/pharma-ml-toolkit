@@ -132,7 +132,7 @@ def _synth_last_outcome(analysis) -> None:
 # -- construction --------------------------------------------------------------- #
 
 
-def test_page_constructs_with_the_five_tabs(studio_app) -> None:
+def test_page_constructs_with_the_six_tabs(studio_app) -> None:
     page = _fresh_page()
     assert [page._tabs.tabText(i) for i in range(page._tabs.count())] == [
         "Hyperparameter search",
@@ -140,7 +140,15 @@ def test_page_constructs_with_the_five_tabs(studio_app) -> None:
         "Ensemble builder",
         "Persistence",
         "Applicability domain",
+        "Statistical tools",
     ]
+    # the Phase-3 statistical tab's defaults (part6 §3.3: forms expose
+    # the canonical backends' own defaults)
+    assert page._stat_source.currentText() == "Model Analysis run"
+    assert page._stat_alpha.value() == 0.10
+    assert page._stat_bins.value() == 10
+    assert page._stat_cost.value() == 1.0
+    assert page._stat_frame is None
     assert page._tune_estimator.currentText() == "ann"
     assert page._ens_kind.currentText() == "voting"
     assert page._ens_voting.currentText() == "soft"

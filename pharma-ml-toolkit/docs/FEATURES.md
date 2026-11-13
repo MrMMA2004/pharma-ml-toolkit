@@ -9,7 +9,7 @@ inventory, not a current certification: counts and grades have not been
 revalidated against every current UI and dependency profile. See
 [Part 5 audit](PART5_PHASE0_AUDIT.md) and [test profiles](TEST_PROFILES.md)
 for scoped evidence and engine limitations. Matrix inputs were frozen
-at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.186 (the
+at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.187 (the
 r266 arena absorption landed the former E-row conformal/coverage/split-audit
 suite from `arena/8696775e`; the r265 §24.3/24.4 rows were trued live). The §5
 nine-card mapping (§10 below) was
@@ -60,7 +60,7 @@ underlying calls. All pages additionally ride `tests/ui/test_pages_smoke.py`
 | Biology Workbench (`biology`) | `biology` (incl. `load_response_table`) | `test_biology_page.py` (13) | `test_biology.py` (93), `test_cellline_examples.py`, `test_variable_genes` parity | **A** | Demo cell-line data is synthetic-but-realistic (see §6). |
 | Docking Workbench (`docking`) | `docking` | `test_docking_page.py` (17) | `test_docking.py`, `test_docking_prep.py` (84), `test_docking_contacts.py` (55), `test_pose_rmsd.py` (48) | **A** | Prep/parse/rescore only — no bundled docking engine (class **F** note in §5). The Contacts & PLIF tab ships the pose-level reading: contact geometry + interaction fingerprints (r264). |
 | Model Analysis (`models`) | `ml.cv_results`, `ml.models`, `ml.training` | `test_model_analysis_page.py` (13) | `test_cv_results.py`, `test_ml_pipeline.py` (211) | **A** | |
-| ML Workbench (`mlworkbench`) | `ml` core, `ml.evaluation`, `ml.persistence`, `ml.tuner`, `utils.checkpoints` | `test_ml_workbench_page.py` (19) | `test_ml_pipeline.py` (211), `test_tuner.py` (118), `test_checkpoints.py` | **A** | Stacking/voting exposed; boosting families optional-gated (§5). |
+| ML Workbench (`mlworkbench`) | `ml` core, `ml.evaluation`, `ml.persistence`, `ml.tuner`, `ml.conformal`, `ml.calibration`, `ml.decision`, `ml.drift`, `utils.checkpoints` | `test_ml_workbench_page.py` (19) + `test_ml_statistical_tools.py` (11) | `test_ml_pipeline.py` (211), `test_tuner.py` (118), `test_conformal.py`, `test_calibration.py`, `test_decision.py`, `test_drift.py` | **A** | Stacking/voting exposed; the v1.2.187 Statistical tools tab (conformal intervals, calibration report, decision curve, drift detection); boosting families optional-gated (§5). |
 | Unsupervised (`unsupervised`) | `ml.manifold`, `ml.unsupervised`, `utils.io` | `test_unsupervised_page.py` (23) | `test_unsupervised.py`, `test_manifold.py`, `test_hierarchical.py` | **A** | |
 | Deep Learning (`deep_learning`) | `ml.neural`, `ml.numpy_neural`, `ml.runboard`, `ml.curation` | `test_deep_learning_page.py` (27) | `test_neural.py` (95), `test_numpy_neural_checkpoints.py`, `test_runboard.py`, `test_umap.py`, `test_curation.py` | **A** | Torch optional-gated (§5). Pruning/quantization/GNN/harness are class **C** (§4). |
 | Generative Workbench (`generative`) | `generative`, `chem.oracles`, `chem.sa_scoring` | `test_generative_page.py` (31) | `test_generative.py` (291), `test_mcts.py` (12), `test_sa_score.py`, `test_generative_sa_cli.py` | **A** | MCTS moves are Studio-only (no web twin). |
@@ -118,7 +118,10 @@ commit. "GUI" = Studio page(s); "Web" = card(s)/route(s) from §2.
 
 These modules have real implementations and real tests, and **no** Studio
 page, web card, or API route references them. They are importable library
-surface (and CLI where noted) — listed here instead of being papered over:
+surface (and CLI where noted) — listed here instead of being papered over.
+(`ml/conformal.py` left this table in v1.2.187: the ML Workbench's
+Statistical tools tab now runs split-conformal intervals end to end; its
+classification siblings remain CLI/library-only until their Phase-3 form.)
 
 | Module | Tests | What it does | Why no GUI |
 | --- | --- | --- | --- |
@@ -127,7 +130,7 @@ surface (and CLI where noted) — listed here instead of being papered over:
 | `ml/pruning.py` | `test_pruning.py` (48) | magnitude/structured network pruning | Deep Learning page stops at train/runboard/umap/curation/xai |
 | `ml/quantization.py` | `test_quantization.py` (50) | int8/fp16-style quantisation arithmetic | same |
 | `ml/harness.py` | `test_harness.py` (56) | offline sharded-training harness (ZeRO stages + early stopping) | same |
-| `ml/conformal.py` + `ml/conformal_classification.py` | `test_conformal.py` (17) + `test_conformal_classification.py` (35) | split-conformal regression intervals, classification sets, label-conditional sets | landed v1.2.173 (arena/8696775e, 12 commits); no card built yet |
+| `ml/conformal_classification.py` | `test_conformal_classification.py` (35) | classification sets, label-conditional sets | sibling of the landed regression card |
 | `ml/coverage_diagnostics.py` | `test_coverage_diagnostics.py` (34) | subgroup empirical-vs-nominal coverage shortfall table | same |
 | `ml/split_audit.py` | `test_split_overlap_audit.py` (34) + `test_cli_split_audit.py` (13) | identifier-overlap audit across data splits + the `pharmaml split-audit` CLI | same |
 
@@ -187,9 +190,9 @@ Counted over the matrix rows above (18 Studio pages, 12 web areas,
 
 | Status | Count | What |
 | --- | --- | --- |
-| **A** | 35 | implemented and tested end-to-end (the §5 nine-card workflow dashboard rides the Dashboard row — see §10) |
+| **A** | 36 | implemented and tested end-to-end (the §5 nine-card workflow dashboard rides the Dashboard row — see §10) |
 | **B** | 6 | implemented, incompletely tested — settings (smoke only), foundations + responseai (page-suite-only backends), TS calculators + PK/PD explorer + reconciler (no automated TS↔Python parity pins) |
-| **C** | 8 | backend-only: gnn(+gnnxai), geometric, pruning, quantization, harness, conformal(+conformal_classification), coverage_diagnostics, split_audit |
+| **C** | 7 | backend-only: gnn(+gnnxai), geometric, pruning, quantization, harness, conformal_classification, coverage_diagnostics, split_audit (conformal itself landed in v1.2.187) |
 | **D** | 0 | nothing currently classified **D** — the nine-card workflow dashboard moved to **A** in v1.2.169 (§10) |
 | **E** | 0 | nothing currently classified **E** — the conformal/coverage/split-audit suite landed in v1.2.173 (the `arena/8696775e` absorption, formerly "PR #9 parked") and moved to **C** |
 | **F** | 3 | docking execution (external Vina), real MD data (external GROMACS/PLUMED), DOCKSTRING dataset (external download) |

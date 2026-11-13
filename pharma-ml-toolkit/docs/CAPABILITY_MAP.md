@@ -35,7 +35,7 @@ capability assignments live in the pure-Python registry
 | `biology` | biology | 07 PK/PD (biology sub-workspace) |
 | `docking` | docking, exceptions, studio | 06 Molecular Docking |
 | `model_analysis` | ml, ml.cv_results, ml.models, ml.training, utils.io | 03 Machine Learning |
-| `ml_workbench` | ml, ml.evaluation, ml.models, ml.persistence, ml.tuner, studio, utils.checkpoints, utils.io | 03 Machine Learning |
+| `ml_workbench` | ml, ml.calibration, ml.conformal, ml.decision, ml.drift, ml.evaluation, ml.models, ml.persistence, ml.tuner, studio, utils.checkpoints, utils.io | 03 Machine Learning |
 | `unsupervised` | ml.manifold, ml.unsupervised, utils.io | 03 Machine Learning (exploration) |
 | `deep_learning` | exceptions, ml, ml.curation, ml.neural, ml.numpy_neural, ml.runboard, ml.splits, ml.umap, ml.xai, studio, utils.io | 04 Deep Learning |
 | `generative` | chem.oracles, chem.sa_scoring, generative, studio | 05 Generative AI |
@@ -47,8 +47,8 @@ capability assignments live in the pure-Python registry
 | `utilities` | chem, chem.converters, docking, pharma, utils.io, viz | 02 Datasets + cross-card utilities |
 | `settings_page` | — | 01 Introduction (global menu) |
 
-Tests: 576 UI test functions across
-40 UI suites; page smoke
+Tests: 587 UI test functions across
+41 UI suites; page smoke
 coverage via `tests/ui/test_pages_smoke.py`.
 
 ## 3. Backend census
@@ -74,13 +74,9 @@ form is the Phase-3 work:
 | Module | What it does | Primary card | Route (Phase-3 form) |
 | --- | --- | --- | --- |
 | `pharmaml.ml.split_audit` | Identifier-overlap audit across splits | datasets | data |
-| `pharmaml.ml.calibration` | Probability calibration + recalibration | machine-learning | mlworkbench |
 | `pharmaml.ml.comparison` | Paired model-comparison tests | machine-learning | mlworkbench |
-| `pharmaml.ml.conformal` | Split-conformal regression intervals | machine-learning | mlworkbench |
 | `pharmaml.ml.conformal_classification` | Conformal classification sets | machine-learning | mlworkbench |
 | `pharmaml.ml.coverage_diagnostics` | Coverage-shortfall diagnostics | machine-learning | mlworkbench |
-| `pharmaml.ml.decision` | Decision-curve analysis | machine-learning | mlworkbench |
-| `pharmaml.ml.drift` | Distribution-shift detection | machine-learning | mlworkbench |
 | `pharmaml.ml.model_card` | Model cards / provenance sheets | machine-learning | models |
 | `pharmaml.ml.multiplicity` | Multiple-comparison corrections | machine-learning | mlworkbench |
 | `pharmaml.ml.power` | Fold-count power analysis | machine-learning | mlworkbench |
@@ -113,7 +109,7 @@ preserves metadata/provenance.  Import presence, a button, or a
 synthetic demo is NOT integration.  Phase 6's coverage tests enforce
 this against the registry, not against prose.
 
-Registry coverage (live): **52 capabilities**, 19 api, 33 integrated; orphans 0; test gaps 0; Other card absent.
+Registry coverage (live): **52 capabilities**, 15 api, 37 integrated; orphans 0; test gaps 0; Other card absent.
 
 ## 6. Migration plan (Phases 1-6)
 

@@ -30,16 +30,13 @@ from pharmaml.studio.capability_registry import (
 
 _TK = Path(__file__).resolve().parents[1]
 
-#: The 19 class-C backend-only modules from the Phase-0 audit, now with
-#: their §6.1 primary card assignments (part6 Phase 2's core deliverable).
+#: The class-C backend-only modules still awaiting their GUI workflow
+#: (the Phase-0 audit's 19, minus the four that landed in v1.2.187:
+#: conformal, calibration, decision, drift — all ML Workbench now).
 C_LIST_ASSIGNMENTS: dict[str, str] = {
-    "pharmaml.ml.calibration": "machine-learning",
     "pharmaml.ml.comparison": "machine-learning",
-    "pharmaml.ml.conformal": "machine-learning",
     "pharmaml.ml.conformal_classification": "machine-learning",
     "pharmaml.ml.coverage_diagnostics": "machine-learning",
-    "pharmaml.ml.decision": "machine-learning",
-    "pharmaml.ml.drift": "machine-learning",
     "pharmaml.ml.geometric": "deep-learning",
     "pharmaml.ml.gnn": "deep-learning",
     "pharmaml.ml.gnnxai": "deep-learning",

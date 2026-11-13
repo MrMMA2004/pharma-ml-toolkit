@@ -1,3 +1,34 @@
+## [1.2.187] — 2026-11-13
+### Added — part6 round 17 (Phase 3, batch 1): the statistical tools
+
+- **ML Workbench tab 6, "Statistical tools"** — four previously
+  API-only backends now have full GUI workflows (§3.2 bar: form →
+  validation → worker → the canonical backend → results table +
+  figure + status → CSV export; §3.3: the GUI never reimplements,
+  it calls `pharmaml.ml.*`):
+  - **Conformal intervals** (regression): split-conformal radius on
+    the held-out split, per-row interval table, prediction/interval
+    figure, empirical coverage in the status line.
+  - **Calibration report** (binary classification): Brier/ECE/MCE +
+    the binned reliability diagram against the perfect line.
+  - **Decision curve** (binary classification): net benefit vs
+    treat-all/treat-none over the threshold range, best-threshold
+    verdict.
+  - **Drift detection**: per-feature PSI (+KS) of a current batch
+    against a reference CSV or the loaded dataset, with
+    stable/moderate/shifted verdicts.
+  All four reuse the page's existing model sources (Model Analysis
+  run / Workbench ensemble / loaded bundle) and refuse honestly when
+  the task type or the inputs do not match.
+- **Registry:** the four rows flipped `api` → `integrated` (37
+  integrated / 15 api now); the C-list pin in
+  `tests/test_capability_registry.py` shrank accordingly (27 pins
+  still green).
+- **Tests:** `tests/ui/test_ml_statistical_tools.py` — 11 pins:
+  construction, four honest refusals, four end-to-end workflows on
+  the real example data (including a genuinely shifted drift batch)
+  and the export round-trip.
+
 ## [1.2.186] — 2026-11-13
 ### Added — part6 round 16 (Phase 2): the complete capability registry
 

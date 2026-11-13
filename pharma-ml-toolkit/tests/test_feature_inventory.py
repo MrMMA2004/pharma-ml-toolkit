@@ -26,10 +26,10 @@ API_ROOT = REPO_ROOT / "src" / "app" / "api"
 
 BACKEND_ONLY_MODULES = (
     "gnn", "geometric", "pruning", "quantization", "harness",
-    "conformal", "coverage_diagnostics", "split_audit",
+    "conformal_classification", "coverage_diagnostics", "split_audit",
 )
 
-STATUS_COUNTS = {"A": 35, "B": 6, "C": 8, "D": 0, "E": 0, "F": 3}
+STATUS_COUNTS = {"A": 36, "B": 6, "C": 7, "D": 0, "E": 0, "F": 3}
 
 
 def _doc() -> str:
@@ -187,12 +187,13 @@ class TestStatusSummary:
             )
 
     def test_row_total_consistency(self) -> None:
-        """18 pages + 12 web areas + 11 packages = 41 A/B rows; C/E/F add
-        11 more (8 backend-only, 3 external) — the former E-row conformal
-        suite landed in v1.2.173 (arena/8696775e) and moved to C. The
-        nine-card organization rides the Dashboard page row since v1.2.169
-        (§10)."""
-        assert STATUS_COUNTS["A"] + STATUS_COUNTS["B"] == 41
+        """18 pages + 12 web areas + 11 packages = 42 A/B rows; C/E/F add
+        10 more (7 backend-only, 3 external) — the v1.2.187 statistical
+        tools moved conformal/calibration/decision/drift from C to the
+        ML Workbench's A row (the registry carries the same flip). The
+        nine-card organization rides the Dashboard page row since
+        v1.2.169 (§10)."""
+        assert STATUS_COUNTS["A"] + STATUS_COUNTS["B"] == 42
         assert sum(STATUS_COUNTS.values()) == 52
 
     def test_synthetic_demo_register(self) -> None:

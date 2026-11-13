@@ -14396,3 +14396,18 @@ generator script.
 Next (Phase 3): the GUI forms for the 19 api rows — forms → execution
 → results → export, each calling the existing backend (§3.3: one
 canonical implementation, never a GUI reimplementation).
+
+## R17 (part6 Phase 3, batch 1) — the statistical tools — 2026-11-13
+
+ML Workbench tab 6: conformal intervals, calibration report, decision
+curve, drift detection — four §3.2-complete GUI workflows over the
+canonical backends, reusing the page's three model sources with honest
+refusals. 11-pin UI suite on real example data; registry rows flipped
+(37 integrated / 15 api); the §6.2 battery re-pinned. Discovered while
+testing: qsar_classification.csv is 3-class, so the binary tools'
+helper binarizes (active vs rest) — the backends' own binary contract
+is the honest boundary.
+
+Next (Phase 3, batch 2): comparison + multiplicity + power +
+coverage_diagnostics + subgroups (the ML stats cluster), then the DL
+cluster (geometric, gnn, gnnxai, pruning, quantization, harness).
