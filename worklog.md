@@ -14537,3 +14537,30 @@ Phase 6 deliverables:
 
 v1.2.193 shipped: carriers, notebooks, FEATURES stamp, README
 RELEASE_READINESS row.
+
+## R24 (part6 §17A+B) — 2026-11-13
+
+The part6 PDF was re-uploaded this round, so §17 was read from the
+original text for the first time since the recycle. Audit: A/B/C
+missing, D/E partial (report writers / resource snapshots exist, no
+composition or live widget), F done (R22 glossary), G mostly done
+(recents, aliases, shortcuts, notifications, empty states, actionable
+errors; favorites/export-presets/layout-prefs missing). Per §18's
+incremental rule the work is split: R24 = A+B, R25 = C+D, R26 = E+G.
+
+Built §17B first (the engine the templates ride on), then §17A as
+factories over it. Every backend API named by a template was verified
+against source BEFORE wiring — four initial misassumptions corrected
+this way (create_model→build_model, recipe-keyword→objective classes,
+oral_concentration→simulate_compartment, load_trajectory→the Trajectory
+dataclass/synthetic factory; plus split_table's frame kwarg,
+compute_fingerprints' kind kwarg and set-bit return, and the screen's
+replicate-collapse precondition).
+
+UI: Workflow-templates tab in Utilities Workbench (browser + PK/PD and
+MD runnable forms + JSON run records; honest not-a-form-yet message
+for data-dependent chains). Registry 62 caps. Gates 100 green;
+pipeline suite 19/19; tab suite 7/7; utilities page 25/25 with its
+pins updated 5→6 tabs; phase suites 26 green.
+
+v1.2.194 shipped.

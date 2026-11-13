@@ -174,6 +174,9 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability("viz.images", "Image inspection + metadata", "pharmaml.viz.export", "export_image, sniff_format", "visualization", "imagelab", "integrated", tests=("tests/test_export_images.py",)),
     Capability("viz.tiff", "Lossless high-bit-depth TIFF handling", "pharmaml.viz.export", "ImageExportOptions, export_image", "visualization", "imagelab", "integrated", tests=("tests/test_export_images.py",)),
     Capability("viz.reports", "Report generation + figure export", "pharmaml.viz.report", "HTMLReport", "visualization", "utilities", "integrated", tests=("tests/test_viz.py",)),
+    # -- §17A/B (part6 round 24): workflow templates + the sequential engine ----
+    Capability("utilities.templates", "§17A workflow-template library (7 scientific chains)", "pharmaml.studio.pipelines", "TEMPLATES, build_template", "visualization", "utilities", "integrated", tests=("tests/test_workflow_pipelines.py", "tests/ui/test_workflow_templates.py"), optional_deps=("rdkit", "meeko", "gemmi"), status_detail="QSAR / descriptors / drug-response / generation+screening / docking prep / PK-PD / MD chains; every stage calls an existing backend implementation"),
+    Capability("utilities.pipelines", "§17B sequential pipeline engine", "pharmaml.studio.pipelines", "Pipeline, Stage, run_pipeline", "visualization", "utilities", "integrated", tests=("tests/test_workflow_pipelines.py",), status_detail="Reliable sequential engine: artifact threading, per-stage timing, fail-fast with preserved partial outcomes, no-clobber artifact keys, dependency-gated stages; no drag-and-drop by design"),
 )
 
 #: The §2.3 decision, machine-readable: no Other card, because the

@@ -1,3 +1,43 @@
+## [1.2.194] — 2026-11-13
+### Added — part6 round 24 (§17A + §17B): workflow templates + the sequential pipeline engine
+
+- **`src/pharmaml/studio/pipelines.py`** — the §17B reliable sequential
+  engine: `Stage` / `Pipeline` / `run_pipeline` with artifact threading
+  between stages, per-stage timing, fail-fast runs that PRESERVE
+  partial outcomes, loud no-clobber artifact keys, and dependency-gated
+  stages whose missing optionals fail with the exact pip command (the
+  `DependencyError` contract — never a silent empty). NO drag-and-drop,
+  exactly as §17B instructs: the engine is a reliable sequential chain
+  first.
+- **The §17A workflow-template library** — seven templates, every stage
+  calling an EXISTING backend implementation (verified one by one
+  against source during the round): QSAR model development
+  (`load_dataset` → `split_table` → `compare_models` → held-out
+  evaluation → `export_table`); molecular descriptor generation
+  (`compute_fingerprints`); drug-response prediction (the notebook's
+  own chain: `load_response_table` → `collapse_replicates` →
+  `normalize_expression` → `most_variable_genes` → `response_matrix` →
+  `make_train_test_split` → leaderboard); molecular generation and
+  screening (`run_genetic_optimization` over the bundled objective
+  classes); docking preparation and analysis (`prepare_ligand_library`
+  + `compute_grid_box`); PK/PD modeling (`simulate_compartment` +
+  `oral_tmax`/`oral_cmax`/`half_life`/`auc_trapezoid`); MD analysis
+  (`synthetic_trajectory`/caller-provided + `rmsd_trajectory`).
+- **`ui/widgets/workflow_templates.py`** — the "Workflow templates" tab
+  in the Utilities Workbench: a browser over all seven templates with
+  owning card + stage chain, runnable forms for the two
+  parameter-light chains (PK/PD, MD) that write a JSON run record next
+  to their exports (the surface §17C comparison will consume), and an
+  HONEST message for the data-dependent chains (they name the Python
+  API and wait for their card-integrated forms — no pretending).
+- **Registry**: `utilities.templates` + `utilities.pipelines` rows
+  (62 capabilities, 62 integrated, 0 test gaps);
+  `docs/CAPABILITY_MAP.md` + `docs/FEATURES.md` synced.
+- **Tests**: `tests/test_workflow_pipelines.py` (19: engine contracts
+  + every template running end-to-end against the bundled example
+  data) and `tests/ui/test_workflow_templates.py` (7); the Utilities
+  page's tab pins updated 5 → 6.
+
 ## [1.2.193] — 2026-11-13
 ### Added — part6 round 23 (Phase 6): comprehensive verification + the evidence-based release-readiness report
 

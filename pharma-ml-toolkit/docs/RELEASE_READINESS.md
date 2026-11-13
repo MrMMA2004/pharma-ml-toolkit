@@ -36,21 +36,18 @@ All probed dependencies import cleanly in this environment (the Qt rows are prob
 
 ## 2. Capability coverage
 
-- Registry rows: **60**
-- integrated: **60**
+- Registry rows: **62**
+- integrated: **62**
 - Rows without test references: **0**
 
 ## 3. Test evidence
 
-- Suites discovered: **186** (46 UI, 140 library)
-- Tests collected: **5880**
+- Suites discovered: **188** (47 UI, 141 library)
+- Tests collected: **5906**
 
 | Suite chunk (as actually run) | Result |
 | --- | --- |
-| `library chunks 1-10 (§14.2 sequential, 139 suites)` | 5234 passed, 13 skipped, 0 failed |
-| `UI battery (46 suites, class-split for nine_card_first)` | 589 passed, 0 failed |
-| `gates (registry/inventory/carriers/docs-index)` | 81 passed |
-| `phase6 readiness pins` | 6 passed |
+| `round 24 targeted suites` | pipelines 19/19 + templates tab 7/7 + utilities page 25/25 + gates 100 + phase suites 26, 0 failed |
 
 Chunkening follows §14.2 (low-memory constraints): suites
 run sequentially in small groups; nothing was skipped in
@@ -58,10 +55,10 @@ bulk and no skipped test is claimed as passed.
 
 ## 4. Version carriers (§15)
 
-- VERSION: `1.2.193`
-- pyproject.toml: `1.2.193`
-- src/pharmaml/__init__.py: `1.2.193`
-- CHANGELOG.md leads with: `1.2.193`
+- VERSION: `1.2.194`
+- pyproject.toml: `1.2.194`
+- src/pharmaml/__init__.py: `1.2.194`
+- CHANGELOG.md leads with: `1.2.194`
 - Agreement: **yes**
 
 ## 5. Release-archive verification (§14)

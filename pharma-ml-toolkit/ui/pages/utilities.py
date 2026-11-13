@@ -61,6 +61,7 @@ from ..widgets.data_table import DataTableView, PandasTableModel
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
 from ..widgets.responsive import configure_splitter
+from ..widgets.workflow_templates import WorkflowTemplatesTab
 from ..workers.job_worker import JobRunner
 
 _TK = Path(__file__).resolve().parents[2]
@@ -187,6 +188,8 @@ class UtilitiesWorkbenchPage(QWidget):
         self._tabs.addTab(self._build_approved_tab(), "Approved drugs")
         self._tabs.addTab(self._build_tools_tab(), "Campaign tools")
         self._tabs.addTab(self._build_reindex_tab(), "Reindex")
+        self._templates_tab = WorkflowTemplatesTab()
+        self._tabs.addTab(self._templates_tab, "Workflow templates")
         lay.addWidget(self._tabs)
         self._diagnostics_btn = QPushButton("Reproducibility & checkpoint diagnostics…")
         self._diagnostics_btn.clicked.connect(self._show_diagnostics)
