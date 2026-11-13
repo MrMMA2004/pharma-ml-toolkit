@@ -27,6 +27,8 @@ class TopBar(QWidget):
     back_requested = Signal()
     settings_requested = Signal()
     advanced_toggled = Signal(bool)
+    search_requested = Signal()
+    jobs_clicked = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -50,6 +52,14 @@ class TopBar(QWidget):
         self.back_btn.clicked.connect(self.back_requested.emit)
         lay.addWidget(self.back_btn)
 
+        # part6 §7 (Phase 4): the global search entry point
+        self.search_btn = QPushButton("Search…")
+        self.search_btn.setToolTip(
+            "Search every capability, card and section (Ctrl+K)"
+        )
+        self.search_btn.clicked.connect(self.search_requested.emit)
+        lay.addWidget(self.search_btn)
+
         self.location = QLabel("Nine-card home")
         self.location.setObjectName("studioTopBarLocation")
         self.location.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -57,7 +67,16 @@ class TopBar(QWidget):
         lay.addWidget(self.location, stretch=1)
 
         # Live jobs indicator — MainWindow feeds this from the real
-        # JobRunner signals; never a fabricated busy state.
+        # JobRunner signals; never a fabricated busy state.  The §10
+        # job center opens on click (also reachable when idle: it owns
+        # the run history, not just the live job).
+        self.jobs_btn = QPushButton("Jobs")
+        self.jobs_btn.setToolTip(
+            "Open the unified job center: the live job, Stop, and the "
+            "recorded run history with provenance"
+        )
+        self.jobs_btn.clicked.connect(self.jobs_clicked.emit)
+        lay.addWidget(self.jobs_btn)
         self.jobs_label = QLabel("")
         self.jobs_label.setObjectName("studioTopBarJobs")
         lay.addWidget(self.jobs_label)

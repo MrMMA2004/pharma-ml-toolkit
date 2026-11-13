@@ -1500,6 +1500,14 @@ class MLWorkbenchPage(QWidget):
         def done(payload: Any) -> None:
             written, sidecar = payload
             self._persist_status.setText(f"bundle written: {written.name} (+ {sidecar.name})")
+            # part6 §8 (Phase 4): a saved bundle enters the shared
+            # workspace's model registry (best-effort side record).
+            try:
+                from pharmaml.studio import note as note_workspace
+
+                note_workspace("bundle", written, note=f"{sidecar.name} alongside")
+            except Exception:  # noqa: BLE001 - never block the save's success path
+                pass
 
         self._submit("saving model bundle", job, done, self._persist_status)
 

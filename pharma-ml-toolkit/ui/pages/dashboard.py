@@ -175,6 +175,48 @@ class DashboardPage(QWidget):
             holder.setLayout(row)
             lay.addWidget(holder)
 
+        # -- shared workspace recents (part6 §8, Phase 4) ------------------------
+        try:
+            from pharmaml.studio import entries as workspace_entries
+            from pharmaml.studio import summary_counts
+
+            counts = summary_counts()
+            ws_header = QLabel("Shared workspace (this session's inputs & outputs)")
+            ws_header.setObjectName("studioSectionTitle")
+            lay.addWidget(ws_header)
+            shown = 0
+            for kind, title in (
+                ("dataset", "Recent datasets"),
+                ("bundle", "Recent model bundles"),
+                ("artifact", "Recent artifacts"),
+            ):
+                for entry in workspace_entries(kind)[:4]:
+                    row = QHBoxLayout()
+                    name = QLabel(entry.name)
+                    name.setObjectName("studioDatasetName")
+                    when = QLabel(entry.recorded[:16].replace("T", " "))
+                    when.setObjectName("studioDatasetSize")
+                    when.setAlignment(Qt.AlignmentFlag.AlignRight)
+                    row.addWidget(name, stretch=1)
+                    row.addWidget(when)
+                    holder = QFrame()
+                    holder.setObjectName("studioRow")
+                    holder.setLayout(row)
+                    holder.setToolTip(f"{entry.path}\nrecorded {entry.recorded}"
+                                      + (f"\nsha-256 {entry.sha256[:16]}…" if entry.sha256 else ""))
+                    lay.addWidget(holder)
+                    shown += 1
+            if shown == 0:
+                note = QLabel(
+                    "Nothing recorded yet — datasets you open, bundles you "
+                    "save and artifacts you export appear here (Ctrl+K "
+                    "searches every capability)."
+                )
+                note.setWordWrap(True)
+                lay.addWidget(note)
+        except Exception:  # noqa: BLE001 - the census stays honest even without the registry
+            pass
+
         migration = QLabel(
             "Migration status (directive #16): COMPLETE — the original seventeen pages were "
             "verified in increment 14 (round 228); the legacy Tkinter "

@@ -14463,3 +14463,26 @@ guard re-pinned to zero (A=46, C=0).
 Phase 3 is DONE: every backend module has a GUI workflow. Next: the
 part6 remaining scope (whatever the master prompt's §4+ queue holds —
 check PROJECT_AUDIT_PROGRESS.md for the unstarted sections).
+
+## R21 (part6 Phase 4) — 2026-11-13
+
+Phase 3 closed last round (52/52); this round delivered Phase 4's
+three pillars over the canonical backends:
+
+1. §7 global search: ui/search_index.py (pure, 81 rows) +
+   ui/search_palette.py (Ctrl+K) + TopBar Search button. All eight
+   directive example queries verified landing right (tests pin it).
+   Dependency honesty: absent optional deps tag "needs X", never hide.
+2. §10 job center: ui/widgets/job_center.py + TopBar Jobs button.
+   Live job via runner signals + monotonic clock; cooperative Stop
+   ONLY (no Pause/Resume — §13); history from studio.runs with §9
+   provenance detail on select.
+3. §8 shared workspace: src/pharmaml/studio/workspace.py (JSON,
+   file-based, env-overridable, optional project, best-effort) +
+   Data Explorer/Workbench note their real loads/saves + Dashboard
+   recents card.
+
+Also fixed a registry gap: gen.rl + gen.mcts rows (real since
+v1.2.107, never registered). Registry now 57 integrated / 0 api.
+
+Suite 13/13; gates 51/51; UI battery 620 across all 45 suites.

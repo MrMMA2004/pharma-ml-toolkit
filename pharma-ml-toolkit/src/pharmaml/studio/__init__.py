@@ -49,6 +49,15 @@ from pharmaml.studio.runs import (
     run_families,
     runs_root,
 )
+from pharmaml.studio.workspace import (
+    WorkspaceEntry,
+    current_project,
+    entries,
+    note,
+    set_current_project,
+    summary_counts,
+    workspace_path,
+)
 
 __all__ = [
     "CAPABILITIES",
@@ -60,10 +69,17 @@ __all__ = [
     "Capability",
     "CardEvidence",
     "RegistrySummary",
+    "WorkspaceEntry",
     "capabilities_for_card",
     "card_route_target",
+    "current_project",
+    "entries",
     "find",
+    "note",
+    "set_current_project",
     "summary",
+    "summary_counts",
+    "workspace_path",
     "collect_evidence",
     "dataset_evidence",
     "dl_evidence",

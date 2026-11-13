@@ -233,6 +233,14 @@ class DataExplorerPage(QWidget):
         self._source = str(path)
         self._table.bind_frame(frame, note="No dataset loaded")
         self._status.setText(f"{path.name} — {self._table.statusHint}")
+        # part6 §8 (Phase 4): a successful load enters the shared
+        # workspace's dataset registry (best-effort side record).
+        try:
+            from pharmaml.studio import note as note_workspace
+
+            note_workspace("dataset", path, note=f"{len(frame)} rows")
+        except Exception:  # noqa: BLE001 - the registry must never block a load
+            pass
         self._column_combo.blockSignals(True)
         self._column_combo.clear()
         numeric = [c for c in frame.columns if pd.api.types.is_numeric_dtype(frame[c])]

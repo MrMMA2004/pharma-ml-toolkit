@@ -28,8 +28,8 @@ capability assignments live in the pure-Python registry
 
 | Page | pharmaml modules imported (live grep) | card assignment (Phase 2 target) |
 | --- | --- | --- |
-| `dashboard` | — | 01 Introduction (current host of the §5 grid) |
-| `data_explorer` | ml.research_audit, ml.sar, ml.split_audit, utils.io | 02 Datasets |
+| `dashboard` | studio | 01 Introduction (current host of the §5 grid) |
+| `data_explorer` | ml.research_audit, ml.sar, ml.split_audit, studio, utils.io | 02 Datasets |
 | `chemistry` | chem, chem.csv_standardize, chem.features, utils.io | 02 Datasets (chemical preparation) |
 | `pkpd` | pharma.pk, pkpd.compartments, pkpd.events, pkpd.nca_ext, pkpd.ode, studio | 07 PK/PD |
 | `biology` | biology | 07 PK/PD (biology sub-workspace) |
@@ -47,8 +47,8 @@ capability assignments live in the pure-Python registry
 | `utilities` | chem, chem.converters, docking, pharma, utils.io, viz | 02 Datasets + cross-card utilities |
 | `settings_page` | — | 01 Introduction (global menu) |
 
-Tests: 616 UI test functions across
-44 UI suites; page smoke
+Tests: 629 UI test functions across
+45 UI suites; page smoke
 coverage via `tests/ui/test_pages_smoke.py`.
 
 ## 3. Backend census
@@ -94,7 +94,7 @@ preserves metadata/provenance.  Import presence, a button, or a
 synthetic demo is NOT integration.  Phase 6's coverage tests enforce
 this against the registry, not against prose.
 
-Registry coverage (live): **52 capabilities**, 52 integrated; orphans 0; test gaps 0; Other card absent.
+Registry coverage (live): **57 capabilities**, 57 integrated; orphans 0; test gaps 0; Other card absent.
 
 ## 6. Migration plan (Phases 1-6)
 

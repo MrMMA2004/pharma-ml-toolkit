@@ -1,3 +1,40 @@
+## [1.2.191] — 2026-11-13
+### Added — part6 round 21 (Phase 4): global search, shared workspace, unified job center
+
+- **Global capability search / command palette (§7)** — `Ctrl+K` or the
+  top bar's "Search…" opens a palette over a NEW pure search index
+  (`ui/search_index.py`, no Qt): all 54 registry capabilities, the nine
+  cards and the 18 sections, with scientific-terminology aliases
+  (morgan/ECFP, conformal prediction, GNN, MCTS, Vina, PBPK, RMSD,
+  TIFF…). All EIGHT example queries from the directive land their top
+  hit on the right section (pinned by tests). Every result shows the
+  parent card and destination; unavailable optional dependencies are
+  TAGGED "needs <dep>", never hidden — distinguished from missing
+  functionality per §7. No private class names are exposed.
+- **Unified job center (§10)** — the top bar's "Jobs" button opens a
+  dialog with the live job (name, monotonic-clock runtime, the
+  cooperative Stop only — no fake Pause/Resume, per §13) and the
+  recorded run history from `pharmaml.studio.runs` (the same records
+  the pages have written since v1.2.171), newest first, with the §9
+  provenance detail on select (family, label, created, toolkit
+  version, the run's own summary — nothing inferred).
+- **Shared session workspace (§8)** — `pharmaml.studio.workspace`: a
+  file-based JSON registry (env-overridable path, no database) of the
+  session's datasets, model bundles and artifacts with canonical
+  sha-256 fingerprints, path de-duplication, a 24-per-kind cap, an
+  OPTIONAL project tag (never forced), and best-effort semantics (a
+  failed side-write never touches the user's results). The Data
+  Explorer notes every loaded dataset, the Workbench notes saved
+  bundles, and the Dashboard shows the recents card.
+- **Registry: `gen.rl` + `gen.mcts` rows added** (the Reinforcement
+  Learning and MCTS workflows were real on the Generative page since
+  v1.2.107 but unregistered) + the three Phase-4 rows — 57 integrated.
+- **Tests:** `tests/ui/test_phase4.py` — 13 pins: index purity, the
+  eight directive queries, dependency honesty, the palette's
+  navigation through the public API, the job center's live/honest-idle
+  contract, and the workspace's record/list/dedupe/refusal/corruption
+  paths, all env-isolated.
+
 ## [1.2.190] — 2026-11-13
 ### Added — part6 round 20 (Phase 3, batch 4 — the closer): the last three class-C backends
 

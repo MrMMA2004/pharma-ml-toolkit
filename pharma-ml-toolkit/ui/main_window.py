@@ -198,6 +198,8 @@ class MainWindow(QMainWindow):
         self.top_bar.back_requested.connect(self.go_back)
         self.top_bar.settings_requested.connect(lambda: self.go_to("settings"))
         self.top_bar.advanced_toggled.connect(self._set_advanced_nav)
+        self.top_bar.search_requested.connect(self.open_search)
+        self.top_bar.jobs_clicked.connect(self.open_job_center)
         self.home.card_activated.connect(self.open_card)
         bar_wrap = QWidget()
         bar_lay = QVBoxLayout(bar_wrap)
@@ -248,6 +250,12 @@ class MainWindow(QMainWindow):
         back_action.setShortcut(QKeySequence("Alt+Left"))
         back_action.triggered.connect(self.go_back)
         self.addAction(back_action)
+
+        # -- global search (part6 §7, Phase 4): Ctrl+K opens the palette ------
+        search_action = QAction("Search capabilities", self)
+        search_action.setShortcut(QKeySequence("Ctrl+K"))
+        search_action.triggered.connect(self.open_search)
+        self.addAction(search_action)
 
         # -- navigation history (part6 §5: Home/Back with memory) -------------
         self._history: list[tuple[str, str | None]] = []  # (mode marker, section)
@@ -320,6 +328,20 @@ class MainWindow(QMainWindow):
     def go_to(self, section: str) -> None:
         """Public navigation API (tests and page cross-links)."""
         self._go(section)
+
+    def open_search(self) -> None:
+        """The §7 command palette: search, then navigate on accept."""
+        from .search_palette import SearchPalette
+
+        palette = SearchPalette(self)
+        if palette.exec() == SearchPalette.DialogCode.Accepted and palette.chosen_route:
+            self.go_to(palette.chosen_route)
+
+    def open_job_center(self) -> None:
+        """The §10 unified job center (live job + honest history)."""
+        from .widgets.job_center import JobCenterDialog
+
+        JobCenterDialog(self.runner, parent=self).exec()
 
     def go_home(self, persist: bool = True) -> None:
         self._push_history()
