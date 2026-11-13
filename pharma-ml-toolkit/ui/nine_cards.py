@@ -41,7 +41,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QEvent, QObject, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -394,7 +394,13 @@ class NineCardGrid(QWidget):
     by objectName ``nineCardLivePreview``; :meth:`refresh_evidence`
     re-reads the real sources and updates the SAME labels in place
     (the §8 widget-reuse contract, now for the evidence text too).
+
+    part6 §5 (Phase 1): clicking anywhere on a card emits
+    ``card_activated(card_id)`` — the nine-card-first home connects it
+    to its CardWorkspace.  The entry buttons keep their exact routing.
     """
+
+    card_activated = Signal(str)
 
     def __init__(
         self,
@@ -409,6 +415,10 @@ class NineCardGrid(QWidget):
             frame = _build_card(card, context)
             frame.setObjectName("nineCard")
             self._frames[card.card_id] = frame
+            # part6 §5: the whole card is clickable — the workspace opens;
+            # the buttons inside keep their per-section routing.
+            frame.setCursor(Qt.CursorShape.PointingHandCursor)
+            frame.installEventFilter(self)
         self._previews: dict[str, QLabel] = {}
         for card in NINE_CARDS:
             labels = [
@@ -422,6 +432,15 @@ class NineCardGrid(QWidget):
         self._columns = 0
         self._stretch_row: int | None = None
         self.reflow(3)  # the §5 canonical layout is the default
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        """A mouse press on a card frame opens that card's workspace."""
+        if event.type() == QEvent.Type.MouseButtonPress and isinstance(obj, QFrame):
+            for card_id, frame in self._frames.items():
+                if frame is obj:
+                    self.card_activated.emit(card_id)
+                    break
+        return super().eventFilter(obj, event)
 
     def current_columns(self) -> int:
         """The live column count (3, 2 or 1)."""

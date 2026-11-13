@@ -14360,3 +14360,21 @@ the doc + UI battery at 1.2.184.
 default screen; sidebar → optional advanced mode; Settings to a
 global menu; registry validation tests (exact order, routes, Other
 semantics).  The map's §7 gap list is the backlog.
+
+## R15 (part6 Phase 1) — the nine-card-first shell — 2026-11-13
+
+The inversion: the app opens on the nine-card home; the 18-page
+sidebar survives only behind the Advanced-navigation toggle.  Three
+new modules (home, card_workspace, top_bar) + the MainWindow rewrite;
+the Dashboard page and every pin keep working (54/54 on the four
+pinned suites).  New 21-pin battery tests/ui/test_nine_card_first.py.
+
+Full UI battery: 39 suites.  Four environment-drift failures (exact
+floats/SMILES from the generative GA and the UMAP trustworthiness)
+fail on pristine v1.2.184 too — relaxed to structural bounds, with
+comments saying why.  The two splitter-policy failures were mine (the
+new bar-host splitter) — fixed by using a plain layout.  qdarkstyle
+was missing from the rebuilt venv (recovery gap) — installed.
+
+Next (Phase 2): the full capability→card assignment audit, the
+registry under src/pharmaml/studio/, and the Other-card decision.

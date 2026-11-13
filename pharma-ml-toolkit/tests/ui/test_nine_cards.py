@@ -240,8 +240,16 @@ class TestPhase3ResponsiveGrid:
     def test_dashboard_uses_the_responsive_grid(self, main_window) -> None:
         from ui.nine_cards import NineCardGrid
 
+        # part6 §2.1 (Phase 1): the grid is PROMOTED to the nine-card home;
+        # the Dashboard page keeps its own grid (the page survives as a
+        # section).  Two grids total, one per host, both the real widget.
         grids = main_window.findChildren(NineCardGrid)
-        assert len(grids) == 1, "the Dashboard page must host exactly one responsive grid"
+        assert len(grids) == 2, (
+            "the promoted home AND the Dashboard page each host one responsive grid"
+        )
+        assert main_window.mode.currentIndex() == 0
+        home_grid = main_window.home.cards_host
+        assert isinstance(home_grid, NineCardGrid)
 
 
 class TestPhase3SmilesPreview:

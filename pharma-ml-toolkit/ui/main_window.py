@@ -1,9 +1,12 @@
-"""The Studio main window (directive 16.5/16.7/16.15).
+"""The Studio main window (directive 16.5/16.7/16.15; part6 §2.1 Phase 1).
 
-QMainWindow with a collapsible sidebar (Navigation), a QStackedWidget
-of feature pages, a status bar with a persistent ready message, toast
-notifications, Ctrl+1..9 section jumps, and geometry/nav/theme state
-persisted through QSettings on close.
+The nine-card-first inversion: the application opens on the §5
+nine-card home, cards open dedicated workspaces, and the pages live
+behind them exactly as before.  The 18-item sidebar survives as the
+optional Advanced-navigation mode (top-bar toggle); it is NOT the
+dominant default interface anymore (part6 §2.1).  ``go_to`` remains
+the one routing API — the sidebar, the card buttons, the workspaces,
+Ctrl+1..9 and the tests all funnel through it.
 """
 
 from __future__ import annotations
@@ -17,14 +20,19 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStackedWidget,
     QStatusBar,
+    QVBoxLayout,
     QWidget,
 )
 
 from .app_settings import AppSettings
+from .card_workspace import CardWorkspace
+from .home import NineCardHome
+from .nine_cards import NINE_CARDS
 from .theme_manager import ChartPalette, ThemeManager
 from .widgets.navigation import Navigation
 from .widgets.notification_widget import Notifications
 from .widgets.responsive import configure_splitter
+from .widgets.top_bar import TopBar
 from .workers.job_worker import JobRunner
 
 SECTIONS: list[tuple[str, str]] = [
@@ -48,9 +56,23 @@ SECTIONS: list[tuple[str, str]] = [
     ("settings", "Settings"),
 ]
 
+#: part6 §2.2 — the card→section anchors used by Ctrl+1..9; each card
+#: workspace carries its full entry set (the registry's CardEntry list).
+CARD_SECTION_KEYS: dict[str, str] = {
+    "introduction": "dashboard",
+    "datasets": "data",
+    "machine-learning": "models",
+    "deep-learning": "deep_learning",
+    "generative-ai": "generative",
+    "molecular-docking": "docking",
+    "pkpd": "pkpd",
+    "molecular-dynamics-analysis": "molecular_dynamics",
+    "visualization": "imagelab",
+}
+
 
 class MainWindow(QMainWindow):
-    """Shell: navigation + pages + status bar + notifications."""
+    """Shell: top bar + (home | card workspaces | pages) + status bar."""
 
     def __init__(self, theme: ThemeManager | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -63,10 +85,6 @@ class MainWindow(QMainWindow):
         assert isinstance(app_ref, QApplication)  # window exists only inside a QApplication
         self.theme = theme or ThemeManager(app_ref, self.settings.settings())
         self.runner = JobRunner(self)
-
-        splitter = QSplitter(Qt.Orientation.Horizontal, self)
-        self.nav = Navigation(SECTIONS)
-        self.pages = QStackedWidget()
 
         # -- pages (import lazily so Qt is up first) ----------------------------
         from .pages.bestofml import BestOfMLWorkbenchPage
@@ -88,6 +106,7 @@ class MainWindow(QMainWindow):
         from .pages.unsupervised import UnsupervisedWorkbenchPage
         from .pages.utilities import UtilitiesWorkbenchPage
 
+        self.pages = QStackedWidget()
         self.dashboard_page = DashboardPage()
         self.data_page = DataExplorerPage(theme=self.theme, runner=self.runner)
         self.chemistry_page = ChemistryWorkbenchPage(theme=self.theme, runner=self.runner, data_explorer=self.data_page)
@@ -145,14 +164,58 @@ class MainWindow(QMainWindow):
         ):
             self.pages.addWidget(page)
 
-        splitter.addWidget(self.nav)
-        splitter.addWidget(self.pages)
-        splitter.setSizes([200, 980])
-        # §23.2: neither side collapsible -- the nav (every section) and
-        # the page stack stay reachable at every window size; growth
-        # flows to the pages (§23.3 resizing discipline).
-        configure_splitter(splitter, min_sizes=(200, 480), stretch=(0, 1))
-        self.setCentralWidget(splitter)
+        # -- three modes (part6 §2.1): home, card workspaces, pages ----------
+        self.home = NineCardHome()
+        self.workspaces: dict[str, CardWorkspace] = {}
+        self._workspace_stack = QStackedWidget()
+        for card in NINE_CARDS:
+            ws = CardWorkspace(card)
+            ws.open_section.connect(self.go_to)
+            self.workspaces[card.card_id] = ws
+            self._workspace_stack.addWidget(ws)
+
+        self.mode = QStackedWidget()
+        self.mode.addWidget(self.home)              # index 0 — the default screen
+        self.mode.addWidget(self._workspace_stack)  # index 1 — card workspaces
+        self.mode.addWidget(self.pages)             # index 2 — the 18 pages
+        self.mode.setCurrentIndex(0)
+
+        # -- the legacy sidebar: hidden unless Advanced is on (§2.1) ---------
+        self.nav = Navigation(SECTIONS)
+        self.splitter = QSplitter(Qt.Orientation.Horizontal, self)
+        self.splitter.addWidget(self.nav)
+        self.splitter.addWidget(self.mode)
+        # §23.2 policy: neither side collapsible; the nav's minimum keeps
+        # every section readable when Advanced navigation is on.  Hiding
+        # the nav (below) removes it from the layout entirely — the §2.1
+        # default needs no collapsible handle.
+        configure_splitter(self.splitter, min_sizes=(200, 480), stretch=(0, 1))
+        self.setCentralWidget(self.splitter)
+
+        # -- top bar (§5.2) ----------------------------------------------------
+        self.top_bar = TopBar()
+        self.top_bar.home_requested.connect(self.go_home)
+        self.top_bar.back_requested.connect(self.go_back)
+        self.top_bar.settings_requested.connect(lambda: self.go_to("settings"))
+        self.top_bar.advanced_toggled.connect(self._set_advanced_nav)
+        self.home.card_activated.connect(self.open_card)
+        bar_wrap = QWidget()
+        bar_lay = QVBoxLayout(bar_wrap)
+        bar_lay.setContentsMargins(0, 0, 0, 0)
+        bar_lay.setSpacing(0)
+        bar_lay.addWidget(self.top_bar)
+        bar_lay.addWidget(self.splitter)
+        self.setCentralWidget(bar_wrap)
+
+        # the promoted home grid reads the same live page-state provider as
+        # the Dashboard's own grid (part5 §11 contract, unchanged)
+        self.home.set_card_context(self._card_context)
+        self.dashboard_page.set_card_context(self._card_context)
+
+        # §2.1: the sidebar is NOT the dominant default — hidden at launch;
+        # a hidden splitter child is excluded from the layout, so the mode
+        # stack takes the full width without any size juggling.
+        self.nav.hide()
 
         # -- status bar ------------------------------------------------------------
         self._status = QStatusBar()
@@ -160,6 +223,8 @@ class MainWindow(QMainWindow):
         self._status.showMessage("Ready")
         self.runner.job_started.connect(lambda name: self._status.showMessage(f"Running: {name}"))
         self.runner.job_ended.connect(lambda: self._status.showMessage("Ready"))
+        self.runner.job_started.connect(lambda name: self.top_bar.set_jobs(f"Running: {name}"))
+        self.runner.job_ended.connect(lambda: self.top_bar.set_jobs(""))
 
         # -- notifications ------------------------------------------------------------
         self._toasts = Notifications(self)
@@ -175,15 +240,36 @@ class MainWindow(QMainWindow):
             action.setShortcut(QKeySequence(f"Ctrl+{i}"))
             action.triggered.connect(lambda _checked=False, idx=i - 1: self._go(SECTIONS[idx][0]))
             self.addAction(action)
+        home_action = QAction("Go to the nine-card home", self)
+        home_action.setShortcut(QKeySequence("Alt+Home"))
+        home_action.triggered.connect(self.go_home)
+        self.addAction(home_action)
+        back_action = QAction("Go back to the previous workspace", self)
+        back_action.setShortcut(QKeySequence("Alt+Left"))
+        back_action.triggered.connect(self.go_back)
+        self.addAction(back_action)
 
-        # part5 §11: the nine cards read the live page state through one
-        # provider — every dashboard visit re-reads real evidence.
-        self.dashboard_page.set_card_context(self._card_context)
+        # -- navigation history (part6 §5: Home/Back with memory) -------------
+        self._history: list[tuple[str, str | None]] = []  # (mode marker, section)
+        self._current_route: tuple[str, str | None] = ("home", None)
 
         # -- restore persisted state --------------------------------------------
         self.theme.restore_state()
         saved_nav = self.settings.nav()
-        self._go(saved_nav if saved_nav in dict(SECTIONS) else "dashboard", persist=False)
+        # part6 §2.1: the app opens on the nine-card home by default;
+        # restoring the last workspace is opt-in via the nav/restore_last
+        # flag (default off — the old sidebar-first default never returns).
+        restore = False
+        try:
+            raw = self.settings.settings().value("nav/restore_last")
+            restore = isinstance(raw, str) and raw.lower() in ("true", "1")
+        except Exception:  # noqa: BLE001 - settings must never block launch
+            restore = False
+        if restore and saved_nav in dict(SECTIONS):
+            self._current_route = ("page", saved_nav)
+            self._apply_route("page", saved_nav, persist=False)
+        else:
+            self._apply_route("home", None, persist=False)
         geometry = self.settings.geometry()
         if geometry is not None:
             self.restoreGeometry(geometry)
@@ -192,20 +278,69 @@ class MainWindow(QMainWindow):
             self.restoreState(state)
 
     # -- navigation ------------------------------------------------------------
-    def _go(self, section: str, persist: bool = True) -> None:
-        index = dict(SECTIONS).get(section)
-        if index is None:
-            return
-        target = {key: i for i, (key, _title) in enumerate(SECTIONS)}
-        if section in target:
+    def _push_history(self) -> None:
+        self._history.append(self._current_route)
+        self._history = self._history[-24:]  # bounded memory
+
+    def _apply_route(self, marker: str, section: str | None, persist: bool = True) -> None:
+        if marker == "home":
+            self.mode.setCurrentIndex(0)
+        elif marker == "workspace":
+            ws = self.workspaces.get(section or "")
+            if ws is None:
+                return
+            self._workspace_stack.setCurrentWidget(ws)
+            self.mode.setCurrentIndex(1)
+        else:
+            target = {key: i for i, (key, _title) in enumerate(SECTIONS)}
+            if section not in target:
+                return
             self.pages.setCurrentIndex(target[section])
+            self.mode.setCurrentIndex(2)
             self.nav.select(section)
-            if persist:
-                self.settings.save_nav(section)
+        self._current_route = (marker, section)
+        self.top_bar.set_back_enabled(bool(self._history))
+        if marker == "home":
+            title = "Nine-card home"
+        elif marker == "workspace":
+            title = f"{self.workspaces[section].card.title} — card workspace"
+        else:
+            title = dict(SECTIONS).get(section or "", section or "")
+        self.top_bar.set_location(title)
+        if persist and marker == "page" and section is not None:
+            self.settings.save_nav(section)
+
+    def _go(self, section: str, persist: bool = True) -> None:
+        """Route to a page section (sidebar, shortcuts, tests, cards)."""
+        if section not in dict(SECTIONS):
+            return
+        self._push_history()
+        self._apply_route("page", section, persist=persist)
 
     def go_to(self, section: str) -> None:
         """Public navigation API (tests and page cross-links)."""
         self._go(section)
+
+    def go_home(self, persist: bool = True) -> None:
+        self._push_history()
+        self._apply_route("home", None, persist=persist)
+
+    def go_back(self) -> None:
+        if not self._history:
+            return
+        marker, section = self._history.pop()
+        self._apply_route(marker, section, persist=False)
+
+    def open_card(self, card_id: str) -> None:
+        """Open a card's workspace (part6 §5) — the grid's card target."""
+        if card_id not in self.workspaces:
+            return
+        self._push_history()
+        self._apply_route("workspace", card_id, persist=False)
+
+    def _set_advanced_nav(self, on: bool) -> None:
+        """§2.1: the 18-item sidebar rides again — but only on request."""
+        self.nav.setVisible(on)
 
     # -- §11 evidence context --------------------------------------------------------
     def _card_context(self) -> dict[str, object]:

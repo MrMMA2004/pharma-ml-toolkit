@@ -1,3 +1,37 @@
+## [1.2.185] — 2026-11-13
+### Added — part6 round 15 (Phase 1): the nine-card-first shell lands
+
+- **The inversion (part6 §2.1):** the Studio now opens on the
+  nine-card home — the §5 grid promoted from the Dashboard page into
+  the application's default screen.  MainWindow routes three modes
+  (home → card workspace → the 18 pages); ``go_to`` stays the one
+  routing API, so every existing pin, shortcut and cross-link keeps
+  working unchanged.
+- **New:** ``ui/home.py`` (the promoted home + §11 evidence wiring),
+  ``ui/card_workspace.py`` (a workspace per card: title, description,
+  workflow entries, in-card filter), ``ui/widgets/top_bar.py``
+  (Home / Back / location / live-jobs indicator / Settings / the
+  Advanced-navigation toggle), navigation history with Alt+Home and
+  Alt+Left, and the grid's additive ``card_activated`` signal —
+  clicking a card opens its workspace.
+- **The 18-item sidebar is no longer the dominant default** (§2.1):
+  it hides at launch and returns only behind the top-bar toggle.
+  Restoring the last workspace is opt-in (``nav/restore_last``,
+  default off — the old default never returns).
+- **Tests:** new ``tests/ui/test_nine_card_first.py`` (21 pins:
+  default=home, sidebar-not-dominant, history round-trips, all 18
+  pages reachable, 9 workspaces in the directive order, no Other
+  card, routes valid, evidence on the home grid, restore opt-in).
+  Full UI battery re-run: 39 suites green after four environment-
+  drift pins (generative GA/Pareto/UMAP exact-float and exact-SMILES
+  literals) were relaxed to structural assertions — those four fail
+  on pristine v1.2.184 too, so this is drift repair, not regression
+  hiding.  Two genuine bugs the new pins caught were fixed: the
+  history guard that swallowed home-entry, and the splitter-hide
+  semantics of the advanced toggle.
+- One superseded pin updated honestly: the Dashboard grid count
+  (×1 → home + dashboard ×2), per §2.1's promotion.
+
 ## [1.2.184] — 2026-11-13
 ### Added — part6 round 14 (Phase 0): the capability map — the nine-card-first audit lands
 
