@@ -58,6 +58,12 @@ class JobCenterDialog(QDialog):
 
         lay = QVBoxLayout(self)
 
+        # -- §17E resource monitor card (live, honest) ------------------------
+        from .resource_monitor import ResourceMonitorWidget
+
+        self._resources = ResourceMonitorWidget(runner)
+        lay.addWidget(self._resources)
+
         # -- the live job card ------------------------------------------------
         live = QHBoxLayout()
         self._live_label = QLabel("No job running.")

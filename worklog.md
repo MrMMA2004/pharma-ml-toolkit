@@ -14593,3 +14593,32 @@ stamped 195 with both rounds named.
 Suites: comparison 10/10, compare UI 4/4, reports 8/8, report UI 3/3,
 phase4 pins 13/13, gates 81 (after the FEATURES stamp fix). Registry
 64 caps. v1.2.195 shipped.
+
+## R26 (part6 §17E+G, forms) — 2026-11-13
+
+Closed the §17 checklist. §17E: the resource monitor rides the Job
+Center (the §18 reuse rule — no new page); honesty pinned by tests:
+memory unknown is rendered unknown, GPU absence stated as fact, the
+preset switch round-trips the real store, the timer runs only while
+shown. §17G: all three gaps as additive keys on the existing
+workspace file — favorites (star toggle on the Dashboard recents,
+starred-first ordering), per-template export-folder recall (the
+templates tab pre-fills the remembered folder on template switch),
+and layout preferences (backend ready; the tab-order consumer can
+adopt it without another schema change).
+
+The big piece was the card-integrated forms: the five data-dependent
+templates now run end-to-end from the tab. Two real science
+constraints surfaced while testing, both left honest rather than
+papered over: a 4-row CSV cannot satisfy sklearn's one-test-sample-
+per-class split rule, and a raw smiles+target CSV has zero numeric
+features (the dataset stage excludes the SMILES column, visibly) —
+the test fixture carries numeric descriptor columns and 16 rows,
+documenting what the template actually needs.
+
+Incidents: none this round (the QFormLayout takeAt warning is Qt
+noise from clearing rows; harmless, not suppressed).
+
+Suites: resource monitor 6/6, workspace gaps 5/5, templates 10/10,
+full affected sweep (phase4/5, utilities, templates, monitor, gaps)
+60/60. v1.2.196 shipped.

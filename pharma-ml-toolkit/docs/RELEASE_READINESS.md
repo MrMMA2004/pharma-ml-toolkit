@@ -42,12 +42,12 @@ All probed dependencies import cleanly in this environment (the Qt rows are prob
 
 ## 3. Test evidence
 
-- Suites discovered: **192** (49 UI, 143 library)
-- Tests collected: **5931**
+- Suites discovered: **194** (50 UI, 144 library)
+- Tests collected: **5946**
 
 | Suite chunk (as actually run) | Result |
 | --- | --- |
-| `round 25 targeted suites` | comparison 10/10 + compare UI 4/4 + reports 8/8 + report UI 3/3 + gates 118 + affected UI suites 52, 0 failed |
+| `round 26 targeted suites` | resource monitor 6/6 + workspace gaps 5/5 + templates 10/10 + affected sweep 60/60, 0 failed |
 
 Chunkening follows §14.2 (low-memory constraints): suites
 run sequentially in small groups; nothing was skipped in
@@ -55,10 +55,10 @@ bulk and no skipped test is claimed as passed.
 
 ## 4. Version carriers (§15)
 
-- VERSION: `1.2.195`
-- pyproject.toml: `1.2.195`
-- src/pharmaml/__init__.py: `1.2.195`
-- CHANGELOG.md leads with: `1.2.195`
+- VERSION: `1.2.196`
+- pyproject.toml: `1.2.196`
+- src/pharmaml/__init__.py: `1.2.196`
+- CHANGELOG.md leads with: `1.2.196`
 - Agreement: **yes**
 
 ## 5. Release-archive verification (§14)

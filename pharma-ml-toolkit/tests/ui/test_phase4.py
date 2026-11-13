@@ -292,3 +292,33 @@ def _all_label_text(widget) -> str:
     from PySide6.QtWidgets import QLabel
 
     return "\n".join(l.text() for l in widget.findChildren(QLabel))
+
+
+def test_workspace_star_toggle_on_the_dashboard(
+        studio_app, qtbot, monkeypatch, tmp_path) -> None:
+    """§17G: the ★ on a workspace row toggles a real favorite."""
+    monkeypatch.setenv("PHARML_STUDIO_WORKSPACE", str(tmp_path / "ws.json"))
+    import pandas as pd
+    from PySide6.QtWidgets import QToolButton
+
+    from pharmaml.studio import note
+    from pharmaml.studio.workspace import is_favorite
+
+    csv = tmp_path / "starrable.csv"
+    pd.DataFrame({"a": [1]}).to_csv(csv, index=False)
+    note("dataset", csv)
+
+    from ui.pages.dashboard import DashboardPage
+
+    page = DashboardPage()
+    qtbot.addWidget(page)
+    stars = [b for b in page.findChildren(QToolButton)]
+    assert stars, "the workspace rows carry star toggles"
+    star = stars[0]
+    assert star.text() == "☆"  # unstarred
+    star.click()
+    assert star.text() == "★"
+    assert is_favorite(str(csv))
+    star.click()
+    assert star.text() == "☆"
+    assert not is_favorite(str(csv))

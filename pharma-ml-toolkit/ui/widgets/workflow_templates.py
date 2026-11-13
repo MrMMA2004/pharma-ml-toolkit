@@ -83,25 +83,12 @@ class WorkflowTemplatesTab(QWidget):
         self._out_dir.setPlaceholderText(
             "export folder (required — pick or type a path)")
         form.addRow("export folder:", self._out_dir)
-        self._param_a = QDoubleSpinBox()
-        self._param_a.setRange(0.0, 1000.0)
-        self._param_a.setDecimals(3)
-        form.addRow("ka (1/h):", self._param_a)
-        self._param_b = QDoubleSpinBox()
-        self._param_b.setRange(0.0, 1000.0)
-        self._param_b.setDecimals(3)
-        form.addRow("ke (1/h):", self._param_b)
-        self._param_c = QDoubleSpinBox()
-        self._param_c.setRange(0.0, 100000.0)
-        self._param_c.setDecimals(1)
-        form.addRow("Vd (L):", self._param_c)
-        self._param_d = QDoubleSpinBox()
-        self._param_d.setRange(0.0, 100000.0)
-        self._param_d.setDecimals(1)
-        form.addRow("dose (mg):", self._param_d)
-        self._param_e = QSpinBox()
-        self._param_e.setRange(10, 500)
-        form.addRow("MD frames:", self._param_e)
+        # the per-template input area: swapped by _refresh() so every
+        # template carries its own card-integrated form (R26-c)
+        self._form_host = QWidget()
+        self._form_layout = QFormLayout(self._form_host)
+        self._form_layout.setContentsMargins(0, 0, 0, 0)
+        form.addRow(self._form_host)
         lay.addLayout(form)
 
         self._pick_btn = QPushButton("Pick export folder…")
@@ -111,6 +98,12 @@ class WorkflowTemplatesTab(QWidget):
         btns = QHBoxLayout()
         btns.addWidget(self._pick_btn)
         btns.addWidget(self._run_btn)
+        self._remember = QPushButton("Remember export folder")
+        self._remember.setToolTip(
+            "§17G: persist this folder for THIS template — it comes back "
+            "pre-filled the next time you pick the template.")
+        self._remember.clicked.connect(self._remember_folder)
+        btns.addWidget(self._remember)
         btns.addStretch(1)
         lay.addLayout(btns)
 
@@ -141,6 +134,17 @@ class WorkflowTemplatesTab(QWidget):
         except Exception as exc:  # noqa: BLE001 - honest display
             lines.append(f"(chain preview unavailable: {exc})")
         self._stages.setPlainText("\n".join(lines))
+        self._build_form_for(name)
+        # fill the target/compound combo live as the path is typed/picked
+        for key in ("data_path", "screen_path"):
+            field = self._inputs.get(key)
+            if isinstance(field, QLineEdit):
+                field.textChanged.connect(self._refresh_target_combo)
+        # §17G: recall this template's remembered export folder
+        from pharmaml.studio.workspace import last_export_folder
+
+        remembered = last_export_folder(name)
+        self._out_dir.setText(remembered)
 
     def _describe_chain(self, name: str):
         """Build the pipeline with placeholder args for display."""
@@ -168,6 +172,168 @@ class WorkflowTemplatesTab(QWidget):
                                   smiles_col="SMILES")
         raise ValueError(name)
 
+    # -- per-template card-integrated forms (R26-c) ---------------------------
+
+    def _clear_form(self) -> None:
+        while (row := self._form_layout.takeAt(0)) is not None:
+            if row.widget():
+                row.widget().deleteLater()
+
+    def _add_path_row(self, label: str, placeholder: str,
+                      pick_caption: str) -> QLineEdit:
+        """One labelled path field with its own inline Pick button."""
+        edit = QLineEdit()
+        edit.setPlaceholderText(placeholder)
+        pick = QPushButton("…")
+        pick.setFixedWidth(28)
+        pick.clicked.connect(lambda: self._pick_file(edit, pick_caption))
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(edit, stretch=1)
+        row.addWidget(pick)
+        host = QWidget()
+        host.setLayout(row)
+        self._form_layout.addRow(label, host)
+        return edit
+
+    def _pick_file(self, edit: QLineEdit, caption: str) -> None:
+        from PySide6.QtWidgets import QFileDialog
+
+        chosen, _ = QFileDialog.getOpenFileName(self, caption)
+        if chosen:
+            edit.setText(chosen)
+
+    def _build_form_for(self, name: str) -> None:
+        """Swap the input form to the current template's fields."""
+        self._clear_form()
+        self._inputs: dict[str, object] = {}
+        if name == "pk_pd_modeling":
+            for key, label, top, decimals in (
+                    ("ka", "ka (1/h)", 1000.0, 3),
+                    ("ke", "ke (1/h)", 1000.0, 3),
+                    ("vd", "Vd (L)", 100000.0, 1),
+                    ("dose", "dose (mg)", 100000.0, 1)):
+                box = QDoubleSpinBox()
+                box.setRange(0.0, top)
+                box.setDecimals(decimals)
+                box.setValue({"ka": 1.2, "ke": 0.25,
+                              "vd": 40.0, "dose": 250.0}[key])
+                self._form_layout.addRow(label, box)
+                self._inputs[key] = box
+        elif name == "md_analysis":
+            box = QSpinBox()
+            box.setRange(10, 500)
+            box.setValue(80)
+            self._form_layout.addRow("MD frames:", box)
+            self._inputs["n_frames"] = box
+        elif name == "molecular_generation_screening":
+            objective = QComboBox()
+            objective.addItems(["qed", "sa", "logp_band", "mw_band",
+                                "tpsa_band"])
+            self._form_layout.addRow("objective:", objective)
+            gens = QSpinBox()
+            gens.setRange(1, 50)
+            gens.setValue(3)
+            self._form_layout.addRow("generations:", gens)
+            self._inputs.update(objective=objective, generations=gens)
+        elif name in ("qsar_model_development",
+                      "molecular_descriptor_generation"):
+            key = "data_path"
+            field = self._add_path_row(
+                "dataset CSV:", "molecules CSV (smiles + target columns)",
+                "Pick the dataset CSV")
+            self._inputs[key] = field
+            if name == "qsar_model_development":
+                target = QComboBox()
+                target.setEditable(True)
+                target.setToolTip(
+                    "the prediction target column; leave as (auto) to let "
+                    "the pipeline pick the last non-SMILES column")
+                target.addItem("(auto)")
+                self._form_layout.addRow("target column:", target)
+                self._inputs["target"] = target
+                self._inputs["_data_field"] = field
+            smiles = QComboBox()
+            smiles.setEditable(True)
+            smiles.setToolTip("the SMILES column (default: smiles/SMILES)")
+            smiles.addItem("smiles")
+            smiles.addItem("SMILES")
+            if name == "molecular_descriptor_generation":
+                self._form_layout.addRow("SMILES column:", smiles)
+                self._inputs["smiles_col"] = smiles
+            else:
+                self._inputs["smiles_col"] = smiles
+        elif name == "drug_response_prediction":
+            screen = self._add_path_row(
+                "response screen CSV:",
+                "drug-response screen (cell lines × compounds)",
+                "Pick the response screen CSV")
+            expr = self._add_path_row(
+                "expression CSV:", "gene-expression matrix",
+                "Pick the expression CSV")
+            compound = QComboBox()
+            compound.setEditable(True)
+            compound.setToolTip(
+                "restrict to one compound; (auto) takes the screen's "
+                "first compound (stated in the run record)")
+            compound.addItem("(auto)")
+            self._form_layout.addRow("compound:", compound)
+            cv = QSpinBox()
+            cv.setRange(2, 10)
+            cv.setValue(5)
+            self._form_layout.addRow("CV folds:", cv)
+            self._inputs.update(screen_path=screen, expression_path=expr,
+                                compound=compound, cv=cv)
+        elif name == "docking_preparation_analysis":
+            ligands = self._add_path_row(
+                "ligands CSV:", "SMILES ligand library CSV",
+                "Pick the ligands CSV")
+            receptor = self._add_path_row(
+                "receptor PDBQT:", "prepared receptor (.pdbqt)",
+                "Pick the receptor PDBQT")
+            smiles = QComboBox()
+            smiles.setEditable(True)
+            smiles.setToolTip("the SMILES column (default: SMILES)")
+            smiles.addItem("SMILES")
+            smiles.addItem("smiles")
+            self._form_layout.addRow("SMILES column:", smiles)
+            self._inputs.update(ligands_path=ligands,
+                                receptor_pdbqt=receptor, smiles_col=smiles)
+        else:
+            raise ValueError(name)
+
+    def _csv_columns(self, path: str) -> list[str]:
+        """Best-effort column peek (empty on any read failure)."""
+        try:
+            import csv
+
+            with open(path, newline="", encoding="utf-8", errors="replace") as fh:
+                return [str(c).strip() for c in next(csv.reader(fh))]
+        except (OSError, StopIteration, UnicodeError):
+            return []
+
+    def _refresh_target_combo(self) -> None:
+        """Fill the target/compound combos with the picked CSV's columns."""
+        field = self._inputs.get("data_path") or self._inputs.get("screen_path")
+        if not isinstance(field, QLineEdit):
+            return
+        combo = self._inputs.get("target") or self._inputs.get("compound")
+        if not isinstance(combo, QComboBox):
+            return
+        path = field.text().strip()
+        if not path:
+            return
+        keep = combo.currentText()
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("(auto)")
+        for column in self._csv_columns(path):
+            if column and column.lower() not in ("smiles",):
+                combo.addItem(column)
+        index = combo.findText(keep)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.blockSignals(False)
+
     # -- running ------------------------------------------------------------
 
     def _pick_out_dir(self) -> None:
@@ -180,28 +346,107 @@ class WorkflowTemplatesTab(QWidget):
     def _log_line(self, text: str) -> None:
         self._log.append(text)
 
+    def _remember_folder(self) -> None:
+        """§17G: persist the current folder for this template."""
+        from pharmaml.studio.workspace import remember_export_folder
+
+        folder = self._out_dir.text().strip()
+        if not folder:
+            self._log_line("error: nothing to remember — pick a folder first")
+            return
+        if remember_export_folder(folder, self._current_name()):
+            self._log_line(f"remembered export folder for "
+                           f"{self._current_name()}: {folder}")
+
     def _run(self) -> None:
         name = self._current_name()
         out_dir = self._out_dir.text().strip()
         if not out_dir:
             self._log_line("error: pick an export folder first")
             return
+
+        def text(key: str) -> str:
+            field = self._inputs.get(key)
+            return field.text().strip() if isinstance(field, QLineEdit) else ""
+
+        def combo(key: str, auto: str | None = None) -> str | None:
+            field = self._inputs.get(key)
+            if isinstance(field, QComboBox):
+                value = field.currentText().strip()
+                if value == "(auto)":
+                    return auto
+                return value
+            return auto
+
+        def required(key: str, what: str) -> str:
+            value = text(key)
+            if not value:
+                self._log_line(f"error: {what} is required — pick the file")
+                return ""
+            return value
+
         try:
             if name == "pk_pd_modeling":
                 pipe = build_template(
                     name, out_dir=out_dir,
-                    ka=self._param_a.value(), ke=self._param_b.value(),
-                    vd=self._param_c.value(), dose=self._param_d.value())
+                    ka=float(self._inputs["ka"].value()),
+                    ke=float(self._inputs["ke"].value()),
+                    vd=float(self._inputs["vd"].value()),
+                    dose=float(self._inputs["dose"].value()))
             elif name == "md_analysis":
                 pipe = build_template(name, out_dir=out_dir,
-                                      n_frames=self._param_e.value(), seed=0)
+                                      n_frames=int(
+                                          self._inputs["n_frames"].value()),
+                                      seed=0)
+            elif name == "molecular_generation_screening":
+                pipe = build_template(
+                    name, out_dir=out_dir,
+                    objective=str(self._inputs["objective"].currentText()),
+                    generations=int(
+                        self._inputs["generations"].value()), seed=42)
+            elif name == "qsar_model_development":
+                data = required("data_path", "the dataset CSV")
+                if not data:
+                    return
+                pipe = build_template(
+                    name, out_dir=out_dir, data_path=data,
+                    target=combo("target"), models=None,
+                    cv=5)
+            elif name == "molecular_descriptor_generation":
+                data = required("data_path", "the dataset CSV")
+                if not data:
+                    return
+                pipe = build_template(
+                    name, out_dir=out_dir, data_path=data,
+                    smiles_col=combo("smiles_col", "smiles"),
+                    kind="morgan")
+            elif name == "drug_response_prediction":
+                screen = required("screen_path", "the response screen CSV")
+                if not screen:
+                    return
+                expr = required("expression_path",
+                                "the expression CSV")
+                if not expr:
+                    return
+                pipe = build_template(
+                    name, out_dir=out_dir, screen_path=screen,
+                    expression_path=expr,
+                    compound=combo("compound"),
+                    models=None, cv=int(self._inputs["cv"].value()))
+            elif name == "docking_preparation_analysis":
+                ligands = required("ligands_path", "the ligands CSV")
+                if not ligands:
+                    return
+                receptor = required("receptor_pdbqt",
+                                    "the receptor PDBQT")
+                if not receptor:
+                    return
+                pipe = build_template(
+                    name, out_dir=out_dir, ligands_path=ligands,
+                    receptor_pdbqt=receptor,
+                    smiles_col=combo("smiles_col", "SMILES"))
             else:
-                self._log_line(
-                    f"'{name}' needs data inputs this quick form does not "
-                    "collect yet — run it via the Python API "
-                    "(pharmaml.studio.pipelines.build_template) or wait "
-                    "for its card-integrated form")
-                return
+                raise ValueError(name)
         except Exception as exc:  # noqa: BLE001 - honest inline error
             self._log_line(f"error: {type(exc).__name__}: {exc}")
             return

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QScrollArea,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -179,6 +180,10 @@ class DashboardPage(QWidget):
         try:
             from pharmaml.studio import entries as workspace_entries
             from pharmaml.studio import summary_counts
+            from pharmaml.studio.workspace import (
+                is_favorite,
+                toggle_favorite,
+            )
 
             counts = summary_counts()
             ws_header = QLabel("Shared workspace (this session's inputs & outputs)")
@@ -190,8 +195,26 @@ class DashboardPage(QWidget):
                 ("bundle", "Recent model bundles"),
                 ("artifact", "Recent artifacts"),
             ):
-                for entry in workspace_entries(kind)[:4]:
+                # §17G: starred entries float to the top of their kind
+                rows = sorted(
+                    workspace_entries(kind)[:4],
+                    key=lambda e: not is_favorite(e.path))
+                for entry in rows:
                     row = QHBoxLayout()
+                    star = QToolButton()
+                    star.setText("★" if is_favorite(entry.path) else "☆")
+                    star.setToolTip(
+                        "§17G favorite: starred entries stay at the top "
+                        "of their kind and survive the recency cap.")
+                    star.setAutoRaise(True)
+
+                    def _toggle(checked=False, path=entry.path,
+                                button=star):
+                        starred = toggle_favorite(path)
+                        button.setText("★" if starred else "☆")
+
+                    star.clicked.connect(_toggle)
+                    row.addWidget(star)
                     name = QLabel(entry.name)
                     name.setObjectName("studioDatasetName")
                     when = QLabel(entry.recorded[:16].replace("T", " "))

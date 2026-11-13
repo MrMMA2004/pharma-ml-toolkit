@@ -1,3 +1,43 @@
+## [1.2.196] — 2026-11-13
+### Added — part6 round 26 (§17E + §17G + card-integrated forms): §17 checklist closed
+
+- **`ui/widgets/resource_monitor.py`** — the §17E live resource
+  monitor, hosted as the Job Center's top card: CPU threads and
+  memory from the real probe (source always named; "unknown" when
+  unevidenced — a number is never invented), the execution preset
+  combo with its honest trade-off sentence (switching persists
+  through the real store), the active-job row riding the shared
+  JobRunner's own signals, a GPU line that states "none detected"
+  as fact rather than implying accelerator support, and a refresh
+  QTimer that runs ONLY while the widget is shown.
+- **Card-integrated forms for all seven §17A templates** — the
+  Workflow templates tab's five data-dependent chains (QSAR,
+  descriptors, drug-response, generative, docking) now have real
+  input forms: path fields with Pick buttons, a target/compound
+  combo auto-filled from the picked CSV's header, the generative
+  objective selector, the docking receptor path. The "run it via the
+  Python API" refusal branch is gone; every template runs from the
+  tab and writes its JSON run record.
+- **§17G workspace extensions** (`pharmaml.studio.workspace`,
+  additive top-level keys in the same studio-workspace/1 file):
+  `toggle_favorite`/`is_favorite`/`favorite_entries` (starred
+  entries float to the top of their Dashboard kind and survive the
+  recency cap), `remember_export_folder`/`last_export_folder`
+  (per-template export-folder recall in the templates tab, with a
+  Remember button), and `layout_preference`/`set_layout_preference`
+  (named key-value strings for UI state). An older payload keeps
+  reading as empty state; setters extend the file without dropping
+  old keys.
+- **Dashboard** — each workspace recents row carries a ★/☆ toggle
+  wired to the real favorites store.
+- **Tests**: `tests/ui/test_resource_monitor.py` (6 — honest
+  unknown, real preset round-trip, timer discipline),
+  `tests/test_workspace_gaps.py` (5 — round-trips, old-payload and
+  corrupt-payload empty states), the templates suite grew to 10
+  (end-to-end QSAR run through the form with a numeric-feature CSV,
+  required-path guards, generative objective run, folder recall),
+  and the phase4 suite gained the dashboard star-toggle pin.
+
 ## [1.2.195] — 2026-11-13
 ### Added — part6 round 25 (§17C + §17D): experiment comparison + scientific reports
 

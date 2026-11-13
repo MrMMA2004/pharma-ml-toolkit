@@ -190,3 +190,81 @@ def summary_counts() -> dict[str, int]:
         if kind in counts:
             counts[kind] += 1
     return counts
+
+
+# -- §17G: favorites, export presets, layout preferences ----------------------
+# All three ride the SAME workspace file as additive top-level keys:
+# an older build reading a newer file ignores the unknown keys, and
+# `_load` never rejects a payload for having extras.
+
+def toggle_favorite(path: str | Path) -> bool:
+    """Star/unstar one recorded entry by path (returns the NEW state).
+
+    A favorite survives the per-kind recency cap: capping drops the
+    OLDEST rows first, so a starred path is kept as long as it stays
+    recorded at all.
+    """
+    real = str(Path(path))
+    payload = _load()
+    favorites = set(payload.get("favorites", []))
+    now_starred = real not in favorites
+    if now_starred:
+        favorites.add(real)
+    else:
+        favorites.discard(real)
+    payload["favorites"] = sorted(favorites)
+    _save(payload)  # best-effort; the new state is returned regardless
+    return now_starred
+
+
+def is_favorite(path: str | Path) -> bool:
+    """Whether ``path`` is currently starred."""
+    real = str(Path(path))
+    return real in set(_load().get("favorites", []))
+
+
+def favorite_entries(kind: str | None = None) -> list[WorkspaceEntry]:
+    """The starred entries (most-recent first)."""
+    favorites = set(_load().get("favorites", []))
+    return [e for e in entries(kind) if e.path in favorites]
+
+
+def last_export_folder(template: str = "") -> str:
+    """The remembered export folder (per template, or the shared one)."""
+    payload = _load()
+    folders = payload.get("export_folders", {})
+    if not isinstance(folders, dict):
+        return ""
+    if template:
+        return str(folders.get(template, ""))
+    return str(folders.get("_shared", ""))
+
+
+def remember_export_folder(folder: str | Path, template: str = "") -> bool:
+    """Persist the export folder for next time (best-effort)."""
+    payload = _load()
+    folders = payload.get("export_folders", {})
+    if not isinstance(folders, dict):
+        folders = {}
+    folders[template or "_shared"] = str(Path(folder))
+    payload["export_folders"] = folders
+    return _save(payload)
+
+
+def layout_preference(key: str, default: str = "") -> str:
+    """One named layout preference ("" when never set)."""
+    prefs = _load().get("layout", {})
+    if not isinstance(prefs, dict):
+        return default
+    return str(prefs.get(key, default))
+
+
+def set_layout_preference(key: str, value: str) -> bool:
+    """Set one named layout preference (best-effort)."""
+    payload = _load()
+    prefs = payload.get("layout", {})
+    if not isinstance(prefs, dict):
+        prefs = {}
+    prefs[str(key)] = str(value)
+    payload["layout"] = prefs
+    return _save(payload)
