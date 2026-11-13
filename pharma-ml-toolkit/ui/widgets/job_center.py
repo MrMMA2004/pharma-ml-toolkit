@@ -79,6 +79,9 @@ class JobCenterDialog(QDialog):
         lay.addWidget(QLabel("Recorded run history (provenance on select):"))
         splitter = QSplitter(Qt.Orientation.Vertical)
         self._history = QListWidget()
+        # §17C: multi-select so runs can be compared side by side
+        self._history.setSelectionMode(
+            QListWidget.SelectionMode.ExtendedSelection)
         self._history.currentItemChanged.connect(self._show_detail)
         splitter.addWidget(self._history)
         self._detail = QPlainTextEdit()
@@ -91,6 +94,32 @@ class JobCenterDialog(QDialog):
         splitter.setSizes([260, 200])
         configure_splitter(splitter, stretch=(0, 1))
         lay.addWidget(splitter, stretch=1)
+
+        compare_row = QHBoxLayout()
+        self._compare_btn = QPushButton("Compare selected experiments…")
+        self._compare_btn.setToolTip(
+            "part6 §17C: side-by-side comparison of the selected runs, "
+            "grouped by experimental conditions — runs whose task, metric "
+            "or validation protocol differ are shown as explicitly NOT "
+            "compared, never merged."
+        )
+        self._compare_btn.clicked.connect(self._compare_selected)
+        compare_row.addWidget(self._compare_btn)
+        self._report_btn = QPushButton("Report selected run…")
+        self._report_btn.setToolTip(
+            "part6 §17D: the structured scientific report (inputs, "
+            "methods, parameters, results, plots, statistical metrics, "
+            "provenance, limitations) for ONE selected run, saved as a "
+            "self-contained HTML file. Facts only — no automatic "
+            "conclusions."
+        )
+        self._report_btn.clicked.connect(self._report_selected)
+        compare_row.addWidget(self._report_btn)
+        self._compare_note = QLabel("")
+        self._compare_note.setObjectName("studioStatus")
+        self._compare_note.setWordWrap(True)
+        compare_row.addWidget(self._compare_note, stretch=1)
+        lay.addLayout(compare_row)
 
         close = QPushButton("Close")
         close.clicked.connect(self.accept)
@@ -167,6 +196,41 @@ class JobCenterDialog(QDialog):
                 "campaigns, exports…); a failed or cancelled run records "
                 "only what its workflow chose to record."
             )
+
+    def _compare_selected(self) -> None:
+        """Open the §17C comparison over the multi-selected runs."""
+        from pharmaml.studio.comparison import _run_view
+
+        from .experiment_compare import ExperimentCompareDialog
+
+        records = [
+            item.data(Qt.ItemDataRole.UserRole)
+            for item in self._history.selectedItems()
+        ]
+        if len(records) < 2:
+            self._compare_note.setText(
+                "select two or more recorded runs to compare (Ctrl+click)")
+            return
+        self._compare_note.setText("")
+        views = [_run_view(record) for record in records]
+        dialog = ExperimentCompareDialog(views, self)
+        dialog.exec()
+
+    def _report_selected(self) -> None:
+        """Open the §17D report for exactly one selected run."""
+        from .run_report import RunReportDialog
+
+        records = [
+            item.data(Qt.ItemDataRole.UserRole)
+            for item in self._history.selectedItems()
+        ]
+        if len(records) != 1:
+            self._compare_note.setText(
+                "select exactly one run to report")
+            return
+        self._compare_note.setText("")
+        dialog = RunReportDialog(records[0], self)
+        dialog.exec()
 
     def _show_detail(self, current: QListWidgetItem | None,
                      _previous: QListWidgetItem | None) -> None:

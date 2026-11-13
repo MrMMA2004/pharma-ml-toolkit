@@ -94,7 +94,7 @@ preserves metadata/provenance.  Import presence, a button, or a
 synthetic demo is NOT integration.  Phase 6's coverage tests enforce
 this against the registry, not against prose.
 
-Registry coverage (live): **62 capabilities**, 62 integrated; orphans 0; test gaps 0; Other card absent. Round 24 (part6 §17A/B) added `utilities.templates` (the seven workflow-template chains, every stage calling an existing backend implementation) and `utilities.pipelines` (the §17B sequential pipeline engine).
+Registry coverage (live): **64 capabilities**, 64 integrated; orphans 0; test gaps 0; Other card absent. Round 24 (part6 §17A/B) added `utilities.templates` (the seven workflow-template chains, every stage calling an existing backend implementation) and `utilities.pipelines` (the §17B sequential pipeline engine); round 25 (part6 §17C/D) added `utilities.compare` (experiment comparison with compatibility grouping — cross-condition pairs refused, never merged) and `utilities.reports` (eight-section scientific run reports; units and significant figures preserved; no automatic conclusions).
 
 ## 6. Migration plan (Phases 1-6)
 

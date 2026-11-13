@@ -1,3 +1,48 @@
+## [1.2.195] — 2026-11-13
+### Added — part6 round 25 (§17C + §17D): experiment comparison + scientific reports
+
+- **`src/pharmaml/studio/comparison.py`** — the §17C backend: every
+  saved run record becomes a comparable `RunView` (dataset identity,
+  model config, hyperparameters, validation protocol, metrics,
+  runtime/resources where recorded); runs are grouped by a
+  compatibility key (task + metric + protocol + folds) and
+  cross-condition pairs are explicitly REFUSED — never silently
+  merged into one ranking. Comparable groups get a side-by-side table
+  with Δ-vs-best deltas (sign convention: the trailing gap, ≥ 0,
+  lower-is-better metrics handled). `comparison_summary` is the text
+  twin the reports embed.
+- **`ui/widgets/experiment_compare.py`** — the Compare dialog,
+  reachable from the Job Center's history (now multi-select): group
+  headers, tables, verdicts, and the refused pairs with the differing
+  axes named.
+- **`src/pharmaml/studio/reports.py`** — the §17D composer: the eight
+  sections (inputs, methods, parameters, results, plots, statistical
+  metrics, provenance, limitations) from a run record, written
+  through the EXISTING self-contained `HTMLReport` writer. Units
+  travel with their values (known-key table; unknown units are never
+  invented), five significant figures throughout. The Limitations
+  section is factual-only and the fixed closing statement says the
+  toolkit does not interpret results — there is no Conclusion section
+  to auto-write.
+- **`ui/widgets/run_report.py`** — the Report dialog (Job Center,
+  one selected run): eight-section preview + save-as-HTML.
+- **Registry**: `utilities.compare` + `utilities.reports` rows
+  (64 capabilities, 64 integrated, 0 test gaps); CAPABILITY_MAP.md
+  and FEATURES.md synced (the FEATURES freeze stamp now names 195 —
+  R24's bump landed after its gate run; noted in the worklog).
+- **Tests**: `tests/test_experiment_comparison.py` (10 — grouping,
+  refusals, deltas, empty states, real `record_run` fixtures),
+  `tests/ui/test_experiment_compare.py` (4),
+  `tests/test_run_reports.py` (8 — section order, units, sig-figs,
+  no-conclusions pin, self-contained save),
+  `tests/ui/test_run_report.py` (3).
+
+### Fixed
+- Job Center: `setCurrentRow(0)` also SELECTS the row in Qt, so the
+  under-selection guards in the compare/report tests now clear the
+  selection explicitly (a modal `exec()` headless hang, diagnosed and
+  pinned in the new tests).
+
 ## [1.2.194] — 2026-11-13
 ### Added — part6 round 24 (§17A + §17B): workflow templates + the sequential pipeline engine
 

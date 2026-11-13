@@ -14564,3 +14564,32 @@ pipeline suite 19/19; tab suite 7/7; utilities page 25/25 with its
 pins updated 5→6 tabs; phase suites 26 green.
 
 v1.2.194 shipped.
+
+## R25 (part6 §17C+D) — 2026-11-13
+
+Survey: run records live at ~/.pharmaml/studio-runs/<family>/*.json
+(schema pharmaml-studio-run/1); the Job Center already renders them
+with UserRole payloads — it became the §17C/D host instead of a new
+page (§18: reuse, don't rebuild).
+
+Built §17C backend first (comparison.py: RunView extraction,
+compatibility grouping, cross-condition refusal, Δ-vs-best with a
+trailing-gap sign convention, lower-is-better handled), then its UI
+(Job Center multi-select + ExperimentCompareDialog), then §17D
+(reports.py: eight sections over the existing HTMLReport writer,
+known-key unit table, unknown units never invented, 5 sig figs,
+factual-only Limitations, fixed no-conclusions statement) and its UI
+(RunReportDialog with preview + save).
+
+Incidents this round: (1) disk back at 96% — cleared 1.6G of pip/
+puppeteer/playwright caches. (2) A headless test hang: Qt's
+setCurrentRow(0) also selects, so the report button's zero-selected
+guard actually opened a modal exec() that blocks forever offscreen —
+diagnosed by isolation, tests fixed to clearSelection() first. (3) A
+sequencing gap from R24: FEATURES.md's freeze stamp still said 193
+because the version bump landed after that round's gate run — now
+stamped 195 with both rounds named.
+
+Suites: comparison 10/10, compare UI 4/4, reports 8/8, report UI 3/3,
+phase4 pins 13/13, gates 81 (after the FEATURES stamp fix). Registry
+64 caps. v1.2.195 shipped.
