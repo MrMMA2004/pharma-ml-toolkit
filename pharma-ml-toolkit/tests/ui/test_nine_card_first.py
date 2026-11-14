@@ -163,11 +163,13 @@ class TestEvidenceAndShortcuts:
         main_window.go_home()
 
     def test_home_grid_buttons_still_route(self, main_window) -> None:
-        # the promoted grid's entry buttons keep the part-4 routing
+        # the promoted grid's entry buttons keep the part-4 routing (the
+        # ML card's first entry is its primary action button)
         grid = main_window.home.cards_host
         btn = next(
             b for b in grid.findChildren(QPushButton)
-            if b.objectName() == "nineCardEntry-models"
+            if b.objectName() in ("nineCardEntry-models", "nineCardEntry-primary")
+            and b.text() == "Open Model Analysis"
         )
         btn.click()
         assert main_window.pages.currentWidget() is main_window.model_page

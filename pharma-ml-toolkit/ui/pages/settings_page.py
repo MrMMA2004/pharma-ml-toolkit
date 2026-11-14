@@ -143,9 +143,14 @@ class SettingsPage(QWidget):
         lay.addLayout(buttons)
 
         note = QLabel(
-            "Qt-Material is the primary Material Design provider; QDarkStyleSheet is the "
-            "verified alternative (single dark theme, Qt6-styled widgets); native is the "
-            "unstyled fallback. Switching providers replaces the active stylesheet "
+            "The studio provider carries the Design System identity: Mineral light "
+            "and dark (the canonical direction) plus the two alternative directions "
+            "as switchable themes — Spectral (warm paper, indigo actions, rounded "
+            "panels) and Catalyst (navy frame, ivory surfaces, lime selection, "
+            "squared cards), each in light and dark. Qt-Material is the primary "
+            "Material Design provider; QDarkStyleSheet is the verified alternative "
+            "(single dark theme, Qt6-styled widgets); native is the unstyled "
+            "fallback. Switching providers replaces the active stylesheet "
             "completely — the two engines never compete — and every PyQtGraph chart "
             "re-colours itself to match the new theme. Preferences persist via QSettings."
         )

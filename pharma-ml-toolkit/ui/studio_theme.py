@@ -7,11 +7,20 @@ in ONE place and the existing provider machinery delivers it:
 registering here means theme switching, persistence and the
 ChartPalette signal path all keep working unchanged.
 
+The studio provider offers Mineral's light/dark (the canonical §2
+identity) PLUS the Design System's two alternative directions as
+switchable themes: 02/SPECTRAL (warm paper + indigo, rounded panels)
+and 03/CATALYST (navy frame + ivory surfaces + lime selection, squared
+cards), each in light and dark variants.  §2 pinned Mineral as the
+default; the alternates are opt-in via the Settings page.
+
 The QSS is deliberately CONSERVATIVE: it styles the shared widget
 classes and the studio objectNames, not every page's custom layout —
 pages keep their own structure and inherit the identity.  Flat,
 restrained surfaces: 1 px separators, no gradients, elevation reserved
-for floating dialogs.
+for floating dialogs.  Catalyst's direction-specific geometry (squared
+cards) and Spectral's (rounder panels) are delivered through the
+per-theme radius ramp below — still one QSS, token-driven.
 """
 
 from __future__ import annotations
@@ -24,19 +33,42 @@ from .design_tokens import (
     SCIENTIFIC_CATEGORICAL,
     SCIENTIFIC_CATEGORICAL_DARK,
     TYPEFACES,
+    is_dark_theme,
     tokens,
 )
 
-STUDIO_THEMES: tuple[str, ...] = ("light", "dark")
+STUDIO_THEMES: tuple[str, ...] = (
+    "light", "dark",                       # 01 / MINERAL (canonical)
+    "spectral", "spectral-dark",           # 02 / SPECTRAL (alternative)
+    "catalyst", "catalyst-dark",           # 03 / CATALYST (alternative)
+)
+
+
+def _theme_radius(theme: str) -> tuple[int, int, int, int]:
+    """Per-direction corner radii (sm, md, lg, xl), token-driven.
+
+    Mineral ships the spec §6 scale verbatim (4/6/8/12).  Spectral's
+    preview card reads "rounded panels" — one step rounder.  Catalyst's
+    reads "squared cards" — one step squarer, squared cards outright.
+    """
+    if theme.startswith("spectral"):
+        return (6, 8, 10, 14)
+    if theme.startswith("catalyst"):
+        return (2, 4, 6, 8)
+    return (LAYOUT.radius_sm, LAYOUT.radius_md, LAYOUT.radius_lg,
+            LAYOUT.radius_xl)
 
 
 def studio_qss(theme: str) -> str:
     """The full application stylesheet for a studio theme name."""
     t = tokens(theme)
     L = LAYOUT
+    r_sm, r_md, r_lg, r_xl = _theme_radius(theme)
     f_ui = TYPEFACES.ui_css()
     f_mono = TYPEFACES.mono_css()
     on_primary = t.on_primary  # white on teal (light), ink on bright teal (dark)
+    shell = t.shell_fill()
+    shell_text = t.shell_foreground()
 
     return f"""
 /* ---- base ---------------------------------------------------------- */
@@ -60,7 +92,28 @@ QToolTip {{
 QFrame#nineCard {{
     background: {t.surface};
     border: {L.border}px solid {t.border_subtle};
-    border-radius: {L.radius_lg}px;
+    border-radius: {r_lg}px;
+}}
+/* ---- app shell (Catalyst's navy frame; other themes: the canvas) ---- */
+QWidget#studioTopBar {{
+    background: {shell};
+    color: {shell_text};
+    border-bottom: 1px solid {t.border};
+}}
+QLabel#studioTopBarTitle, QLabel#studioTopBarLocation,
+QLabel#studioTopBarJobs {{
+    background: transparent;
+    color: {shell_text};
+}}
+QListWidget#studioNav {{
+    background: {shell};
+    color: {shell_text};
+    border: none;
+}}
+QListWidget#studioNav::item {{ color: {shell_text}; }}
+QListWidget#studioNav::item:selected {{
+    background: {t.selected_surface};
+    color: {t.shell_text or t.text};
 }}
 QLabel {{ background: transparent; }}
 QLabel#studioCardTitle {{
@@ -74,7 +127,7 @@ QLabel#studioCardDetail, QLabel#nineCardDesc {{
 QLabel#nineCardBadge {{
     background: {t.selected_surface};
     color: {t.text};
-    border-radius: {L.radius_sm}px;
+    border-radius: {r_sm}px;
     padding: {L.space_xs}px {L.space_sm}px;
     font-weight: 600;
 }}
@@ -107,7 +160,7 @@ QPushButton {{
     background: {t.surface};
     color: {t.text};
     border: {L.border}px solid {t.border};
-    border-radius: {L.radius_md}px;
+    border-radius: {r_md}px;
     padding: {L.space_sm}px {L.space_md}px;
     font-weight: 500;
 }}
@@ -139,7 +192,7 @@ QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox {{
     background: {t.surface};
     color: {t.text};
     border: {L.border}px solid {t.border};
-    border-radius: {L.radius_sm}px;
+    border-radius: {r_sm}px;
     padding: {L.space_xs}px {L.space_sm}px;
     selection-background-color: {t.selected_surface};
     selection-color: {t.text};
@@ -162,7 +215,7 @@ QComboBox {{
     background: {t.surface};
     color: {t.text};
     border: {L.border}px solid {t.border};
-    border-radius: {L.radius_sm}px;
+    border-radius: {r_sm}px;
     padding: {L.space_xs}px {L.space_sm}px;
 }}
 QComboBox:hover {{ border-color: {t.accent_hover}; }}
@@ -205,7 +258,7 @@ QTableWidget:focus, QTableView:focus, QListWidget:focus, QTreeWidget:focus {{
 /* ---- tabs ------------------------------------------------------------ */
 QTabWidget::pane {{
     border: {L.border}px solid {t.border_subtle};
-    border-radius: {L.radius_sm}px;
+    border-radius: {r_sm}px;
     background: {t.surface};
 }}
 QTabBar::tab {{
@@ -252,7 +305,7 @@ QSlider::handle:horizontal {{
 }}
 QSlider:focus {{
     border: {L.border_emph}px solid {t.focus_color()};
-    border-radius: {L.radius_sm}px;
+    border-radius: {r_sm}px;
     padding: 0px;
 }}
 QSlider::handle:horizontal:focus {{
@@ -263,7 +316,7 @@ QSlider::handle:horizontal:focus {{
 }}
 QGroupBox {{
     border: {L.border}px solid {t.border_subtle};
-    border-radius: {L.radius_sm}px;
+    border-radius: {r_sm}px;
     margin-top: {L.space_md}px;
     font-weight: 600;
 }}
@@ -276,22 +329,23 @@ QDialog {{ background: {t.surface}; }}
 QProgressBar {{
     background: {t.surface};
     border: {L.border}px solid {t.border};
-    border-radius: {L.radius_sm}px;
+    border-radius: {r_sm}px;
     text-align: center;
     color: {t.text};
 }}
 QProgressBar::chunk {{
     background: {t.primary};
-    border-radius: {L.radius_sm}px;
+    border-radius: {r_sm}px;
 }}
 /* the shell strip: bg/subtle surface with a hairline separator and
-   secondary text — flat Mineral chrome, not a colored bar */
+   secondary text — flat Mineral chrome, not a colored bar (Catalyst:
+   the navy frame strip with ivory text) */
 QStatusBar {{
-    background: {t.subtle};
-    color: {t.text_secondary};
+    background: {shell};
+    color: {shell_text};
     border-top: 1px solid {t.border};
 }}
-QMenuBar {{ background: {t.subtle}; color: {t.text}; }}
+QMenuBar {{ background: {shell}; color: {shell_text}; }}
 QMenuBar::item:selected {{ background: {t.selected_surface}; color: {t.text}; }}
 QMenu {{
     background: {t.elevated};
@@ -326,8 +380,9 @@ def apply_studio(app: QApplication, theme: str) -> None:
 
 
 def studio_chart_series(theme: str) -> tuple[str, ...]:
-    """The Mineral scientific data cycle for a studio theme (§4.2)."""
-    return (SCIENTIFIC_CATEGORICAL_DARK if theme == "dark"
+    """The scientific data cycle for a studio theme (§4.2 — shared by
+    all three directions: "One scientific foundation")."""
+    return (SCIENTIFIC_CATEGORICAL_DARK if is_dark_theme(theme)
             else SCIENTIFIC_CATEGORICAL)
 
 

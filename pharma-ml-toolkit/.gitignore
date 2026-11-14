@@ -41,3 +41,4 @@ catboost_info/
 # Experiment-tracking runtime artifact (100x-173)
 experiments.jsonl
 core/
+core*

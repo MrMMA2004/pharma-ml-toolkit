@@ -69,6 +69,9 @@ class Navigation(QListWidget):
     # token accent; kept inline because the sidebar icons are painted,
     # not styled (QSS never reaches inside a QIcon).  The stray-hex
     # audit test pins it against the token so it cannot drift.
+    # ``set_theme_accent`` re-paints the glyphs when the studio theme
+    # changes (Spectral indigo / Catalyst navy or lime), because a
+    # painted QIcon cannot be recolored by a stylesheet.
     ACCENT = "#076F73"
 
     def __init__(self, sections: list[tuple[str, str]], parent: QWidget | None = None) -> None:
@@ -78,12 +81,23 @@ class Navigation(QListWidget):
         self.setMaximumWidth(230)
         self.setObjectName("studioNav")
         self.setIconSize(QSize(18, 18))
-        for key, title in sections:
+        self._sections = list(sections)
+        for key, title in self._sections:
             item = QListWidgetItem(_glyph(self.ACCENT, self.GLYPHS.get(key, "grid")), title)
             item.setData(Qt.ItemDataRole.UserRole, key)
             self.addItem(item)
         self.currentRowChanged.connect(self._on_row)
         self.setStyleSheet("QListWidget#studioNav { border: none; background: transparent; }")
+
+    def set_theme_accent(self, accent: str) -> None:
+        """Re-paint the sidebar glyphs in a new theme's action color."""
+        if accent == self.ACCENT:
+            return
+        self.ACCENT = accent
+        for i, (key, _title) in enumerate(self._sections):
+            item = self.item(i)
+            if item is not None:
+                item.setIcon(_glyph(accent, self.GLYPHS.get(key, "grid")))
 
     def _on_row(self, row: int) -> None:
         item = self.item(row) if row >= 0 else None

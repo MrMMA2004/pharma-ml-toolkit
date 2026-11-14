@@ -102,23 +102,26 @@ _LIGHT_PALETTES: dict[str, ChartPalette] = {
 def _palette_for(provider: str, theme: str) -> ChartPalette:
     """Map provider+theme to a chart palette (dark themes get dark plots)."""
     if provider == "studio":
-        # Mineral §4.2: the scientific data palette is SEPARATE from
-        # the interface action color — the 7-series Mineral cycle on
-        # theme-matched axes; teal marks selections/highlights only.
-        from .design_tokens import tokens as color_tokens
+        # §4.2: the scientific data palette is SEPARATE from
+        # the interface action color — the 7-series cycle on
+        # theme-matched axes; the action color marks
+        # selections/highlights only.  Applies to every studio theme
+        # (Mineral light/dark + the Spectral/Catalyst alternates).
+        from .design_tokens import is_dark_theme, tokens as color_tokens
         from .studio_theme import studio_chart_series
 
         t = color_tokens(theme)
         bs = t.border_subtle
         grid: tuple[int, int, int] = (
             int(bs[1:3], 16), int(bs[3:5], 16), int(bs[5:7], 16))
+        dark = is_dark_theme(theme)
         return ChartPalette(
-            background=t.background if theme == "dark" else "w",
-            foreground=t.text if theme == "dark" else "k",
+            background=t.background if dark else "w",
+            foreground=t.text if dark else "k",
             grid=grid,
             accent=t.accent,
             series=studio_chart_series(theme),
-            dark=theme == "dark",
+            dark=dark,
         )
     if provider == "qt-material":
         dark = theme.startswith("dark_")

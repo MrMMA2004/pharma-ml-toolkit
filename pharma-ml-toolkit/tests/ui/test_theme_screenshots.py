@@ -139,7 +139,9 @@ def test_card_surfaces_contrast_the_canvas(studio_app, tmp_path) -> None:
 
 
 @pytest.mark.parametrize("theme,expected", [
-    ("light", "#F4F7F8"), ("dark", "#0D1B23")])
+    ("light", "#F4F7F8"), ("dark", "#0D1B23"),
+    ("spectral", "#F5F2EC"), ("spectral-dark", "#151321"),
+    ("catalyst", "#F3F5F1"), ("catalyst-dark", "#0E1D2B")])
 def test_studio_qss_tokens_reach_the_canvas(theme, expected) -> None:
     """Static cross-check: the QSS text really carries the canvas
     token for this theme (grab tests above prove it APPLIES)."""

@@ -136,10 +136,13 @@ class TestRenderedGrid:
 
     def test_entry_button_routes_to_the_real_page(self, main_window) -> None:
         host, _frames = build_nine_card_grid()
+        # the ML card's FIRST entry (its primary action button) — full
+        # labels since the R33 flow-wrap round
         btn = next(
             b
             for b in host.findChildren(QPushButton)
-            if b.objectName() == "nineCardEntry-models"
+            if b.objectName() in ("nineCardEntry-models", "nineCardEntry-primary")
+            and b.text() == "Open Model Analysis"
         )
         main_window.setCentralWidget(host)  # give the button a live window chain
         main_window.go_to("dashboard")

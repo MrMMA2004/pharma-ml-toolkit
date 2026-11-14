@@ -34,6 +34,9 @@ class TopBar(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("studioTopBar")
+        # a plain QWidget subclass ignores QSS background rules unless it
+        # opts in — required for the Catalyst navy shell strip
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         lay = QHBoxLayout(self)
         lay.setContentsMargins(12, 6, 12, 6)
         lay.setSpacing(10)

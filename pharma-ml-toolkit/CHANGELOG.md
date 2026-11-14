@@ -1,3 +1,57 @@
+## [1.2.203] — 2026-11-14 — Spectral & Catalyst alternates + partX3 audit
+
+Commissioned by the partX3 round: "Spectral/Catalyst as switchable
+alternates, and a deeper page-by-page visual pass" over the full
+MASTER_PROMPT partX3 audit baseline.
+
+### The three directions, one foundation
+- `ui/design_tokens.py`: 02/SPECTRAL (warm paper #F5F2EC canvas,
+  indigo #5048A5 actions, rounded panels) and 03/CATALYST (navy
+  #172F43 frame shell, ivory surfaces, lime #C6E84B selection/action,
+  squared cards), each in light and dark — four new WCAG-validated
+  token sets (4.5:1 body text, 3:1 interactive accents, AA status
+  pairs; same contract as Mineral). New `shell`/`shell_text` tokens
+  carry Catalyst's navy frame (top bar, status strip, nav).
+  `is_dark_theme()` classifies all six studio themes.
+- `ui/studio_theme.py`: STUDIO_THEMES = 6; per-direction radius ramp
+  (Mineral 4/6/8/12, Spectral one step rounder, Catalyst squared);
+  shell QSS for studioTopBar/studioNav/QStatusBar/QMenuBar.
+- `ui/theme_manager.py`: studio chart palettes for the alternates
+  (dark variants carry the shared dark series — "One scientific
+  foundation": the §4.2 data palette is direction-independent).
+- Settings → Appearance: the six studio themes are offered; Mineral
+  light remains the fresh-install default (§2 pinned Mineral
+  canonical; the alternates are opt-in).
+
+### Fixes (partX3 §5 findings)
+- Dead QSS rule `nineCardEntry-primary` now matches a real widget:
+  each nine-card's FIRST entry is its primary action button (the one
+  place the identity action color fills).
+- TopBar painted no QSS background in live windows (plain QWidget
+  needs WA_StyledBackground) — the Catalyst navy shell now renders.
+- Sidebar glyphs re-paint on studio-theme switches
+  (`Navigation.set_theme_accent`, wired in MainWindow._on_theme).
+
+### partX3 deliverable
+- docs/COMPREHENSIVE_AUDIT_AND_REMEDIATION.md: compliance matrix,
+  confirmed bugs + root causes, files changed, batched test evidence,
+  remaining limitations (dead `_elide_entry_label` flagged; full
+  backend suite not re-run this round — UI scope only).
+
+### Verification
+- Theme suites: 101 tests across test_design_tokens (6-theme
+  parametrization), test_theme_manager (+5 new), test_theme_screenshots
+  (6-theme canvas pins), test_marker_discipline — all green.
+- Full tests/ui sweep: 48 suites, sequential one-per-process: 47 exit
+  0 + the documented environmental kill (test_nine_card_first test 21,
+  exit 137 at the 4 GB ceiling — passes in a fresh process; same
+  profile as the v1.2.202 release sweep).
+- Doctor: 18/18 OK. ruff clean on changed files (mypy: no NEW errors
+  in changed files; repo-wide pre-existing debt unchanged).
+- Visual: six-theme home renders verified at the pixels (canvas,
+  shell, action fills); 90 page renders (18 sections x 5 themes) pass
+  canvas + content checks.
+
 ## [1.2.202] — 2026-11-14 — the Mineral design-system round
 
 Commissioned by the uploaded "Design System" MASTER PROMPT: "Implement

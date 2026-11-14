@@ -425,6 +425,11 @@ class MainWindow(QMainWindow):
 
     # -- theming -------------------------------------------------------------------
     def _on_theme(self, provider: str, name: str, palette: ChartPalette) -> None:
+        # the painted sidebar glyphs follow the active studio theme's
+        # action color (a stylesheet cannot recolor a QIcon)
+        if provider == "studio":
+            from .design_tokens import tokens as color_tokens
+            self.nav.set_theme_accent(color_tokens(name).accent)
         self.data_page.apply_palette(palette)
         self.chemistry_page.apply_palette(palette)
         self.pkpd_page.apply_palette(palette)

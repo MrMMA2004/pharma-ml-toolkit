@@ -11,6 +11,7 @@ data the token tests pin.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from ui.design_tokens import (
     MARKER_DISCIPLINE_DARK,
@@ -60,12 +61,28 @@ def test_dark_theme_flags_the_mint_pair() -> None:
 
 def test_foreign_light_palette_has_no_discipline() -> None:
     """qt-material light / native light use their own palettes —
-    discipline only guards the studio (Mineral) series."""
+    discipline only guards the studio (design-system) series."""
     from ui.theme_manager import _palette_for
 
     palette = _palette_for("qt-material", "light_teal.xml")
     for color in palette.series:
         assert not _needs_marker(palette, color)
+
+
+@pytest.mark.parametrize("theme", ["spectral", "catalyst"])
+def test_alternate_directions_carry_the_same_discipline(theme: str) -> None:
+    """'One scientific foundation': the §2 alternates share the Mineral
+    series + discipline sets (their interface identity changes, the
+    data-viz contract does not)."""
+    from ui.theme_manager import _palette_for
+
+    light = _palette_for("studio", theme)
+    assert light.series == _studio_light().series
+    assert not any(_needs_marker(light, c) for c in
+                   ("#0072B2", "#D55E00"))   # the holders stay unflagged
+    dark = _palette_for("studio", f"{theme}-dark")
+    assert dark.series == _studio_dark().series
+    assert dark.dark and not light.dark
 
 
 def test_line_gains_symbol_exactly_when_flagged(studio_app) -> None:

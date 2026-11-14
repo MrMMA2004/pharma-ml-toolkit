@@ -13,6 +13,16 @@ scientific/technical content.  Values are transcribed from the
 status background tints and dark-theme action/pressed value are the
 documented derived tokens (see docs/DESIGN_SYSTEM_MIGRATION.md).
 
+The Design System's two ALTERNATIVE directions — 02/SPECTRAL (warm
+paper, indigo actions, rounded panels) and 03/CATALYST (navy frame,
+ivory surfaces, electric-lime selection, squared cards) — ship as
+switchable studio themes alongside Mineral's light/dark.  §2 named them
+alternatives and pinned Mineral as canonical; they remain available
+for users who want them WITHOUT being the default (per the partX3
+request), each meeting the same WCAG contract the Mineral themes are
+pinned to.  All three directions share the §4.2 scientific data
+palette ("Three directions. One scientific foundation.").
+
 Tokens are plain data (frozen dataclasses + module constants) so QSS
 generation (studio theme provider), chart styling (ChartPalette)
 and tests (WCAG contrast verification) all consume the SAME source.
@@ -57,6 +67,8 @@ class ColorTokens:
     success_bg: str          # status soft background
     info: str                # status/info (foreground)
     info_bg: str             # status soft background
+    shell: str = ""          # app-shell fills (top/status/nav); "" → background
+    shell_text: str = ""     # text on the shell; "" → text
 
     def hex_or(self, fallback: str) -> str:
         """A token or its stand-in when a theme has no value."""
@@ -65,6 +77,14 @@ class ColorTokens:
     def focus_color(self) -> str:
         """The :focus indicator color (focus/ring token)."""
         return self.focus_ring
+
+    def shell_fill(self) -> str:
+        """The app-shell (top bar / status / nav) background."""
+        return self.shell or self.background
+
+    def shell_foreground(self) -> str:
+        """Text on the app shell."""
+        return self.shell_text or self.text
 
 
 LIGHT = ColorTokens(
@@ -125,12 +145,154 @@ DARK = ColorTokens(
     info_bg="#12253A",         # derived tint
 )
 
-THEMES: dict[str, ColorTokens] = {"light": LIGHT, "dark": DARK}
+
+# -- 02 / SPECTRAL — warm paper, indigo actions, rounded panels -------------
+# The Design System's alternative direction, transcribed from its preview
+# card: "Warm paper, indigo actions, broader spacing and rounded panels. A
+# more editorial, exploratory character."  Spec-pinned anchors: canvas
+# #F5F2EC, action indigo #5048A5; the rest of the ramp is derived to the
+# same WCAG contract as Mineral (see docs/DESIGN_SYSTEM_MIGRATION.md).
+SPECTRAL = ColorTokens(
+    name="spectral",
+    background="#F5F2EC",      # warm paper canvas
+    surface="#FFFFFF",         # white surfaces on paper
+    primary="#5048A5",         # action/primary (indigo)
+    accent="#5048A5",
+    accent_hover="#403A8C",    # deeper indigo
+    accent_pressed="#332E70",  # deepest indigo
+    on_primary="#FFFFFF",
+    selected_surface="#EAE8F6",  # indigo-tinted paper selection
+    text="#2B2440",            # indigo-black ink
+    text_secondary="#5C5470",
+    text_muted="#857E97",
+    border="#D8D2C4",          # warm border
+    border_subtle="#EAE5D9",
+    elevated="#FFFFFF",
+    subtle="#EFEAE0",
+    disabled="#EAE5D9",
+    focus_ring="#5048A5",
+    error="#A32833",
+    error_bg="#F7E7E6",
+    warning="#7A5300",
+    warning_bg="#F7EBD4",
+    success="#1F6845",
+    success_bg="#E3EFE5",
+    info="#235E9D",
+    info_bg="#E5EEF8",
+)
+
+SPECTRAL_DARK = ColorTokens(
+    name="spectral-dark",
+    background="#151321",      # deep indigo-black canvas
+    surface="#1E1B30",         # indigo-slate surface
+    primary="#9D96E8",         # lavender indigo (bright)
+    accent="#9D96E8",
+    accent_hover="#B7B1F0",
+    accent_pressed="#837CCB",
+    on_primary="#151321",      # dark text on lavender
+    selected_surface="#322D52",
+    text="#ECEAF4",
+    text_secondary="#B4AECB",
+    text_muted="#837D9C",
+    border="#6F688F",
+    border_subtle="#2C2946",
+    elevated="#2C2946",
+    subtle="#241F3A",
+    disabled="#2C2946",
+    focus_ring="#9D96E8",
+    error="#F2A9B0",
+    error_bg="#3B2229",
+    warning="#E9C583",
+    warning_bg="#342B14",
+    success="#85D4AE",
+    success_bg="#16301F",
+    info="#9CC8F0",
+    info_bg="#152741",
+)
+
+
+# -- 03 / CATALYST — navy frame, ivory surfaces, lime selection -------------
+# "Navy frame, ivory surfaces and electric lime selection. Squared cards,
+# stronger contrast and familiar navigation."  Spec-pinned anchors: navy
+# #172F43 (the FRAME — shell chrome, not the content canvas), ivory
+# surfaces, lime #C6E84B for selection accents.  Actions on ivory stay a
+# brighter navy so AA holds; lime carries selection/focus, and in the dark
+# variant it becomes the action color (9.87:1 on navy).
+CATALYST = ColorTokens(
+    name="catalyst",
+    background="#F3F5F1",      # ivory content canvas
+    surface="#FFFFFF",         # ivory-white surfaces
+    primary="#2E5F7A",         # brighter navy for actions on ivory
+    accent="#2E5F7A",
+    accent_hover="#1F4860",
+    accent_pressed="#16374A",
+    on_primary="#FFFFFF",
+    selected_surface="#DDF0B8",  # lime-tinted ivory selection
+    text="#16232E",
+    text_secondary="#46586A",
+    text_muted="#6E7F8E",
+    border="#C9D2CC",
+    border_subtle="#E4E9E3",
+    elevated="#FFFFFF",
+    subtle="#E9EDE7",
+    disabled="#E4E9E3",
+    focus_ring="#172F43",      # the navy frame color as focus ink
+    shell="#172F43",           # the navy frame: top bar / status / nav
+    shell_text="#E8EFEA",
+    error="#A32833",
+    error_bg="#F7E7E6",
+    warning="#7A5300",
+    warning_bg="#F7EBD4",
+    success="#1F6845",
+    success_bg="#E3EFE5",
+    info="#235E9D",
+    info_bg="#E5EEF8",
+)
+
+CATALYST_DARK = ColorTokens(
+    name="catalyst-dark",
+    background="#0E1D2B",      # deeper navy canvas
+    surface="#172F43",         # navy surface (the frame color)
+    primary="#C6E84B",         # electric lime action
+    accent="#C6E84B",
+    accent_hover="#D6F27A",
+    accent_pressed="#A8CC33",
+    on_primary="#0E1D2B",      # navy text on lime
+    selected_surface="#2A4560",
+    text="#E8EFEA",
+    text_secondary="#A9BAC8",
+    text_muted="#75889A",
+    border="#5A7288",
+    border_subtle="#223A50",
+    elevated="#223A50",
+    subtle="#1B3550",
+    disabled="#223A50",
+    focus_ring="#C6E84B",
+    error="#F2A9B0",
+    error_bg="#3B2229",
+    warning="#E9C583",
+    warning_bg="#342B14",
+    success="#85D4AE",
+    success_bg="#16301F",
+    info="#9CC8F0",
+    info_bg="#152741",
+)
+
+THEMES: dict[str, ColorTokens] = {
+    "light": LIGHT, "dark": DARK,
+    "spectral": SPECTRAL, "spectral-dark": SPECTRAL_DARK,
+    "catalyst": CATALYST, "catalyst-dark": CATALYST_DARK,
+}
 
 
 def tokens(theme: str) -> ColorTokens:
     """The color tokens for ``theme`` (unknown → light)."""
     return THEMES.get(theme, LIGHT)
+
+
+def is_dark_theme(theme: str) -> bool:
+    """True when ``theme`` is one of the dark variants."""
+    return theme in ("dark", "spectral-dark", "catalyst-dark")
 
 
 # -- typography tokens (Mineral §5) -----------------------------------------
@@ -254,13 +416,13 @@ MARKER_DISCIPLINE_DARK: frozenset[str] = frozenset({
 
 def scientific_categorical(theme: str) -> tuple[str, ...]:
     """The categorical series cycle for a theme."""
-    return SCIENTIFIC_CATEGORICAL_DARK if theme == "dark" \
+    return SCIENTIFIC_CATEGORICAL_DARK if is_dark_theme(theme) \
         else SCIENTIFIC_CATEGORICAL
 
 
 def marker_discipline(theme: str) -> frozenset[str]:
     """Series colors that need a non-color encoding in this theme."""
-    return MARKER_DISCIPLINE_DARK if theme == "dark" \
+    return MARKER_DISCIPLINE_DARK if is_dark_theme(theme) \
         else MARKER_DISCIPLINE_LIGHT
 
 
@@ -313,6 +475,8 @@ def contrast_ratio(foreground: str, background: str) -> float:
 
 
 __all__ = [
+    "CATALYST",
+    "CATALYST_DARK",
     "DARK",
     "DIVERGING_MAPS",
     "LAYOUT",
@@ -322,12 +486,15 @@ __all__ = [
     "SCIENTIFIC_CATEGORICAL",
     "SCIENTIFIC_CATEGORICAL_DARK",
     "SEQUENTIAL_MAPS",
+    "SPECTRAL",
+    "SPECTRAL_DARK",
     "THEMES",
     "TYPEFACES",
     "ColorTokens",
     "LayoutTokens",
-    "TypeScale",
     "TypefaceTokens",
+    "TypeScale",
     "contrast_ratio",
+    "is_dark_theme",
     "tokens",
 ]

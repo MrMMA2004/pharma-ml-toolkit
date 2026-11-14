@@ -669,9 +669,15 @@ def _build_card(card: NineCard, context: Mapping[str, Any] | None = None) -> QFr
     flow = QWidget()
     flow.setObjectName("nineCardButtonFlow")
     flow_layout = FlowLayout(flow, margin=0, spacing=6)
-    for entry in card.entries:
+    for position, entry in enumerate(card.entries):
         btn = QPushButton(entry.label)
-        btn.setObjectName(f"nineCardEntry-{entry.section}")
+        # the FIRST entry of each card is its primary action — the one
+        # place the identity action color appears as a fill (§9 button
+        # variants); the rest are secondary buttons
+        if position == 0:
+            btn.setObjectName("nineCardEntry-primary")
+        else:
+            btn.setObjectName(f"nineCardEntry-{entry.section}")
         btn.setToolTip(f"{entry.label} — navigate to the {entry.section} page")
         # Minimum-Expanding horizontal policy: the flow wraps whatever
         # does not fit, so full labels never set the card's minimum width

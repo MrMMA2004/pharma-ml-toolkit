@@ -1,9 +1,10 @@
-"""Design-token compliance (Mineral §4/§5/§6).
+"""Design-token compliance (Mineral §4/§5/§6 + the §2 alternates).
 
 Pins the token VALUES from the Design System spec and its structured
 token export, and verifies, programmatically, the contrast the spec
 demands: 4.5:1 for body text on its intended background, 3:1 for large
-text and interactive accents, in BOTH themes.  A token regression
+text and interactive accents, in EVERY studio theme (Mineral light/dark
+plus the Spectral/Catalyst alternative directions).  A token regression
 (someone edits a hex) fails here before it ships a washed-out theme.
 """
 
@@ -12,20 +13,29 @@ from __future__ import annotations
 import pytest
 
 from ui.design_tokens import (
+    CATALYST,
+    CATALYST_DARK,
     DARK,
     LAYOUT,
     LIGHT,
     SCALE,
     SCIENTIFIC_CATEGORICAL,
     SCIENTIFIC_CATEGORICAL_DARK,
+    SPECTRAL,
+    SPECTRAL_DARK,
     THEMES,
     TYPEFACES,
     contrast_ratio,
+    is_dark_theme,
     tokens,
 )
 
+#: every studio theme, Mineral + both §2 alternative directions
+ALL_THEMES = [LIGHT, DARK, SPECTRAL, SPECTRAL_DARK, CATALYST, CATALYST_DARK]
+ALL_NAMES = [t.name for t in ALL_THEMES]
 
-@pytest.mark.parametrize("t", [LIGHT, DARK], ids=["light", "dark"])
+
+@pytest.mark.parametrize("t", ALL_THEMES, ids=ALL_NAMES)
 class TestTokenContrast:
     def test_body_text_meets_aa(self, t) -> None:
         # primary text on the canvas AND on surfaces (cards/dialogs)
@@ -95,9 +105,11 @@ def test_identity_values_verbatim() -> None:
 
 
 def test_alternative_directions_are_absent() -> None:
-    """§2: the retired Deep Navy/Ivory/Lime identity must be gone."""
-    retired = ("#172F43", "#F3F5F1", "#C6E84B", "#ACD52F", "#F0F6D9",
-               "#101B24", "#263D4D", "#55701F")
+    """§2: the retired Deep Navy/Ivory/Lime identity must be gone from
+    the MINERAL themes (the canonical identity carries none of its
+    hexes).  The same hues legitimately return ONLY as Catalyst — the
+    §2 alternative direction users may now opt into."""
+    retired = ("#ACD52F", "#F0F6D9", "#101B24", "#263D4D", "#55701F")
     for t in (LIGHT, DARK):
         for hex_val in retired:
             assert hex_val not in vars(t).values(), hex_val
@@ -256,36 +268,88 @@ def test_layout_rhythm() -> None:
 def test_tokens_unknown_theme_falls_back_to_light() -> None:
     assert tokens("neon").name == "light"
     assert tokens("dark").name == "dark"
-    assert set(THEMES) == {"light", "dark"}
+    assert set(THEMES) == {
+        "light", "dark", "spectral", "spectral-dark",
+        "catalyst", "catalyst-dark"}
+
+
+def test_alternative_directions_ship_as_studio_themes() -> None:
+    """The §2 alternative directions, as opt-in studio themes: spec-pinned
+    anchors from their preview cards (Spectral: warm paper + indigo;
+    Catalyst: navy frame + ivory + lime), each pair light-and-dark."""
+    assert SPECTRAL.background == "#F5F2EC"     # warm paper canvas
+    assert SPECTRAL.primary == "#5048A5"        # indigo action
+    assert SPECTRAL.focus_ring == "#5048A5"
+    assert CATALYST.surface == "#FFFFFF"        # ivory-family surfaces
+    assert CATALYST.shell_fill() == "#172F43"   # the navy frame
+    assert CATALYST.selected_surface == "#DDF0B8"  # lime-tinted selection
+    assert CATALYST.focus_ring == "#172F43"     # navy focus ink on ivory
+    # dark variants adapt, not invert: distinct surface ladders
+    for light_t, dark_t in ((SPECTRAL, SPECTRAL_DARK),
+                            (CATALYST, CATALYST_DARK)):
+        assert dark_t.surface != light_t.surface
+        assert contrast_ratio(dark_t.surface, dark_t.background) > 1.0
+        assert contrast_ratio(dark_t.on_primary, dark_t.primary) >= 4.5
+    # Catalyst dark puts the electric lime where the spec preview shows
+    # selection: as the ACTION color on navy (9.87:1)
+    assert CATALYST_DARK.primary == "#C6E84B"
+    assert contrast_ratio(CATALYST_DARK.primary,
+                          CATALYST_DARK.surface) >= 4.5
+    # is_dark_theme classifies every variant
+    for name in ("dark", "spectral-dark", "catalyst-dark"):
+        assert is_dark_theme(name)
+    for name in ("light", "spectral", "catalyst"):
+        assert not is_dark_theme(name)
+
+
+def test_alternative_directions_share_the_scientific_foundation() -> None:
+    """'Three directions. One scientific foundation.': the §4.2 data
+    palette is unchanged by the interface direction, per theme mode."""
+    from ui.design_tokens import scientific_categorical
+
+    for name in ("spectral", "catalyst"):
+        assert scientific_categorical(name) == SCIENTIFIC_CATEGORICAL
+    for name in ("spectral-dark", "catalyst-dark"):
+        assert scientific_categorical(name) == SCIENTIFIC_CATEGORICAL_DARK
 
 
 def test_card_title_contrast_both_themes() -> None:
-    """Card titles read t.text on t.surface in BOTH themes (the part7
-    dark-title regression stays fixed — t.primary in dark is a bright
-    FILL token and would wash out as text)."""
+    """Card titles read t.text on t.surface in EVERY studio theme (the
+    part7 dark-title regression stays fixed — a bright FILL token would
+    wash out as text)."""
     from ui.studio_theme import studio_qss
 
-    for theme in ("light", "dark"):
+    for theme in ALL_NAMES:
         assert "QLabel#studioCardTitle" in studio_qss(theme)
         assert contrast_ratio(
             tokens(theme).text, tokens(theme).surface) >= 4.5
 
 
 def test_notification_kinds_resolve_to_status_tokens() -> None:
-    """The toast kinds map to the semantic status tokens, both themes
+    """The toast kinds map to the semantic status tokens, every theme
     (the migration's notification tokenization follow-up, pinned)."""
     from ui.widgets.notification_widget import kind_style
 
-    for theme, t in (("light", LIGHT), ("dark", DARK)):
-        assert kind_style("success", theme) == (t.success_bg, t.success)
-        assert kind_style("info", theme) == (t.info_bg, t.info)
-        assert kind_style("warning", theme) == (t.warning_bg, t.warning)
-        assert kind_style("danger", theme) == (t.error_bg, t.error)
+    for t in ALL_THEMES:
+        assert kind_style("success", t.name) == (t.success_bg, t.success)
+        assert kind_style("info", t.name) == (t.info_bg, t.info)
+        assert kind_style("warning", t.name) == (t.warning_bg, t.warning)
+        assert kind_style("danger", t.name) == (t.error_bg, t.error)
 
 
-def test_navigation_accent_is_the_token_teal() -> None:
+def test_navigation_accent_is_the_token_teal(studio_app) -> None:
     """The sidebar's painted icon color cannot come from QSS, so it is
-    pinned to the action/primary token value it mirrors."""
+    pinned to the action/primary token value it mirrors — and follows
+    the active studio theme via set_theme_accent."""
     from ui.widgets.navigation import Navigation
 
     assert Navigation.ACCENT == LIGHT.primary == "#076F73"
+    nav = Navigation([("dashboard", "Dashboard")])
+    assert nav.ACCENT == "#076F73"
+    nav.set_theme_accent(SPECTRAL.primary)
+    assert nav.ACCENT == "#5048A5"
+    nav.set_theme_accent(CATALYST_DARK.primary)
+    assert nav.ACCENT == "#C6E84B"
+    # idempotent no-op on the same color
+    nav.set_theme_accent("#C6E84B")
+    assert nav.ACCENT == "#C6E84B"
