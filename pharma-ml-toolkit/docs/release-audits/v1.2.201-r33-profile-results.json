@@ -4,69 +4,87 @@
   "environment": {
     "platform": "Linux-5.10.134-013.15.kangaroo.al8.x86_64-with-glibc2.41",
     "python": "3.12.16",
-    "venv": "/home/z/.venv (rdkit 2025.3.3, PySide6 6.8.3, pytest 9.0.2; meeko+gemmi+torch-cpu 2.15.0 reinstalled for the release ritual)"
+    "venv": "the sandbox venv (rdkit 2025.3.3, PySide6 6.8.3, pytest 9.0.2; meeko+gemmi+torch-cpu 2.15.0 reinstalled for the release ritual)"
   },
   "profiles": [
     {
       "name": "review-fix regression batch 1 (touched pages)",
       "command": "pytest tests/ui/test_model_analysis_page.py tests/ui/test_chemistry_page.py tests/ui/test_pkpd_page.py tests/ui/test_biology_page.py tests/ui/test_deep_learning_page.py",
-      "passed": 76,
-      "failed": 3,
-      "skipped": 0,
-      "blocked": 0,
-      "not_executed": 0
+      "outcome_counts": {
+        "passed": 76,
+        "failed": 3,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "collected": 79
     },
     {
       "name": "review-fix regression batch 2 (touched pages)",
       "command": "pytest tests/ui/test_docking_page.py tests/ui/test_foundations_page.py tests/ui/test_unsupervised_page.py tests/ui/test_generative_page.py tests/ui/test_bestofml_page.py tests/ui/test_responseai_page.py",
-      "passed": 43,
-      "failed": 2,
-      "skipped": 0,
-      "blocked": 0,
-      "not_executed": 0
+      "outcome_counts": {
+        "passed": 43,
+        "failed": 2,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "collected": 45
     },
     {
       "name": "review-fix regression batch 3 (windows + dialogs)",
       "command": "pytest tests/ui/test_foundations_page.py tests/ui/test_docking_page.py tests/ui/test_molecular_dynamics_page.py tests/ui/test_main_window.py tests/ui/test_nine_cards.py",
-      "passed": 71,
-      "failed": 0,
-      "skipped": 0,
-      "blocked": 0,
-      "not_executed": 0
+      "outcome_counts": {
+        "passed": 71,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "collected": 71
     },
     {
       "name": "web parity (session report + explorer contracts)",
       "command": "pytest tests/test_web_parity.py",
-      "passed": 78,
-      "failed": 0,
-      "skipped": 1,
-      "blocked": 0,
-      "not_executed": 0
+      "outcome_counts": {
+        "passed": 78,
+        "failed": 0,
+        "skipped": 1,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "collected": 79
     },
     {
       "name": "version carriers + notebook freshness gates",
       "command": "pytest tests/test_version_carriers.py tests/test_notebook_variants.py",
-      "passed": 126,
-      "failed": 0,
-      "skipped": 0,
-      "blocked": 0,
-      "not_executed": 0
+      "outcome_counts": {
+        "passed": 126,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "collected": 126
     },
     {
       "name": "torch-dependent retest (after torch-cpu install)",
       "command": "pytest tests/ui/test_deep_learning_page.py tests/ui/test_generative_page.py",
-      "passed": 58,
-      "failed": 0,
-      "skipped": 0,
-      "blocked": 0,
-      "not_executed": 0
+      "outcome_counts": {
+        "passed": 58,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "collected": 58
     }
   ],
   "gates": [
     {
       "name": "torch-dependent failures were environmental, not regressions",
       "outcome": "passed",
-      "detail": "the 5 failures from batches 1-2 (deep_learning torch backend x3, generative RL/MCTS x2) all PASS after installing torch-cpu 2.15.0 — they required the pharmaml[deep] extra, absent from the venv at first sweep time"
+      "detail": "the 5 failures from batches 1-2 (deep_learning torch backend x3, generative RL/MCTS x2) all PASS after installing torch-cpu 2.15.0 \u2014 they required the pharmaml[deep] extra, absent from the venv at first sweep time"
     },
     {
       "name": "tsc --noEmit on src/",
@@ -86,6 +104,6 @@
   "limitations": [
     "The full 5,000+ test suite was not run end-to-end this round (chucked spot-batches over every touched page + the web parity + carrier/notebook gates instead).",
     "No GUI screenshot walk was re-shot at 1.2.201; the R31/R32 fixes were live-verified headlessly per page instead.",
-    "The web console's Next build was not exercised (tsc only) — no code paths changed beyond the reviewed fixes."
+    "The web console's Next build was not exercised (tsc only) \u2014 no code paths changed beyond the reviewed fixes."
   ]
 }
