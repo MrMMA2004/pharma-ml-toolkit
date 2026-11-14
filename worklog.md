@@ -14780,3 +14780,20 @@ scratch/examples errors — zero new from this round).
 
 Suites: web parity 78+1skip; UI sweeps 264; all new files green.
 v1.2.200 shipped.
+
+R34 (Mineral design-system round) — commissioned by the uploaded
+"Design System" MASTER PROMPT ("Implement the supplied Mineral Design
+System throughout the actual PharmaML Studio application"). The
+sandbox was recycled mid-round; the workspace was restored from the
+GitHub backup (v1.2.201). Identity migrated part7 (navy/ivory/lime,
+Inter) → Mineral (cool neutrals, teal #076F73 action, IBM Plex Sans +
+JetBrains Mono): tokens, QSS, fonts (Plex bundled, Inter removed),
+notification kinds + nav accent + empty-state tokenized, nine-card
+breakpoints 1200/860, doctor +2 font checks (18; a QFontDatabase-
+needs-QGuiApplication segfault found and fixed), suites re-pinned
+(design_tokens 31, theme_manager 23, font_loader 9, theme_screenshots
+7, focus/marker/mono 31, qt_doctor 7, chart_export M-3 fix, nine_cards
+breakpoints), ruff/mypy clean on changed files, DPI ladder
+100/125/150/200% at 1440x900/1280x800/1024x768/860x560 all pass,
+both-theme pixel canvas verified. One OOM-kill round of batches was
+re-run small (green). v1.2.202 shipped; zip in three homes; pushed.
