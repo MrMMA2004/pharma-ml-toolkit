@@ -126,9 +126,11 @@ def test_the_focus_rule_set_covers_the_core_classes() -> None:
             assert f"{cls}:focus" in qss, f"{theme}: {cls} lacks :focus"
 
 
-def test_focus_rules_use_the_accent_token() -> None:
-    """Focus indicators draw with the ACCENT (Electric Lime), not the
-    border gray — visibility is the point."""
+def test_focus_rules_use_the_theme_focus_color() -> None:
+    """Focus indicators draw with the THEME'S FOCUS COLOR — visibility is
+    the point.  Dark keeps Electric Lime (8.1:1 on its surfaces); light
+    carries the dedicated olive-lime focus_ring because the lime itself
+    is only 1.40:1 on white (review M-9, WCAG 1.4.11)."""
     for theme in ("light", "dark"):
         qss = studio_qss(theme)
         focus_rules = [
@@ -137,8 +139,26 @@ def test_focus_rules_use_the_accent_token() -> None:
         ]
         assert focus_rules
         for line in focus_rules:
-            # every solid-border focus rule paints the accent
-            assert "#C6E84B" in line or "#ACD52F" in line, line
+            # every solid-border focus rule paints a sanctioned focus color
+            assert (
+                "#C6E84B" in line    # dark accent
+                or "#ACD52F" in line  # dark accent hover family
+                or "#55701F" in line  # light focus_ring (5.6:1 on white)
+            ), line
+
+
+def test_selected_tab_underline_uses_the_focus_color() -> None:
+    """Review M-9: the selected-tab underline is a state indicator on the
+    surface in light theme, so it takes focus_ring, not raw lime."""
+    for theme in ("light", "dark"):
+        qss = studio_qss(theme)
+        block = qss.split("QTabBar::tab:selected {{\n")[1] if \
+            "QTabBar::tab:selected {{\n" in qss else qss.split("QTabBar::tab:selected {")[1]
+        body = block.split("}")[0]
+        if theme == "light":
+            assert "#55701F" in body, body
+        else:
+            assert "#C6E84B" in body, body
 
 
 def test_selection_is_not_the_only_cue_in_tables() -> None:

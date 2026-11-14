@@ -100,7 +100,7 @@ QPushButton:hover {{
     border-color: {t.accent_hover};
 }}
 QPushButton:pressed {{ background: {t.selected_surface}; }}
-QPushButton:focus {{ border: {L.border + 1}px solid {t.accent}; }}
+QPushButton:focus {{ border: {L.border + 1}px solid {t.focus_color()}; }}
 QPushButton:disabled {{ color: {t.disabled or t.text_secondary}; border-color: {t.border}; }}
 
 QPushButton#nineCardEntry-primary {{
@@ -125,7 +125,7 @@ QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox {{
 }}
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus,
 QSpinBox:focus, QDoubleSpinBox:focus {{
-    border: {L.border + 1}px solid {t.accent};
+    border: {L.border + 1}px solid {t.focus_color()};
 }}
 QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{
     color: {t.disabled or t.text_secondary};
@@ -144,7 +144,7 @@ QComboBox {{
     padding: {L.space_xs}px {L.space_sm}px;
 }}
 QComboBox:hover {{ border-color: {t.accent_hover}; }}
-QComboBox:focus {{ border: {L.border + 1}px solid {t.accent}; }}
+QComboBox:focus {{ border: {L.border + 1}px solid {t.focus_color()}; }}
 QComboBox::drop-down {{ border: none; width: 18px; }}
 QComboBox QAbstractItemView {{
     background: {t.surface};
@@ -176,7 +176,7 @@ QTableWidget, QTableView {{
    table must not be the only visual cue.  The accent border marks
    the widget that owns the keyboard. */
 QTableWidget:focus, QTableView:focus, QListWidget:focus, QTreeWidget:focus {{
-    border: {L.border + 1}px solid {t.accent};
+    border: {L.border + 1}px solid {t.focus_color()};
 }}
 
 /* ---- tabs ------------------------------------------------------------ */
@@ -195,18 +195,18 @@ QTabBar::tab {{
 QTabBar::tab:hover {{ color: {t.text}; }}
 QTabBar::tab:selected {{
     color: {t.text};
-    border-bottom: 2px solid {t.accent};
+    border-bottom: 2px solid {t.focus_color()};
     font-weight: 600;
 }}
 /* (R30-b) the tab bar owning the keyboard gets the accent underline
    on the focused tab as well (selected ≠ focused: arrow keys move
    focus inside a tab bar even when another tab stays selected). */
-QTabBar:focus {{ border-bottom: 2px solid {t.accent}; }}
+QTabBar:focus {{ border-bottom: 2px solid {t.focus_color()}; }}
 
 /* ---- checkboxes, radios, sliders, group boxes (R30-b) ---------------- */
 QCheckBox:focus, QRadioButton:focus {{
     border: none;
-    color: {t.accent};
+    color: {t.focus_color()};
     font-weight: 600;
 }}
 QSlider::groove:horizontal {{
@@ -223,7 +223,7 @@ QSlider::handle:horizontal {{
 /* (R30-b) the slider WIDGET rule (the handle pseudo-element above
    cannot carry the widget-level :focus state). */
 QSlider:focus {{
-    border: {L.border + 1}px solid {t.accent};
+    border: {L.border + 1}px solid {t.focus_color()};
     border-radius: {L.radius_sm}px;
 }}
 QGroupBox {{
@@ -233,7 +233,7 @@ QGroupBox {{
     font-weight: 600;
 }}
 QGroupBox:focus {{
-    border: {L.border + 1}px solid {t.accent};
+    border: {L.border + 1}px solid {t.focus_color()};
 }}
 
 /* ---- dialogs, progress, status --------------------------------------- */
@@ -250,6 +250,9 @@ QProgressBar::chunk {{
     border-radius: {L.radius_sm}px;
 }}
 QStatusBar {{ background: {t.primary}; color: {'#EAF0F4'}; }}
+/* review P-1: a hairline separates the bar from the canvas in BOTH
+   themes (dark nearly merged with Midnight before) */
+QStatusBar {{ border-top: 1px solid {t.focus_color()}; }}
 QMenuBar {{ background: {t.primary}; color: {'#EAF0F4'}; }}
 QMenuBar::item:selected {{ background: {t.selected_surface}; color: {t.text}; }}
 QMenu {{

@@ -69,7 +69,7 @@ def attach_chart_export(
         path, _selected = QFileDialog.getSaveFileName(
             page,
             "Export the chart",
-            f"{name}.png",
+            f"{name}-{__import__('datetime').datetime.now():%Y%m%d-%H%M%S}.png",
             "PNG (*.png);;TIFF (*.tif *.tiff);;JPEG (*.jpg *.jpeg);;All files (*)",
         )
         if not path:

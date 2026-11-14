@@ -57,6 +57,15 @@ class MolecularDynamicsPage(QWidget):
         self._export_btn.clicked.connect(self._export_dialog)
         controls.addWidget(self._open_btn)
         controls.addWidget(self._export_btn)
+        # review P-10 fix: a bundled example study button — the page was the
+        # emptiest first-open (99% background) with no guided entry.
+        self._example_btn = QPushButton("Try the example study")
+        self._example_btn.setToolTip(
+            "Load a small generated two-ligand study (RMSD / RMSF exports) "
+            "to try the plots without any data of your own"
+        )
+        self._example_btn.clicked.connect(self._load_example)
+        controls.addWidget(self._example_btn)
         controls.addStretch(1)
         layout.addLayout(controls)
 
@@ -96,7 +105,26 @@ class MolecularDynamicsPage(QWidget):
         self._preview = QLabel("Open a study to begin")
         self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._preview.setMinimumSize(300, 220)
-        splitter.addWidget(self._preview)
+        # review C-1/P-7/P-10 fix: an honest empty state in the big preview
+        # panel — glyph + headline + guidance instead of a bare white box.
+        from PySide6.QtWidgets import QStackedWidget
+
+        from ..widgets.empty_state import EmptyState
+
+        self._empty = EmptyState(
+            headline="No study loaded yet",
+            guidance=(
+                "A study is a folder of ligand sub-folders with .xvg exports "
+                "(RMSD, RMSF, hydrogen bonds…). Open yours, or press "
+                "'Try the example study' above to see the plots immediately."
+            ),
+            glyph="∿",
+        )
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self._preview)
+        self._stack.addWidget(self._empty)
+        self._stack.setCurrentWidget(self._empty)
+        splitter.addWidget(self._stack)
         configure_splitter(splitter, min_sizes=(220, 300), stretch=(0, 1))
         splitter.setSizes([280, 700])
         layout.addWidget(splitter, stretch=1)
@@ -121,7 +149,35 @@ class MolecularDynamicsPage(QWidget):
     def _invalidate_figure(self, *_args: object) -> None:
         if self._figure is not None:
             self._clear_figure()
+            self._stack.setCurrentWidget(self._empty)
             self._status.setText("Inputs changed; plot again before exporting.")
+
+    def _load_example(self) -> None:
+        """Review P-10 fix: generate + load a small bundled-style study."""
+        if self._runner.busy:
+            self._status.setText("Another job is running; try again when it finishes.")
+            return
+        from tempfile import mkdtemp
+
+        root = Path(mkdtemp(prefix="pharmaml-md-example-")) / "example_study"
+        for ligand, drift in (("ligand_A", 0.02), ("ligand_B", 0.05)):
+            folder = root / ligand
+            folder.mkdir(parents=True)
+            steps = list(range(0, 100, 2))
+            # plain GROMACS-style two-column .xvg (see study.py docstring)
+            (folder / "ligand_rmsd.xvg").write_text(
+                "# t rmsd\n" + "\n".join(
+                    f"{t} {0.10 + drift * t + 0.01 * ((t % 10) - 5):.4f}"
+                    for t in steps
+                ) + "\n"
+            )
+            (folder / "ligand_rmsf.xvg").write_text(
+                "# res rmsf\n" + "\n".join(
+                    f"{i} {0.08 + 0.02 * ((i * 7) % 13) / 13.0:.4f}"
+                    for i in range(1, 21)
+                ) + "\n"
+            )
+        self.load_path(root)
 
     def _open_dialog(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Open MD study folder")
@@ -156,6 +212,8 @@ class MolecularDynamicsPage(QWidget):
         self._ligand.blockSignals(False)
         self._update_metrics()
         self._open_btn.setEnabled(True)
+        # review C-1 fix: real content replaces the empty state
+        self._stack.setCurrentWidget(self._preview)
         self._status.setText(
             f"Loaded {len(study)} ligand(s). Loader may convert units or smooth H-bonds; "
             "verify data and axis labels."

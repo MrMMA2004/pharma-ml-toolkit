@@ -286,6 +286,7 @@ class ModelAnalysisPage(QWidget):
         self._runner = runner or JobRunner(self)
         self._data_explorer = data_explorer
         self._frame: pd.DataFrame | None = None
+        self._external_path: Path | None = None
         self._last_outcome: AnalysisOutcome | None = None
 
         lay = QVBoxLayout(self)
@@ -299,6 +300,14 @@ class ModelAnalysisPage(QWidget):
         self._dataset_combo.currentTextChanged.connect(self._load_dataset)
         self._target_combo = QComboBox()
         self._model_combo = QComboBox()
+        # review P-12 fix: a visible route for the user's own CSV/Excel —
+        # the combo alone implied bundled data was the only way in.
+        self._open_btn = QPushButton("Open CSV / Excel…")
+        self._open_btn.setToolTip(
+            "Load any table from disk into this workspace "
+            "(CSV, TSV or Excel via pharmaml.utils.io.read_table)"
+        )
+        self._open_btn.clicked.connect(self._open_external)
         try:
             from pharmaml.ml.models import MODEL_REGISTRY
 
@@ -331,7 +340,7 @@ class ModelAnalysisPage(QWidget):
             "Clear every value cell back to the estimator's own defaults "
             "(the blank state — nothing is pinned)."
         )
-        self._reset_params_btn.clicked.connect(self._clear_param_values)
+        self._reset_params_btn.clicked.connect(self._confirm_reset_params)
         # -- the §19 CV controls (round 226 port) ------------------------- #
         self._cv_folds = QSpinBox()
         self._cv_folds.setRange(2, 10)
@@ -363,6 +372,7 @@ class ModelAnalysisPage(QWidget):
         self._compare_btn.setMinimumHeight(34)
         self._compare_btn.clicked.connect(self._start_compare)
         form.addRow("Dataset:", self._dataset_combo)
+        form.addRow("", self._open_btn)
         form.addRow("Target column:", self._target_combo)
         form.addRow("Model:", self._model_combo)
         params_buttons = QHBoxLayout()
@@ -552,6 +562,44 @@ class ModelAnalysisPage(QWidget):
         dialog.raise_()
         dialog.activateWindow()
 
+    def _open_external(self) -> None:
+        """Review P-12 fix: load the user's own table directly."""
+        from PySide6.QtWidgets import QFileDialog
+
+        path, _filt = QFileDialog.getOpenFileName(
+            self,
+            "Open a dataset table",
+            str(_TK / "examples" / "data"),
+            "Tables (*.csv *.tsv *.txt *.xlsx *.xls);;All files (*)",
+        )
+        if not path:
+            return
+        from pharmaml.utils.io import read_table
+
+        try:
+            frame = read_table(path)
+        except Exception as exc:  # noqa: BLE001 - surface any reader failure
+            self._metric_label.setText(f"Could not read {Path(path).name}: {exc}")
+            from ..widgets.toast_routing import shell_notify
+
+            shell_notify(self, f"Model Analysis — could not read {Path(path).name}", "danger")
+            return
+        if frame is None or frame.empty:
+            self._metric_label.setText(f"{Path(path).name} is empty.")
+            return
+        self._external_path = Path(path)
+        label = f"{Path(path).name} (file)"
+        if label not in [self._dataset_combo.itemText(i) for i in range(self._dataset_combo.count())]:
+            self._dataset_combo.addItem(label)
+        self._dataset_combo.setCurrentText(label)
+        self._frame = frame
+        self._target_combo.clear()
+        for col in frame.columns:
+            self._target_combo.addItem(str(col))
+        self._metric_label.setText(
+            f"Loaded {Path(path).name} — {len(frame):,} rows × {len(frame.columns)} columns; pick a target column."
+        )
+
     def _load_dataset(self, name: str) -> None:
         self._target_combo.clear()
         if name == "(table from Data Explorer)":
@@ -563,6 +611,10 @@ class ModelAnalysisPage(QWidget):
                 self._metric_label.setText("Data Explorer has no table loaded yet.")
                 return
             self._frame = frame
+        elif name.endswith(" (file)") and getattr(self, "_external_path", None) is not None:
+            # review P-12: the user-loaded external table (already in memory;
+            # re-reading would flash a busy state for nothing)
+            pass
         else:
             path = _TK / "examples" / "data" / name
             if not path.exists():  # pragma: no cover - missing example
@@ -584,6 +636,53 @@ class ModelAnalysisPage(QWidget):
         for btn in self._diag_buttons:
             btn.setEnabled(False)
         self._metric_label.setText(f"Training {name}…")
+
+    def _show_dependency_help(self, message: str) -> None:
+        """M-5: a copyable install line + a route to the Settings doctor."""
+        import re as _re
+        from PySide6.QtWidgets import (
+            QDialogButtonBox,
+            QLabel,
+            QMessageBox,
+            QPushButton,
+            QVBoxLayout,
+            QWidget,
+        )
+
+        pip = _re.search(r"pip install[^\n\"]+", message)
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("Missing dependency")
+        dlg.setText(
+            "This workflow needs an optional dependency that is not installed."
+        )
+        detail = (pip.group(0).strip() if pip else
+                  "See Settings ▸ Doctor for the full dependency check.")
+        copy_btn = QPushButton("Copy the install line")
+        def _copy():
+            from PySide6.QtGui import QGuiApplication
+            QGuiApplication.clipboard().setText(detail)
+            copy_btn.setText("Copied")
+        copy_btn.clicked.connect(_copy)
+        dlg.addButton(copy_btn, QMessageBox.ButtonRole.ActionRole)
+        settings_btn = dlg.addButton("Open Settings ▸ Doctor", QMessageBox.ButtonRole.AcceptRole)
+        dlg.setDetailedText(message)
+        dlg.exec()
+        if dlg.clickedButton() is settings_btn:
+            go_to = getattr(self.window(), "go_to", None)
+            if callable(go_to):
+                go_to("settings")
+
+    def _confirm_reset_params(self) -> None:
+        """Review M-4 fix: view/param resets are reversible-blind — confirm."""
+        from PySide6.QtWidgets import QMessageBox
+
+        if QMessageBox.question(
+            self,
+            "Reset hyperparameters",
+            "Clear the manual hyperparameter table and restore the defaults?",
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        self._reset_param_values()
 
     def _on_ended(self) -> None:
         self._train_btn.setEnabled(True)
@@ -1131,10 +1230,15 @@ class ModelAnalysisPage(QWidget):
             )
             self._importance_plot.set_labels(x="feature", y="importance")
         cv = f" · CV mean {o.cv_mean:.3f}" if o.cv_mean == o.cv_mean else ""
-        self._metric_label.setText(
+        summary = (
             f"{o.model} ({o.task}) · train {o.n_train} / test {o.n_test} · "
             f"{o.metric_name} {o.metric_value:.3f}{cv} · fitted in {o.seconds:.1f}s"
         )
+        self._metric_label.setText(summary)
+        # review C-3 fix: completion is a toast, not a silent label
+        from ..widgets.toast_routing import shell_notify
+
+        shell_notify(self, f"Model Analysis — training done: {summary}", "success")
         self._diag_status.setText(
             f"Last run: {o.model} ({o.task}) — the calibration / learning-curve / "
             "ROC / PR figures below reuse THIS fit."
@@ -1292,9 +1396,24 @@ class ModelAnalysisPage(QWidget):
 
     def _failed(self, message: str) -> None:
         self._metric_label.setText(f"Training failed — {message.splitlines()[0]}")
+        # review M-5 fix: dependency failures get a copy affordance + doctor
+        # pointer instead of one bare line the user must transcribe.
+        if "DependencyError" in message:
+            self._show_dependency_help(message)
+        # review C-3 fix: failures are the case that most needs a toast
+        from ..widgets.toast_routing import shell_notify
+
+        shell_notify(
+            self,
+            f"Model Analysis — training failed: {message.splitlines()[0]}",
+            "error",
+        )
 
     def _cancelled(self, seconds: float) -> None:
         self._metric_label.setText(f"Training cancelled after {seconds:.1f}s (cooperative stop).")
+        from ..widgets.toast_routing import shell_notify
+
+        shell_notify(self, f"Model Analysis — training cancelled after {seconds:.1f}s", "warning")
 
     def apply_palette(self, palette: ChartPalette) -> None:
         for plot in (self._pred_plot, self._resid_plot, self._importance_plot):

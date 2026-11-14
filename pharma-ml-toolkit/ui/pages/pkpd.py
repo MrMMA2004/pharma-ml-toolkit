@@ -445,6 +445,15 @@ class PKPDWorkbenchPage(QWidget):
             f"AUC(0–{outcome.duration_h:g} h) {outcome.auc:.5g} mg·h/L · "
             f"matrix-exponential linCmt solution ({outcome.seconds:.1f}s)"
         )
+        # review C-3 fix: the regimen completion is a toast, not a silent label
+        from ..widgets.toast_routing import shell_notify
+
+        shell_notify(
+            self,
+            f"PK/PD — regimen done: {len(outcome.events)} {outcome.route} dose(s) · "
+            f"Cmax {outcome.c_max:.5g} mg/L · AUC {outcome.auc:.5g} mg·h/L",
+            "success",
+        )
 
     # -- NCA --------------------------------------------------------------------
     def _start_nca(self) -> None:
@@ -662,6 +671,11 @@ class PKPDWorkbenchPage(QWidget):
     def _failed(self, message: str) -> None:
         first = message.splitlines()[0] if message else "job failed"
         self._report.setText(f"Job failed — {first}")
+        # review C-3 fix: failures surface as a toast even when the user
+        # has already navigated to another workspace
+        from ..widgets.toast_routing import shell_notify
+
+        shell_notify(self, f"PK/PD — job failed: {first}", "danger")
 
     def apply_palette(self, palette: ChartPalette) -> None:
         self._plot.apply_palette(palette)

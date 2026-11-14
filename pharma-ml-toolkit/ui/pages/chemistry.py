@@ -131,6 +131,13 @@ class ChemistryWorkbenchPage(QWidget):
             self._dataset_combo.addItem(name)
         self._dataset_combo.addItem("(table from Data Explorer)")
         self._dataset_combo.currentTextChanged.connect(self._load_dataset)
+        # review P-12 fix: a visible route for the user's own ligand table
+        self._open_btn = QPushButton("Open CSV / Excel…")
+        self._open_btn.setToolTip(
+            "Load any ligand table from disk (a SMILES column is "
+            "auto-detected from the header)"
+        )
+        self._open_btn.clicked.connect(self._open_external)
         self._smiles_combo = QComboBox()
         self._families_combo = QComboBox()
         for label in _FAMILY_PRESETS:
@@ -146,6 +153,7 @@ class ChemistryWorkbenchPage(QWidget):
         self._feat_btn.setMinimumHeight(34)
         self._feat_btn.clicked.connect(self._start_features)
         form.addRow("Dataset:", self._dataset_combo)
+        form.addRow("", self._open_btn)
         form.addRow("SMILES column:", self._smiles_combo)
         form.addRow("Feature families:", self._families_combo)
         form.addRow("Threads (n_jobs):", self._jobs_combo)
@@ -202,6 +210,40 @@ class ChemistryWorkbenchPage(QWidget):
         self._load_dataset(self._dataset_combo.currentText())
 
     # -- data ---------------------------------------------------------------
+    def _open_external(self) -> None:
+        """Review P-12 fix: load the user's own ligand table directly."""
+        from PySide6.QtWidgets import QFileDialog
+
+        path, _filt = QFileDialog.getOpenFileName(
+            self,
+            "Open a ligand table",
+            str(_TK / "examples" / "data"),
+            "Tables (*.csv *.tsv *.txt *.xlsx *.xls);;All files (*)",
+        )
+        if not path:
+            return
+        from pharmaml.utils.io import read_table
+
+        try:
+            frame = read_table(path)
+        except Exception as exc:  # noqa: BLE001 - surface any reader failure
+            self._report.setText(f"Could not read {Path(path).name}: {exc}")
+            return
+        if frame is None or frame.empty:
+            self._report.setText(f"{Path(path).name} is empty.")
+            return
+        label = f"{Path(path).name} (file)"
+        names = [self._dataset_combo.itemText(i) for i in range(self._dataset_combo.count())]
+        if label not in names:
+            self._dataset_combo.addItem(label)
+        # hold the frame: _load_dataset re-runs on setCurrentText and the
+        # "(file)" branch below picks this up instead of hitting examples/
+        self._external_frame = frame
+        self._dataset_combo.setCurrentText(label)
+        self._report.setText(
+            f"Loaded {Path(path).name} — {len(frame):,} rows; SMILES column auto-detected."
+        )
+
     def _load_dataset(self, name: str) -> None:
         self._frame = None
         self._smiles_combo.clear()
@@ -211,6 +253,9 @@ class ChemistryWorkbenchPage(QWidget):
             if self._frame is None or self._frame.empty:
                 self._report.setText("Data Explorer has no table loaded yet.")
                 return
+        elif name.endswith(" (file)") and getattr(self, "_external_frame", None) is not None:
+            # review P-12: the user-loaded table, already in memory
+            self._frame = self._external_frame
         else:
             path = _TK / "examples" / "data" / name
             if not path.exists():  # pragma: no cover - missing example
@@ -230,7 +275,7 @@ class ChemistryWorkbenchPage(QWidget):
     def _on_started(self, name: str) -> None:
         self._std_btn.setEnabled(False)
         self._feat_btn.setEnabled(False)
-        self._report.setText(f"Running {name}…")
+        self._report.setText(f"Running {name}… on {self._dataset_combo.currentText()}")
 
     def _on_ended(self) -> None:
         self._std_btn.setEnabled(True)

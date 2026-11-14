@@ -25,20 +25,33 @@ class ColorTokens:
     """The spec's token table for one theme (light or dark)."""
 
     name: str
-    background: str          # 60% — neutral canvas
+    background: str          # neutral canvas
     surface: str             # cards, tables, dialogs
-    primary: str             # 30% — navigation, structure
-    accent: str              # 10% — interactive highlights
+    primary: str             # navigation, structure
+    accent: str              # interactive highlights (on dark/navy fills)
     accent_hover: str        # hovered primary actions
     selected_surface: str    # selected items, active states
     text: str                # primary text
     text_secondary: str      # supporting information
     border: str              # separators, boundaries
     disabled: str = ""       # disabled controls (dark: same as border)
+    focus_ring: str = ""     # keyboard-focus indicator color; empty -> accent
 
     def hex_or(self, fallback: str) -> str:
         """A token or its stand-in when a theme has no value."""
         return self.disabled or fallback
+
+    def focus_color(self) -> str:
+        """The :focus indicator color (WCAG 1.4.11-safe per theme).
+
+        Electric Lime is the identity accent and clears 3:1 against
+        every dark-theme fill it sits on, but on light-theme white
+        surfaces it lands at 1.40:1 — below the non-text UI-component
+        floor.  Light theme therefore carries a dedicated olive-lime
+        focus ring (5.6:1 on white, still the lime hue family);
+        dark theme reuses the accent unchanged (8.1:1 on surface).
+        """
+        return self.focus_ring or self.accent
 
 
 LIGHT = ColorTokens(
@@ -46,13 +59,14 @@ LIGHT = ColorTokens(
     background="#F3F5F1",      # Warm Ivory
     surface="#FFFFFF",         # White
     primary="#172F43",         # Deep Navy
-    accent="#C6E84B",          # Electric Lime
+    accent="#C6E84B",          # Electric Lime (fills with navy text)
     accent_hover="#ACD52F",    # Dark Lime
     selected_surface="#F0F6D9",  # Pale Lime
     text="#202B36",            # Charcoal
     text_secondary="#64748B",  # Slate
-    border="#DFE5E9",          # Light Gray
-    disabled="#AAB4BC",        # Muted Gray
+    border="#7B8B99",          # Steel Gray — 3.5:1 on white (WCAG 1.4.11)
+    disabled="#7E8C99",        # Slate Gray — 3.44:1 on white
+    focus_ring="#55701F",      # Olive Lime — 5.64:1 on white
 )
 
 DARK = ColorTokens(

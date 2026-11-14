@@ -119,7 +119,8 @@ sidebar — 18 pages (Dashboard, Data Explorer, the Chemistry / PK/PD /
 Biology / Docking / Model Analysis / ML / Unsupervised / Deep Learning /
 Generative / Foundations / Best-of ML / Response AI / Utilities
 workbenches, Molecular Dynamics, the Image Lab, Settings) with scientific plots,
-Qt-Material / QDarkStyleSheet theming and QThreadPool workers behind a
+the studio theme (Deep Navy / Warm Ivory / Electric Lime, light and dark,
+WCAG-verified tokens; optional Qt-Material / QDarkStyleSheet providers) and QThreadPool workers behind a
 cooperative Stop button (directive #16's complete redesign; see
 `docs/gui/GUI_REDESIGN.md` and the tab-by-tab `docs/gui/GUI_AUDIT.md`).
 
@@ -269,8 +270,9 @@ Engineering notes:
 * **Sessions persist** — QSettings remember the window geometry, the
   navigation state and the theme across launches.
 * **Light and dark** — the Settings page's theme switcher recolours the
-  whole window (Qt-Material densities, the QDarkStyleSheet alternative,
-  a native fallback) and re-tints every PyQtGraph plot through the
+  whole window (the studio design tokens by default; Qt-Material
+  densities and the QDarkStyleSheet alternative remain selectable) and
+  re-tints every PyQtGraph plot through the
   ChartPalette, live; the choice rides QSettings.
 * **Keyboard-first** — Ctrl+1..9 jump straight to the workbench pages;
   every long job's cooperative Stop is one click away, and the offscreen
@@ -332,7 +334,7 @@ pharma-ml-toolkit/
 ├── studio.py               # THE graphical front end — `python studio.py` opens PharmaML
 │                            # Studio (directive #16 redesign, increments 1–14, all eighteen
 │                            # pages): sidebar navigation, PyQtGraph scientific plots,
-│                            # Qt-Material/QDarkStyleSheet theming, QThreadPool workers with
+│                            # studio-token theming (Qt-Material/QDarkStyle optional), QThreadPool workers with
 │                            # the cooperative Stop; runs offscreen for CI (`ui/headless.py`
 │                            # preloads the committed EGL stub when the box has none); the
 │                            # legacy Tkinter playground.py was retired in v1.2.141
@@ -2302,7 +2304,9 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (2907 tests incl. doctests, skips RDKit-only tests if absent)
+python -m pytest                 # full suite (6,900+ tests with the pinned stack incl.
+                                 # doctests; skips RDKit/torch-only tests when those extras
+                                 # are absent — run `pytest --co -q` for the exact count)
 python -m pytest tests/test_pk.py -v
 python -m pytest --cov=pharmaml  # with pytest-cov
 ```

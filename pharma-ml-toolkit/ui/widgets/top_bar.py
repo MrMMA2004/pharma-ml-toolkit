@@ -29,6 +29,7 @@ class TopBar(QWidget):
     advanced_toggled = Signal(bool)
     search_requested = Signal()
     jobs_clicked = Signal()
+    help_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -59,6 +60,13 @@ class TopBar(QWidget):
         )
         self.search_btn.clicked.connect(self.search_requested.emit)
         lay.addWidget(self.search_btn)
+
+        # review C-2/C-5 fix: a visible Help entry point (F1) so the
+        # cheat-sheet is discoverable without knowing the key.
+        self.help_btn = QPushButton("Help")
+        self.help_btn.setToolTip("Help, shortcuts and guidance (F1)")
+        self.help_btn.clicked.connect(self.help_requested.emit)
+        lay.addWidget(self.help_btn)
 
         self.location = QLabel("Nine-card home")
         self.location.setObjectName("studioTopBarLocation")

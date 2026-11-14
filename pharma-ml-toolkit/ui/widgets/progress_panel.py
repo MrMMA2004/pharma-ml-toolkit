@@ -59,16 +59,39 @@ class ProgressPanel(QWidget):
         self._note.setText("")
         self._stop.setEnabled(True)
         self.show()
+        # review M-6 fix: elapsed time from the start of THIS job
+        import time as _time
+        self._t0 = _time.monotonic()
+        from PySide6.QtCore import QTimer
+        self._tick = QTimer(self)
+        self._tick.timeout.connect(self._show_elapsed)
+        self._tick.start(1000)
+        self._job_name = job_name
+        self._show_elapsed()
+
+    def _show_elapsed(self) -> None:
+        elapsed = getattr(self, "_t0", None)
+        if elapsed is None:
+            return
+        import time as _time
+        secs = _time.monotonic() - elapsed
+        name = getattr(self, "_job_name", "")
+        self._label.setText(f"{name} — {int(secs)}s elapsed")
 
     def update_progress(self, percent: int, label: str) -> None:
         self._bar.setValue(max(0, min(100, int(percent))))
         if label:
-            self._label.setText(label)
+            self._job_name = label
+            self._show_elapsed()
 
     def note(self, text: str) -> None:
         self._note.setText(text)
 
     def end(self) -> None:
+        tick = getattr(self, "_tick", None)
+        if tick is not None:
+            tick.stop()
+
         self._bar.setValue(0)
         self._stop.setEnabled(False)
         self._label.setText("Ready")

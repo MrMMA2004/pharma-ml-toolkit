@@ -33,7 +33,7 @@ class NotificationBar(QLabel):
         self.setAccessibleName(f"{kind.title()} notification: {text}")
         self.setStyleSheet(
             f"QLabel {{ background: {bg}; color: {fg}; border-radius: 6px;"
-            " padding: 8px 12px; font-weight: 600; }}"
+            " padding: 8px 12px; font-weight: 600; }"
         )
         self.setWordWrap(True)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)

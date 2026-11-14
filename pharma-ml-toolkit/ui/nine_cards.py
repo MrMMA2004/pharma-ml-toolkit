@@ -48,6 +48,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -583,16 +584,41 @@ def _build_card(card: NineCard, context: Mapping[str, Any] | None = None) -> QFr
     lay.addWidget(chips)
 
     buttons = QHBoxLayout()
+    buttons.setSpacing(6)
+    # review C-6 fix: the row of entry buttons used to force the card's
+    # minimum width to the sum of the labels' natural widths (the ML card's
+    # five buttons alone demanded 671 px, so the 3x3 grid could never
+    # re-flow below ~1617 px). Buttons now shrink below their text width:
+    # the label elides, and the full name stays in the tooltip.
     for entry in card.entries:
-        btn = QPushButton(entry.label)
+        btn = QPushButton(_elide_entry_label(entry.label))
         btn.setObjectName(f"nineCardEntry-{entry.section}")
-        btn.setToolTip(f"Navigate to the existing {entry.section} page")
+        btn.setToolTip(f"{entry.label} — navigate to the {entry.section} page")
+        # Ignored horizontal policy: the button's text no longer sets the
+        # card's minimum width (with stretch=1 it still gets its fair share
+        # of whatever width the card has)
+        btn.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+        )
         btn.clicked.connect(
             lambda _checked=False, section=entry.section, source=btn: _go(section, source)
         )
         buttons.addWidget(btn, stretch=1)
     lay.addLayout(buttons)
     return frame
+
+
+def _elide_entry_label(label: str, budget: int = 18) -> str:
+    """Shorten an entry label for the card row (tooltip keeps the full one).
+
+    'Open Model Analysis' -> 'Model Analysis' -> capped at ``budget``
+    chars with an ellipsis. Single-word labels pass through unchanged.
+    """
+    if label.startswith("Open "):
+        label = label[len("Open "):]
+    if len(label) > budget:
+        return label[: budget - 1].rstrip() + "…"
+    return label
 
 
 def _go(section: str, source: QWidget) -> None:

@@ -61,7 +61,22 @@ def test_identity_values_verbatim() -> None:
     assert DARK.surface == "#263D4D"       # Deep Blue Gray
     assert DARK.selected_surface == "#344C35"  # Forest Slate
     assert LIGHT.accent_hover == "#ACD52F"
-    assert LIGHT.disabled == "#AAB4BC"
+    # WCAG 1.4.11 fix (review M-9): disabled/border/focus_ring were retuned
+    # to clear the 3:1 non-text floor on light surfaces; the three
+    # signature colors above are the identity and stay verbatim.
+    assert LIGHT.disabled == "#7E8C99"
+    assert LIGHT.border == "#7B8B99"
+    assert LIGHT.focus_ring == "#55701F"
+
+
+def test_light_theme_ui_components_clear_3_to_1() -> None:
+    """Review M-9 regression guard: every light-theme token that paints a
+    UI state (disabled text, borders, focus ring / selected-tab underline)
+    must reach WCAG 2.1 1.4.11's 3:1 against the white surface."""
+    for tok in (LIGHT.disabled, LIGHT.border, LIGHT.focus_ring):
+        assert contrast_ratio(tok, LIGHT.surface) >= 3.0, tok
+    assert DARK.focus_color() == DARK.accent  # dark keeps the lime (8.1:1)
+    assert LIGHT.focus_color() == LIGHT.focus_ring
 
 
 def test_dark_theme_is_not_an_inversion() -> None:

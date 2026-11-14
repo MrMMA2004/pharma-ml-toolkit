@@ -156,7 +156,7 @@ class DashboardPage(QWidget):
             0,
         )
         grid.addWidget(_stat_card("Example datasets", f"{len(datasets)} files", "examples/data — ready to open in Data Explorer"), 1, 1)
-        grid.addWidget(_stat_card("GUI framework", "PySide6 + PyQtGraph", "Qt-Material themes, QThread workers"), 1, 2)
+        grid.addWidget(_stat_card("GUI framework", "PySide6 + PyQtGraph", "studio design tokens (light/dark), QThread workers"), 1, 2)
         lay.addLayout(grid)
 
         data_header = QLabel("Example datasets")

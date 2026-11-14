@@ -199,6 +199,7 @@ class MainWindow(QMainWindow):
         self.top_bar.settings_requested.connect(lambda: self.go_to("settings"))
         self.top_bar.advanced_toggled.connect(self._set_advanced_nav)
         self.top_bar.search_requested.connect(self.open_search)
+        self.top_bar.help_requested.connect(self.open_help)
         self.top_bar.jobs_clicked.connect(self.open_job_center)
         self.home.card_activated.connect(self.open_card)
         bar_wrap = QWidget()
@@ -257,6 +258,12 @@ class MainWindow(QMainWindow):
         search_action.triggered.connect(self.open_search)
         self.addAction(search_action)
 
+        # -- F1 help (review C-2): the shortcut cheat-sheet + orientation ---
+        help_action = QAction("Open the help pane", self)
+        help_action.setShortcut(QKeySequence.StandardKey.HelpContents)
+        help_action.triggered.connect(self.open_help)
+        self.addAction(help_action)
+
         # -- navigation history (part6 §5: Home/Back with memory) -------------
         self._history: list[tuple[str, str | None]] = []  # (mode marker, section)
         self._current_route: tuple[str, str | None] = ("home", None)
@@ -284,6 +291,10 @@ class MainWindow(QMainWindow):
         state = self.settings.state()
         if state is not None:
             self.restoreState(state)
+
+        # review C-1/C-2 fix: first-run welcome rides the first paint,
+        # not __init__ (dialog exec inside init would block show()).
+        QTimer.singleShot(0, self._maybe_show_welcome)
 
     # -- navigation ------------------------------------------------------------
     def _push_history(self) -> None:
@@ -336,6 +347,37 @@ class MainWindow(QMainWindow):
         palette = SearchPalette(self)
         if palette.exec() == SearchPalette.DialogCode.Accepted and palette.chosen_route:
             self.go_to(palette.chosen_route)
+
+    def open_help(self) -> None:
+        """F1: the help pane (review C-2/C-5 fix)."""
+        from .widgets.help_dialog import HelpDialog
+
+        HelpDialog(self).exec()
+
+    def _maybe_show_welcome(self) -> None:
+        """First run only (review C-1/C-2 fix): the welcome dialog.
+
+        Never blocks the offscreen platform (CI, screenshots, tests):
+        a modal exec() there would hang the event loop. The flag is
+        still written so a real desktop shows it exactly once.
+        """
+        from PySide6.QtGui import QGuiApplication
+
+        if QGuiApplication.platformName() == "offscreen":
+            return
+        try:
+            raw = self.settings.settings().value("onboarding/welcome_seen")
+        except Exception:  # noqa: BLE001 - settings must never block launch
+            raw = None
+        if not (isinstance(raw, str) and raw.lower() in ("true", "1")):
+            from .widgets.help_dialog import WelcomeDialog
+
+            dlg = WelcomeDialog(self)
+            dlg.exec()
+            if dlg.result() == WelcomeDialog.DialogCode.Accepted and dlg._wants_help:
+                self.open_help()
+            self.settings.settings().setValue("onboarding/welcome_seen", "true")
+
 
     def open_job_center(self) -> None:
         """The §10 unified job center (live job + honest history)."""
