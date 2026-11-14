@@ -52,7 +52,7 @@ payload = {
             "title": "Only in A — 60",
             "columns": ["#", "ligand name"],
             "rows": [[1, "ligand_A_only_01"], [2, "ligand_A_only_02"],
-                     ["", "+ 58 more (see the reconciler)"]],
+                     ["", "+ 58 more (see Ligand Sets in the Studio or the Explorer report settings)"]],
         },
     ],
 }

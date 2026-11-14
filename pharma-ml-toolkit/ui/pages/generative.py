@@ -270,6 +270,8 @@ class GenerativeWorkbenchPage(QWidget):
         )
         splitter.addWidget(self._table)
         self._plot = PlotPanel(title="Generative panel")
+        self._plot.set_empty_hint("Press Generate to sample molecules; scored results land here")
+
         splitter.addWidget(self._plot)
         splitter.setSizes([560, 540])
         configure_splitter(splitter, stretch=(0, 1))
@@ -391,7 +393,7 @@ class GenerativeWorkbenchPage(QWidget):
         self._seed_spin = QSpinBox()
         self._seed_spin.setRange(0, 999999)
         self._seed_spin.setValue(42)
-        knobs_lay.addWidget(QLabel("seed:"))
+        knobs_lay.addWidget(QLabel("Seed:"))
         knobs_lay.addWidget(self._seed_spin)
         # §17 F (Phase 5): the search-budget knobs explain themselves
         from pharmaml.studio import apply_help as _help
@@ -464,7 +466,7 @@ class GenerativeWorkbenchPage(QWidget):
         self._breed_seed = QSpinBox()
         self._breed_seed.setRange(0, 999999)
         self._breed_seed.setValue(42)
-        breed_knobs_lay.addWidget(QLabel("seed:"))
+        breed_knobs_lay.addWidget(QLabel("Seed:"))
         breed_knobs_lay.addWidget(self._breed_seed)
         breed_knobs_lay.addStretch(1)
         form.addRow("", breed_knobs)

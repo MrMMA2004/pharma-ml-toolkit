@@ -56,6 +56,9 @@ class CalibrationDialog(QDialog):
         form.addRow("Features:", self._features)
         self._controls.append(self._features)
         self._target, self._key, self._positive = QLineEdit(), QLineEdit(), QLineEdit()
+        self._positive.setToolTip("The positive class label (calibration is class-conditional)")
+        self._key.setToolTip("ID column joining the three files' rows")
+        self._target.setToolTip("Target column in the training file (1/0 or labels)")
         self._positive.setPlaceholderText("Exact text of one of the two classes")
         for title, field in (("Target:", self._target), ("Leakage-unit ID:", self._key),
                              ("Positive label:", self._positive)):

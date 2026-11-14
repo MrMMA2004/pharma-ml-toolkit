@@ -25,8 +25,9 @@ import {
   CommandPaletteTrigger,
 } from "@/components/explorer/command-palette";
 import { CardFinder } from "@/components/explorer/playground/card-finder";
-import { TABS, useToolkitStore } from "@/lib/store";
+import { TABS, TAB_DESCRIPTIONS, useToolkitStore } from "@/lib/store";
 import type { TabId } from "@/lib/store";
+import { useTabRouting } from "@/lib/tab-routing";
 import { cn } from "@/lib/utils";
 import { SHIPPED_TOOLKIT_VERSION } from "@/lib/toolkit-version"
 
@@ -69,6 +70,10 @@ export default function Home() {
   const setTab = useToolkitStore((s) => s.setTab);
   const stats = useToolkitStore((s) => s.stats);
 
+  /* (M-7) hash routing: #/playground/ml is shareable, Back/Forward
+   * navigate tabs instead of leaving the app. */
+  useTabRouting();
+
   /* Tabs behave like pages: always start a fresh tab at the top (also
    * keeps deep links to the code explorer from inheriting stale scroll). */
   useEffect(() => {
@@ -77,6 +82,14 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
+      {/* (M-8) keyboard users land on a 40+-control page; the skip link
+       * is the first focusable element and jumps past the whole header. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg focus:border focus:border-ring"
+      >
+        Skip to content
+      </a>
       {/* ------------------------------ Header ------------------------------ */}
       <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-2.5 sm:px-6 md:flex-row md:items-center md:justify-between md:gap-4">
@@ -118,6 +131,7 @@ export default function Home() {
                   type="button"
                   onClick={() => setTab(t.id)}
                   aria-current={active ? "page" : undefined}
+                  title={TAB_DESCRIPTIONS[t.id]}
                   className={cn(
                     "relative flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4",
                     active
@@ -150,7 +164,7 @@ export default function Home() {
       </header>
 
       {/* ------------------------------ Main ------------------------------ */}
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+      <main id="main-content" className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
         <AnimatePresence mode="wait">
           <motion.div
             key={tab}

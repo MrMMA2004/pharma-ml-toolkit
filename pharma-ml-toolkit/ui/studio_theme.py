@@ -221,10 +221,20 @@ QSlider::handle:horizontal {{
     border-radius: 6px;
 }}
 /* (R30-b) the slider WIDGET rule (the handle pseudo-element above
-   cannot carry the widget-level :focus state). */
+   cannot carry the widget-level :focus state).  (P-3) the ring now
+   hugs the groove (padding 0 + tight margins) and the HANDLE grows
+   and takes the focus color, so keyboard focus reads as "this
+   control" on the thin slider instead of a box around dead space. */
 QSlider:focus {{
     border: {L.border + 1}px solid {t.focus_color()};
     border-radius: {L.radius_sm}px;
+    padding: 0px;
+}}
+QSlider::handle:horizontal:focus {{
+    background: {t.focus_color()};
+    width: 16px;
+    margin: -7px 0;
+    border-radius: 8px;
 }}
 QGroupBox {{
     border: {L.border}px solid {t.border};

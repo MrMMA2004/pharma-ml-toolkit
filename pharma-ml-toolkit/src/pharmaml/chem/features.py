@@ -1113,11 +1113,22 @@ def compute_feature_frame(
         try:
             # Blank cells parse as valid 0-atom molecules in RDKit; they are
             # failures here (the chem/descriptors.py convention).
-            mol = (
-                Chem.MolFromSmiles(text)
-                if isinstance(smi, str) and smi.strip()
-                else None
-            )
+            # (P-9) Invalid SMILES make RDKit dump multi-line parse errors
+            # to stderr; the caller drops the row and reports it in the UI,
+            # so the console trail is noise (and reads as a crash trail in
+            # a packaged app).  Silence rdApp around the parse — the same
+            # quiet convention as chem/csv_standardize._parse_smiles.
+            from rdkit.rdBase import DisableLog, EnableLog
+
+            DisableLog("rdApp.error")
+            try:
+                mol = (
+                    Chem.MolFromSmiles(text)
+                    if isinstance(smi, str) and smi.strip()
+                    else None
+                )
+            finally:
+                EnableLog("rdApp.error")
             if mol is None:
                 raise ValueError("SMILES did not parse to a valid molecule")
             vector = np.concatenate([computers[family](mol) for family in requested])

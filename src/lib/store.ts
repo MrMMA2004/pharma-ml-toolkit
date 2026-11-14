@@ -979,6 +979,17 @@ export const TABS: Array<{ id: TabId; label: string }> = [
   { id: "download", label: "Download" },
 ];
 
+/* r268 (review M-8): one-line descriptions for the dense icon+short-text
+ * tab strip — hover/focus explains what each section holds before the
+ * click. */
+export const TAB_DESCRIPTIONS: Record<TabId, string> = {
+  overview: "Toolkit health at a glance: version, capability map, quick entry points",
+  explorer: "Browse the toolkit's source tree with syntax-highlighted files",
+  reference: "The generated API reference: modules, classes and functions",
+  playground: "Run real toolkit jobs in the browser: PK/PD, NCA, ML, cheminformatics",
+  download: "Releases, checksums and the bundled assets",
+};
+
 type TreeStatus = "idle" | "loading" | "ready" | "error";
 
 interface ToolkitStore {

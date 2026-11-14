@@ -196,7 +196,7 @@ class UnsupervisedWorkbenchPage(QWidget):
             self._dataset_combo.addItem(f"{name} (bundled)")
         self._dataset_combo.addItem(_DATA_EXPLORER_ENTRY)
         self._dataset_combo.currentTextChanged.connect(self._load_dataset)
-        top.addRow("dataset:", self._dataset_combo)
+        top.addRow("Dataset:", self._dataset_combo)
 
         columns_row = QWidget()
         columns_lay = QHBoxLayout(columns_row)
@@ -234,6 +234,8 @@ class UnsupervisedWorkbenchPage(QWidget):
         self._table = DataTableView()
         splitter.addWidget(self._table)
         self._plot = PlotPanel(title="Unsupervised panel")
+        self._plot.set_empty_hint("Pick a dataset and method, then press Fit — the embedding lands here")
+
         splitter.addWidget(self._plot)
         splitter.setSizes([560, 540])
         configure_splitter(splitter, stretch=(0, 1))

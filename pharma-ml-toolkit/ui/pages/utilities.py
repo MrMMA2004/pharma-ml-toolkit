@@ -228,6 +228,8 @@ class UtilitiesWorkbenchPage(QWidget):
         right_lay.setContentsMargins(0, 0, 0, 0)
         right_lay.addWidget(QLabel("Ligand-set reconciliation:"))
         self._plot = PlotPanel(title="common / only-A / only-B")
+        self._plot.set_empty_hint("Pick a tool on the left and run it — output tables land here")
+
         right_lay.addWidget(self._plot, stretch=1)
         splitter.addWidget(right)
         splitter.setSizes([680, 420])

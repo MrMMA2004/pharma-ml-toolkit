@@ -406,7 +406,11 @@ class ModelAnalysisPage(QWidget):
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self._pred_plot = PlotPanel(title="Predicted vs actual (held-out split)")
+        self._pred_plot.set_empty_hint("Pick dataset + target, then press Train — predicted vs actual lands here")
+
         self._resid_plot = PlotPanel(title="Residuals vs predicted")
+        self._resid_plot.set_empty_hint("The residual plot appears after the first training run")
+
         splitter.addWidget(self._pred_plot)
         splitter.addWidget(self._resid_plot)
         splitter.setSizes([420, 420])
@@ -414,6 +418,8 @@ class ModelAnalysisPage(QWidget):
         lay.addWidget(splitter, stretch=1)
 
         self._importance_plot = PlotPanel(title="Feature importance (when the estimator exposes it)")
+        self._importance_plot.set_empty_hint("Feature importance appears for estimators that expose it (trees, coefficients)")
+
         self._importance_plot.setMinimumHeight(220)
         lay.addWidget(self._importance_plot)
         self._metric_label = QLabel("No training run yet.")
@@ -426,17 +432,22 @@ class ModelAnalysisPage(QWidget):
         from ..widgets.chart_export import attach_chart_export
 
         _export_row = QHBoxLayout()
+        # (M-3) the three sibling buttons name their plot — position no
+        # longer carries the meaning
         attach_chart_export(
             self, self._pred_plot, "model-analysis-parity",
             layout=_export_row, status_label=self._metric_label,
+            label="parity",
         )
         attach_chart_export(
             self, self._resid_plot, "model-analysis-residuals",
             layout=_export_row, status_label=self._metric_label,
+            label="residuals",
         )
         attach_chart_export(
             self, self._importance_plot, "model-analysis-importance",
             layout=_export_row, status_label=self._metric_label,
+            label="importance",
         )
         _export_row.addStretch(1)
         lay.addLayout(_export_row)
@@ -492,6 +503,8 @@ class ModelAnalysisPage(QWidget):
         diag_buttons.addStretch(1)
         lay.addLayout(diag_buttons)
         self._diag_plot = PlotPanel(title="Diagnostics (calibration / learning curve / ROC / PR)")
+        self._diag_plot.set_empty_hint("Fit a model, then run calibration / learning-curve / ROC / PR below")
+
         self._diag_plot.setMinimumHeight(230)
         lay.addWidget(self._diag_plot)
         self._diag_status = QLabel(

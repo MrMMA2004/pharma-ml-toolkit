@@ -81,6 +81,8 @@ class DataExplorerPage(QWidget):
         right_lay.addWidget(QLabel("Column distribution:"))
         right_lay.addWidget(self._column_combo)
         self._plot = PlotPanel(title="Column histogram")
+        self._plot.set_empty_hint("Open CSV / Excel… and pick a numeric column to see its distribution")
+
         right_lay.addWidget(self._plot, stretch=1)
         # (R30-c) the per-page chart export under the live palette
         from ..widgets.chart_export import attach_chart_export

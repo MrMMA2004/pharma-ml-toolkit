@@ -1493,7 +1493,7 @@ class TestSessionReportInspect:
         assert ts["inspectFlat"] == "flat — 2 pts · x 1 · y 5", ts
         # fmtCell's exponential branch reaches the tooltip too
         assert ts["inspectBig"] == (
-            "big — 2 pts · x 0…1 · y 1.235e+4…6.789e+4"
+            "big — 2 pts · x 0…1 · y 12,345…67,890"
         ), ts
         # every crafted trace yielded a named inspect (never a mute title)
         assert ts["allNamed"] is True, ts

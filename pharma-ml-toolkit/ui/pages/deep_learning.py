@@ -251,9 +251,9 @@ class DeepLearningWorkbenchPage(QWidget):
             self._dataset_combo.addItem(f"{name} (bundled)")
         self._dataset_combo.addItem(_DATA_EXPLORER_ENTRY)
         self._dataset_combo.currentTextChanged.connect(self._load_dataset)
-        top.addRow("dataset:", self._dataset_combo)
+        top.addRow("Dataset:", self._dataset_combo)
         self._target_combo = QComboBox()
-        top.addRow("target column:", self._target_combo)
+        top.addRow("Target column:", self._target_combo)
         lay.addLayout(top)
 
         # -- the four engine tabs ------------------------------------------------
@@ -277,6 +277,8 @@ class DeepLearningWorkbenchPage(QWidget):
         self._table = DataTableView()
         splitter.addWidget(self._table)
         self._plot = PlotPanel(title="Deep learning panel")
+        self._plot.set_empty_hint("Pick a dataset, target and motif, then press Train")
+
         splitter.addWidget(self._plot)
         splitter.setSizes([560, 540])
         configure_splitter(splitter, stretch=(0, 1))
@@ -307,9 +309,9 @@ class DeepLearningWorkbenchPage(QWidget):
         self._architecture = QComboBox()
         for _key, label in _ARCHITECTURES:
             self._architecture.addItem(label)
-        form.addRow("architecture:", self._architecture)
+        form.addRow("Architecture:", self._architecture)
         self._hidden_entry = QLineEdit("32,16")
-        form.addRow("hidden layers:", self._hidden_entry)
+        form.addRow("Hidden layers:", self._hidden_entry)
         task_row = QWidget()
         task_lay = QHBoxLayout(task_row)
         task_lay.setContentsMargins(0, 0, 0, 0)
@@ -320,7 +322,7 @@ class DeepLearningWorkbenchPage(QWidget):
         self._epochs_spin = QSpinBox()
         self._epochs_spin.setRange(1, 500)
         self._epochs_spin.setValue(40)
-        task_lay.addWidget(QLabel("epochs:"))
+        task_lay.addWidget(QLabel("Epochs:"))
         task_lay.addWidget(self._epochs_spin)
         self._patience_spin = QSpinBox()
         self._patience_spin.setRange(1, 100)
@@ -330,9 +332,9 @@ class DeepLearningWorkbenchPage(QWidget):
         self._seed_spin = QSpinBox()
         self._seed_spin.setRange(0, 999999)
         self._seed_spin.setValue(42)
-        task_lay.addWidget(QLabel("seed:"))
+        task_lay.addWidget(QLabel("Seed:"))
         task_lay.addWidget(self._seed_spin)
-        form.addRow("task / budget:", task_row)
+        form.addRow("Task / budget:", task_row)
         self._train_btn = QPushButton("Train & evaluate")
         self._train_btn.setMinimumHeight(34)
         self._train_btn.clicked.connect(self._start_train)
@@ -399,7 +401,7 @@ class DeepLearningWorkbenchPage(QWidget):
             self._umap_metric.addItem(metric)
         knobs_lay.addWidget(QLabel("metric:"))
         knobs_lay.addWidget(self._umap_metric)
-        form.addRow("knobs:", knobs)
+        form.addRow("Knobs:", knobs)
         self._embed_btn = QPushButton("Embed")
         self._embed_btn.setMinimumHeight(34)
         self._embed_btn.clicked.connect(self._start_umap)
@@ -432,7 +434,7 @@ class DeepLearningWorkbenchPage(QWidget):
         self._filter_btn = QPushButton("Filter")
         self._filter_btn.clicked.connect(self._apply_filter)
         stage_lay.addWidget(self._filter_btn)
-        form.addRow("stage:", stage_row)
+        form.addRow("Stage:", stage_row)
         chain_row = QWidget()
         chain_lay = QHBoxLayout(chain_row)
         chain_lay.setContentsMargins(0, 0, 0, 0)
@@ -445,7 +447,7 @@ class DeepLearningWorkbenchPage(QWidget):
         self._reset_btn = QPushButton("Reset view")
         self._reset_btn.clicked.connect(self._reset_view)
         chain_lay.addWidget(self._reset_btn)
-        form.addRow("chain:", chain_row)
+        form.addRow("Chain:", chain_row)
         audit_row = QWidget()
         audit_lay = QHBoxLayout(audit_row)
         audit_lay.setContentsMargins(0, 0, 0, 0)
@@ -466,7 +468,7 @@ class DeepLearningWorkbenchPage(QWidget):
         self._sim_row.setValue(0)
         audit_lay.addWidget(QLabel("row:"))
         audit_lay.addWidget(self._sim_row)
-        form.addRow("audits:", audit_row)
+        form.addRow("Audits:", audit_row)
         hint = QLabel(
             "SampleSet.from_frame + the DataView stage algebra (filter / sort_by / "
             "limit / identity reset, every stage named in the report), then the four "
@@ -555,7 +557,7 @@ class DeepLearningWorkbenchPage(QWidget):
             "Linear(hidden, out), seeded — the pruning and quantization "
             "subject."
         )
-        form.addRow("hidden size:", self._eff_params)
+        form.addRow("Hidden size:", self._eff_params)
         self._eff_sparsity = QDoubleSpinBox()
         self._eff_sparsity.setRange(0.05, 0.95)
         self._eff_sparsity.setDecimals(2)
@@ -565,7 +567,7 @@ class DeepLearningWorkbenchPage(QWidget):
             "Target sparsity for the one-shot prune (and the ramp's "
             "final level for the iterative loop)."
         )
-        form.addRow("target sparsity:", self._eff_sparsity)
+        form.addRow("Target sparsity:", self._eff_sparsity)
         self._eff_scope = QComboBox()
         for token in ("local", "global"):
             self._eff_scope.addItem(token)
@@ -574,14 +576,14 @@ class DeepLearningWorkbenchPage(QWidget):
             "global: one threshold across all layers (small layers "
             "can vanish entirely)."
         )
-        form.addRow("prune scope:", self._eff_scope)
+        form.addRow("Prune scope:", self._eff_scope)
         self._eff_steps = QSpinBox()
         self._eff_steps.setRange(1, 10)
         self._eff_steps.setValue(4)
         self._eff_steps.setToolTip(
             "The gradual ramp's levels for the iterative loop (1 = one-shot)."
         )
-        form.addRow("ramp steps:", self._eff_steps)
+        form.addRow("Ramp steps:", self._eff_steps)
 
         run_row = QWidget()
         run_lay = QHBoxLayout(run_row)
@@ -611,13 +613,13 @@ class DeepLearningWorkbenchPage(QWidget):
             "stage partitions, in bytes."
         )
         run_lay.addWidget(self._eff_zero_btn)
-        form.addRow("run:", run_row)
+        form.addRow("Run:", run_row)
 
         self._eff_world = QSpinBox()
         self._eff_world.setRange(1, 64)
         self._eff_world.setValue(4)
         self._eff_world.setToolTip("Simulated ranks for the ZeRO planner.")
-        form.addRow("world size:", self._eff_world)
+        form.addRow("World size:", self._eff_world)
         self._eff_millions = QDoubleSpinBox()
         self._eff_millions.setRange(0.1, 1000.0)
         self._eff_millions.setDecimals(1)
@@ -659,24 +661,24 @@ class DeepLearningWorkbenchPage(QWidget):
             "plus roof) or a 6-node cycle, attached to half the random "
             "base graphs."
         )
-        form.addRow("motif:", self._gnn_motif)
+        form.addRow("Motif:", self._gnn_motif)
         self._gnn_graphs = QSpinBox()
         self._gnn_graphs.setRange(20, 400)
         self._gnn_graphs.setValue(120)
         self._gnn_graphs.setSingleStep(20)
         self._gnn_graphs.setToolTip("How many synthetic graphs to generate.")
-        form.addRow("graphs:", self._gnn_graphs)
+        form.addRow("Graphs:", self._gnn_graphs)
         self._gnn_layer = QComboBox()
         for token in ("gcn", "sage", "gat"):
             self._gnn_layer.addItem(token)
         self._gnn_layer.setToolTip("The convolution kind behind both layers.")
-        form.addRow("convolution:", self._gnn_layer)
+        form.addRow("Convolution:", self._gnn_layer)
         self._gnn_epochs = QSpinBox()
         self._gnn_epochs.setRange(20, 500)
         self._gnn_epochs.setValue(200)
         self._gnn_epochs.setSingleStep(50)
         self._gnn_epochs.setToolTip("Training epochs over the collated graphs.")
-        form.addRow("epochs:", self._gnn_epochs)
+        form.addRow("Epochs:", self._gnn_epochs)
         self._gnn_sparsity = QDoubleSpinBox()
         self._gnn_sparsity.setRange(0.1, 0.9)
         self._gnn_sparsity.setDecimals(2)
@@ -686,12 +688,12 @@ class DeepLearningWorkbenchPage(QWidget):
             "The explanation's edge-sparsity: the fraction of edges the "
             "hard mask removes (DIG's control_sparsity)."
         )
-        form.addRow("explain sparsity:", self._gnn_sparsity)
+        form.addRow("Explain sparsity:", self._gnn_sparsity)
         self._gnn_seed = QSpinBox()
         self._gnn_seed.setRange(0, 999999)
         self._gnn_seed.setValue(27)
         self._gnn_seed.setToolTip("Deterministic seed for the classifier.")
-        form.addRow("seed:", self._gnn_seed)
+        form.addRow("Seed:", self._gnn_seed)
 
         self._gnn_train_btn = QPushButton("Train & explain")
         self._gnn_train_btn.setMinimumHeight(34)

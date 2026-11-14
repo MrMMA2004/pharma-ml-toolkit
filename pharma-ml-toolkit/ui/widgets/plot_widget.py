@@ -160,7 +160,44 @@ class PlotPanel(QWidget):
         if self._title_full:
             self.setToolTip(self._title_full)
         self._readout.show()
+        # (C-1) first-run guidance: a hint painted INSIDE the plot until
+        # the first series lands — an empty white panel explains nothing.
+        self._empty_hint: str = ""
+        self._hint_item: pg.TextItem | None = None
         self.apply_palette(self._palette)
+
+    # -- (C-1) the empty-plot hint ------------------------------------------------
+    def set_empty_hint(self, text: str) -> None:
+        """Show ``text`` centered in the panel until data is drawn.
+
+        Pages call this with their concrete first step ("Load a dataset
+        and press Train…").  The hint hides itself on the first
+        scatter/line/bars/vlines call and re-appears after clear() —
+        the panel never fakes data, it explains the next action.
+        """
+        self._empty_hint = text
+        if not text:
+            self._hide_hint()
+            return
+        if self._hint_item is None:
+            self._hint_item = pg.TextItem(text, color="#64748B", anchor=(0.5, 0.5))
+            self._plot.addItem(self._hint_item, ignoreBounds=True)
+        else:
+            self._hint_item.setText(text)
+        self._hint_item.setPos(
+            self._plot.getViewBox().viewRect().center().x(),
+            self._plot.getViewBox().viewRect().center().y(),
+        )
+        self._hint_item.setVisible(True)
+
+    def _hide_hint(self) -> None:
+        if self._hint_item is not None:
+            self._hint_item.setVisible(False)
+
+    def _drawn_data(self) -> None:
+        """Called by every draw method: real data displaces the hint."""
+        if self._hint_item is not None and self._hint_item.isVisible():
+            self._hint_item.setVisible(False)
 
     def resizeEvent(self, event) -> None:  # Qt signature
         """Pin the readout and re-fit the §23.6/§23.7/§23.8/§23.9 policies."""
@@ -169,6 +206,10 @@ class PlotPanel(QWidget):
         self._fit_legend()
         self._apply_title_budget()
         self._position_readout()  # last: reads the freshly capped legend band
+        # (C-1) keep the empty-state hint centered through resizes
+        if self._hint_item is not None and self._hint_item.isVisible():
+            vr = self._plot.getViewBox().viewRect()
+            self._hint_item.setPos(vr.center().x(), vr.center().y())
 
     def showEvent(self, event) -> None:  # Qt signature
         super().showEvent(event)
@@ -401,6 +442,7 @@ class PlotPanel(QWidget):
                          self._palette.series[index % len(self._palette.series)]):
             symbol = _discipline_symbol(self._discipline_count)
             self._discipline_count += 1
+        self._drawn_data()
         item = self._plot.plot(x, y, pen=pen, symbol=symbol, symbolSize=size, symbolBrush=brush, name=label or None)
         self._inspector.register_series(label, x, y, item, kind="scatter", meta=meta)
         self._fit_legend()
@@ -425,6 +467,7 @@ class PlotPanel(QWidget):
             kwargs["symbolBrush"] = pg.mkBrush(color)
             self._discipline_count += 1
         item = self._plot.plot(x, y, pen=pen, name=label or None, **kwargs)
+        self._drawn_data()
         self._inspector.register_series(label, x, y, item, kind="line", meta=meta)
         self._fit_legend()
 
@@ -436,6 +479,7 @@ class PlotPanel(QWidget):
         for x in xs:
             pen = pg.mkPen(self._palette.foreground, width=1, style=Qt.PenStyle.DotLine)
             self._plot.addLine(x=float(x), pen=pen)
+        self._drawn_data()
 
     def bars(self, heights: np.ndarray, *, labels: list[str] | None = None, index: int = 0, width: float = 0.6, x: np.ndarray | None = None, meta: Callable[[int], dict[str, Any]] | None = None) -> None:
         """Vertical bar chart (feature importance and histograms).
@@ -450,6 +494,7 @@ class PlotPanel(QWidget):
         brush = pg.mkBrush(self._palette.series[index % len(self._palette.series)])
         bg = pg.BarGraphItem(x=x, height=heights, width=width, brush=brush)
         self._plot.addItem(bg)
+        self._drawn_data()
         if labels:
             # §23.6: store the full list, render the width-fitted subset.
             self._cat_ticks = [(float(i), str(labels[i])) for i in range(len(labels))]
@@ -490,6 +535,9 @@ class PlotPanel(QWidget):
         self._cat_ticks = None
         self._discipline_count = 0  # shape cycle restarts with the data
         self._plot.getAxis("bottom").setTicks(None)
+        # (C-1) cleared panels re-explain themselves
+        if self._empty_hint and self._hint_item is not None:
+            self._hint_item.setVisible(True)
         # The inspector's hover decorations are lazy: plot.clear()
         # removed them along with the data, and nothing is re-added
         # until the next hover (see ChartInspector._ensure_decorations_added)

@@ -935,6 +935,8 @@ class MLWorkbenchPage(QWidget):
         )
         splitter.addWidget(self._stack_board)
         self._stack_plot = PlotPanel(title="OOF stacking parity (best blender)")
+        self._stack_plot.set_empty_hint("Run the OOF stacking benchmark to see the blender parity")
+
         splitter.addWidget(self._stack_plot)
         splitter.setSizes([420, 420])
         configure_splitter(splitter, stretch=(0, 1))
@@ -1253,6 +1255,8 @@ class MLWorkbenchPage(QWidget):
         )
         lay.addWidget(self._ens_summary)
         self._ens_plot = PlotPanel(title="Ensemble (parity / class counts)")
+        self._ens_plot.set_empty_hint("Run an ensemble to see parity and class counts")
+
         lay.addWidget(self._ens_plot, stretch=1)
         return tab
 
@@ -1755,6 +1759,8 @@ class MLWorkbenchPage(QWidget):
         )
         splitter.addWidget(self._ad_table)
         self._ad_plot = PlotPanel(title="Applicability domain — inside vs outside")
+        self._ad_plot.set_empty_hint("Train a model, then compute the applicability domain")
+
         splitter.addWidget(self._ad_plot)
         splitter.setSizes([520, 420])
         configure_splitter(splitter, stretch=(0, 1))
@@ -2063,6 +2069,8 @@ class MLWorkbenchPage(QWidget):
         )
         splitter.addWidget(self._stat_table)
         self._stat_plot = PlotPanel(title="Statistical tools")
+        self._stat_plot.set_empty_hint("Pick a statistical tool and run it on your table")
+
         splitter.addWidget(self._stat_plot)
         splitter.setSizes([520, 420])
         configure_splitter(splitter, stretch=(0, 1))

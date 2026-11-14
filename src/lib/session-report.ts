@@ -214,12 +214,20 @@ export function sessionGroupsAvailable(
 /* ------------------------------------------------------------------ */
 
 /** Compact number formatting for table cells (≤ 4 significant digits,
- *  trailing zeros trimmed — the fmtNum convention of the web cards). */
+ *  trailing zeros trimmed — the fmtNum convention of the web cards).
+ *
+ *  r268 (review P-6): plain integers 1,000–999,999 keep grouped digits
+ *  ("1,234", not "1.234e+03") — the exponential form was surprising in
+ *  metrics cards; true magnitudes (≥ 1e6) and tiny values (< 0.001)
+ *  still use exponential. */
 export function fmtCell(value: number): string {
   if (!Number.isFinite(value)) return "—";
   if (value === 0) return "0";
   const abs = Math.abs(value);
-  if (abs >= 1000 || abs < 0.001) return value.toExponential(3);
+  if (Number.isInteger(value) && abs >= 1000 && abs < 1e6) {
+    return value.toLocaleString("en-US");
+  }
+  if (abs >= 1e6 || abs < 0.001) return value.toExponential(3);
   const fixed = abs >= 100 ? 1 : abs >= 1 ? 3 : 4;
   return String(Number(value.toFixed(fixed)));
 }
@@ -559,7 +567,13 @@ function ligandsSections(snapshot: SessionSnapshot): ReportSection[] {
       name,
     ]);
     if (count > capped.length) {
-      rows.push(["", `+ ${count - capped.length} more (see the reconciler)`]);
+      /* r268 (review P-4): the report is generated from BOTH the desktop
+       * studio and the web Explorer — name the places, not the desktop
+       * UI's reconciler panel. */
+      rows.push([
+        "",
+        `+ ${count - capped.length} more (see Ligand Sets in the Studio or the Explorer report settings)`,
+      ]);
     }
     return { kind: "table", title, columns: ["#", "ligand name"], rows };
   };

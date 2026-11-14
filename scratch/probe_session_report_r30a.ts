@@ -104,7 +104,7 @@ if (onlyATable.rows.length !== RECONCILE_BUCKET_CAP + 1) {
   throw new Error(`capped table should be cap+1 rows (last = +N confession), got ${onlyATable.rows.length}`);
 }
 const lastRow = onlyATable.rows[onlyATable.rows.length - 1];
-if (String(lastRow[1]) !== `+ ${60 - RECONCILE_BUCKET_CAP} more (see the reconciler)`) {
+if (String(lastRow[1]) !== `+ ${60 - RECONCILE_BUCKET_CAP} more (see Ligand Sets in the Studio or the Explorer report settings)`) {
   throw new Error(`confession row wrong: ${JSON.stringify(lastRow)}`);
 }
 const emptyBucket = tables.filter(

@@ -55,6 +55,7 @@ class ReproducibilityDialog(QDialog):
         form = QFormLayout()
         row = QHBoxLayout()
         self._checkpoint = QLineEdit()
+        self._checkpoint.setToolTip("Path to the training checkpoint to restore")
         browse = QPushButton("Browse…")
         browse.clicked.connect(self._browse)
         self._checkpoint.textChanged.connect(self._invalidate)
