@@ -11,13 +11,25 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QLabel, QWidget
 
-KIND_STYLES = {
-    "success": ("#E8F5E9", "#1B5E20"),
-    "info": ("#E0F2F1", "#004D40"),
-    "warning": ("#FFF8E1", "#8D6E00"),
-    "danger": ("#FDECEA", "#8B1A12"),
+from ..design_tokens import tokens
+
+#: kind -> semantic token name pair (status foreground, soft background).
+#: The Mineral status tokens (§4.1) — one source for QSS, toasts and
+#: tests; no Material-era hex pairs inline (the migration's follow-up).
+_KIND_TOKENS = {
+    "success": ("success", "success_bg"),
+    "info": ("info", "info_bg"),
+    "warning": ("warning", "warning_bg"),
+    "danger": ("error", "error_bg"),
 }
 AUTO_MS = 4_000
+
+
+def kind_style(kind: str, theme: str = "light") -> tuple[str, str]:
+    """The (background, foreground) pair for a toast kind from tokens."""
+    t = tokens(theme)
+    fg_name, bg_name = _KIND_TOKENS.get(kind, _KIND_TOKENS["info"])
+    return getattr(t, bg_name), getattr(t, fg_name)
 
 
 class NotificationBar(QLabel):
@@ -27,7 +39,7 @@ class NotificationBar(QLabel):
 
     def __init__(self, text: str, kind: str = "info", parent: QWidget | None = None) -> None:
         super().__init__(text, parent)
-        bg, fg = KIND_STYLES.get(kind, KIND_STYLES["info"])
+        bg, fg = kind_style(kind)
         # Phase 5 accessibility: screen readers announce the toast as a
         # notification of its severity, not as an anonymous label.
         self.setAccessibleName(f"{kind.title()} notification: {text}")

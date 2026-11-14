@@ -1,8 +1,8 @@
-"""Screenshot-level theme regression (part7 §9, R29-c).
+"""Screenshot-level theme regression (part7 §9, R29-c; Mineral values).
 
 The pixel check R28 left as future work: render the real window
 offscreen under the studio theme, grab it, and verify the canvas is
-actually Warm Ivory / Midnight at the pixels (not just in the QSS
+actually the Mineral canvas token at the pixels (not just in the QSS
 string).  Catches a stylesheet that parses but never reaches the
 widget it targets, and a dark theme that is accidentally the light
 one.
@@ -80,28 +80,28 @@ def _render(studio_app, tmp_path, theme, base):
     return img
 
 
-def test_light_canvas_is_warm_ivory(studio_app, tmp_path) -> None:
+def test_light_canvas_is_the_mineral_canvas(studio_app, tmp_path) -> None:
     img = _render(studio_app, tmp_path, "light", "light")
     canvas = _canvas_points(img)
-    ivory = _hex_rgb("#F3F5F1")
+    mineral = _hex_rgb("#F4F7F8")
     for name, px in canvas.items():
-        assert _close(px, ivory), f"{name}: {px} vs {ivory}"
+        assert _close(px, mineral), f"{name}: {px} vs {mineral}"
     SHOT_DIR.mkdir(parents=True, exist_ok=True)
     img.save(str(SHOT_DIR / "home-light.png"))
 
 
-def test_dark_canvas_is_midnight(studio_app, tmp_path) -> None:
+def test_dark_canvas_is_the_mineral_canvas(studio_app, tmp_path) -> None:
     img = _render(studio_app, tmp_path, "dark", "dark")
-    midnight = _hex_rgb("#101B24")
-    # top strip: the Midnight background token
+    deep = _hex_rgb("#0D1B23")
+    # top strip: the dark canvas token
     for name, px in _canvas_points(img).items():
         if name == "canvas-right":
             continue  # lands inside the card grid in dark — see below
-        assert _close(px, midnight), f"{name}: {px} vs {midnight}"
-    # the dark home fills its scroll viewport with the elevated
-    # surface token (#263D4D) — the §2.2 surface ladder, verified at
-    # the card region, NOT the light canvas assumption
-    surface = _hex_rgb("#263D4D")
+        assert _close(px, deep), f"{name}: {px} vs {deep}"
+    # the dark home fills its scroll viewport with the surface
+    # token (#14232C) — the surface ladder, verified at the card
+    # region, NOT the light canvas assumption
+    surface = _hex_rgb("#14232C")
     c = img.pixelColor(img.width() // 2, img.height() // 3)
     px = (c.red(), c.green(), c.blue())
     assert _close(px, surface), f"card region: {px} vs {surface}"
@@ -125,7 +125,7 @@ def test_grab_is_not_blank(studio_app, tmp_path) -> None:
 
 def test_card_surfaces_contrast_the_canvas(studio_app, tmp_path) -> None:
     """Somewhere mid-grab there must be white card surface against
-    the ivory canvas (light) — i.e. the cards actually render."""
+    the Mineral canvas (light) — i.e. the cards actually render."""
     img = _render(studio_app, tmp_path, "light", "cards")
     w, h = img.width(), img.height()
     white = _hex_rgb("#FFFFFF")
@@ -139,7 +139,7 @@ def test_card_surfaces_contrast_the_canvas(studio_app, tmp_path) -> None:
 
 
 @pytest.mark.parametrize("theme,expected", [
-    ("light", "#F3F5F1"), ("dark", "#101B24")])
+    ("light", "#F4F7F8"), ("dark", "#0D1B23")])
 def test_studio_qss_tokens_reach_the_canvas(theme, expected) -> None:
     """Static cross-check: the QSS text really carries the canvas
     token for this theme (grab tests above prove it APPLIES)."""

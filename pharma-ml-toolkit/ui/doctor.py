@@ -175,6 +175,73 @@ def check_qtwidgets(applied: dict[str, str | None]) -> Check:
     return Check("QtWidgets", OK, f"QApplication importable (platform: {plat})")
 
 
+def _font_probe() -> tuple[bool, str | None]:
+    """Register the bundle and report whether Qt is usable for it.
+
+    QFontDatabase requires a QGuiApplication to exist (its statics
+    touch platform font databases); the doctor runs before any window
+    does, so a minimal offscreen app instance is created ONLY when
+    none exists yet.  Returns (ok, detail) — ok=False means the probe
+    itself could not run (never a Studio failure).
+    """
+    try:
+        from PySide6.QtGui import QGuiApplication
+
+        app = QGuiApplication.instance()
+        if app is None:
+            QGuiApplication(
+                ["pharmaml-doctor", "-platform", "offscreen"])
+        from .font_loader import register_fonts
+
+        register_fonts()
+    except Exception as exc:  # noqa: BLE001 - diagnostics never raise
+        return False, f"probe failed: {exc}"
+    return True, None
+
+
+def check_font_plex() -> Check:
+    """Mineral §5: report the interface font's status through diagnostics.
+
+    A missing IBM Plex Sans is NOT a failure — the fallback chain
+    (Segoe UI → Arial) carries the UI — so this check warns instead of
+    failing, and the fix names the bundled file rather than a pip line.
+    """
+    ok, detail = _font_probe()
+    if not ok:
+        return Check("font: IBM Plex Sans", WARN, detail)
+    try:
+        from .font_loader import has_plex
+
+        if has_plex():
+            return Check("font: IBM Plex Sans", OK, "bundled and registered")
+        return Check(
+            "font: IBM Plex Sans", WARN,
+            "not available -- fallback chain (Segoe UI, Arial) in use",
+            "restore fonts/IBMPlexSans-*.ttf from the toolkit archive",
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostics never raise
+        return Check("font: IBM Plex Sans", WARN, f"probe failed: {exc}")
+
+
+def check_font_mono() -> Check:
+    """Mineral §5: the technical font's diagnostic status (SMILES/logs)."""
+    ok, detail = _font_probe()
+    if not ok:
+        return Check("font: JetBrains Mono", WARN, detail)
+    try:
+        from .font_loader import has_mono
+
+        if has_mono():
+            return Check("font: JetBrains Mono", OK, "bundled and registered")
+        return Check(
+            "font: JetBrains Mono", WARN,
+            "not available -- fallback chain (Cascadia Code, Consolas) in use",
+            "restore fonts/JetBrainsMono-Regular.ttf from the toolkit archive",
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostics never raise
+        return Check("font: JetBrains Mono", WARN, f"probe failed: {exc}")
+
+
 def _import_check(
     name: str,
     module: str,
@@ -206,6 +273,8 @@ def collect_checks() -> list[Check]:
         check_pyside6(),
         check_shiboken6(),
         check_qtwidgets(applied),
+        check_font_plex(),
+        check_font_mono(),
         _import_check("pyqtgraph", "pyqtgraph", fix=_pip("install pyqtgraph==0.13.7")),
         _import_check(
             "qt-material", "qt_material",

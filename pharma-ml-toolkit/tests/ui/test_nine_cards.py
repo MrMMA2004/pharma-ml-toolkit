@@ -162,8 +162,8 @@ class TestPhase3ResponsiveGrid:
     """Part-4 §8 Phase-3: responsive layouts — 3/2/1 columns, order kept.
 
     The directive's canonical 3×3 is the default; narrower windows
-    re-flow row-major to two columns (below 880 logical px) and one
-    (below 560).  The re-flow must reuse the SAME card widgets — a
+    re-flow row-major to two columns (860-1199 logical px) and one
+    (below 860).  The re-flow must reuse the SAME card widgets — a
     width change can never rebuild state or reorder the §5 sequence.
     """
 
@@ -231,10 +231,14 @@ class TestPhase3ResponsiveGrid:
         host.resizeEvent(QResizeEvent(QSize(1200, 900), QSize(100, 30)))
         assert host.current_columns() == 3
         host.resizeEvent(QResizeEvent(QSize(700, 900), QSize(1200, 900)))
-        assert host.current_columns() == 2
+        assert host.current_columns() == 1  # below the 860 two-column band
         host.resizeEvent(QResizeEvent(QSize(400, 900), QSize(700, 900)))
         assert host.current_columns() == 1
+        # Mineral breakpoints: 1000 logical px sits in the 860-1199
+        # two-column band; only >= 1200 re-flows to three columns
         host.resizeEvent(QResizeEvent(QSize(1000, 900), QSize(400, 900)))
+        assert host.current_columns() == 2
+        host.resizeEvent(QResizeEvent(QSize(1200, 900), QSize(1000, 900)))
         assert host.current_columns() == 3
 
     def test_dashboard_uses_the_responsive_grid(self, main_window) -> None:

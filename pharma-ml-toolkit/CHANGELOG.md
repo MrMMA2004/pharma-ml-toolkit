@@ -1,3 +1,73 @@
+## [1.2.202] — 2026-11-14 — the Mineral design-system round
+
+Commissioned by the uploaded "Design System" MASTER PROMPT: "Implement
+the supplied Mineral Design System throughout the actual PharmaML
+Studio application." Mineral (01) replaces the part7 Deep Navy +
+Warm Ivory + Electric Lime identity (explicitly retired by the spec);
+Spectral/Catalyst alternatives not applied.
+
+### Identity
+- `ui/design_tokens.py`: full Mineral semantic token set (bg/canvas
+  #F4F7F8, surface #FFFFFF, action/primary teal #076F73, hover
+  #05565B, pressed #06494E, selected #E3F3F1, focus/ring #076F73;
+  dark: canvas #0D1B23, surface #14232C, action #79D9CF, hover
+  #A0E9DF, selected #06494E, focus/ring #79D9CF), status foregrounds
+  + soft backgrounds, text/border ramps, layout scale (4/8/12/16/24,
+  radius 4/6/8/12, controls 28/32/36/40, table rows 28/32/40,
+  borders 1/2), and the Mineral type hierarchy (Display 40 down to
+  Technical 12 logical px). Remaining values transcribed from the
+  SVG's structured token export (status triples, dark data-palette
+  companions, primitives).
+- Scientific palette: 7-series Mineral data cycle (Blue/Orange/Green/
+  Purple/Yellow/Sky/Ink) with dark companions; the action teal is NOT
+  a series color. Marker discipline: light flags sub-3:1 yellow+sky;
+  dark flags the green/sky mint pair (companions converge 1.08:1,
+  14 degrees apart — the non-color encoding tells them apart, per the
+  chart-design rules).
+- `ui/studio_theme.py`: QSS regenerated from the tokens — flat
+  surfaces, 1 px separators, subtle-fill table headers, bg/subtle
+  status bar strip, Mineral radii, focus rings from the focus/ring
+  token in both themes; empty-state objectName rules added.
+- `ui/font_loader.py`: IBM Plex Sans (OFL, bundled Regular/Medium/
+  SemiBold/Bold) + JetBrains Mono; fallback chains; has_plex();
+  the Inter bundle removed.
+- `ui/theme_manager.py`: studio ChartPalette grid from the
+  border/subtle token; accent = action/primary per theme.
+- `ui/widgets/notification_widget.py`: toast kinds tokenized to the
+  status tokens (kind_style(), both themes).
+- `ui/widgets/navigation.py`: sidebar icon ACCENT = the teal action
+  token (pinned by test against drift).
+- `ui/widgets/empty_state.py`: construction-time inline styles
+  replaced by QSS objectName rules — recolors on theme switch now.
+- `ui/nine_cards.py`: responsive breakpoints 3-col at/above 1200,
+  2-col 860-1199, 1-col below 860.
+- `ui/doctor.py`: two font-status checks — 18 checks total;
+  WARN-not-FAIL with the fallback chains named; the probe creates an
+  offscreen QGuiApplication only when none exists (QFontDatabase
+  requires one — found via a segfault, fixed).
+
+### Tests
+- test_design_tokens: Mineral values verbatim, status-token AA on
+  soft backgrounds AND surfaces, retired-identity absence, data
+  palette + companions, type scale, layout rhythm, notification
+  kinds, nav accent.
+- test_theme_manager / test_font_loader / test_theme_screenshots /
+  test_focus_visibility / test_marker_discipline: re-pinned to
+  Mineral (canvas #F4F7F8 / #0D1B23 at the pixels; teal focus rings;
+  dark mint-pair discipline; Plex chains/bundle).
+- test_chart_export: accepts the M-3 labeled variants (a pre-existing
+  R33 failure, not a Mineral regression).
+- test_qt_doctor: 18 checks, font checks asserted OK.
+- test_nine_cards: docstring thresholds updated.
+
+### Verification
+- ruff + mypy clean on every changed file.
+- Doctor: 18/18 OK.
+- Screenshot regression: Mineral canvas verified at the pixels in
+  both themes; DPI ladder 100/125/150/200% at 1440x900, 1280x800,
+  1024x768, 860x560 — device-pixel sizes track Qt's own scaling (no
+  manual scaling layered on top).
+
 ## [1.2.201] — 2026-11-14
 ### Fixed — all 27 third-edition product-review findings (rounds 31-32)
 

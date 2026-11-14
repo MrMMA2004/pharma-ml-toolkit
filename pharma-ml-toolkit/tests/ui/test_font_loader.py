@@ -1,4 +1,4 @@
-"""Font loading (part7 §3): Inter + JetBrains Mono with fallbacks."""
+"""Font loading (Mineral §5): IBM Plex Sans + JetBrains Mono with fallbacks."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from PySide6.QtGui import QFont
 from ui.font_loader import (
     _BUNDLED,
     _registered,
-    has_inter,
     has_mono,
+    has_plex,
     mono_font,
     register_fonts,
     ui_font,
@@ -18,15 +18,15 @@ from ui.font_loader import (
 def test_bundled_fonts_register_and_resolve(studio_app) -> None:
     families = register_fonts()
     # the bundled files exist in the repo and Qt gained them
-    assert "Inter" in families
+    assert "IBM Plex Sans" in families
     assert "JetBrains Mono" in families
-    assert has_inter() and has_mono()
+    assert has_plex() and has_mono()
 
 
 def test_ui_font_carries_the_full_chain(studio_app) -> None:
     font = ui_font(12)
     assert font.families() == [
-        "Inter", "Segoe UI", "Arial", "sans-serif"]
+        "IBM Plex Sans", "Segoe UI", "Arial", "sans-serif"]
     assert font.pointSize() == 12
 
 
@@ -54,19 +54,20 @@ def test_registration_is_idempotent(studio_app) -> None:
 
 def test_bundled_list_matches_repo(studio_app) -> None:
     """Every claimed bundle file exists next to its OFL license."""
-    from pathlib import Path
-
     from ui.font_loader import _FONT_DIR
 
     for name in _BUNDLED:
         assert (_FONT_DIR / name).is_file(), name
-    assert (_FONT_DIR / "Inter-OFL.txt").is_file()
+    assert (_FONT_DIR / "IBMPlexSans-OFL.txt").is_file()
     assert (_FONT_DIR / "JetBrainsMono-OFL.txt").is_file()
+    # the retired Inter bundle is gone (license files included)
+    assert not (_FONT_DIR / "Inter-Regular.ttf").exists()
+    assert not (_FONT_DIR / "Inter-OFL.txt").exists()
 
 
 def test_missing_bundle_degrades_to_chains(studio_app, monkeypatch,
                                             tmp_path) -> None:
-    """§3.3: never assume the fonts are installed — with an empty
+    """§5: never assume the fonts are installed — with an empty
     bundle dir the loader registers nothing new and never raises;
     the fallback chain still constructs a usable font.  (Families
     registered earlier in the process stay available app-wide —
@@ -80,7 +81,7 @@ def test_missing_bundle_degrades_to_chains(studio_app, monkeypatch,
     # the fallback chain still produces a usable font
     font = fl.ui_font(10)
     assert font.families() == [
-        "Inter", "Segoe UI", "Arial", "sans-serif"]
+        "IBM Plex Sans", "Segoe UI", "Arial", "sans-serif"]
 
 
 def test_registered_flag_module_state() -> None:

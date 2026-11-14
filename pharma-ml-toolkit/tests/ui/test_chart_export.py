@@ -51,7 +51,10 @@ def test_page_carries_its_export_buttons(studio_app, page_spec, count) -> None:
             f"{page_spec}: expected {count} export button(s), found {len(buttons)}"
         )
         for button in buttons:
-            assert button.text() == "Export chart…"
+            # M-3: buttons may carry a distinguishing label
+            # ("Export parity…") instead of the generic text
+            assert button.text().startswith("Export "), button.text()
+            assert button.text().endswith("…")
             assert button.isEnabled()
             assert button.toolTip()  # the §17 engine is explained
     finally:

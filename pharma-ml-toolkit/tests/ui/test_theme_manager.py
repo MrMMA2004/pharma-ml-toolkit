@@ -83,38 +83,45 @@ def test_persistence_roundtrip(theme_manager: ThemeManager, studio_app, tmp_path
     assert not palette.dark
 
 
-# -- part7: the studio provider (token-built visual identity) -------------
+# -- Mineral: the studio provider (token-built visual identity) ----------
 def test_studio_provider_themes_and_default(theme_manager: ThemeManager) -> None:
     assert ThemeManager.available_themes("studio") == ("light", "dark")
     palette = theme_manager.apply("studio", "light")
     assert theme_manager.provider == "studio"
     assert theme_manager.theme == "light"
     assert not palette.dark
-    assert palette.accent == "#C6E84B"
-    # §5: Okabe-Ito scientific series, NOT the interface accent
+    assert palette.accent == "#076F73"
+    # §4.2: the Mineral scientific data series, NOT the interface accent
     assert palette.series[0] == "#0072B2"
-    assert "#C6E84B" not in palette.series
+    assert "#076F73" not in palette.series
 
 
 def test_studio_dark_palette_matches_canvas(theme_manager: ThemeManager) -> None:
     palette = theme_manager.apply("studio", "dark")
     assert palette.dark
-    assert palette.background == "#101B24"
-    assert palette.series[-1] == "#CCCCCC"  # the dark-variant gray swap
+    assert palette.background == "#0D1B23"
+    assert palette.accent == "#79D9CF"
+    assert palette.series[-1] == "#E1E7EB"  # the ink companion
+    # the grid is the dark border/subtle token, not a generic gray
+    assert palette.grid == (0x26, 0x3A, 0x45)
 
 
 def test_studio_qss_carries_the_identity(studio_app) -> None:
     from ui.studio_theme import studio_qss
 
     light = studio_qss("light")
-    assert "#F3F5F1" in light      # Warm Ivory canvas
-    assert "#172F43" in light      # Deep Navy structure
-    assert "#C6E84B" in light      # Electric Lime accent
-    assert "Inter" in light and "JetBrains Mono" in light
+    assert "#F4F7F8" in light      # Mineral canvas
+    assert "#076F73" in light      # teal action color
+    assert "#E3F3F1" in light      # action/selected
+    assert "IBM Plex Sans" in light and "JetBrains Mono" in light
     dark = studio_qss("dark")
-    assert "#101B24" in dark and "#263D4D" in dark
+    assert "#0D1B23" in dark and "#14232C" in dark
+    assert "#79D9CF" in dark       # bright teal action color
     # one identity, two themes: no token bleeds across
-    assert "#101B24" not in light
+    assert "#0D1B23" not in light
+    # the retired part7 identity is gone from both sheets
+    for retired in ("#C6E84B", "#F3F5F1", "#172F43", "#101B24"):
+        assert retired not in light and retired not in dark, retired
 
 
 def test_studio_switch_round_trip(theme_manager: ThemeManager,
@@ -131,9 +138,7 @@ def test_studio_switch_round_trip(theme_manager: ThemeManager,
 
 def test_studio_is_the_fresh_install_default(
         studio_app, monkeypatch, tmp_path) -> None:
-    """No saved preference → studio/light (part7 identity first)."""
-    import os
-
+    """No saved preference → studio/light (Mineral identity first)."""
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     from PySide6.QtCore import QSettings
 

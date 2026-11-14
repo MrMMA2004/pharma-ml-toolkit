@@ -1,10 +1,17 @@
-"""PharmaML Studio design tokens (part7 visual identity).
+"""PharmaML Studio design tokens (Mineral visual identity).
 
 One module owns every color, typography, spacing and chart-palette
-decision — the §6 rule "no duplicated hardcoded colors and no
-independent styling definitions across individual pages".  The
-identity: Deep Navy + Warm Ivory + Electric Lime (60/30/10), Inter
-for the interface, JetBrains Mono for scientific/technical content.
+decision — the standing "no duplicated hardcoded colors and no
+independent styling definitions across individual pages" rule, carried
+from part7 into the Mineral design system ("A clearer path from
+molecules to evidence").
+
+The identity: cool neutral surfaces, Teal ``#076F73`` for primary
+actions and focus, IBM Plex Sans for the interface, JetBrains Mono for
+scientific/technical content.  Values are transcribed from the
+"Design System" specification and its structured token export; the
+status background tints and dark-theme action/pressed value are the
+documented derived tokens (see docs/DESIGN_SYSTEM_MIGRATION.md).
 
 Tokens are plain data (frozen dataclasses + module constants) so QSS
 generation (studio theme provider), chart styling (ChartPalette)
@@ -16,70 +23,106 @@ them directly).  Any new visual decision belongs HERE, not inline.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
-# -- color tokens (part7 §2) ---------------------------------------------
+# -- semantic color tokens (Mineral §4.1) ----------------------------------
 @dataclass(frozen=True)
 class ColorTokens:
-    """The spec's token table for one theme (light or dark)."""
+    """The spec's semantic token table for one theme (light or dark)."""
 
     name: str
-    background: str          # neutral canvas
-    surface: str             # cards, tables, dialogs
-    primary: str             # navigation, structure
-    accent: str              # interactive highlights (on dark/navy fills)
-    accent_hover: str        # hovered primary actions
-    selected_surface: str    # selected items, active states
-    text: str                # primary text
-    text_secondary: str      # supporting information
-    border: str              # separators, boundaries
-    disabled: str = ""       # disabled controls (dark: same as border)
-    focus_ring: str = ""     # keyboard-focus indicator color; empty -> accent
+    background: str          # bg/canvas
+    surface: str             # bg/surface (cards, tables, dialogs)
+    primary: str             # action/primary (teal; dark: bright teal)
+    accent: str              # action/primary for the QSS accent path
+    accent_hover: str        # action/hover
+    accent_pressed: str      # action/pressed
+    on_primary: str          # action/on-primary (text on teal fills)
+    selected_surface: str    # action/selected
+    text: str                # text/primary
+    text_secondary: str      # text/secondary
+    text_muted: str          # text/muted
+    border: str              # border/default
+    border_subtle: str       # border/subtle
+    elevated: str            # bg/elevated (dialogs, floating)
+    subtle: str              # bg/subtle (inputs, hover fills)
+    disabled: str            # state/disabled
+    focus_ring: str          # focus/ring
+    error: str               # status/error (foreground)
+    error_bg: str            # status soft background
+    warning: str             # status/warning (foreground)
+    warning_bg: str          # status soft background
+    success: str             # status/success (foreground)
+    success_bg: str          # status soft background
+    info: str                # status/info (foreground)
+    info_bg: str             # status soft background
 
     def hex_or(self, fallback: str) -> str:
         """A token or its stand-in when a theme has no value."""
         return self.disabled or fallback
 
     def focus_color(self) -> str:
-        """The :focus indicator color (WCAG 1.4.11-safe per theme).
-
-        Electric Lime is the identity accent and clears 3:1 against
-        every dark-theme fill it sits on, but on light-theme white
-        surfaces it lands at 1.40:1 — below the non-text UI-component
-        floor.  Light theme therefore carries a dedicated olive-lime
-        focus ring (5.6:1 on white, still the lime hue family);
-        dark theme reuses the accent unchanged (8.1:1 on surface).
-        """
-        return self.focus_ring or self.accent
+        """The :focus indicator color (focus/ring token)."""
+        return self.focus_ring
 
 
 LIGHT = ColorTokens(
     name="light",
-    background="#F3F5F1",      # Warm Ivory
-    surface="#FFFFFF",         # White
-    primary="#172F43",         # Deep Navy
-    accent="#C6E84B",          # Electric Lime (fills with navy text)
-    accent_hover="#ACD52F",    # Dark Lime
-    selected_surface="#F0F6D9",  # Pale Lime
-    text="#202B36",            # Charcoal
-    text_secondary="#64748B",  # Slate
-    border="#7B8B99",          # Steel Gray — 3.5:1 on white (WCAG 1.4.11)
-    disabled="#7E8C99",        # Slate Gray — 3.44:1 on white
-    focus_ring="#55701F",      # Olive Lime — 5.64:1 on white
+    background="#F4F7F8",      # bg/canvas
+    surface="#FFFFFF",         # bg/surface
+    primary="#076F73",         # action/primary (Mineral teal)
+    accent="#076F73",
+    accent_hover="#05565B",    # action/hover
+    accent_pressed="#06494E",  # action/pressed
+    on_primary="#FFFFFF",      # action/on-primary
+    selected_surface="#E3F3F1",  # action/selected
+    text="#14232C",            # text/primary
+    text_secondary="#4D6572",  # text/secondary
+    text_muted="#697F8A",      # text/muted
+    border="#CCD8DE",          # border/default
+    border_subtle="#EAF0F2",   # border/subtle
+    elevated="#FFFFFF",        # bg/elevated
+    subtle="#EAF0F2",          # bg/subtle
+    disabled="#EAF0F2",        # state/disabled
+    focus_ring="#076F73",      # focus/ring
+    error="#B33840",           # status/error
+    error_bg="#FCECEE",        # status soft background
+    warning="#805400",         # status/warning
+    warning_bg="#FFF4DC",      # status soft background
+    success="#246C48",         # status/success
+    success_bg="#E8F4EC",      # status soft background
+    info="#2468A0",            # status/info
+    info_bg="#E9F2FA",         # status soft background
 )
 
 DARK = ColorTokens(
     name="dark",
-    background="#101B24",      # Midnight
-    surface="#263D4D",         # Deep Blue Gray (elevated)
-    primary="#203645",         # Slate Navy (panels/navigation)
-    accent="#C6E84B",          # Electric Lime
-    accent_hover="#ACD52F",    # Dark Lime
-    selected_surface="#344C35",  # Forest Slate
-    text="#EAF0F4",            # Soft White
-    text_secondary="#A7B5C1",  # Cool Gray
-    border="#344957",          # Muted Blue Gray
+    background="#0D1B23",      # bg/canvas
+    surface="#14232C",         # bg/surface
+    primary="#79D9CF",         # action/primary (bright teal)
+    accent="#79D9CF",
+    accent_hover="#A0E9DF",    # action/hover
+    accent_pressed="#5EBFB4",  # action/pressed (derived, 4.5:1 on canvas)
+    on_primary="#0D1B23",      # action/on-primary (dark text on bright teal)
+    selected_surface="#06494E",  # action/selected
+    text="#EAF0F2",            # text/primary
+    text_secondary="#A9BCC6",  # text/secondary
+    text_muted="#697F8A",      # text/muted
+    border="#697F8A",          # border/default
+    border_subtle="#263A45",   # border/subtle
+    elevated="#263A45",        # bg/elevated
+    subtle="#1B2C35",          # bg/subtle
+    disabled="#263A45",        # state/disabled
+    focus_ring="#79D9CF",      # focus/ring
+    error="#FFADB1",           # status/error
+    error_bg="#3A1F26",        # status soft background (derived tint)
+    warning="#F3CB7A",         # status/warning
+    warning_bg="#33290F",      # derived tint
+    success="#80D6AC",         # status/success
+    success_bg="#122B1D",      # derived tint
+    info="#99CAEF",            # status/info
+    info_bg="#12253A",         # derived tint
 )
 
 THEMES: dict[str, ColorTokens] = {"light": LIGHT, "dark": DARK}
@@ -90,13 +133,13 @@ def tokens(theme: str) -> ColorTokens:
     return THEMES.get(theme, LIGHT)
 
 
-# -- typography tokens (part7 §3) -----------------------------------------
+# -- typography tokens (Mineral §5) -----------------------------------------
 @dataclass(frozen=True)
 class TypefaceTokens:
     """Interface + technical faces with their fallback chains."""
 
     ui_families: tuple[str, ...] = (
-        "Inter", "Segoe UI", "Arial", "sans-serif")
+        "IBM Plex Sans", "Segoe UI", "Arial", "sans-serif")
     mono_families: tuple[str, ...] = (
         "JetBrains Mono", "Cascadia Code", "Consolas", "monospace")
 
@@ -109,16 +152,21 @@ class TypefaceTokens:
 
 TYPEFACES = TypefaceTokens()
 
-# part7 §3.4 hierarchy (pt targets; Qt adapts to metrics/DPI)
+# Mineral §5 size hierarchy (logical px at 100% scaling; pt targets =
+# px × 72/96, Qt adapts to metrics/DPI).  Display 40 and PageTitle 26
+# are reserved for the home hero and page headers; body stays at the
+# dense scientific default (14 px = 10.5 pt).
 @dataclass(frozen=True)
 class TypeScale:
-    main_title_pt: int = 24    # Bold 700
-    card_title_pt: int = 15    # Semibold 600
-    section_title_pt: int = 13  # Semibold 600
-    body_pt: int = 10          # Regular 400
-    table_pt: int = 10         # Regular 400
-    metadata_pt: int = 9       # Regular 400
-    code_pt: int = 9           # Regular 400 (mono)
+    display_pt: float = 30      # Display 40px (home hero only)
+    page_title_pt: float = 19.5  # Page title 26px (workspace headers)
+    section_title_pt: float = 13.5  # Section title 18px
+    card_title_pt: float = 12   # Card title 16px
+    body_pt: float = 10.5       # Body 14px
+    label_pt: float = 9.75      # Label 13px
+    table_pt: float = 9.75      # Table 13px
+    metadata_pt: float = 9      # Metadata 12px
+    code_pt: float = 9          # Technical 12px (mono)
 
     WEIGHT_BOLD = 700
     WEIGHT_SEMIBOLD = 600
@@ -129,7 +177,7 @@ class TypeScale:
 SCALE = TypeScale()
 
 
-# -- spacing, borders, elevation (part7 §6) --------------------------------
+# -- spacing, borders, elevation (Mineral §6) --------------------------------
 @dataclass(frozen=True)
 class LayoutTokens:
     """Spacing/radius/border rhythm shared by every component."""
@@ -139,10 +187,19 @@ class LayoutTokens:
     space_md: int = 12
     space_lg: int = 16
     space_xl: int = 24
-    radius_sm: int = 4
-    radius_md: int = 6
-    radius_lg: int = 10
-    border: int = 1
+    radius_sm: int = 4          # default corner radius
+    radius_md: int = 6          # buttons
+    radius_lg: int = 8          # cards
+    radius_xl: int = 12         # larger containers
+    border: int = 1             # default border
+    border_emph: int = 2        # emphasized border
+    control_height_text: int = 28   # text-only controls
+    control_height_compact: int = 32
+    control_height_default: int = 36
+    control_height_lg: int = 40
+    table_row_compact: int = 28
+    table_row_standard: int = 32
+    table_row_comfortable: int = 40
     card_min_width: int = 260
     card_min_height: int = 200
 
@@ -150,37 +207,48 @@ class LayoutTokens:
 LAYOUT = LayoutTokens()
 
 
-# -- scientific chart palette (part7 §5) -----------------------------------
-# Okabe-Ito colorblind-conscious categorical palette — SEPARATE from
-# the interface accent palette, and NOT defaulted to Electric Lime.
+# -- scientific visualization palette (Mineral §4.2) -------------------------
+# A separate scientific data palette — NOT defaulted to the Mineral
+# teal action color, and kept distinct from status colors.
 SCIENTIFIC_CATEGORICAL: tuple[str, ...] = (
     "#0072B2",  # Blue
-    "#E69F00",  # Orange
+    "#D55E00",  # Orange
     "#009E73",  # Green
     "#CC79A7",  # Purple
-    "#D55E00",  # Vermilion
-    "#56B4E9",  # Sky Blue
-    "#F0E442",  # Yellow
-    "#333333",  # Dark Gray
+    "#E69F00",  # Yellow
+    "#56B4E9",  # Sky
+    "#444444",  # Ink
 )
 
-# Dark-theme variant: Okabe-Ito verbatim EXCEPT the Dark Gray, which
-# vanishes on Midnight surfaces (1.4:1) — it becomes a light gray.
-# The other seven hold up on dark surfaces (all ≥ 3:1 there).
+# Dark-theme variant from the structured token export: each series gets
+# its lighter companion value (blue→69BDE8, orange→F49A6A, green→63D3AC,
+# purple→E4A6CF, yellow→F0CC68, sky→8DD6AC, ink→E1E7EB).
 SCIENTIFIC_CATEGORICAL_DARK: tuple[str, ...] = (
-    "#0072B2", "#E69F00", "#009E73", "#CC79A7",
-    "#D55E00", "#56B4E9", "#F0E442", "#CCCCCC",
+    "#69BDE8",  # Blue (dark)
+    "#F49A6A",  # Orange (dark)
+    "#63D3AC",  # Green (dark)
+    "#E4A6CF",  # Purple (dark)
+    "#F0CC68",  # Yellow (dark)
+    "#8DD6AC",  # Sky (dark)
+    "#E1E7EB",  # Ink (dark)
 )
 
-# §5 "do not communicate class identity through color alone": these
-# colors fall below 3:1 against LIGHT surfaces, so series drawn in
-# them MUST carry a non-color encoding (marker shape or dash pattern)
-# in light theme.  Programmatic, not a style comment.
+# "Do not communicate class identity through color alone": these light-
+# theme series colors fall below 3:1 against white surfaces, so series
+# drawn in them MUST carry a non-color encoding (marker shape or dash
+# pattern).  Programmatic, not a style comment.
+# Dark theme: the token-export companions mostly hold up, but green
+# (#63D3AC) and sky (#8DD6AC) converge to near-identical mint tints
+# (contrast 1.08, hue gap 14°) — pairwise-distinctness for that pair
+# is delivered by the same non-color encoding, so both companions join
+# the dark discipline set.
 MARKER_DISCIPLINE_LIGHT: frozenset[str] = frozenset({
-    "#E69F00",  # Orange — 2.1:1 on white
-    "#CC79A7",  # Purple — 2.8:1 on white
-    "#56B4E9",  # Sky Blue — 2.1:1 on white
-    "#F0E442",  # Yellow — 1.1:1 on white
+    "#E69F00",  # Yellow — 2.25:1 on white
+    "#56B4E9",  # Sky — 2.31:1 on white
+})
+MARKER_DISCIPLINE_DARK: frozenset[str] = frozenset({
+    "#63D3AC",  # Green companion — vs sky companion: 1.08:1, 14°
+    "#8DD6AC",  # Sky companion — the pair needs non-color encoding
 })
 
 
@@ -192,13 +260,14 @@ def scientific_categorical(theme: str) -> tuple[str, ...]:
 
 def marker_discipline(theme: str) -> frozenset[str]:
     """Series colors that need a non-color encoding in this theme."""
-    return frozenset() if theme == "dark" else MARKER_DISCIPLINE_LIGHT
+    return MARKER_DISCIPLINE_DARK if theme == "dark" \
+        else MARKER_DISCIPLINE_LIGHT
 
 
 def colors_are_distinct(palette: tuple[str, ...],
                         floor: float = 1.25) -> bool:
     """True when every pair of series colors differs meaningfully in
-    luminance (contrast ≥ floor) OR in hue (≥ 40° apart) — 8 hues
+    luminance (contrast ≥ floor) OR in hue (≥ 40° apart) — 7 hues
     cannot all clear a luminance floor pairwise, so distinctness is
     delivered by hue with luminance as the tiebreaker."""
     import colorsys
@@ -222,7 +291,7 @@ SEQUENTIAL_MAPS: tuple[str, ...] = ("viridis", "cividis", "plasma")
 DIVERGING_MAPS: tuple[str, ...] = ("RdBu",)
 
 
-# -- contrast verification (part7 §7) --------------------------------------
+# -- contrast verification (standing WCAG guard) -----------------------------
 def _rel_luminance(hex_color: str) -> float:
     """WCAG relative luminance of a #rrggbb color."""
     def channel(v: int) -> float:
@@ -244,9 +313,21 @@ def contrast_ratio(foreground: str, background: str) -> float:
 
 
 __all__ = [
-    "ColorTokens", "LIGHT", "DARK", "THEMES", "tokens",
-    "TypefaceTokens", "TYPEFACES", "TypeScale", "SCALE",
-    "LayoutTokens", "LAYOUT",
-    "SCIENTIFIC_CATEGORICAL", "SEQUENTIAL_MAPS", "DIVERGING_MAPS",
+    "DARK",
+    "DIVERGING_MAPS",
+    "LAYOUT",
+    "LIGHT",
+    "MARKER_DISCIPLINE_LIGHT",
+    "SCALE",
+    "SCIENTIFIC_CATEGORICAL",
+    "SCIENTIFIC_CATEGORICAL_DARK",
+    "SEQUENTIAL_MAPS",
+    "THEMES",
+    "TYPEFACES",
+    "ColorTokens",
+    "LayoutTokens",
+    "TypeScale",
+    "TypefaceTokens",
     "contrast_ratio",
+    "tokens",
 ]

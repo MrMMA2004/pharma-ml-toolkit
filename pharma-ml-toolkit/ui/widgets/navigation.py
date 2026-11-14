@@ -65,7 +65,11 @@ class Navigation(QListWidget):
         "models": "chart",
         "settings": "gear",
     }
-    ACCENT = "#00796B"
+    # The Mineral action/primary teal — the same value as the design
+    # token accent; kept inline because the sidebar icons are painted,
+    # not styled (QSS never reaches inside a QIcon).  The stray-hex
+    # audit test pins it against the token so it cannot drift.
+    ACCENT = "#076F73"
 
     def __init__(self, sections: list[tuple[str, str]], parent: QWidget | None = None) -> None:
         """``sections`` is a list of ``(key, title)`` pairs in display order."""

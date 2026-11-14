@@ -108,13 +108,18 @@ def test_doctor_report_format_and_exit_codes() -> None:
 
 
 def test_doctor_collect_live() -> None:
-    """On the healthy sandbox every check answers, the stack is OK."""
+    """On the healthy sandbox every check answers, the stack is OK.
+
+    18 checks since the Mineral round: the 16 part7 checks plus the
+    two font-status checks (§5: the interface/technical font's
+    availability is reported through diagnostics, WARN not FAIL)."""
     checks = collect_checks()
-    assert len(checks) == 16
+    assert len(checks) == 18
     assert all(c.status in (OK, WARN, FAIL) for c in checks)
     by_name = {c.name: c for c in checks}
     for name in ("python", "PySide6", "shiboken6", "QtWidgets",
-                 "pyqtgraph", "qt-material", "numpy", "rdkit"):
+                 "pyqtgraph", "qt-material", "numpy", "rdkit",
+                 "font: IBM Plex Sans", "font: JetBrains Mono"):
         assert by_name[name].status == OK, (name, by_name[name])
     assert "matches PySide6" in by_name["shiboken6"].detail
     assert doctor_exit_code(checks) == 0  # warnings do not fail the doctor

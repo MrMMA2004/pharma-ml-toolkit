@@ -1,12 +1,13 @@
 """Centralized theme management for PharmaML Studio.
 
 Directive #16 (GUI redesign, 16.9/16.10/16.11): one ACTIVE global theme
-provider at a time -- Qt-Material (primary Material Design provider),
-QDarkStyleSheet (verified alternative), or native Qt styling (fallback).
-Switching providers always clears the previous stylesheet first so the
-two engines never compete, and every switch re-emits a
-:class:`ChartPalette` so PyQtGraph plots re-style to match (a Qt
-stylesheet never reaches inside pyqtgraph's own rendering).
+provider at a time -- the Mineral 'studio' provider (default), Qt-Material
+(primary Material Design provider), QDarkStyleSheet (verified
+alternative), or native Qt styling (fallback).  Switching providers
+always clears the previous stylesheet first so the two engines never
+compete, and every switch re-emits a :class:`ChartPalette` so
+PyQtGraph plots re-style to match (a Qt stylesheet never reaches
+inside pyqtgraph's own rendering).
 
 Usage::
 
@@ -27,8 +28,8 @@ from .studio_theme import STUDIO_THEMES
 
 PROVIDERS: tuple[str, ...] = ("studio", "qt-material", "qdarkstyle", "native")
 
-# part7 visual identity: the studio provider is the default for
-# fresh installs (Deep Navy + Warm Ivory + Electric Lime, light and
+# Mineral visual identity: the studio provider is the default for
+# fresh installs (cool neutral surfaces + teal action color, light and
 # dark).  Persisted provider choices keep whatever the user saved.
 STUDIO_DEFAULT = "light"
 
@@ -101,16 +102,20 @@ _LIGHT_PALETTES: dict[str, ChartPalette] = {
 def _palette_for(provider: str, theme: str) -> ChartPalette:
     """Map provider+theme to a chart palette (dark themes get dark plots)."""
     if provider == "studio":
-        # part7 §5: the scientific palette is SEPARATE from the
-        # interface accent — Okabe-Ito series on theme-matched axes
+        # Mineral §4.2: the scientific data palette is SEPARATE from
+        # the interface action color — the 7-series Mineral cycle on
+        # theme-matched axes; teal marks selections/highlights only.
         from .design_tokens import tokens as color_tokens
         from .studio_theme import studio_chart_series
 
         t = color_tokens(theme)
+        bs = t.border_subtle
+        grid: tuple[int, int, int] = (
+            int(bs[1:3], 16), int(bs[3:5], 16), int(bs[5:7], 16))
         return ChartPalette(
             background=t.background if theme == "dark" else "w",
             foreground=t.text if theme == "dark" else "k",
-            grid=(52, 73, 87) if theme == "dark" else (200, 200, 200),
+            grid=grid,
             accent=t.accent,
             series=studio_chart_series(theme),
             dark=theme == "dark",

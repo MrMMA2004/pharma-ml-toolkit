@@ -1,10 +1,10 @@
-"""Application font loading (part7 §3: Inter + JetBrains Mono).
+"""Application font loading (Mineral §5: IBM Plex Sans + JetBrains Mono).
 
 Bundles SIL-OFL fonts (redistribution permitted) and registers them
 with Qt at startup; the fallback CHAINS still apply when a font is
-missing, so nothing here is load-bearing for correctness.  §3.3:
-"Do not assume that Inter or JetBrains Mono is already installed on
-every user's computer."
+missing, so nothing here is load-bearing for correctness — §5: "If a
+font is unavailable, use the specified fallback and report its status
+through the application diagnostics" (the doctor reports it).
 
 ``ui_font()``/``mono_font()`` are the single constructors pages and
 widgets use — no page builds its own QFont with a hardcoded family.
@@ -22,10 +22,10 @@ _FONT_DIR = Path(__file__).resolve().parent.parent / "fonts"
 
 # bundled, license-clean files (SIL OFL 1.1 — see fonts/*-OFL.txt)
 _BUNDLED = (
-    "Inter-Regular.ttf",
-    "Inter-Medium.ttf",
-    "Inter-SemiBold.ttf",
-    "Inter-Bold.ttf",
+    "IBMPlexSans-Regular.ttf",
+    "IBMPlexSans-Medium.ttf",
+    "IBMPlexSans-SemiBold.ttf",
+    "IBMPlexSans-Bold.ttf",
     "JetBrainsMono-Regular.ttf",
 )
 
@@ -67,32 +67,32 @@ def _families() -> list[str]:
             if f in available]
 
 
-def has_inter() -> bool:
-    return "Inter" in _families()
+def has_plex() -> bool:
+    return "IBM Plex Sans" in _families()
 
 
 def has_mono() -> bool:
     return "JetBrains Mono" in _families()
 
 
-def ui_font(point_size: int | None = None,
+def ui_font(point_size: float | None = None,
             weight: int = SCALE.WEIGHT_REGULAR) -> QFont:
     """The interface font with its full fallback chain."""
     font = QFont()
     font.setFamilies(list(TYPEFACES.ui_families))
     if point_size is not None:
-        font.setPointSize(point_size)
+        font.setPointSizeF(float(point_size))
     font.setWeight(_qt_weight(weight))
     return font
 
 
-def mono_font(point_size: int | None = None,
+def mono_font(point_size: float | None = None,
               weight: int = SCALE.WEIGHT_REGULAR) -> QFont:
     """The technical font (SMILES, code, logs, identifiers)."""
     font = QFont()
     font.setFamilies(list(TYPEFACES.mono_families))
     if point_size is not None:
-        font.setPointSize(point_size)
+        font.setPointSizeF(float(point_size))
     font.setWeight(_qt_weight(weight))
     return font
 
@@ -107,9 +107,9 @@ def _qt_weight(token_weight: int) -> QFont.Weight:
     }.get(token_weight, QFont.Weight.Normal)
 
 
-def set_mono(widget, point_size: int | None = None,
+def set_mono(widget, point_size: float | None = None,
              weight: int = SCALE.WEIGHT_REGULAR) -> None:
-    """Set a technical-content widget to the mono face (part7 §3.2).
+    """Set a technical-content widget to the mono face (§5).
 
     An EXPLICIT QFont beats the stylesheet, so SMILES readouts, log
     panes and identifier fields stay mono under every theme provider
@@ -125,6 +125,6 @@ def set_mono(widget, point_size: int | None = None,
 
 
 __all__ = [
-    "has_inter", "has_mono", "mono_font", "register_fonts", "set_mono",
+    "has_mono", "has_plex", "mono_font", "register_fonts", "set_mono",
     "ui_font",
 ]

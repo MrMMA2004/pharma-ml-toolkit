@@ -15,7 +15,6 @@ censuses the focusable widget classes it finds.
 from __future__ import annotations
 
 import pytest
-
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -29,8 +28,8 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QSlider,
     QSpinBox,
-    QTableWidget,
     QTabBar,
+    QTableWidget,
     QTreeWidget,
 )
 
@@ -127,10 +126,10 @@ def test_the_focus_rule_set_covers_the_core_classes() -> None:
 
 
 def test_focus_rules_use_the_theme_focus_color() -> None:
-    """Focus indicators draw with the THEME'S FOCUS COLOR — visibility is
-    the point.  Dark keeps Electric Lime (8.1:1 on its surfaces); light
-    carries the dedicated olive-lime focus_ring because the lime itself
-    is only 1.40:1 on white (review M-9, WCAG 1.4.11)."""
+    """Focus indicators draw with the THEME'S FOCUS RING TOKEN —
+    visibility is the point.  Light uses the teal focus/ring
+    (#076F73, 5.95:1 on white); dark uses the bright teal focus/ring
+    (#79D9CF, 9.67:1 on its surfaces) (WCAG 1.4.11)."""
     for theme in ("light", "dark"):
         qss = studio_qss(theme)
         focus_rules = [
@@ -138,27 +137,22 @@ def test_focus_rules_use_the_theme_focus_color() -> None:
             if ":focus" in line and "solid" in line
         ]
         assert focus_rules
+        expected = "#076F73" if theme == "light" else "#79D9CF"
         for line in focus_rules:
-            # every solid-border focus rule paints a sanctioned focus color
-            assert (
-                "#C6E84B" in line    # dark accent
-                or "#ACD52F" in line  # dark accent hover family
-                or "#55701F" in line  # light focus_ring (5.6:1 on white)
-            ), line
+            # every solid-border focus rule paints the theme focus token
+            assert expected in line, (theme, line)
 
 
 def test_selected_tab_underline_uses_the_focus_color() -> None:
-    """Review M-9: the selected-tab underline is a state indicator on the
-    surface in light theme, so it takes focus_ring, not raw lime."""
+    """The selected-tab underline is a state indicator on the surface,
+    so it takes the focus/ring token in both themes."""
     for theme in ("light", "dark"):
         qss = studio_qss(theme)
         block = qss.split("QTabBar::tab:selected {{\n")[1] if \
             "QTabBar::tab:selected {{\n" in qss else qss.split("QTabBar::tab:selected {")[1]
         body = block.split("}")[0]
-        if theme == "light":
-            assert "#55701F" in body, body
-        else:
-            assert "#C6E84B" in body, body
+        expected = "#076F73" if theme == "light" else "#79D9CF"
+        assert expected in body, (theme, body)
 
 
 def test_selection_is_not_the_only_cue_in_tables() -> None:

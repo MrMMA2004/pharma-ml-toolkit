@@ -295,11 +295,11 @@ assert tuple(c.card_id for c in NINE_CARDS) == _REGISTRY_CARD_ORDER, (
     "nine primary cards — fix the divergence before shipping (part6 §2.1/§6)"
 )
 
-#: Phase-3 responsive thresholds: at/above 880 logical px the directive's
-#: canonical 3×3; from 560 to 879 two columns; below 560 a single column.
-#: The order is row-major at every width — only the column count changes.
-COLUMNS_3_MIN_WIDTH = 880
-COLUMNS_2_MIN_WIDTH = 560
+#: Mineral §8 responsive thresholds: three columns at/above 1200 logical
+#: px; two columns from 860 to 1199; a single column below 860.  The
+#: order is row-major at every width — only the column count changes.
+COLUMNS_3_MIN_WIDTH = 1200
+COLUMNS_2_MIN_WIDTH = 860
 
 #: The Datasets card's molecule thumbnail (logical px; the §22 renderer
 #: draws at 2x with devicePixelRatio for crisp bonds).

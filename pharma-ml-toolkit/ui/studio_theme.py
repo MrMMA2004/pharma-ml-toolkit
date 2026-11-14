@@ -1,17 +1,17 @@
-"""The 'studio' theme provider — part7's visual identity as QSS.
+"""The 'studio' theme provider — the Mineral identity as QSS.
 
 Generates the application stylesheet from :mod:`ui.design_tokens`
-(the single source of every color, font and spacing decision), so
-the Deep Navy + Warm Ivory + Electric Lime identity lives in ONE
-place and the existing provider machinery delivers it: registering
-here means theme switching, persistence and the ChartPalette signal
-path all keep working unchanged (§6.1: "retain the existing
-technology stack"; §8 step 10: "migrate reusable components
-incrementally").
+(the single source of every color, font and spacing decision), so the
+Mineral identity ("A clearer path from molecules to evidence") lives
+in ONE place and the existing provider machinery delivers it:
+registering here means theme switching, persistence and the
+ChartPalette signal path all keep working unchanged.
 
 The QSS is deliberately CONSERVATIVE: it styles the shared widget
-classes and the nine-card objectNames, not every page's custom
-layout — pages keep their own structure and inherit the identity.
+classes and the studio objectNames, not every page's custom layout —
+pages keep their own structure and inherit the identity.  Flat,
+restrained surfaces: 1 px separators, no gradients, elevation reserved
+for floating dialogs.
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ from .design_tokens import (
     SCIENTIFIC_CATEGORICAL,
     SCIENTIFIC_CATEGORICAL_DARK,
     TYPEFACES,
-    ColorTokens,
     tokens,
 )
 
@@ -37,8 +36,7 @@ def studio_qss(theme: str) -> str:
     L = LAYOUT
     f_ui = TYPEFACES.ui_css()
     f_mono = TYPEFACES.mono_css()
-    on_accent = t.primary  # dark foreground on lime fills (§2.3)
-    canvas_meta = t.text  # canvas metadata promoted to primary (4.34:1 fix)
+    on_primary = t.on_primary  # white on teal (light), ink on bright teal (dark)
 
     return f"""
 /* ---- base ---------------------------------------------------------- */
@@ -51,27 +49,23 @@ QWidget {{
     selection-color: {t.text};
 }}
 QToolTip {{
-    background: {t.surface};
+    background: {t.elevated};
     color: {t.text};
     border: {L.border}px solid {t.border};
     padding: {L.space_xs}px;
-    font-size: 9pt;
+    font-size: {SCALE.metadata_pt}pt;
 }}
 
 /* ---- surfaces ------------------------------------------------------ */
 QFrame#nineCard {{
     background: {t.surface};
-    border: {L.border}px solid {t.border};
-    border-radius: {L.radius_md}px;
+    border: {L.border}px solid {t.border_subtle};
+    border-radius: {L.radius_lg}px;
 }}
 QLabel {{ background: transparent; }}
 QLabel#studioCardTitle {{
-    /* review 4.1: dark's t.primary (#203645) is a FILL token (panels,
-       status bar) — as title text on t.surface it measures 1.11:1.
-       Titles read t.text in dark (9.84:1); light keeps t.primary
-       (13.78:1). The WCAG guard test pins both pairs. */
-    color: {t.text if theme == 'dark' else t.primary};
-    font-size: 15pt;
+    color: {t.text};
+    font-size: {SCALE.card_title_pt}pt;
     font-weight: 600;
 }}
 QLabel#studioCardDetail, QLabel#nineCardDesc {{
@@ -86,8 +80,26 @@ QLabel#nineCardBadge {{
 }}
 QLabel#nineCardChip {{
     font-family: {f_mono};
-    color: {canvas_meta};
-    font-size: 8.5pt;
+    color: {t.text_secondary};
+    font-size: {SCALE.metadata_pt}pt;
+}}
+
+/* ---- empty states (tokenized: re-color with every theme switch) ----- */
+QWidget#studioEmptyState {{ background: transparent; }}
+QLabel#studioEmptyGlyph {{
+    color: {t.text_muted};
+    background: transparent;
+    font-size: 34px;
+}}
+QLabel#studioEmptyHead {{
+    color: {t.text};
+    background: transparent;
+    font-size: {SCALE.card_title_pt}pt;
+    font-weight: 600;
+}}
+QLabel#studioEmptyGuide {{
+    color: {t.text_secondary};
+    background: transparent;
 }}
 
 /* ---- buttons: primary vs secondary ---------------------------------- */
@@ -95,29 +107,32 @@ QPushButton {{
     background: {t.surface};
     color: {t.text};
     border: {L.border}px solid {t.border};
-    border-radius: {L.radius_sm}px;
+    border-radius: {L.radius_md}px;
     padding: {L.space_sm}px {L.space_md}px;
     font-weight: 500;
 }}
 QPushButton:hover {{
-    background: {t.selected_surface};
+    background: {t.subtle};
     border-color: {t.accent_hover};
 }}
-QPushButton:pressed {{ background: {t.selected_surface}; }}
-QPushButton:focus {{ border: {L.border + 1}px solid {t.focus_color()}; }}
-QPushButton:disabled {{ color: {t.disabled or t.text_secondary}; border-color: {t.border}; }}
+QPushButton:pressed {{ background: {t.subtle}; border-color: {t.accent_pressed}; }}
+QPushButton:focus {{ border: {L.border_emph}px solid {t.focus_color()}; }}
+QPushButton:disabled {{ color: {t.text_muted}; border-color: {t.border_subtle}; background: {t.disabled}; }}
 
+/* the primary action button: the Mineral teal fill (semantic action
+   color — the ONLY place the identity teal appears as a fill) */
 QPushButton#nineCardEntry-primary {{
     background: {t.primary};
-    color: {t.accent};
+    color: {on_primary};
     border: none;
     font-weight: 600;
 }}
 QPushButton#nineCardEntry-primary:hover {{
-    background: {t.accent};
-    color: {on_accent};
+    background: {t.accent_hover};
+    color: {on_primary};
 }}
-QPushButton#nineCardEntry-primary:pressed {{ background: {t.accent_hover}; color: {on_accent}; }}
+QPushButton#nineCardEntry-primary:pressed {{ background: {t.accent_pressed}; color: {on_primary}; }}
+QPushButton#nineCardEntry-primary:focus {{ border: {L.border_emph}px solid {t.focus_color()}; }}
 
 /* ---- inputs --------------------------------------------------------- */
 QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox {{
@@ -126,17 +141,20 @@ QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox {{
     border: {L.border}px solid {t.border};
     border-radius: {L.radius_sm}px;
     padding: {L.space_xs}px {L.space_sm}px;
+    selection-background-color: {t.selected_surface};
+    selection-color: {t.text};
 }}
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus,
 QSpinBox:focus, QDoubleSpinBox:focus {{
-    border: {L.border + 1}px solid {t.focus_color()};
+    border: {L.border_emph}px solid {t.focus_color()};
 }}
 QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{
-    color: {t.disabled or t.text_secondary};
+    color: {t.text_muted};
+    background: {t.disabled};
 }}
 QPlainTextEdit, QTextEdit, QAbstractScrollArea#mono {{
     font-family: {f_mono};
-    font-size: 9pt;
+    font-size: {SCALE.code_pt}pt;
 }}
 
 /* ---- combos ---------------------------------------------------------- */
@@ -148,10 +166,10 @@ QComboBox {{
     padding: {L.space_xs}px {L.space_sm}px;
 }}
 QComboBox:hover {{ border-color: {t.accent_hover}; }}
-QComboBox:focus {{ border: {L.border + 1}px solid {t.focus_color()}; }}
+QComboBox:focus {{ border: {L.border_emph}px solid {t.focus_color()}; }}
 QComboBox::drop-down {{ border: none; width: 18px; }}
 QComboBox QAbstractItemView {{
-    background: {t.surface};
+    background: {t.elevated};
     color: {t.text};
     border: {L.border}px solid {t.border};
     selection-background-color: {t.selected_surface};
@@ -160,32 +178,33 @@ QComboBox QAbstractItemView {{
 
 /* ---- tables ---------------------------------------------------------- */
 QHeaderView::section {{
-    background: {t.primary};
-    color: {t.text if theme == 'dark' else '#EAF0F4'};
+    background: {t.subtle};
+    color: {t.text_secondary};
     border: none;
+    border-bottom: {L.border}px solid {t.border};
     padding: {L.space_xs}px {L.space_sm}px;
     font-weight: 600;
 }}
 QTableWidget, QTableView {{
     background: {t.surface};
     color: {t.text};
-    gridline-color: {t.border};
+    gridline-color: {t.border_subtle};
     border: {L.border}px solid {t.border};
     selection-background-color: {t.selected_surface};
     selection-color: {t.text};
-    alternate-background-color: {t.selected_surface if theme == 'dark' else t.background};
+    alternate-background-color: {t.subtle};
 }}
-/* (R30-b) keyboard focus is visible on data widgets too — selection
-   and focus are DIFFERENT states; a selected row in an unfocused
-   table must not be the only visual cue.  The accent border marks
-   the widget that owns the keyboard. */
+/* (R30-b, carried into Mineral) keyboard focus is visible on data
+   widgets too — selection and focus are DIFFERENT states; a selected
+   row in an unfocused table must not be the only visual cue.  The
+   focus ring marks the widget that owns the keyboard. */
 QTableWidget:focus, QTableView:focus, QListWidget:focus, QTreeWidget:focus {{
-    border: {L.border + 1}px solid {t.focus_color()};
+    border: {L.border_emph}px solid {t.focus_color()};
 }}
 
 /* ---- tabs ------------------------------------------------------------ */
 QTabWidget::pane {{
-    border: {L.border}px solid {t.border};
+    border: {L.border}px solid {t.border_subtle};
     border-radius: {L.radius_sm}px;
     background: {t.surface};
 }}
@@ -202,16 +221,23 @@ QTabBar::tab:selected {{
     border-bottom: 2px solid {t.focus_color()};
     font-weight: 600;
 }}
-/* (R30-b) the tab bar owning the keyboard gets the accent underline
-   on the focused tab as well (selected ≠ focused: arrow keys move
-   focus inside a tab bar even when another tab stays selected). */
 QTabBar:focus {{ border-bottom: 2px solid {t.focus_color()}; }}
 
-/* ---- checkboxes, radios, sliders, group boxes (R30-b) ---------------- */
+/* ---- checkboxes, radios, sliders, group boxes ------------------------ */
 QCheckBox:focus, QRadioButton:focus {{
     border: none;
     color: {t.focus_color()};
     font-weight: 600;
+}}
+QCheckBox::indicator, QRadioButton::indicator {{
+    width: 16px; height: 16px;
+    border: {L.border}px solid {t.border};
+    border-radius: 3px;
+    background: {t.surface};
+}}
+QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
+    background: {t.primary};
+    border-color: {t.primary};
 }}
 QSlider::groove:horizontal {{
     height: 4px;
@@ -224,13 +250,8 @@ QSlider::handle:horizontal {{
     margin: -5px 0;
     border-radius: 6px;
 }}
-/* (R30-b) the slider WIDGET rule (the handle pseudo-element above
-   cannot carry the widget-level :focus state).  (P-3) the ring now
-   hugs the groove (padding 0 + tight margins) and the HANDLE grows
-   and takes the focus color, so keyboard focus reads as "this
-   control" on the thin slider instead of a box around dead space. */
 QSlider:focus {{
-    border: {L.border + 1}px solid {t.focus_color()};
+    border: {L.border_emph}px solid {t.focus_color()};
     border-radius: {L.radius_sm}px;
     padding: 0px;
 }}
@@ -241,13 +262,13 @@ QSlider::handle:horizontal:focus {{
     border-radius: 8px;
 }}
 QGroupBox {{
-    border: {L.border}px solid {t.border};
+    border: {L.border}px solid {t.border_subtle};
     border-radius: {L.radius_sm}px;
     margin-top: {L.space_md}px;
     font-weight: 600;
 }}
 QGroupBox:focus {{
-    border: {L.border + 1}px solid {t.focus_color()};
+    border: {L.border_emph}px solid {t.focus_color()};
 }}
 
 /* ---- dialogs, progress, status --------------------------------------- */
@@ -260,17 +281,20 @@ QProgressBar {{
     color: {t.text};
 }}
 QProgressBar::chunk {{
-    background: {t.accent};
+    background: {t.primary};
     border-radius: {L.radius_sm}px;
 }}
-QStatusBar {{ background: {t.primary}; color: {'#EAF0F4'}; }}
-/* review P-1: a hairline separates the bar from the canvas in BOTH
-   themes (dark nearly merged with Midnight before) */
-QStatusBar {{ border-top: 1px solid {t.focus_color()}; }}
-QMenuBar {{ background: {t.primary}; color: {'#EAF0F4'}; }}
+/* the shell strip: bg/subtle surface with a hairline separator and
+   secondary text — flat Mineral chrome, not a colored bar */
+QStatusBar {{
+    background: {t.subtle};
+    color: {t.text_secondary};
+    border-top: 1px solid {t.border};
+}}
+QMenuBar {{ background: {t.subtle}; color: {t.text}; }}
 QMenuBar::item:selected {{ background: {t.selected_surface}; color: {t.text}; }}
 QMenu {{
-    background: {t.surface};
+    background: {t.elevated};
     color: {t.text};
     border: {L.border}px solid {t.border};
 }}
@@ -293,16 +317,16 @@ QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 def apply_studio(app: QApplication, theme: str) -> None:
     """Clear any previous stylesheet, then apply the studio QSS.
 
-    The same discipline ThemeManager.apply already enforces (16.10.4
-    step 1 — one ACTIVE provider, no engine competition): called
-    from ThemeManager after it clears, and safe standalone.
+    The same discipline ThemeManager.apply already enforces (one ACTIVE
+    provider, no engine competition): called from ThemeManager after
+    it clears, and safe standalone.
     """
     app.setStyleSheet("")
     app.setStyleSheet(studio_qss(theme))
 
 
 def studio_chart_series(theme: str) -> tuple[str, ...]:
-    """The Okabe-Ito cycle for a studio theme (§5)."""
+    """The Mineral scientific data cycle for a studio theme (§4.2)."""
     return (SCIENTIFIC_CATEGORICAL_DARK if theme == "dark"
             else SCIENTIFIC_CATEGORICAL)
 

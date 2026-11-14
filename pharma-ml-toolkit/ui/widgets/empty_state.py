@@ -13,11 +13,15 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
-from ..design_tokens import tokens
-
 
 class EmptyState(QWidget):
-    """Glyph + headline + guidance (+ optional action) for empty panels."""
+    """Glyph + headline + guidance (+ optional action) for empty panels.
+
+    Colors come from the studio QSS via objectName rules
+    (studioEmptyState / studioEmptyGlyph / studioEmptyHead) — no inline
+    hex, so the placeholder re-colors with every theme switch instead
+    of keeping its construction-time palette.
+    """
 
     def __init__(
         self,
@@ -35,30 +39,22 @@ class EmptyState(QWidget):
         lay.setSpacing(8)
         lay.addStretch(1)
 
-        t = tokens("light")  # colors recolour via QSS; tokens size the glyph
         self._glyph = QLabel(glyph)
+        self._glyph.setObjectName("studioEmptyGlyph")
         self._glyph.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._glyph.setStyleSheet(
-            f"font-size: 34px; color: {t.text_secondary}; background: transparent;"
-        )
         lay.addWidget(self._glyph)
 
         self._head = QLabel(headline)
+        self._head.setObjectName("studioEmptyHead")
         self._head.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._head.setWordWrap(True)
-        self._head.setStyleSheet(
-            f"font-size: 15px; font-weight: 600; color: {t.text};"
-            " background: transparent;"
-        )
         lay.addWidget(self._head)
 
         if guidance:
             self._guide = QLabel(guidance)
+            self._guide.setObjectName("studioEmptyGuide")
             self._guide.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self._guide.setWordWrap(True)
-            self._guide.setStyleSheet(
-                f"color: {t.text_secondary}; background: transparent;"
-            )
             lay.addWidget(self._guide)
 
         if action_text and on_action is not None:

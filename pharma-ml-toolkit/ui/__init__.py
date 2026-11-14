@@ -72,8 +72,8 @@ def run(argv: list[str] | None = None) -> int:
     app = QApplication(argv if argv is not None else [])
     app.setApplicationName("PharmaML Studio")
     app.setOrganizationName("PharmaML")
-    # part7 §3.3: register the bundled Inter/JetBrains Mono before
-    # any widget exists; the fallback chains cover a missing bundle
+    # Mineral §5: register the bundled IBM Plex Sans/JetBrains Mono
+    # before any widget exists; the fallback chains cover a missing bundle
     from .font_loader import register_fonts
 
     register_fonts()

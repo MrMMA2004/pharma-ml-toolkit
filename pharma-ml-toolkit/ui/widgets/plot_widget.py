@@ -38,7 +38,7 @@ from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from ..design_tokens import MARKER_DISCIPLINE_LIGHT
+from ..design_tokens import MARKER_DISCIPLINE_DARK, MARKER_DISCIPLINE_LIGHT
 from ..theme_manager import ChartPalette
 from .chart_inspector import ChartInspector
 from .image_export import export_widget_grab
@@ -49,15 +49,16 @@ _DISCIPLINE_SYMBOLS: tuple[str, ...] = ("t", "s", "d", "p", "x")
 
 
 def _needs_marker(palette: ChartPalette, color: str) -> bool:
-    """Whether this series must carry a non-color encoding (§5).
+    """Whether this series must carry a non-color encoding (§12).
 
-    Only in LIGHT themes: the discipline set is exactly the Okabe-Ito
-    colors under 3:1 on white (ui.design_tokens).  Dark palettes flag
-    nothing — every color holds on the Midnight canvas.
+    The discipline set is theme-aware (ui.design_tokens): light flags
+    the sub-3:1-on-white series colors; dark flags the green/sky
+    companion pair, whose token-export values converge to
+    near-identical mint tints (1.08:1, 14° apart).
     """
-    if palette.dark:
-        return False
-    return color in MARKER_DISCIPLINE_LIGHT
+    discipline = MARKER_DISCIPLINE_DARK if palette.dark \
+        else MARKER_DISCIPLINE_LIGHT
+    return color in discipline
 
 
 def _discipline_symbol(index: int) -> str:
