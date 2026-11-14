@@ -132,6 +132,7 @@ const snapshot: SessionSnapshot = {
     elapsedSeconds: 0.4,
     rdkitVersion: "2026.09.1",
   },
+  ligands: null,
 };
 
 const emptySnapshot: SessionSnapshot = {
@@ -141,6 +142,7 @@ const emptySnapshot: SessionSnapshot = {
   mlHistory: [],
   ncaState: { rows: [], dose: "250", f: "1", terminalN: 3 },
   surgery: null,
+  ligands: null,
 };
 
 const allOn = collectSessionReport(snapshot);

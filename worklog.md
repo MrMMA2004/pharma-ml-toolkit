@@ -14735,3 +14735,48 @@ parses — replaced with binary junk that genuinely fails.
 
 Suites: 219/219 affected sweeps, all four new files green.
 v1.2.199 shipped.
+
+## R30 (report group + focus + export) — 2026-11-14
+
+Started from a FULL sandbox recycle: repo, venv, /tmp all gone. The
+recovery itself is part of this round's record: the token PDF wraps
+the PAT across two lines with a form-feed after — a naive grep takes
+only the first line and git rejects the URL; re-extracting the joined
+string worked. Clone at d370017 verified the R29 push landed; venv
+rebuilt from the pinned stack plus the two pins the requirements
+file documents but the core install omits (matplotlib 3.10.9 for the
+report bridge, torch 2.14.1 CPU for the generative page — the sweep
+caught the latter honestly: two real-numbers tests failed until the
+pin went in).
+
+R30-a (twice deferred): the Ligand Sets reconciliation now rides the
+session report. Store slice (persist + validate + cap), collector
+group, bridge bar style, UI chip. The report is a summary, not a
+data dump — bucket tables cap at 50 names and confess the remainder.
+Two test pins that hard-coded the six-group canonical order were
+updated to the seven-group truth (the probe emits the live order, so
+only the assertions drifted).
+
+R30-b: the studio QSS had exactly four :focus rules (buttons, input
+widgets, combos). Tables, lists, trees, tab bars, checkboxes,
+radios, sliders and group boxes had none — a keyboard user tabbing
+through a workspace lost their place. Now 16 rules, all accent-
+colored; a parametrized audit walks all nine pages and maps subclass
+names to base selectors before asserting coverage.
+
+R30-c: the §17 export engine existed (PlotPanel.export_image) but no
+chart-bearing page exposed it. Twelve buttons now ship (one per
+panel; model_analysis has three panels). The helper first called a
+nonexistent export() — the real-PNG round-trip test caught it before
+any human could hit it.
+
+Incidents: token form-feed (recovery); a method-local QHBoxLayout
+import shadowed the module import and broke generative's ctor
+(removed the local imports); pkpd/docking lacked the top-level
+QHBoxLayout import (added); the export-name bug above; two sweep
+commands used a wrong test filename (exit-4, corrected); the tsc
+baseline was measured BEFORE judging my changes (18 pre-existing
+scratch/examples errors — zero new from this round).
+
+Suites: web parity 78+1skip; UI sweeps 264; all new files green.
+v1.2.200 shipped.

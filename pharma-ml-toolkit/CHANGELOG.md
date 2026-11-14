@@ -1,3 +1,54 @@
+## [1.2.200] — 2026-11-14
+### Added — part7 round 30 (report group, focus visibility, chart export) + full environment recovery
+
+- **Recovery** — the sandbox was fully recycled between rounds (repo,
+  venv and /tmp all gone).  Restored per the backup protocol: the
+  fine-grained token re-extracted from its wrapped PDF lines (the
+  form-feed at the page break had clipped the first attempt), the
+  repository re-cloned at R29's d370017, the venv rebuilt from the
+  pinned stack (7 core pins + rdkit 2025.3.3 + pytest 9.0.2 + the
+  PySide6 6.8.3 GUI set + matplotlib 3.10.9 + torch 2.14.1 CPU),
+  the committed EGL stub verified, and green test chunks run before
+  any new work started.
+- **Ligand-set reconciliation rides the session report (R30-a)** —
+  the twice-deferred comparison-figure export: the Ligand Sets tab's
+  result now mirrors into the toolkit store (sessionStorage-persisted,
+  validated, buckets capped at 50 names) and the session report walks
+  a new `ligands` group — the bucket-count metrics card, a bar-trace
+  comparison figure composed by the report bridge into a real
+  matplotlib figure (one horizontal bar per bucket, the
+  plot_table_comparison visual language), and per-bucket name tables
+  with an honest `+N more (see the reconciler)` confession row.  The
+  group honors the walking order (canonical-last; stored orders
+  append it, never drop it), the toggles, and the census.  The bridge
+  gained the `bar` trace style ([y, value] pairs, value-labelled).
+- **Focus visibility across the nine workspaces (R30-b)** — the
+  studio QSS grew from 4 to 16 :focus rules: tables, lists, trees,
+  tab bars, checkboxes, radios, sliders and group boxes now show the
+  accent (Electric Lime) border when they own the keyboard —
+  selection is not the only cue.  A parametrized audit walks every
+  workspace and asserts every focusable widget CLASS it instantiates
+  has a rule in both themes, mapping subclass names to their base
+  selectors (DataTableView → QTableView).
+- **Per-page chart export (R30-c)** — a shared
+  `attach_chart_export()` helper and 12 "Export chart…" buttons
+  across the nine workspaces (one per PlotPanel; model_analysis
+  carries three), wired to `PlotPanel.export_image()` — the §17
+  raster engine (PNG/TIFF/JPEG, reopened + magic-sniffed +
+  dimension-checked) at the §23.3 640×480 legibility floor, with
+  success/failure reported into each page's status line.  Found and
+  fixed during the round: the helper initially called a nonexistent
+  `export()` method — the real PNG round-trip test caught it.
+- **Tests**: test_focus_visibility.py (13), test_chart_export.py
+  (12), TestLigandReportContract (5, incl. the shipped probe and the
+  bridge bar-style guards); web parity 78 passed + 1 skip (the
+  six-group pins updated to the seven-group truth); affected UI
+  sweeps 264 green (chemistry 13, biology 13+8, pkpd 32, docking 17,
+  generative 31, unsupervised+deep_learning 50, model_analysis 13,
+  ml_workbench 19, smoke+focus+export 33, themes 22, mono/
+  discipline/discipline re-runs).  tsc at its pre-round baseline
+  (18 pre-existing scratch/examples errors, zero new); eslint clean.
+
 ## [1.2.199] — 2026-11-13
 ### Added — part7 round 29 (adoption: mono fonts, marker discipline, screenshot regression, biology path)
 

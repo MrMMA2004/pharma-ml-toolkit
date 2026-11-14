@@ -613,6 +613,7 @@ class TestSessionReportSections:
         assert ts["availableEmpty"] == {
             "ml": False, "learningCurve": False, "pkpd": True,
             "nca": False, "history": False, "surgery": False,
+            "ligands": False,  # (R30-a) the reconciliation group
         }
         assert ts["available"]["surgery"] is True
         # the image section carries the grid PNG data URI verbatim
@@ -767,19 +768,22 @@ class TestSessionReportOrder:
         ts = json.loads(Path("/tmp/sr_ts_132.json").read_text())
         canonical = [
             "ml", "learningCurve", "pkpd", "nca", "history", "surgery",
+            "ligands",  # (R30-a) the reconciliation group, canonical-last
         ]
         assert ts["canonical"] == canonical
         # unknown ids dropped; missing groups appended canonical-last
         assert ts["sanitizedUnknown"] == [
             "surgery", "ml", "learningCurve", "pkpd", "nca", "history",
+            "ligands",
         ]
         # duplicates collapse (first occurrence wins)
         assert ts["sanitizedDupes"] == [
             "ml", "pkpd", "learningCurve", "nca", "history", "surgery",
+            "ligands",
         ]
         # a partial order completes (surgery stays first, the missing
         # groups appended canonical-last); empty/absent falls back
-        assert ts["sanitizedPartial"] == ["surgery"] + canonical[:5]
+        assert ts["sanitizedPartial"] == ["surgery"] + canonical[:5] + ["ligands"]
         assert ts["sanitizedEmpty"] == canonical
         assert ts["sanitizedUndefined"] == canonical
         # the ordered walk moves WHOLE groups: surgery's three sections
@@ -2043,3 +2047,114 @@ class TestPreviewKeyboardSpotlight:
         assert "onClick={resetOrder}" in report
         # the reset stays honest about its scope (the dialog stays open)
         assert "the dialog stays open" in report
+
+
+class TestLigandReportContract:
+    """R30-a — the ligand-set reconciliation session-report group.
+
+    The Ligand Sets tab's result now rides the session report: the
+    store slice mirrors it, the collector walks a ``ligands`` group
+    (metrics card + comparison figure + capped bucket tables), and
+    the bridge renders the figure's ``bar`` trace style.  This guard
+    pins the shipped artifacts: the TS probe runs the collector over
+    a fixed reconciliation fixture, and the bridge composes the
+    payload into a real themed HTMLReport with the bar figure
+    embedded."""
+
+    COLLECTOR_TS = REPO_ROOT / "src" / "lib" / "session-report.ts"
+    STORE_TS = REPO_ROOT / "src" / "lib" / "store.ts"
+    BRIDGE_PY = REPO_ROOT / "scripts" / "report_bridge.py"
+    PROBE_TS = REPO_ROOT / "scratch" / "probe_session_report_r30a.ts"
+
+    @pytest.mark.skipif(
+        not PROBE_TS.is_file() or not BRIDGE_PY.is_file(),
+        reason="web checkout (probe + bridge) required; the zip-only "
+        "tree skips — its probes live outside the shipped tree",
+    )
+    def test_the_collector_walks_the_ligands_group(self) -> None:
+        """The shipped probe passes: metrics card, capped tables with
+        the +N confession, availability/toggle/order semantics, the
+        bar-figure contract and null-safety."""
+        if BUN is not None:
+            _run([BUN, "run", "scratch/probe_session_report_r30a.ts"], REPO_ROOT)
+        else:  # node fallback (bun absent): strip-types runs plain TS
+            _run(
+                ["node", "--experimental-strip-types",
+                 "scratch/probe_session_report_r30a.ts"],
+                REPO_ROOT,
+            )
+
+    def test_the_store_exports_the_slice(self) -> None:
+        store = self.STORE_TS.read_text()
+        # the persisted slice + its cap
+        assert "RECONCILE_RESULT_STORAGE_KEY" in store
+        assert "reconcileResult" in store
+        assert "setReconcileResult" in store
+        assert "RECONCILE_BUCKET_CAP = 50" in store
+        # the validator restores-as-null contract
+        assert "validateReconcileResult" in store
+
+    def test_the_collector_declares_the_group(self) -> None:
+        collector = self.COLLECTOR_TS.read_text()
+        assert '"ligands"' in collector
+        assert "ligandsSections" in collector
+        # the comparison figure rides the bar trace style
+        assert 'style: "bar"' in collector
+        # the bucket tables confess their caps
+        assert "+ ${count - capped.length} more" in collector
+
+    def test_the_bridge_renders_bar_traces(self) -> None:
+        """A bar-trace figure composes into a real HTMLReport with the
+        value-labelled horizontal bars (no matplotlib backend needed
+        beyond the suite's own Agg)."""
+        import json
+
+        payload = {
+            "theme": "light",
+            "subtitle": "R30-a bridge bar-style guard",
+            "sections": [
+                {
+                    "kind": "figure",
+                    "title": "Ligand-set reconciliation — bucket counts",
+                    "xLabel": "number of unique ligand names",
+                    "yLabel": "bucket",
+                    "traces": [
+                        {"name": "ligands", "style": "bar",
+                         "points": [[2, 4], [1, 60], [0, 1]]},
+                    ],
+                },
+            ],
+        }
+        result = subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps(payload),
+            capture_output=True, text=True, timeout=120, check=True,
+        )
+        composed = json.loads(result.stdout)
+        assert composed["figures"] == 1
+        assert composed["tables"] == 0
+        assert composed["theme"] == "light"
+        html = composed["html"]
+        assert html.count("<img") == 1
+        assert "data:image/png;base64," in html
+        assert "bucket counts" in html
+
+    def test_the_bridge_rejects_a_bad_bar_trace(self) -> None:
+        import json
+
+        payload = {
+            "theme": "light",
+            "subtitle": "bad bar guard",
+            "sections": [
+                {"kind": "figure", "title": "t", "xLabel": "x", "yLabel": "y",
+                 "traces": [{"name": "b", "style": "histogram",
+                             "points": [[0, 1]]}]},
+            ],
+        }
+        result = subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps(payload),
+            capture_output=True, text=True, timeout=120, check=False,
+        )
+        assert result.returncode != 0
+        assert "unknown trace style" in result.stdout

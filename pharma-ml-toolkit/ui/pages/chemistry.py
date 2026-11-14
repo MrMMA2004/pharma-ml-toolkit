@@ -187,6 +187,18 @@ class ChemistryWorkbenchPage(QWidget):
         self._report.setWordWrap(True)
         lay.addWidget(self._report)
 
+        # (R30-c) the per-page chart export under the live palette —
+        # created after _report so the status line exists to receive it
+        from ..widgets.chart_export import attach_chart_export
+
+        export_row = QHBoxLayout()
+        attach_chart_export(
+            self, self._plot, "chemistry-features",
+            layout=export_row, status_label=self._report,
+        )
+        export_row.addStretch(1)
+        right_lay.addLayout(export_row)
+
         self._load_dataset(self._dataset_combo.currentText())
 
     # -- data ---------------------------------------------------------------

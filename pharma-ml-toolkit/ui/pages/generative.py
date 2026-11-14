@@ -280,6 +280,17 @@ class GenerativeWorkbenchPage(QWidget):
         self._report.setWordWrap(True)
         lay.addWidget(self._report)
 
+        # (R30-c) the per-page chart export under the live palette
+        from ..widgets.chart_export import attach_chart_export
+
+        _export_row = QHBoxLayout()
+        attach_chart_export(
+            self, self._plot, "generative-panel",
+            layout=_export_row, status_label=self._report,
+        )
+        _export_row.addStretch(1)
+        lay.addLayout(_export_row)
+
         # §21.5 (round 236): clicking a plotted molecule opens its
         # §22.5 detail view (structure + calculated properties).
         self._sa_hover: list[str] = []

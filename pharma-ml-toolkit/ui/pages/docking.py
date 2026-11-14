@@ -61,6 +61,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QPlainTextEdit,
     QPushButton,
@@ -240,6 +241,17 @@ class DockingWorkbenchPage(QWidget):
         self._report.setObjectName("studioStatus")
         self._report.setWordWrap(True)
         lay.addWidget(self._report)
+
+        # (R30-c) the per-page chart export under the live palette
+        from ..widgets.chart_export import attach_chart_export
+
+        _export_row = QHBoxLayout()
+        attach_chart_export(
+            self, self._plot, "docking-panel",
+            layout=_export_row, status_label=self._report,
+        )
+        _export_row.addStretch(1)
+        lay.addLayout(_export_row)
 
     # -- tab construction -----------------------------------------------------
     def _build_campaign_tab(self) -> QWidget:

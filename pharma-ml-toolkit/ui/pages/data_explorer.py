@@ -82,6 +82,16 @@ class DataExplorerPage(QWidget):
         right_lay.addWidget(self._column_combo)
         self._plot = PlotPanel(title="Column histogram")
         right_lay.addWidget(self._plot, stretch=1)
+        # (R30-c) the per-page chart export under the live palette
+        from ..widgets.chart_export import attach_chart_export
+
+        _export_row = QHBoxLayout()
+        attach_chart_export(
+            self, self._plot, "explorer-histogram",
+            layout=_export_row, status_label=self._status,
+        )
+        _export_row.addStretch(1)
+        right_lay.addLayout(_export_row)
         self._stats_label = QLabel("")
         self._stats_label.setObjectName("studioStatus")
         self._stats_label.setWordWrap(True)

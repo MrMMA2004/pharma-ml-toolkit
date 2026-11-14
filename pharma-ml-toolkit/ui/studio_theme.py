@@ -171,6 +171,13 @@ QTableWidget, QTableView {{
     selection-color: {t.text};
     alternate-background-color: {t.selected_surface if theme == 'dark' else t.background};
 }}
+/* (R30-b) keyboard focus is visible on data widgets too — selection
+   and focus are DIFFERENT states; a selected row in an unfocused
+   table must not be the only visual cue.  The accent border marks
+   the widget that owns the keyboard. */
+QTableWidget:focus, QTableView:focus, QListWidget:focus, QTreeWidget:focus {{
+    border: {L.border + 1}px solid {t.accent};
+}}
 
 /* ---- tabs ------------------------------------------------------------ */
 QTabWidget::pane {{
@@ -190,6 +197,43 @@ QTabBar::tab:selected {{
     color: {t.text};
     border-bottom: 2px solid {t.accent};
     font-weight: 600;
+}}
+/* (R30-b) the tab bar owning the keyboard gets the accent underline
+   on the focused tab as well (selected ≠ focused: arrow keys move
+   focus inside a tab bar even when another tab stays selected). */
+QTabBar:focus {{ border-bottom: 2px solid {t.accent}; }}
+
+/* ---- checkboxes, radios, sliders, group boxes (R30-b) ---------------- */
+QCheckBox:focus, QRadioButton:focus {{
+    border: none;
+    color: {t.accent};
+    font-weight: 600;
+}}
+QSlider::groove:horizontal {{
+    height: 4px;
+    background: {t.border};
+    border-radius: 2px;
+}}
+QSlider::handle:horizontal {{
+    background: {t.text_secondary};
+    width: 12px;
+    margin: -5px 0;
+    border-radius: 6px;
+}}
+/* (R30-b) the slider WIDGET rule (the handle pseudo-element above
+   cannot carry the widget-level :focus state). */
+QSlider:focus {{
+    border: {L.border + 1}px solid {t.accent};
+    border-radius: {L.radius_sm}px;
+}}
+QGroupBox {{
+    border: {L.border}px solid {t.border};
+    border-radius: {L.radius_sm}px;
+    margin-top: {L.space_md}px;
+    font-weight: 600;
+}}
+QGroupBox:focus {{
+    border: {L.border + 1}px solid {t.accent};
 }}
 
 /* ---- dialogs, progress, status --------------------------------------- */

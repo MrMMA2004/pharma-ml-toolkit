@@ -10,6 +10,7 @@ import {
   Dna,
   Eye,
   FileDown,
+  FlaskConical,
   Gauge,
   GripVertical,
   History,
@@ -189,6 +190,12 @@ const GROUPS: Array<{
     label: "Surgery",
     icon: Dna,
     hint: "the surgery run's metrics + SMILES table + structure grid",
+  },
+  {
+    id: "ligands",
+    label: "Ligand sets",
+    icon: FlaskConical,
+    hint: "the reconciliation bucket counts + per-bucket name tables",
   },
 ];
 
@@ -641,6 +648,7 @@ export function SessionReport() {
   const pdParams = useToolkitStore((s) => s.pdParams);
   const ncaState = useToolkitStore((s) => s.ncaState);
   const surgeryResult = useToolkitStore((s) => s.surgeryResult);
+  const reconcileResult = useToolkitStore((s) => s.reconcileResult);
   const { resolvedTheme } = useTheme();
   const [busy, setBusy] = useState(false);
   const [options, setOptions] = useState<SessionReportOptions>({});
@@ -686,8 +694,18 @@ export function SessionReport() {
       pdParams,
       ncaState,
       surgery: surgeryResult,
+      ligands: reconcileResult,
     }),
-    [mlResult, lcResult, mlHistory, pkParams, pdParams, ncaState, surgeryResult],
+    [
+      mlResult,
+      lcResult,
+      mlHistory,
+      pkParams,
+      pdParams,
+      ncaState,
+      surgeryResult,
+      reconcileResult,
+    ],
   );
   const available = useMemo(() => sessionGroupsAvailable(snapshot), [snapshot]);
   const census = useMemo(

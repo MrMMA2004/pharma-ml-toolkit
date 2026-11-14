@@ -411,6 +411,26 @@ class ModelAnalysisPage(QWidget):
         self._metric_label.setWordWrap(True)
         lay.addWidget(self._metric_label)
 
+        # (R30-c) per-page chart export under the live palette — one
+        # row per plot, all reporting into the metric line
+        from ..widgets.chart_export import attach_chart_export
+
+        _export_row = QHBoxLayout()
+        attach_chart_export(
+            self, self._pred_plot, "model-analysis-parity",
+            layout=_export_row, status_label=self._metric_label,
+        )
+        attach_chart_export(
+            self, self._resid_plot, "model-analysis-residuals",
+            layout=_export_row, status_label=self._metric_label,
+        )
+        attach_chart_export(
+            self, self._importance_plot, "model-analysis-importance",
+            layout=_export_row, status_label=self._metric_label,
+        )
+        _export_row.addStretch(1)
+        lay.addLayout(_export_row)
+
         # -- the native diagnostic figures (round 228) ------------------ #
         diag_buttons = QHBoxLayout()
         self._diag_buttons: list[QPushButton] = []

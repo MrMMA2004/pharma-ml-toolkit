@@ -166,7 +166,7 @@ def _validate_section(section: Any) -> dict[str, Any]:
         style = trace.get("style")
         if not isinstance(name, str) or not name or len(name) > MAX_TEXT:
             raise ValueError("each trace needs a name (1-200 chars)")
-        if style not in {"line", "band", "scatter"}:
+        if style not in {"line", "band", "scatter", "bar"}:
             raise ValueError(f"unknown trace style {style!r}")
         points = trace.get("points")
         if not isinstance(points, list) or not points or len(points) > MAX_POINTS:
@@ -250,6 +250,20 @@ def _build_figure(plt: Any, palette: tuple[str, ...], section: dict[str, Any]) -
             xs = [p[0] for p in points]
             ys = [p[1] for p in points]
             ax.plot(xs, ys, lw=1.9, color=color, label=trace["name"])
+        elif style == "bar":
+            # (R30-a) the comparison-figure trace: one horizontal bar
+            # per [y, value] point, labelled at the end — the same
+            # visual language as viz.plot_table_comparison's count
+            # panel, so the report figure and the library figure tell
+            # one story.
+            ys = [p[0] for p in points]
+            values = [p[1] for p in points]
+            ax.barh(ys, values, height=0.6, color=color,
+                    edgecolor="white", linewidth=0.8, label=trace["name"])
+            largest = max(values) if values else 1.0
+            for y, value in zip(ys, values):
+                ax.text(value + largest * 0.025, y, f"{value:g}",
+                        va="center", fontsize=9, color="#1F2937")
         else:  # scatter
             xs = [p[0] for p in points]
             ys = [p[1] for p in points]

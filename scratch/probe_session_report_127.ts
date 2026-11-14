@@ -115,6 +115,7 @@ const snapshot: SessionSnapshot = {
   // census as before) — the surgery-on round trip lives in
   // scratch/probe_session_report_131.ts.
   surgery: null,
+  ligands: null,
 };
 
 const payload = collectSessionReport(snapshot);

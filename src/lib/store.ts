@@ -152,6 +152,36 @@ const SURGERY_RESULT_STORAGE_KEY = "pharmaml.surgeryResult";
  *  than the ML result's; an oversized grid simply does not persist. */
 const SURGERY_RESULT_MAX_BYTES = 1_500_000;
 
+/** (R30-a) sessionStorage key for the last ligand-set reconciliation —
+ *  the session-report collector walks it so the report gains the
+ *  chem-compare bucket counts and name tables.  The reconciler ALSO
+ *  keeps its raw inputs under its own key (survives reloads); this
+ *  one holds the RESULT only, exactly like surgeryResult. */
+const RECONCILE_RESULT_STORAGE_KEY = "pharmaml.reconcileResult";
+
+/** (R30-a) the persisted shape of one ligand-set reconciliation — the
+ *  client-side twin of pharmaml.chem.compare_tables' summary plus the
+ *  per-bucket name lists the report tables need. */
+export interface ReconcileResultState {
+  /** Normalisation flags actually used (the report subtitle cites them). */
+  stripExtension: boolean;
+  lowercase: boolean;
+  /** Table labels for the report headers ("A"/"B" when untitled). */
+  labelA: string;
+  labelB: string;
+  counts: { common: number; onlyA: number; onlyB: number };
+  /** Bucket name lists (cap: RECONCILE_BUCKET_CAP entries each). */
+  common: string[];
+  onlyA: string[];
+  onlyB: string[];
+}
+
+/** Cap on each persisted bucket list and each report-table row count —
+ *  reconciliation outputs can run to thousands of ligand names; the
+ *  report is a summary, not a data dump (the reconciler UI keeps the
+ *  full lists client-side). */
+export const RECONCILE_BUCKET_CAP = 50;
+
 /** sessionStorage key for the ML run history (newest first). */
 const ML_HISTORY_STORAGE_KEY = "pharmaml.mlHistory";
 
@@ -734,6 +764,82 @@ function loadSurgeryResult(): SurgeryResponse | null {
   }
 }
 
+/** (R30-a) Validate a persisted reconciliation payload; a wrong shape
+ *  restores as "no reconciliation yet" instead of poisoning the report
+ *  collector.  Mirrors validateSurgeryResult's light structural check. */
+function validateReconcileResult(raw: unknown): ReconcileResultState | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const counts = r.counts as Record<string, unknown> | undefined;
+  const bucket = (key: string): string[] | null => {
+    if (!Array.isArray(r[key])) return null;
+    const list = r[key] as unknown[];
+    if (!list.every((name) => typeof name === "string" && name.length <= 300)) return null;
+    return (list as string[]).slice(0, RECONCILE_BUCKET_CAP);
+  };
+  const common = bucket("common");
+  const onlyA = bucket("onlyA");
+  const onlyB = bucket("onlyB");
+  if (
+    typeof r.stripExtension !== "boolean" ||
+    typeof r.lowercase !== "boolean" ||
+    typeof r.labelA !== "string" ||
+    r.labelA.length > 60 ||
+    typeof r.labelB !== "string" ||
+    r.labelB.length > 60 ||
+    typeof counts !== "object" ||
+    counts === null ||
+    typeof counts.common !== "number" ||
+    typeof counts.onlyA !== "number" ||
+    typeof counts.onlyB !== "number" ||
+    !common ||
+    !onlyA ||
+    !onlyB
+  ) {
+    return null;
+  }
+  return {
+    stripExtension: r.stripExtension,
+    lowercase: r.lowercase,
+    labelA: r.labelA,
+    labelB: r.labelB,
+    counts: { common: counts.common, onlyA: counts.onlyA, onlyB: counts.onlyB },
+    common,
+    onlyA,
+    onlyB,
+  };
+}
+
+/** (R30-a) Read the persisted reconciliation (client only, failure-tolerant). */
+function loadReconcileResult(): ReconcileResultState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(RECONCILE_RESULT_STORAGE_KEY);
+    if (!raw) return null;
+    return validateReconcileResult(JSON.parse(raw));
+  } catch {
+    return null; // corrupted JSON / private mode — start fresh
+  }
+}
+
+/** (R30-a) Persist the reconciliation (client only, size-capped by the
+ *  bucket cap, best-effort). */
+function saveReconcileResult(result: ReconcileResultState | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (result === null) {
+      window.sessionStorage.removeItem(RECONCILE_RESULT_STORAGE_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(
+      RECONCILE_RESULT_STORAGE_KEY,
+      JSON.stringify(result)
+    );
+  } catch {
+    /* quota exceeded or private mode — persistence is optional */
+  }
+}
+
 /** Persist the surgery result (client only, size-capped, best-effort). */
 function saveSurgeryResult(result: SurgeryResponse | null): void {
   if (typeof window === "undefined") return;
@@ -947,6 +1053,13 @@ interface ToolkitStore {
    *  session-report collector can walk its grid figure + SMILES table). */
   surgeryResult: SurgeryResponse | null;
   setSurgeryResult: (result: SurgeryResponse | null) => void;
+
+  /** (R30-a) Last ligand-set reconciliation (the Ligand Sets tab's
+   *  result) — the session-report collector walks it so the report
+   *  gains the chem-compare bucket counts and name tables; null = no
+   *  reconciliation yet. */
+  reconcileResult: ReconcileResultState | null;
+  setReconcileResult: (result: ReconcileResultState | null) => void;
   /** Last dataset-preview payload. */
   mlPreview: DatasetPreviewResponse | null;
   setMlPreview: (preview: DatasetPreviewResponse | null) => void;
@@ -1100,6 +1213,11 @@ export const useToolkitStore = create<ToolkitStore>((set, get) => {
   setSurgeryResult: (result) => {
     set({ surgeryResult: result });
     saveSurgeryResult(result);
+  },
+  reconcileResult: loadReconcileResult(),
+  setReconcileResult: (result) => {
+    set({ reconcileResult: result });
+    saveReconcileResult(result);
   },
   mlPreview: null,
   setMlPreview: (preview) => set({ mlPreview: preview }),
