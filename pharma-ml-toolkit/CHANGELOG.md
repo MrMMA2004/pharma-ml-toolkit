@@ -1,3 +1,63 @@
+## [1.2.201] — 2026-11-14
+### Fixed — all 27 third-edition product-review findings (rounds 31-32)
+
+- **First-run guidance everywhere (C-1)** — `PlotPanel.set_empty_hint()`:
+  26 plot panels across 14 workspaces explain their concrete first step
+  ("Pick dataset + target, then press Train — …") as text inside the plot;
+  the hint hides on the first drawn series, returns after `clear()`, and
+  recenters on resize.  The empty white box that was 90-97% of the canvas
+  on first open now teaches instead of staring.
+- **In-app help (C-2/C-5)** — F1 opens a searchable help pane (10 topics
+  including the full shortcut cheat-sheet); a Help button joins the top
+  bar; a first-run welcome card appears once (offscreen-safe).  The
+  shortcut cheat-sheet is also linked from tooltips.
+- **Completion toasts (C-3)** — long jobs (train success/fail/cancel,
+  PK/PD regimen, failures) raise a native notification through
+  `shell_notify()` so a minimized window no longer swallows the result.
+  A latent doubled-brace stylesheet typo was fixed on the way.
+- **Nine-card grid reflow (C-6)** — the card grid minimum width drops
+  from 1617 to 542 px (3/2/1 columns at 880/560 breakpoints) with button
+  elision and an Ignored policy instead of a horizontal scrollbar.
+- **Tooltips for the jargon controls (M-1)** — the modules that shipped
+  zero tooltips (PK/PD, Biology, Chemistry, Foundations, Best-of-ML,
+  Response AI and the six workflow dialogs: campaign wizard, preparation,
+  calibration, reproducibility, validation, campaign status) now explain
+  their domain controls — NCA terminal points, PLIF, quantile cuts,
+  grouped-CV folds, calibration classes.
+- **Label capitalization (M-2)** — every form label is sentence-case
+  across all workspaces (docking, deep learning, pkpd, biology, bestofml,
+  generative, responseai, unsupervised); "contact shell (A)" is now the
+  correct "Contact shell (Å)".
+- **Chart export buttons (M-3)** — the per-plot export buttons
+  distinguish their plot ("Export parity…", "Export residuals…",
+  "Export importance…"), carry a save glyph and accessible names.
+- **Dialog safety (M-4/M-5)** — reset-to-defaults asks before wiping;
+  DependencyError dialogs offer the exact install line (copy button) and
+  a Doctor route instead of a bare failure.
+- **Progress honesty (M-6)** — ProgressPanel shows an elapsed-time
+  counter alongside the determinate bar.
+- **Light-theme contrast (M-9)** — focus_ring 5.64:1, disabled text
+  3.44:1, border 3.50:1 (WCAG AA); nine QSS rules moved to the tuned
+  focus color; guard tests pin the ratios.
+- **Web Explorer routing (M-7)** — hash-based deep links
+  (`#/playground/ml`): shareable URLs, Back/Forward navigate tabs
+  instead of leaving the app, unknown hashes fall back to overview.
+- **Web Explorer a11y (M-8)** — skip-to-content link, per-tab
+  descriptions on hover/focus, and the report-chip caption announces the
+  arrow-key reorder path.
+- **Polish (P-1..P-12)** — status-bar hairline; stale dashboard stat
+  card; timestamped export names; shared EmptyState widget; the MD page
+  example study; chemistry run labels name their dataset; "Open CSV /
+  Excel…" entry points in Model Analysis and Chemistry; slider focus
+  paints the handle (not a box); "+N more" names Studio/Explorer instead
+  of the desktop-only "reconciler"; fmtCell keeps "1,234" not
+  "1.234e+03"; RDKit raw parse-error dumps silenced in featurization
+  (per-row drop warnings kept).
+- **Release hygiene** — the two-commit fix branch also updates the
+  version-carrier pentad, re-executes the notebook evidence at
+  1.2.201, and ships with the standard zip recipe (leak scan,
+  composition guard, four byte-identical homes).
+
 ## [1.2.200] — 2026-11-14
 ### Added — part7 round 30 (report group, focus visibility, chart export) + full environment recovery
 
