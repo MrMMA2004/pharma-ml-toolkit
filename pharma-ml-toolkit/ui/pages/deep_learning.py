@@ -68,7 +68,7 @@ from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
-from ..widgets.responsive import configure_splitter
+from ..widgets.responsive import configure_splitter, wrap_in_scroll
 from ..workers.job_worker import JobRunner
 
 _TK = Path(__file__).resolve().parents[2]
@@ -258,13 +258,13 @@ class DeepLearningWorkbenchPage(QWidget):
 
         # -- the four engine tabs ------------------------------------------------
         self._tabs = QTabWidget()
-        self._tabs.addTab(self._build_train_tab(), "Train & evaluate")
-        self._tabs.addTab(self._build_runboard_tab(), "Runboard")
-        self._tabs.addTab(self._build_umap_tab(), "UMAP map")
-        self._tabs.addTab(self._build_curation_tab(), "Curation")
+        self._tabs.addTab(wrap_in_scroll(self._build_train_tab()), "Train & evaluate")
+        self._tabs.addTab(wrap_in_scroll(self._build_runboard_tab()), "Runboard")
+        self._tabs.addTab(wrap_in_scroll(self._build_umap_tab()), "UMAP map")
+        self._tabs.addTab(wrap_in_scroll(self._build_curation_tab()), "Curation")
         # part6 Phase 3, batch 3: the efficiency + GNN labs
-        self._tabs.addTab(self._build_efficiency_tab(), "Efficiency lab")
-        self._tabs.addTab(self._build_gnn_lab_tab(), "GNN lab")
+        self._tabs.addTab(wrap_in_scroll(self._build_efficiency_tab()), "Efficiency lab")
+        self._tabs.addTab(wrap_in_scroll(self._build_gnn_lab_tab()), "GNN lab")
         lay.addWidget(self._tabs)
 
         self._progress = ProgressPanel()

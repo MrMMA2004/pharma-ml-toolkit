@@ -177,6 +177,12 @@ class ImageLabPage(QWidget):
         self._theme = theme
         self._runner = runner or JobRunner(self)
         self._data_explorer = data_explorer
+        # review m-19: re-fill the similarity/response pickers on every
+        # explorer load (the opportunistic first paint used to be the only
+        # refresh; a later load left the combos showing the old columns)
+        if self._data_explorer is not None and hasattr(self._data_explorer, "frameLoaded"):
+            self._data_explorer.frameLoaded.connect(self._on_explorer_frame)
+
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 8, 8, 8)
@@ -302,7 +308,7 @@ class ImageLabPage(QWidget):
         row = QWidget()
         form = QFormLayout(row)
         form.setContentsMargins(0, 0, 0, 0)
-        form.addRow("Colormap (16.8.4):", box)
+        form.addRow("Colormap:", box)
 
         # Part-3 §17: the format-aware export controls -- TIFF/JPEG are
         # first-class beside PNG, with the compression/quality knobs the
@@ -322,7 +328,7 @@ class ImageLabPage(QWidget):
         export.clicked.connect(
             lambda: self._export_panel(panel, fmt_box, quality, compress)
         )
-        form.addRow("Export format (§17):", fmt_box)
+        form.addRow("Export format:", fmt_box)
         form.addRow("JPEG quality:", quality)
         form.addRow("TIFF compression:", compress)
         form.addRow("", export)
@@ -340,7 +346,7 @@ class ImageLabPage(QWidget):
         row = QWidget()
         form = QFormLayout(row)
         form.setContentsMargins(0, 0, 0, 0)
-        form.addRow("View (§21.4):", btn_1to1)
+        form.addRow("View:", btn_1to1)
         return row
 
     def _toggle_original_resolution(self, panel: ImagePanel) -> None:
@@ -497,6 +503,17 @@ class ImageLabPage(QWidget):
             self._sim_source.currentIndex() == 1 and self._sim_column.count() > 0
         )
         self._sim_column.setEnabled(use_explorer)
+
+    def _on_explorer_frame(self, frame: object) -> None:
+        """frameLoaded slot (review m-19): keep pickers true to the live table."""
+        import pandas as pd
+
+        if not isinstance(frame, pd.DataFrame) or frame.empty:
+            return
+        self._refresh_sim_columns()
+        self._refresh_numeric_pickers(
+            [str(c) for c in frame.columns if pd.api.types.is_numeric_dtype(frame[c])]
+        )
 
     def _refresh_sim_columns(self) -> None:
         """Refill the SMILES picker with the explorer's SMILES-like columns."""

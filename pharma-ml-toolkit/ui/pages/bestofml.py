@@ -78,7 +78,7 @@ from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView, PandasTableModel
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
-from ..widgets.responsive import configure_splitter
+from ..widgets.responsive import configure_splitter, wrap_in_scroll
 from ..workers.job_worker import JobRunner
 
 #: the association card's default pasted transactions (mirrored verbatim).
@@ -211,19 +211,23 @@ class BestOfMLWorkbenchPage(QWidget):
         self._theme = theme
         self._runner = runner or JobRunner(self)
         self._data_explorer = data_explorer
+        # review m-19: refresh the catalog pickers on every explorer load
+        if self._data_explorer is not None and hasattr(self._data_explorer, "frameLoaded"):
+            self._data_explorer.frameLoaded.connect(self._on_explorer_frame)
+
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 8, 8, 8)
 
         self._tabs = QTabWidget()
-        self._tabs.addTab(self._build_catalog_tab(), "Catalogue")
-        self._tabs.addTab(self._build_coverage_tab(), "Coverage audit")
-        self._tabs.addTab(self._build_dp_tab(), "Differential privacy")
-        self._tabs.addTab(self._build_recommender_tab(), "Recommender")
-        self._tabs.addTab(self._build_lsh_tab(), "Vector search (LSH)")
-        self._tabs.addTab(self._build_adversarial_tab(), "Adversarial")
-        self._tabs.addTab(self._build_timeseries_tab(), "Time series")
-        self._tabs.addTab(self._build_assoc_tab(), "Association rules")
+        self._tabs.addTab(wrap_in_scroll(self._build_catalog_tab()), "Catalogue")
+        self._tabs.addTab(wrap_in_scroll(self._build_coverage_tab()), "Coverage audit")
+        self._tabs.addTab(wrap_in_scroll(self._build_dp_tab()), "Differential privacy")
+        self._tabs.addTab(wrap_in_scroll(self._build_recommender_tab()), "Recommender")
+        self._tabs.addTab(wrap_in_scroll(self._build_lsh_tab()), "Vector search (LSH)")
+        self._tabs.addTab(wrap_in_scroll(self._build_adversarial_tab()), "Adversarial")
+        self._tabs.addTab(wrap_in_scroll(self._build_timeseries_tab()), "Time series")
+        self._tabs.addTab(wrap_in_scroll(self._build_assoc_tab()), "Association rules")
         lay.addWidget(self._tabs)
 
         self._progress = ProgressPanel()
@@ -477,6 +481,16 @@ class BestOfMLWorkbenchPage(QWidget):
                 return frame
         return None
 
+    def _on_explorer_frame(self, frame: object) -> None:
+        """frameLoaded slot (review m-19): keep pickers true to the live table."""
+        import pandas as pd
+
+        if not isinstance(frame, pd.DataFrame) or frame.empty:
+            return
+        self._refresh_column_pickers(
+            [str(c) for c in frame.select_dtypes(include=[np.number]).columns]
+        )
+
     def _refresh_column_pickers(self, numeric: list[str]) -> None:
         """(Re)fill the DP / time-series pickers with the explorer's numeric columns."""
         if not numeric:
@@ -653,7 +667,7 @@ class BestOfMLWorkbenchPage(QWidget):
             progress(0.4, "the epsilon budget split")
             report = dp_statistics(values, epsilon=epsilon, n_bins=n_bins, seed=42)
             progress(0.8, "the RDP accountant")
-            plan = dp_sgd_noise_scale(epsilon=4.0, delta=1e-5, steps=1500)
+            plan = dp_sgd_noise_scale(epsilon=float(self._dp_epsilon.value()) if getattr(self, "_dp_epsilon", None) else 4.0, delta=1e-5, steps=int(self._dp_steps.value()) if getattr(self, "_dp_steps", None) else 1500)
             progress(1.0, "done")
             return DPOutcome(report=report, plan=plan, source=source, seconds=_time.monotonic() - started)
 
@@ -711,7 +725,7 @@ class BestOfMLWorkbenchPage(QWidget):
             f"[{report.bounds[0]:.2f}, {report.bounds[1]:.2f}]"
             + (" (data-derived — production bounds must be public)" if report.bounds_from_data else "")
             + f" · dp mean {report.dp_mean:.4f} vs true {report.true_mean:.4f}\n"
-            f"RDP accountant: eps=4, delta=1e-5, 1500 steps needs sigma={plan.sigma:.1f} "
+            f"RDP accountant: eps={float(getattr(self, '_dp_epsilon', None) and self._dp_epsilon.value() or 4.0)}, delta=1e-5, 1500 steps needs sigma={plan.sigma:.1f} "
             "(the conservative plain-RDP ceiling; Opacus' amplified accountant needs ~1)"
         )
 

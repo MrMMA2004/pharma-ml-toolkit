@@ -1,7 +1,7 @@
 """Tests for molecular standardization and 3D ligand generation.
 
-Mirrors the upgrade of ``others/Docking/ligand generation/nigga.py``
-and ``nigga2.py``: tautomer canonicalization (keto/enol collapse),
+Mirrors the upgrade of ``others/Docking/ligand generation/ligprep.py``
+and ``ligprep2.py``: tautomer canonicalization (keto/enol collapse),
 unsupported-metal screening, ETKDG multi-conformer embedding with MMFF
 (UFF fallback) optimisation, lowest-energy conformer selection and PDB
 export with CONECT connectivity records and the AutoDock B-factor

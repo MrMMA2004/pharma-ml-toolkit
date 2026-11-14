@@ -159,3 +159,21 @@ def test_tokens_unknown_theme_falls_back_to_light() -> None:
     assert tokens("neon").name == "light"
     assert tokens("dark").name == "dark"
     assert set(THEMES) == {"light", "dark"}
+
+
+def test_card_title_contrast_both_themes() -> None:
+    """Review 4.1 regression pin: QLabel#studioCardTitle reads t.text in
+    dark and t.primary in light (studio_theme.py routes it), on t.surface.
+    The dark pair regressed to t.primary — a fill token — at 1.11:1 and
+    every nine-card heading went invisible. Large-text floor is 3:1; the
+    title is 15pt semi-bold, but it holds 4.5 comfortably in both themes.
+    """
+    # the colors the QSS actually paints (mirror of studio_theme.py:68-76)
+    from ui.studio_theme import studio_qss
+
+    for theme, fg in (("light", LIGHT.primary), ("dark", DARK.text)):
+        assert f"QLabel#studioCardTitle" in studio_qss(theme)
+        assert contrast_ratio(fg, tokens(theme).surface) >= 4.5, (
+            f"{theme} card-title color {fg} vs surface "
+            f"{tokens(theme).surface} fell under WCAG AA"
+        )

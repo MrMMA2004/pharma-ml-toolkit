@@ -41,12 +41,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from PySide6.QtCore import QEvent, QObject, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -57,6 +58,77 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from PySide6.QtGui import QPixmap, QResizeEvent
+
+
+class FlowLayout(QLayout):
+    """A left-to-right, top-to-bottom flow (review 4.2).
+
+    Wraps whole child widgets to the next row instead of demanding the sum
+    of their widths — the nine-card entry buttons keep full labels at every
+    card width. The classic Qt flow-layout pattern, sized from the
+    children's sizeHints.
+    """
+
+    def __init__(self, parent: QWidget | None = None, margin: int = 0, spacing: int = 6) -> None:
+        super().__init__(parent)
+        self.setContentsMargins(margin, margin, margin, margin)
+        self._spacing = spacing
+        self._items: list[Any] = []
+
+    def addItem(self, item: Any) -> None:
+        self._items.append(item)
+
+    def count(self) -> int:
+        return len(self._items)
+
+    def itemAt(self, index: int) -> Any:
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def takeAt(self, index: int) -> Any:
+        return self._items.pop(index) if 0 <= index < len(self._items) else None
+
+    def expandingDirections(self) -> Qt.Orientation:
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        return self._do_layout(QRect(0, 0, width, 0), test_only=True)
+
+    def setGeometry(self, rect: QRect) -> None:
+        super().setGeometry(rect)
+        self._do_layout(rect, test_only=False)
+
+    def sizeHint(self) -> QSize:
+        return self.minimumSize()
+
+    def minimumSize(self) -> QSize:
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        margins = self.contentsMargins()
+        size += QSize(margins.left() + margins.right(), margins.top() + margins.bottom())
+        return size
+
+    def _do_layout(self, rect: QRect, test_only: bool) -> int:
+        margins = self.contentsMargins()
+        effective = rect.adjusted(margins.left(), margins.top(), -margins.right(), -margins.bottom())
+        x, y = effective.x(), effective.y()
+        line_height = 0
+        for item in self._items:
+            hint = item.sizeHint()
+            next_x = x + hint.width() + self._spacing
+            if next_x - self._spacing > effective.right() + 1 and line_height > 0:
+                x = effective.x()
+                y = y + line_height + self._spacing
+                next_x = x + hint.width() + self._spacing
+                line_height = 0
+            if not test_only:
+                item.setGeometry(QRect(QPoint(x, y), hint))
+            x = next_x
+            line_height = max(line_height, hint.height())
+        return y + line_height - rect.y() + margins.bottom()
 
 
 @dataclass(frozen=True)
@@ -588,23 +660,32 @@ def _build_card(card: NineCard, context: Mapping[str, Any] | None = None) -> QFr
     # review C-6 fix: the row of entry buttons used to force the card's
     # minimum width to the sum of the labels' natural widths (the ML card's
     # five buttons alone demanded 671 px, so the 3x3 grid could never
-    # re-flow below ~1617 px). Buttons now shrink below their text width:
-    # the label elides, and the full name stays in the tooltip.
+    # re-flow below ~1617 px).
+    # review 4.2: eliding per-label still left five mid-word fragments on
+    # the ML card ("…del Anal…", "Workben…"). A flowing container wraps
+    # whole buttons to the next line instead — no label is ever clipped,
+    # and the minimum width contract stays satisfied because the flow
+    # wraps rather than demands width.
+    flow = QWidget()
+    flow.setObjectName("nineCardButtonFlow")
+    flow_layout = FlowLayout(flow, margin=0, spacing=6)
     for entry in card.entries:
-        btn = QPushButton(_elide_entry_label(entry.label))
+        btn = QPushButton(entry.label)
         btn.setObjectName(f"nineCardEntry-{entry.section}")
         btn.setToolTip(f"{entry.label} — navigate to the {entry.section} page")
-        # Ignored horizontal policy: the button's text no longer sets the
-        # card's minimum width (with stretch=1 it still gets its fair share
-        # of whatever width the card has)
+        # Minimum-Expanding horizontal policy: the flow wraps whatever
+        # does not fit, so full labels never set the card's minimum width
+        # (the C-6 contract) — but the button keeps its natural sizeHint
+        # inside the flow (Ignored collapsed them to blank strips in the
+        # offscreen grab: sizeHint -> zero width under a flow layout).
         btn.setSizePolicy(
-            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+            QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed
         )
         btn.clicked.connect(
             lambda _checked=False, section=entry.section, source=btn: _go(section, source)
         )
-        buttons.addWidget(btn, stretch=1)
-    lay.addLayout(buttons)
+        flow_layout.addWidget(btn)
+    lay.addWidget(flow)
     return frame
 
 

@@ -48,7 +48,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -272,6 +272,10 @@ class AnalysisOutcome:
 
 
 class ModelAnalysisPage(QWidget):
+
+    # review m-19: downstream pages (ML Workbench's statistics picker)
+    # re-list their columns when the training table changes.
+    frameLoaded = Signal(object)
     """Train a registry model on a real dataset and inspect the fit."""
 
     def __init__(
@@ -289,7 +293,15 @@ class ModelAnalysisPage(QWidget):
         self._external_path: Path | None = None
         self._last_outcome: AnalysisOutcome | None = None
 
-        lay = QVBoxLayout(self)
+        # review 4.6: this page is a single ~250-line vertical column —
+        # on the 860x560 minimum window the leaderboard, diagnostics and
+        # export rows sat below the fold with no scroll. The §23.2 scroll
+        # policy (the one every ML Workbench tab rides) makes the whole
+        # form reachable without changing the fitted look while it fits.
+        from ..widgets.responsive import wrap_in_scroll
+
+        body = QWidget()
+        lay = QVBoxLayout(body)
         lay.setContentsMargins(8, 8, 8, 8)
 
         form = QFormLayout()
@@ -540,6 +552,12 @@ class ModelAnalysisPage(QWidget):
         self._load_dataset(self._dataset_combo.currentText())
         self._rebuild_param_rows(self._model_combo.currentText())
 
+        # review 4.6: the scroll wrapper takes the built body (added at
+        # __init__ start); everything above keeps working unchanged.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(wrap_in_scroll(body))
+
     # -- data ---------------------------------------------------------------
     def _show_calibration(self) -> None:
         from .calibration_dialog import CalibrationDialog
@@ -641,6 +659,10 @@ class ModelAnalysisPage(QWidget):
             self._target_combo.addItem(str(col))
         if default and default in [str(c) for c in self._frame.columns]:
             self._target_combo.setCurrentText(default)
+
+        # review m-19: tell the downstream pages the training table changed
+        if self._frame is not None:
+            self.frameLoaded.emit(self._frame)
 
     # -- training ------------------------------------------------------------
     def _on_started(self, name: str) -> None:
@@ -1431,6 +1453,9 @@ class ModelAnalysisPage(QWidget):
     def apply_palette(self, palette: ChartPalette) -> None:
         for plot in (self._pred_plot, self._resid_plot, self._importance_plot):
             plot.apply_palette(palette)
+        diag = getattr(self, "_diag_plot", None)
+        if diag is not None:
+            diag.apply_palette(palette)
 
 
 class CVReportDialog(QDialog):

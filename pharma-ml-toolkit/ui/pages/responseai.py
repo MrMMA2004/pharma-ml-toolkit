@@ -84,7 +84,7 @@ from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView, PandasTableModel
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
-from ..widgets.responsive import configure_splitter
+from ..widgets.responsive import configure_splitter, wrap_in_scroll
 from ..workers.job_worker import JobRunner
 
 
@@ -288,19 +288,29 @@ class ResponseAIWorkbenchPage(QWidget):
         self._theme = theme
         self._runner = runner or JobRunner(self)
         self._data_explorer = data_explorer
+        # review 4.9: _refresh_column_pickers existed but was NEVER called
+        # — the metrics/rank pickers offered only the synthetic pair and
+        # the docstring's "two columns of the Data Explorer's loaded
+        # table" was unreachable. The explorer's frameLoaded signal (also
+        # new, m-19) now drives it; the pickers refresh on every load.
+        if self._data_explorer is not None and hasattr(self._data_explorer, "frameLoaded"):
+            self._data_explorer.frameLoaded.connect(self._on_explorer_frame)
+            current = self._explorer_frame()
+            if current is not None:
+                self._on_explorer_frame(current)
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 8, 8, 8)
 
         self._tabs = QTabWidget()
-        self._tabs.addTab(self._build_hill_tab(), "Hill curve")
-        self._tabs.addTab(self._build_metrics_tab(), "Response metrics")
-        self._tabs.addTab(self._build_rank_tab(), "Rank correlations")
-        self._tabs.addTab(self._build_model_tab(), "Response model")
-        self._tabs.addTab(self._build_cv_tab(), "Cross-validation")
-        self._tabs.addTab(self._build_info_tab(), "Informative regression")
-        self._tabs.addTab(self._build_vae_tab(), "Response VAE")
-        self._tabs.addTab(self._build_fusion_tab(), "Multi-omics fusion")
+        self._tabs.addTab(wrap_in_scroll(self._build_hill_tab()), "Hill curve")
+        self._tabs.addTab(wrap_in_scroll(self._build_metrics_tab()), "Response metrics")
+        self._tabs.addTab(wrap_in_scroll(self._build_rank_tab()), "Rank correlations")
+        self._tabs.addTab(wrap_in_scroll(self._build_model_tab()), "Response model")
+        self._tabs.addTab(wrap_in_scroll(self._build_cv_tab()), "Cross-validation")
+        self._tabs.addTab(wrap_in_scroll(self._build_info_tab()), "Informative regression")
+        self._tabs.addTab(wrap_in_scroll(self._build_vae_tab()), "Response VAE")
+        self._tabs.addTab(wrap_in_scroll(self._build_fusion_tab()), "Multi-omics fusion")
         lay.addWidget(self._tabs)
 
         self._progress = ProgressPanel()
@@ -546,6 +556,19 @@ class ResponseAIWorkbenchPage(QWidget):
             if frame is not None and not frame.empty:
                 return frame
         return None
+
+    def _on_explorer_frame(self, frame: object) -> None:
+        """frameLoaded slot (review 4.9): re-fill pickers on every load."""
+        import pandas as pd
+
+        if not isinstance(frame, pd.DataFrame) or frame.empty:
+            return
+        numeric = [
+            str(c)
+            for c in frame.columns
+            if pd.api.types.is_numeric_dtype(frame[c])
+        ]
+        self._refresh_column_pickers(numeric)
 
     def _refresh_column_pickers(self, numeric: list[str]) -> None:
         """(Re)fill the metrics / rank pickers with the explorer's numeric columns."""

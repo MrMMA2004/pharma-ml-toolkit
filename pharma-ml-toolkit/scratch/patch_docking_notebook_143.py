@@ -5,7 +5,7 @@ worklog candidate asked for ("the notebook's §12 could tour the census +
 the workers>1 pool explicitly"):
 
 * ``vina_batch_progress`` — the pre-flight resume census (round 27's
-  ``niggavina.py`` resume rule, library edition): a ligand whose
+  ``batch_vina.py`` resume rule, library edition): a ligand whose
   ``<stem>_out.pdbqt`` AND non-empty ``<stem>.log`` exist is "already
   docked"; the census counts what a resume WOULD skip, with the SAME
   skip rule and the SAME collision-disambiguated naming the run itself
@@ -64,7 +64,7 @@ def tail_cells() -> list:
 from pharmaml.docking import run_vina_batch, vina_batch_progress
 from pharmaml.exceptions import DockingError
 
-# The pre-flight census (niggavina.py's resume rule, library edition):
+# The pre-flight census (batch_vina.py's resume rule, library edition):
 # a ligand whose <stem>_out.pdbqt AND non-empty <stem>.log exist is
 # "already docked" -- the SAME skip rule and the SAME collision-
 # disambiguated naming the run itself uses, so the count is a promise

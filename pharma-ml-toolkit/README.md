@@ -1,12 +1,12 @@
 # PharmaML Toolkit
 
-A **production-ready, typed, tested** Python toolkit for computational pharmacy, consolidating three
-domains into one coherent package:
+A **production-ready, typed, tested** Python toolkit for computational pharmacy, consolidating
+data, ML, biology, pharma, docking, PK/PD and cheminformatics into one coherent package:
 
 | Domain | What it does |
 |---|---|
 | **`pharmaml.data`** | **Bring your own data** — load user CSV/TSV/Excel files, auto-detect the target column, infer classification (2+ classes) vs regression, audit data quality |
-| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (18 classical + **2 deep-learning families** + **hierarchical SVR**), cross-validated training (binary **and multiclass**), evaluation, persistence, hyperparameter search (`RandomSearch` / **`TPESearch`** (Optuna's Parzen sampler) / `Hyperband` over `HyperParameters` spaces — with **`PercentilePruner`/`MedianPruner` fold-loop pruning**, Optuna-style trial states + durations + intermediates, **`param_importances`** (the MDI forest) — plus the tuners' own fold protocol `make_cv_splitter` public for apples-to-apples baselines and `resource_bounds` sizing Hyperband ladders from the family's own declared grid) — plus **the offline attribution engine (`ml.xai`: `input_x_gradient` / `integrated_gradients` with the convergence Δ / `smoothgrad` / `occlusion`, layer-activation traces, the bertviz-style attention grid — captum · tf-keras-vis · PAIR-code/saliency · bertviz absorbed with zero engine dependencies)**, **the run-trace board (`ml.runboard`: scalar/histogram/hparams/embedding event records over Vitter reservoirs with `always_keep_last`, the bias-corrected EMA smoothing, the projector's cosine nearest-neighbours — tensorflow/tensorboard absorbed), `ml.umap` (the fuzzy-simplicial-set pipeline: `smooth_knn_dist`'s binary search, the union symmetrisation, `find_ab_params`' curve fit, the negative-sampling SGD layout with gradient-for-gradient ports, `transform`, sklearn-pinned trustworthiness — lmcinnes/umap absorbed) and `ml.curation` (fiftyone's immutable view-stage algebra over any CSV — filter/match/sort/limit/skip/shuffle/take/select/exists/tags, plus the brain audits: duplicates, z-score/IQR outliers, uniqueness, similarity, evaluation — voxel51/fiftyone absorbed) — and, since 1.2.110, the reunited fork families: `ml.explainers`/`ml.ebm`/`ml.lime`/`ml.daley`/`ml.benchmark` (the XAI suite), `ml.mpnn`, `ml.admet`, `ml.pharmacogenomics`, the `pkpd` package (ODE/PBPK/population PK) and the `viz` palette/scale system**, plus **`ml.dta` paired drug–target encodings/features and DeepDTA rm2** |
+| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (**33 families**: 24 classical + 3 boosting + **3 deep-learning families** + **hierarchical SVR** + voting/stackging), cross-validated training (binary **and multiclass**), evaluation, persistence, hyperparameter search (`RandomSearch` / **`TPESearch`** (Optuna's Parzen sampler) / `Hyperband` over `HyperParameters` spaces — with **`PercentilePruner`/`MedianPruner` fold-loop pruning**, Optuna-style trial states + durations + intermediates, **`param_importances`** (the MDI forest) — plus the tuners' own fold protocol `make_cv_splitter` public for apples-to-apples baselines and `resource_bounds` sizing Hyperband ladders from the family's own declared grid) — plus **the offline attribution engine (`ml.xai`: `input_x_gradient` / `integrated_gradients` with the convergence Δ / `smoothgrad` / `occlusion`, layer-activation traces, the bertviz-style attention grid — captum · tf-keras-vis · PAIR-code/saliency · bertviz absorbed with zero engine dependencies)**, **the run-trace board (`ml.runboard`: scalar/histogram/hparams/embedding event records over Vitter reservoirs with `always_keep_last`, the bias-corrected EMA smoothing, the projector's cosine nearest-neighbours — tensorflow/tensorboard absorbed), `ml.umap` (the fuzzy-simplicial-set pipeline: `smooth_knn_dist`'s binary search, the union symmetrisation, `find_ab_params`' curve fit, the negative-sampling SGD layout with gradient-for-gradient ports, `transform`, sklearn-pinned trustworthiness — lmcinnes/umap absorbed) and `ml.curation` (fiftyone's immutable view-stage algebra over any CSV — filter/match/sort/limit/skip/shuffle/take/select/exists/tags, plus the brain audits: duplicates, z-score/IQR outliers, uniqueness, similarity, evaluation — voxel51/fiftyone absorbed) — and, since 1.2.110, the reunited fork families: `ml.explainers`/`ml.ebm`/`ml.lime`/`ml.daley`/`ml.benchmark` (the XAI suite), `ml.mpnn`, `ml.admet`, `ml.pharmacogenomics`, the `pkpd` package (ODE/PBPK/population PK) and the `viz` palette/scale system**, plus **`ml.dta` paired drug–target encodings/features and DeepDTA rm2** |
 | **`pharmaml.biology`** | **Cell line data analysis** — GDSC/CCLE-style drug-response screens (load, audit, replicate collapse, LN_IC50↔pIC50), response matrices, sensitive/resistant calling, expression normalization, **biomarker discovery with BH-FDR** |
 | **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design, regulatory-approval filtering (DGIdb TSV) |
 | **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids **and DPF generation**, AutoDock4 & Vina batch workflows (incl. config-driven batches), result parsing, scoring, torsion QA, campaign file management, plus the **58-target DOCKSTRING box registry and original F2/promiscuous-PPAR/selective-JAK2 objectives**, and **pose-level contact geometry + PLIF interaction fingerprints** (`compute_contacts`, `contact_matrix`, `plif_matrix`/`plif_bits`) |
@@ -89,6 +89,9 @@ pip install -e ".[docking]"
 # with gradient-boosting model families
 pip install -e ".[boosting]"
 
+# with the desktop Studio GUI (PySide6 + pyqtgraph + theme providers)
+pip install -e ".[studio]"
+
 # development (pytest, mypy, ruff)
 pip install -e ".[dev]"
 ```
@@ -108,9 +111,12 @@ python -m pytest
 ## Graphical interface — PharmaML Studio
 
 The toolkit ships a graphical front end — open it instead of a terminal
-whenever you prefer pointing and clicking:
+whenever you prefer pointing and clicking. The GUI runs on the Qt stack,
+which the core install does not include, so install the `studio` extra
+first (or `pip install PySide6 pyqtgraph qt-material qdarkstyle`):
 
 ```bash
+pip install -e ".[studio]"
 python studio.py
 ```
 
@@ -288,7 +294,7 @@ capabilities live on through the Studio pages above and the CLI.)*
 ## Versioned downloads & updating
 
 The downloadable archive is version-stamped: it downloads as
-`pharma-ml-toolkit-v1.2.0.zip`, carries its version in the `VERSION` file
+`pharma-ml-toolkit-v<version>.zip`, carries its version in the `VERSION` file
 (and in `pyproject.toml` → `[project] version`), and the web explorer's
 Download tab shows the live version next to the size. `CHANGELOG.md` at the
 archive root documents every release; versions follow semver — minor bumps
@@ -298,7 +304,7 @@ add features, patch bumps ship fixes.
 your current folder — `-o` overwrites without prompting:
 
 ```bash
-unzip -o pharma-ml-toolkit-v1.2.0.zip -d pharmaml   # your existing folder
+unzip -o pharma-ml-toolkit-v1.2.201.zip -d pharmaml   # your existing folder
 cat VERSION                                         # what you have now
 ```
 
@@ -2304,7 +2310,7 @@ log = get_logger("my-analysis", level="INFO")   # console; add log_file="run.log
 ## Testing
 
 ```bash
-python -m pytest                 # full suite (6,900+ tests with the pinned stack incl.
+python -m pytest                 # full suite (~6,960 tests at 1.2.201 with the pinned stack incl.
                                  # doctests; skips RDKit/torch-only tests when those extras
                                  # are absent — run `pytest --co -q` for the exact count)
 python -m pytest tests/test_pk.py -v

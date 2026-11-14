@@ -165,6 +165,11 @@ class PlotPanel(QWidget):
         self._empty_hint: str = ""
         self._hint_item: pg.TextItem | None = None
         self.apply_palette(self._palette)
+        # review 4.4: the hint used a fixed #64748B — light-theme grey —
+        # which sank below comfortable contrast on dark plot backgrounds.
+        # apply_palette() now re-themes the hint text alongside the axes.
+        if self._hint_item is not None and self._empty_hint:
+            self._hint_item.setColor(self._palette.foreground)
 
     # -- (C-1) the empty-plot hint ------------------------------------------------
     def set_empty_hint(self, text: str) -> None:
@@ -180,7 +185,11 @@ class PlotPanel(QWidget):
             self._hide_hint()
             return
         if self._hint_item is None:
-            self._hint_item = pg.TextItem(text, color="#64748B", anchor=(0.5, 0.5))
+            # review 4.4: themed, not fixed grey — dark backgrounds get
+            # the palette's foreground (the axes' own color)
+            self._hint_item = pg.TextItem(
+                text, color=self._palette.foreground, anchor=(0.5, 0.5)
+            )
             self._plot.addItem(self._hint_item, ignoreBounds=True)
         else:
             self._hint_item.setText(text)
@@ -430,6 +439,10 @@ class PlotPanel(QWidget):
             f"color: {palette.foreground}; background: transparent;"
             " font-size: 11px; padding: 1px 2px;"
         )
+        # review 4.4: keep the empty-state hint readable after theme
+        # switches (same color the axes use on this palette)
+        if self._hint_item is not None:
+            self._hint_item.setColor(palette.foreground)
 
     # -- plotting (real data only) ------------------------------------------
     def scatter(self, x: np.ndarray, y: np.ndarray, *, label: str = "", symbol: str = "o", size: int = 6, index: int = 0, meta: Callable[[int], dict[str, Any]] | None = None) -> None:

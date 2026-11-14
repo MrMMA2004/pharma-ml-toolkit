@@ -25,11 +25,11 @@ tqdm==4.67.1
 # ---- Optional feature sets (uncomment what you need) -----------------
 
 # Cheminformatics (descriptors, fingerprints, Tanimoto scan):
-# rdkit==2026.9.1
+# rdkit==2026.09.1
 # mordred==1.2.0
 
 # Docking preparation (SMILES -> PDBQT, receptor grids):
-# rdkit==2026.9.1
+# rdkit==2026.09.1
 # meeko==0.8.0
 # gemmi==0.7.5
 

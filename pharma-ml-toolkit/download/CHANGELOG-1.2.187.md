@@ -5755,12 +5755,12 @@ The instruction this round: *"Check the contents of this file one by
 one and update the playground.py file"* over the freshly uploaded
 `کد علی.zip` (8 files). The one-by-one verdict: the docking quartet
 was already covered — `pdbqtgeneration.py` is byte-identical to the
-audited `niggaqt.py` (the MGLTools PDB → PDBQT batch card),
-`pdbfromsmile.py` is the stricter older twin of `nigga.py` (the
+audited `ligprep_qt.py` (the MGLTools PDB → PDBQT batch card),
+`pdbfromsmile.py` is the stricter older twin of `ligprep.py` (the
 LIGAND STRUCTURES card implements the more tolerant column handling),
 `mismatchcheck.py` rides the grid/torsion/completion audit card (its
 `check_torsion_consistency` even auto-detects the MGLTools-vs-Meeko
-convention), and `niggavinamulti.py` is the thread-pool Vina batch
+convention), and `batch_vina_multi.py` is the thread-pool Vina batch
 with resume the config-batch card already runs — leaving the `Ml/`
 pair as the round's genuine work.
 
@@ -6098,7 +6098,7 @@ three features shipped.
   the converter card as its PDB source, pre-fills the PDBQT output
   folder BESIDE it (never inside it, never over a live pick),
   refreshes the card's info label, and jumps there with the finder's
-  own flash — the nigga.py → niggaqt.py relay without one re-pick.
+  own flash — the ligprep.py → ligprep_qt.py relay without one re-pick.
 * **The pre-flight resume census.** `vina_batch_progress(ligands_dir,
   out_dir) -> VinaBatchProgress(total, docked, remaining, collisions)`
   counts what a resumed Vina batch would skip, with the SAME skip
@@ -6135,24 +6135,24 @@ three features shipped.
 
 ## [1.2.80] — 2026-10-26
 
-### Added — the round-26 review (100x-141): the "new folder.zip" upload audited file by file — the nigga.py ligand-structure pipeline + the niggaqt.py MGLTools batch converter + the Vina batch's RESUME
+### Added — the round-26 review (100x-141): the "new folder.zip" upload audited file by file — the ligprep.py ligand-structure pipeline + the ligprep_qt.py MGLTools batch converter + the Vina batch's RESUME
 
 The user delivered a new upload — `new folder.zip` (1.0 MB, 22
 entries) — with the instruction *"Check the contents of this file one
 by one and update the playground.py file."* Every file was checked
 one by one against the toolkit's surfaces:
 
-* **ligand generation/** — `nigga.py` (the CSV → canonical tautomer →
+* **ligand generation/** — `ligprep.py` (the CSV → canonical tautomer →
   50 ETKDG conformers → MMFF-with-UFF-fallback → lowest-energy
   conformer as PDB + OpenBabel/Gasteiger MOL2 pipeline, parallel
   worker pool, unsupported-atom skip list) had **no dedicated
   surface**: `prepare_ligand_library` covers the CSV → PDBQT campaign
   twin, but the PDB/MOL2 structure pipeline itself did not exist.
-  `niggaqt.py` (the MGLTools `prepare_ligand4.py` batch converter
+  `ligprep_qt.py` (the MGLTools `prepare_ligand4.py` batch converter
   with its 30-second timeout, numbered sub-folders and conversion
   log) had been *absorbed* as "MGLTools deprecated → Meeko path" —
   the re-delivery says the user wants it. `mismatch2.py` /
-  `niggamatch.py` were already covered (`check_torsion_consistency` /
+  `ligprep_match.py` were already covered (`check_torsion_consistency` /
   `scan_torsion_consistency`, the audit card's torsion mode).
 * **Vina/** — `vina.conf` + `log.txt` were already covered
   (`parse_vina_config`, the grid box / config batch cards,
@@ -6161,11 +6161,11 @@ one by one against the toolkit's surfaces:
   `vinar.py`, `vinar_multiple.py`, `vina_reader.py`, `conf.txt` were
   already covered (`distribute_files` / `_dock_distribute_receptor`,
   `run_vina` / `run_vina_batch` / `scan_vina_directory`); `batch.py`
-  and `niggavina.py` contributed one genuinely missing behaviour —
+  and `batch_vina.py` contributed one genuinely missing behaviour —
   the **resume** (skip already-docked ligands; a zero-byte log marks
   a crashed job).
 
-**The ligand structures card (nigga.py, whole).**
+**The ligand structures card (ligprep.py, whole).**
 `pharmaml.docking.generate_ligand_structures(library, output_root,
 *, num_confs=50, default_b_factor=20.0, write_mol2=True, workers=1)`
 runs the original pipeline per library row: RDKit tautomer
@@ -6192,7 +6192,7 @@ structures (CSV → PDB + MOL2)** card drives it over the already-loaded
 library with conformers / workers / MOL2 knobs, a live report tree and
 the report CSV export.
 
-**The MGLTools PDB → PDBQT batch card (niggaqt.py, whole).**
+**The MGLTools PDB → PDBQT batch card (ligprep_qt.py, whole).**
 `pharmaml.docking.convert_pdb_folder_to_pdbqt(source_dir, output_dir,
 mgl_python, adt_script, *, timeout_s=30.0, add_hydrogens=True)`
 drives `prepare_ligand4.py -l <pdb> -o <pdbqt> -A hydrogens` over
@@ -6212,12 +6212,12 @@ output pickers, the two MGLTools paths pre-filled with the original's
 Windows defaults, the timeout knob, the live report tree and the
 report CSV export.
 
-**The Vina batch's RESUME (batch.py + niggavina.py).**
+**The Vina batch's RESUME (batch.py + batch_vina.py).**
 `run_vina_batch(..., skip_existing=False)` gained the upload
 controllers' resume behaviour: when ticked, a ligand whose
 `<stem>_out.pdbqt` **and** non-empty `<stem>.log` already exist is
 not started again (the zero-byte log marks a crashed job —
-`niggavina.py`'s empty-log cleanup rule — and is re-docked). Skipped
+`batch_vina.py`'s empty-log cleanup rule — and is re-docked). Skipped
 ligands return `DockingRunResult(skipped=True, ok=True, seconds=0.0)`
 so an interrupted campaign re-runs in seconds, docking only the
 remainder; the results table's status column shows `skip` and the
@@ -8274,7 +8274,7 @@ matrix so future rounds keep the guarantee:
 - **Docking tab**:
   - *Grid, torsion & completion audit* — `read_gpf` (typed
     parameters of one GPF), `scan_gpf_ligand_types`
-    (`gpfreader.py`), `scan_torsion_consistency` (`niggamatch.py` /
+    (`gpfreader.py`), `scan_torsion_consistency` (`ligprep_match.py` /
     `mismatch2.py`: TORSDOF vs active REMARKs vs BRANCH counts) and
     `check_docking_completion` (`checker.py`: OK / INCOMPLETE /
     MISSING_LOG per folder).

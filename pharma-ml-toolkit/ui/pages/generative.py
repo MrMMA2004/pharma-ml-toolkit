@@ -48,7 +48,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
+from PySide6.QtWidgets import (  # noqa: F401
+    QApplication,
     QCheckBox,
     QComboBox,
     QFormLayout,
@@ -710,7 +711,9 @@ class GenerativeWorkbenchPage(QWidget):
                 title=f"{outcome.method_label} · the run's progress",
             )
         frame = result.to_dataframe()
-        self._table.bind_frame(frame.head(20))
+        shown = frame.head(20)
+        self._table.bind_frame(shown)
+        QApplication.clipboard().setText(frame.to_csv(index=False))
         elapsed = result.metadata.get("elapsed_s")
         timing = f" · {elapsed:.1f} s" if isinstance(elapsed, (int, float)) else ""
         self._report.setText(

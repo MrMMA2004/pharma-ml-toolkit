@@ -1009,9 +1009,9 @@ class TestCoordinateTokenFallback:
 
 
 class TestLigandStructureGeneration:
-    """generate_ligand_structures: the nigga.py pipeline, library edition.
+    """generate_ligand_structures: the ligprep.py pipeline, library edition.
 
-    The 2026-10 "new folder" upload's ligand generation/nigga.py: tautomer
+    The 2026-10 "new folder" upload's ligand generation/ligprep.py: tautomer
     canonicalisation, multi-conformer ETKDG, MMFF-with-UFF-fallback, the
     lowest-energy conformer written as a PDB with CONECT records, the
     metal-centre skip list, and per-row error accounting.
@@ -1129,9 +1129,9 @@ class TestLigandStructureGeneration:
 
 
 class TestMglToolsConversion:
-    """convert_pdb_folder_to_pdbqt: the niggaqt.py batch converter.
+    """convert_pdb_folder_to_pdbqt: the ligprep_qt.py batch converter.
 
-    The 2026-10 "new folder" upload's ligand generation/niggaqt.py:
+    The 2026-10 "new folder" upload's ligand generation/ligprep_qt.py:
     prepare_ligand4.py over a folder of PDBs into numbered sub-folders,
     per-ligand timeout, and the conversion log beside the tree.
     """

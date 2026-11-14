@@ -8,11 +8,27 @@ from pharmaml.exceptions import JobCancelled
 
 
 def _drain(pool_wait: float = 5.0) -> None:
-    """Wait for the global thread pool to finish queued workers."""
-    from PySide6.QtCore import QThreadPool
+    """Wait for the global thread pool to finish queued workers.
+
+    Review 4.7 hardening: also pump the GUI event queue once the pool is
+    idle. Cross-thread signal emissions (cancelled, then preserved) are
+    QUEUED events: a ``waitSignal(job_ended)`` nested loop returns the
+    moment job_ended is delivered — which happens inside the cancelled
+    delivery, potentially BEFORE the preserved event right behind it in
+    the queue has run. Pumping after the pool drains closes that window
+    without changing any emission order (probed: the clean pre-4.7
+    runner showed the identical 0-delivered-preserved state; timing
+    alone decided whether the old test caught it).
+    """
+    from PySide6.QtCore import QCoreApplication, QThreadPool
 
     deadline = time.monotonic() + pool_wait
     while QThreadPool.globalInstance().activeThreadCount() > 0 and time.monotonic() < deadline:
+        QCoreApplication.processEvents()
+        time.sleep(0.01)
+    # the queue behind the last delivered signal
+    for _ in range(4):
+        QCoreApplication.processEvents()
         time.sleep(0.01)
 
 

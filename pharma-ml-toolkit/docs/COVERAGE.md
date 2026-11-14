@@ -109,9 +109,9 @@ folder) is the point of the upgrade: one registry, one pipeline.
 | `smilestopdbqt.py` / `smiqt.py` | `docking.smiles_to_pdbqt` (Meeko, AD4 atom types) | ✅ |
 | `ligand_preparation_autodock4.py` / `others/ligand_preparation_autodock4.py` | `docking.prepare_ligand_library` (CSV → campaign folders → PDBQT with torsion reports) | ✅ |
 | `ligand_pdbqt_extracter.py` | `collect_files` (numbered .pdbqt collection with unique-name resolution) | ✅ |
-| `ligand generation/niggaqt.py` | `prepare_ligand_library` (the modern Meeko path replaces the MGLTools pythonsh subprocess; PDB → PDBQT) | ⚠ MGLTools itself is deprecated tooling — Meeko is the supported path |
-| `ligand generation/nigga.py` / `nigga2.py` | `prepare_ligand_library` + `chem.table_to_sdf` (multi-conformer 3D: ETKDG embeds + UFF, unsupported-metal filtering via validation notes) | ⚠ mol2 output not produced (PDBQT/SDF are the docking formats) |
-| `ligand generation/niggamatch.py` / `mismatch2.py` | `docking.check_torsion_consistency` + `scan_torsion_consistency` (TORSDOF vs active REMARKs vs BRANCHes) | ✅ |
+| `ligand generation/ligprep_qt.py` | `prepare_ligand_library` (the modern Meeko path replaces the MGLTools pythonsh subprocess; PDB → PDBQT) | ⚠ MGLTools itself is deprecated tooling — Meeko is the supported path |
+| `ligand generation/ligprep.py` / `ligprep2.py` | `prepare_ligand_library` + `chem.table_to_sdf` (multi-conformer 3D: ETKDG embeds + UFF, unsupported-metal filtering via validation notes) | ⚠ mol2 output not produced (PDBQT/SDF are the docking formats) |
+| `ligand generation/ligprep_match.py` / `mismatch2.py` | `docking.check_torsion_consistency` + `scan_torsion_consistency` (TORSDOF vs active REMARKs vs BRANCHes) | ✅ |
 
 ## Vina (`others/Vina/`)
 
@@ -249,7 +249,7 @@ gains or moves a card.
 | `checker.py` | Docking → *Grid, torsion & completion audit* → `folder: completion check` |
 | `gpfer.py` / `gpferreceptorni.py` / `dpfer.py` (×4) | Docking → *Grid box & docking configs* (`write_gpf` + `write_dpf`) |
 | `gpfreader.py` | *Grid, torsion & completion audit* → `GPF file → parameters` **and** `folder: ligand_types per sub-dir` |
-| `niggamatch.py` / `mismatch2.py` | same card → `folder: torsion consistency` |
+| `ligprep_match.py` / `mismatch2.py` | same card → `folder: torsion consistency` |
 | `smilestopdbqt.py` / `smiqt.py` | Docking → *SMILES → PDBQT (single ligand)*; the array card + *Ligand library* cover the batch paths |
 | `ligand_preparation_autodock4.py` (×2) | Docking → *Ligand library → PDBQT* (`prepare_ligand_library`) |
 | `smiles array docking` (the 100x-108 request) | Docking → *SMILES array docking* (`dock_smiles_array`, both engines, simultaneous) |
@@ -259,7 +259,7 @@ gains or moves a card.
 | `others/Readme.txt` | `README.md` + the home tab's *What lives where* guide |
 | `New Text Document.txt` (×2) | empty placeholders — nothing to cover |
 | `tuned_random_forest_bbb_prediction_model.pkl` | ⚠ dataset-specific weights are not shipped (the *save bundle* card writes fresh ones) |
-| `ligand generation/nigga*.py` MGLTools/`.mol2` paths | ⚠ deprecated tooling absorbed by the Meeko paths (see rows above) |
+| `ligand generation/ligprep*.py` MGLTools/`.mol2` paths | ⚠ deprecated tooling absorbed by the Meeko paths (see rows above) |
 
 Audit method: the rar re-extracted to a clean tree (118 files, `unrar
 x`), each file opened, its calls matched against
@@ -363,10 +363,10 @@ grep) whenever a card moves; a **ZERO-HIT** row is a regression.
 | `others/Docking/gpferreceptorni.py` | Docking → **receptor types field** + Batch GPF/DPF (1.2.51) | `write_gpf`×2 `write_config_batch`×2 `receptor_types`×10 |
 | `others/Docking/gpfreader.py` | Docking → Audit (GPF → parameters, ligand_types per folder) | `read_gpf`×2 `scan_gpf_ligand_types`×2 |
 | `others/Docking/ligand generation/mismatch2.py` | Docking → Audit (folder: torsion consistency) | `check_torsion_consistency`×0 `scan_torsion_consistency`×2 |
-| `others/Docking/ligand generation/nigga.py` | Docking → Ligand library + Chemistry → CSV→3D SDF (Meeko path; mol2 absorbed) | `prepare_ligand_library`×2 `table_to_sdf`×2 |
-| `others/Docking/ligand generation/nigga2.py` | Docking → Ligand library + Chemistry → CSV→3D SDF (Meeko path; mol2 absorbed) | `prepare_ligand_library`×2 `table_to_sdf`×2 |
-| `others/Docking/ligand generation/niggamatch.py` | Docking → Audit (folder: torsion consistency) | `check_torsion_consistency`×0 `scan_torsion_consistency`×2 |
-| `others/Docking/ligand generation/niggaqt.py` | Docking → Ligand library → PDBQT (MGLTools absorbed → Meeko) | `prepare_ligand_library`×2 |
+| `others/Docking/ligand generation/ligprep.py` | Docking → Ligand library + Chemistry → CSV→3D SDF (Meeko path; mol2 absorbed) | `prepare_ligand_library`×2 `table_to_sdf`×2 |
+| `others/Docking/ligand generation/ligprep2.py` | Docking → Ligand library + Chemistry → CSV→3D SDF (Meeko path; mol2 absorbed) | `prepare_ligand_library`×2 `table_to_sdf`×2 |
+| `others/Docking/ligand generation/ligprep_match.py` | Docking → Audit (folder: torsion consistency) | `check_torsion_consistency`×0 `scan_torsion_consistency`×2 |
+| `others/Docking/ligand generation/ligprep_qt.py` | Docking → Ligand library → PDBQT (MGLTools absorbed → Meeko) | `prepare_ligand_library`×2 |
 | `others/Docking/ligand_pdbqt_extracter.py` | Utilities → Campaign file tools (collect) | `collect_files`×2 |
 | `others/Docking/ligand_preparation_autodock4.py` | Docking → Ligand library → PDBQT | `prepare_ligand_library`×2 |
 | `others/Docking/main.py` | Docking → Campaign runner | `batch_run_directories`×2 |
@@ -541,16 +541,16 @@ engines, absorbed like the rar's own engine payloads):
 
 | Uploaded file | PharmaML surface | Status |
 | --- | --- | --- |
-| `ligand generation/nigga.py` | `docking.generate_ligand_structures` (the whole pipeline: tautomer → ETKDG conformers → MMFF/UFF → lowest-energy PDB with CONECT + OpenBabel MOL2, the Fe/Zn/Cu/Mn/Co/Ni/Mo/W skip list, the process-pool workers) + the playground **Ligand structures (CSV → PDB + MOL2)** card | ✚ 100x-141 |
-| `ligand generation/niggaqt.py` | `docking.convert_pdb_folder_to_pdbqt` (prepare_ligand4.py over a folder of PDBs into numbered sub-folders, per-ligand timeout, conversion_log.txt) + the playground **PDB → PDBQT batch (MGLTools)** card | ✚ 100x-141 |
+| `ligand generation/ligprep.py` | `docking.generate_ligand_structures` (the whole pipeline: tautomer → ETKDG conformers → MMFF/UFF → lowest-energy PDB with CONECT + OpenBabel MOL2, the Fe/Zn/Cu/Mn/Co/Ni/Mo/W skip list, the process-pool workers) + the playground **Ligand structures (CSV → PDB + MOL2)** card | ✚ 100x-141 |
+| `ligand generation/ligprep_qt.py` | `docking.convert_pdb_folder_to_pdbqt` (prepare_ligand4.py over a folder of PDBs into numbered sub-folders, per-ligand timeout, conversion_log.txt) + the playground **PDB → PDBQT batch (MGLTools)** card | ✚ 100x-141 |
 | `ligand generation/mismatch2.py` | `docking.check_torsion_consistency` + `scan_torsion_consistency` + the audit card's torsion mode | already covered |
-| `ligand generation/niggamatch.py` | same surface (the numeric-sort variant needed none of its own) | already covered |
+| `ligand generation/ligprep_match.py` | same surface (the numeric-sort variant needed none of its own) | already covered |
 | `Vina/vina.conf` | `docking.parse_vina_config` + the grid box / config batch cards | already covered |
 | `Vina/log.txt` | `docking.parse_vina_output` + `scan_vina_directory` + the results card | already covered |
 | `Vina_contol/adder.py` | `docking.distribute_files` + the receptor distribution card | already covered |
 | `Vina_contol/batch.py` | `docking.run_vina_batch(skip_existing=True)` — the resume | ✚ 100x-141 |
 | `Vina_contol/conf.txt` | `docking.parse_vina_config` | already covered |
-| `Vina_contol/niggavina.py` | `run_vina_batch` parallel + the skip-existing resume (the empty-log rule) | ✚ resume 100x-141 |
+| `Vina_contol/batch_vina.py` | `run_vina_batch` parallel + the skip-existing resume (the empty-log rule) | ✚ resume 100x-141 |
 | `Vina_contol/vinar.py` | `docking.run_vina` + the Vina config batch card | already covered |
 | `Vina_contol/vinar_multiple.py` | `docking.run_vina_batch(max_parallel=…)` | already covered |
 | `Vina_contol/vina_reader.py` | `docking.parse_vina_output` + `scan_vina_directory` + the Vina results card | already covered |
@@ -779,7 +779,7 @@ SOURCE this round: `check_torsion_consistency`/`TorsionCheck` are the
 single-file engine behind the ligand-audit card's
 `scan_torsion_consistency` folder walk (the audit's own per-file probe
 shows the pairing: `check_torsion_consistency:0
-scan_torsion_consistency:2` on niggamatch.py / mismatch2.py), and
+scan_torsion_consistency:2` on ligprep_match.py / mismatch2.py), and
 `PKSummary`/`aucm_trapezoid` are the return type + internal
 integrator behind the PK card's `summary.aucm` readouts
 (playground.py:6501/6568). The library axis holds; the round's
@@ -1188,14 +1188,14 @@ Standing pins updated where the markup evolved: the Contents-line
 form (now title-carrying) across test_viz (12), test_playground (7),
 smoke136/137/139, shoot137/138/139, and the report.py doctest.
 
-### Round 26 (100x-141) — the "new folder.zip" upload audited file by file: the nigga.py pipeline + the niggaqt.py converter + the Vina batch's resume
+### Round 26 (100x-141) — the "new folder.zip" upload audited file by file: the ligprep.py pipeline + the ligprep_qt.py converter + the Vina batch's resume
 
 | What shipped | The contract |
 | --- | --- |
-| The file-by-file audit | The user's new upload (22 entries; 13 script/config/log files + 6 engine binaries + folders) was checked one file at a time against the toolkit's surfaces: 9 of the 13 were already covered (the torsion pair, the Vina configs/logs, the receptor distribution, the Vina runners and reader — most of them rar twins the toolkit had already absorbed), and the audit isolated the three genuine gaps: nigga.py's structure pipeline, niggaqt.py's MGLTools converter (previously "absorbed: MGLTools deprecated" — the re-delivery says otherwise), and the batch.py/niggavina.py resume. The probe's uploads axis now maps all 13 files (14/14 with the AD upload); the engine binaries are absorbed like the rar's own payloads. |
-| `generate_ligand_structures` + the Ligand structures card | nigga.py whole: tautomer canonicalisation (best-effort, confessed per row), the Fe/Zn/Cu/Mn/Co/Ni/Mo/W skip list (`UNSUPPORTED_LIGAND_ATOMS`, per-row reason, never batch-fatal), ETKDG multi-conformer embedding, MMFF minimisation with the UFF fallback, the lowest-energy conformer kept, the one-model PDB written by the original's own writer (HEADER/COMPND/ATOM/CONECT/END — the connectivity prepare_ligand4.py reads), and the OpenBabel/Gasteiger MOL2 twin (graceful without OpenBabel — the PDB lands, the row confesses). The workers knob rides a spawn-context ProcessPoolExecutor (the GUI's worker thread makes fork the documented deadlock risk). The card: library picker reuse, conformers/workers/MOL2 knobs, report tree, CSV save. |
-| `convert_pdb_folder_to_pdbqt` + the MGLTools batch card | niggaqt.py whole: prepare_ligand4.py over every .pdb of a folder into the numbered-sub-folder tree (1/, 2/, 3/…), the 30-second per-ligand timeout (one subprocess.run(timeout=...) instead of the original's polling loop), the conversion_log.txt with its SUCCESSFUL/TIMED OUT/FAILED sections, and pre-flight path checks (a typo'd MGLTools path is a typed error before any subprocess fires). The card: source/output pickers, both MGLTools paths pre-filled with the original's Windows defaults, the timeout knob, report tree, CSV save. |
-| `run_vina_batch(skip_existing=True)` + the resume checkbox | batch.py's "already docked" skip and niggavina.py's empty-log rule, unified: a ligand is skipped only when its _out.pdbqt AND non-empty log both exist (the zero-byte log marks a crashed job and is re-docked); skipped rows return skipped=True/ok=True/seconds=0.0 and the vbatch card's table shows "skip" with the summary confessing the count. The checkbox rides the card next to the workers knob. |
+| The file-by-file audit | The user's new upload (22 entries; 13 script/config/log files + 6 engine binaries + folders) was checked one file at a time against the toolkit's surfaces: 9 of the 13 were already covered (the torsion pair, the Vina configs/logs, the receptor distribution, the Vina runners and reader — most of them rar twins the toolkit had already absorbed), and the audit isolated the three genuine gaps: ligprep.py's structure pipeline, ligprep_qt.py's MGLTools converter (previously "absorbed: MGLTools deprecated" — the re-delivery says otherwise), and the batch.py/batch_vina.py resume. The probe's uploads axis now maps all 13 files (14/14 with the AD upload); the engine binaries are absorbed like the rar's own payloads. |
+| `generate_ligand_structures` + the Ligand structures card | ligprep.py whole: tautomer canonicalisation (best-effort, confessed per row), the Fe/Zn/Cu/Mn/Co/Ni/Mo/W skip list (`UNSUPPORTED_LIGAND_ATOMS`, per-row reason, never batch-fatal), ETKDG multi-conformer embedding, MMFF minimisation with the UFF fallback, the lowest-energy conformer kept, the one-model PDB written by the original's own writer (HEADER/COMPND/ATOM/CONECT/END — the connectivity prepare_ligand4.py reads), and the OpenBabel/Gasteiger MOL2 twin (graceful without OpenBabel — the PDB lands, the row confesses). The workers knob rides a spawn-context ProcessPoolExecutor (the GUI's worker thread makes fork the documented deadlock risk). The card: library picker reuse, conformers/workers/MOL2 knobs, report tree, CSV save. |
+| `convert_pdb_folder_to_pdbqt` + the MGLTools batch card | ligprep_qt.py whole: prepare_ligand4.py over every .pdb of a folder into the numbered-sub-folder tree (1/, 2/, 3/…), the 30-second per-ligand timeout (one subprocess.run(timeout=...) instead of the original's polling loop), the conversion_log.txt with its SUCCESSFUL/TIMED OUT/FAILED sections, and pre-flight path checks (a typo'd MGLTools path is a typed error before any subprocess fires). The card: source/output pickers, both MGLTools paths pre-filled with the original's Windows defaults, the timeout knob, report tree, CSV save. |
+| `run_vina_batch(skip_existing=True)` + the resume checkbox | batch.py's "already docked" skip and batch_vina.py's empty-log rule, unified: a ligand is skipped only when its _out.pdbqt AND non-empty log both exist (the zero-byte log marks a crashed job and is re-docked); skipped rows return skipped=True/ok=True/seconds=0.0 and the vbatch card's table shows "skip" with the summary confessing the count. The checkbox rides the card next to the workers knob. |
 
 The axes after the round: rar 118 (115 covered + 3 absorbed, zero-hit
 0) + uploads 14/14 — the probe verdict line reads "every rar + upload
@@ -1212,7 +1212,7 @@ symbol test re-synced (275 symbols). The version chain moved to
 | The one-by-one audit | The instruction ("review the codebase, troubleshoot potential issues, improve the engineering details") became a tab-by-tab review of playground.py (module helpers, chrome, session machinery, Data & ML, Deep Learning, Generative; the Docking tab in parallel). The audit's harvest: one real bug (the text-map drift), five risks (the Ctrl+O race, the _poll_jobs ordering, the finder's title-only keys, the AD k-guard's condition, the shadowed tuner parameter), three polish items (fractional parse_int truncation, the _copy label clobber, _require's unguarded next()) — all nine fixed, each with its own regression test or source-level pin. |
 | The picked PATHS ride the session | `_SESSION_PATH_ATTRS` (27 pure picker attributes across Docking / conversion / Utilities) persist through the session file's new `paths` key and restore only when the folder still EXISTS on this machine (a mailed session degrades to the honest un-picked state; a live pick is never overwritten; dataset paths needing a reload stay out on purpose — a path without its frame would be a lie the label tells). `_refresh_restored_path_labels()` re-renders every picker's info label after the restore, reusing the four cards that own refresh helpers. |
 | `vina_batch_progress` + the Count remaining button | The pre-flight resume census: `VinaBatchProgress(total, docked, remaining, collisions)` applies the SAME skip rule and the SAME collision-disambiguated output names as `run_vina_batch(skip_existing=True)` — the stem logic lives in one shared `_batch_output_names` helper, so "N/M already docked · K to go" is a promise the run keeps. The vbatch card's button reports it (confessing name collisions); toggling the resume checkbox with both folders picked runs the census on its own (the trace degrades to a no-op during session restore and never fires while busy). |
-| The generate → MGLTools relay | The ligand-structures card's "Send PDBs → MGLTools" button: the structure output folder becomes the converter's PDB source, the PDBQT output folder is pre-filled BESIDE it (never inside, never over a live pick), the card's info label refreshes, and the finder's own jump + flash lands on the MGL card — the nigga.py → niggaqt.py relay in one click. |
+| The generate → MGLTools relay | The ligand-structures card's "Send PDBs → MGLTools" button: the structure output folder becomes the converter's PDB source, the PDBQT output folder is pre-filled BESIDE it (never inside, never over a live pick), the card's info label refreshes, and the finder's own jump + flash lands on the MGL card — the ligprep.py → ligprep_qt.py relay in one click. |
 | `_dl_load_frame` (the Apply-best fix) | `_ml_tune_apply` → dnn reloaded the ORIGINAL CSV (resurrecting every row the Clean card removed — the winner then trained on data it was never tuned on). The split-out `_dl_load_frame` adopts the LIVE cleaned frame; `_dl_load_path` is a thin wrapper. |
 
 The axes after the round: unchanged (rar 118, uploads 14/14, zero-hit
@@ -1291,7 +1291,7 @@ moved to 1.2.83 across all five carriers (the VERSION file included).
 
 | What shipped | The contract |
 | --- | --- |
-| The one-by-one verdict over the 8 uploaded files | `pdbqtgeneration.py` — byte-identical to the audited `niggaqt.py` (the MGLTools PDB → PDBQT batch card, 100x-141). `pdbfromsmile.py` — the STRICTER older twin of `nigga.py` (the LIGAND STRUCTURES card implements the tolerant version: auto-generated names, first-column SMILES fallback — a superset). `mismatchcheck.py` — the grid/torsion/completion audit card's TORSDOF-vs-active-REMARKs-vs-BRANCH rule, upgraded with MGLTools/Meeko convention auto-detection. `niggavinamulti.py` — the Vina config batch card's thread-pool + resume story (`run_vina_batch(skip_existing=True)` + the pre-flight census). `conf.txt` — the config-batch card's parsed-keys surface. `vina.exe` — an external engine binary (absorbed like the rar's own engines, never shipped). `Ml/pred.py` + `Ml/D2.py` — the round's genuine work, below. |
+| The one-by-one verdict over the 8 uploaded files | `pdbqtgeneration.py` — byte-identical to the audited `ligprep_qt.py` (the MGLTools PDB → PDBQT batch card, 100x-141). `pdbfromsmile.py` — the STRICTER older twin of `ligprep.py` (the LIGAND STRUCTURES card implements the tolerant version: auto-generated names, first-column SMILES fallback — a superset). `mismatchcheck.py` — the grid/torsion/completion audit card's TORSDOF-vs-active-REMARKs-vs-BRANCH rule, upgraded with MGLTools/Meeko convention auto-detection. `batch_vina_multi.py` — the Vina config batch card's thread-pool + resume story (`run_vina_batch(skip_existing=True)` + the pre-flight census). `conf.txt` — the config-batch card's parsed-keys surface. `vina.exe` — an external engine binary (absorbed like the rar's own engines, never shipped). `Ml/pred.py` + `Ml/D2.py` — the round's genuine work, below. |
 | `prepare_pic50_dataset` (chem/converters.py) | `Ml/D2.py`'s `process_data` upgraded: auto-detected or explicit SMILES/endpoint columns (the upload's own `Ligand SMILES` / `EC50 (nM)` spellings first), censored `<`/`>` magnitudes kept AND counted (the original stripped them in silence), the `0 < EC50 ≤ upper_limit` cap (default 1e9 nM — D2.py's own), the duplicate-SMILES collapse as a parameter (`median`/`mean`/`first`/`keep`; the original hard-coded the median), the conversion through `ic50_to_pic50` (any unit), and a typed `EndpointDatasetReport` whose buckets satisfy the accounting identity (valid + missing-SMILES + unparsable + out-of-range == rows in; rows out == valid − duplicates collapsed). |
 | The EC50 → pEC50 prep card (Data & ML) | The Dataset card's third row: the duplicate-rule combobox + the prep button + the save button. The audit lands in the status line ("5 rows in → 2 out · 1 censored magnitudes used · 1 duplicates collapsed (median) …"), one click adopts the prepared set as the active dataset with pEC50 pre-picked as the target, and declining keeps the loaded frame untouched. |
 | `permutation_feature_importance` (ml/evaluation.py) | `Ml/D2.py`'s interpretability step, typed: a `PermutationImportance` record (names/means/stds/scoring/repeats/n) with `as_frame()` and first-declared-wins `ranking()`. Works with bare estimators AND fitted pipelines (the preprocessing reruns on every shuffle, so the measure reflects the whole model), defaults D2.py's own choices (r2/accuracy, 5 repeats, seed 42), pins `n_jobs=1` (the nested-parallelism trap the original's comment confessed), and raises the house `ModelError` for every bad input (task, repeats, row mismatch, names mismatch). |

@@ -348,7 +348,7 @@ export function PdEffect() {
                       value: "time (h)",
                       position: "insideBottomRight",
                       offset: -2,
-                      fill: "#78716c",
+                      fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                       fontSize: 11,
                     }}
                     tickFormatter={fmtTick}
@@ -366,7 +366,7 @@ export function PdEffect() {
                         value: "C (mg/L)",
                         angle: -90,
                         position: "insideLeft",
-                        fill: "#78716c",
+                        fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                         fontSize: 11,
                       }}
                     />
@@ -442,7 +442,7 @@ export function PdEffect() {
                       label={{
                         value: "half-max",
                         position: "insideBottomRight",
-                        fill: "#78716c",
+                        fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                         fontSize: 10,
                       }}
                     />

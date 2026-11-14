@@ -93,15 +93,34 @@ class DataTableView(QTableView):
         self.horizontalHeader().setStretchLastSection(True)
         self.verticalHeader().setVisible(False)
         self.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
-        self._empty_note = ""
+        # review 4.3: pages construct the view empty and only bind after
+        # the first successful run — paint the first-run hint from the
+        # start instead of a blank half-screen. bind_frame(None) keeps
+        # overriding it (page-specific notes win).
+        self._empty_note = (
+            "Results land here.\n"
+            "Load a dataset above and run an operation — "
+            "the table fills with the run's output."
+        )
         self.statusHint = ""
 
     def bind_frame(self, frame: pd.DataFrame | None, note: str = "") -> None:
-        """Swap the displayed frame; ``None``/empty shows the empty state."""
+        """Swap the displayed frame; ``None``/empty shows the empty state.
+
+        Review 4.3: fourteen pages construct the table empty and only bind
+        a frame after the first successful run — the blank half-screen
+        problem. A caller that never passes a note now gets the generic
+        first-run hint painted in the viewport instead of nothing; callers
+        with a specific story (delete mode, errors) still override it.
+        """
         self._empty_note = note
         if frame is None or frame.empty:
             self.setModel(PandasTableModel(pd.DataFrame()))
-            self.statusHint = note or "No data loaded"
+            self.statusHint = note or (
+                "Results land here.\n"
+                "Load a dataset above and run an operation — "
+                "the table fills with the run's output."
+            )
         else:
             model = PandasTableModel(frame)
             self.setModel(model)

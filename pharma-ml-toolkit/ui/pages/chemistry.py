@@ -272,7 +272,24 @@ class ChemistryWorkbenchPage(QWidget):
             self._frame = read_table(path)
         from pharmaml.chem.csv_standardize import detect_smiles_column
 
-        self._smiles_combo.addItem(detect_smiles_column(self._frame))
+        # review C-3.4: detect_smiles_column RAISES DataValidationError on a
+        # table without a molecular column (an assay table is a legitimate
+        # thing to load); an uncaught raise inside this combo-refresh signal
+        # handler would silently break the page. Model Analysis solved the
+        # identical problem with a None-returning wrapper — same here: no
+        # match leaves the pick unauto-populated with a reason in the status
+        # line, every column still offered for manual choice.
+        try:
+            detected = detect_smiles_column(self._frame)
+        except Exception:  # noqa: BLE001 - the engine's validation, surfaced
+            detected = None
+        if detected is not None:
+            self._smiles_combo.addItem(detected)
+        else:
+            self._report.setText(
+                "No SMILES-like column found — pick one manually "
+                "(load a ligand table, or standardize a SMILES column first)."
+            )
         for col in self._frame.columns:
             if str(col) != self._smiles_combo.currentText():
                 self._smiles_combo.addItem(str(col))

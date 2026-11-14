@@ -1,6 +1,6 @@
 """Unit tests for the docking-campaign additions: DPF/GPF generation
 (``others/dpfer.py``), campaign file management (``others/General/*``),
-the torsion-consistency audit (``ligand generation/niggamatch.py``) and
+the torsion-consistency audit (``ligand generation/ligprep_match.py``) and
 the config-driven Vina batch (``others/Vina/*``)."""
 
 from __future__ import annotations
@@ -806,7 +806,7 @@ class TestRunVinaBatch:
 
 
 class TestVinaBatchResume:
-    """run_vina_batch(skip_existing=True): batch.py / niggavina.py resume.
+    """run_vina_batch(skip_existing=True): batch.py / batch_vina.py resume.
 
     The 2026-10 "new folder" upload's Vina_contol controllers: a ligand
     whose ``_out.pdbqt`` AND non-empty log already exist is not docked
@@ -860,7 +860,7 @@ class TestVinaBatchResume:
         assert commands[0][commands[0].index("--ligand") + 1].endswith("2.pdbqt")
 
     def test_zero_byte_log_means_crashed_and_is_redone(self, tmp_path, monkeypatch) -> None:
-        # niggavina.py's empty-log cleanup rule: an existing but EMPTY
+        # batch_vina.py's empty-log cleanup rule: an existing but EMPTY
         # log marks a crashed job -- the ligand must be docked again.
         conf = self._make_batch(tmp_path)
         commands: list[list[str]] = []
@@ -1227,7 +1227,7 @@ class TestVinaBatchProgress:
         assert (progress.total, progress.docked, progress.remaining) == (2, 1, 1)
 
     def test_zero_byte_log_is_not_docked(self, tmp_path) -> None:
-        # niggavina.py's crashed-job marker: the census must agree with
+        # batch_vina.py's crashed-job marker: the census must agree with
         # the run -- a zero-byte log means REDO, not skip.
         from pharmaml.docking.workflow import vina_batch_progress
 

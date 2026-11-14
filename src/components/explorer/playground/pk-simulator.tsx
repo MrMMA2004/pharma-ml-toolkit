@@ -158,7 +158,7 @@ function RegimenPanel() {
                     tick={CHART.axisTick}
                     tickLine={false}
                     axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
-                    label={{ value: "time (h)", position: "insideBottomRight", offset: -2, fill: "#78716c", fontSize: 11 }}
+                    label={{ value: "time (h)", position: "insideBottomRight", offset: -2, fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"), fontSize: 11 }}
                     minTickGap={32}
                   />
                   <YAxis
@@ -166,7 +166,7 @@ function RegimenPanel() {
                     tickLine={false}
                     axisLine={false}
                     width={44}
-                    label={{ value: "C (mg/L)", angle: -90, position: "insideLeft", fill: "#78716c", fontSize: 11 }}
+                    label={{ value: "C (mg/L)", angle: -90, position: "insideLeft", fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"), fontSize: 11 }}
                   />
                   <Tooltip
                     contentStyle={CHART.tooltipStyle}

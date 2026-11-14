@@ -155,11 +155,23 @@
 }
 
 /* Horizontal pill nav scrolling — hide the vertical bar entirely */
+/* review 4.10: nav clipped the last item mid-word at 1280px with zero
+   affordance (scrollbar hidden entirely). A thin overlay scrollbar now
+   appears exactly when the strip overflows. */
 .pill-scroll {
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, currentColor 25%, transparent) transparent;
 }
 .pill-scroll::-webkit-scrollbar {
-  display: none;
+  height: 4px;
+  display: block;
+}
+.pill-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 999px;
+}
+.pill-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* ---- Hero panel: layered radial glow + faint blueprint grid ---- */
@@ -503,3 +515,9 @@
   }
 }
 
+
+
+/* review 4.10: right-edge fade signals the nav continues */
+.pill-scroll-more {
+  mask-image: linear-gradient(to right, black 92%, transparent 100%);
+}

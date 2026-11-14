@@ -281,6 +281,12 @@ class MLWorkbenchPage(QWidget):
         self._theme = theme
         self._runner = runner or JobRunner(self)
         self._model_analysis = model_analysis
+        # review m-19: the statistics tab's grouping picker used to fill
+        # once at construction and go stale after the next dataset load;
+        # the Model Analysis page now emits frameLoaded and this page
+        # re-lists the columns on every change.
+        if self._model_analysis is not None and hasattr(self._model_analysis, "frameLoaded"):
+            self._model_analysis.frameLoaded.connect(self._on_analysis_frame)
 
         # -- the cards' kept state ----------------------------------------
         self._tune_last: tuple[Any, str, str, str] | None = None
@@ -2474,16 +2480,20 @@ class MLWorkbenchPage(QWidget):
             )
             return
         reference_path = self._stat_drift_reference.text().strip()
+        # review C-3.5: _training_context() reads the Model Analysis page's
+        # QComboBox — GUI state. Snapshot it HERE on the GUI thread (the
+        # file's own contract: "the worker never touches the frame"); the
+        # worker used to call it from the job thread, which is undefined
+        # behaviour in Qt.
+        reference_frame = (
+            None if reference_path else self._training_context()[0]
+        )
 
         def job(progress: Any) -> Any:
             from pharmaml.ml.drift import detect_drift
 
             progress(0.2, "reading the two tables")
-            reference = (
-                read_table(reference_path)
-                if reference_path
-                else self._training_context()[0]
-            )
+            reference = read_table(reference_path) if reference_path else reference_frame
             current = read_table(current_path)
             if reference is None:
                 raise ValueError(
@@ -2684,6 +2694,10 @@ class MLWorkbenchPage(QWidget):
         )
         run_row2.addWidget(self._stat_subgroup_btn)
         form.addRow("group tools:", run_row2)
+
+    def _on_analysis_frame(self, frame: object) -> None:
+        """frameLoaded slot (review m-19): re-list the grouping choices."""
+        self._refresh_stat_group_columns()
 
     def _refresh_stat_group_columns(self) -> None:
         """Re-list the grouping choices from the loaded dataset."""

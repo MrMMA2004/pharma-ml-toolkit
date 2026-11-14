@@ -11,7 +11,7 @@ the audit you run before queueing the next round:
 * a torsion-QA cell: ``scan_torsion_consistency`` over the §3 ligand
   folder plus one deliberately corrupted PDBQT (TORSDOF 3 vs two
   BRANCH records vs two active REMARKs) so the report carries a real
-  MISMATCH row — the report ``niggamatch.py`` / ``mismatch2.py``
+  MISMATCH row — the report ``ligprep_match.py`` / ``mismatch2.py``
   exported to Excel with red fills,
 * a campaign-housekeeping cell: ``collect_files`` / ``cleanup_tree``
   previews (``dry_run=True``, including the ``removed_dir`` rows of the
@@ -55,7 +55,7 @@ A campaign is rarely *one* run: ligands get hand-edited, folders get renamed,
 results get collected and re-collected. Before queueing the next round, two
 cheap audits catch the silent failures.
 
-**Torsion QA** (upgrades `others/Docking/ligand generation/niggamatch.py` and
+**Torsion QA** (upgrades `others/Docking/ligand generation/ligprep_match.py` and
 `mismatch2.py`, which exported the audit to Excel with red fills):
 `prepare_ligand4.py` — the MGLTools ligand writer — emits one active-torsion
 `REMARK` and one `BRANCH` record per rotatable bond plus a final `TORSDOF`
@@ -84,7 +84,7 @@ from pharmaml.docking import check_torsion_consistency, scan_torsion_consistency
 ligand_audit = scan_torsion_consistency(LIGAND_DIR)
 
 # The deliberate mismatch (a hand-edited ligand -- the corruption
-# niggamatch.py painted red): TORSDOF claims 3 rotatable bonds but the
+# ligprep_match.py painted red): TORSDOF claims 3 rotatable bonds but the
 # tree holds only two BRANCH records and two active REMARKs. Auto-
 # detection sees the REMARKs and applies the MGLTools three-way rule:
 bad_ligand = WORK / "bad_torsions.pdbqt"

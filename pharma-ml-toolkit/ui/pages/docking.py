@@ -76,7 +76,7 @@ from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView, PandasTableModel
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
-from ..widgets.responsive import configure_splitter
+from ..widgets.responsive import configure_splitter, wrap_in_scroll
 from ..workers.job_worker import JobRunner
 
 _TK = Path(__file__).resolve().parents[2]
@@ -215,11 +215,11 @@ class DockingWorkbenchPage(QWidget):
         lay.setContentsMargins(8, 8, 8, 8)
 
         self._tabs = QTabWidget()
-        self._tabs.addTab(self._build_campaign_tab(), "Campaign summary")
-        self._tabs.addTab(self._build_cluster_tab(), "Cluster analysis")
-        self._tabs.addTab(self._build_library_tab(), "Ligand library")
-        self._tabs.addTab(self._build_dockstring_tab(), "DOCKSTRING lab")
-        self._tabs.addTab(self._build_contacts_tab(), "Contacts & PLIF")
+        self._tabs.addTab(wrap_in_scroll(self._build_campaign_tab()), "Campaign summary")
+        self._tabs.addTab(wrap_in_scroll(self._build_cluster_tab()), "Cluster analysis")
+        self._tabs.addTab(wrap_in_scroll(self._build_library_tab()), "Ligand library")
+        self._tabs.addTab(wrap_in_scroll(self._build_dockstring_tab()), "DOCKSTRING lab")
+        self._tabs.addTab(wrap_in_scroll(self._build_contacts_tab()), "Contacts & PLIF")
         lay.addWidget(self._tabs)
 
         self._progress = ProgressPanel()

@@ -79,6 +79,53 @@ ORIENTATION: dict[str, tuple[str, str]] = {
         "The Doctor button verifies optional dependencies and prints the "
         "exact pip line to install what is missing.",
     ),
+    # review m-7: the ten workspaces that had no orientation line
+    "Deep Learning": (
+        "Train a neural QSAR model",
+        "Pick a dataset, target and architecture on the Train & evaluate tab, "
+        "then Train. The runboard, UMAP map and curation tabs read the run.",
+    ),
+    "ML Workbench": (
+        "Tune and compare models",
+        "The Hyperparameter search tab runs a budgeted search over the "
+        "registry; Leaderboards ranks every stored run.",
+    ),
+    "Unsupervised": (
+        "Reduce and cluster a table",
+        "Check the numeric columns, pick a method tab (PCA / clustering / "
+        "KDE / manifold) and press its action button.",
+    ),
+    "Generative": (
+        "Evolve molecules against an objective",
+        "Pick an objective (LogP, TPSA, SA, similarity), a budget, then "
+        "Evolve. The leaderboard and plots fill as generations land.",
+    ),
+    "Best-of ML": (
+        "Compare model families head-to-head",
+        "The Catalogue tab searches the 33-family registry; the comparison "
+        "tabs run a seeded bake-off on the loaded table.",
+    ),
+    "Response AI": (
+        "Fit dose-response and rank predictions",
+        "The Hill curve tab fits a full curve; the metric tabs read two "
+        "columns of the Data Explorer's table or a seeded demo pair.",
+    ),
+    "Image Lab": (
+        "Matrix views of response and similarity",
+        "The similarity heatmap reads a SMILES column of the loaded table; "
+        "the response and explorer matrices read numeric grids.",
+    ),
+    "Molecular Dynamics": (
+        "Load a GROMACS study",
+        "Open a study folder (or load the example study) — the metric, "
+        "correlation and CV tabs read the parsed series.",
+    ),
+    "Foundations": (
+        "Explore statistical distributions",
+        "Pick a sampler family and Draw samples; the comparison tab "
+        "measures two drawn columns against each other.",
+    ),
+
 }
 
 

@@ -1963,7 +1963,7 @@ function RandomSearchTrajectory({
                 value: "trial (draw order)",
                 position: "insideBottomRight",
                 offset: -2,
-                fill: "#78716c",
+                fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                 fontSize: 11,
               }}
             />
@@ -1981,7 +1981,7 @@ function RandomSearchTrajectory({
                 angle: -90,
                 position: "insideLeft",
                 offset: 16,
-                fill: "#78716c",
+                fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                 fontSize: 11,
               }}
             />
@@ -2342,7 +2342,7 @@ function HyperbandRungScatter({
                         dataKey="x"
                         domain={[xLo, xHi]}
                         allowDecimals={false}
-                        tick={{ fill: "#78716c", fontSize: 9 }}
+                        tick={{ fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"), fontSize: 9 }}
                         tickLine={false}
                         axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
                       />
@@ -2351,7 +2351,7 @@ function HyperbandRungScatter({
                         dataKey="y"
                         width={38}
                         domain={[yMin, yMax]}
-                        tick={{ fill: "#78716c", fontSize: 9 }}
+                        tick={{ fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"), fontSize: 9 }}
                         tickFormatter={(v: number) => fmtNum(v, 2)}
                         tickLine={false}
                         axisLine={false}
@@ -2403,7 +2403,7 @@ function HyperbandRungScatter({
                   value: `${resourceLabel} (scoring budget)`,
                   position: "insideBottomRight",
                   offset: -2,
-                  fill: "#78716c",
+                  fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                   fontSize: 11,
                 }}
               />
@@ -2421,7 +2421,7 @@ function HyperbandRungScatter({
                   angle: -90,
                   position: "insideLeft",
                   offset: 16,
-                  fill: "#78716c",
+                  fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                   fontSize: 11,
                 }}
               />
@@ -4711,7 +4711,7 @@ export function MlPlayground() {
                                   "x",
                                 position: "insideBottomRight",
                                 offset: -2,
-                                fill: "#78716c",
+                                fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                                 fontSize: 11,
                               }}
                             />
@@ -4730,7 +4730,7 @@ export function MlPlayground() {
                               contentStyle={CHART.tooltipStyle}
                               formatter={(value) => fmtNum(Number(value), 4)}
                             />
-                            <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                            <Legend wrapperStyle={{ fontSize: 12, color: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c") }} />
                             <Scatter
                               name="sampled points"
                               data={previewView?.points ?? preview.points}
@@ -4780,7 +4780,7 @@ export function MlPlayground() {
                               contentStyle={CHART.tooltipStyle}
                               formatter={(value) => fmtNum(Number(value), 3)}
                             />
-                            <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                            <Legend wrapperStyle={{ fontSize: 12, color: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c") }} />
                             {previewView ? (
                               <Scatter
                                 name={
@@ -5097,7 +5097,7 @@ export function MlPlayground() {
                               value: result.datasetMeta.source?.featureColumns[0] ?? "x",
                               position: "insideBottomRight",
                               offset: -2,
-                              fill: "#78716c",
+                              fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                               fontSize: 11,
                             }}
                           />
@@ -5126,7 +5126,7 @@ export function MlPlayground() {
                             />
                           ) : null}
                           <Tooltip cursor={{ strokeDasharray: "3 3" }} content={<GpBandTooltip />} />
-                          <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                          <Legend wrapperStyle={{ fontSize: 12, color: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c") }} />
                           <Area
                             dataKey="bandBase"
                             stackId="gpBand"
@@ -5218,7 +5218,7 @@ export function MlPlayground() {
                                 : result.datasetMeta.source?.featureColumns[0] ?? "x",
                               position: "insideBottomRight",
                               offset: -2,
-                              fill: "#78716c",
+                              fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                               fontSize: 11,
                             }}
                           />
@@ -5237,7 +5237,7 @@ export function MlPlayground() {
                                     angle: -90,
                                     position: "insideBottomLeft",
                                     offset: 18,
-                                    fill: "#78716c",
+                                    fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                                     fontSize: 11,
                                   }
                                 : undefined
@@ -5248,7 +5248,7 @@ export function MlPlayground() {
                             contentStyle={CHART.tooltipStyle}
                             formatter={(value) => fmtNum(Number(value), 4)}
                           />
-                          <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                          <Legend wrapperStyle={{ fontSize: 12, color: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c") }} />
                           <Scatter
                             name={predActual ? "perfect prediction (ŷ = y)" : "fitted curve"}
                             data={result.series.curve ?? []}
@@ -5306,7 +5306,7 @@ export function MlPlayground() {
                           contentStyle={CHART.tooltipStyle}
                           formatter={(value) => fmtNum(Number(value), 3)}
                         />
-                        <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                        <Legend wrapperStyle={{ fontSize: 12, color: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c") }} />
                         {clsSeries ? (
                           <Scatter
                             name={probaFade ? "boundary: class 0 (opacity = |p − 0.5|)" : "boundary: class 0"}
@@ -6124,7 +6124,7 @@ export function MlPlayground() {
                               position: "insideBottomRight",
                               offset: -2,
                               fontSize: 10,
-                              fill: "#78716c",
+                              fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                             }}
                           />
                           <YAxis
@@ -6139,7 +6139,7 @@ export function MlPlayground() {
                               <LcTooltip metricName={lcResult.metricName} />
                             }
                           />
-                          <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                          <Legend wrapperStyle={{ fontSize: 12, color: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c") }} />
                           {/* Training band + line */}
                           <Area
                             dataKey="trainBase"

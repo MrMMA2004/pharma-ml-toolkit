@@ -24,7 +24,7 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+from PySide6.QtCore import QObject, QTimer, QRunnable, QThreadPool, Signal
 
 ProgressReport = Callable[[Any, str], None]
 ProgressCallback = Callable[[Any, str], bool]
@@ -106,6 +106,17 @@ class JobRunner(QObject):
 
     job_started = Signal(str)
     job_ended = Signal()
+    # review 4.7: a relayed progress signal. Pages that pass on_progress
+    # keep working exactly as before; pages that DON'T (10 of 16 at the
+    # time of the review) now still reach the ProgressPanel, which
+    # attaches to this relay once — the bar moves for every job that
+    # reports, without touching 77 submit call sites.
+    job_progress = Signal(int, str)
+    # review 4.7: cooperative stops that no page handler caught left the
+    # page's own status line saying "Running ..." forever. The runner
+    # itself now tells the world; ProgressPanel paints an honest
+    # "Stopped" instead of a stale "Ready".
+    job_stopped = Signal(float)
 
     def __init__(self, parent: QObject | None = None, pool: QThreadPool | None = None) -> None:
         super().__init__(parent)
@@ -172,6 +183,19 @@ class JobRunner(QObject):
         worker.signals.finished.connect(lambda _r: self._finish())
         worker.signals.failed.connect(lambda _m: self._finish())
         worker.signals.cancelled.connect(lambda _s: self._finish())
+        # review 4.7: the always-on relays, connected AFTER the runner's
+        # finisher so the historical emission order (finished/failed/
+        # cancelled -> job_ended -> page slots) is byte-identical.
+        worker.signals.progress.connect(self.job_progress)
+        # job_stopped rides a zero-timeout timer: emitting it synchronously
+        # inside the cancelled delivery could return control to a
+        # waitSignal(job_ended) caller BEFORE the preserved-partial event
+        # behind it in the queue is delivered (probed: the round-12
+        # preserved test caught exactly that). The deferral costs the
+        # panel one event-loop turn and cannot reorder anything.
+        worker.signals.cancelled.connect(
+            lambda s: QTimer.singleShot(0, lambda: self.job_stopped.emit(s))
+        )
         if on_finished is not None:
             worker.signals.finished.connect(on_finished)
         if on_failed is not None:

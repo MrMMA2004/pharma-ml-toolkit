@@ -137,7 +137,7 @@ class DockingRunResult:
         True when the run was not started at all because its output
         already existed (``run_vina_batch(skip_existing=True)`` -- the
         resume behaviour of ``Vina_contol/batch.py`` and
-        ``niggavina.py``); such rows count as ``ok`` with zero seconds.
+        ``batch_vina.py``); such rows count as ``ok`` with zero seconds.
     """
 
     directory: Path
@@ -749,10 +749,10 @@ def run_vina_batch(
     release the GIL, so threads are enough).
 
     ``skip_existing=True`` adds the resume behaviour of the 2026-10
-    "new folder" upload's ``Vina_contol/batch.py`` and ``niggavina.py``:
+    "new folder" upload's ``Vina_contol/batch.py`` and ``batch_vina.py``:
     a ligand whose ``<stem>_out.pdbqt`` AND ``<stem>.log`` both exist
     and are non-empty is not started again (a zero-byte log marks a
-    crashed job, exactly like ``niggavina.py``'s empty-log cleanup) --
+    crashed job, exactly like ``batch_vina.py``'s empty-log cleanup) --
     an interrupted campaign re-runs in seconds, docking only the
     remainder. The skip check is only a file-presence heuristic: it does not
     prove a completed docking, validate content, or match the current inputs,

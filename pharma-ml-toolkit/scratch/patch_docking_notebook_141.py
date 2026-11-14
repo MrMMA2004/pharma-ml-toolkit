@@ -3,11 +3,11 @@
 Adds §12 — "The ligand-structure & MGLTools twins" — covering the three
 notebook-axis surfaces the 2026-10 "new folder.zip" upload contributed:
 
-* ``generate_ligand_structures`` (``ligand generation/nigga.py``): the
+* ``generate_ligand_structures`` (``ligand generation/ligprep.py``): the
   tautomer → ETKDG-conformers → MMFF/UFF → lowest-energy PDB (CONECT)
   + OpenBabel MOL2 pipeline, over a small honest library (a valid drug,
   a metal complex the skip list refuses, a broken SMILES),
-* ``convert_pdb_folder_to_pdbqt`` (``ligand generation/niggaqt.py``):
+* ``convert_pdb_folder_to_pdbqt`` (``ligand generation/ligprep_qt.py``):
   the MGLTools prepare_ligand4.py batch converter, demonstrated with a
   self-contained STUB interpreter pair (the real MGLTools is a Windows
   install; the stub keeps the notebook engine-free),
@@ -58,13 +58,13 @@ def _fail(message: str) -> None:
 def section_cells() -> list:
     header = md(
         """\
-## 12 · The ligand-structure & MGLTools twins — nigga.py / niggaqt.py
+## 12 · The ligand-structure & MGLTools twins — ligprep.py / ligprep_qt.py
 
 The 2026-10 "new folder" upload re-delivered two ligand-side pipelines
 the toolkit had only partially absorbed — this section tours both, plus
 the Vina config reader its controllers drive:
 
-* **`generate_ligand_structures`** (the upload's `nigga.py`) — every
+* **`generate_ligand_structures`** (the upload's `ligprep.py`) — every
   valid SMILES of a library becomes its **canonical tautomer**, is
   embedded as *N* ETKDG conformers, minimised (MMFF, UFF fallback), and
   the **lowest-energy conformer** is written as a one-model PDB **with
@@ -72,7 +72,7 @@ the Vina config reader its controllers drive:
   plus — when OpenBabel is installed — a Gasteiger-charged **MOL2**
   twin. Metal centres (Fe/Zn/Cu/Mn/Co/Ni/Mo/W) are skipped with a
   per-row reason, never aborting the batch.
-* **`convert_pdb_folder_to_pdbqt`** (the upload's `niggaqt.py`) — a
+* **`convert_pdb_folder_to_pdbqt`** (the upload's `ligprep_qt.py`) — a
   folder of PDB files driven through MGLTools'
   `prepare_ligand4.py` into the numbered-sub-folder tree (`1/`, `2/`,
   `3/` …) the campaign readers expect, each conversion guarded by a
@@ -110,7 +110,7 @@ structures[["ligand", "forcefield", "energy", "conformers", "atoms", "ok", "erro
     conect_cell = code(
         """\
 # The PDB carries the connectivity records MGLTools' ligand reader
-# needs -- the whole reason nigga.py wrote its own PDB writer.
+# needs -- the whole reason ligprep.py wrote its own PDB writer.
 aspirin_pdb = (STRUCT_OUT / "aspirin.pdb").read_text(encoding="utf-8")
 conect_lines = [line for line in aspirin_pdb.splitlines() if line.startswith("CONECT")]
 print(f"{len(conect_lines)} CONECT records; the first three:")
@@ -217,8 +217,8 @@ def update_recap_and_toc(nb: nbformat.NotebookNode) -> None:
             new_row = (
                 "| 11 | Publish — one-click HTML report + csv/md exports |"
                 " `pharmaml.viz` |\n"
-                "| 12 | Ligand-structure & MGLTools twins — nigga.py /"
-                " niggaqt.py (2026-10 upload) | `pharmaml.docking` |"
+                "| 12 | Ligand-structure & MGLTools twins — ligprep.py /"
+                " ligprep_qt.py (2026-10 upload) | `pharmaml.docking` |"
             )
             if old_row not in source:
                 _fail("TOC row for §11 not found (notebook drifted)")

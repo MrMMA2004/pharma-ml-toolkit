@@ -1112,6 +1112,19 @@ class UtilitiesWorkbenchPage(QWidget):
             if not filename:
                 self._report.setText("Name the stray file to delete.")
                 return
+            # review C-3.3: real deletion is irreversible — the sibling
+            # destructive modes (distribute, cleanup) both confirm first;
+            # delete must too. Dry runs pass through untouched.
+            if not dry_run:
+                answer = QMessageBox.question(
+                    self,
+                    "Delete for real",
+                    f"Permanently delete EVERY '{filename}' file in every\n"
+                    f"sub-folder of\n{folder}?\n"
+                    "(this cannot be undone — tick 'dry run' to preview)",
+                )
+                if answer != QMessageBox.StandardButton.Yes:
+                    return
 
             def delete_job(progress: Any) -> ToolOutcome:
                 from pharmaml.docking import delete_named_files

@@ -66,7 +66,11 @@ QFrame#nineCard {{
 }}
 QLabel {{ background: transparent; }}
 QLabel#studioCardTitle {{
-    color: {t.primary};
+    /* review 4.1: dark's t.primary (#203645) is a FILL token (panels,
+       status bar) — as title text on t.surface it measures 1.11:1.
+       Titles read t.text in dark (9.84:1); light keeps t.primary
+       (13.78:1). The WCAG guard test pins both pairs. */
+    color: {t.text if theme == 'dark' else t.primary};
     font-size: 15pt;
     font-weight: 600;
 }}

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
@@ -39,6 +39,12 @@ _TK = Path(__file__).resolve().parents[2]
 
 class DataExplorerPage(QWidget):
     """Open real tables, inspect them, plot a column's distribution."""
+
+    # review 4.9/m-19: downstream workbenches (Response AI's metric and
+    # rank pickers, the Best-of ML / Image Lab / statistics pickers) need
+    # to know when a NEW frame lands — they used to read the explorer once
+    # at construction and go stale. Consumers connect to this and re-fill.
+    frameLoaded = Signal(object)
 
     def __init__(self, parent: QWidget | None = None, theme: ThemeManager | None = None,
                  runner: JobRunner | None = None) -> None:
@@ -246,6 +252,7 @@ class DataExplorerPage(QWidget):
             self._table.bind_frame(None, note=f"Could not read {path.name}")
             return
         self._frame = frame
+        self.frameLoaded.emit(frame)
         self._reset_audit([str(c) for c in frame.columns])
         self._source = str(path)
         self._table.bind_frame(frame, note="No dataset loaded")

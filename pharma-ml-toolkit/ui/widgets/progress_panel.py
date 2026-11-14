@@ -96,13 +96,33 @@ class ProgressPanel(QWidget):
         self._stop.setEnabled(False)
         self._label.setText("Ready")
         self._note.setText("")
+        # review m-6: begin() shows the panel; a finished job must give
+        # the row back — otherwise every page keeps a dead "Ready" bar
+        # after its first run. A stopped job keeps the panel visible
+        # briefly to show the honest stop note.
+        if not self._note.text():
+            self.hide()
 
     # -- wiring convenience ------------------------------------------------------
     def attach(self, runner: JobRunner) -> None:
         """One-call wiring of runner signals onto this panel."""
         runner.job_started.connect(self.begin)
         runner.job_ended.connect(self.end)
+        # review 4.7: the relayed progress (pages that never passed
+        # on_progress still move this bar) and the honest stop line
+        # (a cooperative Stop no longer leaves a stale "Ready").
+        runner.job_progress.connect(self.update_progress)
+        runner.job_stopped.connect(self._on_stopped)
         self.stop_clicked.connect(runner.request_stop)
+
+    def _on_stopped(self, stopped_after: float) -> None:
+        """A cooperative stop reached its checkpoint (review 4.7)."""
+        self._stop.setEnabled(False)
+        self._job_name = ""
+        self._note.setText(
+            f"Stopped after {stopped_after:.1f}s (partial results, if the "
+            "job preserved any, appear in the results area)"
+        )
 
     def _on_stop(self) -> None:
         self._stop.setEnabled(False)

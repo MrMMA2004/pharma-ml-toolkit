@@ -29,7 +29,9 @@ import { TABS, TAB_DESCRIPTIONS, useToolkitStore } from "@/lib/store";
 import type { TabId } from "@/lib/store";
 import { useTabRouting } from "@/lib/tab-routing";
 import { cn } from "@/lib/utils";
-import { SHIPPED_TOOLKIT_VERSION } from "@/lib/toolkit-version"
+import { SHIPPED_TOOLKIT_VERSION } from "@/lib/toolkit-version";
+import { SHIPPED_FILE_COUNT, SHIPPED_SOURCE_LINES, SHIPPED_TEST_COUNT } from "@/lib/toolkit-stats";
+import { fmtInt } from "@/lib/format";
 
 const TAB_ICONS: Record<TabId, typeof LayoutDashboard> = {
   overview: LayoutDashboard,
@@ -63,7 +65,7 @@ function ThemeToggle() {
  * collect tests (5,035 total); census verified by the endpoint-rule walk
  * (1129 = 1110 + 19 new; 348,052 as the live /api/toolkit/tree answers --
  * countLines' split("\n").length rule) after the notebook re-execution. */
-const FALLBACK_STATS = { files: 1129, lines: "348,052" };
+const FALLBACK_STATS = { files: SHIPPED_FILE_COUNT, lines: fmtInt(SHIPPED_SOURCE_LINES) };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
@@ -223,7 +225,7 @@ export default function Home() {
             {stats ? `${stats.files} files · ${stats.totalLines.toLocaleString("en-US")} LOC` : `${FALLBACK_STATS.files} files · ${FALLBACK_STATS.lines} LOC`}
             {" · "}
             <span className="ping-ring relative inline-flex size-2 rounded-full bg-primary" aria-hidden />
-            <span className="text-primary">5909 tests</span>
+            <span className="text-primary">{SHIPPED_TEST_COUNT} tests</span>
           </p>
         </div>
       </footer>

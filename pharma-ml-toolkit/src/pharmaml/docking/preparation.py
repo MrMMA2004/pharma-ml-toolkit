@@ -7,7 +7,7 @@ about-centroid, TORSDOF and the full AutoDock4 GA parameter block) and
 repair), plus the ligand-folder conventions of
 ``ligand generation/*.py`` -- and (the 2026-10 "new folder" upload
 re-delivered it) the MGLTools batch converter of
-``ligand generation/niggaqt.py``:
+``ligand generation/ligprep_qt.py``:
 :func:`convert_pdb_folder_to_pdbqt` drives ``prepare_ligand4.py``
 over a folder of PDB files into the numbered-subfolder PDBQT tree,
 with the original's per-ligand timeout and conversion log.
@@ -802,7 +802,7 @@ def smiles_to_pdbqt(
     return target
 
 
-#: Default MGLTools interpreter path of ``niggaqt.py`` (the Windows
+#: Default MGLTools interpreter path of ``ligprep_qt.py`` (the Windows
 #: MGLTools-1.5.7 layout; override for any other installation).
 DEFAULT_MGL_PYTHON = r"C:\Program Files (x86)\MGLTools-1.5.7\python.exe"
 
@@ -826,7 +826,7 @@ def convert_pdb_folder_to_pdbqt(
 ) -> pd.DataFrame:
     """Batch-convert a folder of PDB files to PDBQT via MGLTools.
 
-    The ``others/Docking/ligand generation/niggaqt.py`` pipeline (the
+    The ``others/Docking/ligand generation/ligprep_qt.py`` pipeline (the
     2026-10 "new folder" upload re-delivered it): every ``.pdb`` under
     ``source_dir`` is converted with AutoDockTools'
     ``prepare_ligand4.py`` into a numbered sub-folder (``1``, ``2``,

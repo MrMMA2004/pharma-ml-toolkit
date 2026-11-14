@@ -454,7 +454,7 @@ export function ProbabilityCalibration() {
                           value: "Mean predicted probability",
                           position: "insideBottomRight",
                           offset: -2,
-                          fill: "#78716c",
+                          fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                           fontSize: 11,
                         }}
                       />
@@ -473,7 +473,7 @@ export function ProbabilityCalibration() {
                           angle: -90,
                           position: "insideBottomLeft",
                           offset: 18,
-                          fill: "#78716c",
+                          fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                           fontSize: 11,
                         }}
                       />
@@ -481,7 +481,7 @@ export function ProbabilityCalibration() {
                         cursor={{ strokeDasharray: "3 3" }}
                         content={<CalibrationTooltipContent />}
                       />
-                      <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                      <Legend wrapperStyle={{ fontSize: 12, color: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c") }} />
                       <Scatter
                         name={`class 1 — Brier ${fmtNum(stats.brier, 3)}`}
                         data={series}

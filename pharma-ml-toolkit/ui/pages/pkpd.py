@@ -253,7 +253,7 @@ class PKPDWorkbenchPage(QWidget):
             self._regimen_entries[key] = entry
             form.addRow(f"{label}:", entry)
         self._route_combo = QComboBox()
-        self._route_combo.setToolTip("Administration route for the regimen (oral, IV bolus, IV infusion)")
+        self._route_combo.setToolTip("Administration route for the regimen (oral and IV)")
         self._route_combo.addItems(("oral", "iv"))
         form.addRow("Route:", self._route_combo)
         self._sim_btn = QPushButton("Simulate regimen")

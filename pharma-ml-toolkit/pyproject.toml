@@ -98,6 +98,16 @@ gui-test = [
     "pytest>=7.4",
     "pytest-qt>=4.5,<5",
 ]
+# The desktop Studio GUI itself (r33 review C-3.2): `python studio.py`
+# needs the Qt stack, which is NOT part of the core library dependencies.
+# Install with: pip install ".[studio]"
+studio = [
+    "PySide6>=6.8,<7",
+    "pyqtgraph>=0.13.7,<0.14",
+    "qt-material>=2.17,<3",
+    "qdarkstyle>=3.2,<4",
+    "matplotlib>=3.7",
+]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
