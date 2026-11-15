@@ -70,8 +70,8 @@ class TestChemistryLabNJobs:
 
         seen: dict[str, object] = {}
 
-        def fake_compute(smiles, families=None, n_jobs=1, progress=None, **kw):
-            seen["n_jobs"] = n_jobs
+        def fake_compute(smiles, families=None, n_jobs=1, progress=None, config=None, **kw):
+            seen["n_jobs"] = n_jobs if config is None else config.n_jobs
             report = FeatureReport(
                 smiles=list(smiles), dropped=[], families={"descriptors": 1}
             )

@@ -24,11 +24,13 @@ from pathlib import Path
 import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSpinBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -105,6 +107,10 @@ class FeaturesOutcome:
     dropped: int = 0
     seconds: float = 0.0
     refusal: str = ""  # non-empty: the batch guard refused (arithmetic inside)
+    # (part8 §7.4) the complete feature-generation config rides the
+    # outcome: families, descriptor subset, radius/bits/count, n_jobs,
+    # plus RDKit/Mordred versions — the reproducibility record.
+    config_record: dict = field(default_factory=dict)
 
 
 class ChemistryWorkbenchPage(QWidget):
@@ -145,6 +151,41 @@ class ChemistryWorkbenchPage(QWidget):
         for label in _FAMILY_PRESETS:
             self._families_combo.addItem(label)
         self._jobs_field = NJobsField(default=-1)
+
+        # (part8 Phase D) independent fingerprint configuration — the
+        # Morgan-style families accept radius / bit width / count mode;
+        # non-Morgan families ignore these (the backend enforces it too).
+        self._fp_radius = QSpinBox()
+        self._fp_radius.setRange(0, 6)
+        self._fp_radius.setValue(2)
+        self._fp_radius.setToolTip(
+            "Morgan-family radius (ECFP / ECFP3 / Morgan / FCFP): the atom-"
+            "environment diameter the fingerprint sees. 2 is the ECFP4 "
+            "convention; non-Morgan families ignore this."
+        )
+        self._fp_bits = QSpinBox()
+        self._fp_bits.setRange(32, 65_536)
+        self._fp_bits.setSingleStep(512)
+        self._fp_bits.setValue(2048)
+        self._fp_bits.setToolTip(
+            "Fold length (bit count) for the Morgan-style families. "
+            "Non-Morgan families keep their fixed widths."
+        )
+        self._fp_counts = QCheckBox("count fingerprints")
+        self._fp_counts.setToolTip(
+            "Emit COUNT vectors instead of binary bits for the Morgan-"
+            "style families with a count flavour (values > 1 where an "
+            "environment recurs)."
+        )
+
+        # (part8 Phase D) exact individual descriptor selection — the
+        # picker lists the RDKit property catalog; empty selection means
+        # ALL properties (the historical behaviour).
+        self._descriptor_picker = QComboBox()
+        self._descriptor_picker.setToolTip(
+            "Descriptor-family scope: all RDKit properties (historical) or "
+            "an exact subset picked in the dialog."
+        )
         self._std_btn = QPushButton("Standardize column")
         self._std_btn.setToolTip("Standardize SMILES (canonical form, salts stripped per the RDKit pipeline)")
         self._std_btn.setMinimumHeight(34)
@@ -157,6 +198,13 @@ class ChemistryWorkbenchPage(QWidget):
         form.addRow("", self._open_btn)
         form.addRow("SMILES column:", self._smiles_combo)
         form.addRow("Feature families:", self._families_combo)
+        form.addRow("Descriptor scope:", self._descriptor_picker)
+        fp_row = QHBoxLayout()
+        fp_row.addWidget(self._fp_radius)
+        fp_row.addWidget(QLabel("bits:"))
+        fp_row.addWidget(self._fp_bits)
+        fp_row.addWidget(self._fp_counts)
+        form.addRow("Fingerprint radius/bits:", fp_row)
         form.addRow("Threads (n_jobs):", self._jobs_field)
         buttons = QHBoxLayout()
         buttons.addWidget(self._std_btn)
@@ -194,6 +242,10 @@ class ChemistryWorkbenchPage(QWidget):
         # (round 12) the requested molecule count behind the pending
         # feature batch -- the preserved-partial line reports against it
         self._pending_n_total = 0
+        # (part8 Phase D) the descriptor-scope picker fills lazily —
+        # RDKit's property catalog is not worth importing at page build
+        # on machines that only browse datasets.
+        self._fill_descriptor_picker()
         self._report.setObjectName("studioStatus")
         self._report.setWordWrap(True)
         lay.addWidget(self._report)
@@ -329,6 +381,34 @@ class ChemistryWorkbenchPage(QWidget):
         self._std_btn.setEnabled(True)
         self._feat_btn.setEnabled(True)
 
+    def _descriptor_selection(self) -> tuple[str, ...] | None:
+        """(part8 Phase D) the picker's exact subset, or None = all.
+
+        Scope 0 ('all properties') is the historical behaviour; any other
+        index means the user picked exactly those catalog names (the
+        picker stores the tuple in its item data).
+        """
+        data = self._descriptor_picker.currentData()
+        return tuple(data) if data else None
+
+    def _fill_descriptor_picker(self) -> None:
+        """Fill the descriptor-scope picker (lazy: needs RDKit)."""
+        combo = self._descriptor_picker
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("all properties (43)", None)
+        try:
+            from pharmaml.chem.features import descriptor_catalog
+
+            names = descriptor_catalog()
+            combo.setItemText(0, f"all properties ({len(names)})")
+            for name in names:
+                combo.addItem(name, [name])
+        except Exception:  # noqa: BLE001 - RDKit absent: scope stays 'all'
+            pass
+        combo.blockSignals(False)
+        combo.setCurrentIndex(0)
+
     def _smiles(self) -> list[str] | None:
         """The selected column as a plain SMILES list (None when unusable)."""
         if self._frame is None:
@@ -401,6 +481,33 @@ class ChemistryWorkbenchPage(QWidget):
                 f"got {self._jobs_field.currentText().strip()!r}"
             )
             return
+        # (part8 Phase D) the structured generation config: family list +
+        # exact descriptor subset + Morgan radius/bits/count.  Built and
+        # validated on the GUI thread so a bad selection refuses BEFORE
+        # the worker spins up; the SAME object flows to the backend and
+        # is persisted with the outcome (§7.4).
+        fp_radius = int(self._fp_radius.value())
+        fp_bits = int(self._fp_bits.value())
+        fp_counts = bool(self._fp_counts.isChecked())
+        descriptor_subset = self._descriptor_selection()
+        from pharmaml.chem.features import FeatureConfig
+
+        try:
+            feature_config = FeatureConfig(
+                families=tuple(
+                    families if families is not None else __import__(
+                        "pharmaml.chem", fromlist=["FEATURE_FAMILIES"]
+                    ).FEATURE_FAMILIES
+                ),
+                descriptors=descriptor_subset,
+                morgan_radius=fp_radius,
+                morgan_bits=fp_bits,
+                as_counts=fp_counts,
+                n_jobs=n_jobs,
+            )
+        except ValueError as exc:
+            self._report.setText(f"Feature configuration refused: {exc}")
+            return
 
         def job(progress) -> FeaturesOutcome:
             import time as _time
@@ -422,7 +529,9 @@ class ChemistryWorkbenchPage(QWidget):
             probe = [s for s in smiles if s.strip()][:10]
             if not probe:
                 return FeaturesOutcome(refusal="no parseable input: the SMILES column is empty")
-            _probe_frame, probe_report = compute_feature_frame(probe[:5], families=requested)
+            _probe_frame, probe_report = compute_feature_frame(
+                probe[:5], config=feature_config
+            )
             if probe_report.n_valid == 0:
                 return FeaturesOutcome(
                     refusal="none of the first 5 SMILES parsed — check the column"
@@ -451,10 +560,23 @@ class ChemistryWorkbenchPage(QWidget):
                 return progress(fraction, note)
 
             frame, report = compute_feature_frame(
-                smiles, families=requested, n_jobs=n_jobs, progress=adapt
+                smiles, config=feature_config, progress=adapt
             )
             seconds = _time.monotonic() - started
             progress(1.0, "done")
+            record = feature_config.as_dict()
+            try:  # §7.4: library versions where applicable
+                import rdkit
+
+                record["rdkit_version"] = rdkit.__version__
+            except Exception:  # noqa: BLE001 - version is best-effort
+                pass
+            record["n_descriptors_selected"] = (
+                len(descriptor_subset) if descriptor_subset is not None else "all"
+            )
+            record["dropped_molecules"] = len(report.dropped)
+            record["feature_columns"] = list(frame.columns)[:200]
+            record["n_feature_columns"] = int(frame.shape[1])
             return FeaturesOutcome(
                 frame=frame,
                 families=dict(report.families),
@@ -462,6 +584,7 @@ class ChemistryWorkbenchPage(QWidget):
                 n_valid=report.n_valid,
                 dropped=len(report.dropped),
                 seconds=seconds,
+                config_record=record,
             )
 
         name = f"feature factory ({preset})"

@@ -208,6 +208,8 @@ __all__ = [
     "FeatureReport",
     "FeatureSelection",
     "VarianceFilterResult",
+    "FeatureConfig",
+    "descriptor_catalog",
     "compute_feature_frame",
     "family_of_column",
     "filter_low_variance",
@@ -284,6 +286,9 @@ RDKIT_FP_BITS = 2048
 MORGAN_BITS = 2048
 #: Morgan fingerprint radius (ECFP-style).
 MORGAN_RADIUS = 2
+
+#: (part8 Phase D) process-wide ``GetAvailableProperties`` cache.
+_DESCRIPTOR_NAMES_CACHE: tuple[str, ...] | None = None
 #: Bit length of the MACCS structure-key fingerprint (RDKit's fixed 167
 #: SMARTS keys).
 MACCS_BITS = 167
@@ -547,9 +552,45 @@ def _onbits_vector(fingerprint: Any, n_bits: int) -> np.ndarray:
     return vector
 
 
-def _morgan_computer() -> Callable[[Any], np.ndarray]:
-    """Morgan family: radius-2 2048-bit bit vector (chem/descriptors style)."""
+def _countfold_vector(fingerprint: Any, n_bits: int) -> np.ndarray:
+    """Dense float COUNT vector of a ``UIntSparseIntVect`` folded to ``n_bits``.
+
+    (part8 Phase D) the count flavour of the Morgan families: each
+    sparse position contributes its COUNT (not 1.0) at ``index %
+    n_bits`` -- the same fold ``GetCountFingerprint``'s ``fpSize``
+    performs, spelled explicitly so the width always matches the
+    requested ``morgan_bits``.
+    """
+    vector = np.zeros(n_bits, dtype=float)
+    for index, count in fingerprint.GetNonzeroElements().items():
+        vector[int(index) % n_bits] += float(count)
+    return vector
+
+
+def _morgan_computer(
+    radius: int = MORGAN_RADIUS,
+    bits: int = MORGAN_BITS,
+    as_counts: bool = False,
+) -> Callable[[Any], np.ndarray]:
+    """Morgan family: configurable radius/bits (part8 Phase D).
+
+    Historical defaults reproduce the ``MORGAN_RADIUS``/``MORGAN_BITS``
+    bit vector exactly; ``as_counts`` emits unbounded-count semantics
+    (``GetMorganCountFingerprint`` folded to ``bits``) for the families
+    with a count flavour.
+    """
     from rdkit.Chem import rdMolDescriptors
+
+    if as_counts:
+        count_fn = getattr(
+            rdMolDescriptors, "GetHashedMorganFingerprint", None
+        )
+
+        def morgan_count_vector(mol: Any) -> np.ndarray:
+            fingerprint = count_fn(mol, radius=radius, nBits=bits)
+            return _countfold_vector(fingerprint, bits)
+
+        return morgan_count_vector
 
     def morgan_vector(mol: Any) -> np.ndarray:
         # The legacy GetMorganFingerprintAsBitVect call is deliberate: it
@@ -557,15 +598,19 @@ def _morgan_computer() -> Callable[[Any], np.ndarray]:
         # through rdMolDescriptors (the defining module) instead of AllChem's
         # re-export so mypy resolves the attribute the same way.
         fingerprint = rdMolDescriptors.GetMorganFingerprintAsBitVect(
-            mol, radius=MORGAN_RADIUS, nBits=MORGAN_BITS
+            mol, radius=radius, nBits=bits
         )
-        return _onbits_vector(fingerprint, MORGAN_BITS)
+        return _onbits_vector(fingerprint, bits)
 
     return morgan_vector
 
 
-def _ecfp3_computer() -> Callable[[Any], np.ndarray]:
-    """ECFP3 family: radius-3 2048-bit bit vector (``Ml/D2.py``'s R3).
+def _ecfp3_computer(
+    radius: int = ECFP3_RADIUS,
+    bits: int = ECFP3_BITS,
+    as_counts: bool = False,
+) -> Callable[[Any], np.ndarray]:
+    """ECFP3 family: configurable radius/bits (part8 Phase D override).
 
     The upload's dual-radius fingerprints were Morgan radius 2 (4096
     bits) + radius 3 (2048 bits); this family reproduces the R3 half
@@ -575,11 +620,22 @@ def _ecfp3_computer() -> Callable[[Any], np.ndarray]:
     """
     from rdkit.Chem import rdMolDescriptors
 
+    if as_counts:
+        count_fn = getattr(
+            rdMolDescriptors, "GetHashedMorganFingerprint", None
+        )
+
+        def ecfp3_count_vector(mol: Any) -> np.ndarray:
+            fingerprint = count_fn(mol, radius=radius, nBits=bits)
+            return _countfold_vector(fingerprint, bits)
+
+        return ecfp3_count_vector
+
     def ecfp3_vector(mol: Any) -> np.ndarray:
         fingerprint = rdMolDescriptors.GetMorganFingerprintAsBitVect(
-            mol, radius=ECFP3_RADIUS, nBits=ECFP3_BITS
+            mol, radius=radius, nBits=bits
         )
-        return _onbits_vector(fingerprint, ECFP3_BITS)
+        return _onbits_vector(fingerprint, bits)
 
     return ecfp3_vector
 
@@ -605,8 +661,8 @@ def _maccs_computer() -> Callable[[Any], np.ndarray]:
     return maccs_vector
 
 
-def _fcfp_generator() -> Any:
-    """The feature-invariant Morgan generator (radius 2, 2048 bits).
+def _fcfp_generator(radius: int = MORGAN_RADIUS, bits: int = FCFP_BITS) -> Any:
+    """The feature-invariant Morgan generator (configurable, part8 Phase D).
 
     ``GetMorganFeatureAtomInvGen`` swaps the connectivity invariants
     for Gasteiger-Marsili feature labels (donor/acceptor/aromatic/...)
@@ -615,8 +671,8 @@ def _fcfp_generator() -> Any:
     from rdkit.Chem import rdFingerprintGenerator
 
     return rdFingerprintGenerator.GetMorganGenerator(
-        radius=MORGAN_RADIUS,
-        fpSize=FCFP_BITS,
+        radius=radius,
+        fpSize=bits,
         includeChirality=False,
         useBondTypes=True,
         atomInvariantsGenerator=rdFingerprintGenerator.GetMorganFeatureAtomInvGen(),
@@ -863,6 +919,163 @@ def _batch_dataset_fingerprint(smiles_list: Sequence[str]) -> str:
     return digest.hexdigest()
 
 
+# ---------------------------------------------------------------------
+# (part8 Phase D) the structured feature-generation configuration
+# ---------------------------------------------------------------------
+
+#: The Morgan-style families a radius/bit-width override applies to.
+#: Count-mode applies only to families with a count flavour.
+_RADIUS_FAMILIES = ("ecfp", "ecfp3", "morgan_full", "morgan_scaffold", "fcfp")
+_COUNT_FAMILIES = ("ecfp", "ecfp3", "morgan_full", "fcfp")
+
+
+def descriptor_catalog() -> list[str]:
+    """The exact ``descriptors``-family property names RDKit offers.
+
+    One stable, importable answer for GUI pickers and config
+    persistence: the names behind the ``desc_`` columns
+    (:func:`rdMolDescriptors.Properties.GetAvailableProperties` at call
+    time, order preserved).  Requires RDKit (the same guard as the
+    family itself).
+    """
+    Chem = require_rdkit()
+    from rdkit.Chem import rdMolDescriptors  # noqa: F401 - via Chem
+
+    names, _computer = _descriptor_computer()
+    return list(names)
+
+
+@dataclass(slots=True, frozen=True)
+class FeatureConfig:
+    """A typed, validated feature-generation configuration (part8 §7.3).
+
+    The single object that flows ``GUI → validation → backend feature
+    generation → worker → DataFrame → feature metadata → export``.
+    All fields default to the historical behaviour, so the legacy
+    positional ``compute_feature_frame(smiles, families=..., n_jobs=...)``
+    calls stay byte-identical (``config=None`` builds the default).
+
+    Parameters
+    ----------
+    families:
+        The feature families to compute (canonical order is applied by
+        the backend regardless of request order).
+    descriptors:
+        Optional subset of the ``descriptors``-family property names
+        (see :func:`descriptor_catalog`).  ``None``/empty = all
+        properties (the historical behaviour).  Unknown names raise at
+        validation time.
+    morgan_radius:
+        Radius override for the Morgan-style families (``ecfp``,
+        ``ecfp3``, ``morgan_full``, ``morgan_scaffold``, ``fcfp``).
+        Default 2 = the historical ``MORGAN_RADIUS``.
+    morgan_bits:
+        Fold length override for the same families.  Must be in
+        ``(0, 65536]``; default 2048 = the historical ``MORGAN_BITS``.
+    as_counts:
+        When ``True`` the Morgan-style families with a count flavour
+        (``ecfp``, ``ecfp3``, ``morgan_full``, ``fcfp``) emit COUNT
+        vectors instead of binary bits (column names keep their
+        ``*_bit_`` prefix -- the family vocabulary is fixed, only the
+        values change semantics; this mirrors
+        :func:`pharmaml.chem.descriptors.compute_fingerprints`).
+    n_conformers, n_jobs:
+        The historical knobs, carried so ONE object describes the whole
+        generation run.
+
+    Examples
+    --------
+    >>> FeatureConfig(families=("ecfp",), morgan_radius=3, morgan_bits=1024)
+    FeatureConfig(families=('ecfp',), descriptors=None, morgan_radius=3, morgan_bits=1024, as_counts=False, n_conformers=3, n_jobs=1)
+    >>> FeatureConfig(families=("ecfp",), morgan_bits=0)
+    Traceback (most recent call last):
+        ...
+    ValueError: morgan_bits must be an integer in (0, 65536], got 0
+    """
+
+    families: tuple[str, ...] = FEATURE_FAMILIES
+    descriptors: tuple[str, ...] | None = None
+    morgan_radius: int = MORGAN_RADIUS
+    morgan_bits: int = MORGAN_BITS
+    as_counts: bool = False
+    n_conformers: int = 3
+    n_jobs: int = 1
+
+    def __post_init__(self) -> None:
+        for name in self.families:
+            if name not in FEATURE_FAMILIES:
+                raise ValueError(
+                    f"unknown feature family {name!r}; valid families are: "
+                    + ", ".join(FEATURE_FAMILIES)
+                )
+        if (
+            not isinstance(self.morgan_radius, (int, np.integer))
+            or isinstance(self.morgan_radius, bool)
+            or int(self.morgan_radius) < 0
+        ):
+            raise ValueError(
+                f"morgan_radius must be an integer >= 0, got {self.morgan_radius!r}"
+            )
+        if (
+            not isinstance(self.morgan_bits, (int, np.integer))
+            or isinstance(self.morgan_bits, bool)
+            or not 0 < int(self.morgan_bits) <= 65_536
+        ):
+            raise ValueError(
+                f"morgan_bits must be an integer in (0, 65536], got {self.morgan_bits!r}"
+            )
+        if self.descriptors is not None:
+            if not self.descriptors:
+                raise ValueError(
+                    "descriptors must be None (all properties) or a non-empty "
+                    "tuple of property names"
+                )
+            unknown = [
+                name for name in self.descriptors
+                if name not in _descriptor_names_cached()
+            ]
+            if unknown:
+                raise ValueError(
+                    f"unknown descriptor names: {', '.join(unknown[:5])}"
+                    f" (of {len(unknown)}); see descriptor_catalog()"
+                )
+
+    def as_dict(self) -> dict[str, Any]:
+        """The reproducibility record (JSON-ready)."""
+        return {
+            "families": list(self.families),
+            "descriptors": list(self.descriptors) if self.descriptors is not None else None,
+            "morgan_radius": int(self.morgan_radius),
+            "morgan_bits": int(self.morgan_bits),
+            "as_counts": bool(self.as_counts),
+            "n_conformers": int(self.n_conformers),
+            "n_jobs": int(self.n_jobs),
+        }
+
+    @classmethod
+    def from_dict(cls, record: dict[str, Any]) -> "FeatureConfig":
+        """Rebuild from :meth:`as_dict` output (unknown keys ignored)."""
+        known = {f: record.get(f) for f in (
+            "families", "descriptors", "morgan_radius", "morgan_bits",
+            "as_counts", "n_conformers", "n_jobs",
+        ) if f in record}
+        if "families" in known and known["families"] is not None:
+            known["families"] = tuple(known["families"])
+        if "descriptors" in known and known["descriptors"] is not None:
+            known["descriptors"] = tuple(known["descriptors"])
+        return cls(**known)
+
+
+def _descriptor_names_cached() -> tuple[str, ...]:
+    """``GetAvailableProperties`` once per process (it hits the C++ registry)."""
+    global _DESCRIPTOR_NAMES_CACHE
+    if _DESCRIPTOR_NAMES_CACHE is None:
+        require_rdkit()
+        names, _computer = _descriptor_computer()
+        _DESCRIPTOR_NAMES_CACHE = tuple(names)
+    return _DESCRIPTOR_NAMES_CACHE
+
+
 def compute_feature_frame(
     smiles: Sequence[str],
     families: Iterable[str] = FEATURE_FAMILIES,
@@ -873,6 +1086,7 @@ def compute_feature_frame(
     checkpoint_dir: str | os.PathLike[str] | None = None,
     checkpoint_every: int = 1,
     checkpoint_resume: bool = True,
+    config: FeatureConfig | None = None,
 ) -> tuple[pd.DataFrame, FeatureReport]:
     """Compute a multi-family feature matrix for a batch of SMILES.
 
@@ -886,9 +1100,11 @@ def compute_feature_frame(
         :data:`FEATURE_FAMILIES`).  Unknown names raise; duplicates are
         ignored.  The output column order is the CANONICAL
         :data:`FEATURE_FAMILIES` order regardless of the request order.
+        Ignored when ``config`` is given (the config carries its own).
     n_conformers:
         ETKDG conformer count for the ``shape_3d`` family only (the
         ``xxx.ipynb`` cell 6 default 3); every other family ignores it.
+        Ignored when ``config`` is given.
     n_jobs:
         Worker count for the per-molecule loop, joblib convention
         (``1`` = serial, ``-1`` = all cores, ``0`` invalid).  Threads,
@@ -896,7 +1112,8 @@ def compute_feature_frame(
         GIL, so real parallelism needs no pickling of the per-family
         computers (which are closures and would not survive a process
         boundary).  Order, drops and the report are byte-identical to
-        the serial run whatever the worker count.
+        the serial run whatever the worker count.  Ignored when
+        ``config`` is given.
     progress:
         (100x-169) Optional ``progress(done, total, note)`` callback,
         fired on the calling thread as molecule batches COMPLETE --
@@ -933,6 +1150,14 @@ def compute_feature_frame(
         from the newest valid checkpoint whose fingerprints match.
         ``False`` still writes checkpoints but always computes from
         scratch -- the fresh-run twin the resume tests compare against.
+    config:
+        (part8 Phase D) The structured, validated
+        :class:`FeatureConfig` -- family list, optional descriptor
+        subset, Morgan radius/bit overrides, count mode, ``n_jobs`` and
+        ``n_conformers`` in ONE object.  When given it takes precedence
+        over the legacy ``families``/``n_conformers``/``n_jobs``
+        arguments (backwards compatibility: ``None`` keeps the legacy
+        path byte for byte).
 
     Returns
     -------
@@ -1060,6 +1285,13 @@ def compute_feature_frame(
       ``rism_gsolv_kcalmol`` ... ``rism_q_neg_frac``.
     """
     smiles_list = _as_smiles_list(smiles, "smiles")
+    # (part8 Phase D) the structured config takes precedence; when absent
+    # the legacy arguments build the equivalent default config so both
+    # paths share ONE downstream flow.
+    if config is not None:
+        families = config.families
+        n_conformers = config.n_conformers
+        n_jobs = config.n_jobs
     # Cheap validation BEFORE any parsing: caller bugs must not wait for a
     # full RDKit pass to surface (the chem/descriptors.py ordering lesson).
     if not smiles_list:
@@ -1098,7 +1330,11 @@ def compute_feature_frame(
     requested = [family for family in FEATURE_FAMILIES if family in requested_set]
 
     Chem = require_rdkit()
-    computers, columns, family_widths = _family_plan(requested, int(n_conformers))
+    computers, columns, family_widths = _family_plan(
+        requested,
+        int(n_conformers),
+        config=config,
+    )
 
     def compute_one(pair: tuple[int, str]) -> tuple[int, str, np.ndarray | None, str]:
         """One molecule -> ``(row, text, vector-or-None, error-or-"")``.
@@ -1374,18 +1610,56 @@ def _finish_batch(
 def _family_plan(
     requested: list[str],
     n_conformers: int = 3,
+    *,
+    config: "FeatureConfig | None" = None,
 ) -> tuple[dict[str, Callable[[Any], np.ndarray]], list[str], dict[str, int]]:
-    """Build per-family computers, column names and widths for the request."""
+    """Build per-family computers, column names and widths for the request.
+
+    (part8 Phase D) When ``config`` carries overrides the plan honours
+    them: a descriptor SUBSET (fewer ``desc_*`` columns), Morgan
+    radius/bit-width overrides for the five Morgan-style families, and
+    count mode for the families with a count flavour.  ``None`` keeps
+    the historical behaviour byte for byte.
+    """
     computers: dict[str, Callable[[Any], np.ndarray]] = {}
     property_names: list[str] = []
     if "descriptors" in requested:
         property_names, computers["descriptors"] = _descriptor_computer()
+        if config is not None and config.descriptors is not None:
+            # the SUBSET contract: keep the catalog's own order (stable
+            # columns), restrict both the computer and the names
+            keep = [n for n in property_names if n in set(config.descriptors)]
+            missing = set(config.descriptors) - set(keep)
+            if missing:
+                raise ValueError(
+                    "descriptor subset names not in the RDKit catalog: "
+                    + ", ".join(sorted(missing)[:5])
+                )
+            from rdkit.Chem import rdMolDescriptors
+
+            subset_getter = rdMolDescriptors.Properties(keep)
+
+            def subset_vector(mol: Any) -> np.ndarray:
+                return np.asarray(
+                    subset_getter.ComputeProperties(mol), dtype=float
+                )
+
+            computers["descriptors"] = subset_vector
+            property_names = keep
     if "atompair_count" in requested:
         computers["atompair_count"] = _atompair_computer()
     if "avalon_count" in requested:
         computers["avalon_count"] = _avalon_computer()
     if "ecfp" in requested or "morgan_full" in requested or "morgan_scaffold" in requested:
-        morgan_vector = _morgan_computer()
+        # (part8 Phase D) overrides apply ONLY when a config carries them;
+        # no config keeps every family's own historical defaults.
+        if config is not None:
+            morgan_vector = _morgan_computer(
+                radius=int(config.morgan_radius), bits=int(config.morgan_bits),
+                as_counts=bool(config.as_counts) and "ecfp" in requested,
+            )
+        else:
+            morgan_vector = _morgan_computer()
         if "ecfp" in requested:
             computers["ecfp"] = morgan_vector
         if "morgan_full" in requested:
@@ -1393,11 +1667,22 @@ def _family_plan(
         if "morgan_scaffold" in requested:
             computers["morgan_scaffold"] = _morgan_scaffold_computer(morgan_vector)
     if "ecfp3" in requested:
-        computers["ecfp3"] = _ecfp3_computer()
+        if config is not None:
+            computers["ecfp3"] = _ecfp3_computer(
+                radius=int(config.morgan_radius), bits=int(config.morgan_bits),
+                as_counts=bool(config.as_counts),
+            )
+        else:
+            computers["ecfp3"] = _ecfp3_computer()
     if "maccs" in requested:
         computers["maccs"] = _maccs_computer()
     if "fcfp" in requested or "fcfp_count" in requested:
-        fcfp_generator = _fcfp_generator()
+        if config is not None:
+            fcfp_generator = _fcfp_generator(
+                radius=int(config.morgan_radius), bits=int(config.morgan_bits)
+            )
+        else:
+            fcfp_generator = _fcfp_generator()
         if "fcfp" in requested:
             computers["fcfp"] = _fcfp_computer(fcfp_generator)
         if "fcfp_count" in requested:
@@ -1461,12 +1746,28 @@ def _family_plan(
             names = list(_D3D_FAMILY_COLUMNS)
             width = len(names)
             columns.extend(names)
+        elif config is not None and family in _RADIUS_FAMILIES:
+            # (part8 Phase D) the overridden width drives the column
+            # count; count mode keeps the SAME names (the vocabulary is
+            # fixed, only the values change semantics)
+            width = int(config.morgan_bits)
+            prefix = FAMILY_PREFIXES[family]
+            columns.extend(f"{prefix}{index}" for index in range(width))
         else:
             width = _FAMILY_BITS[family]
             prefix = FAMILY_PREFIXES[family]
             columns.extend(f"{prefix}{index}" for index in range(width))
         family_widths[family] = width
     return computers, columns, family_widths
+
+
+def _cfg_radius(config: "FeatureConfig | None") -> int:
+    """The effective Morgan radius (config override or the MORGAN default).
+
+    NOTE: only the plain Morgan families use this default; ``ecfp3``
+    keeps its own historical :data:`ECFP3_RADIUS` when no config rides.
+    """
+    return int(config.morgan_radius) if config is not None else MORGAN_RADIUS
 
 
 def _lightgbm_estimators() -> tuple[Any, Any] | None:

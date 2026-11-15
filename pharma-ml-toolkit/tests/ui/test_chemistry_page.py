@@ -268,7 +268,7 @@ def test_feature_stop_surfaces_the_preserved_partial(
         smiles=["CCO", "c1ccccc1O"], dropped=[], families={"descriptors": 2}
     )
 
-    def fake_compute(smiles, families=None, n_jobs=1, progress=None):
+    def fake_compute(smiles, families=None, n_jobs=1, progress=None, config=None):
         # the probe call passes no progress; the batch call passes the
         # page's adapter -- only report when there is one
         if progress is not None:
@@ -312,7 +312,7 @@ def test_feature_stop_without_payload_keeps_the_historic_line(
     import ui.pages.chemistry as chem
     from pharmaml.exceptions import JobCancelled
 
-    def fake_compute(smiles, families=None, n_jobs=1, progress=None):
+    def fake_compute(smiles, families=None, n_jobs=1, progress=None, config=None):
         if progress is not None:
             progress(0.5, "computing")
         raise JobCancelled("user stop")
