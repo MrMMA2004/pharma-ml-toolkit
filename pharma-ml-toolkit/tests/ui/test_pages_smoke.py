@@ -33,11 +33,13 @@ def test_dashboard_census_numbers_are_real() -> None:
     assert any(name == "qsar_regression.csv" for name, _size in datasets)
 
 
-def test_data_explorer_loads_real_csv(studio_app) -> None:
+def test_data_explorer_loads_real_csv(studio_app, qtbot) -> None:
     from ui.pages.data_explorer import DataExplorerPage
 
     page = DataExplorerPage()
     page.load_path(_TK / "examples" / "data" / "qsar_regression.csv")
+    # (part8 Phase B) load_path reads on the worker; wait for the bind
+    qtbot.waitUntil(lambda: page.frame() is not None, timeout=10_000)
     frame = page.frame()
     assert frame is not None and len(frame) == 260
     assert "qsar_regression.csv" in page.source()
@@ -45,7 +47,7 @@ def test_data_explorer_loads_real_csv(studio_app) -> None:
     assert page._stats_label.text().startswith("rows")
 
 
-def test_data_explorer_reads_excel_too(studio_app, tmp_path) -> None:
+def test_data_explorer_reads_excel_too(studio_app, qtbot, tmp_path) -> None:
     import pandas as pd
 
     from ui.pages.data_explorer import DataExplorerPage
@@ -56,6 +58,7 @@ def test_data_explorer_reads_excel_too(studio_app, tmp_path) -> None:
 
     page = DataExplorerPage()
     page.load_path(path)
+    qtbot.waitUntil(lambda: page.frame() is not None, timeout=10_000)
     assert page.frame() is not None and len(page.frame()) == 3  # the v1.2.116 Excel guarantee, Studio-side
 
 

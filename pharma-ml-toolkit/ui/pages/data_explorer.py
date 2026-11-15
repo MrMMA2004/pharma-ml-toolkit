@@ -239,18 +239,57 @@ class DataExplorerPage(QWidget):
             self.load_path(Path(path))
 
     def load_path(self, path: Path) -> None:
-        """Read through pharmaml's own reader (CSV/TSV/XLSX) and render."""
-        from pharmaml.utils.io import read_table
+        """Read through pharmaml's own reader (CSV/TSV/XLSX) and render.
 
-        try:
-            frame = read_table(path)
-        except Exception as exc:  # noqa: BLE001 - surfaced to the user
-            self._status.setText(f"Could not read {path.name}: {exc}")
+        (part8 Phase B) The read runs on the JobRunner worker — the
+        GUI thread never parses a user table, however large.  Small
+        bundled example tables complete on the first event-loop tick,
+        so the historical synchronous-looking call sites (tests that
+        read ``page.frame()`` right after ``load_path``) keep working
+        via ``qtbot``/``processEvents`` pumping; the worker is the
+        same pattern every audit job below already uses.
+        """
+        if self._runner.busy:
+            self._status.setText(
+                f"Busy: '{self._runner.job_name}' is running — Stop it "
+                "(or check Job Center) first."
+            )
+            return
+
+        self._status.setText(f"Reading {path.name}…")
+        self._open_btn.setEnabled(False)
+
+        def job(progress: object) -> object:
+            from pharmaml.utils.io import read_table_with_progress
+
+            def report(done: int, total: int | None, _note: str) -> bool | None:
+                if total:
+                    progress(min(done / total, 1.0), f"{done:,} rows")
+                return None
+
+            return read_table_with_progress(path, report)
+
+        def done(frame: object) -> None:
+            self._bind_loaded_frame(path, frame)
+
+        def failed(message: str) -> None:
+            self._open_btn.setEnabled(True)
+            self._status.setText(f"Could not read {path.name}: {message.splitlines()[0]}")
             self._frame = None
             self._source = ""
             self._reset_audit([])
             self._table.bind_frame(None, note=f"Could not read {path.name}")
-            return
+
+        def settled() -> None:
+            self._open_btn.setEnabled(True)
+
+        self._runner.submit(
+            f"load {path.name}", job, done, failed, on_cancelled=settled,
+        )
+
+    def _bind_loaded_frame(self, path: Path, frame: object) -> None:
+        """GUI-thread binding of a successfully read frame (part8 B)."""
+        self._open_btn.setEnabled(True)
         self._frame = frame
         self.frameLoaded.emit(frame)
         self._reset_audit([str(c) for c in frame.columns])
