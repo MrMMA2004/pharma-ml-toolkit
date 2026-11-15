@@ -164,9 +164,13 @@ def test_split_audit_refuses_without_a_dataset(studio_app) -> None:
     assert "Load a dataset first" in page._split_audit_output.toPlainText()
 
 
-def test_split_audit_refuses_bad_ranges(studio_app) -> None:
+def test_split_audit_refuses_bad_ranges(studio_app, qtbot) -> None:
     page = _fresh_explorer()
     page._load_builtin("qsar_classification.csv")
+    qtbot.waitUntil(lambda: not page._runner.busy, timeout=10_000)
+    qtbot.wait(50)
+    qtbot.waitUntil(lambda: not page._runner.busy, timeout=10_000)
+    qtbot.wait(50)  # the queued finished-signal delivery pump
     assert page._frame is not None
     page._split_audit_ranges.setPlainText("train 0-10")  # no colon
     page._run_split_audit()
@@ -182,6 +186,10 @@ def test_split_audit_refuses_bad_ranges(studio_app) -> None:
 def test_split_audit_clean_then_dirty(studio_app, qtbot, qapp) -> None:
     page = _fresh_explorer()
     page._load_builtin("qsar_classification.csv")
+    qtbot.waitUntil(lambda: not page._runner.busy, timeout=10_000)
+    qtbot.wait(50)
+    qtbot.waitUntil(lambda: not page._runner.busy, timeout=10_000)
+    qtbot.wait(50)
     assert page._frame is not None and len(page._frame) == 420
     # compound_id column is listed after the load
     assert page._split_audit_column.findText("compound_id") >= 0
@@ -218,10 +226,12 @@ def test_sar_refuses_without_a_dataset(studio_app) -> None:
     assert "Load a dataset first" in page._sar_output.toPlainText()
 
 
-def test_sar_activity_combo_lists_only_numeric(studio_app) -> None:
+def test_sar_activity_combo_lists_only_numeric(studio_app, qtbot) -> None:
     """The activity picker filters to numeric columns at load time."""
     page = _fresh_explorer()
     page._load_builtin("qsar_classification.csv")
+    qtbot.waitUntil(lambda: not page._runner.busy, timeout=10_000)
+    qtbot.wait(50)
     listed = [page._sar_activity.itemText(i) for i in range(page._sar_activity.count())]
     assert listed  # the eight descriptor columns
     assert "activity" not in listed  # three labels — filtered out
@@ -237,6 +247,10 @@ def test_sar_activity_combo_lists_only_numeric(studio_app) -> None:
 def test_sar_matched_pairs_end_to_end(studio_app, qtbot, qapp, tmp_path) -> None:
     page = _fresh_explorer()
     page._load_builtin("library_with_descriptors.csv")
+    qtbot.waitUntil(lambda: not page._runner.busy, timeout=10_000)
+    qtbot.wait(50)
+    qtbot.waitUntil(lambda: not page._runner.busy, timeout=10_000)
+    qtbot.wait(50)
     assert page._frame is not None and len(page._frame) == 77
     # the numeric activity list carries MolLogP after the load
     assert page._sar_activity.findText("MolLogP") >= 0
@@ -265,6 +279,8 @@ def test_sar_cliff_threshold_moves(studio_app, qtbot, qapp) -> None:
     """A looser threshold finds (weakly) more cliffs."""
     page = _fresh_explorer()
     page._load_builtin("library_with_descriptors.csv")
+    qtbot.waitUntil(lambda: not page._runner.busy, timeout=10_000)
+    qtbot.wait(50)
     page._sar_smiles.setCurrentText("SMILES")
     page._sar_activity.setCurrentText("MolLogP")
     page._sar_min_delta.setValue(2.0)

@@ -1598,6 +1598,7 @@ class TestGenerativeRunPlotFlag:
         # figure (plot_rl_introspection) -- the GA-only restriction is
         # lifted the same round the diagnostics landed in history. The
         # old "ga only" typed error is retired with it.
+        pytest.importorskip("torch")  # the RL method's RNN prior needs it
         figure = tmp_path / "drift.png"
         code = main([
             "generative", "run",

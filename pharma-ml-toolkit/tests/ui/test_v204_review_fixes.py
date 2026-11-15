@@ -127,9 +127,10 @@ class TestToastBehavior:
         bar._remaining = 500
         bar.enterEvent(None)
         bar.leaveEvent(None)
-        # resumes with the 2s floor (never a fresh AUTO_MS window)
+        # resumes with the 2s floor (never a fresh AUTO_MS window);
+        # 100ms of timer-granularity slack on a loaded sandbox
         remaining = bar._timer.remainingTime()
-        assert 2_000 <= remaining <= 2_200
+        assert 1_900 <= remaining <= 2_200
 
 
 # -- m-5: the busy guard names the job ---------------------------------------

@@ -26,6 +26,8 @@ from __future__ import annotations
 import re
 import time
 
+import pytest
+
 
 def _drain(pool_wait: float = 60.0) -> None:
     from PySide6.QtCore import QThreadPool
@@ -197,6 +199,7 @@ def test_pareto_front_real_numbers(studio_app, qtbot) -> None:
 
 
 def test_rl_real_numbers(studio_app, qtbot) -> None:
+    pytest.importorskip("torch", reason="the RL method's RNN prior needs the deep extra")
     page = _fresh_page()
     page._method.setCurrentText("reinforcement learning (RL)")
     page._seeded_check.setChecked(True)  # the probe's idiom: seeds anchored ahead of the bundle
@@ -210,6 +213,7 @@ def test_rl_real_numbers(studio_app, qtbot) -> None:
 
 
 def test_mcts_real_numbers(studio_app, qtbot) -> None:
+    pytest.importorskip("torch", reason="the MCTS method's RNN prior needs the deep extra")
     page = _fresh_page()
     page._corpus_combo.setCurrentText("built-in drug-like corpus (244)")
     page._method.setCurrentText("monte carlo tree search (MCTS)")

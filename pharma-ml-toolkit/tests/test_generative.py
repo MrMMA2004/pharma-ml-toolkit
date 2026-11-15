@@ -859,6 +859,9 @@ class TestGeneticOptimizer:
 # ---------------------------------------------------------------------------
 # The RNN prior
 # ---------------------------------------------------------------------------
+pytest.importorskip("torch", reason="the SMILES RNN needs the optional deep extra")
+
+
 class TestSmilesRnn:
     def test_train_prior_returns_per_epoch_losses(self, trained_prior) -> None:
         losses = trained_prior.train_prior(DEFAULT_CORPUS, epochs=1)

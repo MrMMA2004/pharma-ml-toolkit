@@ -194,6 +194,9 @@ class TestLoadLigandCsv:
 # ---------------------------------------------------------------------------
 
 
+pytest.importorskip("meeko", reason="ligand PDBQT preparation needs the optional meeko extra")
+
+
 class TestPrepareLigandLibrary:
     @pytest.fixture()
     def ligands_csv(self, tmp_path: Path) -> Path:

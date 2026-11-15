@@ -22,6 +22,8 @@ from __future__ import annotations
 import re
 import time
 
+import pytest
+
 
 def _drain(pool_wait: float = 60.0) -> None:
     from PySide6.QtCore import QThreadPool
@@ -97,6 +99,7 @@ def test_data_explorer_entry_without_a_table_reports_honestly(studio_app) -> Non
 
 
 def test_torch_regression_real_numbers(studio_app, qtbot) -> None:
+    pytest.importorskip("torch", reason="the DL page's real training runs need the deep extra")
     page = _fresh_page()
     _run(page, page._start_train, qtbot, studio_app)
     text = page.report_text()
@@ -124,6 +127,7 @@ def test_numpy_regression_real_numbers(studio_app, qtbot) -> None:
 
 
 def test_classification_real_numbers(studio_app, qtbot) -> None:
+    pytest.importorskip("torch", reason="the DL page's real training runs need the deep extra")
     page = _fresh_page()
     page._dataset_combo.setCurrentText("qsar_classification.csv (bundled)")
     _run(page, page._start_train, qtbot, studio_app)
@@ -207,6 +211,7 @@ def test_weights_after_a_numpy_run_real_numbers(studio_app, qtbot) -> None:
 
 
 def test_weights_refuse_a_torch_run_honestly(studio_app, qtbot) -> None:
+    pytest.importorskip("torch", reason="the refusal path needs the torch engine present")
     page = _fresh_page()
     _run(page, page._start_train, qtbot, studio_app)  # the torch engine
     assert page._last_run.engine == "torch"

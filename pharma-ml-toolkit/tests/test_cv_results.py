@@ -308,6 +308,7 @@ def test_to_frame_is_the_fold_table(
 def test_dnn_cross_validation_uses_a_fresh_model_per_fold(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    pytest.importorskip("torch")  # the DNN estimator needs the optional deep extra
     from pharmaml.ml import neural
 
     rng = np.random.default_rng(11)

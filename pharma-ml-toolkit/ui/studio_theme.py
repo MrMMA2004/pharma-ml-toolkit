@@ -203,6 +203,9 @@ QPushButton:hover {{
 }}
 QPushButton:pressed {{ background: {t.subtle}; border-color: {t.accent_pressed}; }}
 QPushButton:focus {{ border: {L.border_emph}px solid {t.focus_color()}; }}
+/* (part8 round 3 review) NJobsField is a QComboBox: the focus-visible
+   audit demands an explicit :focus rule for every focusable class */
+QComboBox:focus {{ border: {L.border_emph}px solid {t.focus_color()}; }}
 QPushButton:disabled {{ color: {t.text_muted}; border-color: {t.border_subtle}; background: {t.disabled}; }}
 
 /* the primary action button: the Mineral teal fill (semantic action

@@ -48,8 +48,10 @@ def _page(data_explorer: object | None = None):
 
 
 def test_page_constructs_with_five_tabs(studio_app) -> None:
+    # (part8 round 3) six tabs now — the Backend-figures coverage
+    # browser joined the Image Lab (§4.1/§4.2)
     page = _page()
-    assert page._tabs.count() == 5
+    assert page._tabs.count() == 6
     labels = [page._tabs.tabText(i) for i in range(page._tabs.count())]
     assert labels == [
         "Similarity heatmap",
@@ -57,6 +59,7 @@ def test_page_constructs_with_five_tabs(studio_app) -> None:
         "Explorer matrix",
         "ROI explorer",
         "Performance",
+        "Backend figures",
     ]
     assert page._sim_source.currentText() == "bundled seed_molecules.csv (12 drugs)"
     assert page._sim_column.isEnabled() is False  # explorer source not selected

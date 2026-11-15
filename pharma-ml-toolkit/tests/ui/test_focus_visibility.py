@@ -81,6 +81,7 @@ def _focusable_classes(page) -> set[str]:
 _BASE_OF = {
     "DataTableView": "QTableView",
     "PandasTableModel": "QTableView",
+    "NJobsField": "QComboBox",  # a QComboBox subclass (the §5 manual field)
 }
 
 
