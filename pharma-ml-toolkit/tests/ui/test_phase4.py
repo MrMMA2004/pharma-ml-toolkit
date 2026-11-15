@@ -257,6 +257,11 @@ def test_the_data_explorer_notes_loaded_datasets(studio_app, qtbot, monkeypatch,
     page = DataExplorerPage()
     qtbot.addWidget(page)
     page._load_builtin("qsar_classification.csv")
+    # (part8 B) the load is async on the JobRunner worker: wait for the
+    # worker, then let the queued finished-signal deliver (one extra
+    # pump after busy clears -- the signal is queued, not synchronous).
+    qtbot.waitUntil(lambda: not page._runner.busy, timeout=10_000)
+    qtbot.wait(50)
     assert page._frame is not None
 
     from pharmaml.studio import entries

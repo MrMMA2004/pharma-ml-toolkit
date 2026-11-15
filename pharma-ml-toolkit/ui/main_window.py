@@ -1,11 +1,16 @@
-"""The Studio main window (directive 16.5/16.7/16.15; part6 §2.1 Phase 1).
+"""The Studio main window (part8 §12: nine-workspace architecture).
 
-The nine-card-first inversion: the application opens on the §5
-nine-card home, cards open dedicated workspaces, and the pages live
-behind them exactly as before.  The 18-item sidebar survives as the
-optional Advanced-navigation mode (top-bar toggle); it is NOT the
-dominant default interface anymore (part6 §2.1).  ``go_to`` remains
-the one routing API — the sidebar, the card buttons, the workspaces,
+The part8 Phase C restructure: the application opens on the
+Introduction page ONLY (no nine-card dashboard as the default), a
+horizontal navigation bar exposes the nine primary workspaces in the
+commission's exact left-to-right order (Introduction · Datasets ·
+Machine Learning · Deep Learning · Generative AI · Molecular Docking ·
+PK/PD · Molecular Dynamics Analysis · Visualization), and the previous
+18 detail pages live as SUBPAGES (tabs) inside their mapped
+workspace.  The 18-item vertical sidebar survives as the optional
+Advanced-navigation mode (top-bar toggle); it is NOT the dominant
+default interface.  ``go_to`` remains the one routing API — the nav
+bar, the introduction entries, the workspace tabs, the sidebar,
 Ctrl+1..9 and the tests all funnel through it.
 """
 
@@ -24,10 +29,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from PySide6.QtWidgets import QTabWidget
+
 from .app_settings import AppSettings
 from .card_workspace import CardWorkspace
 from .home import NineCardHome
+from .introduction import IntroductionPage
 from .nine_cards import NINE_CARDS
+from .widgets.page_mirror import PageMirror
+from .widgets.workspace_nav import WORKSPACE_ORDER, WorkspaceNav
 from .theme_manager import ChartPalette, ThemeManager
 from .widgets.navigation import Navigation
 from .widgets.notification_widget import Notifications
@@ -106,7 +116,10 @@ class MainWindow(QMainWindow):
         from .pages.unsupervised import UnsupervisedWorkbenchPage
         from .pages.utilities import UtilitiesWorkbenchPage
 
-        self.pages = QStackedWidget()
+        # (part8 §12) the pages mirror: the historical pages-stack API
+        # over pages now parented inside their workspace tabs.
+        self._pages_real: list[QWidget] = []
+        self.pages = PageMirror([])
         self.dashboard_page = DashboardPage()
         self.data_page = DataExplorerPage(theme=self.theme, runner=self.runner)
         self.chemistry_page = ChemistryWorkbenchPage(theme=self.theme, runner=self.runner, data_explorer=self.data_page)
@@ -142,42 +155,90 @@ class MainWindow(QMainWindow):
         self.utilities_page = UtilitiesWorkbenchPage(theme=self.theme, runner=self.runner)
         self.settings_page = SettingsPage(self.theme)
 
-        for page in (
-            self.dashboard_page,
-            self.data_page,
-            self.chemistry_page,
-            self.pkpd_page,
-            self.biology_page,
-            self.docking_page,
-            self.model_page,
-            self.mlworkbench_page,
-            self.unsupervised_page,
-            self.deep_learning_page,
-            self.generative_page,
-            self.foundations_page,
-            self.bestofml_page,
-            self.responseai_page,
-            self.imagelab_page,
-            self.molecular_dynamics_page,
-            self.utilities_page,
-            self.settings_page,
-        ):
-            self.pages.addWidget(page)
+        # (part8 §12) the 18 pages, in historical SECTIONS order, feed
+        # the mirror (the pinned pages-stack API) while their REAL
+        # parents are the workspace tabs built below.
+        self._pages_real = [
+            self.dashboard_page, self.data_page, self.chemistry_page,
+            self.pkpd_page, self.biology_page, self.docking_page,
+            self.model_page, self.mlworkbench_page, self.unsupervised_page,
+            self.deep_learning_page, self.generative_page,
+            self.foundations_page, self.bestofml_page, self.responseai_page,
+            self.imagelab_page, self.molecular_dynamics_page,
+            self.utilities_page, self.settings_page,
+        ]
+        self.pages = PageMirror(self._pages_real)
 
-        # -- three modes (part6 §2.1): home, card workspaces, pages ----------
-        self.home = NineCardHome()
-        self.workspaces: dict[str, CardWorkspace] = {}
+        # -- (part8 §12) the nine workspaces: real page hosts ---------------
+        # Each workspace is a QTabWidget whose tabs are the previous 18
+        # detail pages mapped to it (the directive's subpage rule — no
+        # page is deleted to satisfy the nine-workspace structure).  The
+        # registry's card metadata (badge/title/description) rides the
+        # tabbed shell's intro tab where a card has more than one page.
+        self._SECTION_ROUTE: dict[str, tuple[str, int]] = {}
+        self._WORKSPACE_PAGES: dict[str, list[tuple[str, QWidget]]] = {
+            "introduction": [
+                ("Dashboard", self.dashboard_page),
+                ("Settings", self.settings_page),
+            ],
+            "datasets": [
+                ("Data Explorer", self.data_page),
+                ("Chemistry Lab", self.chemistry_page),
+                ("Utilities", self.utilities_page),
+            ],
+            "machine-learning": [
+                ("Model Analysis", self.model_page),
+                ("ML Workbench", self.mlworkbench_page),
+                ("Unsupervised", self.unsupervised_page),
+                ("Best of ML", self.bestofml_page),
+                ("Foundations", self.foundations_page),
+            ],
+            "deep-learning": [("Deep Learning", self.deep_learning_page)],
+            "generative-ai": [("Generative", self.generative_page)],
+            "molecular-docking": [("Docking", self.docking_page)],
+            "pkpd": [
+                ("PK/PD", self.pkpd_page),
+                ("Biology", self.biology_page),
+                ("Response AI", self.responseai_page),
+            ],
+            "molecular-dynamics-analysis": [("Molecular Dynamics", self.molecular_dynamics_page)],
+            "visualization": [("Image Lab", self.imagelab_page)],
+        }
+        # Settings is reachable from every workspace's tab bar tail via
+        # the top bar; it also stays a subpage under Introduction.
+        # (kept: self.settings_page in the flat pages stack for Advanced
+        # navigation compat)
+
+        self.workspaces: dict[str, QWidget] = {}
         self._workspace_stack = QStackedWidget()
         for card in NINE_CARDS:
-            ws = CardWorkspace(card)
-            ws.open_section.connect(self.go_to)
-            self.workspaces[card.card_id] = ws
-            self._workspace_stack.addWidget(ws)
+            tabs = QTabWidget()
+            tabs.setObjectName(f"workspaceTabs-{card.card_id}")
+            tabs.setDocumentMode(True)
+            for label, page in self._WORKSPACE_PAGES[card.card_id]:
+                tabs.addTab(page, label)
+            self.workspaces[card.card_id] = tabs
+            self._workspace_stack.addWidget(tabs)
+        # the section route: page identity -> (workspace key, tab index)
+        # (built AFTER the tabs exist; identity comparison, no names)
+        for section_index, (section_key, _title) in enumerate(SECTIONS):
+            page = self._page_for_section(section_key)
+            if page is None:
+                continue
+            for workspace_key, pages in self._WORKSPACE_PAGES.items():
+                for tab_index, (_label, tab_page) in enumerate(pages):
+                    if tab_page is page:
+                        self._SECTION_ROUTE[section_key] = (workspace_key, tab_index)
+                        break
+
+        # -- (part8 §12.2) the Introduction page is the opening screen ------
+        self.introduction = IntroductionPage()
+        self.home = NineCardHome()  # retained: Advanced mode + Alt+Home target
 
         self.mode = QStackedWidget()
-        self.mode.addWidget(self.home)              # index 0 — the default screen
-        self.mode.addWidget(self._workspace_stack)  # index 1 — card workspaces
-        self.mode.addWidget(self.pages)             # index 2 — the 18 pages
+        self.mode.addWidget(self.introduction)      # index 0 — the §12.2 default screen
+        self.mode.addWidget(self._workspace_stack)  # index 1 — the nine workspaces
+        self.mode.addWidget(self.home)              # index 2 — the legacy card grid
         self.mode.setCurrentIndex(0)
 
         # -- the legacy sidebar: hidden unless Advanced is on (§2.1) ---------
@@ -194,10 +255,12 @@ class MainWindow(QMainWindow):
 
         # -- top bar (§5.2) ----------------------------------------------------
         self.top_bar = TopBar()
-        self.top_bar.home_requested.connect(self.go_home)
+        self.top_bar.home_requested.connect(self.go_home)  # Introduction
         self.top_bar.back_requested.connect(self.go_back)
         self.top_bar.settings_requested.connect(lambda: self.go_to("settings"))
         self.top_bar.advanced_toggled.connect(self._set_advanced_nav)
+        # (part8 §12.1) the horizontal workspace bar
+        self.workspace_nav = WorkspaceNav()
         self.top_bar.search_requested.connect(self.open_search)
         self.top_bar.help_requested.connect(self.open_help)
         self.top_bar.jobs_clicked.connect(self.open_job_center)
@@ -207,8 +270,15 @@ class MainWindow(QMainWindow):
         bar_lay.setContentsMargins(0, 0, 0, 0)
         bar_lay.setSpacing(0)
         bar_lay.addWidget(self.top_bar)
+        # (part8 §12.1) the horizontal nine-workspace bar, always visible
+        bar_lay.addWidget(self.workspace_nav)
         bar_lay.addWidget(self.splitter)
         self.setCentralWidget(bar_wrap)
+
+        # §12.1 routing: the bar picks the workspace; the Introduction
+        # page's entry buttons ask for the same thing.
+        self.workspace_nav.workspace_selected.connect(self.open_workspace)
+        self.introduction.workspace_requested.connect(self.open_workspace)
 
         # the promoted home grid reads the same live page-state provider as
         # the Dashboard's own grid (part5 §11 contract, unchanged)
@@ -238,12 +308,16 @@ class MainWindow(QMainWindow):
         # -- wiring ------------------------------------------------------------
         self.nav.section_selected.connect(self._go)
         self.theme.theme_applied.connect(self._on_theme)
-        for i in range(1, min(9, len(SECTIONS)) + 1):
-            action = QAction(f"Jump to {SECTIONS[i - 1][1]}", self)
+        # (part8 §12.1) Ctrl+1..9 jump to the nine WORKSPACES in the
+        # commission order — the keyboard-accessible twin of the bar.
+        for i, (key, label) in enumerate(WORKSPACE_ORDER, start=1):
+            action = QAction(f"Jump to the {label} workspace", self)
             action.setShortcut(QKeySequence(f"Ctrl+{i}"))
-            action.triggered.connect(lambda _checked=False, idx=i - 1: self._go(SECTIONS[idx][0]))
+            action.triggered.connect(
+                lambda _checked=False, k=key: self.open_workspace(k)
+            )
             self.addAction(action)
-        home_action = QAction("Go to the nine-card home", self)
+        home_action = QAction("Go to the Introduction page", self)
         home_action.setShortcut(QKeySequence("Alt+Home"))
         home_action.triggered.connect(self.go_home)
         self.addAction(home_action)
@@ -284,7 +358,9 @@ class MainWindow(QMainWindow):
             self._current_route = ("page", saved_nav)
             self._apply_route("page", saved_nav, persist=False)
         else:
+            # §12.2: the app opens on the Introduction page ONLY
             self._apply_route("home", None, persist=False)
+            self.workspace_nav.select("introduction")
         geometry = self.settings.geometry()
         if geometry is not None:
             self.restoreGeometry(geometry)
@@ -301,33 +377,109 @@ class MainWindow(QMainWindow):
         self._history.append(self._current_route)
         self._history = self._history[-24:]  # bounded memory
 
+    def _page_for_section(self, section: str) -> QWidget | None:
+        """The page widget behind a legacy section key (§12 subpage rule).
+
+        The section->page map is exactly the historical construction
+        order of the page attributes (the SECTIONS list order).
+        """
+        page_of = {
+            "dashboard": self.dashboard_page,
+            "data": self.data_page,
+            "chemistry": self.chemistry_page,
+            "pkpd": self.pkpd_page,
+            "biology": self.biology_page,
+            "docking": self.docking_page,
+            "models": self.model_page,
+            "mlworkbench": self.mlworkbench_page,
+            "unsupervised": self.unsupervised_page,
+            "deep_learning": self.deep_learning_page,
+            "generative": self.generative_page,
+            "foundations": self.foundations_page,
+            "bestofml": self.bestofml_page,
+            "responseai": self.responseai_page,
+            "imagelab": self.imagelab_page,
+            "molecular_dynamics": self.molecular_dynamics_page,
+            "utilities": self.utilities_page,
+            "settings": self.settings_page,
+        }
+        return page_of.get(section)
+
+    #: (part8 §12) mode stack indices — Introduction, workspaces, the
+    #: legacy card grid (Advanced reach).
+    _MODE_INTRODUCTION = 0
+    _MODE_WORKSPACES = 1
+    _MODE_CARD_GRID = 2
+
     def _apply_route(self, marker: str, section: str | None, persist: bool = True) -> None:
         if marker == "home":
-            self.mode.setCurrentIndex(0)
+            self.mode.setCurrentIndex(self._MODE_INTRODUCTION)
         elif marker == "workspace":
             ws = self.workspaces.get(section or "")
             if ws is None:
                 return
             self._workspace_stack.setCurrentWidget(ws)
-            self.mode.setCurrentIndex(1)
+            self.mode.setCurrentIndex(self._MODE_WORKSPACES)
+            self.workspace_nav.select(section or "")
+        elif marker == "cardgrid":
+            self.mode.setCurrentIndex(self._MODE_CARD_GRID)
         else:
-            target = {key: i for i, (key, _title) in enumerate(SECTIONS)}
-            if section not in target:
+            # (part8 §12) a legacy section key routes INTO its workspace
+            # as the subpage tab — the flat pages stack is a legacy host
+            # that no longer owns any page (single-parent rule).
+            route = self._SECTION_ROUTE.get(section or "")
+            if route is None:
                 return
-            self.pages.setCurrentIndex(target[section])
-            self.mode.setCurrentIndex(2)
+            workspace_key, tab_index = route
+            tabs = self.workspaces[workspace_key]
+            tabs.setCurrentIndex(tab_index)
+            self._workspace_stack.setCurrentWidget(tabs)
+            self.mode.setCurrentIndex(self._MODE_WORKSPACES)
+            self.workspace_nav.select(workspace_key)
             self.nav.select(section)
+            # the mirror keeps the historical currentIndex contract
+            section_index = {k: i for i, (k, _t) in enumerate(SECTIONS)}.get(section, -1)
+            if section_index >= 0:
+                self.pages.setCurrentIndex(section_index)
         self._current_route = (marker, section)
         self.top_bar.set_back_enabled(bool(self._history))
         if marker == "home":
-            title = "Nine-card home"
+            title = "Introduction"
         elif marker == "workspace":
-            title = f"{self.workspaces[section].card.title} — card workspace"
+            title = f"{self._workspace_title(section or '')} workspace"
+        elif marker == "cardgrid":
+            title = "Nine-card home (advanced)"
         else:
             title = dict(SECTIONS).get(section or "", section or "")
         self.top_bar.set_location(title)
         if persist and marker == "page" and section is not None:
             self.settings.save_nav(section)
+
+    def _workspace_of_section(self, section: str) -> str | None:
+        """Which §12 workspace owns a legacy section key (subpage rule)."""
+        for workspace_key, pages in self._WORKSPACE_PAGES.items():
+            for _label, page in pages:
+                if page is self.pages.widget(
+                    {key: i for i, (key, _t) in enumerate(SECTIONS)}.get(section, -1)
+                ):
+                    return workspace_key
+        return None
+
+    def _workspace_title(self, key: str) -> str:
+        return dict(WORKSPACE_ORDER).get(key, key)
+
+    def open_workspace(self, key: str) -> None:
+        """(part8 §12.1) Route to one of the nine workspaces.
+
+        The horizontal bar, the Introduction entry buttons and the tests
+        all funnel here.  When the workspace carries a known legacy
+        section (its first subpage), the route persists that section so
+        Advanced navigation and restore stay coherent.
+        """
+        if key not in self.workspaces:
+            return
+        self._push_history()
+        self._apply_route("workspace", key, persist=False)
 
     def _go(self, section: str, persist: bool = True) -> None:
         """Route to a page section (sidebar, shortcuts, tests, cards)."""
@@ -386,8 +538,15 @@ class MainWindow(QMainWindow):
         JobCenterDialog(self.runner, parent=self).exec()
 
     def go_home(self, persist: bool = True) -> None:
+        """§12.2: Home IS the Introduction page now (the card grid is
+        reachable as the Advanced home, and from nothing else)."""
         self._push_history()
         self._apply_route("home", None, persist=persist)
+
+    def go_card_grid(self) -> None:
+        """The legacy nine-card grid (Advanced navigation reach)."""
+        self._push_history()
+        self._apply_route("cardgrid", None, persist=False)
 
     def go_back(self) -> None:
         if not self._history:
@@ -396,11 +555,8 @@ class MainWindow(QMainWindow):
         self._apply_route(marker, section, persist=False)
 
     def open_card(self, card_id: str) -> None:
-        """Open a card's workspace (part6 §5) — the grid's card target."""
-        if card_id not in self.workspaces:
-            return
-        self._push_history()
-        self._apply_route("workspace", card_id, persist=False)
+        """Open a card's workspace — the §12 twin of open_workspace."""
+        self.open_workspace(card_id)
 
     def _set_advanced_nav(self, on: bool) -> None:
         """§2.1: the 18-item sidebar rides again — but only on request."""

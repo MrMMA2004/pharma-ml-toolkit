@@ -121,6 +121,39 @@ QLabel#studioCardTitle {{
     font-size: {SCALE.card_title_pt}pt;
     font-weight: 600;
 }}
+/* ---- (part8 §12) the horizontal nine-workspace navigation ---------- */
+QWidget#studioWorkspaceNav {{
+    background: {shell};
+    border-bottom: 1px solid {t.border};
+}}
+QWidget#studioWorkspaceNav QPushButton {{
+    background: transparent;
+    color: {t.shell_text or t.text_secondary};
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: {L.space_sm}px {L.space_md}px;
+    font-weight: 500;
+}}
+QWidget#studioWorkspaceNav QPushButton:hover {{
+    color: {t.shell_text or t.text};
+    background: {t.selected_surface};
+}}
+QWidget#studioWorkspaceNav QPushButton:checked {{
+    color: {t.shell_text or t.text};
+    border-bottom: 2px solid {t.focus_color()};
+    font-weight: 600;
+}}
+QLabel#studioSectionHeading {{
+    color: {t.text};
+    font-size: {SCALE.card_title_pt}pt;
+    font-weight: 600;
+}}
+QFrame#introductionWorkspaceRow {{
+    background: {t.surface};
+    border: {L.border}px solid {t.border_subtle};
+    border-radius: {r_sm}px;
+}}
 QLabel#studioCardDetail, QLabel#nineCardDesc {{
     color: {t.text_secondary};
 }}
