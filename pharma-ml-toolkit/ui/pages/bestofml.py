@@ -467,7 +467,12 @@ class BestOfMLWorkbenchPage(QWidget):
 
     def _busy_check(self) -> bool:
         if self._runner.busy:
-            self._report.setText("A job is already running — Stop it first.")
+            # v1.2.204 m-5: name the running job so the guard is
+            # actionable ("which job?") instead of anonymous.
+            name = getattr(self._runner, "job_name", "") or "another operation"
+            self._report.setText(
+                f"Busy: '{name}' is running — Stop it (or check Job Center) first."
+            )
             return True
         return False
 

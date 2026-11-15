@@ -425,7 +425,7 @@ class MLWorkbenchPage(QWidget):
         cancellations say so (the cooperative stop).
         """
         if self._runner.busy:
-            status.setText("A job is already running — Stop it first.")
+            status.setText(f"Busy: '{getattr(self._runner, 'job_name', '') or 'another operation'}' is running — Stop it (or check Job Center) first.")
             return
         self._active_status = status
 

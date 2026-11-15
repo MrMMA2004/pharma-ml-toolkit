@@ -94,10 +94,11 @@ def test_identity_values_verbatim() -> None:
     # focus rings are the spec's focus/ring tokens
     assert LIGHT.focus_ring == "#076F73"
     assert DARK.focus_ring == "#79D9CF"
-    # text/border ramps from the spec table
+    # text/border ramps from the spec table (text_muted re-tuned in
+    # v1.2.204 to hold 4.5:1 on canvas AND surface — review M-5)
     assert LIGHT.text == "#14232C"
     assert LIGHT.text_secondary == "#4D6572"
-    assert LIGHT.text_muted == "#697F8A"
+    assert LIGHT.text_muted == "#60747E"
     assert LIGHT.border == "#CCD8DE"
     assert DARK.text == "#EAF0F2"
     assert DARK.text_secondary == "#A9BCC6"
@@ -130,9 +131,27 @@ def test_light_theme_ui_components_clear_3_to_1() -> None:
 
 def test_disabled_state_is_a_fill_not_text() -> None:
     """state/disabled paints backgrounds; disabled TEXT routes to
-    text_muted (3.9:1 on canvas) by the QSS, which this pins."""
-    assert LIGHT.disabled == "#EAF0F2"  # a fill, not a text color
-    assert DARK.disabled == "#263A45"
+    text_muted by the QSS, which this pins.
+
+    v1.2.204 (review C-3): the disabled token itself now clears the
+    WCAG 1.4.11 3:1 non-text floor against BOTH the canvas and the
+    surface in every theme — a disabled control reads as present-but-
+    unavailable, not as invisible (the pre-204 values measured
+    1.07-1.48:1 and failed everywhere)."""
+    for t in ALL_THEMES:
+        assert contrast_ratio(t.disabled, t.background) >= 3.0, t.name
+        assert contrast_ratio(t.disabled, t.surface) >= 3.0, t.name
+
+
+def test_muted_text_meets_aa_everywhere() -> None:
+    """v1.2.204 (review M-5): text_muted paints real copy (metadata,
+    helper hints, empty-state glyphs at 9 pt) on the canvas AND on
+    surfaces, so it holds 4.5:1 in both contexts in every theme (the
+    pre-204 values measured 3.46-4.69:1 and missed AA in five of six
+    themes on at least one context)."""
+    for t in ALL_THEMES:
+        assert contrast_ratio(t.text_muted, t.background) >= 4.5, t.name
+        assert contrast_ratio(t.text_muted, t.surface) >= 4.5, t.name
 
 
 def test_dark_theme_is_not_an_inversion() -> None:

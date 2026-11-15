@@ -1108,6 +1108,6 @@ class ImageLabPage(QWidget):
 
     def _busy_check(self) -> bool:
         if self._runner.busy:
-            self._status.setText("A job is already running — Stop it first.")
+            self._status.setText(f"Busy: '{getattr(self._runner, 'job_name', '') or 'another operation'}' is running — Stop it (or check Job Center) first.")
             return True
         return False

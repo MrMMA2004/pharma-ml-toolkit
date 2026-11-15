@@ -14797,3 +14797,41 @@ breakpoints), ruff/mypy clean on changed files, DPI ladder
 100/125/150/200% at 1440x900/1280x800/1024x768/860x560 all pass,
 both-theme pixel canvas verified. One OOM-kill round of batches was
 re-run small (green). v1.2.202 shipped; zip in three homes; pushed.
+
+R35 (product-review fix round) — commissioned by the user's three-step
+"Fix issues / Update zip / Push" on the v1.2.203 product review (the
+17-page review doc delivered the same round: 3 critical, 8 major, 10
+minor findings; visual 7.0/10, functional 7.5/10). Fixed: C-2 the
+dependency mapper (JobWorker maps DependencyError + ImportError by
+name OR message text to the pip-extra install hint + doctor pointer;
+pinned end-to-end), C-3 disabled token re-tuned in all six themes
+(>=3:1 canvas AND surface; was 1.07-1.48:1), M-5 text_muted re-tuned
+in all six (>=4.5:1 both contexts; was 3.46-4.69:1), M-3 the
+QFormLayout::takeAt warning (count()-bounded clears in
+workflow_templates + nine_cards grid, nested rows drained), m-4 toast
+hover-pause with 2s resume floor + danger 9s + trailing-x close
+affordance + clean accessible name, m-5 busy guard names the job in
+all 14 pages, m-9 dead _elide_entry_label removed. C-1 closed by
+audit: a QSS rule scan proves every primary/accent fill paints
+on_primary (5.95-12.24:1) and selection-color passes 8.48-14.05:1 in
+all six themes; the failing pairing in the review's chart was the
+disabled/muted ramp, fixed above, and the token tests now pin the
+floors so it cannot regress.
+
+Housekeeping found on the way: the 1.2.202/1.2.203 releases shipped
+with three of four version carriers stuck at 1.2.201 (pyproject,
+__init__, toolkit-version.ts — the four-carrier test was red on the
+release tree). All four trued to 1.2.204 in this bump, r262 rule.
+
+Verification: test_v204_review_fixes.py (14) green; design_tokens
+re-pinned and green; theme_screenshots (6-theme canvas pins) green;
+touched-page suites green (docking, utilities, nine-cards, biology,
+chemistry, pkpd, dl-efficiency, bestofml, image-lab, ml-workbench,
+model-analysis, deep-learning, generative, foundations, responseai,
+unsupervised, research-workflows, job-worker, theme-manager); doctor
+18/18; ruff clean on new code (4 pre-existing findings in touched
+files verified by stash-diff, left to the standing debt sweep); the
+mid-round deep-learning/generative failures were the missing torch
+extra (the C-2 scenario itself) and went green after the cpu wheel.
+Six busy-message test pins updated to the new contract (biology,
+chemistry, dl-efficiency x2, docking, pkpd). v1.2.204 shipped.

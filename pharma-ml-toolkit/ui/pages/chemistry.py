@@ -322,7 +322,7 @@ class ChemistryWorkbenchPage(QWidget):
             return
         col = self._smiles_combo.currentText()
         if self._runner.busy:
-            self._report.setText("A job is already running — Stop it first.")
+            self._report.setText(f"Busy: '{getattr(self._runner, 'job_name', '') or 'another operation'}' is running — Stop it (or check Job Center) first.")
             return
         frame = self._frame
 
@@ -359,7 +359,7 @@ class ChemistryWorkbenchPage(QWidget):
         if smiles is None:
             return
         if self._runner.busy:
-            self._report.setText("A job is already running — Stop it first.")
+            self._report.setText(f"Busy: '{getattr(self._runner, 'job_name', '') or 'another operation'}' is running — Stop it (or check Job Center) first.")
             return
         # (round 12) the preserved-partial line reports against this
         # requested count when a cooperative stop lands mid-batch

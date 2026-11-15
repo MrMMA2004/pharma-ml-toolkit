@@ -23,6 +23,8 @@ _KIND_TOKENS = {
     "danger": ("error", "error_bg"),
 }
 AUTO_MS = 4_000
+#: v1.2.204 m-4: failures need more reading time than confirmations.
+DANGER_MS = 9_000
 
 
 def kind_style(kind: str, theme: str = "light") -> tuple[str, str]:
@@ -43,6 +45,10 @@ class NotificationBar(QLabel):
         # Phase 5 accessibility: screen readers announce the toast as a
         # notification of its severity, not as an anonymous label.
         self.setAccessibleName(f"{kind.title()} notification: {text}")
+        # v1.2.204 m-4: the trailing '×' states the close affordance in
+        # text (the whole bar is already click-to-dismiss; hover pauses).
+        super().setText(f"{text}   \N{MULTIPLICATION X}")
+        self.setToolTip("Click to dismiss")
         self.setStyleSheet(
             f"QLabel {{ background: {bg}; color: {fg}; border-radius: 6px;"
             " padding: 8px 12px; font-weight: 600; }"
@@ -55,7 +61,23 @@ class NotificationBar(QLabel):
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._dismiss)
-        self._timer.start(AUTO_MS)
+        # v1.2.204 m-4: danger toasts linger longer; hovering pauses the
+        # countdown so long messages can be read at the reader's pace.
+        self._duration = DANGER_MS if kind == "danger" else AUTO_MS
+        self._timer.start(self._duration)
+
+    def enterEvent(self, event: object) -> None:
+        # m-4: pause the auto-dismiss while the pointer is on the toast.
+        if self._timer.isActive():
+            self._remaining = max(
+                self._duration - self._timer.remainingTime(), 2_000
+            )
+            self._timer.stop()
+
+    def leaveEvent(self, event: object) -> None:
+        # m-4: resume (never longer than the original remaining time).
+        if not self._timer.isActive():
+            self._timer.start(max(getattr(self, "_remaining", 0), 2_000))
 
     def mousePressEvent(self, event: object) -> None:
         self._dismiss()

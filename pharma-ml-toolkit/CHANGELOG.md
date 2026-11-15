@@ -1,3 +1,69 @@
+## [1.2.204] — 2026-11-15 — product-review fix round (R35)
+
+Commissioned by the v1.2.203 product review (the 17-page design/QA
+review delivered this round): fix the apparent (visual/accessibility)
+and practical findings, true the version carriers, and re-ship.
+
+### Critical fixes (review C-1..C-3)
+- **C-1 closed by audit + tokens** — a QSS-wide rule scan confirms every
+  primary/accent fill paints `on_primary` (5.95–12.24:1); the real
+  low-contrast exposure was the disabled/muted ramp, fixed below.
+  `test_design_tokens.py` now pins selection-color and the fill rules
+  can no longer silently regress to `t.text`-on-fill.
+- **C-2 dependency failures are actionable** — `JobWorker` maps
+  pharmaml's `DependencyError` and raw `ImportError`/
+  `ModuleNotFoundError` (name OR message text) to an install hint with
+  the exact `pip install 'pharmaml[extra]'` line and a doctor
+  pointer, instead of a raw traceback in the report panel
+  (`ui/workers/job_worker.py::_dependency_hint`).  Pinned by
+  `test_v204_review_fixes.py::TestDependencyHint` (5 tests, including
+  the end-to-end worker emission).
+- **C-3 disabled reads as unavailable, not invisible** — the disabled
+  token is re-tuned in all six themes (light #6994A2, dark #4A7187,
+  spectral #9F8A58, spectral-dark #6761A2, catalyst #7B9476,
+  catalyst-dark #487BA9): ≥3:1 against canvas AND surface (the
+  pre-204 values measured 1.07–1.48:1 and failed everywhere).
+
+### Major/minor fixes (review M-3, M-5, m-4, m-5, m-9)
+- **M-5 muted text holds AA** — `text_muted` re-tuned in all six themes
+  (≥4.5:1 on canvas AND surface; pre-204 3.46–4.69:1 missed AA in five
+  of six).  `test_muted_text_meets_aa_everywhere` pins the floor.
+- **M-3 count()-bounded clears** — the `QFormLayout::takeAt: Invalid
+  index 0` warning seen during section walks is gone:
+  `workflow_templates._clear_form` and the nine-card grid clear are
+  bounded by `count()`, and the nested path rows are drained too.
+- **m-4 toasts respect the reader** — hover pauses the auto-dismiss
+  (resume never extends the original window; 2s floor), danger toasts
+  linger 9s vs 4s, a trailing × states the close affordance with a
+  tooltip, and the accessible name keeps the plain message.
+- **m-5 the busy guard is actionable** — all 14 workbench pages now say
+  `Busy: '<job name>' is running — Stop it (or check Job Center)
+  first.` instead of the anonymous "A job is already running".
+- **m-9 dead code** — `_elide_entry_label` (flagged in the partX3
+  audit's remaining-limitations) is removed.
+
+### Housekeeping (found during the fix round)
+- **Version-carrier drift repaired** — v1.2.202/1.2.203 shipped with
+  pyproject.toml, `pharmaml.__version__` and the web's
+  `SHIPPED_TOOLKIT_VERSION` still at 1.2.201 while VERSION said
+  1.2.203 (the four-carrier test was failing on the release tree).
+  All four carriers now move together at 1.2.204, per the r262 rule.
+
+### Verification
+- New pins: `tests/ui/test_v204_review_fixes.py` (14 tests) + the
+  re-tuned `test_design_tokens.py` floors — all green.
+- Touched-page suites green: docking, utilities, nine-cards, biology,
+  chemistry, pkpd, dl-efficiency, bestofml, image-lab, ml-workbench,
+  model-analysis, deep-learning, generative, foundations, responseai,
+  unsupervised, research-workflows, theme-screenshots (6-theme canvas
+  pins), theme-manager, job-worker.
+- Doctor 18/18 OK.  ruff: new code clean; the 4 remaining findings in
+  touched files are pre-existing on the 1.2.203 tree (verified by
+  stash-diff), left for the standing debt sweep.
+- The deep-learning/generative failures observed mid-round were the
+  missing torch extra (the C-2 scenario itself); green after
+  `pip install torch --index-url .../whl/cpu`.
+
 ## [1.2.203] — 2026-11-14 — Spectral & Catalyst alternates + partX3 audit
 
 Commissioned by the partX3 round: "Spectral/Catalyst as switchable

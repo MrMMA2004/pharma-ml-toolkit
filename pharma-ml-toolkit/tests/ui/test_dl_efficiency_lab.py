@@ -180,8 +180,8 @@ def test_busy_guard_blocks_concurrent_runs(studio_app, qtbot, qapp) -> None:
 
     assert QThreadPool.globalInstance().activeThreadCount() > 0
     page._start_eff_prune()
-    assert "already running" in page._report.text()
+    assert "Busy: '" in page._report.text()
     page._start_eff_quant()
     page._start_eff_zero()
-    assert "already running" in page._report.text()
+    assert "Busy: '" in page._report.text()
     _settle(qtbot, qapp)

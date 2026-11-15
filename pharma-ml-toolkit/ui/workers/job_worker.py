@@ -30,6 +30,59 @@ ProgressReport = Callable[[Any, str], None]
 ProgressCallback = Callable[[Any, str], bool]
 BackendJob = Callable[[ProgressCallback], Any]
 
+#: module names that map to the pip extra that installs them (the
+#: README's extras table).  An ImportError naming one of these is a
+#: setup problem, so the UI can say how to fix it (v1.2.204 C-2).
+_PIP_EXTRAS: tuple[tuple[str, str], ...] = (
+    ("rdkit", "chem"),
+    ("meeko", "chem"),
+    ("gemmi", "docking"),
+    ("vina", "docking"),
+    ("torch", "deep-learning"),
+    ("lightgbm", "boosting"),
+    ("xgboost", "boosting"),
+    ("catboost", "boosting"),
+    ("fiftyone", "data-curation"),
+    ("mdanalysis", "md"),
+    ("optuna", "tuning"),
+)
+
+
+def _dependency_hint(exc: BaseException) -> str | None:
+    """A user-facing install hint when ``exc`` is a missing optional dep.
+
+    Recognises pharmaml's own ``DependencyError`` (whose message already
+    carries the pip command) and the raw ``ImportError``/
+    ``ModuleNotFoundError`` shapes a backend raises before it can build
+    its own error.  Returns ``None`` for everything else (the historical
+    traceback format is preserved).
+    """
+    from pharmaml.exceptions import DependencyError
+
+    if isinstance(exc, DependencyError):
+        return (f"Missing optional dependency — {exc}\n"
+                "Install it (see README → Installation), then retry. "
+                "Run 'python studio.py --doctor' to verify the environment.")
+    if isinstance(exc, ImportError):
+        # ``exc.name`` is only populated by the interpreter's own raise
+        # path; backends often raise ``ModuleNotFoundError(msg)`` with
+        # the module in the TEXT (the shape the docking library scan
+        # produced in the v1.2.203 review).  Check both.
+        candidates = [exc.name or "", str(exc)]
+        for module, extra in _PIP_EXTRAS:
+            for source in candidates:
+                text = source.lower()
+                if text == module or f"'{module}'" in text or f"\"{module}\"" in text \
+                        or f" {module}" in text or text.startswith(module):
+                    return (
+                        f"Job needs the '{module}' package, which is not installed "
+                        f"in this environment.\nInstall it with the '{extra}' extra "
+                        "(see README → Installation), then retry — e.g.\n"
+                        f"    pip install 'pharmaml[{extra}]'\n"
+                        "Run 'python studio.py --doctor' to verify the environment."
+                    )
+    return None
+
 
 class JobSignals(QObject):
     """Queued-connection bridge from the worker thread to the GUI thread."""
@@ -95,6 +148,14 @@ class JobWorker(QRunnable):
                 self.signals.cancelled.emit(time.monotonic() - self._t0)
                 if partial is not None:
                     self.signals.preserved.emit(partial)
+                return
+            friendly = _dependency_hint(exc)
+            if friendly is not None:
+                # v1.2.204 C-2: a missing optional dependency is a setup
+                # problem, not a bug -- the user gets the install command
+                # instead of a raw traceback (the doctor deep-links from
+                # the install page of the README).
+                self.signals.failed.emit(friendly)
                 return
             self.signals.failed.emit(f"{type(exc).__name__}: {exc}\n{traceback.format_exc(limit=3)}")
             return

@@ -228,7 +228,8 @@ def test_duplicate_submission_refused(studio_app, qtbot) -> None:
 
     page._runner.submit("hold-the-runner", slow_job)
     page._start_features()  # refused while the hold job runs
-    assert "already running" in page.report_text()
+    assert "Busy: '" in page.report_text()
+    assert "Stop it" in page.report_text()
     done.wait()
     _settle(qtbot, studio_app)
 

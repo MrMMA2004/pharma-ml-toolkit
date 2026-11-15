@@ -576,8 +576,12 @@ class NineCardGrid(QWidget):
             self._stretch_row = None
         for column in range(3):
             self._grid.setColumnStretch(column, 0)
+        # v1.2.204 M-3: count()-bounded clear (takeAt(0) past the end
+        # logs "Invalid index" to stderr — seen during section walks).
         while self._grid.count():
-            self._grid.takeAt(0)
+            item = self._grid.takeAt(0)
+            if item is None:
+                break
         for index, card in enumerate(NINE_CARDS):
             self._grid.addWidget(
                 self._frames[card.card_id], index // columns, index % columns
@@ -693,19 +697,6 @@ def _build_card(card: NineCard, context: Mapping[str, Any] | None = None) -> QFr
         flow_layout.addWidget(btn)
     lay.addWidget(flow)
     return frame
-
-
-def _elide_entry_label(label: str, budget: int = 18) -> str:
-    """Shorten an entry label for the card row (tooltip keeps the full one).
-
-    'Open Model Analysis' -> 'Model Analysis' -> capped at ``budget``
-    chars with an ellipsis. Single-word labels pass through unchanged.
-    """
-    if label.startswith("Open "):
-        label = label[len("Open "):]
-    if len(label) > budget:
-        return label[: budget - 1].rstrip() + "…"
-    return label
 
 
 def _go(section: str, source: QWidget) -> None:

@@ -291,7 +291,7 @@ def test_duplicate_submission_refused(studio_app, qtbot) -> None:
     page = _page()
     assert page._runner.submit("blocker", lambda progress: time.sleep(0.8)) is not None
     page._start_events()  # refused while the blocker runs
-    assert "A job is already running" in page.report_text()
+    assert "Busy: '" in page.report_text()
     # let the blocker finish AND flush its queued signals while the page
     # is still alive (destroying the runner first breaks _finish)
     qtbot.waitSignal(page._runner.job_ended, timeout=30_000).wait()

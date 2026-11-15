@@ -176,9 +176,24 @@ class WorkflowTemplatesTab(QWidget):
     # -- per-template card-integrated forms (R26-c) ---------------------------
 
     def _clear_form(self) -> None:
-        while (row := self._form_layout.takeAt(0)) is not None:
+        # v1.2.204 M-3: bound the loop by count() — takeAt(0) on an
+        # empty QFormLayout logs "Invalid index 0" to stderr (seen in
+        # the 228-shot capture walk).  count()-bounded loops never ask
+        # for an index that does not exist.
+        while self._form_layout.count():
+            row = self._form_layout.takeAt(0)
+            if row is None:
+                break
             if row.widget():
                 row.widget().deleteLater()
+            elif row.layout() is not None:
+                # nested rows (path rows wrap a QHBoxLayout): let the
+                # children be deleted with their widgets, drop the row.
+                child = row.layout().takeAt(0)
+                while child is not None:
+                    if child.widget():
+                        child.widget().deleteLater()
+                    child = row.layout().takeAt(0)
 
     def _add_path_row(self, label: str, placeholder: str,
                       pick_caption: str) -> QLineEdit:

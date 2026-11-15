@@ -855,7 +855,7 @@ class ModelAnalysisPage(QWidget):
 
     def _submit_diag(self, name: str, job, on_finished) -> None:
         if self._runner.busy:
-            self._diag_status.setText("A job is already running — Stop it first.")
+            self._diag_status.setText(f"Busy: '{getattr(self._runner, 'job_name', '') or 'another operation'}' is running — Stop it (or check Job Center) first.")
             return
         self._runner.submit(
             name,
@@ -1091,7 +1091,7 @@ class ModelAnalysisPage(QWidget):
             self._metric_label.setText("Pick a target column.")
             return
         if self._runner.busy:
-            self._metric_label.setText("A job is already running — Stop it first.")
+            self._metric_label.setText(f"Busy: '{getattr(self._runner, 'job_name', '') or 'another operation'}' is running — Stop it (or check Job Center) first.")
             return
 
         task = detect_task(frame, target)
@@ -1299,7 +1299,7 @@ class ModelAnalysisPage(QWidget):
             self._metric_label.setText("Pick a target column.")
             return
         if self._runner.busy:
-            self._metric_label.setText("A job is already running — Stop it first.")
+            self._metric_label.setText(f"Busy: '{getattr(self._runner, 'job_name', '') or 'another operation'}' is running — Stop it (or check Job Center) first.")
             return
 
         task = detect_task(frame, target)

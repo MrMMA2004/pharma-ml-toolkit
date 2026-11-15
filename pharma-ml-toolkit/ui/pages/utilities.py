@@ -709,7 +709,7 @@ class UtilitiesWorkbenchPage(QWidget):
     def _submit(self, name: str, job: Any, on_finished: Any) -> None:
         """Shared runner submit with the duplicate-submission guard."""
         if self._runner.busy:
-            self._report.setText("A job is already running — Stop it first.")
+            self._report.setText(f"Busy: '{getattr(self._runner, 'job_name', '') or 'another operation'}' is running — Stop it (or check Job Center) first.")
             return
         self._runner.submit(
             name,
