@@ -19,6 +19,11 @@ from pharmaml.ml.annsearch import (
     ann_benchmark,
     brute_force_knn,
 )
+from pharmaml.ml.active_learning import (
+    QUERY_STRATEGIES,
+    ActiveLearningLoop,
+    QueryRecord,
+)
 from pharmaml.ml.applicability import (
     ApplicabilityDomainResult,
     BootstrapUncertainty,
@@ -593,6 +598,7 @@ __all__ = [
     "advice_families",
     "ann_benchmark",
     "anova_ii",
+    "ActiveLearningLoop",
     "applicability_domain",
     "audit_split_overlap",
     "autocorrelation",
