@@ -284,6 +284,10 @@ class MLWorkbenchPage(QWidget):
         # (part8 Phase F) the last semi-supervised result, kept for
         # export/inspection between runs
         self._semi_result: Any = None
+        # (part8 Phase 10) the last applicability-domain result + the
+        # model's query predictions behind the view selector
+        self._ad_result: Any = None
+        self._ad_query_pred: Any = None
         # review m-19: the statistics tab's grouping picker used to fill
         # once at construction and go stale after the next dataset load;
         # the Model Analysis page now emits frameLoaded and this page
@@ -1744,6 +1748,27 @@ class MLWorkbenchPage(QWidget):
             "resample and the spread becomes the per-row uncertainty."
         )
         form.addRow("bootstrap models:", self._ad_boot)
+        # (part8 Phase 10) the four required analyses behind one selector:
+        # training-distance distribution + threshold, query distance vs
+        # predicted value (in/out categories), uncertainty distribution
+        # (when the bootstrap half ran), and the combined reliability
+        # view (AD x uncertainty, the backend's own decision rule).
+        self._ad_view = QComboBox()
+        for token in (
+            "query distance (inside/outside)",
+            "training distance distribution",
+            "distance vs predicted value",
+            "uncertainty distribution",
+            "combined reliability",
+        ):
+            self._ad_view.addItem(token)
+        self._ad_view.setToolTip(
+            "Which Applicability-Domain analysis to display. The "
+            "uncertainty and combined views need the bootstrap half "
+            "(bootstrap models > 0)."
+        )
+        self._ad_view.currentTextChanged.connect(self._render_ad_view)
+        form.addRow("view:", self._ad_view)
         self._ad_btn = QPushButton("Run AD analysis")
         self._ad_btn.setMinimumHeight(34)
         self._ad_btn.clicked.connect(self._start_ad)
@@ -1770,6 +1795,9 @@ class MLWorkbenchPage(QWidget):
             "NA in the kNN-only pass)."
         )
         splitter.addWidget(self._ad_table)
+        # (part8 Phase 10) click a row -> the sample dossier (SMILES,
+        # prediction, distances, thresholds, the reliability verdict).
+        self._ad_table.cellClicked.connect(self._ad_inspect_row)
         self._ad_plot = PlotPanel(title="Applicability domain — inside vs outside")
         self._ad_plot.set_empty_hint("Train a model, then compute the applicability domain")
 
@@ -1899,6 +1927,16 @@ class MLWorkbenchPage(QWidget):
         def done(result: Any) -> None:
             table = result.to_frame(names=query_names)
             self._ad_frame = table
+            # (part8 Phase 10) the views re-render from the SAME stored
+            # result; predictions come from the model on the query rows
+            # (the ensemble's own readout the backend scored against).
+            self._ad_result = result
+            try:
+                self._ad_query_pred = np.asarray(
+                    model.predict(x_test), dtype=float
+                ).ravel()
+            except Exception:  # noqa: BLE001 - classifier or absent split
+                self._ad_query_pred = None
             columns = [str(column) for column in table.columns]
             shown = table.head(200)
             rows = [
@@ -1928,30 +1966,185 @@ class MLWorkbenchPage(QWidget):
             if len(table) > 200:
                 text += f" · table capped at the first 200 of {len(table)} rows"
             self._ad_status.setText(text)
-            # the inside/outside figure, Qt-native: every query row's kNN
-            # distance against the threshold line, the two populations in
-            # the palette's own two series colours.
-            self._ad_plot.clear()
-            positions = np.arange(1, total_rows + 1, dtype=float)
-            distances = np.asarray(result.test_knn_mean, dtype=float)
-            mask = np.asarray(result.inside_ad, dtype=bool)
-            self._ad_plot.scatter(positions[mask], distances[mask], label="inside AD")
-            self._ad_plot.scatter(positions[~mask], distances[~mask], label="outside AD")
-            span = np.array([1.0, float(max(total_rows, 1))])
-            threshold = float(result.distance_threshold)
-            self._ad_plot.line(
-                span,
-                np.array([threshold, threshold]),
-                label="threshold",
-                width=1,
-                index=1,
-                style="dash",
-            )
-            self._ad_plot.set_labels(
-                x="held-out row", y="kNN distance", title="Applicability domain — inside vs outside"
-            )
+            self._render_ad_view(self._ad_view.currentText())
 
         self._submit(f"applicability domain ({label})", job, done, self._ad_status)
+
+    # -- (part8 Phase 10) the AD view renderer --------------------------------------
+    def _render_ad_view(self, view: str) -> None:
+        """Render the selected Applicability-Domain analysis (Phase 10).
+
+        One stored :class:`~pharmaml.ml.applicability.ApplicabilityDomainResult`
+        behind five readouts — the audit round's "complete, scientifically
+        interpretable workflow" rather than the single kNN chart.  Each
+        view re-derives from the backend result; nothing is recomputed
+        and no status is invented (the combined view degrades honestly
+        when the bootstrap half did not run).
+        """
+        result = getattr(self, "_ad_result", None)
+        if result is None:
+            return
+        plot = self._ad_plot
+        plot.clear()
+        distances = np.asarray(result.test_knn_mean, dtype=float)
+        mask = np.asarray(result.inside_ad, dtype=bool)
+        threshold = float(result.distance_threshold)
+        total = int(distances.size)
+
+        if view == "training distance distribution":
+            # (A) the descriptor-space density the model was fitted on,
+            # with the percentile threshold that splits inside/outside.
+            # (bars() carries no series label — the histogram renders as
+            # per-bin points at the bin centers, same information, and
+            # the threshold line rides its own series.)
+            train_d = np.asarray(result.train_knn_mean, dtype=float)
+            counts, edges = np.histogram(train_d, bins=40)
+            centers = (edges[:-1] + edges[1:]) / 2.0
+            nonzero = counts > 0
+            plot.scatter(
+                centers[nonzero], counts[nonzero].astype(float),
+                label="training rows",
+            )
+            plot.scatter(
+                np.array([threshold]), np.array([float(counts.max()) * 0.05]),
+                label="threshold",
+            )
+            plot.line(
+                np.array([threshold, threshold]),
+                np.array([0.0, float(counts.max())]),
+                label="threshold line", width=1, index=1, style="dash",
+            )
+            plot.set_labels(x="mean kNN distance (training, standardised)",
+                            y="molecules", title="Training distance distribution")
+            return
+
+        if view == "distance vs predicted value":
+            # (B) query compounds by distance vs the ensemble prediction,
+            # distinct in/out categories, threshold line.
+            pred = getattr(self, "_ad_query_pred", None)
+            if pred is None or pred.size != total:
+                self._ad_status.setText(
+                    "distance-vs-prediction needs the model's query "
+                    "predictions — retrain, then re-run the analysis."
+                )
+                return
+            plot.scatter(distances[mask], pred[mask], label="inside AD")
+            plot.scatter(distances[~mask], pred[~mask], label="outside AD")
+            yspan = np.array([float(pred.min()), float(pred.max())])
+            plot.line(np.array([threshold, threshold]), yspan,
+                      label="threshold", width=1, index=1, style="dash")
+            plot.set_labels(x="mean kNN distance (query)",
+                            y="predicted value",
+                            title="Query distance vs predicted value")
+            return
+
+        if view == "uncertainty distribution":
+            # (C) the bootstrap spread per query row against the
+            # uncertainty threshold (only when the half actually ran).
+            std = getattr(result, "pred_std", None)
+            if getattr(result, "n_models", 0) in (None, 0) or std is None:
+                self._ad_status.setText(
+                    "uncertainty view: the kNN-only pass carries no "
+                    "bootstrap spread — set bootstrap models > 0 and re-run."
+                )
+                return
+            std = np.asarray(std, dtype=float)
+            u_threshold = float(getattr(result, "uncertainty_threshold", 0.0) or 0.0)
+            positions = np.arange(1, std.size + 1, dtype=float)
+            low = np.asarray(result.low_uncertainty, dtype=bool)
+            plot.scatter(positions[low], std[low], label="low uncertainty")
+            plot.scatter(positions[~low], std[~low], label="high uncertainty")
+            plot.line(np.array([1.0, float(std.size)]),
+                      np.array([u_threshold, u_threshold]),
+                      label="threshold", width=1, index=1, style="dash")
+            plot.set_labels(x="query row", y="prediction SD",
+                            title="Prediction uncertainty")
+            return
+
+        if view == "combined reliability":
+            # (D) the four-quadrant reliability story on the backend's
+            # own decision rule (reliable = inside AD & low uncertainty).
+            if getattr(result, "n_models", 0) in (None, 0) or result.reliable is None:
+                self._ad_status.setText(
+                    "combined view: needs the bootstrap half — set "
+                    "bootstrap models > 0 and re-run."
+                )
+                return
+            positions = np.arange(1, total + 1, dtype=float)
+            reliable = np.asarray(result.reliable, dtype=bool)
+            low = np.asarray(result.low_uncertainty, dtype=bool)
+            plot.scatter(positions[reliable], distances[reliable],
+                         label="reliable (in AD, low unc.)")
+            both = (~reliable) & mask & (~low)
+            plot.scatter(positions[both], distances[both],
+                         label="in AD, high uncertainty")
+            out_low = (~mask) & low & (~reliable)
+            plot.scatter(positions[out_low], distances[out_low],
+                         label="out of AD, low uncertainty")
+            out_high = (~mask) & (~low)
+            plot.scatter(positions[out_high], distances[out_high],
+                         label="out of AD, high uncertainty")
+            plot.line(np.array([1.0, float(total)]),
+                      np.array([threshold, threshold]),
+                      label="distance threshold", width=1, index=1, style="dash")
+            plot.set_labels(x="query row", y="kNN distance",
+                            title="Combined reliability (AD × uncertainty)")
+            return
+
+        # default: the historical inside/outside figure
+        positions = np.arange(1, total + 1, dtype=float)
+        plot.scatter(positions[mask], distances[mask], label="inside AD")
+        plot.scatter(positions[~mask], distances[~mask], label="outside AD")
+        span = np.array([1.0, float(max(total, 1))])
+        plot.line(span, np.array([threshold, threshold]),
+                  label="threshold", width=1, index=1, style="dash")
+        plot.set_labels(x="held-out row", y="kNN distance",
+                        title="Applicability domain — inside vs outside")
+
+    # -- (part8 Phase 10) sample-level inspection ------------------------------------
+    def _ad_inspect_row(self, row: int, column: int) -> None:
+        """Click a table row -> the compound's full AD dossier."""
+        result = getattr(self, "_ad_result", None)
+        frame = getattr(self, "_ad_frame", None)
+        if result is None or frame is None or not 0 <= row < len(frame):
+            return
+        record = frame.iloc[row]
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Applicability domain — sample inspection")
+        lay = QVBoxLayout(dialog)
+        fields = [
+            ("name / SMILES", str(record.get("name", ""))),
+            ("predicted", f"{float(record.get('predicted', float('nan'))):.4g}"),
+            ("kNN distance", f"{float(record.get('knn_distance', float('nan'))):.4g}"),
+            ("distance threshold",
+             f"{float(result.distance_threshold):.4g} "
+             f"(p{getattr(result, 'percentile', 95):g}, k={result.k})"),
+            ("inside AD", "yes" if bool(record.get("inside_ad", False)) else "no"),
+        ]
+        std = record.get("prediction_sd", None)
+        if std is not None and std == std:
+            fields.append(("prediction SD", f"{float(std):.4g}"))
+            fields.append(("uncertainty threshold",
+                           f"{float(getattr(result, 'uncertainty_threshold', 0.0) or 0.0):.4g}"))
+            fields.append(("low uncertainty",
+                           "yes" if bool(record.get("low_uncertainty", False)) else "no"))
+            reliable = record.get("reliable", None)
+            if reliable is not None and reliable == reliable:
+                fields.append(("reliable (backend rule)",
+                               "yes" if bool(reliable) else "no"))
+        for label, value in fields:
+            line = QLabel(f"<b>{label}:</b> {value}")
+            line.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+            lay.addWidget(line)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.reject)
+        lay.addWidget(buttons)
+        dialog.exec()
 
     # -- tab: semi-supervised learning (part8 Phase F) ------------------------------
     # The three scikit-learn semi-supervised estimators (SelfTraining,

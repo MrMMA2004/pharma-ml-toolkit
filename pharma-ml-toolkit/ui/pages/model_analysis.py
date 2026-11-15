@@ -77,13 +77,21 @@ if TYPE_CHECKING:
     from pharmaml.ml.cv_results import CVResult
 
 
-def _parity_meta(y_test: Any, y_pred: Any) -> Any:
+def _parity_meta(
+    y_test: Any,
+    y_pred: Any,
+    sample_smiles: list[str] | None = None,
+    sample_ids: list[str] | None = None,
+) -> Any:
     """Per-point hover metadata for the regression parity plot (§21.5).
 
     The readout already shows actual and predicted (the plotted x/y);
-    the added facts are the 0-based held-out row and the signed
-    residual.  Out-of-range indexes answer ``{}`` -- hover metadata
-    must never raise (the ``_molecule_meta`` contract, generative page).
+    the added facts are the stable sample ID, the SMILES when the frame
+    carries a detectable column, and the signed residual.  Out-of-range
+    indexes answer ``{}`` -- hover metadata must never raise (the
+    ``_molecule_meta`` contract, generative page).  (part8 Phase E) the
+    ID/SMILES lists are the split's own alignment payload, so they stay
+    correct through shuffles, stratification and filtering.
     """
     test = np.asarray(y_test, dtype=float)
     pred = np.asarray(y_pred, dtype=float)
@@ -91,18 +99,29 @@ def _parity_meta(y_test: Any, y_pred: Any) -> Any:
     def meta(i: int) -> dict[str, Any]:
         if not 0 <= i < test.size or i >= pred.size:
             return {}
-        return {"row": i, "residual": float(pred[i] - test[i])}
+        record: dict[str, Any] = {"row": i, "residual": float(pred[i] - test[i])}
+        if sample_ids is not None and i < len(sample_ids):
+            record["sample"] = sample_ids[i]
+        if sample_smiles is not None and i < len(sample_smiles):
+            record["SMILES"] = sample_smiles[i]
+        return record
 
     return meta
 
 
-def _residual_meta(y_test: Any, y_pred: Any) -> Any:
+def _residual_meta(
+    y_test: Any,
+    y_pred: Any,
+    sample_smiles: list[str] | None = None,
+    sample_ids: list[str] | None = None,
+) -> Any:
     """Per-point hover metadata for the residual plot (§21.5).
 
     The residual plot shows predicted (x) and residual (y) -- both
     derivable from the parity pair -- so the fact this provider adds is
-    the ACTUAL value behind the point, plus the same 0-based row the
-    parity plot carries (one key, one meaning, across both panels).
+    the ACTUAL value behind the point, plus the same stable sample
+    ID/SMILES the parity plot carries (one key, one meaning, across
+    both panels; part8 Phase E).
     """
     test = np.asarray(y_test, dtype=float)
     pred = np.asarray(y_pred, dtype=float)
@@ -110,7 +129,12 @@ def _residual_meta(y_test: Any, y_pred: Any) -> Any:
     def meta(i: int) -> dict[str, Any]:
         if not 0 <= i < test.size or i >= pred.size:
             return {}
-        return {"row": i, "actual": float(test[i])}
+        record: dict[str, Any] = {"row": i, "actual": float(test[i])}
+        if sample_ids is not None and i < len(sample_ids):
+            record["sample"] = sample_ids[i]
+        if sample_smiles is not None and i < len(sample_smiles):
+            record["SMILES"] = sample_smiles[i]
+        return record
 
     return meta
 
@@ -269,6 +293,15 @@ class AnalysisOutcome:
     feature_names: list[str] = field(default_factory=list)
     classes: list[str] = field(default_factory=list)
     metrics: dict[str, float] = field(default_factory=dict)
+    # (part8 Phase E) stable sample alignment for the ML figures: the
+    # held-out rows' ORIGINAL frame index (position 0..n-1 -> label), the
+    # SMILES strings when the frame carries a detectable SMILES column,
+    # and the frame's row labels as stable sample IDs.  Survives splits,
+    # shuffles and filtering because every consumer maps THROUGH the
+    # index, never by position.
+    test_index: object | None = None
+    sample_smiles: list[str] | None = None
+    sample_ids: list[str] | None = None
 
 
 class ModelAnalysisPage(QWidget):
@@ -1134,6 +1167,18 @@ class ModelAnalysisPage(QWidget):
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.25, random_state=42, stratify=stratify
         )
+        # (part8 Phase E) the alignment payload: split index (labels),
+        # SMILES via the shared detector, and the frame's row labels as
+        # stable sample IDs -- computed on the GUI thread before the job.
+        test_index = list(X_test.index)
+        smiles_col = detect_smiles_column(frame)
+        sample_smiles: list[str] | None = None
+        if smiles_col is not None:
+            try:
+                sample_smiles = [str(v) for v in frame.loc[X_test.index, smiles_col]]
+            except Exception:  # noqa: BLE001 - index drift: no SMILES
+                sample_smiles = None
+        sample_ids = [str(label) for label in X_test.index]
 
         def job(progress) -> AnalysisOutcome:
             from pharmaml.ml.training import train_model
@@ -1177,6 +1222,9 @@ class ModelAnalysisPage(QWidget):
                 y_train=y_train,
                 X_test=X_test,
                 feature_names=[str(name) for name in X.columns],
+                test_index=test_index,
+                sample_smiles=sample_smiles,
+                sample_ids=sample_ids,
             )
             progress(0.85, "scoring")
             if task == "regression":
@@ -1263,11 +1311,13 @@ class ModelAnalysisPage(QWidget):
             span = np.array([lo, hi])
             self._pred_plot.line(span, span, label="y = x", width=1, index=1, style="dash")
             self._pred_plot.scatter(
-                o.y_test, o.y_pred, label="held-out samples", meta=_parity_meta(o.y_test, o.y_pred)
+                o.y_test, o.y_pred, label="held-out samples",
+                meta=_parity_meta(o.y_test, o.y_pred, o.sample_smiles, o.sample_ids),
             )
             self._pred_plot.set_labels(x="actual", y="predicted")
             self._resid_plot.scatter(
-                o.y_pred, o.y_test - o.y_pred, meta=_residual_meta(o.y_test, o.y_pred)
+                o.y_pred, o.y_test - o.y_pred,
+                meta=_residual_meta(o.y_test, o.y_pred, o.sample_smiles, o.sample_ids),
             )
             self._resid_plot.line(
                 np.array([float(o.y_pred.min()), float(o.y_pred.max())]),
