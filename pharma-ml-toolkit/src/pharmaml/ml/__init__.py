@@ -279,6 +279,14 @@ from pharmaml.ml.recommend import (
     similarity_matrix,
     synthetic_ratings,
 )
+from pharmaml.ml.semi_supervised import (
+    SemiSupervisedEvaluation,
+    SemiSupervisedMethod,
+    SemiSupervisedResult,
+    evaluate_semi_supervised,
+    train_semi_supervised,
+    validate_unlabeled,
+)
 from pharmaml.ml.sequences import (
     SEQUENCE_MODELS,
     SYNTHETIC_KINDS,
@@ -727,6 +735,12 @@ __all__ = [
     "split_features_target",
     "split_indices",
     "stack_oof_regressors",
+    "SemiSupervisedEvaluation",
+    "SemiSupervisedMethod",
+    "SemiSupervisedResult",
+    "evaluate_semi_supervised",
+    "train_semi_supervised",
+    "validate_unlabeled",
     "synthetic_ratings",
     "synthetic_series",
     "tanh",

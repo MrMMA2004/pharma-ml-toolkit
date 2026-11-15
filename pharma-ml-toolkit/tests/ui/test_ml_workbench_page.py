@@ -134,14 +134,22 @@ def _synth_last_outcome(analysis) -> None:
 
 def test_page_constructs_with_the_six_tabs(studio_app) -> None:
     page = _fresh_page()
+    # (part8 Phase F) the Semi-supervised tab rides after Applicability
+    # domain — seven tabs now.
     assert [page._tabs.tabText(i) for i in range(page._tabs.count())] == [
         "Hyperparameter search",
         "Leaderboards",
         "Ensemble builder",
         "Persistence",
         "Applicability domain",
+        "Semi-supervised",
         "Statistical tools",
     ]
+    # the semi-supervised defaults: method/marker/threshold/kernel
+    assert page._semi_method.currentText() == "self-training"
+    assert page._semi_unlabeled.currentText() == "-1"
+    assert page._semi_threshold.value() == 0.75
+    assert page._semi_kernel.currentText() == "knn"
     # the Phase-3 statistical tab's defaults (part6 §3.3: forms expose
     # the canonical backends' own defaults)
     assert page._stat_source.currentText() == "Model Analysis run"

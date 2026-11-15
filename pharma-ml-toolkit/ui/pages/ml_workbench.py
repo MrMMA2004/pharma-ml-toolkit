@@ -281,6 +281,9 @@ class MLWorkbenchPage(QWidget):
         self._theme = theme
         self._runner = runner or JobRunner(self)
         self._model_analysis = model_analysis
+        # (part8 Phase F) the last semi-supervised result, kept for
+        # export/inspection between runs
+        self._semi_result: Any = None
         # review m-19: the statistics tab's grouping picker used to fill
         # once at construction and go stale after the next dataset load;
         # the Model Analysis page now emits frameLoaded and this page
@@ -348,6 +351,9 @@ class MLWorkbenchPage(QWidget):
         self._tabs.addTab(wrap_in_scroll(self._build_ensemble_tab()), "Ensemble builder")
         self._tabs.addTab(wrap_in_scroll(self._build_persistence_tab()), "Persistence")
         self._tabs.addTab(wrap_in_scroll(self._build_ad_tab()), "Applicability domain")
+        self._tabs.addTab(
+            wrap_in_scroll(self._build_semi_tab()), "Semi-supervised"
+        )
         self._tabs.addTab(
             wrap_in_scroll(self._build_statistical_tab()), "Statistical tools"
         )
@@ -1946,6 +1952,212 @@ class MLWorkbenchPage(QWidget):
             )
 
         self._submit(f"applicability domain ({label})", job, done, self._ad_status)
+
+    # -- tab: semi-supervised learning (part8 Phase F) ------------------------------
+    # The three scikit-learn semi-supervised estimators (SelfTraining,
+    # LabelPropagation, LabelSpreading) with the conventional -1 unlabeled
+    # marker, a leakage-safe evaluation against genuine held-out labels,
+    # a supervised baseline, and the pseudo-label inspection table — one
+    # canonical backend (pharmaml.ml.semi_supervised), never a GUI
+    # reimplementation.
+    def _build_semi_tab(self) -> QWidget:
+        tab = QWidget()
+        lay = QVBoxLayout(tab)
+        lay.setContentsMargins(0, 0, 0, 0)
+        form = QFormLayout()
+
+        self._semi_method = QComboBox()
+        for token in ("self-training", "label propagation", "label spreading"):
+            self._semi_method.addItem(token)
+        self._semi_method.setToolTip(
+            "SelfTrainingClassifier iteratively labels the most confident "
+            "unlabeled rows and refits; LabelPropagation/LabelSpreading "
+            "spread labels over a similarity graph (spreading clamps the "
+            "original labels with alpha)."
+        )
+        form.addRow("method:", self._semi_method)
+
+        self._semi_unlabeled = QComboBox()
+        self._semi_unlabeled.setEditable(True)
+        self._semi_unlabeled.addItem("-1")
+        self._semi_unlabeled.addItem("unlabeled")
+        self._semi_unlabeled.addItem("NA")
+        self._semi_unlabeled.setToolTip(
+            "How unlabeled rows are marked in the target column. -1 is the "
+            "conventional sentinel; 'unlabeled'/'NA' are converted safely "
+            "before training (a legitimate class is never converted)."
+        )
+        form.addRow("unlabeled marker:", self._semi_unlabeled)
+
+        self._semi_threshold = QDoubleSpinBox()
+        self._semi_threshold.setRange(0.5, 0.99)
+        self._semi_threshold.setDecimals(2)
+        self._semi_threshold.setSingleStep(0.01)
+        self._semi_threshold.setValue(0.75)
+        self._semi_threshold.setToolTip(
+            "Self-training only: the confidence cut a pseudo-label must "
+            "clear. Consider calibrating the base estimator when the "
+            "threshold is high (uncalibrated probabilities can stall the "
+            "labelling)."
+        )
+        form.addRow("confidence threshold:", self._semi_threshold)
+
+        self._semi_max_iter = QSpinBox()
+        self._semi_max_iter.setRange(1, 100)
+        self._semi_max_iter.setValue(10)
+        self._semi_max_iter.setToolTip(
+            "Max self-training iterations / graph propagation sweeps."
+        )
+        form.addRow("max iterations:", self._semi_max_iter)
+
+        self._semi_kernel = QComboBox()
+        for token in ("knn", "rbf"):
+            self._semi_kernel.addItem(token)
+        self._semi_kernel.setToolTip(
+            "Graph methods only: the similarity kernel (kNN or RBF)."
+        )
+        form.addRow("kernel (graph methods):", self._semi_kernel)
+
+        self._semi_neighbors = QSpinBox()
+        self._semi_neighbors.setRange(1, 50)
+        self._semi_neighbors.setValue(7)
+        self._semi_neighbors.setToolTip("Graph methods only: kNN neighbour count.")
+        form.addRow("k (neighbours):", self._semi_neighbors)
+
+        self._semi_btn = QPushButton("Train + evaluate")
+        self._semi_btn.setMinimumHeight(34)
+        self._semi_btn.clicked.connect(self._start_semi)
+        self._semi_btn.setToolTip(
+            "Runs on the Model Analysis page's loaded frame and target: "
+            "train the semi-supervised model over labeled + unlabeled rows, "
+            "then score the leakage-safe protocol (held-out genuine labels, "
+            "supervised baseline on the same split)."
+        )
+        form.addRow("", self._semi_btn)
+        lay.addLayout(form)
+
+        self._semi_status = self._status_label(
+            "semi-supervised learning needs the Model Analysis page's frame "
+            "with a classification target where some rows are unlabeled."
+        )
+        lay.addWidget(self._semi_status)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._semi_table = self._make_board(minimum_height=170)
+        self._semi_table.setToolTip(
+            "Sample-level result: the final label of every row (pseudo "
+            "labels flagged), its confidence, and the SMILES when the "
+            "frame carries one."
+        )
+        splitter.addWidget(self._semi_table)
+        self._semi_plot = PlotPanel(title="Semi-supervised — confidence by row")
+        self._semi_plot.set_empty_hint(
+            "Train a semi-supervised model — pseudo-label confidences land here"
+        )
+        splitter.addWidget(self._semi_plot)
+        configure_splitter(splitter, stretch=(2, 3))
+        lay.addWidget(splitter, stretch=1)
+        return tab
+
+    def _start_semi(self) -> None:
+        """Form → validation → worker → backend → table + figure."""
+        frame, target, _task = self._training_context()
+        if frame is None:
+            self._semi_status.setText(
+                "Load a dataset on the Model Analysis page first (e.g. "
+                "qsar_classification.csv)."
+            )
+            return
+        if not target:
+            self._semi_status.setText(
+                "Pick a classification target on the Model Analysis page."
+            )
+            return
+
+        marker_text = self._semi_unlabeled.currentText().strip()
+        marker: object = -1
+        if marker_text not in ("-1", ""):
+            marker = marker_text
+        method_map = {
+            "self-training": "self_training",
+            "label propagation": "label_propagation",
+            "label spreading": "label_spreading",
+        }
+        method = method_map[str(self._semi_method.currentText())]
+        threshold = float(self._semi_threshold.value())
+        max_iter = int(self._semi_max_iter.value())
+        kernel = str(self._semi_kernel.currentText())
+        neighbors = int(self._semi_neighbors.value())
+
+        y_raw = frame[target]
+        smiles_col = detect_smiles_column(frame)
+        smiles: list[str] | None = None
+        if smiles_col is not None:
+            try:
+                smiles = [str(v) for v in frame[smiles_col]]
+            except Exception:  # noqa: BLE001 - display-only nicety
+                smiles = None
+
+        def job(progress: Any) -> Any:
+            from pharmaml.ml.semi_supervised import (
+                evaluate_semi_supervised,
+                train_semi_supervised,
+                validate_unlabeled,
+            )
+
+            progress(0.1, "validating labels")
+            labels, info = validate_unlabeled(y_raw, unlabeled_marker=marker)
+            progress(0.35, f"{info['n_unlabeled']} unlabeled of {len(labels)} rows")
+            x = frame.select_dtypes("number").drop(columns=[target], errors="ignore")
+            result = train_semi_supervised(
+                x, labels, method=method,
+                threshold=threshold, max_iter=max_iter,
+                kernel=kernel, n_neighbors=neighbors,
+            )
+            progress(0.7, "evaluating (leakage-safe split)")
+            evaluation = evaluate_semi_supervised(
+                x, labels, method=method,
+                threshold=threshold, max_iter=max_iter,
+                kernel=kernel, n_neighbors=neighbors,
+            )
+            return result, evaluation, info
+
+        def done(payload: Any) -> None:
+            result, evaluation, info = payload
+            self._semi_result = result
+            table = result.to_frame()
+            if smiles is not None and len(smiles) == len(table):
+                table.insert(0, "SMILES", smiles)
+            columns = [str(c) for c in table.columns]
+            shown = table.head(200)
+            rows = [
+                [_cell_text(v, limit=26) for v in record]
+                for record in shown.to_numpy().tolist()
+            ]
+            _populate_table(self._semi_table, columns, rows)
+            self._semi_status.setText(
+                f"{info['n_labeled']} labeled + {info['n_unlabeled']} "
+                f"unlabeled — {evaluation.summary()}"
+                + (f" · table capped at the first 200 of {len(table)} rows"
+                   if len(table) > 200 else "")
+            )
+            # confidence by row, pseudo-labeled rows distinct from genuine
+            self._semi_plot.clear()
+            conf = np.asarray(result.confidence, dtype=float)
+            pseudo = np.asarray(result.pseudo_label_mask, dtype=bool)
+            pos = np.arange(1, conf.size + 1, dtype=float)
+            self._semi_plot.scatter(
+                pos[pseudo], conf[pseudo], label="pseudo-labeled"
+            )
+            self._semi_plot.scatter(
+                pos[~pseudo], conf[~pseudo], label="genuinely labeled"
+            )
+            self._semi_plot.set_labels(
+                x="row", y="confidence",
+                title=f"Semi-supervised ({method}) — confidence by row",
+            )
+
+        self._submit(f"semi-supervised ({method})", job, done, self._semi_status)
 
     # -- tab 6: statistical tools ----------------------------------------------------
     # part6 Phase 3 batch 1: the four statistical backends (conformal
