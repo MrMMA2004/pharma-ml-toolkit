@@ -193,6 +193,16 @@ class ImageLabPage(QWidget):
         self._tabs.addTab(self._build_explorer_tab(), "Explorer matrix")
         self._tabs.addTab(self._build_roi_tab(), "ROI explorer")
         self._tabs.addTab(self._build_perf_tab(), "Performance")
+        # (part8 §4.1/§4.2) the backend-figure coverage browser: the
+        # shared FigureCanvasHost renders original backend figures from
+        # the loaded dataset; the registry table maps every public viz
+        # function to its workspace and integration status.
+        from ..widgets.coverage_browser import CoverageBrowser
+
+        self._coverage_tab = CoverageBrowser(
+            frame_provider=self._live_frame
+        )
+        self._tabs.addTab(self._coverage_tab, "Backend figures")
         lay.addWidget(self._tabs)
 
         self._progress = ProgressPanel()
@@ -503,6 +513,12 @@ class ImageLabPage(QWidget):
             self._sim_source.currentIndex() == 1 and self._sim_column.count() > 0
         )
         self._sim_column.setEnabled(use_explorer)
+
+    def _live_frame(self):
+        """The explorer's current table (None before any load)."""
+        if self._data_explorer is not None and hasattr(self._data_explorer, "frame"):
+            return self._data_explorer.frame()
+        return None
 
     def _on_explorer_frame(self, frame: object) -> None:
         """frameLoaded slot (review m-19): keep pickers true to the live table."""
