@@ -167,6 +167,7 @@ class HelpDialog(QDialog):
         self._pages: list[tuple[str, str]] = [
             ("Keyboard shortcuts", self._shortcuts_html()),
             ("Getting started", self._getting_started_html()),
+            ("Workflow stages", self._workflow_stages_html()),
         ]
         for name in sorted(ORIENTATION):
             first, rest = ORIENTATION[name]
@@ -181,6 +182,47 @@ class HelpDialog(QDialog):
         self.topics.setCurrentRow(0)
 
     # -- helpers ---------------------------------------------------------------
+    @staticmethod
+    def _workflow_stages_html() -> str:
+        # (part8 §13) the nine stage chains, searchable from F1: the
+        # same registry the workspace strips render.
+        from .workflow_guide import WORKFLOWS
+
+        order = (
+            "introduction", "datasets", "machine-learning", "deep-learning",
+            "generative-ai", "molecular-docking", "pkpd",
+            "molecular-dynamics-analysis", "visualization",
+        )
+        titles = {
+            "introduction": "Introduction",
+            "datasets": "Datasets",
+            "machine-learning": "Machine Learning",
+            "deep-learning": "Deep Learning",
+            "generative-ai": "Generative AI",
+            "molecular-docking": "Molecular Docking",
+            "pkpd": "PK/PD",
+            "molecular-dynamics-analysis": "Molecular Dynamics Analysis",
+            "visualization": "Visualization",
+        }
+        parts = [
+            "<h3>Workflow stages — the nine workspaces</h3>",
+            "<p>Every workspace runs as one connected scientific workflow. "
+            "The strip at the bottom-right of each workspace's tab bar "
+            "carries the same chain in place.</p>",
+        ]
+        for key in order:
+            chain, stages, note = WORKFLOWS[key]
+            rows = "".join(
+                f"<tr><td><b>{stage}</b></td><td>{where}</td></tr>"
+                for stage, where in stages
+            )
+            parts.append(
+                f"<h4>{titles[key]}</h4><p><i>{chain}</i></p>"
+                f"<table border='0' cellpadding='2'>{rows}</table>"
+                f"<p>{note}</p>"
+            )
+        return "".join(parts)
+
     @staticmethod
     def _shortcuts_html() -> str:
         rows = "".join(

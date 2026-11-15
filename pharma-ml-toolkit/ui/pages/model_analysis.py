@@ -396,6 +396,17 @@ class ModelAnalysisPage(QWidget):
             "detail). 5 = the directive's default; 3 for expensive "
             "models or limited data."
         )
+        # (part8 §5/Phase 6) manual n_jobs: this page previously pinned
+        # every backend call to n_jobs=1 (train, learning curve, the
+        # family benchmark).  One field now feeds them all.
+        from ..widgets.njobs_field import NJobsField
+
+        self._njobs_field = NJobsField(default=-1)
+        self._njobs_field.setToolTip(
+            "Worker count passed to train_model / learning_curve / "
+            "benchmark_feature_families (joblib convention: -1 = all "
+            "cores, 1 = serial). 0 is invalid."
+        )
         self._cv_strategy = QComboBox()
         for token in _CV_STRATEGIES:
             self._cv_strategy.addItem(token)
@@ -427,6 +438,7 @@ class ModelAnalysisPage(QWidget):
         form.addRow("", params_buttons)
         form.addRow("cv folds:", self._cv_folds)
         form.addRow("cv strategy:", self._cv_strategy)
+        form.addRow("Threads (n_jobs):", self._njobs_field)
         buttons = QHBoxLayout()
         buttons.addWidget(self._train_btn)
         buttons.addWidget(self._compare_btn)
@@ -979,6 +991,27 @@ class ModelAnalysisPage(QWidget):
             "is perfect reliability."
         )
 
+    # -- part8 §5 (Phase 6): one validated n_jobs for this page ---------- #
+    def _n_jobs(self) -> int:
+        """The manual worker count, or serial 1 with a toast when invalid.
+
+        The NJobsField answers ``None`` for zero / non-integer input;
+        the page falls back to serial (never blocking the run) and says
+        so through the shell toast, rather than raising mid-job.
+        """
+        value = self._njobs_field.value()
+        if value is None:
+            from ..widgets.toast_routing import shell_notify
+
+            shell_notify(
+                self,
+                "Model Analysis — n_jobs must be a nonzero integer (got "
+                f"{self._njobs_field.currentText().strip()!r}); running serially",
+                "warning",
+            )
+            return 1
+        return value
+
     def _start_learning_curve(self) -> None:
         """Train sizes vs CV score, the 'assay more?' picture."""
         run = self._require_last_run()
@@ -1002,7 +1035,7 @@ class ModelAnalysisPage(QWidget):
                 train_sizes=np.linspace(0.2, 1.0, 5),
                 cv=min(folds, 5),
                 scoring=scoring,
-                n_jobs=1,
+                n_jobs=self._n_jobs(),
             )
             progress(0.9, "done")
             return (
@@ -1191,7 +1224,7 @@ class ModelAnalysisPage(QWidget):
                 y_train,
                 tune=False,
                 preprocess=True,
-                n_jobs=1,
+                n_jobs=self._n_jobs(),
                 model_params=model_params or None,
             )
             progress(0.7, "predicting")

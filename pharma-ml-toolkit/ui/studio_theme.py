@@ -312,6 +312,41 @@ QTabBar::tab:selected {{
 }}
 QTabBar:focus {{ border-bottom: 2px solid {t.focus_color()}; }}
 
+/* ---- (part8 §13) the workflow-guide strip in each workspace ---------- */
+QPushButton#workflowGuideToggle {{
+    background: transparent;
+    color: {t.text_secondary};
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: {L.space_xs}px {L.space_sm}px;
+    font-weight: 500;
+    text-align: left;
+}}
+QPushButton#workflowGuideToggle:hover {{
+    color: {t.text};
+    background: {t.selected_surface};
+}}
+QPushButton#workflowGuideToggle:checked {{
+    color: {t.text};
+    border-bottom: 2px solid {t.focus_color()};
+    font-weight: 600;
+}}
+QWidget#workflowGuideBody {{
+    background: {t.surface};
+    border: {L.border}px solid {t.border_subtle};
+    border-radius: {r_sm}px;
+}}
+QLabel#workflowGuideChain {{
+    color: {t.text};
+    font-weight: 600;
+}}
+QLabel#workflowGuideStage {{
+    color: {t.text};
+}}
+QLabel#workflowGuideWhere, QLabel#workflowGuideNote {{
+    color: {t.text_secondary};
+}}
+
 /* ---- checkboxes, radios, sliders, group boxes ------------------------ */
 QCheckBox:focus, QRadioButton:focus {{
     border: none;

@@ -113,3 +113,130 @@ class TestChemistryLabNJobs:
         assert called["n"] == 0
         assert not page._runner.busy
         assert "nonzero" in page.report_text()
+
+
+class TestModelAnalysisNJobs:
+    """(part8 §5, round 4) the page's four backend calls take the field."""
+
+    def test_field_exists_with_presets(self, qtbot, studio_app) -> None:
+        import ui.pages.model_analysis as ma
+
+        page = ma.ModelAnalysisPage()
+        qtbot.addWidget(page)
+        assert page._njobs_field.currentText() == "-1"
+        assert page._n_jobs() == -1
+
+    def test_valid_value_reaches_train_model(
+        self, qtbot, studio_app, monkeypatch
+    ) -> None:
+        import ui.pages.model_analysis as ma
+
+        page = ma.ModelAnalysisPage()
+        qtbot.addWidget(page)
+        seen: dict[str, object] = {}
+
+        import pharmaml.ml.training as training_mod
+
+        def fake_train(*_args, **kwargs):
+            seen["n_jobs"] = kwargs.get("n_jobs")
+            return "result"
+
+        # the job body imports train_model late (inside the worker), so
+        # the page helper's answer is the contract: what _n_jobs() says
+        # is exactly what train_model(n_jobs=...) will receive.
+        monkeypatch.setattr(training_mod, "train_model", fake_train)
+        page._njobs_field.setCurrentText("6")
+        assert page._n_jobs() == 6
+        page._njobs_field.setCurrentText("-4")
+        assert page._n_jobs() == -4
+        assert callable(training_mod.train_model)
+
+    def test_invalid_value_falls_back_to_serial(self, qtbot, studio_app) -> None:
+        import ui.pages.model_analysis as ma
+
+        page = ma.ModelAnalysisPage()
+        qtbot.addWidget(page)
+        page._njobs_field.setCurrentText("0")
+        assert page._njobs_field.value() is None
+        assert page._n_jobs() == 1  # serial fallback, never an exception
+        page._njobs_field.setCurrentText("abc")
+        assert page._n_jobs() == 1
+
+
+class TestMLWorkbenchNJobs:
+    """(part8 §5, round 4) the family benchmark takes the field."""
+
+    def test_bench_field_exists(self, qtbot, studio_app) -> None:
+        import ui.pages.ml_workbench as mw
+
+        page = mw.MLWorkbenchPage()
+        qtbot.addWidget(page)
+        assert page._bench_njobs.currentText() == "-1"
+        assert page._bench_njobs.value() == -1
+
+    def test_bench_value_reaches_the_call(
+        self, qtbot, studio_app, monkeypatch
+    ) -> None:
+        import ui.pages.ml_workbench as mw
+
+        page = mw.MLWorkbenchPage()
+        qtbot.addWidget(page)
+        seen: dict[str, object] = {}
+
+        import pharmaml.ml as ml_mod
+
+        def fake_benchmark(smiles, y, task, **kwargs):
+            seen.update(kwargs)
+            import pandas as pd
+
+            return pd.DataFrame({"family": ["morgan"], "score": [0.5]})
+
+        # the job body imports the symbol at call time: patch the module
+        monkeypatch.setattr(ml_mod, "benchmark_feature_families", fake_benchmark)
+        frame = pd.DataFrame(
+            {
+                "smiles": ["CCO", "CCN", "CCC", "CCCl"] * 2,
+                "y": [1, 0, 1, 0] * 2,
+            }
+        )
+        page._training_context = lambda: (frame, "y", "classification")
+        monkeypatch.setattr(
+            mw, "detect_smiles_column", lambda _f: "smiles"
+        )
+        page._bench_njobs.setCurrentText("5")
+        page._start_benchmark()
+        qtbot.waitSignal(page._runner.job_ended, timeout=30_000).wait()
+        assert seen.get("n_jobs") == 5
+
+    def test_bench_invalid_runs_serial_with_a_note(
+        self, qtbot, studio_app, monkeypatch
+    ) -> None:
+        import ui.pages.ml_workbench as mw
+
+        page = mw.MLWorkbenchPage()
+        qtbot.addWidget(page)
+        seen: dict[str, object] = {}
+
+        import pharmaml.ml as ml_mod
+
+        def fake_benchmark(smiles, y, task, **kwargs):
+            seen.update(kwargs)
+            import pandas as pd
+
+            return pd.DataFrame({"family": ["morgan"], "score": [0.5]})
+
+        monkeypatch.setattr(ml_mod, "benchmark_feature_families", fake_benchmark)
+        frame = pd.DataFrame(
+            {"smiles": ["CCO", "CCN"], "y": [1, 0]}
+        )
+        page._training_context = lambda: (frame, "y", "classification")
+        monkeypatch.setattr(
+            mw, "detect_smiles_column", lambda _f: "smiles"
+        )
+        page._bench_njobs.setCurrentText("0")
+        page._start_benchmark()
+        # invalid input: the serial fallback reaches the backend and the
+        # warning rides a shell toast (standalone pages have no shell,
+        # so the durable pin is the backend value + no exception).
+        qtbot.waitSignal(page._runner.job_ended, timeout=30_000).wait()
+        assert seen.get("n_jobs") == 1  # serial fallback

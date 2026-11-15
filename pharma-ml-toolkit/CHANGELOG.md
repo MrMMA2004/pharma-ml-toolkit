@@ -1,3 +1,35 @@
+## [1.2.208] — 2026-11-15 — part8 round 4 (§13 workflow guides + §5/Phase-6 n_jobs sweep)
+
+- **§13 (Phase Twelve) workflow guides**: every one of the nine
+  workspaces now carries its stage-chain strip — the directive's
+  suggested sequence (Import → Inspect → Validate → … → Export, each
+  chain transcribed verbatim) rendered as a collapsible row in the
+  workspace's tab-bar corner, every stage naming the REAL surface that
+  implements it (which page, which button).  The audit found the
+  stages all exist and are wired — the sequence was simply invisible;
+  now the workspace reads as the connected scientific workflow it is.
+  `ui/widgets/workflow_guide.py`: the WORKFLOWS registry (9 chains,
+  91 stages total), the `WorkflowGuide` widget (collapsed by default,
+  loud ValueError on an unregistered workspace), QSS in the studio
+  theme, and the same chains searchable from F1 help as a "Workflow
+  stages" topic.  §13.8's honesty rule is pinned in writing: the MD
+  note says ANALYSIS, never simulation.  26 tests
+  (tests/ui/test_workflow_guide.py): registry completeness, verbatim
+  stage pins per workspace (first stage, last stage, exact count), no
+  placeholders, no Persian/RTL, widget toggle behaviour, one strip
+  mounted per workspace tab bar.
+- **§5/Phase 6 n_jobs sweep**: the manual `NJobsField` was Chemistry-
+  Lab-only; now Model Analysis (one field feeding `train_model`,
+  `learning_curve` — previously both hard-pinned `n_jobs=1`) and the
+  ML Workbench family benchmark (`benchmark_feature_families`, also
+  previously serial) expose the same editable field with joblib
+  semantics.  Invalid input (0, non-integer) never blocks a run: the
+  page falls back to serial and says so through the shell toast.  6
+  new tests in tests/ui/test_njobs_field.py pin the value reaching
+  each backend call and the serial fallback.
+- Version carriers: 1.2.208 (VERSION, `pharmaml.__version__`, the web
+  TS mirror).
+
 ## [1.2.207] — 2026-11-15 — part8 round 3 (§4 renderer + §5.5 stress + §14.1 Active Learning)
 
 - **§4.1/§4.2 shared figure renderer**: `FigureCanvasHost` (original

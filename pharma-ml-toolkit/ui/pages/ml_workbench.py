@@ -845,6 +845,17 @@ class MLWorkbenchPage(QWidget):
             "2 for a quick screen."
         )
         bench_form.addRow("folds:", self._bench_folds)
+        # (part8 §5/Phase 6) manual n_jobs for the family benchmark --
+        # previously pinned serial, now the same editable field the
+        # Chemistry Lab uses.
+        from ..widgets.njobs_field import NJobsField
+
+        self._bench_njobs = NJobsField(default=-1)
+        self._bench_njobs.setToolTip(
+            "Worker count for benchmark_feature_families (joblib "
+            "convention: -1 = all cores, 1 = serial). 0 is invalid."
+        )
+        bench_form.addRow("Threads (n_jobs):", self._bench_njobs)
         self._bench_btn = QPushButton("Benchmark feature families")
         self._bench_btn.setMinimumHeight(34)
         self._bench_btn.clicked.connect(self._start_benchmark)
@@ -988,6 +999,22 @@ class MLWorkbenchPage(QWidget):
             return
         model_name = self._bench_model.text().strip()
         folds = int(self._bench_folds.value())
+        # part8 §5: pass the manual n_jobs through; invalid input runs
+        # serial with a shell toast instead of raising mid-benchmark
+        # (a status-label note would be overwritten by the run's own
+        # progress line before anyone could read it).
+        bench_njobs = self._bench_njobs.value()
+        if bench_njobs is None:
+            from ..widgets.toast_routing import shell_notify
+
+            bench_njobs = 1
+            shell_notify(
+                self,
+                "ML Workbench — n_jobs must be a nonzero integer (got "
+                f"{self._bench_njobs.currentText().strip()!r}); "
+                "benchmarking serially",
+                "warning",
+            )
         smiles = frame[smiles_column]
         y = frame[target]
         self._bench_resume_note = ""
@@ -1023,7 +1050,7 @@ class MLWorkbenchPage(QWidget):
                 task,
                 model=None if model_name in ("", "auto") else model_name,
                 cv=folds,
-                n_jobs=1,
+                n_jobs=bench_njobs,
                 on_family=on_family,
                 checkpoint_dir=self._bench_checkpoint_dir,
             )

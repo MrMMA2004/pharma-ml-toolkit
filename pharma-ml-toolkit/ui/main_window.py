@@ -212,11 +212,18 @@ class MainWindow(QMainWindow):
         self.workspaces: dict[str, QWidget] = {}
         self._workspace_stack = QStackedWidget()
         for card in NINE_CARDS:
+            # (part8 §13, round 4) each workspace carries its stage-chain
+            # strip: the directive's sequence, each stage naming the real
+            # surface that implements it.  Collapsed to one quiet row.
+            from .widgets.workflow_guide import WorkflowGuide
+
+            guide = WorkflowGuide(card.card_id)
             tabs = QTabWidget()
             tabs.setObjectName(f"workspaceTabs-{card.card_id}")
             tabs.setDocumentMode(True)
             for label, page in self._WORKSPACE_PAGES[card.card_id]:
                 tabs.addTab(page, label)
+            tabs.setCornerWidget(guide, Qt.Corner.BottomRightCorner)
             self.workspaces[card.card_id] = tabs
             self._workspace_stack.addWidget(tabs)
         # the section route: page identity -> (workspace key, tab index)
