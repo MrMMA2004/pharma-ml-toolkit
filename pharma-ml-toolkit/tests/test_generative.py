@@ -2045,7 +2045,11 @@ class TestScaffoldMutation:
         ).optimize()
         assert result.best == "COc1ccc2[nH]c(CCC(C)=O)cc2c1"
         assert result.best_score == pytest.approx(0.855097, abs=1e-6)
-        assert len(result) == 137
+        # (r263 environment: rdkit 2026.03.4 canonicalises two near-dupe
+        #  children to equal strings, so the unique set is 135, not the
+        #  137 of the pre-upgrade environment; best molecule, best score
+        #  and the full generation history are unchanged)
+        assert len(result) == 135
 
         multi = MultiObjective(
             [QedObjective(), LogPBandObjective(1.0, 3.0)], weights=[0.7, 0.3]
@@ -2652,13 +2656,17 @@ class TestScaffoldHopFusedRings:
         from pharmaml.generative.scaffold_hop import _ring_units
 
         decalin = _ring_units(rdkit.Chem.MolFromSmiles("C1CCC2CCCCC2C1"))
+        # (r263: rdkit 2026.03.4 enumerates ring atoms in a different
+        #  traversal order — same memberships, same anchors, same bond
+        #  tuple; pins re-recorded against the live enumeration)
         assert decalin == [
-            ((0, 1, 2, 3, 8, 9), 3, 8, ((6, 2, False, 0), (6, 2, False, 0))),
-            ((3, 4, 5, 6, 7, 8), 3, 8, ((6, 2, False, 0), (6, 2, False, 0))),
+            ((0, 9, 8, 3, 2, 1), 3, 8, ((6, 2, False, 0), (6, 2, False, 0))),
+            ((4, 5, 6, 7, 8, 3), 3, 8, ((6, 2, False, 0), (6, 2, False, 0))),
         ]
         indane = _ring_units(rdkit.Chem.MolFromSmiles("C1Cc2ccccc2C1"))
+        # (r263: same re-record as the decalin pin above)
         assert indane == [
-            ((2, 3, 4, 5, 6, 7), 2, 7, ((6, 2, False, 0), (6, 2, False, 0))),
+            ((3, 4, 5, 6, 7, 2), 2, 7, ((6, 2, False, 0), (6, 2, False, 0))),
         ]
         # rejections: attachment count, spiro anchor, aromatic fusion
         for smi in (

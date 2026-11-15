@@ -2049,6 +2049,7 @@ class TestPreviewKeyboardSpotlight:
         assert "the dialog stays open" in report
 
 
+@pytest.mark.web_checkout_only
 class TestLigandReportContract:
     """R30-a — the ligand-set reconciliation session-report group.
 

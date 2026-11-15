@@ -1,4 +1,32 @@
-## 1.2.206 — part8 round 2 (Phase C: nine-workspace architecture)
+## [1.2.207] — 2026-11-15 — part8 round 3 (§4 renderer + §5.5 stress + §14.1 Active Learning)
+
+- **§4.1/§4.2 shared figure renderer**: `FigureCanvasHost` (original
+  backend figure via FigureCanvasQTAgg, leak-free, honest states,
+  export through save_figure, lazy matplotlib) + the plot-coverage
+  registry (63 public viz functions introspected across the eight
+  modules: 25 wired, 2 native-equivalent, 36 backend-only) + the Image
+  Lab "Backend figures" tab with artifact-honest invocations (13
+  launchable families; real fits, real AD analysis, real confusion
+  matrices; honest refusals for artifact-gated functions).
+- **§5.5/§16.5 stress suite (9 tests)**: 150k-row CSV, 40k-row Excel,
+  5k×512 wide-matrix ops, 2k-molecule fingerprints, RF fit + 5-fold
+  CV, 150k-row predictions, 150k-point plots, GUI-responsiveness
+  fence (the explorer load stays off the GUI thread).
+- **§14.1 Active Learning**: `ActiveLearningLoop` with six native
+  strategies (uncertainty, margin, entropy, committee, diversity,
+  representative); scikit-activeml evaluated and kept OUT; SMILES/
+  IDs/scores/uncertainty/rationale retained; labels never fabricated
+  (unexported IDs refused, NaN skipped); import + retrain steps.
+- Sandbox-honest test gates: torch/meeko importorskip where siblings
+  had them, async-load timing pumps, six-tab Image Lab + tab-order
+  pins, NJobsField focus mapping + QSS rule, example data regenerated
+  for rdkit 2026.03.4, PMI1 pin widened with provenance note.
+
+**Open (next round):** notebook full re-execution at 1.2.207, docs/
+INDEX.md regeneration for new pharmaml.ml exports, RELEASE_READINESS
+regen, §13 sequential-workflow audit per workspace.
+
+## [1.2.206] — 2026-11-15 — part8 round 2 (Phase C: nine-workspace architecture)
 
 - **Introduction-only startup (§12.2)**: the app opens on a new
   IntroductionPage — purpose, computational-pharmaceutical scope, workflow
@@ -29,7 +57,7 @@
 renderer for the 70 unwired viz functions, stress/performance tests,
 the full chunked verification pass, and docs regeneration.
 
-## 1.2.205 — part8 round 1 (audit + Phases 6/9/B2/F/D/E)
+## [1.2.205] — 2026-11-15 — part8 round 1 (audit + Phases 6/9/B2/F/D/E)
 
 The MASTER_PROMPT part8 commission, first implementation round. Phase A's
 audit drove six phases to completion; the remaining ones (C nav, figure

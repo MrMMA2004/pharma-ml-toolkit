@@ -427,6 +427,7 @@ after adding new public functions.
 | `advice_families` | function | The tokens with hand-authored §18.3 tables. |
 | `ann_benchmark` | function | Recall@k and candidate compression of LSH against brute force. |
 | `anova_ii` | function | Type-II ANOVA table from the term slices. |
+| `ActiveLearningLoop` | class | The §14.1 workflow as one honest, serializable object. |
 | `applicability_domain` | function | The uploaded workflow end-to-end, one call. |
 | `audit_split_overlap` | function | Audit exact identifier overlap across two or more named data partitions. |
 | `autocorrelation` | function | The autocorrelation function: which lag carries which memory. |
@@ -569,6 +570,12 @@ after adding new public functions.
 | `split_features_target` | function | Separate features from the target column. |
 | `split_indices` | function | Core dispatcher: ``(train_indices, test_indices)`` for a strategy. |
 | `stack_oof_regressors` | function | Stack registry regressors out-of-fold and rank the blenders. |
+| `SemiSupervisedEvaluation` | class | Leakage-safe honest evaluation of a semi-supervised configuration. |
+| `SemiSupervisedMethod` | constant |  |
+| `SemiSupervisedResult` | class | Outcome of one semi-supervised fit. |
+| `evaluate_semi_supervised` | function | Leakage-safe honest evaluation of a semi-supervised configuration. |
+| `train_semi_supervised` | function | Fit one of the three semi-supervised methods on ``X`` / ``y``. |
+| `validate_unlabeled` | function | Validate a target vector under the ``-1`` unlabeled convention. |
 | `synthetic_ratings` | function | A seeded rating matrix with genuine latent structure. |
 | `synthetic_series` | function | Seeded synthetic series: the no-data fallback for the whole card. |
 | `tanh` | function |  |
