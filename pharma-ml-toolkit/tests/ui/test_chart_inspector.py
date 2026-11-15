@@ -121,24 +121,31 @@ class TestChartKinds:
 
 class TestMouseWiring:
     def test_mouse_move_drives_crosshair(self, panel, monkeypatch):
+        """(part8 Phase 9) The crosshair is OFF by default — a mouse move
+        drives the search and readout but NOT the guide lines; turning
+        the per-chart preference on brings them back on the next move."""
         _stub_scene_to_view(panel, monkeypatch)
         panel.line(np.array([0.0, 1.0]), np.array([0.0, 1.0]), label="a")
         panel._inspector._on_mouse_moved(QPointF(1.0, 1.0))
-        assert panel._inspector._vline.isVisible()
-        assert panel._inspector._hline.isVisible()
-        # §12 dense-plot coalescing (round 4): the search runs once the
-        # ~15 ms settle elapses; the readout catches up then, not on the
-        # move itself.  Drain the timer synchronously (tests don't spin
-        # the event loop) and the readout must be live.
+        # default: hidden guides, live search queue
+        assert not panel._inspector._vline.isVisible()
+        assert not panel._inspector._hline.isVisible()
         assert panel._inspector._settle_timer.isActive()
         panel._inspector._run_pending_inspect()
-        assert panel._inspector._pending_view is None
-        assert not panel._inspector._settle_timer.isActive()
         assert panel._readout.text() != "—"
-        # Leaving the plot hides the decorations again AND cancels the
-        # queued search (an outside move can never run a stale inspect).
-        panel._inspector._on_mouse_moved(QPointF(1e12, 1e12))
+        # explicit opt-in: the guides ride the next move
+        panel.set_crosshair_enabled(True)
+        assert panel.crosshair_enabled()
+        panel._inspector._on_mouse_moved(QPointF(1.0, 1.0))
+        assert panel._inspector._vline.isVisible()
+        assert panel._inspector._hline.isVisible()
+        # opting back out hides them immediately
+        panel.set_crosshair_enabled(False)
         assert not panel._inspector._vline.isVisible()
+        assert not panel._inspector._hline.isVisible()
+        # Leaving the plot cancels the queued search (an outside move can
+        # never run a stale inspect) and clears the readout.
+        panel._inspector._on_mouse_moved(QPointF(1e12, 1e12))
         assert not panel._inspector._settle_timer.isActive()
         assert panel._inspector._pending_view is None
         assert panel._readout.text() == "—"

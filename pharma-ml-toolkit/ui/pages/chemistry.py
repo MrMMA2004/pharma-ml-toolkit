@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 
 from ..theme_manager import ChartPalette, ThemeManager
 from ..widgets.data_table import DataTableView, PandasTableModel
+from ..widgets.njobs_field import NJobsField
 from ..widgets.plot_widget import PlotPanel
 from ..widgets.progress_panel import ProgressPanel
 from ..widgets.responsive import configure_splitter
@@ -143,11 +144,7 @@ class ChemistryWorkbenchPage(QWidget):
         self._families_combo.setToolTip("Descriptor families to compute (descriptors, ECFP fingerprints, counts…)")
         for label in _FAMILY_PRESETS:
             self._families_combo.addItem(label)
-        self._jobs_combo = QComboBox()
-        self._jobs_combo.setToolTip("Parallel workers for featurization (n_jobs=-1 uses all cores)")
-        for n in ("1", "2", "4"):
-            self._jobs_combo.addItem(n)
-        self._jobs_combo.setCurrentText("2")
+        self._jobs_field = NJobsField(default=-1)
         self._std_btn = QPushButton("Standardize column")
         self._std_btn.setToolTip("Standardize SMILES (canonical form, salts stripped per the RDKit pipeline)")
         self._std_btn.setMinimumHeight(34)
@@ -160,7 +157,7 @@ class ChemistryWorkbenchPage(QWidget):
         form.addRow("", self._open_btn)
         form.addRow("SMILES column:", self._smiles_combo)
         form.addRow("Feature families:", self._families_combo)
-        form.addRow("Threads (n_jobs):", self._jobs_combo)
+        form.addRow("Threads (n_jobs):", self._jobs_field)
         buttons = QHBoxLayout()
         buttons.addWidget(self._std_btn)
         buttons.addWidget(self._feat_btn)
@@ -366,7 +363,16 @@ class ChemistryWorkbenchPage(QWidget):
         self._pending_n_total = len(smiles)
         preset = self._families_combo.currentText()
         families = _FAMILY_PRESETS[preset]
-        n_jobs = int(self._jobs_combo.currentText())
+        # (part8 Phase 6) manual n_jobs: any nonzero integer the user
+        # typed; 0/garbage is refused BEFORE the job starts (the backend
+        # would raise the same error after the button went dark).
+        n_jobs = self._jobs_field.value()
+        if n_jobs is None:
+            self._report.setText(
+                "n_jobs must be a nonzero integer (e.g. -1 for all cores); "
+                f"got {self._jobs_field.currentText().strip()!r}"
+            )
+            return
 
         def job(progress) -> FeaturesOutcome:
             import time as _time

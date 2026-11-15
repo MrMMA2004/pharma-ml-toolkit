@@ -571,6 +571,19 @@ class PlotPanel(QWidget):
     def inspection_enabled(self) -> bool:
         return self._inspector.enabled
 
+    # -- crosshair guides (part8 Phase 9: off by default) -----------------------
+    def set_crosshair_enabled(self, enabled: bool) -> None:
+        """Toggle the cursor crosshair guide lines for this chart.
+
+        OFF by default (the part8 audit: the moving guides distracted
+        from the scientific gridlines); hover inspection, nearest-point
+        snap and click-to-select are unaffected either way.
+        """
+        self._inspector.set_crosshair_enabled(enabled)
+
+    def crosshair_enabled(self) -> bool:
+        return self._inspector.crosshair_enabled
+
     def attach_metadata(self, label: str, meta: Callable[[int], dict[str, Any]]) -> bool:
         """Attach a hover-metadata provider to a plotted series (§21.3)."""
         return self._inspector.attach_metadata(label, meta)

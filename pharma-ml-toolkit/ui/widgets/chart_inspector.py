@@ -84,6 +84,13 @@ class ChartInspector(QObject):
         self._palette = ChartPalette()
         self._series: OrderedDict[str, _SeriesRecord] = OrderedDict()
         self._enabled = True
+        # (part8 Phase 9) The full crosshair (guides through the mouse
+        # position) is OFF by default: the audit round found the moving
+        # v/h pair distracting against the scientific gridlines.  Hover
+        # inspection, nearest-point snap, click-to-select and the marker
+        # highlight all stay ON; the crosshair itself only rides when a
+        # user turns the per-chart preference on (context menu).
+        self._crosshair_enabled = False
         self._last_snap: tuple[str, int] | None = None
         self._pinned: tuple[str, int] | None = None
 
@@ -183,6 +190,23 @@ class ChartInspector(QObject):
     def enabled(self) -> bool:
         return self._enabled
 
+    # -- crosshair control (part8 Phase 9) ---------------------------------------
+    def set_crosshair_enabled(self, enabled: bool) -> None:
+        """Toggle the crosshair guide lines (OFF by default).
+
+        Turning the guides off mid-hover removes them immediately; turning
+        them on needs the next mouse move to position the pair (there is
+        no cursor position to snap to at toggle time).
+        """
+        self._crosshair_enabled = bool(enabled)
+        if not self._crosshair_enabled:
+            self._vline.hide()
+            self._hline.hide()
+
+    @property
+    def crosshair_enabled(self) -> bool:
+        return self._crosshair_enabled
+
     # -- theming ---------------------------------------------------------------
     def apply_palette(self, palette: ChartPalette) -> None:
         self._palette = palette
@@ -215,11 +239,14 @@ class ChartInspector(QObject):
         self._ensure_decorations_added()
         view_pos = vb.mapSceneToView(scene_pos)
         # the crosshair rides every move (cheap; smooth visual feedback),
-        # the search is coalesced (§12 dense-plot debounce).
-        self._vline.setPos(view_pos.x())
-        self._hline.setPos(view_pos.y())
-        self._vline.show()
-        self._hline.show()
+        # the search is coalesced (§12 dense-plot debounce) — but only
+        # when the per-chart crosshair preference is on (part8 Phase 9:
+        # hidden by default, the context menu toggles it).
+        if self._crosshair_enabled:
+            self._vline.setPos(view_pos.x())
+            self._hline.setPos(view_pos.y())
+            self._vline.show()
+            self._hline.show()
         self._queue_inspect((view_pos.x(), view_pos.y()))
 
     def _queue_inspect(self, view_xy: tuple[float, float]) -> None:
@@ -360,6 +387,14 @@ class ChartInspector(QObject):
         inspection.setCheckable(True)
         inspection.setChecked(self._enabled)
         menu.addSeparator()
+        crosshair = menu.addAction("Crosshair guides")
+        crosshair.setCheckable(True)
+        crosshair.setChecked(self._crosshair_enabled)
+        crosshair.setToolTip(
+            "Show the horizontal/vertical guide lines through the cursor "
+            "(off by default)"
+        )
+        menu.addSeparator()
         reset = menu.addAction("Reset view")
 
         chosen = menu.exec(self._plot.mapToGlobal(pos))
@@ -369,6 +404,9 @@ class ChartInspector(QObject):
             return
         if chosen is inspection:
             self.set_enabled(not self._enabled)
+            return
+        if chosen is crosshair:
+            self.set_crosshair_enabled(not self._crosshair_enabled)
             return
         label = chosen.data()
         picked = self._series.get(label)
