@@ -605,31 +605,59 @@ class ModelAnalysisPage(QWidget):
         )
         if not path:
             return
-        from pharmaml.utils.io import read_table
 
-        try:
-            frame = read_table(path)
-        except Exception as exc:  # noqa: BLE001 - surface any reader failure
-            self._metric_label.setText(f"Could not read {Path(path).name}: {exc}")
+        # (part8 Phase B) the read runs on the worker — the GUI thread
+        # never parses a user table, however large.
+        if self._runner.busy:
+            self._metric_label.setText(
+                f"Busy: '{getattr(self._runner, 'job_name', '') or 'another operation'}' "
+                "is running — Stop it (or check Job Center) first."
+            )
+            return
+        self._open_btn.setEnabled(False)
+
+        def job(progress):
+            from pharmaml.utils.io import read_table_with_progress
+
+            def report(done, total=None, _note=""):
+                if total:
+                    progress(min(done / total, 1.0), f"{done:,} rows")
+                return None
+
+            progress(0.05, "reading")
+            return read_table_with_progress(Path(path), report)
+
+        def done(frame) -> None:
+            self._open_btn.setEnabled(True)
+            if frame is None or frame.empty:
+                self._metric_label.setText(f"{Path(path).name} is empty.")
+                return
+            self._external_path = Path(path)
+            label = f"{Path(path).name} (file)"
+            if label not in [self._dataset_combo.itemText(i) for i in range(self._dataset_combo.count())]:
+                self._dataset_combo.addItem(label)
+            self._dataset_combo.setCurrentText(label)
+            self._frame = frame
+            self._target_combo.clear()
+            for col in frame.columns:
+                self._target_combo.addItem(str(col))
+            self._metric_label.setText(
+                f"Loaded {Path(path).name} — {len(frame):,} rows × {len(frame.columns)} columns; pick a target column."
+            )
+
+        def failed(message) -> None:
+            self._open_btn.setEnabled(True)
+            self._metric_label.setText(
+                f"Could not read {Path(path).name}: {message.splitlines()[0]}"
+            )
             from ..widgets.toast_routing import shell_notify
 
             shell_notify(self, f"Model Analysis — could not read {Path(path).name}", "danger")
-            return
-        if frame is None or frame.empty:
-            self._metric_label.setText(f"{Path(path).name} is empty.")
-            return
-        self._external_path = Path(path)
-        label = f"{Path(path).name} (file)"
-        if label not in [self._dataset_combo.itemText(i) for i in range(self._dataset_combo.count())]:
-            self._dataset_combo.addItem(label)
-        self._dataset_combo.setCurrentText(label)
-        self._frame = frame
-        self._target_combo.clear()
-        for col in frame.columns:
-            self._target_combo.addItem(str(col))
-        self._metric_label.setText(
-            f"Loaded {Path(path).name} — {len(frame):,} rows × {len(frame.columns)} columns; pick a target column."
-        )
+
+        def cancelled(_seconds) -> None:
+            self._open_btn.setEnabled(True)
+
+        self._runner.submit(f"load {Path(path).name}", job, done, failed, on_cancelled=cancelled)
 
     def _load_dataset(self, name: str) -> None:
         self._target_combo.clear()

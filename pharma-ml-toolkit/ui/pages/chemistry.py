@@ -225,27 +225,55 @@ class ChemistryWorkbenchPage(QWidget):
         )
         if not path:
             return
-        from pharmaml.utils.io import read_table
 
-        try:
-            frame = read_table(path)
-        except Exception as exc:  # noqa: BLE001 - surface any reader failure
-            self._report.setText(f"Could not read {Path(path).name}: {exc}")
+        # (part8 Phase B) the read runs on the worker — the GUI thread
+        # never parses a user ligand table, however large.
+        if self._runner.busy:
+            self._report.setText(
+                f"Busy: '{getattr(self._runner, 'job_name', '') or 'another operation'}' "
+                "is running — Stop it (or check Job Center) first."
+            )
             return
-        if frame is None or frame.empty:
-            self._report.setText(f"{Path(path).name} is empty.")
-            return
-        label = f"{Path(path).name} (file)"
-        names = [self._dataset_combo.itemText(i) for i in range(self._dataset_combo.count())]
-        if label not in names:
-            self._dataset_combo.addItem(label)
-        # hold the frame: _load_dataset re-runs on setCurrentText and the
-        # "(file)" branch below picks this up instead of hitting examples/
-        self._external_frame = frame
-        self._dataset_combo.setCurrentText(label)
-        self._report.setText(
-            f"Loaded {Path(path).name} — {len(frame):,} rows; SMILES column auto-detected."
-        )
+        self._open_btn.setEnabled(False)
+
+        def job(progress) -> pd.DataFrame:
+            from pharmaml.utils.io import read_table_with_progress
+
+            def report(done, total=None, _note=""):
+                if total:
+                    progress(min(done / total, 1.0), f"{done:,} rows")
+                return None
+
+            progress(0.05, "reading")
+            return read_table_with_progress(Path(path), report)
+
+        def done(frame) -> None:
+            self._open_btn.setEnabled(True)
+            if frame is None or frame.empty:
+                self._report.setText(f"{Path(path).name} is empty.")
+                return
+            label = f"{Path(path).name} (file)"
+            names = [self._dataset_combo.itemText(i) for i in range(self._dataset_combo.count())]
+            if label not in names:
+                self._dataset_combo.addItem(label)
+            # hold the frame: _load_dataset re-runs on setCurrentText and the
+            # "(file)" branch below picks this up instead of hitting examples/
+            self._external_frame = frame
+            self._dataset_combo.setCurrentText(label)
+            self._report.setText(
+                f"Loaded {Path(path).name} — {len(frame):,} rows; SMILES column auto-detected."
+            )
+
+        def failed(message) -> None:
+            self._open_btn.setEnabled(True)
+            self._report.setText(
+                f"Could not read {Path(path).name}: {message.splitlines()[0]}"
+            )
+
+        def cancelled(_seconds) -> None:
+            self._open_btn.setEnabled(True)
+
+        self._runner.submit(f"load {Path(path).name}", job, done, failed, on_cancelled=cancelled)
 
     def _load_dataset(self, name: str) -> None:
         self._frame = None
