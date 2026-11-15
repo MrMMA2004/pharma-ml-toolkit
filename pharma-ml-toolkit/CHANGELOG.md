@@ -1,3 +1,40 @@
+## 1.2.205 — part8 round 1 (audit + Phases 6/9/B2/F/D/E)
+
+The MASTER_PROMPT part8 commission, first implementation round. Phase A's
+audit drove six phases to completion; the remaining ones (C nav, figure
+renderer, stress tests, final verification) are tracked as the open ledger.
+
+- **Semi-supervised Learning (Phase F)**: `pharmaml.ml.semi_supervised` —
+  SelfTrainingClassifier / LabelPropagation / LabelSpreading over the -1
+  sentinel, safe marker conversion, leakage-safe evaluation with a
+  supervised baseline, and the ML Workbench's "Semi-supervised" tab
+  (46 tests + 35 doctests + 3 GUI round-trips).
+- **Chemistry Lab configuration (Phase D)**: `FeatureConfig` — exact
+  descriptor subsets, independent Morgan radius/bit-width/count-mode
+  configuration, one validated object GUI -> backend -> outcome with the
+  §7.4 reproducibility record (rdkit version, columns, drops); legacy
+  calls stay byte-identical.
+- **Manual n_jobs (Phase 6)**: `NJobsField` — any nonzero integer
+  (including -1), 0 refused before the job starts.
+- **Crosshair off by default (Phase 9)**: hover inspection/snap/click
+  kept, guide lines opt-in per chart via the context menu.
+- **Async loaders (Phase B)**: Data Explorer, Chemistry Lab and Model
+  Analysis read user tables on the JobRunner worker with progress and
+  busy-guards.
+- **Applicability Domain completion (Phase E/10)**: training-distance
+  distribution, distance-vs-predicted, uncertainty distribution, combined
+  reliability quadrants on the backend's own rule, honest degradation on
+  the kNN-only pass, click-a-row sample dossiers.
+- **ML plot metadata (Phase E/9)**: parity/residual points carry stable
+  sample IDs + SMILES + actual/predicted, aligned through the split index.
+- Environment: numpy 1.26.4 / rdkit 2026.09.1 / pyqtgraph 0.13.7 re-pinned
+  (the 0.14 auto-range drift broke the snap-tolerance test on clean HEAD);
+  notebook version prints trued to 1.2.204+.
+
+**Known open**: Phase C (Introduction-only startup + horizontal
+nine-workspace nav), the shared backend-figure renderer, stress tests,
+and the full chunked verification pass.
+
 ## [1.2.204] — 2026-11-15 — product-review fix round (R35)
 
 Commissioned by the v1.2.203 product review (the 17-page design/QA
