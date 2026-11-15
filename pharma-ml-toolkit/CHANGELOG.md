@@ -1,3 +1,34 @@
+## 1.2.206 — part8 round 2 (Phase C: nine-workspace architecture)
+
+- **Introduction-only startup (§12.2)**: the app opens on a new
+  IntroductionPage — purpose, computational-pharmaceutical scope, workflow
+  structure, key backend capabilities, and one entry point per workspace.
+  The nine-card dashboard is no longer the default screen (reachable as
+  the Advanced home).
+- **Horizontal nine-workspace navigation (§12.1)**: a WorkspaceNav bar in
+  the commission's exact order (Introduction · Datasets · Machine
+  Learning · Deep Learning · Generative AI · Molecular Docking · PK/PD ·
+  Molecular Dynamics Analysis · Visualization) — checkable exclusive
+  segments, active-state styling, horizontal scroll overflow (order never
+  changes), Left/Right/Enter keyboard access, Mineral-consistent QSS.
+- **18 pages as subpages**: every previous detail page lives as a tab in
+  its mapped workspace (ML: Model Analysis/ML Workbench/Unsupervised/Best
+  of ML/Foundations; Datasets: Data Explorer/Chemistry Lab/Utilities;
+  PK/PD: PK-PD/Biology/Response AI; Introduction: Dashboard/Settings;
+  single-page workspaces for Deep Learning, Generative, Docking, MD,
+  Visualization). Nothing deleted.
+- **Ctrl+1..9** rebind to the nine workspaces; Alt+Home = Introduction.
+- **PageMirror**: the historical `pages` stack API (count/widget/
+  currentWidget/currentIndex) over workspace-parented pages, so 44 test
+  files' pins keep passing.
+- The 18-item vertical sidebar remains the opt-in Advanced mode only.
+- tests/ui/test_nine_card_first.py rewritten to the §12 contract (23
+  tests); the phase4 async-load test now pumps the queued signal.
+
+**Known open** (tracked for the next round): the shared backend-figure
+renderer for the 70 unwired viz functions, stress/performance tests,
+the full chunked verification pass, and docs regeneration.
+
 ## 1.2.205 — part8 round 1 (audit + Phases 6/9/B2/F/D/E)
 
 The MASTER_PROMPT part8 commission, first implementation round. Phase A's
