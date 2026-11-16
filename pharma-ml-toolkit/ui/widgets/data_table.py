@@ -55,6 +55,12 @@ class PandasTableModel(QAbstractTableModel):
         if role != Qt.ItemDataRole.DisplayRole:
             return None
         if orientation == Qt.Orientation.Horizontal:
+            # a model swap mid-render can ask for a stale section index
+            # (the header still carries the old column count for one
+            # paint pass on some platforms) — out of range answers
+            # None instead of raising IndexError through the override
+            if section < 0 or section >= len(self._shown.columns):
+                return None
             return str(self._shown.columns[section])
         return str(section)
 

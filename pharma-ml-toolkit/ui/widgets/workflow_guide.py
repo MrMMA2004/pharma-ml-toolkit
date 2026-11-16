@@ -80,7 +80,10 @@ WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str], ...], str]] = {
             ("Save/Export", "persistence bundle save; chart exports"),
         ),
         "Semi-supervised learning lives in this workspace: the ML "
-        "Workbench's self-training paths over partially labeled targets.",
+        "Workbench's self-training paths over partially labeled targets, "
+        "and the §14.1 active-learning campaign (pool holdout → strategy-"
+        "ranked candidates → export → imported labels → retrain) on its "
+        "Active learning tab.",
     ),
     "deep-learning": (
         "Select Dataset → Validate → Preprocess → Define Architecture → "

@@ -126,10 +126,11 @@ def _classification_outcome(analysis) -> None:
 
 def test_statistical_tab_constructs(studio_app) -> None:
     page = _fresh_page()
-    # (round 1) the Semi-supervised tab landed at index 5; Statistical
-    # tools shifted to 6 — both orders are pinned here
+    # (round 1) the Semi-supervised tab landed at index 5; (round 5,
+    # §14.1) Active learning took 6 and Statistical tools shifted to 7
     assert page._tabs.tabText(5) == "Semi-supervised"
-    assert page._tabs.tabText(6) == "Statistical tools"
+    assert page._tabs.tabText(6) == "Active learning"
+    assert page._tabs.tabText(7) == "Statistical tools"
     assert page._stat_frame is None
     assert page._stat_export_btn.text() == "Export last result (CSV)"
     # the four backend buttons are all wired

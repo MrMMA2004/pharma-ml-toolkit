@@ -58,7 +58,12 @@ def test_semi_tab_runs_the_real_backend(qtbot, studio_app) -> None:
 
     page._semi_method.setCurrentText("label spreading")
     page._start_semi()
-    qtbot.waitSignal(page._runner.job_ended, timeout=120_000).wait()
+    # job_ended fires BEFORE the page's done() slot (the runner's
+    # finisher connects first); wait for the handler's own effect.
+    qtbot.waitUntil(
+        lambda: "held-out accuracy=" in page._semi_status.text(),
+        timeout=120_000,
+    )
 
     status = page._semi_status.text()
     assert "labeled" in status and "unlabeled" in status
@@ -90,7 +95,10 @@ def test_semi_tab_self_training_with_custom_marker(qtbot, studio_app) -> None:
 
     page._semi_unlabeled.setCurrentText("unlabeled")
     page._start_semi()
-    qtbot.waitSignal(page._runner.job_ended, timeout=120_000).wait()
+    qtbot.waitUntil(
+        lambda: "held-out accuracy=" in page._semi_status.text(),
+        timeout=120_000,
+    )
 
     status = page._semi_status.text()
     assert "unlabeled" in status

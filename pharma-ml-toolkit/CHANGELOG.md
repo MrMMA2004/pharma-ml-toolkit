@@ -1,3 +1,56 @@
+## [1.2.209] — 2026-11-16 — part8 round 5 (§14.1 Active Learning GUI + §14.2 proposals + guide linter)
+
+- **§14.1 Active Learning tab** (the round-3 backend finally gets its
+  workflow surface): the ML Workbench gains an "Active learning" tab
+  implementing the directive's required sequence — pool holdout %
+  (seeded, class-stratified) → query strategy (all six: uncertainty,
+  margin, entropy, committee, diversity, representative — mirrored
+  from `QUERY_STRATEGIES` by test) → ranked candidate table carrying
+  the §14.1 retention set (SMILES, stable IDs, prediction scores,
+  uncertainty, per-molecule selection rationale) → CSV export for the
+  lab → import of the MEASURED labels → retrain.  Labels are never
+  fabricated: the only pool→labeled path is the imported CSV, and the
+  import refuses IDs the loop never exported (the backend's structural
+  guarantee, surfaced in the GUI status line).  Regression targets are
+  refused before any job starts.  8 tests
+  (tests/ui/test_active_learning_tab.py): tab mount + form defaults,
+  strategy mirror, a full query round's retention set, export CSV
+  contents (and that `experimental_label` is absent — never
+  fabricated), the import→retrain fold-in with pool/labeled counts,
+  and the two refusal paths.
+- **§14.2 feature proposals** (docs/part8_SECTION_14_2_PROPOSALS.md):
+  the directive's "present a justified proposal before expanding
+  scope" requirement, answered in writing.  Two candidates proposed
+  for the next round — dataset-level provenance/versioning and
+  reproducibility manifests — each with all nine required fields
+  (gap, scientific usefulness, backend, GUI location, dependencies,
+  resources, GitHub source, tests, status).  The other five §14.2
+  candidates are evaluated and declined with reasons (uncertainty,
+  comparison, imbalance, chemical-space viz, QSAR diagnostics are all
+  already covered by shipped, validated surfaces).
+- **Workflow-guide where-linter** (tests/ui/
+  test_workflow_guide_lint.py, 14 tests): round 4's honest limitation
+  closed — the guides' hand-maintained `where` texts are now linted
+  against reality: every page a guide names must still exist and be
+  constructible, the AL strategies must mirror the backend registry,
+  and the ML workspace note must mention the new AL campaign.
+- The ML workspace's §13.3 guide note now names the Active learning
+  tab among its semi-supervised paths.
+- Environment note: this round shipped from a REBUILT sandbox (the
+  previous one was fully recycled — repo re-cloned at v1.2.208,
+  venv re-pinned from requirements.txt, Qt system libraries restored
+  from the extracted debs).  Two artifacts of the rebuild, both
+  understood: (1) full-file UI suite runs exit-crash AFTER
+  100%-passing on this stack (verified on pristine 1.2.208 too — an
+  offscreen-teardown artifact, not a code regression; suites run
+  clean one-at-a-time or in small chunks); (2) the first notebook
+  re-execution inherited MPLBACKEND=Agg from the test env, which
+  suppressed the inline figures (the freshness gate caught it) —
+  re-executed with the variable cleared, all figures embedded again
+  (pk 3 / generative 15 / dl 6 PNGs, twins back to 6-9% of full).
+- Version carriers: 1.2.209 (VERSION, `pharmaml.__version__`,
+  pyproject, web TS mirror).
+
 ## [1.2.208] — 2026-11-15 — part8 round 4 (§13 workflow guides + §5/Phase-6 n_jobs sweep)
 
 - **§13 (Phase Twelve) workflow guides**: every one of the nine

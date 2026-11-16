@@ -288,6 +288,11 @@ class MLWorkbenchPage(QWidget):
         # model's query predictions behind the view selector
         self._ad_result: Any = None
         self._ad_query_pred: Any = None
+        # (part8 §14.1, round 5) the live active-learning campaign: the
+        # loop object + the last exported batch + its context key
+        self._al_loop: Any = None
+        self._al_key: tuple[str, int, int] | None = None
+        self._al_last_batch: Any = None
         # review m-19: the statistics tab's grouping picker used to fill
         # once at construction and go stale after the next dataset load;
         # the Model Analysis page now emits frameLoaded and this page
@@ -359,6 +364,9 @@ class MLWorkbenchPage(QWidget):
             wrap_in_scroll(self._build_semi_tab()), "Semi-supervised"
         )
         self._tabs.addTab(
+            wrap_in_scroll(self._build_al_tab()), "Active learning"
+        )
+        self._tabs.addTab(
             wrap_in_scroll(self._build_statistical_tab()), "Statistical tools"
         )
         lay.addWidget(self._tabs)
@@ -386,6 +394,9 @@ class MLWorkbenchPage(QWidget):
             self._stat_coverage_btn,
             self._stat_subgroup_btn,
             self._stat_export_btn,
+            self._al_btn,
+            self._al_export_btn,
+            self._al_import_btn,
         ]
 
         self._progress = ProgressPanel()
@@ -2378,6 +2389,260 @@ class MLWorkbenchPage(QWidget):
             )
 
         self._submit(f"semi-supervised ({method})", job, done, self._semi_status)
+
+    # -- tab 5b: active learning (part8 §14.1, round 5) ---------------------
+    # The backend loop (ActiveLearningLoop) shipped in round 3; this tab
+    # is the §14.1 required workflow made visible: Labeled + Pool →
+    # train → strategy → ranked candidates → rationale → export →
+    # import labels → retrain.  Labels are NEVER fabricated: the only
+    # path from pool to labeled is the imported-CSV fold-in.
+    def _build_al_tab(self) -> QWidget:
+        tab = QWidget()
+        lay = QVBoxLayout(tab)
+        lay.setContentsMargins(0, 0, 0, 0)
+        header = QLabel(
+            "Active learning for assay prioritization: hold out part of the "
+            "labeled data as a candidate pool, rank the next batch by a "
+            "query strategy, export the candidates for the lab, then import "
+            "the measured labels and retrain. Experimental labels are only "
+            "ever imported — never invented."
+        )
+        header.setWordWrap(True)
+        lay.addWidget(header)
+        form = QFormLayout()
+
+        self._al_pool_pct = QSpinBox()
+        self._al_pool_pct.setRange(10, 90)
+        self._al_pool_pct.setValue(30)
+        self._al_pool_pct.setToolTip(
+            "Percent of the labeled rows held out as the unlabeled pool "
+            "(seeded split, stratified for classification targets). The "
+            "rest trains the first model."
+        )
+        form.addRow("pool holdout %:", self._al_pool_pct)
+
+        self._al_strategy = QComboBox()
+        for token in (
+            "uncertainty", "margin", "entropy", "committee",
+            "diversity", "representative",
+        ):
+            self._al_strategy.addItem(token)
+        self._al_strategy.setToolTip(
+            "uncertainty: 1 - max P(y|x), least confident first. margin: "
+            "P(top1) - P(top2), smallest decision margin first. entropy: "
+            "largest predictive entropy. committee: bootstrap-ensemble "
+            "disagreement (std of P). diversity: farthest-from-labeled "
+            "first (MaxMin distance). representative: densest pool "
+            "regions first (kNN density)."
+        )
+        form.addRow("query strategy:", self._al_strategy)
+
+        self._al_batch = QSpinBox()
+        self._al_batch.setRange(1, 200)
+        self._al_batch.setValue(10)
+        self._al_batch.setToolTip(
+            "How many candidates one query round exports for the lab."
+        )
+        form.addRow("batch size:", self._al_batch)
+
+        self._al_seed = QSpinBox()
+        self._al_seed.setRange(0, 9999)
+        self._al_seed.setValue(0)
+        self._al_seed.setToolTip("Seeded split + strategy reproducibility.")
+        form.addRow("random seed:", self._al_seed)
+
+        go_row = QHBoxLayout()
+        self._al_btn = QPushButton("Start / advance campaign")
+        self._al_btn.setMinimumHeight(34)
+        self._al_btn.clicked.connect(self._start_al_query)
+        go_row.addWidget(self._al_btn)
+        self._al_export_btn = QPushButton("Export candidates (CSV)…")
+        self._al_export_btn.setEnabled(False)
+        self._al_export_btn.clicked.connect(self._al_export_candidates)
+        go_row.addWidget(self._al_export_btn)
+        self._al_import_btn = QPushButton("Import experimental labels (CSV)…")
+        self._al_import_btn.setEnabled(False)
+        self._al_import_btn.clicked.connect(self._al_import_labels)
+        go_row.addWidget(self._al_import_btn)
+        go_row.addStretch(1)
+        form.addRow(go_row)
+        lay.addLayout(form)
+
+        self._al_status = self._status_label(
+            "Load a classification dataset on the Model Analysis page, then "
+            "start a campaign."
+        )
+        lay.addWidget(self._al_status)
+        self._al_table = QTableWidget()
+        self._al_table.setMinimumHeight(220)
+        lay.addWidget(self._al_table)
+        return tab
+
+    def _start_al_query(self) -> None:
+        """One campaign round: build/advance the loop, rank, render."""
+        frame, target, task = self._training_context()
+        if frame is None:
+            self._al_status.setText(
+                "Load a dataset on the Model Analysis page first (e.g. "
+                "qsar_classification.csv)."
+            )
+            return
+        if not target:
+            self._al_status.setText(
+                "Pick a classification target on the Model Analysis page."
+            )
+            return
+        if task != "classification":
+            self._al_status.setText(
+                "Active learning ranks class predictions — pick a "
+                "classification target (regression targets are refused)."
+            )
+            return
+
+        strategy = str(self._al_strategy.currentText())
+        n_query = int(self._al_batch.value())
+        seed = int(self._al_seed.value())
+        pool_pct = int(self._al_pool_pct.value())
+        context_key = (target, seed, pool_pct)
+
+        def job(progress: Any) -> Any:
+            from pharmaml.ml.active_learning import ActiveLearningLoop
+
+            progress(0.15, "preparing frames")
+            numeric = [
+                c for c in frame.select_dtypes("number").columns
+                if c != target
+            ]
+            if not numeric:
+                raise ValueError(
+                    "no numeric feature columns beside the target — "
+                    "featurize first (Chemistry Lab)"
+                )
+            smiles_col = detect_smiles_column(frame)
+            y = frame[target]
+            labeled_mask = y.notna()
+            rng = np.random.default_rng(seed)
+            labeled_idx = np.flatnonzero(labeled_mask.to_numpy())
+            # seeded stratified-ish holdout: shuffle within each class
+            # so class balance survives the split
+            classes = np.unique(y[labeled_mask].to_numpy())
+            pool_part: list[int] = []
+            for cls in classes:
+                cls_idx = labeled_idx[y.to_numpy()[labeled_idx] == cls]
+                rng.shuffle(cls_idx)
+                take = max(1, int(round(len(cls_idx) * pool_pct / 100.0)))
+                pool_part.extend(cls_idx[:take].tolist())
+            pool_set = set(pool_part)
+            train_idx = [i for i in labeled_idx.tolist() if i not in pool_set]
+
+            shared = {
+                "feature_columns": numeric,
+                "target_column": target,
+                "smiles_column": smiles_col,
+                "random_state": seed,
+            }
+            loop = ActiveLearningLoop(
+                frame.iloc[train_idx].reset_index(drop=True),
+                frame.iloc[sorted(pool_set)].reset_index(drop=True),
+                **shared,
+            )
+            progress(0.5, f"querying ({strategy})")
+            batch = loop.query(n_query=n_query, strategy=strategy)
+            progress(0.9, "done")
+            return loop, batch, context_key
+
+        def done(payload: Any) -> None:
+            loop, batch, key = payload
+            # a changed context (target/seed/pool) restarts the campaign
+            # visibly; the same context advances the live loop
+            if getattr(self, "_al_key", None) != key:
+                self._al_key = key
+            self._al_loop = loop
+            self._al_last_batch = batch
+            columns = [str(c) for c in batch.columns]
+            rows = [
+                [_cell_text(v, limit=40) for v in record]
+                for record in batch.to_numpy().tolist()
+            ]
+            _populate_table(self._al_table, columns, rows)
+            rounds = len(getattr(loop, "history", []))
+            self._al_status.setText(
+                f"Round {rounds}: {len(batch)} candidates by "
+                f"'{strategy}' — pool {len(loop.pool)} · labeled "
+                f"{len(loop.labeled)}. Export for the lab, then import "
+                "the measured labels to retrain."
+            )
+            self._al_export_btn.setEnabled(True)
+            self._al_import_btn.setEnabled(True)
+
+        self._submit(
+            f"active learning ({strategy})", job, done, self._al_status
+        )
+
+    def _al_export_candidates(self) -> None:
+        """Export the current batch: SMILES, IDs, scores, rationale."""
+        batch = getattr(self, "_al_last_batch", None)
+        if batch is None or len(batch) == 0:
+            self._al_status.setText("No candidates yet — run a query first.")
+            return
+        path, _filter = QFileDialog.getSaveFileName(
+            self, "Export assay candidates", "al_candidates.csv",
+            "CSV files (*.csv)",
+        )
+        if not path:
+            return
+        try:
+            batch.to_csv(path, index=False)
+        except Exception as exc:  # noqa: BLE001 - user-facing report
+            self._al_status.setText(f"Export failed — {exc}")
+            return
+        self._al_status.setText(
+            f"Exported {len(batch)} candidates to {Path(path).name} — "
+            "add an 'experimental_label' column with the measured values, "
+            "then import it back."
+        )
+
+    def _al_import_labels(self) -> None:
+        """Fold measured labels into the loop and retrain (§14.1)."""
+        loop = getattr(self, "_al_loop", None)
+        if loop is None:
+            self._al_status.setText("No active campaign — start one first.")
+            return
+        path, _filter = QFileDialog.getOpenFileName(
+            self, "Import experimental labels", "",
+            "CSV files (*.csv);;All files (*)",
+        )
+        if not path:
+            return
+
+        def job(progress: Any) -> Any:
+            progress(0.2, "reading labels")
+            labels = pd.read_csv(path)
+            progress(0.5, "folding into the labeled set")
+            moved = loop.import_experimental_labels(labels)
+            progress(0.8, "retraining")
+            loop.retrain()
+            return moved
+
+        def done(moved: int) -> None:
+            self._al_status.setText(
+                f"Imported {moved} experimental labels — pool "
+                f"{len(loop.pool)} · labeled {len(loop.labeled)}. The "
+                "next query round uses the retrained model."
+            )
+
+        def failed(message: str) -> None:
+            first = message.splitlines()[0] if message else "import failed"
+            self._al_status.setText(f"Import failed — {first}")
+
+        self._runner.submit(
+            "active learning: import labels", job,
+            on_finished=done, on_failed=failed,
+            on_cancelled=lambda s: self._al_status.setText(
+                f"Cancelled after {s:.1f}s (cooperative stop)."
+            ),
+            on_progress=self._progress.update_progress,
+        )
 
     # -- tab 6: statistical tools ----------------------------------------------------
     # part6 Phase 3 batch 1: the four statistical backends (conformal

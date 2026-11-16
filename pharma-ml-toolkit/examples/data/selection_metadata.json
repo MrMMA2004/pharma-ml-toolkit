@@ -16,14 +16,14 @@
     "desc_NumHBA",
     "desc_CrippenClogP",
     "desc_lipinskiHBD",
+    "desc_chi2v",
+    "desc_chi2n",
     "desc_chi1v",
     "desc_chi1n",
     "desc_kappa2",
     "desc_Phi",
-    "desc_kappa3",
-    "desc_NumHeterocycles",
-    "desc_NumAromaticHeterocycles",
-    "ecfp_bit_378"
+    "ecfp_bit_378",
+    "ecfp_bit_389"
   ],
   "descriptor_names": [
     "amw",
@@ -42,20 +42,19 @@
     "NumHBA",
     "CrippenClogP",
     "lipinskiHBD",
+    "chi2v",
+    "chi2n",
     "chi1v",
     "chi1n",
     "kappa2",
-    "Phi",
-    "kappa3",
-    "NumHeterocycles",
-    "NumAromaticHeterocycles"
+    "Phi"
   ],
   "fingerprint_sizes": {
     "ecfp": 2048
   },
   "family_counts": {
-    "descriptors": 23,
-    "ecfp": 1
+    "descriptors": 22,
+    "ecfp": 2
   },
   "families_computed": {
     "descriptors": 43,

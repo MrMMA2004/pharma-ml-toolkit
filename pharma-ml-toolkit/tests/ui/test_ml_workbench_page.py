@@ -135,7 +135,8 @@ def _synth_last_outcome(analysis) -> None:
 def test_page_constructs_with_the_six_tabs(studio_app) -> None:
     page = _fresh_page()
     # (part8 Phase F) the Semi-supervised tab rides after Applicability
-    # domain — seven tabs now.
+    # domain; (round 5, §14.1) Active learning rides after it — eight
+    # tabs now.
     assert [page._tabs.tabText(i) for i in range(page._tabs.count())] == [
         "Hyperparameter search",
         "Leaderboards",
@@ -143,6 +144,7 @@ def test_page_constructs_with_the_six_tabs(studio_app) -> None:
         "Persistence",
         "Applicability domain",
         "Semi-supervised",
+        "Active learning",
         "Statistical tools",
     ]
     # the semi-supervised defaults: method/marker/threshold/kernel
