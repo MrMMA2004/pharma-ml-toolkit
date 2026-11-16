@@ -14835,3 +14835,63 @@ mid-round deep-learning/generative failures were the missing torch
 extra (the C-2 scenario itself) and went green after the cpu wheel.
 Six busy-message test pins updated to the new contract (biology,
 chemistry, dl-efficiency x2, docking, pkpd). v1.2.204 shipped.
+
+Round 271 (100x-68, the interrupted session closed by continuation): the
+Response AI web twin — the last documented Studio-only row. ml.drugresponse
+(now 25 focused headless tests in tests/test_drugresponse.py) rides
+scripts/drugresponse_bridge.py (hill / metrics+rank / model / cv — the
+page's four headline tabs, the deeper diagnostics stay desktop-side)
+through /api/ml/drugresponse and the responseai-card.tsx playground card;
+census 34->35 cards / 28->29 routes. v1.2.215 shipped (zip 10,556,365 B
+sha 72665e44, four tracked homes + offsite; the root dist-archive task-text
+home missed it — restored during r272). The round's gate find, fixed at the
+source: the ten-chunk runner died twice at chunk-7 (SIGKILL); narrowed
+sub-batch by sub-batch to tests/ui/test_nine_card_first.py, which OOMs
+ALONE — 23 tests x full MainWindow with the ui/conftest.py main_window
+fixture teardown only close()ing (close HIDES; the C++ tree survives), ~150
+MiB retained per instantiation. Teardown fixed (close + deleteLater +
+processEvents + gc.collect) — correct hygiene, kept; the deeper per-window
+retention persists (pyqtgraph ViewBox warnings point at a global-side
+accumulation; backlog), so the gate runs that suite as class-scoped legs.
+A shell-pipeline masking bug (rc captured from `tail`, not pytest) briefly
+produced a false "258s green" — caught, corrected, and recorded in the
+CHANGELOG. The 22:45 sibling firing (would-be 100x-69, round 272) died
+mid-gate at chunk-4; its work (VERSION/CHANGELOG/web pins/readiness re-run)
+was absorbed and completed by this session rather than duplicated.
+
+Round 272 (the part9 campaign, phase 1): packaging/windows/ — the complete
+Windows-installer pipeline a Linux host can honestly produce: pharmaml.spec
+(PyInstaller 6 onedir; mordred's dynamic registry + pyqtgraph backends +
+matplotlib export backends collected; fonts/engines/LICENSE datas aligned to
+the app's own __file__-relative math — engines land at
+_internal/pharmaml/engines where workflow.py's SHA-256/PE validation guards
+them; UPX+strip off; pytest/mypy/ruff/tkinter excluded), installer.iss
+(Inno 6: MIT license page, stable AppId, x64, Start Menu + optional
+desktop, uninstall NEVER silently deletes user data — an explicit opt-in
+question only), build_windows.ps1/.bat (the §16 one-command pipeline, every
+step fails loudly), packaging_validation.py (--static runs on any OS: 26
+checks — engines sha+PE pinned, version quadruple, spec structure, 25
+pinned runtime packages importable; --dist --frozen-smoke for the Windows
+machine), version_info.txt (honest publisher), assets/pharmaml.ico
+(generated, multi-size), installer-requirements.txt (the FULL pinned stack
++ the torch-CPU index note), README.md, DEPENDENCY_INVENTORY.md (30 rows
+from an AST scan of the real tree — statsmodels + shiboken6 DISCOVERED by
+the scan; TensorFlow/OpenCV/Polars/LIME honestly NOT USED), BUILD_REPORT.md
+(PASS/PARTIAL/BLOCKED vocabulary — the actual EXE is BLOCKED on this Linux
+sandbox: PyInstaller cannot cross-compile Windows binaries, no Wine, disk;
+nothing claims standalone before a §14 clean-machine run, the recording
+sheet ships unfilled). tools/packaging_audit.py drives the inventories.
+studio.py calls freeze_support() on Windows (§13, after the architecture
+inspection). The r272 gate: chunk-1 red on notebook freshness (the 8
+notebooks re-executed at 1.2.216 — the guard worked), chunk-6 red on the
+FEATURES.md freeze stamp (trued 1.2.213->1.2.216), chunk-7 as split legs,
+everything else green first-try. v1.2.216 shipped to ALL SIX homes (the
+root dist-archive restored as home 5 with 215 backfilled): 1,445 entries /
+1,376 files / 26,986,648 B, sha d0786517, testzip OK per home, real leaks
+0 (the leak scanner now length-qualified — the naive substring needles
+flagged the repo's own detection signatures and incident documentation,
+which legitimately name the prefixes without carrying tokens). Web pins
+re-trued to the final census (7,367 tests / 1,400 files / 474,637 lines).
+E2E: the responseai card runs the real Hill fit (fitted-vs-truth pair
+displayed), theme round-trip, mobile 390, the download tab streams
+v1.2.216 byte-identical to the shipped archive, zero console errors.
