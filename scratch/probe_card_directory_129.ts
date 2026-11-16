@@ -40,6 +40,7 @@ const SOURCES: Record<string, string> = {
   "gen-topology": "src/components/explorer/playground/surgery-cards.tsx",
   "gen-breed": "src/components/explorer/playground/surgery-cards.tsx",
   "gen-sa-score": "src/components/explorer/playground/sa-score-card.tsx",
+  "gen-mcts": "src/components/explorer/playground/mcts-card.tsx",
   "md-xvg": "src/components/explorer/playground/md-analysis.tsx",
   "md-traj": "src/components/explorer/playground/md-analysis.tsx",
   "md-hbond": "src/components/explorer/playground/md-analysis.tsx",

@@ -278,6 +278,16 @@ export const PLAYGROUND_CARDS: readonly PlaygroundCardEntry[] = [
     keywords:
       "sa score sascore ertl schuffenhauer synthetic accessibility ease of synthesis complexity",
   },
+  /* -- MCTS search (the Studio Generative method's web twin) ---------- */
+  {
+    id: "gen-mcts",
+    tab: "generative",
+    title: "MCTS molecule search",
+    blurb: "ChemTSv2-style tree search over an RNN prior",
+    match: "MCTS molecule search",
+    keywords:
+      "mcts monte carlo tree search chemts uct puct rnn prior generative optimization leaderboard",
+  },
   /* -- Molecular Dynamics (round 249 — the pharmaml.md web twins) ----- */
   {
     id: "md-xvg",

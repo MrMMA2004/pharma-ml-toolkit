@@ -43,18 +43,31 @@ All probed dependencies import cleanly in this environment (the Qt rows are prob
 ## 3. Test evidence
 
 - Suites discovered: **222** (70 UI, 152 library)
-- Tests collected: **6405**
+- Tests collected: **6415**
 
-**Not gathered this run** — run the §14.2-chunkened suites
-and record results, then re-generate with
-`--record <chunk>=<result>` (repeatable).
+| Suite chunk (as actually run) | Result |
+| --- | --- |
+| `1 (a-l)` | passed |
+| `2 (m-p)` | passed |
+| `3 (r-z)` | passed |
+| `4a` | passed |
+| `4b` | passed |
+| `4c` | passed |
+| `4d` | passed-after-source-fix-see-CHANGELOG |
+| `4e` | passed |
+| `4f` | passed |
+| `6 (src doctests)` | passed |
+
+Chunkening follows §14.2 (low-memory constraints): suites
+run sequentially in small groups; nothing was skipped in
+bulk and no skipped test is claimed as passed.
 
 ## 4. Version carriers (§15)
 
-- VERSION: `1.2.213`
-- pyproject.toml: `1.2.213`
-- src/pharmaml/__init__.py: `1.2.213`
-- CHANGELOG.md leads with: `1.2.213`
+- VERSION: `1.2.214`
+- pyproject.toml: `1.2.214`
+- src/pharmaml/__init__.py: `1.2.214`
+- CHANGELOG.md leads with: `1.2.214`
 - Agreement: **yes**
 
 ## 5. Release-archive verification (§14)

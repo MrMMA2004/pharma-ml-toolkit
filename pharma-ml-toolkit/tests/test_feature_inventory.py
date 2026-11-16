@@ -3,7 +3,7 @@
 The inventory is a traceability matrix (feature → backend → UI → test)
 whose rows were derived from the LIVE tree, not from prose.  These pins
 keep it that way: every live registry the matrix claims to cover (the 18
-Studio nav keys, the 33 web card ids, the 27 API routes, the backend-only
+Studio nav keys, the 34 web card ids, the 28 API routes, the backend-only
 module list) is re-derived here and asserted present in the document —
 so adding a page/card/route without truing the matrix fails the release,
 and so does retiring one.  The class-C rows are additionally checked for
@@ -120,14 +120,14 @@ class TestRegistryCoverage:
 
     def test_all_web_card_ids_mapped(self) -> None:
         ids = _card_ids()
-        assert len(ids) == 33, f"card directory drifted: {len(ids)} cards"
+        assert len(ids) == 34, f"card directory drifted: {len(ids)} cards"
         text = _doc()
         missing = [c for c in ids if f"`{c}`" not in text]
         assert not missing, f"matrix missing card ids: {missing}"
 
     def test_all_web_routes_mapped(self) -> None:
         routes = _route_names()
-        assert len(routes) == 27, f"route set drifted: {len(routes)} routes"
+        assert len(routes) == 28, f"route set drifted: {len(routes)} routes"
         text = _doc()
         missing = [r for r in routes if r != "(root)" and f"`{r}`" not in text]
         assert not missing, f"matrix missing routes: {missing}"

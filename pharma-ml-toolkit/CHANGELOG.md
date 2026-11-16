@@ -1,3 +1,59 @@
+## [1.2.214] — 2026-11-17 — round 270 (wire the backend-only features to the GUI: the MCTS web twin)
+
+- **The last documented Studio-only gap is wired**: the Generative
+  page's third optimisation method — "monte carlo tree search (MCTS)",
+  the ChemTSv2-style `MctsOptimizer` over an on-the-fly SMILES RNN
+  prior — had no web twin (FEATURES.md called it out by name). The
+  **MCTS molecule search** card closes it on the web console's
+  Generative sub-tab.
+- **Bridge**: `scripts/mcts_bridge.py` (repo-root stdin→stdout JSON,
+  the surgery-route pattern) runs the REAL optimizer with real RDKit
+  + torch: the objective registry rides the Studio's
+  `_build_objective` verbatim (QED, LogP/MW/TPSA windows, the QED+LogP
+  blend, the druglike triple, similarity to a reference, the SA
+  easy/hard anchors), the corpus semantics mirror the desktop's
+  (built-in / seeded / custom), the tree policy knob (UCT / PUCT) is
+  the web card's honest extra, iterations bounded 4–24 for the web
+  latency budget. Response: the ranked leaderboard (rank-aligned,
+  best first, per-objective breakdown columns on multi-objective
+  runs), the per-cycle history, the tree accounting surfaced verbatim
+  from the optimizer's metadata, and the top-9 structure grid as a
+  base64 PNG.
+- **Route + card**: `/api/gen/mcts` (zod-validated, 90 s bridge
+  timeout) + `src/components/explorer/playground/mcts-card.tsx` —
+  objective picker with window/reference rows, cycles/seed/tree-policy
+  inputs, optional prior-corpus textarea with the seeded-mode switch,
+  the best-vs-mean progress chart on the one shared [0, 1] scale,
+  copyable leaderboard, downloadable grid PNG. Card census 33 → **34**
+  (`gen-mcts`); routes 27 → **28**.
+- **Tests**: `TestMctsBridge` (6 — round-trip ranked+honest, the
+  multi-objective breakdown columns, per-seed determinism, the three
+  corpus modes with the dedupe-aware expectation, the nine
+  client-error exits) + `TestMctsWebWiring` (5 — mount, card pins,
+  route validation, the type contract, the catalog entry).
+  `TestCardFinderParity` census trued 33 → 34 (probe mapping gained
+  the gen-mcts row); `test_feature_inventory` pins trued 34 cards /
+  28 routes. Neighbours re-verified: surgery bridge + wiring, session
+  report, the full `test_web_parity` battery. **11 round tests + the
+  trued neighbours green.**
+- **Docs**: FEATURES.md — the Generative web row carries `gen-mcts`,
+  the Studio row's "no web twin" note retired, the freeze-stamp note
+  updated; ruff clean on the round files, mypy on the round files
+  clean (the pre-existing tests/ debt unchanged at its baseline 19).
+- Web pin carriers: `SHIPPED_TOOLKIT_VERSION` 1.2.214; hero pins
+  re-measured at ship (see RELEASE_READINESS).
+- **Gate find, fixed at the source** (the r270 chunk-4d re-run): the
+  v1.2.213 Table Tools page shipped its result splitter with the bare
+  `QSplitter` defaults — collapsible children, no minimum extents —
+  violating the §23.2 splitter policy every other page carries
+  (`ui/pages/table_tools.py` now routes through `configure_splitter`,
+  min extents 320/320, stretch 3/4 to the result side). The r269 ship
+  never recorded its chunk-4d evidence (RELEASE_READINESS §3 said
+  "not gathered"); both `test_responsive_policy` pins went red at
+  pristine HEAD and are green again (37 tests with the Table Tools
+  suite).
+
+
 ## [1.2.213] — 2026-11-16 — part8 round 9 (wire the remaining features: the STRETCH-card reshaping family)
 
 - **The documented stretch cards are wired** (data-handbook audit rows

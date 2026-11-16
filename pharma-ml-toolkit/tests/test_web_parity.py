@@ -1021,15 +1021,16 @@ class TestCardFinderParity:
         )
         assert result.returncode == 0, result.stdout + result.stderr
         assert "CARD_DIRECTORY_OK" in result.stdout
-        # the census: 33 cards (24 + the two Surgery entries of
+        # the census: 34 cards (24 + the two Surgery entries of
         # 100x-130 + the SA score card of part3 §24 + the six
-        # Molecular Dynamics entries of rounds 249/252/257/258), 33
-        # unique ids, zero problems
+        # Molecular Dynamics entries of rounds 249/252/257/258 + the
+        # MCTS search card of the Studio-method twin), 34 unique
+        # ids, zero problems
         start = result.stdout.index("{")
         end = result.stdout.index("}", start) + 1
         report = json.loads(result.stdout[start:end])
-        assert report["entries"] == 33, report
-        assert report["ids"] == 33, report
+        assert report["entries"] == 34, report
+        assert report["ids"] == 34, report
         assert report["problems"] == [], report
 
     @needs_card_finder
@@ -1438,6 +1439,248 @@ class TestSurgeryWebWiring:
         assert "rememberJump(entry.id)" in finder
         assert "if (found) {" in finder
         assert "Recently jumped" in finder
+
+
+class TestMctsBridge:
+    """Round 270: the MCTS search bridge contract.
+
+    The Studio Generative page's third method ("monte carlo tree search
+    (MCTS)" — the ChemTSv2-style ``MctsOptimizer`` over an on-the-fly
+    SMILES RNN prior) had no web twin; the ``gen-mcts`` card closes the
+    gap over the repo-root bridge pattern.  These guards pipe fixed
+    requests through the SHIPPED bridge script and pin the contract:
+    the objective registry, seeded determinism, the corpus semantics,
+    the leaderboard + history + structure-grid payload, and the
+    client-error exits."""
+
+    BRIDGE_PY = REPO_ROOT / "scripts" / "mcts_bridge.py"
+
+    needs_bridge = pytest.mark.skipif(
+        not BRIDGE_PY.is_file(),
+        reason="web checkout (<repo>/scripts/mcts_bridge.py) required; "
+        "the zip-only tree skips — its probes live outside the shipped tree",
+    )
+
+    def _bridge(self, payload: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            timeout=240,
+            check=False,
+        )
+
+    @needs_bridge
+    def test_qed_round_trip_is_ranked_and_honest(self) -> None:
+        result = self._bridge(
+            {"objective": "qed", "iterations": 6, "treePolicy": "uct", "seed": 42}
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["objective"] == "qed"
+        assert response["objectiveLabel"] == "QED drug-likeness"
+        assert response["treePolicy"] == "uct"
+        assert response["corpusMode"] == "built-in"
+        # the leaderboard is rank-aligned, best first
+        assert [row["rank"] for row in response["leaderboard"]] == list(
+            range(1, len(response["leaderboard"]) + 1)
+        )
+        scores = [row["score"] for row in response["leaderboard"]]
+        assert scores == sorted(scores, reverse=True)
+        assert response["best"] == response["leaderboard"][0]["smiles"]
+        assert response["bestScore"] == response["leaderboard"][0]["score"]
+        # every objective scores in [0, 1]
+        assert all(0.0 <= score <= 1.0 for score in scores)
+        # single-objective runs carry no breakdown columns
+        assert response["breakdownColumns"] == []
+        assert all(row["breakdown"] == {} for row in response["leaderboard"])
+        # the history rides one record per cycle
+        assert response["history"]["cycle"] == list(range(6))
+        assert len(response["history"]["bestScore"]) == 6
+        assert len(response["history"]["meanScore"]) == 6
+        # the tree accounting is surfaced verbatim
+        stats = response["treeStats"]
+        assert stats["nNodes"] > 0 and stats["nRollouts"] > 0
+        assert stats["nValid"] == len(scores)
+        assert stats["policy"] == "smiles-rnn"
+        assert stats["corpusSize"] == 244  # the built-in prior corpus
+        # the structure grid is a real PNG
+        import base64
+
+        assert response["gridPng"].startswith("data:image/png;base64,")
+        assert (
+            base64.b64decode(response["gridPng"].split(",", 1)[1])[:8]
+            == b"\x89PNG\r\n\x1a\n"
+        )
+        assert response["gridPanels"] == min(9, len(scores))
+        assert "unique valid molecule(s)" in response["summary"]
+        assert response["rdkitVersion"]
+
+    @needs_bridge
+    def test_multi_objective_carries_the_breakdown_columns(self) -> None:
+        result = self._bridge({"objective": "multi", "iterations": 5, "seed": 9})
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["breakdownColumns"] == ["qed", "mw_band", "tpsa_band"]
+        for row in response["leaderboard"]:
+            assert set(row["breakdown"]) == {"qed", "mw_band", "tpsa_band"}
+            assert all(0.0 <= v <= 1.0 for v in row["breakdown"].values())
+
+    @needs_bridge
+    def test_search_is_deterministic_per_seed(self) -> None:
+        payload = {"objective": "qed", "iterations": 6, "seed": 42}
+        first = self._bridge(payload)
+        second = self._bridge(payload)
+        assert first.returncode == 0 and second.returncode == 0
+        assert json.loads(first.stdout)["leaderboard"] == json.loads(
+            second.stdout
+        )["leaderboard"], "the same seed must regrow the identical tree"
+
+    @needs_bridge
+    def test_corpus_semantics_mirror_the_studio_modes(self) -> None:
+        # custom corpus: the lines are the sampling pool alone
+        result = self._bridge(
+            {
+                "objective": "qed",
+                "iterations": 6,
+                "seed": 42,
+                "corpus": "CCO\nCCN\nc1ccccc1",
+                "seeded": False,
+            }
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["corpusMode"] == "custom"
+        assert response["treeStats"]["corpusSize"] == 3
+        # seeded mode: the lines anchor ahead of the built-in corpus
+        # (dict.fromkeys dedupes — a line already riding the built-in
+        # corpus collapses, so the expectation is computed from the
+        # real DEFAULT_CORPUS, never assumed to be 3 + 244)
+        from pharmaml.generative import DEFAULT_CORPUS
+
+        lines = ["CCO", "CCN", "c1ccccc1"]
+        expected_seeded = len(dict.fromkeys([*lines, *DEFAULT_CORPUS]))
+        seeded = self._bridge(
+            {
+                "objective": "qed",
+                "iterations": 6,
+                "seed": 42,
+                "corpus": "CCO\nCCN\nc1ccccc1",
+                "seeded": True,
+            }
+        )
+        seeded_response = json.loads(seeded.stdout)
+        assert seeded_response["corpusMode"] == "seeded"
+        assert seeded_response["treeStats"]["corpusSize"] == expected_seeded
+
+    @needs_bridge
+    def test_bridge_rejects_bad_requests_as_client_errors(self) -> None:
+        for payload, fragment in (
+            ({"objective": "neon", "iterations": 6, "seed": 42}, "objective must be one of"),
+            ({"objective": "qed", "iterations": 3, "seed": 42}, "between 4 and 24"),
+            ({"objective": "qed", "iterations": 25, "seed": 42}, "between 4 and 24"),
+            ({"objective": "qed", "iterations": 6, "seed": -1}, "seed must be"),
+            ({"objective": "qed", "iterations": 6, "seed": 42, "treePolicy": "greedy"}, "treePolicy"),
+            ({"objective": "qed", "iterations": 6, "seed": 42, "seeded": "yes"}, "seeded must be"),
+            ({"objective": "similarity", "iterations": 6, "seed": 42, "reference": ""}, "reference SMILES"),
+            (
+                {"objective": "similarity", "iterations": 6, "seed": 42, "reference": "not-a-smiles"},
+                "did not parse",
+            ),
+            ({"objective": "logp", "iterations": 6, "seed": 42, "lo": 5, "hi": 1}, "lo < hi"),
+        ):
+            result = self._bridge(payload)
+            assert result.returncode == 2, (payload, result.stdout)
+            response = json.loads(result.stdout)
+            assert fragment in response["error"], (payload, response["error"])
+
+
+class TestMctsWebWiring:
+    """Round 270: the gen-mcts card's static wiring pins.
+
+    The live E2E (agent-browser) clicks the real buttons; these pins
+    keep the wiring from silently disappearing between rounds: the
+    card rides on the /api/gen/mcts route, the finder's catalog gained
+    the gen-mcts entry (its drift probe lives in
+    scratch/probe_card_directory_129.ts, pinned by
+    TestCardFinderParity above), and the Studio's objective registry
+    is mirrored verbatim."""
+
+    PLAYGROUND_TSX = REPO_ROOT / "src" / "components" / "explorer" / "playground.tsx"
+    MCTS_TSX = REPO_ROOT / "src" / "components" / "explorer" / "playground" / "mcts-card.tsx"
+    ROUTE_TS = REPO_ROOT / "src" / "app" / "api" / "gen" / "mcts" / "route.ts"
+    TYPES_TS = REPO_ROOT / "src" / "lib" / "toolkit-types.ts"
+    CARD_DIRECTORY_TS = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "card-directory.ts"
+    )
+
+    needs_wiring = pytest.mark.skipif(
+        not PLAYGROUND_TSX.is_file(),
+        reason="web checkout (<repo>/src components) required; the zip-only "
+        "tree skips — its probes live outside the shipped tree",
+    )
+
+    @needs_wiring
+    def test_card_is_mounted_on_the_generative_tab(self) -> None:
+        playground = self.PLAYGROUND_TSX.read_text(encoding="utf-8")
+        assert 'value="generative"' in playground
+        assert "<MctsCard />" in playground
+        assert "mcts-card" in playground
+
+    @needs_wiring
+    def test_card_posts_to_the_mcts_route(self) -> None:
+        card = self.MCTS_TSX.read_text(encoding="utf-8")
+        assert '"/api/gen/mcts"' in card
+        assert "MctsResponse" in card
+        # the Studio objective registry rides over verbatim
+        for label in (
+            "QED drug-likeness",
+            "LogP window",
+            "Molecular weight window",
+            "TPSA window",
+            "QED + LogP blend",
+            "Multi-objective (QED × MW × TPSA)",
+            "Similarity to reference",
+            "SA score (ease of synthesis)",
+        ):
+            assert label in card, label
+        # the tree policy knob + the corpus semantics
+        assert "uct" in card and "puct" in card
+        assert "Seeded mode" in card
+        assert "the built-in 244-molecule corpus" in card
+        # the leaderboard export + the figure download
+        assert "Download PNG" in card
+        assert "Copy" in card
+        # the honest determinism note
+        assert "the same seed regrow" in card
+
+    @needs_wiring
+    def test_route_validates_through_the_bridge(self) -> None:
+        route = self.ROUTE_TS.read_text(encoding="utf-8")
+        assert "mcts_bridge.py" in route
+        assert "z.enum" in route
+        assert "objective" in route
+        assert "treePolicy" in route
+        assert "corpus" in route
+
+    @needs_wiring
+    def test_response_type_carries_the_search_contract(self) -> None:
+        types = self.TYPES_TS.read_text(encoding="utf-8")
+        assert "export interface MctsResponse" in types
+        assert "export interface MctsLeaderboardRow" in types
+        assert "export interface MctsHistory" in types
+        assert "export interface MctsTreeStats" in types
+        assert "breakdownColumns: string[];" in types
+        assert 'treePolicy: "uct" | "puct";' in types
+        assert 'corpusMode: "built-in" | "seeded" | "custom";' in types
+
+    @needs_wiring
+    def test_catalog_carries_the_mcts_entry(self) -> None:
+        catalog = self.CARD_DIRECTORY_TS.read_text(encoding="utf-8")
+        assert 'id: "gen-mcts"' in catalog
+        assert 'match: "MCTS molecule search"' in catalog
+        assert 'tab: "generative"' in catalog
 
 
 class TestSessionReportInspect:

@@ -951,6 +951,74 @@ export interface SurgeryBreedResponse {
 export type SurgeryResponse = SurgeryTopologyResponse | SurgeryBreedResponse;
 
 /* ------------------------------------------------------------------ */
+/* MCTS molecule search (the Studio Generative method's web twin)     */
+/* ------------------------------------------------------------------ */
+
+/** One leaderboard row of an MCTS run: rank 1 = best. The breakdown
+ * carries one key per `MctsResponse.breakdownColumns` (empty for
+ * single-objective runs — the blended score is the whole story). */
+export interface MctsLeaderboardRow {
+  rank: number;
+  smiles: string;
+  score: number;
+  breakdown: Record<string, number>;
+}
+
+/** The per-cycle progress of the search (one record per iteration):
+ * best/mean score of the molecules the tree found so far, plus the
+ * unique count — scores live in [0, 1] for every objective, so one
+ * shared scale plots them honestly. */
+export interface MctsHistory {
+  cycle: number[];
+  bestScore: number[];
+  meanScore: number[];
+  nUnique: number[];
+}
+
+/** The search's own accounting, surfaced verbatim from the optimizer's
+ * metadata — the tree size, rollout count, validity and the policy
+ * knobs the run actually used. */
+export interface MctsTreeStats {
+  nNodes: number;
+  nRollouts: number;
+  nValid: number;
+  nUnique: number;
+  nCacheHits: number;
+  maxDepth: number;
+  corpusSize: number;
+  policy: string;
+  cVal: number;
+  expansionThreshold: number;
+  simulationNum: number;
+  maxLen: number;
+}
+
+/** Response of /api/gen/mcts: the ranked leaderboard of one
+ * MctsOptimizer run (ChemTSv2-style MCTS over an on-the-fly SMILES RNN
+ * prior — the desktop Studio Generative page's MCTS method), with the
+ * per-cycle history, the tree accounting and the top-molecule
+ * structure grid as a base64 PNG data URI. */
+export interface MctsResponse {
+  objective: string;
+  objectiveLabel: string;
+  iterations: number;
+  treePolicy: "uct" | "puct";
+  seed: number;
+  corpusMode: "built-in" | "seeded" | "custom";
+  best: string;
+  bestScore: number;
+  leaderboard: MctsLeaderboardRow[];
+  breakdownColumns: string[];
+  history: MctsHistory;
+  gridPng: string;
+  gridPanels: number;
+  treeStats: MctsTreeStats;
+  summary: string;
+  elapsedSeconds: number;
+  rdkitVersion: string;
+}
+
+/* ------------------------------------------------------------------ */
 /* Synthetic Accessibility scoring (part3 §24 — Ertl-Schuffenhauer)    */
 /* ------------------------------------------------------------------ */
 

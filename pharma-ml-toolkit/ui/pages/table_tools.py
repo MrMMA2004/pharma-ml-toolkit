@@ -46,6 +46,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..widgets.data_table import DataTableView
+from ..widgets.responsive import configure_splitter
 from ..workers.job_worker import JobRunner
 
 
@@ -128,8 +129,12 @@ class TableToolsPage(QWidget):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._tabs)
         splitter.addWidget(result_box)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 4)
+        # (r270) the §23.2 splitter policy — non-collapsible children +
+        # hard minimum extents + growth flowing to the result side. The
+        # page shipped in v1.2.213 with the bare QSplitter defaults; the
+        # round-270 gate re-run caught it (the r269 ship never recorded
+        # its chunk-4d evidence) and this is the source fix.
+        configure_splitter(splitter, min_sizes=(320, 320), stretch=(3, 4))
         root.addWidget(splitter, 1)
 
         self._refresh_column_combos()

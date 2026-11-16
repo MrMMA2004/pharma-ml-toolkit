@@ -25,6 +25,7 @@ import { PkSimulator } from "@/components/explorer/playground/pk-simulator";
 import { LigandReconciler } from "@/components/explorer/playground/ligand-reconciler";
 import { SurgeryCards } from "@/components/explorer/playground/surgery-cards";
 import { SaScoreCard } from "@/components/explorer/playground/sa-score-card";
+import { MctsCard } from "@/components/explorer/playground/mcts-card";
 import { MdAnalysis } from "@/components/explorer/playground/md-analysis";
 import { SessionReport } from "@/components/explorer/playground/session-report";
 import { CardFinderTrigger } from "@/components/explorer/playground/card-finder";
@@ -169,6 +170,7 @@ export function Playground() {
         <div className="space-y-4 sm:space-y-6">
           <SaScoreCard />
           <SurgeryCards />
+          <MctsCard />
         </div>
       </TabsContent>
       <TabsContent value="md" className="mt-4 sm:mt-6">
