@@ -120,14 +120,14 @@ class TestRegistryCoverage:
 
     def test_all_web_card_ids_mapped(self) -> None:
         ids = _card_ids()
-        assert len(ids) == 34, f"card directory drifted: {len(ids)} cards"
+        assert len(ids) == 35, f"card directory drifted: {len(ids)} cards"
         text = _doc()
         missing = [c for c in ids if f"`{c}`" not in text]
         assert not missing, f"matrix missing card ids: {missing}"
 
     def test_all_web_routes_mapped(self) -> None:
         routes = _route_names()
-        assert len(routes) == 28, f"route set drifted: {len(routes)} routes"
+        assert len(routes) == 29, f"route set drifted: {len(routes)} routes"
         text = _doc()
         missing = [r for r in routes if r != "(root)" and f"`{r}`" not in text]
         assert not missing, f"matrix missing routes: {missing}"

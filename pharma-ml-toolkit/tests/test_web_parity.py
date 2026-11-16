@@ -1021,16 +1021,17 @@ class TestCardFinderParity:
         )
         assert result.returncode == 0, result.stdout + result.stderr
         assert "CARD_DIRECTORY_OK" in result.stdout
-        # the census: 34 cards (24 + the two Surgery entries of
+        # the census: 35 cards (24 + the two Surgery entries of
         # 100x-130 + the SA score card of part3 §24 + the six
         # Molecular Dynamics entries of rounds 249/252/257/258 + the
-        # MCTS search card of the Studio-method twin), 34 unique
+        # MCTS search card of the Studio-method twin + the Response AI
+        # drug-response card of the Studio-page twin), 35 unique
         # ids, zero problems
         start = result.stdout.index("{")
         end = result.stdout.index("}", start) + 1
         report = json.loads(result.stdout[start:end])
-        assert report["entries"] == 34, report
-        assert report["ids"] == 34, report
+        assert report["entries"] == 35, report
+        assert report["ids"] == 35, report
         assert report["problems"] == [], report
 
     @needs_card_finder
@@ -1681,6 +1682,302 @@ class TestMctsWebWiring:
         assert 'id: "gen-mcts"' in catalog
         assert 'match: "MCTS molecule search"' in catalog
         assert 'tab: "generative"' in catalog
+
+
+class TestDrugResponseBridge:
+    """The Response AI page's web-twin bridge contract.
+
+    The Studio's Response AI page drives ``pharmaml.ml.drugresponse``
+    (drug-response learning absorbed from CaDRReS / Precily /
+    DeepResponse) through eight tabs; the web twin carried the other ML
+    surfaces but never this module (FEATURES.md called it out as
+    Studio-only).  The ``ml-drugresponse`` card closes the gap over the
+    repo-root bridge pattern: these guards pipe fixed requests through
+    the SHIPPED bridge script and pin the contract — the seeded 4PL
+    demo's parameters-against-truth recovery, the pasted-series path,
+    the NaN-pair dropping of the metrics layer, the seeded screen's
+    training determinism, the cell-line-grouped folds, and the
+    client-error exits."""
+
+    BRIDGE_PY = REPO_ROOT / "scripts" / "drugresponse_bridge.py"
+
+    needs_bridge = pytest.mark.skipif(
+        not BRIDGE_PY.is_file(),
+        reason="web checkout (<repo>/scripts/drugresponse_bridge.py) required; "
+        "the zip-only tree skips — its probes live outside the shipped tree",
+    )
+
+    def _bridge(self, payload: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            timeout=240,
+            check=False,
+        )
+
+    @needs_bridge
+    def test_hill_seeded_round_trip_is_honest(self) -> None:
+        result = self._bridge({"analysis": "hill", "noise": 0.01, "seed": 42})
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["analysis"] == "hill"
+        assert response["source"] == "seeded 4PL demo"
+        assert response["converged"] is True
+        assert response["nPoints"] == 21
+        # the fit recovers the generating truth {1.2, 0.8, 1.0, 0.05}
+        truth = response["truth"]
+        assert truth == {"hill_coef": 1.2, "ic50": 0.8, "top": 1.0, "bottom": 0.05}
+        assert abs(response["parameters"]["hill_coef"] - 1.2) < 0.1
+        assert abs(response["parameters"]["ic50"] - 0.8) < 0.1
+        assert abs(response["parameters"]["top"] - 1.0) < 0.1
+        assert abs(response["parameters"]["bottom"] - 0.05) < 0.05
+        assert response["rSquared"] > 0.99
+        # the log-dose AUC both ways: the fitted curve against the
+        # CLEAN generating curve (the page's exact comparison)
+        assert abs(response["fittedAuc"] - response["cleanAuc"]) < 0.05
+        assert response["noise"] == 0.01
+        # the measured points and the padded fit grid ride for the chart
+        assert len(response["doses"]) == 21
+        assert len(response["response"]) == 21
+        assert len(response["curveDose"]) == 200
+        assert len(response["curveResponse"]) == 200
+        assert "seeded 4PL demo" in response["summary"]
+        assert response["pharmamlVersion"]
+
+    @needs_bridge
+    def test_hill_pasted_series_fits_without_a_truth_block(self) -> None:
+        result = self._bridge(
+            {
+                "analysis": "hill",
+                "dose": "0.1 0.3 1 3 10 30 100",
+                "response": "0.05 0.08 0.2 0.5 0.75 0.9 0.95",
+            }
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["source"] == "pasted series"
+        assert "truth" not in response
+        assert "cleanAuc" not in response
+        assert response["converged"] is True
+        assert response["rSquared"] > 0.99
+        # the mid point of the pasted series sits at the IC50
+        assert abs(response["parameters"]["ic50"] - 3.0) < 1.0
+
+    @needs_bridge
+    def test_metrics_seeded_pair_carries_both_layers(self) -> None:
+        result = self._bridge({"analysis": "metrics", "seed": 42})
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["analysis"] == "metrics"
+        assert response["source"] == "seeded noisy pair"
+        assert response["n"] == 60
+        assert response["pearson"] > 0.9
+        assert response["spearman"] > 0.9
+        assert 0.0 <= response["rmse"] < 0.2
+        assert 0.0 <= response["mae"] < 0.2
+        # the rank trio rides the same pair (the page's rank tab)
+        rank = response["rank"]
+        assert rank["n"] == 60
+        assert 0.0 < rank["kendall"] <= 1.0
+        assert len(response["yTrue"]) == 60
+        assert len(response["yPred"]) == 60
+
+    @needs_bridge
+    def test_metrics_drops_nan_pairs_before_everything(self) -> None:
+        result = self._bridge(
+            {
+                "analysis": "metrics",
+                "yTrue": "0.1 nan 0.3 0.4 0.5 nan 0.7 0.8",
+                "yPred": "0.2 nan 0.35 0.45 0.4 nan 0.75 0.7",
+            }
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["source"] == "pasted pair"
+        assert response["n"] == 6, "the two NaN pairs must drop"
+        assert response["nDropped"] == 2
+        # rank_correlations refuses NaN (its own finite-only contract),
+        # so the rank trio rides the SURVIVING pairs — same six
+        assert response["rank"]["n"] == 6
+        assert "NaN pair(s) dropped" in response["summary"]
+
+    @needs_bridge
+    def test_model_trains_the_seeded_screen_deterministically(self) -> None:
+        payload = {"analysis": "model", "epochs": 60, "factors": 2, "seed": 42}
+        first = self._bridge(payload)
+        assert first.returncode == 0, first.stdout + first.stderr
+        response = json.loads(first.stdout)
+        assert response["analysis"] == "model"
+        assert response["shape"] == {"cellLines": 12, "drugs": 4}
+        assert response["drugs"] == ["DRUG_A", "DRUG_B", "DRUG_C", "DRUG_D"]
+        assert response["nObserved"] == 40, "the 15% NaN mask drops the rest"
+        assert response["nPairs"] == 40
+        assert len(response["trainLosses"]) == 60
+        assert response["epochs"] == 60
+        # the predicted-response head: the page's CELL_00/CELL_07 pair
+        assert [row["cell"] for row in response["predictedHead"]] == [
+            "CELL_00",
+            "CELL_07",
+        ]
+        for row in response["predictedHead"]:
+            assert len(row["values"]) == 4
+            assert all(0.0 <= v <= 1.0 for v in row["values"])
+        assert -1.0 <= response["pearsonR"] <= 1.0
+        second = self._bridge(payload)
+        assert second.returncode == 0
+        repeat = json.loads(second.stdout)
+        assert repeat["trainLosses"] == response["trainLosses"]
+        assert repeat["predictedHead"] == response["predictedHead"]
+
+    @needs_bridge
+    def test_cv_folds_group_cell_lines(self) -> None:
+        result = self._bridge({"analysis": "cv", "folds": 4})
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["analysis"] == "cv"
+        assert response["nFolds"] == 4
+        assert len(response["folds"]) == 4
+        # 12 cell lines / 4 folds = 3 test cells per fold, no straddling
+        assert all(fold["nTestCells"] == 3 for fold in response["folds"])
+        assert (
+            sum(fold["nObserved"] for fold in response["folds"]) == 40
+        ), "the folds together see every observed pair exactly once"
+        mean_of_folds = sum(fold["pearson"] for fold in response["folds"]) / 4
+        assert abs(response["meanPearson"] - mean_of_folds) < 1e-9
+        assert "grouped by cell line" in response["summary"]
+
+    @needs_bridge
+    def test_bridge_rejects_bad_requests_as_client_errors(self) -> None:
+        for payload, fragment in (
+            ({"analysis": "dreaming"}, "analysis must be one of"),
+            (
+                {"analysis": "hill", "dose": "1 2"},
+                "BOTH a dose series and a response series",
+            ),
+            (
+                {"analysis": "hill", "dose": "1 2 3 4 5 6"},
+                "BOTH a dose series and a response series",
+            ),
+            (
+                {
+                    "analysis": "hill",
+                    "dose": "1 2 3 4 5 6",
+                    "response": "0.5 0.6 0.7 0.8 0.9 1.0",
+                    "seed": -1,
+                },
+                "seed must be",
+            ),
+            ({"analysis": "metrics", "yTrue": "1 2", "yPred": "1 2"}, "at least 4"),
+            (
+                {"analysis": "metrics", "yTrue": "1 2 3 4 5", "yPred": "1 2 3 4"},
+                "same length",
+            ),
+            ({"analysis": "model", "epochs": 10}, "epochs must be between 20 and 400"),
+            ({"analysis": "model", "epochs": 401}, "epochs must be between 20 and 400"),
+            ({"analysis": "model", "epochs": 120, "factors": 5}, "factors must be"),
+            ({"analysis": "cv", "folds": 1}, "folds must be between 2 and 8"),
+            ({"analysis": "cv", "folds": 9}, "folds must be between 2 and 8"),
+            ({"analysis": "hill", "noise": 0.9}, "noise must be between 0 and 0.5"),
+        ):
+            result = self._bridge(payload)
+            assert result.returncode == 2, (payload, result.stdout)
+            response = json.loads(result.stdout)
+            assert fragment in response["error"], (payload, response["error"])
+
+
+class TestDrugResponseWebWiring:
+    """The Response AI card's static wiring pins.
+
+    The live E2E (agent-browser) clicks the real buttons; these pins
+    keep the wiring from silently disappearing between rounds: the
+    card rides on the /api/ml/drugresponse route on the Playground's
+    ML sub-tab, the finder's catalog gained the ml-drugresponse entry
+    (its drift probe lives in scratch/probe_card_directory_129.ts,
+    pinned by TestCardFinderParity above), and the Studio page's
+    seeded-demo semantics are mirrored verbatim."""
+
+    ML_PLAYGROUND_TSX = REPO_ROOT / "src" / "components" / "explorer" / "playground" / "ml-playground.tsx"
+    CARD_TSX = REPO_ROOT / "src" / "components" / "explorer" / "playground" / "responseai-card.tsx"
+    ROUTE_TS = REPO_ROOT / "src" / "app" / "api" / "ml" / "drugresponse" / "route.ts"
+    TYPES_TS = REPO_ROOT / "src" / "lib" / "toolkit-types.ts"
+    CARD_DIRECTORY_TS = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "card-directory.ts"
+    )
+
+    needs_wiring = pytest.mark.skipif(
+        not ML_PLAYGROUND_TSX.is_file(),
+        reason="web checkout (<repo>/src components) required; the zip-only "
+        "tree skips — its probes live outside the shipped tree",
+    )
+
+    @needs_wiring
+    def test_card_is_mounted_on_the_ml_tab(self) -> None:
+        playground = self.ML_PLAYGROUND_TSX.read_text(encoding="utf-8")
+        assert 'from "@/components/explorer/playground/responseai-card"' in playground
+        assert "<ResponseAICard />" in playground
+        # it rides after the Probability Calibration widget — the ML
+        # tab's card column ends with the two evaluation surfaces
+        calibration_at = playground.index("<ProbabilityCalibration />")
+        card_at = playground.index("<ResponseAICard />")
+        assert calibration_at < card_at, (
+            "the Response AI card must mount after the Probability "
+            "Calibration widget"
+        )
+
+    @needs_wiring
+    def test_card_posts_to_the_drugresponse_route(self) -> None:
+        card = self.CARD_TSX.read_text(encoding="utf-8")
+        assert '"/api/ml/drugresponse"' in card
+        assert "DrugResponseResult" in card
+        # the four headline analyses of the Studio page
+        for label in (
+            "Hill curve fit",
+            "Response metrics",
+            "Response model",
+            "Cross-validation",
+        ):
+            assert label in card, label
+        # the pasted-series inputs + the seeded-demo fallbacks + the
+        # honest NaN-pair disclosure
+        assert "seeded demo" in card
+        assert "seeded pair" in card
+        assert "NaN" in card
+        # the copyable result + the honest scoping note
+        assert "Copy result" in card
+        assert "stay desktop-side" in card
+        # the determinism note
+        assert "the same seed regrow" in card
+
+    @needs_wiring
+    def test_route_validates_through_the_bridge(self) -> None:
+        route = self.ROUTE_TS.read_text(encoding="utf-8")
+        assert "drugresponse_bridge.py" in route
+        assert "z.enum" in route
+        assert "analysis" in route
+        assert "epochs" in route
+        assert "folds" in route
+
+    @needs_wiring
+    def test_response_type_carries_the_analysis_contract(self) -> None:
+        types = self.TYPES_TS.read_text(encoding="utf-8")
+        assert "export type DrugResponseAnalysis" in types
+        assert "export interface HillFitResponse" in types
+        assert "export interface ResponseMetricsResponse" in types
+        assert "export interface ResponseModelResponse" in types
+        assert "export interface ResponseCvResponse" in types
+        assert "export type DrugResponseResult" in types
+        assert 'analysis: "hill";' in types
+        assert "meanPearson: number;" in types
+        assert "rSquared: number;" in types
+
+    @needs_wiring
+    def test_catalog_carries_the_responseai_entry(self) -> None:
+        catalog = self.CARD_DIRECTORY_TS.read_text(encoding="utf-8")
+        assert 'id: "ml-drugresponse"' in catalog
+        assert 'match: "Response AI — drug-response learning"' in catalog
+        assert 'tab: "ml"' in catalog
 
 
 class TestSessionReportInspect:

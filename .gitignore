@@ -67,6 +67,16 @@ scratch/pdf-extract/MASTER_PROMPT*.txt
 *.key
 *.pid
 
+# 2026-11-17 hardening: automated cron snapshot commits (webDevReview) once
+# committed .credentials/github_pat wholesale (leaked-commit f2607a2, purged
+# locally before any push). Never let that happen again.
+.credentials/
+
 # python build cache (r260 guard)
 __pycache__/
 *.pyc
+
+# r272: the root dist-archive/ is home 5 of the six-home zip ritual
+# (the task-text home) -- a local mirror, deliberately untracked like
+# the offsite ~/pharma-ml-toolkit-zips/ mirror.
+/dist-archive/

@@ -1,3 +1,154 @@
+## [1.2.216] — 2026-11-17 — round 272 (packaging phase 1: the Windows EXE installer campaign per MASTER_PROMPT part9 — infrastructure, audit, validation)
+
+- **The part9 packaging campaign, phase 1 — everything a Linux build
+  host can honestly produce**: `packaging/windows/` now carries the
+  complete, maintainable build pipeline: `pharmaml.spec` (PyInstaller 6
+  **onedir**; onefile explicitly rejected per §2's startup-time and
+  reliability evaluation; UPX/strip disabled for Qt and scientific
+  DLLs per §12), `installer.iss` (Inno Setup 6: license display,
+  directory selection with space/non-ASCII-safe paths, Start Menu +
+  optional desktop shortcuts, uninstaller registration, upgrade-safe
+  user-data handling per §7/§11), `build_windows.bat` /
+  `build_windows.ps1` (the §16 one-command pipeline: version check,
+  pre-build tests, clean artifacts, freeze, assemble, validate,
+  checksums, manifest — every failed step returns nonzero),
+  `packaging_validation.py` (``--static`` runs on ANY OS: spec
+  references exist in the tree, bundled engines match their pinned
+  SHA-256/PE-machine contract, the version quadruple in
+  `version_info.txt` agrees with VERSION, load-bearing config
+  structure, pinned-stack importability; ``--dist``/``--frozen-smoke``
+  for the Windows build machine; its own ``--static`` quadruple check
+  carried a tuple-repr spacing bug that made the needle unmatchable —
+  a real unconditional FAIL — fixed in r272, 26/26 green on this
+  release), `version_info.txt` (honest
+  publisher "PharmaML contributors", no fabricated signatures per
+  §11), `assets/pharmaml.ico`, `installer-requirements.txt`,
+  `README.md`, `DEPENDENCY_INVENTORY.md` and `BUILD_REPORT.md` (the
+  §19 report in PASS/PARTIAL/FAIL/BLOCKED vocabulary — the actual
+  installer EXE artifacts are **BLOCKED** on this Linux sandbox:
+  PyInstaller cannot cross-compile Windows binaries, no Windows host
+  or Wine exists here, and the full Windows scientific stack exceeds
+  the sandbox's free disk; nothing claims standalone operation before
+  a clean-machine §14 run, and the recording sheet ships unfilled).
+- **`tools/packaging_audit.py` (§1 dependency inventory)**: an AST
+  scan of the ACTUAL imports (studio.py + ui/ + src/ + scripts/)
+  cross-referenced with the live venv's dist-info — 30 runtime rows
+  with purpose/required-or-optional/verification per row;
+  TensorFlow/OpenCV/Polars/LIME confirmed NOT used (the §1
+  anti-padding rule — no packages added for size), while statsmodels
+  and shiboken6 were DISCOVERED by the scan and added.
+- **studio.py: `freeze_support()` on Windows (§13)**: after the
+  architecture inspection — the app's only spawn-context pool lives
+  in `pharmaml/docking/ligands.py` (3D structure generation, launched
+  from worker threads) and the GUI itself is guarded by the
+  `__main__` guard — the frozen bootstrap call is added BEFORE any
+  other work; it is a no-op in every unfrozen session (source
+  checkouts, wheels, the test suites) and makes PyInstaller spawn
+  children bootstrap correctly on Windows.
+- **Round housekeeping**: sandbox rollback recovery — the PAT
+  re-spliced from MASTER_PROMPT.pdf into the 600-mode credential
+  file, remote re-registered via the 700-mode credential helper
+  (no token ever in URLs/logs), ff-only sync to r270, venv repaired
+  to pins; the r263 gate's two failing chunks re-run honestly
+  (chunk-1 green after the remote restore; chunk-7's OOM narrowed
+  sub-batch by sub-batch and then file-by-file — the 28-file single
+  batch SIGKILLs at the container's 4 GiB limit, the four 7-file
+  sub-batches each pass green EXCEPT the last, which OOMs again;
+  narrowed to `tests/ui/test_nine_card_first.py`, which OOMs ALONE:
+  23 tests × the full MainWindow, and the `main_window` fixture's
+  teardown only `close()`d the window — close HIDES, the C++ widget
+  tree stays alive — so each instantiation retained ~150 MiB until
+  SIGKILL at ~3.4 GiB.  **Fixed at the source** in `tests/ui/
+  conftest.py`: teardown now `close()` + `deleteLater()` + a
+  `processEvents()` pump + `gc.collect()` — correct Qt hygiene that
+  bounds every UI suite's teardown.  The deeper find: the suite STILL
+  retains ~150 MiB per instantiation after the fixture fix (a global-
+  side accumulation the pyqtgraph ViewBox destroyed-disconnect
+  warnings point at; backlog, not fixed this round), so the r272
+  gate runs it as THREE class-scoped legs (9+8+6=23 tests,
+  142s/64s/42s, all real pytest rc=0 with summary lines — the shell
+  pipeline masking that produced a false "258s green" earlier was
+  itself caught and corrected); spot-checked against
+  ml_statistics_batch2/biology_page/ad_views); the
+  Response AI web twin round (v1.2.215) shipped from the same
+  session; `~/pharma-ml-toolkit-zips/` offsite home re-mirrored.
+- **Web pin carriers**: `SHIPPED_TOOLKIT_VERSION` 1.2.216; the census
+  re-measured at ship (see RELEASE_READINESS).
+
+## [1.2.215] — 2026-11-17 — round 271 (wire the backend-only features to the GUI: the Response AI web twin)
+
+- **The last documented Studio-only feature row is wired**: the
+  Response AI page — `pharmaml.ml.drugresponse` (drug-response
+  learning absorbed from CaDRReS / Precily / DeepResponse) — was the
+  one FEATURES.md row still flagged "Studio-only (no web twin)" after
+  the r270 MCTS twin. The **Response AI — drug-response learning** card
+  closes it on the web console's Machine Learning sub-tab (after the
+  Probability Calibration widget — the Studio's own nine-card mapping
+  puts the page under the machine-learning workspace).
+- **Bridge**: `scripts/drugresponse_bridge.py` (repo-root
+  stdin→stdout JSON, the surgery/MCTS route pattern) runs the REAL
+  module: four analyses mapping the page's headline tabs —
+  **hill** (`fit_hill_curve` + `dose_response_curve` + `auc_log_dose`,
+  the page's exact seeded 21-point 4PL demo with truth comparison, or a
+  pasted series with the honest fitted-vs-measured AUC pair),
+  **metrics** (`response_metrics` + `rank_correlations` — the
+  evaluation layer and the rank trio in one run, NaN pairs dropped
+  with the drop count reported; the rank trio rides the finite pairs
+  because `rank_correlations` refuses NaN by its own contract),
+  **model** (`DrugResponseModel`, the page's `_seeded_screen` verbatim
+  — the 12×4 screen with its 15% NaN mask, full-batch gradient descent
+  over the observed pairs only, the honest in-sample pearson, the
+  loss history, the CELL_00/CELL_07 predicted head, the
+  observed-vs-predicted pairs), and **cv**
+  (`cross_validate_response`, folds split CELL LINES, the page's exact
+  factory, the honest across-fold mean). The page's three deeper
+  diagnostics (informative regression, the response VAE, multi-omics
+  fusion) stay desktop-side — the card says so.
+- **Route + card + types**: `/api/ml/drugresponse` (zod-validated,
+  60 s bridge timeout) + `src/components/explorer/playground/responseai-card.tsx`
+  (analysis picker, pasted-series textareas with seeded-demo
+  fallbacks, the Hill chart on the log-dose axis, the
+  observed-vs-predicted scatter with identity reference, the loss
+  curve, the per-fold bars with the dashed mean, copyable result
+  tables) + the `DrugResponseResult` discriminated union in
+  `toolkit-types.ts`. Card census 34 → **35** (`ml-drugresponse`);
+  routes 28 → **29**.
+- **The B note closed twice over**: FEATURES.md's Response AI row
+  carried a second honest debt — "no focused backend suite beyond the
+  page tests". New `tests/test_drugresponse.py` (**25 headless
+  tests**: hill 6 + metrics 5 + model 6 + cv 3 + deeper 5) pins the
+  module's public API directly — the 4PL recovery and input contract,
+  the NaN semantics of both evaluation layers, the seeded screen's
+  shape and the 15% mask, per-seed training determinism, the
+  cell-line-grouped folds with every observed pair seen exactly once,
+  the informative-weight shrinkage direction, the VAE's improving ELBO
+  bound, and the fusion's equalised per-block column-variance sums.
+- **Tests**: `TestDrugResponseBridge` (7 — hill round-trips, the
+  pasted path, the NaN drop with the honest note, model determinism,
+  grouped folds, 12 client-error exits) + `TestDrugResponseWebWiring`
+  (5 — mount-after-calibration, route posting, bridge validation,
+  the type contract, the catalog entry). `TestCardFinderParity` census
+  trued 34 → 35; `test_feature_inventory` pins trued 35 cards / 29
+  routes; the TS drift probe gained the `ml-drugresponse` source
+  mapping. **32 round tests + the trued neighbours green.** mypy and
+  ruff clean on the round files (the repo-root bridges stay outside
+  the toolkit ruff gate, the mcts_bridge convention).
+- **Round housekeeping**: sandbox rollback recovery — the PAT
+  re-spliced from MASTER_PROMPT.pdf into the 600-mode credential file;
+  a root-owned `screenshots.rootlock-r271/` leftover (empty, from the
+  interleaved webDevReview cron) was breaking Turbopack's watcher and
+  was removed with `rmdir` (plain overlayfs — rename was refused,
+  rmdir only needed the parent's write bit); an automated
+  `f63a4be2-…-cron` snapshot commit had committed `.credentials/`
+  wholesale — it was discarded locally and its objects purged
+  (reflog expire + gc --prune) BEFORE any push; `.gitignore` gained
+  `.credentials/` so no future automated snapshot can leak the token;
+  dist-archive/ and the offsite `~/pharma-ml-toolkit-zips/` homes were
+  rebuilt after the rollback wiped them (the v1.2.214 zip's sha
+  verified on all four homes first).
+- **Web pin carriers**: `SHIPPED_TOOLKIT_VERSION` 1.2.215; the census
+  re-measured at ship (see RELEASE_READINESS).
+
 ## [1.2.214] — 2026-11-17 — round 270 (wire the backend-only features to the GUI: the MCTS web twin)
 
 - **The last documented Studio-only gap is wired**: the Generative

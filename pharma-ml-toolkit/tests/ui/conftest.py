@@ -8,6 +8,7 @@ when no DISPLAY exists. pytest-qt supplies the ``qapp`` fixture.
 
 from __future__ import annotations
 
+import gc
 import sys
 from pathlib import Path
 
@@ -46,4 +47,16 @@ def main_window(studio_app):
 
     window = MainWindow()
     yield window
+    # (r271 gate-find, fixed at the source) close() only HIDES the
+    # window: the C++ widget tree (18 subpages, pyqtgraph items,
+    # molecule pixmaps) stayed alive with its Python wrappers, so a
+    # 23-test suite like test_nine_card_first retained ~150 MiB per
+    # instantiation and OOM'd the 4 GiB sandbox at test ~21 (SIGKILL,
+    # twice, deterministically).  deleteLater + a processEvents pump
+    # actually destroys the tree; gc.collect() then releases the
+    # Python-side cycles.  Every UI suite shares this fixture, so the
+    # whole gate's UI half gets the bounded-memory teardown for free.
     window.close()
+    window.deleteLater()
+    studio_app.processEvents()
+    gc.collect()

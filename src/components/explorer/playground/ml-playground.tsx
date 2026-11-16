@@ -79,6 +79,7 @@ import {
 } from "@/components/ui/table";
 import { CHART, ParamSlider } from "@/components/explorer/playground/calc-ui";
 import { ProbabilityCalibration } from "@/components/explorer/playground/calibration-widget";
+import { ResponseAICard } from "@/components/explorer/playground/responseai-card";
 import {
   MAX_CSV_FEATURES,
   MAX_CSV_TEXT,
@@ -6946,6 +6947,9 @@ export function MlPlayground() {
 
         {/* --------------------- Probability calibration --------------------- */}
         <ProbabilityCalibration />
+
+        {/* --------------------- Response AI (drug-response learning) --------------------- */}
+        <ResponseAICard />
       </div>
     </div>
   );

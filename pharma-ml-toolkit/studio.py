@@ -22,6 +22,7 @@ this application is THE front end.
 
 from __future__ import annotations
 
+import multiprocessing
 import sys
 from pathlib import Path
 
@@ -30,4 +31,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ui import run
 
 if __name__ == "__main__":
+    # Frozen-application initialization (the part9 §13 audit): the only
+    # spawn-context pool in the app lives in pharmaml/docking/ligands.py
+    # (3D structure generation), launched from worker threads; the GUI
+    # itself is guarded by this very ``__main__`` guard, so children
+    # never re-launch it.  ``freeze_support()`` is a no-op in every
+    # unfrozen session (source checkouts, wheels, the test suites);
+    # in a PyInstaller-frozen Windows build it makes the spawn
+    # children bootstrap correctly instead of falling through the
+    # module body.  It is called BEFORE any other work by design.
+    if sys.platform == "win32":
+        multiprocessing.freeze_support()
     raise SystemExit(run(sys.argv))

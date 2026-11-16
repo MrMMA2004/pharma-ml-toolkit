@@ -1019,6 +1019,147 @@ export interface MctsResponse {
 }
 
 /* ------------------------------------------------------------------ */
+/* Response AI — drug-response learning (the Studio page's web twin)  */
+/* ------------------------------------------------------------------ */
+
+/** Which analysis the Response AI card runs — the four headline tabs
+ * of the desktop Studio's Response AI page (hill / metrics / model /
+ * cv). The page's deeper diagnostics (informative regression, the
+ * response VAE, multi-omics fusion) stay desktop-side. */
+export type DrugResponseAnalysis = "hill" | "metrics" | "model" | "cv";
+
+/** Response of /api/ml/drugresponse analysis "hill": the four-parameter
+ * log-logistic fitted by the toolkit's own Levenberg-Marquardt engine
+ * (pharmaml.ml.drugresponse.fit_hill_curve) on the seeded 21-point 4PL
+ * demo or a pasted series. `top`/`bottom` follow the module's own
+ * convention: the low-dose / high-dose plateaus. The truth block and
+ * clean AUC ride only on the seeded demo; the curve arrays are the
+ * fitted curve on a padded log-dose grid for the chart. */
+export interface HillFitResponse {
+  analysis: "hill";
+  source: "seeded 4PL demo" | "pasted series";
+  parameters: {
+    hill_coef: number;
+    ic50: number;
+    top: number;
+    bottom: number;
+  };
+  rSquared: number;
+  converged: boolean;
+  nPoints: number;
+  fittedAuc: number;
+  measuredAuc: number;
+  doses: number[];
+  response: number[];
+  curveDose: number[];
+  curveResponse: number[];
+  truth?: { hill_coef: number; ic50: number; top: number; bottom: number };
+  noise?: number;
+  cleanAuc?: number;
+  summary: string;
+  elapsedSeconds: number;
+  pharmamlVersion: string;
+}
+
+/** Response of /api/ml/drugresponse analysis "metrics": the evaluation
+ * layer every response paper reports (pharmaml.ml.drugresponse
+ * .response_metrics — Pearson / Spearman / RMSE / MAE, NaN pairs
+ * dropped before everything) plus the rank trio
+ * (rank_correlations: Pearson / Spearman / Kendall tau-b) on the same
+ * pair — the page's response-metrics and rank-correlations tabs in
+ * one run. */
+export interface ResponseMetricsResponse {
+  analysis: "metrics";
+  source: "seeded noisy pair" | "pasted pair";
+  n: number;
+  /** Pairs where either side was NaN — dropped before every metric
+   * (response_metrics' own NaN semantics; the rank trio rides the
+   * surviving finite pairs because rank_correlations refuses NaN). */
+  nDropped: number;
+  pearson: number;
+  spearman: number;
+  rmse: number;
+  mae: number;
+  rank: {
+    n: number;
+    pearson: number;
+    spearman: number;
+    kendall: number;
+  };
+  yTrue: number[];
+  yPred: number[];
+  summary: string;
+  elapsedSeconds: number;
+  pharmamlVersion: string;
+}
+
+/** One predicted-response head row of the CaDRReS model run: the
+ * model's predicted response for one cell line across every drug of
+ * the seeded 12x4 screen (values are ordered by `drugs`). */
+export interface ResponseHeadRow {
+  cell: string;
+  values: number[];
+}
+
+/** Response of /api/ml/drugresponse analysis "model": the CaDRReS
+ * bilinear factorisation (pharmaml.ml.drugresponse
+ * .DrugResponseModel) trained on the seeded 12x4 screen with its 15%
+ * NaN mask — full-batch gradient descent over the observed pairs
+ * only, the honest in-sample pearson, the loss history, the predicted
+ * head for CELL_00/CELL_07, and every observed/predicted pair for the
+ * scatter. */
+export interface ResponseModelResponse {
+  analysis: "model";
+  epochs: number;
+  factors: number;
+  seed: number;
+  shape: { cellLines: number; drugs: number };
+  drugs: string[];
+  trainLosses: number[];
+  finalLoss: number;
+  nObserved: number;
+  pearsonR: number;
+  predictedHead: ResponseHeadRow[];
+  observed: number[];
+  predicted: number[];
+  nPairs: number;
+  summary: string;
+  elapsedSeconds: number;
+  pharmamlVersion: string;
+}
+
+/** One cell-line-grouped fold of the cross-validation run. */
+export interface ResponseCvFold {
+  fold: number;
+  nTestCells: number;
+  nObserved: number;
+  pearson: number;
+  rmse: number;
+}
+
+/** Response of /api/ml/drugresponse analysis "cv":
+ * cross_validate_response over the seeded screen — folds split CELL
+ * LINES (no cell line straddles a fold), each fold training a fresh
+ * model with the Studio page's exact factory, the honest across-fold
+ * mean pearson even when the toy screen barely carries signal. */
+export interface ResponseCvResponse {
+  analysis: "cv";
+  nFolds: number;
+  folds: ResponseCvFold[];
+  meanPearson: number;
+  summary: string;
+  elapsedSeconds: number;
+  pharmamlVersion: string;
+}
+
+/** Either Response AI response, discriminated on `analysis`. */
+export type DrugResponseResult =
+  | HillFitResponse
+  | ResponseMetricsResponse
+  | ResponseModelResponse
+  | ResponseCvResponse;
+
+/* ------------------------------------------------------------------ */
 /* Synthetic Accessibility scoring (part3 §24 — Ertl-Schuffenhauer)    */
 /* ------------------------------------------------------------------ */
 

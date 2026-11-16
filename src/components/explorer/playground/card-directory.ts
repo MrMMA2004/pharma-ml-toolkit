@@ -174,6 +174,14 @@ export const PLAYGROUND_CARDS: readonly PlaygroundCardEntry[] = [
     match: "Probability Calibration",
     keywords: "calibration reliability brier probability",
   },
+  {
+    id: "ml-drugresponse",
+    tab: "ml",
+    title: "Response AI — drug-response learning",
+    blurb: "Hill 4PL fit · metrics · CaDRReS model · grouped CV",
+    match: "Response AI — drug-response learning",
+    keywords: "drug response hill ic50 cadres metrics pearson spearman kendall cross-validation",
+  },
   /* -- Cell Line Bio -------------------------------------------------- */
   {
     id: "bio-biomarkers",

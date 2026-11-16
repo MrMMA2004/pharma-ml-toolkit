@@ -28,6 +28,7 @@ const SOURCES: Record<string, string> = {
   "pk-nca": "src/components/explorer/playground/nca-panel.tsx",
   "ml-setup": "src/components/explorer/playground/ml-playground.tsx",
   "ml-calibration": "src/components/explorer/playground/calibration-widget.tsx",
+  "ml-drugresponse": "src/components/explorer/playground/responseai-card.tsx",
   "bio-biomarkers": "src/components/explorer/playground/biology-playground.tsx",
   "dock-parse": "src/components/explorer/playground/docking-parser.tsx",
   "dock-torsion": "src/components/explorer/playground/docking-parser.tsx",

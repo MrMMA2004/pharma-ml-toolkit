@@ -1,12 +1,21 @@
 #!/usr/bin/env python
-"""round-215 -- the round-214 release archive builder (the
-round-180/182/212 recipe verbatim: VERSION is read dynamically) PLUS the
-predecessor sweep (v1.2.129 leaves all four homes) and the testzip
-integrity check per home.
+"""round-272 -- the v1.2.216 release archive builder (the
+round-180/182/212/215 recipe verbatim: VERSION is read dynamically)
+extended to ALL SIX homes: the four tracked homes (download/,
+toolkit/dist-archive/, toolkit/download/, upload/), the root
+dist-archive/ home (untracked, the task-text home), and the offsite
+~/pharma-ml-toolkit-zips/ mirror.  testzip integrity per home, the
+leak scan (no /home/z/, no token material), and NO predecessor sweep
+(the homes keep their release history: 182..215 stay).
+
+The root dist-archive/ home was missing v1.2.215 in the lost session
+(215 shipped to the four tracked homes + offsite only); 216 restores
+the six-home shape everywhere.
 """
 from __future__ import annotations
 
 import hashlib
+import shutil
 import subprocess
 import sys
 import zipfile
@@ -16,7 +25,7 @@ REPO = Path("/home/z/my-project")
 TOOLKIT = REPO / "pharma-ml-toolkit"
 VERSION = (TOOLKIT / "VERSION").read_text().strip()
 NAME = f"pharma-ml-toolkit-v{VERSION}.zip"
-PREDECESSOR = "pharma-ml-toolkit-v1.2.129.zip"
+OFFSITE = Path.home() / "pharma-ml-toolkit-zips"
 
 EXCLUDES = [
     # the route's canonical list (toolkit-fs.ts ZIP_EXCLUDE_ARGS)
@@ -36,10 +45,12 @@ EXCLUDES = [
 ]
 
 HOMES = [
-    REPO / "download",
-    TOOLKIT / "dist-archive",
-    TOOLKIT / "download",
-    REPO / "upload",
+    REPO / "download",          # build here (home 1)
+    TOOLKIT / "dist-archive",   # home 2 (tracked)
+    TOOLKIT / "download",       # home 3 (tracked)
+    REPO / "upload",            # home 4 (tracked; FUSE - sha-verified copy)
+    REPO / "dist-archive",      # home 5 (root, untracked, the task-text home)
+    OFFSITE,                    # home 6 (offsite mirror)
 ]
 
 
@@ -62,38 +73,53 @@ def main() -> int:
     print(f"entries={len(names)} files={len(files)} bytes={len(data)}")
     print(f"testzip first-bad-entry={bad!r}")
     print(f"sha-256={digest}")
-    # byte-identical copies into every home
+    # byte-identical copies into every other home, testzip each
     for home in HOMES[1:]:
+        home.mkdir(parents=True, exist_ok=True)
         copy = home / NAME
-        copy.write_bytes(data)
+        shutil.copyfile(target, copy)
+        if copy.read_bytes() != data:
+            print(f"BYTE MISMATCH: {copy}")
+            return 1
         with zipfile.ZipFile(copy) as zf:
             assert zf.testzip() is None, f"testzip failed in {copy}"
-        print(f"home (testzip OK): {copy}")
-    # the leak scan: no absolute paths, no tokens in TEXT members
+        print(f"home (sha+testzip OK): {copy}")
+    # the leak scan: no absolute paths, no REAL token material in TEXT
+    # members.  (r272: length-qualified regexes — the naive substring
+    # needles flagged the repo's own detection signatures and incident
+    # documentation: packaging_validation.py's scanner regexes,
+    # tools/purge_secret_history.sh's purge patterns, and
+    # docs/security/PAT_EXPOSURE_REMEDIATION.md's incident write-up all
+    # legitimately SAY "github_pat_"/"ghp_" without carrying any token;
+    # a real PAT carries a 60+ char body, a real ghp_ 36+.  Verified by
+    # hand first: zero [A-Za-z0-9_]+ bodies follow any prefix in the
+    # tree's text members.)
+    import re
+    TOKEN_PATTERNS = [
+        re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
+        re.compile(r"ghp_[A-Za-z0-9]{20,}"),
+        re.compile(r"ghs_[A-Za-z0-9]{20,}"),
+        re.compile(r"AKIA[0-9A-Z]{16}"),
+        re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    ]
     leaks = []
     with zipfile.ZipFile(target) as zf:
         for name in files:
-            if name.endswith((".png", ".jpg", ".zip", ".db", ".pcap", ".parquet")):
+            if name.endswith((".png", ".jpg", ".zip", ".db", ".pcap", ".parquet",
+                              ".exe", ".ico", ".ttf", ".pdf")):
                 continue
             try:
                 text = zf.read(name).decode("utf-8", errors="ignore")
             except Exception:
                 continue
-            for needle in ("/home/z/", "github_pat_", "ghp_", "AKIA"):
-                if needle in text:
-                    leaks.append((name, needle))
+            if "/home/z/" in text:
+                leaks.append((name, "/home/z/"))
+            for pat in TOKEN_PATTERNS:
+                if pat.search(text):
+                    leaks.append((name, pat.pattern))
     print(f"real leaks: {len(leaks)}")
     for name, needle in leaks[:10]:
         print("  LEAK:", name, needle)
-    # the predecessor sweep
-    swept = 0
-    for home in HOMES:
-        old = home / PREDECESSOR
-        if old.exists():
-            old.unlink()
-            swept += 1
-            print(f"swept predecessor: {old}")
-    print(f"predecessor swept from {swept} home(s)")
     if leaks:
         return 1
     return 0
