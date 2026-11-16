@@ -1,3 +1,28 @@
+## [1.2.212] — 2026-11-16 — part8 round 8 (§18 Phase G: final verification + §20 final report)
+
+- **Phase G executed in full**: backend sweep (151 suites, 5,370
+  tests, all batches at 100%), src doctest contracts (912 items),
+  UI tree (69 suites, 937 tests — the count reconciled exactly
+  against the collection), carriers, phase6, feature inventory,
+  notebook variants, stress — **7,219+ green, 0 failures**.
+- **One real defect found and fixed**: the `ml/persistence.py`
+  module docstring example still asserted `bundle_metadata`'s old
+  first-four sorted keys; the dict grew `feature_distributions` and
+  `feature_ranges` (r5's applicability work) without the doctest
+  being trued.  Example corrected to the actual contract — doctests
+  912/912 green (with `selfies` installed for its 17 optional-extra
+  contracts).
+- **`docs/FINAL_REPORT.md`** — the §20 required final report: all 20
+  numbered sections plus the §19 acceptance matrix with PASS/PARTIAL/
+  FAIL/BLOCKED labels, every number re-measured live this round.
+- `docs/RELEASE_READINESS.md` regenerated at 1.2.212 (18 deps
+  installed, 0 broken; carriers agree).
+- Web mirror pins trued with the census's exact walk rules:
+  7,249 collected (6,334 tests + 915 doctest items), 1,370 files,
+  469,011 source lines.
+- Version carriers: 1.2.212 (VERSION, `pharmaml.__version__`,
+  pyproject, web TS mirror).
+
 ## [1.2.211] — 2026-11-16 — part8 round 7 (§14.2 Proposal B: reproducibility manifests)
 
 - **§14.2 Proposal B shipped** (the round-5 proposal document's second

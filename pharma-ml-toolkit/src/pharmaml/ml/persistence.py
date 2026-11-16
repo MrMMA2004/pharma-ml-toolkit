@@ -22,7 +22,7 @@ Examples
 >>> from pharmaml.ml.persistence import bundle_metadata, load_model, save_model
 >>> metadata = bundle_metadata("y=2x", "regression", features=["x"], metrics={"rmse": 0.0})
 >>> sorted(metadata)[:4]
-['best_params', 'features', 'metrics', 'name']
+['best_params', 'feature_distributions', 'feature_ranges', 'features']
 >>> "sklearn_version" in metadata        # provenance pins the training stack
 True
 >>> (metadata["name"], metadata["task"], metadata["features"], metadata["metrics"])
