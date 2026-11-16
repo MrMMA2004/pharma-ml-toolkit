@@ -34,7 +34,7 @@ The honesty rules, mechanically enforced:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from pharmaml.viz.report import HTMLReport
 
@@ -42,6 +42,9 @@ __all__ = [
     "report_sections",
     "build_run_report",
     "save_run_report",
+    "write_manifest",
+    "MANIFEST_SCHEMA",
+    "PINNED_STACK",
     "UNITS",
 ]
 
@@ -257,3 +260,148 @@ def build_run_report(record: Mapping[str, Any]) -> HTMLReport:
 def save_run_report(record: Mapping[str, Any], path: str | Path) -> Path:
     """Write the §17D report for one saved run to a self-contained HTML."""
     return build_run_report(record).save(path)
+
+
+# -- §14.2 Proposal B (round 7): reproducibility manifests ----------------------
+
+#: The manifest schema stamp — readers refuse anything else.
+MANIFEST_SCHEMA = "pharmaml-manifest/1"
+
+#: The pinned-stack packages whose versions the manifest records.
+#: A package that is not installed records as "" — an honest absence,
+#: never a guess (the core toolkit is importable without any of them).
+PINNED_STACK = (
+    "numpy", "pandas", "scikit-learn", "scipy", "rdkit", "PySide6",
+    "matplotlib", "pyqtgraph", "xgboost", "lightgbm", "catboost",
+    "shap", "torch",
+)
+
+_version_cache: dict[str, str] = {}
+
+
+def _package_version(name: str) -> str:
+    """importlib.metadata.version(), cached after first use ("" if absent)."""
+    if name not in _version_cache:
+        try:
+            from importlib.metadata import PackageNotFoundError, version
+
+            try:
+                _version_cache[name] = version(name)
+            except PackageNotFoundError:
+                _version_cache[name] = ""
+        except ImportError:  # pragma: no cover - py>=3.8 always has it
+            _version_cache[name] = ""
+    return _version_cache[name]
+
+
+def _platform_facts() -> dict[str, str]:
+    """The descriptive platform block (never executable, never a guess)."""
+    import platform
+    import sys
+
+    return {
+        "python": sys.version.split()[0],
+        "implementation": platform.python_implementation(),
+        "machine": platform.machine(),
+        "system": platform.system(),
+    }
+
+
+def write_manifest(
+    path: str | Path,
+    *,
+    runs: "Sequence[Mapping[str, Any]] | None" = None,
+    datasets: "Sequence[Mapping[str, Any]] | None" = None,
+    config: "Mapping[str, Any] | PipelineConfig | None" = None,
+) -> Path:
+    """Write one reproducibility manifest (§14.2 Proposal B) as JSON.
+
+    The manifest is *descriptive, not executable*: it captures the
+    environment (pharmaml + Python + pinned-stack versions, platform)
+    and the workflow slice (per-run recorded hyperparameters, seeds,
+    ``n_jobs``; dataset fingerprints + Proposal A content versions) so
+    "I trained this in the Studio yesterday" becomes a checkable
+    claim.  It never reinstalls, executes, or recomputes anything.
+
+    Parameters
+    ----------
+    runs:
+        Run records (``latest_runs()`` dicts) — each contributes its
+        ``family``, ``label``, ``created`` and the summary keys the
+        workflow chose to record (``seeds``, ``n_jobs``, hyperpar-
+        ameters…), exactly as stored, never recomputed.
+    datasets:
+        Workspace dataset entries (``WorkspaceEntry``-shaped mappings
+        or dataclasses) — each contributes name, path, sha-256,
+        Proposal A ``content_version`` and ``column_signature``.
+    config:
+        A :class:`~pharmaml.config.PipelineConfig` (or mapping of its
+        fields) — its ``random_state`` / ``test_size`` / ``cv_folds`` /
+        ``n_jobs`` ride along when given; the defaults are never
+        invented when it is not.
+
+    Returns the written path (parents created).  Raises nothing the
+    caller cannot handle: OSError/TypeError propagate like any honest
+    file write — this is a user-invoked export, not a best-effort
+    side-record.
+    """
+    import dataclasses
+    import datetime as _dt
+    import json
+
+    from pharmaml import __version__ as _pharmaml_version
+
+    def _as_mapping(item: Any) -> Mapping[str, Any]:
+        if dataclasses.is_dataclass(item) and not isinstance(item, type):
+            return dataclasses.asdict(item)
+        return dict(item)
+
+    payload: dict[str, Any] = {
+        "schema": MANIFEST_SCHEMA,
+        "created": _dt.datetime.now(_dt.timezone.utc).isoformat(
+            timespec="seconds"
+        ),
+        "pharmaml_version": _pharmaml_version,
+        "platform": _platform_facts(),
+        "pinned_stack": {
+            name: _package_version(name) for name in PINNED_STACK
+        },
+        "runs": [
+            {
+                "family": str(r.get("family", "")),
+                "label": str(r.get("label", "")),
+                "created": str(r.get("created", "")),
+                "summary": dict(r.get("summary") or {}),
+            }
+            for r in (_as_mapping(item) for item in (runs or []))
+        ],
+        "datasets": [
+            {
+                "name": str(d.get("name", "")),
+                "path": str(d.get("path", "")),
+                "sha256": str(d.get("sha256", "")),
+                "content_version": int(d.get("content_version", 1) or 1),
+                "column_signature": str(d.get("column_signature", "")),
+            }
+            for d in (_as_mapping(item) for item in (datasets or []))
+        ],
+    }
+    if config is not None:
+        cfg = (
+            dataclasses.asdict(config)
+            if dataclasses.is_dataclass(config)
+            else dict(config)
+        )
+        payload["config"] = {
+            key: cfg[key] for key in (
+                "random_state", "test_size", "cv_folds", "n_jobs",
+            ) if key in cfg
+        }
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n",
+        encoding="utf-8",
+    )
+    return target

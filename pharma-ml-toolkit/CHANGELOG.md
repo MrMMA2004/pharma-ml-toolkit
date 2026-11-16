@@ -1,3 +1,43 @@
+## [1.2.211] — 2026-11-16 — part8 round 7 (§14.2 Proposal B: reproducibility manifests)
+
+- **§14.2 Proposal B shipped** (the round-5 proposal document's second
+  candidate, implemented as proposed): ``write_manifest()`` in
+  ``pharmaml.studio.reports`` exports the environment + workflow slice
+  as one JSON sidecar — **descriptive, not executable** (no reinstall,
+  no re-run).  Fields: pharmaml/Python versions, the pinned stack via
+  cached ``importlib.metadata`` (13 packages, "" when absent — an
+  honest absence), platform facts, per-run recorded hyperparameters /
+  seeds / ``n_jobs`` (the §5 field's end-to-end audit trail), and the
+  workspace datasets' sha-256 fingerprints + Proposal A content
+  versions + column signatures.  A ``PipelineConfig`` slice
+  (``random_state``/``test_size``/``cv_folds``/``n_jobs``) rides along
+  when given — defaults are never invented.
+- **GUI**: the Persistence tab gains "Write reproducibility manifest…"
+  next to the model-card writer; the sidecar defaults to
+  ``<bundle>.manifest.json`` and is written through the real job path
+  (never the GUI thread), refusing honestly without a loaded bundle.
+  The slice it exports: the 5 most recent ml-evaluation + dl-training
+  runs and up to 8 fingerprinted workspace datasets.
+- 11 tests: ``tests/test_reproducibility_manifest.py`` (8 — contract,
+  versions match the interpreter, cached lookups, n_jobs end-to-end,
+  carried-not-recomputed, config slice, fingerprint round-trip,
+  dataclass/mapping agreement) +
+  ``tests/ui/test_reproducibility_manifest_gui.py`` (3 — button +
+  tooltip, honest refusal, sidecar end-to-end with job runner).
+- **PySide6 6.12 compatibility** (surfaced by a fresh test
+  environment; two upstream signature changes, both fixed so the
+  toolkit runs on 6.8–6.12): (1) `QPixmap.loadFromData` now wants the
+  format as `str` — `smiles_preview` accepts both forms; (2) the
+  `studio --doctor` font probe no longer leaves a bare
+  `QGuiApplication` in the interpreter (which aborted every later
+  `QWidget` construction) — it builds an offscreen `QApplication`
+  instead; the UI-test `studio_app` fixture also guards its
+  `setStyleSheet` call.  The test stack pins rdkit 2026.09.1 (the
+  version the 149-suite sweep was verified under; 2026.09.2 shows
+  mutation-chemistry drift).
+- Version carriers: 1.2.211 (VERSION, ``pharmaml.__version__``,
+  pyproject, web TS mirror).
+
 ## [1.2.210] — 2026-11-16 — part8 round 6 (§14.2 Proposal A: dataset-level provenance and versioning)
 
 - **§14.2 Proposal A shipped** (the round-5 proposal document's first

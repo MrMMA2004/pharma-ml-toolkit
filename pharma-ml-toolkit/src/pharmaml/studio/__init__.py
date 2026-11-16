@@ -49,6 +49,11 @@ from pharmaml.studio.runs import (
     run_families,
     runs_root,
 )
+from pharmaml.studio.reports import (
+    MANIFEST_SCHEMA,
+    PINNED_STACK,
+    write_manifest,
+)
 from pharmaml.studio.glossary import (
     GLOSSARY,
     apply_help,
@@ -99,11 +104,14 @@ __all__ = [
     "empty_evidence",
     "generative_evidence",
     "latest_runs",
+    "MANIFEST_SCHEMA",
     "md_evidence",
     "ml_evidence",
+    "PINNED_STACK",
     "pkpd_evidence",
     "record_run",
     "run_families",
     "runs_root",
     "viz_evidence",
+    "write_manifest",
 ]

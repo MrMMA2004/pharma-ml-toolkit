@@ -1491,6 +1491,17 @@ class MLWorkbenchPage(QWidget):
             "per-feature min/max applicability box."
         )
         buttons.addWidget(self._persist_card_btn)
+        self._persist_manifest_btn = QPushButton("Write reproducibility manifest…")
+        self._persist_manifest_btn.clicked.connect(self._write_manifest)
+        self._persist_manifest_btn.setToolTip(
+            "Export the environment + workflow slice as a JSON sidecar "
+            "beside the bundle: pharmaml/Python/pinned-stack versions, "
+            "platform, the recorded runs' hyperparameters/seeds/n_jobs, "
+            "and the workspace datasets' fingerprints + content versions "
+            "(§14.2 Proposal B). Descriptive, not executable — nothing "
+            "is reinstalled or re-run."
+        )
+        buttons.addWidget(self._persist_manifest_btn)
         form.addRow("", buttons)
         lay.addLayout(form)
         self._persist_status = self._status_label(
@@ -1761,6 +1772,53 @@ class MLWorkbenchPage(QWidget):
             self._persist_status.setText(f"Model card written to {written}")
 
         self._submit("writing the model card", job, done, self._persist_status)
+
+    def _write_manifest(self) -> None:
+        """Write the reproducibility manifest (§14.2 Proposal B).
+
+        The manifest lands beside the loaded bundle (``<bundle>.manifest.json``)
+        and captures the environment + the workspace's recorded slice:
+        pinned-stack versions, per-run hyperparameters/seeds/n_jobs, and
+        dataset fingerprints with Proposal A content versions.
+        """
+        if self._bundle is None:
+            self._persist_status.setText(
+                "Open a model bundle first — the manifest documents a "
+                "saved bundle's environment."
+            )
+            return
+        _model, _metadata, bundle_path = self._bundle
+        target = bundle_path.with_suffix(".manifest.json")
+        path, _filter = QFileDialog.getSaveFileName(
+            self,
+            "Write reproducibility manifest",
+            str(target),
+            "JSON (*.json)",
+        )
+        if not path:
+            return
+
+        def job(progress: Any) -> Any:
+            from pharmaml.studio import (
+                entries as workspace_entries,
+                latest_runs,
+                write_manifest,
+            )
+
+            progress(0.4, "collecting the workspace slice")
+            runs = [r for f in (
+                "ml-evaluation", "dl-training",
+            ) for r in latest_runs(f, limit=5)]
+            datasets = [
+                e for e in workspace_entries("dataset") if e.sha256
+            ][:8]
+            progress(0.7, f"{len(runs)} run(s), {len(datasets)} dataset(s)")
+            return write_manifest(path, runs=runs, datasets=datasets)
+
+        def done(written: Any) -> None:
+            self._persist_status.setText(f"Manifest written to {written}")
+
+        self._submit("writing the reproducibility manifest", job, done, self._persist_status)
 
     # -- tab 5: applicability domain -------------------------------------------------
     def _build_ad_tab(self) -> QWidget:

@@ -185,11 +185,18 @@ def _font_probe() -> tuple[bool, str | None]:
     itself could not run (never a Studio failure).
     """
     try:
-        from PySide6.QtGui import QGuiApplication
+        # QApplication (not the lighter QGuiApplication): it satisfies
+        # the font-database statics the same way, and — when the probe
+        # is the first to build an app instance in this interpreter —
+        # the surviving instance can still parent QWidgets later
+        # (pytest-qt reuses whatever instance exists; a bare
+        # QGuiApplication would abort every later QWidget test under
+        # PySide6 6.12).
+        from PySide6.QtWidgets import QApplication
 
-        app = QGuiApplication.instance()
+        app = QApplication.instance()
         if app is None:
-            QGuiApplication(
+            QApplication(
                 ["pharmaml-doctor", "-platform", "offscreen"])
         from .font_loader import register_fonts
 

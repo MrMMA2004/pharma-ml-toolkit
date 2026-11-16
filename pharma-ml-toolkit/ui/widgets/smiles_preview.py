@@ -157,11 +157,15 @@ class MoleculeRenderer:
             return None, f"Structure drawing failed: {exc}"
 
         pixmap = QPixmap()
-        # PySide6 6.8.x: the format must be a keyword arg (positional
-        # b"PNG" trips the shiboken signature checker); PNG is also
-        # auto-detected from the magic bytes, but the explicit pin
-        # documents the contract.
-        if not pixmap.loadFromData(png, format=b"PNG"):  # pragma: no cover - corrupt bytes
+        # The format pin documents the contract (PNG is also auto-
+        # detected from the magic bytes).  PySide6 6.8.x wanted the
+        # format as a bytes keyword; 6.12 wants a plain str — accept
+        # both so the toolkit runs on either stack.
+        try:
+            loaded = pixmap.loadFromData(png, format="PNG")
+        except (TypeError, ValueError):  # pragma: no cover - 6.8.x path
+            loaded = pixmap.loadFromData(png, format=b"PNG")
+        if not loaded:  # pragma: no cover - corrupt bytes
             return None, "Structure drawing produced an unreadable image."
         pixmap.setDevicePixelRatio(scale)
         self.render_count += 1

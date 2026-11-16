@@ -24,7 +24,12 @@ import pytest
 @pytest.fixture()
 def studio_app(qapp):
     """The shared QApplication with a clean native (unstyled) base."""
-    qapp.setStyleSheet("")
+    # PySide6 6.12: setStyleSheet lives on QApplication (widgets),
+    # not QGuiApplication — a bare QGuiApplication left behind by an
+    # earlier suite (e.g. the qt-doctor subprocess checks) would
+    # raise here under 6.12 while working under 6.8.
+    if hasattr(qapp, "setStyleSheet"):
+        qapp.setStyleSheet("")
     yield qapp
 
 
