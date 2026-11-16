@@ -39,13 +39,17 @@ from PySide6.QtWidgets import (
 #: names the REAL surfaces in this tree that implement each stage.
 WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str], ...], str]] = {
     "datasets": (
-        "Import → Inspect → Validate → Clean/Standardize → Select Columns "
+        "Import → Inspect → Validate → Reshape (Combine/Merge/Pivot) "
+        "→ Clean/Standardize → Select Columns "
         "→ Calculate Descriptors/Fingerprints → Feature Selection → "
         "Split/Leakage Audit → Visualize → Export",
         (
             ("Import", "Data Explorer — Open CSV / Excel… (background worker, cancellable)"),
             ("Inspect", "Data Explorer — preview table + column stats"),
             ("Validate", "Data Audit — per-column type/range/duplicate report"),
+            ("Reshape", "Table Tools — combine replicate tables, merge on a key, "
+             "groupby summary, pivot, clean text, resample/rolling, filter "
+             "(runs off-thread; bind the result back when it fits)"),
             ("Clean/Standardize", "Chemistry Lab — RDKit standardize, invalid rows dropped with reasons"),
             ("Select Columns", "Data Explorer — column visibility + partition ranges"),
             ("Descriptors/Fingerprints", "Chemistry Lab — 20 feature families, Morgan fingerprints"),
@@ -56,7 +60,8 @@ WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str], ...], str]] = {
         ),
         "Dataset provenance rides the shared workspace registry: every load "
         "is noted with its real path and fingerprint, reusable from any "
-        "workspace.",
+        "workspace. Reshaped results bound from Table Tools join the same "
+        "registry with their own content version.",
     ),
     "machine-learning": (
         "Select Dataset → Select Target → Select Features → Preprocess → "

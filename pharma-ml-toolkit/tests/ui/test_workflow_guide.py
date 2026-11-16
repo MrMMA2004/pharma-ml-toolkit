@@ -26,8 +26,11 @@ NINE_KEYS = (
 
 #: First-stage / key-stage pins transcribed from the directive's own
 #: suggested workflows — a renamed stage here is a regression.
+#: (part8 r9) datasets grew to 11 stages: the Reshape step (Table
+#: Tools — combine/merge/groupby/pivot/clean/resample/filter) inserted
+#: between Validate and Clean/Standardize.
 _DIRECTIVE_PINS = {
-    "datasets": ("Import", "Export", 10),
+    "datasets": ("Import", "Export", 11),
     "machine-learning": ("Select Dataset", "Save/Export", 14),
     "deep-learning": ("Select Dataset", "Save Checkpoint/Export", 11),
     "generative-ai": ("Select Generation Method", "Export", 10),

@@ -11,15 +11,15 @@
 
 /** Collected pytest cases at the shipped revision (repo-wide
  *  ``pytest --collect-only -q`` sum, 2026-11-16). */
-export const SHIPPED_TEST_COUNT = 7249;
+export const SHIPPED_TEST_COUNT = 6934;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
  *  docs, tools — the same census /api/toolkit/tree walks). */
-export const SHIPPED_FILE_COUNT = 1370;
+export const SHIPPED_FILE_COUNT = 1377;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). */
-export const SHIPPED_SOURCE_LINES = 469011;
+export const SHIPPED_SOURCE_LINES = 471341;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

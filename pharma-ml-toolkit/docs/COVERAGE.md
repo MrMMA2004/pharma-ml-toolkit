@@ -1460,14 +1460,14 @@ naive-Bayes ModelSpecs (`gaussian_nb` / `multinomial_nb` /
 | 23 | 03.02-Data-Indexing-and-Selection | Data Indexing and Selection | `iloc`/`loc`, masking on frames. | **N-A-HONEST** — `split_features_target`/column pickers are the controlled subset a pharma GUI needs. |
 | 24 | 03.03-Operations-in-Pandas | Operating on Data in Pandas | Index alignment; ufuncs on frames. | **N-A-HONEST**. |
 | 25 | 03.04-Missing-Values | Handling Missing Data | NaN semantics; `isnull`/`fillna`/`dropna`; imputation idea. | **COVERED-ALREADY** — `clean_numeric_frame` (drop/impute with a dropped-column ledger) + `build_preprocessor`'s `SimpleImputer` branch (median/mean/most-frequent). |
-| 26 | 03.05-Hierarchical-Indexing | Hierarchical Indexing | MultiIndex, stack/unstack. | **STRETCH** — a MultiIndex-aware Data tab (dose × replicate hierarchy browsing). |
-| 27 | 03.06-Concat-And-Append | Combining Datasets: concat and append | `pd.concat`, append, repeated-index. | **STRETCH** — dataset-stacking card (combine replicate assay CSVs). |
-| 28 | 03.07-Merge-and-Join | Combining Datasets: merge and join | `pd.merge` one-to-one/many-to-many on keys. | **STRETCH** — merge-two-loaded-tables-on-a-key card. |
-| 29 | 03.08-Aggregation-and-Grouping | Aggregation and Grouping | Split-apply-combine, aggregation, `apply`, pivot preview. | **STRETCH** — groupby summary card (per-compound/batch aggregate stats). |
-| 30 | 03.09-Pivot-Tables | Pivot Tables | `pivot_table`, `cut`/`qcut` binning. | **STRETCH** — pivot card (rows/cols/values pickers over the loaded frame). |
-| 31 | 03.10-Working-With-Strings | Vectorized String Operations | `.str` accessor, regex extraction. | **STRETCH** — string-ops card (SMILES/categorical column cleaning). |
-| 32 | 03.11-Working-with-Time-Series | Working with Time Series | DatetimeIndex, resample, rolling, shifting. | **STRETCH** — pharma time series already have a home (PK tab's `plot_concentration_profile`/`plot_dose_accumulation`); a generic resample/rolling card is the stretch. |
-| 33 | 03.12-Performance-Eval-and-Query | High-Performance Pandas: eval and query | `pd.eval`/`query`, numexpr. | **STRETCH** — filter-expression card over the loaded frame. |
+| 26 | 03.05-Hierarchical-Indexing | Hierarchical Indexing | MultiIndex, stack/unstack. | **WIRED (part8 r9)** — combine/merge/groupby/pivot cover the reshape use cases through Table Tools; the MultiIndex browsing surface remains a documented future refinement. |
+| 27 | 03.06-Concat-And-Append | Combining Datasets: concat and append | `pd.concat`, append, repeated-index. | **WIRED (part8 r9)** — Table Tools ▸ Combine (stack with source_frame identity, or side-by-side with equal-row-count validation). |
+| 28 | 03.07-Merge-and-Join | Combining Datasets: merge and join | `pd.merge` one-to-one/many-to-many on keys. | **WIRED (part8 r9)** — Table Tools ▸ Merge (inner/left/outer on one key; shared-key counts and fan-out warnings in the report). |
+| 29 | 03.08-Aggregation-and-Grouping | Aggregation and Grouping | Split-apply-combine, aggregation, `apply`, pivot preview. | **WIRED (part8 r9)** — Table Tools ▸ GroupBy (validated aggregations, per-group statistics table). |
+| 30 | 03.09-Pivot-Tables | Pivot Tables | `pivot_table`, `cut`/`qcut` binning. | **WIRED (part8 r9)** — Table Tools ▸ Pivot (long → wide; missing combinations stay NaN). |
+| 31 | 03.10-Working-With-Strings | Vectorized String Operations | `.str` accessor, regex extraction. | **WIRED (part8 r9)** — Table Tools ▸ Clean text (strip/collapse/case/drop-missing on one column; source never mutated). |
+| 32 | 03.11-Working-with-Time-Series | Working with Time Series | DatetimeIndex, resample, rolling, shifting. | **STRETCH** — pharma time series already have a home (PK tab's `plot_concentration_profile`/`plot_dose_accumulation`); the generic card shipped (part8 r9): Table Tools ▸ Time series (resample with rule validation + rolling with time-sort). |
+| 33 | 03.12-Performance-Eval-and-Query | High-Performance Pandas: eval and query | `pd.eval`/`query`, numexpr. | **WIRED (part8 r9)** — Table Tools ▸ Filter (pandas query grammar, keyword-column escaping, honest kept/total reporting). |
 | 34 | 03.13-Further-Resources | Further Resources | Pure link list. | **N-A-HONEST** — no content. |
 | 35 | 04.00-Introduction-To-Matplotlib | Visualization with Matplotlib | pyplot vs axes; figure/axes anatomy; styles. | **N-A-HONEST** — the toolkit's house plot style already embodies it (every `viz` function). |
 | 36 | 04.01-Simple-Line-Plots | Simple Line Plots | Color/linestyle, axes limits/labels, legend. | **COVERED-ALREADY** — every house plot is a styled line plot: `plot_concentration_profile`, `plot_predicted_vs_actual`, `plot_learning_curve`. |
@@ -1551,7 +1551,10 @@ of the same content), `website/` (Pelican infra), `tools/` (build tooling) and
 the `figures/` directories carry no additional teachable items.
 
 **Disposition tallies (67 rows):** COVERED-ALREADY **10** · ADDED-THIS-ROUND **7**
-· STRETCH **10** · N-A-HONEST **40**.
+· STRETCH **10** · N-A-HONEST **40**.  *(part8 r9 update: seven of the ten STRETCH rows —
+the pandas-reshaping family, rows 26-33 — are now WIRED as the Datasets workspace's Table
+Tools tab; the remaining three stretch items (MultiIndex browsing, 3D plotting, text-feature
+basis) stay documented future work.)*
 
 ### Round-40 verification rows
 

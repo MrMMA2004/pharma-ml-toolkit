@@ -1,3 +1,42 @@
+## [1.2.213] — 2026-11-16 — part8 round 9 (wire the remaining features: the STRETCH-card reshaping family)
+
+- **The documented stretch cards are wired** (data-handbook audit rows
+  26-33, `docs/COVERAGE.md`): the seven pandas-reshaping surfaces the
+  audit had marked STRETCH — combine replicate tables, merge on a key,
+  groupby summary, pivot, string cleaning, resample/rolling, and
+  filter expressions — now ship as one **Table Tools** tab (second
+  tab of the Datasets workspace, after Data Explorer).
+- **Backend**: new `pharmaml.utils.reshape` (eight operations, typed,
+  validated, each returning `(frame, ReshapeReport)` — the report
+  carries counts and decisions so the GUI never re-derives them).
+  Honest behaviour throughout: side-by-side combine requires equal
+  row counts; merges report shared-key counts and many-to-many
+  fan-out warnings; pivots leave missing combinations NaN (never
+  zero-filled); resample validates the rule through pandas' offset
+  machinery and names non-datetime rows; rolling time-sorts first and
+  drops no rows; filter runs pandas' `query` grammar (python engine,
+  never arbitrary eval) with automatic backtick-escaping of
+  keyword-named columns (`yield > 100` works — only tokens that are
+  BOTH keywords and actual columns are escaped, so `in`/`and` stay
+  grammar).
+- **GUI**: `ui/pages/table_tools.py` — consumes the Explorer's shared
+  frame (`frameLoaded`), loads a second table through the JobRunner
+  for combine/merge, runs every operation off-thread, previews the
+  result in the workspace's preview-windowed table, and binds it back
+  as the active dataset (announced via `frameLoaded` + a registry
+  note with content version).  Backend errors surface verbatim.
+- **§13 workflow guide**: the Datasets chain gained the Reshape step
+  (Import → Inspect → Validate → **Reshape** → Clean/Standardize → …);
+  the directive pin trued to 11 stages.
+- **Tests**: `tests/test_reshape.py` (50 — contracts, numerics, edge
+  cases, keyword-escape) + `tests/ui/test_table_tools.py` (21 —
+  wiring, worker, preview, bind, error surfacing, workspace
+  integration).  Neighbor suites re-verified: nine_card_first (23,
+  tab-count pin trued to 4), workflow guides (40), pages smoke +
+  nine cards (46).  **111 round-9 tests green, 0 failures.**
+- Web mirror pins re-measured with the census's exact walk rules:
+  6,934 collected / 1,377 files / 471,341 source lines.
+
 ## [1.2.212] — 2026-11-16 — part8 round 8 (§18 Phase G: final verification + §20 final report)
 
 - **Phase G executed in full**: backend sweep (151 suites, 5,370

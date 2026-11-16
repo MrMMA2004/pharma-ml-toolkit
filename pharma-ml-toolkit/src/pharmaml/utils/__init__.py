@@ -25,6 +25,18 @@ from pharmaml.utils.validation import (
     validate_positive,
     validate_smiles_syntax,
 )
+from pharmaml.utils.reshape import (
+    SUPPORTED_AGGREGATIONS,
+    ReshapeReport,
+    clean_strings,
+    combine_frames,
+    filter_frame,
+    groupby_summary,
+    merge_frames,
+    pivot_table,
+    resample_timeseries,
+    rolling_window,
+)
 
 __all__ = [
     "ENVELOPE_SCHEMA_VERSION",
@@ -44,4 +56,14 @@ __all__ = [
     "validate_positive",
     "validate_smiles_syntax",
     "write_table",
+    "SUPPORTED_AGGREGATIONS",
+    "ReshapeReport",
+    "clean_strings",
+    "combine_frames",
+    "filter_frame",
+    "groupby_summary",
+    "merge_frames",
+    "pivot_table",
+    "resample_timeseries",
+    "rolling_window",
 ]

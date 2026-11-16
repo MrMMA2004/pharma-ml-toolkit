@@ -111,6 +111,7 @@ class MainWindow(QMainWindow):
         from .pages.model_analysis import ModelAnalysisPage
         from .pages.molecular_dynamics import MolecularDynamicsPage
         from .pages.pkpd import PKPDWorkbenchPage
+        from .pages.table_tools import TableToolsPage
         from .pages.responseai import ResponseAIWorkbenchPage
         from .pages.settings_page import SettingsPage
         from .pages.unsupervised import UnsupervisedWorkbenchPage
@@ -122,6 +123,12 @@ class MainWindow(QMainWindow):
         self.pages = PageMirror([])
         self.dashboard_page = DashboardPage()
         self.data_page = DataExplorerPage(theme=self.theme, runner=self.runner)
+        # (part8 r9) Table Tools — the pandas-reshaping surface (the
+        # COVERAGE rows 26-33 stretch cards), consuming the Explorer's
+        # shared frame.
+        self.table_tools_page = TableToolsPage(
+            runner=self.runner, data_explorer=self.data_page
+        )
         self.chemistry_page = ChemistryWorkbenchPage(theme=self.theme, runner=self.runner, data_explorer=self.data_page)
         self.pkpd_page = PKPDWorkbenchPage(theme=self.theme, runner=self.runner)
         self.biology_page = BiologyWorkbenchPage(theme=self.theme, runner=self.runner)
@@ -183,6 +190,7 @@ class MainWindow(QMainWindow):
             ],
             "datasets": [
                 ("Data Explorer", self.data_page),
+                ("Table Tools", self.table_tools_page),
                 ("Chemistry Lab", self.chemistry_page),
                 ("Utilities", self.utilities_page),
             ],

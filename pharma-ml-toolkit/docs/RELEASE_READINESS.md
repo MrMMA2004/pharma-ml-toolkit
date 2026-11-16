@@ -42,8 +42,8 @@ All probed dependencies import cleanly in this environment (the Qt rows are prob
 
 ## 3. Test evidence
 
-- Suites discovered: **220** (69 UI, 151 library)
-- Tests collected: **6334**
+- Suites discovered: **222** (70 UI, 152 library)
+- Tests collected: **6405**
 
 **Not gathered this run** — run the §14.2-chunkened suites
 and record results, then re-generate with
@@ -51,10 +51,10 @@ and record results, then re-generate with
 
 ## 4. Version carriers (§15)
 
-- VERSION: `1.2.212`
-- pyproject.toml: `1.2.212`
-- src/pharmaml/__init__.py: `1.2.212`
-- CHANGELOG.md leads with: `1.2.211`
+- VERSION: `1.2.213`
+- pyproject.toml: `1.2.213`
+- src/pharmaml/__init__.py: `1.2.213`
+- CHANGELOG.md leads with: `1.2.213`
 - Agreement: **yes**
 
 ## 5. Release-archive verification (§14)

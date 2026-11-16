@@ -83,8 +83,10 @@ class TestWorkspaceSubpages:
         assert main_window.workspaces["introduction"].currentWidget() is main_window.settings_page
 
     def test_workspace_tab_counts_match_the_mapping(self, main_window) -> None:
+        # datasets grew to 4 tabs in part8 r9: Table Tools (the
+        # pandas-reshaping surface) joined Data Explorer.
         expected = {
-            "introduction": 2, "datasets": 3, "machine-learning": 5,
+            "introduction": 2, "datasets": 4, "machine-learning": 5,
             "deep-learning": 1, "generative-ai": 1, "molecular-docking": 1,
             "pkpd": 3, "molecular-dynamics-analysis": 1, "visualization": 1,
         }
