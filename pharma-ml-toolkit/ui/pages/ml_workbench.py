@@ -1089,8 +1089,29 @@ class MLWorkbenchPage(QWidget):
             self._bench_status.setText(note)
             # part5 §11: the finished board becomes a saved evaluation —
             # the ML card's real evidence. Best-effort by contract.
+            # (round 6, §14.2 Proposal A) the record carries the
+            # dataset's workspace provenance — the current content
+            # version + column signature at the time of the run — so a
+            # later re-exported CSV never silently invalidates the
+            # stored numbers.
             try:
                 from pharmaml.studio import record_run
+                from pharmaml.studio import workspace as _ws
+
+                dataset_provenance: dict[str, Any] = {}
+                source = getattr(self._model_analysis, "_external_path", None)
+                if source is not None:
+                    prior = next((
+                        e for e in _ws.entries("dataset")
+                        if e.path == str(source)
+                    ), None)
+                    if prior is not None:
+                        dataset_provenance = {
+                            "dataset_name": prior.name,
+                            "dataset_version": prior.content_version,
+                            "dataset_sha256": prior.sha256[:16],
+                            "dataset_columns": prior.column_signature,
+                        }
 
                 best_row = None
                 if metric_column is not None:
@@ -1116,6 +1137,7 @@ class MLWorkbenchPage(QWidget):
                         "target": target,
                         "task": task,
                         "n_failed": int(n_nan),
+                        **dataset_provenance,
                     },
                 )
             except Exception:  # noqa: BLE001, S110 -- the record must never fail the board

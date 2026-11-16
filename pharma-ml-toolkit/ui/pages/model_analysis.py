@@ -687,7 +687,8 @@ class ModelAnalysisPage(QWidget):
             for col in frame.columns:
                 self._target_combo.addItem(str(col))
             self._metric_label.setText(
-                f"Loaded {Path(path).name} — {len(frame):,} rows × {len(frame.columns)} columns; pick a target column."
+                f"Loaded {Path(path).name} {self._dataset_badge(path, frame)} — "
+                f"{len(frame):,} rows × {len(frame.columns)} columns; pick a target column."
             )
 
         def failed(message) -> None:
@@ -736,6 +737,30 @@ class ModelAnalysisPage(QWidget):
         # review m-19: tell the downstream pages the training table changed
         if self._frame is not None:
             self.frameLoaded.emit(self._frame)
+
+    # -- dataset provenance badge (round 6, §14.2 Proposal A) ----------------
+    def _dataset_badge(self, path: Path, frame: pd.DataFrame) -> str:
+        """``[v2]`` when the workspace registry has this dataset at ≥ v2.
+
+        The badge is the audit hook: load a corrected CSV under the same
+        path and the version bumps — every later status line, run record
+        and comparison names the version it actually saw.  Best-effort:
+        a missing/failed registry read renders "" (no badge), never an
+        error.
+        """
+        try:
+            from pharmaml.studio import workspace as _ws
+
+            note_ok = _ws.note("dataset", path, note="model analysis load",
+                               columns=frame)
+            if not note_ok:
+                return ""
+            entry = _ws.entries("dataset")[0]
+            if entry.content_version < 2:
+                return ""  # v1 is the unremarkable first sighting
+            return f"[v{entry.content_version}]"
+        except Exception:  # noqa: BLE001 - the badge must never block a load
+            return ""
 
     # -- training ------------------------------------------------------------
     def _on_started(self, name: str) -> None:

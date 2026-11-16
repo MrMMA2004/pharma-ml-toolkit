@@ -29,6 +29,7 @@ grow the file without bound.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import asdict, dataclass, field
@@ -64,6 +65,14 @@ class WorkspaceEntry:
     sha256: str = ""     # from the canonical fingerprint helper ("" if skipped)
     project: str = ""    # optional §8 project tag — never required
     note: str = ""       # free-form provenance from the recording page
+    # (part8 §14.2 Proposal A, round 6) dataset-level provenance: a
+    # monotone per-path content version (same bytes → same version;
+    # changed bytes under the same path → +1) and the column
+    # signature (names + dtypes hash) the loading page recorded.
+    # Bundles/artifacts carry them too when their loader supplies a
+    # frame — one registry, one rule.
+    content_version: int = 1
+    column_signature: str = ""
 
 
 def _now() -> str:
@@ -103,26 +112,79 @@ def _fingerprint(path: Path) -> str:
         return ""
 
 
+def _column_signature(columns: Any) -> str:
+    """The Proposal A column signature: names (+ dtypes when a frame).
+
+    Accepts a pandas DataFrame (names + dtypes — the dtype IS part of
+    the dataset's meaning: an int64 target read back as float64 is a
+    different dataset to a classifier), any ``columns``-like iterable
+    of names (names only), or ``None``/``""`` (no signature, "").  The
+    signature is a sha-256 hex prefix; it is descriptive, never a
+    compatibility promise.
+    """
+    if columns is None or (isinstance(columns, str) and not columns):
+        return ""
+    names: list[str]
+    dtypes: list[str] | None = None
+    try:
+        frame_columns = getattr(columns, "columns", None)
+        if frame_columns is not None:  # a DataFrame (or anything shaped like one)
+            names = [str(c) for c in columns.columns]
+            dtypes = [str(t) for t in columns.dtypes]
+        else:
+            names = [str(c) for c in columns]
+    except Exception:  # noqa: BLE001 - a weird frame must never fail the note
+        return ""
+    parts = ["|".join(names)]
+    if dtypes is not None:
+        parts.append("|".join(dtypes))
+    joined = "\n".join(parts).encode("utf-8", errors="replace")
+    return hashlib.sha256(joined).hexdigest()[:16]
+
+
 def note(kind: str, path: str | Path, *, project: str = "", note: str = "",
-         with_hash: bool = True) -> bool:
+         with_hash: bool = True,
+         columns: Any = None) -> bool:
     """Record one entry (best-effort; returns whether it was written).
 
     The kinds: ``dataset`` (a table the session opened), ``bundle``
     (a saved model bundle), ``artifact`` (an exported figure/report/
     table).  Duplicate paths are re-recorded (moved to most-recent);
     each kind keeps at most :data:`_MAX_PER_KIND` entries.
+
+    ``columns`` (Proposal A): the loaded frame's column names or a
+    ``pandas`` frame/index — recorded as a sha-256 ``column_signature``
+    (names + dtypes when a frame is given).  The per-path
+    ``content_version`` is monotone: re-recording byte-identical
+    content keeps the existing version; changed content under the
+    same path bumps it (the OLD entry's version is what run records
+    already wrote — they keep it, by design).
     """
     if kind not in _KINDS:
         raise ValueError(f"unknown workspace kind {kind!r}")
     real = Path(path)
+    payload = _load()
+    previous = next((
+        e for e in payload["entries"]
+        if e.get("kind") == kind and e.get("path") == str(real)
+    ), None)
+    digest = _fingerprint(real) if with_hash and real.is_file() else ""
+    if previous is not None and digest and previous.get("sha256") == digest:
+        version = int(previous.get("content_version", 1))  # same bytes, same version
+    elif previous is not None and previous.get("sha256"):
+        version = int(previous.get("content_version", 1)) + 1  # changed content
+    else:
+        version = 1
     entry = WorkspaceEntry(
         kind=kind,
         path=str(real),
         name=real.name,
         recorded=_now(),
-        sha256=_fingerprint(real) if with_hash and real.is_file() else "",
+        sha256=digest,
         project=project or current_project(),
         note=note,
+        content_version=version,
+        column_signature=_column_signature(columns),
     )
     payload = _load()
     entries = [e for e in payload["entries"] if not (
@@ -163,6 +225,8 @@ def entries(kind: str | None = None) -> list[WorkspaceEntry]:
                 sha256=str(raw.get("sha256", "")),
                 project=str(raw.get("project", "")),
                 note=str(raw.get("note", "")),
+                content_version=int(raw.get("content_version", 1) or 1),
+                column_signature=str(raw.get("column_signature", "")),
             ))
         except (KeyError, TypeError):
             continue  # a corrupt row is skipped, never guessed

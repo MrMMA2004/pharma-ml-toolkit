@@ -298,10 +298,13 @@ class DataExplorerPage(QWidget):
         self._status.setText(f"{path.name} — {self._table.statusHint}")
         # part6 §8 (Phase 4): a successful load enters the shared
         # workspace's dataset registry (best-effort side record).
+        # (round 6, §14.2 Proposal A) the loaded frame rides along —
+        # the registry records its column signature and bumps the
+        # per-path content version when the bytes change.
         try:
             from pharmaml.studio import note as note_workspace
 
-            note_workspace("dataset", path, note=f"{len(frame)} rows")
+            note_workspace("dataset", path, note=f"{len(frame)} rows", columns=frame)
         except Exception:  # noqa: BLE001 - the registry must never block a load
             pass
         self._column_combo.blockSignals(True)

@@ -1,3 +1,33 @@
+## [1.2.210] — 2026-11-16 — part8 round 6 (§14.2 Proposal A: dataset-level provenance and versioning)
+
+- **§14.2 Proposal A shipped** (the round-5 proposal document's first
+  candidate, implemented as proposed): the shared workspace registry
+  now records **dataset-level provenance** — every dataset entry
+  carries a monotone per-path ``content_version`` (byte-identical
+  re-load keeps the version; changed bytes under the same path bump
+  it) and a ``column_signature`` (sha-256 of names + dtypes; an
+  int64 target read back as float64 is a different dataset).
+  Run records written at version N keep N forever — the bump never
+  rewrites history.  Legacy registry rows (v1.2.209 and earlier)
+  read cleanly as version 1 with an empty signature.
+- **GUI surfaces**: the Model Analysis load line shows a ``[v2+]``
+  badge when the loaded dataset has advanced past its first sighting;
+  the Job Center history row names the dataset version
+  (``· data v3``) for runs that carry provenance.  The ML Workbench's
+  family-benchmark run record now embeds ``dataset_name`` /
+  ``dataset_version`` / ``dataset_sha256`` (16-hex prefix) /
+  ``dataset_columns`` when the training source is a registered
+  dataset — the audit hook that survives a later corrected CSV.
+- Data Explorer's load path passes the frame to the registry (the
+  column signature comes from what was actually read).
+- 10 tests in two files: ``tests/test_dataset_provenance_v2.py``
+  (7 — version semantics, signature semantics, frozen run records,
+  JSON round-trip, legacy-row defaults) and
+  ``tests/ui/test_dataset_provenance_gui.py`` (3 — the badge, the
+  record block, the Job Center row).
+- Version carriers: 1.2.210 (VERSION, ``pharmaml.__version__``,
+  pyproject, web TS mirror).
+
 ## [1.2.209] — 2026-11-16 — part8 round 5 (§14.1 Active Learning GUI + §14.2 proposals + guide linter)
 
 - **§14.1 Active Learning tab** (the round-3 backend finally gets its

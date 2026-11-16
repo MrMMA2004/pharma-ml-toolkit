@@ -190,6 +190,13 @@ class JobCenterDialog(QDialog):
             for record in latest_runs(family, limit=10):
                 created = str(record.get("created", ""))[:19].replace("T", " ")
                 label = str(record.get("label", "(unlabelled)"))
+                # (round 6, §14.2 Proposal A) runs that carry dataset
+                # provenance show its content version — the audit hook
+                # that survives a later re-exported CSV
+                summary = record.get("summary") or {}
+                version = summary.get("dataset_version")
+                if version:
+                    label = f"{label} · data v{version}"
                 item = QListWidgetItem(f"{created}  [{family}]  {label}")
                 item.setData(Qt.ItemDataRole.UserRole, record)
                 self._history.addItem(item)
