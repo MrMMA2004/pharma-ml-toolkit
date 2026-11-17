@@ -4,9 +4,9 @@
   "python": "3.12.16",
   "archive": {
     "name": "pharma-ml-toolkit-v1.2.223.zip",
-    "size": 11697387,
-    "sha256": "4ec11de8310f02586818a5104b1b40dfec0298e1dbb5e03e83d17f8315f0129d",
-    "entry_count": 934,
+    "size": 11483068,
+    "sha256": "b991fe5ee3e690d1983188ea02c42722013b3dda56009ac80a479b6043bff711",
+    "entry_count": 933,
     "file_count": 848
   },
   "checks": {
@@ -76,16 +76,6 @@
       "path": "VERSION",
       "size": 8,
       "sha256": "b05375879ab6d2b8771635488e9c10c667e329aca075bf7659add29b4b5ff82d"
-    },
-    {
-      "path": "build/theme-shots/home-dark.png",
-      "size": 136620,
-      "sha256": "5a0d2017600588cf67ef8e0d56107cfb8090f17165a9106d39528dffc5cfc5b2"
-    },
-    {
-      "path": "build/theme-shots/home-light.png",
-      "size": 135848,
-      "sha256": "a597efcfeca85006153567be095a775ff2c2329e534a8fb7da35b536af663a98"
     },
     {
       "path": "conftest.py",
@@ -255,7 +245,7 @@
     {
       "path": "docs/RELEASE_READINESS.md",
       "size": 2262,
-      "sha256": "924e6472b14c885be03ac6b6abe28fb7d56911eb129c9c40f027f4fd0edf2442"
+      "sha256": "fd00f14a1bd2b539c66c1f1a2e982fff3768bcff049ffe1aec102b2ab0383554"
     },
     {
       "path": "docs/RESEARCH_WORKFLOWS.md",
@@ -536,6 +526,16 @@
       "path": "docs/release-audits/v1.2.222-r278/report.json",
       "size": 136646,
       "sha256": "f3e9788f9ff3d0570f4500ad5ebe57b4eb4bcb904c71e3f169700c7062b2ed40"
+    },
+    {
+      "path": "docs/release-audits/v1.2.223-r279/SUMMARY.md",
+      "size": 1073,
+      "sha256": "0a21d06a2237e9474a908de1995d6fc2fb2f4fdcc7a916747f5a781e02b802f7"
+    },
+    {
+      "path": "docs/release-audits/v1.2.223-r279/report.json",
+      "size": 142788,
+      "sha256": "21dbb14a042c1cc707b04b408709956df4f9b0e8f344e2e14ceabd71f1ec44d9"
     },
     {
       "path": "docs/research/REGISTRY_RECONCILIATION.md",
