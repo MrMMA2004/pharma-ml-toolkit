@@ -1,3 +1,60 @@
+## [1.2.221] — 2026-11-17 — round 277 (part10 continuation: the docking / pkpd / md / visualization / applicability-domain row — the API surface completes)
+
+- **The third queued campaign row and the one that completes the
+  `/api/v1` surface: five new route groups, all over the REAL
+  backend, 59 new tests** (`tests/api/test_docking_pkpd_md_viz_ad.py`,
+  the api suite now 178 green — 42 + 47 + 29 + 59):
+- **`src/pharmaml/api/routes/docking.py`** — the engine catalog with
+  the HONEST host boundary (`locate_engine_binary` finds the bundled
+  Windows PE engines, `engine_argv` answers the no-Wine truth and
+  `/docking/dock` pre-checks to an honest 422 on non-Windows hosts);
+  the 58-target DOCKSTRING catalog + the three original objectives on
+  real math; receptor preparation (`prepare_protein`, the cleaned
+  receptor registers as a downloadable artifact); ligand
+  `smiles_to_pdbqt` (RDKit ETKDG + Meeko, seeded); the vina/DLG
+  parsers over pasted logs; consensus rescoring; ligand efficiency;
+  contacts + PLIF; symmetry-aware pose RMSD.
+- **`src/pharmaml/api/routes/pkpd.py`** — NCA (`nca_summary` +
+  linear/log trapezoids + the terminal-phase fit, inputs through
+  `validate_concentration_series`); steady-state metrics (zero
+  concentrations honest for troughs); iv-bolus / bateman /
+  superposition (causal unit response) / `MinimalPBPK` (iv + oral);
+  the sigmoid-Emax PD table; and `simulate_population` as a managed
+  job with REAL per-batch telemetry (50 seeded subjects per batch)
+  whose between-batch cancel lands CANCELLED, never FAILED.
+- **`src/pharmaml/api/routes/md.py`** — the synthetic trajectory
+  demo + the REAL metric bundle (RMSD/RMSF/Rg/native-contact
+  fraction/contact occupancy/PCA), inline-coordinate analysis, `.xvg`
+  parsing with stats + moving average, ANM fluctuations, standalone
+  PCA, and the full study as a managed job with two REAL figure
+  artifacts (RMSD + Rg via `plot_md_series`).
+- **`src/pharmaml/api/routes/visualization.py`** — the statplots
+  family (stats + rendered artifact), concentration-profile /
+  dose-accumulation figures through the §17 export stack, md-series
+  panels, `export_table` in six formats, and the self-contained
+  `HTMLReport` as a managed job with `file.progress` events per
+  section.
+- **`src/pharmaml/api/routes/applicability_domain.py`** — the kNN
+  distance half; `applicability_domain` over a session-trained model
+  with the REAL bootstrap progress callback driving per-member
+  `training.progress` events; `figure=true` renders the twin AD plot
+  as an artifact; the persisted `DomainBox` check.
+- **The honest fixes riding the same round:** the matplotlib
+  3.10.9 empty-fliers `plot_box` crash (clean data now renders —
+  `showfliers` gated on outlier presence, the round-206 EGL
+  precedent); the in-flight playground scaffold test rewritten on a
+  genuinely single-scaffold benzene table (its draft pointed at
+  `qsar_classification.csv`, whose three unique SMILES span TWO
+  scaffold groups, so the split legitimately succeeds there); the
+  phase5 preset test forces the balanced baseline first (the
+  construction-time index follows the LIVE memory recommendation, so
+  a loaded gate process can start the combo at 1); the
+  `store` for steady-state inputs accepts zero concentrations.
+- **Boundary ledger unchanged:** the WinUI/NSwag/installer/PySide6
+  retirement phases stay BLOCKED (no Windows host); the campaign row
+  queue is empty — the API surface is complete and the next queue
+  moves to the C# solution specification.
+
 ## [1.2.220] — 2026-11-17 — round 276 (part10 continuation: the dl / semi-supervised / generative row; the r275-cont datasets/ml/artifacts row rides the same close)
 
 - **The second queued campaign row after the v1.2.219 close, and the

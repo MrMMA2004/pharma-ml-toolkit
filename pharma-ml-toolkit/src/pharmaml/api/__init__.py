@@ -13,10 +13,11 @@ WinUI host will launch it:
   can be generated from it (NSwag) — one DTO definition, never two;
 * versioned routes under ``/api/v1`` (health, capabilities, jobs,
   events, chemistry — the opening round; the second row added
-  datasets, ml, artifacts + the file upload/download contracts; this
-  row adds dl, semi-supervised, generative + the training-progress
-  events; the docking/pkpd/md/viz/AD groups follow in the campaign's
-  next rounds);
+  datasets, ml, artifacts + the file upload/download contracts; the
+  third row added dl, semi-supervised, generative + the
+  training-progress events; this row — row four — adds the five
+  domain surfaces: docking, pkpd, md, visualization and the
+  applicability-domain analysis);
 * session-scoped stores (datasets / trained models / generative
   priors / artifacts) — in-memory only, exactly like the token,
   fresh per app;

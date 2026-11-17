@@ -1085,12 +1085,27 @@ class TestGuiUnderXvfb:
         app._ml_split_combo.set("random")  # restore the default
 
     def test_scaffold_strategy_on_a_single_scaffold_dataset_fails_honestly(
-        self, app: Any, quiet_dialogs: list[Any]
+        self, app: Any, quiet_dialogs: list[Any], tmp_path: Any
     ) -> None:
-        # qsar_classification.csv's molecules all share one framework:
-        # no scaffold-honest test set exists, and the split must say so
-        # by name (never an empty-test crash downstream).
-        app._ml_load_path(TOOLKIT_ROOT / "examples" / "data" / "qsar_classification.csv")
+        # a genuinely single-scaffold table (every molecule on the
+        # benzene Murcko scaffold): no scaffold-honest test set exists,
+        # and the split must say so by name (never an empty-test crash
+        # downstream).  (r277: the in-flight draft pointed at
+        # qsar_classification.csv, whose three unique SMILES actually
+        # span TWO scaffold groups -- benzene plus ethanol's empty
+        # (acyclic) scaffold -- so that split legitimately succeeds;
+        # the honest single-scaffold case is this table.)
+        rows = [
+            "descr_1,descr_2,activity,SMILES,compound_id",
+            "0.1,0.2,active,c1ccccc1O,CMPD-0000",
+            "0.3,0.1,active,c1ccccc1CC,CMPD-0001",
+            "0.2,0.4,inactive,c1ccccc1C(=O)O,CMPD-0002",
+            "0.4,0.3,inactive,c1ccccc1Cl,CMPD-0003",
+            "0.25,0.35,active,c1ccccc1OC,CMPD-0004",
+        ]
+        single = tmp_path / "single_scaffold.csv"
+        single.write_text("\n".join(rows) + "\n", encoding="utf-8")
+        app._ml_load_path(single)
         app._ml_split_combo.set("scaffold")
         app._model_combo.set("logistic_regression")
         app._ml_train()

@@ -12,17 +12,22 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from . import (
+    applicability_domain,
     artifacts,
     capabilities,
     chemistry,
     datasets,
     dl,
+    docking,
     events,
     generative,
     health,
     jobs,
+    md,
     ml,
+    pkpd,
     semi_supervised,
+    visualization,
 )
 
 __all__ = ["api_router", "ws_router"]
@@ -39,6 +44,11 @@ api_router.include_router(artifacts.router)
 api_router.include_router(dl.router)
 api_router.include_router(semi_supervised.router)
 api_router.include_router(generative.router)
+api_router.include_router(docking.router)
+api_router.include_router(pkpd.router)
+api_router.include_router(md.router)
+api_router.include_router(visualization.router)
+api_router.include_router(applicability_domain.router)
 
 ws_router = APIRouter(prefix="/api/v1")
 ws_router.include_router(events.router)

@@ -26,7 +26,12 @@ def test_settings_page_shows_presets_probe_and_doctor(studio_app, qtbot) -> None
     assert "Balanced" in labels and "Low-memory" in labels
     assert "chunk" in labels  # the honest trade is spelled out
 
-    # switching persists through the session echo
+    # switching persists through the session echo.  (r277: the
+    # construction-time index follows the LIVE memory recommendation
+    # (preset_for_low_memory), so under a loaded gate process the
+    # combo can already sit at 1 -- force the balanced baseline first
+    # so the switch under test actually fires currentIndexChanged.)
+    page._preset_combo.setCurrentIndex(0)
     page._preset_combo.setCurrentIndex(1)
     from pharmaml.utils.resources import stored_preset
 
