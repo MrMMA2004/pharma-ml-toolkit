@@ -15,13 +15,17 @@ A local-first toolkit for pharmaceutical machine learning, molecular research an
 [![Python 3.10–3.12](https://img.shields.io/badge/tested%20Python-3.10%E2%80%933.12-3776ab?logo=python&logoColor=white)](pharma-ml-toolkit/pyproject.toml)
 [![MIT License](https://img.shields.io/badge/license-MIT-526b66)](LICENSE)
 
-[Get started](#get-started) · [Explore workflows](#explore-workflows) · [Research checks](#research-checks) · [Interfaces](#interfaces) · [Desktop direction](#desktop-direction) · [Documentation](#documentation) · [Contribute](#contributing-and-citation)
+[About](#about) · [Get started](#get-started) · [Explore workflows](#explore-workflows) · [Research checks](#research-checks) · [Interfaces](#interfaces) · [Desktop direction](#desktop-direction) · [Documentation](#documentation) · [Contribute](#contributing-and-citation)
 
 </div>
 
 ---
 
-PharmaML brings data exploration, QSAR modeling, cheminformatics, docking, PK/PD and scientific visualization together in a Python package. Work through notebooks, scripts or the desktop Studio; use the companion web console to browse the project. Core workflows run locally without a cloud account or API key. Some features need optional packages or external engines.
+## About
+
+PharmaML Toolkit is a Python-based research toolkit for exploring compound data, building and evaluating QSAR models, working with molecular descriptors and docking workflows, and analyzing PK/PD. It also includes scientific visualization, uncertainty and data-quality tools, and example notebooks.
+
+Use it through the Python API, CLI or PySide6 desktop Studio; a separate Next.js web console provides a project explorer. Core workflows run locally without a cloud account or API key. Chemistry, docking, deep learning and other workflows may require optional packages or external engines. The proposed React/Tauri desktop migration is described under [Desktop direction](#desktop-direction) and is not a completed release.
 
 > **Research and education only — not clinical decision support.** Independently validate calculations, models and outputs for your data and intended use.
 
