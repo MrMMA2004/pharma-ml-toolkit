@@ -25,7 +25,7 @@ export const SHIPPED_FILE_COUNT = 1473;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). */
-export const SHIPPED_SOURCE_LINES = 481529;
+export const SHIPPED_SOURCE_LINES = 481574;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

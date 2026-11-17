@@ -27,7 +27,7 @@
   `create_app` gained the three stores and maps the backend's typed
   client-input errors (`DataValidationError`/`ModelError`) to 422s.
   The boundary ledger `docs/MIGRATION_WINUI3.md` carries the trued
-  campaign table; web census pins re-trued (1473 files / 481,529
+  campaign table; web census pins re-trued (1473 files / 481,574
   lines / 7,463 collected tests). Windows-side work stays BLOCKED —
   unchanged boundary, no Windows host.
 
