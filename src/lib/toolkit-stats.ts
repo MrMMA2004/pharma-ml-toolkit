@@ -21,11 +21,11 @@ export const SHIPPED_TEST_COUNT = 8305;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
  *  docs, tools — the same census /api/toolkit/tree walks). */
-export const SHIPPED_FILE_COUNT = 1492;
+export const SHIPPED_FILE_COUNT = 1496;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). */
-export const SHIPPED_SOURCE_LINES = 533961;
+export const SHIPPED_SOURCE_LINES = 534018;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */
