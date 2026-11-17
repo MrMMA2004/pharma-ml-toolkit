@@ -16,6 +16,18 @@ inside a ``QThreadPool`` worker (the existing Studio architecture) and are
 tested headlessly.
 """
 
+from pharmaml.studio.capability_registry import (
+    CAPABILITIES,
+    CARD_ORDER,
+    OTHER_CARD_PRESENT,
+    SECTION_KEYS,
+    Capability,
+    RegistrySummary,
+    capabilities_for_card,
+    card_route_target,
+    find,
+    summary,
+)
 from pharmaml.studio.evidence import (
     EMPTY_STATES,
     CardEvidence,
@@ -30,17 +42,17 @@ from pharmaml.studio.evidence import (
     pkpd_evidence,
     viz_evidence,
 )
-from pharmaml.studio.capability_registry import (
-    CAPABILITIES,
-    CARD_ORDER,
-    OTHER_CARD_PRESENT,
-    SECTION_KEYS,
-    Capability,
-    RegistrySummary,
-    capabilities_for_card,
-    card_route_target,
-    find,
-    summary,
+from pharmaml.studio.glossary import (
+    GLOSSARY,
+    apply_help,
+    explanation,
+    missing_keys,
+    tooltip_text,
+)
+from pharmaml.studio.reports import (
+    MANIFEST_SCHEMA,
+    PINNED_STACK,
+    write_manifest,
 )
 from pharmaml.studio.runs import (
     RUN_SCHEMA,
@@ -48,18 +60,6 @@ from pharmaml.studio.runs import (
     record_run,
     run_families,
     runs_root,
-)
-from pharmaml.studio.reports import (
-    MANIFEST_SCHEMA,
-    PINNED_STACK,
-    write_manifest,
-)
-from pharmaml.studio.glossary import (
-    GLOSSARY,
-    apply_help,
-    explanation,
-    missing_keys,
-    tooltip_text,
 )
 from pharmaml.studio.workspace import (
     WorkspaceEntry,
@@ -73,45 +73,45 @@ from pharmaml.studio.workspace import (
 
 __all__ = [
     "CAPABILITIES",
-    "GLOSSARY",
-    "apply_help",
-    "explanation",
-    "missing_keys",
-    "tooltip_text",
     "CARD_ORDER",
     "EMPTY_STATES",
+    "GLOSSARY",
+    "MANIFEST_SCHEMA",
     "OTHER_CARD_PRESENT",
+    "PINNED_STACK",
     "RUN_SCHEMA",
     "SECTION_KEYS",
     "Capability",
     "CardEvidence",
     "RegistrySummary",
     "WorkspaceEntry",
+    "apply_help",
     "capabilities_for_card",
     "card_route_target",
-    "current_project",
-    "entries",
-    "find",
-    "note",
-    "set_current_project",
-    "summary",
-    "summary_counts",
-    "workspace_path",
     "collect_evidence",
+    "current_project",
     "dataset_evidence",
     "dl_evidence",
     "docking_evidence",
     "empty_evidence",
+    "entries",
+    "explanation",
+    "find",
     "generative_evidence",
     "latest_runs",
-    "MANIFEST_SCHEMA",
     "md_evidence",
+    "missing_keys",
     "ml_evidence",
-    "PINNED_STACK",
+    "note",
     "pkpd_evidence",
     "record_run",
     "run_families",
     "runs_root",
+    "set_current_project",
+    "summary",
+    "summary_counts",
+    "tooltip_text",
     "viz_evidence",
+    "workspace_path",
     "write_manifest",
 ]

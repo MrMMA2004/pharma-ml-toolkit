@@ -13,8 +13,20 @@ background job runner; they are not cancellable or resumable. A new load
 invalidates the previous report. Split auditing refuses missing/blank keys and
 split labels, and requires at least two partitions. The regular table reader
 infers types, which may alter identifiers such as leading-zero IDs; inspect the
-loaded values and use the existing `pharmaml data audit-splits` CLI for
-text-preserving, separate-file exact-key audits.
+loaded values. For separate files, choose **Data Explorer → Audit separate
+files…** or use `pharmaml data audit-splits`. Both read identifier columns as
+literal text, preserving values such as `001` and `NA` instead of inferring
+numeric or missing values. In the dialog, add at least two unique `NAME=PATH`
+entries, enter one exact column name per line (multiple columns form a
+composite key), and select a delimiter if automatic detection is inappropriate.
+The worker reports per-partition rows, extra duplicates, overlap rows and
+pairwise unique-key intersections. It cannot be stopped or resumed; closing
+the dialog does not stop it. Changing inputs clears the prior result. The
+optional JSON summary is created as a new file and omits raw shared keys and
+input paths; column and partition names can still be sensitive. Failed saves
+may leave a partial file. The reader does not snapshot files: keep them stable
+while the audit runs. Excel cells stored as numbers cannot recover leading zeros
+that were never stored as text.
 
 No SMILES canonicalization or similarity detection is performed. A clean
 report does not prove independent data or absence of other leakage. Select the
@@ -52,6 +64,33 @@ Use **Save report…** to create a new JSON file (existing files are never
 replaced), and **Compare saved reports…** to inspect input-hash, parameter,
 environment and summary differences. A failed save can leave a partial new
 file; inspect it before reuse. Reports can contain sensitive subgroup labels.
+
+## Statistics-tab conformal and subgroup tools
+
+The older **ML Workbench → Statistical tools** conformal buttons reuse the
+selected fitted model and its scored rows. They now split those rows by
+position, with a fixed random seed: approximately half calibrate and the rest
+are evaluated. Regression coverage and classification set summaries therefore
+no longer evaluate the very same rows used for calibration. Too few calibration
+rows may prevent a finite regression radius; classification can fall back to
+full sets. The split is not stratified, and rare classes can have little or no
+calibration data. The tools cannot verify that the source model was fitted and
+selected independently of these rows, particularly for a loaded bundle or a
+previously explored run. Exchangeability, independence and prospective
+validity are not established; for an explicitly separate train/calibration/test
+workflow use **Model Analysis → Uncertainty…** above.
+
+Coverage-by-group uses the evaluation rows and alpha saved with the last
+regression conformal run, including mean interval width in its CSV output.
+Subgroup metrics use the actual indexed scored rows, not a reconstructed 25%
+split. Both refuse if indexed features and targets do not match the current
+dataset, or if row identity is unavailable or ambiguous. Group labels come from
+the current dataset and are **not authenticated**: identical features and targets
+cannot prove their original metadata or independence, especially for duplicate
+rows. Keep the dataset stable and verify labels, avoid test-set selection, and
+interpret group-level Wilson intervals under their independence and common-rate
+assumptions. These tools cannot establish conditional coverage or eliminate
+leakage.
 
 ## Held-out classification uncertainty
 
@@ -375,8 +414,18 @@ Existing `tools/diagnose_data_drift.py` performs a separate, read-only generated
 CSV comparison; environment inspection does not modify any results or strict
 byte comparison policy.
 
-In Studio, **Utilities Workbench → Reproducibility & checkpoint diagnostics…**
-provides environment details, checkpoint inspection and the checkout's
+In Studio, **Utilities Workbench → Reproducibility & checkpoint diagnostics… →
+Create declared manifest…** fingerprints one selected file and records a
+user-entered split strategy and optional `NAME=VALUE` parameters. This does not
+run or observe training. The fingerprint assumes a stable file while reading;
+the background job cannot be stopped or resumed, and closing the dialog does
+not stop it. Saving creates a new JSON file exclusively (a failed save may
+leave a partial file). The manifest can contain sensitive names, parameters and
+environment information. **Compare declared manifests…** compares two such
+manifests, whether created by Studio or the CLI, and reports dataset-hash,
+parameter, split-strategy and environment differences. Neither tool verifies
+what was trained or establishes reproducibility. The same dialog provides
+environment details, checkpoint inspection and the checkout's
 `tools/diagnose_data_drift.py` strict generated-data check. The latter runs in
 an isolated child process and requires the diagnostic script, example data and
 its dependencies; installations without them report failure rather than a
@@ -402,6 +451,29 @@ command never resumes a job, validates no external side effects, and does not
 extend resumability to additional operations. Existing proof-backed checkpoint
 support and the separate release recovery tooling retain their documented
 limitations.
+
+## Genetic search in Studio
+
+In **Generative Workbench → Evolve**, the genetic algorithm reports progress
+at generation boundaries. **Stop** requests cooperative cancellation at the
+next boundary; it cannot interrupt a generation in progress. A Stop requested
+too late, including during the final generation, may finish normally rather
+than cancel. When the backend returns a partial result, Studio labels it partial and displays its leaderboard
+and completed history. The partial is in memory only: Studio does not save a
+GA checkpoint, offer resume, or extract a Pareto front from a partial run.
+Closing the page does not stop a running job. RL, MCTS and the other generative
+operations remain single-shot and do not gain this Stop behavior.
+
+The lower-level genetic checkpoint mechanism is not exposed as a Studio resume
+feature. Its revised identity covers GA settings, the ordered canonical corpus
+and seeds, supported objective parameters, package Python source, Python, RDKit
+and platform metadata. Unsupported or modified objectives, older identities,
+mismatches and malformed files fail rather than silently restarting. Use a new
+checkpoint directory for a fresh run and preserve old or damaged files for
+inspection. The checks are not authentication, do not cover every dependency
+build or runtime alteration, and are not a cross-machine reproducibility guarantee;
+never share a checkpoint directory between concurrent writers. See the
+[checkpoint schema](CHECKPOINT_SCHEMA.md) for supported objectives and limits.
 
 ## Still to build
 

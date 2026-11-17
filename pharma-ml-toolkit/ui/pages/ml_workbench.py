@@ -43,6 +43,7 @@ never touched from the worker.
 from __future__ import annotations
 
 import importlib.util
+import logging
 import math
 from pathlib import Path
 from typing import Any
@@ -1597,8 +1598,8 @@ class MLWorkbenchPage(QWidget):
                 from pharmaml.studio import note as note_workspace
 
                 note_workspace("bundle", written, note=f"{sidecar.name} alongside")
-            except Exception:  # noqa: BLE001 - never block the save's success path
-                pass
+            except Exception:  # Never block the save's success path.
+                logging.getLogger(__name__).warning("Could not record bundle in workspace", exc_info=True)
 
         self._submit("saving model bundle", job, done, self._persist_status)
 
@@ -2781,8 +2782,8 @@ class MLWorkbenchPage(QWidget):
         self._stat_conformal_btn.clicked.connect(self._start_stat_conformal)
         self._stat_conformal_btn.setToolTip(
             "Split-conformal intervals for a REGRESSION model: calibrate "
-            "the radius on held-out rows, then report the interval, the "
-            "radius and the empirical coverage on the same split."
+            "a random half of the held-out rows, then evaluate on the other "
+            "half. Independence from fitting and model selection is not verified."
         )
         run_row.addWidget(self._stat_conformal_btn)
         self._stat_conformal_cls_btn = QPushButton("Conformal label sets")
@@ -2791,8 +2792,8 @@ class MLWorkbenchPage(QWidget):
         self._stat_conformal_cls_btn.setToolTip(
             "Prediction sets for a CLASSIFICATION model: the marginal "
             "split-conformal scheme and the label-conditional scheme "
-            "calibrated on the held-out rows, side by side — set sizes, "
-            "empirical coverage and the per-row sets."
+            "calibrated on one half of the held-out rows and evaluated on "
+            "the other. Independence from fitting is not verified."
         )
         run_row.addWidget(self._stat_conformal_cls_btn)
         self._stat_calibration_btn = QPushButton("Calibration report")
@@ -2870,6 +2871,7 @@ class MLWorkbenchPage(QWidget):
         # batch 2: the coverage diagnostics audit the last conformal
         # run's covered flag, so the tab keeps the result object.
         self._stat_conformal_last: Any = None
+        self._stat_conformal_evaluation: Any = None
         self._refresh_stat_group_columns()
         return tab
 
@@ -2944,6 +2946,11 @@ class MLWorkbenchPage(QWidget):
 
     def _start_stat_conformal(self) -> None:
         """Split-conformal intervals on the held-out split (regression)."""
+        self._stat_frame = None
+        self._stat_table.setRowCount(0)
+        self._stat_plot.clear()
+        self._stat_conformal_last = None
+        self._stat_conformal_evaluation = None
         resolved = self._stat_model_and_split()
         if resolved is None:
             return
@@ -2955,19 +2962,28 @@ class MLWorkbenchPage(QWidget):
             )
             return
         alpha = float(self._stat_alpha.value())
+        from pharmaml.exceptions import DataValidationError
+        from pharmaml.ml.heldout_partition import split_calibration_evaluation
+
+        try:
+            x_cal, x_eval, y_cal, y_eval = split_calibration_evaluation(x_test, y_test)
+        except DataValidationError as exc:
+            self._stat_status.setText(f"Cannot split held-out rows: {exc}")
+            return
 
         def job(progress: Any) -> Any:
             from pharmaml.ml.conformal import calibrate_split_conformal
 
             progress(0.3, "calibrating the interval radius on held-out rows")
-            calibrated = calibrate_split_conformal(model, x_test, y_test, alpha=alpha)
+            calibrated = calibrate_split_conformal(model, x_cal, y_cal, alpha=alpha)
             progress(0.8, "scoring the held-out rows")
-            return calibrated.predict_interval(x_test, y_true=y_test)
+            return calibrated.predict_interval(x_eval, y_true=y_eval)
 
         def done(result: Any) -> None:
             table = result.to_dataframe()
             self._stat_frame = table
             self._stat_conformal_last = result  # the coverage workflow audits this
+            self._stat_conformal_evaluation = (x_eval, np.asarray(y_eval).copy())
             columns = [str(column) for column in table.columns]
             shown = table.head(200)
             rows = [
@@ -2982,7 +2998,8 @@ class MLWorkbenchPage(QWidget):
             )
             self._stat_status.setText(
                 f"radius {result.radius:.4g} for {1 - alpha:.0%} intervals "
-                f"({result.n_test} held-out rows){coverage} · source {label}"
+                f"({result.n_test} evaluation rows; {len(x_cal)} calibration rows){coverage} · "
+                f"source {label} · independence from fitting/selection not verified"
             )
             self._stat_plot.clear()
             positions = np.arange(1, result.n_test + 1, dtype=float)
@@ -3003,9 +3020,12 @@ class MLWorkbenchPage(QWidget):
         part6 Phase 3, batch 4 — the classification mirror of the
         regression conformal card above: both calibration schemes from
         ``ml.conformal_classification`` run side by side over the same
-        held-out rows, so the marginal (split) and label-conditional
-        guarantees can be compared directly.
+        calibration rows and evaluate on disjoint held-out rows. This does
+        not verify independence from fitting, selection or prior evaluation.
         """
+        self._stat_frame = None
+        self._stat_table.setRowCount(0)
+        self._stat_plot.clear()
         resolved = self._stat_model_and_split()
         if resolved is None:
             return
@@ -3017,6 +3037,14 @@ class MLWorkbenchPage(QWidget):
             )
             return
         alpha = float(self._stat_alpha.value())
+        from pharmaml.exceptions import DataValidationError
+        from pharmaml.ml.heldout_partition import split_calibration_evaluation
+
+        try:
+            x_cal, x_eval, y_cal, y_eval = split_calibration_evaluation(x_test, y_test)
+        except DataValidationError as exc:
+            self._stat_status.setText(f"Cannot split held-out rows: {exc}")
+            return
 
         def job(progress: Any) -> Any:
             from pharmaml.ml.conformal_classification import (
@@ -3025,15 +3053,15 @@ class MLWorkbenchPage(QWidget):
             )
 
             progress(0.3, "calibrating the marginal threshold on held-out rows")
-            split = calibrate_split_conformal_classifier(model, x_test, y_test, alpha=alpha)
+            split = calibrate_split_conformal_classifier(model, x_cal, y_cal, alpha=alpha)
             progress(0.6, "calibrating one threshold per class")
             conditional = calibrate_label_conditional_classifier(
-                model, x_test, y_test, alpha=alpha
+                model, x_cal, y_cal, alpha=alpha
             )
             progress(0.85, "scoring the held-out rows under both schemes")
             return (
-                split.predict_set(x_test, y_true=y_test),
-                conditional.predict_set(x_test, y_true=y_test),
+                split.predict_set(x_eval, y_true=y_eval),
+                conditional.predict_set(x_eval, y_true=y_eval),
             )
 
         def done(result: Any) -> None:
@@ -3048,15 +3076,15 @@ class MLWorkbenchPage(QWidget):
             # the verbatim per-row table: both schemes' sets as label lists
             table = pd.DataFrame(
                 {
-                    "true": [_cell_text(v, limit=18) for v in np.asarray(y_test)],
+                    "true": [_cell_text(v, limit=18) for v in np.asarray(y_eval)],
                     "split_set": [
-                        "{" + ", ".join(c for c, m in zip(classes, row) if m) or "∅"
-                        for row in membership
+                        "{" + ", ".join(c for c, m in zip(classes, row) if m) + "}"
+                        if any(row) else "∅" for row in membership
                     ],
                     "split_size": sizes,
                     "cond_set": [
-                        "{" + ", ".join(c for c, m in zip(classes, row) if m) or "∅"
-                        for row in cond_membership
+                        "{" + ", ".join(c for c, m in zip(classes, row) if m) + "}"
+                        if any(row) else "∅" for row in cond_membership
                     ],
                     "cond_size": cond_sizes,
                 }
@@ -3075,8 +3103,9 @@ class MLWorkbenchPage(QWidget):
                 f"split: threshold {split.threshold:.3f}, coverage "
                 f"{covered.mean():.1%}, mean set {sizes.mean():.2f} · "
                 f"label-conditional: coverage {cond_covered.mean():.1%}, "
-                f"mean set {cond_sizes.mean():.2f} · {len(table)} held-out "
-                f"rows · source {label}"
+                f"mean set {cond_sizes.mean():.2f} · {len(table)} evaluation "
+                f"rows; {len(x_cal)} calibration rows · source {label} · "
+                "independence from fitting/selection not verified"
             )
             self._stat_plot.clear()
             positions = np.arange(1, len(sizes) + 1, dtype=float)
@@ -3725,6 +3754,9 @@ class MLWorkbenchPage(QWidget):
 
     def _start_stat_coverage(self) -> None:
         """Coverage diagnostics, grouped, for the last conformal run."""
+        self._stat_frame = None
+        self._stat_table.setRowCount(0)
+        self._stat_plot.clear()
         intervals = self._stat_conformal_last
         if intervals is None:
             self._stat_status.setText(
@@ -3747,36 +3779,27 @@ class MLWorkbenchPage(QWidget):
                 "coverage is audited per group."
             )
             return
-        n_test = len(intervals.prediction)
-        if len(frame) < n_test:
-            self._stat_status.setText(
-                f"The dataset has {len(frame)} rows but the run scored "
-                f"{n_test} — reload the dataset the run was trained on."
-            )
-            return
-        # the conformal rows follow the held-out split's row order, which
-        # is the 25% test share of the frame's own split (random_state
-        # 42) — rebuild that split and take the test side's group labels
-        # the same way the tab's other sources do.
-        from sklearn.model_selection import train_test_split
+        from pharmaml.exceptions import DataValidationError
+        from pharmaml.ml.heldout_partition import aligned_group_values
 
-        _tr, test_rows = train_test_split(
-            np.arange(len(frame)), test_size=0.25, random_state=42
-        )
-        if len(test_rows) != n_test:
-            self._stat_status.setText(
-                "The run's held-out row count does not match a 25% split "
-                "of the current dataset — reload the dataset it was run on."
-            )
+        evaluation = self._stat_conformal_evaluation
+        if evaluation is None:
+            self._stat_status.setText("Evaluation row identity is unavailable — rerun Conformal intervals.")
             return
-        groups = frame[column].iloc[test_rows].to_numpy()
-        confidence = 1.0 - float(self._stat_alpha.value())
+        x_eval, y_eval = evaluation
+        try:
+            groups = aligned_group_values(frame, x_eval, y_eval, target, column)
+        except DataValidationError as exc:
+            self._stat_status.setText(str(exc))
+            return
+        confidence = 1.0 - float(intervals.alpha)
+        sizes = np.asarray(intervals.upper) - np.asarray(intervals.lower)
 
         def job(progress: Any) -> Any:
             from pharmaml.ml.coverage_diagnostics import coverage_by_group
 
             progress(0.5, "summarizing coverage per group")
-            return coverage_by_group(covered, groups, confidence=confidence)
+            return coverage_by_group(covered, groups, sizes=sizes, confidence=confidence)
 
         def done(result: Any) -> None:
             rows = []
@@ -3804,6 +3827,7 @@ class MLWorkbenchPage(QWidget):
                         "coverage": g.coverage,
                         "lower": g.lower,
                         "upper": g.upper,
+                        "mean_width": g.mean_size,
                     }
                     for g in (result.overall, *result.groups)
                 ]
@@ -3811,7 +3835,8 @@ class MLWorkbenchPage(QWidget):
             self._stat_status.setText(
                 f"overall coverage {result.overall.coverage:.1%} "
                 f"(nominal {confidence:.0%}) over {result.overall.n_test} rows · "
-                f"{len(result.groups)} groups"
+                f"{len(result.groups)} groups · current group labels not authenticated; "
+                "independence and subgroup coverage are not guaranteed"
             )
             self._stat_plot.clear()
             names = [str(g.group) for g in result.groups] or ["overall"]
@@ -3834,6 +3859,9 @@ class MLWorkbenchPage(QWidget):
 
     def _start_stat_subgroups(self) -> None:
         """Stratified performance + the corrected gap scan."""
+        self._stat_frame = None
+        self._stat_table.setRowCount(0)
+        self._stat_plot.clear()
         resolved = self._stat_model_and_split()
         if resolved is None:
             return
@@ -3846,24 +3874,15 @@ class MLWorkbenchPage(QWidget):
                 "the subgroup audit stratifies the held-out rows by it."
             )
             return
-        if len(frame) < len(x_test):
-            self._stat_status.setText(
-                f"The dataset has {len(frame)} rows but the run's split "
-                f"scored {len(x_test)} — reload the dataset it was run on."
-            )
-            return
-        from sklearn.model_selection import train_test_split
+        from pharmaml.exceptions import DataValidationError
+        from pharmaml.ml.heldout_partition import aligned_group_values
 
-        _tr, test_rows = train_test_split(
-            np.arange(len(frame)), test_size=0.25, random_state=42
-        )
-        if len(test_rows) != len(x_test):
-            self._stat_status.setText(
-                "The run's held-out row count does not match a 25% split "
-                "of the current dataset — reload the dataset it was run on."
-            )
+        _frame, target, _task = self._training_context()
+        try:
+            groups = aligned_group_values(frame, x_test, y_test, target, column)
+        except DataValidationError as exc:
+            self._stat_status.setText(str(exc))
             return
-        groups = frame[column].iloc[test_rows].to_numpy()
         min_group_size = int(self._stat_mingroup.value())
 
         def job(progress: Any) -> Any:
@@ -3937,7 +3956,7 @@ class MLWorkbenchPage(QWidget):
             self._stat_status.setText(
                 f"{len(report.subgroups)} subgroups over {primary} · "
                 f"{len(gaps)} gaps tested (fdr_bh) — {significant} significant · "
-                f"source {label} · column {column}"
+                f"source {label} · column {column} · current group labels not authenticated"
             )
             self._stat_plot.clear()
             names = [s.value for s in report.subgroups]

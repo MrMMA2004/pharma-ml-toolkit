@@ -9,6 +9,7 @@ histogram of the selected numeric column with honest per-column stats
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -151,7 +152,13 @@ class DataExplorerPage(QWidget):
             "overlap matrix. No SMILES canonicalization or fuzzy matching "
             "— exact keys only."
         )
-        right_lay.addWidget(self._split_audit_btn)
+        split_actions = QHBoxLayout()
+        split_actions.addWidget(self._split_audit_btn)
+        self._file_split_audit_btn = QPushButton("Audit separate files…")
+        self._file_split_audit_btn.setToolTip("Audit literal identifier text across separate partition files.")
+        self._file_split_audit_btn.clicked.connect(self._show_file_split_audit)
+        split_actions.addWidget(self._file_split_audit_btn)
+        right_lay.addLayout(split_actions)
         self._split_audit_output = QPlainTextEdit()
         set_mono(self._split_audit_output)  # split ranges, numerical log
         self._split_audit_output.setReadOnly(True)
@@ -227,6 +234,17 @@ class DataExplorerPage(QWidget):
         path = _TK / "examples" / "data" / name
         if path.exists():
             self.load_path(path)
+
+    def _show_file_split_audit(self) -> None:
+        from .file_split_audit_dialog import FileSplitAuditDialog
+
+        dialog = getattr(self, "_file_split_audit_dialog", None)
+        if dialog is None:
+            dialog = FileSplitAuditDialog(self._runner, self)
+            self._file_split_audit_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def _open_dialog(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -305,8 +323,8 @@ class DataExplorerPage(QWidget):
             from pharmaml.studio import note as note_workspace
 
             note_workspace("dataset", path, note=f"{len(frame)} rows", columns=frame)
-        except Exception:  # noqa: BLE001 - the registry must never block a load
-            pass
+        except Exception:  # The registry must never block a load.
+            logging.getLogger(__name__).warning("Could not record dataset in workspace", exc_info=True)
         self._column_combo.blockSignals(True)
         self._column_combo.clear()
         numeric = [c for c in frame.columns if pd.api.types.is_numeric_dtype(frame[c])]
@@ -473,7 +491,7 @@ class DataExplorerPage(QWidget):
             )
 
     def _split_audit_finished(self, report) -> None:
-        lines = [f"Partitions: " + ", ".join(
+        lines = ["Partitions: " + ", ".join(
             f"{name}={rows:,}" for name, rows in zip(report.partition_names, report.partition_rows)
         )]
         lines.append(

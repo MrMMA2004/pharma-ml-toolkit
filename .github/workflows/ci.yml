@@ -98,6 +98,7 @@ jobs:
           tests/test_cv_scaffold_integrity.py
           tests/test_split_overlap_audit.py
           tests/test_cli_split_audit.py
+          tests/test_file_split_audit.py
           tests/test_evaluation_auc_integrity.py
           -o addopts="-q --tb=short"
 
@@ -160,7 +161,11 @@ jobs:
           python -m pip install --no-deps -e .
           python -m pip install -c requirements.txt pytest==9.0.2 rdkit==2026.9.1
       - name: Test SA scoring and generation integration
-        run: python -m pytest tests/test_sa_score.py tests/test_generative_sa_cli.py -o addopts="-q --tb=short"
+        run: >-
+          python -m pytest tests/test_sa_score.py tests/test_generative_sa_cli.py
+          tests/test_ga_cooperative_stop.py tests/test_ga_checkpoint_identity.py
+          tests/test_generative_search_resumability.py tests/test_heldout_partition.py
+          -o addopts="-q --tb=short"
       - name: Test release portability and checkout-only guards
         run: >-
           python -m pytest tests/test_release_portability.py tests/test_checkpoint_tooling.py
@@ -275,6 +280,12 @@ jobs:
           python -m pytest
           tests/ui/test_molecular_dynamics_page.py
           tests/ui/test_data_audit_page.py
+          tests/ui/test_file_split_audit.py
+          tests/ui/test_manifest_and_ga_stop.py
+          tests/ui/test_ml_statistical_tools.py
+          tests/ui/test_ml_statistics_batch2.py
+          tests/ui/test_phase3_batch4.py::test_conformal_sets_end_to_end
+          tests/ui/test_phase3_batch4.py::test_conformal_classification_uses_disjoint_rows
           tests/ui/test_research_workflows.py
           tests/ui/test_nine_cards.py::TestHonesty::test_docking_card_declares_engine_and_runtime_boundaries
           tests/ui/test_main_window.py

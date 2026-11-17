@@ -30,11 +30,10 @@ APIs the playground cards call, over a shared corpus selection:
   ``rediscovery_score`` plus the Lipinski-style ``property_filter``
   with its values and violations in the table.
 
-Every heavy path runs in a :class:`~ui.workers.job_worker.JobWorker`;
-they are single-shot engine calls without checkpoint loops, so the
-cooperative Stop only lands for checkpoint-wired jobs -- the same
-disclosure the PK/PD, Biology, Docking, Unsupervised and Deep Learning
-pages carry.
+Every heavy path runs in a :class:`~ui.workers.job_worker.JobWorker`.
+Genetic evolution checks cooperative Stop between generations and surfaces
+its in-memory partial result. This Studio path does not persist checkpoints
+or offer resume; other engine calls remain single-shot.
 """
 
 from __future__ import annotations
@@ -413,7 +412,9 @@ class GenerativeWorkbenchPage(QWidget):
             "crossover over the corpus), ReinventOptimizer (policy-gradient "
             "fine-tuning of an on-the-fly SMILES RNN prior) or MctsOptimizer "
             "(ChemTSv2-style MCTS over SMILES prefixes) — the ranked leaderboard "
-            "plus the per-generation best/mean score curves."
+            "plus the per-generation best/mean score curves. GA Stop takes effect "
+            "between generations and shows partial results; Studio does not save "
+            "GA checkpoints or resume them. RL and MCTS are single-shot."
         )
         hint.setWordWrap(True)
         form.addRow("", hint)
@@ -667,14 +668,19 @@ class GenerativeWorkbenchPage(QWidget):
                     operator_selection="uniform",
                     seed=seed,
                 )
+                # The backend uses (completed, total, label), while the shared
+                # runner expects a 0–1 fraction and returns the Stop signal.
+                def ga_progress(completed, total, label):
+                    return progress(completed / total, f"{label}: {completed}/{total} generations")
+
                 if not lines:
-                    result = optimizer.optimize()
+                    result = optimizer.optimize(progress=ga_progress)
                     mode = "built-in corpus"
                 elif seeded:
-                    result = optimizer.optimize(seed_smiles=lines)
+                    result = optimizer.optimize(seed_smiles=lines, progress=ga_progress)
                     mode = "seeded"
                 else:
-                    result = optimizer.optimize(corpus=lines)
+                    result = optimizer.optimize(corpus=lines, progress=ga_progress)
                     mode = "custom corpus"
             progress(1.0, "done")
             return EvolveOutcome(
@@ -685,6 +691,13 @@ class GenerativeWorkbenchPage(QWidget):
                 seconds=_time.monotonic() - started,
             )
 
+        if method_key == "ga":
+            # Do not leave an earlier run looking like a cancelled run's output.
+            self._last_run = None
+            self._last_result = None
+            self._table.bind_frame(None, note="No genetic result yet")
+            self._plot.clear()
+        partial_mode = "built-in corpus" if not lines else ("seeded" if seeded else "custom corpus")
         self._runner.submit(
             f"{method_label} · {objective_label}",
             job,
@@ -692,7 +705,22 @@ class GenerativeWorkbenchPage(QWidget):
             on_failed=self._failed,
             on_cancelled=self._cancelled,
             on_progress=self._progress.update_progress,
+            on_preserved=(lambda result: self._preserved_ga(
+                result, method_label, objective_label, partial_mode, generations
+            )) if method_key == "ga" else None,
         )
+
+    def _preserved_ga(self, result: object, method: str, objective: str, mode: str, total: int) -> None:
+        from pharmaml.generative.result import GenerationResult
+
+        if not isinstance(result, GenerationResult) or not result.metadata.get("partial"):
+            self._report.setText("Genetic run stopped; no inspectable partial result was returned.")
+            return
+        self._render_evolve(EvolveOutcome(result=result, method_label=method,
+                                          objective_label=objective, mode=mode))
+        completed = len(result.history)
+        self._report.setText(f"PARTIAL — stopped after {completed}/{total} generations; "
+                             f"no checkpoint or resume. {self._report.text()}")
 
     def _render_evolve(self, outcome: EvolveOutcome) -> None:
         self._last_run = outcome
@@ -720,7 +748,8 @@ class GenerativeWorkbenchPage(QWidget):
         self._table.bind_frame(shown)
         QApplication.clipboard().setText(frame.to_csv(index=False))
         elapsed = result.metadata.get("elapsed_s")
-        timing = f" · {elapsed:.1f} s" if isinstance(elapsed, (int, float)) else ""
+        timing = (f" · {elapsed:.1f} s" if isinstance(elapsed, (int, float))
+                  and not result.metadata.get("partial") else "")
         self._report.setText(
             f"{outcome.method_label} · {outcome.objective_label} · best "
             f"{result.best_score:.3f} — {result.best} · {len(result.smiles)} unique "
@@ -735,6 +764,9 @@ class GenerativeWorkbenchPage(QWidget):
             self._report.setText("Run an evolution first — the front reads the LAST run's breakdown.")
             return
         result = self._last_result
+        if result.metadata.get("partial"):
+            self._report.setText("The last run is partial; complete a new evolution before extracting a Pareto front.")
+            return
         if not any(result.breakdown):
             self._report.setText(
                 "This run optimises a single objective — the Pareto front needs a "
