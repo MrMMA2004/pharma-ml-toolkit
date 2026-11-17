@@ -1,3 +1,76 @@
+## [1.2.217] — 2026-11-17 — round 273 (packaging phase 2: the Windows EXE campaign's frozen-equivalent verification)
+
+- **The part9 campaign, phase 2 — freeze the actual application on
+  the Linux host and run part9's flows INSIDE the frozen bundle.** The
+  Windows EXE artifact stays honestly BLOCKED (no Windows host, no
+  Wine, no cross-compile from Linux — unchanged since the phase-1
+  report), but every claim that phase 1 could only make as "design"
+  now carries a recorded PASS tier between static validation and the
+  Windows clean-machine run:
+  `tools/freeze_equivalent.py` captures `pharmaml.spec`'s policy
+  VERBATIM (exec'd with recorder stubs — 432 hiddenimports / 586 datas
+  / 1 binaries / 12 excludes recorded in the evidence JSON), writes
+  the derived Linux-equivalent spec with four documented deltas
+  (icon/version dropped; console=True for evidence stdout; studio.py
+  + the new §14 driver as TWO entries in ONE Analysis/COLLECT so the
+  driver rides the identical dependency collection; `ui/native` datas
+  — the EGL no-op stub `ui.headless` preloads on libEGL-less hosts),
+  and freezes with PyInstaller 6.22.3 in 204 s (dist 2.2 GB). The
+  frozen layout honors the spec's own datas contract: engines at
+  `_internal/pharmaml/engines` found and SHA-256 + PE-machine
+  validated by the app's OWN `pharmaml.docking.workflow` discovery,
+  fonts at `_internal/fonts` registered by `ui.font_loader`'s
+  `__file__` math, all Qt platform plugins collected.
+- **`tools/freeze_smoke_driver.py` — the §14 evidence driver** (frozen
+  alongside studio.py, ALSO runnable unfrozen and pinned at gate
+  time): `PharmaMLStudio --doctor` FROZEN at cwd=/ → **18 OK / 0 warn
+  / 0 failed, exit 0**; the 13-flow smoke at cwd=/tmp → **13/13
+  PASS** — CSV + Excel import through `load_dataset`, RDKit
+  descriptors (133 columns × 12 real-drug molecules), Morgan
+  fingerprints, ML classification (accuracy 0.90) + regression
+  (r² 0.9923), prediction, plots + PNG/SVG/PDF/TIFF export, CSV +
+  Excel table export, model save/reload with byte-parity predictions,
+  kNN applicability domain, the bundled AutoDock trio's validation,
+  and the offscreen Qt stack (qdarkstyle's 54,234-char stylesheet +
+  qt-material applied). §7's data architecture is RECORDED
+  (`install_dir_unchanged: true` — the frozen tree byte-identical,
+  every output byte in the user dir, MPLCONFIGDIR/NUMBA_CACHE_DIR
+  redirected there) and §14.3's offline proof is ARMED
+  (`socket.connect` patched to raise on ANY outbound attempt before
+  the science imports — the green run records zero attempts, it does
+  not assume zero). Evidence: the committed, machine-readable
+  `packaging/windows/evidence/freeze-equivalent-r273.json`.
+- **`tests/test_freeze_equivalent.py` (7 focused tests)** — the gate
+  pins: the full unfrozen flow run (13/13 verdict JSON), the offline
+  guard's blocking semantics, the §7 user-dir isolation contract, the
+  captured Windows-spec policy (the freeze traps + the §12 excludes +
+  the studio.py-only entry contract), and the generated spec's
+  two-entries-one-COLLECT shape with the `ui/native` delta.
+- **BUILD_REPORT.md phase-2 section** (§19 vocabulary): what upgraded
+  (§13 startup reliability, §4 resource paths, §3.3 scientific
+  compute inside the freeze, §14.2/§14.3 Linux-frozen-equivalent PASS
+  tier), what did not (the EXE, the Inno sequence, the §14
+  clean-machine sheet — still BLOCKED, honestly). The
+  sandbox-eviction note is recorded there too: the build tree lives
+  under `/tmp` (`FREEZE_BUILD_DIR` override) because this container
+  evicts large gitignored trees under disk pressure — the in-repo
+  dist and spec both vanished within a minute of creation, twice,
+  before the reroute.
+- **Round housekeeping**: sandbox rollback recovery per the r221
+  recipe (PAT re-spliced from MASTER_PROMPT.pdf via pdftotext into
+  the 600-mode credential file; remote re-registered via the
+  700-mode credential helper; 40 blob-identical untracked files
+  reconciled against origin/main, ff-only sync to a011dae; venv
+  repaired at the pins — numpy 1.26.4, torch 2.14.1+cpu, rdkit
+  2026.9.1, pharmaml 1.2.216→1.2.217 editable), the 8 notebooks
+  re-executed at 1.2.217 (211 s, zero error outputs, 7 twins
+  re-stripped), the static validation 26/26 at the new quadruple,
+  version_info.txt quadruple bumped in lockstep, FEATURES.md freeze
+  stamp trued, web pins re-trued to the live census, v1.2.217 zip
+  shipped to all six homes (the root dist-archive and offsite homes
+  rebuilt from tracked bytes after the rollback wiped them), the
+  ten-chunk gate, and the E2E verification.
+
 ## [1.2.216] — 2026-11-17 — round 272 (packaging phase 1: the Windows EXE installer campaign per MASTER_PROMPT part9 — infrastructure, audit, validation)
 
 - **The part9 packaging campaign, phase 1 — everything a Linux build
