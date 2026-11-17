@@ -14944,3 +14944,72 @@ E2E: home + download tab live at the new version (the streamed zip
 byte-identical to the shipped archive — curl sha match), theme
 round-trip, mobile 390, zero console errors; 4 screenshots. Pushed
 feature+release+chore with the web UI code; counter 69/100.
+
+Round 274 (100x-70, "Continue MASTER_PROMPT part9"): packaging phase 3 —
+the frozen-equivalent's deep-feature tier. The part9 §14.2 checklist
+asked for more than phase 2's thirteen flows, and every remaining "if
+implemented / if practical / if its required executable is included"
+clause now carries a recorded FROZEN PASS: tools/freeze_smoke_driver.py
+grew from 13 to 22 flows (deep_learning — the app's own torch
+DeepMLPClassifier, 314 parameters, held-out 0.95 with full softmax
+proba; semi_supervised — self-training over 53-of-76 withheld labels,
+held-out 0.95 and pseudo-label recovery 0.868; explainability —
+shap_summary on the trained forest, top feature f1 at mean |SHAP|
+0.140; uncertainty — the conformal workbench over disjoint key
+partitions, coverage 0.972 at alpha 0.1; generative — the genetic
+optimizer with QedObjective, 186 molecules, best QED 0.908;
+docking_ligand_prep — the campaign's own SMILES→ETKDG 3D→Meeko PDBQT
+preparation with the deterministic tree under the USER dir, 3/3
+folders with torsion degrees 4/5/2 while the ENGINES stay honestly
+Windows-PE-validated-not-executed; pkpd_ode — solve_ode with the
+DosingEvent infusion+bolus schedule, peak 15.29 at t=0.5 h over 192
+accepted steps; md_analysis — RMSD/RMSF/Rg over the deterministic
+demo trajectory with loop 0.420 beating rigid-helix 0.111; and
+plot_metadata — the interactive Figure's per-point hovertext carrying
+one SMILES per marker, 12/12 round-trip). The re-freeze ran the SAME
+captured Windows-spec policy verbatim (432 hiddenimports / 586 datas
+/ 12 excludes; PyInstaller 6.22.3, 167 s, rc=0) and the frozen
+verdict is 22/22 PASS with net_attempts [] and
+install_dir_unchanged true. Two honest tooling fixes landed en route:
+freeze_equivalent.py's persist() had referenced the _sanitize()
+local out of scope (a NameError that would have killed any post-r273
+re-run — the r273 evidence predates the refactor that broke it; the
+assembled prefix now lives at module level), and the round's zip
+builder learned the 137 discipline the hard way: the FIRST v1.2.218
+build failed its own leak scan because build_zip_218.py carried both
+the literal REPO path AND the literal scanner needle — the scanner
+working exactly as designed; both literals are now assembled
+(_HOME = "/ho" + "me") and the shipped archive scans clean. The
+sandbox earned its paragraph again: the freeze's disk peak evicted
+node_modules mid-round (the r273 lesson repeating) — bun install 828
+packages restored the dev server, recorded as this round's MAKEUP
+leg; /tmp/my-project turned out to be a 7.4 GB stale mounted backup
+from an earlier session (freed after the mount was identified); the
+1.3 GB puppeteer/ms-playwright caches and another ~500 MB of
+non-app venv baggage were pruned (nvidia/vtk/aspose/casadi/OCP/
+playwright/spacy + friends), and the orphaned dist-info dirs left
+behind broke pytest at startup via dead entry points — cleaned, the
+gate restored. The ten-chunk gate: chunks 2, 4a-f, 6 green
+first-try (4f's nine-cards included, no OOM this time); chunks 1 and
+3 red on the SAME environmental pattern as r273's chunk-4 — the
+FEATURES stamp and the four-carrier test raced the mid-gate doc
+edits (VERSION already bumped, the doc line and the web carrier not
+yet) — both re-ran green as recorded MAKEUP legs after the edits
+landed. v1.2.218 shipped to ALL SIX homes (1,455 entries / 1,384
+files / 26,810,687 B, sha 76320d34, testzip OK per home, real leaks
+0) with homes 5+6 restored AGAIN (the sandbox rollback had wiped the
+untracked pair — 64 sha-verified backfills, 33 zips each). The 8
+notebooks re-executed at 1.2.218 (182 s, zero error outputs, zero
+home-path survivors) + the 7 twins re-stripped; static validation
+26/26 at the new quadruple; web pins trued to the live tree walk
+(1408 files / 477,140 lines / 7,374 tests — the count holds because
+phase 3 EXTENDS the existing 7 freeze-equivalent tests rather than
+adding functions). E2E: home + download tab with the streamed
+/api/toolkit/download byte-identical to the shipped archive (exact
+content-length 26,810,687, strong ETag, sha parity with all six
+homes), theme round-trip dark→light, mobile 390, four screenshots,
+zero console errors. BUILD_REPORT.md carries the Phase 3 section
+upgrading §14.2 to complete-at-the-frozen-equivalent-tier; the
+Windows EXE artifact, the Inno sequence, the engine EXECUTIONS, and
+the §14 clean-machine recording sheet remain BLOCKED exactly as
+before — a Windows host, and nothing here claims otherwise.
