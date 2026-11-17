@@ -1,0 +1,388 @@
+{
+  "build": {
+    "app_executable": "/tmp/freeze-equivalent/dist/freeze-equivalent/PharmaMLStudio",
+    "engines": [
+      "README.md",
+      "autodock4.exe",
+      "autogrid4.exe",
+      "vina.exe"
+    ],
+    "fonts": [
+      "IBMPlexSans-Bold.ttf",
+      "IBMPlexSans-Medium.ttf",
+      "IBMPlexSans-Regular.ttf",
+      "IBMPlexSans-SemiBold.ttf",
+      "JetBrainsMono-Regular.ttf"
+    ],
+    "log": "/tmp/freeze-equivalent/pyinstaller.log",
+    "ok": true,
+    "qt_plugins_platforms": [
+      "libqeglfs.so",
+      "libqlinuxfb.so",
+      "libqminimal.so",
+      "libqminimalegl.so",
+      "libqoffscreen.so",
+      "libqvkkhrdisplay.so",
+      "libqvnc.so",
+      "libqwayland-egl.so",
+      "libqwayland-generic.so",
+      "libqxcb.so"
+    ],
+    "rc": 0,
+    "seconds": 167,
+    "smoke_executable": "/tmp/freeze-equivalent/dist/freeze-equivalent/FreezeSmokeDriver",
+    "spec": "/tmp/freeze-equivalent/pharmaml_linux.spec"
+  },
+  "linux_deltas": [
+    "icon/version resources dropped (Windows-only)",
+    "console=True (evidence stdout)",
+    "two entries in one Analysis/COLLECT (studio.py + smoke driver)",
+    "ui/native EGL-stub datas row (Linux-class host fallback)"
+  ],
+  "policy": {
+    "binaries_count": 1,
+    "datas_count": 586,
+    "excludes": [
+      "pytest",
+      "_pytest",
+      "pytestqt",
+      "pytest_cov",
+      "mypy",
+      "ruff",
+      "tkinter",
+      "pip",
+      "setuptools",
+      "wheel",
+      "IPython",
+      "jupyter"
+    ],
+    "hiddenimports_count": 432,
+    "scripts": [
+      "<toolkit>/studio.py"
+    ]
+  },
+  "policy_captured_from": "<toolkit>/packaging/windows/pharmaml.spec",
+  "round": "r274",
+  "smoke": {
+    "doctor": {
+      "rc": 0,
+      "seconds": 1,
+      "tail": [
+        "qdarkstyle            OK     3.2.3 -- optional -- the alternative dark theme provider",
+        "========================================================================",
+        "18 OK / 0 warn / 0 failed -> exit 0",
+        "Verified dependency pins: requirements.txt (\"/tmp/freeze-equivalent/dist/freeze-equivalent/PharmaMLStudio\" -m pip install -r requirements.txt)",
+        "Re-run after fixing: \"/tmp/freeze-equivalent/dist/freeze-equivalent/PharmaMLStudio\" studio.py --doctor",
+        "========================================================================"
+      ]
+    },
+    "smoke": {
+      "rc": 0,
+      "seconds": 8,
+      "stderr_tail": [
+        "[07:37:35] DEPRECATION WARNING: please use MorganGenerator",
+        "[07:37:35] DEPRECATION WARNING: please use MorganGenerator",
+        "[07:37:35] DEPRECATION WARNING: please use MorganGenerator",
+        "[07:37:35] DEPRECATION WARNING: please use MorganGenerator",
+        "[07:37:35] DEPRECATION WARNING: please use MorganGenerator",
+        "[07:37:35] DEPRECATION WARNING: please use MorganGenerator",
+        "[07:37:35] DEPRECATION WARNING: please use MorganGenerator",
+        "[07:37:35] DEPRECATION WARNING: please use MorganGenerator",
+        "sklearn/base.py:486: UserWarning: X has feature names, but SelfTrainingClassifier was fitted without feature names",
+        "WARNING:pharmaml.generative.genetic:corpus holds only 12 unique molecule(s) -- duplicating members to reach population_size=64"
+      ],
+      "stdout_tail": [
+        "FLOW import_csv PASS 354ms ",
+        "FLOW import_excel PASS 244ms ",
+        "FLOW descriptors PASS 142ms ",
+        "FLOW fingerprints PASS 2ms ",
+        "FLOW ml_train_predict PASS 1104ms ",
+        "FLOW deep_learning PASS 1484ms ",
+        "FLOW semi_supervised PASS 13ms ",
+        "FLOW explainability PASS 530ms ",
+        "FLOW uncertainty PASS 11ms ",
+        "FLOW plot_export PASS 337ms ",
+        "FLOW table_export PASS 7ms ",
+        "FLOW model_save_reload PASS 83ms ",
+        "FLOW applicability_domain PASS 2ms ",
+        "FLOW generative PASS 421ms ",
+        "FLOW docking_ligand_prep PASS 146ms ",
+        "FLOW pkpd_ode PASS 43ms ",
+        "FLOW md_analysis PASS 19ms ",
+        "FLOW plot_metadata PASS 10ms ",
+        "FLOW bundled_engines PASS 4ms ",
+        "FREEZE-SMOKE PASS 22/22 offline=yes verdict=/tmp/freeze-equivalent-user/smoke-user/freeze_smoke_verdict.json"
+      ],
+      "verdict": {
+        "applicability_domain": {
+          "distance_threshold": 2.996599454020631,
+          "test_knn_mean_rows": 20,
+          "train_knn_mean_rows": 76
+        },
+        "bundled_engines": {
+          "autodock4": "/tmp/freeze-equivalent/dist/freeze-equivalent/_internal/pharmaml/engines/autodock4.exe",
+          "autogrid4": "/tmp/freeze-equivalent/dist/freeze-equivalent/_internal/pharmaml/engines/autogrid4.exe",
+          "vina": "/tmp/freeze-equivalent/dist/freeze-equivalent/_internal/pharmaml/engines/vina.exe"
+        },
+        "deep_learning": {
+          "accuracy": 0.95,
+          "n_params": 314,
+          "proba_shape": [
+            20,
+            2
+          ]
+        },
+        "descriptors": {
+          "columns": 133,
+          "rows": 12
+        },
+        "docking_ligand_prep": {
+          "campaign_root": "/tmp/freeze-equivalent-user/smoke-user/docking_campaign",
+          "folders": [
+            "01_aspirin",
+            "02_ibuprofen",
+            "03_paracetamol"
+          ],
+          "ok_rows": 3,
+          "pdbqt_bytes": {
+            "01_aspirin/l.pdbqt": 1411,
+            "02_ibuprofen/l.pdbqt": 1639,
+            "03_paracetamol/l.pdbqt": 1254
+          },
+          "torsdofs": [
+            4,
+            5,
+            2
+          ]
+        },
+        "environment": {
+          "argv0": "/tmp/freeze-equivalent/dist/freeze-equivalent/FreezeSmokeDriver",
+          "cwd": "/tmp",
+          "frozen": true,
+          "meipass": "/tmp/freeze-equivalent/dist/freeze-equivalent/_internal",
+          "pharmaml": "1.2.217",
+          "python": "3.12.16",
+          "rdkit": "2026.09.1",
+          "torch": "2.14.1+cpu"
+        },
+        "explainability": {
+          "model_name": "RandomForestClassifier",
+          "n_features": 9,
+          "n_samples": 20,
+          "top_feature": "f1",
+          "top_mean_abs": 0.1401
+        },
+        "failures": [],
+        "fingerprints": {
+          "rows_with_bits": 11,
+          "shape": [
+            12,
+            2048
+          ]
+        },
+        "flows": {
+          "applicability_domain": {
+            "detail": "",
+            "ms": 2,
+            "status": "PASS"
+          },
+          "bundled_engines": {
+            "detail": "",
+            "ms": 4,
+            "status": "PASS"
+          },
+          "deep_learning": {
+            "detail": "",
+            "ms": 1484,
+            "status": "PASS"
+          },
+          "descriptors": {
+            "detail": "",
+            "ms": 142,
+            "status": "PASS"
+          },
+          "docking_ligand_prep": {
+            "detail": "",
+            "ms": 146,
+            "status": "PASS"
+          },
+          "environment": {
+            "detail": "",
+            "ms": 1608,
+            "status": "PASS"
+          },
+          "explainability": {
+            "detail": "",
+            "ms": 530,
+            "status": "PASS"
+          },
+          "fingerprints": {
+            "detail": "",
+            "ms": 2,
+            "status": "PASS"
+          },
+          "fonts": {
+            "detail": "",
+            "ms": 7,
+            "status": "PASS"
+          },
+          "generative": {
+            "detail": "",
+            "ms": 421,
+            "status": "PASS"
+          },
+          "import_csv": {
+            "detail": "",
+            "ms": 354,
+            "status": "PASS"
+          },
+          "import_excel": {
+            "detail": "",
+            "ms": 244,
+            "status": "PASS"
+          },
+          "md_analysis": {
+            "detail": "",
+            "ms": 19,
+            "status": "PASS"
+          },
+          "ml_train_predict": {
+            "detail": "",
+            "ms": 1104,
+            "status": "PASS"
+          },
+          "model_save_reload": {
+            "detail": "",
+            "ms": 83,
+            "status": "PASS"
+          },
+          "pkpd_ode": {
+            "detail": "",
+            "ms": 43,
+            "status": "PASS"
+          },
+          "plot_export": {
+            "detail": "",
+            "ms": 337,
+            "status": "PASS"
+          },
+          "plot_metadata": {
+            "detail": "",
+            "ms": 10,
+            "status": "PASS"
+          },
+          "qt_offscreen": {
+            "detail": "",
+            "ms": 241,
+            "status": "PASS"
+          },
+          "semi_supervised": {
+            "detail": "",
+            "ms": 13,
+            "status": "PASS"
+          },
+          "table_export": {
+            "detail": "",
+            "ms": 7,
+            "status": "PASS"
+          },
+          "uncertainty": {
+            "detail": "",
+            "ms": 11,
+            "status": "PASS"
+          }
+        },
+        "fonts": {
+          "plex": true,
+          "registered": 2
+        },
+        "generative": {
+          "best": "CC(C)(C)OCC(O)COc1cccc2ccccc12",
+          "best_score": 0.9079,
+          "n_molecules": 186,
+          "unique": -1,
+          "valid": -1
+        },
+        "import_csv": {
+          "dropped": [],
+          "features": 9,
+          "path": "/tmp/freeze-equivalent-user/smoke-user/smoke_dataset.csv",
+          "rows": 96,
+          "task": "classification"
+        },
+        "import_excel": {
+          "path": "/tmp/freeze-equivalent-user/smoke-user/smoke_dataset.xlsx",
+          "rows": 96,
+          "task": "regression"
+        },
+        "install_dir_unchanged": true,
+        "md_analysis": {
+          "n_atoms": 36,
+          "n_frames": 60,
+          "rg_mean": 5.6701,
+          "rmsd_first_last": 0.3123,
+          "rmsf_helix_mean": 0.1108,
+          "rmsf_loop_mean": 0.4202
+        },
+        "ml": {
+          "classification_accuracy": 0.9,
+          "n_test": 20,
+          "n_train": 76,
+          "regression_r2": 0.9923
+        },
+        "model_save_reload": {
+          "bundle_version": "1.2.217",
+          "parity": true,
+          "path": "/tmp/freeze-equivalent-user/smoke-user/smoke_rf.joblib"
+        },
+        "net_attempts": [],
+        "offline": true,
+        "pkpd_ode": {
+          "c0_bolus_lag": 7.8854,
+          "c_end": 0.12906,
+          "c_peak": 15.2898,
+          "n_steps": 192,
+          "t_peak": 0.5
+        },
+        "plot_export": {
+          "pdf": 12244,
+          "png": 22837,
+          "svg": 25015,
+          "tiff": 968206
+        },
+        "plot_metadata": {
+          "hovertext_first": "CC(=O)Oc1ccccc1C(=O)O",
+          "hovertext_len": 12,
+          "n_points": 12,
+          "report_chars": 262
+        },
+        "qt_offscreen": {
+          "egl": "stub",
+          "platform": null,
+          "qdarkstyle_chars": 54234
+        },
+        "semi_supervised": {
+          "accuracy_held_out": 0.95,
+          "labeled_rows": 23,
+          "method": "self_training",
+          "pseudo_label_accuracy": 0.8679,
+          "unlabeled_rows": 53
+        },
+        "table_export": {
+          "csv": 770,
+          "xlsx": 6010
+        },
+        "uncertainty": {
+          "alpha": 0.1,
+          "coverage": 0.9722,
+          "mean_width": 0.3689,
+          "n_test": 36
+        },
+        "user_dir": "/tmp/freeze-equivalent-user/smoke-user",
+        "verdict": "PASS"
+      }
+    },
+    "verdict": "PASS"
+  },
+  "windows_spec": "packaging/windows/pharmaml.spec"
+}

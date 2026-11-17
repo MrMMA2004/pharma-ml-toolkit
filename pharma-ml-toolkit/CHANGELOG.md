@@ -1,3 +1,54 @@
+## [1.2.218] — 2026-11-17 — round 274 (packaging phase 3: the frozen-equivalent's deep-feature tier)
+
+- **The part9 campaign, phase 3 — extend the frozen smoke from 13 to
+  22 flows and re-freeze/re-run the whole tier INSIDE the bundle.**
+  part9 §14.2 asks for more than phase 2 shipped: a DL example
+  ("if practical"), Semi-supervised Learning ("if implemented"), a
+  representative optional scientific workflow "such as docking or MD
+  analysis, if its required executable is included", plus §9's
+  explainability, prediction uncertainty, and SMILES metadata
+  inspection. All of it now runs FROZEN through the application's own
+  APIs (same captured Windows-spec policy verbatim — 432
+  hiddenimports / 586 datas / 12 excludes; PyInstaller 6.22.3,
+  167 s, rc=0): `deep_learning` (the app's torch DeepMLPClassifier,
+  314 parameters, held-out accuracy 0.95 with full softmax
+  predict_proba), `semi_supervised` (train_semi_supervised with 53
+  of 76 labels withheld: held-out 0.95, recovered pseudo-label
+  accuracy 0.868), `explainability` (shap_summary on the trained
+  RandomForest — top feature f1, mean |SHAP| 0.140), `uncertainty`
+  (regression_uncertainty_report over disjoint key partitions:
+  coverage 0.972 at alpha 0.1, mean width 0.369), `generative`
+  (run_genetic_optimization with QedObjective: 186 molecules, best
+  QED 0.908), `docking_ligand_prep` (the campaign's own SMILES ->
+  ETKDG 3D -> Meeko PDBQT preparation, deterministic tree under the
+  USER dir: 3/3 folders, torsion degrees 4/5/2; the engines stay
+  Windows PEs — sha+PE-validated, honestly not EXECUTED on Linux),
+  `pkpd_ode` (solve_ode with DosingEvent bolus + infusion: peak
+  15.29 at t=0.5 h, 192 accepted steps), `md_analysis`
+  (synthetic_trajectory + RMSD/RMSF/Rg: loop RMSF 0.420 vs
+  rigid-helix 0.111), and `plot_metadata` (the interactive Figure's
+  per-point hovertext carrying one SMILES per marker, 12/12
+  round-trip through to_json). Verdict: 22/22 PASS, zero failures,
+  net_attempts [] (the armed offline proof), install_dir_unchanged
+  true (§7). Evidence: packaging/windows/evidence/
+  freeze-equivalent-r274.json (committed, machine-path-sanitized);
+  BUILD_REPORT.md gains the Phase 3 section.
+- **The unfrozen mirror is pinned at gate time.**
+  tests/test_freeze_equivalent.py now asserts the nine phase-3 flow
+  names in the registry, the 22-flow verdict, the docking campaign
+  tree under the user dir, and the deep-feature numbers — API drift
+  fails the gate, not the freeze.
+- **Tooling fix landed en route:** freeze_equivalent.py's persist()
+  referenced the _sanitize() local (home) out of scope — a
+  NameError that would have killed any post-r273 re-run; the
+  assembled prefix now lives at module level (_HOME_PREFIX, the 137
+  discipline intact).
+- The 8 notebooks re-executed at 1.2.218 (182 s, zero error outputs,
+  zero home-path survivors) + the 7 twins re-stripped; static
+  validation 26/26 at the new quadruple; v1.2.218 shipped to all
+  six homes (homes 5+6 backfilled again after the sandbox rollback
+  wiped the untracked pair).
+
 ## [1.2.217] — 2026-11-17 — round 273 (packaging phase 2: the Windows EXE campaign's frozen-equivalent verification)
 
 - **The part9 campaign, phase 2 — freeze the actual application on

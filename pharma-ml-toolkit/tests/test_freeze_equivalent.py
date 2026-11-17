@@ -1,4 +1,4 @@
-"""Focused tests for the part9 phase-2 freeze-equivalent campaign (r273).
+"""Focused tests for the part9 freeze-equivalent campaign (r273+r274).
 
 ``tools/freeze_smoke_driver.py`` is the §14 evidence driver that runs
 INSIDE the frozen bundle (and unfrozen, pinned here so API drift fails
@@ -7,7 +7,10 @@ builder that captures the Windows spec's policy verbatim. These tests
 pin both: the full unfrozen flow run, the offline guard's blocking
 semantics, the §7 user-dir isolation contract, and the captured
 Windows-spec policy (hiddenimports/datas/excludes) that the
-Linux-equivalent build inherits unchanged.
+Linux-equivalent build inherits unchanged. The phase-3 tier (r274:
+deep-learning / semi-supervised / generative / docking ligand prep /
+PK-PD / MD / SHAP / uncertainty / plot metadata) is pinned the same
+way — registry shape plus the full-run record.
 """
 
 from __future__ import annotations
@@ -42,6 +45,14 @@ class TestSmokeDriver:
         assert names[:3] == ["environment", "qt_offscreen", "fonts"]
         assert "import_csv" in names and "bundled_engines" in names
         assert "model_save_reload" in names and "applicability_domain" in names
+        # the phase-3 (r274) deep-feature tier — all nine, registered
+        phase3 = {
+            "deep_learning", "semi_supervised", "explainability",
+            "uncertainty", "generative", "docking_ligand_prep",
+            "pkpd_ode", "md_analysis", "plot_metadata",
+        }
+        assert phase3 <= set(names)
+        assert len(names) == 22
         # every flow has the uniform (record, user, bundle) contract
         for _, flow in fsd.FLOWS:
             assert callable(flow)
@@ -82,16 +93,32 @@ class TestSmokeDriver:
         assert verdict["offline"] is True
         assert verdict["net_attempts"] == []
         flows = verdict["flows"]
-        assert len(flows) == 13
+        assert len(flows) == 22
         assert all(f["status"] == "PASS" for f in flows.values())
         # §7: everything the flows wrote lives under the user dir
         assert user_dir.joinpath("smoke_dataset.csv").is_file()
         assert user_dir.joinpath("parity_plot.png").is_file()
         assert user_dir.joinpath("parity_plot.tiff").is_file()
         assert user_dir.joinpath("smoke_rf.joblib").is_file()
+        # §7 (phase 3): the docking campaign tree is a USER-dir artifact
+        campaign = user_dir / "docking_campaign"
+        folders = sorted(p.name for p in campaign.iterdir())
+        assert len(folders) == 3
+        assert all((campaign / f / "l.pdbqt").is_file() for f in folders)
         # §14.2 science sanity: the frozen flows' regression parity
         assert verdict["ml"]["regression_r2"] > 0.9
         assert verdict["ml"]["classification_accuracy"] > 0.8
+        # the phase-3 (r274) deep-feature tier's own numbers
+        assert verdict["deep_learning"]["accuracy"] > 0.7
+        assert verdict["semi_supervised"]["accuracy_held_out"] > 0.7
+        assert verdict["semi_supervised"]["pseudo_label_accuracy"] > 0.5
+        assert verdict["generative"]["best_score"] > 0.1
+        assert verdict["explainability"]["top_feature"] in ("f1", "f2")
+        assert 0.0 <= verdict["uncertainty"]["coverage"] <= 1.0
+        assert verdict["pkpd_ode"]["c_peak"] > 0
+        assert verdict["md_analysis"]["rmsf_loop_mean"] > verdict["md_analysis"]["rmsf_helix_mean"]
+        assert verdict["plot_metadata"]["hovertext_len"] == len(fsd.SMILES)
+        assert verdict["docking_ligand_prep"]["ok_rows"] == 3
 
     def test_environment_flow_refuses_silent_unfrozen_runs(self) -> None:
 

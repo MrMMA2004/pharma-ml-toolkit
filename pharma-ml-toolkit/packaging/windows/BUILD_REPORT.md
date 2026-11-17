@@ -203,3 +203,71 @@ note: the build tree deliberately lives under `/tmp`
 (`FREEZE_BUILD_DIR` override) because this container evicts large
 gitignored trees under disk pressure — observed twice this round
 before the reroute; the tracked evidence JSON is the deliverable.
+
+---
+
+## Phase 3 (round 274, v1.2.218): the deep-feature §14.2 tier
+
+part9 §14.2 lists MORE than the thirteen phase-2 flows: "Run a
+supported DL example, if practical", "Run Semi-supervised Learning, if
+implemented", "Test one representative optional scientific workflow,
+such as docking or MD analysis, if its required executable is
+included", plus §9's explainability, prediction uncertainty, and
+SMILES metadata inspection. Phase 3 extends the frozen smoke driver
+from 13 to **22 flows** and re-freezes/re-runs the whole tier INSIDE
+the bundle (same captured Windows-spec policy, 432 hiddenimports /
+586 datas / 12 excludes verbatim; PyInstaller 6.22.3, 167 s, rc=0):
+
+* `deep_learning` — the app's own torch `DeepMLPClassifier` (314
+  parameters) trained inside the freeze: held-out accuracy **0.95**
+  with a full softmax `predict_proba` (§14.2's DL example).
+* `semi_supervised` — `train_semi_supervised` with 53 of 76 training
+  labels withheld (the −1 convention): held-out accuracy **0.95**,
+  recovered pseudo-label accuracy **0.868** (§14.2's semi-supervised
+  leg, both the unlabeled-recovery and the inductive view).
+* `explainability` — `shap_summary` (the real shap TreeExplainer)
+  on the trained RandomForest inside the freeze: top feature **f1**
+  (the synthetic truth's strongest driver), mean |SHAP| 0.140.
+* `uncertainty` — `regression_uncertainty_report` (ridge + split
+  conformal, disjoint key partitions): coverage **0.972** at
+  α=0.1 over 36 test rows, mean width 0.369.
+* `generative` — `run_genetic_optimization(QedObjective(), …)` inside
+  the freeze: 186 molecules, best QED **0.908** (§9's Generative AI).
+* `docking_ligand_prep` — the campaign's own ligand preparation
+  (SMILES → ETKDG 3D → Meeko PDBQT), the deterministic campaign tree
+  under the USER dir: 3/3 folders (aspirin/ibuprofen/paracetamol),
+  torsion degrees 4/5/2, PDBQTs 1.2–1.6 KB. The ENGINES remain
+  Windows PEs — sha+PE-validated (`flow_bundled_engines`), they
+  cannot EXECUTE on Linux; an actual vina run waits for the Windows
+  clean machine exactly as before.
+* `pkpd_ode` — `solve_ode` with `DosingEvent` bolus + infusion:
+  peak concentration 15.29 at t=0.5 h, 192 accepted steps, trough
+  decay to 0.129 (§14.2's PK/PD leg).
+* `md_analysis` — `synthetic_trajectory` + RMSD/RMSF/Rg: loop RMSF
+  0.420 vs rigid-helix 0.111 (the §14.2 MD leg; GROMACS was never
+  invoked by the app, so this is the honest MD surface).
+* `plot_metadata` — the interactive `Figure`'s per-point hovertext
+  carries one SMILES per marker (12/12 round-trip through
+  `to_json`), §9's "SMILES metadata inspection" surface.
+
+Verdict (all 22 flows, frozen, `cwd=/tmp`): **PASS** — zero failures,
+`net_attempts: []` (§14.3 armed proof), `install_dir_unchanged: true`
+(§7). Evidence: `evidence/freeze-equivalent-r274.json` (committed,
+machine-path-sanitized). The unfrozen mirror is pinned by
+`tests/test_freeze_equivalent.py` (7 focused tests, now asserting the
+nine phase-3 names, the 22-flow verdict, and the docking campaign tree
+under the user dir) so API drift fails at gate time, not freeze time.
+
+Tooling fix landed en route: `freeze_equivalent.py`'s `persist()` had
+referenced the `_sanitize()` local (`home`) out of scope — a NameError
+that would have killed any post-r273 re-run; the assembled prefix now
+lives at module level (`_HOME_PREFIX`, the 137 discipline intact) and
+the write-then-leak-check assertion is unchanged in behavior.
+
+What this upgrades: §14.2's checklist is now COMPLETE at the
+Linux-frozen-equivalent tier (every "if implemented / if practical /
+if its required executable is included" clause answered with the
+app's real code inside the frozen bundle). What stays BLOCKED,
+unchanged: the Windows EXE artifact, the Inno install sequence, the
+ENGINE executions, and the §14 clean-machine recording sheet — a
+Windows host and nothing here claims otherwise.

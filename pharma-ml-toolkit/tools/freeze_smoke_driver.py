@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The part9 frozen-smoke driver (phase 2) — runs INSIDE a frozen app.
+"""The part9 frozen-smoke driver (phases 2 + 3) — runs INSIDE a frozen app.
 
 ``packaging/windows/pharmaml.spec`` defines the Windows installer; this
 driver is the §13/§14 evidence entry that ``tools/freeze_equivalent.py``
@@ -17,11 +17,24 @@ What it proves, per part9's own vocabulary:
   ``__file__`` math; the bundled engines are found by
   ``pharmaml.docking.workflow``'s OWN discovery (SHA-256 + PE-machine
   validated) at ``_internal/pharmaml/engines``.
-* §14.2 scientific workflows: CSV import, Excel import, descriptors,
-  fingerprints, ML classification + regression, prediction, plots,
-  figure export (PNG/SVG/PDF/TIFF), CSV/Excel export, model
-  save/reload, kNN applicability domain, the docking engines'
-  presence — every one through the application's real APIs.
+* §14.2 scientific workflows, phase 2 (r273): CSV import, Excel
+  import, descriptors, fingerprints, ML classification + regression,
+  prediction, plots, figure export (PNG/SVG/PDF/TIFF), CSV/Excel
+  export, model save/reload, kNN applicability domain, the docking
+  engines' presence — every one through the application's real APIs.
+* §14.2 scientific workflows, phase 3 (r274 — the deep-feature tier):
+  a torch deep-learning training (DeepMLPClassifier), semi-supervised
+  learning with unlabeled rows (train_semi_supervised), the generative
+  AI workspace (run_genetic_optimization with QedObjective), the
+  docking campaign's ligand preparation (prepare_ligand_library —
+  SMILES → 3D → PDBQT campaign tree; the ENGINES themselves are
+  Windows PEs and cannot execute on Linux — validated, not run),
+  PK/PD ODE solving with dosing events (solve_ode), MD trajectory
+  analysis (synthetic_trajectory + rmsd/rmsf/Rg), SHAP explainability
+  (shap_summary on the trained forest), prediction uncertainty
+  (regression_uncertainty_report — the conformal workbench), and the
+  interactive figure's per-point SMILES metadata (Figure hovertext —
+  §9's "SMILES metadata inspection" surface).
 * §14.3 offline: ``socket.socket.connect`` is armed to raise on ANY
   outbound attempt before the science imports; a green run is a
   recorded zero-attempt proof, not an assumption.
@@ -383,6 +396,261 @@ def flow_qt_offscreen(record: dict, user: Path, bundle: dict) -> None:
     widget.deleteLater()
 
 
+# --- phase 3 (r274): the deep-feature §14.2 tier -------------------------
+
+
+def flow_deep_learning(record: dict, user: Path, bundle: dict) -> None:
+    """§14.2 "Run a supported DL example": a torch MLP trained INSIDE
+    the frozen bundle through the app's own DeepMLPClassifier."""
+    from pharmaml.ml.neural import DeepMLPClassifier
+
+    X, y = bundle["X"], bundle["y"]
+    split = int(len(X) * 0.8)
+    net = DeepMLPClassifier(
+        hidden_layers=(16, 8), epochs=40, batch_size=16,
+        learning_rate=0.01, random_state=274,
+    )
+    net.fit(X.iloc[:split], y.iloc[:split])
+    pred = net.predict(X.iloc[split:])
+    truth = y.iloc[split:].to_numpy()
+    acc = float((pred == truth).mean())
+    proba = net.predict_proba(X.iloc[split:])
+    record["deep_learning"] = {
+        "accuracy": round(acc, 4),
+        "n_params": int(sum(p.numel() for p in net._network.parameters())),
+        "proba_shape": list(proba.shape),
+    }
+    assert acc > 0.7 and proba.shape == (len(X) - split, 2), (acc, proba.shape)
+
+
+def flow_semi_supervised(record: dict, user: Path, bundle: dict) -> None:
+    """§14.2 "Run Semi-supervised Learning": self-training over a
+    training split whose labels are 70% withheld (the -1 convention);
+    the pseudo-labels recovered on the masked rows are scored against
+    the withheld truth, and the fitted model is evaluated inductively
+    on the held-out test rows."""
+    import numpy as np
+
+    from pharmaml.ml.semi_supervised import train_semi_supervised
+
+    X, y = bundle["X"], bundle["y"]
+    split = int(len(X) * 0.8)
+    rng = np.random.default_rng(274)
+    y_masked = y.iloc[:split].copy()
+    hide = rng.choice(split, size=int(split * 0.7), replace=False)
+    y_masked.iloc[hide] = -1
+    result = train_semi_supervised(
+        X.iloc[:split], y_masked, method="self_training", random_state=274,
+    )
+    pseudo = np.asarray(result.labels_)[hide]
+    pseudo_acc = float((pseudo == y.iloc[hide].to_numpy()).mean())
+    test_pred = result.model.predict(X.iloc[split:])
+    truth = y.iloc[split:].to_numpy()
+    acc = float((test_pred == truth).mean())
+    record["semi_supervised"] = {
+        "accuracy_held_out": round(acc, 4),
+        "pseudo_label_accuracy": round(pseudo_acc, 4),
+        "labeled_rows": int(split - len(hide)),
+        "unlabeled_rows": int(len(hide)),
+        "method": "self_training",
+    }
+    assert acc > 0.7 and pseudo_acc > 0.5 and len(hide) > 0, (acc, pseudo_acc)
+
+
+def flow_explainability(record: dict, user: Path, bundle: dict) -> None:
+    """§9 "Explainability": SHAP summary of the trained forest through
+    the app's own shap_summary (the real shap TreeExplainer path)."""
+    from pharmaml.ml.explain import shap_summary
+
+    X = bundle["X"]
+    split = int(len(X) * 0.8)
+    summary = shap_summary(bundle["clf_model"], X.iloc[split:])
+    top = int(max(range(len(summary.mean_abs)), key=lambda i: summary.mean_abs[i]))
+    record["explainability"] = {
+        "model_name": summary.model_name,
+        "n_features": len(summary.names),
+        "n_samples": int(summary.n_samples),
+        "top_feature": summary.names[top],
+        "top_mean_abs": round(float(summary.mean_abs[top]), 5),
+    }
+    assert summary.n_samples == len(X) - split and summary.names[top] in ("f1", "f2"), (
+        summary.names[top],
+    )
+
+
+def flow_uncertainty(record: dict, user: Path, bundle: dict) -> None:
+    """§9 "Prediction uncertainty": the conformal workbench's report
+    over disjoint train/calibration/test partitions."""
+    import numpy as np
+
+    from pharmaml.ml.uncertainty_workbench import regression_uncertainty_report
+
+    frame = bundle["frame"].copy()
+    rng = np.random.default_rng(274)
+    frame["mol"] = [f"m{i:03d}" for i in range(len(frame))]
+    frame = frame.iloc[rng.permutation(len(frame))]
+    n = len(frame)
+    train, calib, test = frame.iloc[:40], frame.iloc[40:60], frame.iloc[60:]
+    features = [c for c in frame.columns if c.startswith("f")]
+    report = regression_uncertainty_report(
+        train, calib, test,
+        features=features, target="y_reg", key="mol", alpha=0.1,
+    )
+    record["uncertainty"] = {
+        "coverage": round(float(report["coverage"]), 4),
+        "mean_width": round(float(report["mean_width"]), 4),
+        "n_test": int(report["n_test"]),
+        "alpha": report["alpha"],
+    }
+    assert 0.0 <= report["coverage"] <= 1.0 and report["mean_width"] > 0
+
+
+def flow_generative(record: dict, user: Path, bundle: dict) -> None:
+    """§14.2 "Generative AI": the genetic optimizer maximizing QED over
+    real-drug seeds, INSIDE the freeze."""
+    from pharmaml.generative import QedObjective, run_genetic_optimization
+
+    result = run_genetic_optimization(
+        QedObjective(),
+        seed_smiles=list(SMILES[:6]),
+        corpus=list(SMILES),
+        generations=4,
+        seed=274,
+    )
+    record["generative"] = {
+        "n_molecules": len(result.smiles),
+        "best_score": round(float(result.best_score), 4),
+        "best": result.best,
+        "valid": int(result.metadata.get("valid", -1)),
+        "unique": int(result.metadata.get("unique", -1)),
+    }
+    assert result.best_score > 0.1 and len(result.smiles) > 0, result.best_score
+
+
+def flow_docking_ligand_prep(record: dict, user: Path, bundle: dict) -> None:
+    """§14.2's docking leg, the Linux-honest part: the campaign's own
+    ligand preparation (SMILES → ETKDG 3D → Meeko PDBQT), one campaign
+    folder per ligand, deterministic seed.  The ENGINES bundled by the
+    installer are Windows PEs — sha+PE validated in flow_bundled_engines,
+    they cannot EXECUTE on Linux; running an actual vina docking waits
+    for the Windows clean machine."""
+    import pandas as pd
+
+    from pharmaml.docking.ligands import prepare_ligand_library
+
+    csv_path = user / "docking_library.csv"
+    lib = pd.DataFrame({
+        "smiles": list(SMILES[:3]),
+        "name": ["aspirin", "ibuprofen", "paracetamol"],
+    })
+    lib.to_csv(csv_path, index=False)
+    root = user / "docking_campaign"
+    report = prepare_ligand_library(csv_path, root, seed=274)
+    pdbqts = sorted(root.glob("*/l.pdbqt"))
+    sizes = {str(p.relative_to(root)): p.stat().st_size for p in pdbqts}
+    record["docking_ligand_prep"] = {
+        "campaign_root": str(root),
+        "folders": sorted(p.name for p in root.iterdir() if p.is_dir()),
+        "pdbqt_bytes": sizes,
+        "ok_rows": int(report.frame["ok"].sum()),
+        "torsdofs": [int(v) for v in report.frame["torsdof"].tolist()],
+    }
+    assert len(pdbqts) == 3 and all(s > 500 for s in sizes.values()), sizes
+
+
+def flow_pkpd_ode(record: dict, user: Path, bundle: dict) -> None:
+    """§14.2 "PK/PD": one-compartment IV infusion + a maintenance bolus
+    through the app's own dosing-event ODE solver."""
+    import numpy as np
+
+    from pharmaml.pkpd.ode import DosingEvent, solve_ode
+
+    k, volume = 0.35, 30.0
+    times = np.linspace(0.0, 24.0, 97)
+    sol = solve_ode(
+        lambda t, y: np.array([-k * y[0]]),
+        times,
+        [0.0],
+        (
+            DosingEvent(time=0.0, amount=500.0, duration=0.5),
+            DosingEvent(time=12.0, amount=250.0),
+        ),
+    )
+    conc = sol.states[:, 0] / volume
+    peak_i = int(np.argmax(conc))
+    record["pkpd_ode"] = {
+        "n_steps": int(sol.n_steps),
+        "c_peak": round(float(conc[peak_i]), 4),
+        "t_peak": float(times[peak_i]),
+        "c_end": round(float(conc[-1]), 5),
+        "c0_bolus_lag": round(float(conc[np.searchsorted(times, 12.0) + 1]), 4),
+    }
+    assert sol.n_steps > 50 and 0.0 < times[peak_i] < 1.5 and conc[-1] > 0
+
+
+def flow_md_analysis(record: dict, user: Path, bundle: dict) -> None:
+    """§14.2 "MD analysis": RMSD/RMSF/Rg over the deterministic demo
+    trajectory — loop flexibility must beat the rigid helix."""
+    import numpy as np
+
+    from pharmaml.md.metrics import (
+        radius_of_gyration_trajectory,
+        rmsd_trajectory,
+        rmsf,
+    )
+    from pharmaml.md.trajectory import synthetic_trajectory
+
+    traj = synthetic_trajectory(
+        n_frames=60, seed=274, n_residues=12, flexible_residues=(5, 6, 7),
+    )
+    rmsd = rmsd_trajectory(traj)
+    fl = rmsf(traj)
+    rg = radius_of_gyration_trajectory(traj)
+    loop_atoms = [a for a in range(traj.n_atoms) if a // 3 in (5, 6, 7)]
+    helix_atoms = [0, 1, 2, 3]
+    record["md_analysis"] = {
+        "n_frames": traj.n_frames,
+        "n_atoms": traj.n_atoms,
+        "rmsd_first_last": round(float(rmsd[-1]), 4),
+        "rmsf_loop_mean": round(float(np.mean(fl[loop_atoms])), 4),
+        "rmsf_helix_mean": round(float(np.mean(fl[helix_atoms])), 4),
+        "rg_mean": round(float(np.mean(rg)), 4),
+    }
+    assert (
+        rmsd.shape == (60,)
+        and fl.shape == (traj.n_atoms,)
+        and rg.shape == (60,)
+        and np.mean(fl[loop_atoms]) > np.mean(fl[helix_atoms])
+    )
+
+
+def flow_plot_metadata(record: dict, user: Path, bundle: dict) -> None:
+    """§9 "SMILES metadata inspection": the interactive figure's
+    per-point hovertext — one SMILES label per marker, the exact
+    surface the studio's plot inspection reads."""
+    import json as _json
+
+    from pharmaml.viz.interactive import Figure, figure_report
+
+    desc = bundle["desc"]
+    x_col, y_col = "MolWt", "qed"
+    fig = Figure()
+    fig.add_scatter(
+        desc[x_col], desc[y_col],
+        name="molecules", mode="markers", hovertext=list(SMILES),
+    )
+    payload = _json.loads(fig.to_json())
+    trace = payload["data"][0]
+    report_text = figure_report(fig)
+    record["plot_metadata"] = {
+        "n_points": len(trace["x"]),
+        "hovertext_first": trace["hovertext"][0],
+        "hovertext_len": len(trace["hovertext"]),
+        "report_chars": len(report_text),
+    }
+    assert trace["hovertext"] == list(SMILES) and len(report_text) > 50
+
+
 FLOWS: tuple[tuple[str, Callable[[dict, Path, dict], None]], ...] = (
     ("environment", flow_environment),
     ("qt_offscreen", flow_qt_offscreen),
@@ -392,10 +660,19 @@ FLOWS: tuple[tuple[str, Callable[[dict, Path, dict], None]], ...] = (
     ("descriptors", flow_descriptors),
     ("fingerprints", flow_fingerprints),
     ("ml_train_predict", flow_ml_train_predict),
+    ("deep_learning", flow_deep_learning),
+    ("semi_supervised", flow_semi_supervised),
+    ("explainability", flow_explainability),
+    ("uncertainty", flow_uncertainty),
     ("plot_export", flow_plot_export),
     ("table_export", flow_table_export),
     ("model_save_reload", flow_model_save_reload),
     ("applicability_domain", flow_applicability_domain),
+    ("generative", flow_generative),
+    ("docking_ligand_prep", flow_docking_ligand_prep),
+    ("pkpd_ode", flow_pkpd_ode),
+    ("md_analysis", flow_md_analysis),
+    ("plot_metadata", flow_plot_metadata),
     ("bundled_engines", flow_bundled_engines),
 )
 
