@@ -1,9 +1,65 @@
-## [Unreleased] — part10 continuation (r275-cont: the datasets/ml/artifacts row)
+## [1.2.220] — 2026-11-17 — round 276 (part10 continuation: the dl / semi-supervised / generative row; the r275-cont datasets/ml/artifacts row rides the same close)
 
-- **The first queued campaign row after the v1.2.219 close — delivered
-  inside the same 71st session and pushed on top of it (the release
-  numbering stays with round closes; the next round ships this as
-  part of its zip).** Three new route groups + the session stores, all
+- **The second queued campaign row after the v1.2.219 close, and the
+  one that puts the §9.3 training-progress vocabulary on REAL
+  telemetry.** Three new route groups + the generative prior store,
+  all over the REAL backend, 29 new tests
+  (`tests/api/test_dl_semi_generative.py`, the api suite now 118
+  green — 42 + 47 + 29):
+- **`src/pharmaml/api/routes/dl.py`** — `GET /api/v1/dl/networks`
+  (the four tabular torch families of `ml/neural.py`, defaults read
+  live off the class signatures — one source of truth, never
+  re-declared) and `POST /api/v1/dl/train` (sync + job): the
+  estimator's OWN `fit(X, y, on_epoch=...)` hook drives per-epoch
+  `training.progress` (progress %, `epoch k/N` stage, the job
+  record's own counter) and `training.metrics` (train/val losses,
+  best val, staleness) onto the session bus — replay-verified with
+  real epoch counters AND streamed live over the WebSocket in the
+  suite. A DL-trained model registers in the shared session model
+  store and predicts through the single `/api/v1/ml/predict` path
+  (one prediction path, never two); unknown hyperparameters,
+  task mismatches and unknown datasets answer 422/404 honestly.
+- **`src/pharmaml/api/routes/semi_supervised.py`** —
+  `POST /api/v1/semi-supervised/train` (the REAL
+  `train_semi_supervised` over a registered dataset: the unlabeled
+  pool arrives marker-native from the target column or as a seeded
+  `mask_fraction` carve-out; `base_estimator` resolves through the
+  registry factory and the backend itself demands `predict_proba`;
+  the fitted model registers for the single prediction path) and
+  `POST /api/v1/semi-supervised/evaluate` (the held-out
+  `evaluate_semi_supervised` comparison vs the fully-labeled
+  baseline with the honest `delta_vs_baseline`). The backend's own
+  method Literal is reused, never re-declared.
+- **`src/pharmaml/api/routes/generative.py`** — `GET
+  /api/v1/generative/objectives` (the nine scoring-oracle kinds of
+  `generative/scoring.py`), `POST /api/v1/generative/rnn/train`
+  (the REAL `SmilesRnn.train_prior` over inline SMILES or a
+  dataset's column — the prior registers in the new bounded
+  `PriorStore` with its REAL per-epoch loss curve, and the curve is
+  published as a `training.metrics` event on completion),
+  `POST /api/v1/generative/rnn/sample` (temperature / top_k / seed
+  / max_length passthrough; seeded sampling is deterministic —
+  verified byte-identical across calls), and `POST
+  /api/v1/generative/optimize` (the REAL `GeneticOptimizer` over a
+  validated objective spec — the nine kinds plus the weighted
+  `multi` nest with aligned-weights validation; per-generation
+  `iteration.update` events flow through the backend's OWN progress
+  callback, and when that callback answers `False` on a job cancel
+  the evolution stops at its own checkpoint and raises the
+  backend's native `JobCancelled` — translated into the JobManager's
+  state machine so the job lands CANCELLED, never FAILED; the
+  round's cancellation test pins exactly that path).
+- **`src/pharmaml/api/stores.py`** gains `PriorRecord` / `PriorStore`
+  (bounded at 16, in-memory, oldest-first eviction — session-scoped
+  exactly like the token), wired into `create_app()` as
+  `app.state.prior_store`.
+- The three routers register under `/api/v1` with the same
+  loopback+token guard as every other route; the OpenAPI schema (the
+  single NSwag source) grows with them automatically.
+- **Riding the same close: the r275-cont datasets/ml/artifacts row** —
+  delivered and pushed right after the v1.2.219 close in the same 71st
+  session; it ships in this archive. Three new route groups + the
+  session stores, all
   over the REAL backend, 47 new tests (`tests/api/test_datasets_ml_artifacts.py`,
   the api suite now 89 green): `src/pharmaml/api/stores.py` (session-scoped
   Dataset/Model/Artifact stores — in-memory like the token, bounded,

@@ -30,6 +30,7 @@ __all__ = [
     "MAX_ARTIFACTS",
     "MAX_ARTIFACT_TOTAL_BYTES",
     "MAX_DATASETS",
+    "MAX_PRIORS",
     "MAX_TRAINED_MODELS",
     "MAX_UPLOAD_BYTES",
     "ArtifactRecord",
@@ -37,6 +38,8 @@ __all__ = [
     "DatasetRecord",
     "DatasetStore",
     "ModelStore",
+    "PriorRecord",
+    "PriorStore",
     "TrainedModelRecord",
     "json_safe",
 ]
@@ -47,6 +50,7 @@ MAX_TRAINED_MODELS = 16
 MAX_ARTIFACTS = 64
 MAX_ARTIFACT_TOTAL_BYTES = 256 * 1024 * 1024  # 256 MiB of live artifacts
 MAX_UPLOAD_BYTES = 64 * 1024 * 1024  # 64 MiB per dataset upload
+MAX_PRIORS = 16  # trained generative priors (SmilesRnn instances)
 
 
 def _now_iso() -> str:
@@ -267,6 +271,74 @@ class ModelStore:
 
     def evict(self, model_id: str) -> bool:
         return self._items.pop(model_id, None) is not None
+
+
+class PriorRecord:
+    """One trained generative prior (a fitted ``SmilesRnn``).
+
+    The model object stays in memory only (never JSON'd, like the
+    trained estimators); the view carries the training telemetry so
+    the WinUI page can plot the loss curve without the weights.
+    """
+
+    def __init__(
+        self,
+        prior_id: str,
+        model: Any,
+        name: str,
+        params: dict,
+        n_train_smiles: int,
+        losses: list[float],
+        corpus_source: str,
+    ) -> None:
+        self.prior_id = prior_id
+        self.model = model  # the fitted SmilesRnn (never JSON'd)
+        self.name = name
+        self.params = dict(params or {})
+        self.n_train_smiles = int(n_train_smiles)
+        self.losses = [float(x) for x in (losses or [])]
+        self.corpus_source = corpus_source
+        self.created_at = _now_iso()
+
+    def view(self) -> dict:
+        return {
+            "prior_id": self.prior_id,
+            "name": self.name,
+            "kind": "smiles_rnn",
+            "params": json_safe(self.params),
+            "n_train_smiles": self.n_train_smiles,
+            "n_epochs": len(self.losses),
+            "final_loss": self.losses[-1] if self.losses else None,
+            "losses": json_safe(self.losses),
+            "corpus_source": self.corpus_source,
+            "created_at": self.created_at,
+            "sample_url": "/api/v1/generative/rnn/sample",
+        }
+
+
+class PriorStore:
+    """Bounded registry of the session's trained generative priors."""
+
+    def __init__(self, max_items: int = MAX_PRIORS) -> None:
+        self._max_items = max_items
+        self._items: dict[str, PriorRecord] = {}
+
+    def register(self, record: PriorRecord) -> PriorRecord:
+        self._items[record.prior_id] = record
+        while len(self._items) > self._max_items:
+            oldest = next(iter(self._items))
+            del self._items[oldest]
+        return record
+
+    def get(self, prior_id: str) -> PriorRecord | None:
+        return self._items.get(prior_id)
+
+    def list(self) -> list[dict]:
+        views = [r.view() for r in self._items.values()]
+        return sorted(views, key=lambda v: v["created_at"])
+
+    def evict(self, prior_id: str) -> bool:
+        return self._items.pop(prior_id, None) is not None
 
 
 class ArtifactRecord:

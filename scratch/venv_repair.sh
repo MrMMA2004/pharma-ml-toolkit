@@ -72,6 +72,35 @@ $P install fastapi==0.128.0 uvicorn==0.44.0 pydantic==2.12.5 \
 #     on the import; the pin keeps it across future rebuilds).
 $P install pyinstaller==6.22.3 2>&1 | tail -1
 
+# 6e. the rdkit-stub syntax patch (r276: the rdkit 2026.9.1 wheel bundles
+#     rdkit-stubs/Chem/rdRGroupDecomposition.pyi with two enum members
+#     literally named None — '<target>: ClassVar[...]' with target None is
+#     illegal syntax and mypy died at the stub before checking OUR code.
+#     The two lines become comments: a member named None is unreachable
+#     through attribute syntax anyway, so no real type surface is lost.
+#     Precedent: the round-206 EGL wheel patch (6b) — the installed
+#     wheel artifacts are repairable surface, like libEGL was.)
+/home/z/.venv/bin/python - <<'STUBPATCH'
+p = '/home/z/.venv/lib/python3.12/site-packages/rdkit-stubs/Chem/rdRGroupDecomposition.pyi'
+try:
+    src = open(p).read()
+    fixed = src.replace(
+        "    None: typing.ClassVar[RGroupCoreAlignment]\n",
+        "    # None member (enum name None is not expressible in stub syntax)\n",
+    ).replace(
+        "None: RGroupCoreAlignment\n",
+        "# None member (enum name None is not expressible in stub syntax)\n",
+    )
+    if fixed != src:
+        open(p, 'w').write(fixed)
+    import ast
+    ast.parse(open(p).read())
+    print('rdkit-stub patch applied + parses OK')
+except FileNotFoundError:
+    echo_note = 'rdkit-stubs absent — nothing to patch'
+    print(echo_note)
+STUBPATCH
+
 # 7. the editable toolkit itself (its version tracks the checkout)
 cd /home/z/my-project/pharma-ml-toolkit && $P install --no-deps -e . 2>&1 | tail -1
 

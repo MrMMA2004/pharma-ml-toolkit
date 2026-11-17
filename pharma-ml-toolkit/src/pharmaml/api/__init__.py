@@ -12,12 +12,14 @@ WinUI host will launch it:
   token), with the OpenAPI schema served locally so the C# client
   can be generated from it (NSwag) — one DTO definition, never two;
 * versioned routes under ``/api/v1`` (health, capabilities, jobs,
-  events, chemistry — the opening round; this row adds datasets,
-  ml, artifacts + the file upload/download contracts; the
-  DL/generative/docking/pkpd/md/viz/AD groups follow in the
-  campaign's next rounds);
-* session-scoped stores (datasets / trained models / artifacts) —
-  in-memory only, exactly like the token, fresh per app;
+  events, chemistry — the opening round; the second row added
+  datasets, ml, artifacts + the file upload/download contracts; this
+  row adds dl, semi-supervised, generative + the training-progress
+  events; the docking/pkpd/md/viz/AD groups follow in the campaign's
+  next rounds);
+* session-scoped stores (datasets / trained models / generative
+  priors / artifacts) — in-memory only, exactly like the token,
+  fresh per app;
 * the backend's typed client-input errors (``DataValidationError``/
   ``ModelError``) map to 422 responses so a bad target column or an
   unknown registry model is answered honestly instead of a 500.
@@ -38,7 +40,12 @@ from .events import EventBus
 from .jobs import JobManager
 from .routes import api_router, ws_router
 from .security import SessionSecurity, reset_session_security
-from .stores import ArtifactStore, DatasetStore, ModelStore
+from .stores import (
+    ArtifactStore,
+    DatasetStore,
+    ModelStore,
+    PriorStore,
+)
 
 __all__ = [
     "ArtifactStore",
@@ -46,6 +53,7 @@ __all__ = [
     "EventBus",
     "JobManager",
     "ModelStore",
+    "PriorStore",
     "SessionSecurity",
     "create_app",
 ]
@@ -71,6 +79,7 @@ def create_app(token: str | None = None) -> FastAPI:
     app.state.dataset_store = DatasetStore()
     app.state.model_store = ModelStore()
     app.state.artifact_store = ArtifactStore()
+    app.state.prior_store = PriorStore()
 
     def guard(request: Request) -> None:
         secure.guard_request(request)

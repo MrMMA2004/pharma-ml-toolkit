@@ -11,7 +11,19 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from . import artifacts, capabilities, chemistry, datasets, events, health, jobs, ml
+from . import (
+    artifacts,
+    capabilities,
+    chemistry,
+    datasets,
+    dl,
+    events,
+    generative,
+    health,
+    jobs,
+    ml,
+    semi_supervised,
+)
 
 __all__ = ["api_router", "ws_router"]
 
@@ -24,6 +36,9 @@ api_router.include_router(chemistry.router)
 api_router.include_router(datasets.router)
 api_router.include_router(ml.router)
 api_router.include_router(artifacts.router)
+api_router.include_router(dl.router)
+api_router.include_router(semi_supervised.router)
+api_router.include_router(generative.router)
 
 ws_router = APIRouter(prefix="/api/v1")
 ws_router.include_router(events.router)

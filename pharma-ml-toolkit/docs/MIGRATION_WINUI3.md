@@ -79,7 +79,10 @@ domain; the row-level matrix regenerates from the registry below.
 | Data profiling / stratified splits | `data_profiling.py::profile_frame`, `data.py::split_table` | live | real | `POST /api/v1/datasets/{id}/profile`, `POST /api/v1/datasets/{id}/split` (sync+job) | BLOCKED | TestDatasetProfile + TestDatasetSplit (6) | PASS / BLOCKED |
 | ML catalog / training / prediction | `ml/models.py` (registry), `ml/training.py::train_model` | live | real | `GET /api/v1/ml/models`, `POST /api/v1/ml/train` (sync+job, registry pre-validated, `n_jobs` passthrough incl. `-1`), `POST /api/v1/ml/predict` (+probabilities), `GET /api/v1/ml/trained` | BLOCKED | TestMLCatalog + TestMLTrain + TestMLPredict (14) | PASS / BLOCKED |
 | Artifacts + file transfer contracts | `viz/export.py` (the §17 four-format stack), `utils/io.py::write_table`, `ml/persistence.py::save_model` | live | real | `POST /api/v1/artifacts/{figure,table,model}`, `GET /api/v1/artifacts`, `GET/HEAD /artifacts/{id}/download` (exact Content-Length, sha256 strong ETag, magic bytes verified), `DELETE` | BLOCKED | TestArtifactFigure + TestArtifactTable + TestArtifactModel + TestArtifactLifecycle (18) | PASS / BLOCKED |
-| DL / semi-supervised / generative / docking / PK/PD / MD / viz / AD route groups | real backend modules (audited, tested) | live | real | **queued next rounds** (§3 campaign) | BLOCKED | existing suites carry the backend | PARTIAL (API pending) |
+| DL training (torch MLP families) | `ml/neural.py` (DeepMLP/ResidualMLP) | live | real | `GET /api/v1/dl/networks`, `POST /api/v1/dl/train` (sync+job, per-epoch `training.progress`/`training.metrics` from the estimator's own `on_epoch` hook) | BLOCKED | TestDLNetworks (2) + TestDLTrain (6) | PASS / BLOCKED |
+| Semi-supervised labeling | `ml/semi_supervised.py` (train/evaluate) | live | real | `POST /api/v1/semi-supervised/train` (marker-native or seeded `mask_fraction`), `POST /api/v1/semi-supervised/evaluate` | BLOCKED | TestSemiSupervisedRoutes (6) | PASS / BLOCKED |
+| Generative priors + evolution | `generative/rnn.py` (SmilesRnn), `generative/genetic.py`, `generative/scoring.py` | live | real | `POST /api/v1/generative/rnn/{train,sample}`, `POST /api/v1/generative/optimize` (per-generation `iteration.update`, native cancel), `GET /generative/objectives` | BLOCKED | TestGenerativeObjectives (4) + TestGenerativePrior (6) + TestGenerativeOptimize (5) | PASS / BLOCKED |
+| Docking / PK-PD / MD / viz / AD route groups | real backend modules (audited, tested) | live | real | **queued next rounds** (§3 campaign) | BLOCKED | existing suites carry the backend | PARTIAL (API pending) |
 | PySide6 retirement | `ui/` | production | n/a | n/a | n/a | rule #9 requires parity first | **BLOCKED** (stays) |
 
 ### 1.3 The machine-readable capability inventory (Phase One §4.2)
@@ -93,11 +96,12 @@ re-declaration — the prompt's §9.2 rule applied to capability data).
 
 ---
 
-## 2. Phase Six/Seven/Nine — the implementation (r275 + its continuation)
+## 2. Phase Six/Seven/Nine — the implementation (r275 + its continuations)
 
 All in `src/pharmaml/api/` (new package), tested by
-`tests/api/test_backend_service.py` (42 tests) and
-`tests/api/test_datasets_ml_artifacts.py` (47 tests) — 89 green:
+`tests/api/test_backend_service.py` (42 tests),
+`tests/api/test_datasets_ml_artifacts.py` (47 tests) and
+`tests/api/test_dl_semi_generative.py` (29 tests) — 118 green:
 
 | Module | Implements | Test classes |
 |---|---|---|
@@ -115,6 +119,11 @@ All in `src/pharmaml/api/` (new package), tested by
 | `routes/ml.py` | `list_models` catalog projection, `train_model` over the REAL registry (sync + job, registry key pre-validated in both modes so an unknown model is an honest 422, `n_jobs` verbatim incl. `-1`), predictions with optional probabilities (pipeline-aware class order) | TestMLCatalog (3), TestMLTrain (5), TestMLPredict (6) |
 | `routes/artifacts.py` | the **download contract** — §17 four-format figure export (PNG/SVG/TIFF/JPEG, magic-byte verified), CSV/TSV/XLSX table export, `save_model` joblib bundles; exact Content-Length, Content-Type, Content-Disposition, strong ETag = sha256, X-Artifact-SHA256, HEAD support | TestArtifactFigure (7), TestArtifactTable (3), TestArtifactModel (2), TestArtifactLifecycle (3) |
 
+| `routes/dl.py` | the torch-family catalog (defaults read off the class signatures) + training with per-epoch telemetry: the estimator's own `on_epoch` hook publishes `training.progress` + `training.metrics` (job record tracks the epochs; sync mode publishes on the bus without a job); models register in the shared model store | TestDLNetworks (2), TestDLTrain (6 — incl. the WS live-stream of training events) |
+| `routes/semi_supervised.py` | `train_semi_supervised` (marker-native or seeded mask) + `evaluate_semi_supervised` (held-out vs baseline); the backend's method Literal reused; fitted models predict through the single path | TestSemiSupervisedRoutes (6) |
+| `routes/generative.py` | the nine-kind scoring-oracle catalog + builder (incl. the weighted multi nest), `SmilesRnn.train_prior` (inline or dataset column) into the `PriorStore` with the REAL loss curve, seeded deterministic sampling, `GeneticOptimizer` with per-generation `iteration.update` events and the native-cancel translation (backend `JobCancelled` → job CANCELLED, never FAILED) | TestGenerativeObjectives (4), TestGenerativePrior (6), TestGenerativeOptimize (5) |
+| `stores.py` (prior row) | `PriorRecord` / `PriorStore` — bounded at 16, in-memory, oldest-first eviction, loss curve in the view | exercised through every generative route above |
+
 The OpenAPI contract is served at `/api/openapi.json` (docs/redoc
 DISABLED per §9.4) — the C# client is generated from it (NSwag)
 when a Windows host exists; one DTO definition, never two.
@@ -127,8 +136,8 @@ when a Windows host exists; one DTO definition, never two.
 |---|---|---|
 | 275 | Phase One audit + api foundation (security/bus/jobs/WS/health/capabilities/chemistry) + handshake | done (v1.2.219) |
 | 275-cont | `/api/v1/datasets`, `/api/v1/ml`, `/api/v1/artifacts` + the file upload/download contracts — 47 new tests, pushed right after the v1.2.219 close (the same 71st session's continuation) | done here |
-| next | `/api/v1/dl`, `/api/v1/semi-supervised`, `/api/v1/generative` + training-progress events | queued |
-| then | `/api/v1/docking`, `/api/v1/pkpd`, `/api/v1/md`, `/api/v1/visualization`, `/api/v1/applicability-domain` | queued |
+| 276 | `/api/v1/dl`, `/api/v1/semi-supervised`, `/api/v1/generative` + the training-progress events on REAL telemetry (per-epoch `on_epoch`, per-generation GA callback, native cancel translation) — 29 new tests | done here |
+| next | `/api/v1/docking`, `/api/v1/pkpd`, `/api/v1/md`, `/api/v1/visualization`, `/api/v1/applicability-domain` | queued |
 | then | Phase Eight large-file transfer + n_jobs passthrough (incl. `-1`) | queued (the upload/download contracts and the `-1` passthrough already landed with 275-cont) |
 | then | the C# solution **specification** (XAML/MVVM contract docs, ViewModel/Service skeletons as source artifacts — NOT claimed as built) | queued |
 | Windows host | build the WinUI frontend, the NSwag client, the packaged backend, the installer, clean-machine §14-equivalent, PySide6 retirement | **BLOCKED** (unchanged boundary) |
