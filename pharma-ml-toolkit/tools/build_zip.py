@@ -37,6 +37,10 @@ EXCLUDE_DIRS = {
     ".git", "__pycache__", ".pytest_cache", ".ruff_cache",
     ".mypy_cache", ".tox", ".idea", ".vscode", ".cache",
     "node_modules", "catboost_info", "artifacts", ".venv", "venv", "env",
+    # (part11 Phase Three) the frontend build output: the Tauri host
+    # rebuilds dist/ from the committed sources on the Windows side;
+    # only the sources + lockfile ship.
+    "dist",
     # (round-260 §4.3) the research-history homes: provenance, not
     # product.  scratch/ keeps the probe archive (475 tracked files,
     # the one-off exploratory drivers), download/ the E2E evidence

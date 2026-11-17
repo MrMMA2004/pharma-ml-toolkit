@@ -147,10 +147,10 @@ All behind the same session token + loopback guard as every route
 | Round | Scope | Status |
 |---|---|---|
 | 278 | Phase Eleven SQLite + file vault + `/api/v1/database` + durability/recovery (67 persistence/database tests across the two lanes, api suite 251 green) + §12.2 contract tooling (`contracts/openapi.json` + `tools/export_openapi.py` + the drift gate + the four colliding request-model renames for byte-stable exports) + this ledger (architecture replacement recorded, C# spec row cancelled) | done (v1.2.222) |
-| queued | Phase Three foundation: the `frontend/` Vite + React + TS workspace (strict tsconfig, Tailwind + shadcn/ui tokens, feature-oriented skeleton) with the horizontal nine-workspace navigation shell (§10.1 order: Introduction → Datasets → ML → DL → Generative AI → Docking → PK/PD → MD Analysis → Visualization; Introduction-only start page) | queued |
-| queued | §12.2 client half: openapi-typescript type generation wired to the committed `contracts/openapi.json` (the export + drift gate are done — see row 278) | queued |
-| queued | Phase Three services: typed REST/WS clients, job manager, dataset/artifact clients (§5.2 frontend application services); Introduction page content (§10.2) | queued |
-| queued | Datasets + ML workspace workflows on the real API (§11.1–11.2), then the remaining seven workspaces row by row | queued |
+| 279 | Phase Three foundation: the `frontend/` Vite + React + TS workspace (strict tsconfig, Tailwind v4 + the Mineral tokens, shadcn/ui primitives on the Radix heads, Motion for React) with the horizontal nine-workspace navigation shell (the exact §10.1 order; Introduction the §10.2 start page; the eight queued workspaces render honest shells) + the §12.2 client half (openapi-typescript generation wired to the committed contract — the 5,476-line `api.d.ts`, every schema covered) + the typed REST client (handshake-only endpoint/token) + the WS envelope mirror + 6 Python-side drift guards (`tests/test_frontend_foundation.py`); `tsc --noEmit` clean, the production build green (2,085 modules) | done (v1.2.223) |
+| queued | §12.2 client half: openapi-typescript type generation wired to the committed `contracts/openapi.json` (the export + drift gate are done — see row 278) | done in 279 |
+| queued | Phase Three services, part two: the WS client service (hello/replay/heartbeats/reconnection) + the job manager client + dataset/artifact clients on the generated types (§5.2) — the typed REST client + envelope mirror shipped in 279 | queued |
+| queued | Datasets workspace workflow on the real API (§11.1), then ML (§11.2), then the remaining seven workspaces row by row | queued |
 | Windows host | Tauri 2 host + sidecar supervision (§14.2), WebView2 packaging, EXE/MSI installer, clean-machine verification, PySide6 retirement | **BLOCKED** (unchanged boundary) |
 
 The queued rows are honest plans, not claims. The frontend rows are

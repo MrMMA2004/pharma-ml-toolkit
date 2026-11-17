@@ -1,3 +1,46 @@
+## [1.2.223] — 2026-11-18 — round 279 (part11 Phase Three: the frontend foundation row)
+
+- **The offline React + TypeScript SPA exists** (`frontend/`): the
+  part11 §3 mandated stack pinned — TypeScript (strict +
+  `noUncheckedIndexedAccess`), React 19, Vite 7, Tailwind CSS v4,
+  shadcn/ui primitives on the Radix heads (button / card / tabs in
+  the shadcn idiom with the class-merge pair), Motion for React,
+  Plotly.js + Three.js pinned for the visualization rows. The
+  Mineral Design System tokens carry over from the shipped console
+  (light/dark, chart palette, reduced-motion respect).
+- **The §10.1 shell is real**: exactly nine primary workspaces in the
+  exact left-to-right order (Introduction, Datasets, Machine
+  Learning, Deep Learning, Generative AI, Molecular Docking, PK/PD,
+  Molecular Dynamics Analysis, Visualization) with a visually clear
+  active state (the Motion underline), keyboard-operable buttons,
+  horizontal-overflow behavior for small windows, one page instance
+  per workspace, and **Introduction as the initial page** — the
+  §10.2 start page explains the studio, the scientific areas, the
+  workflow and the offline local-backend architecture, and is NOT a
+  nine-card dashboard. The eight queued workspaces render an honest
+  shell (route + identity + §11 workflow summary + the queued-row
+  badge) — no fake controls, no fabricated parity.
+- **§12.2 wired end-to-end**: `npm run generate:types` regenerates
+  `src/types/api.d.ts` (5,476 lines) from `contracts/openapi.json`;
+  the typed REST client (`services/api/client.ts`) takes its base
+  URL + session token ONLY from the startup handshake (memory-only,
+  `X-Session-Token` header, typed `ApiError`), and the WS envelope
+  (`services/websocket/events.ts`) mirrors the backend's 20-event
+  vocabulary field-for-field.
+- **Offline-only production** (§4.1): the CSP in `index.html` allows
+  no remote script/style sources and no external navigation; the
+  vite config builds to local `dist/` (excluded from the archive —
+  the Tauri host rebuilds it), with plotly/three/motion as separate
+  lazy chunks; the dev server is dev-only on :5174.
+- **The Python-side drift guards** (`tests/test_frontend_foundation.py`,
+  6 tests): the mandated stack pins, the Radix foundation, the exact
+  workspace order + Introduction-initial, the strict tsconfig, the
+  generated types covering EVERY contract schema (a backend schema
+  without re-export turns the suite red), and the offline-only CSP +
+  no-remote-URL config. Typecheck clean (`tsc --noEmit`), production
+  build green (2,085 modules; the shell bundle 290.9 kB / 91.5 kB
+  gzip).
+
 ## [1.2.222] — 2026-11-18 — round 278 (part11 begins: the SQLite persistence + database surface row)
 
 - **The architecture campaign continues under part11** ("Complete

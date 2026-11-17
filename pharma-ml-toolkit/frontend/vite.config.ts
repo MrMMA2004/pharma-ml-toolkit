@@ -1,0 +1,37 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { fileURLToPath } from "node:url";
+
+// part11 §9.2: the Vite dev server is a DEVELOPMENT-ONLY convenience.
+// The production frontend is the static `dist/` build loaded locally by
+// the Tauri 2 host (frontendDist) — no dev server, no remote URL.
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  base: "./",
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
+  build: {
+    outDir: "dist",
+    // the offline bundle must be self-contained: no CDN fallbacks
+    assetsInlineLimit: 0,
+    rollupOptions: {
+      output: {
+        // plotly and three are the mandated scientific visualization
+        // stacks — kept as separate lazy chunks so the shell boots fast
+        manualChunks: {
+          plotly: ["plotly.js-dist-min"],
+          three: ["three"],
+          motion: ["motion"],
+        },
+      },
+    },
+  },
+  server: {
+    port: 5174,
+    strictPort: true,
+  },
+});
