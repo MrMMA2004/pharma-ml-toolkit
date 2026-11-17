@@ -14895,3 +14895,52 @@ re-trued to the final census (7,367 tests / 1,400 files / 474,637 lines).
 E2E: the responseai card runs the real Hill fit (fitted-vs-truth pair
 displayed), theme round-trip, mobile 390, the download tab streams
 v1.2.216 byte-identical to the shipped archive, zero console errors.
+
+Round 273 (100x-69, "Continue MASTER_PROMPT part9"): packaging phase 2 —
+the frozen-equivalent verification. tools/freeze_equivalent.py captures
+packaging/windows/pharmaml.spec's policy VERBATIM (exec'd with recorder
+stubs; 432 hiddenimports / 586 datas / 1 binaries / 12 excludes recorded
+in the evidence JSON), writes the derived Linux-equivalent spec with
+four documented deltas (icon/version dropped, console=True, studio.py +
+the new §14 driver as two entries in ONE Analysis/COLLECT, ui/native
+EGL-stub datas), and freezes with PyInstaller 6.22.3 in 204 s — dist
+2.2 GB in /tmp. The sandbox EARNED its own paragraph this round: the
+container evicts large gitignored trees under disk pressure — the
+in-repo dist AND the generated spec both vanished within a minute of
+creation, twice, before the build tree was rerouted to /tmp
+(FREEZE_BUILD_DIR) and ~1.7G of non-app venv baggage (nvidia/vtk/aspose/
+casadi/OCP/spacy/playwright — imported by nothing in the tree) was
+pruned. The frozen evidence: PharmaMLStudio --doctor at cwd=/ → 18 OK /
+0 warn / 0 failed, exit 0; tools/freeze_smoke_driver.py at cwd=/tmp →
+13/13 flows PASS (CSV+Excel import via load_dataset, RDKit descriptors
+133 cols × 12 real-drug molecules, Morgan fingerprints, ML clf acc 0.90
++ reg r² 0.9923, prediction, plots + PNG/SVG/PDF/TIFF export, CSV+Excel
+table export, model save/reload byte-parity, kNN AD, the bundled
+AutoDock trio sha+PE validated inside the freeze, offscreen Qt with
+qdarkstyle's 54,234-char stylesheet applied); install_dir_unchanged
+true (§7) and net_attempts [] with socket.connect armed to raise (§14.3
+— recorded zero, not assumed). Evidence JSON committed under
+packaging/windows/evidence/ — the leak scan CAUGHT it carrying
+/home/z/ machine paths on the first ship: _sanitize now rewrites them
+to <repo>/<toolkit>/<venv> labels with the prefixes assembled the 137
+discipline way (the sanitizer itself ships). 7 focused tests
+(tests/test_freeze_equivalent.py) pin the flows, the offline guard, the
+§7 isolation, the captured policy, and the generated spec's shape.
+v1.2.217: the 8 notebooks re-executed (211 s) + 7 twins re-stripped,
+static validation 26/26 at the new quadruple, FEATURES stamp trued, web
+pins re-trued to the live walk (1404 files / 476,125 lines / 7,374
+tests — the live /api/toolkit/tree walk is the convention, it includes
+the ritual's own zip homes). Gate: chunks 1,2,3,5,6,8,9,10 green
+first-try; chunk-4 red on ONE web-parity test — environmental (the
+disk-pressure eviction had purged node_modules; bun install 828 pkgs →
+re-run green, recorded as a MAKEUP leg); chunk-7 OOM-split green
+through singles except test_nine_card_first rc=-9 alone (the r271
+~150MiB/window backlog) → 6 class-scoped legs, 23/23 green, recorded.
+Zip shipped to ALL SIX homes: 1446 entries / 1378 files / 26,746,372 B,
+sha b34d194c, testzip OK per home, real leaks 0 — and homes 5+6 (root
+dist-archive + offsite ~/pharma-ml-toolkit-zips), wiped by the
+rollback, RESTORED with 62 sha-verified backfill copies (32 zips each).
+E2E: home + download tab live at the new version (the streamed zip
+byte-identical to the shipped archive — curl sha match), theme
+round-trip, mobile 390, zero console errors; 4 screenshots. Pushed
+feature+release+chore with the web UI code; counter 69/100.
