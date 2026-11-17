@@ -22,6 +22,9 @@ PANEL = [
     REPO / "node_modules" / "next" / "package.json",
     REPO / "node_modules" / "zustand" / "package.json",
     REPO / "node_modules" / "react" / "package.json",
+    REPO / "node_modules" / "@swc" / "helpers" / "package.json",
+    REPO / "node_modules" / "typescript" / "package.json",
+    REPO / "node_modules" / "tailwindcss" / "package.json",
 ]
 PIDFILE = Path("/tmp/nm_reader.pid")
 
