@@ -134,3 +134,72 @@ locations. Scientific: [ ] CSV [ ] Excel [ ] descriptors
 fail gracefully. Upgrade/uninstall: [ ] upgrade preserves data
 [ ] uninstall preserves data [ ] explicit data removal question only
 removes what the user chose.
+
+---
+
+## Phase 2 (round 273, v1.2.217): the Linux frozen-equivalent verification
+
+part9 says "Do not stop after creating the packaging scripts. Build the
+installer, test it, fix packaging failures, rebuild it" — and the EXE
+itself remains BLOCKED (no Windows host, no Wine, no cross-compile;
+see §10 above). What the Linux build host CAN honestly produce is the
+next tier of evidence: **freeze the actual application with the actual
+Windows spec's policy and run part9's flows inside that frozen bundle.**
+That verification shipped this round:
+
+* `tools/freeze_equivalent.py` — captures
+  `packaging/windows/pharmaml.spec`'s policy VERBATIM (432
+  hiddenimports, 586 datas, 1 binaries, 12 excludes — recorded in the
+  evidence JSON), writes the derived Linux-equivalent spec with four
+  documented deltas (icon/version resources dropped; `console=True`
+  for evidence stdout; `studio.py` + `tools/freeze_smoke_driver.py`
+  as two entries in ONE Analysis/COLLECT so the §14 driver rides the
+  identical dependency collection; `ui/native` datas — the EGL no-op
+  stub the app's own `ui.headless` preloads on libEGL-less Linux
+  hosts), and runs PyInstaller 6.22.3: **204 s, rc=0**, dist 2.2 GB.
+* The frozen bundle's layout honors the spec's own datas contract:
+  engines at `_internal/pharmaml/engines` (the trio found and
+  SHA-256 + PE-machine validated by the app's OWN
+  `pharmaml.docking.workflow` discovery), fonts at `_internal/fonts`
+  (registered by `ui.font_loader`'s `__file__` math), all Qt
+  platform plugins collected.
+* `PharmaMLStudio --doctor` FROZEN (cwd=`/`, part9 §4's no-CWD rule):
+  **18 OK / 0 warn / 0 failed, exit 0** — the app's own environment
+  self-check through the bootloader's embedded interpreter.
+* `FreezeSmokeDriver` (the §14.2/§14.3/§7 driver, cwd=`/tmp`): **13/13
+  flows PASS** — CSV import, Excel import, RDKit descriptors (133
+  columns × 12 real-drug molecules), Morgan fingerprints, ML
+  classification (accuracy 0.90) + regression (r² 0.9923), prediction,
+  plots + PNG/SVG/PDF/TIFF figure export, CSV/Excel table export,
+  model save/reload (byte-parity predictions), kNN applicability
+  domain, the bundled engines' validation, and the offscreen Qt stack
+  (qdarkstyle 54,234-char stylesheet + qt-material applied).
+  `install_dir_unchanged: true` (§7 — the frozen tree stayed
+  byte-identical while every output byte landed in the user dir) and
+  `net_attempts: []` (§14.3 — `socket.connect` armed to raise on ANY
+  outbound attempt before the science imports; a green run is a
+  recorded zero-attempt proof, not an assumption).
+* Evidence: `packaging/windows/evidence/freeze-equivalent-r273.json`
+  (machine-readable, committed) — the build log itself stays in the
+  ephemeral build tree; the durable record is the tracked JSON.
+* Pinned at gate time by `tests/test_freeze_equivalent.py` (7 focused
+  tests): the full unfrozen flow run, the offline guard's blocking
+  semantics, the §7 user-dir isolation contract, the captured
+  Windows-spec policy (the freeze traps — mordred's dynamic registry,
+  shap/numba/llvmlite, matplotlib export backends, PySide6.QtSvg —
+  plus the pytest/mypy/ruff/tkinter excludes), and the generated
+  spec's two-entries-one-COLLECT shape.
+
+What this UPGRADES from phase 1: §13 (startup reliability — the
+frozen app imports and runs the dynamic-import surface, not just the
+source tree), §4 (resource paths load through the app's own
+`__file__` math in a real frozen layout), §3.3 (the scientific stack
+computes inside the freeze — real train/predict/export parity), and
+§14.2/§14.3 gain a Linux-frozen-equivalent PASS tier. What stays
+BLOCKED, unchanged: the Windows EXE artifact itself, the Inno install
+sequence, and the §14 clean-machine recording sheet — those require a
+Windows host and nothing here claims otherwise. The sandbox-eviction
+note: the build tree deliberately lives under `/tmp`
+(`FREEZE_BUILD_DIR` override) because this container evicts large
+gitignored trees under disk pressure — observed twice this round
+before the reroute; the tracked evidence JSON is the deliverable.

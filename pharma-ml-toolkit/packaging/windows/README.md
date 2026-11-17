@@ -14,6 +14,9 @@ evaluation (onedir keeps the scientific bundle inspectable and startup fast;
 | `build_windows.ps1` | The one-command release pipeline (§16): version check → interpreter check → clean venv → pinned stack → full test gate → freeze → validation → license inventory → ISCC → checksums/manifest/report; every step fails loudly |
 | `build_windows.bat` | Thin cmd wrapper (`--dev` skips the test gate; never for releases) |
 | `packaging_validation.py` | `--static` (any OS: spec/asset/config validation — the Linux-side release evidence) and `--dist` (Windows post-build: qwindows.dll, imageformats, fonts, engines' pinned SHAs, no dev-package leakage, no secrets, `--doctor` smoke, the top-20 size report) |
+| `tools/freeze_equivalent.py` (repo root) | The phase-2 Linux frozen-equivalent builder: captures `pharmaml.spec`'s policy verbatim and freezes the app on a Linux host — the honest tier between `--static` and the Windows clean-machine run (see `BUILD_REPORT.md` phase 2) |
+| `tools/freeze_smoke_driver.py` (repo root) | The §14.2/§14.3/§7 evidence driver that runs INSIDE the frozen bundle (and unfrozen, pinned by `tests/test_freeze_equivalent.py`) |
+| `evidence/` | The committed, machine-readable verification records (e.g. `freeze-equivalent-r273.json`) |
 | `installer-requirements.txt` | The FULL pinned stack for the offline distribution (every optional feature group included, per §12's no-silent-omission rule) |
 | `version_info.txt` | The exe's version resource (honest publisher: "PharmaML contributors"; no fake signatures) |
 | `assets/pharmaml.ico` | The application/installer icon (multi-size 256→16) |

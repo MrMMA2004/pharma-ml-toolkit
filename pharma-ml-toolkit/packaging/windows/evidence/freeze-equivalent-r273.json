@@ -1,0 +1,262 @@
+{
+  "build": {
+    "app_executable": "/tmp/freeze-equivalent/dist/freeze-equivalent/PharmaMLStudio",
+    "engines": [
+      "README.md",
+      "autodock4.exe",
+      "autogrid4.exe",
+      "vina.exe"
+    ],
+    "fonts": [
+      "IBMPlexSans-Bold.ttf",
+      "IBMPlexSans-Medium.ttf",
+      "IBMPlexSans-Regular.ttf",
+      "IBMPlexSans-SemiBold.ttf",
+      "JetBrainsMono-Regular.ttf"
+    ],
+    "log": "/tmp/freeze-equivalent/pyinstaller.log",
+    "ok": true,
+    "qt_plugins_platforms": [
+      "libqeglfs.so",
+      "libqlinuxfb.so",
+      "libqminimal.so",
+      "libqminimalegl.so",
+      "libqoffscreen.so",
+      "libqvkkhrdisplay.so",
+      "libqvnc.so",
+      "libqwayland-egl.so",
+      "libqwayland-generic.so",
+      "libqxcb.so"
+    ],
+    "rc": 0,
+    "seconds": 204,
+    "smoke_executable": "/tmp/freeze-equivalent/dist/freeze-equivalent/FreezeSmokeDriver",
+    "spec": "/tmp/freeze-equivalent/pharmaml_linux.spec"
+  },
+  "linux_deltas": [
+    "icon/version resources dropped (Windows-only)",
+    "console=True (evidence stdout)",
+    "two entries in one Analysis/COLLECT (studio.py + smoke driver)",
+    "ui/native EGL-stub datas row (Linux-class host fallback)"
+  ],
+  "policy": {
+    "binaries_count": 1,
+    "datas_count": 586,
+    "excludes": [
+      "pytest",
+      "_pytest",
+      "pytestqt",
+      "pytest_cov",
+      "mypy",
+      "ruff",
+      "tkinter",
+      "pip",
+      "setuptools",
+      "wheel",
+      "IPython",
+      "jupyter"
+    ],
+    "hiddenimports_count": 432,
+    "scripts": [
+      "<toolkit>/studio.py"
+    ]
+  },
+  "policy_captured_from": "<toolkit>/packaging/windows/pharmaml.spec",
+  "round": "r273",
+  "smoke": {
+    "doctor": {
+      "rc": 0,
+      "seconds": 2,
+      "tail": [
+        "qdarkstyle            OK     3.2.3 -- optional -- the alternative dark theme provider",
+        "========================================================================",
+        "18 OK / 0 warn / 0 failed -> exit 0",
+        "Verified dependency pins: requirements.txt (\"/tmp/freeze-equivalent/dist/freeze-equivalent/PharmaMLStudio\" -m pip install -r requirements.txt)",
+        "Re-run after fixing: \"/tmp/freeze-equivalent/dist/freeze-equivalent/PharmaMLStudio\" studio.py --doctor",
+        "========================================================================"
+      ]
+    },
+    "smoke": {
+      "rc": 0,
+      "seconds": 5,
+      "stderr_tail": [
+        "[04:07:40] DEPRECATION WARNING: please use MorganGenerator",
+        "[04:07:40] DEPRECATION WARNING: please use MorganGenerator",
+        "[04:07:40] DEPRECATION WARNING: please use MorganGenerator",
+        "[04:07:40] DEPRECATION WARNING: please use MorganGenerator",
+        "[04:07:40] DEPRECATION WARNING: please use MorganGenerator",
+        "[04:07:40] DEPRECATION WARNING: please use MorganGenerator",
+        "[04:07:40] DEPRECATION WARNING: please use MorganGenerator",
+        "[04:07:40] DEPRECATION WARNING: please use MorganGenerator",
+        "[04:07:40] DEPRECATION WARNING: please use MorganGenerator",
+        "[04:07:40] DEPRECATION WARNING: please use MorganGenerator"
+      ],
+      "stdout_tail": [
+        "FLOW environment PASS 1535ms ",
+        "FLOW qt_offscreen PASS 238ms ",
+        "FLOW fonts PASS 7ms ",
+        "FLOW import_csv PASS 295ms ",
+        "FLOW import_excel PASS 171ms ",
+        "FLOW descriptors PASS 126ms ",
+        "FLOW fingerprints PASS 2ms ",
+        "FLOW ml_train_predict PASS 946ms ",
+        "FLOW plot_export PASS 1246ms ",
+        "FLOW table_export PASS 5ms ",
+        "FLOW model_save_reload PASS 92ms ",
+        "FLOW applicability_domain PASS 2ms ",
+        "FLOW bundled_engines PASS 19ms ",
+        "FREEZE-SMOKE PASS 13/13 offline=yes verdict=/tmp/freeze-equivalent-user/smoke-user/freeze_smoke_verdict.json"
+      ],
+      "verdict": {
+        "applicability_domain": {
+          "distance_threshold": 2.996599454020631,
+          "test_knn_mean_rows": 20,
+          "train_knn_mean_rows": 76
+        },
+        "bundled_engines": {
+          "autodock4": "/tmp/freeze-equivalent/dist/freeze-equivalent/_internal/pharmaml/engines/autodock4.exe",
+          "autogrid4": "/tmp/freeze-equivalent/dist/freeze-equivalent/_internal/pharmaml/engines/autogrid4.exe",
+          "vina": "/tmp/freeze-equivalent/dist/freeze-equivalent/_internal/pharmaml/engines/vina.exe"
+        },
+        "descriptors": {
+          "columns": 133,
+          "rows": 12
+        },
+        "environment": {
+          "argv0": "/tmp/freeze-equivalent/dist/freeze-equivalent/FreezeSmokeDriver",
+          "cwd": "/tmp",
+          "frozen": true,
+          "meipass": "/tmp/freeze-equivalent/dist/freeze-equivalent/_internal",
+          "pharmaml": "1.2.216",
+          "python": "3.12.16",
+          "rdkit": "2026.09.1",
+          "torch": "2.14.1+cpu"
+        },
+        "failures": [],
+        "fingerprints": {
+          "rows_with_bits": 11,
+          "shape": [
+            12,
+            2048
+          ]
+        },
+        "flows": {
+          "applicability_domain": {
+            "detail": "",
+            "ms": 2,
+            "status": "PASS"
+          },
+          "bundled_engines": {
+            "detail": "",
+            "ms": 19,
+            "status": "PASS"
+          },
+          "descriptors": {
+            "detail": "",
+            "ms": 126,
+            "status": "PASS"
+          },
+          "environment": {
+            "detail": "",
+            "ms": 1535,
+            "status": "PASS"
+          },
+          "fingerprints": {
+            "detail": "",
+            "ms": 2,
+            "status": "PASS"
+          },
+          "fonts": {
+            "detail": "",
+            "ms": 7,
+            "status": "PASS"
+          },
+          "import_csv": {
+            "detail": "",
+            "ms": 295,
+            "status": "PASS"
+          },
+          "import_excel": {
+            "detail": "",
+            "ms": 171,
+            "status": "PASS"
+          },
+          "ml_train_predict": {
+            "detail": "",
+            "ms": 946,
+            "status": "PASS"
+          },
+          "model_save_reload": {
+            "detail": "",
+            "ms": 92,
+            "status": "PASS"
+          },
+          "plot_export": {
+            "detail": "",
+            "ms": 1246,
+            "status": "PASS"
+          },
+          "qt_offscreen": {
+            "detail": "",
+            "ms": 238,
+            "status": "PASS"
+          },
+          "table_export": {
+            "detail": "",
+            "ms": 5,
+            "status": "PASS"
+          }
+        },
+        "fonts": {
+          "plex": true,
+          "registered": 2
+        },
+        "import_csv": {
+          "dropped": [],
+          "features": 9,
+          "path": "/tmp/freeze-equivalent-user/smoke-user/smoke_dataset.csv",
+          "rows": 96,
+          "task": "classification"
+        },
+        "import_excel": {
+          "path": "/tmp/freeze-equivalent-user/smoke-user/smoke_dataset.xlsx",
+          "rows": 96,
+          "task": "regression"
+        },
+        "install_dir_unchanged": true,
+        "ml": {
+          "classification_accuracy": 0.9,
+          "n_test": 20,
+          "n_train": 76,
+          "regression_r2": 0.9923
+        },
+        "model_save_reload": {
+          "bundle_version": "1.2.216",
+          "parity": true,
+          "path": "/tmp/freeze-equivalent-user/smoke-user/smoke_rf.joblib"
+        },
+        "net_attempts": [],
+        "offline": true,
+        "plot_export": {
+          "pdf": 12244,
+          "png": 22837,
+          "svg": 25015,
+          "tiff": 968206
+        },
+        "qt_offscreen": {
+          "egl": "stub",
+          "platform": null,
+          "qdarkstyle_chars": 54234
+        },
+        "table_export": {
+          "csv": 772,
+          "xlsx": 6016
+        },
+        "user_dir": "/tmp/freeze-equivalent-user/smoke-user",
+        "verdict": "PASS"
+      }
+    },
+    "verdict": "PASS"
+  },
+  "windows_spec": "packaging/windows/pharmaml.spec"
+}
