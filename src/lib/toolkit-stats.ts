@@ -10,19 +10,19 @@
  */
 
 /** Collected pytest cases at the shipped revision (repo-wide
- *  ``pytest --collect-only -q`` sum, 2026-11-17 (r274: the phase-3 flows extend the EXISTING 7 freeze-equivalent tests — no new test functions, so the count holds at r273's 7,374), under the FULL pinned
+ *  ``pytest --collect-only -q`` sum, 2026-11-17 (r275: the part10 api foundation adds tests/api/test_backend_service.py — 42 tests over the FastAPI service layer; the count moves 7,374 -> 7,416), under the FULL pinned
  *  stack — every optional dep installed, so the conditionally-defined
  *  suites collect; the r269 6,934 pin had been measured under a
  *  degraded venv and undercounted by 386). */
-export const SHIPPED_TEST_COUNT = 7374;
+export const SHIPPED_TEST_COUNT = 7416;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
  *  docs, tools — the same census /api/toolkit/tree walks). */
-export const SHIPPED_FILE_COUNT = 1408;
+export const SHIPPED_FILE_COUNT = 1468;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). */
-export const SHIPPED_SOURCE_LINES = 477140;
+export const SHIPPED_SOURCE_LINES = 479513;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

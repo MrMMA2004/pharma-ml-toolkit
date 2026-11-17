@@ -58,11 +58,25 @@ $P install PySide6==6.8.3 pyqtgraph==0.13.7 qt-material==2.17 \
 cp /home/z/my-project/pharma-ml-toolkit/ui/native/libEGL.so.1 \
    /home/z/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libEGL.so.1
 
+# 6c. the part10 FastAPI service stack (r275: src/pharmaml/api needs
+#     it — without these pins a repair would drop the api package's
+#     deps and tests/api would stop importing). Versions = the live
+#     venv at r275; pydantic wheels are numpy-neutral (1.26.4 safe).
+$P install fastapi==0.128.0 uvicorn==0.44.0 pydantic==2.12.5 \
+    httpx==0.28.1 \
+    -c /tmp/constraint.txt 2>&1 | tail -1
+
+# 6d. the freeze stack (r274/r275: the part9 frozen-equivalent tier runs
+#     PyInstaller 6.22.3 per the captured Windows-spec policy — the
+#     r275 round-open repair dropped it and the freeze tests went red
+#     on the import; the pin keeps it across future rebuilds).
+$P install pyinstaller==6.22.3 2>&1 | tail -1
+
 # 7. the editable toolkit itself (its version tracks the checkout)
 cd /home/z/my-project/pharma-ml-toolkit && $P install --no-deps -e . 2>&1 | tail -1
 
 # 8. verify the full import surface
-/home/z/.venv/bin/python -c "import numpy, rdkit, selfies, shap, meeko, gemmi, matplotlib, torch, mordred, xgboost, lightgbm, catboost, seaborn, fpdf, docx, openpyxl, pandas, pharmaml; print('VENV-REPAIR-DONE numpy', numpy.__version__, 'torch', torch.__version__, 'matplotlib', matplotlib.__version__, 'openpyxl', openpyxl.__version__, 'pharmaml', pharmaml.__version__)"
+/home/z/.venv/bin/python -c "import numpy, rdkit, selfies, shap, meeko, gemmi, matplotlib, torch, mordred, xgboost, lightgbm, catboost, seaborn, fpdf, docx, openpyxl, pandas, pharmaml, fastapi, uvicorn, pydantic; print('VENV-REPAIR-DONE numpy', numpy.__version__, 'torch', torch.__version__, 'matplotlib', matplotlib.__version__, 'openpyxl', openpyxl.__version__, 'pharmaml', pharmaml.__version__, 'fastapi', fastapi.__version__, 'uvicorn', uvicorn.__version__)"
 
 # 8b. verify the Studio GUI stack offscreen (the EGL stub + offscreen
 #     platform ride inside ui.headless — real EGL, when present, wins)

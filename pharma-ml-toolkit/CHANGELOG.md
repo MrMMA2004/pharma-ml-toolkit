@@ -1,3 +1,66 @@
+## [1.2.219] — 2026-11-17 — round 275 (part10: the FastAPI local backend service)
+
+- **The part10 campaign opens — the master prompt pivots the frontend to
+  C# WinUI 3 + XAML + MVVM over a FastAPI/WebSocket Python backend with
+  nine-workspace reconstruction, PySide6 retirement, and a fully
+  self-contained offline Windows installer; this release ships the part
+  the boundary permits: the complete local backend service layer the
+  WinUI host will drive, plus the honest Phase-One audit.** The boundary
+  ledger lives at `docs/MIGRATION_WINUI3.md`: every Windows-host
+  deliverable (the WinUI build itself, the NSwag client, the installer,
+  the §31 clean-machine sheet, and the PySide6 retirement — rule #9
+  forbids retiring it before parity) is marked BLOCKED, nothing
+  scaffolded-as-done; the Linux-real deliverables are implemented and
+  tested. The audit: 25 `src/pharmaml` packages, the 62-row
+  `capability_registry`, the 9-card PySide6 Studio, and the part9
+  packaging stack, all inspected live. The deliverable: `src/pharmaml/api/`
+  — `security.py` (per-startup `secrets.token_urlsafe(32)` session
+  credential, memory-only, constant-time verify, never logged; loopback
+  Host/Origin guard on every route; Bearer + X-Session-Token);
+  `events.py` (the pydantic `EventEnvelope` — ONE wire DTO, a 20-event
+  vocabulary, per-bus monotonic sequencing, replay-since duplicate
+  protection, bounded-queue backpressure with `bus.overflow` notices,
+  thread-to-loop-safe publication); `jobs.py` (the backend-side
+  JobManager: the full QUEUED→RUNNING→COMPLETED/FAILED +
+  CANCELLATION_REQUESTED→CANCELLED machine with REAL cooperative
+  cancellation — the RUNNING-path flag-set bug was caught by the suite
+  and fixed — the expensive-slot semaphore, and the graceful shutdown
+  drain); the REST routes (`/api/v1/health` with the scientific-core
+  probe, `/api/v1/capabilities` as the 62-row registry projection — one
+  source of truth, zero re-declaration — `/api/v1/jobs`
+  submit/poll/result/cancel with REST as the authoritative recovery
+  path, and `/api/v1/chemistry/descriptors` + `fingerprints` over the
+  REAL backend functions in sync AND job modes with strict-int
+  validation, bools 422); the `/api/v1/events` WebSocket (typed
+  envelopes, token handshake — the header for the native client, the
+  documented loopback-only `?token=` fallback — hello + replay, 15 s
+  heartbeats, ping/pong); and `server.py` (the controlled port-0
+  loopback bind: the socket is owned by us and handed to uvicorn BY
+  FILE DESCRIPTOR — no check-then-bind race — the single
+  `PHARMAML-READY {port,token,pid,version}` stdout line emitted the
+  moment `listen()` returns, diagnostics on stderr only, SIGTERM
+  graceful shutdown; OpenAPI at `/api/openapi.json`, docs/redoc
+  disabled per §9.4). `tests/api/test_backend_service.py` — 42 tests
+  across 10 classes, all green, including a REAL port-0 serve with a
+  live HTTP probe.
+
+- Tooling: the venv repair script learned §6c/§6d (fastapi==0.128.0,
+  uvicorn==0.44.0, pydantic==2.12.5, httpx==0.28.1 — the TestClient dep —
+  and pyinstaller==6.22.3, which the round-open rebuild had dropped;
+  the gate caught the gap and the pin keeps it across future
+  rebuilds).
+
+- The round's gate: the ten-block suite plus the new leg 11 (the api
+  suite) — chunks 1, 2, 3, 5, 6, 8, the nine-card leg 9, the doctest
+  leg 10, and leg 11 green; chunk 4 red on the sandbox's third
+  node_modules eviction of the day (the web-parity probes' bun
+  imports — restored mid-round, the three affected probes re-ran green
+  as the makeup leg A) and chunk 7 split by the OOM discipline into
+  sub-batches (sub-batch 2's freeze-equivalent casualty cured by the
+  PyInstaller restore — makeup leg B; sub-batch 4's post-OOM single
+  re-ran in two halves — makeup leg C). All makeup legs green;
+  environmental, recorded, none silently forgiven.
+
 ## [1.2.218] — 2026-11-17 — round 274 (packaging phase 3: the frozen-equivalent's deep-feature tier)
 
 - **The part9 campaign, phase 3 — extend the frozen smoke from 13 to

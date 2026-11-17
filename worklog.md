@@ -15013,3 +15013,101 @@ upgrading §14.2 to complete-at-the-frozen-equivalent-tier; the
 Windows EXE artifact, the Inno sequence, the engine EXECUTIONS, and
 the §14 clean-machine recording sheet remain BLOCKED exactly as
 before — a Windows host, and nothing here claims otherwise.
+
+Round 275 (100x-71, "Continue MASTER_PROMPT part10"): the part10 campaign
+OPENS — the master prompt pivots the frontend to C# WinUI 3 + XAML + MVVM
+over a FastAPI/WebSocket Python backend with nine-workspace reconstruction,
+PySide6 retirement, and a fully self-contained offline Windows installer;
+the round's honest core is the boundary ledger first (docs/MIGRATION_WINUI3.md,
+the Phase-One audit: 25 src packages + the 62-row capability_registry +
+the 9-card PySide6 Studio + the part9 packaging stack audited live) and
+then the REAL deliverable the boundary permits: the backend the WinUI host
+will drive, `src/pharmaml/api/` — the complete local service layer.
+security.py (per-startup secrets.token_urlsafe(32) credential, memory-only,
+constant-time verify, loopback Host/Origin guard, Bearer + X-Session-Token);
+events.py (the pydantic EventEnvelope — ONE wire DTO, 20-event vocabulary,
+per-bus monotonic sequencing, replay-since duplicate protection,
+bounded-queue backpressure with bus.overflow notices); jobs.py (the
+backend-side JobManager: QUEUED→RUNNING→COMPLETED/FAILED +
+CANCELLATION_REQUESTED→CANCELLED with REAL cooperative cancellation — the
+RUNNING-path flag-set bug was caught by the suite and fixed — plus the
+expensive-slot semaphore and the graceful drain); the REST routes
+(/api/v1/health with the scientific-core probe, /api/v1/capabilities as the
+62-row registry projection — one source of truth, zero re-declaration —
+/api/v1/jobs submit/poll/result/cancel, and /api/v1/chemistry/descriptors
++ fingerprints over the REAL backend functions in sync AND job modes with
+strict-int validation, bools 422); the /api/v1/events WebSocket (token
+handshake — header for the native client, ?token= documented loopback-only
+fallback; hello+replay, 15 s heartbeats, ping/pong; REST stays the
+authoritative recovery path of record); and server.py (the controlled
+port-0 loopback bind — socket owned by us, handed to uvicorn BY FILE
+DESCRIPTOR, no check-then-bind race — the single PHARMAML-READY
+{port,token,pid,version} stdout handshake line emitted the moment listen()
+returns, diagnostics on stderr only, SIGTERM graceful shutdown; OpenAPI at
+/api/openapi.json, docs/redoc disabled per §9.4). tests/api/
+test_backend_service.py: 42 tests / 10 classes green, including a REAL
+port-0 serve with a live HTTP probe. The C# frontend build, the WinUI
+reconstruction, the NSwag client, the installer, and the PySide6
+retirement stay BLOCKED — no Windows host, and the prompt's own rules
+#9/#30 agree; the ledger says so in every row.
+
+Housekeeping: the sandbox rolled AGAIN between the 71st firing's two
+halves (context ran out mid-gate; the container's auto-checkpoint
+136bd1ed captured the half-done tree — 652fa9c, unpushed — and both gate
+daemons died with the recycle). Recovery: PAT re-extracted (never printed),
+remote re-added, fetch clean (no arena/* this time), the checkpointed tree
+already clean on top of ae55053, venv verified intact (fastapi 0.128.0
+present), the gate restarted from chunk-2 with the continuation runner in
+a QUIET environment (the first death was memory-pressure contention with
+the round's own parallel API-test dev — the OOM lesson enforced). The
+ten-block gate + the NEW leg 11 (the api suite): chunks 1 (99 s), 2
+(140 s), 3 (141 s), 5 (96 s), 6 (152 s), 8 (145 s), leg 9 the nine-card
+Qt envelope (21 s), leg 10 the src doctests (86 s), and leg 11 the api
+suite (12 s) all green; chunk-4 went red at 403 s on ONE web-parity probe
+(the sandbox's node_modules janitor struck for the THIRD time that day —
+bun restore + the makeup leg A green: the 27-file remainder plus the
+three web-parity probes with fresh node_modules); chunk-7 OOM-split by
+the runner's own discipline into 7-file sub-batches (sub-batches 1/3/5
+green; sub-batch 2 red on the venv's LOST PyInstaller — the round-open
+rebuild had dropped it, pyinstaller==6.22.3 reinstalled mid-gate and the
+makeup leg B green, 7 tests; sub-batch 4 SIGKILLed and degraded to
+singles — four green, nine_card_first OOM'd EVEN as a single at 3.4 GB
+RSS, the makeup leg C re-ran its 23 tests in two halves, both green).
+All casualties environmental, every one cured and re-run, none silently
+forgiven. The venv repair script learned §6c (fastapi==0.128.0,
+uvicorn==0.44.0, pydantic==2.12.5, httpx==0.28.1 — the TestClient dep —
+pinned so the next rollback-repair keeps the service importable; §8's
+import surface extended to match) and §6d (pyinstaller==6.22.3 — the
+freeze tier's captured-policy version, whose absence the gate caught).
+RELEASE_READINESS.md re-trued with all eleven legs + the three makeup
+legs recorded. v1.2.219 shipped to ALL SIX homes (1,485 entries / 1,406
+files / 27,152,181 B, sha a63e413f, testzip OK per home, real leaks 0,
+homes 5+6 already at 34 zips each — the prior segment's 106-copy
+backfill held, this round's builder needed zero re-backfills). The 8
+notebooks re-executed at 1.2.219 (207 s, zero error outputs, zero
+home-path survivors — the first background attempt was OOM-killed at
+3.4 GB and the per-call subtree reaper ate two makeup daemons, so the
+notebooks and every makeup leg ran in the foreground; the E2E learned
+the same discipline) + the 7 twins re-stripped; static validation
+154/154 at the new quadruple (VERSION / pyproject / __init__ /
+toolkit-version.ts moved in one atomic bump; CHANGELOG leads with
+1.2.219; FEATURES stamp trued); web pins re-trued to the live walk
+(1468 files / 479,513 lines / 7,416 tests — the api package added 60
+files / 2,373 lines / 42 tests). E2E: home 200 (201,054 B) + the
+streamed /api/toolkit/download BYTE-IDENTICAL to the shipped archive
+(exact 27,152,181 B, sha a63e413f parity with all six homes; the
+zip-size endpoint answers exact:true source:release) + theme round-trip
+dark→light (className "dark" verified, then white background with the
+localStorage persistence surviving a browser restart) + mobile 390 +
+four screenshots (desktop / mobile-390 / dark / light) + zero console
+errors. The janitor earned its paragraph: node_modules was wiped FIVE
+times (10:36, ~11:15, ~11:54, ~11:57, ~12:06 — only node_modules, never
+the zips or scratch), six bun installs restored it, a double-forked
+keeper daemon couldn't stop the blind-periodic wipe, and the E2E
+batteries were re-planned as one-call post-install windows (the
+discipline that finally made the whole chain green). Disk relief: the
+pip cache (534 MB) and the puppeteer cache (618 MB) pruned, /tmp/my-project
+identified as a PolarFS remote mount (not local disk) and left alone.
+The campaign ledger's next rows stay queued and honest: datasets/ml/
+artifacts routes, the dl/generative tiers, the C# specification as
+source artifacts — then everything Windows-side, BLOCKED, unchanged.

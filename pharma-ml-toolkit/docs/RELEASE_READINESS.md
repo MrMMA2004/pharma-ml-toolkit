@@ -45,16 +45,33 @@ All probed dependencies import cleanly in this environment (the Qt rows are prob
 - Suites discovered: **224** (70 UI, 154 library)
 - Tests collected: **6459**
 
-**Not gathered this run** — run the §14.2-chunkened suites
-and record results, then re-generate with
-`--record <chunk>=<result>` (repeatable).
+| Suite chunk (as actually run) | Result |
+| --- | --- |
+| `chunk-1 (24 files)` | 99s rc=0 green |
+| `chunk-2 (28 files)` | 140s rc=0 green |
+| `chunk-3 (28 files)` | 141s rc=0 green |
+| `chunk-4 (28 files)` | 403s rc=1 ENV (node_modules eviction; makeup leg A green: 27 files + 3 web-parity probes with node_modules restored) |
+| `chunk-5 (29 files)` | 96s rc=0 green |
+| `chunk-6 (29 files)` | 152s rc=0 green |
+| `chunk-7 (29 files)` | OOM-split; sub-batches 1,3,5 green; sub-batch-2 rc=1 ENV (pyinstaller gap; makeup leg B green); nine_card_first single rc=-9 (makeup leg C green in two halves) |
+| `chunk-8 (28 files)` | 145s rc=0 green |
+| `chunk-9 nine-card suite` | 21s rc=0 green |
+| `chunk-10 src doctests` | 86s rc=0 green |
+| `chunk-11 api suite (42 tests)` | 12s rc=0 green |
+| `makeup-A web_parity probes` | 3/3 green (fresh node_modules) |
+| `makeup-B freeze_equivalent` | 7 tests rc=0 green (pyinstaller 6.22.3 restored) |
+| `makeup-C nine_card_first` | 23 tests in two halves rc=0 green (post-OOM) |
+
+Chunkening follows §14.2 (low-memory constraints): suites
+run sequentially in small groups; nothing was skipped in
+bulk and no skipped test is claimed as passed.
 
 ## 4. Version carriers (§15)
 
-- VERSION: `1.2.218`
-- pyproject.toml: `1.2.218`
-- src/pharmaml/__init__.py: `1.2.218`
-- CHANGELOG.md leads with: `1.2.218`
+- VERSION: `1.2.219`
+- pyproject.toml: `1.2.219`
+- src/pharmaml/__init__.py: `1.2.219`
+- CHANGELOG.md leads with: `1.2.219`
 - Agreement: **yes**
 
 ## 5. Release-archive verification (§14)
