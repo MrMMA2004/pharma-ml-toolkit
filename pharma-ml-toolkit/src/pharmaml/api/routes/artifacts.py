@@ -108,7 +108,10 @@ class FigureRequest(BaseModel):
         return pd.DataFrame(data)
 
 
-class TableRequest(BaseModel):
+class ArtifactTableRequest(BaseModel):
+    # renamed for a unique OpenAPI component name: a same-named
+    # request model lives in routes/visualization.py (see the note
+    # in routes/applicability_domain.py)
     dataset_id: str
     format: Literal["csv", "tsv", "xlsx"] = "csv"
     filename: str | None = None
@@ -173,7 +176,9 @@ def _register_figure(req: FigureRequest, store: ArtifactStore) -> dict:
     return record.view()
 
 
-def _register_table(req: TableRequest, store, frame: pd.DataFrame) -> dict:
+def _register_table(
+    req: ArtifactTableRequest, store, frame: pd.DataFrame
+) -> dict:
     extension = f".{req.format}"
     with tempfile.TemporaryDirectory(prefix="pharmaml-art-") as tmp:
         target = Path(tmp) / f"table{extension}"
@@ -245,7 +250,7 @@ def create_figure(req: FigureRequest, request: Request) -> dict:
 
 
 @router.post("/table")
-def create_table(req: TableRequest, request: Request) -> dict:
+def create_table(req: ArtifactTableRequest, request: Request) -> dict:
     store: ArtifactStore = request.app.state.artifact_store
     dataset = request.app.state.dataset_store.get(req.dataset_id)
     if dataset is None:

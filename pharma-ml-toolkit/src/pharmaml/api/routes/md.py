@@ -74,7 +74,9 @@ class SyntheticRequest(BaseModel):
     )
 
 
-class AnalyzeRequest(BaseModel):
+class MDAnalyzeRequest(BaseModel):
+    # renamed for a unique OpenAPI component name — see the note in
+    # routes/applicability_domain.py
     coords: list[list[list[float]]] = Field(min_length=1, max_length=_MAX_FRAMES)
     masses: list[float] | None = Field(default=None, max_length=_MAX_ATOMS)
 
@@ -180,7 +182,7 @@ def synthetic(req: SyntheticRequest, request: Request) -> dict:
 
 
 @router.post("/analyze")
-def analyze(req: AnalyzeRequest, request: Request) -> dict:
+def analyze(req: MDAnalyzeRequest, request: Request) -> dict:
     try:
         coords = np.asarray(req.coords, dtype=float)
     except (TypeError, ValueError) as exc:

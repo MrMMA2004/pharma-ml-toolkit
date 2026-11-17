@@ -579,7 +579,7 @@ class TestPkPdCalculators:
 class TestPkPdPopulation:
 
     def test_population_job_real_batches(self, client):
-        times = [float(t) for t in range(0, 25)]
+        times = [float(t) for t in range(25)]
         r = client.post(
             "/api/v1/pkpd/population",
             headers=auth_headers(),
@@ -1034,7 +1034,7 @@ class TestApplicabilityDomain:
         return ds, model
 
     def test_analyze_job_bootstrap_telemetry(self, client):
-        ds, model = self._prepare_model(client)
+        _ds, model = self._prepare_model(client)
         x_test = [[0.5, 0.5], [1.0, 0.25], [4.0, 2.0]]
         r = client.post(
             "/api/v1/applicability-domain/analyze",
@@ -1068,7 +1068,7 @@ class TestApplicabilityDomain:
         assert training[-1]["payload"]["progress"] == 99
 
     def test_analyze_sync_uncertainty_off(self, client):
-        ds, model = self._prepare_model(client)
+        _ds, model = self._prepare_model(client)
         r = client.post(
             "/api/v1/applicability-domain/analyze",
             headers=auth_headers(),
@@ -1089,7 +1089,7 @@ class TestApplicabilityDomain:
         assert row["predicted"] is None  # no bootstrap half, honestly
 
     def test_analyze_with_figure(self, client):
-        ds, model = self._prepare_model(client)
+        _ds, model = self._prepare_model(client)
         r = client.post(
             "/api/v1/applicability-domain/analyze",
             headers=auth_headers(),
@@ -1117,7 +1117,7 @@ class TestApplicabilityDomain:
         assert r.status_code == 404
 
     def test_analyze_feature_mismatch_422(self, client):
-        ds, model = self._prepare_model(client)
+        _ds, model = self._prepare_model(client)
         r = client.post(
             "/api/v1/applicability-domain/analyze",
             headers=auth_headers(),

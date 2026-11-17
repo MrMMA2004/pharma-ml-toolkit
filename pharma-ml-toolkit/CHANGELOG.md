@@ -1,3 +1,76 @@
+## [1.2.222] — 2026-11-18 — round 278 (part11 begins: the SQLite persistence + database surface row)
+
+- **The architecture campaign continues under part11** ("Complete
+  Migration to an Offline React + TypeScript Desktop Application
+  Using Tauri 2, Python + FastAPI + WebSocket, SQLite ..."): part11
+  §2 removes every C#/WinUI/XAML/MVVM/NSwag instruction and mandates
+  exactly the FastAPI + REST + WebSocket backend this repo already
+  ships. The part10 ledger's queued "C# solution specification" row
+  is cancelled; the successor ledger is `docs/MIGRATION_TAURI2.md`
+  (the feasible/blocked boundary moves WITH part11: a Vite/React/TS
+  frontend is Node-toolchain work, no Windows host needed — only the
+  Tauri/WebView2 packaging legs stay BLOCKED).
+- **part11 Phase Eleven — SQLite persistence (this round's code)**:
+  `src/pharmaml/api/persistence.py` — the `Persistence` backend owns
+  SQLite (the frontend never touches the file), the `FileVault`
+  keeps large payloads on disk with SQLite holding ids/relative
+  paths/sha256 only (§16.2), `default_data_dir()` resolves
+  `%LOCALAPPDATA%\PharmaML Studio` / XDG data home /
+  `PHARMAML_STUDIO_DATA` (§16.5), connections are per-operation with
+  `foreign_keys=ON`, `journal_mode=WAL`, `busy_timeout=5000` (§16.4),
+  and the `schema_migrations` ledger applies v1/v2 idempotently and
+  transactionally. `create_app()` stays ephemeral (the documented
+  library/test default); `create_app(data_dir=...)` /
+  `PHARMAML_STUDIO_DATA` turns durability on; the shipped host entry
+  (`server.serve()`) always passes the platform user-data directory.
+- **Stores write through, history persists, recovery reports**:
+  DatasetStore/ModelStore/PriorStore/ArtifactStore write through to
+  SQLite + vault when durable (eviction deletes the persisted row +
+  payload — the retention rule); every JobManager state transition
+  upserts its job-history row (failure-tolerant);
+  `recover_registry()` rebuilds the live stores on startup through
+  the REAL loader and drops corrupt rows with an honest
+  `startup_recovery.dropped` report — never silent.
+- **The `/api/v1/database` surface (§12.1)**: status (schema
+  version/WAL/integrity/per-table counts), persisted job history,
+  preference CRUD, and backup/restore — the backup bundle (SQLite
+  online-backup snapshot + every referenced vault payload, one zip)
+  registers as a standard `database` artifact and restores with
+  integrity + schema-version validation, atomic swap, WAL-sidecar
+  cleanup and the orphan sweep. All behind the session token +
+  loopback guard like every route.
+- **Tests**: `tests/api/test_persistence_database.py` (37) +
+  `tests/api/test_persistence.py` (30) + `tests/api/test_contracts.py`
+  (6) — migrations, vault traversal/atomicity, registry round-trips,
+  preferences, job history + retention, backup/restore incl. the
+  refuse-garbage and refuse-newer-schema paths, orphan sweep, the
+  activation contract, durability-across-restarts incl. the
+  corrupt-payload drop report, route-level auth/loopback, and the
+  contract drift gate. The api suite is **251 green** (178 + 37 +
+  30 + 6). The suite caught and fixed two honest bugs on arrival:
+  `FileVault.exists()` reported resolvable-but-absent paths as
+  present (which would have silently defeated the orphan sweep),
+  and garbage restore images raise `sqlite3.DatabaseError` at
+  execute time — now normalised to the documented `ValueError` →
+  422.
+- **part11 §12.2 contract tooling (the round's second half)**:
+  `contracts/openapi.json` — the exported machine-readable API
+  contract (81 paths, 54 schemas) the frontend TypeScript
+  client/types are generated or validated from — plus
+  `tools/export_openapi.py` (write + `--check` drift mode) and the
+  `tests/api/test_contracts.py` drift gate (a schema change without
+  a re-export turns the suite red). Exporting surfaced and fixed a
+  real cross-process nondeterminism: the four colliding request
+  model names across route modules (`AnalyzeRequest` in md +
+  applicability-domain, `TableRequest` in artifacts +
+  visualization) made FastAPI's collision fallback pick the
+  plain-name winner by hash-seed-dependent set order — the same
+  PYTHONHASHSEED flake class the r275 selfies fix addressed. All
+  four are renamed uniquely (`MDAnalyzeRequest`,
+  `ADAnalyzeRequest`, `ArtifactTableRequest`,
+  `VisualizationTableRequest`) — the export is now byte-stable
+  across nine different hash seeds.
+
 ## [1.2.221] — 2026-11-17 — round 277 (part10 continuation: the docking / pkpd / md / visualization / applicability-domain row — the API surface completes)
 
 - **The third queued campaign row and the one that completes the

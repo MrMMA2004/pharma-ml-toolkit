@@ -51,10 +51,10 @@ and record results, then re-generate with
 
 ## 4. Version carriers (§15)
 
-- VERSION: `1.2.220`
-- pyproject.toml: `1.2.220`
-- src/pharmaml/__init__.py: `1.2.220`
-- CHANGELOG.md leads with: `1.2.220`
+- VERSION: `1.2.222`
+- pyproject.toml: `1.2.222`
+- src/pharmaml/__init__.py: `1.2.222`
+- CHANGELOG.md leads with: `1.2.222`
 - Agreement: **yes**
 
 ## 5. Release-archive verification (§14)

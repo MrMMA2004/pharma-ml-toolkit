@@ -31,6 +31,7 @@ and retrievable via REST (the authoritative recovery path).
 from __future__ import annotations
 
 import inspect
+import logging
 import threading
 import time
 import uuid
@@ -108,18 +109,29 @@ class _JobHandle:
     cancel_event: threading.Event = field(default_factory=threading.Event)
 
 
+_logger = logging.getLogger(__name__)
+
+
 class JobManager:
-    """Session-wide job manager: submit / poll / cancel / list."""
+    """Session-wide job manager: submit / poll / cancel / list.
+
+    When constructed with a :class:`~pharmaml.api.persistence.Persistence`
+    backend, every state transition also upserts the job row into
+    SQLite — the part11 Phase Eleven job-history-across-restarts
+    contract (the audit trail survives the process).
+    """
 
     def __init__(
         self,
         bus: EventBus,
         max_concurrent_expensive_jobs: int = 2,
         worker_threads: int = 4,
+        persistence: Any = None,
     ) -> None:
         self._bus = bus
         self._jobs: dict[str, _JobHandle] = {}
         self._lock = threading.RLock()
+        self._persistence = persistence
         self._executor = ThreadPoolExecutor(
             max_workers=worker_threads,
             thread_name_prefix="pharmaml-job",
@@ -130,6 +142,19 @@ class JobManager:
             max_concurrent_expensive_jobs
         )
         self._shutdown = False
+
+    # -- persistence -------------------------------------------------
+
+    def _persist(self, record: JobRecord) -> None:
+        if self._persistence is None:
+            return
+        try:
+            self._persistence.record_job(record.public())
+        except Exception:
+            # break the live job path; a failed history write is a
+            # degraded audit trail, not a failed job (logged, not raised)
+            _logger.debug("job-history write failed for %s",
+                          record.job_id, exc_info=True)
 
     # -- submission ---------------------------------------------------
 
@@ -166,6 +191,7 @@ class JobManager:
         handle = _JobHandle(record=record)
         with self._lock:
             self._jobs[job_id] = handle
+        self._persist(record)
         self._bus.publish(
             EventType.JOB_QUEUED,
             {"operation": operation, "workspace": workspace},
@@ -187,6 +213,7 @@ class JobManager:
                     record.state = JobState.RUNNING
                     record.started_at = _now_iso()
                     record.stage = "running"
+                self._persist(record)
                 self._bus.publish(
                     EventType.JOB_STARTED, {"operation": operation}, job_id=job_id
                 )
@@ -198,6 +225,7 @@ class JobManager:
                         record.completed_at = _now_iso()
                         record.stage = "cancelled"
                         record.error = str(exc) or "Cancelled."
+                    self._persist(record)
                     self._bus.publish(
                         EventType.JOB_CANCELLED, {}, job_id=job_id
                     )
@@ -208,6 +236,7 @@ class JobManager:
                     record.stage = "completed"
                     record.progress = 100
                     record.result = result
+                self._persist(record)
                 self._bus.publish(
                     EventType.JOB_COMPLETED,
                     {"progress": 100},
@@ -223,6 +252,7 @@ class JobManager:
                     record.completed_at = _now_iso()
                     record.stage = "failed"
                     record.error = f"{type(exc).__name__}: {exc}"
+                self._persist(record)
                 self._bus.publish(
                     EventType.JOB_FAILED,
                     {"error": record.error},
@@ -269,6 +299,7 @@ class JobManager:
                 record.completed_at = _now_iso()
                 record.stage = "cancelled"
                 record.error = "Cancelled before start."
+        self._persist(record)
         self._bus.publish(
             EventType.JOB_CANCEL_REQUESTED, {}, job_id=job_id
         )

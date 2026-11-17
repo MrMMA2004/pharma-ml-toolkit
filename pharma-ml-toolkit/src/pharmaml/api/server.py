@@ -34,6 +34,7 @@ from typing import Any
 import uvicorn
 
 from . import create_app
+from .persistence import default_data_dir
 from .security import session_security
 
 HANDSHAKE_PREFIX = "PHARMAML-READY"
@@ -68,13 +69,18 @@ async def serve(
 ) -> int:
     """Bind loopback:0, emit the handshake, serve until signalled.
 
-    Returns the *actual* bound port (tests and the WinUI host both
+    The shipped host entry is **durable** (part11 Phase Eleven): it
+    always passes the platform user-data directory, so the registry
+    (datasets / models / priors / artifacts / job history /
+    preferences) survives restarts in SQLite + the file vault.
+
+    Returns the *actual* bound port (tests and the Tauri host both
     need it; the handshake line carries it too).
     """
     import os
 
     out = stdout or sys.stdout
-    app = create_app(token=token)
+    app = create_app(token=token, data_dir=default_data_dir())
     secure = session_security()
 
     sock = bind_loopback_socket(host, port)

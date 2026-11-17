@@ -143,7 +143,7 @@ when a Windows host exists; one DTO definition, never two.
 | 275-cont | `/api/v1/datasets`, `/api/v1/ml`, `/api/v1/artifacts` + the file upload/download contracts — 47 new tests, pushed right after the v1.2.219 close (the same 71st session's continuation) | done here |
 | 276 | `/api/v1/dl`, `/api/v1/semi-supervised`, `/api/v1/generative` + the training-progress events on REAL telemetry (per-epoch `on_epoch`, per-generation GA callback, native cancel translation) — 29 new tests | done here |
 | 277 | `/api/v1/docking`, `/api/v1/pkpd`, `/api/v1/md`, `/api/v1/visualization`, `/api/v1/applicability-domain` — 59 new tests (`tests/api/test_docking_pkpd_md_viz_ad.py`, the api suite now 178 green); the engines catalog reports the honest Windows-PE/no-Wine boundary of non-Windows hosts; the matplotlib 3.10.9 empty-fliers `plot_box` fix rides the same round | done here |
-| next | the campaign row queue is empty — the API surface is complete; the next queue moves to the C# solution **specification** (XAML/MVVM contract docs, ViewModel/Service skeletons as source artifacts — NOT claimed as built) | queued |
-| Windows host | build the WinUI frontend, the NSwag client, the packaged backend, the installer, clean-machine §14-equivalent, PySide6 retirement | **BLOCKED** (unchanged boundary) |
+| next | **CANCELLED by part11 §2** — the master prompt's part11 ("Mandatory Architecture Replacement Rules") removes every C#/WinUI/XAML/MVVM/NSwag requirement; the campaign continues as **Tauri 2 + React + TypeScript** — the successor ledger is `MIGRATION_TAURI2.md` (the FastAPI backend built in rows 275–277 is adopted unchanged by part11 Phase Seven) | superseded |
+| Windows host | ~~build the WinUI frontend, the NSwag client~~ → per part11: the Tauri 2 host + WebView2 packaging, EXE/MSI installer, clean-machine §14-equivalent, PySide6 retirement | **BLOCKED** (unchanged boundary) |
 
 The queued rows are honest plans, not claims.

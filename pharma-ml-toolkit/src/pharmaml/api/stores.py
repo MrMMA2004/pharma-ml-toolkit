@@ -1,30 +1,39 @@
 """Session-scoped stores: datasets, trained models, downloadable
 artifacts (part10's queued row after the opening foundation).
 
-Everything here is session-scoped exactly like the session token:
-in-memory only, never persisted to disk, and fresh per
-:func:`~pharmaml.api.create_app`.  A restarted backend starts with
-empty stores — the WinUI host re-uploads/retrains after any restart,
-and the REST surface is the only recovery path (the WebSocket stream
-is a convenience view, never the source of truth).
+Everything here was session-scoped exactly like the session token
+under part10 — in-memory only, never persisted, fresh per
+:func:`~pharmaml.api.create_app`.  **part11 Phase Eleven replaced
+that contract**: when a store is constructed with a
+:class:`~pharmaml.api.persistence.Persistence` backend (the
+``create_app(data_dir=...)`` / ``PHARMAML_STUDIO_DATA`` path, which
+the shipped host always takes), every register/evict writes through
+to SQLite + the file vault and ``create_app`` recovers the prior
+registry on startup — durability across restarts, backend-owned.
 
-Bounds are honest and *enforced*: each store evicts oldest-first when
-its cap is crossed (a local GUI session, not a server, so the newest
-work always wins), and a single artifact larger than the session byte
-cap is refused outright rather than silently evicting everything else.
+Bounds stay honest and *enforced*: each store evicts oldest-first
+when its cap is crossed (a local GUI session, not a server, so the
+newest work always wins; eviction also removes the persisted row +
+vault payload — the retention rule), and a single artifact larger
+than the session byte cap is refused outright rather than silently
+evicting everything else.
 """
 
 from __future__ import annotations
 
 import hashlib
+import pickle
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
 from pharmaml.data import Dataset
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle guard
+    from .persistence import Persistence
 
 __all__ = [
     "MAX_ARTIFACTS",
@@ -164,9 +173,14 @@ class DatasetRecord:
 class DatasetStore:
     """Bounded registry of the session's datasets (oldest-first evict)."""
 
-    def __init__(self, max_items: int = MAX_DATASETS) -> None:
+    def __init__(
+        self,
+        max_items: int = MAX_DATASETS,
+        persistence: Persistence | None = None,
+    ) -> None:
         self._max_items = max_items
         self._items: dict[str, DatasetRecord] = {}
+        self._persistence = persistence
 
     def register(
         self,
@@ -174,16 +188,24 @@ class DatasetStore:
         name: str,
         source_bytes: int,
         source_filename: str,
+        raw_bytes: bytes | None = None,
     ) -> DatasetRecord:
         dataset_id = f"ds-{uuid.uuid4().hex[:12]}"
         record = DatasetRecord(
             dataset_id, dataset, name, source_bytes, source_filename
         )
         self._items[dataset_id] = record
+        if self._persistence is not None and raw_bytes is not None:
+            self._persistence.save_dataset(record.view(), raw_bytes)
         while len(self._items) > self._max_items:
             oldest = next(iter(self._items))
-            del self._items[oldest]
+            self._forget(oldest)
         return record
+
+    def _forget(self, dataset_id: str) -> None:
+        record = self._items.pop(dataset_id, None)
+        if record is not None and self._persistence is not None:
+            self._persistence.delete_dataset(dataset_id)
 
     def get(self, dataset_id: str) -> DatasetRecord | None:
         return self._items.get(dataset_id)
@@ -193,7 +215,10 @@ class DatasetStore:
         return sorted(views, key=lambda v: v["created_at"])
 
     def evict(self, dataset_id: str) -> bool:
-        return self._items.pop(dataset_id, None) is not None
+        if dataset_id not in self._items:
+            return False
+        self._forget(dataset_id)
+        return True
 
 
 class TrainedModelRecord:
@@ -251,16 +276,29 @@ class TrainedModelRecord:
 class ModelStore:
     """Bounded registry of the session's trained models."""
 
-    def __init__(self, max_items: int = MAX_TRAINED_MODELS) -> None:
+    def __init__(
+        self,
+        max_items: int = MAX_TRAINED_MODELS,
+        persistence: Persistence | None = None,
+    ) -> None:
         self._max_items = max_items
         self._items: dict[str, TrainedModelRecord] = {}
+        self._persistence = persistence
 
     def register(self, record: TrainedModelRecord) -> TrainedModelRecord:
         self._items[record.model_id] = record
+        if self._persistence is not None:
+            payload = pickle.dumps(record.model, protocol=pickle.HIGHEST_PROTOCOL)
+            self._persistence.save_model(record.view(), payload)
         while len(self._items) > self._max_items:
             oldest = next(iter(self._items))
-            del self._items[oldest]
+            self._forget(oldest)
         return record
+
+    def _forget(self, model_id: str) -> None:
+        record = self._items.pop(model_id, None)
+        if record is not None and self._persistence is not None:
+            self._persistence.delete_model(model_id)
 
     def get(self, model_id: str) -> TrainedModelRecord | None:
         return self._items.get(model_id)
@@ -270,7 +308,10 @@ class ModelStore:
         return sorted(views, key=lambda v: v["created_at"])
 
     def evict(self, model_id: str) -> bool:
-        return self._items.pop(model_id, None) is not None
+        if model_id not in self._items:
+            return False
+        self._forget(model_id)
+        return True
 
 
 class PriorRecord:
@@ -319,16 +360,29 @@ class PriorRecord:
 class PriorStore:
     """Bounded registry of the session's trained generative priors."""
 
-    def __init__(self, max_items: int = MAX_PRIORS) -> None:
+    def __init__(
+        self,
+        max_items: int = MAX_PRIORS,
+        persistence: Persistence | None = None,
+    ) -> None:
         self._max_items = max_items
         self._items: dict[str, PriorRecord] = {}
+        self._persistence = persistence
 
     def register(self, record: PriorRecord) -> PriorRecord:
         self._items[record.prior_id] = record
+        if self._persistence is not None:
+            payload = pickle.dumps(record.model, protocol=pickle.HIGHEST_PROTOCOL)
+            self._persistence.save_prior(record.view(), payload)
         while len(self._items) > self._max_items:
             oldest = next(iter(self._items))
-            del self._items[oldest]
+            self._forget(oldest)
         return record
+
+    def _forget(self, prior_id: str) -> None:
+        record = self._items.pop(prior_id, None)
+        if record is not None and self._persistence is not None:
+            self._persistence.delete_prior(prior_id)
 
     def get(self, prior_id: str) -> PriorRecord | None:
         return self._items.get(prior_id)
@@ -338,7 +392,10 @@ class PriorStore:
         return sorted(views, key=lambda v: v["created_at"])
 
     def evict(self, prior_id: str) -> bool:
-        return self._items.pop(prior_id, None) is not None
+        if prior_id not in self._items:
+            return False
+        self._forget(prior_id)
+        return True
 
 
 class ArtifactRecord:
@@ -384,10 +441,12 @@ class ArtifactStore:
         self,
         max_items: int = MAX_ARTIFACTS,
         max_total_bytes: int = MAX_ARTIFACT_TOTAL_BYTES,
+        persistence: Persistence | None = None,
     ) -> None:
         self._max_items = max_items
         self._max_total_bytes = max_total_bytes
         self._items: dict[str, ArtifactRecord] = {}
+        self._persistence = persistence
 
     @property
     def total_bytes(self) -> int:
@@ -411,6 +470,8 @@ class ArtifactStore:
             artifact_id, kind, filename, content_type, data, meta
         )
         self._items[artifact_id] = record
+        if self._persistence is not None:
+            self._persistence.save_artifact(record.view(), data)
         # oldest-first eviction; the artifact just registered is never
         # evicted by its own registration (guarded by len > 1)
         while len(self._items) > 1 and (
@@ -420,8 +481,13 @@ class ArtifactStore:
             oldest = next(iter(self._items))
             if oldest == artifact_id:  # pragma: no cover - guard order
                 break
-            del self._items[oldest]
+            self._forget(oldest)
         return record
+
+    def _forget(self, artifact_id: str) -> None:
+        record = self._items.pop(artifact_id, None)
+        if record is not None and self._persistence is not None:
+            self._persistence.delete_artifact(artifact_id)
 
     def get(self, artifact_id: str) -> ArtifactRecord | None:
         return self._items.get(artifact_id)
@@ -431,4 +497,7 @@ class ArtifactStore:
         return sorted(views, key=lambda v: v["created_at"])
 
     def evict(self, artifact_id: str) -> bool:
-        return self._items.pop(artifact_id, None) is not None
+        if artifact_id not in self._items:
+            return False
+        self._forget(artifact_id)
+        return True

@@ -180,7 +180,9 @@ class MdSeriesRequest(BaseModel):
     format: Literal["PNG", "SVG", "TIFF", "JPEG"] = "PNG"
 
 
-class TableRequest(BaseModel):
+class VisualizationTableRequest(BaseModel):
+    # renamed for a unique OpenAPI component name — see
+    # routes/artifacts.py
     rows: list[dict[str, Any]] = Field(min_length=1, max_length=_MAX_ROWS)
     format: Literal["csv", "tsv", "xlsx", "md", "json", "html"] = "csv"
     filename: str = "table"
@@ -397,7 +399,7 @@ def md_series(req: MdSeriesRequest, request: Request) -> dict:
 
 
 @router.post("/table")
-def table(req: TableRequest, request: Request) -> dict:
+def table(req: VisualizationTableRequest, request: Request) -> dict:
     store = request.app.state.artifact_store
     frame = pd.DataFrame(req.rows)
     extension = f".{req.format}"

@@ -16,6 +16,7 @@ from . import (
     artifacts,
     capabilities,
     chemistry,
+    database,
     datasets,
     dl,
     docking,
@@ -49,6 +50,7 @@ api_router.include_router(pkpd.router)
 api_router.include_router(md.router)
 api_router.include_router(visualization.router)
 api_router.include_router(applicability_domain.router)
+api_router.include_router(database.router)
 
 ws_router = APIRouter(prefix="/api/v1")
 ws_router.include_router(events.router)

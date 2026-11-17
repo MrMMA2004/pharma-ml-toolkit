@@ -75,6 +75,7 @@ def _load_and_register(
     record = store.register(
         dataset, name=name, source_bytes=len(data),
         source_filename=source_filename,
+        raw_bytes=data,  # part11 Phase Eleven: durable write-through
     )
     return record.view(preview_rows=10)
 

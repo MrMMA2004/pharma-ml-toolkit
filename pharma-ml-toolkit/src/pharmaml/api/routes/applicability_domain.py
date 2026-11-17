@@ -62,7 +62,12 @@ class KnnRequest(BaseModel):
     metric: Literal["euclidean", "manhattan", "cosine"] = "euclidean"
 
 
-class AnalyzeRequest(BaseModel):
+class ADAnalyzeRequest(BaseModel):
+    # renamed for a unique OpenAPI component name: a same-named
+    # request model lives in routes/md.py, and FastAPI's collision
+    # fallback picks the plain-name winner nondeterministically
+    # (hash-seed-dependent set iteration) — unique class names make
+    # the exported contract byte-stable across processes
     model_id: str
     dataset_id: str | None = None
     x_test: list[list[float]] = Field(min_length=1, max_length=_MAX_TEST_ROWS)
@@ -237,7 +242,7 @@ def _analyze_body(
 
 
 @router.post("/analyze")
-def analyze(req: AnalyzeRequest, request: Request) -> dict:
+def analyze(req: ADAnalyzeRequest, request: Request) -> dict:
     model_store = request.app.state.model_store
     model_record = model_store.get(req.model_id)
     if model_record is None:
