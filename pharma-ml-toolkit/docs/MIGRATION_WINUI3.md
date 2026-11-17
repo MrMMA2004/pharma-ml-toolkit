@@ -75,7 +75,11 @@ domain; the row-level matrix regenerates from the registry below.
 | WebSocket typed events (§9.3) | n/a (new) | n/a | new | `/api/v1/events` (envelopes, sequencing, replay, heartbeats) | BLOCKED | TestEventBus (5) + TestWebSocketEvents (3) | PASS / BLOCKED |
 | Molecular descriptors | `chem/descriptors.py::compute_descriptors` | live | real | `POST /api/v1/chemistry/descriptors` (sync+job) | BLOCKED | TestChemistryRoutes (2 + validation) | PASS / BLOCKED |
 | Fingerprints (radius/n_bits exact) | `chem/descriptors.py::compute_fingerprints` | live | real | `POST /api/v1/chemistry/fingerprints` (strict ints — bools 422) | BLOCKED | ditto | PASS / BLOCKED |
-| ML / DL / semi-supervised / generative / docking / PK/PD / MD / viz / AD route groups | real backend modules (audited, tested) | live | real | **queued next rounds** (§3 campaign) | BLOCKED | existing suites carry the backend | PARTIAL (API pending) |
+| Dataset upload + registered views | `data.py::load_dataset`, `utils/io.py::read_table` | live | real | `POST /api/v1/datasets` (multipart, size+extension guarded, sync+job), `GET /datasets`, `GET/DELETE /datasets/{id}`, `GET /datasets/{id}/preview` (NaN-as-null) | BLOCKED | TestDatasetUpload + TestDatasetViews (12) | PASS / BLOCKED |
+| Data profiling / stratified splits | `data_profiling.py::profile_frame`, `data.py::split_table` | live | real | `POST /api/v1/datasets/{id}/profile`, `POST /api/v1/datasets/{id}/split` (sync+job) | BLOCKED | TestDatasetProfile + TestDatasetSplit (6) | PASS / BLOCKED |
+| ML catalog / training / prediction | `ml/models.py` (registry), `ml/training.py::train_model` | live | real | `GET /api/v1/ml/models`, `POST /api/v1/ml/train` (sync+job, registry pre-validated, `n_jobs` passthrough incl. `-1`), `POST /api/v1/ml/predict` (+probabilities), `GET /api/v1/ml/trained` | BLOCKED | TestMLCatalog + TestMLTrain + TestMLPredict (14) | PASS / BLOCKED |
+| Artifacts + file transfer contracts | `viz/export.py` (the §17 four-format stack), `utils/io.py::write_table`, `ml/persistence.py::save_model` | live | real | `POST /api/v1/artifacts/{figure,table,model}`, `GET /api/v1/artifacts`, `GET/HEAD /artifacts/{id}/download` (exact Content-Length, sha256 strong ETag, magic bytes verified), `DELETE` | BLOCKED | TestArtifactFigure + TestArtifactTable + TestArtifactModel + TestArtifactLifecycle (18) | PASS / BLOCKED |
+| DL / semi-supervised / generative / docking / PK/PD / MD / viz / AD route groups | real backend modules (audited, tested) | live | real | **queued next rounds** (§3 campaign) | BLOCKED | existing suites carry the backend | PARTIAL (API pending) |
 | PySide6 retirement | `ui/` | production | n/a | n/a | n/a | rule #9 requires parity first | **BLOCKED** (stays) |
 
 ### 1.3 The machine-readable capability inventory (Phase One §4.2)
@@ -89,10 +93,11 @@ re-declaration — the prompt's §9.2 rule applied to capability data).
 
 ---
 
-## 2. Phase Six/Seven/Nine — the opening implementation (this round)
+## 2. Phase Six/Seven/Nine — the implementation (r275 + its continuation)
 
 All in `src/pharmaml/api/` (new package), tested by
-`tests/api/test_backend_service.py` (42 tests, all green):
+`tests/api/test_backend_service.py` (42 tests) and
+`tests/api/test_datasets_ml_artifacts.py` (47 tests) — 89 green:
 
 | Module | Implements | Test classes |
 |---|---|---|
@@ -105,6 +110,10 @@ All in `src/pharmaml/api/` (new package), tested by
 | `routes/health.py` | `/api/v1/health` — liveness + identity + scientific-core probe | TestHealth (2) |
 | `routes/capabilities.py` | registry projection (62 rows) | TestCapabilities (3) |
 | `server.py` | the controlled port-0 loopback bind (socket owned by us, handed to uvicorn by fd — no check-then-bind race), the single `PHARMAML-READY {port, token, pid, version}` stdout handshake, graceful SIGTERM shutdown | TestStartupHandshake (3, incl. the real serve with live HTTP probe) |
+| `stores.py` | session-scoped DatasetStore / ModelStore / ArtifactStore — in-memory only (like the token), bounded with oldest-first eviction, sha256 digests per artifact | exercised through every route below |
+| `routes/datasets.py` | the multipart **upload contract** (extension + size guards, sync and job parse modes) + registered views, previews (NaN-as-null), `profile_frame` profiling, `split_table` stratified splits — all over the REAL backend | TestDatasetUpload (7), TestDatasetViews (5), TestDatasetProfile (2), TestDatasetSplit (4) |
+| `routes/ml.py` | `list_models` catalog projection, `train_model` over the REAL registry (sync + job, registry key pre-validated in both modes so an unknown model is an honest 422, `n_jobs` verbatim incl. `-1`), predictions with optional probabilities (pipeline-aware class order) | TestMLCatalog (3), TestMLTrain (5), TestMLPredict (6) |
+| `routes/artifacts.py` | the **download contract** — §17 four-format figure export (PNG/SVG/TIFF/JPEG, magic-byte verified), CSV/TSV/XLSX table export, `save_model` joblib bundles; exact Content-Length, Content-Type, Content-Disposition, strong ETag = sha256, X-Artifact-SHA256, HEAD support | TestArtifactFigure (7), TestArtifactTable (3), TestArtifactModel (2), TestArtifactLifecycle (3) |
 
 The OpenAPI contract is served at `/api/openapi.json` (docs/redoc
 DISABLED per §9.4) — the C# client is generated from it (NSwag)
@@ -116,11 +125,11 @@ when a Windows host exists; one DTO definition, never two.
 
 | Round | Scope | Status |
 |---|---|---|
-| 275 (this) | Phase One audit + api foundation (security/bus/jobs/WS/health/capabilities/chemistry) + handshake | done here |
-| next | `/api/v1/datasets`, `/api/v1/ml`, `/api/v1/artifacts` + file upload/download contracts | queued |
-| then | `/api/v1/dl`, `/api/v1/semi-supervised`, `/api/v1/generative` + training-progress events | queued |
+| 275 | Phase One audit + api foundation (security/bus/jobs/WS/health/capabilities/chemistry) + handshake | done (v1.2.219) |
+| 275-cont | `/api/v1/datasets`, `/api/v1/ml`, `/api/v1/artifacts` + the file upload/download contracts — 47 new tests, pushed right after the v1.2.219 close (the same 71st session's continuation) | done here |
+| next | `/api/v1/dl`, `/api/v1/semi-supervised`, `/api/v1/generative` + training-progress events | queued |
 | then | `/api/v1/docking`, `/api/v1/pkpd`, `/api/v1/md`, `/api/v1/visualization`, `/api/v1/applicability-domain` | queued |
-| then | Phase Eight large-file transfer + n_jobs passthrough (incl. `-1`) | queued |
+| then | Phase Eight large-file transfer + n_jobs passthrough (incl. `-1`) | queued (the upload/download contracts and the `-1` passthrough already landed with 275-cont) |
 | then | the C# solution **specification** (XAML/MVVM contract docs, ViewModel/Service skeletons as source artifacts — NOT claimed as built) | queued |
 | Windows host | build the WinUI frontend, the NSwag client, the packaged backend, the installer, clean-machine §14-equivalent, PySide6 retirement | **BLOCKED** (unchanged boundary) |
 

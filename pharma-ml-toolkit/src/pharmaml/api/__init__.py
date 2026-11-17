@@ -12,9 +12,15 @@ WinUI host will launch it:
   token), with the OpenAPI schema served locally so the C# client
   can be generated from it (NSwag) — one DTO definition, never two;
 * versioned routes under ``/api/v1`` (health, capabilities, jobs,
-  events, chemistry — this opening round; the ML/DL/generative/
-  docking/pkpd/md/viz/AD groups follow the same recipe in the
-  campaign's next rounds).
+  events, chemistry — the opening round; this row adds datasets,
+  ml, artifacts + the file upload/download contracts; the
+  DL/generative/docking/pkpd/md/viz/AD groups follow in the
+  campaign's next rounds);
+* session-scoped stores (datasets / trained models / artifacts) —
+  in-memory only, exactly like the token, fresh per app;
+* the backend's typed client-input errors (``DataValidationError``/
+  ``ModelError``) map to 422 responses so a bad target column or an
+  unknown registry model is answered honestly instead of a 500.
 
 Run it with :func:`pharmaml.api.server.serve` — loopback-bound,
 port-0 (no hardcoded port, no check-then-bind race), structured
@@ -24,13 +30,25 @@ handshake line on stdout, graceful shutdown.
 from __future__ import annotations
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse
+
+from pharmaml.exceptions import DataValidationError, ModelError
 
 from .events import EventBus
 from .jobs import JobManager
 from .routes import api_router, ws_router
 from .security import SessionSecurity, reset_session_security
+from .stores import ArtifactStore, DatasetStore, ModelStore
 
-__all__ = ["EventBus", "JobManager", "SessionSecurity", "create_app"]
+__all__ = [
+    "ArtifactStore",
+    "DatasetStore",
+    "EventBus",
+    "JobManager",
+    "ModelStore",
+    "SessionSecurity",
+    "create_app",
+]
 
 
 def create_app(token: str | None = None) -> FastAPI:
@@ -50,6 +68,9 @@ def create_app(token: str | None = None) -> FastAPI:
     app.state.security = secure
     app.state.bus = bus
     app.state.job_manager = job_manager
+    app.state.dataset_store = DatasetStore()
+    app.state.model_store = ModelStore()
+    app.state.artifact_store = ArtifactStore()
 
     def guard(request: Request) -> None:
         secure.guard_request(request)
@@ -63,5 +84,12 @@ def create_app(token: str | None = None) -> FastAPI:
     @app.on_event("shutdown")
     async def _shutdown_jobs() -> None:
         job_manager.shutdown()
+
+    def _client_error(request: Request, exc: Exception) -> JSONResponse:
+        # a typed client-input error from the backend → an honest 422
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    app.add_exception_handler(DataValidationError, _client_error)
+    app.add_exception_handler(ModelError, _client_error)
 
     return app

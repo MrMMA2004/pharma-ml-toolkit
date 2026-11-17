@@ -160,6 +160,10 @@ extend-exclude = ["scratch"]
 # a `caplog.at_level()` context (and vice versa) to keep the restore-on-exit
 # guarantee visually explicit; collapsing the two `with` blocks hides that.
 "tests/*" = ["SIM117"]
+# FastAPI's canonical parameter declarations call File()/Form()/Depends()
+# at signature defaults — the framework reads the markers there by
+# design; the B008 warning is noise for route modules.
+"src/pharmaml/api/routes/*" = ["B008"]
 # Notebooks are published artefacts with committed outputs — they are reviewed
 # by hand, never auto-rewritten by formatters.
 "*.ipynb" = ["ALL"]

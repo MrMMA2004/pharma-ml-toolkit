@@ -42,8 +42,8 @@ All probed dependencies import cleanly in this environment (the Qt rows are prob
 
 ## 3. Test evidence
 
-- Suites discovered: **224** (70 UI, 154 library)
-- Tests collected: **6459**
+- Suites discovered: **225** (70 UI, 155 library)
+- Tests collected: **6506**
 
 | Suite chunk (as actually run) | Result |
 | --- | --- |
@@ -58,6 +58,7 @@ All probed dependencies import cleanly in this environment (the Qt rows are prob
 | `chunk-9 nine-card suite` | 21s rc=0 green |
 | `chunk-10 src doctests` | 86s rc=0 green |
 | `chunk-11 api suite (42 tests)` | 12s rc=0 green |
+| `r275-cont (pushed after the close): tests/api both files (89 tests)` | 26s rc=0 green |
 | `makeup-A web_parity probes` | 3/3 green (fresh node_modules) |
 | `makeup-B freeze_equivalent` | 7 tests rc=0 green (pyinstaller 6.22.3 restored) |
 | `makeup-C nine_card_first` | 23 tests in two halves rc=0 green (post-OOM) |
@@ -71,8 +72,10 @@ bulk and no skipped test is claimed as passed.
 - VERSION: `1.2.219`
 - pyproject.toml: `1.2.219`
 - src/pharmaml/__init__.py: `1.2.219`
-- CHANGELOG.md leads with: `1.2.219`
-- Agreement: **yes**
+- CHANGELOG.md leads with: `[Unreleased]` — the r275-cont
+  datasets/ml/artifacts entry — above `1.2.219`
+- Agreement: **yes** (the four version carriers all stay `1.2.219`;
+  the between-rounds delivery adds no release)
 
 ## 5. Release-archive verification (§14)
 

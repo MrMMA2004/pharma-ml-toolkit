@@ -1,3 +1,36 @@
+## [Unreleased] — part10 continuation (r275-cont: the datasets/ml/artifacts row)
+
+- **The first queued campaign row after the v1.2.219 close — delivered
+  inside the same 71st session and pushed on top of it (the release
+  numbering stays with round closes; the next round ships this as
+  part of its zip).** Three new route groups + the session stores, all
+  over the REAL backend, 47 new tests (`tests/api/test_datasets_ml_artifacts.py`,
+  the api suite now 89 green): `src/pharmaml/api/stores.py` (session-scoped
+  Dataset/Model/Artifact stores — in-memory like the token, bounded,
+  oldest-first eviction, per-artifact sha256); `routes/datasets.py`
+  (the multipart upload contract: extension + 64-MiB size guards,
+  sync and job parse modes over `load_dataset`, registered views with
+  NaN-as-null previews, `profile_frame` profiling, `split_table`
+  stratified splits); `routes/ml.py` (the `list_models` catalog
+  projection, `train_model` training in sync and job modes with the
+  registry key pre-validated so an unknown model is an honest 422 —
+  not an asynchronous job failure — and `n_jobs` passed through
+  verbatim including `-1`, the Phase-Eight clause previewed; prediction
+  with optional probabilities and pipeline-aware class order);
+  `routes/artifacts.py` (the download contract: §17 four-format
+  figure export PNG/SVG/TIFF/JPEG with magic bytes verified per
+  format, CSV/TSV/XLSX table export, `save_model` joblib bundles —
+  each download byte-exact with Content-Length, Content-Type,
+  Content-Disposition, strong ETag = sha256, X-Artifact-SHA256, and
+  HEAD support; the model bundle round-trips through `load_model`
+  with identical predictions, the save/reload parity clause).
+  `create_app` gained the three stores and maps the backend's typed
+  client-input errors (`DataValidationError`/`ModelError`) to 422s.
+  The boundary ledger `docs/MIGRATION_WINUI3.md` carries the trued
+  campaign table; web census pins re-trued (1473 files / 481,529
+  lines / 7,463 collected tests). Windows-side work stays BLOCKED —
+  unchanged boundary, no Windows host.
+
 ## [1.2.219] — 2026-11-17 — round 275 (part10: the FastAPI local backend service)
 
 - **The part10 campaign opens — the master prompt pivots the frontend to
