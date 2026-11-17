@@ -15,18 +15,20 @@
  *  surface -- adds tests/api/test_persistence.py,
  *  tests/api/test_persistence_database.py and the
  *  tests/api/test_contracts.py OpenAPI drift gate; the api suite
- *  moves to 251; the count moves to 8,378 under the FULL pinned
+ *  moves to 251; then the arena/cfdb76b9 absorption (GA checkpoint
+ *  identity, file-split audit, held-out partition + their UI
+ *  dialogs) moves the count to 8,410 under the FULL pinned
  *  stack -- every optional dep installed, so the
  *  conditionally-defined suites collect). */
-export const SHIPPED_TEST_COUNT = 8378;
+export const SHIPPED_TEST_COUNT = 8410;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
  *  docs, tools — the same census /api/toolkit/tree walks). */
-export const SHIPPED_FILE_COUNT = 1508;
+export const SHIPPED_FILE_COUNT = 1521;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). */
-export const SHIPPED_SOURCE_LINES = 548063;
+export const SHIPPED_SOURCE_LINES = 549488;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */
