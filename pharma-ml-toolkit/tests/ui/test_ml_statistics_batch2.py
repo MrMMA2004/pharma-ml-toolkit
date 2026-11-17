@@ -319,3 +319,81 @@ def test_model_card_end_to_end(studio_app, qtbot, qapp, tmp_path, monkeypatch) -
     _settle(qtbot, qapp)
     assert card_html.exists()
     assert "<html" in card_html.read_text(encoding="utf-8").lower()
+
+
+def test_coverage_uses_saved_evaluation_rows_and_original_alpha(studio_app, qtbot, qapp, monkeypatch):
+    from pharmaml.ml import conformal
+
+    page = _fresh_page()
+    _regression_outcome(page._model_analysis)
+    observed = {}
+    real_calibrate = conformal.calibrate_split_conformal
+
+    def calibrate(model, X, y, **kwargs):
+        observed["calibration_index"] = list(X.index)
+        inner = real_calibrate(model, X, y, **kwargs)
+
+        class Recorder:
+            def predict_interval(self, X, **kw):
+                observed["evaluation_index"] = list(X.index)
+                return inner.predict_interval(X, **kw)
+        return Recorder()
+
+    monkeypatch.setattr(conformal, "calibrate_split_conformal", calibrate)
+    page._start_stat_conformal()
+    _settle(qtbot, qapp)
+    assert observed["calibration_index"] and observed["evaluation_index"]
+    assert set(observed["calibration_index"]).isdisjoint(observed["evaluation_index"])
+    assert "independence from fitting/selection not verified" in page._stat_status.text()
+
+    frame = pd.read_csv(_REGRESSION_EXAMPLE)
+    frame["audit_group"] = np.where(frame.index % 2, "odd", "even")
+    page._training_context = lambda: (frame, "pIC50", "regression")
+    page._stat_group_column.setCurrentText("audit_group")
+    page._stat_alpha.setValue(0.2)  # Must not relabel the previous alpha=0.1 result.
+    page._start_stat_coverage()
+    _settle(qtbot, qapp)
+    assert "nominal 90%" in page._stat_status.text()
+    result = page._stat_frame
+    assert result is not None and result.iloc[0]["n_test"] == len(observed["evaluation_index"])
+    assert "mean_width" in result.columns
+    expected = frame.loc[observed["evaluation_index"], "audit_group"].value_counts()
+    for group, n in expected.items():
+        assert result.loc[result["group"] == group, "n_test"].iloc[0] == n
+    frame.loc[observed["evaluation_index"][0], "pIC50"] += 1
+    page._start_stat_coverage()
+    assert "cannot verify group alignment" in page._stat_status.text()
+    assert page._stat_frame is None and page._stat_table.rowCount() == 0
+
+
+def test_subgroup_uses_actual_stratified_indices(studio_app, qtbot, qapp, monkeypatch):
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import train_test_split
+
+    from pharmaml.ml import subgroups
+    from ui.pages.model_analysis import AnalysisOutcome
+
+    page = _fresh_page()
+    frame = pd.DataFrame({"f": range(120), "target": [0] * 100 + [1] * 20,
+                          "group": [f"g{i % 3}" for i in range(120)]})
+    x_train, x_test, y_train, y_test = train_test_split(
+        frame[["f"]], frame.target, test_size=0.25, random_state=42, stratify=frame.target)
+    model = LogisticRegression().fit(x_train, y_train)
+    page._model_analysis._last_outcome = AnalysisOutcome(
+        task="classification", model="logistic", n_train=len(x_train), n_test=len(x_test),
+        y_test=y_test.to_numpy(), y_pred=None, metric_name="accuracy", metric_value=0.5,
+        estimator=model, X_train=x_train, y_train=y_train, X_test=x_test, feature_names=["f"], metrics={})
+    page._training_context = lambda: (frame, "target", "classification")
+    page._stat_group_column.setCurrentText("group")
+    captured = {}
+    original = subgroups.subgroup_report
+
+    def report(model, X, y, groups, **kwargs):
+        captured["groups"] = groups.copy()
+        return original(model, X, y, groups, **kwargs)
+
+    monkeypatch.setattr(subgroups, "subgroup_report", report)
+    page._start_stat_subgroups()
+    _settle(qtbot, qapp)
+    np.testing.assert_array_equal(captured["groups"], frame.loc[x_test.index, "group"].to_numpy())
+    assert "not authenticated" in page._stat_status.text()

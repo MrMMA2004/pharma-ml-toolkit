@@ -147,6 +147,30 @@ strategy knobs AND the table itself (columns, dtypes, shape, content
 checksum). With that, all six §13 classes the schema header names
 are registered and the pending list is empty.
 
+## Genetic checkpoint compatibility and limits
+
+`GeneticOptimizer.optimize(checkpoint_dir=...)` uses a conservative identity:
+all GA settings, ordered effective canonical corpus and seeds, nested objective
+parameters and weights, Python package source, Python version, RDKit version,
+and platform metadata. Checkpointing supports exact built-in `QedObjective`,
+`LogPBandObjective`, `MolecularWeightBandObjective`, `TpsaBandObjective`,
+`SAScoreObjective` and recursively composed `MultiObjective` instances of
+these. Custom, subclassed, modified, or other built-in objectives are rejected
+for checkpointed runs; they remain available without `checkpoint_dir`.
+
+Every existing genetic checkpoint is checked, and an old identity, mismatch,
+invalid envelope, corrupt file, or checkpoint remnant raises `PersistenceError`
+without silently falling back, quarantining, or starting fresh. A fresh
+checkpointed run must use a directory without existing genetic checkpoint files,
+even with `checkpoint_resume=False`. Preserve problematic files separately and
+choose a new directory. A write failure also raises rather than silently
+continuing. Do not run concurrent writers in the same directory: no locking is
+provided. Checksums and identities are unsigned and do not authenticate files;
+they cannot prove correctness of manually modified state. Runtime patches,
+other dependencies and build differences are not fully captured; matching is
+not a guarantee of scientific validity or cross-machine reproducibility.
+Studio does not currently expose checkpoint resume.
+
 ## Using it
 
 ```python

@@ -15,10 +15,9 @@ matched pairs and 96 cliffs at |delta| >= 1 on
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import pandas as pd
-
-from pathlib import Path
 
 _TK = Path(__file__).resolve().parents[2]
 
@@ -131,18 +130,22 @@ def test_conformal_sets_end_to_end(studio_app, qtbot, qapp, tmp_path) -> None:
     assert "split: threshold" in status
     assert "coverage" in status
     assert "label-conditional" in status
-    assert "105 held-out rows" in status  # 420 rows * 0.25 test share
+    assert "53 evaluation rows; 52 calibration rows" in status
+    assert "independence from fitting/selection not verified" in status
 
     # the per-row table: true label + both schemes' verbatim sets
     assert page._stat_frame is not None
     assert list(page._stat_frame.columns) == [
         "true", "split_set", "split_size", "cond_set", "cond_size",
     ]
-    assert len(page._stat_frame) == 105
+    assert len(page._stat_frame) == 53
     # set sizes are non-negative ints; every split set is a subset of the
     # three classes ({} renders as the empty-set glyph)
     sizes = page._stat_frame["split_size"].astype(int)
     assert (sizes >= 0).all() and (sizes <= 3).all()
+    for column in ("split_set", "cond_set"):
+        assert all(value == "∅" or (value.startswith("{") and value.endswith("}"))
+                   for value in page._stat_frame[column])
 
     # the honest engine numbers, printed first by the probe: the split
     # scheme's mean set size on this fit
@@ -152,7 +155,7 @@ def test_conformal_sets_end_to_end(studio_app, qtbot, qapp, tmp_path) -> None:
     export = tmp_path / "conformal_sets.csv"
     page._stat_frame.to_csv(export, index=False)
     reread = pd.read_csv(export)
-    assert len(reread) == 105
+    assert len(reread) == 53
 
 
 # -- the split-overlap audit panel --------------------------------------------------
@@ -275,3 +278,42 @@ def test_sar_cliff_threshold_moves(studio_app, qtbot, qapp) -> None:
     # 2 log units is a big ask on MolLogP: strictly fewer than 96
     number = int(text.split(" activity cliff(s)")[0].split()[-1])
     assert 0 <= number < 96
+
+
+def test_conformal_classification_uses_disjoint_rows(studio_app, qtbot, qapp, monkeypatch):
+    from pharmaml.ml import conformal_classification as cc
+
+    page = _fresh_workbench()
+    _classification_outcome(page._model_analysis)
+    seen = {}
+    real_split = cc.calibrate_split_conformal_classifier
+    real_conditional = cc.calibrate_label_conditional_classifier
+
+    def split(model, X, y, **kwargs):
+        seen["split_cal"] = list(X.index)
+        inner = real_split(model, X, y, **kwargs)
+
+        class Recorder:
+            def predict_set(self, X, **kw):
+                seen["split_eval"] = list(X.index)
+                return inner.predict_set(X, **kw)
+        return Recorder()
+
+    def conditional(model, X, y, **kwargs):
+        seen["conditional_cal"] = list(X.index)
+        inner = real_conditional(model, X, y, **kwargs)
+
+        class Recorder:
+            def predict_set(self, X, **kw):
+                seen["conditional_eval"] = list(X.index)
+                return inner.predict_set(X, **kw)
+        return Recorder()
+
+    monkeypatch.setattr(cc, "calibrate_split_conformal_classifier", split)
+    monkeypatch.setattr(cc, "calibrate_label_conditional_classifier", conditional)
+    page._start_stat_conformal_cls()
+    _settle(qtbot, qapp)
+    assert seen["split_cal"] == seen["conditional_cal"]
+    assert seen["split_eval"] == seen["conditional_eval"]
+    assert set(seen["split_cal"]).isdisjoint(seen["split_eval"])
+    assert len(seen["split_cal"]) + len(seen["split_eval"]) == 105

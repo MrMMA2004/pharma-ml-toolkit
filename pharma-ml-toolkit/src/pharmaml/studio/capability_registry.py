@@ -188,7 +188,6 @@ def summary() -> RegistrySummary:
     CAPABILITY_MAP quotes it; documentation alone never substitutes.
     """
     by_status: dict[str, int] = {}
-    by_card: dict[str, int] = {}
     orphans: list[str] = []
     duplicates: list[str] = []
     blocked_undisclosed: list[str] = []

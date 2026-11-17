@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from pharmaml.exceptions import JobCancelled
+from pharmaml.exceptions import JobCancelled, PersistenceError
 from pharmaml.generative import (
     GeneticOptimizer,
     LogPBandObjective,
@@ -190,41 +190,17 @@ class TestGenerativeSearchResume:
         objective): exact restore or nothing."""
         home = tmp_path / "stale"
         _ga().optimize(checkpoint_dir=home, checkpoint_resume=False)
-        ran: list[int] = []
-        # different seed
-        GeneticOptimizer(
-            QedObjective(), population_size=10, generations=GENS, seed=8
-        ).optimize(
-            checkpoint_dir=home,
-            progress=lambda done, total, note: ran.append(done),
-        )
-        assert ran and ran[0] == 1
-        ran.clear()
-        # different objective (config fingerprint covers the objective
-        # identity -- a LogP-band run must not resume a Qed checkpoint)
-        GeneticOptimizer(
-            LogPBandObjective(1.0, 3.0),
-            population_size=10,
-            generations=GENS,
-            seed=7,
-        ).optimize(
-            checkpoint_dir=home,
-            progress=lambda done, total, note: ran.append(done),
-        )
-        assert ran and ran[0] == 1
-        ran.clear()
-        # different mutation mode
-        GeneticOptimizer(
-            QedObjective(),
-            population_size=10,
-            generations=GENS,
-            seed=7,
-            mutation="bioisostere",
-        ).optimize(
-            checkpoint_dir=home,
-            progress=lambda done, total, note: ran.append(done),
-        )
-        assert ran and ran[0] == 1
+        before = {p.name: p.read_bytes() for p in home.iterdir()}
+        alternatives = [
+            GeneticOptimizer(QedObjective(), population_size=10, generations=GENS, seed=8),
+            GeneticOptimizer(LogPBandObjective(1.0, 3.0), population_size=10, generations=GENS, seed=7),
+            GeneticOptimizer(QedObjective(), population_size=10, generations=GENS, seed=7,
+                             mutation="bioisostere"),
+        ]
+        for optimizer in alternatives:
+            with pytest.raises(PersistenceError, match="identity or version mismatch"):
+                optimizer.optimize(checkpoint_dir=home)
+            assert {p.name: p.read_bytes() for p in home.iterdir()} == before
 
     def test_checkpoints_carry_the_v2_envelope(self, tmp_path: Path) -> None:
         """The §13 envelope rides every checkpoint: registered
