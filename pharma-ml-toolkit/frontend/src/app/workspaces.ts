@@ -75,7 +75,7 @@ export const WORKSPACES: readonly WorkspaceEntry[] = [
     label: "Molecular Docking",
     summary:
       "Ligands → Prepare → Receptor → Binding Site/Grid → Engine → Dock → Poses → Interactions → Export.",
-    state: "shell",
+    state: "workflow",
   },
   {
     id: "pkpd",

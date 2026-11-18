@@ -37,7 +37,7 @@ OFFSITE_DIR = Path.home() / "pharma-ml-toolkit-zips"
 EXCLUDE_DIRS = {
     ".git", "__pycache__", ".pytest_cache", ".ruff_cache",
     ".mypy_cache", ".tox", ".idea", ".vscode", ".cache",
-    "node_modules", "catboost_info", "artifacts", ".venv", "venv", "env",
+    "node_modules", "catboost_info", ".venv", "venv", "env",
     # (part11 Phase Three) the frontend build output: the Tauri host
     # rebuilds dist/ from the committed sources on the Windows side;
     # only the sources + lockfile ship.
@@ -50,6 +50,16 @@ EXCLUDE_DIRS = {
     # Kept on disk and in git; excluded from RELEASE ZIPS only.
     "scratch", "download", "dist-archive",
 }
+# (r285 defect fix) the backend's artifact OUTPUT directory lives under
+# data/ — the bare "artifacts" name that lived in EXCLUDE_DIRS until
+# v1.2.227 matched ANY path component, so the release zips silently
+# shipped the frontend WITHOUT frontend/src/services/artifacts/client.ts
+# while ml/dl/generative imported it — an internally inconsistent
+# archive (the sandbox rollback exposed it when the working-tree copy
+# vanished and the shipped zip could not restore it). The exclusion is
+# now path-anchored: only data/artifacts (the backend output home) is
+# dropped, the frontend services lane always ships.
+EXCLUDE_DIR_PATHS = {"data/artifacts"}
 EXCLUDE_SUFFIXES = {".log", ".zip"}
 EXCLUDE_DIR_SUFFIX = ".egg-info"
 
@@ -64,11 +74,15 @@ def iter_files(root: Path | None = None):
         raise error
 
     for dirpath, dirnames, filenames in os.walk(base, onerror=fail_walk):
+        folder = Path(dirpath)
+        rel = folder.relative_to(base).as_posix()
         dirnames[:] = sorted(
             d for d in dirnames
-            if d not in EXCLUDE_DIRS and not d.endswith(EXCLUDE_DIR_SUFFIX)
+            if d not in EXCLUDE_DIRS
+            and not d.endswith(EXCLUDE_DIR_SUFFIX)
+            and (f"{rel}/{d}" if rel != "." else d)
+            not in EXCLUDE_DIR_PATHS
         )
-        folder = Path(dirpath)
         for name in dirnames:
             if (folder / name).is_symlink():
                 raise OSError(f"release input directory is a symlink: {folder / name}")

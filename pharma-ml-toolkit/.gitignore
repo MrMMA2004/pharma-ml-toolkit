@@ -31,7 +31,15 @@ data/
 !examples/data/**
 !tests/data/
 !tests/data/**
-artifacts/
+# (r285 defect fix, carrier three) root-anchored: the bare `artifacts/`
+# pattern matched ANY directory named artifacts -- including
+# frontend/src/services/artifacts/ -- so every `git add -A` silently
+# skipped the services client and the r283 "rollback repair" never
+# durably landed in git (the remote's r284 tree still lacks the file
+# ml/dl/generative import). Only the toolkit root's own regenerated
+# artifacts output dir is ignored now; the frontend services lane is
+# tracked like any other source file.
+/artifacts/
 *.joblib
 *.xlsx
 

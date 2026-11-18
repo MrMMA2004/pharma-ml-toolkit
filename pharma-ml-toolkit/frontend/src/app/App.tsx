@@ -6,6 +6,7 @@ import { DatasetsPage } from "@/features/datasets/DatasetsPage";
 import { MLPage } from "@/features/ml/MLPage";
 import { DLPage } from "@/features/dl/DLPage";
 import { GenerativePage } from "@/features/generative/GenerativePage";
+import { DockingPage } from "@/features/docking/DockingPage";
 import { INITIAL_WORKSPACE, WORKSPACES, type WorkspaceId } from "@/app/workspaces";
 
 /**
@@ -66,6 +67,8 @@ export function App() {
           <DLPage />
         ) : entry.id === "generative-ai" ? (
           <GenerativePage />
+        ) : entry.id === "molecular-docking" ? (
+          <DockingPage />
         ) : (
           <WorkspaceShell entry={entry} />
         )}
