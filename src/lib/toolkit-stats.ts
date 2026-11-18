@@ -21,15 +21,17 @@
 export const SHIPPED_TEST_COUNT = 8541;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
- *  docs, tools — the same census /api/toolkit/tree walks). The r287
- *  close-out re-trued walk: 1,546 (the MD + Visualization workspace
- *  pages, clients and guard suites ride the tree). */
-export const SHIPPED_FILE_COUNT = 1546;
+ *  docs, tools — the same census /api/toolkit/tree walks). The r288
+ *  absorption re-trued walk: 1,551 (the r288 audit home, the r288
+ *  chunk runner and the in-flight molecular3d WIP ride the live walk;
+ *  the same convention the r287 close-out used for its in-flight
+ *  round). */
+export const SHIPPED_FILE_COUNT = 1551;
 
 /** Source lines of the shipped tree, formatted with thousands
- *  separators at render time (raw number kept for math). The r287
- *  close-out live census: 582,735. */
-export const SHIPPED_SOURCE_LINES = 582740;
+ *  separators at render time (raw number kept for math). The r288
+ *  absorption live census: 587,481. */
+export const SHIPPED_SOURCE_LINES = 587481;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

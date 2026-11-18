@@ -9,7 +9,7 @@
 # heading); long lanes (the study/report jobs, the figure renders)
 # wait through polling loops, never fixed sleeps.
 set -u
-cd /home/z/my-project/pharma-ml-toolkit
+cd "$HOME/my-project/pharma-ml-toolkit"
 
 FAILED=0
 note() { echo "==[ $1 ]=="; }
@@ -19,7 +19,7 @@ check() { # check <name> <cond-string>
 
 # -- boot the real backend (port-0 handshake) --------------------------
 rm -f /tmp/mdviz_backend.log
-/home/z/.venv/bin/python3 -m pharmaml.api > /tmp/mdviz_backend.log 2>&1 &
+"$HOME/.venv/bin/python3" -m pharmaml.api > /tmp/mdviz_backend.log 2>&1 &
 BACKEND_PID=$!
 
 READY=""
@@ -31,7 +31,7 @@ done
 PORT=$(echo "${READY}" | rg -o '"port": *[0-9]+' | rg -o '[0-9]+' | head -1)
 TOKEN=$(echo "${READY}" | rg -o '"token": *"[^"]+"' | sed 's/.*"token": *"//; s/"$//')
 
-(cd /home/z/my-project/pharma-ml-toolkit/frontend && PHARMAML_DEV_BACKEND_PORT="${PORT}" \
+(cd "$HOME/my-project/pharma-ml-toolkit/frontend" && PHARMAML_DEV_BACKEND_PORT="${PORT}" \
   bun x vite --port 5174 --host 127.0.0.1 > /tmp/vite_dev.log 2>&1 &)
 for i in $(seq 1 30); do
   curl -s --max-time 2 -o /dev/null http://127.0.0.1:5174/ && break

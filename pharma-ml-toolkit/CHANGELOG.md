@@ -1,3 +1,43 @@
+## [1.2.228-r288] — 2026-11-19 — the housekeeping absorption (the 2h pipeline's arena/recover288 branch merged; the superseding rebuild)
+
+- **The arena/recover288 branch is absorbed.** The 2026-11-18 17:58 UTC
+  pipeline firing had shipped its own v1.2.228 ritual from a clean
+  worktree at 4c125967 (996 entries / 891 files / 11,792,081 B,
+  `a6d5246f…`) while the interactive session was finishing the
+  authoritative close-out on main — a true divergence. The r288 merge
+  took main's later, browser-verified state for every conflicted
+  carrier (the counters, `toolkit-stats.ts`, `audit287/`, the
+  `upload/` zip, the notebooks — whose two re-executions differ only
+  in timestamps) and landed arena's genuine contributions: the
+  `examples/artifacts/` anchor in `.gitignore`, the path-anchored
+  `excluded_paths` check in `tools/audit_release.py`, the `$HOME`
+  scrub of `scratch/browser_verify_pkpd.sh`, and the regenerated
+  RELEASE_READINESS eleven-leg table (main's copy was still the stale
+  v1.2.227-era text). The remote `arena/recover288` ref is deleted
+  after the merge, per the standing branch-hygiene rule.
+- **The leakage gate caught the absorption re-introducing a home-path
+  literal**: arena's regenerated eleven-leg table quoted the r286
+  `browser_verify_pkpd.sh` defect verbatim (the home-path prefix)
+  inside RELEASE_READINESS.md, and the r288 run's own CHANGELOG entry
+  first repeated the same mistake here — both reworded to the r284
+  `$HOME` precedent (abd39859), and the r288 chunk-1 gate caught the
+  two committed/in-flight browser-verify scripts (`md_viz`, `3d`)
+  carrying the same literals; scrubbed to `$HOME`, chunk 1 re-run
+  green.
+- **The superseding rebuild.** The absorption changed four payload
+  files the shipped zip carried (`.gitignore`, `docs/FEATURES.md`,
+  `docs/RELEASE_READINESS.md`, `tools/audit_release.py`), so the
+  v1.2.228 archive was rebuilt from the clean worktree at abd39859
+  (the in-flight molecular3d WIP excluded, per the arena lesson):
+  1006 entries / 897 files / 11,853,300 B / sha256
+  `f2c411ca2a0ab4874dbd7ce73228bd3dd82870bf88f7b31e85a7eb0310a9dd5b`.
+  The build's own leakage gate: 0 real leaks; the r288 8-check audit
+  passed (`scratch/audit288/`); the archive shipped across the four
+  homes + the offsite home re-seeded; predecessors honestly retained
+  (223/224/225 have no independent offsite backup). The close-out's
+  `ca11d523…` digest below stays as the historical record of the zip
+  it describes — this rebuild supersedes it byte-wise.
+
 ## [1.2.228] — 2026-11-18 — round 287 (part11 §11.7/§11.8: the MD Analysis + Visualization rows — the nine-workspace GUI reconstruction completes; the r285/286 docking + PK/PD rows ride the same close)
 
 - **The §11.7 sequential workflow now EXISTS** as

@@ -74,4 +74,16 @@ bulk and no skipped test is claimed as passed.
 ## 5. Release-archive verification (§14)
 
 - Status: **passed** (8 checks)
+- The r288 superseding rebuild (the arena/recover288 absorption changed
+  four payload files the close-out zip carried):
+  `pharma-ml-toolkit-v1.2.228.zip`, 1006 entries / 897 files /
+  11,853,300 B, sha256
+  `f2c411ca2a0ab4874dbd7ce73228bd3dd82870bf88f7b31e85a7eb0310a9dd5b`,
+  built from the clean worktree at abd39859, audited 8/8
+  (`scratch/audit288/`), shipped across the four homes + the offsite
+  home re-seeded. The eleven-leg gate re-runs on the merged tree in
+  the same firing (`scratch/run_suite_chunks_288.py`); its chunk
+  table above records the r287 close-out's run, which the r288 merge
+  carried forward — the r288 results land in the counter note and the
+  audit home when the firing closes.
 
