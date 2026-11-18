@@ -4,6 +4,16 @@
 Explainability/Uncertainty queue lane CLOSED — `POST /api/v1/ml/explain`
 (`ml.explain.shap_summary`) with the GUI stage, 8 API pins, and the
 live browser run (evidence: `docs/gui/screenshots/r290-ml-explainability-*.png`).
+· **r291 addendum:** the Plotly.js src adoption campaign CLOSED —
+the shared `frontend/src/components/charts/PlotlyFigure.tsx` surface
+now renders every interactive 2-D chart lane through real Plotly
+traces (§22.2–§22.5: the ML parity scatter with the §22.5 click
+inspector over `predict`'s new evaluation block — the bounded
+aligned actual/predicted/SMILES sample, 5 API pins — the confusion
+heatmap, the §24.2.B/C AD scatters, the mean-|SHAP| bar, the DL
+learning curve, the PK/PD + MD curves); the row below gains the
+chart column's live evidence (r291 browser run, 7 evidence shots:
+`docs/gui/screenshots/r291-*.png`).
 **Spec:** MASTER_PROMPT part11_1 §21 —
 "Complete Backend–GUI Integration Audit" — with part11_2 §12's status labels.
 **Method:** every row below was derived live from the working tree — the 88
@@ -91,7 +101,7 @@ REST surface) · **GUI workspace / UI control** (the React consumer) ·
 |---|---|---|---|---|---|---|---|---|
 | `ml.models.list_models` | GET `/ml/models?task&only_available` | ML · Algorithm stage: catalog radio (task-filtered, unavailable rendered honestly) | S | catalog card | — | — | catalog tests | PASS |
 | `ml.training.train_model` (+ `resolve_model_name`) | POST `/ml/train` | ML · Hyperparameters: model-params JSON editor, test-size/folds/n-jobs/seed | J/S | `TrainedModelCard` (best_params, CV mean/std) | — | predictions table | train/tuned-CV pins | PASS |
-| stored estimator `.predict/.predict_proba` | POST `/ml/predict` | ML/DL · Inspect Predictions: predict-proba toggle | S/J | predictions table + probabilities block | — | csv/tsv/xlsx | inline/on-dataset/proba pins; e2e283 | PASS |
+| stored estimator `.predict/.predict_proba` | POST `/ml/predict` (dataset mode carries the §22.5 `evaluation` block — bounded aligned actual/predicted/SMILES rows, 5 pins) | ML/DL · Inspect Predictions: predict-proba toggle + the Plotly parity scatter / confusion heatmap with the click→sample inspector | S/J | predictions table + probabilities block + evaluation block | Plotly parity scatter (customdata §22.5) · confusion heatmap | csv/tsv/xlsx | inline/on-dataset/proba+evaluation pins; e2e283 + r291 browser (evidence: r291-ml-parity-*.png) | PASS |
 | `ml.semi_supervised.train_semi_supervised` | POST `/semi-supervised/train` | ML · Semi-supervised stage: method/base-estimator/threshold/k-best/kernel panel | J/S | pseudo-label counts + confidence summary view | — | — | `test_dl_semi_generative.py` 30 (incl. predict via `/ml/predict`) | PASS |
 | `ml.semi_supervised.evaluate_semi_supervised` | POST `/semi-supervised/evaluate` | **no UI consumer** (honest queue — the leakage-safe protocol note renders instead) | S | — | — | — | evaluate pins (API-only) | PARTIAL — §3.4 |
 | `ml.applicability.applicability_domain` (+ bootstrap) | POST `/applicability-domain/analyze` | ML · AD stage: k/percentile/n-models/uncertainty/figure panel (feature cap 50) | J/S | `ADResultCard` (counts + per-row reliability frame) | AD figure artifact | figure + AD table | analyze + bootstrap telemetry pins | PASS |

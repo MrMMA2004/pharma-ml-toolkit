@@ -141,6 +141,27 @@ export interface PredictResponse {
   readonly n_rows: number;
   readonly predictions: readonly unknown[];
   readonly probabilities: ProbabilitiesBlock | null;
+  /** part11 §22.5 — dataset mode only (null for inline rows). */
+  readonly evaluation: EvaluationBlock | null;
+}
+
+/** One aligned sample row of the evaluation block (§22.5's identity). */
+export interface EvaluationRow {
+  readonly name: unknown;
+  readonly actual: unknown;
+  readonly predicted: unknown;
+  readonly residual: number | null;
+  readonly smiles: string | null;
+}
+
+/** The aligned actual/predicted sample the parity lane plots. */
+export interface EvaluationBlock {
+  readonly target: string;
+  readonly task: string;
+  readonly smiles_col: string | null;
+  readonly n_rows_available: number;
+  readonly n_rows_evaluated: number;
+  readonly rows: readonly EvaluationRow[];
 }
 
 /** One row of the AD reliability frame (`to_frame`, JSON-safe). */
@@ -627,12 +648,58 @@ export function parsePredictResponse(
         : [],
     };
   }
+  const evaluationRaw = r["evaluation"];
+  const evaluation: EvaluationBlock | null =
+    typeof evaluationRaw === "object" && evaluationRaw !== null
+      ? parseEvaluationBlock(evaluationRaw, `${what} evaluation`)
+      : null;
   return {
     mode: "sync",
     model_id: modelId,
     n_rows: asNumber(r["n_rows"]) ?? 0,
     predictions: predictions as readonly unknown[],
     probabilities,
+    evaluation,
+  };
+}
+
+/** Narrow the §22.5 evaluation block — row-validated, never trusted. */
+function parseEvaluationBlock(
+  raw: unknown,
+  what: string,
+): EvaluationBlock {
+  const r = expectObject(raw, what);
+  const target = r["target"];
+  const task = r["task"];
+  const rowsRaw = r["rows"];
+  if (
+    typeof target !== "string" ||
+    typeof task !== "string" ||
+    !Array.isArray(rowsRaw)
+  ) {
+    throw new Error(`${what}: target/task/rows have wrong shapes`);
+  }
+  const rows: EvaluationRow[] = [];
+  for (const rowRaw of rowsRaw) {
+    if (typeof rowRaw !== "object" || rowRaw === null) {
+      throw new Error(`${what}: a row is not an object`);
+    }
+    const row = rowRaw as Record<string, unknown>;
+    rows.push({
+      name: row["name"] ?? null,
+      actual: row["actual"] ?? null,
+      predicted: row["predicted"] ?? null,
+      residual: asNumber(row["residual"]),
+      smiles: asString(row["smiles"]),
+    });
+  }
+  return {
+    target,
+    task,
+    smiles_col: asString(r["smiles_col"]),
+    n_rows_available: asNumber(r["n_rows_available"]) ?? 0,
+    n_rows_evaluated: asNumber(r["n_rows_evaluated"]) ?? 0,
+    rows,
   };
 }
 

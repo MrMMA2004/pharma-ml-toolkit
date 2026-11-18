@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownToLine,
   Braces,
@@ -42,13 +42,19 @@ import {
   parseSemiSupervisedResult,
   parseTrainResult,
   type ADAnalyzeResult,
+  type ADFrameRow,
   type ExplainResult,
+  type EvaluationRow,
   type ModelCatalogEntry,
   type PredictResponse,
   type SemiSupervisedView,
   type TrainedModelView,
 } from "@/services/ml/client";
 import type { components } from "@/types/api.d";
+import {
+  PlotlyFigure,
+  type PlotTrace,
+} from "@/components/charts/PlotlyFigure";
 
 /**
  * The Machine Learning workspace — part11 §11.2's complete sequential
@@ -915,12 +921,16 @@ export function MLPage() {
           State, honestly: the train and semi-supervised lanes run as
           managed background jobs with the authoritative REST result
           relay; the predict lane runs sync over the registered
-          dataset&apos;s own feature matrix; the applicability-domain
-          stage assembles x_test through the bounded column bridge;
-          the explainability stage runs the real shap_summary engine
-          sync over a bounded sample (job mode available) and refuses
-          non-tree estimators honestly. No feature on this page is a
-          claim that was not executed.
+          dataset&apos;s own feature matrix (its evaluation block now
+          plots through the interactive Plotly lanes — the parity
+          scatter with per-click sample metadata, the confusion
+          heatmap, the AD query-distance view, the mean-|SHAP| bar);
+          the applicability-domain stage assembles x_test through
+          the bounded column bridge; the explainability stage runs
+          the real shap_summary engine sync over a bounded sample
+          (job mode available) and refuses non-tree estimators
+          honestly. No feature on this page is a claim that was not
+          executed.
         </p>
       </div>
 
@@ -1382,6 +1392,11 @@ export function MLPage() {
                   keeps the authoritative prediction set; the Export
                   stage registers the full rows as the table artifact.
                 </p>
+                <EvaluateCharts
+                  result={predictResult}
+                  modelId={selectedTrainedId ?? predictResult.model_id}
+                  datasetId={selectedId}
+                />
                 {predictResult.probabilities !== null ? (
                   <div className="mt-3">
                     <p className="text-xs font-medium text-[var(--color-foreground)]">
@@ -2131,6 +2146,526 @@ function TrainedModelCard({ model }: { model: TrainedModelView }) {
   );
 }
 
+/**
+ * part11 §22.2/§22.5 — the Evaluate stage's interactive Plotly lanes.
+ *
+ * Regression answers get the parity scatter (actual vs predicted over
+ * the evaluation block's aligned sample, the identity line for
+ * reference); classification answers get the confusion-matrix heatmap.
+ * Every point carries the row's own metadata (`customdata`); a click
+ * opens the sample inspector below the chart — the real row's name,
+ * SMILES when the dataset carried structures, actual, predicted, and
+ * residual, never a plot position or array index.
+ */
+function EvaluateCharts({
+  result,
+  modelId,
+  datasetId,
+}: {
+  result: PredictResponse;
+  modelId: string;
+  datasetId: string | null;
+}) {
+  const evaluation = result.evaluation;
+  const [selected, setSelected] = useState<EvaluationRow | null>(null);
+  const numericRows = useMemo(
+    () =>
+      evaluation === null
+        ? []
+        : evaluation.rows.filter(
+            (row) =>
+              typeof row.actual === "number" && typeof row.predicted === "number",
+          ),
+    [evaluation],
+  );
+
+  if (evaluation === null) {
+    return (
+      <p className="mt-3 text-xs text-[var(--color-muted-foreground)]">
+        No evaluation block in this answer — inline-row predictions carry
+        no aligned actuals to chart (the dataset-mode lane plots them).
+      </p>
+    );
+  }
+
+  const isRegression =
+    evaluation.task === "regression" && numericRows.length >= 2;
+  const hasClasses =
+    evaluation.task === "classification" && evaluation.rows.length > 0;
+
+  return (
+    <div className="mt-4">
+      <p className="mb-2 text-xs font-medium text-[var(--color-foreground)]">
+        Interactive chart (Plotly) — {isRegression
+          ? "parity: actual vs predicted"
+          : "confusion matrix: actual vs predicted class"}
+        {evaluation.n_rows_available !== evaluation.n_rows_evaluated
+          ? ` · ${evaluation.n_rows_evaluated} of ${evaluation.n_rows_available} rows plotted (the route's own sample bound)`
+          : ` · ${evaluation.n_rows_evaluated} rows plotted`}
+      </p>
+      {isRegression ? (
+        <ParityChart rows={numericRows} onRowSelect={setSelected} />
+      ) : hasClasses ? (
+        <ConfusionChart rows={evaluation.rows} />
+      ) : (
+        <p className="rounded-md border border-dashed border-[var(--color-border)] px-3 py-4 text-xs text-[var(--color-muted-foreground)]">
+          No plottable numeric pairs in the evaluation sample — the parity
+          lane needs numeric actual/predicted values.
+        </p>
+      )}
+      <EvalRowInspector
+        row={selected}
+        target={evaluation.target}
+        task={evaluation.task}
+        modelId={modelId}
+        datasetId={datasetId}
+        onClear={() => setSelected(null)}
+      />
+    </div>
+  );
+}
+
+/** The regression parity scatter with the identity reference line. */
+function ParityChart({
+  rows,
+  onRowSelect,
+}: {
+  rows: readonly {
+    readonly name: unknown;
+    readonly actual: unknown;
+    readonly predicted: unknown;
+    readonly residual: number | null;
+    readonly smiles: string | null;
+  }[];
+  onRowSelect: (row: EvaluationRow) => void;
+}) {
+  const traces = useMemo<readonly PlotTrace[]>(() => {
+    const xs = rows.map((row) => row.actual as number);
+    const ys = rows.map((row) => row.predicted as number);
+    const lo = Math.min(...xs, ...ys);
+    const hi = Math.max(...xs, ...ys);
+    const pad = (hi - lo) * 0.05 || 0.5;
+    const x0 = lo - pad;
+    const x1 = hi + pad;
+    return [
+      {
+        type: "scatter",
+        mode: "markers",
+        name: "samples",
+        x: xs,
+        y: ys,
+        customdata: rows.map((row) => [
+          row.name,
+          row.smiles ?? "—",
+          row.actual,
+          row.predicted,
+          row.residual ?? "—",
+        ]),
+        hovertemplate:
+          "row %{customdata[0]}<br>actual %{customdata[2]:.4g}" +
+          "<br>predicted %{customdata[3]:.4g}" +
+          "<br>residual %{customdata[4]:.4g}" +
+          "<br>%{customdata[1]}<extra></extra>",
+        marker: { color: "var(--chart-1)", size: 7, opacity: 0.85 },
+      },
+      {
+        type: "scatter",
+        mode: "lines",
+        name: "y = x",
+        x: [x0, x1],
+        y: [x0, x1],
+        showlegend: false,
+        hoverinfo: "skip",
+        line: { color: "var(--chart-5)", width: 1, dash: "dot" },
+      },
+    ];
+  }, [rows]);
+  const layout = useMemo(
+    () => ({
+      xaxis: { title: { text: "actual" }, scaleanchor: "y", scaleratio: 1 },
+      yaxis: { title: { text: "predicted" } },
+      margin: { l: 56, r: 12, t: 8, b: 40 },
+    }),
+    [],
+  );
+  return (
+    <PlotlyFigure
+      data={traces}
+      layout={layout}
+      height={300}
+      ariaLabel="the actual-versus-predicted parity scatter over the evaluation sample"
+      emptyHint="No numeric actual/predicted pairs to plot."
+      onPointSelect={(point) => {
+        const index = point.pointIndex ?? null;
+        if (index === null || index >= rows.length) return;
+        onRowSelect(rows[index] as EvaluationRow);
+      }}
+    />
+  );
+}
+
+/** The classification confusion-matrix heatmap over the sample rows. */
+function ConfusionChart({ rows }: { rows: readonly EvaluationRow[] }) {
+  const { traces, layout, classes } = useMemo(() => {
+    const classSet = new Set<string>();
+    for (const row of rows) {
+      classSet.add(String(row.actual));
+      classSet.add(String(row.predicted));
+    }
+    const classes = Array.from(classSet).sort();
+    const index = new Map(classes.map((cls, i) => [cls, i]));
+    const z = classes.map(() => classes.map(() => 0));
+    for (const row of rows) {
+      const i = index.get(String(row.actual));
+      const j = index.get(String(row.predicted));
+      if (i === undefined || j === undefined) continue;
+      z[i]![j]! += 1;
+    }
+    const annotations = [];
+    for (let i = 0; i < classes.length; i++) {
+      for (let j = 0; j < classes.length; j++) {
+        annotations.push({
+          x: classes[j],
+          y: classes[i],
+          text: String(z[i]![j]!),
+          showarrow: false,
+          font: { size: 11 },
+        });
+      }
+    }
+    const traces: readonly PlotTrace[] = [
+      {
+        type: "heatmap",
+        z,
+        x: classes,
+        y: classes,
+        hovertemplate:
+          "actual %{y}<br>predicted %{x}<br>count %{z}<extra></extra>",
+        colorscale: [
+          [0, "rgba(47, 125, 95, 0.06)"],
+          [1, "rgba(47, 125, 95, 0.92)"],
+        ],
+        showscale: false,
+      },
+    ];
+    return {
+      traces,
+      layout: {
+        xaxis: { title: { text: "predicted class" }, constrain: "domain" },
+        yaxis: { title: { text: "actual class" }, autorange: "reversed" },
+        annotations,
+        margin: { l: 64, r: 12, t: 8, b: 48 },
+      },
+      classes,
+    };
+  }, [rows]);
+  return (
+    <PlotlyFigure
+      data={traces}
+      layout={layout}
+      height={300}
+      ariaLabel={`the confusion matrix heatmap over ${rows.length} evaluation rows and ${classes.length} classes`}
+      emptyHint="No class pairs to chart."
+    />
+  );
+}
+
+/** §22.5's sample inspector — the clicked row's own metadata. */
+function EvalRowInspector({
+  row,
+  target,
+  task,
+  modelId,
+  datasetId,
+  onClear,
+}: {
+  row: EvaluationRow | null;
+  target: string;
+  task: string;
+  modelId: string;
+  datasetId: string | null;
+  onClear: () => void;
+}) {
+  if (row === null) {
+    return (
+      <p className="mt-2 text-[11px] text-[var(--color-muted-foreground)]">
+        Click a point in the parity chart to inspect that sample&apos;s own
+        metadata (row identity, SMILES when the dataset carried them,
+        actual, predicted, residual).
+      </p>
+    );
+  }
+  const fields: readonly [string, string][] = [
+    ["row", formatValue(row.name)],
+    ["SMILES", row.smiles ?? "—"],
+    [`actual ${target}`, formatValue(row.actual)],
+    ["predicted", formatValue(row.predicted)],
+    ["residual", row.residual === null ? "—" : row.residual.toFixed(4)],
+    ["task", task],
+    ["model", modelId],
+    ["dataset", datasetId ?? "—"],
+  ];
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-[var(--color-foreground)]">
+          Selected sample (the point&apos;s own metadata)
+        </p>
+        <Button size="sm" variant="outline" onClick={onClear}>
+          Clear
+        </Button>
+      </div>
+      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+        {fields.map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-[10px] uppercase tracking-wide text-[var(--color-muted-foreground)]">
+              {label}
+            </dt>
+            <dd className="truncate text-[11px] font-medium text-[var(--color-foreground)]">
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/**
+ * §24.2.B — the query-distance scatter: every query compound by its
+ * kNN distance (x) against the predicted value (y), in-domain and
+ * out-of-domain as distinct categories, with the analysis&apos;s own
+ * distance threshold drawn as the reference line. §24.2.C rides the
+ * same frame when the bootstrap uncertainty ran: the prediction_sd
+ * values with their threshold.
+ */
+function ADQueryScatter({
+  analysis,
+}: {
+  analysis: ADAnalyzeResult["analysis"];
+}) {
+  const frame = analysis.frame;
+  const hasUncertainty = frame.some(
+    (row) => row.prediction_sd !== null && row.knn_distance !== null,
+  );
+  const domainTraces = useMemo<readonly PlotTrace[]>(() => {
+    const inside = frame.filter((row) => row.inside_ad === true);
+    const outside = frame.filter((row) => row.inside_ad !== true);
+    const point = (row: ADFrameRow): readonly unknown[] => [
+      row.name,
+      row.inside_ad === true ? "in-domain" : "out-of-domain",
+      row.low_uncertainty === null
+        ? "—"
+        : row.low_uncertainty === true
+          ? "low uncertainty"
+          : "high uncertainty",
+      row.reliable === null ? "—" : row.reliable === true ? "reliable" : "not reliable",
+    ];
+    return [
+      {
+        type: "scatter",
+        mode: "markers",
+        name: "in-domain",
+        x: inside.map((row) => row.knn_distance),
+        y: inside.map((row) => row.predicted),
+        customdata: inside.map(point),
+        hovertemplate:
+          "%{customdata[0]}<br>kNN distance %{x:.4g}" +
+          "<br>predicted %{y:.4g}<br>%{customdata[1]} · %{customdata[2]}" +
+          "<br>%{customdata[3]}<extra></extra>",
+        marker: { color: "var(--chart-1)", size: 7, opacity: 0.85 },
+      },
+      {
+        type: "scatter",
+        mode: "markers",
+        name: "out-of-domain",
+        x: outside.map((row) => row.knn_distance),
+        y: outside.map((row) => row.predicted),
+        customdata: outside.map(point),
+        hovertemplate:
+          "%{customdata[0]}<br>kNN distance %{x:.4g}" +
+          "<br>predicted %{y:.4g}<br>%{customdata[1]} · %{customdata[2]}" +
+          "<br>%{customdata[3]}<extra></extra>",
+        marker: { color: "var(--chart-3)", size: 7, opacity: 0.85 },
+      },
+    ];
+  }, [frame]);
+  const domainLayout = useMemo(
+    () => ({
+      xaxis: { title: { text: "kNN distance to the training domain" } },
+      yaxis: { title: { text: "predicted value" } },
+      shapes: [
+        {
+          type: "line",
+          x0: analysis.distance_threshold,
+          x1: analysis.distance_threshold,
+          y0: 0,
+          y1: 1,
+          yref: "paper",
+          line: { color: "var(--chart-3)", width: 1, dash: "dash" },
+        },
+      ],
+      annotations: [
+        {
+          x: analysis.distance_threshold,
+          y: 1,
+          yref: "paper",
+          text: "distance threshold",
+          showarrow: false,
+          yanchor: "bottom",
+          font: { size: 10 },
+        },
+      ],
+      margin: { l: 56, r: 12, t: 8, b: 40 },
+    }),
+    [analysis.distance_threshold],
+  );
+
+  const sdTraces = useMemo<readonly PlotTrace[]>(() => {
+    const rows = frame.filter(
+      (row) => row.prediction_sd !== null && row.knn_distance !== null,
+    );
+    return [
+      {
+        type: "scatter",
+        mode: "markers",
+        name: "prediction sd",
+        x: rows.map((row) => row.knn_distance),
+        y: rows.map((row) => row.prediction_sd),
+        customdata: rows.map((row) => [row.name]),
+        hovertemplate:
+          "%{customdata[0]}<br>kNN distance %{x:.4g}" +
+          "<br>prediction sd %{y:.4g}<extra></extra>",
+        marker: { color: "var(--chart-2)", size: 7, opacity: 0.85 },
+      },
+    ];
+  }, [frame]);
+  const sdLayout = useMemo(
+    () => ({
+      xaxis: { title: { text: "kNN distance to the training domain" } },
+      yaxis: { title: { text: "prediction sd (bootstrap)" } },
+      shapes:
+        analysis.uncertainty_threshold === null
+          ? []
+          : [
+              {
+                type: "line",
+                x0: 0,
+                x1: 1,
+                xref: "paper",
+                y0: analysis.uncertainty_threshold,
+                y1: analysis.uncertainty_threshold,
+                line: { color: "var(--chart-3)", width: 1, dash: "dash" },
+              },
+            ],
+      annotations:
+        analysis.uncertainty_threshold === null
+          ? []
+          : [
+              {
+                x: 1,
+                xref: "paper",
+                y: analysis.uncertainty_threshold,
+                text: "uncertainty threshold",
+                showarrow: false,
+                xanchor: "right",
+                yanchor: "bottom",
+                font: { size: 10 },
+              },
+            ],
+      margin: { l: 56, r: 12, t: 8, b: 40 },
+    }),
+    [analysis.uncertainty_threshold],
+  );
+
+  if (frame.length === 0) {
+    return null;
+  }
+  return (
+    <div className="mt-3">
+      <p className="mb-2 text-xs font-medium text-[var(--color-foreground)]">
+        Query-distance view (Plotly) — the §24.2.B scatter
+        {hasUncertainty ? " with the §24.2.C uncertainty panel" : ""}
+      </p>
+      <PlotlyFigure
+        data={domainTraces}
+        layout={domainLayout}
+        height={260}
+        ariaLabel="the query compounds by kNN distance versus predicted value, in-domain and out-of-domain with the distance threshold"
+      />
+      {hasUncertainty ? (
+        <div className="mt-3">
+          <p className="mb-2 text-xs font-medium text-[var(--color-foreground)]">
+            Prediction uncertainty (bootstrap sd) with the threshold
+          </p>
+          <PlotlyFigure
+            data={sdTraces}
+            layout={sdLayout}
+            height={220}
+            ariaLabel="the bootstrap prediction standard deviation by kNN distance with the uncertainty threshold"
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * §22.2's feature-importance form — the mean |SHAP| ranking as the
+ * real horizontal Plotly bar chart over the top-ranked features (the
+ * table below stays the full inventory; the chart is the visual over
+ * the head of the same ranking, never a different number).
+ */
+function ShapRankingBar({
+  ranking,
+}: {
+  ranking: readonly { readonly feature: string; readonly mean_abs_shap: number }[];
+}) {
+  const rows = ranking.slice(0, 12);
+  const traces = useMemo<readonly PlotTrace[]>(
+    () => [
+      {
+        type: "bar",
+        orientation: "h",
+        x: rows.map((row) => row.mean_abs_shap),
+        y: rows.map((row) => row.feature),
+        customdata: rows.map((row) => [row.feature]),
+        hovertemplate:
+          "%{customdata[0]}<br>mean |SHAP| %{x:.4g}<extra></extra>",
+        marker: { color: "var(--chart-1)", opacity: 0.9 },
+        showlegend: false,
+      },
+    ],
+    [rows],
+  );
+  const layout = useMemo(
+    () => ({
+      xaxis: { title: { text: "mean |SHAP|" } },
+      yaxis: { autorange: "reversed", tickfont: { size: 10 } },
+      margin: { l: 120, r: 12, t: 8, b: 40 },
+    }),
+    [],
+  );
+  if (rows.length === 0) {
+    return null;
+  }
+  const height = Math.max(180, rows.length * 22 + 60);
+  return (
+    <div className="mt-3">
+      <p className="mb-2 text-xs font-medium text-[var(--color-foreground)]">
+        Mean |SHAP| ranking (Plotly) — top {rows.length} of{" "}
+        {ranking.length} features
+      </p>
+      <PlotlyFigure
+        data={traces}
+        layout={layout}
+        height={height}
+        ariaLabel={`the mean absolute SHAP value bar chart over the top ${rows.length} of ${ranking.length} ranked features`}
+      />
+    </div>
+  );
+}
+
 /** The AD analysis result card — every key as it arrived. */
 function ADResultCard({
   result,
@@ -2182,6 +2717,7 @@ function ADResultCard({
           fit_seconds: {analysis.fit_seconds.toFixed(2)}
         </span>
       </div>
+      <ADQueryScatter analysis={analysis} />
       {analysis.frame.length > 0 ? (
         <div className="mt-3 overflow-hidden rounded-lg border border-[var(--color-border)]">
           <div className="max-h-64 overflow-auto">
@@ -2275,6 +2811,8 @@ function ExplainResultCard({
           base value: {result.base_value === null ? "—" : result.base_value.toFixed(4)}
         </span>
       </div>
+
+      <ShapRankingBar ranking={result.ranking} />
 
       <div className="mt-3 overflow-hidden rounded-lg border border-[var(--color-border)]">
         <div className="max-h-64 overflow-auto">

@@ -26,6 +26,10 @@ import {
 } from "@/services/artifacts/client";
 import { getEventStream } from "@/services/websocket/client";
 import {
+  PlotlyFigure,
+  type PlotTrace,
+} from "@/components/charts/PlotlyFigure";
+import {
   assertNcaSeriesBounds,
   assertPopulationBounds,
   assertTimesBounds,
@@ -365,9 +369,11 @@ function parseSeries(text: string, label: string): SeriesPoint[] {
 }
 
 /**
- * The inline curve — an SVG polyline drawn ONLY from the points that
- * actually arrived (no interpolation the data does not own, no
- * fabricated axes: the domain/range labels state the real min/max).
+ * The inline curve — a real Plotly line chart drawn ONLY from the
+ * points that actually arrived (no interpolation the data does not
+ * own, no fabricated axes: the domain/range labels state the real
+ * min/max; §22.2's curve form, §22.4's per-point hover without any
+ * mouse-following crosshair).
  */
 function CurveFigure({
   points,
@@ -380,6 +386,23 @@ function CurveFigure({
   yLabel: string;
   height?: number;
 }) {
+  const traces = useMemo<readonly PlotTrace[]>(
+    () => [
+      {
+        type: "scatter",
+        mode: "lines+markers",
+        name: yLabel,
+        x: points.map((p) => p.x),
+        y: points.map((p) => p.y),
+        customdata: points.map((p) => [p.x, p.y]),
+        hovertemplate: `${xLabel}: %{customdata[0]:.4g}<br>${yLabel}: %{customdata[1]:.4g}<extra></extra>`,
+        line: { color: "var(--chart-1)", width: 2, shape: "linear" },
+        marker: { size: 4 },
+        showlegend: false,
+      },
+    ],
+    [points, xLabel, yLabel],
+  );
   if (points.length < 2) {
     return (
       <p className="text-xs text-[var(--color-muted-foreground)]">
@@ -388,43 +411,23 @@ function CurveFigure({
       </p>
     );
   }
-  const width = 640;
-  const pad = 34;
   const xs = points.map((p) => p.x);
   const ys = points.map((p) => p.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const spanX = maxX - minX || 1;
-  const spanY = maxY - minY || 1;
-  const toX = (x: number) => pad + ((x - minX) / spanX) * (width - pad * 2);
-  const toY = (y: number) => height - pad - ((y - minY) / spanY) * (height - pad * 2);
-  const path = points
-    .map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.x).toFixed(2)},${toY(p.y).toFixed(2)}`)
-    .join(" ");
   return (
     <figure className="mt-2">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)]"
-        role="img"
-        aria-label={`${yLabel} versus ${xLabel} curve over ${points.length} real points`}
-      >
-        <path
-          d={path}
-          fill="none"
-          stroke="var(--color-primary)"
-          strokeWidth="2"
-          strokeLinejoin="round"
-        />
-        {points.map((p, i) => (
-          <circle key={i} cx={toX(p.x)} cy={toY(p.y)} r="2.5" fill="var(--color-primary)" />
-        ))}
-      </svg>
+      <PlotlyFigure
+        data={traces}
+        layout={{
+          xaxis: { title: { text: xLabel } },
+          yaxis: { title: { text: yLabel } },
+          margin: { l: 56, r: 12, t: 8, b: 40 },
+        }}
+        height={height}
+        ariaLabel={`${yLabel} versus ${xLabel} curve over ${points.length} real points`}
+      />
       <figcaption className="mt-1 text-[11px] text-[var(--color-muted-foreground)]">
-        {points.length} real points · {xLabel} {formatValue(minX)}–{formatValue(maxX)} ·{" "}
-        {yLabel} {formatValue(minY)}–{formatValue(maxY)}
+        {points.length} real points · {xLabel} {formatValue(Math.min(...xs))}–{formatValue(Math.max(...xs))} ·{" "}
+        {yLabel} {formatValue(Math.min(...ys))}–{formatValue(Math.max(...ys))}
       </figcaption>
     </figure>
   );

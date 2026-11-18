@@ -9,7 +9,13 @@ training backend (part10's queued row).
   model store for prediction and artifact export.
 * ``POST /api/v1/ml/predict`` — predictions (and optional
   probabilities) from a session-trained model on inline rows or on a
-  registered dataset's feature matrix.
+  registered dataset's feature matrix. Dataset mode additionally
+  carries the aligned ``evaluation`` block (part11 §22.5's point
+  metadata lane): the bounded sample rows with the stable frame-index
+  name, the actual target value, the prediction, the regression
+  residual, and the SMILES string whenever the frame carries a
+  detectable SMILES column — the raw the parity plot and the sample
+  inspector in the GUI plot and click through.
 * ``POST /api/v1/ml/explain`` — the SHAP summary of a session-trained
   model over (a bounded sample of) its dataset's feature matrix
   (:func:`pharmaml.ml.explain.shap_summary` — part11 §11.2's
@@ -36,6 +42,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from pharmaml.chem import detect_smiles_column
 from pharmaml.exceptions import (
     DataValidationError,
     DependencyError,
@@ -58,6 +65,10 @@ router = APIRouter(prefix="/ml", tags=["ml"])
 # columns (the top-ranked ones; the ranking itself carries all)
 _MAX_EXPLAIN_ROWS = 500
 _MAX_PREVIEW_FEATURES = 50
+
+# the evaluation block's own wire bound (§17.3 again: the parity
+# plot's sample is bounded, the bound is reported, never silent)
+_MAX_EVALUATION_ROWS = 500
 
 
 class TrainRequest(BaseModel):
@@ -232,10 +243,69 @@ def train_model_route(req: TrainRequest, request: Request) -> dict:
     return {"mode": "job", "job": record.public()}
 
 
+def _evaluation_block(dataset: Any, predictions: Any) -> dict:
+    """§22.5 — the aligned actual/predicted rows for the parity lane.
+
+    Dataset mode only: the frame's own index is the stable row
+    identity, ``y`` carries the actuals, the SMILES column (when the
+    frame has one, by ``detect_smiles_column``'s two-pass probe)
+    carries the structures, and the regression residual is
+    ``actual - predicted`` over the numeric pairs. The block is
+    bounded to the first ``_MAX_EVALUATION_ROWS`` rows with both
+    counts reported — a display bound never a truncation of the
+    model's authoritative prediction set (the Export stage registers
+    the full table).
+    """
+    frame = dataset.frame
+    y = dataset.y
+    smiles_col: str | None = None
+    try:
+        smiles_col = detect_smiles_column(frame)
+    except DataValidationError:
+        smiles_col = None  # a numeric-only frame simply has no structures
+    regression = dataset.task == "regression"
+    n_available = len(predictions)
+    bounded = min(n_available, _MAX_EVALUATION_ROWS)
+    rows: list[dict[str, Any]] = []
+    for i in range(bounded):
+        actual = y.iloc[i]
+        predicted = predictions[i]
+        residual = None
+        if regression and isinstance(
+            actual, (int, float, np.number)
+        ) and isinstance(predicted, (int, float, np.number)):
+            residual = json_safe(float(actual) - float(predicted))
+        smiles = None
+        if smiles_col is not None:
+            value = frame.iloc[i][smiles_col]
+            if value is not None and not (
+                isinstance(value, float) and np.isnan(value)
+            ):
+                smiles = str(value)
+        rows.append(
+            {
+                "name": json_safe(frame.index[i]),
+                "actual": json_safe(actual),
+                "predicted": json_safe(predicted),
+                "residual": residual,
+                "smiles": smiles,
+            }
+        )
+    return {
+        "target": dataset.target,
+        "task": dataset.task,
+        "smiles_col": smiles_col,
+        "n_rows_available": n_available,
+        "n_rows_evaluated": bounded,
+        "rows": rows,
+    }
+
+
 def _predict_body(
     model_record: TrainedModelRecord,
     X: pd.DataFrame,
     want_proba: bool,
+    dataset: Any | None = None,
     cancel_event=None,
 ) -> dict:
     if cancel_event is not None and cancel_event.is_set():
@@ -247,6 +317,8 @@ def _predict_body(
         "n_rows": len(X),
         "predictions": [json_safe(p) for p in predictions],
     }
+    if dataset is not None and len(dataset.y) == len(X):
+        payload["evaluation"] = _evaluation_block(dataset, predictions)
     if want_proba:
         if not hasattr(estimator, "predict_proba"):
             raise ModelError(
@@ -281,6 +353,7 @@ def predict(req: PredictRequest, request: Request) -> dict:
         raise HTTPException(status_code=404, detail="Unknown model_id.")
     if req.rows is not None:
         X = pd.DataFrame(req.rows)
+        evaluation_dataset = None  # inline rows carry no aligned actuals
     else:
         dataset = request.app.state.dataset_store.get(
             req.dataset_id or ""
@@ -290,10 +363,12 @@ def predict(req: PredictRequest, request: Request) -> dict:
                 status_code=404, detail="Unknown dataset_id."
             )
         X = dataset.X
+        evaluation_dataset = dataset
     if req.mode == "sync":
         try:
             return {"mode": "sync", **_predict_body(
-                model_record, X, req.predict_proba
+                model_record, X, req.predict_proba,
+                dataset=evaluation_dataset,
             )}
         except (DataValidationError, ModelError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -310,6 +385,7 @@ def predict(req: PredictRequest, request: Request) -> dict:
         model_record=model_record,
         X=X,
         want_proba=req.predict_proba,
+        dataset=evaluation_dataset,
     )
     return {"mode": "job", "job": record.public()}
 
@@ -359,7 +435,10 @@ def _explain_body(
     # the preview matrices carry only the top-ranked feature columns
     # (the ranking above carries every feature — the bound is on the
     # wire size, never on the honest inventory)
-    keep = [row["feature"] for row in ranking[:_MAX_PREVIEW_FEATURES]]
+    keep = [
+        str(row["feature"])
+        for row in ranking[:_MAX_PREVIEW_FEATURES]
+    ]
     indices = [summary.names.index(name) for name in keep]
     values = np.asarray(summary.values, dtype=float)
     feature_values = np.asarray(summary.feature_values, dtype=float)

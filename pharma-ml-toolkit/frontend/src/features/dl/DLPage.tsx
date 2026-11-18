@@ -23,6 +23,10 @@ import {
 import { mlApi, type PredictResponse } from "@/services/ml/client";
 import { getEventStream } from "@/services/websocket/client";
 import {
+  PlotlyFigure,
+  type PlotTrace,
+} from "@/components/charts/PlotlyFigure";
+import {
   DL_ACTIVATIONS,
   DL_HYPERPARAM_KEYS,
   dlApi,
@@ -253,12 +257,52 @@ function validateHiddenLayers(text: string): number[] | null {
 }
 
 /**
- * The live loss/validation curve — an inline SVG drawn from the
- * REAL per-epoch telemetry points (no chart fabrication: two
- * polylines, the points the backend actually published, axes
- * labelled honestly, missing points skipped).
+ * The live loss/validation curve — a real Plotly line chart drawn
+ * from the REAL per-epoch telemetry points (no chart fabrication:
+ * two lines over the points the backend actually published, the
+ * missing points of either series skipped, axes labelled honestly;
+ * §22.2's learning-curve form, §22.4's per-point hover without any
+ * mouse-following crosshair).
  */
 function LossCurveChart({ points }: { points: readonly TrainingMetricsPoint[] }) {
+  const traces = useMemo<readonly PlotTrace[]>(() => {
+    const series = (key: "train_loss" | "val_loss"): readonly {
+      epoch: number;
+      value: number;
+    }[] =>
+      points
+        .filter((p) => {
+          const value = p[key];
+          return value !== null && Number.isFinite(value);
+        })
+        .map((p) => ({ epoch: p.epoch, value: p[key] as number }));
+    const train = series("train_loss");
+    const val = series("val_loss");
+    return [
+      {
+        type: "scatter",
+        mode: "lines+markers",
+        name: "train loss",
+        x: train.map((p) => p.epoch),
+        y: train.map((p) => p.value),
+        customdata: train.map((p) => [p.epoch]),
+        hovertemplate: "epoch %{customdata[0]} · train %{y:.4g}<extra></extra>",
+        line: { color: "var(--chart-1)", width: 2 },
+        marker: { size: 4 },
+      },
+      {
+        type: "scatter",
+        mode: "lines+markers",
+        name: "validation loss",
+        x: val.map((p) => p.epoch),
+        y: val.map((p) => p.value),
+        customdata: val.map((p) => [p.epoch]),
+        hovertemplate: "epoch %{customdata[0]} · val %{y:.4g}<extra></extra>",
+        line: { color: "var(--chart-3)", width: 2, dash: "dash" },
+        marker: { size: 4 },
+      },
+    ];
+  }, [points]);
   if (points.length < 2) {
     return (
       <p className="text-sm text-[var(--color-muted-foreground)]">
@@ -267,122 +311,17 @@ function LossCurveChart({ points }: { points: readonly TrainingMetricsPoint[] })
       </p>
     );
   }
-  const width = 640;
-  const height = 240;
-  const pad = { left: 56, right: 16, top: 12, bottom: 28 };
-  const epochs = points.map((p) => p.epoch);
-  const minEpoch = Math.min(...epochs);
-  const maxEpoch = Math.max(...epochs);
-  const losses = points
-    .flatMap((p) => [p.train_loss, p.val_loss])
-    .filter((v): v is number => v !== null && Number.isFinite(v));
-  const minLoss = Math.min(...losses);
-  const maxLoss = Math.max(...losses);
-  const spanX = Math.max(1, maxEpoch - minEpoch);
-  const spanY = Math.max(1e-9, maxLoss - minLoss);
-  const x = (epoch: number) =>
-    pad.left + ((epoch - minEpoch) / spanX) * (width - pad.left - pad.right);
-  const y = (loss: number) =>
-    height - pad.bottom - ((loss - minLoss) / spanY) * (height - pad.top - pad.bottom);
-
-  const polyline = (key: "train_loss" | "val_loss"): string =>
-    points
-      .filter((p) => {
-        const value = p[key];
-        return value !== null && Number.isFinite(value);
-      })
-      .map((p) => `${x(p.epoch).toFixed(1)},${y(p[key] as number).toFixed(1)}`)
-      .join(" ");
-
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="w-full max-w-2xl"
-      role="img"
-      aria-label="the live train and validation loss per epoch"
-    >
-      {/* the axes */}
-      <line
-        x1={pad.left}
-        y1={height - pad.bottom}
-        x2={width - pad.right}
-        y2={height - pad.bottom}
-        stroke="var(--color-border)"
-        strokeWidth="1"
-      />
-      <line
-        x1={pad.left}
-        y1={pad.top}
-        x2={pad.left}
-        y2={height - pad.bottom}
-        stroke="var(--color-border)"
-        strokeWidth="1"
-      />
-      {/* the y ticks (3, honest to the actual range) */}
-      {[0, 0.5, 1].map((fraction) => {
-        const value = minLoss + fraction * spanY;
-        return (
-          <g key={fraction}>
-            <line
-              x1={pad.left - 4}
-              y1={y(value)}
-              x2={width - pad.right}
-              y2={y(value)}
-              stroke="var(--color-border)"
-              strokeDasharray="2 4"
-              strokeWidth="0.5"
-            />
-            <text
-              x={pad.left - 8}
-              y={y(value) + 3}
-              textAnchor="end"
-              fontSize="10"
-              fill="var(--color-muted-foreground)"
-            >
-              {value.toFixed(3)}
-            </text>
-          </g>
-        );
-      })}
-      {/* the x labels (first, mid, last epoch) */}
-      {[minEpoch, Math.round((minEpoch + maxEpoch) / 2), maxEpoch].map((epoch) => (
-        <text
-          key={epoch}
-          x={x(epoch)}
-          y={height - pad.bottom + 16}
-          textAnchor="middle"
-          fontSize="10"
-          fill="var(--color-muted-foreground)"
-        >
-          {epoch}
-        </text>
-      ))}
-      <text
-        x={(pad.left + width - pad.right) / 2}
-        y={height - 4}
-        textAnchor="middle"
-        fontSize="10"
-        fill="var(--color-muted-foreground)"
-      >
-        epoch
-      </text>
-      {/* the two REAL series */}
-      <polyline
-        points={polyline("train_loss")}
-        fill="none"
-        stroke="var(--color-primary)"
-        strokeWidth="2"
-        aria-label="train loss"
-      />
-      <polyline
-        points={polyline("val_loss")}
-        fill="none"
-        stroke="var(--color-destructive)"
-        strokeWidth="2"
-        strokeDasharray="5 3"
-        aria-label="validation loss"
-      />
-    </svg>
+    <PlotlyFigure
+      data={traces}
+      layout={{
+        xaxis: { title: { text: "epoch" } },
+        yaxis: { title: { text: "loss" } },
+        margin: { l: 56, r: 12, t: 8, b: 40 },
+      }}
+      height={260}
+      ariaLabel="the live train and validation loss per epoch"
+    />
   );
 }
 

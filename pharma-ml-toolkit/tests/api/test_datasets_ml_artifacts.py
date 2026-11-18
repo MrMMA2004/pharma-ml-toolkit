@@ -630,6 +630,126 @@ class TestMLPredict:
         )
         assert r.status_code == 422
 
+    # ----------------------------- part11 §22.5 — the evaluation block
+
+    def test_predict_dataset_mode_carries_evaluation(self, client):
+        ds = _upload(client)
+        model = _train(client, ds["dataset_id"])
+        r = client.post(
+            "/api/v1/ml/predict", headers=auth_headers(),
+            json={"model_id": model["model_id"],
+                  "dataset_id": ds["dataset_id"]},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        evaluation = body["evaluation"]
+        assert evaluation["target"] == "y"
+        assert evaluation["task"] == "classification"
+        assert evaluation["smiles_col"] is None  # the toy CSV has none
+        assert evaluation["n_rows_available"] == body["n_rows"] == 24
+        assert evaluation["n_rows_evaluated"] == 24
+        assert len(evaluation["rows"]) == 24
+        first = evaluation["rows"][0]
+        # the stable frame-index identity, the aligned actual, the same
+        # prediction the top-level array reports
+        assert first["name"] == 0
+        assert first["actual"] == 0
+        assert first["predicted"] == body["predictions"][0]
+        # classification carries no residual — the honest null
+        assert first["residual"] is None
+        assert first["smiles"] is None
+
+    def test_predict_inline_rows_have_no_evaluation(self, client):
+        ds = _upload(client)
+        model = _train(client, ds["dataset_id"])
+        r = client.post(
+            "/api/v1/ml/predict", headers=auth_headers(),
+            json={"model_id": model["model_id"],
+                  "rows": [{"x1": 0.5, "x2": 0.25}]},
+        )
+        assert r.status_code == 200
+        # inline rows have no aligned actuals to report — the block is
+        # a dataset-mode lane, never a fabricated one
+        assert "evaluation" not in r.json()
+
+    def test_evaluation_regression_residual_math(self, client):
+        buf = io.StringIO()
+        buf.write("x1,x2,y\n")
+        # 32 rows with all-distinct numeric targets: infer_task's
+        # max_class_count=20 boundary crossed -> regression
+        for i in range(32):
+            buf.write(f"{round(0.25 * i + 0.5, 3)},{(i * 3) % 7 * 0.5},"
+                       f"{round(2.0 * (0.25 * i + 0.5) + (i * 3) % 7 * 0.25 + 0.01 * i, 3)}\n")
+        csv = buf.getvalue().encode()
+        ds = _upload(client, data=csv, name="reg.csv", target="y")
+        assert ds["task"] == "regression"
+        model = _train(client, ds["dataset_id"], task="regression")
+        r = client.post(
+            "/api/v1/ml/predict", headers=auth_headers(),
+            json={"model_id": model["model_id"],
+                  "dataset_id": ds["dataset_id"]},
+        )
+        assert r.status_code == 200
+        evaluation = r.json()["evaluation"]
+        assert evaluation["task"] == "regression"
+        for row in evaluation["rows"]:
+            # the residual IS actual - predicted, recomputed from the
+            # block's own fields (the parity plot's y-axis minus x)
+            assert row["residual"] is not None
+            assert abs(
+                row["residual"] - (row["actual"] - row["predicted"])
+            ) < 1e-9
+
+    def test_evaluation_carries_the_smiles_column(self, client):
+        buf = io.StringIO()
+        buf.write("smiles,x1,x2,y\n")
+        for i in range(16):
+            smiles = "C" * (i % 4 + 1) + "O"  # toy parseable structures
+            buf.write(f"{smiles},{round(0.2 * i + 0.5, 3)},"
+                       f"{(i * 5) % 3 * 0.5},{i % 2}\n")
+        csv = buf.getvalue().encode()
+        ds = _upload(client, data=csv, name="smiles.csv", target="y")
+        assert "smiles" in ds["dropped_columns"]
+        model = _train(client, ds["dataset_id"])
+        r = client.post(
+            "/api/v1/ml/predict", headers=auth_headers(),
+            json={"model_id": model["model_id"],
+                  "dataset_id": ds["dataset_id"]},
+        )
+        assert r.status_code == 200
+        evaluation = r.json()["evaluation"]
+        assert evaluation["smiles_col"] == "smiles"
+        first = evaluation["rows"][0]
+        assert first["smiles"] == "CO"
+        # the identity travels with the structure: the §22.5 click
+        # payload has name + actual + predicted + residual + smiles
+        assert first["name"] == 0
+        assert first["actual"] == 0
+        assert "predicted" in first
+
+    def test_evaluation_bound_is_reported_never_silent(self, client):
+        buf = io.StringIO()
+        buf.write("x1,x2,y\n")
+        for i in range(600):
+            buf.write(f"{round(0.01 * i + 0.5, 3)},{(i * 7) % 5 * 0.25},{i % 2}\n")
+        csv = buf.getvalue().encode()
+        ds = _upload(client, data=csv, name="big.csv", target="y")
+        model = _train(client, ds["dataset_id"])
+        r = client.post(
+            "/api/v1/ml/predict", headers=auth_headers(),
+            json={"model_id": model["model_id"],
+                  "dataset_id": ds["dataset_id"]},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        evaluation = body["evaluation"]
+        # the full prediction set stays authoritative (§17.3: the
+        # bound is on the plotted sample, never on the result)
+        assert body["n_rows"] == 600
+        assert evaluation["n_rows_available"] == 600
+        assert evaluation["n_rows_evaluated"] == 500
+        assert len(evaluation["rows"]) == 500
+
 
 # --------------------------------------------------------- figure artifacts
 

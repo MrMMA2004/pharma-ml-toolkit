@@ -3,7 +3,18 @@
 **Baseline:** v1.2.228 (round 289) · **r290 addendum:** the ML
 Explainability/Uncertainty queue lane CLOSED (POST /api/v1/ml/explain
 + the GUI stage, 8 pins, browser-verified) — the §46.1 workflow row
-flips to PASS. **Spec:** MASTER_PROMPT part11_1 §46
+flips to PASS. · **r291 addendum:** the Plotly.js src adoption
+CAMPAIGN CLOSED (the §3.2 row): the shared
+`components/charts/PlotlyFigure.tsx` surface (§22.4's
+hovermode-closest interaction contract, §22.5's customdata click
+lane, §23's react/resize/purge lifecycle) now renders the live
+charts — ML parity scatter + confusion heatmap + §24.2.B/C AD
+views + the mean-|SHAP| bar, the DL learning curve, the PK/PD and
+MD curves — each browser-verified end-to-end over the real backend
+with the oklch→sRGB theme resolution (bit-exact against Chromium's
+own rasterizer); `predict`'s dataset mode gained the §22.5
+evaluation block (5 new API pins). The §46.1/§46.5 Plotly rows
+flip to PASS. **Spec:** MASTER_PROMPT part11_1 §46
 (Final Acceptance Criteria) with part11_2 §12's status labels.
 **Method:** every criterion below is checked against live evidence from
 this round's gates (the browser-verified startup bridge, the §21
@@ -29,7 +40,7 @@ Labels: **PASS** · **PARTIAL** · **FAIL** · **BLOCKED** · **NOTAPPLICABLE**.
 | Tailwind CSS for styling | Tailwind 4 + the Mineral tokens | PASS |
 | shadcn/ui reusable components | Radix head + cva/clsx/merge primitives | PASS |
 | Motion for React used appropriately | `motion` — the nav underline only (restrained §8.5) | PASS |
-| Plotly.js is the primary interactive charting library | declared + chunked + pinned — **zero src imports yet** (the §3.2 campaign row; all 2D charts are SVG components today) | PARTIAL |
+| Plotly.js is the primary interactive charting library | the shared `PlotlyFigure` surface + the live trace lanes: ML parity scatter (customdata click → §22.5 inspector, browser-verified), confusion heatmap, §24.2.B/C AD scatters, mean-\|SHAP\| bar, DL learning curve, PK/PD + MD curves; the oklch→sRGB token resolution rides the draw pass; the lazy chunk stays manualChunks-split (r291, 6 evidence shots) | PASS |
 | Three.js for appropriate 3D visualizations | Molecule3D ligand/receptor/trajectory lanes (r288 browser 21/21) | PASS |
 | GUI is an offline SPA inside WebView2 | offline CSP (`self` + loopback), `frontendDist` local, no dev server in production | PASS |
 | No external browser / remote website / CDN | CSP + the vite `assetsInlineLimit 0` + no remote URLs (drift-guarded) | PASS |
@@ -107,7 +118,7 @@ Labels: **PASS** · **PARTIAL** · **FAIL** · **BLOCKED** · **NOTAPPLICABLE**.
 | MD analysis features remain available | the §2.7 lanes | PASS |
 | Applicability Domain complete | analyze + bootstrap uncertainty + reliability frame (the §24.1/24.2 lanes; the §24 combined-status gate: the ADResultCard) | PASS |
 | Backend plot generation fully integrated | the figure artifact lane + adapters (digest-verified) | PASS |
-| Plotly.js charts work | the SVG components + figure artifacts work; **Plotly-trace rendering not yet adopted in src** | PARTIAL (same §3.2 — the one remaining campaign row) |
+| Plotly.js charts work | the r291 lanes: parity/AD/SHAP/DL/PKPD/MD all render through real Plotly traces (browser-verified live, zero console errors, dark-mode re-draw exact); the Matplotlib figure artifacts remain their own §22.3 lane | PASS |
 | Three.js visualizations work where applicable | Molecule3D ×3 lanes (r288 21/21) | PASS |
 | Model save/load and prediction work | model-bundle round-trip (load → identical predictions) | PASS |
 | Sample metadata and SMILES preserved | per-point metadata lanes (customdata); identity pins | PASS |
@@ -183,22 +194,25 @@ Labels: **PASS** · **PARTIAL** · **FAIL** · **BLOCKED** · **NOTAPPLICABLE**.
 
 ## Verdict
 
-**66 PASS · 3 PARTIAL · 0 FAIL · 24 BLOCKED (all Windows-runner-gated
-executions) · 1 NOTAPPLICABLE** across §46.1–46.9.
+**68 PASS · 1 PARTIAL · 0 FAIL · 24 BLOCKED (all Windows-runner-gated
+executions) · 1 NOTAPPLICABLE** across §46.1–§46.9.
 
-The PARTIAL rows, each with its disposition:
+The remaining PARTIAL disposition:
 
-1. **Plotly.js src adoption** (§46.1/§46.5) — declared, chunked, pinned;
-   the SVG/figure lanes carry the charts today; the Plotly trace
-   migration is the one remaining queued campaign row (never claimed
-   done).
-2. **PySide6 retirement Stage-5** (§46.8) — deliberately gated on the
-   §28 Stage-4 parity acceptance; the parity audit (this round's
-   matrix) is the gate's evidence base.
-3. **Windows-side runtime items inside otherwise-PASS criteria** — all
-   BLOCKED per part11_2 §12's honest-label rule (the Linux host cannot
-   execute the Windows runner, and a workflow file's existence is
-   never marked a successful build).
+1. **PySide6 retirement Stage-5** (§46.8) — deliberately gated on the
+   §28 Stage-4 parity acceptance; the parity audit (the §21 matrix,
+   now with the r291 Plotly campaign row closed) is the gate's
+   evidence base, and the Windows runner's lanes are the remaining
+   blockers.
+
+The closed campaign (r291): the Plotly.js src adoption — the shared
+PlotlyFigure surface renders every interactive 2-D chart lane
+through real Plotly traces (parity + confusion + AD + SHAP + DL +
+PK/PD + MD), the §22.5 sample-inspector click lane rides
+`predict`'s new evaluation block, and the whole lane is
+browser-verified with evidence shots. The §28 Stage-4 gate's own
+"complete plotting integration" condition flips to PASS; Stage-5
+now waits only on the Windows-runner executions.
 
 The BLOCKED set is exactly part11_2 §1/§12's expected split: the
 Linux development host completes every portable lane (all code,

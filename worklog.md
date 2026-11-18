@@ -15771,3 +15771,155 @@ closed): the Plotly.js src adoption campaign (§46.1/§46.5 — now the
 one remaining Linux-portable PARTIAL), then §47's final engineering
 report riding the Windows runner's first real release. Everything
 committed and pushed (the askpass lane) at close.
+
+## Round 291 — the Plotly.js src adoption campaign CLOSED: every interactive 2-D chart now a real Plotly trace, the §22.5 sample-inspector lane rides predict's new evaluation block
+
+The session opened on the standing directive ("Continue
+MASTER_PROMPT part11_1and2 (first priority)" + "Push"); the
+environment had fully restored (the upload PDFs present, the scratch
+extractions present), so the r290 queue's head — the one remaining
+Linux-portable PARTIAL, the §3.2/§46.1/§46.5 Plotly src adoption
+campaign — executed to done.
+
+**1. The shared chart surface** (`frontend/src/components/charts/
+PlotlyFigure.tsx`, 480 lines): the one lane every workspace chart
+renders through. §22.4's interaction contract is pinned in the
+layout defaults — `hovermode: "closest"` (the per-point readout;
+`"x"/"y"` unified hover are exactly the mouse-following crosshair
+behaviour the migration retires, never used), gridlines and
+threshold/reference shapes stay, click-to-select rides
+`plotly_click`. §22.5's identity contract: every trace may carry
+`customdata`; a click hands the point's own `customdata` back through
+`onPointSelect` — never a plot position or array index. §23's
+resource rules: the lazy `import("plotly.js-dist-min")` rides the
+vite `manualChunks` split (the 4.84 MB bundle stays a separate
+lazy chunk — the shell boots without it), `Plotly.react` for
+diffed updates, a ResizeObserver for container resizes,
+`Plotly.purge` on unmount (no leaked listeners across workspace
+switches), a MutationObserver on the root class so the `.dark`
+flip re-draws with the live tokens. A typed local module surface
+(`src/types/plotly.d.ts`) — the structural slice (react/purge/
+Plots.resize + the click-point payload), no `any` at the boundary.
+
+**2. The theme pass — a real bug found and fixed by the live
+run:** plotly's color parser accepts rgb/rgba/hex/hsl but NOT the
+`oklch()` space the Mineral tokens are authored in — the first
+browser pass showed the axis text silently falling back to
+plotly's own default #444 and the parity points rendering BLACK
+(plotly rejecting `var(--chart-1)`). The fix rides the draw pass:
+`oklchToRgb()` (the standard OKLab→linear-sRGB matrix + the sRGB
+transfer curve, clamped) plus `resolveTokens()` — a walker that
+resolves `var(--*)` tokens to their live computed values and every
+oklch literal to sRGB across the traces and layout
+(`customdata` strings pass through untouched). Bit-exact against
+Chromium's own rasterizer: `oklch(0.596 0.145 163.225)` →
+rgb(0,153,102) by BOTH the component and the browser's canvas;
+the dark flip re-draws to rgb(250,250,250) text,
+rgba(255,255,255,0.1) grid (the alpha form works), the brighter
+dark teal rgb(0,188,125) points.
+
+**3. The §22.5 evaluation block** (`src/pharmaml/api/routes/ml.py`
+— `_evaluation_block` + the `_predict_body`/`dataset` lane):
+dataset-mode predict answers now carry the aligned
+actual/predicted sample — the stable frame-index row name, the
+actual target value, the prediction, the regression residual
+(`actual - predicted`, the honest null for classification), and
+the SMILES string whenever the frame carries a detectable SMILES
+column (`detect_smiles_column`'s two-pass probe, soft-failed on
+numeric-only frames). Bounded to the first 500 rows with both
+counts reported (`n_rows_available`/`n_rows_evaluated`) — §17.3's
+explicit bound, never a silent truncation of the authoritative
+prediction set (the Export stage keeps registering the full
+table). Inline-row mode carries no evaluation — no fabricated
+actuals. **5 new API pins** (`TestMLPredict`): the
+dataset-mode-carry, the inline-rows absence, the regression
+residual math (recomputed from the block's own fields), the SMILES
+carry (a 16-row smiles CSV through the dropped-columns lane), and
+the 600-row bound honesty. API suite: 273 passed + 1 skip.
+
+**4. The live chart lanes** (the pages, each replacing its
+hand-rolled SVG chart):
+* **ML Evaluate** (`MLPage.tsx`): `EvaluateCharts` — regression
+  answers get the parity scatter (actual vs predicted, the
+  identity reference line, per-point customdata = row name +
+  SMILES + actual + predicted + residual) and a click opens
+  `EvalRowInspector` (§22.5's panel: the clicked row's own
+  metadata + task/model/dataset IDs + a Clear button);
+  classification answers get the confusion-matrix heatmap
+  (actual × predicted classes, count annotations, a fixed
+  teal ramp — gradient stops don't resolve CSS vars, so the
+  ramp is literal rgba).
+* **ML AD** (`ADResultCard`): `ADQueryScatter` — §24.2.B's
+  query-distance view (every query compound by kNN distance ×
+  predicted value, in-domain/out-of-domain as distinct
+  categories, the analysis's own distance threshold drawn as
+  the dashed reference line) + §24.2.C's uncertainty panel when
+  the bootstrap ran (prediction_sd by distance with the
+  uncertainty threshold).
+* **ML Explain** (`ExplainResultCard`): `ShapRankingBar` — the
+  mean-|SHAP| ranking as the real horizontal Plotly bar (top 12
+  of the full ranking, the table below stays the complete
+  inventory — never a different number).
+* **DL** (`DLPage.tsx`): the learning curve — the two REAL
+  per-epoch telemetry series (train + validation loss) as
+  Plotly lines, missing points skipped, no fabrication.
+* **PK/PD** (`PKPDPage.tsx`): the concentration-time curve —
+  Plotly lines+markers over ONLY the points that actually
+  arrived.
+* **MD** (`MDPage.tsx`): both the single curve and the
+  raw+moving-average overlay as Plotly traces.
+
+**5. The gates:** tsc 0 errors · vite production build green
+(24.9 s, the plotly chunk at 4.84 MB / 1.47 MB gzip as its own
+lazy chunk) · the API suite 273+1 · the 30 frontend drift guards
+green · ruff clean on every changed file · mypy clean (the r290
+explain lane's one pre-existing `object`-vs-`str` finding in the
+same file fixed in passing — `keep = [str(row["feature"])…]`) ·
+the contract untouched (predict's response body was never pinned
+in OpenAPI — the request models are; `export_openapi.py` re-run,
+zero drift, api.d.ts regenerated in place).
+
+**6. BROWSER-VERIFIED live** (the r290 pattern — the double-fork
+daemons on 8017/5174 via `scratch/e2e291_daemons.py`, the app
+boots ITSELF): the Datasets workspace uploads the 40-row
+smiles+pic50 regression CSV, the ML workspace trains
+random_forest (tune off), Evaluate fires POST /api/v1/ml/predict
+→ 200 (the regression honest-refusal first: the predict_proba
+toggle on a RandomForestRegressor surfaces the backend's own 422
+verbatim — the exact §11.2 behaviour), the parity scatter renders
+(40 teal points, the identity line), a click opens the inspector
+with the row's own truth — row 20, SMILES `c1ccc(O)cc1`, actual
+pic50 4.9000, predicted 4.8509, residual 0.0491 (the math
+exact). The AD analysis (bootstrap on) renders the §24.2.B
+scatter + threshold line + the §24.2.C sd panel; the SHAP
+explanation renders the 3-bar ranking; the DL page trains
+deep_mlp_regressor (20 epochs) and the learning curve renders
+(2 traces × 20 points); the PK/PD page's IV-bolus simulate
+renders the 49-real-point concentration curve. Dark-mode flip
+re-draws every chart with the resolved tokens (verified at the
+plotly layout level); mobile 390 fits (308px). Zero console/page
+errors across the whole run. **7 evidence shots**:
+`docs/gui/screenshots/r291-ml-parity-inspector.png`,
+`r291-ml-parity-dark.png`, `r291-ml-parity-mobile.png`,
+`r291-ml-ad-scatter.png`, `r291-ml-shap-bar.png`,
+`r291-dl-learning-curve.png`, `r291-pkpd-curve.png`.
+
+**The evidence docs updated:** `ACCEPTANCE_SWEEP.md` — the
+§46.1/§46.5 Plotly rows flip to PASS, the verdict 68 PASS · 1
+PARTIAL (the deliberate Stage-5 deferral) · 24 BLOCKED · 1
+NOTAPPLICABLE, the campaign disposition closed out;
+`CAPABILITY_INTEGRATION_MATRIX.md` — the r291 addendum + the
+`ml/predict` row gains the evaluation block, the chart columns,
+and the r291 evidence pins.
+
+**The §28 Stage-4 gate consequence:** the gate's own "complete
+plotting integration" condition — the PARTIAL that held Stage-5
+back alongside the Windows runner lanes — is now PASS. Stage-5's
+PySide6 retirement waits only on the Windows-runner executions
+(the release pipeline + the clean-machine verify), exactly
+part11_2 §12's honest split.
+
+Next queue: §47's final engineering report riding the Windows
+runner's first real release (the last part11_1 deliverable that
+needs the runner). Everything committed and pushed (the askpass
+lane) at close.

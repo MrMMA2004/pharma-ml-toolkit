@@ -25,6 +25,10 @@ import {
 } from "@/services/artifacts/client";
 import { getEventStream } from "@/services/websocket/client";
 import {
+  PlotlyFigure,
+  type PlotTrace,
+} from "@/components/charts/PlotlyFigure";
+import {
   assertCoordsBounds,
   assertEnmBounds,
   assertPcaBounds,
@@ -422,9 +426,11 @@ function parseAtomList(text: string, label: string): readonly Atom[] {
 }
 
 /**
- * The inline curve — an SVG polyline drawn ONLY from the points that
- * actually arrived (no interpolation the data does not own, no
- * fabricated axes: the domain/range labels state the real min/max).
+ * The inline curve — a real Plotly line chart drawn ONLY from the
+ * points that actually arrived (no interpolation the data does not
+ * own, no fabricated axes: the domain/range labels state the real
+ * min/max; §22.2's curve form, §22.4's per-point hover without any
+ * mouse-following crosshair).
  */
 function CurveFigure({
   points,
@@ -437,6 +443,23 @@ function CurveFigure({
   yLabel: string;
   height?: number;
 }) {
+  const traces = useMemo<readonly PlotTrace[]>(
+    () => [
+      {
+        type: "scatter",
+        mode: "lines+markers",
+        name: yLabel,
+        x: points.map((p) => p.x),
+        y: points.map((p) => p.y),
+        customdata: points.map((p) => [p.x, p.y]),
+        hovertemplate: `${xLabel}: %{customdata[0]:.4g}<br>${yLabel}: %{customdata[1]:.4g}<extra></extra>`,
+        line: { color: "var(--chart-1)", width: 2 },
+        marker: { size: 4 },
+        showlegend: false,
+      },
+    ],
+    [points, xLabel, yLabel],
+  );
   if (points.length < 2) {
     return (
       <p className="text-xs text-[var(--color-muted-foreground)]">
@@ -445,37 +468,29 @@ function CurveFigure({
       </p>
     );
   }
-  const width = 640;
-  const pad = 34;
   const xs = points.map((p) => p.x);
   const ys = points.map((p) => p.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const spanX = maxX - minX || 1;
-  const spanY = maxY - minY || 1;
-  const toX = (x: number) => pad + ((x - minX) / spanX) * (width - 2 * pad);
-  const toY = (y: number) => height - pad - ((y - minY) / spanY) * (height - 2 * pad);
-  const path = points.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.x).toFixed(2)},${toY(p.y).toFixed(2)}`).join(" ");
   return (
     <figure>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label={`${yLabel} versus ${xLabel}`}>
-        <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="var(--color-muted-foreground)" strokeWidth="1" />
-        <line x1={pad} y1={pad} x2={pad} y2={height - pad} stroke="var(--color-muted-foreground)" strokeWidth="1" />
-        <path d={path} fill="none" stroke="var(--color-primary)" strokeWidth="2" />
-        <text x={width / 2} y={height - 6} textAnchor="middle" fontSize="10" fill="var(--color-muted-foreground)">
-          {xLabel}: {formatValue(minX)}…{formatValue(maxX)}
-        </text>
-        <text x={10} y={height / 2} fontSize="10" fill="var(--color-muted-foreground)" transform={`rotate(-90 10 ${height / 2})`}>
-          {yLabel}: {formatValue(minY)}…{formatValue(maxY)}
-        </text>
-      </svg>
+      <PlotlyFigure
+        data={traces}
+        layout={{
+          xaxis: { title: { text: xLabel } },
+          yaxis: { title: { text: yLabel } },
+          margin: { l: 56, r: 12, t: 8, b: 40 },
+        }}
+        height={height}
+        ariaLabel={`${yLabel} versus ${xLabel}`}
+      />
+      <figcaption className="mt-1 text-[11px] text-[var(--color-muted-foreground)]">
+        {points.length} real points · {xLabel}: {formatValue(Math.min(...xs))}…{formatValue(Math.max(...xs))} ·{" "}
+        {yLabel}: {formatValue(Math.min(...ys))}…{formatValue(Math.max(...ys))}
+      </figcaption>
     </figure>
   );
 }
 
-/** Two overlaid polylines (the raw series + its moving average). */
+/** Two overlaid Plotly lines (the raw series + its moving average). */
 function OverlayCurveFigure({
   primary,
   secondary,
@@ -489,8 +504,37 @@ function OverlayCurveFigure({
   yLabel: string;
   height?: number;
 }) {
-  const all = secondary === null ? primary : [...primary, ...secondary];
-  if (all.length < 2 || primary.length < 2) {
+  const traces = useMemo<readonly PlotTrace[]>(
+    () => [
+      {
+        type: "scatter",
+        mode: "lines",
+        name: "raw series",
+        x: primary.map((p) => p.x),
+        y: primary.map((p) => p.y),
+        customdata: primary.map((p) => [p.x, p.y]),
+        hovertemplate: `${xLabel}: %{customdata[0]:.4g}<br>${yLabel}: %{customdata[1]:.4g}<extra>raw</extra>`,
+        line: { color: "var(--chart-1)", width: 2 },
+        showlegend: secondary !== null,
+      },
+      ...(secondary !== null
+        ? [
+            {
+              type: "scatter",
+              mode: "lines",
+              name: "moving average",
+              x: secondary.map((p) => p.x),
+              y: secondary.map((p) => p.y),
+              customdata: secondary.map((p) => [p.x, p.y]),
+              hovertemplate: `${xLabel}: %{customdata[0]:.4g}<br>${yLabel}: %{customdata[1]:.4g}<extra>moving average</extra>`,
+              line: { color: "var(--chart-3)", width: 1.5, dash: "dash" },
+            },
+          ]
+        : []),
+    ],
+    [primary, secondary, xLabel, yLabel],
+  );
+  if (primary.length < 2) {
     return (
       <p className="text-xs text-[var(--color-muted-foreground)]">
         the curve draws only from points that actually arrived — two
@@ -498,36 +542,18 @@ function OverlayCurveFigure({
       </p>
     );
   }
-  const width = 640;
-  const pad = 34;
-  const xs = all.map((p) => p.x);
-  const ys = all.map((p) => p.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const spanX = maxX - minX || 1;
-  const spanY = maxY - minY || 1;
-  const toX = (x: number) => pad + ((x - minX) / spanX) * (width - 2 * pad);
-  const toY = (y: number) => height - pad - ((y - minY) / spanY) * (height - 2 * pad);
-  const path = (points: readonly { x: number; y: number }[]) =>
-    points.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.x).toFixed(2)},${toY(p.y).toFixed(2)}`).join(" ");
   return (
     <figure>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label={`${yLabel} versus ${xLabel}`}>
-        <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="var(--color-muted-foreground)" strokeWidth="1" />
-        <line x1={pad} y1={pad} x2={pad} y2={height - pad} stroke="var(--color-muted-foreground)" strokeWidth="1" />
-        <path d={path(primary)} fill="none" stroke="var(--color-primary)" strokeWidth="2" />
-        {secondary !== null && secondary.length >= 2 ? (
-          <path d={path(secondary)} fill="none" stroke="var(--color-destructive)" strokeWidth="1.5" strokeDasharray="4 3" />
-        ) : null}
-        <text x={width / 2} y={height - 6} textAnchor="middle" fontSize="10" fill="var(--color-muted-foreground)">
-          {xLabel}: {formatValue(minX)}…{formatValue(maxX)}
-        </text>
-        <text x={10} y={height / 2} fontSize="10" fill="var(--color-muted-foreground)" transform={`rotate(-90 10 ${height / 2})`}>
-          {yLabel}: {formatValue(minY)}…{formatValue(maxY)}
-        </text>
-      </svg>
+      <PlotlyFigure
+        data={traces}
+        layout={{
+          xaxis: { title: { text: xLabel } },
+          yaxis: { title: { text: yLabel } },
+          margin: { l: 56, r: 12, t: 8, b: 40 },
+        }}
+        height={height}
+        ariaLabel={`${yLabel} versus ${xLabel} with the moving-average overlay`}
+      />
       <figcaption className="mt-1 text-[11px] text-[var(--color-muted-foreground)]">
         solid = the raw series · dashed = the backend&apos;s moving average
         {secondary === null ? " (not requested)" : ""}
