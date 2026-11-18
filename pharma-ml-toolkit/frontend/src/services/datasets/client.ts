@@ -103,6 +103,20 @@ export interface DatasetProfileResponse {
   readonly profile: Readonly<Record<string, unknown>>;
 }
 
+/**
+ * `GET /api/v1/datasets/{id}/column/{column}` — one column's values,
+ * bounded by the chemistry engine's own request cap (500). `truncated`
+ * states plainly whether the bound clipped the dataset's real rows.
+ */
+export interface ColumnValues {
+  readonly column: string;
+  readonly dtype: string;
+  readonly n_rows: number;
+  readonly returned: number;
+  readonly truncated: boolean;
+  readonly values: readonly (string | number | null)[];
+}
+
 export interface DatasetUploadOptions {
   /** The target column (null = the loader's auto-detection). */
   readonly target?: string | null;
@@ -178,6 +192,25 @@ export const datasetsApi = {
       `/api/v1/datasets/${encodeURIComponent(datasetId)}/preview?limit=${bounded}`,
     );
     return parseFramePreview(raw, `preview ${datasetId}`);
+  },
+
+  /**
+   * `GET /api/v1/datasets/{id}/column/{column}?limit=N` — the §11.1
+   * chemistry-stage bridge: one column's values bounded by the
+   * chemistry engine's own request cap (`CHEMISTRY_MAX_SMILES`), with
+   * the dataset's real row count and an explicit `truncated` flag
+   * (§17.3: a bounded view never masquerades as the whole column).
+   */
+  async column(
+    datasetId: string,
+    column: string,
+    limit: number = 500,
+  ): Promise<ColumnValues> {
+    const bounded = Math.min(Math.max(1, Math.floor(limit)), 500);
+    const raw = await api.get<Record<string, unknown>>(
+      `/api/v1/datasets/${encodeURIComponent(datasetId)}/column/${encodeURIComponent(column)}?limit=${bounded}`,
+    );
+    return parseColumnValues(raw, `column ${column}`);
   },
 
   /** `DELETE /api/v1/datasets/{id}` — evict from the session store. */
@@ -274,6 +307,24 @@ function parseFramePreview(raw: unknown, what: string): FramePreview {
     rows: Array.isArray(rows)
       ? (rows as unknown[]).map((row) =>
           Array.isArray(row) ? (row as readonly unknown[]) : [],
+        )
+      : [],
+  };
+}
+
+/** Narrow an untrusted payload to the column-bridge view (§8.1). */
+function parseColumnValues(raw: unknown, what: string): ColumnValues {
+  const r = expectObject(raw, what);
+  const values = r["values"];
+  return {
+    column: typeof r["column"] === "string" ? r["column"] : "",
+    dtype: typeof r["dtype"] === "string" ? r["dtype"] : "",
+    n_rows: typeof r["n_rows"] === "number" ? r["n_rows"] : 0,
+    returned: typeof r["returned"] === "number" ? r["returned"] : 0,
+    truncated: r["truncated"] === true,
+    values: Array.isArray(values)
+      ? (values as unknown[]).map((v) =>
+          typeof v === "string" || typeof v === "number" ? v : null,
         )
       : [],
   };

@@ -76,6 +76,7 @@ def _frontend_path_set(source: str) -> set[str]:
     normalized = source.replace("${encodeURIComponent(jobId)}", "{job_id}")
     normalized = normalized.replace("${encodeURIComponent(datasetId)}", "{dataset_id}")
     normalized = normalized.replace("${encodeURIComponent(artifactId)}", "{artifact_id}")
+    normalized = normalized.replace("${encodeURIComponent(column)}", "{column}")
     # quoted strings AND backtick template literals carry the paths
     hits = re.findall(r"/api/v1/[A-Za-z0-9_/{}\-]+", normalized)
     # strip query strings the client appends (?limit=…, ?workspace=…)
@@ -242,6 +243,9 @@ def test_dataset_rest_surface_covered() -> None:
         "/api/v1/datasets/{dataset_id}/preview": {"GET"},
         "/api/v1/datasets/{dataset_id}/profile": {"POST"},
         "/api/v1/datasets/{dataset_id}/split": {"POST"},
+        # the §11.1 chemistry-stage bridge (bounded by the chemistry
+        # engine's own request cap — see routes/datasets.py)
+        "/api/v1/datasets/{dataset_id}/column/{column}": {"GET"},
     }
     assert backend == expected, f"the backend dataset routes moved: {backend}"
 
@@ -320,6 +324,37 @@ def test_artifact_download_rides_the_token_header_lane() -> None:
     # the route's verification headers are consumed, not discarded
     assert "X-Artifact-SHA256" in client
     assert "ETag" in client
+
+
+# -- the chemistry surface (§11.1's featurization stage) ------------------
+
+
+def test_chemistry_rest_surface_covered() -> None:
+    backend = _backend_routes("chemistry.py")
+    expected = {
+        "/api/v1/chemistry/descriptors": {"POST"},
+        "/api/v1/chemistry/fingerprints": {"POST"},
+    }
+    assert backend == expected, f"the backend chemistry routes moved: {backend}"
+
+    client = _read(SERVICES / "chemistry" / "client.ts")
+    frontend_paths = _frontend_path_set(client)
+    missing = expected.keys() - frontend_paths
+    assert not missing, (
+        f"the chemistry client lost backend routes: {sorted(missing)} "
+        f"(has {sorted(frontend_paths)})"
+    )
+
+
+def test_chemistry_requests_use_the_generated_contract_types() -> None:
+    client = _read(SERVICES / "chemistry" / "client.ts")
+    # §12.2: one DTO source — the request bodies come from api.d.ts
+    assert 'from "@/types/api.d"' in client
+    assert "DescriptorsRequest" in client and "FingerprintsRequest" in client
+    assert "interface DescriptorsRequest" not in client
+    assert "interface FingerprintsRequest" not in client
+    # the engine's own cap is mirrored once, beside the route
+    assert "CHEMISTRY_MAX_SMILES = 500" in client
 
 
 # -- the React binding ----------------------------------------------------

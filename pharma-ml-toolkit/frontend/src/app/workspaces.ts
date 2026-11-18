@@ -47,7 +47,7 @@ export const WORKSPACES: readonly WorkspaceEntry[] = [
     label: "Datasets",
     summary:
       "Import → Inspect → Validate → Clean/Standardize → Descriptor/Fingerprint Generation → Feature Selection → Split/Leakage Audit → Visualize → Export.",
-    state: "shell",
+    state: "workflow",
   },
   {
     id: "machine-learning",

@@ -1,0 +1,7 @@
+{
+  "$schema": "https://schema.tauri.app/capability/v2",
+  "identifier": "default",
+  "description": "The PharmaML Studio main window's ONLY capability: the core window set plus the application's own backend-endpoint IPC command. No shell executor, no arbitrary filesystem, no dialog/plugin surface — the Python sidecar is spawned and supervised by the Rust host (backend_manager.rs), never by the WebView frontend (part11 §9.3).",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

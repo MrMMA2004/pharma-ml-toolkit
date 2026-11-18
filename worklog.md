@@ -15111,3 +15111,52 @@ identified as a PolarFS remote mount (not local disk) and left alone.
 The campaign ledger's next rows stay queued and honest: datasets/ml/
 artifacts routes, the dl/generative tiers, the C# specification as
 source artifacts — then everything Windows-side, BLOCKED, unchanged.
+
+---
+
+Round 281 — part11_1 (the Datasets §11.1 row) + part11_2 (the Windows
+release pipeline addendum) — 2026-11-18, the interactive session from
+the re-uploaded MASTER_PROMPT part11_1.pdf + the NEW part11_2.pdf.
+
+PART11_1: the declared next queue row now EXISTS —
+features/datasets/DatasetsPage.tsx walks the complete §11.1 chain on
+the REAL backend: Import (multipart, job mode, the live JobRunCard —
+WS state/progress/stage + cancel + the authoritative REST result
+relay), Inspect (registry + view + the paginated PreviewTable), Validate
+(the profile engine's table + per-variable evidence), Clean/Select
+(the loader's own policy surfaced), Descriptor/Fingerprint Generation
+(the NEW bounded column bridge → chemistryApi, job/sync), Split (the
+leakage-safe report), Visualize (the statplots engine + the registered
+figure), Export (POST /artifacts/table → the digest-verified download).
+Backend: GET /datasets/{id}/column/{column} (bounded by the chemistry
+engine's own 500 cap, truncated explicit, drift-pinned) + the split
+sklearn-boundary 500→422 fix (a live E2E find) + the chemistry client +
+the RESTORED artifacts client (a rollback had eaten r280's — the guard
+was red on arrival).
+
+PART11_2: .github/workflows/windows-release.yml (23 stages, pinned
+actions, least-privilege, the live sidecar verification, the honest
+BLOCKED closing note) + src-tauri/ (the offlineInstaller WebView2 conf,
+the loopback CSP, the least-privilege capability, the Rust host
+implementing the TESTED PHARMAML-READY handshake contract) +
+packaging/windows/pharmaml_backend.spec (the sidecar entry, Qt
+excluded) + backend_entry.py + verify_sidecar.py +
+TAURI_RELEASE_PIPELINE.md (the §12 labels) + 8 pipeline guards
+(tests/test_windows_pipeline.py).
+
+E2E (scratch/e2e281/, live backend): handshake → WS → upload → the
+column bridge (16/16, truncated@5) → descriptors (16×2049) →
+fingerprints (16×512) → profile → split → the digest-verified export →
+SIGTERM → the shutdown envelope. E2E-DATASETS-PASS.
+
+Gates: tests/api 260 passed (the contract drift guard caught the new
+route — contracts/openapi.json re-exported + api.d.ts regenerated +
+tsc clean again); datasets+pipeline+services 80; mypy routes clean;
+ruff clean (2 RUF046); the frontend production build green. The venv
+was FOUND BROKEN on arrival (rdkit eaten by a rollback) — the full
+FOREGROUND repair ran to VENV-REPAIR-DONE + STUDIO-REPAIR-DONE; the
+frontend node_modules wiped again (bun install). The ledger got the
+281 row; the Windows host line moved BLOCKED→PARTIAL with the
+BLOCKED-on-runner sublabels. Counter 76→77. Next queue: ML (§11.2),
+then the remaining seven workspaces; the Windows runner execution
+when a Windows host exists.

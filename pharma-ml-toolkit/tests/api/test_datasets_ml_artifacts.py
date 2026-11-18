@@ -261,6 +261,120 @@ class TestDatasetViews:
         ).status_code == 404
 
 
+class TestDatasetColumn:
+    """§11.1's chemistry-stage bridge: bounded column extraction."""
+
+    def test_column_values_and_shape_fields(self, client):
+        ds = _upload(client)
+        r = client.get(
+            f"/api/v1/datasets/{ds['dataset_id']}/column/x1",
+            headers=auth_headers(),
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["column"] == "x1"
+        assert body["n_rows"] == 24
+        assert body["returned"] == 24
+        assert body["truncated"] is False
+        assert body["dtype"].startswith("float")
+        assert len(body["values"]) == 24
+        assert isinstance(body["values"][0], float)
+
+    def test_column_limit_and_truncated_flag(self, client):
+        ds = _upload(client)
+        r = client.get(
+            f"/api/v1/datasets/{ds['dataset_id']}/column/x1",
+            headers=auth_headers(), params={"limit": 5},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        # §17.3: the bound is explicit, never a silent truncation
+        assert body["returned"] == 5
+        assert body["n_rows"] == 24
+        assert body["truncated"] is True
+        assert body["values"] == body["values"][:5]
+
+    def test_column_nan_becomes_null(self, client):
+        ds = _upload(client, data=_csv_bytes(blank_cell_at=3))
+        body = client.get(
+            f"/api/v1/datasets/{ds['dataset_id']}/column/x1",
+            headers=auth_headers(),
+        ).json()
+        assert body["values"][3] is None
+        assert body["values"][0] is not None
+
+    def test_column_unknown_dataset_404(self, client):
+        assert client.get(
+            "/api/v1/datasets/ds-doesnotexist/column/x1",
+            headers=auth_headers(),
+        ).status_code == 404
+
+    def test_column_unknown_column_404(self, client):
+        ds = _upload(client)
+        assert client.get(
+            f"/api/v1/datasets/{ds['dataset_id']}/column/nope",
+            headers=auth_headers(),
+        ).status_code == 404
+
+    def test_column_bad_limit_422(self, client):
+        ds = _upload(client)
+        assert client.get(
+            f"/api/v1/datasets/{ds['dataset_id']}/column/x1",
+            headers=auth_headers(), params={"limit": 0},
+        ).status_code == 422
+        assert client.get(
+            f"/api/v1/datasets/{ds['dataset_id']}/column/x1",
+            headers=auth_headers(), params={"limit": 501},
+        ).status_code == 422
+
+    def test_column_cap_mirrors_the_chemistry_engine(self):
+        # the bound is the chemistry request models' own max_length —
+        # one source per engine limit, drift-pinned here
+        import re
+        from pathlib import Path
+
+        chemistry = (
+            Path(__file__).resolve().parents[2]
+            / "src" / "pharmaml" / "api" / "routes" / "chemistry.py"
+        ).read_text(encoding="utf-8")
+        caps = re.findall(
+            r"smiles: list\[str\] = Field\(.*?max_length=(\d+)", chemistry
+        )
+        assert caps and all(c == "500" for c in caps), caps
+        from pharmaml.api.routes.datasets import CHEMISTRY_MAX_SMILES
+        assert CHEMISTRY_MAX_SMILES == 500
+
+    def test_column_feeds_the_chemistry_descriptors_route(self, client):
+        """The §11.1 chain end-to-end: upload → column → descriptors."""
+        buf = io.StringIO()
+        buf.write("smiles,y\n")
+        for smi, y in [("CCO", "0"), ("CCC", "1"), ("CCN", "0")]:
+            buf.write(f"{smi},{y}\n")
+        ds = _upload(
+            client,
+            data=buf.getvalue().encode(),
+            name="tiny.csv", target="y",
+        )
+        column = client.get(
+            f"/api/v1/datasets/{ds['dataset_id']}/column/smiles",
+            headers=auth_headers(),
+        ).json()
+        assert column["values"] == ["CCO", "CCC", "CCN"]
+        r = client.post(
+            "/api/v1/chemistry/descriptors",
+            headers=auth_headers(),
+            json={
+                "smiles": column["values"],
+                "descriptor_set": "morgan",
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        result = r.json()["result"]
+        assert result["shape"][0] == 3
+        assert result["rows"][0][0] == "CCO"
+
+
 # ------------------------------------------------------ profile / split
 
 
@@ -329,6 +443,23 @@ class TestDatasetSplit:
             headers=auth_headers(), json={"test_size": 0.2},
         )
         assert r.status_code == 404
+
+    def test_split_stratification_boundary_is_422_not_500(self, client):
+        # the live r281 E2E caught this: sklearn's "test fold smaller
+        # than the class count" surfaced as a raw 500 — now a clean 422
+        buf = io.StringIO()
+        buf.write("x1,y\n")
+        for i in range(12):
+            buf.write(f"{i % 12 * 0.25},{i % 4}\n")
+        ds = _upload(client, data=buf.getvalue().encode(),
+                     name="tiny-strat.csv", target="y")
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.25, "stratify": True, "mode": "sync"},
+        )
+        assert r.status_code == 422, r.text
+        assert "classes" in r.json()["detail"]
 
     def test_split_bad_fraction_422(self, client):
         ds = _upload(client)

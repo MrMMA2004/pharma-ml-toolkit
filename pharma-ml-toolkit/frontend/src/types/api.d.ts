@@ -384,6 +384,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/datasets/{dataset_id}/column/{column}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dataset Column
+         * @description One column's values — the §11.1 chemistry-stage bridge.
+         *
+         *     Bounded by the chemistry request models' own ``max_length`` cap and
+         *     explicit about it: ``n_rows`` + ``truncated`` state the dataset's
+         *     real size so a bounded view never masquerades as the whole column
+         *     (§17.3's "a display limit must never silently truncate" rule).
+         *     Values ride ``json_safe`` (NaN/Inf → ``null``).
+         */
+        get: operations["dataset_column_api_v1_datasets__dataset_id__column__column__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/datasets/{dataset_id}/preview": {
         parameters: {
             query?: never;
@@ -3522,6 +3548,42 @@ export interface operations {
             header?: never;
             path: {
                 dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dataset_column_api_v1_datasets__dataset_id__column__column__get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                dataset_id: string;
+                column: string;
             };
             cookie?: never;
         };

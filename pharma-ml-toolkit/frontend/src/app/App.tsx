@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { WorkspaceNav } from "@/components/layout/WorkspaceNav";
 import { WorkspaceShell } from "@/components/layout/WorkspaceShell";
 import { IntroductionPage } from "@/features/introduction/IntroductionPage";
+import { DatasetsPage } from "@/features/datasets/DatasetsPage";
 import { INITIAL_WORKSPACE, WORKSPACES, type WorkspaceId } from "@/app/workspaces";
 
 /**
@@ -9,8 +10,9 @@ import { INITIAL_WORKSPACE, WORKSPACES, type WorkspaceId } from "@/app/workspace
  *
  * One page instance per workspace (state preserved across switches;
  * no duplicate mounts), Introduction selected at startup, the exact
- * §10.1 navigation order. The queued workspace rows render the honest
- * shell; the workflow rows connect in their campaign rounds.
+ * §10.1 navigation order. The connected workflow rows render their
+ * real API-driven pages; the queued rows keep the honest shell (the
+ * campaign ledger owns the queue).
  */
 export function App() {
   const [active, setActive] = useState<WorkspaceId>(INITIAL_WORKSPACE);
@@ -53,6 +55,8 @@ export function App() {
       <main className="flex-1">
         {entry.id === "introduction" ? (
           <IntroductionPage />
+        ) : entry.id === "datasets" ? (
+          <DatasetsPage />
         ) : (
           <WorkspaceShell entry={entry} />
         )}

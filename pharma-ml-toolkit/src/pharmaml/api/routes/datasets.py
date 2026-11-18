@@ -224,6 +224,55 @@ def dataset_preview(
     return frame_payload(record.frame, limit)
 
 
+#: The chemistry engine's own request cap (``DescriptorsRequest.smiles``
+#: / ``FingerprintsRequest.smiles`` ``max_length`` in routes/chemistry.py)
+#: — the single limit this route's bound mirrors, so the GUI feeds the
+#: chemistry step inside the engine's own documented ceiling (§11.1's
+#: Descriptor/Fingerprint stage) instead of shipping an unbounded column.
+CHEMISTRY_MAX_SMILES = 500
+
+
+@router.get("/{dataset_id}/column/{column}")
+def dataset_column(
+    dataset_id: str,
+    column: str,
+    request: Request,
+    limit: int = CHEMISTRY_MAX_SMILES,
+) -> dict:
+    """One column's values — the §11.1 chemistry-stage bridge.
+
+    Bounded by the chemistry request models' own ``max_length`` cap and
+    explicit about it: ``n_rows`` + ``truncated`` state the dataset's
+    real size so a bounded view never masquerades as the whole column
+    (§17.3's "a display limit must never silently truncate" rule).
+    Values ride ``json_safe`` (NaN/Inf → ``null``).
+    """
+    store: DatasetStore = request.app.state.dataset_store
+    record = store.get(dataset_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Unknown dataset_id.")
+    if column not in [str(c) for c in record.frame.columns]:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown column {column!r}.",
+        )
+    if not 1 <= limit <= CHEMISTRY_MAX_SMILES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"limit must be in [1, {CHEMISTRY_MAX_SMILES}].",
+        )
+    series = record.frame[column]
+    values = [json_safe(v) for v in series.iloc[:limit].tolist()]
+    return {
+        "column": column,
+        "dtype": str(series.dtype),
+        "n_rows": len(series),
+        "returned": len(values),
+        "truncated": len(series) > limit,
+        "values": values,
+    }
+
+
 @router.delete("/{dataset_id}")
 def delete_dataset(dataset_id: str, request: Request) -> dict:
     store: DatasetStore = request.app.state.dataset_store
@@ -271,6 +320,11 @@ def split_dataset(
                 ),
             }
         except DataValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except ValueError as exc:
+            # sklearn's stratification boundary (e.g. the test fold is
+            # smaller than the target's class count) is a user-input
+            # problem, not a server fault — a clean 422, never a 500
             raise HTTPException(status_code=422, detail=str(exc)) from exc
     manager = request.app.state.job_manager
     job = manager.submit(

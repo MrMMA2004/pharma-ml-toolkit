@@ -4030,6 +4030,70 @@
         ]
       }
     },
+    "/api/v1/datasets/{dataset_id}/column/{column}": {
+      "get": {
+        "description": "One column's values \u2014 the \u00a711.1 chemistry-stage bridge.\n\nBounded by the chemistry request models' own ``max_length`` cap and\nexplicit about it: ``n_rows`` + ``truncated`` state the dataset's\nreal size so a bounded view never masquerades as the whole column\n(\u00a717.3's \"a display limit must never silently truncate\" rule).\nValues ride ``json_safe`` (NaN/Inf \u2192 ``null``).",
+        "operationId": "dataset_column_api_v1_datasets__dataset_id__column__column__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "title": "Dataset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "column",
+            "required": true,
+            "schema": {
+              "title": "Column",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Dataset Column Api V1 Datasets  Dataset Id  Column  Column  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dataset Column",
+        "tags": [
+          "datasets"
+        ]
+      }
+    },
     "/api/v1/datasets/{dataset_id}/preview": {
       "get": {
         "operationId": "dataset_preview_api_v1_datasets__dataset_id__preview_get",
