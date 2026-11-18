@@ -785,6 +785,52 @@
         "title": "EnmRequest",
         "type": "object"
       },
+      "ExplainRequest": {
+        "description": "POST /api/v1/ml/explain \u2014 the \u00a711.2 Explainability stage body.",
+        "properties": {
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          },
+          "figure": {
+            "default": false,
+            "title": "Figure",
+            "type": "boolean"
+          },
+          "max_rows": {
+            "default": 200,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Max Rows",
+            "type": "integer"
+          },
+          "mode": {
+            "default": "sync",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id"
+        ],
+        "title": "ExplainRequest",
+        "type": "object"
+      },
       "FigureRequest": {
         "properties": {
           "color": {
@@ -5545,6 +5591,49 @@
         "summary": "Xvg",
         "tags": [
           "md"
+        ]
+      }
+    },
+    "/api/v1/ml/explain": {
+      "post": {
+        "operationId": "explain_api_v1_ml_explain_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Explain Api V1 Ml Explain Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explain",
+        "tags": [
+          "ml"
         ]
       }
     },

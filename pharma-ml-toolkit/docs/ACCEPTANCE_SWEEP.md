@@ -1,6 +1,9 @@
 # ACCEPTANCE_SWEEP — part11_1 §46 (Phase Thirty-Nine's final gate)
 
-**Baseline:** v1.2.228 (round 289) · **Spec:** MASTER_PROMPT part11_1 §46
+**Baseline:** v1.2.228 (round 289) · **r290 addendum:** the ML
+Explainability/Uncertainty queue lane CLOSED (POST /api/v1/ml/explain
++ the GUI stage, 8 pins, browser-verified) — the §46.1 workflow row
+flips to PASS. **Spec:** MASTER_PROMPT part11_1 §46
 (Final Acceptance Criteria) with part11_2 §12's status labels.
 **Method:** every criterion below is checked against live evidence from
 this round's gates (the browser-verified startup bridge, the §21
@@ -33,7 +36,7 @@ Labels: **PASS** · **PARTIAL** · **FAIL** · **BLOCKED** · **NOTAPPLICABLE**.
 | Introduction is the initial screen | `INITIAL_WORKSPACE = "introduction"`; browser-verified r289 | PASS |
 | Exactly nine primary workspaces | registry + the §10.1 order drift guard | PASS |
 | Navigation horizontal, exact order | `WorkspaceNav` (aria-current, motion underline, overflow scroll) | PASS |
-| All workspaces have complete sequential workflows | the §21 matrix: 64 PASS rows; the ML Explainability/Uncertainty stage is the honest queue lane | PARTIAL |
+| All workspaces have complete sequential workflows | the §21 matrix: 65 PASS rows (r290: the ML Explainability stage now runs its real backend lane); every stage of §11.2's order executes | PASS |
 | Professional, consistent, responsive, accessible design | the nine pages; keyboard/ARIA states; loading/error/empty everywhere | PASS |
 | All application-facing text in English | verified across the pages | PASS |
 | Mineral Design System direction preserved | design tokens + light/dark architecture carried into Tailwind | PASS |
@@ -104,7 +107,7 @@ Labels: **PASS** · **PARTIAL** · **FAIL** · **BLOCKED** · **NOTAPPLICABLE**.
 | MD analysis features remain available | the §2.7 lanes | PASS |
 | Applicability Domain complete | analyze + bootstrap uncertainty + reliability frame (the §24.1/24.2 lanes; the §24 combined-status gate: the ADResultCard) | PASS |
 | Backend plot generation fully integrated | the figure artifact lane + adapters (digest-verified) | PASS |
-| Plotly.js charts work | the SVG components + figure artifacts work; **Plotly-trace rendering not yet adopted in src** | PARTIAL (same §3.2) |
+| Plotly.js charts work | the SVG components + figure artifacts work; **Plotly-trace rendering not yet adopted in src** | PARTIAL (same §3.2 — the one remaining campaign row) |
 | Three.js visualizations work where applicable | Molecule3D ×3 lanes (r288 21/21) | PASS |
 | Model save/load and prediction work | model-bundle round-trip (load → identical predictions) | PASS |
 | Sample metadata and SMILES preserved | per-point metadata lanes (customdata); identity pins | PASS |
@@ -180,21 +183,19 @@ Labels: **PASS** · **PARTIAL** · **FAIL** · **BLOCKED** · **NOTAPPLICABLE**.
 
 ## Verdict
 
-**65 PASS · 4 PARTIAL · 0 FAIL · 24 BLOCKED (all Windows-runner-gated
+**66 PASS · 3 PARTIAL · 0 FAIL · 24 BLOCKED (all Windows-runner-gated
 executions) · 1 NOTAPPLICABLE** across §46.1–46.9.
 
 The PARTIAL rows, each with its disposition:
 
 1. **Plotly.js src adoption** (§46.1/§46.5) — declared, chunked, pinned;
    the SVG/figure lanes carry the charts today; the Plotly trace
-   migration is the queued campaign row (never claimed done).
-2. **ML Explainability/Uncertainty workflow stage** (§46.1) — the honest
-   queue lane; the backend `ml/explain` engine awaits its API route +
-   GUI card (a documented campaign row).
-3. **PySide6 retirement Stage-5** (§46.8) — deliberately gated on the
+   migration is the one remaining queued campaign row (never claimed
+   done).
+2. **PySide6 retirement Stage-5** (§46.8) — deliberately gated on the
    §28 Stage-4 parity acceptance; the parity audit (this round's
    matrix) is the gate's evidence base.
-4. **Windows-side runtime items inside otherwise-PASS criteria** — all
+3. **Windows-side runtime items inside otherwise-PASS criteria** — all
    BLOCKED per part11_2 §12's honest-label rule (the Linux host cannot
    execute the Windows runner, and a workflow file's existence is
    never marked a successful build).

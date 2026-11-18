@@ -36,11 +36,13 @@ import {
 } from "@/services/artifacts/client";
 import {
   AD_MAX_FEATURES,
+  EXPLAIN_MAX_ROWS,
   mlApi,
   parseADAnalyzeResult,
   parseSemiSupervisedResult,
   parseTrainResult,
   type ADAnalyzeResult,
+  type ExplainResult,
   type ModelCatalogEntry,
   type PredictResponse,
   type SemiSupervisedView,
@@ -55,7 +57,7 @@ import type { components } from "@/types/api.d";
  * Select Dataset → Target & Features → Preprocess → Configure
  * Split/CV → Algorithm → Hyperparameters → Train → Evaluate →
  * Compare → Applicability Domain → Semi-supervised Learning →
- * Explainability (the honest queue) → Export
+ * Explainability → Export
  *
  * Every control below executes the REAL backend through the typed
  * service layer (no fabricated data, no disabled pretend buttons):
@@ -63,12 +65,11 @@ import type { components } from "@/types/api.d";
  * rides routes/applicability_domain.py with x_test assembled through
  * the bounded column bridge, the semi-supervised lane rides
  * routes/semi_supervised.py behind the backend's own
- * classification-only gate, and the export registers a real table
- * artifact downloaded through the token-header lane with digest
- * verification. The one honest exception is stated where it lives:
- * standalone explainability/uncertainty routes do not exist in the
- * backend API yet (§12.2 owns that queue) — nothing on this page
- * claims otherwise.
+ * classification-only gate, the explainability stage rides the
+ * /ml/explain SHAP lane (the real shap_summary engine over a bounded
+ * sample — the r289 queue row, closed), and the export registers a
+ * real table artifact downloaded through the token-header lane with
+ * digest verification.
  */
 
 type VisualizationTableRequest = components["schemas"]["VisualizationTableRequest"];
@@ -317,6 +318,16 @@ export function MLPage() {
   const [ssJobId, setSsJobId] = useState<string | null>(null);
   const [ssError, setSsError] = useState<string | null>(null);
   const [ssResult, setSsResult] = useState<SemiSupervisedView | null>(null);
+
+  // stage 12: explainability (the real SHAP lane)
+  const [exMaxRows, setExMaxRows] = useState(200);
+  const [exFigure, setExFigure] = useState(true);
+  const [exBusy, setExBusy] = useState(false);
+  const [exError, setExError] = useState<string | null>(null);
+  const [exResult, setExResult] = useState<ExplainResult | null>(null);
+  const [exArtifactStatuses, setExArtifactStatuses] = useState<
+    Record<string, string>
+  >({});
 
   // stage 13: export + the verified download
   const [exportFormat, setExportFormat] = useState<"csv" | "tsv" | "xlsx">("csv");
@@ -717,6 +728,44 @@ export function MLPage() {
     [refreshTrained],
   );
 
+  // stage 12: the SHAP explainability lane (sync by default; job mode
+  // relays the same payload through the JobRunCard)
+  const handleExplain = useCallback(async () => {
+    if (selectedTrained === null) {
+      return;
+    }
+    if (
+      !Number.isInteger(exMaxRows) ||
+      exMaxRows < 1 ||
+      exMaxRows > EXPLAIN_MAX_ROWS
+    ) {
+      setExError(
+        `max_rows must be an integer in [1, ${EXPLAIN_MAX_ROWS}] (the route's own bound)`,
+      );
+      return;
+    }
+    setExError(null);
+    setExResult(null);
+    setExArtifactStatuses({});
+    setExBusy(true);
+    try {
+      const response = await mlApi.explain({
+        modelId: selectedTrained.model_id,
+        datasetId: null, // the model's own training dataset
+        maxRows: exMaxRows,
+        figure: exFigure,
+        mode: "sync",
+      });
+      if (response.mode === "sync") {
+        setExResult(response.explain);
+      }
+    } catch (error) {
+      setExError(describeError(error));
+    } finally {
+      setExBusy(false);
+    }
+  }, [selectedTrained, exMaxRows, exFigure]);
+
   // the shared digest-verified download lane (the artifacts client's
   // own raw lane — reused by the AD figure and the Export stage)
   const verifiedDownload = useCallback(
@@ -754,6 +803,28 @@ export function MLPage() {
       setAdArtifactStatus(describeError(error));
     }
   }, [adResult, verifiedDownload]);
+
+  const handleExplainArtifactDownload = useCallback(
+    async (artifactId: string) => {
+      const artifact = exResult?.artifacts.find(
+        (a) => a.artifact_id === artifactId,
+      );
+      if (artifact === undefined || exResult === null) {
+        return;
+      }
+      setExArtifactStatuses((prev) => ({ ...prev, [artifactId]: "…" }));
+      try {
+        const status = await verifiedDownload(artifact);
+        setExArtifactStatuses((prev) => ({ ...prev, [artifactId]: status }));
+      } catch (error) {
+        setExArtifactStatuses((prev) => ({
+          ...prev,
+          [artifactId]: describeError(error),
+        }));
+      }
+    },
+    [exResult, verifiedDownload],
+  );
 
   // stage 13: the export over the LAST predictions block
   const handleExport = useCallback(async () => {
@@ -845,11 +916,11 @@ export function MLPage() {
           managed background jobs with the authoritative REST result
           relay; the predict lane runs sync over the registered
           dataset&apos;s own feature matrix; the applicability-domain
-          stage assembles x_test through the bounded column bridge. The
-          one lane that does not exist yet — standalone
-          explainability/uncertainty routes — says so plainly in its
-          own stage below. No feature on this page is a claim that was
-          not executed.
+          stage assembles x_test through the bounded column bridge;
+          the explainability stage runs the real shap_summary engine
+          sync over a bounded sample (job mode available) and refuses
+          non-tree estimators honestly. No feature on this page is a
+          claim that was not executed.
         </p>
       </div>
 
@@ -1822,23 +1893,79 @@ export function MLPage() {
       <StageHeader
         index={12}
         title="Explainability & Uncertainty"
-        hint="the honest queue — no §12.2 route exists yet"
+        hint="the real SHAP lane + the AD bootstrap's uncertainty surface"
         icon={<Info aria-hidden className="h-4 w-4" />}
       >
         <Card>
           <CardContent>
-            <p className="text-sm text-[var(--color-muted-foreground)]">
-              Standalone explainability and uncertainty routes do not
-              exist in the backend API yet: the ml.xai engine exists
-              offline, but no §12.2 route exposes it, so this card
-              renders no controls and makes no claims. The
-              uncertainty surface that DOES run today is the
-              Applicability Domain stage&apos;s bootstrap ensemble
-              (stage 10): the n_models refits produce the per-row
-              prediction_sd, the uncertainty_threshold cut and the
-              reliable verdict — all of it surfaced in that stage&apos;s
-              result card from the real executed job.
-            </p>
+            {selectedTrained === null ? (
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                Select a trained model in Evaluate or Compare — the SHAP
+                explanation runs over that model&apos;s own training
+                dataset&apos;s feature matrix (a bounded, explicitly
+                reported sample).
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    max rows
+                    <input
+                      type="number"
+                      min={1}
+                      max={EXPLAIN_MAX_ROWS}
+                      value={exMaxRows}
+                      onChange={(event) => setExMaxRows(Number(event.target.value))}
+                      className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                    <input
+                      type="checkbox"
+                      checked={exFigure}
+                      onChange={(event) => setExFigure(event.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    figure artifacts
+                  </label>
+                  <Button
+                    size="sm"
+                    disabled={exBusy}
+                    onClick={() => void handleExplain()}
+                  >
+                    <Info aria-hidden className="h-4 w-4" />
+                    {exBusy ? "Explaining…" : "Run the SHAP explanation"}
+                  </Button>
+                  <span className="text-xs text-[var(--color-muted-foreground)]">
+                    model {selectedTrained.name} · dataset{" "}
+                    {selectedTrained.dataset_id}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                  The explain lane rides POST /api/v1/ml/explain — the
+                  real pharmaml.ml.explain.shap_summary engine (the
+                  tree-family SHAP lane) over the first max_rows rows of
+                  the model&apos;s dataset: the per-feature mean |SHAP|
+                  ranking, the bounded beeswarm preview, and the
+                  optional importance + beeswarm figure artifacts
+                  (digest-verified downloads below). Non-tree
+                  estimators are refused honestly with the engine&apos;s
+                  own message naming the permutation-importance
+                  sibling. The uncertainty surface that also runs today
+                  is the Applicability Domain stage&apos;s bootstrap
+                  ensemble (stage 10): per-row prediction_sd, the
+                  uncertainty_threshold cut and the reliable verdict.
+                </p>
+                {exError !== null ? <div className="mt-3"><ErrorBanner message={exError} /></div> : null}
+                {exResult !== null ? (
+                  <ExplainResultCard
+                    result={exResult}
+                    artifactStatuses={exArtifactStatuses}
+                    onDownload={(artifactId) => void handleExplainArtifactDownload(artifactId)}
+                  />
+                ) : null}
+              </>
+            )}
           </CardContent>
         </Card>
       </StageHeader>
@@ -2106,6 +2233,233 @@ function ADResultCard({
       {artifactStatus !== null ? (
         <p className="mt-2 text-xs font-medium text-[var(--color-foreground)]">{artifactStatus}</p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The stage-12 result card: the SHAP summary's chips (model, task,
+ * engine, the honest sample bound, base value), the full mean-|SHAP|
+ * ranking table (bounded viewport with the full count stated), the
+ * compact per-feature beeswarm preview, and the digest-verified
+ * figure-artifact downloads.
+ */
+function ExplainResultCard({
+  result,
+  artifactStatuses,
+  onDownload,
+}: {
+  result: ExplainResult;
+  artifactStatuses: Record<string, string>;
+  onDownload: (artifactId: string) => void;
+}) {
+  return (
+    <div className="mt-4 rounded-lg border border-[var(--color-border)] p-4">
+      <div className="flex flex-wrap gap-2">
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          engine: {result.engine}
+        </span>
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          model: {result.model_name}
+        </span>
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          task: {result.task}
+        </span>
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          explained {result.n_samples} of {result.n_rows_available} rows
+        </span>
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          features: {result.n_features}
+        </span>
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          base value: {result.base_value === null ? "—" : result.base_value.toFixed(4)}
+        </span>
+      </div>
+
+      <div className="mt-3 overflow-hidden rounded-lg border border-[var(--color-border)]">
+        <div className="max-h-64 overflow-auto">
+          <table className="w-full border-collapse text-[11px]">
+            <thead className="sticky top-0 bg-[var(--color-muted)]">
+              <tr>
+                <th scope="col" className="whitespace-nowrap px-2 py-1 text-left font-semibold text-[var(--color-foreground)]">
+                  feature
+                </th>
+                <th scope="col" className="whitespace-nowrap px-2 py-1 text-left font-semibold text-[var(--color-foreground)]">
+                  mean |SHAP|
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.ranking.map((row) => (
+                <tr
+                  key={row.feature}
+                  className="border-t border-[var(--color-border)] bg-[var(--color-card)]"
+                >
+                  <td className="whitespace-nowrap px-2 py-1 font-medium text-[var(--color-foreground)]">
+                    {row.feature}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-1 text-[var(--color-muted-foreground)]">
+                    {row.mean_abs_shap.toFixed(4)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="border-t border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-[11px] text-[var(--color-muted-foreground)]">
+          All {result.ranking.length} features ranked (descending mean
+          |SHAP|) — the preview matrices below carry only the top{" "}
+          {result.preview.features.length} column
+          {result.preview.features.length === 1 ? "" : "s"} (the
+          route&apos;s own {result.preview.max_features}-column bound).
+        </p>
+      </div>
+
+      {result.preview.features.length > 0 ? (
+        <ShapStrip result={result} />
+      ) : null}
+
+      {result.artifacts.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          {result.artifacts.map((artifact) => (
+            <div key={artifact.artifact_id} className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onDownload(artifact.artifact_id)}
+              >
+                <ArrowDownToLine aria-hidden className="h-4 w-4" />
+                Download {artifact.filename}
+              </Button>
+              <span className="text-[11px] text-[var(--color-muted-foreground)]">
+                {artifact.size_bytes} bytes · sha256{" "}
+                {artifact.sha256.slice(0, 16)}…
+              </span>
+              {artifactStatuses[artifact.artifact_id] !== undefined ? (
+                <span className="text-[11px] font-medium text-[var(--color-foreground)]">
+                  {artifactStatuses[artifact.artifact_id]}
+                </span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The compact beeswarm preview: one strip per top feature (≤6), one
+ * dot per explained sample — the x position is the sample&apos;s SHAP
+ * value (normalized within the strip), the colour the feature&apos;s own
+ * value on that sample (the house amber→teal ramp: teal = high,
+ * amber = low). A preview only — the beeswarm artifact carries the
+ * true figure.
+ */
+function ShapStrip({ result }: { result: ExplainResult }) {
+  const rows = result.preview.features.slice(0, 6);
+  const rowHeight = 26;
+  const labelWidth = 96;
+  const plotWidth = 100;
+  return (
+    <div className="mt-3">
+      <svg
+        role="img"
+        aria-label="SHAP beeswarm preview: one dot per explained sample per top feature"
+        viewBox={`0 0 100 ${rows.length * rowHeight}`}
+        className="w-full"
+        style={{ maxHeight: rows.length * rowHeight }}
+      >
+        {rows.map((feature, featureIndex) => {
+          const columnIndex = result.preview.features.indexOf(feature);
+          // noUncheckedIndexedAccess: every indexed read is guarded
+          const column: number[] = [];
+          for (const row of result.preview.values) {
+            const value = row[columnIndex];
+            if (value !== undefined) {
+              column.push(value);
+            }
+          }
+          const colorColumn: number[] = [];
+          for (const row of result.preview.feature_values) {
+            const value = row[columnIndex];
+            if (value !== undefined) {
+              colorColumn.push(value);
+            }
+          }
+          let lo = Number.POSITIVE_INFINITY;
+          let hi = Number.NEGATIVE_INFINITY;
+          for (const value of column) {
+            if (Number.isFinite(value)) {
+              lo = Math.min(lo, value);
+              hi = Math.max(hi, value);
+            }
+          }
+          const span = hi - lo;
+          const finiteColors = colorColumn.filter(Number.isFinite);
+          const colorLo = finiteColors.length > 0
+            ? Math.min(...finiteColors)
+            : 0;
+          const colorHi = finiteColors.length > 0
+            ? Math.max(...finiteColors)
+            : 0;
+          const colorSpan = colorHi - colorLo;
+          const y = featureIndex * rowHeight + rowHeight / 2;
+          return (
+            <g key={feature}>
+              <text
+                x={0}
+                y={y + 3}
+                fontSize={7}
+                fill="var(--color-muted-foreground)"
+              >
+                {feature.length > 14 ? `${feature.slice(0, 13)}…` : feature}
+              </text>
+              <line
+                x1={labelWidth}
+                x2={96}
+                y1={y}
+                y2={y}
+                stroke="var(--color-border)"
+                strokeWidth={0.4}
+              />
+              {column.map((value, sampleIndex) => {
+                if (!Number.isFinite(value)) {
+                  return null;
+                }
+                const t = span > 0 ? (value - lo) / span : 0.5;
+                const x = labelWidth + t * (plotWidth - 8) + 2;
+                const colorValue = colorColumn[sampleIndex];
+                const colorT =
+                  colorSpan > 0 &&
+                  colorValue !== undefined &&
+                  Number.isFinite(colorValue)
+                    ? (colorValue - colorLo) / colorSpan
+                    : 0.5;
+                // the house ramp: amber (chart-2) for low feature
+                // values → teal (chart-1) for high ones
+                const fill = `color-mix(in oklch, var(--color-chart-2) ${Math.round((1 - colorT) * 100)}%, var(--color-chart-1))`;
+                return (
+                  <circle
+                    key={sampleIndex}
+                    cx={x}
+                    cy={y}
+                    r={2.2}
+                    fill={fill}
+                    fillOpacity={0.85}
+                  />
+                );
+              })}
+            </g>
+          );
+        })}
+      </svg>
+      <p className="mt-1 text-[11px] text-[var(--color-muted-foreground)]">
+        beeswarm preview: the top {rows.length} features, one dot per
+        explained sample (x = the SHAP value normalized per strip;
+        colour = the feature&apos;s own value, amber = low → teal =
+        high). The beeswarm artifact carries the true figure.
+      </p>
     </div>
   );
 }

@@ -15653,3 +15653,121 @@ regenerated from the real r289 records + the audit report (carriers
 agree: yes). Counter 84 → 87 (the two cut-off interactive sessions
 85+86 ride the ledger note), dev server relaunched via the
 double-fork daemon (web / 200), everything pushed.
+
+## Round 290 — the interactive part11 continuation: the ML Explainability queue lane CLOSED + the §28 Stage-4 gate assessed
+
+The session opened on the user's standing directive ("Continue
+MASTER_PROMPT part11_1and2 (first priority)" + "Push"): the one
+unpushed cron commit (c7989dc9) pushed first (the askpass helper
+recreated from .zscripts/gh_backup.sh — the ~/.github_token file was
+intact at 600), then the r289 queue's first item executed to done.
+
+**The Explainability/Uncertainty lane (the §46.1/§46.4 PARTIAL, the
+r289 "next queue" head) — CLOSED end-to-end:**
+
+1. **The route** (`src/pharmaml/api/routes/ml.py`): POST
+   `/api/v1/ml/explain` over the REAL
+   `pharmaml.ml.explain.shap_summary` engine (the tree-family SHAP
+   lane; Pipelines unwrapped to their final step, values computed over
+   the pipeline's own preprocessed rows). The body: `model_id` +
+   optional `dataset_id` (defaulting to the model's own training
+   dataset, the AD-route pattern), `max_rows` bounded 1..500
+   (`_MAX_EXPLAIN_ROWS`; the sample is the first N rows, reported
+   honestly as both `n_rows_available` and the explained
+   `n_samples`), `figure`, sync/job modes (sync default). The payload:
+   the full per-feature mean-|SHAP| ranking, `base_value`, engine/
+   model/task chips, the bounded preview matrices (top-50 ranked
+   feature columns, `_MAX_PREVIEW_FEATURES` — the ranking carries all
+   features; the bound is on wire size, never on the inventory), and —
+   with `figure=true` — TWO registered artifacts:
+   `shap-importance.png` (plot_shap_importance) and
+   `shap-beeswarm.png` (plot_shap_beeswarm), each digest-verified on
+   download. Non-tree estimators (svm pinned) surface the engine's own
+   typed refusal as a 422 — the message names TreeExplainer's limit,
+   never a silent fallback. Job mode carries real progress milestones
+   (10/55/80).
+2. **The contract**: `tools/export_openapi.py` re-run (83 paths), the
+   TS types regenerated (`openapi-typescript` → api.d.ts;
+   `ExplainRequest` present) — the drift gate green.
+3. **The service layer** (`frontend/src/services/ml/client.ts`):
+   `ExplainOptions`/`ExplainResult`/`ExplainPreview` types,
+   `EXPLAIN_MAX_ROWS = 500` mirrored beside the route, `mlApi.explain`
+   (sync + job lanes), and `parseExplainResult`/`parseExplainView`
+   with a row-validated `matrixOf` for the preview matrices.
+4. **The GUI** (`frontend/src/features/ml/MLPage.tsx`): stage 12 — the
+   honest placeholder REPLACED by the real card: the trained-model
+   reuse (Evaluate's select), max-rows control bounded client-side,
+   figure toggle, the sync run, and `ExplainResultCard` (engine/model/
+   task/sample-bound/base-value chips, the full ranking table with
+   the bounded max-h-64 viewport, the digest-verified ×2 artifact
+   downloads) + `ShapStrip` — the compact inline SVG beeswarm preview
+   (top ≤6 features, one dot per explained sample, x = the per-strip
+   normalized SHAP value, colour = the feature's own value through
+   the house amber→teal `color-mix` ramp on the chart tokens). The
+   page's docstring + "State, honestly" header updated to the new
+   truth: no queue exception remains on this page.
+5. **The tests**: `TestMLExplain` — 8 pins (sync ranking/preview
+   shape, the training-dataset default, job mode's COMPLETED result,
+   figures byte-for-byte with X-Artifact-SHA256 digests, the svm
+   refusal, unknown-model 404, the evicted-dataset 404, the
+   max_rows bounds). API suite: **268 passed + 1 skip** (261→269
+   collected). tsc 0 errors · vite production build green (11.4 s) ·
+   frontend guards 30/30 · ruff clean on every changed file (five
+   pre-existing findings live in packaging/windows/packaging_
+   validation.py, untouched, out of this lane's scope).
+6. **BROWSER-VERIFIED live** (the r289 pattern, no injection): the
+   backend daemonized with a fixed token (8017) + the vite dev server
+   with `PHARMAML_DEV_BACKEND_PORT`/`VITE_PHARMAML_TOKEN` (the
+   double-fork daemon pattern — plain `&` dies with the bash call):
+   the app boots ITSELF ("backend 1.2.229 ready via dev-same-origin"),
+   the Datasets workspace uploads the 40-row toy CSV, the ML workspace
+   selects it, trains random_forest (tune off), the Evaluate stage
+   selects `mdl-26b5fb309a63`, stage 12's "Run the SHAP explanation"
+   fires POST /api/v1/ml/explain → 200 (the app's own proxied lane),
+   the `ExplainResultCard` renders (engine shap_summary, both ranking
+   rows, the beeswarm preview SVG, both artifact buttons), the
+   beeswarm download lands "digest verified: e75a49a9696e7175…", zero
+   console/page errors, mobile 390 re-checked. Evidence:
+   `docs/gui/screenshots/r290-ml-explainability-stage.png` +
+   `r290-ml-explainability-mobile.png`.
+
+**The evidence docs updated**: `CAPABILITY_INTEGRATION_MATRIX.md` —
+the `ml.explain.shap_summary` row added (PASS; 73 rows / 65 PASS /
+0 FAIL) with the r290 addendum in the header; `ACCEPTANCE_SWEEP.md` —
+the §46.1 workflow row flips to PASS (every stage of §11.2's order
+now executes its real backend lane), the verdict 66 PASS · 3 PARTIAL
+· 24 BLOCKED · 1 NOTAPPLICABLE, the explainability disposition
+removed from the PARTIAL list (the remaining three: the Plotly src
+adoption campaign row, the Stage-5 retirement gate, the Windows-
+runner-gated executions).
+
+**The §28 Stage-4 parity gate — formally assessed** (the r289 queue's
+third item; the decision the sweep's §46.8 rows track): against the
+gate's own twelve conditions — 100% relevant capabilities mapped
+(PASS: 73-row matrix, 0 FAIL, the 6 PARTIAL rows are §3.4
+housekeeping surfaces each dispositioned), critical capabilities
+under integration tests (PASS: the 269-test API suite + 123 guards +
+browser drivers), all nine workspaces usable (PASS: r289 12/12 +
+r290's lane), no critical missing workflow (PASS: the last
+user-facing queue lane closed this round), no unsupported feature
+advertised (PASS: the honest-label discipline), performance (PASS:
+the stress suite + bounded previews), regression tests (PASS:
+7,115-suite r289 + the 8 new pins), data/artifact persistence (PASS:
+SQLite + digest-verified round-trips), offline frontend (PASS
+Linux-side) — versus **PARTIAL: complete plotting integration** (the
+Plotly src adoption campaign row — declared, chunked, pinned, but
+zero src imports yet) and **BLOCKED: clean-machine deployment
+verified + WebView2 runtime verification** (the Windows runner's
+lane, exactly part11_2 §12's honest split). **Decision: Stage-5
+PySide6 retirement remains correctly DEFERRED** — the gate stands at
+9 PASS · 1 PARTIAL · 2 BLOCKED of 12, so the removal order §28 pins
+(no production PySide6 entrypoint removal, no Qt dependency purge,
+no legacy-module deletion) stays in force until (a) the Windows
+runner executes the release pipeline + clean-machine verify and (b)
+the Plotly src adoption row closes. No silent pass, no silent purge.
+
+Next queue (the remaining part11_1 residuals, unchanged except one
+closed): the Plotly.js src adoption campaign (§46.1/§46.5 — now the
+one remaining Linux-portable PARTIAL), then §47's final engineering
+report riding the Windows runner's first real release. Everything
+committed and pushed (the askpass lane) at close.

@@ -1022,6 +1022,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ml/explain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Explain */
+        post: operations["explain_api_v1_ml_explain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ml/models": {
         parameters: {
             query?: never;
@@ -1747,6 +1764,32 @@ export interface components {
              * @default 1
              */
             gamma: number;
+        };
+        /**
+         * ExplainRequest
+         * @description POST /api/v1/ml/explain — the §11.2 Explainability stage body.
+         */
+        ExplainRequest: {
+            /** Dataset Id */
+            dataset_id?: string | null;
+            /**
+             * Figure
+             * @default false
+             */
+            figure: boolean;
+            /**
+             * Max Rows
+             * @default 200
+             */
+            max_rows: number;
+            /**
+             * Mode
+             * @default sync
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /** Model Id */
+            model_id: string;
         };
         /** FigureRequest */
         FigureRequest: {
@@ -4747,6 +4790,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["XvgRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    explain_api_v1_ml_explain_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExplainRequest"];
             };
         };
         responses: {

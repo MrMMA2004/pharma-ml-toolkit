@@ -850,3 +850,164 @@ class TestArtifactLifecycle:
                 "/api/v1/artifacts", headers=auth_headers()
             ).json()
             assert arts == {"artifacts": []}
+
+
+# ------------------------------------------------------------- ml explain
+# part11 §11.2's Explainability/Uncertainty stage — the r289 queue row
+# closed: POST /ml/explain rides the REAL shap_summary engine (the
+# tree-family SHAP lane), bounded preview matrices, the honest
+# non-tree refusal, and the importance + beeswarm figure artifacts.
+
+
+class TestMLExplain:
+
+    def _prepare(self, client, rows: int = 40, model: str = "random_forest"):
+        ds = _upload(client, data=_csv_bytes(rows=rows))
+        trained = _train(client, ds["dataset_id"], model=model)
+        return ds, trained
+
+    def test_explain_sync_ranking_and_preview(self, client):
+        ds, trained = self._prepare(client, rows=40)
+        r = client.post(
+            "/api/v1/ml/explain",
+            headers=auth_headers(),
+            json={
+                "model_id": trained["model_id"],
+                "dataset_id": ds["dataset_id"],
+                "max_rows": 30,
+            },
+        )
+        assert r.status_code == 200, r.text
+        payload = r.json()
+        assert payload["mode"] == "sync"
+        explain = payload["explain"]
+        assert explain["engine"] == "shap_summary"
+        assert explain["model_id"] == trained["model_id"]
+        assert explain["task"] in ("classification", "regression")
+        assert explain["model_name"]
+        assert explain["n_rows_available"] == 40
+        assert explain["n_samples"] == 30  # the bounded sample, honest
+        assert explain["n_features"] == 2
+        assert explain["base_value"] is not None
+        ranking = explain["ranking"]
+        assert len(ranking) == 2
+        assert ranking[0]["mean_abs_shap"] >= ranking[1]["mean_abs_shap"]
+        # the preview carries the top-ranked columns, one row per
+        # explained sample
+        preview = explain["preview"]
+        assert preview["features"] == [
+            row["feature"] for row in ranking
+        ]
+        assert len(preview["values"]) == 30
+        assert len(preview["values"][0]) == 2
+        assert len(preview["feature_values"]) == 30
+        assert explain["artifacts"] == []
+
+    def test_explain_defaults_to_the_models_training_dataset(self, client):
+        _ds, trained = self._prepare(client)
+        r = client.post(
+            "/api/v1/ml/explain",
+            headers=auth_headers(),
+            json={"model_id": trained["model_id"], "max_rows": 24},
+        )
+        assert r.status_code == 200, r.text
+        explain = r.json()["explain"]
+        assert explain["n_rows_available"] == 40
+        assert explain["n_samples"] == 24
+
+    def test_explain_job_mode_progress_and_result(self, client):
+        _ds, trained = self._prepare(client)
+        r = client.post(
+            "/api/v1/ml/explain",
+            headers=auth_headers(),
+            json={
+                "model_id": trained["model_id"],
+                "max_rows": 24,
+                "mode": "job",
+            },
+        )
+        assert r.status_code == 200, r.text
+        job = r.json()["job"]
+        assert job["operation"] == "ml.explain"
+        assert job["workspace"] == "ml"
+        final = _wait_job(client, job["job_id"])
+        assert final["state"] == "COMPLETED", final
+        result = client.get(
+            f"/api/v1/jobs/{job['job_id']}/result", headers=auth_headers()
+        ).json()["result"]
+        explain = result["explain"]
+        assert explain["n_samples"] == 24
+        assert explain["engine"] == "shap_summary"
+        assert len(explain["ranking"]) == 2
+
+    def test_explain_figures_download_byte_for_byte(self, client):
+        _ds, trained = self._prepare(client)
+        r = client.post(
+            "/api/v1/ml/explain",
+            headers=auth_headers(),
+            json={
+                "model_id": trained["model_id"],
+                "max_rows": 24,
+                "figure": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        artifacts = r.json()["explain"]["artifacts"]
+        assert [a["filename"] for a in artifacts] == [
+            "shap-importance.png", "shap-beeswarm.png"
+        ]
+        for artifact in artifacts:
+            dl = client.get(
+                f"/api/v1/artifacts/{artifact['artifact_id']}/download",
+                headers=auth_headers(),
+            )
+            assert dl.status_code == 200
+            assert dl.content[:8] == b"\x89PNG\r\n\x1a\n"
+            assert dl.headers["X-Artifact-SHA256"] == hashlib.sha256(
+                dl.content
+            ).hexdigest()
+
+    def test_explain_non_tree_model_refused_honestly(self, client):
+        _ds, trained = self._prepare(client, model="svm")
+        r = client.post(
+            "/api/v1/ml/explain",
+            headers=auth_headers(),
+            json={"model_id": trained["model_id"]},
+        )
+        assert r.status_code == 422
+        detail = str(r.json()["detail"])
+        # the engine's own refusal names the engine family, never a
+        # silent fallback
+        assert "TreeExplainer" in detail
+
+    def test_explain_unknown_model_404(self, client):
+        r = client.post(
+            "/api/v1/ml/explain",
+            headers=auth_headers(),
+            json={"model_id": "mdl-unknown"},
+        )
+        assert r.status_code == 404
+
+    def test_explain_missing_dataset_404(self, client):
+        ds, trained = self._prepare(client)
+        evict = client.delete(
+            f"/api/v1/datasets/{ds['dataset_id']}", headers=auth_headers()
+        )
+        assert evict.status_code == 200, evict.text
+        r = client.post(
+            "/api/v1/ml/explain",
+            headers=auth_headers(),
+            json={"model_id": trained["model_id"]},
+        )
+        assert r.status_code == 404
+        assert "training dataset" in r.json()["detail"]
+
+    def test_explain_max_rows_bounds_validated(self, client):
+        _ds, trained = self._prepare(client)
+        for bad in (0, -1, 501):
+            r = client.post(
+                "/api/v1/ml/explain",
+                headers=auth_headers(),
+                json={"model_id": trained["model_id"], "max_rows": bad},
+            )
+            assert r.status_code == 422, bad

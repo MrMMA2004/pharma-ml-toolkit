@@ -25,6 +25,13 @@
  *   the sync answer `{mode: "sync", model_id, n_rows, predictions,
  *   probabilities?}` (probabilities only when the estimator exposes
  *   predict_proba — a 422 states the honest refusal otherwise).
+ * * `POST /api/v1/ml/explain` — `ExplainRequest` → the sync answer
+ *   `{mode: "sync", explain: view}` (job mode when asked): the REAL
+ *   `shap_summary` engine over a bounded sample of the model's
+ *   dataset — the per-feature mean-|SHAP| ranking (all features),
+ *   the top-50-column preview matrices for the beeswarm, and the
+ *   optional importance + beeswarm figure artifacts. Non-tree
+ *   estimators surface the engine's own typed refusal as a 422.
  * * `POST /api/v1/applicability-domain/analyze` —
  *   `ADAnalyzeRequest` (x_test required, min 1 row) → job mode; the
  *   COMPLETED result payload is `{analysis: {…as_dict()…, frame},
@@ -53,6 +60,7 @@ import type { components } from "@/types/api.d";
 
 type TrainRequest = components["schemas"]["TrainRequest"];
 type PredictRequest = components["schemas"]["PredictRequest"];
+type ExplainRequest = components["schemas"]["ExplainRequest"];
 type ADAnalyzeRequest = components["schemas"]["ADAnalyzeRequest"];
 type SemiSupervisedTrainRequest =
   components["schemas"]["SemiSupervisedTrainRequest"];
@@ -63,6 +71,14 @@ type SemiSupervisedTrainRequest =
  * state the doomed request honestly instead of firing it.
  */
 export const AD_MAX_FEATURES = 50;
+
+/**
+ * The explain route's own row-sample cap (ml.py's
+ * `_MAX_EXPLAIN_ROWS`) — mirrored once beside the route so the page
+ * can bound its control honestly instead of firing the doomed
+ * request.
+ */
+export const EXPLAIN_MAX_ROWS = 500;
 
 /** `list_models` — one registry catalog entry (the catalog's own keys). */
 export interface ModelCatalogEntry {
@@ -211,6 +227,43 @@ export type SemiSupervisedTrainResponse =
   | MLJobResponse
   | SemiSupervisedSyncResponse;
 
+/** One row of the explain ranking (all features, descending). */
+export interface ExplainRankingRow {
+  readonly feature: string;
+  readonly mean_abs_shap: number;
+}
+
+/** The bounded preview matrices (top-ranked feature columns). */
+export interface ExplainPreview {
+  readonly max_features: number;
+  readonly features: readonly string[];
+  readonly values: readonly (readonly number[])[];
+  readonly feature_values: readonly (readonly number[])[];
+}
+
+/** The `_explain_body` view — the SHAP summary payload. */
+export interface ExplainResult {
+  readonly model_id: string;
+  readonly model_name: string;
+  readonly task: string;
+  readonly engine: string;
+  readonly n_rows_available: number;
+  readonly n_samples: number;
+  readonly n_features: number;
+  readonly base_value: number | null;
+  readonly ranking: readonly ExplainRankingRow[];
+  readonly preview: ExplainPreview;
+  readonly artifacts: readonly ArtifactView[];
+}
+
+/** The sync-mode explain answer (`{mode: "sync", explain: view}`). */
+export interface ExplainSyncResponse {
+  readonly mode: "sync";
+  readonly explain: ExplainResult;
+}
+
+export type ExplainResponse = MLJobResponse | ExplainSyncResponse;
+
 export interface TrainOptions {
   readonly datasetId: string;
   readonly model: string;
@@ -254,6 +307,14 @@ export interface SemiSupervisedOptions {
   readonly nNeighbors: number;
   readonly gamma: number;
   readonly randomState: number;
+  readonly mode?: "job" | "sync";
+}
+
+export interface ExplainOptions {
+  readonly modelId: string;
+  readonly datasetId: string | null;
+  readonly maxRows: number;
+  readonly figure: boolean;
   readonly mode?: "job" | "sync";
 }
 
@@ -354,6 +415,34 @@ export const mlApi = {
       unknown
     >;
     return parsePredictResponse(raw, "predict");
+  },
+
+  /**
+   * `POST /api/v1/ml/explain` — the REAL shap_summary engine over a
+   * bounded sample of the trained model's dataset (its own when
+   * datasetId is null). Sync by default (the route's own lane); the
+   * job-mode COMPLETED result payload is `{explain: view}` (parse
+   * with parseExplainResult).
+   */
+  async explain(options: ExplainOptions): Promise<ExplainResponse> {
+    const request: ExplainRequest = {
+      model_id: options.modelId,
+      dataset_id: options.datasetId,
+      max_rows: options.maxRows,
+      figure: options.figure,
+      mode: options.mode ?? "sync",
+    };
+    const raw = (await api.post("/api/v1/ml/explain", request)) as Record<
+      string,
+      unknown
+    >;
+    if (raw["mode"] === "sync") {
+      return {
+        mode: "sync",
+        explain: parseExplainView(raw["explain"], "explain(sync)"),
+      };
+    }
+    return { mode: "job", job: parseJobView(raw["job"], "explain(job)") };
   },
 
   /**
@@ -622,6 +711,106 @@ export function parseSemiSupervisedResult(
 ): SemiSupervisedView {
   const r = expectObject(raw, what);
   return parseSemiSupervisedView(r["semi_supervised"], what);
+}
+
+/** Narrow the explain job result payload: `{explain: ExplainResult}`. */
+export function parseExplainResult(
+  raw: unknown,
+  what: string,
+): ExplainResult {
+  const r = expectObject(raw, what);
+  return parseExplainView(r["explain"], what);
+}
+
+/** Narrow the `_explain_body` view — optional keys surface as null. */
+function parseExplainView(raw: unknown, what: string): ExplainResult {
+  const r = expectObject(raw, what);
+  const modelId = r["model_id"];
+  const modelName = r["model_name"];
+  const nSamples = r["n_samples"];
+  if (
+    typeof modelId !== "string" ||
+    typeof modelName !== "string" ||
+    typeof nSamples !== "number"
+  ) {
+    throw new Error(`${what}: model_id/model_name/n_samples have wrong shapes`);
+  }
+  const rankingRaw = r["ranking"];
+  const ranking: ExplainRankingRow[] = [];
+  if (Array.isArray(rankingRaw)) {
+    for (const rowRaw of rankingRaw as unknown[]) {
+      const row = expectObject(rowRaw, `${what} ranking row`);
+      const feature = row["feature"];
+      const meanAbs = row["mean_abs_shap"];
+      if (typeof feature !== "string" || typeof meanAbs !== "number") {
+        throw new Error(`${what} ranking row has wrong shapes`);
+      }
+      ranking.push({ feature, mean_abs_shap: meanAbs });
+    }
+  }
+  const previewRaw = r["preview"];
+  let preview: ExplainPreview = {
+    max_features: 0,
+    features: [],
+    values: [],
+    feature_values: [],
+  };
+  if (typeof previewRaw === "object" && previewRaw !== null) {
+    const p = previewRaw as Record<string, unknown>;
+    preview = {
+      max_features: asNumber(p["max_features"]) ?? 0,
+      features: Array.isArray(p["features"])
+        ? (p["features"] as unknown[]).map((f) =>
+            typeof f === "string" ? f : String(f),
+          )
+        : [],
+      values: matrixOf(p["values"], `${what} preview.values`),
+      feature_values: matrixOf(
+        p["feature_values"],
+        `${what} preview.feature_values`,
+      ),
+    };
+  }
+  const artifactsRaw = r["artifacts"];
+  const artifacts: ArtifactView[] = [];
+  if (Array.isArray(artifactsRaw)) {
+    for (const a of artifactsRaw as unknown[]) {
+      if (typeof a === "object" && a !== null) {
+        artifacts.push(parseArtifactView(a, `${what} artifact`));
+      }
+    }
+  }
+  return {
+    model_id: modelId,
+    model_name: modelName,
+    task: asString(r["task"]) ?? "",
+    engine: asString(r["engine"]) ?? "",
+    n_rows_available: asNumber(r["n_rows_available"]) ?? 0,
+    n_samples: nSamples,
+    n_features: asNumber(r["n_features"]) ?? 0,
+    base_value: asNumber(r["base_value"]),
+    ranking,
+    preview,
+    artifacts,
+  };
+}
+
+/** A (rows × columns) numeric matrix, validated row-by-row. */
+function matrixOf(
+  raw: unknown,
+  what: string,
+): readonly (readonly number[])[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return (raw as unknown[]).map((row, i) => {
+    if (!Array.isArray(row)) {
+      throw new Error(`${what}[${i}]: expected a numeric row`);
+    }
+    return (row as unknown[]).map((v) =>
+      typeof v === "number" ? v : Number.NaN,
+    );
+  });
 }
 
 /** Narrow the `_semi_view` payload — optional keys surface as null. */

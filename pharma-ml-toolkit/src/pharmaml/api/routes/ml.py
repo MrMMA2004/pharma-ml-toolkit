@@ -10,6 +10,15 @@ training backend (part10's queued row).
 * ``POST /api/v1/ml/predict`` — predictions (and optional
   probabilities) from a session-trained model on inline rows or on a
   registered dataset's feature matrix.
+* ``POST /api/v1/ml/explain`` — the SHAP summary of a session-trained
+  model over (a bounded sample of) its dataset's feature matrix
+  (:func:`pharmaml.ml.explain.shap_summary` — part11 §11.2's
+  Explainability/Uncertainty stage, the r289 queue row closed here):
+  the per-feature mean |SHAP| ranking, the bounded values preview for
+  the beeswarm, and the optional importance + beeswarm figure
+  artifacts (``plot_shap_importance`` / ``plot_shap_beeswarm``).
+  Non-tree estimators are refused honestly with the typed error that
+  names the permutation-importance sibling — never a silent fallback.
 
 ``n_jobs`` passes through verbatim, including ``-1`` (all cores) —
 the Phase-Eight passthrough clause, previewed here.
@@ -17,21 +26,38 @@ the Phase-Eight passthrough clause, previewed here.
 
 from __future__ import annotations
 
+import tempfile
 import uuid
+from pathlib import Path
 from typing import Any, Literal
 
+import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from pharmaml.exceptions import DataValidationError, ModelError
+from pharmaml.exceptions import (
+    DataValidationError,
+    DependencyError,
+    ModelError,
+)
+from pharmaml.ml.explain import shap_summary
 from pharmaml.ml.models import list_models, resolve_model_name
 from pharmaml.ml.training import train_model
+from pharmaml.viz._compat import close_figure
+from pharmaml.viz.export import export_figure
+from pharmaml.viz.ml_plots import plot_shap_beeswarm, plot_shap_importance
 
 from ..jobs import CancelledJob
 from ..stores import TrainedModelRecord, json_safe
 
 router = APIRouter(prefix="/ml", tags=["ml"])
+
+# the SHAP preview bounds (§17.3: explicit, never silent): the rows
+# sampled for the explanation, and the preview matrices' feature
+# columns (the top-ranked ones; the ranking itself carries all)
+_MAX_EXPLAIN_ROWS = 500
+_MAX_PREVIEW_FEATURES = 50
 
 
 class TrainRequest(BaseModel):
@@ -59,6 +85,16 @@ class PredictRequest(BaseModel):
             raise ValueError(
                 "give either rows=[...] or dataset_id=..., not both/neither"
             )
+
+
+class ExplainRequest(BaseModel):
+    """POST /api/v1/ml/explain — the §11.2 Explainability stage body."""
+
+    model_id: str
+    dataset_id: str | None = None
+    max_rows: int = Field(default=200, ge=1, le=_MAX_EXPLAIN_ROWS)
+    figure: bool = False
+    mode: Literal["job", "sync"] = "sync"
 
 
 @router.get("/models")
@@ -274,5 +310,167 @@ def predict(req: PredictRequest, request: Request) -> dict:
         model_record=model_record,
         X=X,
         want_proba=req.predict_proba,
+    )
+    return {"mode": "job", "job": record.public()}
+
+
+# ------------------------------------------------------------------ explain
+
+
+def _explain_body(
+    model_record: TrainedModelRecord,
+    X: pd.DataFrame,
+    max_rows: int,
+    figure: bool,
+    artifact_store=None,
+    manager=None,
+    job_id: str | None = None,
+    cancel_event=None,
+) -> dict:
+    """Job/sync body: the REAL ``shap_summary`` engine, bounded preview.
+
+    The explanation runs over the first ``max_rows`` rows of the
+    feature matrix (a deterministic, explicitly-bounded sample — the
+    payload reports both ``n_rows_available`` and the explained
+    ``n_samples`` so the bound is never silent). Non-tree estimators
+    surface the engine's own typed refusal (which names the
+    permutation-importance sibling) as a 422 — no silent fallback.
+    """
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledJob("Cancelled before the SHAP stage.")
+    if manager is not None and job_id is not None:
+        manager.report_progress(
+            job_id, 10, "sampling the explanation frame"
+        )
+    X_sample = X.head(max_rows)
+    try:
+        summary = shap_summary(model_record.model, X_sample)
+    except (
+        DataValidationError, DependencyError, ModelError, ValueError
+    ) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if manager is not None and job_id is not None:
+        manager.report_progress(job_id, 55, "assembling the SHAP summary")
+
+    ranking = [
+        {"feature": name, "mean_abs_shap": float(value)}
+        for name, value in summary.ranking()
+    ]
+    # the preview matrices carry only the top-ranked feature columns
+    # (the ranking above carries every feature — the bound is on the
+    # wire size, never on the honest inventory)
+    keep = [row["feature"] for row in ranking[:_MAX_PREVIEW_FEATURES]]
+    indices = [summary.names.index(name) for name in keep]
+    values = np.asarray(summary.values, dtype=float)
+    feature_values = np.asarray(summary.feature_values, dtype=float)
+    preview = {
+        "max_features": _MAX_PREVIEW_FEATURES,
+        "features": keep,
+        "values": values[:, indices].tolist() if indices else [],
+        "feature_values": (
+            feature_values[:, indices].tolist() if indices else []
+        ),
+    }
+
+    artifacts: list[dict] = []
+    if figure:
+        if manager is not None and job_id is not None:
+            manager.report_progress(
+                job_id, 80, "rendering the SHAP figures"
+            )
+        for filename, plot in (
+            ("shap-importance.png", plot_shap_importance),
+            ("shap-beeswarm.png", plot_shap_beeswarm),
+        ):
+            if artifact_store is None:
+                break
+            try:
+                fig = plot(summary)
+            except (DataValidationError, DependencyError) as exc:
+                raise HTTPException(
+                    status_code=422, detail=str(exc)
+                ) from exc
+            with tempfile.TemporaryDirectory(prefix="pharmaml-shap-") as tmp:
+                target = Path(tmp) / filename
+                export_figure(fig, target)
+                data = target.read_bytes()
+            record = artifact_store.register(
+                kind="figure",
+                filename=filename,
+                content_type="image/png",
+                data=data,
+                meta={"model_id": model_record.model_id},
+            )
+            artifacts.append(record.view())
+            close_figure(fig)
+
+    return {
+        "explain": {
+            "model_id": model_record.model_id,
+            "model_name": summary.model_name,
+            "task": summary.task,
+            "engine": "shap_summary",
+            "n_rows_available": len(X),
+            "n_samples": int(summary.n_samples),
+            "n_features": len(summary.names),
+            "base_value": (
+                None if summary.base_value is None
+                else float(summary.base_value)
+            ),
+            "ranking": ranking,
+            "preview": preview,
+            "artifacts": artifacts,
+        }
+    }
+
+
+@router.post("/explain")
+def explain(req: ExplainRequest, request: Request) -> dict:
+    model_store = request.app.state.model_store
+    model_record = model_store.get(req.model_id)
+    if model_record is None:
+        raise HTTPException(status_code=404, detail="Unknown model_id.")
+    dataset_store = request.app.state.dataset_store
+    dataset_id = req.dataset_id or model_record.dataset_id
+    dataset = dataset_store.get(dataset_id) if dataset_id else None
+    if dataset is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "the model's training dataset is not registered in this "
+                "session; re-upload it (POST /api/v1/datasets) and pass "
+                "dataset_id"
+            ),
+        )
+    X = dataset.X
+    if req.mode == "sync":
+        return {
+            "mode": "sync",
+            **_explain_body(
+                model_record,
+                X,
+                req.max_rows,
+                req.figure,
+                artifact_store=request.app.state.artifact_store,
+            ),
+        }
+    manager = request.app.state.job_manager
+    record = manager.submit(
+        "ml.explain",
+        "ml",
+        _explain_body,
+        configuration={
+            "model_id": req.model_id,
+            "dataset_id": dataset_id,
+            "n_rows_available": len(X),
+            "max_rows": req.max_rows,
+            "figure": req.figure,
+        },
+        model_record=model_record,
+        X=X,
+        max_rows=req.max_rows,
+        figure=req.figure,
+        artifact_store=request.app.state.artifact_store,
+        manager=manager,
     )
     return {"mode": "job", "job": record.public()}

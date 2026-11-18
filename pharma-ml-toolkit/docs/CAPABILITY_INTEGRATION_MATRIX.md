@@ -1,6 +1,10 @@
 # CAPABILITY_INTEGRATION_MATRIX — part11_1 §21 (Phase Sixteen)
 
-**Baseline:** v1.2.228 (round 289) · **Spec:** MASTER_PROMPT part11_1 §21 —
+**Baseline:** v1.2.228 (round 289) · **r290 addendum:** the ML
+Explainability/Uncertainty queue lane CLOSED — `POST /api/v1/ml/explain`
+(`ml.explain.shap_summary`) with the GUI stage, 8 API pins, and the
+live browser run (evidence: `docs/gui/screenshots/r290-ml-explainability-*.png`).
+**Spec:** MASTER_PROMPT part11_1 §21 —
 "Complete Backend–GUI Integration Audit" — with part11_2 §12's status labels.
 **Method:** every row below was derived live from the working tree — the 88
 OpenAPI operations (`contracts/openapi.json`) were traced to their route
@@ -93,6 +97,7 @@ REST surface) · **GUI workspace / UI control** (the React consumer) ·
 | `ml.applicability.applicability_domain` (+ bootstrap) | POST `/applicability-domain/analyze` | ML · AD stage: k/percentile/n-models/uncertainty/figure panel (feature cap 50) | J/S | `ADResultCard` (counts + per-row reliability frame) | AD figure artifact | figure + AD table | analyze + bootstrap telemetry pins | PASS |
 | `ml.applicability.knn_applicability_domain` | POST `/applicability-domain/knn` | consumed internally by analyze; standalone route | S | — | — | — | knn pins (API-only) | NOTAPPLICABLE — internal utility |
 | `ml.applicability.check_domain_box` | POST `/applicability-domain/domain-box` | metadata rule check | S | — | — | — | domain-box pins | NOTAPPLICABLE — internal utility |
+| `ml.explain.shap_summary` | POST `/ml/explain` | ML · Explainability stage: trained-model select, bounded max_rows sample (route cap 500), figure toggle; non-tree estimators refused honestly (the r289 queue lane, closed r290) | S/J | `ExplainResultCard` (engine/model/task chips, full mean-\|SHAP\| ranking table, base value, bounded beeswarm preview strip) | shap-importance.png + shap-beeswarm.png figure artifacts | digest-verified downloads ×2 | explain pins 8 (sync/job/bounds/refusal/figures/404s) + the r290 browser run | PASS |
 | AD catalog | GET `/applicability-domain/catalog` | defaults source for the ML AD panel | S | panel defaults | — | — | contract pin | NOTAPPLICABLE — config surface |
 
 ### 2.3 Deep Learning (§11.3; card 04)
@@ -274,7 +279,7 @@ JS tests remain a documented campaign row, not a silent gap.
 | Domain | Operations | PASS | PARTIAL | FAIL | BLOCKED | N/A |
 |---|---|---|---|---|---|---|
 | Datasets + Chemistry | 12 | 11 | 1 (evict) | 0 | 0 | 0 |
-| ML + Semi-supervised + AD | 9 | 6 | 1 (evaluate) | 0 | 0 | 2 (internal) |
+| ML + Semi-supervised + AD | 10 | 7 | 1 (evaluate) | 0 | 0 | 2 (internal) |
 | Deep Learning | 3 | 3 | 0 | 0 | 0 | 0 |
 | Generative AI | 5 | 5 | 0 | 0 | 0 | 0 |
 | Molecular Docking | 11 | 11 | 0 | 0 | 0 | 0 |
@@ -282,7 +287,7 @@ JS tests remain a documented campaign row, not a silent gap.
 | MD Analysis | 7 | 7 | 0 | 0 | 0 | 0 |
 | Visualization + artifacts | 8 | 7 | 1 (view/delete) | 0 | 0 | 0 |
 | Control plane (health/jobs/WS) | 7 | 4 | 3 (db surface, jobs list, capabilities) | 0 | 0 | 1 (codegen) |
-| **Total** | **72 capability rows** | **64** | **6** | **0** | **0** | **3** |
+| **Total** | **73 capability rows** | **65** | **6** | **0** | **0** | **3** |
 
 Every user-facing workflow chain (UI control → service client → REST →
 job/worker → real scientific function → result handler → visualization →
