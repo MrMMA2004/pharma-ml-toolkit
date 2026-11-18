@@ -42,14 +42,14 @@ All probed dependencies import cleanly in this environment (the Qt rows are prob
 
 ## 3. Test evidence
 
-- Suites discovered: **239** (72 UI, 167 library)
-- Tests collected: **7343**
+- Suites discovered: **243** (72 UI, 171 library)
+- Tests collected: **7400**
 
 | Suite chunk (as actually run) | Result |
 | --- | --- |
-| `1 (a-l)` | 3146 passed, 1 failed (the leakage guard caught the r286 browser_verify_pkpd.sh home-path literal; scrubbed to `$HOME` per the r284 precedent, tests/test_leakage.py re-run green post-scrub: 5 passed) |
-| `2 (m-p)` | 866 passed, 1 skipped (worktree; the 8 notebook twins re-executed at 1.2.228 + stripped, 119 variant guards green) |
-| `3 (r-z)` | worktree 1305 passed + 11 web-parity probes environment-blocked in a bare worktree (bun needs the companion node_modules; green in the main checkout); main-checkout committed-scope run 1325 passed, 1 failed (test_release_portability reads the live dirty tree; 2 passed in the clean worktree) |
+| `1 (a-l)` | 3156 passed, 1 skipped |
+| `2 (m-p)` | 904 passed, 1 skipped |
+| `3 (r-z)` | 1326 passed, 1 skipped (re-run green after the CHANGELOG-lead heading fix; the first run's 2 failures were the version-carrier guards reading the '-r289' suffix heading — the r287 precedent) |
 | `4a (ui bestof..docking)` | 97 passed |
 | `4b (ui export..generative)` | 51 passed |
 | `4c (ui chart..legend)` | 126 passed |
@@ -65,25 +65,13 @@ bulk and no skipped test is claimed as passed.
 
 ## 4. Version carriers (§15)
 
-- VERSION: `1.2.228`
-- pyproject.toml: `1.2.228`
-- src/pharmaml/__init__.py: `1.2.228`
-- CHANGELOG.md leads with: `1.2.228`
+- VERSION: `1.2.229`
+- pyproject.toml: `1.2.229`
+- src/pharmaml/__init__.py: `1.2.229`
+- CHANGELOG.md leads with: `1.2.229`
 - Agreement: **yes**
 
 ## 5. Release-archive verification (§14)
 
 - Status: **passed** (8 checks)
-- The r288 superseding rebuild (the arena/recover288 absorption changed
-  four payload files the close-out zip carried):
-  `pharma-ml-toolkit-v1.2.228.zip`, 1006 entries / 897 files /
-  11,853,300 B, sha256
-  `f2c411ca2a0ab4874dbd7ce73228bd3dd82870bf88f7b31e85a7eb0310a9dd5b`,
-  built from the clean worktree at abd39859, audited 8/8
-  (`scratch/audit288/`), shipped across the four homes + the offsite
-  home re-seeded. The eleven-leg gate re-runs on the merged tree in
-  the same firing (`scratch/run_suite_chunks_288.py`); its chunk
-  table above records the r287 close-out's run, which the r288 merge
-  carried forward — the r288 results land in the counter note and the
-  audit home when the firing closes.
 
