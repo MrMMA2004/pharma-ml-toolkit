@@ -15589,3 +15589,67 @@ dev server stopped, restarted after), and the freshness guard went
 back green (119/119). The web console verified via agent-browser
 rendering v1.2.229 live. The zip ritual + three-home ship + push ride
 the pipeline's next firing (the r286 precedent).
+
+
+## Round 289 firing — 100x-87 (the 2h pipeline close-out: the r289 recovery + the v1.2.229 ship)
+
+MASTER_PROMPT-2h-sync-100x job 533878 fired into a rolled-back sandbox
+(git HEAD at the round-186 era 2eb0ede, 2026-11-03; the origin remote
+wiped from .git/config; no credential file). The standard recovery
+drill ran first, then the firing's own work on top:
+
+RECOVERY: the PAT re-spliced from upload/MASTER_PROMPT.pdf
+(scripts/extract_pat.py: the 76-col pdftotext wrap + the 17-char
+continuation line, 93 chars verified, written to the 600-mode
+.credential file — never printed, never in a URL); origin re-added
+(token-free URL) + fetched --prune (no arena/* branches existed to
+absorb — only origin/main); main ff-synced to origin/main 4f828ba
+(the r288b evidence commit) after a blob-level proof that the reset
+was lossless (scripts/sync_check_289.py: 144/145 modified files
+byte-identical to origin, dev.pid the one exception); the venv probed
+at the exact requirements pins (rdkit 2026.9.1 / torch 2.14.1+cpu /
+numpy 1.26.4 / matplotlib 3.10.9 / fastapi 0.128.0 / pyinstaller
+6.22.3 / PySide6 6.8.3) — venv_repair.sh not needed. The sandbox
+exec-bit corruption (677 files executable that the index says 644 —
+the inverse of r185's EXE002 sweep) repaired from the git index;
+CI-scope ruff back to "All checks passed".
+
+THE BLIND-SPOT FIND: the reset only rewrites files whose
+HEAD→origin blobs differ, so the r289 interactive session's edits to
+same-blob files SURVIVED invisibly (frontend/README's nine-row truth,
+tauri.conf.json pre-bumped to 1.2.229, tools/packaging_audit.py's
+Phase Twenty-Four extension + DEPENDENCY_INVENTORY regen, the worklog
+entry) while its App.tsx gate wiring was CLOBBERED (App.tsx exists in
+origin so it was "in the way") and the three new startup files
+survived untracked. scripts/full_tree_check_289.py now scans ALL of
+origin/main's 2,655 tracked paths against disk. The wiring was re-done
+(scripts/wire_startup_gate_289.py), the 8 startup guards + tsc +
+the production vite build green first-run, and the browser verify
+re-run live at 1.2.229 ("backend 1.2.229 ready via dev-same-origin",
+12/12, FAILURES=0, the evidence screenshot re-synced into docs/).
+
+THE SHIP (v1.2.229): the four carriers + tauri.conf at 1.2.229; the
+8 notebooks re-executed (325 s, zero error-outputs, zero home-path
+survivors) + twins stripped; the web census pins re-trued live
+(8,576 = tests/ 7,661 incl. ui 971 + api 261 + src doctests 915;
+1,569 files; 588,975 lines) with toolkit-stats.ts +
+toolkit-version.ts updated. The eleven-leg gate: chunks 1/2/3 =
+3156+904+1326 passed (chunk 3 re-run green after the CHANGELOG-lead
+heading fix — the guard wants the bare ^## [(X.Y.Z)] exactly, the
+'-r289' suffix made it fall through to the 1.2.228 entry, the r287
+precedent verbatim), 4a-4f = 97+51+126+53+182+26, doctests 912
+(3 skipped), api+guards 282 — 7,115 passed / 8 skipped = the r288
+gate's 7,080 + the 35 new guards (molecular3d 27 + startup 8).
+tools/build_zip.py shipped pharma-ml-toolkit-v1.2.229.zip (1,019
+entries / 908 files / 12,155,988 B, sha256 6d412b87…c46a2c) across
+the four homes (download/, toolkit dist-archive/, toolkit download/,
+upload/ via the copyfile path; v1.2.228 retention retained — no
+independent matching backup, the safe policy); the 8-check audit
+passed (scratch/audit289/: path_and_bounds, crc, version_carriers,
+manifest, excluded_paths, engine_checksums, isolated_restore,
+archive_stability); the offsite ~/pharma-ml-toolkit-zips/ re-seeded
+with the 228-superseding + 229 pair. RELEASE_READINESS.md
+regenerated from the real r289 records + the audit report (carriers
+agree: yes). Counter 84 → 87 (the two cut-off interactive sessions
+85+86 ride the ledger note), dev server relaunched via the
+double-fork daemon (web / 200), everything pushed.
