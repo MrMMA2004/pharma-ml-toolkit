@@ -40,6 +40,12 @@ data/
 # artifacts output dir is ignored now; the frontend services lane is
 # tracked like any other source file.
 /artifacts/
+# (r287 close-out, the audit's third catch) the notebook-execution
+# output home: docking PDBQT/SDF/joblib products under
+# examples/artifacts/ are regenerable runtime products (the reexec
+# leaves them on disk; the zip build now anchors them out too) --
+# never tracked, exactly like /artifacts/ above.
+/examples/artifacts/
 *.joblib
 *.xlsx
 

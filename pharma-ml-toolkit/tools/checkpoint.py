@@ -86,10 +86,28 @@ KEEP_ZIPS = 2
 ZIP_EXCLUDE_DIRS = {
     ".git", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache",
     ".tox", ".idea", ".vscode", ".cache", "node_modules", "catboost_info",
-    "artifacts", ".venv", "venv", "env", "scratch", "download", "dist-archive",
+    ".venv", "venv", "env", "scratch", "download", "dist-archive",
+    # (part11 Phase Three, mirrors build_zip.py) the frontend build
+    # output never rides the archive: the Tauri host rebuilds dist/
+    # from the committed sources on the Windows side.
+    "dist",
 }
 ZIP_EXCLUDE_SUFFIXES = {".log", ".zip"}
 ZIP_EXCLUDE_DIR_SUFFIX = ".egg-info"
+
+#: (r285 defect fix, mirrored here after audit287 caught the drift)
+#: the bare "artifacts" name that lived in ZIP_EXCLUDE_DIRS until
+#: v1.2.227 matched ANY path component, so the release zips silently
+#: shipped the frontend WITHOUT frontend/src/services/artifacts/client.ts
+#: while ml/dl/generative imported it. build_zip.py anchored its
+#: exclusion to data/artifacts (the backend output home) at r285; this
+#: module -- and the audit_release.py check that reads it -- carried the
+#: stale bare entry until the r287 audit flagged the correctly-SHIPPED
+#: services file as a violation. Path-anchored here too: the frontend
+#: services lane always ships. (r287 close-out) examples/artifacts
+#: (the notebook-execution output home, regenerable, never in git) is
+#: anchored out alongside data/artifacts.
+ZIP_EXCLUDE_DIR_PATHS = frozenset({"data/artifacts", "examples/artifacts"})
 
 #: (round-184 lesson, 2026-11-03) the SAFE COPY home: inside the toolkit
 #: tree, so the ship commit's ``-- ROOT`` pathspec carries it in the SAME
@@ -312,8 +330,12 @@ def _build_zip(version: str) -> Path | None:
                     folder = Path(dirpath)
                     rel = folder.relative_to(ROOT)
                     parts = set(rel.parts)
+                    rel_posix = rel.as_posix()
                     if (folder == stage or parts & ZIP_EXCLUDE_DIRS or any(
                         part.endswith(ZIP_EXCLUDE_DIR_SUFFIX) for part in parts
+                    ) or any(
+                        rel_posix == anchored or rel_posix.startswith(anchored + "/")
+                        for anchored in ZIP_EXCLUDE_DIR_PATHS
                     )):
                         dirnames[:] = []
                         continue

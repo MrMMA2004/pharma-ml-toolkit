@@ -15387,3 +15387,58 @@ download/upload/toolkit-download keep 225+227, toolkit dist-archive
 keeps 223/224/225/227, the root dist-archive + offsite keep
 226+227). Counter 79 -> 80. Next queue: Molecular Docking (§11.5),
 then PK/PD, MD Analysis, Visualization — the remaining four rows.
+
+---
+
+## Round 287 — 100x-83, part11 §11.7/§11.8 close-out: the nine-workspace GUI reconstruction completes; the interrupted session's release ritual finished
+
+MASTER_PROMPT part11_1+part11_2 continued (the continuation session of
+the cut-off interactive round). The cut-off session had built and
+pushed the §11.7 MD Analysis + §11.8 Visualization workspaces (the
+final two rows: MDPage.tsx 1,951 L + VisualizationPage.tsx 1,704 L +
+the md/visualization clients + 21 drift guards + the
+useJobTracking track-then-subscribe fix + the registry flip to ALL
+NINE `workflow` rows) and shipped a first v1.2.228 zip, but died
+mid-ritual: no audit, no counter bump, no worklog, one unpushed
+commit, a second zip rebuild that would turn out broken.
+
+THE CLOSE-OUT'S AUDIT CAUGHT THREE REAL DEFECTS: (1) the §14
+eight-check audit (scratch/audit287/) read the correctly-SHIPPED
+frontend/src/services/artifacts/client.ts as a violation —
+tools/checkpoint.py still carried the bare `artifacts` exclusion the
+r285 build_zip.py fix removed (and lacked `dist`); the exclusion
+semantics are now path-anchored in BOTH tools and a new drift guard
+(test_checkpoint_tooling.py TestZipPolicy) pins the lists together.
+(2) The notebook freshness gate failed: the 8 example notebooks
+printed 1.2.227 against VERSION 1.2.228 (the cut-off session shipped
+before re-executing them) — all 8 re-executed at 1.2.228 (213 s, zero
+errors, 7 twins stripped). (3) The manifest diff against the cut-off
+session's final zip (the cron-labeled 41a931d7 rebuild, 891 files)
+showed it MISSING the six MD/Viz payload files themselves — the
+archive's own CHANGELOG described workspaces the zip did not contain;
+the close-out rebuild restores the payload (897 files). A fourth find
+rode the file-count delta: examples/artifacts/ (the notebook runtime
+output home, 20 files, never in git) had become includable after the
+r285 anchoring — anchored out of both tools alongside data/artifacts.
+
+FINAL v1.2.228: 11,852,460 B / 897 files / sha256
+ca11d5238d10597d02540977e7f16cd595a4fff2dba8c79de43bb9d3539136a7,
+shipped across the four homes (web download/, toolkit download/,
+toolkit dist-archive/, upload/ via the copyfile path) + the offsite
+pair restored; the 8-check audit passed on the final digest. Census
+re-trued live through /api/toolkit/tree?fresh=1: 1,546 files /
+582,735 lines; the honest test recount (default
+pytest --collect-only): 8,541 = tests/ 7,626 (ui 971 + api 261) +
+src doctests 915 — the r284 pin's 8,545 double-counted tests/ui (the
+true r284 default-collection total was 8,489; 8,489 + 52 new guards =
+8,541 exactly); the web pins synced (SHIPPED_TEST_COUNT 8,541 /
+FILE_COUNT 1,546 / SOURCE_LINES 582,735). Gates:
+test_checkpoint_tooling 24/24 green, the audit 8/8, the drift guard
+live. Counter 82 → 83.
+
+Next queue: part11_1 Phase Eighteen — the Three.js 3D scientific
+visualization (three@0.180 is installed but has ZERO src usage: the
+docking poses / binding sites / MD trajectory frames lanes), then the
+remaining audit phases (Phase Sixteen backend–GUI integration audit,
+Phase Twenty-Four dependency/packaging readiness, the §46 final
+acceptance sweep).

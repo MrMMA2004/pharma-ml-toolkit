@@ -253,6 +253,38 @@ class TestZipPolicy:
         bz = _load_module(TOOLKIT / "tools" / "build_zip.py", "build_zip_under_test")
         assert {"scratch", "download", "dist-archive"} <= bz.EXCLUDE_DIRS
 
+    def test_exclusion_semantics_drift_guard(self) -> None:
+        """(r287, caught live by audit287) checkpoint's exclusion rules and
+        build_zip.py's must agree: a bare ``artifacts`` component entry in
+        EITHER tool wrongly excludes frontend/src/services/artifacts/client.ts
+        (the r285 defect class), and a missing anchored path lets the backend
+        output home ride the archive. The audit (audit_release.py) reads
+        checkpoint's constants, so any drift between the two lists makes the
+        §14 audit flag the correct archive as failed -- exactly what happened
+        at r287 before this guard."""
+        bz = _load_module(TOOLKIT / "tools" / "build_zip.py", "build_zip_guard")
+        # the bare component entry must stay out of both lists
+        assert "artifacts" not in cp.ZIP_EXCLUDE_DIRS
+        assert "artifacts" not in bz.EXCLUDE_DIRS
+        # the anchored runtime-output homes must match in both tools:
+        # data/artifacts (backend) + examples/artifacts (notebook
+        # execution, the r287 close-out find) -- regenerable output
+        # never rides the archive
+        assert set(cp.ZIP_EXCLUDE_DIR_PATHS) == set(bz.EXCLUDE_DIR_PATHS)
+        assert cp.ZIP_EXCLUDE_DIR_PATHS == frozenset({"data/artifacts", "examples/artifacts"})
+        # the shared component-level dirs (history homes + build output)
+        assert {"scratch", "download", "dist-archive", "dist"} <= cp.ZIP_EXCLUDE_DIRS
+        assert {"scratch", "download", "dist-archive", "dist"} <= bz.EXCLUDE_DIRS
+        # and the frontend services lane never matches any rule
+        for path in ("frontend/src/services/artifacts/client.ts",
+                     "frontend/src/services/artifacts"):
+            parts = path.split("/")
+            dirs = set(parts[:-1])
+            assert not (dirs & cp.ZIP_EXCLUDE_DIRS)
+            assert not (dirs & bz.EXCLUDE_DIRS)
+            assert "/".join(parts[:-1]) not in cp.ZIP_EXCLUDE_DIR_PATHS
+            assert "/".join(parts[:-1]) not in bz.EXCLUDE_DIR_PATHS
+
     def test_checkpoint_builder_writes_root_level(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     ) -> None:

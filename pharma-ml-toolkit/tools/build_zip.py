@@ -50,16 +50,23 @@ EXCLUDE_DIRS = {
     # Kept on disk and in git; excluded from RELEASE ZIPS only.
     "scratch", "download", "dist-archive",
 }
-# (r285 defect fix) the backend's artifact OUTPUT directory lives under
-# data/ — the bare "artifacts" name that lived in EXCLUDE_DIRS until
-# v1.2.227 matched ANY path component, so the release zips silently
+# (r285 defect fix) the backend's artifact OUTPUT directories live under
+# data/ and examples/ — the bare "artifacts" name that lived in EXCLUDE_DIRS
+# until v1.2.227 matched ANY path component, so the release zips silently
 # shipped the frontend WITHOUT frontend/src/services/artifacts/client.ts
 # while ml/dl/generative imported it — an internally inconsistent
 # archive (the sandbox rollback exposed it when the working-tree copy
 # vanished and the shipped zip could not restore it). The exclusion is
-# now path-anchored: only data/artifacts (the backend output home) is
-# dropped, the frontend services lane always ships.
-EXCLUDE_DIR_PATHS = {"data/artifacts"}
+# now path-anchored: only data/artifacts (the backend runtime output
+# home) is dropped, the frontend services lane always ships.
+# (r287 close-out) examples/artifacts (the notebook-execution output
+# home — docking PDBQT/SDF/joblib products, regenerable by running the
+# notebooks, never tracked in git) is anchored out too: after the r285
+# anchoring it had become includable, and the r287 notebook re-execution
+# left it on disk where the rebuild would have shipped 372 KB of
+# runtime products — caught by the file-count delta (891 -> 915) on the
+# rebuilt archive.
+EXCLUDE_DIR_PATHS = {"data/artifacts", "examples/artifacts"}
 EXCLUDE_SUFFIXES = {".log", ".zip"}
 EXCLUDE_DIR_SUFFIX = ".egg-info"
 

@@ -263,6 +263,13 @@ def audit_archive(path: Path, profile_results: dict[str, Any] | None = None) -> 
             report["archive"]["file_count"] = len(manifest)
             checks[phase] = {"status": "passed"}
             # Audit directories as well as files, including empty excluded directories.
+            # (r287) the check mirrors build_zip.py's PATH-ANCHORED semantics
+            # via checkpoint.ZIP_EXCLUDE_DIR_PATHS: the bare "artifacts"
+            # component rule that lived here until this fix wrongly flagged
+            # frontend/src/services/artifacts/client.ts -- the file the r285
+            # build_zip fix exists to SHIP -- as a violation. Only the
+            # anchored data/artifacts (the backend output home) is excluded.
+            anchored = tuple(checkpoint.ZIP_EXCLUDE_DIR_PATHS)
             hits = []
             for info in archive.infolist():
                 name = info.filename[len(prefix):] if prefix else info.filename
@@ -271,6 +278,16 @@ def audit_archive(path: Path, profile_results: dict[str, Any] | None = None) -> 
                     part in checkpoint.ZIP_EXCLUDE_DIRS or part.endswith(checkpoint.ZIP_EXCLUDE_DIR_SUFFIX)
                     for part in (parts if info.is_dir() else parts[:-1])
                 )
+                if not info.is_dir():
+                    rel_posix = "/".join(parts[:-1])
+                    excluded_dir = excluded_dir or any(
+                        rel_posix == a for a in anchored
+                    )
+                else:
+                    rel_posix = name.rstrip("/")
+                    excluded_dir = excluded_dir or any(
+                        rel_posix == a or rel_posix.startswith(a + "/") for a in anchored
+                    )
                 excluded_file = not info.is_dir() and Path(parts[-1]).suffix.lower() in checkpoint.ZIP_EXCLUDE_SUFFIXES
                 if excluded_dir or excluded_file:
                     hits.append(info.filename)

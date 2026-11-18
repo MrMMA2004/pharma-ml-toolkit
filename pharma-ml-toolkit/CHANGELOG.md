@@ -93,6 +93,43 @@
   (COMPLETED → REST relay → body + figure artifacts), the digest
   verified exports, all five visualization families, the report job
   through the tracker, and the filter/compare pane.
+- **The r287 close-out (the cut-off session's unfinished ritual,
+  completed in the continuation session)**: the §14 eight-check
+  release audit (`scratch/audit287/`) caught a REAL tooling drift on
+  its first firing — `tools/checkpoint.py`'s `ZIP_EXCLUDE_DIRS` still
+  carried the bare `artifacts` component entry that r285 removed from
+  `build_zip.py` (and lacked the `dist` entry), so the audit read the
+  correctly-SHIPPED `frontend/src/services/artifacts/client.ts` as a
+  violation. The exclusion semantics are now path-anchored in BOTH
+  tools (`ZIP_EXCLUDE_DIR_PATHS` mirrored — both runtime-output
+  homes; `audit_release.py`'s `excluded_paths` check updated to the
+  anchored rule) and a new drift guard
+  (`tests/test_checkpoint_tooling.py::TestZipPolicy::test_exclusion_semantics_drift_guard`)
+  pins the two lists together so the audit can never again flag the
+  correct archive. The notebook-freshness gate failed on the same
+  firing (the 8 example notebooks still printed `pharmaml 1.2.227`
+  against `VERSION 1.2.228` — the cut-off session shipped the zip
+  before re-executing them): all 8 re-executed at 1.2.228 (213 s,
+  zero error outputs, zero home-path survivors, the 7 no-output twins
+  re-stripped) and the **v1.2.228 zip was REBUILT** so the archive
+  carries the fresh notebooks + the tool fixes instead of the stale
+  stamps; the audit re-passed all eight checks on the rebuilt digest.
+  The manifest diff against the cut-off session's last zip exposed a
+  second defect: the cron-labeled rebuild the interrupted session
+  committed (891 files, 11,792,081 B) had **lost the six §11.7/§11.8
+  payload files themselves** (MDPage / VisualizationPage / the md +
+  visualization clients / both guard suites — the archive's own
+  CHANGELOG described workspaces the zip did not contain); the
+  close-out's rebuild restores the payload (897 files). A third find
+  rode the file-count delta: the notebook re-execution writes its
+  runtime products to `examples/artifacts/` (never tracked in git,
+  regenerable), which the r285 path-anchoring had inadvertently left
+  includable — both runtime-output homes (`data/artifacts` +
+  `examples/artifacts`) are now anchored out in BOTH tools and the
+  drift guard pins the pair. Final archive: 11,852,460 B / 897 files /
+  sha256 `ca11d5238d10597d02540977e7f16cd595a4fff2dba8c79de43bb9d3539136a7`,
+  shipped across the four homes + the offsite pair restored.
+  Counter 82 → 83.
 
 ## [1.2.227] — 2026-11-18 — round 284 (part11 §11.4: the Generative AI workspace on the real backend)
 
