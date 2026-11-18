@@ -59,8 +59,8 @@
   keys) -> the predictions export (digest verified) -> SIGTERM -> the
   shutdown envelope. E2E-DL-PASS. The page browser-verified on the
   vite dev server: all 11 stages render, zero console errors.
-- Census re-trued live through the `/api/toolkit/tree` route: 1,522
-  files / 564,578 lines / 8,473 tests collected; the web pins synced;
+- Census re-trued live through the `/api/toolkit/tree` route at
+  ship close: 1,519 files / 569,181 lines / 8,473 tests collected; the web pins synced;
   the version bumped across every carrier; the git recovery (PAT
   re-extracted, the remote re-anchored, origin's r282 release
   confirmed landed, the disk reconciled over origin/main) ran before
