@@ -15486,3 +15486,106 @@ four-carrier bump ride the next pipeline firing (the r286 precedent).
 Next queue: the remaining part11_1 phases — Phase Sixteen (the
 backend–GUI integration audit), Phase Twenty-Four (dependency &
 packaging readiness), the §46 final acceptance sweep.
+
+---
+
+## Round 289 — 100x-86 (interactive continuation): part11 Phase Sixteen — the backend–GUI integration audit, the §14.1 startup bridge fix, and the Phase Twenty-Four + §46 sweep deliverables
+
+MASTER_PROMPT part11_1+part11_2 continued (the two upload PDFs
+re-read in full this session: the 174-page main spec + the 19-page
+Linux-host addendum). A NEW rollback hit before the session's work
+(git HEAD reverted to the round-186 era `2eb0ede`, the venv lost the
+editable install + rdkit, the GitHub token + remote wiped) — the
+standard drill repaired the venv (`tools/venv_repair.sh` re-pinned
+numpy 1.26.4 / torch 2.14.1+cpu / pharmaml 1.2.228 editable; all
+imports verified), the tree was coherent at the post-r288 state
+(v1.2.228 shipped, Phase Eighteen closed), and the 2h pipeline cron
+(533878) owns the token/remote/ship recovery.
+
+**Phase Sixteen CLOSED** (part11_1 §21 — "Complete Backend–GUI
+Integration Audit", one of the prompt's most important requirements):
+
+1. **The audit**: three live inventories (the 88-operation
+   endpoint→function trace across all 18 route modules, the frontend
+   services/workspace surface, the 261-test API + 123-guard evidence)
+   assembled into `docs/CAPABILITY_INTEGRATION_MATRIX.md` — 72
+   capability rows, every §21 verification-chain item evidenced,
+   64 PASS / 6 PARTIAL (housekeeping surfaces with no UI consumer,
+   each dispositioned) / 3 NOTAPPLICABLE / **0 FAIL after the fix**.
+2. **The one real FAIL the audit found — CLOSED in-code**: the
+   browser app never wired its own §14.1 boot sequence
+   (`configureBackend`/`stream.connect` had ZERO callers in
+   frontend/src; only the Node e2e harnesses called them). The fix:
+   `frontend/src/services/api/startup.ts` (the Tauri
+   `backend_endpoint` IPC → configureBackend → `/api/v1/health`
+   verify BEFORE the stream opens → `getEventStream().connect()`,
+   plus a dev-only same-origin fallback via VITE_PHARMAML_TOKEN),
+   `frontend/src/app/StartupGate.tsx` (connecting / failed-with-
+   typed-stage-and-retry / ready; the ConnectionBanner is the first
+   `useEventStreamState` consumer), App.tsx mounting the whole shell
+   inside the gate, the vite proxy's WS lane enabled (`ws: true`),
+   `@tauri-apps/api@2.12.5` pinned, `src/vite-env.d.ts` typed, and
+   8 new drift guards (`tests/test_frontend_startup.py`).
+3. **BROWSER-STARTUP-PASS 12/12**
+   (`scratch/browser_verify_startup_r289.sh`): the app boots ITSELF
+   (no injection — the r288 pattern): the gate resolves, the ready
+   marker reports "backend 1.2.228 ready via dev-same-origin", the
+   event stream is `open` through the app's own proxied WS path, and
+   a dataset uploads → previews end-to-end through the native boot
+   path. (The venv's missing editable install was caught live by the
+   first run failing the handshake — the repair drill, then green.)
+
+**Phase Twenty-Four CLOSED** (§29 dependency & packaging readiness):
+`tools/packaging_audit.py` extended — the API layer now maps
+(fastapi 0.128.0 / uvicorn 0.44.0 / pydantic 2.12.5 — previously
+flagged unmapped and absent from the table; openbabel now honestly
+"Optional, NOT bundled"; asyncio/hmac/zipfile classified stdlib) and
+a new `frontend_host_section()` derives §29's frontend/desktop/host
+table from the ACTUAL package.json/Cargo.toml/tauri.conf.json (11
+runtime deps incl. @tauri-apps/api, 10 build-time-only devDeps, the
+Rust host surface, the WebView2 offlineInstaller mode + the runtime
+notes). `packaging/windows/DEPENDENCY_INVENTORY.md` regenerated: 34
+Python rows + the frontend/host table + engines — all regenerable
+in one command.
+
+**§46 final acceptance sweep DELIVERED**:
+`docs/ACCEPTANCE_SWEEP.md` — every criterion 46.1–46.9 checked
+against live evidence with part11_2 §12's labels: 65 PASS · 4
+PARTIAL (Plotly src adoption queued, the ML explainability queue
+lane, the Stage-5 retirement gate, honest Windows-execution items) ·
+0 FAIL · 24 BLOCKED (every one Windows-runner-gated execution —
+the Linux host's expected split; no placeholder EXE, no renamed
+Linux artifact, no claimed Windows test). The README's stale "only
+Introduction is workflow-connected" claim corrected to the nine-row
+truth. The part11_2 `windows-release.yml` deliverable verified
+green (8/8 `tests/test_windows_pipeline.py` guards — it was built
+in an earlier round; this session only re-verified it).
+
+Gates: tsc 0 · vite production build green (12 s) · pytest
+frontend_startup 8/8 + foundation 6/6 + services 16/16 +
+windows_pipeline 8/8 + api contracts 6/6 · ruff clean · the
+browser-verify 12/12. Evidence screenshot:
+`docs/gui/screenshots/r289-startup-gate-datasets.png`.
+
+Next queue: the remaining part11_1 items — the Plotly.js src
+adoption campaign (the §46.1 PARTIAL), the ML explainability API
+route + card (ml/explain engine exists, route queued), the §28
+Stage-4 parity gate → Stage-5 PySide6 retirement decision, and the
+§47 final engineering report (rides the Windows runner's first real
+release, per part11_2's no-false-completion rule).
+
+### r289 addendum — the interrupted v1.2.229 ritual completed
+
+The 2h pipeline fired mid-session and was interrupted after bumping 3
+of the carriers (VERSION/pyproject/package.json → 1.2.229,
+tauri.conf.json left at 1.2.228 — the lockstep guard went red exactly
+as designed) and before the notebook re-execution. The interactive
+session completed the ritual's missing steps: tauri.conf.json trued
+to 1.2.229 (all six carriers green: VERSION, pyproject, __init__,
+package.json, tauri.conf, the web tree's SHIPPED_TOOLKIT_VERSION),
+the 8 notebooks re-executed at 1.2.229 + the 7 twins re-stripped
+(`tools/reexec_notebooks.py`, the worker-capped OOM ritual with the
+dev server stopped, restarted after), and the freshness guard went
+back green (119/119). The web console verified via agent-browser
+rendering v1.2.229 live. The zip ritual + three-home ship + push ride
+the pipeline's next firing (the r286 precedent).
