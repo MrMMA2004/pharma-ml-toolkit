@@ -1,10 +1,10 @@
 # PharmaML Studio — dependency inventory (part9 §1.1)
 
-Generated 2026-11-18 12:06 by `tools/packaging_audit.py` from the ACTUAL
+Generated 2026-11-18 20:58 by `tools/packaging_audit.py` from the ACTUAL
 source tree (studio.py + ui/ + src/ + scripts/, 3656 import statements parsed) and the live venv's dist-info. Versions are
 importlib.metadata's truth, not a hand-maintained table.
 
-Toolkit version audited: **1.2.227**. Python: 3.12.16.
+Toolkit version audited: **1.2.229**. Python: 3.12.16.
 
 | Package | Version | Purpose | Required or Optional | Included in Installer | Verification |
 | --- | --- | --- | --- | --- | --- |
@@ -38,6 +38,10 @@ Toolkit version audited: **1.2.227**. Python: 3.12.16.
 | qdarkstyle | 3.2.3 | the dark stylesheet engine | Required (feature-gated import) | YES | ui/theme_manager.py |
 | shiboken6 | 6.8.3 | PySide6's C++ binding runtime (transitive) | Required (feature-gated import) | YES | ui/doctor.py |
 | statsmodels | 0.14.5 | multiple-testing FDR correction (biology/association) | Required (feature-gated import) | YES | src/pharmaml/biology/association.py |
+| fastapi | 0.128.0 | the local REST API layer (api/routes/*, the app-level guard) | Required (feature-gated import) | YES | src/pharmaml/api/__init__.py; src/pharmaml/api/routes/__init__.py; src/pharmaml/api/routes/applicability_domain.py; ... |
+| uvicorn | 0.44.0 | the loopback ASGI server the sidecar runs (port-0 bind) | Required (feature-gated import) | YES | src/pharmaml/api/server.py |
+| pydantic | 2.12.5 | the typed request/response schemas behind the OpenAPI contract | Required (feature-gated import) | YES | src/pharmaml/api/events.py; src/pharmaml/api/routes/applicability_domain.py; src/pharmaml/api/routes/artifacts.py; ... |
+| openbabel | NOT INSTALLED | optional mol2 writer lane (docking/ligands; NOT bundled — external) | Optional (feature-gated import) | NO (external, optional) | src/pharmaml/docking/ligands.py |
 
 ## Not used (the anti-padding rule)
 
@@ -84,3 +88,64 @@ PySide6 6.8.3 (Essentials + Addons) is the complete Qt runtime for
 the Studio; platform/imageformat/style plugins ride along via
 PyInstaller's PySide6 hooks and are asserted post-build by
 `packaging_validation.py --dist` (qwindows.dll etc.).
+
+## Frontend and desktop dependencies (part11 §29, Phase Twenty-Four)
+
+Derived from the actual `frontend/package.json` (name: pharmaml-studio-frontend, version 1.2.229), `src-tauri/Cargo.toml`
+and `src-tauri/tauri.conf.json` — the same files the Windows
+release workflow's step-2 version lockstep gate enforces(`tests/test_windows_pipeline.py`).
+
+| Package/Component | Version | Purpose | Required or Optional | Frontend/Host/Backend | Included in Installer | Verification |
+| --- | --- | --- | --- | --- | --- | --- |
+| @radix-ui/react-tabs | ^1.1.13 | the shadcn/ui Tab head | Required (runtime) | Frontend | YES (bundled into the Vite static dist/) | package.json + bun.lock; tsc/vite build gates
+| @tauri-apps/api | ^2.12.5 | the startup bridge's invoke (backend_endpoint IPC; offline-bundled) | Required (runtime) | Frontend | YES (bundled into the Vite static dist/) | package.json + bun.lock; tsc/vite build gates
+| class-variance-authority | ^0.7.1 | shadcn/ui component variants | Required (runtime) | Frontend | YES (bundled into the Vite static dist/) | package.json + bun.lock; tsc/vite build gates
+| clsx | ^2.1.1 | shadcn/ui class merge | Required (runtime) | Frontend | YES (bundled into the Vite static dist/) | package.json + bun.lock; tsc/vite build gates
+| lucide-react | ^0.548.0 | the icon set | Required (runtime) | Frontend | YES (bundled into the Vite static dist/) | package.json + bun.lock; tsc/vite build gates
+| motion | ^12.23.24 | Motion for React — restrained shell animations (§8.5) | Required (runtime) | Frontend | YES (bundled into the Vite static dist/) | package.json + bun.lock; tsc/vite build gates
+| plotly.js-dist-min | ^3.1.1 | the mandated scientific charting stack (declared + chunked; src adoption is the §3.2 campaign row) | Required (runtime) | Frontend | YES (bundled into the Vite static dist/) | package.json + bun.lock; tsc/vite build gates
+| react | ^19.0.0 | the UI framework (the SPA's components/hooks) | Required (runtime) | Frontend | YES (bundled into the Vite static dist/) | package.json + bun.lock; tsc/vite build gates
+| react-dom | ^19.0.0 | React's DOM renderer | Required (runtime) | Frontend | YES (bundled into the Vite static dist/) | package.json + bun.lock; tsc/vite build gates
+| tailwind-merge | ^3.3.1 | shadcn/ui class merge | Required (runtime) | Frontend | YES (bundled into the Vite static dist/) | package.json + bun.lock; tsc/vite build gates
+| three | ^0.180.0 | the Three.js 3D molecular viewer + trajectory playback (§23) | Required (runtime) | Frontend | YES (bundled into the Vite static dist/) | package.json + bun.lock; tsc/vite build gates
+| @tailwindcss/vite | ^4 | the Tailwind 4 Vite integration (build-time) | Build-time only | Frontend (toolchain) | NO (never ships) | package.json + bun.lock
+| @types/node | ^26.6.6 | type declarations (build-time) | Build-time only | Frontend (toolchain) | NO (never ships) | package.json + bun.lock
+| @types/react | ^19.0.0 | type declarations (build-time) | Build-time only | Frontend (toolchain) | NO (never ships) | package.json + bun.lock
+| @types/react-dom | ^19.0.0 | type declarations (build-time) | Build-time only | Frontend (toolchain) | NO (never ships) | package.json + bun.lock
+| @types/three | ^0.180.0 | type declarations (build-time) | Build-time only | Frontend (toolchain) | NO (never ships) | package.json + bun.lock
+| @vitejs/plugin-react | ^5.1.1 | the React transform (build-time) | Build-time only | Frontend (toolchain) | NO (never ships) | package.json + bun.lock
+| openapi-typescript | ^7.9.1 | generates src/types/api.d.ts from contracts/openapi.json (codegen-time — §12.2's single DTO source) | Build-time only | Frontend (toolchain) | NO (never ships) | package.json + bun.lock
+| tailwindcss | ^4 | the styling engine (build-time CSS generation) | Build-time only | Frontend (toolchain) | NO (never ships) | package.json + bun.lock
+| typescript | ^5 | strict typechecking (build-time) | Build-time only | Frontend (toolchain) | NO (never ships) | package.json + bun.lock
+| vite | ^7.1.10 | the static-asset build tool (build-time; dist/ ships) | Build-time only | Frontend (toolchain) | NO (never ships) | package.json + bun.lock
+| description (Rust) | The PharmaML Studio desktop host (Tauri 2): the offline WebView2 shell, the Python backend sidecar supervisor, and nothing else — no scientific logic lives in Rust (part11 §3). | host dependency (Cargo.toml) | Required (runtime) | Host | YES (compiled into pharmaml-studio.exe) | src-tauri/Cargo.toml (cargo build --release on the Windows runner)
+| edition (Rust) | 2021 | host dependency (Cargo.toml) | Required (runtime) | Host | YES (compiled into pharmaml-studio.exe) | src-tauri/Cargo.toml (cargo build --release on the Windows runner)
+| license (Rust) | MIT | host dependency (Cargo.toml) | Required (runtime) | Host | YES (compiled into pharmaml-studio.exe) | src-tauri/Cargo.toml (cargo build --release on the Windows runner)
+| name (Rust) | pharmaml-studio | host dependency (Cargo.toml) | Required (runtime) | Host | YES (compiled into pharmaml-studio.exe) | src-tauri/Cargo.toml (cargo build --release on the Windows runner)
+| opt-level (Rust) | s | host dependency (Cargo.toml) | Required (runtime) | Host | YES (compiled into pharmaml-studio.exe) | src-tauri/Cargo.toml (cargo build --release on the Windows runner)
+| panic (Rust) | abort | host dependency (Cargo.toml) | Required (runtime) | Host | YES (compiled into pharmaml-studio.exe) | src-tauri/Cargo.toml (cargo build --release on the Windows runner)
+| repository (Rust) | https://github.com/pharmaml/pharma-ml-toolkit | host dependency (Cargo.toml) | Required (runtime) | Host | YES (compiled into pharmaml-studio.exe) | src-tauri/Cargo.toml (cargo build --release on the Windows runner)
+| rust-version (Rust) | 1.77 | host dependency (Cargo.toml) | Required (runtime) | Host | YES (compiled into pharmaml-studio.exe) | src-tauri/Cargo.toml (cargo build --release on the Windows runner)
+| serde (Rust) | 1 | the BackendEndpoint IPC serialization | Required (runtime) | Host | YES (compiled into pharmaml-studio.exe) | src-tauri/Cargo.toml (cargo build --release on the Windows runner)
+| serde_json (Rust) | 1 | the handshake/IPC JSON layer | Required (runtime) | Host | YES (compiled into pharmaml-studio.exe) | src-tauri/Cargo.toml (cargo build --release on the Windows runner)
+| tauri (Rust) | 2 | the Tauri 2 host core (window, IPC, sidecar supervision) | Required (runtime) | Host | YES (compiled into pharmaml-studio.exe) | src-tauri/Cargo.toml (cargo build --release on the Windows runner)
+| tauri-build (Rust) | 2 | the Tauri build script (build-time) | Build-time only | Host | NO (never ships) | src-tauri/Cargo.toml (cargo build --release on the Windows runner)
+| version (Rust) | 1.2.224 | host dependency (Cargo.toml) | Required (runtime) | Host | YES (compiled into pharmaml-studio.exe) | src-tauri/Cargo.toml (cargo build --release on the Windows runner)
+
+### Runtimes and redistribution notes (§29's runtime-dependency audit)
+
+- **Microsoft WebView2 Runtime**: `{}` in
+  `tauri.conf.json` — the offline Evergreen installer rides the
+  NSIS/MSI bundle (part11_2 §7 / §32); the workflow's step 19 installs
+  it offline; the release manifest records the selected mode.
+- **Node.js / bun / Vite / TypeScript / Tailwind**: build-time only —
+  the end user needs none of them (`vite build` emits the static
+  `frontendDist` assets the Tauri host loads locally).
+- **Rust toolchain (rustc/cargo 1.77+)**: build-time only.
+- **Python runtime + the table above's wheels**: bundled via the
+  PyInstaller onedir sidecar (`packaging/windows/pharmaml_backend.spec`)
+  — the end user needs no Python, conda, or pip (part11_2 §5).
+- **AutoDock trio (vina/autogrid4/autodock4)**: the engines/ table above.
+- **No CDN, no remote URL**: the offline CSP pins the frontend to
+  `self` + the loopback API (`frontend/index.html`, drift-guarded).
+

@@ -10,28 +10,25 @@
  */
 
 /** Collected pytest cases at the shipped revision (repo-wide
- *  ``pytest --collect-only -q`` sum, 2026-11-18 the r287 close-out walk:
+ *  ``pytest --collect-only -q`` sum, 2026-11-19 the r289 firing walk:
  *  the default collection (testpaths tests+src, doctest-modules on)
- *  collects 8,541 = tests/ 7,626 (of which tests/ui 971, tests/api 261)
- *  + src doctests 915. The r285/286/287 workspace guard families
- *  (docking 16, pkpd 14, md+visualization 21) and the r287
- *  exclusion-drift guard ride the count. The previous 8,545 pin
- *  double-counted tests/ui ("7,574 incl. ui" + 971) — the honest
- *  default-collection total at r284 was 8,489; 8,489 + 52 = 8,541. */
-export const SHIPPED_TEST_COUNT = 8541;
+ *  collects 8,576 = tests/ 7,661 (of which tests/ui 971, tests/api 261)
+ *  + src doctests 915. The r288 molecular3d family (27 guards) and the
+ *  r289 §14.1 startup-gate family (8 guards) ride the count. The
+ *  previous 8,541 pin was the r287 close-out walk. */
+export const SHIPPED_TEST_COUNT = 8576;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
- *  docs, tools — the same census /api/toolkit/tree walks). The r288
- *  absorption re-trued walk: 1,551 (the r288 audit home, the r288
- *  chunk runner and the in-flight molecular3d WIP ride the live walk;
- *  the same convention the r287 close-out used for its in-flight
- *  round). */
-export const SHIPPED_FILE_COUNT = 1551;
+ *  docs, tools — the same census /api/toolkit/tree walks). The r289
+ *  firing re-trued walk: 1,569 (the §14.1 startup trio + its drift
+ *  guard + the browser-verify harness ride the live walk; the same
+ *  convention the r287/288 rounds used for their in-flight rounds). */
+export const SHIPPED_FILE_COUNT = 1569;
 
 /** Source lines of the shipped tree, formatted with thousands
- *  separators at render time (raw number kept for math). The r288
- *  absorption live census: 587,481. */
-export const SHIPPED_SOURCE_LINES = 587481;
+ *  separators at render time (raw number kept for math). The r289
+ *  firing live census: 588,975. */
+export const SHIPPED_SOURCE_LINES = 588975;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

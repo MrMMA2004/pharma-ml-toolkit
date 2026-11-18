@@ -40,8 +40,12 @@ src/
 ## Honesty rules carried over
 
 The workspace registry (`src/app/workspaces.ts`) states each
-workspace's build state; only Introduction is `workflow`-connected
-this row. Queued workspaces render an explicit shell that names their
-queued row — no fake controls, no fabricated data. The registry order
-is drift-guarded by `tests/test_frontend_foundation.py` on the Python
-side.
+workspace's build state; all nine rows are `workflow`-connected to
+the real backend through their service clients (verified by the
+`tests/test_frontend_services.py` route-surface guards and the
+scratch browser drivers). The shell still renders the honest
+queued-row placeholder for any registry row that regresses — no
+fake controls, no fabricated data. The registry order is
+drift-guarded by `tests/test_frontend_foundation.py` on the Python
+side, and the whole app boots through the §14.1 `StartupGate`
+(`tests/test_frontend_startup.py`).

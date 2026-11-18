@@ -83,6 +83,14 @@ DISTRIBUTION_MAP = {
     "qdarkstyle": ("qdarkstyle", "the dark stylesheet engine"),
     "shiboken6": ("shiboken6", "PySide6's C++ binding runtime (transitive)"),
     "statsmodels": ("statsmodels", "multiple-testing FDR correction (biology/association)"),
+    # the part11 API layer (Phase Seven — the FastAPI sidecar surface
+    # the Phase Twenty-Four §29 audit added: these power the shipped
+    # REST/WebSocket backend and must ride the PyInstaller bundle)
+    "fastapi": ("fastapi", "the local REST API layer (api/routes/*, the app-level guard)"),
+    "uvicorn": ("uvicorn", "the loopback ASGI server the sidecar runs (port-0 bind)"),
+    "pydantic": ("pydantic", "the typed request/response schemas behind the OpenAPI contract"),
+    # optional external chemistry engine (feature-gated, never required)
+    "openbabel": ("openbabel", "optional mol2 writer lane (docking/ligands; NOT bundled — external)")
 }
 
 # modules the prompt names that the AST scan is expected NOT to find
@@ -103,7 +111,7 @@ _STDLIB = {
     "shutil", "signal", "socket", "sqlite3", "statistics", "string", "struct",
     "subprocess", "sys", "tempfile", "textwrap", "threading", "time", "traceback", "types",
     "typing", "typing_extensions", "unittest", "urllib", "uuid", "warnings",
-    "weakref", "zlib",
+    "weakref", "zlib", "asyncio", "hmac", "zipfile",
 }
 
 
@@ -158,6 +166,118 @@ def dist_homepage(dist: str) -> str:
         return ""
 
 
+def frontend_host_section() -> list[str]:
+    """part11 §29 (Phase Twenty-Four)'s frontend/desktop/host dependency
+    table — derived from the ACTUAL frontend/package.json, src-tauri/
+    Cargo.toml and tauri.conf.json (never a hand-maintained list)."""
+    pkg = json.loads((TOOLKIT / "frontend" / "package.json").read_text(encoding="utf-8"))
+    deps: dict[str, str] = pkg.get("dependencies", {})
+    dev_deps: dict[str, str] = pkg.get("devDependencies", {})
+    cargo = (TOOLKIT / "src-tauri" / "Cargo.toml").read_text(encoding="utf-8")
+    conf = json.loads((TOOLKIT / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8"))
+
+    # the §29 purpose column, keyed on the actual dependency names
+    purposes = {
+        "react": "the UI framework (the SPA's components/hooks)",
+        "react-dom": "React's DOM renderer",
+        "@tauri-apps/api": "the startup bridge's invoke (backend_endpoint IPC; offline-bundled)",
+        "motion": "Motion for React — restrained shell animations (§8.5)",
+        "plotly.js-dist-min": "the mandated scientific charting stack (declared + chunked; src adoption is the §3.2 campaign row)",
+        "three": "the Three.js 3D molecular viewer + trajectory playback (§23)",
+        "@radix-ui/react-tabs": "the shadcn/ui Tab head",
+        "class-variance-authority": "shadcn/ui component variants",
+        "clsx": "shadcn/ui class merge",
+        "tailwind-merge": "shadcn/ui class merge",
+        "lucide-react": "the icon set",
+    }
+    dev_purposes = {
+        "typescript": "strict typechecking (build-time)",
+        "vite": "the static-asset build tool (build-time; dist/ ships)",
+        "@vitejs/plugin-react": "the React transform (build-time)",
+        "tailwindcss": "the styling engine (build-time CSS generation)",
+        "@tailwindcss/vite": "the Tailwind 4 Vite integration (build-time)",
+        "openapi-typescript": "generates src/types/api.d.ts from contracts/openapi.json (codegen-time — §12.2's single DTO source)",
+        "@types/react": "type declarations (build-time)",
+        "@types/react-dom": "type declarations (build-time)",
+        "@types/three": "type declarations (build-time)",
+        "@types/node": "type declarations (build-time)",
+    }
+    lines = [
+        "",
+        "## Frontend and desktop dependencies (part11 §29, Phase Twenty-Four)",
+        "",
+        (f"Derived from the actual `frontend/package.json` (name: "
+         f"{pkg.get('name')}, version {pkg.get('version')}), `src-tauri/Cargo.toml`"),
+        "and `src-tauri/tauri.conf.json` — the same files the Windows",
+        ("release workflow's step-2 version lockstep gate enforces"
+         "(`tests/test_windows_pipeline.py`)."),
+        "",
+        "| Package/Component | Version | Purpose | Required or Optional | Frontend/Host/Backend | Included in Installer | Verification |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for name, ver in sorted(deps.items()):
+        purpose = purposes.get(name, "runtime dependency (package.json)")
+        lines.append(
+            f"| {name} | {ver} | {purpose} | Required (runtime) | Frontend | "
+            "YES (bundled into the Vite static dist/) | package.json + bun.lock; "
+            "tsc/vite build gates"
+        )
+    for name, ver in sorted(dev_deps.items()):
+        purpose = dev_purposes.get(name, "build-time tooling (devDependency)")
+        lines.append(
+            f"| {name} | {ver} | {purpose} | Build-time only | Frontend (toolchain) | "
+            "NO (never ships) | package.json + bun.lock"
+        )
+    # the Rust host surface
+    rust_rows = re.findall(
+        r"^([a-zA-Z0-9_-]+)\s*=\s*\{\s*version\s*=\s*\"([^\"]+)\"", cargo, re.MULTILINE
+    )
+    plain_rust = re.findall(r"^([a-zA-Z0-9_-]+)\s*=\s*\"([^\"]+)\"", cargo, re.MULTILINE)
+    seen_rust = {n: v for n, v in rust_rows}
+    for n, v in plain_rust:
+        seen_rust.setdefault(n, v)
+    rust_purpose = {
+        "tauri": "the Tauri 2 host core (window, IPC, sidecar supervision)",
+        "serde": "the BackendEndpoint IPC serialization",
+        "serde_json": "the handshake/IPC JSON layer",
+        "tauri-build": "the Tauri build script (build-time)",
+    }
+    for name, ver in sorted(seen_rust.items()):
+        if name == "pharmaml-studio":
+            continue
+        build_time = name == "tauri-build"
+        lines.append(
+            f"| {name} (Rust) | {ver} | {rust_purpose.get(name, 'host dependency (Cargo.toml)')} | "
+            + ("Build-time only" if build_time else "Required (runtime)")
+            + " | Host | "
+            + ("NO (never ships)" if build_time else "YES (compiled into pharmaml-studio.exe)")
+            + " | src-tauri/Cargo.toml (cargo build --release on the Windows runner)"
+        )
+    # WebView2 + runtimes
+    webview2_mode = conf.get("bundle", {}).get("windows", {}).get("webview2", {})
+    lines += [
+        "",
+        "### Runtimes and redistribution notes (§29's runtime-dependency audit)",
+        "",
+        f"- **Microsoft WebView2 Runtime**: `{json.dumps(webview2_mode)}` in",
+        "  `tauri.conf.json` — the offline Evergreen installer rides the",
+        "  NSIS/MSI bundle (part11_2 §7 / §32); the workflow's step 19 installs",
+        "  it offline; the release manifest records the selected mode.",
+        "- **Node.js / bun / Vite / TypeScript / Tailwind**: build-time only —",
+        "  the end user needs none of them (`vite build` emits the static",
+        "  `frontendDist` assets the Tauri host loads locally).",
+        "- **Rust toolchain (rustc/cargo 1.77+)**: build-time only.",
+        "- **Python runtime + the table above's wheels**: bundled via the",
+        "  PyInstaller onedir sidecar (`packaging/windows/pharmaml_backend.spec`)",
+        "  — the end user needs no Python, conda, or pip (part11_2 §5).",
+        "- **AutoDock trio (vina/autogrid4/autodock4)**: the engines/ table above.",
+        "- **No CDN, no remote URL**: the offline CSP pins the frontend to",
+        "  `self` + the loopback API (`frontend/index.html`, drift-guarded).",
+        "",
+    ]
+    return lines
+
+
 def write_inventory() -> int:
     found = scan_imports()
     rows = []
@@ -170,9 +290,16 @@ def write_inventory() -> int:
                 top in {"numpy", "pandas", "scipy", "sklearn", "joblib",
                         "openpyxl", "tqdm", "PySide6", "pyqtgraph"}
             )
-            status = "Required (unconditional)" if core else "Required (feature-gated import)"
+            if top == "openbabel":
+                # optional external engine lane — honestly optional, never
+                # bundled: the §29/§34 anti-padding rule over the hardcoded YES
+                status = "Optional (feature-gated import)"
+                included = "NO (external, optional)"
+            else:
+                status = "Required (unconditional)" if core else "Required (feature-gated import)"
+                included = "YES"
             sample = "; ".join(where[:3]) + ("; ..." if len(where) > 3 else "")
-            rows.append((dist, version or "NOT INSTALLED", purpose, status, "YES", sample))
+            rows.append((dist, version or "NOT INSTALLED", purpose, status, included, sample))
         else:
             rows.append((dist, version or "-", "declared but no static import found",
                          "n/a", "review", "no import in studio.py/ui/src/scripts"))
@@ -243,6 +370,7 @@ def write_inventory() -> int:
         "PyInstaller's PySide6 hooks and are asserted post-build by",
         "`packaging_validation.py --dist` (qwindows.dll etc.).",
     ]
+    lines += frontend_host_section()
     out = PACKAGING / "DEPENDENCY_INVENTORY.md"
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"wrote {out.relative_to(TOOLKIT)} ({len(rows)} rows)")

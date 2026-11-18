@@ -9,7 +9,7 @@ inventory, not a current certification: counts and grades have not been
 revalidated against every current UI and dependency profile. See
 [Part 5 audit](PART5_PHASE0_AUDIT.md) and [test profiles](TEST_PROFILES.md)
 for scoped evidence and engine limitations. Matrix inputs were frozen
-at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.228 (the
+at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.229 (the
 Phase-4 search/job-center/workspace rows and the Phase-5 glossary/
 presets/doctor rows are registry-level additions, not matrix changes;
 r266 arena absorption landed the former E-row conformal/coverage/split-audit
@@ -22,7 +22,12 @@ packaging suite under `packaging/windows/`, documented in its own
 BUILD_REPORT, not as a GUI matrix row; the r273 round verified that
 packaging policy for real by freezing the app on the Linux host —
 `tools/freeze_equivalent.py` + `tools/freeze_smoke_driver.py`, the
-evidence under `packaging/windows/evidence/`). The §5
+evidence under `packaging/windows/evidence/`; the r289 round closed the
+Phase Sixteen audit's one FAIL row — the §14.1 startup gate
+(`services/api/startup.ts` + `app/StartupGate.tsx`: the whole shell
+mounts inside the gate only after the handshake → health → WS-open
+sequence, with 8 drift guards and the 12/12 no-injection browser
+verification), an integration-level fix, not a matrix row). The §5
 nine-card mapping (§10 below) was
 derived live at v1.2.169.
 

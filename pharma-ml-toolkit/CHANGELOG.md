@@ -1,3 +1,74 @@
+## [1.2.229-r289] — 2026-11-19 — part11 Phase Sixteen: the §14.1 startup gate — the app boots ITSELF (the backend–GUI integration audit's central fix; run 85)
+
+- **The audit's one FAIL row is closed.** The Phase Sixteen
+  backend–GUI integration audit (`docs/CAPABILITY_INTEGRATION_MATRIX.md`,
+  part11_1 §21) found the browser app never wired its own boot
+  sequence: `configureBackend` and `stream.connect` had no caller
+  inside `frontend/src` — only the Node e2e harnesses called them, so
+  a real browser session could never reach its own backend without an
+  injected shim. This release closes it with the §14.1 steps 9–12
+  bridge, the gate that renders it honestly, and the drift guards
+  that keep it true.
+- **`frontend/src/services/api/startup.ts`** — the §14.1 boot
+  sequence, typed end to end: the handshake endpoint arrives through
+  exactly two channels (never a query string, a log, or a persisted
+  setting) — the Tauri IPC bridge `invoke("backend_endpoint")` in
+  production (the Rust host parsed the sidecar's single
+  `PHARMAML-READY {port, token, pid, version}` stdout line,
+  snake_case fields mapped into the client's camelCase contract), or
+  a DEV-ONLY same-origin fallback riding the Vite proxy with the
+  token supplied at dev-server start via `VITE_PHARMAML_TOKEN`
+  (guarded by `import.meta.env.DEV`; outside Tauri and outside dev
+  builds the bridge throws "no startup channel" instead of silently
+  fabricating an endpoint). The order is the §14.1 order: acquire →
+  `configureBackend` → verify `/api/v1/health` (status checked, not
+  just requested) → `getEventStream().connect()` → only then the
+  workspaces mount. Every failure surfaces as a typed `StartupError`
+  carrying its stage (`acquire` / `health` / `stream`).
+- **`frontend/src/app/StartupGate.tsx`** — three honest states, never
+  a silent fake: `connecting` (the handshake-in-flight card, the nine
+  workspaces named as locked), `failed` (the typed stage + message
+  verbatim + the controlled §14.2 retry — not a page reload), `ready`
+  (the workspaces mount; an sr-only `data-testid=startup-ready`
+  marker carries the backend version + channel; the connection
+  banner below the header is the FIRST `useEventStreamState`
+  consumer — a subtle strip whenever the WS lane degrades, silent
+  when healthy, always honest that REST stays the authoritative
+  recovery path). The boot runs exactly once per process even under
+  React StrictMode's double-mount (`booted.current`).
+- **The wiring**: `App.tsx` mounts its ENTIRE shell (header + nav +
+  the nine workspaces) inside `<StartupGate>` — no page renders
+  pre-handshake; `vite.config.ts`'s dev proxy forwards the WS lane
+  (`ws: true`) so the dev fallback's event stream opens through the
+  same same-origin path as REST; `package.json` gains
+  `@tauri-apps/api` 2.12.5 (the official, offline-bundled `invoke`
+  wrapper — no filesystem, no shell passthrough) and `vite-env.d.ts`
+  types the dev token channel for the strict tsc gate.
+- **8 new drift guards** (`tests/test_frontend_startup.py`): the
+  §14.1 order pinned INSIDE the module (the health probe must
+  precede the stream open; the verdict must be checked), the dev
+  fallback's production leak guard, the three honest gate states +
+  the retry + the StrictMode guard, the App shell wrapped header
+  included, the proxy's `ws: true`, the dependency pin, the typed
+  env channel, and the Rust command contract (the `backend_endpoint`
+  name and the snake_case `BackendEndpoint` fields the bridge maps).
+- **BROWSER-STARTUP-PASS** (`scratch/browser_verify_startup_r289.sh`,
+  12/12 checks, the r288 no-injection pattern): the real backend on a
+  port-0 loopback handshake → vite with BOTH env channels → the app
+  boots ITSELF through the gate (no `configureBackend` injection) →
+  the connecting card resolves to the shell (header rendered,
+  Introduction initial) → `startup-ready` = "backend 1.2.228 ready
+  via dev-same-origin" → the event stream state OPEN through the
+  app's own boot path → the Datasets workspace mounts post-gate → a
+  real 3-row CSV uploaded through the app's own file input → the
+  preview rendered (smiles/pIC50 columns) → zero failed-startup
+  cards.
+- Gates: tsc 0 errors, the production vite build green (the three
+  chunk splits unchanged: plotly / three / motion), the 8 startup
+  guards green first-run, ruff clean. v1.2.229 ships with the full
+  eleven-leg gate + the four-home ritual + the offsite re-seed in the
+  same firing (the r286 precedent).
+
 ## [1.2.228-r288b] — 2026-11-19 — part11 Phase Eighteen: the Three.js 3D scientific visualization lanes (the interactive continuation of run 84)
 
 - **The Phase Eighteen 3D lanes now EXIST.**

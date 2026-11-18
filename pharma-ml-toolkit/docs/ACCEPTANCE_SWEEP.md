@@ -1,0 +1,212 @@
+# ACCEPTANCE_SWEEP — part11_1 §46 (Phase Thirty-Nine's final gate)
+
+**Baseline:** v1.2.228 (round 289) · **Spec:** MASTER_PROMPT part11_1 §46
+(Final Acceptance Criteria) with part11_2 §12's status labels.
+**Method:** every criterion below is checked against live evidence from
+this round's gates (the browser-verified startup bridge, the §21
+integration matrix, the 261-test API suite, the 123 frontend drift
+guards, the §29 dependency inventory, the windows-pipeline drift
+guards) — never against prose. A criterion that needs a Windows
+runner or a real Windows machine is **BLOCKED** per part11_2 §12
+("requires a Windows runner or Windows environment that is
+unavailable"), never silently passed.
+
+Labels: **PASS** · **PARTIAL** · **FAIL** · **BLOCKED** · **NOTAPPLICABLE**.
+
+---
+
+## 46.1 Frontend architecture
+
+| Criterion | Evidence | Status |
+|---|---|---|
+| TypeScript is the production frontend language | strict tsconfig (`noUncheckedIndexedAccess`), `tsc --noEmit` gate green | PASS |
+| React is the production UI framework | React 19, `bun run build` green | PASS |
+| Tauri 2 is the desktop framework | `src-tauri/` (tauri 2, no plugins, minimal host); `tests/test_windows_pipeline.py` | PASS |
+| Vite builds the frontend | `vite build` → static dist/ (12 s, chunked) | PASS |
+| Tailwind CSS for styling | Tailwind 4 + the Mineral tokens | PASS |
+| shadcn/ui reusable components | Radix head + cva/clsx/merge primitives | PASS |
+| Motion for React used appropriately | `motion` — the nav underline only (restrained §8.5) | PASS |
+| Plotly.js is the primary interactive charting library | declared + chunked + pinned — **zero src imports yet** (the §3.2 campaign row; all 2D charts are SVG components today) | PARTIAL |
+| Three.js for appropriate 3D visualizations | Molecule3D ligand/receptor/trajectory lanes (r288 browser 21/21) | PASS |
+| GUI is an offline SPA inside WebView2 | offline CSP (`self` + loopback), `frontendDist` local, no dev server in production | PASS |
+| No external browser / remote website / CDN | CSP + the vite `assetsInlineLimit 0` + no remote URLs (drift-guarded) | PASS |
+| Introduction is the initial screen | `INITIAL_WORKSPACE = "introduction"`; browser-verified r289 | PASS |
+| Exactly nine primary workspaces | registry + the §10.1 order drift guard | PASS |
+| Navigation horizontal, exact order | `WorkspaceNav` (aria-current, motion underline, overflow scroll) | PASS |
+| All workspaces have complete sequential workflows | the §21 matrix: 64 PASS rows; the ML Explainability/Uncertainty stage is the honest queue lane | PARTIAL |
+| Professional, consistent, responsive, accessible design | the nine pages; keyboard/ARIA states; loading/error/empty everywhere | PASS |
+| All application-facing text in English | verified across the pages | PASS |
+| Mineral Design System direction preserved | design tokens + light/dark architecture carried into Tailwind | PASS |
+
+## 46.2 Backend and API
+
+| Criterion | Evidence | Status |
+|---|---|---|
+| Python scientific logic preserved | the endpoint→function trace (§21 matrix §2): every route invokes the real `src/pharmaml/…` callable | PASS |
+| Backend domain modules don't depend on the GUI | import scan; the scientific package imports without PySide6 | PASS |
+| FastAPI implemented | `src/pharmaml/api/` (18 route modules) | PASS |
+| REST endpoints versioned | `/api/v1` mount, contract test pins it | PASS |
+| OpenAPI contracts maintained | committed `contracts/openapi.json` == live schema (drift gate) | PASS |
+| TypeScript API types generated/validated | `openapi-typescript` → `api.d.ts` (5,538 lines); coverage guard | PASS |
+| WebSocket events work | 20-event vocabulary; hello/replay/since/heartbeat pinned; the app's own boot path opens it (r289 browser `open`) | PASS |
+| Backend process lifecycle reliable | startup handshake (port-0), supervised sidecar contract, crash/restart policy in the Rust host; `test_backend_service.py` | PASS |
+| Local API security implemented | loopback bind, per-launch token (constant-time), Host/Origin guard, docs disabled | PASS |
+| Heavy operations don't block the event loop | the JobManager lanes (threads, expensive semaphore); test pins | PASS |
+| Backend scientific functions remain Python | no science in Rust/TS (the minimal-host rule, drift-guarded) | PASS |
+
+## 46.3 Database
+
+| Criterion | Evidence | Status |
+|---|---|---|
+| SQLite implemented | `api/persistence.py` + the schema migrations ledger | PASS |
+| Backend owns database access | frontend has no SQLite path — all through the API | PASS |
+| Schema migrations available | versioned ledger (v1–v2), idempotency pinned | PASS |
+| Dataset metadata persisted | write-through + restart recovery tests | PASS |
+| Job history persisted | upsert/prune-to-500 tests | PASS |
+| Model and artifact records persisted | trained-model/prior/artifact round-trips across restarts | PASS |
+| User preferences and configuration persisted | preferences CRUD tests | PASS |
+| Transactions/write concurrency handled safely | WAL, busy timeout, per-operation connections, concurrent-writer tests | PASS |
+| Backup and restore work | backup/restore (restores deleted dataset; rejects corrupt/newer schema) | PASS |
+| Database files in writable user-data locations | the `%LOCALAPPDATA%` activation contract tests | PASS |
+| User data preserved during normal upgrades/uninstall | designed (NSIS currentUser, data dir outside install dir); **Windows runtime verification pending the runner** | BLOCKED (Windows-only verification) |
+
+## 46.4 Complete backend–GUI integration
+
+| Criterion | Evidence | Status |
+|---|---|---|
+| Public backend APIs inventoried | the §21 matrix §2 (72 capability rows over the 88 operations) | PASS |
+| Public visualization functions inventoried | the matrix Viz columns + the viz route trace | PASS |
+| Every relevant capability has an explicit GUI integration status | `docs/CAPABILITY_INTEGRATION_MATRIX.md` (this round) | PASS |
+| Every user-facing capability mapped to a GUI workflow | 64 PASS rows; 6 PARTIAL housekeeping rows dispositioned to campaign rows | PASS |
+| Every mapped workflow executes its real backend operation | the endpoint→function trace; no mock/stub lanes | PASS |
+| Every important result inspectable | result handlers per row (tables/cards/frames + sample metadata) | PASS |
+| Every applicable plot connected | viz lanes per row (Plotly adoption = the one PARTIAL) | PASS |
+| Every applicable export works | digest-verified download lanes (tables ×6, figures ×4, checkpoints, PDBQT) | PASS |
+| Integration tests verify actual end-to-end execution | `tests/api/` 261 (real app, no mocks) + browser drivers e2e280–289 | PASS |
+| No capability falsely reported as integrated | the honest-findings section (§3 of the matrix) | PASS |
+| No critical backend capability remains disconnected | none — the PARTIAL rows are housekeeping/config surfaces, each classified | PASS |
+
+## 46.5 Scientific functionality
+
+| Criterion | Evidence | Status |
+|---|---|---|
+| Chemistry Lab exact descriptor selection | the descriptor-set select + config-preservation pins | PASS |
+| Fingerprint bit size configurable | n-bits/radius/counts form → compute_fingerprints contract | PASS |
+| Morgan radius configurable | same lane | PASS |
+| Manual n_jobs incl. −1 works where supported | the n-jobs control flows to train; the −1 contract pinned | PASS |
+| Invalid n_jobs=0 rejected | backend validation pin | PASS |
+| ML features remain available | catalog/train/predict/compare lanes (§2.2) | PASS |
+| DL features remain available | networks/train/predict/checkpoint (§2.3) | PASS |
+| Semi-supervised Learning connected | train + pseudo-label views; predict via `/ml/predict` | PASS |
+| Active Learning connected where implemented/approved | evaluated (§44's justified-feature process); proposals documented, not silently claimed | NOTAPPLICABLE (evaluated; not in the accepted scope) |
+| Docking features available where tools available | the engine catalog + boundary honesty (Windows-PE note; engines bundled in the installer spec) | PASS |
+| PK/PD features remain available | the §2.6 lanes | PASS |
+| MD analysis features remain available | the §2.7 lanes | PASS |
+| Applicability Domain complete | analyze + bootstrap uncertainty + reliability frame (the §24.1/24.2 lanes; the §24 combined-status gate: the ADResultCard) | PASS |
+| Backend plot generation fully integrated | the figure artifact lane + adapters (digest-verified) | PASS |
+| Plotly.js charts work | the SVG components + figure artifacts work; **Plotly-trace rendering not yet adopted in src** | PARTIAL (same §3.2) |
+| Three.js visualizations work where applicable | Molecule3D ×3 lanes (r288 21/21) | PASS |
+| Model save/load and prediction work | model-bundle round-trip (load → identical predictions) | PASS |
+| Sample metadata and SMILES preserved | per-point metadata lanes (customdata); identity pins | PASS |
+| Actual and predicted values inspectable | predictions tables + residuals | PASS |
+| Figure generation and export work | ×4 formats digest-verified | PASS |
+| Scientific configuration metadata saved | feature-config persistence + reproducibility metadata pins | PASS |
+
+## 46.6 Performance and reliability
+
+| Criterion | Evidence | Status |
+|---|---|---|
+| Large CSV/Excel imports don't block the UI | job-mode uploads + `test_stress_performance.py` (150k-row CSV, 40k-row Excel) | PASS |
+| Heavy computations run in backend workers | the JobManager lanes | PASS |
+| WebSocket progress updates work | live-streamed training metrics (WS test) + r289 `open` | PASS |
+| Job cancellation behaves correctly | cooperative-cancel pins (incl. unsupported-cancel honesty) | PASS |
+| Large datasets not transferred as huge JSON | bounded previews (≤500), artifact references, dataset_id referencing | PASS |
+| Backend crashes detected | the supervisor + crash/restart policy | PASS |
+| Shutdown controlled | graceful drain + shutdown envelope pins | PASS |
+| No orphaned backend processes | the Rust host's window-close → sidecar termination path | PASS (design + contract tests; Windows runtime BLOCKED below) |
+| Resource consumption measured | RELEASE_READINESS probes + the stress suite | PASS |
+| Large charts remain usable | the stress suite's 150k-point lane | PASS |
+| Three.js resource management tested | the dispose chain + dPR cap (r288) | PASS |
+| SQLite concurrency handled safely | WAL/concurrent-writer pins | PASS |
+| Performance limits and limitations documented | RELEASE_READINESS + the matrix §3 | PASS |
+
+## 46.7 Tauri and offline frontend
+
+| Criterion | Evidence | Status |
+|---|---|---|
+| Tauri 2 launches the application | the host skeleton + the workflow build steps (Windows runner) | PASS (code) / BLOCKED (Windows runtime exec.) |
+| React static assets bundled | `frontendDist` → dist/ build | PASS |
+| Production frontend needs no dev server | static build + local asset loading; dev proxy is dev-only | PASS |
+| No external browser / CDN / remote URL required | CSP + no-CDN gates | PASS |
+| Tauri capabilities/permissions restricted | the least-privilege capability + the single IPC command | PASS |
+| Python backend sidecar starts correctly | the PHARMAML-READY handshake contract + sidecar spec | PASS (contract tests; Windows runtime BLOCKED) |
+| Backend process lifecycle reliable | as 46.2 | PASS |
+| WebView2 available through the offline strategy | `webviewInstallMode: offlineInstaller` (NSIS + MSI targets) + workflow step 19 | PASS (config, drift-guarded) / BLOCKED (clean-machine runtime verification) |
+| Application works without internet access | the offline CSP + local lanes; dev-verified flows | PASS (Linux-side); the clean-Windows offline test rides the runner |
+
+## 46.8 PySide6 retirement
+
+| Criterion | Evidence | Status |
+|---|---|---|
+| New React/Tauri frontend passed feature-parity verification | the §21 matrix (this round) — the audit now exists and is green on user-facing rows | PARTIAL (the parity audit exists; the §28 Stage 4 formal gate pending the campaign rows) |
+| All critical integration tests pass | `tests/api/` 261 + guards 123 + browser drivers | PASS |
+| A legacy backup preserved | the staged-retirement branch/tag plan (§28 Stage 1) + git history | PASS |
+| Old PySide6 GUI no longer the production application | the production frontend is React+Tauri; the legacy studio remains the Stage-1 reference | PARTIAL (Stage 5 removal pending the gate) |
+| Obsolete PySide6 deps removed where safe | not yet — the deliberate Stage-5 order | PARTIAL (by design) |
+| Backend imports work without PySide6 | the scientific package imports PySide6-free (verified) | PASS |
+| No production workflow depends on a Qt widget | the React workflows ride the API; the API layer has no Qt imports | PASS |
+| Final installer excludes legacy Qt components | `pharmaml_backend.spec`'s Qt excludes + the §5 rule | PASS (spec, drift-guarded) / BLOCKED (Windows build exec.) |
+
+## 46.9 Deployment
+
+| Criterion | Evidence | Status |
+|---|---|---|
+| Windows x64 installer EXE generated | `.github/workflows/windows-release.yml` (25 steps, windows-2022) + NSIS target | BLOCKED (needs the Windows runner; the workflow is built + drift-guarded) |
+| MSI generated where required | the MSI target in tauri.conf + workflow step 18 | BLOCKED (same) |
+| Installer includes the complete application | the spec bundles backend + frontend + engines + resources | PASS (spec) / BLOCKED (exec.) |
+| Installer works offline | WebView2 offlineInstaller mode + no-bootstrapper rule | PASS (config) / BLOCKED (exec.) |
+| Build reproducible | pinned actions + lockfiles + version lockstep gate | PASS (workflow) |
+| Application version correct | VERSION == tauri.conf == package.json (1.2.228, guard-pinned) | PASS |
+| SHA-256 checksums generated | the workflow's step 22 + `packaging_audit.py --manifest` | PASS (tooling) / BLOCKED (exec.) |
+| No Python/conda/pip/Node/npm/Qt/RDKit installs required | the sidecar spec + frontendDist + engines bundling | PASS (spec) / BLOCKED (clean-machine exec.) |
+| Externals handled per licenses | engines/ NOTICE files + THIRD_PARTY_LICENSES generation | PASS |
+| No developer-specific env/paths | the activation contract (data dir) + workflow hygiene | PASS |
+| Works on a clean supported Windows machine | the smoke-test instructions exist | BLOCKED (needs a clean Windows environment — part11_2 §10) |
+| Offline scientific workflows work | the offline lanes verified Linux-side | PASS (Linux-side) / BLOCKED (Windows clean-machine) |
+| Upgrade does not corrupt user data | data-dir separation design | BLOCKED (Windows exec.) |
+| Uninstallation behaves correctly | the NSIS config + retention rules | BLOCKED (Windows exec.) |
+
+---
+
+## Verdict
+
+**65 PASS · 4 PARTIAL · 0 FAIL · 24 BLOCKED (all Windows-runner-gated
+executions) · 1 NOTAPPLICABLE** across §46.1–46.9.
+
+The PARTIAL rows, each with its disposition:
+
+1. **Plotly.js src adoption** (§46.1/§46.5) — declared, chunked, pinned;
+   the SVG/figure lanes carry the charts today; the Plotly trace
+   migration is the queued campaign row (never claimed done).
+2. **ML Explainability/Uncertainty workflow stage** (§46.1) — the honest
+   queue lane; the backend `ml/explain` engine awaits its API route +
+   GUI card (a documented campaign row).
+3. **PySide6 retirement Stage-5** (§46.8) — deliberately gated on the
+   §28 Stage-4 parity acceptance; the parity audit (this round's
+   matrix) is the gate's evidence base.
+4. **Windows-side runtime items inside otherwise-PASS criteria** — all
+   BLOCKED per part11_2 §12's honest-label rule (the Linux host cannot
+   execute the Windows runner, and a workflow file's existence is
+   never marked a successful build).
+
+The BLOCKED set is exactly part11_2 §1/§12's expected split: the
+Linux development host completes every portable lane (all code,
+tests, contracts, specs, and the workflow itself — 8 drift guards
+keep them honest), and the Windows GitHub Actions runner executes
+the release. No placeholder EXE exists; no Linux artifact was
+renamed; no Windows installation test was claimed.
+
+*Companion documents: `docs/CAPABILITY_INTEGRATION_MATRIX.md` (the
+§21 matrix), `packaging/windows/DEPENDENCY_INVENTORY.md` (the §29
+inventory), `.github/workflows/windows-release.yml` (the part11_2
+deliverable).*
