@@ -4,6 +4,7 @@ import { WorkspaceShell } from "@/components/layout/WorkspaceShell";
 import { IntroductionPage } from "@/features/introduction/IntroductionPage";
 import { DatasetsPage } from "@/features/datasets/DatasetsPage";
 import { MLPage } from "@/features/ml/MLPage";
+import { DLPage } from "@/features/dl/DLPage";
 import { INITIAL_WORKSPACE, WORKSPACES, type WorkspaceId } from "@/app/workspaces";
 
 /**
@@ -60,6 +61,8 @@ export function App() {
           <DatasetsPage />
         ) : entry.id === "machine-learning" ? (
           <MLPage />
+        ) : entry.id === "deep-learning" ? (
+          <DLPage />
         ) : (
           <WorkspaceShell entry={entry} />
         )}

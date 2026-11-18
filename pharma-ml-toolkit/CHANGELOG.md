@@ -1,3 +1,71 @@
+## [1.2.226] — 2026-11-18 — round 283 (part11 §11.3: the Deep Learning workspace on the real backend)
+
+- **The §11.3 sequential workflow now EXISTS** as
+  `frontend/src/features/dl/DLPage.tsx`: the complete chain on the
+  REAL backend — Select Dataset (the registry table), Validate (the
+  registered dataset's own loader policy surfaced read-only),
+  Preprocess (the honest no-toggle note: the torch estimator's own
+  fit standardises per-feature on the training rows only), Select
+  Architecture (the live four-family torch catalog with the
+  signature defaults read server-side; task-mismatched rows disabled
+  with the backend's own 422 reason), Configure Model (a validated
+  hidden_layers JSON editor + dropout + the backend's own activation
+  tokens + batchnorm), Configure Training (epochs, batch size, the
+  Adam learning rate + weight decay, early-stop patience, the
+  validation split, seed, device), Train (job mode through the live
+  JobRunCard + the authoritative REST result relay), Monitor (the
+  REAL per-epoch `training.metrics` envelopes off the WS bus: the
+  inline SVG loss/validation curve drawn only from the points that
+  actually arrived, the per-epoch table with best_val + the stale
+  counter), Evaluate — Inspect Predictions (the SINGLE session
+  prediction path `POST /api/v1/ml/predict`, dataset mode, the
+  probabilities block, the honest 422 surfaced verbatim), Visualize
+  (the loss-curve figure artifact through the §17 four-format export
+  stack), Save Checkpoint / Export (the fitted estimator as the
+  standard joblib bundle with the full provenance metadata sidecar +
+  the digest-verified download; the predictions table export with the
+  backend's own 5000-row cap mirrored client-side).
+- **The dl client** `frontend/src/services/dl/client.ts`: request
+  bodies from the GENERATED `api.d.ts` types (DLTrainRequest /
+  FigureRequest / ModelArtifactRequest), the network token union
+  derived from the DTO's own pydantic Literal, runtime validation on
+  every response, the hyperparameter + activation vocabularies
+  mirrored from the backend's own registries.
+- **13 new drift guards** `tests/test_dl_workspace.py`: the dl REST
+  surface vs the real route modules, the request-field parity at the
+  pydantic level, the catalog keys vs `_network_catalog`'s own output,
+  the `training.metrics` payload keys vs the per-epoch hook's dict,
+  the mirrored vocabularies, the anti-fabrication guard against the
+  exported openapi contract, the checkpoint + figure lanes, the
+  mirrored export cap, the workspace registry flip, the §11.3 stage
+  order, the honesty blocks, the Monitor's event-stream subscription.
+- **The artifacts-client rollback repair**: the 11th rollback had
+  eaten `frontend/src/services/artifacts/client.ts` between the r281
+  tsc gate and the v1.2.225 release commit (the shipped zip imported a
+  module the archive lacked — a fresh checkout could not
+  type-check). The file was rebuilt from its pinned contract (the
+  `test_frontend_services.py` artifact guards, the MLPage/
+  DatasetsPage usage sites, `ArtifactRecord.view()`) and re-verified:
+  the registry lanes (list / view / download / evict), `api.raw` +
+  the `X-Artifact-SHA256`/`ETag` consumption, the local-digest
+  verification with the honest null-on-insecure-context.
+- **A REAL E2E rode the live backend** (`scratch/e2e283/`, never
+  shipped): handshake -> WS -> the upload (job mode, tracked with the
+  r282 dormancy-race fix applied) -> the catalog -> dl.train (job
+  mode, tracked; the Monitor lane accumulated 3 REAL telemetry
+  epochs) -> the model view relayed (torch, 32 rows) -> predict on the
+  single path (32 rows, classes 0/1, probabilities) -> the loss-curve
+  figure artifact -> the checkpoint (digest verified, 7 metadata
+  keys) -> the predictions export (digest verified) -> SIGTERM -> the
+  shutdown envelope. E2E-DL-PASS. The page browser-verified on the
+  vite dev server: all 11 stages render, zero console errors.
+- Census re-trued live through the `/api/toolkit/tree` route: 1,522
+  files / 564,578 lines / 8,473 tests collected; the web pins synced;
+  the version bumped across every carrier; the git recovery (PAT
+  re-extracted, the remote re-anchored, origin's r282 release
+  confirmed landed, the disk reconciled over origin/main) ran before
+  the row built.
+
 ## [1.2.225] — 2026-11-18 — round 282 (part11 §11.2: the Machine Learning workspace on the real backend)
 
 - **The §11.2 sequential workflow now EXISTS** as

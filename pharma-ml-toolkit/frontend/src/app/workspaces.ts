@@ -61,7 +61,7 @@ export const WORKSPACES: readonly WorkspaceEntry[] = [
     label: "Deep Learning",
     summary:
       "Select Dataset → Validate → Preprocess → Architecture → Configure → Train with live loss/val curves → Inspect Predictions → Save Checkpoint.",
-    state: "shell",
+    state: "workflow",
   },
   {
     id: "generative-ai",

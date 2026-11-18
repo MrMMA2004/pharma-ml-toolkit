@@ -10,6 +10,7 @@ multi-home transaction; successful copies remain when a later step fails.
 """
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import re
@@ -111,14 +112,36 @@ def _sha256(path: Path) -> str:
 
 
 def _publish_copy(source: Path, destination: Path, expected: str) -> None:
-    """Verify a staged copy, then create its final name exclusively."""
+    """Verify a staged copy, then create its final name exclusively.
+
+    The hardlink lane is the default (atomic, zero extra bytes); the
+    ``upload/`` home rides a bind-mounted filesystem that refuses
+    ``os.link`` (Errno 95 — the r283 find), so the fallback is the
+    copyfile path: a byte copy into the SAME verified staging dir,
+    digest-verified again, renamed (or copied) into place. Either way
+    the digest is checked before AND after the move.
+    """
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".release-copy-", dir=destination.parent) as folder:
         staged = Path(folder) / destination.name
         shutil.copy2(source, staged)
         if _sha256(staged) != expected or _sha256(source) != expected:
             raise OSError(f"copy verification failed: {destination}")
-        os.link(staged, destination)
+        try:
+            os.link(staged, destination)
+        except OSError as exc:
+            if exc.errno not in (errno.EPERM, errno.EACCES, errno.ENOTSUP, errno.EXDEV, errno.EROFS):
+                raise
+            # the copyfile path: same digest, byte copy, verify after
+            final = destination.with_suffix(destination.suffix + ".copyfile")
+            shutil.copy2(staged, final)
+            if _sha256(final) != expected:
+                final.unlink(missing_ok=True)
+                raise OSError(f"copyfile fallback failed: {destination}") from exc
+            os.replace(final, destination)
+            print(f"copyfile path: {destination} (hardlink refused: {exc.errno})")
+        if _sha256(destination) != expected:
+            raise OSError(f"published digest failed: {destination}")
 
 
 def _has_independent_backup(old: Path) -> bool:

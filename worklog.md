@@ -15214,3 +15214,89 @@ lines / 8,461 tests; the web pins synced; v1.2.225 shipped (zip
 all eight §14 audit checks passed — upload/ via the copyfile path).
 Counter 77 -> 78. Next queue: Deep Learning (§11.3), then the
 remaining six workspaces row by row.
+
+## Round 283 (2026-11-18) — the §11.3 Deep Learning workspace + the artifacts-client rollback repair
+
+The declared next queue executed: the Deep Learning workspace
+(features/dl/DLPage.tsx, the complete §11.3 sequential workflow on the
+REAL backend) — Select Dataset (the registry table) -> Validate (the
+loader's own policy surfaced read-only: target/task inference, the
+dropped/categorical counts) -> Preprocess (the honest note: the DL
+train route carries no preprocess toggle — the torch estimator's own
+fit standardises per-feature on the training rows only, stated in the
+stage, never pretended as a control) -> Select Architecture (the LIVE
+catalog: the four tabular torch families with the signature defaults
+read server-side; a task-mismatched row stays disabled with the
+backend's own 422 reason) -> Configure Model (hidden_layers JSON
+validated before any request, dropout, the backend's own four
+activation tokens, batchnorm) -> Configure Training (epochs, batch
+size, Adam learning rate + weight decay, early-stop patience, the
+validation split, seed, device) -> Train (job mode through the live
+JobRunCard + the authoritative REST result relay) -> Monitor (the
+REAL per-epoch training.metrics envelopes accumulated off the WS bus,
+an inline SVG loss/validation curve drawn only from the points that
+actually arrived, the per-epoch table with best_val + the stale
+counter) -> Evaluate — Inspect Predictions (the SINGLE session
+prediction path /api/v1/ml/predict, dataset mode, the probabilities
+block, the honest 422 surfaced verbatim) -> Visualize (the loss-curve
+figure artifact through POST /artifacts/figure — the §17 four-format
+export stack) -> Save Checkpoint / Export (POST /artifacts/model: the
+fitted estimator as the standard joblib bundle with the full
+provenance metadata sidecar + the digest-verified download; the
+predictions table export through POST /visualization/table with the
+mirrored 5000-row cap). The dl client (services/dl/client.ts) builds
+every request from the GENERATED api.d.ts types + runtime-validates
+the responses; the network token union derives from the DTO's own
+pydantic Literal.
+
+THE ROLLBACK REPAIR (a real defect this round closed): the 11th
+rollback had eaten frontend/src/services/artifacts/client.ts BETWEEN
+the r281 tsc gate and the v1.2.225 release commit — the shipped zip
+carried MLPage/DatasetsPage/ml-client imports of a module that was
+not in the archive (a fresh checkout could not type-check). The file
+was rebuilt from its pinned contract (test_frontend_services.py's
+artifact surface + token-header download guards, the usage sites in
+MLPage/DatasetsPage/the e280 driver, the ArtifactRecord.view()
+fields) and re-verified: the artifact registry lanes (list / view /
+download / evict), api.raw + the X-Artifact-SHA256/ETag consumption,
+the local-digest verification with the honest null-on-insecure-context.
+
+13 new drift guards (tests/test_dl_workspace.py): the dl REST surface
+vs the real route modules, the DLTrainRequest field parity at the
+pydantic level, the network catalog keys vs _network_catalog's own
+output dict, the training.metrics payload keys vs the
+_training_progress_hook dict, the hyperparameter + activation
+vocabularies vs _HYPERPARAM_SPEC / _ACTIVATIONS, the
+anti-fabrication guard against the exported openapi contract, the
+checkpoint lane, the figure lane's two-epoch minimum, the mirrored
+export cap, the workspace registry flip (deep-learning shell ->
+workflow) + the App wiring, the §11.3 stage order, the honesty blocks,
+the Monitor's job-scoped event-stream subscription.
+
+E2E (scratch/e2e283/, live backend, never shipped): handshake -> WS
+-> the upload (job mode, tracked) -> the catalog (4 families, 12
+signature defaults) -> dl.train (job mode, tracked; the dormancy-race
+fix from r282 applied track-first-then-subscribe) -> the Monitor lane
+accumulated 3 REAL telemetry epochs (first_loss 0.7237) -> the
+COMPLETED model view relayed by the REST result (torch, 32 rows,
+3.48 s) -> predict on the single path (32 rows, classes 0/1, the
+probabilities block) -> the loss-curve figure artifact (20,811 B) ->
+the checkpoint (digest verified, 7 metadata keys) -> the predictions
+export (digest verified) -> SIGTERM -> the shutdown envelope -> closed.
+E2E-DL-PASS. The page itself browser-verified on the vite dev server:
+the nav switch renders all 11 stages, the honest not-configured
+banners (the loud failure mode), zero console errors.
+
+GATES: tests/api 260 passed RC=0, the dl guards 13/13, the guard
+family (frontend services + ml + frontend foundation + windows
+pipeline) 40/40, tsc 0 errors, vite build RC=0, ruff clean. Census
+re-trued live through the /api/toolkit/tree route itself: 1,522 files
+/ 564,578 lines / 8,473 tests; the web pins synced; v1.2.226 shipped
+across the homes (all §14 audit checks). The git recovery ran FIRST
+this round: PAT re-extracted (93-char, sha12 4f46c07b6879, mode 600),
+the remote re-anchored to MrMMA2004/pharma-ml-toolkit, origin fetched
+(r282's 8c7cf8c5 confirmed landed), the disk reconciled over
+origin/main via the mixed reset (the disk tree matched v1.2.225
+exactly — only the 8 stale zip stragglers untracked). Counter
+78 -> 79. Next queue: Generative AI (§11.4), then the remaining five
+workspaces row by row.
