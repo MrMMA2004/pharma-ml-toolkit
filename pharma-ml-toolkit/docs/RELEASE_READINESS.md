@@ -47,7 +47,7 @@ All probed dependencies import cleanly in this environment (the Qt rows are prob
 
 | Suite chunk (as actually run) | Result |
 | --- | --- |
-| `1 (a-l)` | 3146 passed, 1 failed (the leakage guard caught the r286 browser_verify_pkpd.sh /home/z/ literal; scrubbed this commit, tests/test_leakage.py re-run green post-scrub: 5 passed) |
+| `1 (a-l)` | 3146 passed, 1 failed (the leakage guard caught the r286 browser_verify_pkpd.sh home-path literal; scrubbed to `$HOME` per the r284 precedent, tests/test_leakage.py re-run green post-scrub: 5 passed) |
 | `2 (m-p)` | 866 passed, 1 skipped (worktree; the 8 notebook twins re-executed at 1.2.228 + stripped, 119 variant guards green) |
 | `3 (r-z)` | worktree 1305 passed + 11 web-parity probes environment-blocked in a bare worktree (bun needs the companion node_modules; green in the main checkout); main-checkout committed-scope run 1325 passed, 1 failed (test_release_portability reads the live dirty tree; 2 passed in the clean worktree) |
 | `4a (ui bestof..docking)` | 97 passed |
