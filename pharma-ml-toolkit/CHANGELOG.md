@@ -1,3 +1,66 @@
+## [1.2.225] — 2026-11-18 — round 282 (part11 §11.2: the Machine Learning workspace on the real backend)
+
+- **The §11.2 sequential workflow now EXISTS** as
+  `frontend/src/features/ml/MLPage.tsx`: the complete chain on the REAL
+  backend — Select Dataset (the registry table + the dataset view card),
+  Target & Features (the registered dataset's own loader policy surfaced
+  read-only, the frame stays server-side), Preprocess (the training
+  pipeline's own impute/scale toggle), Configure Split/CV (cv 2-10,
+  tune, n_jobs, random_state), Select Algorithm (the registry catalog,
+  task-synced, the unavailable rows surfaced with their own reason),
+  Configure Hyperparameters (a validated model_params JSON editor that
+  refuses to fire on invalid JSON), Train (job mode through the live
+  JobRunCard - WS-driven state/progress/stage + cancel + the
+  authoritative REST result relay), Evaluate - Inspect Predictions
+  (dataset-mode predict with the probabilities block and the honest
+  422 surface when the model lacks predict_proba), Compare (the session
+  trained-model registry sorted by cv_mean), Applicability Domain
+  (x_test assembled through the bounded column bridge over the trained
+  model's own feature columns, the k/percentile/n_models/uncertainty/
+  figure controls, job mode), Semi-supervised Learning (the
+  classification-only card with the honest disabled note on
+  regression datasets, the full control set, job mode), Explainability
+  & Uncertainty (the honest queued block: no §12.2 route exists yet,
+  the AD bootstrap ensemble is the uncertainty surface that runs),
+  Export (the predictions rows through POST /visualization/table with
+  the backend's own 5000-row cap mirrored client-side, then the
+  digest-verified download through the token-header lane).
+- **The ml client** `frontend/src/services/ml/client.ts` (671 lines):
+  request bodies built from the GENERATED `api.d.ts` component types
+  (TrainRequest / PredictRequest / ADAnalyzeRequest /
+  SemiSupervisedTrainRequest), runtime validation on every response,
+  the catalog's unavailable-entry lane.
+- **11 new drift guards** `tests/test_ml_workspace.py`: the ml client's
+  REST surface vs the real route modules, the request-field parity at
+  the pydantic level, the anti-fabrication guard (every /api/v1
+  literal in the page + client must exist in the exported openapi
+  contract), the catalog keys vs list_models' own output, the export
+  lane's mirrored 5000-row cap, the workspace registry flip, the
+  §11.2 stage order, the honesty blocks.
+- **A REAL E2E rode the live backend** (`scratch/e2e282/driver.ts`,
+  never shipped): handshake -> WS open -> the classification-dataset
+  multipart upload (job mode) tracked to COMPLETED on live events ->
+  the task-synced catalog -> ml.train (job mode, tracked) -> the
+  trained-model view -> predict (16 rows, classes 0/1, probabilities)
+  -> the trained registry -> AD analyze (x_test through the bounded
+  column bridge, figure=true, tracked to COMPLETED on live events,
+  the figure artifact registered) -> semi-supervised self-training
+  (job mode, 8 labeled / 8 unlabeled) -> the predictions export
+  (POST /visualization/table -> the digest-verified download) ->
+  SIGTERM -> the shutdown envelope -> closed. E2E-ML-PASS.
+- **The environment recovered from the 11th sandbox rollback first**:
+  git history reverted to the round-186 base with the remote and the
+  reflog gone while the disk kept the full v1.2.224 state; the
+  recovery (arena/recover282 real merge of the snapshot tree over
+  origin r280, PAT re-extracted from the MASTER_PROMPT pdf, remote +
+  credential store restored, the r281 work pushed as 83ac26b2) is
+  documented in the recovery commit.
+- Census re-trued live: 1,510 files / 559,611 lines / 8,461 tests
+  collected; the web pins synced; the version bumped across every
+  carrier (VERSION, pyproject, pharmaml.__version__,
+  frontend/package.json, src-tauri/tauri.conf.json, the root
+  toolkit-version.ts).
+
 ## [1.2.224] — 2026-11-18 — round 280 (part11 Phase Three services, part two: the WS client + job/dataset/artifact clients)
 
 - **The frontend application services exist** (part11 §5.2's block:

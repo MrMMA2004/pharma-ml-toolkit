@@ -15160,3 +15160,57 @@ frontend node_modules wiped again (bun install). The ledger got the
 BLOCKED-on-runner sublabels. Counter 76→77. Next queue: ML (§11.2),
 then the remaining seven workspaces; the Windows runner execution
 when a Windows host exists.
+
+## Round 282 (2026-11-18) — the §11.2 Machine Learning workspace + the 11th-rollback recovery
+
+THE RECOVERY (first): the sandbox rolled git back to the round-186 base
+(history, remote, reflog gone) while the disk kept the full v1.2.224
+tree; PAT re-extracted from the MASTER_PROMPT pdf (93-char, mode 600),
+remote + credential store restored, the r281 snapshot tree absorbed
+over origin r280 through arena/recover282 (the union kept the upload
+prompt-PDF tracking + the swept-zip deletions) and pushed as 83ac26b2;
+gates re-verified green before the push (tests/api, the guard family,
+tsc).
+
+THE §11.2 ROW (the declared next queue): features/ml/MLPage.tsx (2,150
+lines) — the complete sequential workflow on the REAL backend: Select
+Dataset -> Target & Features (the loader's own policy surfaced) ->
+Preprocess -> Configure Split/CV -> Select Algorithm (the task-synced
+catalog, the unavailable rows surfaced with their own reason) ->
+Configure Hyperparameters (the validated model_params editor) -> Train
+(job mode, the live JobRunCard + the REST result relay) -> Evaluate
+(dataset-mode predict with the probabilities block + the honest 422) ->
+Compare (the session registry sorted by cv_mean) -> Applicability
+Domain (x_test through the bounded column bridge, k/percentile/
+n_models/uncertainty/figure, job mode) -> Semi-supervised Learning (the
+classification-only card, the full control set, job mode) ->
+Explainability & Uncertainty (the honest queued block — no §12.2 route
+exists yet) -> Export (POST /visualization/table with the mirrored
+5000-row cap + the digest-verified download lane). The ml client
+(services/ml/client.ts, 671 lines) builds every request from the
+GENERATED api.d.ts types + runtime-validates the responses.
+
+E2E (scratch/e2e282/, live backend, never shipped): handshake -> WS ->
+the classification-dataset upload (job mode) tracked on live events ->
+the catalog -> ml.train (job mode, tracked) -> the trained view ->
+predict (16 rows, classes 0/1) -> the trained registry -> AD analyze
+(x_test via the bounded column bridge, figure=true, tracked on live
+events) -> semi-supervised self-training (8 labeled / 8 unlabeled) ->
+the predictions export (digest verified) -> SIGTERM -> the shutdown
+envelope. E2E-ML-PASS. (Two honest finds on the way: the registry keys
+are snake_case — logistic_regression, not LogisticRegression; and a
+fast job that completes inside the subscribe window races the
+tracker's dormancy rule — the driver now subscribes exactly like
+useJob does, which is the app's own contract.)
+
+GATES: tests/api RC=0, the ml guards 11/11 (tests/test_ml_workspace.py
+— the REST surface, the pydantic-level field parity, the
+anti-fabrication guard against the exported openapi contract, the
+catalog keys, the mirrored export cap, the registry flip, the stage
+order, the honesty blocks), the guard family RC=0, tsc RC=0, vite
+build RC=0, ruff clean. Census re-trued live: 1,510 files / 559,611
+lines / 8,461 tests; the web pins synced; v1.2.225 shipped (zip
+971 entries / 11,603,219 B, sha256 1814fdf316d55b67…, six homes 6/6,
+all eight §14 audit checks passed — upload/ via the copyfile path).
+Counter 77 -> 78. Next queue: Deep Learning (§11.3), then the
+remaining six workspaces row by row.

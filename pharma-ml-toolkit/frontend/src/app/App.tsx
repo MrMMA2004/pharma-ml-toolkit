@@ -3,6 +3,7 @@ import { WorkspaceNav } from "@/components/layout/WorkspaceNav";
 import { WorkspaceShell } from "@/components/layout/WorkspaceShell";
 import { IntroductionPage } from "@/features/introduction/IntroductionPage";
 import { DatasetsPage } from "@/features/datasets/DatasetsPage";
+import { MLPage } from "@/features/ml/MLPage";
 import { INITIAL_WORKSPACE, WORKSPACES, type WorkspaceId } from "@/app/workspaces";
 
 /**
@@ -57,6 +58,8 @@ export function App() {
           <IntroductionPage />
         ) : entry.id === "datasets" ? (
           <DatasetsPage />
+        ) : entry.id === "machine-learning" ? (
+          <MLPage />
         ) : (
           <WorkspaceShell entry={entry} />
         )}

@@ -54,7 +54,7 @@ export const WORKSPACES: readonly WorkspaceEntry[] = [
     label: "Machine Learning",
     summary:
       "Select Dataset → Target → Features → Preprocess → Configure Split/CV → Algorithm → Hyperparameters → Train → Evaluate → Applicability Domain → Explainability → Export.",
-    state: "shell",
+    state: "workflow",
   },
   {
     id: "deep-learning",
