@@ -50,3 +50,8 @@ catboost_info/
 experiments.jsonl
 core/
 core*
+
+# (r287) the notebook/e2e regenerated example-output home — generated
+# data, never source: it must not ride commits or release archives
+# (the audit287 excluded_paths close, matching tools/build_zip.py).
+examples/artifacts/

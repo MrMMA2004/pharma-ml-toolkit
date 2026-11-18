@@ -10,7 +10,7 @@
  */
 
 /** Collected pytest cases at the shipped revision (repo-wide
- *  ``pytest --collect-only -q`` sum, 2026-11-18 post-release walk (r278: part11 Phase
+ *  ``pytest --collect-only -q`` sum, 2026-11-18 v1.2.228 release walk (r287: the
  *  Eleven -- the SQLite persistence backend + the /api/v1/database
  *  surface -- adds tests/api/test_persistence.py,
  *  tests/api/test_persistence_database.py and the
@@ -20,15 +20,15 @@
  *  dialogs) moves the count to 8,410 under the FULL pinned
  *  stack -- every optional dep installed, so the
  *  conditionally-defined suites collect). */
-export const SHIPPED_TEST_COUNT = 8545;
+export const SHIPPED_TEST_COUNT = 8519;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
  *  docs, tools — the same census /api/toolkit/tree walks). */
-export const SHIPPED_FILE_COUNT = 1527;
+export const SHIPPED_FILE_COUNT = 1535;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). */
-export const SHIPPED_SOURCE_LINES = 574471;
+export const SHIPPED_SOURCE_LINES = 581469;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

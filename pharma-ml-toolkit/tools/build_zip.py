@@ -59,7 +59,7 @@ EXCLUDE_DIRS = {
 # vanished and the shipped zip could not restore it). The exclusion is
 # now path-anchored: only data/artifacts (the backend output home) is
 # dropped, the frontend services lane always ships.
-EXCLUDE_DIR_PATHS = {"data/artifacts"}
+EXCLUDE_DIR_PATHS = {"data/artifacts", "examples/artifacts"}
 EXCLUDE_SUFFIXES = {".log", ".zip"}
 EXCLUDE_DIR_SUFFIX = ".egg-info"
 

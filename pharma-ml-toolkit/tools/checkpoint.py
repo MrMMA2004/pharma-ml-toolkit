@@ -86,8 +86,15 @@ KEEP_ZIPS = 2
 ZIP_EXCLUDE_DIRS = {
     ".git", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache",
     ".tox", ".idea", ".vscode", ".cache", "node_modules", "catboost_info",
-    "artifacts", ".venv", "venv", "env", "scratch", "download", "dist-archive",
+    ".venv", "venv", "env", "scratch", "download", "dist-archive",
 }
+#: (r287, the r285 lesson completed) the generated-output artifact homes
+#: are excluded by PATH, not by the bare "artifacts" name: the bare name
+#: also matched frontend/src/services/artifacts/ -- the frontend API
+#: client lane -- and v1.2.225/226/227 shipped without it. The only
+#: paths that must never ride an archive are the backend output home
+#: and the generated example-output home; the frontend client ships.
+ZIP_EXCLUDE_DIR_PATHS = {"data/artifacts", "examples/artifacts"}
 ZIP_EXCLUDE_SUFFIXES = {".log", ".zip"}
 ZIP_EXCLUDE_DIR_SUFFIX = ".egg-info"
 
@@ -312,9 +319,11 @@ def _build_zip(version: str) -> Path | None:
                     folder = Path(dirpath)
                     rel = folder.relative_to(ROOT)
                     parts = set(rel.parts)
+                    rel_posix = rel.as_posix()
                     if (folder == stage or parts & ZIP_EXCLUDE_DIRS or any(
                         part.endswith(ZIP_EXCLUDE_DIR_SUFFIX) for part in parts
-                    )):
+                    ) or any(rel_posix == p or rel_posix.startswith(p + "/")
+                             for p in ZIP_EXCLUDE_DIR_PATHS)):
                         dirnames[:] = []
                         continue
                     dirnames[:] = sorted(dirnames)
