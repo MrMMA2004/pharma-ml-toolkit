@@ -1,21 +1,21 @@
 # PharmaML Studio — dependency inventory (part9 §1.1)
 
-Generated 2026-11-16 22:43 by `tools/packaging_audit.py` from the ACTUAL
-source tree (studio.py + ui/ + src/ + scripts/, 3375 import statements parsed) and the live venv's dist-info. Versions are
+Generated 2026-11-18 12:06 by `tools/packaging_audit.py` from the ACTUAL
+source tree (studio.py + ui/ + src/ + scripts/, 3656 import statements parsed) and the live venv's dist-info. Versions are
 importlib.metadata's truth, not a hand-maintained table.
 
-Toolkit version audited: **1.2.216**. Python: 3.12.16.
+Toolkit version audited: **1.2.227**. Python: 3.12.16.
 
 | Package | Version | Purpose | Required or Optional | Included in Installer | Verification |
 | --- | --- | --- | --- | --- | --- |
-| numpy | 1.26.4 | array math everywhere | Required (unconditional) | YES | src/pharmaml/biology/association.py; src/pharmaml/biology/biomarkers.py; src/pharmaml/biology/enrichment.py; ... |
-| pandas | 2.2.3 | tabular datasets, drift tables | Required (unconditional) | YES | src/pharmaml/biology/association.py; src/pharmaml/biology/biomarkers.py; src/pharmaml/biology/enrichment.py; ... |
+| numpy | 1.26.4 | array math everywhere | Required (unconditional) | YES | src/pharmaml/api/routes/applicability_domain.py; src/pharmaml/api/routes/chemistry.py; src/pharmaml/api/routes/docking.py; ... |
+| pandas | 2.2.3 | tabular datasets, drift tables | Required (unconditional) | YES | src/pharmaml/api/routes/applicability_domain.py; src/pharmaml/api/routes/artifacts.py; src/pharmaml/api/routes/chemistry.py; ... |
 | scikit-learn | 1.5.2 | the ml.* estimator families | Required (unconditional) | YES | src/pharmaml/chem/features.py; src/pharmaml/cli.py; src/pharmaml/data.py; ... |
 | scipy | 1.14.1 | stats + optimization | Required (unconditional) | YES | src/pharmaml/biology/association.py; src/pharmaml/biology/biomarkers.py; src/pharmaml/biology/omics.py; ... |
 | joblib | 1.5.3 | worker utilities (utils/compute absorbs its API) | Required (unconditional) | YES | src/pharmaml/chem/features.py; src/pharmaml/ml/persistence.py |
 | openpyxl | 3.1.5 | declared but no static import found | n/a | review | no import in studio.py/ui/src/scripts |
 | tqdm | 4.67.1 | progress bars for long jobs | Required (unconditional) | YES | src/pharmaml/chem/descriptors.py; src/pharmaml/chem/rism.py |
-| rdkit | 2026.9.1 | chem.* + docking preparation (Chem/Draw/DataStructs) | Required (feature-gated import) | YES | src/pharmaml/chem/bit_highlights.py; src/pharmaml/chem/converters.py; src/pharmaml/chem/csv_standardize.py; ... |
+| rdkit | 2026.9.1 | chem.* + docking preparation (Chem/Draw/DataStructs) | Required (feature-gated import) | YES | src/pharmaml/api/routes/docking.py; src/pharmaml/api/routes/health.py; src/pharmaml/chem/bit_highlights.py; ... |
 | mordred | 1.2.0 | the mordred descriptor set (dynamic registry) | Required (feature-gated import) | YES | src/pharmaml/chem/descriptors.py |
 | meeko | 0.8.0 | SMILES -> PDBQT ligand preparation | Required (feature-gated import) | YES | src/pharmaml/docking/preparation.py; src/pharmaml/docking/receptor.py |
 | gemmi | 0.7.5 | receptor .pdb parsing/preparation | Required (feature-gated import) | YES | src/pharmaml/docking/receptor.py |

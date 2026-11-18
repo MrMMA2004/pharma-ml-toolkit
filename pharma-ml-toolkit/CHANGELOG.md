@@ -1,3 +1,86 @@
+## [1.2.227] — 2026-11-18 — round 284 (part11 §11.4: the Generative AI workspace on the real backend)
+
+- **The §11.4 sequential workflow now EXISTS** as
+  `frontend/src/features/generative/GenerativePage.tsx`: the complete
+  chain on the REAL backend — Select Generation Method (the two REAL
+  engines: the SmilesRnn prior + sample lane and the
+  GeneticOptimizer evolution, plus the live nine-objective scoring
+  catalog whose rows seed the objective editor), Define Starting
+  Molecules (an inline corpus with the route's own ≥ 5 rule or a
+  registered dataset's SMILES column resolved server-side), Configure
+  Constraints/Objectives (the prior architecture/training bounds
+  verbatim from PriorTrainRequest, the objective spec editor over the
+  catalog's own parameter schema, the GA parameters verbatim from
+  OptimizeRequest), Generate (the prior train as a managed job with
+  the REAL per-epoch loss curve — one `training.metrics` envelope when
+  training ends — then the sync sample lane stated honestly, or the
+  evolution as a managed job with the optimizer's own per-generation
+  `iteration.update` telemetry and its native CANCELLED-never-FAILED
+  cancel path), Validate (the descriptor engine's own verdict: the
+  frame's index IS the validity answer, never a client-side guess; a
+  blank sampled SMILES counts in the invalid lane per the request
+  contract's own non-empty-string validator), Calculate Properties
+  (the REAL rdkit_all frame displayed row-for-row), Filter (kept/
+  filtered lanes over the REAL computed values with stated bounds),
+  Rank (the objective score or a selected property, unscored rows
+  sinking stated), Visualize (two REAL figure artifacts — the prior
+  loss curve and the ranked score profile naming its real ranking key
+  — through the §17 four-format export stack), Export (the ranked
+  table through the rows lane with the backend's own 5000-row cap
+  mirrored client-side + the digest-verified download).
+- **The generative client** `frontend/src/services/generative/client.ts`:
+  request bodies from the GENERATED `api.d.ts` types
+  (PriorTrainRequest / SampleRequest / OptimizeRequest /
+  FigureRequest / VisualizationTableRequest), runtime validation on
+  every untrusted payload (parsePriorView / parseSampleResponse /
+  parseOptimizationView / parseTrainingMetricsPayload /
+  parseIterationUpdatePayload), the nine-kind objective vocabulary
+  mirrored from the route's own catalog.
+- **16 new Python drift guards**
+  (`tests/test_generative_workspace.py`): the REST surface vs the real
+  routes, the three request bodies' field parity, the objective
+  catalog kinds + row keys, the prior view keys vs
+  `PriorRecord.view()`, the training.metrics / iteration.update
+  payload keys vs the backend's own publish dicts, the optimize
+  result keys vs `_optimize_body`'s answer, the anti-fabrication
+  guard against the exported openapi contract, the figure lanes'
+  honest minimums, the mirrored export cap, the chemistry engine's
+  own 500 cap + the verdict note, the registry flip, the §11.4 stage
+  order, the honesty blocks, the WS telemetry subscription.
+- **TWO REAL backend defects closed by the E2E** (the E2E rode the
+  live backend, `scratch/e2e284/`): the prior persistence lane
+  pickled the trained SmilesRnn whose `_Net` class was a method local
+  — `pickle` resolves classes by module.qualname and
+  `SmilesRnn._build_model.<locals>._Net` is not one — so
+  `_net_class(torch)` now builds the class once and pins it into the
+  module namespace under a stable qualname (torch stays an optional
+  lazy import); and `Persistence.save_prior` bound the
+  `corpus_source` dict straight into the TEXT column (sqlite binds
+  scalars only — the ProgrammingError the E2E caught at exactly that
+  parameter) — now JSON-encoded like params/losses.
+- **The E2E verdict** (`E2E-GENERATIVE-PASS`, live backend, never
+  shipped): handshake → WS → the 24-SMILES corpus upload (tracked) →
+  the nine-objective catalog → the prior train (60 epochs, the REAL
+  loss curve 2.503 → 0.345 published as the training.metrics
+  envelope) → the prior registry + view-by-id → the sample lane (16
+  sampled, 9 unique, temperature 0.6 — the E2E's own honesty find: a
+  3-epoch prior samples junk the descriptor engine rightly rejects
+  en masse) → the optimize lane (3 REAL iteration.update envelopes,
+  best_score 0.7652, top 8) → the descriptor engine (16/16 valid,
+  218 columns, MolWt present) → the loss-curve figure (24,750 B) →
+  the ranked score profile figure (21,165 B) → the ranked table
+  export (digest verified) → SIGTERM → the shutdown envelope →
+  closed.
+- Gates: the eleven-leg suite (3 initial failing chunks — the
+  leakage guard catching both e2e run.sh home-path literals, the
+  notebook freshness stamp, the CHANGELOG-heading drift — all closed:
+  the run.sh scripts re-derived via `$HOME`/dirname, the 8 notebooks
+  re-executed at 1.2.227 in 209s with the twins stripped, the
+  CHANGELOG/VERSION lockstep restored), tests/api + guards 282
+  passed, tsc 0 errors, vite build RC=0, ruff clean. The workspace
+  registry: generative-ai shell → workflow (5 of 9 rows connected:
+  Introduction, Datasets, ML, DL, Generative AI).
+
 ## [1.2.226] — 2026-11-18 — round 283 (part11 §11.3: the Deep Learning workspace on the real backend)
 
 - **The §11.3 sequential workflow now EXISTS** as

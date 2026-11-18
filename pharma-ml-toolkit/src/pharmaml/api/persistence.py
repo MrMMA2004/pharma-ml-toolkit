@@ -505,7 +505,11 @@ class Persistence:
                 json.dumps(json_safe(view.get("params") or {})),
                 view.get("n_train_smiles"),
                 json.dumps(json_safe(view.get("losses") or [])),
-                view.get("corpus_source"),
+                # corpus_source is a dict ({"source": ..., "n": ...}) —
+                # the TEXT column needs the JSON encoding, never the
+                # raw dict (sqlite binds scalars only; the E2E caught
+                # the ProgrammingError at exactly this parameter)
+                json.dumps(json_safe(view.get("corpus_source") or {})),
                 view["created_at"],
                 ref["storage_rel"],
             ),

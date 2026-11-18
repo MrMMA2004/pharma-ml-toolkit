@@ -67,8 +67,8 @@ export const WORKSPACES: readonly WorkspaceEntry[] = [
     id: "generative-ai",
     label: "Generative AI",
     summary:
-      "Select Method → Starting Molecules → Constraints → Generate → Validate → Properties → Filter → Rank → Export.",
-    state: "shell",
+      "Select Method → Starting Molecules → Constraints/Objectives → Generate → Validate → Properties → Filter → Rank → Visualize → Export.",
+    state: "workflow",
   },
   {
     id: "molecular-docking",

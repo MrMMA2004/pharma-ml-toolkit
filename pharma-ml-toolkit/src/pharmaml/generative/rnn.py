@@ -108,6 +108,43 @@ def _require_torch() -> Any:
     return torch
 
 
+_NET_CACHE: Any = None
+
+
+def _net_class(torch: Any) -> Any:
+    """The GRU network class, built once and pinned into this module's
+    namespace under a stable qualname.
+
+    The class is created lazily (torch stays an optional import — the
+    module imports without it), but a class defined as a plain
+    function local is *un-picklable*: pickle resolves classes by
+    ``module.qualname``, and ``SmilesRnn._build_model.<locals>._Net``
+    is not a resolvable one — the prior persistence lane
+    (``PriorStore.register`` → ``pickle.dumps``) failed exactly there.
+    Pinning the once-built class as ``pharmaml.generative.rnn._Net``
+    gives every trained prior a stable, importable identity.
+    """
+    global _NET_CACHE
+    if _NET_CACHE is None:
+        class _Net(torch.nn.Module):
+            def __init__(self, n_vocab: int, emb: int, hidden: int, layers: int):
+                super().__init__()
+                self.emb = torch.nn.Embedding(n_vocab, emb, padding_idx=0)
+                self.gru = torch.nn.GRU(emb, hidden, layers, batch_first=True)
+                self.head = torch.nn.Linear(hidden, n_vocab)
+
+            def forward(self, x, state=None):
+                out, state = self.gru(self.emb(x), state)
+                return self.head(out), state
+
+        # a stable module-global identity: pickle resolves this class
+        # as pharmaml.generative.rnn._Net from now on
+        _Net.__qualname__ = "_Net"
+        globals()["_Net"] = _Net
+        _NET_CACHE = _Net
+    return _NET_CACHE
+
+
 class SmilesRnn:
     """Character-level GRU SMILES generator (CPU-only, torch optional).
 
@@ -204,19 +241,8 @@ class SmilesRnn:
         vocab = self._vocab
         if vocab is None:
             raise DataValidationError("no vocabulary yet -- call train_prior first")
-
-        class _Net(torch.nn.Module):
-            def __init__(self, n_vocab: int, emb: int, hidden: int, layers: int):
-                super().__init__()
-                self.emb = torch.nn.Embedding(n_vocab, emb, padding_idx=0)
-                self.gru = torch.nn.GRU(emb, hidden, layers, batch_first=True)
-                self.head = torch.nn.Linear(hidden, n_vocab)
-
-            def forward(self, x, state=None):
-                out, state = self.gru(self.emb(x), state)
-                return self.head(out), state
-
-        return _Net(len(vocab), self.embedding_dim, self.hidden_dim, self.n_layers)
+        net_cls = _net_class(torch)
+        return net_cls(len(vocab), self.embedding_dim, self.hidden_dim, self.n_layers)
 
     # -- public API ------------------------------------------------------
     def train_prior(

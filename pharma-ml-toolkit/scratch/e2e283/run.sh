@@ -3,8 +3,8 @@
 # SIGTERMs the backend AT the await-sigterm marker (the shutdown leg
 # is the driver's own wait), then reports the verdict.
 set -u
-cd /home/z/my-project/pharma-ml-toolkit
-PY=/home/z/.venv/bin/python
+TOOLKIT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$TOOLKIT"
+PY="$HOME/.venv/bin/python"
 HANDSHAKE=/tmp/handshake283.txt
 DRIVER_LOG=/tmp/e2e283-driver.log
 
@@ -23,10 +23,10 @@ done
 head -c 200 "$HANDSHAKE" | sed 's/"token": "[^"]*"/"token": "REDACTED"/'
 
 step "2. run the DL E2E driver against the live backend (background)"
-cd /home/z/my-project/pharma-ml-toolkit/frontend
+cd "$TOOLKIT/frontend"
 timeout 150 bun ../scratch/e2e283/driver.ts "$HANDSHAKE" > "$DRIVER_LOG" 2>&1 &
 DRIVER_PID=$!
-cd /home/z/my-project/pharma-ml-toolkit
+TOOLKIT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$TOOLKIT"
 
 step "3. watch the driver until it reaches the await-sigterm marker"
 for i in $(seq 1 240); do

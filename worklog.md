@@ -15300,3 +15300,90 @@ origin/main via the mixed reset (the disk tree matched v1.2.225
 exactly — only the 8 stale zip stragglers untracked). Counter
 78 -> 79. Next queue: Generative AI (§11.4), then the remaining five
 workspaces row by row.
+
+---
+
+## Round 284 — 100x-80, part11 §11.4: the Generative AI workspace on the real backend
+
+MASTER_PROMPT part11_1+part11_2 continued (both PDFs located in upload/
+and extracted to /tmp/mp11_1.txt + /tmp/mp11_2.txt this round — the
+three-session hunt closed): part11_1 is the full Tauri 2 migration
+master prompt (40 phases + the acceptance criteria), part11_2 the
+Linux-host addendum (the GitHub Actions windows-release lane — already
+shipped at r281). The declared next queue rode exactly.
+
+THE §11.4 ROW: features/generative/GenerativePage.tsx — the complete
+sequential workflow on the REAL backend — Select Generation Method
+(the two REAL engines: SmilesRnn prior+sample, GeneticOptimizer
+evolution, the live nine-objective scoring catalog whose rows seed the
+editor) -> Define Starting Molecules (inline corpus with the route's
+own >= 5 rule or a dataset SMILES column resolved server-side) ->
+Configure Constraints/Objectives (the PriorTrainRequest/OptimizeRequest
+bounds verbatim, the objective spec editor over the catalog's own
+param schema) -> Generate (the prior train as a managed job whose
+training.metrics envelope carries the REAL loss curve; the sync sample
+lane stated honestly — the route declares no job mode; or the
+evolution with the optimizer's own per-generation iteration.update
+telemetry + the native CANCELLED-never-FAILED cancel) -> Validate (the
+descriptor engine's own verdict: the frame's index IS the answer,
+never a client-side guess; blank sampled SMILES counted in the invalid
+lane per the request contract's non-empty validator) -> Calculate
+Properties (the REAL rdkit_all frame row-for-row) -> Filter (kept/
+filtered lanes over the REAL computed values) -> Rank (the objective
+score or a selected property, unscored rows sinking stated) ->
+Visualize (two REAL figure artifacts — the prior loss curve + the
+ranked score profile naming its real key — through the §17 export
+stack) -> Export (the rows lane with the mirrored 5000-row cap + the
+digest-verified download)) + services/generative/client.ts (every
+request from the GENERATED api.d.ts types, runtime validation, the
+nine-kind vocabulary mirrored from the route's own catalog) + 16
+drift guards (tests/test_generative_workspace.py) + the workspace
+registry flip (generative-ai shell -> workflow, 5 of 9 rows
+connected).
+
+TWO REAL BACKEND DEFECTS CLOSED BY THE E2E (scratch/e2e284/, live
+backend, never shipped): the prior persistence lane pickled the
+trained SmilesRnn whose _Net class was a method local (pickle
+resolves classes by module.qualname — not a resolvable one) —
+_net_class(torch) now builds it once and pins it into the module
+namespace under a stable qualname (torch stays an optional lazy
+import); and Persistence.save_prior bound the corpus_source dict
+straight into the TEXT column (sqlite binds scalars only) — now
+JSON-encoded like params/losses.
+
+E2E-GENERATIVE-PASS: handshake -> WS -> the 24-SMILES corpus upload
+(tracked) -> the nine-objective catalog -> the prior train (60 epochs
+— the E2E's own honesty find: a 3-epoch prior samples junk the
+descriptor engine rightly rejects en masse; the REAL loss curve
+2.503 -> 0.345 as the training.metrics envelope) -> the prior
+registry + view-by-id -> the sample lane (16 sampled, 9 unique,
+temperature 0.6) -> the optimize lane (3 REAL iteration.update
+envelopes, best_score 0.7652, top 8) -> the descriptor engine (16/16
+valid, 218 columns, MolWt) -> the loss-curve figure (24,750 B) -> the
+ranked score profile figure (21,165 B) -> the ranked table export
+(digest verified) -> SIGTERM -> the shutdown envelope -> closed.
+
+GATES: the eleven-leg suite (3 initial failing chunks — the leakage
+guard catching both e2e run.sh home-path literals [r283's own leak +
+this round's], the notebook freshness stamp at 1.2.224, the
+CHANGELOG-heading drift — all closed: the run.sh scripts re-derived
+via $HOME/dirname, the 8 notebooks re-executed at 1.2.227 in 209s with
+the twins stripped, the CHANGELOG/VERSION lockstep restored; the
+re-runs: chunk 1 3131 passed, chunk 2 852 passed, chunk 3 1316
+passed), tests/api + guards 282 passed RC=0, the generative guards
+16/16, tsc 0 errors, vite build RC=0, ruff clean (one exec-bit fix on
+rnn.py). Census re-trued live through the /api/toolkit/tree?fresh=1
+route: 1,527 files / 574,471 lines; the collected tests re-counted
+honestly (tests/ incl api 7,574 + tests/ui 971 = 8,545 — the old
+8,473 pin's walk was opaque, this one is stated); the web pins synced
+(SHIPPED_TEST_COUNT/FILE_COUNT/SOURCE_LINES) and browser-verified
+live (the badge v1.2.227, the download panel streaming the exact
+11,712,528-B artifact, the three census pins on the Overview tab,
+zero console errors). v1.2.227 shipped across the six homes
+(984 entries / 884 files / sha256 f3de1da802f2d11f75bf611bf5ce51
+cd0c8c1131917aeee4722c4f806552b7a0, upload/ via the copyfile path,
+all EIGHT §14 audit checks passed in scratch/audit284/; retention:
+download/upload/toolkit-download keep 225+227, toolkit dist-archive
+keeps 223/224/225/227, the root dist-archive + offsite keep
+226+227). Counter 79 -> 80. Next queue: Molecular Docking (§11.5),
+then PK/PD, MD Analysis, Visualization — the remaining four rows.
