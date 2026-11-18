@@ -1,4 +1,4 @@
-## [1.2.229-r289] — 2026-11-19 — part11 Phase Sixteen: the §14.1 startup gate — the app boots ITSELF (the backend–GUI integration audit's central fix; run 85)
+## [1.2.229] — 2026-11-19 — round 289 (part11 Phase Sixteen: the §14.1 startup gate — the app boots ITSELF, the backend–GUI integration audit's central fix; run 87)
 
 - **The audit's one FAIL row is closed.** The Phase Sixteen
   backend–GUI integration audit (`docs/CAPABILITY_INTEGRATION_MATRIX.md`,
