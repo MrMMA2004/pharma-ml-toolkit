@@ -23,8 +23,8 @@ from PySide6.QtWidgets import (
 
 from pharmaml.studio.comparison import (
     RunView,
-    comparison_summary,
     compare_runs,
+    comparison_summary,
 )
 
 

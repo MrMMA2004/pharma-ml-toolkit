@@ -63,7 +63,7 @@ def studio_qss(theme: str) -> str:
     """The full application stylesheet for a studio theme name."""
     t = tokens(theme)
     L = LAYOUT
-    r_sm, r_md, r_lg, r_xl = _theme_radius(theme)
+    r_sm, r_md, r_lg, _r_xl = _theme_radius(theme)
     f_ui = TYPEFACES.ui_css()
     f_mono = TYPEFACES.mono_css()
     on_primary = t.on_primary  # white on teal (light), ink on bright teal (dark)

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
-from pathlib import Path
 
 import pytest
 
@@ -52,9 +51,8 @@ class TestManifestContract:
         assert m["pharmaml_version"]
 
     def test_versions_match_the_running_interpreter(self, tmp_path):
-        from pharmaml.studio import PINNED_STACK, write_manifest
-
         import pharmaml
+        from pharmaml.studio import PINNED_STACK, write_manifest
 
         write_manifest(tmp_path / "m.json", runs=[], datasets=[])
         m = json.loads((tmp_path / "m.json").read_text(encoding="utf-8"))
@@ -150,7 +148,7 @@ class TestDatasetSlice:
             csv, index=False
         )
         note("dataset", csv, columns=["x", "y"])
-        first = entries("dataset")[0]
+        entries("dataset")  # the manifest reader warms the dataset ledger
 
         write_manifest(
             tmp_path / "m1.json", runs=[], datasets=entries("dataset"),

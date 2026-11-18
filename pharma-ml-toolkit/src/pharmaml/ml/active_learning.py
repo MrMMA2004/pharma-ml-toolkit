@@ -58,8 +58,8 @@ True
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Literal
+from dataclasses import dataclass
+from typing import Any, ClassVar
 
 import numpy as np
 import pandas as pd
@@ -252,7 +252,7 @@ class ActiveLearningLoop:
         ]
         return scores, rationale
 
-    _STRATEGY_IMPLS = {
+    _STRATEGY_IMPLS: ClassVar[dict[str, Any]] = {
         "uncertainty": _scores_uncertainty,
         "margin": _scores_margin,
         "entropy": _scores_entropy,
@@ -292,7 +292,6 @@ class ActiveLearningLoop:
         order = np.argsort(-np.asarray(scores, dtype=float))
 
         proba = self._proba()
-        classes = list(self._model.classes_)
         picked = order[: min(n_query, len(order))]
 
         out = pd.DataFrame(index=range(len(picked)))

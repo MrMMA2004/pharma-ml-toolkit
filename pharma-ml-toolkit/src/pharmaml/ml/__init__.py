@@ -3,6 +3,11 @@ hyperparameter tuning, applicability-domain analysis, plus the
 best-of-ml-python absorption surfaces (catalogue, privacy, recommenders,
 ANN search, adversarial audits, time-series analysis)."""
 
+from pharmaml.ml.active_learning import (
+    QUERY_STRATEGIES,
+    ActiveLearningLoop,
+    QueryRecord,
+)
 from pharmaml.ml.adversarial import (
     RadiusResult,
     RobustnessAudit,
@@ -18,11 +23,6 @@ from pharmaml.ml.annsearch import (
     Neighbor,
     ann_benchmark,
     brute_force_knn,
-)
-from pharmaml.ml.active_learning import (
-    QUERY_STRATEGIES,
-    ActiveLearningLoop,
-    QueryRecord,
 )
 from pharmaml.ml.applicability import (
     ApplicabilityDomainResult,
@@ -446,6 +446,7 @@ __all__ = [
     "MODEL_ALIASES",
     "MODEL_REGISTRY",
     "NO_SCALE_MODELS",
+    "QUERY_STRATEGIES",
     "REGRESSION_CV_METRICS",
     "SCRATCH_ACTIVATIONS",
     "SCRATCH_TASKS",
@@ -458,6 +459,7 @@ __all__ = [
     "SYNTHETIC_KINDS",
     "ANNReport",
     "ANOVARow",
+    "ActiveLearningLoop",
     "Adagrad",
     "Adam",
     "AdamW",
@@ -553,6 +555,7 @@ __all__ = [
     "PositionalReport",
     "PrimerReport",
     "QuantileIntervals",
+    "QueryRecord",
     "RDPReport",
     "RMSprop",
     "RadiusResult",
@@ -566,6 +569,9 @@ __all__ = [
     "RobustnessAudit",
     "ScratchHistory",
     "SearchRecommendation",
+    "SemiSupervisedEvaluation",
+    "SemiSupervisedMethod",
+    "SemiSupervisedResult",
     "SequenceHistory",
     "Sequential",
     "ShapInteractions",
@@ -598,7 +604,6 @@ __all__ = [
     "advice_families",
     "ann_benchmark",
     "anova_ii",
-    "ActiveLearningLoop",
     "applicability_domain",
     "audit_split_overlap",
     "autocorrelation",
@@ -659,6 +664,7 @@ __all__ = [
     "estimate_evaluations",
     "evaluate_model",
     "evaluate_recommender",
+    "evaluate_semi_supervised",
     "expected_improvement",
     "few_shot_report",
     "fit_dose_response",
@@ -741,21 +747,17 @@ __all__ = [
     "split_features_target",
     "split_indices",
     "stack_oof_regressors",
-    "SemiSupervisedEvaluation",
-    "SemiSupervisedMethod",
-    "SemiSupervisedResult",
-    "evaluate_semi_supervised",
-    "train_semi_supervised",
-    "validate_unlabeled",
     "synthetic_ratings",
     "synthetic_series",
     "tanh",
     "tensor_primer_report",
     "train_model",
+    "train_semi_supervised",
     "tune_model_multi",
     "two_sample_ttest",
     "validate_bundle_input",
     "validate_space",
+    "validate_unlabeled",
     "validate_values",
     "window_features",
 ]

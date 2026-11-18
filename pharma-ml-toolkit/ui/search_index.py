@@ -26,17 +26,15 @@ without a QApplication; only :class:`SearchPalette` is a widget.
 
 from __future__ import annotations
 
+import importlib.util
 from dataclasses import dataclass, field
 from typing import Any
-
-import importlib.util
 
 from pharmaml.studio.capability_registry import (
     CAPABILITIES,
     CARD_ORDER,
     SECTION_KEYS,
     capabilities_for_card,
-    find,
 )
 
 #: The ``ui`` package is Qt-side, but THIS module imports nothing from

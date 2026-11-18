@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import socket
 import sys
 from typing import Any
@@ -34,10 +35,43 @@ from typing import Any
 import uvicorn
 
 from . import create_app
+from .events import EventType
 from .persistence import default_data_dir
 from .security import session_security
 
+_logger = logging.getLogger(__name__)
+
 HANDSHAKE_PREFIX = "PHARMAML-READY"
+
+
+class StudioServer(uvicorn.Server):
+    """Uvicorn lifecycle with part11 §13's graceful-shutdown push honoured.
+
+    Stock uvicorn closes every live connection BEFORE the lifespan
+    shutdown handlers run, so the app-level ``job_manager.shutdown()``
+    publish of the ``shutdown`` envelope never reaches an open socket
+    — the round-280 services E2E caught this on a real SIGTERM (the
+    socket closed without the envelope; the client then reconnected
+    into a dying backend). The override publishes the envelope the
+    moment the exit begins and gives the WebSocket sender tasks one
+    loop beat (~0.25 s) to flush before uvicorn's connection shutdown
+    runs. The lifespan drain (no new jobs, cancel, persist) follows in
+    its documented place afterwards.
+    """
+
+    async def shutdown(self, sockets=None) -> None:
+        app = getattr(self.config, "app", None)
+        bus = getattr(getattr(app, "state", None), "bus", None)
+        if bus is not None:
+            try:
+                bus.publish(EventType.SHUTDOWN, {})
+            except Exception:
+                _logger.warning("shutdown envelope publish failed",
+                                exc_info=True)
+            # one loop beat: the per-connection sender tasks drain
+            # their bounded queues onto the sockets before close
+            await asyncio.sleep(0.25)
+        await super().shutdown(sockets=sockets)
 
 
 def handshake_line(port: int, token: str, pid: int,
@@ -99,7 +133,7 @@ async def serve(
         access_log=False,
         loop="asyncio",
     )
-    server = uvicorn.Server(config)
+    server = StudioServer(config)
     await server.serve()
     sock.close()
     return real_port

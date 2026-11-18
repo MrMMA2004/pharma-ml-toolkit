@@ -205,12 +205,12 @@ __all__ = [
     "RDKIT_FP_BITS",
     "RISM_DESCRIPTOR_COUNT",
     "TOPOLOGICAL_BITS",
+    "FeatureConfig",
     "FeatureReport",
     "FeatureSelection",
     "VarianceFilterResult",
-    "FeatureConfig",
-    "descriptor_catalog",
     "compute_feature_frame",
+    "descriptor_catalog",
     "family_of_column",
     "filter_low_variance",
     "rank_features",
@@ -585,6 +585,9 @@ def _morgan_computer(
         count_fn = getattr(
             rdMolDescriptors, "GetHashedMorganFingerprint", None
         )
+        assert count_fn is not None, (
+            "rdkit must provide GetHashedMorganFingerprint for count mode"
+        )
 
         def morgan_count_vector(mol: Any) -> np.ndarray:
             fingerprint = count_fn(mol, radius=radius, nBits=bits)
@@ -623,6 +626,9 @@ def _ecfp3_computer(
     if as_counts:
         count_fn = getattr(
             rdMolDescriptors, "GetHashedMorganFingerprint", None
+        )
+        assert count_fn is not None, (
+            "rdkit must provide GetHashedMorganFingerprint for count mode"
         )
 
         def ecfp3_count_vector(mol: Any) -> np.ndarray:
@@ -938,8 +944,7 @@ def descriptor_catalog() -> list[str]:
     time, order preserved).  Requires RDKit (the same guard as the
     family itself).
     """
-    Chem = require_rdkit()
-    from rdkit.Chem import rdMolDescriptors  # noqa: F401 - via Chem
+    require_rdkit()
 
     names, _computer = _descriptor_computer()
     return list(names)
@@ -1053,7 +1058,7 @@ class FeatureConfig:
         }
 
     @classmethod
-    def from_dict(cls, record: dict[str, Any]) -> "FeatureConfig":
+    def from_dict(cls, record: dict[str, Any]) -> FeatureConfig:
         """Rebuild from :meth:`as_dict` output (unknown keys ignored)."""
         known = {f: record.get(f) for f in (
             "families", "descriptors", "morgan_radius", "morgan_bits",
@@ -1063,7 +1068,9 @@ class FeatureConfig:
             known["families"] = tuple(known["families"])
         if "descriptors" in known and known["descriptors"] is not None:
             known["descriptors"] = tuple(known["descriptors"])
-        return cls(**known)
+        # as_dict() output is __post_init__-validated; the narrow here
+        # documents that the dict values are the serialised field types
+        return cls(**known)  # type: ignore[arg-type]
 
 
 def _descriptor_names_cached() -> tuple[str, ...]:
@@ -1611,7 +1618,7 @@ def _family_plan(
     requested: list[str],
     n_conformers: int = 3,
     *,
-    config: "FeatureConfig | None" = None,
+    config: FeatureConfig | None = None,
 ) -> tuple[dict[str, Callable[[Any], np.ndarray]], list[str], dict[str, int]]:
     """Build per-family computers, column names and widths for the request.
 
@@ -1761,7 +1768,7 @@ def _family_plan(
     return computers, columns, family_widths
 
 
-def _cfg_radius(config: "FeatureConfig | None") -> int:
+def _cfg_radius(config: FeatureConfig | None) -> int:
     """The effective Morgan radius (config override or the MORGAN default).
 
     NOTE: only the plain Morgan families use this default; ``ecfp3``

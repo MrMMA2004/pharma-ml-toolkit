@@ -761,7 +761,7 @@ class DeepLearningWorkbenchPage(QWidget):
                 losses.append(value)
                 return value
 
-            net, ramp_report, _recorded = iterative_prune_and_retrain(
+            _net, ramp_report, _recorded = iterative_prune_and_retrain(
                 fresh, retrain, target_sparsity=sparsity, steps=steps, scope=scope
             )
             progress(1.0, "done")
@@ -869,7 +869,6 @@ class DeepLearningWorkbenchPage(QWidget):
             )
             self._plot.clear()
             methods = list(reports)
-            positions = np.arange(len(methods), dtype=float)
             self._plot.bars(
                 np.asarray([reports[m].relative_error for m in methods]),
                 labels=[f"{m}\n{reports[m].bits_per_weight}bpw" for m in methods],

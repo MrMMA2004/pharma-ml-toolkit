@@ -42,7 +42,9 @@ class SettingsPage(QWidget):
         lay.addWidget(perf_title)
         self._preset_combo = QComboBox()
         from pharmaml.utils.resources import (
-            PRESETS, preset_for_low_memory, snapshot, stored_preset,
+            PRESETS,
+            preset_for_low_memory,
+            snapshot,
         )
 
         for preset in PRESETS:
@@ -181,7 +183,7 @@ class SettingsPage(QWidget):
             from PySide6.QtCore import QSettings
 
             QSettings().setValue("execution/preset", preset.key)
-        except Exception:  # noqa: BLE001 - settings must never block launch
+        except Exception:  # noqa: BLE001,S110 - settings must never block launch
             pass
 
     def _apply(self) -> None:

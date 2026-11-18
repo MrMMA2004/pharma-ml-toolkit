@@ -21,7 +21,7 @@ Honesty rules (they are the whole point of §17E):
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -49,7 +49,7 @@ def _gpu_line() -> str:
         if torch.cuda.is_available():
             count = torch.cuda.device_count()
             return f"GPU: {count} CUDA device(s) (torch)"
-    except Exception:  # noqa: BLE001 - an unimportable backend is a fact
+    except Exception:  # noqa: BLE001,S110 - an unimportable backend is a fact
         pass
     return "GPU: none detected (CPU-only build) — shown as fact, " \
            "not as a failure"
@@ -128,9 +128,8 @@ class ResourceMonitorWidget(QWidget):
 
     def _on_preset(self, index: int) -> None:
         key = self._preset.itemData(index)
-        if key and key != stored_preset():
-            if store_preset(key):
-                self.refresh()
+        if key and key != stored_preset() and store_preset(key):
+            self.refresh()
 
     # -- active job ---------------------------------------------------------
 
@@ -142,11 +141,11 @@ class ResourceMonitorWidget(QWidget):
 
     # -- timer discipline ---------------------------------------------------
 
-    def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
+    def showEvent(self, event) -> None:
         self._timer.start()
         self.refresh()
         super().showEvent(event)
 
-    def hideEvent(self, event) -> None:  # noqa: N802 - Qt naming
+    def hideEvent(self, event) -> None:
         self._timer.stop()
         super().hideEvent(event)

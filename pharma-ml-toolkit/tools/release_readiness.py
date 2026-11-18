@@ -88,7 +88,7 @@ def probe_dependencies() -> list[tuple[str, str, str]]:
         from ui.headless import ensure_headless
 
         ensure_headless()
-    except Exception:  # noqa: BLE001 - probing must not crash the report
+    except Exception:  # noqa: BLE001,S110 - probing must not crash the report
         pass
     rows: list[tuple[str, str, str]] = []
     for pip_name, (_label, import_name, consumer) in OPTIONAL_MATRIX.items():
@@ -144,6 +144,7 @@ def count_suites() -> dict[str, int]:
                 [sys.executable, "-m", "pytest", "-q", "--collect-only",
                  *paths[i:i + half], "-p", "no:cacheprovider", "-o", "addopts="],
                 cwd=TK, capture_output=True, text=True, timeout=1800,
+                check=False,
             )
             for line in proc.stdout.splitlines():
                 # collect-only -q lists "<file>::<node>::<node>" per test
@@ -169,13 +170,13 @@ def probe_versions() -> dict[str, str]:
     out = {}
     out["VERSION"] = (TK / "VERSION").read_text().strip()
     pyproject = (TK / "pyproject.toml").read_text()
-    m = re.search(r'^version = "(.*?)"', pyproject, re.M)
+    m = re.search(r'^version = "(.*?)"', pyproject, re.MULTILINE)
     out["pyproject.toml"] = m.group(1) if m else "MISSING"
     init = (TK / "src/pharmaml/__init__.py").read_text()
-    m = re.search(r'^__version__ = "(.*?)"', init, re.M)
+    m = re.search(r'^__version__ = "(.*?)"', init, re.MULTILINE)
     out["src/pharmaml/__init__.py"] = m.group(1) if m else "MISSING"
     changelog = (TK / "CHANGELOG.md").read_text()
-    m = re.search(r"^## \[(.*?)\]", changelog, re.M)
+    m = re.search(r"^## \[(.*?)\]", changelog, re.MULTILINE)
     out["CHANGELOG.md leads with"] = m.group(1) if m else "MISSING"
     versions = {v for k, v in out.items() if k != "CHANGELOG.md leads with"}
     out["agreement"] = "yes" if len(versions) == 1 else "NO"
@@ -189,7 +190,6 @@ def find_audit_report() -> dict[str, str]:
     report = Path("/tmp/audit-release/report.json")
     if not report.exists():
         # look beside the freshest zip in the outer workspace upload/
-        upload = TK.parent / "upload"
         return {"status": "not gathered",
                 "how": "tools/audit_release.py <zip> after tools/build_zip.py"}
     data = json.loads(report.read_text())
@@ -217,7 +217,7 @@ def render(r: Readiness) -> str:
     L.append("| --- | --- | --- |")
     for name, status, consumer in r.dependency_rows:
         L.append(f"| {name} | {status} | {consumer} |")
-    installed, broken, _ = r.dependency_status()
+    installed, _broken, _ = r.dependency_status()
     L.append("")
     L.append(f"{installed} installed / {len(r.dependency_rows)} probed."
              " Optional rows that are not installed are honestly reported")

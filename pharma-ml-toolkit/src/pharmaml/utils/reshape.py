@@ -30,25 +30,24 @@ independently (``tests/test_reshape.py``).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Literal
-
 import keyword
 import re
+from dataclasses import dataclass, field
+from typing import Literal
 
 import pandas as pd
 
 __all__ = [
+    "SUPPORTED_AGGREGATIONS",
     "ReshapeReport",
-    "combine_frames",
-    "merge_frames",
-    "groupby_summary",
-    "pivot_table",
     "clean_strings",
+    "combine_frames",
+    "filter_frame",
+    "groupby_summary",
+    "merge_frames",
+    "pivot_table",
     "resample_timeseries",
     "rolling_window",
-    "filter_frame",
-    "SUPPORTED_AGGREGATIONS",
 ]
 
 

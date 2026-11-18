@@ -94,7 +94,7 @@ def test_attach_reports_failure_to_the_status_label(
     page = QWidget()
     lay = QVBoxLayout(page)
     status = QLabel("idle")
-    panel = PlotPanel()
+    PlotPanel()  # the export host is exercised for side effects
 
     class _Broken:
         def export_image(self, *_args, **_kwargs):

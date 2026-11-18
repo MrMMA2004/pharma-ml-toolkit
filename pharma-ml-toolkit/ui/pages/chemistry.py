@@ -294,7 +294,6 @@ class ChemistryWorkbenchPage(QWidget):
             def report(done, total=None, _note=""):
                 if total:
                     progress(min(done / total, 1.0), f"{done:,} rows")
-                return None
 
             progress(0.05, "reading")
             return read_table_with_progress(Path(path), report)
@@ -404,7 +403,7 @@ class ChemistryWorkbenchPage(QWidget):
             combo.setItemText(0, f"all properties ({len(names)})")
             for name in names:
                 combo.addItem(name, [name])
-        except Exception:  # noqa: BLE001 - RDKit absent: scope stays 'all'
+        except Exception:  # noqa: BLE001,S110 - RDKit absent: scope stays 'all'
             pass
         combo.blockSignals(False)
         combo.setCurrentIndex(0)
@@ -569,7 +568,7 @@ class ChemistryWorkbenchPage(QWidget):
                 import rdkit
 
                 record["rdkit_version"] = rdkit.__version__
-            except Exception:  # noqa: BLE001 - version is best-effort
+            except Exception:  # noqa: BLE001,S110 - version is best-effort
                 pass
             record["n_descriptors_selected"] = (
                 len(descriptor_subset) if descriptor_subset is not None else "all"

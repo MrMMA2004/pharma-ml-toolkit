@@ -20,8 +20,6 @@ never touches the developer's real ``~/.pharmaml``.
 
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 
 import pytest
@@ -196,7 +194,11 @@ def test_the_workspace_records_and_lists(monkeypatch, tmp_path) -> None:
     import pandas as pd
 
     from pharmaml.studio import (
-        current_project, entries, note, set_current_project, summary_counts,
+        current_project,
+        entries,
+        note,
+        set_current_project,
+        summary_counts,
     )
 
     csv = tmp_path / "qsar.csv"
@@ -287,7 +289,6 @@ def test_the_dashboard_shows_workspace_recents(studio_app, qtbot, monkeypatch,
 
     page = DashboardPage()
     qtbot.addWidget(page)
-    labels = [page.findChild(type(page), "")]  # the tree is flat enough:
     text = page._find_text_of_all_labels() if hasattr(page, "_find_text_of_all_labels") else _all_label_text(page)
     assert "Shared workspace" in text
     assert "recents.csv" in text

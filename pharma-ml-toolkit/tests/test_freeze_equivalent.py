@@ -25,8 +25,8 @@ TOOLKIT = Path(__file__).resolve().parents[1]
 if str(TOOLKIT) not in sys.path:
     sys.path.insert(0, str(TOOLKIT))
 
-from tools import freeze_equivalent as fe  # noqa: E402
-from tools import freeze_smoke_driver as fsd  # noqa: E402
+from tools import freeze_equivalent as fe
+from tools import freeze_smoke_driver as fsd
 
 
 @pytest.fixture()
@@ -138,7 +138,6 @@ class TestFreezeEquivalentBuilder:
     def test_capture_carries_the_windows_spec_policy(self) -> None:
         policy = fe.capture_spec()
         hidden = set(policy["hiddenimports"])
-        datas = {str(src): dst for src, dst in policy["datas"]}
         # the freeze traps the spec exists to catch (part9 §3.1)
         assert "mordred.Descriptor" in hidden or any(
             h.startswith("mordred.") for h in hidden

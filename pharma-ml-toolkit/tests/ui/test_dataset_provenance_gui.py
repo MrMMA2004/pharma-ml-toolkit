@@ -48,10 +48,9 @@ class TestGUIWiring:
     ):
         """The workbench's ml-evaluation record names the dataset's
         version + sha + column signature when the source is registered."""
+        import ui.pages.ml_workbench as mw
         from pharmaml.studio import note
         from pharmaml.studio.runs import latest_runs
-
-        import ui.pages.ml_workbench as mw
 
         csv = tmp_path / "ds.csv"
         pd.DataFrame({"x": [1, 2, 3], "y": [0, 1, 0]}).to_csv(csv, index=False)
@@ -107,7 +106,7 @@ class TestGUIWiring:
         })
         record_run("docking", "campaign scan", {"poses": 12})  # no provenance
 
-        app = QApplication.instance() or QApplication([])
+        QApplication.instance() or QApplication([])  # the app must exist
         runner = JobRunner()
         dialog = JobCenterDialog(runner)
         dialog._refresh_history()

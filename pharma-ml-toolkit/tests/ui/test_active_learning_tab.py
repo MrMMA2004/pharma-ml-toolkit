@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 
 def _classification_frame(n: int = 60, seed: int = 0) -> pd.DataFrame:
@@ -49,9 +48,8 @@ class TestALTabMounted:
         assert not page._al_import_btn.isEnabled()
 
     def test_strategies_mirror_backend(self, qtbot, studio_app) -> None:
-        from pharmaml.ml.active_learning import QUERY_STRATEGIES
-
         import ui.pages.ml_workbench as mw
+        from pharmaml.ml.active_learning import QUERY_STRATEGIES
 
         page = mw.MLWorkbenchPage()
         qtbot.addWidget(page)
@@ -111,7 +109,6 @@ class TestALCampaign:
         page._training_context = lambda: (frame, "activity", "regression")
 
         called = {"n": 0}
-        original = mw.MLWorkbenchPage._submit
 
         def refuse_submit(*_args, **_kwargs):
             called["n"] += 1

@@ -185,7 +185,7 @@ class DashboardPage(QWidget):
                 toggle_favorite,
             )
 
-            counts = summary_counts()
+            summary_counts()  # the census is taken for its side-effect ledger
             ws_header = QLabel("Shared workspace (this session's inputs & outputs)")
             ws_header.setObjectName("studioSectionTitle")
             lay.addWidget(ws_header)
@@ -237,7 +237,7 @@ class DashboardPage(QWidget):
                 )
                 note.setWordWrap(True)
                 lay.addWidget(note)
-        except Exception:  # noqa: BLE001 - the census stays honest even without the registry
+        except Exception:  # noqa: BLE001,S110 - the census stays honest even without the registry
             pass
 
         migration = QLabel(

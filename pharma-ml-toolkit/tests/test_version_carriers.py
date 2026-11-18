@@ -34,10 +34,10 @@ ships the toolkit tree alone) — the same skip contract as
 from __future__ import annotations
 
 import re
-import tomllib
 from pathlib import Path
 
 import pytest
+import tomllib
 
 TOOLKIT_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = TOOLKIT_ROOT.parent

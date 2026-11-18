@@ -46,7 +46,7 @@ def seeded(runs_root) -> Path:
     return runs_root
 
 
-def _dialog(runner) -> "object":
+def _dialog(runner) -> object:
     from ui.widgets.job_center import JobCenterDialog
 
     return JobCenterDialog(runner)
@@ -54,7 +54,6 @@ def _dialog(runner) -> "object":
 
 def test_job_center_offers_compare_with_multiselect(
         qtbot, studio_app, seeded, runs_root) -> None:
-    from PySide6.QtCore import Qt
     from ui.workers.job_worker import JobRunner
 
     dialog = _dialog(JobRunner())
@@ -84,7 +83,6 @@ def test_job_center_offers_compare_with_multiselect(
 def test_compare_dialog_renders_groups_and_refusals(
         qtbot, studio_app, seeded) -> None:
     from pharmaml.studio.comparison import _run_view, latest_runs
-
     from ui.widgets.experiment_compare import ExperimentCompareDialog
 
     records = []
@@ -110,7 +108,6 @@ def test_compare_dialog_renders_groups_and_refusals(
 def test_compare_dialog_two_compatible_runs_rank_cleanly(
         qtbot, studio_app, seeded) -> None:
     from pharmaml.studio.comparison import _run_view, latest_runs
-
     from ui.widgets.experiment_compare import ExperimentCompareDialog
 
     records = latest_runs("ml-evaluation", limit=5)

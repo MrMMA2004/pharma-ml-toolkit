@@ -15,11 +15,11 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication
 
-from ui.pages.data_explorer import DataExplorerPage  # noqa: E402
-from ui.pages.table_tools import TableToolsPage  # noqa: E402
-from ui.workers.job_worker import JobRunner  # noqa: E402
+from ui.pages.data_explorer import DataExplorerPage
+from ui.pages.table_tools import TableToolsPage
+from ui.workers.job_worker import JobRunner
 
 
 @pytest.fixture(scope="module")

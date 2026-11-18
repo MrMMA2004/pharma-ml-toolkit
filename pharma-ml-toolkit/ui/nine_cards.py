@@ -288,7 +288,7 @@ NINE_CARDS: tuple[NineCard, ...] = (
 # capability registry under src/pharmaml/studio/; this module owns the
 # card PRESENTATION (titles, badges, entries).  The two sources must
 # never diverge — this check fails the import loudly if they do.
-from pharmaml.studio.capability_registry import CARD_ORDER as _REGISTRY_CARD_ORDER  # noqa: E402
+from pharmaml.studio.capability_registry import CARD_ORDER as _REGISTRY_CARD_ORDER
 
 assert tuple(c.card_id for c in NINE_CARDS) == _REGISTRY_CARD_ORDER, (
     "ui/nine_cards.py and pharmaml.studio.capability_registry disagree on the "

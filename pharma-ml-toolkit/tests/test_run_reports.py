@@ -24,11 +24,11 @@ import pytest
 
 from pharmaml.studio import runs as runs_mod
 from pharmaml.studio.reports import (
+    _SECTION_ORDER,
     UNITS,
     build_run_report,
     report_sections,
     save_run_report,
-    _SECTION_ORDER,  # noqa: PLC2701 - the pin needs the order
 )
 
 SECTIONS = list(_SECTION_ORDER)

@@ -452,6 +452,8 @@ def optimal_threshold(
     fp = fp.astype(float)
     fn = fn.astype(float)
     tn = tn.astype(float)
+    # the three criteria branches produce array-or-scalar numpy maths
+    score: Any
     if criterion == "youden":
         score = tp / total_pos + tn / total_neg - 1.0
     elif criterion == "f1":

@@ -25,24 +25,22 @@ from PySide6.QtWidgets import (
     QSplitter,
     QStackedWidget,
     QStatusBar,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from PySide6.QtWidgets import QTabWidget
-
 from .app_settings import AppSettings
-from .card_workspace import CardWorkspace
 from .home import NineCardHome
 from .introduction import IntroductionPage
 from .nine_cards import NINE_CARDS
-from .widgets.page_mirror import PageMirror
-from .widgets.workspace_nav import WORKSPACE_ORDER, WorkspaceNav
 from .theme_manager import ChartPalette, ThemeManager
 from .widgets.navigation import Navigation
 from .widgets.notification_widget import Notifications
+from .widgets.page_mirror import PageMirror
 from .widgets.responsive import configure_splitter
 from .widgets.top_bar import TopBar
+from .widgets.workspace_nav import WORKSPACE_ORDER, WorkspaceNav
 from .workers.job_worker import JobRunner
 
 SECTIONS: list[tuple[str, str]] = [
@@ -111,9 +109,9 @@ class MainWindow(QMainWindow):
         from .pages.model_analysis import ModelAnalysisPage
         from .pages.molecular_dynamics import MolecularDynamicsPage
         from .pages.pkpd import PKPDWorkbenchPage
-        from .pages.table_tools import TableToolsPage
         from .pages.responseai import ResponseAIWorkbenchPage
         from .pages.settings_page import SettingsPage
+        from .pages.table_tools import TableToolsPage
         from .pages.unsupervised import UnsupervisedWorkbenchPage
         from .pages.utilities import UtilitiesWorkbenchPage
 

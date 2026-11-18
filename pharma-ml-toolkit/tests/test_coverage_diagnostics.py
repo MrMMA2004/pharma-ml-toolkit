@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 """Held-out coverage by group, Wilson scores and conformal integration."""
 
 import math
@@ -109,7 +111,7 @@ def test_regression_results_expose_row_coverage_without_dataframe_break():
 
 def test_classification_sets_integrate_with_report():
     class Model:
-        classes_ = ["a", "b"]
+        classes_: ClassVar[list[str]] = ["a", "b"]
 
         def predict_proba(self, X):
             return np.asarray(X)

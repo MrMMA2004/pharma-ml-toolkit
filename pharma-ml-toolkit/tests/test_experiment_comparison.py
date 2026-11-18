@@ -29,10 +29,8 @@ import pytest
 
 from pharmaml.studio import runs as runs_mod
 from pharmaml.studio.comparison import (
-    RunView,
     collect_runs,
     compare_runs,
-    compatibility_key,
     comparison_summary,
 )
 
@@ -135,10 +133,10 @@ def test_comparable_group_ranks_and_deltas(runs_root) -> None:
     assert len(result.groups) == 1
     group = result.groups[0]
     assert group.comparable
-    best, metric, higher = getattr(group, "_verdict")
+    best, metric, higher = group._verdict
     assert best == "descriptors board"
     assert metric == "roc_auc_ovo" and higher is True
-    table = getattr(group, "_table")
+    table = group._table
     names = [d.name for d in table]
     assert "roc_auc_ovo" in names
     assert "Δ roc_auc_ovo vs best" in names
@@ -159,9 +157,9 @@ def test_lower_is_better_metric_picks_the_minimum(runs_root) -> None:
             task="regression", target="pIC50", best_mean=0.90)
     result = compare_runs(collect_runs("ml-evaluation"))
     group = result.groups[0]
-    best, _, higher = getattr(group, "_verdict")
+    best, _, higher = group._verdict
     assert best == "model B" and higher is False
-    deltas = next(d for d in getattr(group, "_table") if d.name.startswith("Δ"))
+    deltas = next(d for d in group._table if d.name.startswith("Δ"))
     assert deltas.values["model B"] == "0"
     assert deltas.values["model A"].startswith("0.3")
 

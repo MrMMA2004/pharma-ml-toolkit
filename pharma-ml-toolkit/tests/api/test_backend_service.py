@@ -610,3 +610,77 @@ class TestStartupHandshake:
             return "ok"
 
         assert asyncio.new_event_loop().run_until_complete(_drive()) == "ok"
+
+
+class TestGracefulShutdownPush:
+    """The round-280 services E2E find: stock uvicorn closes the
+    connections BEFORE the lifespan handlers fire, so the app-level
+    ``shutdown`` publish never reached an open socket. The
+    ``StudioServer.shutdown()`` override pushes the envelope first —
+    this is the real-socket regression test (websockets client + the
+    real fd-handshake server, driven on a private loop)."""
+
+    def test_shutdown_envelope_reaches_open_sockets(self):
+        import uvicorn
+        import websockets
+
+        from pharmaml.api import create_app
+        from pharmaml.api.server import StudioServer, bind_loopback_socket
+
+        def _drive() -> str:
+            loop = asyncio.new_event_loop()
+
+            async def _run() -> str:
+                app = create_app(token=TEST_TOKEN)
+                sock = bind_loopback_socket()
+                port = sock.getsockname()[1]
+                try:
+                    config = uvicorn.Config(
+                        app,
+                        fd=sock.fileno(),
+                        log_level="warning",
+                        access_log=False,
+                        loop="asyncio",
+                    )
+                    server = StudioServer(config)
+                    task = asyncio.ensure_future(server.serve())
+                    deadline = time.monotonic() + 20
+                    while time.monotonic() < deadline and not server.started:
+                        await asyncio.sleep(0.05)
+                    assert server.started, "the studio server never started"
+                    async with websockets.connect(
+                        f"ws://127.0.0.1:{port}/api/v1/events"
+                        f"?token={TEST_TOKEN}"
+                    ) as ws:
+                        hello = json.loads(await asyncio.wait_for(ws.recv(), 5))
+                        assert hello["payload"]["hello"] is True
+                        # the graceful exit exactly as a SIGTERM sets it
+                        server.should_exit = True
+                        got_shutdown = None
+                        deadline = time.monotonic() + 10
+                        while time.monotonic() < deadline:
+                            try:
+                                msg = json.loads(
+                                    await asyncio.wait_for(ws.recv(), 5)
+                                )
+                            except websockets.ConnectionClosed:
+                                break  # fine — only AFTER the envelope
+                            if msg.get("event_type") == "shutdown":
+                                got_shutdown = msg
+                                break
+                        assert got_shutdown is not None, (
+                            "the socket closed without the shutdown envelope "
+                            "(the stock-uvicorn ordering bug is back)"
+                        )
+                        assert got_shutdown["payload"] == {}
+                    await task
+                    return "ok"
+                finally:
+                    sock.close()
+
+            try:
+                return loop.run_until_complete(_run())
+            finally:
+                loop.close()
+
+        assert _drive() == "ok"

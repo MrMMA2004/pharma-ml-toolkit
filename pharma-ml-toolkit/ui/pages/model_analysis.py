@@ -48,7 +48,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -667,7 +667,6 @@ class ModelAnalysisPage(QWidget):
             def report(done, total=None, _note=""):
                 if total:
                     progress(min(done / total, 1.0), f"{done:,} rows")
-                return None
 
             progress(0.05, "reading")
             return read_table_with_progress(Path(path), report)
@@ -773,13 +772,10 @@ class ModelAnalysisPage(QWidget):
     def _show_dependency_help(self, message: str) -> None:
         """M-5: a copyable install line + a route to the Settings doctor."""
         import re as _re
+
         from PySide6.QtWidgets import (
-            QDialogButtonBox,
-            QLabel,
             QMessageBox,
             QPushButton,
-            QVBoxLayout,
-            QWidget,
         )
 
         pip = _re.search(r"pip install[^\n\"]+", message)

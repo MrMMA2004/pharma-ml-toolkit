@@ -394,7 +394,7 @@ class WorkflowTemplatesTab(QWidget):
         combo.clear()
         combo.addItems(items)
         index = combo.findText(keep)
-        combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.setCurrentIndex(max(index, 0))
         combo.blockSignals(False)
 
     # -- running ------------------------------------------------------------

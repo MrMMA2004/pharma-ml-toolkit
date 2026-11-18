@@ -14,7 +14,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 _TK = Path(__file__).resolve().parents[2]
 _REGRESSION_EXAMPLE = _TK / "examples" / "data" / "qsar_regression.csv"

@@ -1,6 +1,6 @@
 # Release readiness — the Phase-6 evidence report (part6 §16)
 
-Generated 2026-11-17 by `tools/release_readiness.py`.
+Generated 2026-11-18 by `tools/release_readiness.py`.
 Every number below comes from a live probe or a recorded test
 run; sections without gathered evidence say so and name the
 command that gathers them. Nothing here converts absence of
@@ -42,8 +42,8 @@ All probed dependencies import cleanly in this environment (the Qt rows are prob
 
 ## 3. Test evidence
 
-- Suites discovered: **232** (72 UI, 160 library)
-- Tests collected: **7250**
+- Suites discovered: **233** (72 UI, 161 library)
+- Tests collected: **7264**
 
 **Not gathered this run** — run the §14.2-chunkened suites
 and record results, then re-generate with
@@ -51,10 +51,10 @@ and record results, then re-generate with
 
 ## 4. Version carriers (§15)
 
-- VERSION: `1.2.223`
-- pyproject.toml: `1.2.223`
-- src/pharmaml/__init__.py: `1.2.223`
-- CHANGELOG.md leads with: `1.2.223`
+- VERSION: `1.2.224`
+- pyproject.toml: `1.2.224`
+- src/pharmaml/__init__.py: `1.2.224`
+- CHANGELOG.md leads with: `1.2.224`
 - Agreement: **yes**
 
 ## 5. Release-archive verification (§14)

@@ -39,91 +39,91 @@ SHORTCUTS: list[tuple[str, str]] = [
 ORIENTATION: dict[str, tuple[str, str]] = {
     "Data Explorer": (
         "Load a CSV/Excel file",
-        "Open CSV / Excel… picks any table on disk; the audit, plots and "
+        ("Open CSV / Excel… picks any table on disk; the audit, plots and "
         "every downstream workspace read the loaded frame. Bundled example "
-        "datasets live in examples/data/.",
+        "datasets live in examples/data/."),
     ),
     "Chemistry": (
         "Featurize a ligand table",
-        "Pick a SMILES column (or load one in Data Explorer first), then "
-        "Compute features. Invalid SMILES are dropped with per-row reasons.",
+        ("Pick a SMILES column (or load one in Data Explorer first), then "
+        "Compute features. Invalid SMILES are dropped with per-row reasons."),
     ),
     "Model Analysis": (
         "Train and validate a QSAR model",
-        "Choose dataset + target column, press Train. The dataset combo "
+        ("Choose dataset + target column, press Train. The dataset combo "
         "also offers '(table from Data Explorer)' — the route for your own "
-        "CSVs.",
+        "CSVs."),
     ),
     "PK/PD": (
         "Simulate dosing regimens",
-        "Pick a model, set the dosing table, Run simulation. Completion "
-        "reports land as a toast.",
+        ("Pick a model, set the dosing table, Run simulation. Completion "
+        "reports land as a toast."),
     ),
     "Biology": (
         "Explore an expression matrix",
-        "Load the shared matrix (row-select with live preview), then run "
-        "the analyses.",
+        ("Load the shared matrix (row-select with live preview), then run "
+        "the analyses."),
     ),
     "Docking": (
         "Prepare and dock ligands",
-        "Docking needs the Vina engines on PATH (Settings ▸ Doctor checks). "
-        "Start from a prepared receptor + ligand set.",
+        ("Docking needs the Vina engines on PATH (Settings ▸ Doctor checks). "
+        "Start from a prepared receptor + ligand set."),
     ),
     "Utilities": (
         "Templates, pipelines, comparisons, reports",
-        "The seven workflow templates chain existing backends; every "
-        "destructive utility defaults to dry-run.",
+        ("The seven workflow templates chain existing backends; every "
+        "destructive utility defaults to dry-run."),
     ),
     "Settings": (
         "Theme, providers, dependency doctor",
-        "The Doctor button verifies optional dependencies and prints the "
-        "exact pip line to install what is missing.",
+        ("The Doctor button verifies optional dependencies and prints the "
+        "exact pip line to install what is missing."),
     ),
     # review m-7: the ten workspaces that had no orientation line
     "Deep Learning": (
         "Train a neural QSAR model",
-        "Pick a dataset, target and architecture on the Train & evaluate tab, "
-        "then Train. The runboard, UMAP map and curation tabs read the run.",
+        ("Pick a dataset, target and architecture on the Train & evaluate tab, "
+        "then Train. The runboard, UMAP map and curation tabs read the run."),
     ),
     "ML Workbench": (
         "Tune and compare models",
-        "The Hyperparameter search tab runs a budgeted search over the "
-        "registry; Leaderboards ranks every stored run.",
+        ("The Hyperparameter search tab runs a budgeted search over the "
+        "registry; Leaderboards ranks every stored run."),
     ),
     "Unsupervised": (
         "Reduce and cluster a table",
-        "Check the numeric columns, pick a method tab (PCA / clustering / "
-        "KDE / manifold) and press its action button.",
+        ("Check the numeric columns, pick a method tab (PCA / clustering / "
+        "KDE / manifold) and press its action button."),
     ),
     "Generative": (
         "Evolve molecules against an objective",
-        "Pick an objective (LogP, TPSA, SA, similarity), a budget, then "
-        "Evolve. The leaderboard and plots fill as generations land.",
+        ("Pick an objective (LogP, TPSA, SA, similarity), a budget, then "
+        "Evolve. The leaderboard and plots fill as generations land."),
     ),
     "Best-of ML": (
         "Compare model families head-to-head",
-        "The Catalogue tab searches the 33-family registry; the comparison "
-        "tabs run a seeded bake-off on the loaded table.",
+        ("The Catalogue tab searches the 33-family registry; the comparison "
+        "tabs run a seeded bake-off on the loaded table."),
     ),
     "Response AI": (
         "Fit dose-response and rank predictions",
-        "The Hill curve tab fits a full curve; the metric tabs read two "
-        "columns of the Data Explorer's table or a seeded demo pair.",
+        ("The Hill curve tab fits a full curve; the metric tabs read two "
+        "columns of the Data Explorer's table or a seeded demo pair."),
     ),
     "Image Lab": (
         "Matrix views of response and similarity",
-        "The similarity heatmap reads a SMILES column of the loaded table; "
-        "the response and explorer matrices read numeric grids.",
+        ("The similarity heatmap reads a SMILES column of the loaded table; "
+        "the response and explorer matrices read numeric grids."),
     ),
     "Molecular Dynamics": (
         "Load a GROMACS study",
-        "Open a study folder (or load the example study) — the metric, "
-        "correlation and CV tabs read the parsed series.",
+        ("Open a study folder (or load the example study) — the metric, "
+        "correlation and CV tabs read the parsed series."),
     ),
     "Foundations": (
         "Explore statistical distributions",
-        "Pick a sampler family and Draw samples; the comparison tab "
-        "measures two drawn columns against each other.",
+        ("Pick a sampler family and Draw samples; the comparison tab "
+        "measures two drawn columns against each other."),
     ),
 
 }
@@ -206,9 +206,9 @@ class HelpDialog(QDialog):
         }
         parts = [
             "<h3>Workflow stages — the nine workspaces</h3>",
-            "<p>Every workspace runs as one connected scientific workflow. "
+            ("<p>Every workspace runs as one connected scientific workflow. "
             "The strip at the bottom-right of each workspace's tab bar "
-            "carries the same chain in place.</p>",
+            "carries the same chain in place.</p>"),
         ]
         for key in order:
             chain, stages, note = WORKFLOWS[key]

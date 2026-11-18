@@ -60,8 +60,9 @@ import socket
 import sys
 import time
 import traceback
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 # Unfrozen runs (source checkout / the focused test suite) need the toolkit
 # root on sys.path for the ``ui`` package (only ``pharmaml`` is pip-installed,
@@ -126,9 +127,10 @@ def _synth_frame() -> Any:
 def flow_environment(record: dict, user: Path, bundle: dict) -> None:
     meipass = getattr(sys, "_MEIPASS", None)
     frozen = bool(getattr(sys, "frozen", False))
-    import pharmaml
     import rdkit
     import torch
+
+    import pharmaml
 
     record["environment"] = {
         "python": sys.version.split()[0],
@@ -201,6 +203,7 @@ def flow_import_excel(record: dict, user: Path, bundle: dict) -> None:
 
 def flow_descriptors(record: dict, user: Path, bundle: dict) -> None:
     import pandas as pd
+
     from pharmaml.chem.descriptors import compute_descriptors
 
     desc = compute_descriptors(pd.Series(SMILES), progress=False)
@@ -214,6 +217,7 @@ def flow_descriptors(record: dict, user: Path, bundle: dict) -> None:
 
 def flow_fingerprints(record: dict, user: Path, bundle: dict) -> None:
     import pandas as pd
+
     from pharmaml.chem.descriptors import compute_fingerprints
 
     bits, onbits = compute_fingerprints(pd.Series(SMILES), kind="morgan")
@@ -244,7 +248,6 @@ def flow_ml_train_predict(record: dict, user: Path, bundle: dict) -> None:
         bundle["frame"]["y_reg"].iloc[:split],
         tune=False,
     )
-    import numpy as np
 
     pred_c = clf.model.predict(X.iloc[split:])
     truth_c = bundle["y"].iloc[split:].to_numpy()
@@ -347,8 +350,8 @@ def flow_applicability_domain(record: dict, user: Path, bundle: dict) -> None:
     ad = knn_applicability_domain(X.iloc[:split], X.iloc[split:], k=3)
     record["applicability_domain"] = {
         "distance_threshold": float(ad.distance_threshold),
-        "train_knn_mean_rows": int(len(ad.train_knn_mean)),
-        "test_knn_mean_rows": int(len(ad.test_knn_mean)),
+        "train_knn_mean_rows": len(ad.train_knn_mean),
+        "test_knn_mean_rows": len(ad.test_knn_mean),
     }
     assert len(ad.test_knn_mean) == len(X) - split
 
@@ -376,9 +379,8 @@ def flow_qt_offscreen(record: dict, user: Path, bundle: dict) -> None:
     from ui.headless import ensure_headless
 
     applied = ensure_headless()
-    from PySide6.QtWidgets import QApplication, QWidget
-
     import qdarkstyle
+    from PySide6.QtWidgets import QApplication, QWidget
     from qt_material import apply_stylesheet
 
     app = QApplication.instance() or QApplication([])
@@ -451,7 +453,7 @@ def flow_semi_supervised(record: dict, user: Path, bundle: dict) -> None:
         "accuracy_held_out": round(acc, 4),
         "pseudo_label_accuracy": round(pseudo_acc, 4),
         "labeled_rows": int(split - len(hide)),
-        "unlabeled_rows": int(len(hide)),
+        "unlabeled_rows": len(hide),
         "method": "self_training",
     }
     assert acc > 0.7 and pseudo_acc > 0.5 and len(hide) > 0, (acc, pseudo_acc)
@@ -489,7 +491,6 @@ def flow_uncertainty(record: dict, user: Path, bundle: dict) -> None:
     rng = np.random.default_rng(274)
     frame["mol"] = [f"m{i:03d}" for i in range(len(frame))]
     frame = frame.iloc[rng.permutation(len(frame))]
-    n = len(frame)
     train, calib, test = frame.iloc[:40], frame.iloc[40:60], frame.iloc[60:]
     features = [c for c in frame.columns if c.startswith("f")]
     report = regression_uncertainty_report(

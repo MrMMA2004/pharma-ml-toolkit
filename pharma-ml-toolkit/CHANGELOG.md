@@ -1,3 +1,105 @@
+## [1.2.224] — 2026-11-18 — round 280 (part11 Phase Three services, part two: the WS client + job/dataset/artifact clients)
+
+- **The frontend application services exist** (part11 §5.2's block:
+  REST client | WebSocket client | Job Manager | Dataset Client |
+  Artifact Client — the round the r279 foundation queued):
+  `frontend/src/services/websocket/client.ts` (the typed WS client
+  service), `services/jobs/` (types + client + tracker),
+  `services/datasets/client.ts`, `services/artifacts/client.ts`,
+  and the React binding `hooks/useJobTracking.ts`
+  (`useSyncExternalStore` — no extra state dependency, §8.2).
+- **The WS client implements §13's guarantees against the real wire
+  contract**: the socket opens at `/api/v1/events?token=…&since=…`
+  (the browser-compatible token lane the backend documents; the
+  token is the per-startup memory-only credential, so §15's
+  "no long-lived credentials in query strings" holds), the first
+  frame is parsed as the REAL hello envelope (`{hello, last_sequence,
+  replayed}` — the round-279 fictional `{kind:"hello"}` shape is
+  corrected in `events.ts`), duplicate-event protection is enforced
+  client-side (`sequence <= cursor` never reaches listeners),
+  heartbeats drive a 40 s dead-peer liveness window, reconnects ride
+  a bounded exponential backoff (500 ms → 8 s cap, 12 attempts) and
+  re-ask for exactly the missed tail via `since`, and the `shutdown`
+  envelope flips the stream to `closed` — never reconnects into a
+  dying backend.
+- **The JobTracker keeps REST authoritative** (§13's recovery rule):
+  WS events overlay the tracked view optimistically (queued/started/
+  progress/stage/completed/failed/cancel transitions mirrored from
+  the JobManager's publish vocabulary — timestamps/configuration stay
+  from REST, nothing is fabricated), non-terminal jobs poll REST
+  every 1.5 s, every stream (re)open refreshes all live jobs, and
+  `bus.overflow` reconciles through REST (the backend's own
+  backpressure contract). The `jobs/` client covers the full five-op
+  surface (list/status/result/cancel) with `JobView` field-for-field
+  from `JobRecord.public()` and runtime validation (`parseJobView` —
+  unknown states surface as `ApiSchemaError`, not silent `any`).
+- **The dataset client speaks the real upload contract**: multipart
+  `POST /api/v1/datasets` with exactly the backend's Form fields
+  (file/target/task/mode) through the REST client's new `postForm`
+  lane (no preset content-type — the browser owns the boundary),
+  plus list/view/preview (§17.3's paginated 1..500 rows)/delete/
+  profile/split; the request bodies come from the GENERATED OpenAPI
+  types (`ProfileRequest`/`SplitRequest` from `api.d.ts` — §12.2's
+  one-DTO rule, never hand-duplicated).
+- **The artifact client rides the token-header download lane**
+  (§17.1's data plane): list/view/delete + `download()` through the
+  REST client's `raw` lane (the browser cannot put the session header
+  on a bare `<a href>`), consuming the route's `X-Artifact-SHA256` /
+  `ETag` verification headers; large payloads stay out of React
+  state by contract (the caller receives the Blob + metadata).
+- **The real E2E rode the live backend** (`scratch/e2e280/`, never
+  shipped): handshake → `configureBackend` → WS open with the hello
+  frame → multipart upload through the REAL reader (job mode) → the
+  JobTracker followed the job to COMPLETED on live `result.ready`
+  events → the authoritative REST result → registry/preview/profile/
+  split → artifact backup + token-header download with digest
+  verification → the job ledger → SIGTERM → the shutdown envelope
+  reached the Node client and the stream landed in `closed`.
+  `E2E-SERVICES-PASS`, exit 0.
+- **The E2E caught a REAL backend bug, fixed with a regression
+  test**: stock uvicorn closes live connections BEFORE the lifespan
+  shutdown handlers fire, so the app-level `shutdown` publish never
+  reached an open socket (the r278-era routes/events.py docstring
+  promised "pushes shutdown before the socket closes" — it did not
+  hold under a real SIGTERM). `StudioServer.shutdown()` (the server's
+  uvicorn subclass) now publishes the envelope the moment the exit
+  begins and gives the per-connection sender tasks one loop beat
+  (0.25 s) to flush before uvicorn's connection shutdown runs;
+  `TestGracefulShutdownPush` drives a REAL socket (websockets client
+  + the fd-handshake server) and fails if the ordering ever regresses.
+- **The canonical pins' lint debt swept to zero** (surfaced by this
+  round's canonical venv repair, which re-pins ruff 0.17.1 / mypy
+  2.4.0 — the newer defaults fire rules the r276+ custom release
+  flow stopped gating): `mypy src/` clean (the 13 pre-existing
+  errors fixed — Optional-ndarray guards in semi_supervised, the
+  decision score annotation, the features callables' rdkit guards,
+  the reports PipelineConfig import + asdict instance check, the
+  pipelines FingerprintKind Literal chain, the dead duplicated
+  `_cmd_ml_check`, comparison's verdict/table dataclass fields), and
+  `ruff check src tests tools ui studio.py` all-green (the 364-error
+  sweep: exec-bit restoration/removal per shebang, import sorts,
+  ISC004 parenthesization, 13 unused bindings removed with
+  side-effects kept, the deliberate best-effort GUI teardowns
+  narrowed to justified `noqa: BLE001,S110`, ClassVar annotations,
+  the FrozenInstanceError-narrowed B017, values() iteration, and the
+  NaN-guard `noqa: PLR0124`s). Every touched surface re-tested
+  green (91 + 36 + 43 + 75 + 7 targeted tests).
+- **14 new Python drift guards** (`tests/test_frontend_services.py`):
+  the WS path/token/since/ping contract, the hello frame's three
+  payload keys, the §13 client guarantees (dedup/backoff/liveness/
+  shutdown), the tracker's REST-authoritative rules, the job route
+  surface + JobView fields + state vocabulary, the dataset route
+  surface + multipart Form fields + generated-type-only requests, the
+  artifact surface + the token-header download lane, and the hooks'
+  `useSyncExternalStore` binding — each parsed from the REAL backend
+  sources, so a backend rename turns the suite red before the
+  frontend drifts. (The round-279 counter claimed the 20-event
+  vocabulary was "pytest-drift-checked" — that guard did not exist;
+  it ships here.)
+- **`tsc --noEmit` clean; production build green** (2,085 modules;
+  shell 290.9 kB / 91.5 kB gzip — the services tree-shake until the
+  workspace rows wire them, exactly the foundation's pattern).
+
 ## [1.2.223] — 2026-11-18 — round 279 (part11 Phase Three: the frontend foundation row)
 
 - **The offline React + TypeScript SPA exists** (`frontend/`): the

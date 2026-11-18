@@ -83,7 +83,7 @@ class SearchPalette(QDialog):
         self._route = current.data(Qt.ItemDataRole.UserRole)
         self.accept()
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 (Qt name)
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Down:
             self._list.setFocus()
             self._list.setCurrentRow(min(self._list.currentRow() + 1,

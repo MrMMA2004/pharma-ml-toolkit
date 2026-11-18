@@ -312,11 +312,14 @@ def validate_unlabeled(
     )
     encoded = (
         not all_numeric
+        or numeric_labels is None
         or not np.array_equal(numeric_labels, np.round(numeric_labels))
     )
     if not encoded:
         labels = np.full(raw.size, _UNLABELED_SENTINEL, dtype=np.int64)
-        labels[~is_unlabeled] = numeric_labels.astype(np.int64)
+        labels[~is_unlabeled] = (
+            numeric_labels if numeric_labels is not None else inverse
+        ).astype(np.int64)
         class_order = np.array(
             [float(_label_key(c)) for c in classes], dtype=float
         )

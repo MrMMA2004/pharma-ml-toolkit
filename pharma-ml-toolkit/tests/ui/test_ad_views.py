@@ -24,7 +24,6 @@ def _ad_page(qtbot, n_models: int = 8):
     from sklearn.linear_model import Ridge
 
     from pharmaml.ml import applicability_domain
-    from pharmaml.ml.applicability import ApplicabilityDomainResult
     from ui.pages.ml_workbench import MLWorkbenchPage
 
     rng = np.random.default_rng(0)
@@ -44,14 +43,14 @@ def _ad_page(qtbot, n_models: int = 8):
 
 
 def test_default_view_inside_outside(qtbot, studio_app) -> None:
-    page, result = _ad_page(qtbot)
+    page, _result = _ad_page(qtbot)
     page._render_ad_view("query distance (inside/outside)")
     keys = list(page._ad_plot._inspector._series.keys())
     assert "inside AD" in keys and "outside AD" in keys and "threshold" in keys
 
 
 def test_training_distance_distribution_view(qtbot, studio_app) -> None:
-    page, result = _ad_page(qtbot)
+    page, _result = _ad_page(qtbot)
     page._render_ad_view("training distance distribution")
     keys = list(page._ad_plot._inspector._series.keys())
     assert "training rows" in keys and "threshold" in keys
@@ -79,7 +78,7 @@ def test_uncertainty_view_and_honest_degradation(qtbot, studio_app) -> None:
 
 
 def test_combined_reliability_view(qtbot, studio_app) -> None:
-    page, result = _ad_page(qtbot, n_models=8)
+    page, _result = _ad_page(qtbot, n_models=8)
     page._render_ad_view("combined reliability")
     keys = list(page._ad_plot._inspector._series.keys())
     assert "reliable (in AD, low unc.)" in keys
@@ -92,10 +91,10 @@ def test_combined_reliability_view(qtbot, studio_app) -> None:
 def test_sample_inspection_dossier(qtbot, studio_app, monkeypatch) -> None:
     from PySide6.QtWidgets import QDialog, QLabel
 
-    page, result = _ad_page(qtbot, n_models=8)
+    page, _result = _ad_page(qtbot, n_models=8)
     shown: dict[str, object] = {}
 
-    def fake_exec(self):  # noqa: N805
+    def fake_exec(self):
         shown["title"] = self.windowTitle()
         shown["text"] = " ".join(w.text() for w in self.findChildren(QLabel))
         return 0

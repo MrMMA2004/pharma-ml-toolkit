@@ -70,6 +70,62 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+/**
+ * The multipart lane (§17.2's streaming uploads): the browser owns
+ * the multipart boundary, so NO content-type is preset — a preset
+ * `application/json` (or a hand-built boundary) would corrupt the
+ * upload the backend's `File(...)`/`Form(...)` contract expects.
+ */
+async function requestForm<T>(path: string, form: FormData): Promise<T> {
+  if (endpoint === null) {
+    throw new Error(
+      "the backend endpoint is not configured yet (the startup handshake has not completed)",
+    );
+  }
+  const response = await fetch(`${endpoint.baseUrl}${path}`, {
+    method: "POST",
+    headers: { "X-Session-Token": endpoint.token },
+    body: form,
+  });
+  if (!response.ok) {
+    let detail: unknown = null;
+    try {
+      detail = await response.json();
+    } catch {
+      detail = null;
+    }
+    throw new ApiError(response.status, detail);
+  }
+  return (await response.json()) as T;
+}
+
+/**
+ * The raw lane for non-JSON responses (§17.1's data plane: streaming
+ * downloads). Returns the live `Response` with the session header
+ * applied; the caller reads the body (Blob/arrayBuffer) and any
+ * artifact headers (ETag, X-Artifact-SHA256, …).
+ */
+async function rawRequest(path: string): Promise<Response> {
+  if (endpoint === null) {
+    throw new Error(
+      "the backend endpoint is not configured yet (the startup handshake has not completed)",
+    );
+  }
+  const response = await fetch(`${endpoint.baseUrl}${path}`, {
+    headers: { "X-Session-Token": endpoint.token },
+  });
+  if (!response.ok) {
+    let detail: unknown = null;
+    try {
+      detail = await response.json();
+    } catch {
+      detail = null;
+    }
+    throw new ApiError(response.status, detail);
+  }
+  return response;
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
@@ -77,4 +133,8 @@ export const api = {
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  /** multipart upload lane (the browser sets the boundary). */
+  postForm: <T>(path: string, form: FormData) => requestForm<T>(path, form),
+  /** the raw response lane for binary/attachment downloads. */
+  raw: (path: string) => rawRequest(path),
 };

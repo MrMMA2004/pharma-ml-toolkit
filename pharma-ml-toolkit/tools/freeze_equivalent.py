@@ -248,6 +248,7 @@ def run_build(policy: dict) -> dict:
         cwd=str(TOOLKIT),
         capture_output=True,
         text=True,
+        check=False,  # the returncode is evaluated explicitly below
     )
     log = BUILD_DIR / "pyinstaller.log"
     log.write_text(proc.stdout + proc.stderr)
@@ -299,6 +300,7 @@ def run_smoke(user_root: Path) -> dict:
         cwd="/",
         capture_output=True,
         text=True,
+        check=False,
         timeout=300,
     )
     evidence["doctor"] = {
@@ -314,6 +316,7 @@ def run_smoke(user_root: Path) -> dict:
         cwd="/tmp",
         capture_output=True,
         text=True,
+        check=False,
         timeout=900,
     )
     verdict_path = user_dir / "freeze_smoke_verdict.json"

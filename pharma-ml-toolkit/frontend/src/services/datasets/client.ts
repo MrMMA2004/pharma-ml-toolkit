@@ -1,0 +1,315 @@
+/**
+ * The dataset client — part11 §11.1's Datasets workflow service
+ * (Phase Three services, part two: the Dataset Client block of §5.2).
+ *
+ * The backend contract (mirrored field-for-field; the Python drift
+ * guards in `tests/test_frontend_services.py` pin the route list AND
+ * the multipart form-field names against `routes/datasets.py`):
+ *
+ * * `POST /api/v1/datasets` — multipart upload: the fields `file`
+ *   (the CSV/TSV/TXT/XLSX table), `target`, `task`, `mode` — answered
+ *   by `{mode: "job", job: JobView}` (default) or `{mode: "sync",
+ *   dataset: DatasetView}`. One request = one file (§17.2: upload
+ *   once, then reference the stable `dataset_id`).
+ * * `GET /api/v1/datasets` / `GET /api/v1/datasets/{id}` /
+ *   `GET /api/v1/datasets/{id}/preview?limit=N` (paginated preview,
+ *   §17.3) / `DELETE /api/v1/datasets/{id}`.
+ * * `POST /api/v1/datasets/{id}/profile` and `POST …/{id}/split` —
+ *   `ProfileRequest` / `SplitRequest` bodies straight from the
+ *   generated OpenAPI types (`src/types/api.d.ts`, §12.2's one DTO
+ *   source — no hand-duplicated request schema).
+ *
+ * The frames themselves NEVER cross the JSON boundary in full: the
+ * backend serves bounded previews and the workflows reference
+ * `dataset_id` (§17.1's control-plane rule).
+ */
+
+import { api } from "@/services/api/client";
+import type { components } from "@/types/api.d";
+import { type JobView, parseJobView } from "@/services/jobs/types";
+
+type ProfileRequest = components["schemas"]["ProfileRequest"];
+type SplitRequest = components["schemas"]["SplitRequest"];
+
+/** `frame_payload()` — the backend's bounded, JSON-safe head view. */
+export interface FramePreview {
+  readonly columns: readonly string[];
+  readonly dtypes: Readonly<Record<string, string>>;
+  readonly n_rows: number;
+  readonly returned: number;
+  readonly rows: readonly (readonly unknown[])[];
+}
+
+/** `DatasetRecord.view()` — the registry's dataset summary. */
+export interface DatasetView {
+  readonly dataset_id: string;
+  readonly name: string;
+  readonly source_filename: string;
+  readonly size_bytes: number;
+  readonly shape: readonly [number, number];
+  readonly columns: readonly string[];
+  readonly target: string | null;
+  readonly task: string | null;
+  readonly n_features: number;
+  readonly feature_names: readonly string[];
+  readonly classes: unknown;
+  readonly class_counts: unknown;
+  readonly dropped_columns: readonly string[];
+  readonly categorical_columns: readonly string[];
+  readonly summary: Readonly<Record<string, unknown>>;
+  readonly created_at: string;
+  readonly preview?: FramePreview;
+}
+
+export interface DatasetListResponse {
+  readonly datasets: readonly DatasetView[];
+}
+
+/** The sync-mode upload answer. */
+export interface DatasetSyncUploadResponse {
+  readonly mode: "sync";
+  readonly dataset: DatasetView;
+}
+
+/** The job-mode upload answer (the default). */
+export interface DatasetJobUploadResponse {
+  readonly mode: "job";
+  readonly job: JobView;
+}
+
+export type DatasetUploadResponse =
+  | DatasetSyncUploadResponse
+  | DatasetJobUploadResponse;
+
+/** The split-side preview (`_side_view`). */
+export interface SplitSideView {
+  readonly rows: number;
+  readonly columns: readonly string[];
+  readonly target_balance?: Readonly<Record<string, number>>;
+  readonly preview: FramePreview;
+}
+
+/** `POST /api/v1/datasets/{id}/split` — the split report. */
+export interface DatasetSplitResponse {
+  readonly target: string | null;
+  readonly stratified: boolean;
+  readonly random_state: number;
+  readonly sides: Readonly<Record<string, SplitSideView>>;
+  readonly n_rows: number;
+}
+
+/** `POST /api/v1/datasets/{id}/profile` — the profile wrapper. */
+export interface DatasetProfileResponse {
+  readonly profile: Readonly<Record<string, unknown>>;
+}
+
+export interface DatasetUploadOptions {
+  /** The target column (null = the loader's auto-detection). */
+  readonly target?: string | null;
+  /** The task override (null = inferred). */
+  readonly task?: string | null;
+  /** "job" (default) or "sync" — the backend's two execution lanes. */
+  readonly mode?: "job" | "sync";
+}
+
+export const datasetsApi = {
+  /**
+   * `POST /api/v1/datasets` — multipart streaming upload through the
+   * REAL reader. The file is appended untouched; the browser sets
+   * the multipart boundary itself (the REST client's postForm lane
+   * deliberately sends no JSON content-type).
+   */
+  async upload(
+    file: File,
+    options?: DatasetUploadOptions,
+  ): Promise<DatasetUploadResponse> {
+    const form = new FormData();
+    form.append("file", file, file.name);
+    const target = options?.target ?? null;
+    const task = options?.task ?? null;
+    form.append("target", target === null ? "" : target);
+    form.append("task", task === null ? "" : task);
+    form.append("mode", options?.mode ?? "job");
+    const raw = (await api.postForm("/api/v1/datasets", form)) as Record<
+      string,
+      unknown
+    >;
+    if (raw["mode"] === "sync") {
+      return {
+        mode: "sync",
+        dataset: parseDatasetView(raw["dataset"], "upload(sync)"),
+      };
+    }
+    return {
+      mode: "job",
+      job: parseJobView(raw["job"], "upload(job)"),
+    };
+  },
+
+  /** `GET /api/v1/datasets` — the registry (oldest-first). */
+  async list(): Promise<DatasetListResponse> {
+    const raw = await api.get<Record<string, unknown>>("/api/v1/datasets");
+    const items = raw["datasets"];
+    if (!Array.isArray(items)) {
+      return { datasets: [] };
+    }
+    return {
+      datasets: items.map((item, i) =>
+        parseDatasetView(item, `datasets[${i}]`),
+      ),
+    };
+  },
+
+  /** `GET /api/v1/datasets/{id}` — the summary + a 10-row preview. */
+  async view(datasetId: string): Promise<DatasetView> {
+    const raw = await api.get<Record<string, unknown>>(
+      `/api/v1/datasets/${encodeURIComponent(datasetId)}`,
+    );
+    return parseDatasetView(raw, `dataset ${datasetId}`);
+  },
+
+  /** `GET /api/v1/datasets/{id}/preview?limit=N` — §17.3 pagination. */
+  async preview(
+    datasetId: string,
+    limit: number = 10,
+  ): Promise<FramePreview> {
+    const bounded = Math.min(Math.max(1, Math.floor(limit)), 500);
+    const raw = await api.get<Record<string, unknown>>(
+      `/api/v1/datasets/${encodeURIComponent(datasetId)}/preview?limit=${bounded}`,
+    );
+    return parseFramePreview(raw, `preview ${datasetId}`);
+  },
+
+  /** `DELETE /api/v1/datasets/{id}` — evict from the session store. */
+  async remove(datasetId: string): Promise<void> {
+    await api.delete(`/api/v1/datasets/${encodeURIComponent(datasetId)}`);
+  },
+
+  /** `POST /api/v1/datasets/{id}/profile` — the REAL profile_frame. */
+  async profile(
+    datasetId: string,
+    request: ProfileRequest = { mode: "sync" },
+  ): Promise<DatasetProfileResponse> {
+    const raw = await api.post<Record<string, unknown>>(
+      `/api/v1/datasets/${encodeURIComponent(datasetId)}/profile`,
+      request,
+    );
+    return { profile: (raw["profile"] ?? {}) as Record<string, unknown> };
+  },
+
+  /** `POST /api/v1/datasets/{id}/split` — stratified splits. */
+  async split(
+    datasetId: string,
+    request: SplitRequest,
+  ): Promise<DatasetSplitResponse> {
+    const raw = await api.post<Record<string, unknown>>(
+      `/api/v1/datasets/${encodeURIComponent(datasetId)}/split`,
+      request,
+    );
+    return parseSplitResponse(raw);
+  },
+};
+
+// -- validation helpers (§8.1) ------------------------------------------
+
+function expectObject(raw: unknown, what: string): Record<string, unknown> {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error(`${what}: expected an object`);
+  }
+  return raw as Record<string, unknown>;
+}
+
+/** Narrow an untrusted payload to the registry's dataset view. */
+export function parseDatasetView(raw: unknown, what: string): DatasetView {
+  const r = expectObject(raw, what);
+  const id = r["dataset_id"];
+  const name = r["name"];
+  if (typeof id !== "string" || typeof name !== "string") {
+    throw new Error(`${what}: dataset_id/name are not strings`);
+  }
+  const shape = r["shape"];
+  const columns = r["columns"];
+  const preview = r["preview"];
+  return {
+    dataset_id: id,
+    name,
+    source_filename: (r["source_filename"] as string) ?? "",
+    size_bytes: typeof r["size_bytes"] === "number" ? r["size_bytes"] : 0,
+    shape: Array.isArray(shape)
+      ? ([shape[0] ?? 0, shape[1] ?? 0] as [number, number])
+      : [0, 0],
+    columns: Array.isArray(columns) ? (columns as string[]) : [],
+    target: (r["target"] as string | null) ?? null,
+    task: (r["task"] as string | null) ?? null,
+    n_features: typeof r["n_features"] === "number" ? r["n_features"] : 0,
+    feature_names: Array.isArray(r["feature_names"])
+      ? (r["feature_names"] as string[])
+      : [],
+    classes: r["classes"] ?? null,
+    class_counts: r["class_counts"] ?? null,
+    dropped_columns: Array.isArray(r["dropped_columns"])
+      ? (r["dropped_columns"] as string[])
+      : [],
+    categorical_columns: Array.isArray(r["categorical_columns"])
+      ? (r["categorical_columns"] as string[])
+      : [],
+    summary: (r["summary"] as Record<string, unknown>) ?? {},
+    created_at: (r["created_at"] as string) ?? "",
+    preview:
+      preview === undefined
+        ? undefined
+        : parseFramePreview(preview, `${what} preview`),
+  };
+}
+
+function parseFramePreview(raw: unknown, what: string): FramePreview {
+  const r = expectObject(raw, what);
+  const columns = r["columns"];
+  const rows = r["rows"];
+  return {
+    columns: Array.isArray(columns) ? (columns as string[]) : [],
+    dtypes: (r["dtypes"] as Record<string, string>) ?? {},
+    n_rows: typeof r["n_rows"] === "number" ? r["n_rows"] : 0,
+    returned: typeof r["returned"] === "number" ? r["returned"] : 0,
+    rows: Array.isArray(rows)
+      ? (rows as unknown[]).map((row) =>
+          Array.isArray(row) ? (row as readonly unknown[]) : [],
+        )
+      : [],
+  };
+}
+
+function parseSplitResponse(raw: unknown): DatasetSplitResponse {
+  const r = expectObject(raw, "split");
+  const sidesRaw = r["sides"];
+  const sides: Record<string, SplitSideView> = {};
+  if (typeof sidesRaw === "object" && sidesRaw !== null) {
+    for (const [name, sideRaw] of Object.entries(
+      sidesRaw as Record<string, unknown>,
+    )) {
+      const side = expectObject(sideRaw, `split side ${name}`);
+      sides[name] = {
+        rows: typeof side["rows"] === "number" ? side["rows"] : 0,
+        columns: Array.isArray(side["columns"])
+          ? (side["columns"] as string[])
+          : [],
+        target_balance:
+          typeof side["target_balance"] === "object" &&
+          side["target_balance"] !== null
+            ? (side["target_balance"] as Record<string, number>)
+            : undefined,
+        preview: parseFramePreview(
+          side["preview"],
+          `split side ${name} preview`,
+        ),
+      };
+    }
+  }
+  return {
+    target: (r["target"] as string | null) ?? null,
+    stratified: r["stratified"] === true,
+    random_state: typeof r["random_state"] === "number" ? r["random_state"] : 0,
+    sides,
+    n_rows: typeof r["n_rows"] === "number" ? r["n_rows"] : 0,
+  };
+}

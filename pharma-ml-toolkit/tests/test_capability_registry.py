@@ -165,7 +165,7 @@ class TestRule8SpecializedPagesReachable:
         )
         out = subprocess.run(
             [sys.executable, "-c", code], cwd=_TK, capture_output=True,
-            text=True, timeout=120,
+            text=True, timeout=120, check=False,
         )
         assert out.stdout.strip().endswith("AGREE"), out.stderr[-400:]
 
@@ -245,7 +245,7 @@ class TestCoverageSummary:
         )
         out = subprocess.run(
             [sys.executable, "-c", code], cwd=_TK / "src", capture_output=True,
-            text=True, timeout=120,
+            text=True, timeout=120, check=False,
         )
         assert out.stdout.strip().endswith("QTFREE"), out.stderr[-400:]
 
@@ -253,6 +253,8 @@ class TestCoverageSummary:
 class TestCapabilityDataclass:
     def test_frozen_and_iterable(self) -> None:
         cap = CAPABILITIES[0]
-        with pytest.raises(Exception):
+        import dataclasses
+
+        with pytest.raises(dataclasses.FrozenInstanceError):
             cap.status = "integrated"  # type: ignore[misc]
         assert isinstance(cap, Capability)

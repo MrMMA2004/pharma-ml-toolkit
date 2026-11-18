@@ -194,9 +194,9 @@ class TestFingerprintsAndFitting:
 
     def test_large_prediction_batch(self) -> None:
         """150k rows through a fitted pipeline in one predict call."""
+        from sklearn.linear_model import Ridge
         from sklearn.pipeline import Pipeline
         from sklearn.preprocessing import StandardScaler
-        from sklearn.linear_model import Ridge
 
         frame = _make_frame(2_000, 32)
         X = frame[[c for c in frame.columns if c.startswith("feat_")]]

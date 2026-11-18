@@ -107,7 +107,8 @@ def _palette_for(provider: str, theme: str) -> ChartPalette:
         # theme-matched axes; the action color marks
         # selections/highlights only.  Applies to every studio theme
         # (Mineral light/dark + the Spectral/Catalyst alternates).
-        from .design_tokens import is_dark_theme, tokens as color_tokens
+        from .design_tokens import is_dark_theme
+        from .design_tokens import tokens as color_tokens
         from .studio_theme import studio_chart_series
 
         t = color_tokens(theme)

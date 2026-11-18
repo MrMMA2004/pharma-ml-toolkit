@@ -8,13 +8,9 @@ the field.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
 
-from ui.pages.biology import BiologyWorkbenchPage, _EXPRESSION_PATH
-
-import pytest
+from ui.pages.biology import _EXPRESSION_PATH, BiologyWorkbenchPage
 
 
 def test_default_is_the_bundled_matrix(studio_app) -> None:

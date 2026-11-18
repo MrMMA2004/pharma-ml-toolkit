@@ -312,7 +312,7 @@ class TableToolsPage(QWidget):
                 "dataset", "table-tools-result",
                 note=f"{len(frame)} rows", columns=frame,
             )
-        except Exception:  # noqa: BLE001 - registry is best-effort
+        except Exception:  # noqa: BLE001,S110 - registry is best-effort
             pass
         self._note(
             "Bound as the active dataset — downstream pages refreshed. "
@@ -444,7 +444,7 @@ class TableToolsPage(QWidget):
         return tab
 
     def _build_timeseries_tab(self) -> QWidget:
-        tab = QWidget()
+        QWidget()  # the container is built via _finish_timeseries_tab
         inner = QTabWidget()
         # resample sub-tab
         resample_tab = QWidget()

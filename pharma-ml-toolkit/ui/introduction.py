@@ -12,7 +12,7 @@ with entry buttons.
 
 from __future__ import annotations
 
-from typing import Callable, Mapping
+from collections.abc import Callable, Mapping
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -79,18 +79,18 @@ _WORKSPACE_NOTES: dict[str, str] = {
 #: Key backend capabilities (§12.2 "key backend capabilities") — the
 #: real, verified ones, one phrase each.
 _CAPABILITIES: tuple[tuple[str, str], ...] = (
-    ("Chemistry", "RDKit standardization, 43 descriptor properties, 20 feature "
-                  "families, configurable Morgan fingerprints"),
-    ("Classical ML", "train/evaluate registry models, hyperparameter search, "
-                     "ensembles, persistence bundles, applicability domain"),
-    ("Semi-supervised", "SelfTraining / LabelPropagation / LabelSpreading "
-                        "with leakage-safe evaluation"),
+    ("Chemistry", ("RDKit standardization, 43 descriptor properties, 20 feature "
+                  "families, configurable Morgan fingerprints")),
+    ("Classical ML", ("train/evaluate registry models, hyperparameter search, "
+                     "ensembles, persistence bundles, applicability domain")),
+    ("Semi-supervised", ("SelfTraining / LabelPropagation / LabelSpreading "
+                        "with leakage-safe evaluation")),
     ("Deep Learning", "PyTorch training loops with live curves and checkpoints"),
     ("Docking", "AutoDock Vina preparation, docking and pose analysis"),
     ("PK/PD", "compartment fitting, diagnostics and simulation"),
     ("MD analysis", "trajectory-level analyses over loaded studies"),
-    ("Visualization", "70+ matplotlib figure functions behind the Studio's "
-                      "inspector-chart layer"),
+    ("Visualization", ("70+ matplotlib figure functions behind the Studio's "
+                      "inspector-chart layer")),
 )
 
 

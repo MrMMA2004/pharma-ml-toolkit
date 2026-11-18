@@ -47,7 +47,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (  # noqa: F401
+from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,

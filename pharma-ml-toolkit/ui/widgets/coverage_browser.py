@@ -15,31 +15,30 @@ is visible in the table but marked as such (never a dead button).
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import pandas as pd
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
-    QFormLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from ..widgets.figure_canvas_host import FigureCanvasHost
 from pharmaml.studio.plot_coverage import (
     BACKEND_ONLY,
     NATIVE_EQUIVALENT,
     WIRED,
     plot_coverage_table,
 )
+
+from ..widgets.figure_canvas_host import FigureCanvasHost
 
 _STATUS_LABEL = {
     WIRED: "wired",
@@ -170,7 +169,6 @@ class CoverageBrowser(QWidget):
         self._host.run_callable(builder)
         if getattr(self, "_png_snapshot", None):
             import tempfile
-            from pathlib import Path
 
             with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as fh:
                 fh.write(self._png_snapshot)
@@ -204,7 +202,6 @@ class CoverageBrowser(QWidget):
         x = numeric[0]
         y = numeric[1] if len(numeric) > 1 else numeric[0]
 
-        import numpy as np
         import importlib
 
         module = importlib.import_module(f"pharmaml.viz.{entry.module}")
@@ -224,7 +221,6 @@ class CoverageBrowser(QWidget):
                     png = Path(tmp) / "render.png"
                     call(str(png))
                     self._png_snapshot = png.read_bytes()
-                return None
 
             return build
 
@@ -366,6 +362,7 @@ class CoverageBrowser(QWidget):
             # signature: (result: ApplicabilityDomainResult) — the REAL
             # backend analysis on the loaded frame
             from sklearn.linear_model import Ridge
+
             from pharmaml.ml.applicability import applicability_domain
 
             Xf = frame[numeric].dropna()
@@ -387,8 +384,8 @@ class CoverageBrowser(QWidget):
             # a REAL confusion matrix from a fitted classifier when a
             # label column exists; otherwise honest refusal
             from sklearn.linear_model import LogisticRegression
-            from sklearn.model_selection import train_test_split
             from sklearn.metrics import confusion_matrix
+            from sklearn.model_selection import train_test_split
 
             target = labels[0] if labels else None
             if target is None or len(frame) < 30 or len(numeric) < 1:

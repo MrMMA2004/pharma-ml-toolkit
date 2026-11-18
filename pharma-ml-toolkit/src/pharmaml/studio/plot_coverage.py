@@ -129,7 +129,7 @@ def _first_doc_line(func: Any) -> str:
         return "(undocumented)"
     # drop the trailing period; the tables read cleaner
     line = doc.splitlines()[0].strip()
-    return line[:-1] if line.endswith(".") else line
+    return line.removesuffix(".")
 
 
 def plot_coverage_table() -> list[PlotCoverageEntry]:
@@ -142,7 +142,7 @@ def plot_coverage_table() -> list[PlotCoverageEntry]:
     for module_name in PLOT_MODULES:
         try:
             module = importlib.import_module(f"pharmaml.viz.{module_name}")
-        except Exception:  # noqa: BLE001 - registry never blocks the GUI
+        except Exception:  # noqa: BLE001,S112 - registry never blocks the GUI
             continue
         exported = list(getattr(module, "__all__", ()))
         wired = set(_WIRED.get(module_name, ()))

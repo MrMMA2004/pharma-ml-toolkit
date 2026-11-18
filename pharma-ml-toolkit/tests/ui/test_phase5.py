@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QLabel
 
-
 # -- the Settings page: presets, probe, doctor (§17 E + §12) --------------------
 
 

@@ -275,6 +275,7 @@ after adding new public functions.
 | `MODEL_ALIASES` | constant |  |
 | `MODEL_REGISTRY` | constant |  |
 | `NO_SCALE_MODELS` | constant |  |
+| `QUERY_STRATEGIES` | constant |  |
 | `REGRESSION_CV_METRICS` | constant |  |
 | `SCRATCH_ACTIVATIONS` | constant |  |
 | `SCRATCH_TASKS` | constant |  |
@@ -287,6 +288,7 @@ after adding new public functions.
 | `SYNTHETIC_KINDS` | constant |  |
 | `ANNReport` | class | The bargain measured: recall against the exact baseline. |
 | `ANOVARow` | class | One Type-II row: the term, its SS, F and p. |
+| `ActiveLearningLoop` | class | The §14.1 workflow as one honest, serializable object. |
 | `Adagrad` | class | Adagrad: the per-coordinate accumulator ``G += g²``. |
 | `Adam` | class | Adam with bias correction (and optional AMSGrad). |
 | `AdamW` | class | Adam with decoupled weight decay (the Loshchilov-Hutter fix). |
@@ -382,6 +384,7 @@ after adding new public functions.
 | `PositionalReport` | class | The positional encoding as an auditable object. |
 | `PrimerReport` | class | The full chapter 2 walkthrough for one dataset table. |
 | `QuantileIntervals` | class | Prediction intervals from gradient-boosted quantile regression. |
+| `QueryRecord` | class | One AL round's bookkeeping (provenance, never labels). |
 | `RDPReport` | class | The (ε, δ) guarantee of T Gaussian steps at noise multiplier σ. |
 | `RMSprop` | class | RMSprop: the running quadratic mean with ``alpha`` decay. |
 | `RadiusResult` | class | One radius of the audit grid: how many samples broke. |
@@ -395,6 +398,9 @@ after adding new public functions.
 | `RobustnessAudit` | class | The verdict curve of a model under the sign-pattern family. |
 | `ScratchHistory` | class | Everything the scratch training loop observed, per epoch. |
 | `SearchRecommendation` | class | A preset applied and adapted to a concrete dataset/budget. |
+| `SemiSupervisedEvaluation` | class | Leakage-safe honest evaluation of a semi-supervised configuration. |
+| `SemiSupervisedMethod` | constant |  |
+| `SemiSupervisedResult` | class | Outcome of one semi-supervised fit. |
 | `SequenceHistory` | class | Per-epoch training telemetry for one recurrent fit. |
 | `Sequential` | class | Modules applied in order. |
 | `ShapInteractions` | class | Pairwise SHAP interaction values of a fitted tree model (100x-160). |
@@ -427,7 +433,6 @@ after adding new public functions.
 | `advice_families` | function | The tokens with hand-authored §18.3 tables. |
 | `ann_benchmark` | function | Recall@k and candidate compression of LSH against brute force. |
 | `anova_ii` | function | Type-II ANOVA table from the term slices. |
-| `ActiveLearningLoop` | class | The §14.1 workflow as one honest, serializable object. |
 | `applicability_domain` | function | The uploaded workflow end-to-end, one call. |
 | `audit_split_overlap` | function | Audit exact identifier overlap across two or more named data partitions. |
 | `autocorrelation` | function | The autocorrelation function: which lag carries which memory. |
@@ -488,6 +493,7 @@ after adding new public functions.
 | `estimate_evaluations` | function | Estimate the number of evaluations a budget implies. |
 | `evaluate_model` | function | Evaluate a fitted model on held-out data. |
 | `evaluate_recommender` | function | Leave-one-out: hide one rating per user, rebuild, hit@N. |
+| `evaluate_semi_supervised` | function | Leakage-safe honest evaluation of a semi-supervised configuration. |
 | `expected_improvement` | function | The classic expected improvement over the best observed score. |
 | `few_shot_report` | function | Zero-shot vs K-shot vs from-scratch, Pearson-scored. |
 | `fit_dose_response` | function | Fit the sigmoid Emax (Hill) model to (dose, effect) observations. |
@@ -570,21 +576,17 @@ after adding new public functions.
 | `split_features_target` | function | Separate features from the target column. |
 | `split_indices` | function | Core dispatcher: ``(train_indices, test_indices)`` for a strategy. |
 | `stack_oof_regressors` | function | Stack registry regressors out-of-fold and rank the blenders. |
-| `SemiSupervisedEvaluation` | class | Leakage-safe honest evaluation of a semi-supervised configuration. |
-| `SemiSupervisedMethod` | constant |  |
-| `SemiSupervisedResult` | class | Outcome of one semi-supervised fit. |
-| `evaluate_semi_supervised` | function | Leakage-safe honest evaluation of a semi-supervised configuration. |
-| `train_semi_supervised` | function | Fit one of the three semi-supervised methods on ``X`` / ``y``. |
-| `validate_unlabeled` | function | Validate a target vector under the ``-1`` unlabeled convention. |
 | `synthetic_ratings` | function | A seeded rating matrix with genuine latent structure. |
 | `synthetic_series` | function | Seeded synthetic series: the no-data fallback for the whole card. |
 | `tanh` | function |  |
 | `tensor_primer_report` | function | Walk a table through chapter 2's tensor vocabulary. |
 | `train_model` | function | Train (and optionally grid-search) one registry model. |
+| `train_semi_supervised` | function | Fit one of the three semi-supervised methods on ``X`` / ``y``. |
 | `tune_model_multi` | function | Cross-validated multi-objective HPO over the sklearn registry models. |
 | `two_sample_ttest` | function | Two independent samples: Welch's t (default) or Student's t. |
 | `validate_bundle_input` | function | Audit a new dataset against a saved model bundle before inference. |
 | `validate_space` | function | Compatibility-check a search space before optimization starts. |
+| `validate_unlabeled` | function | Validate a target vector under the ``-1`` unlabeled convention. |
 | `validate_values` | function | Compatibility-check one drawn parameter combination. |
 | `window_features` | function | Fixed non-overlapping windows, one feature row each (tsfresh-lite). |
 

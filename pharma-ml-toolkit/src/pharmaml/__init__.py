@@ -49,7 +49,7 @@ from pharmaml.exceptions import (
     UnitConversionError,
 )
 
-__version__ = "1.2.223"
+__version__ = "1.2.224"
 
 __all__ = [
     "DataValidationError",

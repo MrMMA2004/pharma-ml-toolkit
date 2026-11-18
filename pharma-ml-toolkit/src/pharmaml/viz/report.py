@@ -94,8 +94,8 @@ pharmaml.exceptions.DataValidationError: add_metrics accepts report objects or d
 
 from __future__ import annotations
 
-import html
 import base64
+import html
 import tempfile
 from pathlib import Path
 from typing import Any

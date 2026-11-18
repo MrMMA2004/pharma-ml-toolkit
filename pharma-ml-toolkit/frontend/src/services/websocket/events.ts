@@ -54,16 +54,45 @@ export interface EventEnvelope {
   readonly payload: Readonly<Record<string, unknown>>;
 }
 
-/** The `hello` welcome frame sent right after the WS opens. */
-export interface HelloMessage {
-  readonly kind: "hello";
-  /** The backend's current bus sequence (replay-since cursor). */
-  readonly sequence: number;
-  readonly version: string;
+/**
+ * The `hello` payload — the FIRST frame after the socket opens
+ * (mirrors `pharmaml.api.routes.events`' welcome envelope: a
+ * `heartbeat` envelope whose payload carries these three fields; the
+ * drift guards in `tests/test_frontend_services.py` pin the keys).
+ */
+export interface HelloPayload {
+  readonly hello: true;
+  /** The backend bus's current sequence — the reconnect cursor. */
+  readonly last_sequence: number;
+  /** How many envelopes the `since=` handshake replayed. */
+  readonly replayed: number;
+}
+
+/**
+ * Type guard: is this envelope the connection's hello frame?
+ * (The wire hello is an ordinary `heartbeat` envelope distinguished
+ * by `payload.hello === true` — never a separate message shape.)
+ */
+export function isHelloEnvelope(envelope: EventEnvelope): boolean {
+  return (
+    envelope.event_type === "heartbeat" &&
+    envelope.payload["hello"] === true
+  );
 }
 
 /** Payload shapes the job-facing consumers narrow to (§13). */
 export interface JobProgressPayload {
   readonly progress: number;
   readonly stage: string;
+}
+
+/** The `job.failed` payload shape. */
+export interface JobFailedPayload {
+  readonly error: string;
+}
+
+/** The `bus.overflow` payload — REST status is authoritative. */
+export interface BusOverflowPayload {
+  readonly dropped: boolean;
+  readonly note: string;
 }

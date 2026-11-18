@@ -9,9 +9,6 @@ its own: the preview is exactly what ``report_sections`` composed.
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -78,7 +75,7 @@ class RunReportDialog(QDialog):
         lay.addLayout(row)
 
     def _save(self) -> None:
-        default = f"run-report-{str(self._record.get('label', 'run'))}.html"
+        default = f"run-report-{self._record.get('label', 'run')!s}.html"
         chosen, _ = QFileDialog.getSaveFileName(
             self, "Save the run report", default, "HTML (*.html)")
         if not chosen:

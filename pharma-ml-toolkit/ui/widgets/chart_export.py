@@ -19,7 +19,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QPushButton, QWidget
+from PySide6.QtWidgets import QFileDialog, QPushButton, QWidget
 
 from .responsive import LEGIBILITY_FLOOR
 
@@ -76,12 +76,10 @@ def attach_chart_export(
     button.setAccessibleName(tooltip)
     # (M-3) a download glyph marks the row of export buttons as chart
     # actions, visually distinct from the form's Run/Train buttons
-    from PySide6.QtGui import QIcon, QPainter, QPixmap
 
     pm = QPixmap(14, 14)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
-    pen = p.pen()
     from ..design_tokens import tokens
 
     p.setPen(QColor(tokens("light").focus_ring))

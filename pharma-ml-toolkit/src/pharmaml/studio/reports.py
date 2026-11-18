@@ -33,19 +33,23 @@ The honesty rules, mechanically enforced:
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pharmaml.config import PipelineConfig
 
 from pharmaml.viz.report import HTMLReport
 
 __all__ = [
-    "report_sections",
-    "build_run_report",
-    "save_run_report",
-    "write_manifest",
     "MANIFEST_SCHEMA",
     "PINNED_STACK",
     "UNITS",
+    "build_run_report",
+    "report_sections",
+    "save_run_report",
+    "write_manifest",
 ]
 
 
@@ -310,9 +314,9 @@ def _platform_facts() -> dict[str, str]:
 def write_manifest(
     path: str | Path,
     *,
-    runs: "Sequence[Mapping[str, Any]] | None" = None,
-    datasets: "Sequence[Mapping[str, Any]] | None" = None,
-    config: "Mapping[str, Any] | PipelineConfig | None" = None,
+    runs: Sequence[Mapping[str, Any]] | None = None,
+    datasets: Sequence[Mapping[str, Any]] | None = None,
+    config: Mapping[str, Any] | PipelineConfig | None = None,
 ) -> Path:
     """Write one reproducibility manifest (§14.2 Proposal B) as JSON.
 
@@ -390,6 +394,7 @@ def write_manifest(
         cfg = (
             dataclasses.asdict(config)
             if dataclasses.is_dataclass(config)
+            and not isinstance(config, type)
             else dict(config)
         )
         payload["config"] = {

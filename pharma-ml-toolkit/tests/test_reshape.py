@@ -26,7 +26,6 @@ from pharmaml.utils.reshape import (
     rolling_window,
 )
 
-
 # -- fixtures ---------------------------------------------------------------
 
 
@@ -301,7 +300,7 @@ class TestResample:
             resample_timeseries(frame, time_column="time", value_columns=["conc"], rule="1D")
 
     def test_empty_windows_reported(self, time_frame):
-        out, report = resample_timeseries(
+        _out, report = resample_timeseries(
             time_frame, time_column="time", value_columns=["conc"], rule="30min",
         )
         # 02:30 is the only row in its window; several 30-min windows have no data

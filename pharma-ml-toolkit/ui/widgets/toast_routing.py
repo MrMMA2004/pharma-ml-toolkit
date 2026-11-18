@@ -13,13 +13,7 @@ return value tells callers whether a toast actually fired.
 
 from __future__ import annotations
 
-from typing import Protocol
-
 from PySide6.QtWidgets import QWidget
-
-
-class _Notifier(Protocol):
-    def notify(self, text: str, kind: str = "info") -> object: ...
 
 
 def shell_notify(widget: QWidget, text: str, kind: str = "info") -> bool:

@@ -31,7 +31,8 @@ Requirements covered (§4.1):
 from __future__ import annotations
 
 import traceback
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -119,8 +120,6 @@ class FigureCanvasHost(QWidget):
         backend exported it; this path just hosts the artifact instead
         of the live figure object.
         """
-        import tempfile
-        from pathlib import Path
 
         from PySide6.QtGui import QPixmap
 
@@ -249,7 +248,7 @@ class FigureCanvasHost(QWidget):
                 import matplotlib.pyplot as plt
 
                 plt.close(self._figure)
-            except Exception:  # noqa: BLE001 - release must never raise
+            except Exception:  # noqa: BLE001,S110 - release must never raise
                 pass
         self._figure = None
 

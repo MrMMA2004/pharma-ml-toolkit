@@ -39,17 +39,17 @@ from PySide6.QtWidgets import (
 #: names the REAL surfaces in this tree that implement each stage.
 WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str], ...], str]] = {
     "datasets": (
-        "Import → Inspect → Validate → Reshape (Combine/Merge/Pivot) "
+        ("Import → Inspect → Validate → Reshape (Combine/Merge/Pivot) "
         "→ Clean/Standardize → Select Columns "
         "→ Calculate Descriptors/Fingerprints → Feature Selection → "
-        "Split/Leakage Audit → Visualize → Export",
+        "Split/Leakage Audit → Visualize → Export"),
         (
             ("Import", "Data Explorer — Open CSV / Excel… (background worker, cancellable)"),
             ("Inspect", "Data Explorer — preview table + column stats"),
             ("Validate", "Data Audit — per-column type/range/duplicate report"),
-            ("Reshape", "Table Tools — combine replicate tables, merge on a key, "
+            ("Reshape", ("Table Tools — combine replicate tables, merge on a key, "
              "groupby summary, pivot, clean text, resample/rolling, filter "
-             "(runs off-thread; bind the result back when it fits)"),
+             "(runs off-thread; bind the result back when it fits)")),
             ("Clean/Standardize", "Chemistry Lab — RDKit standardize, invalid rows dropped with reasons"),
             ("Select Columns", "Data Explorer — column visibility + partition ranges"),
             ("Descriptors/Fingerprints", "Chemistry Lab — 20 feature families, Morgan fingerprints"),
@@ -58,16 +58,16 @@ WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str], ...], str]] = {
             ("Visualize", "Data Explorer — per-column plots; Image Lab matrices"),
             ("Export", "chart export on every plot; CSV/JSON from utilities"),
         ),
-        "Dataset provenance rides the shared workspace registry: every load "
+        ("Dataset provenance rides the shared workspace registry: every load "
         "is noted with its real path and fingerprint, reusable from any "
         "workspace. Reshaped results bound from Table Tools join the same "
-        "registry with their own content version.",
+        "registry with their own content version."),
     ),
     "machine-learning": (
-        "Select Dataset → Select Target → Select Features → Preprocess → "
+        ("Select Dataset → Select Target → Select Features → Preprocess → "
         "Define Split/Cross-Validation → Select Model → Configure "
         "Hyperparameters → Train → Evaluate → Compare → Applicability "
-        "Domain → Explainability/Uncertainty → Visualize → Save/Export",
+        "Domain → Explainability/Uncertainty → Visualize → Save/Export"),
         (
             ("Select Dataset", "Model Analysis — dataset combo incl. (table from Data Explorer)"),
             ("Select Target", "Model Analysis — target column combo"),
@@ -84,16 +84,16 @@ WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str], ...], str]] = {
             ("Visualize", "learning curves, ROC/PR, calibration; Image Lab backend figures"),
             ("Save/Export", "persistence bundle save; chart exports"),
         ),
-        "Semi-supervised learning lives in this workspace: the ML "
+        ("Semi-supervised learning lives in this workspace: the ML "
         "Workbench's self-training paths over partially labeled targets, "
         "and the §14.1 active-learning campaign (pool holdout → strategy-"
         "ranked candidates → export → imported labels → retrain) on its "
-        "Active learning tab.",
+        "Active learning tab."),
     ),
     "deep-learning": (
-        "Select Dataset → Validate → Preprocess → Define Architecture → "
+        ("Select Dataset → Validate → Preprocess → Define Architecture → "
         "Configure Training → Train → Monitor Learning Curves → Evaluate → "
-        "Inspect Predictions → Visualize → Save Checkpoint/Export",
+        "Inspect Predictions → Visualize → Save Checkpoint/Export"),
         (
             ("Select Dataset", "Deep Learning — dataset combo"),
             ("Validate", "same data-audit path as classical ML"),
@@ -107,13 +107,13 @@ WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str], ...], str]] = {
             ("Visualize", "learning-curve + prediction plots"),
             ("Save Checkpoint/Export", "checkpoint save/resume; run export"),
         ),
-        "DL-specific configuration stays separate from classical ML — "
-        "this workspace never reuses the scikit-learn registry forms.",
+        ("DL-specific configuration stays separate from classical ML — "
+        "this workspace never reuses the scikit-learn registry forms."),
     ),
     "generative-ai": (
-        "Select Generation Method → Define Starting Molecules/Conditions → "
+        ("Select Generation Method → Define Starting Molecules/Conditions → "
         "Configure Constraints/Objectives → Generate → Validate → Calculate "
-        "Properties → Filter → Rank → Visualize → Export",
+        "Properties → Filter → Rank → Visualize → Export"),
         (
             ("Select Generation Method", "Generative — method tab (GA, SMILES RNN, scaffold hop)"),
             ("Starting Molecules", "seed SMILES / corpus fields"),
@@ -126,14 +126,14 @@ WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str], ...], str]] = {
             ("Visualize", "score history + property plots"),
             ("Export", "leaderboard CSV; chart exports"),
         ),
-        "Synthetic accessibility uses the validated SA implementation, "
-        "never a placeholder score.",
+        ("Synthetic accessibility uses the validated SA implementation, "
+        "never a placeholder score."),
     ),
     "molecular-docking": (
-        "Select Ligands → Validate/Prepare Ligands → Select/Prepare "
+        ("Select Ligands → Validate/Prepare Ligands → Select/Prepare "
         "Receptor → Define Binding Site/Grid → Configure Engine → Run "
         "Docking → Inspect Poses → Analyze Interactions → Visualize → "
-        "Export",
+        "Export"),
         (
             ("Select Ligands", "Docking — ligand set (SMILES table or prepared set)"),
             ("Validate/Prepare Ligands", "meeko PDBQT preparation, per-ligand errors surfaced"),
@@ -146,13 +146,13 @@ WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str], ...], str]] = {
             ("Visualize", "pose + interaction figures"),
             ("Export", "pose/analysis exports"),
         ),
-        "Preparation and docking errors are displayed per ligand — never "
-        "a silent empty result.",
+        ("Preparation and docking errors are displayed per ligand — never "
+        "a silent empty result."),
     ),
     "pkpd": (
-        "Import Data → Inspect Dose/Time/Response → Select Model → "
+        ("Import Data → Inspect Dose/Time/Response → Select Model → "
         "Configure Parameters → Fit/Simulate → Evaluate Diagnostics → "
-        "Visualize Exposure/Response → Export",
+        "Visualize Exposure/Response → Export"),
         (
             ("Import Data", "PK/PD — dataset/table picker incl. Data Explorer"),
             ("Inspect Dose/Time/Response", "dose table + concentration preview"),
@@ -163,12 +163,12 @@ WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str], ...], str]] = {
             ("Visualize", "exposure/response curves"),
             ("Export", "curve + table exports"),
         ),
-        "Unsupported calculations are never displayed as completed "
-        "features — the page refuses honestly.",
+        ("Unsupported calculations are never displayed as completed "
+        "features — the page refuses honestly."),
     ),
     "molecular-dynamics-analysis": (
-        "Load Topology/Trajectory → Validate → Select Analysis → Execute → "
-        "Inspect Results → Visualize → Export",
+        ("Load Topology/Trajectory → Validate → Select Analysis → Execute → "
+        "Inspect Results → Visualize → Export"),
         (
             ("Load Topology/Trajectory", "Molecular Dynamics — open study folder (or example study)"),
             ("Validate", "per-series axis/units confirmation on load"),
@@ -178,12 +178,12 @@ WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str], ...], str]] = {
             ("Visualize", "figure preview pane"),
             ("Export", "Export figure… with validation"),
         ),
-        "This workspace ANALYZES trajectories; it does not run "
-        "simulations, and never claims to.",
+        ("This workspace ANALYZES trajectories; it does not run "
+        "simulations, and never claims to."),
     ),
     "visualization": (
-        "Select Dataset/Model Result → Select Plot → Configure "
-        "Variables/Style → Generate → Inspect → Filter/Compare → Export",
+        ("Select Dataset/Model Result → Select Plot → Configure "
+        "Variables/Style → Generate → Inspect → Filter/Compare → Export"),
         (
             ("Select Dataset/Model Result", "Image Lab — source picker (datasets, model results)"),
             ("Select Plot", "the six tabs + Backend figures registry browser"),
@@ -193,8 +193,8 @@ WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str], ...], str]] = {
             ("Filter/Compare", "matrix filters; experiment comparison in Utilities"),
             ("Export", "chart export everywhere (640×480 legibility floor)"),
         ),
-        "Results from other workspaces arrive by REFERENCE — the shared "
-        "dataset/result model, no duplicated DataFrames.",
+        ("Results from other workspaces arrive by REFERENCE — the shared "
+        "dataset/result model, no duplicated DataFrames."),
     ),
     "introduction": (
         "Purpose → overview → workflow explanation → workspace navigation",
@@ -204,8 +204,8 @@ WORKFLOWS: dict[str, tuple[str, tuple[tuple[str, str], ...], str]] = {
             ("Workflow explanation", "the nine stage chains (each workspace's strip)"),
             ("Navigation", "workspace entries + the horizontal bar, Ctrl+1..9"),
         ),
-        "The Introduction workspace orients; the work happens in the "
-        "other eight.",
+        ("The Introduction workspace orients; the work happens in the "
+        "other eight."),
     ),
 }
 

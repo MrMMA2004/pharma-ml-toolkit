@@ -43,7 +43,6 @@ import platform
 import re
 import shutil
 import subprocess
-import sys
 from importlib import metadata as _md
 from pathlib import Path
 
@@ -186,8 +185,8 @@ def write_inventory() -> int:
         "# PharmaML Studio — dependency inventory (part9 §1.1)",
         "",
         f"Generated {stamp} by `tools/packaging_audit.py` from the ACTUAL",
-        f"source tree (studio.py + ui/ + src/ + scripts/, {sum(len(v) for v in found.values())} import"
-        " statements parsed) and the live venv's dist-info. Versions are",
+        (f"source tree (studio.py + ui/ + src/ + scripts/, {sum(len(v) for v in found.values())} import"
+        " statements parsed) and the live venv's dist-info. Versions are"),
         "importlib.metadata's truth, not a hand-maintained table.",
         "",
         f"Toolkit version audited: **{version}**. Python: {platform.python_version()}.",
@@ -255,7 +254,7 @@ def write_licenses_dir(target: Path) -> int:
     licenses = target / "THIRD_PARTY_LICENSES"
     licenses.mkdir(parents=True, exist_ok=True)
     seen: list[str] = []
-    for top, (dist, _purpose) in DISTRIBUTION_MAP.items():
+    for dist, _purpose in DISTRIBUTION_MAP.values():
         version = dist_version(dist)
         if version is None:
             continue
@@ -269,7 +268,7 @@ def write_licenses_dir(target: Path) -> int:
                     ("license", "licence", "notice", "copying")
                 )
             ] if info_dir.is_dir() else []
-        except Exception:
+        except Exception:  # noqa: BLE001 - a missing dist lists no licenses
             files = []
         wrote = False
         for f in files:

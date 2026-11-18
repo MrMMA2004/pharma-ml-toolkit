@@ -1867,54 +1867,6 @@ def _cmd_ml_compare(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_ml_check(args: argparse.Namespace) -> int:
-    """`ml check` — the round-trip audit before inference.
-
-    Prints the bundle's provenance block, then the feature-contract
-    verdict; exit 1 when the audit fails (CI-friendly: run it between
-    a regenerated CSV and a predict step).  ``--target`` drops the
-    training-label column first, so re-checking the original training
-    CSV works out of the box.
-    """
-    from pharmaml.ml.persistence import load_model, validate_bundle_input
-    from pharmaml.utils.io import read_table
-
-    _, metadata = load_model(args.model)
-    print(f"model:    {metadata.get('name', '<unknown>')} ({metadata.get('task', '?')})")
-    print(
-        f"trained:  {metadata.get('trained_at', '?')} "
-        f"(pharmaml {metadata.get('pharmaml_version', '?')}, "
-        f"sklearn {metadata.get('sklearn_version', '?')})"
-    )
-    features = metadata.get("features")
-    if isinstance(features, list) and features:
-        preview = ", ".join(str(name) for name in features[:6])
-        more = "…" if len(features) > 6 else ""
-        print(f"features: {len(features)} ({preview}{more})")
-    else:
-        print("features: (not recorded — the count contract is checked)")
-
-    frame = read_table(args.data)
-    if args.target is not None:
-        if args.target not in frame.columns:
-            print(
-                f"error: --target {args.target!r} is not a column of "
-                f"{args.data} (columns: {', '.join(map(str, frame.columns))})",
-                file=sys.stderr,
-            )
-            return 1
-        frame = frame.drop(columns=[args.target])
-    report = validate_bundle_input(args.model, frame)
-    print(f"data:     {Path(args.data).name} — {len(frame):,} rows x "
-          f"{len(frame.columns)} columns")
-    print(report)
-    if not report.ok and report.extra and args.target is None:
-        print(
-            "hint: if one of the extra columns is the training target, "
-            "pass --target <column> to drop it before the audit"
-        )
-    return 0 if report.ok else 1
-
 
 #: Hypermodel registry for `ml tune`: (estimator token, task) -> builder.
 def _tune_hypermodels() -> dict[tuple[str, str], Any]:

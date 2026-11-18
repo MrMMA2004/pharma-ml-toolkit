@@ -24,7 +24,7 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import QObject, QTimer, QRunnable, QThreadPool, Signal
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 
 ProgressReport = Callable[[Any, str], None]
 ProgressCallback = Callable[[Any, str], bool]

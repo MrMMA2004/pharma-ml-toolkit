@@ -35,24 +35,25 @@ The engine's honesty rules (§12/§13 spirit):
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Callable, Protocol
 import json
 import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Protocol
 
 from pharmaml.exceptions import DependencyError
 
 __all__ = [
-    "Stage",
+    "TEMPLATES",
     "Pipeline",
     "PipelineResult",
+    "Stage",
     "StageOutcome",
-    "run_pipeline",
-    "TEMPLATES",
-    "template_names",
     "build_template",
+    "run_pipeline",
     "template_documentation",
+    "template_names",
 ]
 
 
@@ -192,7 +193,7 @@ def run_pipeline(
                 produced=tuple(sorted(produced)),
             )
             result.artifacts.update(produced)
-        except Exception as exc:  # noqa: BLE001 - record, re-raise
+        except Exception as exc:
             outcome = StageOutcome(
                 stage=stage.name,
                 ok=False,
@@ -287,7 +288,15 @@ def _stage_split(test_size: float = 0.25, seed: int = 42) -> Stage:
     )
 
 
-def _stage_descriptors(smiles_col: str = "smiles", kind: str = "morgan") -> Stage:
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pharmaml.chem.descriptors import FingerprintKind
+
+
+def _stage_descriptors(
+    smiles_col: str = "smiles", kind: FingerprintKind = "morgan"
+) -> Stage:
     """Descriptors stage: the existing chem.descriptors.compute_* APIs.
 
     Reads the table as a plain SMILES column (not :func:`load_dataset`
@@ -296,6 +305,7 @@ def _stage_descriptors(smiles_col: str = "smiles", kind: str = "morgan") -> Stag
 
     def fn(artifacts: dict[str, Any]) -> dict[str, Any]:
         import pandas as pd
+
         from pharmaml.chem.descriptors import compute_fingerprints
 
         frame = artifacts["frame"]
@@ -337,6 +347,7 @@ def _stage_evaluation() -> Stage:
 
     def fn(artifacts: dict[str, Any]) -> dict[str, Any]:
         import numpy as np
+
         from pharmaml.ml.models import build_model
 
         board = artifacts["leaderboard"]
@@ -356,7 +367,7 @@ def _stage_evaluation() -> Stage:
                 r2_score(artifacts["y_test"], pred)))
         return {"best_model": best, "metric_name": metric_name,
                 "metric_value": float(value),
-                "heldout_n": int(len(artifacts["y_test"]))}
+                "heldout_n": len(artifacts["y_test"])}
 
     return Stage(
         name="evaluation",
@@ -408,7 +419,8 @@ def _qsar_template(out_dir: str | Path, data_path: str | Path,
 
 
 def _descriptors_template(out_dir: str | Path, data_path: str | Path,
-                          smiles_col: str, kind: str) -> Pipeline:
+                          smiles_col: str,
+                          kind: FingerprintKind) -> Pipeline:
     def dataset_fn(artifacts: dict[str, Any]) -> dict[str, Any]:
         import pandas as pd
 
@@ -467,6 +479,7 @@ def _response_template(out_dir: str | Path, screen_path: str | Path,
 
     def features_fn(artifacts: dict[str, Any]) -> dict[str, Any]:
         import pandas as pd
+
         from pharmaml.biology.omics import (
             most_variable_genes,
             normalize_expression,
@@ -515,7 +528,7 @@ def _response_template(out_dir: str | Path, screen_path: str | Path,
         return {"best_model": best, "metric_name": "r2",
                 "metric_value": float(np.asarray(
                     r2_score(artifacts["y_test"], pred))),
-                "heldout_n": int(len(artifacts["y_test"]))}
+                "heldout_n": len(artifacts["y_test"])}
 
     return Pipeline(
         name="drug_response_prediction",
@@ -826,8 +839,13 @@ def build_template(name: str, **kwargs: Any) -> Pipeline:
 
 def template_documentation() -> str:
     """Human-readable template index (the UI renders this verbatim)."""
-    lines = ["§17A workflow templates (each stage calls an existing "
-             "backend implementation):", ""]
+    lines = [
+        (
+            "§17A workflow templates (each stage calls an existing "
+            "backend implementation):"
+        ),
+        "",
+    ]
     for name, entry in TEMPLATES.items():
         lines.append(f"- {name} [{entry['card']}]: {entry['summary']}")
     return "\n".join(lines)

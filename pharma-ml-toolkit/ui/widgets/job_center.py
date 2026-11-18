@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 from ..widgets.responsive import configure_splitter
 from ..workers.job_worker import JobRunner
 
+
 #: How the elapsed clock renders.
 def _fmt_elapsed(seconds: float) -> str:
     minutes, secs = divmod(int(seconds), 60)

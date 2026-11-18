@@ -31,9 +31,9 @@ interpretation.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 from pharmaml.studio.runs import (
     RUN_SCHEMA,
@@ -46,9 +46,9 @@ __all__ = [
     "ComparisonGroup",
     "RunView",
     "collect_runs",
-    "compatibility_key",
     "compare_runs",
     "comparison_summary",
+    "compatibility_key",
 ]
 
 
@@ -230,6 +230,10 @@ class ComparisonGroup:
 
     key: tuple[str, ...]
     runs: list[RunView] = field(default_factory=list)
+    # attached by :func:`_annotate_verdict`; ``getattr`` readers treat
+    # them as optional (None until the verdict is computed)
+    _verdict: tuple[str, str, bool] | None = None
+    _table: list[ComparisonDimension] | None = None
 
     @property
     def comparable(self) -> bool:
@@ -372,7 +376,7 @@ def _annotate_verdict(group: ComparisonGroup) -> None:
         best = max(runs, key=lambda r: r.metric_value or float("-inf"))
     else:
         best = min(runs, key=lambda r: r.metric_value or float("inf"))
-    setattr(group, "_verdict", (best.label, metric, higher))
+    group._verdict = best.label, metric, higher
     delta_values = {}
     for r in runs:
         delta = _delta(r, best, higher)
@@ -384,7 +388,7 @@ def _annotate_verdict(group: ComparisonGroup) -> None:
     )
     group_dimensions = _dimensions(runs)
     group_dimensions.append(deltas)
-    setattr(group, "_table", group_dimensions)
+    group._table = group_dimensions
 
 
 def _delta(run: RunView, best: RunView, higher_is_better: bool) -> float | None:

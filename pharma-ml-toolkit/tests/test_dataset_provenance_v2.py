@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -39,7 +38,7 @@ def runs_dir(tmp_path, monkeypatch):
 
 class TestVersionSemantics:
     def test_same_content_keeps_the_version(self, workspace_file, tmp_path):
-        from pharmaml.studio import note, entries
+        from pharmaml.studio import entries, note
 
         csv = tmp_path / "ds.csv"
         frame = pd.DataFrame({"x": [1, 2, 3], "y": [0, 1, 0]})
@@ -53,7 +52,7 @@ class TestVersionSemantics:
         assert entry.content_version == 1
 
     def test_changed_content_bumps(self, workspace_file, tmp_path):
-        from pharmaml.studio import note, entries
+        from pharmaml.studio import entries, note
 
         csv = tmp_path / "ds.csv"
         pd.DataFrame({"x": [1, 2, 3], "y": [0, 1, 0]}).to_csv(csv, index=False)
@@ -113,7 +112,7 @@ class TestVersionSemantics:
         assert versions == [2, 1]
 
     def test_registry_round_trip_survives_reload(self, workspace_file, tmp_path):
-        from pharmaml.studio import note, entries
+        from pharmaml.studio import entries, note
 
         csv = tmp_path / "ds.csv"
         pd.DataFrame({"x": [1], "y": [0]}).to_csv(csv, index=False)
@@ -135,7 +134,7 @@ class TestVersionSemantics:
 
 class TestColumnSignature:
     def test_frame_signature_includes_dtypes(self, workspace_file, tmp_path):
-        from pharmaml.studio import note, entries
+        from pharmaml.studio import entries, note
         from pharmaml.studio.workspace import _column_signature
 
         csv = tmp_path / "ds.csv"
@@ -153,7 +152,7 @@ class TestColumnSignature:
         assert _column_signature(["x", "y"]) != _column_signature(frame)
 
     def test_no_columns_is_empty_signature(self, workspace_file, tmp_path):
-        from pharmaml.studio import note, entries
+        from pharmaml.studio import entries, note
         from pharmaml.studio.workspace import _column_signature
 
         csv = tmp_path / "ds.csv"

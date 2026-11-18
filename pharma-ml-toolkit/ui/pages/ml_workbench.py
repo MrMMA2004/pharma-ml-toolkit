@@ -1802,6 +1802,8 @@ class MLWorkbenchPage(QWidget):
         def job(progress: Any) -> Any:
             from pharmaml.studio import (
                 entries as workspace_entries,
+            )
+            from pharmaml.studio import (
                 latest_runs,
                 write_manifest,
             )
@@ -2238,19 +2240,19 @@ class MLWorkbenchPage(QWidget):
             ("predicted", f"{float(record.get('predicted', float('nan'))):.4g}"),
             ("kNN distance", f"{float(record.get('knn_distance', float('nan'))):.4g}"),
             ("distance threshold",
-             f"{float(result.distance_threshold):.4g} "
-             f"(p{getattr(result, 'percentile', 95):g}, k={result.k})"),
+             (f"{float(result.distance_threshold):.4g} "
+             f"(p{getattr(result, 'percentile', 95):g}, k={result.k})")),
             ("inside AD", "yes" if bool(record.get("inside_ad", False)) else "no"),
         ]
         std = record.get("prediction_sd", None)
-        if std is not None and std == std:
+        if std is not None and std == std:  # noqa: PLR0124 - the NaN guard
             fields.append(("prediction SD", f"{float(std):.4g}"))
             fields.append(("uncertainty threshold",
                            f"{float(getattr(result, 'uncertainty_threshold', 0.0) or 0.0):.4g}"))
             fields.append(("low uncertainty",
                            "yes" if bool(record.get("low_uncertainty", False)) else "no"))
             reliable = record.get("reliable", None)
-            if reliable is not None and reliable == reliable:
+            if reliable is not None and reliable == reliable:  # noqa: PLR0124 - the NaN guard
                 fields.append(("reliable (backend rule)",
                                "yes" if bool(reliable) else "no"))
         for label, value in fields:
@@ -2611,7 +2613,7 @@ class MLWorkbenchPage(QWidget):
             for cls in classes:
                 cls_idx = labeled_idx[y.to_numpy()[labeled_idx] == cls]
                 rng.shuffle(cls_idx)
-                take = max(1, int(round(len(cls_idx) * pool_pct / 100.0)))
+                take = max(1, round(len(cls_idx) * pool_pct / 100.0))
                 pool_part.extend(cls_idx[:take].tolist())
             pool_set = set(pool_part)
             train_idx = [i for i in labeled_idx.tolist() if i not in pool_set]

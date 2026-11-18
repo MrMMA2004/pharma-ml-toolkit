@@ -23,8 +23,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .nine_cards import NINE_CARDS, NineCard
 from pharmaml.studio.capability_registry import capabilities_for_card
+
+from .nine_cards import NineCard
 
 #: Section keys whose workflows the Advanced sidebar and Ctrl+1..9 cover;
 #: the workspace itself always shows every card entry.

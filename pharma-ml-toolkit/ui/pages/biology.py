@@ -361,7 +361,7 @@ class BiologyWorkbenchPage(QWidget):
             return f"expression matrix — not found: {path.name}"
         try:
             header = pd.read_csv(path, index_col=0, nrows=2)
-        except Exception as exc:  # malformed CSV: say so, don't crash
+        except Exception as exc:  # noqa: BLE001 - malformed CSV: say so, don't crash
             return f"expression matrix — unreadable ({exc.__class__.__name__})"
         n_cols = header.shape[1]
         lines = list(header.index[:3])
