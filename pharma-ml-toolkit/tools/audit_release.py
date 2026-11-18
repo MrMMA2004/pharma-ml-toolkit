@@ -274,9 +274,15 @@ def audit_archive(path: Path, profile_results: dict[str, Any] | None = None) -> 
             for info in archive.infolist():
                 name = info.filename[len(prefix):] if prefix else info.filename
                 parts = name.rstrip("/").split("/")
+                dir_parts = parts if info.is_dir() else parts[:-1]
                 excluded_dir = any(
                     part in checkpoint.ZIP_EXCLUDE_DIRS or part.endswith(checkpoint.ZIP_EXCLUDE_DIR_SUFFIX)
-                    for part in (parts if info.is_dir() else parts[:-1])
+                    for part in dir_parts
+                )
+                joined = "/".join(dir_parts)
+                excluded_dir = excluded_dir or any(
+                    joined == p or joined.startswith(p + "/")
+                    for p in checkpoint.ZIP_EXCLUDE_DIR_PATHS
                 )
                 if not info.is_dir():
                     rel_posix = "/".join(parts[:-1])

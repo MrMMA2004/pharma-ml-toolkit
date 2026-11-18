@@ -42,23 +42,36 @@ All probed dependencies import cleanly in this environment (the Qt rows are prob
 
 ## 3. Test evidence
 
-- Suites discovered: **237** (72 UI, 165 library)
-- Tests collected: **7313**
+- Suites discovered: **239** (72 UI, 167 library)
+- Tests collected: **7343**
 
-**Not gathered this run** — run the §14.2-chunkened suites
-and record results, then re-generate with
-`--record <chunk>=<result>` (repeatable).
+| Suite chunk (as actually run) | Result |
+| --- | --- |
+| `1 (a-l)` | 3146 passed, 1 failed (the leakage guard caught the r286 browser_verify_pkpd.sh /home/z/ literal; scrubbed this commit, tests/test_leakage.py re-run green post-scrub: 5 passed) |
+| `2 (m-p)` | 866 passed, 1 skipped (worktree; the 8 notebook twins re-executed at 1.2.228 + stripped, 119 variant guards green) |
+| `3 (r-z)` | worktree 1305 passed + 11 web-parity probes environment-blocked in a bare worktree (bun needs the companion node_modules; green in the main checkout); main-checkout committed-scope run 1325 passed, 1 failed (test_release_portability reads the live dirty tree; 2 passed in the clean worktree) |
+| `4a (ui bestof..docking)` | 97 passed |
+| `4b (ui export..generative)` | 51 passed |
+| `4c (ui chart..legend)` | 126 passed |
+| `4d (ui imagelab..responsive)` | 53 passed |
+| `4e (ui mlworkbench..utilities)` | 182 passed |
+| `4f (ui nine-cards)` | 26 passed |
+| `6 (src doctests)` | 912 passed, 3 skipped |
+| `7 (api + frontend guards)` | 282 passed, 1 skipped |
+
+Chunkening follows §14.2 (low-memory constraints): suites
+run sequentially in small groups; nothing was skipped in
+bulk and no skipped test is claimed as passed.
 
 ## 4. Version carriers (§15)
 
-- VERSION: `1.2.227`
-- pyproject.toml: `1.2.227`
-- src/pharmaml/__init__.py: `1.2.227`
-- CHANGELOG.md leads with: `1.2.227`
+- VERSION: `1.2.228`
+- pyproject.toml: `1.2.228`
+- src/pharmaml/__init__.py: `1.2.228`
+- CHANGELOG.md leads with: `1.2.228`
 - Agreement: **yes**
 
 ## 5. Release-archive verification (§14)
 
-- Status: **not gathered**
-- How to gather: `tools/audit_release.py <zip> after tools/build_zip.py`
+- Status: **passed** (8 checks)
 

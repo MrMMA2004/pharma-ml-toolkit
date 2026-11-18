@@ -3,7 +3,7 @@
 # (background processes do not survive between tool calls here):
 # backend + vite + the agent-browser flow + the assertions + cleanup.
 set -u
-cd /home/z/my-project/pharma-ml-toolkit
+cd "$HOME/my-project/pharma-ml-toolkit"
 
 FAILED=0
 note() { echo "==[ $1 ]=="; }
@@ -13,7 +13,7 @@ check() { # check <name> <cond-string>
 
 # -- boot the real backend (port-0 handshake) --------------------------
 rm -f /tmp/pkpd_backend.log
-/home/z/.venv/bin/python3 -m pharmaml.api > /tmp/pkpd_backend.log 2>&1 &
+"$HOME/.venv/bin/python3" -m pharmaml.api > /tmp/pkpd_backend.log 2>&1 &
 BACKEND_PID=$!
 
 # read the handshake BEFORE starting vite (the dev proxy targets it)

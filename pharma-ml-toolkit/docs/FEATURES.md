@@ -9,13 +9,15 @@ inventory, not a current certification: counts and grades have not been
 revalidated against every current UI and dependency profile. See
 [Part 5 audit](PART5_PHASE0_AUDIT.md) and [test profiles](TEST_PROFILES.md)
 for scoped evidence and engine limitations. Matrix inputs were frozen
-at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.227 (the
+at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.228 (the
 Phase-4 search/job-center/workspace rows and the Phase-5 glossary/
 presets/doctor rows are registry-level additions, not matrix changes;
 r266 arena absorption landed the former E-row conformal/coverage/split-audit
 suite from `arena/8696775e`; the r265 §24.3/24.4 rows were trued live;
 the r271 Response AI web twin closed the last Studio-only row — census
-35 cards / 29 routes; the r272 round added the part9 Windows-installer
+35 cards / 29 routes; the r285/r286 rounds flipped the §11.5 Molecular
+Docking and §11.6 PK/PD workspaces from shell to connected workflow
+(7 of 9 rows) — registry flips, not matrix changes; the r272 round added the part9 Windows-installer
 packaging suite under `packaging/windows/`, documented in its own
 BUILD_REPORT, not as a GUI matrix row; the r273 round verified that
 packaging policy for real by freezing the app on the Linux host —
