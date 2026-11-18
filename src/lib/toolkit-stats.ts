@@ -29,7 +29,7 @@ export const SHIPPED_FILE_COUNT = 1546;
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). The r287
  *  close-out live census: 582,735. */
-export const SHIPPED_SOURCE_LINES = 582735;
+export const SHIPPED_SOURCE_LINES = 582740;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */
