@@ -1,3 +1,99 @@
+## [1.2.228] — 2026-11-18 — round 287 (part11 §11.7/§11.8: the MD Analysis + Visualization rows — the nine-workspace GUI reconstruction completes; the r285/286 docking + PK/PD rows ride the same close)
+
+- **The §11.7 sequential workflow now EXISTS** as
+  `frontend/src/features/md/MDPage.tsx`: the complete chain on the REAL
+  backend — Load Topology/Trajectory (the seeded deterministic demo
+  trajectory, an inline `frames x atoms x 3` coordinate stack, or
+  pasted GROMACS `.xvg` text; the backend's own parsers stay the
+  authority), Validate (the client pre-flight mirrors the route's own
+  list bounds — frames 1…2000, atoms ≤ 300, elements ≤ 240000, the
+  `.xvg` text ≤ 2,000,000 chars — while the scalar ranges stay the
+  backend's honest 422s), Select Analysis (the backend's own
+  `GET /md/catalog` inventory — five groups, each naming the functions
+  it wraps — never a client-side guess), Execute (the trajectory
+  metric bundle, the `.xvg` stats + moving average, the ANM
+  fluctuations, the standalone PCA, or the full study as a managed job
+  with honest per-stage `job.progress` telemetry and native
+  CANCELLED-never-FAILED cancellation), Inspect Results (the bundle
+  summary, the contact-map occupancy block, the PCA explained
+  variance, the ENM fluctuation table — all the backend's own
+  verdicts), Visualize (inline RMSD/Rg/native-contact curves drawn
+  ONLY from points that arrived + the REAL `plot_md_series` figure
+  artifact through the §17 four-format export stack), Export (the
+  rows-based table lane with the backend's own 5000-row cap mirrored
+  client-side + digest-verified downloads). The
+  analysis-vs-simulation distinction the spec demands stays visible:
+  the page analyzes trajectories and never runs simulations — no MD
+  engine is bundled or launched.
+- **The §11.8 sequential workflow now EXISTS** as
+  `frontend/src/features/visualization/VisualizationPage.tsx`: the
+  complete chain on the REAL backend — Select Dataset/Analysis Result
+  (§11.8's cross-workspace demand honored through the shared
+  `artifactsApi.list()` registry — the outputs the other workspaces
+  registered — plus the paste lanes for raw series), Select
+  Visualization (the backend's own `GET /visualization/catalog`
+  inventory: the statplots / pharma-figures / md-series / table /
+  report families + PALETTE + export formats + report themes),
+  Configure Variables (each family's own parameters), Generate (the
+  stat stats dict, the concentration profile, the dose accumulation,
+  the md-series figure, the table export, or the self-contained HTML
+  report as a managed job with honest `file.progress` telemetry),
+  Inspect (the statplots stats dict rendered type-aware and bounded),
+  Filter/Compare (the registry filtered by its own kinds + the last
+  two generated artifacts compared side-by-side — honest, only over
+  what actually arrived), Export (the digest-verified download lane +
+  the rows-based table export).
+- **The md + visualization clients**
+  (`frontend/src/services/md/client.ts`,
+  `frontend/src/services/visualization/client.ts`): request bodies
+  from the GENERATED `api.d.ts` types (SyntheticRequest /
+  MDAnalyzeRequest / XvgRequest / EnmRequest / PcaRequest /
+  StudyRequest / MdSeriesRequest / StatRequest /
+  ConcentrationProfileRequest / DoseAccumulationRequest /
+  ReportRequest / VisualizationTableRequest), runtime validation on
+  every untrusted payload (parseMetricBundle / parseXvgResponse /
+  parseEnmResponse / parsePcaResponse / parseStudyBody /
+  parseMdSeriesFigureResponse / parseVizCatalog / parseStatResponse /
+  parseReportBody / parseJobProgressPayload), and the pre-flight
+  bounds mirrored from the routes' own pydantic validators.
+- **A REAL bug fixed in the shared job hook**
+  (`frontend/src/hooks/useJobTracking.ts`): `useJob` subscribed
+  BEFORE it tracked — the tracker entry did not exist when the
+  callback was registered, so the async REST refresh's notify()
+  reached an empty subscriber set and the store never re-rendered the
+  job card (the WS path papered over it through page-level envelope
+  subscriptions; the REST-poll recovery path never updated). The
+  order is now track-then-subscribe with the rationale documented;
+  all nine workspaces' job lanes ride the corrected hook.
+- **The nine-workspace registry is now ALL `workflow` state** — the
+  §10.1 sequence completes with every row connected to the real
+  backend (the r285 Molecular Docking and r286 PK/PD rows ride this
+  same close; their E2E scripts
+  `scratch/browser_verify_pkpd.sh` and the docking E2E drivers were
+  the cut-off session's last verified acts).
+- **21 new Python drift guards**
+  (`tests/test_md_workspace.py` +
+  `tests/test_visualization_workspace.py`): the REST surfaces vs the
+  real route modules, the request-body field parity vs the pydantic
+  DTOs, the response-view keys vs the routes' own answer dicts
+  (including `_metric_bundle`'s keys, the contact-map occupancy
+  block, `_study_body`'s return, `_report_body`'s two-return union,
+  and the catalog rows), the contract-path anti-fabrication guard,
+  the registry flip + App wiring + unchanged §10.1 order, the §11.7/
+  §11.8 stage orders, the honesty blocks (the
+  analysis-vs-simulation distinction, the no-guess catalogs, the
+  native-cancel notes, the WS-is-progress-only relay notes, the
+  only-what-arrived compare pane), and the job lanes riding the REAL
+  tracker machinery.
+- **E2E browser verification** (`scratch/browser_verify_md_viz.sh`,
+  46/46 checks PASS): the real backend booted (port-0 handshake),
+  the vite dev proxy wired, and both workspaces driven end-to-end —
+  the catalogs, the metric bundle, the `.xvg` stats + overlay, the
+  md-series figure artifact, the full study job through the tracker
+  (COMPLETED → REST relay → body + figure artifacts), the digest
+  verified exports, all five visualization families, the report job
+  through the tracker, and the filter/compare pane.
+
 ## [1.2.227] — 2026-11-18 — round 284 (part11 §11.4: the Generative AI workspace on the real backend)
 
 - **The §11.4 sequential workflow now EXISTS** as

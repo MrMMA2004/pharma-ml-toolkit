@@ -72,8 +72,14 @@ export function useJob(jobId: string | null): UseJobResult {
       return [noop, () => null] as const;
     }
     const sub = (cb: () => void) => {
-      const unlisten = tracker.subscribe(jobId, cb);
+      // track() seeds the tracker entry (and kicks the authoritative
+      // REST read) BEFORE subscribe() registers this callback — the
+      // entry must exist when the callback is added, or the async
+      // refresh's notify() would reach an empty subscriber set and
+      // the store would never re-render the card (the REST-poll
+      // recovery path depends on this order as much as the WS path).
       const untrack = tracker.track(jobId);
+      const unlisten = tracker.subscribe(jobId, cb);
       return () => {
         unlisten();
         untrack();

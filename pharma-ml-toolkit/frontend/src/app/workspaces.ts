@@ -3,10 +3,9 @@
  *
  * The left-to-right order is EXACT and never changes; Introduction is
  * selected at startup and the initial page is Introduction ONLY (the
- * old nine-card dashboard must not return as the home page). The
- * existing detailed PySide6 pages reorganize as workflow stages /
- * tabs / advanced panels inside these workspaces in later campaign
- * rows; the queued rows are honest plans, not claims.
+ * old nine-card dashboard must not return as the home page). All nine
+ * rows are now `workflow` state — each workspace's §11 sequential
+ * workflow is connected to the real backend API.
  */
 
 export type WorkspaceId =
@@ -89,14 +88,14 @@ export const WORKSPACES: readonly WorkspaceEntry[] = [
     label: "Molecular Dynamics Analysis",
     summary:
       "Load Topology/Trajectory → Validate → Select Analysis → Execute → Inspect → Visualize → Export. Trajectory analysis, distinct from simulation.",
-    state: "shell",
+    state: "workflow",
   },
   {
     id: "visualization",
     label: "Visualization",
     summary:
       "Select Dataset/Analysis Result → Visualization → Variables → Generate → Inspect → Compare → Export.",
-    state: "shell",
+    state: "workflow",
   },
 ] as const;
 

@@ -8,6 +8,8 @@ import { DLPage } from "@/features/dl/DLPage";
 import { GenerativePage } from "@/features/generative/GenerativePage";
 import { DockingPage } from "@/features/docking/DockingPage";
 import { PKPDPage } from "@/features/pkpd/PKPDPage";
+import { MDPage } from "@/features/md/MDPage";
+import { VisualizationPage } from "@/features/visualization/VisualizationPage";
 import { INITIAL_WORKSPACE, WORKSPACES, type WorkspaceId } from "@/app/workspaces";
 
 /**
@@ -72,6 +74,10 @@ export function App() {
           <DockingPage />
         ) : entry.id === "pkpd" ? (
           <PKPDPage />
+        ) : entry.id === "molecular-dynamics" ? (
+          <MDPage />
+        ) : entry.id === "visualization" ? (
+          <VisualizationPage />
         ) : (
           <WorkspaceShell entry={entry} />
         )}
