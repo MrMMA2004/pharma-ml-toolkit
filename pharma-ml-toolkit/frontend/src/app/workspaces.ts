@@ -82,7 +82,7 @@ export const WORKSPACES: readonly WorkspaceEntry[] = [
     label: "PK/PD",
     summary:
       "Import Data → Inspect → Model → Parameters → Fit/Simulate → Diagnostics → Exposure/Response → Export.",
-    state: "shell",
+    state: "workflow",
   },
   {
     id: "molecular-dynamics",

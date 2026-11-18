@@ -33,5 +33,22 @@ export default defineConfig({
   server: {
     port: 5174,
     strictPort: true,
+    host: process.env.PHARMAML_DEV_HOST ?? "localhost",
+    // dev-only: with PHARMAML_DEV_BACKEND_PORT set, the /api lanes are
+    // proxied server-side to the real backend's loopback port, so a
+    // browser dev session rides the actual service same-origin (the
+    // CORS gate never applies server-side; the X-Session-Token header
+    // forwards as-is; the WS lane stays direct — loopback origins pass
+    // the backend's own guard). The production frontend never uses
+    // this: the Tauri 2 host loads the static dist/ build.
+    proxy: process.env.PHARMAML_DEV_BACKEND_PORT
+      ? {
+          "/api": {
+            target: `http://127.0.0.1:${process.env.PHARMAML_DEV_BACKEND_PORT}`,
+            changeOrigin: false,
+            ws: false,
+          },
+        }
+      : undefined,
   },
 });
