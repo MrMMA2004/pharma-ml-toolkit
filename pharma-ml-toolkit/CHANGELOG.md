@@ -1,3 +1,77 @@
+## [1.2.228-r288b] — 2026-11-19 — part11 Phase Eighteen: the Three.js 3D scientific visualization lanes (the interactive continuation of run 84)
+
+- **The Phase Eighteen 3D lanes now EXIST.**
+  `frontend/src/services/molecular3d/pdbqt.ts` — the PDBQT text
+  parser + the element vocabulary: the fixed-column PDB/PDBQT grammar
+  (x 31-38, y 39-46, z 47-54 — pinned against the backend's own
+  `tests/conftest.py::pdbqt_atom` convention by a live round-trip
+  guard), the AutoDock trailing-token atom type, the
+  type→display-element map (`A`→`C`, `OA`→`O`, `HD`→`H`, `NA`→`N`,
+  `SA`→`S` …), the Jmol/CPK palette, Bondi/Slater display + covalent
+  radii, the O(n²) distance display-bond heuristic (capped at 2,000
+  atoms, stated as display-only in the required note), and the honest
+  diagnostics (malformed records counted, the 4,000-atom render limit
+  surfaced, never a silent drop).
+  `frontend/src/components/molecular3d/Molecule3D.tsx` — the viewer
+  proper: ball-and-stick on OrbitControls (interactive rotation /
+  zoom / pan with damping), MeshStandardMaterial per element, the
+  raycast selection lane (click-vs-drag threshold, the highlight
+  wireframe + the metadata readout), the structure metadata strip
+  (atom / bond counts, the element histogram, the bounding box), the
+  trajectory playback lane (slider + play/pause, positions applied
+  ONLY from the frames that arrived), the WebGL-unavailable probe +
+  the stated fallback card, the resource-aware rendering
+  (devicePixelRatio capped at 2, the RAF loop paused offscreen via
+  IntersectionObserver and on `document.hidden`), and the complete
+  dispose chain shared by the unmount cleanup AND the failed-build
+  catch.
+- **The two workspace integrations**: the §11.5 Molecular Docking
+  page's Visualize stage gains the ligand + receptor 3D cards (the
+  prepared ligand's PDBQT fetched through the same token-header raw
+  lane the download rides; the receptor rendered from the pasted
+  stage-3 text — with the never-fabricated note: pose coordinates are
+  not parsed from the engine logs, so only the prepared structures
+  render, never an imagined complex); the §11.7 MD page's Validate
+  stage gains the trajectory playback card (the validated inline
+  stack rendered frame by frame, every atom honestly uniform — the
+  stack carries positions only, never element identities).
+- **A REAL shipped defect caught live by the 3D E2E**: the MD inline
+  lane's default `SAMPLE_COORDS` carried four atoms' 12 numbers on
+  ONE line — malformed for the page's own one-triple-per-line parser,
+  so the default sample could NEVER validate (the r287 E2E exercised
+  only the synthetic lane and never caught it). Fixed to the exact
+  grammar (three frames × four atoms, one `x y z` per line) and
+  pinned by a new grammar guard so the sample can never drift from
+  the parser again.
+- **27 new drift guards** (`tests/test_molecular3d.py`): the parser
+  grammar pins + the live round-trip against the backend's own
+  conftest column convention, the element vocabulary + palette +
+  radii pins, the viewer's Phase Eighteen contract (the imports, the
+  resource-awareness blocks, the dispose chain, the WebGL fallback,
+  the required-note throw, the selection + playback lanes), both
+  pages' wiring + the honesty notes verbatim, the genuine-3D-only
+  rule (`three` imported by exactly ONE source file; the 2D lanes
+  stay the §17 Plotly artifact stack), the package pin, and the
+  anti-fabrication contract check.
+- **BROWSER-3D-PASS** (`scratch/browser_verify_3d.sh`, 21/21 checks
+  on the live backend through the vite dev proxy, headless WebGL
+  available): the ligand PDBQT artifact registered → loaded into the
+  3D view → the WebGL canvas mounted → the honesty notes rendered →
+  the receptor fallback lane; the inline stack validated (3 frames ×
+  4 atoms) → the trajectory playback card + Frame 1/3 → the stepper
+  advanced to Frame 2/3 → the canvas mounted; zero page errors, zero
+  error-class console messages. (The stepper lane needed the native
+  value setter — React's value tracker dedupes a bare `.value`
+  assignment.)
+- Gates: tsc 0 errors, eslint 0 findings, the production vite build
+  green (2,117 modules, three.js chunked at 477 KB), the six guard
+  families green (100/100: molecular3d 27 + md + docking +
+  checkpoint-tooling + frontend services + foundation), ruff clean on
+  the new test. The v1.2.229 zip ritual + the four-carrier bump ride
+  the next pipeline firing with the full eleven-leg gate (the r286
+  precedent — the payload is committed, the shipped f2c411ca archive
+  predates it and stays internally consistent).
+
 ## [1.2.228-r288] — 2026-11-19 — the housekeeping absorption (the 2h pipeline's arena/recover288 branch merged; the superseding rebuild)
 
 - **The arena/recover288 branch is absorbed.** The 2026-11-18 17:58 UTC

@@ -15442,3 +15442,47 @@ docking poses / binding sites / MD trajectory frames lanes), then the
 remaining audit phases (Phase Sixteen backend–GUI integration audit,
 Phase Twenty-Four dependency/packaging readiness, the §46 final
 acceptance sweep).
+
+---
+
+## Round 288 — 100x-84 (interactive continuation): part11 Phase Eighteen — the Three.js 3D scientific visualization lanes
+
+MASTER_PROMPT part11_1+part11_2 continued. The 2h pipeline fired
+mid-session (its own r288: the arena/recover288 absorption + the
+superseding f2c411ca rebuild + the full eleven-leg gate 7,080 green +
+counter 83→84); the interactive continuation closed Phase Eighteen on
+top.
+
+**Phase Eighteen CLOSED**: `three@0.180` was installed but had ZERO
+src usage — now the genuine 3D lanes exist:
+`frontend/src/services/molecular3d/pdbqt.ts` (the PDBQT parser — the
+fixed-column grammar pinned against the backend's own conftest
+convention by a live round-trip guard, the AutoDock type→element map,
+the CPK palette, the display/covalent radii, the distance display-bond
+heuristic capped at 2,000 atoms, honest diagnostics) +
+`frontend/src/components/molecular3d/Molecule3D.tsx` (the viewer —
+ball-and-stick on OrbitControls, per-element MeshStandardMaterial, the
+raycast selection lane, the metadata strip, the trajectory playback
+lane rendering ONLY the frames that arrived, the WebGL probe + the
+stated fallback card, resource-aware rendering: DPR capped at 2, the
+RAF loop paused offscreen/hidden, the complete dispose chain) + the
+two integrations (the docking Visualize stage's ligand + receptor 3D
+cards with the never-fabricated-pose note; the MD Validate stage's
+trajectory playback card, every atom honestly uniform).
+
+**A REAL shipped defect caught live**: the MD inline lane's default
+SAMPLE_COORDS carried 12 numbers on one line — malformed for the
+page's own one-triple-per-line parser; the default sample could never
+validate (the r287 E2E tested only the synthetic lane). Fixed + a
+new grammar guard pins it.
+
+BROWSER-3D-PASS: 21/21 on the live backend through the dev proxy
+(headless WebGL available; the stepper needed the native value setter
+— React's value tracker dedupes bare assignments). Gates: tsc 0,
+eslint 0, the vite production build green (three chunked 477 KB), the
+six guard families 100/100, ruff clean. The v1.2.229 zip ritual +
+four-carrier bump ride the next pipeline firing (the r286 precedent).
+
+Next queue: the remaining part11_1 phases — Phase Sixteen (the
+backend–GUI integration audit), Phase Twenty-Four (dependency &
+packaging readiness), the §46 final acceptance sweep.

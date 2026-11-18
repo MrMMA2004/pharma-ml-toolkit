@@ -42,6 +42,18 @@ import {
   type StudyBodyView,
   type XvgResponse,
 } from "@/services/md/client";
+import {
+  Molecule3D,
+  type Molecule3DAtom,
+} from "@/components/molecular3d/Molecule3D";
+import {
+  inferDisplayBonds,
+  UNIFORM_COORDINATE_ELEMENT,
+} from "@/services/molecular3d/pdbqt";
+
+/** The Phase Eighteen display-heuristic honesty note (required). */
+const MD_3D_BOND_NOTE =
+  "The inline stack carries positions only — element identities never arrive, so every atom renders honestly uniform; bonds are drawn by a distance heuristic (covalent radii × 1.25), display only and never scientific output; each frame renders only the coordinates that actually arrived.";
 
 /**
  * The Molecular Dynamics Analysis workspace — part11 §11.7's complete
@@ -136,10 +148,30 @@ const SAMPLE_XVG = [
  * `x y z` per line, blank line between frames) — the inline lane's
  * own editable sample.
  */
+// (r288 fix, caught live by the Phase Eighteen 3D lane's E2E): the
+// previous sample put four atoms' 12 numbers on ONE line — malformed
+// for the page's own one-triple-per-line parser, so the default
+// sample could never validate; the exact grammar below is
+// one `x y z` triple per line, blank lines between frames.
 const SAMPLE_COORDS = [
-  "0.0   0.0   0.0    3.1  0.0  0.0    0.0  3.2  0.0    1.0  1.0  1.0",
-  "0.05  0.02  0.01   3.15 0.03 0.02   0.04 3.18 0.03   1.04 1.03 1.02",
-  "0.11  0.05  0.03   3.22 0.07 0.05   0.09 3.26 0.08   1.09 1.07 1.05",
+  [
+    "0.0   0.0   0.0",
+    "3.1   0.0   0.0",
+    "0.0   3.2   0.0",
+    "1.0   1.0   1.0",
+  ].join("\n"),
+  [
+    "0.05  0.02  0.01",
+    "3.15  0.03  0.02",
+    "0.04  3.18  0.03",
+    "1.04  1.03  1.02",
+  ].join("\n"),
+  [
+    "0.11  0.05  0.03",
+    "3.22  0.07  0.05",
+    "0.09  3.26  0.08",
+    "1.09  1.07  1.05",
+  ].join("\n"),
 ].join("\n\n");
 
 /** The ENM lane's own editable sample (ten atoms). */
@@ -565,6 +597,42 @@ export function MDPage() {
   const [coordsMassesValue, setCoordsMassesValue] = useState<
     readonly number[] | null
   >(null);
+
+  // stage 2 — the Phase Eighteen 3D playback lane (Three.js): the
+  // validated stack rendered frame by frame; the inline stack
+  // carries positions only, so every atom renders honestly uniform
+  // (never a guessed element) and the frames render only the
+  // coordinates that actually arrived
+  const trajectory3d = useMemo(() => {
+    if (coordsStack === null || coordsStack.length === 0) {
+      return null;
+    }
+    const firstFrame = coordsStack[0]!;
+    const atoms: Molecule3DAtom[] = firstFrame.map((position) => ({
+      element: UNIFORM_COORDINATE_ELEMENT,
+      x: position[0],
+      y: position[1],
+      z: position[2],
+      label: null,
+    }));
+    const displayAtoms = firstFrame.map((position, index) => ({
+      index,
+      atomType: UNIFORM_COORDINATE_ELEMENT,
+      element: UNIFORM_COORDINATE_ELEMENT,
+      x: position[0],
+      y: position[1],
+      z: position[2],
+      serial: index + 1,
+      name: null,
+      residue: null,
+    }));
+    const bonds = inferDisplayBonds(displayAtoms);
+    const frames: readonly (readonly [number, number, number])[][] =
+      coordsStack.map((frame) =>
+        frame.map((position) => [position[0], position[1], position[2]] as const),
+      );
+    return { atoms, bonds, frames };
+  }, [coordsStack]);
 
   // stage 3: the backend's own catalog
   const [catalog, setCatalog] = useState<MdCatalogResponse | null>(null);
@@ -1280,6 +1348,37 @@ export function MDPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Phase Eighteen — the genuine 3D trajectory lane (Three.js):
+            the validated stack played frame by frame; this is an
+            ANALYSIS view over the coordinates that actually arrived
+            (the workspace never runs simulations — no MD engine is
+            bundled or launched). */}
+        {trajectory3d !== null ? (
+          <Molecule3D
+            title="Trajectory playback (3D)"
+            description="The validated inline stack rendered frame by frame — play or step through the frames that actually arrived; click an atom to inspect its position in the current frame."
+            atoms={trajectory3d.atoms}
+            bonds={trajectory3d.bonds}
+            frames={trajectory3d.frames}
+            bondNote={MD_3D_BOND_NOTE}
+            height={320}
+          />
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Trajectory playback (3D)</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-[var(--color-muted-foreground)]">
+              <p>
+                The 3D playback renders the validated stack — load a
+                trajectory source in stage one first (the seeded demo, an
+                inline coordinate stack, or pasted `.xvg` text). The view
+                draws only frames that actually arrived.
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </StageHeader>
 
       {/* stage 3: Select Analysis */}

@@ -47,6 +47,16 @@ import {
   type ReceptorPrepareResponse,
   type VinaParseResponse,
 } from "@/services/docking/client";
+import {
+  Molecule3D,
+  type Molecule3DAtom,
+} from "@/components/molecular3d/Molecule3D";
+import {
+  BOND_INFERENCE_ATOM_LIMIT,
+  inferDisplayBonds,
+  parsePdbqtAtoms,
+  type InferredBond,
+} from "@/services/molecular3d/pdbqt";
 
 /**
  * The Molecular Docking workspace — part11 §11.5's complete sequential
@@ -192,6 +202,48 @@ function describeError(error: unknown): string {
   }
   return error instanceof Error ? error.message : String(error);
 }
+
+/**
+ * The Phase Eighteen 3D scene builder — the PDBQT text that actually
+ * arrived parsed client-side for display only (the backend's own
+ * preparation stays the scientific authority); the bonds are the
+ * documented distance heuristic, never scientific output.
+ */
+interface Scene3d {
+  readonly atoms: readonly Molecule3DAtom[];
+  readonly bonds: readonly InferredBond[];
+  readonly diagnostics: string;
+}
+
+function pdbqtToScene(text: string, label: string): Scene3d {
+  const parsed = parsePdbqtAtoms(text, label);
+  const atoms: Molecule3DAtom[] = parsed.atoms.map((atom) => ({
+    element: atom.element,
+    x: atom.x,
+    y: atom.y,
+    z: atom.z,
+    label:
+      [atom.name, atom.residue]
+        .filter((part) => part !== null && part.trim() !== "")
+        .join(" ") || null,
+  }));
+  const bonds = inferDisplayBonds(parsed.atoms);
+  const diagnostics: string[] = [];
+  if (parsed.skipped > 0) {
+    diagnostics.push(`${parsed.skipped} malformed records skipped (counted, never silent)`);
+  }
+  if (parsed.truncated > 0) {
+    diagnostics.push(`${parsed.truncated} records beyond the 4,000-atom render limit not drawn`);
+  }
+  if (bonds.length === 0 && parsed.atoms.length > BOND_INFERENCE_ATOM_LIMIT) {
+    diagnostics.push("bond inference skipped above the 2,000-atom display limit");
+  }
+  return { atoms, bonds, diagnostics: diagnostics.join("; ") };
+}
+
+/** The Phase Eighteen display-heuristic honesty note (required). */
+const DOCKING_3D_BOND_NOTE =
+  "Bonds are drawn by a distance heuristic (covalent radii × 1.25) — display only, never scientific output; the scene renders only the ATOM/HETATM records that actually arrived. Pose coordinates are not parsed from the engine logs, so only the prepared ligand and receptor structures render — never an imagined complex.";
 
 function ErrorBanner({ message }: { message: string }) {
   return (
@@ -539,6 +591,13 @@ export function DockingPage() {
   const [ligandError, setLigandError] = useState<string | null>(null);
   const [ligandBusy, setLigandBusy] = useState(false);
   const [ligandDigest, setLigandDigest] = useState<string | null>(null);
+
+  // stage 9 — the Phase Eighteen 3D structure lane (Three.js): the
+  // prepared ligand's PDBQT text fetched through the digest-verified
+  // raw lane and the pasted receptor rendered as ball-and-stick
+  const [ligand3dText, setLigand3dText] = useState<string | null>(null);
+  const [ligand3dBusy, setLigand3dBusy] = useState(false);
+  const [ligand3dError, setLigand3dError] = useState<string | null>(null);
 
   // stage 3 — the receptor preparation lane
   const [receptorText, setReceptorText] = useState<string>("");
@@ -1150,6 +1209,51 @@ export function DockingPage() {
       setLigandError(describeError(error));
     }
   }, [ligandResult, verifiedDownload]);
+
+  // stage 9: load the prepared ligand's PDBQT text for the 3D view —
+  // the same token-header raw lane the download rides, the text kept
+  // for display (the backend's own preparation stays the authority)
+  const handleLigand3dLoad = useCallback(async () => {
+    if (ligandResult === null) {
+      return;
+    }
+    setLigand3dBusy(true);
+    setLigand3dError(null);
+    try {
+      const download = await artifactsApi.download(
+        ligandResult.artifact.artifact_id,
+      );
+      setLigand3dText(await download.blob.text());
+    } catch (error) {
+      setLigand3dError(describeError(error));
+    } finally {
+      setLigand3dBusy(false);
+    }
+  }, [ligandResult]);
+
+  // the parsed 3D scenes — rebuilt from the texts that actually
+  // arrived; a parse failure renders the honest error, never a guess
+  const ligand3dScene = useMemo(() => {
+    if (ligand3dText === null) {
+      return null;
+    }
+    try {
+      return pdbqtToScene(ligand3dText, "the ligand PDBQT");
+    } catch (error) {
+      return { error: describeError(error) } as const;
+    }
+  }, [ligand3dText]);
+
+  const receptor3dScene = useMemo(() => {
+    if (receptorText.trim() === "") {
+      return null;
+    }
+    try {
+      return pdbqtToScene(receptorText, "the receptor PDBQT");
+    } catch (error) {
+      return { error: describeError(error) } as const;
+    }
+  }, [receptorText]);
 
   const handleReceptorDownload = useCallback(async () => {
     if (receptorResult === null) {
@@ -2933,6 +3037,70 @@ export function DockingPage() {
             read out of the log.
           </p>
         )}
+
+        {/* Phase Eighteen — the genuine 3D structure lane (Three.js):
+            the prepared ligand (its PDBQT artifact fetched through the
+            digest-verified raw lane) and the pasted receptor rendered
+            as ball-and-stick; the pose coordinates are NOT parsed
+            from the engine logs, so only the structures that
+            actually arrived render — never an imagined complex. */}
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={ligandResult === null || ligand3dBusy}
+                onClick={() => void handleLigand3dLoad()}
+              >
+                {ligand3dBusy ? "loading…" : "Load the prepared ligand in 3D"}
+              </Button>
+              <span className="text-xs text-[var(--color-muted-foreground)]">
+                the stage-2 ligand PDBQT artifact — ball-and-stick, click an
+                atom to inspect it
+              </span>
+            </div>
+            {ligand3dError !== null ? (
+              <ErrorBanner message={ligand3dError} />
+            ) : null}
+            {ligand3dScene === null ? (
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                The ligand 3D view draws only after the stage-2 preparation
+                registers its PDBQT artifact and the text is loaded here —
+                never before, and never from a guessed structure.
+              </p>
+            ) : "error" in ligand3dScene ? (
+              <ErrorBanner message={ligand3dScene.error} />
+            ) : (
+              <Molecule3D
+                title="Ligand structure (3D)"
+                atoms={ligand3dScene.atoms}
+                bonds={ligand3dScene.bonds}
+                bondNote={`${DOCKING_3D_BOND_NOTE}${ligand3dScene.diagnostics !== "" ? ` — ${ligand3dScene.diagnostics}` : ""}`}
+                height={300}
+              />
+            )}
+          </div>
+          <div className="flex flex-col gap-2">
+            {receptor3dScene === null ? (
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                The receptor 3D view renders the pasted stage-3 PDBQT text —
+                paste ATOM/HETATM records and the ball-and-stick scene draws
+                from exactly those records.
+              </p>
+            ) : "error" in receptor3dScene ? (
+              <ErrorBanner message={receptor3dScene.error} />
+            ) : (
+              <Molecule3D
+                title="Receptor structure (3D)"
+                atoms={receptor3dScene.atoms}
+                bonds={receptor3dScene.bonds}
+                bondNote={`${DOCKING_3D_BOND_NOTE}${receptor3dScene.diagnostics !== "" ? ` — ${receptor3dScene.diagnostics}` : ""}`}
+                height={300}
+              />
+            )}
+          </div>
+        </div>
       </StageHeader>
 
       <StageHeader
