@@ -91,6 +91,19 @@ export const ZIP_EXCLUDE_ARGS: readonly string[] = [
   "*/.idea/*",
   ".vscode/*",
   "*/.vscode/*",
+  // (100x-260 / MASTER_PROMPT part4 §4.3) The research-history homes
+  // stopped riding RELEASE zips at v1.2.167 (they were 37% of the
+  // archive: 475 scratch/ probe files + 129 download/ evidence PNGs
+  // + dist-archive/). The fallback builder must produce the SAME
+  // shape as the release artifact it substitutes for, or the size
+  // badge's "≈" estimate and the streamed bytes drift apart from the
+  // exact release path the moment a rollback eats the zip homes.
+  "scratch/*",
+  "*/scratch/*",
+  "download/*",
+  "*/download/*",
+  "dist-archive/*",
+  "*/dist-archive/*",
 ];
 
 const ALLOWED_EXTENSIONS = new Set([

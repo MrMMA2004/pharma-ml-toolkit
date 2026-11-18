@@ -67,6 +67,12 @@ True
 >>> float(frame.loc[0, "knn_distance"]) > float(out.distance_threshold)
 True
 
+Descriptor alignment: when both inputs are DataFrames, their unique column
+labels must match exactly in the same order; mismatches are rejected rather
+than silently reordering. When either input is an array, columns are matched
+by position and the caller must ensure their meanings and order agree. This
+check does not verify descriptor units, preprocessing or provenance.
+
 The kNN half alone (no bootstrap fits) is the quick pass:
 
 >>> quick = knn_applicability_domain(x, far, k=5)
@@ -74,7 +80,7 @@ The kNN half alone (no bootstrap fits) is the quick pass:
 False
 >>> quick.pred_mean is None and quick.reliable is None
 True
->>> quick.to_frame(names=["far-away compound"])["reliable"].isna().all()
+>>> bool(quick.to_frame(names=["far-away compound"])["reliable"].isna().all())
 True
 
 Classification models get their honest path too — the ensemble spread
@@ -185,6 +191,8 @@ def _numeric_matrix(X: pd.DataFrame | np.ndarray, name: str) -> np.ndarray:
         distance would silently poison every threshold downstream.
     """
     if isinstance(X, pd.DataFrame):
+        if not X.columns.is_unique:
+            raise DataValidationError(f"{name} has duplicate feature names; columns must be unique")
         bad = [str(col) for col in X.columns
                if X[col].dtype.kind not in "fiub"]
         if bad:
@@ -227,6 +235,29 @@ def _numeric_matrix(X: pd.DataFrame | np.ndarray, name: str) -> np.ndarray:
             "domain needs finite descriptors"
         )
     return matrix
+
+
+def _validate_descriptor_schema(
+    X_train: pd.DataFrame | np.ndarray,
+    X_test: pd.DataFrame | np.ndarray,
+    train: np.ndarray,
+    test: np.ndarray,
+) -> None:
+    """Require matching dimensions and, when available, matching column order."""
+    if train.shape[1] != test.shape[1]:
+        raise ModelError(
+            f"X_test has {test.shape[1]} feature(s) but X_train has "
+            f"{train.shape[1]} — the descriptor spaces must match"
+        )
+    if (
+        isinstance(X_train, pd.DataFrame)
+        and isinstance(X_test, pd.DataFrame)
+        and not X_train.columns.equals(X_test.columns)
+    ):
+        raise ModelError(
+            "X_train and X_test feature names and order must match exactly; "
+            "align query columns to the training descriptors"
+        )
 
 
 def _feature_names(X: pd.DataFrame | np.ndarray) -> list[str]:
@@ -403,9 +434,10 @@ def knn_applicability_domain(
     Parameters
     ----------
     X_train:
-        Training descriptor matrix (numeric, finite).
+        Training descriptor matrix (numeric, finite, unique DataFrame columns).
     X_test:
-        Query descriptor matrix — same column count as ``X_train``.
+        Query descriptor matrix — same columns in the same order as
+        ``X_train``. If either input is an array, alignment is positional.
     k:
         Neighbour count (default 5, the upload's value).
     percentile:
@@ -438,11 +470,7 @@ def knn_applicability_domain(
         )
     if not 0.0 < percentile <= 100.0:
         raise ModelError(f"percentile must be in (0, 100], got {percentile}")
-    if train.shape[1] != test.shape[1]:
-        raise ModelError(
-            f"X_test has {test.shape[1]} feature(s) but X_train has "
-            f"{train.shape[1]} — the descriptor spaces must match"
-        )
+    _validate_descriptor_schema(X_train, X_test, train, test)
 
     scaler = StandardScaler()
     train_scaled = scaler.fit_transform(train)
@@ -532,7 +560,8 @@ def bootstrap_uncertainty(
     X_train, y_train:
         The training data ``model`` was fitted on.
     X_test:
-        Query rows for the uncertainty readout.
+        Query rows for the uncertainty readout. DataFrame columns must match
+        training names and order; arrays are matched by position.
     n_models:
         Ensemble size (default 30, the upload's value).
     random_state:
@@ -561,11 +590,7 @@ def bootstrap_uncertainty(
         )
     train = _numeric_matrix(X_train, "X_train")
     test = _numeric_matrix(X_test, "X_test")
-    if train.shape[1] != test.shape[1]:
-        raise ModelError(
-            f"X_test has {test.shape[1]} feature(s) but X_train has "
-            f"{train.shape[1]} — the descriptor spaces must match"
-        )
+    _validate_descriptor_schema(X_train, X_test, train, test)
     y = np.asarray(y_train)
     if y.shape[0] != train.shape[0]:
         raise ModelError(
@@ -741,7 +766,8 @@ def quantile_prediction_intervals(
         carry NaN — a quantile loss has no honest answer for a missing
         target).
     X_test:
-        Query rows — same column count as ``X_train``.
+        Query rows — DataFrame columns must match training names and order;
+        arrays are matched by position.
     y_test:
         Optional true values for the coverage statistic.
     alpha:
@@ -807,7 +833,7 @@ def quantile_prediction_intervals(
     >>> quantile_prediction_intervals(x2, y, pd.DataFrame({"b": [1.0]}))
     Traceback (most recent call last):
     ...
-    pharmaml.exceptions.ModelError: X_test has 1 feature(s) but X_train has 2 -- the descriptor spaces must match
+    pharmaml.exceptions.ModelError: X_test has 1 feature(s) but X_train has 2 — the descriptor spaces must match
     >>> quantile_prediction_intervals(x, y, x.iloc[:2], y.iloc[:3])
     Traceback (most recent call last):
     ...
@@ -831,11 +857,7 @@ def quantile_prediction_intervals(
         )
     train = _numeric_matrix(X_train, "X_train")
     test = _numeric_matrix(X_test, "X_test")
-    if train.shape[1] != test.shape[1]:
-        raise ModelError(
-            f"X_test has {test.shape[1]} feature(s) but X_train has "
-            f"{train.shape[1]} -- the descriptor spaces must match"
-        )
+    _validate_descriptor_schema(X_train, X_test, train, test)
     y = _numeric_vector(y_train, "y_train", finite=True)
     if y.shape[0] != train.shape[0]:
         raise ModelError(
@@ -1021,3 +1043,141 @@ def applicability_domain(
     result.uncertainty_kind = boot.kind
     result.fit_seconds = boot.fit_seconds
     return result
+
+
+@dataclass(slots=True)
+class DomainBox:
+    """The per-feature min/max box a model was fitted inside.
+
+    A cheap, first-pass applicability domain: a query row is
+    ``in_domain`` when every recorded feature falls within the training
+    range (inclusive).  This is the box a bundle can carry without
+    keeping the training data — a full kNN/leverage domain
+    (:func:`knn_applicability_domain`) is stricter but needs the
+    training descriptors at hand.
+
+    Attributes
+    ----------
+    ranges:
+        ``{feature: {"min": lo, "max": hi}}`` for the features recorded.
+    n_features:
+        Number of features in the box.
+    """
+
+    ranges: dict[str, dict[str, float]]
+    n_features: int
+
+    @classmethod
+    def from_metadata(cls, metadata: dict[str, Any]) -> DomainBox | None:
+        """Build the box from a bundle's metadata, or ``None`` if absent."""
+        ranges = metadata.get("feature_ranges")
+        if not isinstance(ranges, dict) or not ranges:
+            return None
+        clean: dict[str, dict[str, float]] = {}
+        for name, bounds in ranges.items():
+            if (
+                isinstance(bounds, dict)
+                and isinstance(bounds.get("min"), (int, float))
+                and isinstance(bounds.get("max"), (int, float))
+            ):
+                clean[str(name)] = {
+                    "min": float(bounds["min"]),
+                    "max": float(bounds["max"]),
+                }
+        if not clean:
+            return None
+        return cls(ranges=clean, n_features=len(clean))
+
+    def check(self, frame: pd.DataFrame) -> DomainReport:
+        """Flag every row of ``frame`` outside the box.
+
+        A row is out-of-domain when any recorded feature is below its
+        training minimum or above its maximum.  Features absent from
+        ``frame`` are ignored (the bundle's feature contract handles
+        those separately); ``NaN`` in a present feature counts as
+        out-of-domain, since a missing descriptor cannot be shown to be
+        inside the box.
+        """
+        import pandas as pd
+
+        n_rows = len(frame)
+        below: dict[str, int] = {}
+        above: dict[str, int] = {}
+        out_mask = np.zeros(n_rows, dtype=bool)
+        for name, bounds in self.ranges.items():
+            if name not in frame.columns:
+                continue
+            values = pd.to_numeric(frame[name], errors="coerce").to_numpy(dtype=float)
+            low = values < bounds["min"]
+            high = values > bounds["max"]
+            nan = np.isnan(values)
+            if low.any():
+                below[name] = int(low.sum())
+            if high.any():
+                above[name] = int(high.sum())
+            out_mask |= low | high | nan
+        n_out = int(out_mask.sum())
+        return DomainReport(
+            n_rows=n_rows,
+            n_out=int(n_out),
+            out_mask=out_mask,
+            below=below,
+            above=above,
+            box=self,
+        )
+
+
+@dataclass(slots=True)
+class DomainReport:
+    """Outcome of checking a frame against a :class:`DomainBox`."""
+
+    n_rows: int
+    n_out: int
+    out_mask: np.ndarray
+    below: dict[str, int]
+    above: dict[str, int]
+    box: DomainBox
+
+    @property
+    def in_domain(self) -> np.ndarray:
+        """Boolean mask: ``True`` where the row is inside the box."""
+        return ~self.out_mask
+
+    @property
+    def fraction_out(self) -> float:
+        return self.n_out / self.n_rows if self.n_rows else 0.0
+
+    def __str__(self) -> str:
+        if self.n_out == 0:
+            return (
+                f"applicability: all {self.n_rows} row(s) inside the "
+                f"{self.box.n_features}-feature training box"
+            )
+        offenders: list[str] = []
+        for name, _count in sorted(
+            {**self.below, **self.above}.items(), key=lambda item: -item[1]
+        ):
+            parts = []
+            if name in self.below:
+                parts.append(f"{self.below[name]} below")
+            if name in self.above:
+                parts.append(f"{self.above[name]} above")
+            offenders.append(f"{name} ({', '.join(parts)})")
+        head = (
+            f"applicability: {self.n_out}/{self.n_rows} row(s) "
+            f"({self.fraction_out:.0%}) outside the training box"
+        )
+        return head + "\n  " + "\n  ".join(offenders[:8])
+
+
+def check_domain_box(metadata: dict[str, Any], frame: pd.DataFrame) -> DomainReport | None:
+    """Check ``frame`` against a bundle's recorded box, if it has one.
+
+    Returns ``None`` when the bundle predates box recording (no
+    ``feature_ranges`` in its metadata), so callers can stay silent
+    rather than imply a check that did not run.
+    """
+    box = DomainBox.from_metadata(metadata)
+    if box is None:
+        return None
+    return box.check(frame)

@@ -1,0 +1,51 @@
+{
+  "schema": "pharmaml-profile-results/2",
+  "generated_by": "part5-continuation round 5 (§14) — this sandbox",
+  "environment": {
+    "platform": "Linux 5.10 sandbox, offscreen Qt (QT_QPA_PLATFORM=offscreen via ui/headless.py EGL stub)",
+    "python": "3.12.16",
+    "stack": "PySide6 6.8.3, pyqtgraph 0.13.7, rdkit 2026.9.1, scikit-learn 1.5.2, numpy 1.26.4, torch 2.15.0+cpu, tqdm, openpyxl, python-docx"
+  },
+  "profiles": [
+    {
+      "name": "Desktop GUI (chunked 4a-4f, offscreen)",
+      "command": "pytest tests/ui/ in the six project chunk boundaries, one process per chunk",
+      "outcome_counts": {"passed": 532, "failed": 0, "skipped": 0, "blocked": 0, "not_executed": 0},
+      "notes": "round 4 final battery on the pinned stack; dot count reconciled against the collected count; re-verified green in the round-5 session"
+    },
+    {
+      "name": "Release-audit tool regressions",
+      "command": "pytest tests/test_release_audit.py",
+      "outcome_counts": {"passed": 28, "failed": 0, "skipped": 0, "blocked": 0, "not_executed": 0}
+    },
+    {
+      "name": "GUI with real display",
+      "command": "(none — no X server in this sandbox)",
+      "outcome_counts": {"passed": 0, "failed": 0, "skipped": 0, "blocked": 0, "not_executed": 532},
+      "notes": "not-executed-with-cause: the sandbox has no X server; the offscreen battery above covers the same code paths"
+    },
+    {
+      "name": "Docking engines (vina/autodock execution)",
+      "command": "(none — Windows engines not runnable on this Linux sandbox)",
+      "outcome_counts": {"passed": 0, "failed": 0, "skipped": 0, "blocked": 0, "not_executed": 12},
+      "notes": "not-executed-with-cause: bundled engines are Windows PE binaries"
+    }
+  ],
+  "gates": [
+    {"name": "ruff (round files)", "outcome": "passed", "detail": "0.17.x, zero findings on every round-4/5 file"},
+    {"name": "mypy (CI scope src/pharmaml)", "outcome": "passed", "detail": "217 files, 0 errors, numpy 1.26.4 stack"},
+    {"name": "ZIP integrity (testzip + leak scan)", "outcome": "passed", "detail": "round-4 ship 78e73c1d, 588 entries, leak-scan clean"}
+  ],
+  "backup_and_recovery": {
+    "status": "verified this round (session backup task)",
+    "evidence": "tools/session_backup.py safety-commit + push + four-home zip rebuild executed live twice this session (38917dd, 1890c2c); watchdog loop continues every 4h",
+    "power_loss_recovery": "not verified by this round"
+  },
+  "limitations": [
+    "Offscreen Qt only: no real-display rendering profile in this sandbox.",
+    "Windows docking engines cannot execute on this Linux sandbox (checksum verification only).",
+    "torch is CPU-only; CUDA paths are not exercised.",
+    "The companion Web Console tree is not present in this sandbox; web integration/parity not run.",
+    "Full pure-Python backend profiles were last run green in round 3; this round's focus was §12/§14 tooling."
+  ]
+}

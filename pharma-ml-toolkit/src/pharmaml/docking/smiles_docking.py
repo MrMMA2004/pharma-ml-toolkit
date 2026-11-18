@@ -43,6 +43,9 @@ True
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 import re
 import shutil
 import time
@@ -54,8 +57,8 @@ from typing import Any
 from pharmaml.docking.parsing import parse_dlg_cluster_table, parse_vina_output
 from pharmaml.docking.preparation import GridBox, smiles_to_pdbqt, write_dpf, write_gpf
 from pharmaml.docking.receptor import distribute_receptor
-from pharmaml.docking.workflow import run_autodock4, run_vina
-from pharmaml.exceptions import DataValidationError, DockingError
+from pharmaml.docking.workflow import engine_argv, run_autodock4, run_vina
+from pharmaml.exceptions import DataValidationError, DockingError, PersistenceError
 from pharmaml.logger import get_logger
 from pharmaml.utils.io import ensure_directory
 
@@ -137,6 +140,26 @@ def _autodock_best(dlg_path: Path) -> tuple[float | None, int]:
     return best.lowest_energy, len(clusters)
 
 
+def _entries_frame(prepared: list[dict[str, Any]]) -> Any:
+    """The result frame from per-ligand entries: one row per input
+    SMILES, ranked best-first among the successes, failures at the
+    end (the shared shape of the final and the §13 partial frame)."""
+    import pandas as pd
+
+    frame = pd.DataFrame(
+        [
+            {key: entry.get(key, "") for key in (
+                "index", "name", "smiles", "ok", "best_score", "poses",
+                "seconds", "folder", "output", "error",
+            )}
+            for entry in prepared
+        ]
+    )
+    return frame.sort_values(
+        by=["ok", "best_score"], ascending=[False, True], kind="stable"
+    ).reset_index(drop=True)
+
+
 def _progress_sink(
     progress: Callable[..., Any] | None,
 ) -> Callable[[int, int | None, str], None]:
@@ -166,7 +189,11 @@ def dock_smiles_array(
     ga_run: int = 100,
     timeout_s: float = 3600.0,
     keep_folders: bool = True,
+    engine_dir: str | Path | None = None,
     progress: Callable[..., Any] | None = None,
+    checkpoint_dir: str | os.PathLike[str] | None = None,
+    checkpoint_every: int = 1,
+    checkpoint_resume: bool = True,
 ) -> Any:
     """Dock every SMILES of an array against one receptor, simultaneously.
 
@@ -200,7 +227,11 @@ def dock_smiles_array(
         Search box centre ``(x, y, z)`` in Å.
     size:
         Search box edge lengths in Å (Vina); for AutoDock4 the box is
-        quantised to ``npts = round(size / spacing) + 1`` grid points.
+        quantised to ``npts = round(size / spacing) + 1`` as the legacy
+        GPF directive. Bundled AutoGrid4 was observed to interpret even npts
+        as intervals, yielding one more grid point; the actual AutoGrid span
+        can therefore differ from the requested Vina size. Inspect the grid
+        log and specify geometry deliberately rather than assuming equivalence.
     spacing:
         AutoDock4 grid spacing (Å).
     exhaustiveness:
@@ -222,16 +253,40 @@ def dock_smiles_array(
     keep_folders:
         Keep the prepared campaign folders (default).  ``False``
         removes them after the run -- only the result table survives.
-    progress:
-        Optional ``report(done, total, note)`` callback (worker-thread
-        safe); called once per finished ligand.
+    engine_dir:
+        Folder holding the engine binaries (``vina`` / ``vina.exe`` /
+        ``autogrid4.exe`` / ``autodock4.exe``), searched before PATH --
+        the Windows ``.exe`` builds the toolkit ships in ``engines/``.
+        progress:
+            Optional ``report(done, total, note)`` callback (worker-thread
+            safe); called once per finished ligand.
+        checkpoint_dir:
+            (part5-continuation round 10, §13) When given, the batch is a
+            resumable §13 operation: a v2-envelope checkpoint is written
+            every ``checkpoint_every`` finished ligands (and at each stage
+            boundary) carrying the per-ligand completion ledger -- every
+            finished entry's full row.  A later call with the same
+            fingerprint resumes: finished ligands are NEVER re-run and
+            their rows are preserved verbatim (a real docking engine is
+            stochastic by nature; "preserve", not re-execute).  A
+            cooperative stop (``progress`` returning ``False``) raises
+            :class:`~pharmaml.exceptions.JobCancelled` with the partial
+            result frame on ``partial_results``.  Keep this OUTSIDE
+            ``out_dir`` when ``keep_folders=False`` (the campaign root is
+            removed then).
+        checkpoint_every:
+            Save every N finished ligands (default 1; >= 1 enforced).
+        checkpoint_resume:
+            Resume from the newest valid checkpoint (default).  ``False``
+            runs fresh but still writes checkpoints (the fresh-run twin
+            protocol of the proof suite).
 
-    Returns
-    -------
-    pandas.DataFrame
-        One row per input SMILES: ``index, name, smiles, ok,
-        best_score, poses, seconds, folder, output, error`` -- ranked
-        best-first among the successful rows, failures at the end.
+        Returns
+        -------
+        pandas.DataFrame
+            One row per input SMILES: ``index, name, smiles, ok,
+            best_score, poses, seconds, folder, output, error`` -- ranked
+            best-first among the successful rows, failures at the end.
 
     Raises
     ------
@@ -243,11 +298,9 @@ def dock_smiles_array(
 
     Notes
     -----
-    Real docking takes minutes to hours per ligand: ``workers``-wide
-    parallelism is the difference between "tomorrow" and "tonight".
+        Real docking takes minutes to hours per ligand: ``workers``-wide
+        parallelism is the difference between "tomorrow" and "tonight".
     """
-    import pandas as pd
-
     engine = engine.strip().lower()
     if engine not in _ENGINES:
         raise DockingError(
@@ -271,17 +324,148 @@ def dock_smiles_array(
             "must match"
         )
     binaries = ("vina",) if engine == "vina" else ("autogrid4", "autodock4")
-    missing = [name for name in binaries if shutil.which(name) is None]
-    if missing:
-        raise DockingError(
-            f"the {engine} engine needs {', '.join(missing)} on PATH -- "
-            "install AutoDock Tools / Vina first"
-        )
+    # Check launch prerequisites before ligand preparation. Finding a Windows
+    # executable alone does not establish that Wine is available or functional.
+    for name in binaries:
+        engine_argv(name, engine_dir)
     workers = max(1, min(workers, len(rows)))
     report = _progress_sink(progress)
 
     root = Path(out_dir)
     ensure_directory(root)
+
+    # -- (round 10, §13) the resumable docking batch ---------------------- #
+    #
+    # The resume unit is the LIGAND: the per-ligand entry dict is the
+    # complete state (score, poses, seconds, output/error, folder), so
+    # the checkpoint is the ledger of finished entries.  Finished
+    # ligands are never re-run -- their rows are preserved verbatim
+    # (a real engine is stochastic by nature; the §13 "preserve"
+    # policy, not re-execute).  The fingerprint closes both gaps the
+    # R9 audit flagged for this round: the FULL smiles list + names
+    # (the dataset) and the receptor PDBQT content checksum (the
+    # "environment"), besides every engine knob.
+    if (
+        not isinstance(checkpoint_every, int)
+        or isinstance(checkpoint_every, bool)
+        or checkpoint_every < 1
+    ):
+        raise ValueError(
+            f"checkpoint_every must be a positive int, got {checkpoint_every!r}"
+        )
+
+    manager: Any = None
+    spec: Any = None
+    config_fp = ""
+    ledger: dict[str, dict[str, Any]] = {}
+
+    def _ledger_key(entry: dict[str, Any]) -> str:
+        # index + smiles: position AND molecule (a reordered list is a
+        # different dataset and refuses to resume)
+        return f"{entry['index']}:{entry['smiles']}"
+
+    def _save_checkpoint(step: int, note: str) -> None:
+        if manager is None or spec is None:
+            return
+        try:
+            manager.save(
+                step=step,
+                total=total,
+                state={
+                    "config_fp": config_fp,
+                    "ledger": ledger,
+                    "prepared_count": len(prepared),
+                },
+                note=note,
+                operation=spec,
+            )
+        except (PersistenceError, OSError, TypeError, ValueError) as exc:
+            _LOG.warning(
+                "checkpoint write failed at %s (%s); continuing without it",
+                note,
+                exc,
+            )
+
+    if checkpoint_dir is not None:
+        from pharmaml.utils.checkpoint_schema import OperationSpec
+        from pharmaml.utils.checkpoints import CheckpointManager
+
+        try:
+            manager = CheckpointManager(
+                checkpoint_dir, name="docking-batch"
+            )
+            spec = OperationSpec(
+                operation_type="docking_batch",
+                operation_id=f"batch-{Path(receptor_path).name}",
+            )
+        except PersistenceError as exc:
+            _LOG.warning(
+                "checkpoint home unusable (%s); docking without checkpoints",
+                exc,
+            )
+            manager = None
+            spec = None
+
+        receptor_digest = hashlib.sha256(
+            receptor_path.read_bytes()
+        ).hexdigest()
+        config_fp = hashlib.sha256(
+            json.dumps(
+                {
+                    "engine": engine,
+                    "center": [float(c) for c in center],
+                    "size": [float(s) for s in size],
+                    "spacing": spacing,
+                    "exhaustiveness": exhaustiveness,
+                    "num_modes": num_modes,
+                    "workers": workers,
+                    "seed": seed,
+                    "ga_run": ga_run,
+                    "timeout_s": timeout_s,
+                    "keep_folders": keep_folders,
+                    "smiles": rows,
+                    "names": list(names) if names is not None else None,
+                    "receptor_sha256": receptor_digest,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+
+        if manager is not None and checkpoint_resume:
+            try:
+                latest = manager.latest()
+            except OSError:  # pragma: no cover - scan failure
+                latest = None
+                _LOG.warning("checkpoint scan failed; starting fresh")
+            if latest is not None and latest.resumable:
+                st = latest.state
+                if st.get("config_fp") != config_fp:
+                    _LOG.warning(
+                        "docking-batch checkpoint at step %d is for a "
+                        "different dataset/config/receptor; starting fresh "
+                        "(exact restore or nothing)",
+                        latest.step,
+                    )
+                else:
+                    try:
+                        ledger = {
+                            str(k): dict(v)
+                            for k, v in st["ledger"].items()
+                        }
+                        _LOG.info(
+                            "docking batch resumed from checkpoint step %d "
+                            "(%d ligand(s) already finished)",
+                            latest.step,
+                            len(ledger),
+                        )
+                    except (KeyError, TypeError, ValueError) as exc:
+                        _LOG.warning(
+                            "checkpoint payload unreadable (%s); starting "
+                            "fresh",
+                            exc,
+                        )
+                        ledger = {}
 
     # -- stage 1: ligand preparation (sequential; RDKit in-process) --- #
     prepared: list[dict[str, Any]] = []
@@ -305,6 +489,18 @@ def dock_smiles_array(
             "output": "",
             "error": "",
         }
+        # (round 10, §13) a finished ligand's row is preserved verbatim:
+        # neither preparation nor engine run repeats.  A resume with
+        # keep_folders=True re-lists the folder path from the ledger so
+        # the row is byte-identical; with keep_folders=False the folders
+        # were already swept (folder/output read back as the swept "" /
+        # preserved path recorded at sweep time).
+        prior = ledger.get(_ledger_key(entry))
+        if prior is not None:
+            entry.update(prior)
+            prepared.append(entry)
+            report(position + 1, total, "resumed ligands")
+            continue
         try:
             ligand = smiles_to_pdbqt(smiles_text, folder, name="l", seed=seed)
             entry["pdbqt"] = str(ligand)
@@ -315,6 +511,13 @@ def dock_smiles_array(
                 shutil.rmtree(folder, ignore_errors=True)
         prepared.append(entry)
         report(position + 1, total, "preparing ligands")
+
+    # a preparation failure is FINAL for that ligand (the row is
+    # complete with its error) -- it goes into the ledger too
+    for entry in prepared:
+        key = _ledger_key(entry)
+        if key not in ledger and (entry.get("pdbqt") is None):
+            ledger[key] = dict(entry)
 
     dockable = [entry for entry in prepared if entry.get("pdbqt")]
 
@@ -356,6 +559,7 @@ def dock_smiles_array(
                     exhaustiveness=exhaustiveness,
                     num_modes=num_modes,
                     timeout_s=timeout_s,
+                    engine_dir=engine_dir,
                 )
                 entry["seconds"] = result.seconds
                 if not result.ok:
@@ -371,7 +575,7 @@ def dock_smiles_array(
             else:
                 write_gpf(ligand, receptor_file="r.pdbqt", box=box)
                 write_dpf(ligand, receptor_file="r.pdbqt", ga_run=ga_run)
-                result = run_autodock4(folder, timeout_s=timeout_s)
+                result = run_autodock4(folder, timeout_s=timeout_s, engine_dir=engine_dir)
                 entry["seconds"] = result.seconds
                 if not result.ok:
                     entry["error"] = result.error or "autodock4 failed"
@@ -390,41 +594,112 @@ def dock_smiles_array(
         return entry
 
     # -- stage 3: the simultaneous engine run -------------------------- #
+    # (round 10, §13) finished ligands drop out of the queue; the ledger
+    # fills as entries complete; checkpoints land every
+    # checkpoint_every finished ligands; a cooperative stop raises
+    # JobCancelled with the partial frame.  The threaded path runs in
+    # waves of `workers` so a stop request lands at a clean barrier
+    # (never mid-wave -- submitted subprocesses always finish).
     done_count = 0
-    if dockable:
+    pending = [
+        entry for entry in dockable if _ledger_key(entry) not in ledger
+    ]
+    already = len(dockable) - len(pending)
+    if already:
         _LOG.info(
-            "docking %d ligand(s) with %s (workers=%d)", len(dockable), engine, workers
+            "%d ligand(s) already finished (checkpoint); docking the "
+            "remaining %d",
+            already,
+            len(pending),
+        )
+    cancelled = False
+
+    def _finish_one(entry: dict[str, Any]) -> None:
+        nonlocal done_count
+        ledger[_ledger_key(entry)] = dict(entry)
+        done_count += 1
+        report(already + done_count, len(dockable), f"docking ({engine})")
+        if (
+            manager is not None
+            and spec is not None
+            and done_count % checkpoint_every == 0
+        ):
+            _save_checkpoint(
+                already + done_count,
+                f"docking batch {already + done_count}/{len(dockable)}",
+            )
+
+    if pending:
+        _LOG.info(
+            "docking %d ligand(s) with %s (workers=%d)",
+            len(pending),
+            engine,
+            workers,
         )
         if workers > 1:
-            with ThreadPoolExecutor(max_workers=workers) as executor:
-                futures = [executor.submit(_dock_one, entry) for entry in dockable]
-                for future in futures:
-                    future.result()
-                    done_count += 1
-                    report(done_count, len(dockable), f"docking ({engine})")
+            wave_start = 0
+            while wave_start < len(pending) and not cancelled:
+                wave = pending[wave_start : wave_start + workers]
+                with ThreadPoolExecutor(max_workers=workers) as executor:
+                    futures = [
+                        executor.submit(_dock_one, entry) for entry in wave
+                    ]
+                    for future in futures:
+                        future.result()
+                for entry in wave:
+                    _finish_one(entry)
+                wave_start += len(wave)
+                if (
+                    progress is not None
+                    and wave_start < len(pending)
+                    and progress(
+                        already + done_count,
+                        len(dockable),
+                        f"docking ({engine})",
+                    )
+                    is False
+                ):
+                    cancelled = True
         else:
-            for entry in dockable:
+            for entry in pending:
+                if (
+                    progress is not None
+                    and progress(
+                        already + done_count,
+                        len(dockable),
+                        f"docking ({engine})",
+                    )
+                    is False
+                ):
+                    cancelled = True
+                    break
                 _dock_one(entry)
-                done_count += 1
-                report(done_count, len(dockable), f"docking ({engine})")
+                _finish_one(entry)
+
+    if manager is not None and spec is not None and not cancelled:
+        _save_checkpoint(
+            len(dockable) if dockable else total,
+            f"docking batch complete ({len(ledger)} ledger entr(ies))",
+        )
+
+    if cancelled:
+        from pharmaml.exceptions import JobCancelled
+
+        partial_frame = _entries_frame(prepared)
+        raise JobCancelled(
+            f"docking batch cancelled after {already + done_count}/"
+            f"{len(dockable)} ligand(s) -- stopped at a checkpoint by the "
+            "caller",
+            partial_results=partial_frame,
+        )
 
     if not keep_folders:
         shutil.rmtree(root, ignore_errors=True)
         for entry in prepared:
             entry["folder"] = "" if not entry["ok"] else entry["folder"]
 
-    frame = pd.DataFrame(
-        [
-            {key: entry.get(key, "") for key in (
-                "index", "name", "smiles", "ok", "best_score", "poses",
-                "seconds", "folder", "output", "error",
-            )}
-            for entry in prepared
-        ]
-    )
-    ranked = frame.sort_values(
-        by=["ok", "best_score"], ascending=[False, True], kind="stable"
-    ).reset_index(drop=True)
+    ranked = _entries_frame(prepared)
+    frame = ranked
     ok_count = int(frame["ok"].sum())
     _LOG.info(
         "SMILES array docking finished: %d/%d docked (%s)",

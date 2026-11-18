@@ -94,6 +94,7 @@ pharmaml.exceptions.DataValidationError: add_metrics accepts report objects or d
 
 from __future__ import annotations
 
+import base64
 import html
 import tempfile
 from pathlib import Path
@@ -121,8 +122,11 @@ __all__ = [
 
 _LOG = get_logger(__name__)
 
-#: Extensions :func:`export_table` understands.
-TABLE_FORMATS: tuple[str, ...] = ("csv", "tsv", "md", "json", "html")
+#: Extensions :func:`export_table` understands -- the round-201
+#: Excel absorption added ``xlsx`` (openpyxl engine) beside the five
+#: visual formats, so every playground table card can hand its result
+#: to a spreadsheet with the same one-call story.
+TABLE_FORMATS: tuple[str, ...] = ("csv", "tsv", "md", "json", "html", "xlsx")
 
 _REPORT_CSS = """
 /* Theme engine (100x-126): 'auto' follows the OS (the original
@@ -352,12 +356,20 @@ def export_table(frame: pd.DataFrame, path: str | Path, max_rows: int | None = N
 
     Supported: ``.csv``, ``.tsv``, ``.md``/``.markdown`` (GitHub-ready
     table), ``.json`` (records orientation), ``.html`` (styled table
-    that renders standalone in a browser).
+    that renders standalone in a browser) and ``.xlsx`` (Excel
+    workbook via the openpyxl engine, round 201 -- the spreadsheet
+    twin of the CSV arm, one sheet, no index column).
 
     Returns
     -------
     Path
         The resolved output path (parent directories created).
+
+    Examples
+    --------
+    >>> from pharmaml.viz import TABLE_FORMATS
+    >>> sorted(TABLE_FORMATS)
+    ['csv', 'html', 'json', 'md', 'tsv', 'xlsx']
     """
     file_path = Path(path)
     fmt = file_path.suffix.lower().lstrip(".")
@@ -385,6 +397,13 @@ def export_table(frame: pd.DataFrame, path: str | Path, max_rows: int | None = N
             + _frame_to_html(frame, max_rows) + "</body></html>"
         )
         file_path.write_text(document, encoding="utf-8")
+    elif fmt == "xlsx":
+        # (round 201) the Excel arm -- openpyxl writes the workbook
+        # (``engine=`` pinned so a headless xlrd never gets a chance);
+        # the full frame lands in ONE sheet with no index column,
+        # mirroring the CSV arm's layout exactly (``read_table`` reads
+        # it back with the same columns).
+        frame.to_excel(file_path, index=False, sheet_name="table", engine="openpyxl")
     else:
         raise DataValidationError(
             f"Unsupported table format {file_path.suffix!r}; "
@@ -909,6 +928,51 @@ class HTMLReport:
         # alt already carries.
         self._page_ids.append(page_id)
         self._page_names.append(caption or f"figure {self._figure_count}")
+        return self
+
+    def add_image(self, path: str | Path, caption: str | None = None,
+                  max_bytes: int = 8 << 20) -> HTMLReport:
+        """Embed an existing PNG file inline (base64; not re-rendered).
+
+        The §17D run-report path: run records reference exported
+        figures by FILE, so the report embeds the file's own bytes —
+        a re-render would need the workflow's live state the record
+        deliberately does not carry.  Only PNG is accepted (the one
+        format the workflow exports are guaranteed to be); a missing
+        or oversized file raises with the reason rather than
+        silently degrading to a text line.
+        """
+        p = Path(path)
+        try:
+            raw = p.read_bytes()
+        except OSError as exc:
+            raise DataValidationError(
+                f"figure file unreadable: {p} ({exc.strerror or exc})"
+            ) from exc
+        if raw[:8] != b"\x89PNG\r\n\x1a\n":
+            raise DataValidationError(
+                f"not a PNG file: {p} (embedding supports PNG exports only)"
+            )
+        if len(raw) > max_bytes:
+            raise DataValidationError(
+                f"figure too large to embed: {p} "
+                f"({len(raw) >> 20} MiB > {max_bytes >> 20} MiB cap)"
+            )
+        alt = _escape(caption or p.name)
+        # the SAME anchored <figure> page add_figure builds — one
+        # wrapper shape, two sources (live object / file bytes)
+        self._figure_count += 1
+        page_id = f"pg-{len(self._page_names) + 1}"
+        data_uri = "data:image/png;base64," + base64.b64encode(raw).decode()
+        block = f"<figure class='page' id='{page_id}' tabindex='-1'>"
+        block += f"<img src='{data_uri}' alt='{alt}'/>"
+        if caption:
+            block += f"<figcaption>{_escape(caption)}</figcaption>"
+        block += _BACK_CONTENTS_LINK
+        block += "</figure>"
+        self._blocks.append(block)
+        self._page_ids.append(page_id)
+        self._page_names.append(caption or p.name)
         return self
 
     # -- rendering --------------------------------------------------------

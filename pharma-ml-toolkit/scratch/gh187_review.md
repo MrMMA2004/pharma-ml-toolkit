@@ -4,7 +4,7 @@ The user's instruction: "Check the contents and files in this GitHub links compl
 and one by one and add the missing items to playground.py (Deep Learning)."
 
 Method: each repo cloned `--depth 1 --filter=blob:none --no-checkout` to
-`/home/z/gh187/` (OUTSIDE the repo — the round-186 rule-7 lesson), full file
+`~/gh187/` (the home path, outside the repo) (OUTSIDE the repo — the round-186 rule-7 lesson), full file
 inventories via `git ls-tree -r HEAD --name-only` (393 / 616 / 499 / 458 / 1548 /
 6,518 files), subtree counts per directory, then per-subpackage dispositions below.
 Dispositions: **ADDED** (missing from the toolkit, offline-feasible, Deep-Learning

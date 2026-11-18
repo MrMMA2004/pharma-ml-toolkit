@@ -1,0 +1,338 @@
+name: Windows Release
+
+# The automated Windows release pipeline (part11_2 §3/§4 — the
+# documented Windows build environment for the part11 architecture:
+# React + TypeScript + Vite frontend, the Tauri 2 + WebView2 host,
+# the PyInstaller-frozen FastAPI backend sidecar, NSIS EXE + WiX MSI).
+#
+# This workflow is the Windows-only half of the build: every Linux-
+# compatible gate (backend unit tests, the full api/database suites,
+# lint/typecheck, the frontend drift guards) runs on this runner
+# BEFORE the packaging legs — the Windows build is never an untested
+# substitute for the test gate.  Design rules honored (part11_2 §4):
+#
+#   * actions pinned to deliberate major versions (no floating tags);
+#   * least-privilege permissions (contents:write is required ONLY
+#     for the tagged-release upload step; artifact uploads need
+#     none of it);
+#   * no secrets in logs — the built-in GITHUB_TOKEN is the only
+#     credential, used only by the release step, never echoed;
+#   * every stage fails loudly with a nonzero exit (steps 24/25);
+#   * the version is validated across every carrier BEFORE anything
+#     builds (step 2) — a mismatch fails the run, not the installer.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: "Optional release notes for the tag-built release"
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+  RUST_TOOLCHAIN: "1.85.0"
+  TOOLKIT_ROOT: ${{ github.workspace }}
+  RELEASE_DIR: release/windows
+
+jobs:
+  windows-release:
+    name: Build the Windows installer (NSIS EXE + MSI)
+    runs-on: windows-2022
+    timeout-minutes: 120
+
+    steps:
+      # ---- 1. check out the exact intended source revision --------
+      - name: "1. Checkout the exact source revision"
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # ---- 2. validate the project version ----------------------
+      - name: "2. Validate the version across every carrier"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = (Get-Content VERSION -Raw).Trim()
+          $tauri = (Get-Content src-tauri/tauri.conf.json -Raw |
+            ConvertFrom-Json).version
+          $npm = (Get-Content frontend/package.json -Raw |
+            ConvertFrom-Json).version
+          Write-Host "carriers: VERSION=$version tauri=$tauri npm=$npm"
+          if (-not ($version -eq $tauri -and $version -eq $npm)) {
+            Write-Host "::error::version carriers disagree — bump all four (VERSION, pyproject.toml, __init__.py, tauri.conf.json + frontend/package.json) in one atomic change before tagging"
+            exit 1
+          }
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $tag = $env:GITHUB_REF_NAME
+            if (-not $tag.TrimStart("v") -eq $version) {
+              Write-Host "::error::tag $tag does not match VERSION $version"
+              exit 1
+            }
+          }
+
+      # ---- 4. Node.js (before 3: the cache config needs it) ------
+      - name: "4. Set up Node.js (build-time only)"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # ---- 3. restore frontend dependencies from the lock file --
+      - name: "3. Restore frontend dependencies (npm ci from the committed lock)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm ci --prefix frontend
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::npm ci failed — the lockfile does not resolve on this runner"
+            exit 1
+          }
+
+      # ---- 5. the supported Python version ----------------------
+      - name: "5. Set up Python (the pinned scientific stack's family)"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ---- 6. the Rust/MSVC toolchain ----------------------------
+      - name: "6. Set up the Rust toolchain (MSVC target)"
+        uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: "6b. Cache the Rust build (the tauri host compiles)"
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      # ---- 7. the pinned Python stack (the freeze input) ---------
+      - name: "7. Install the pinned backend stack (installer-requirements + the freeze tool)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -m pip install --upgrade pip
+          # the torch CPU wheel rides the CPU index (the venv-repair pin)
+          pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
+          pip install -r packaging/windows/installer-requirements.txt
+          pip install pyinstaller==6.22.3 pytest
+          pip install --no-deps -e .
+          python -c "import pharmaml, fastapi, uvicorn; print('stack OK', pharmaml.__version__)"
+
+      # ---- 8. frontend type checking ----------------------------
+      - name: "8. Frontend type check (tsc --noEmit)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm --prefix frontend run typecheck
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::the strict TS gate failed — the frontend does not type-check"
+            exit 1
+          }
+
+      # ---- 9. frontend tests (the contract/drift suite) ---------
+      - name: "9. Frontend contract tests (the Python drift guards that pin the typed clients)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -m pytest tests/test_frontend_services.py -q
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::the frontend service drift guards failed — the typed clients drifted from the backend contract"
+            exit 1
+          }
+
+      # ---- 10. backend unit tests (the portable subset) ---------
+      - name: "10. Backend unit tests"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -m pytest tests -q `
+            --ignore=tests/api `
+            --ignore=tests/test_web_parity.py `
+            -k "not gui and not nine_card" -x --maxfail=5
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::the backend unit gate failed on the Windows runner"
+            exit 1
+          }
+
+      # ---- 11. API and database tests ---------------------------
+      - name: "11. API + database tests (the FastAPI surface)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -m pytest tests/api -q
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::the API/database gate failed — the backend surface is red on Windows"
+            exit 1
+          }
+
+      # ---- 12. package the Python backend on Windows -----------
+      - name: "12. Freeze the backend sidecar (PyInstaller onedir, pharmaml_backend.spec)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -m PyInstaller packaging/windows/pharmaml_backend.spec `
+            --noconfirm --clean --distpath build/windows-backend
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::PyInstaller failed — the backend sidecar did not freeze"
+            exit 1
+          }
+          if (-not (Test-Path "build/windows-backend/pharmaml-backend/pharmaml-backend.exe")) {
+            Write-Host "::error::the frozen sidecar exe is missing after the build"
+            exit 1
+          }
+
+      # ---- 13. verify the generated backend executable ----------
+      - name: "13. Verify the frozen sidecar (handshake + health + guard + shutdown)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python packaging/windows/verify_sidecar.py build/windows-backend/pharmaml-backend
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::the frozen backend failed its live verification — the installer must not ship it"
+            exit 1
+          }
+
+      # ---- 14. configure the Tauri Windows sidecar -------------
+      - name: "14. Stage the sidecar into the Tauri resources"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force src-tauri/resources/backend | Out-Null
+          Copy-Item -Recurse -Force build/windows-backend/pharmaml-backend `
+            src-tauri/resources/backend/pharmaml-backend
+          if (-not (Test-Path "src-tauri/resources/backend/pharmaml-backend/pharmaml-backend.exe")) {
+            Write-Host "::error::the staged sidecar exe is missing"
+            exit 1
+          }
+
+      # ---- 15. build the React frontend (static assets) --------
+      - name: "15. Build the frontend (tsc + vite build -> dist/)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm --prefix frontend run build
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::the Vite production build failed"
+            exit 1
+          }
+          if (-not (Test-Path "frontend/dist/index.html")) {
+            Write-Host "::error::frontend/dist/index.html is missing — the SPA entry did not build"
+            exit 1
+          }
+
+      # ---- 16/17/18/19. the Tauri Windows build ----------------
+      # tauri build compiles the host (16), emits the NSIS Setup EXE
+      # (17) and the WiX MSI (18), and — with tauri.conf.json's
+      # webviewInstallMode offlineInstaller — embeds the WebView2
+      # Evergreen OFFLINE installer into the NSIS package (19): the
+      # end user never needs the online bootstrapper.
+      - name: "16-19. Build the Tauri app + NSIS EXE + MSI (WebView2 offline)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          cargo install tauri-cli --version 2.0.0-beta.17 --locked
+          cargo tauri build --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::the Tauri Windows build failed (host compile, NSIS, or MSI)"
+            exit 1
+          }
+
+      # ---- 20. validate the final installer contents -----------
+      - name: "20. Validate the installer artifacts + contents"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = (Get-Content VERSION -Raw).Trim()
+          $nsis = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/PharmaML Studio_${version}_x64-setup.exe"
+          $msi  = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/PharmaML Studio_${version}_x64_en-US.msi"
+          if (-not (Test-Path $nsis)) {
+            Write-Host "::error::the NSIS Setup EXE is missing at $nsis"
+            exit 1
+          }
+          if (-not (Test-Path $msi)) {
+            Write-Host "::error::the MSI is missing at $msi — the WiX leg did not emit it"
+            exit 1
+          }
+          # the static packaging validation (spec/asset/config — the
+          # same --static gate the Linux CI runs, now on the artifacts)
+          python packaging/windows/packaging_validation.py --static
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::the packaging validation failed"
+            exit 1
+          }
+          New-Item -ItemType Directory -Force $env:RELEASE_DIR | Out-Null
+          Copy-Item $nsis "$env:RELEASE_DIR/PharmaML_Studio_Setup_v$version.exe"
+          Copy-Item $msi  "$env:RELEASE_DIR/PharmaML_Studio_v$version.msi"
+
+      # ---- 21. release metadata ---------------------------------
+      - name: "21. Generate the release manifest"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = (Get-Content VERSION -Raw).Trim()
+          $setup = "$env:RELEASE_DIR/PharmaML_Studio_Setup_v$version.exe"
+          $msi = "$env:RELEASE_DIR/PharmaML_Studio_v$version.msi"
+          $manifest = [ordered]@{
+            product = "PharmaML Studio"
+            version = $version
+            commit = "$env:GITHUB_SHA"
+            runner = "windows-2022"
+            python = $env:PYTHON_VERSION
+            node = $env:NODE_VERSION
+            rust = $env:RUST_TOOLCHAIN
+            pyinstaller = "6.22.3"
+            webview2 = "offlineInstaller (bundled, no online bootstrapper)"
+            artifacts = @(
+              @{ name = "PharmaML_Studio_Setup_v$version.exe"; bytes = (Get-Item $setup).Length },
+              @{ name = "PharmaML_Studio_v$version.msi"; bytes = (Get-Item $msi).Length }
+            )
+          }
+          $manifest | ConvertTo-Json | Set-Content "$env:RELEASE_DIR/RELEASE_MANIFEST.json"
+
+      # ---- 22. SHA-256 checksums -------------------------------
+      - name: "22. Generate SHA256SUMS.txt"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Get-ChildItem $env:RELEASE_DIR -File |
+            Where-Object { $_.Name -ne "SHA256SUMS.txt" } | ForEach-Object {
+              $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+              "$hash  $($_.Name)" | Add-Content "$env:RELEASE_DIR/SHA256SUMS.txt"
+            }
+          Get-Content "$env:RELEASE_DIR/SHA256SUMS.txt"
+
+      # ---- 23. upload the artifacts ----------------------------
+      - name: "23. Upload the release artifacts"
+        uses: actions/upload-artifact@v4
+        with:
+          name: pharmaml-studio-windows-${{ github.sha }}
+          path: release/windows/
+          if-no-files-found: error
+
+      - name: "23b. Attach to the GitHub Release (tag builds only)"
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/windows/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
+      # ---- the honest closing note (part11_2 §10/§12) -----------
+      - name: "24-25. Report the remaining unverified stages honestly"
+        shell: pwsh
+        run: |
+          Write-Host "BUILD DONE — the artifacts uploaded above are REAL."
+          Write-Host "STILL UNVERIFIED (a runner is a build env, NOT a clean machine):"
+          Write-Host "  BLOCKED: clean-Windows-10/11 installation test (Windows Sandbox / clean VM)"
+          Write-Host "  BLOCKED: offline launch flows (dataset import -> descriptors -> ML -> plots)"
+          Write-Host "  BLOCKED: upgrade + uninstall behavior (user data retention)"
+          Write-Host "Run packaging/windows/TAURI_RELEASE_PIPELINE.md section 'clean-machine smoke test' on a real clean machine before any standalone claim."

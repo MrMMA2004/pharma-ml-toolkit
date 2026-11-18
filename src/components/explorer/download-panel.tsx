@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { copyToClipboard, fmtBytes, fmtInt } from "@/lib/format";
 import type { FileContentResponse, TreeNode } from "@/lib/toolkit-types";
 import { SHIPPED_TOOLKIT_VERSION } from "@/lib/toolkit-version";
+import { SHIPPED_TEST_COUNT } from "@/lib/toolkit-stats";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 
@@ -67,20 +68,21 @@ const INSTALL_STEPS: InstallStep[] = [
       "requirements.txt pins the exact stack the QA chain runs green under (numpy 1.26.4, pandas 2.2.3, scikit-learn 1.5.2, …) — the reproducible route. The editable package install then maps pharmaml onto your Python.",
     commands: ["pip install -r requirements.txt", "pip install -e ."],
     extras: [
+      { name: ".[studio]", note: "the desktop Studio GUI (PySide6 + pyqtgraph)" },
       { name: ".[chem]", note: "cheminformatics (RDKit)" },
       { name: ".[docking]", note: "docking prep (RDKit + Meeko)" },
       { name: ".[boosting]", note: "gradient-boosting model families" },
     ],
   },
   {
-    title: "Open the playground",
+    title: "Open the Studio (desktop GUI)",
     description:
-      "A tabbed Tkinter GUI over every domain — chemistry, PK/PD dosing, ML on your CSVs, and the generative GA. Every trained model ships as a one-click report bundle (report.html + figures + tables, optional report.pdf — the CLI --plots/--pdf-report story, mouse edition), and Check CSV… audits any new dataset against the last model before you predict — in both the Data & ML tab and the Deep Learning tab (the ml check story, mouse edition). No terminal needed; works straight after unzipping.",
-    commands: ["python playground.py"],
+      "python studio.py launches PharmaML Studio, the PySide6 desktop application: the nine-card home opens eighteen workspaces — chemistry featurization, PK/PD dosing, docking campaigns, model training, the generative workbench and more. The GUI needs the Qt stack, which the core install does not include — run pip install \".[studio]\" first (or pip install PySide6 pyqtgraph qt-material qdarkstyle). Long jobs run in a background worker with progress, and trained models export as report bundles.",
+    commands: ["pip install \".[studio]\"", "python studio.py"],
   },
   {
     title: "Verify the install",
-    description: "4020 tests should pass and the CLI answers with its version.",
+    description: "The full test suite should pass and the CLI answers with its version.",
     commands: ["python -m pytest", "pharmaml --version", "cat VERSION"],
   },
 ];
@@ -309,7 +311,7 @@ function collectDirSummary(
 ): Array<{ name: string; files: number; size: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: "4020 pytest cases across all domains",
+    tests: `${SHIPPED_TEST_COUNT} pytest cases across all domains`,
     examples: "eight executed notebooks + seven no-output twins + runnable demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
@@ -336,7 +338,7 @@ function collectDirSummary(
       name: "(root)",
       files: rootFiles,
       size: rootBytes,
-      note: "README, CHANGELOG, VERSION, playground.py, pyproject.toml, Dockerfile, requirements.txt",
+      note: "README, CHANGELOG, VERSION, studio.py + ui/, pyproject.toml, Dockerfile, requirements.txt",
     });
   }
   return out;
@@ -601,7 +603,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value="4020" countTo={4020} label="passing tests" />
+          <StatChip icon={CircleCheck} value={String(SHIPPED_TEST_COUNT)} countTo={SHIPPED_TEST_COUNT} label="passing tests" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}
@@ -974,7 +976,7 @@ export function DownloadPanel() {
             <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">
               <p className="text-[11px] leading-snug text-muted-foreground">
                 <span className="font-medium text-foreground">Why exact versions?</span> Every pin above is
-                the environment the 2,009-test pytest suite, ruff, mypy and the executed notebooks
+                the environment the full pytest suite (see the passing-tests chip), ruff, mypy and the executed notebooks
                 actually run green under — installing the same numbers removes an entire class of
                 &quot;works on my machine&quot; before it starts (the numpy 1.26.4 pin in particular: mordred
                 resolves against it).
@@ -1010,7 +1012,7 @@ export function DownloadPanel() {
           />
           <CommandStrip
             command="cat VERSION"
-            hint="what you have now — or python playground.py --version"
+            hint="what you have now — cat VERSION inside the archive"
           />
           <div className="space-y-1.5">
             <p className="text-[11px] leading-snug text-muted-foreground">

@@ -153,7 +153,7 @@ export function VinaFolderScan({ onOpenLog }: VinaFolderScanProps) {
     }
     if (candidates.length > MAX_LOGS) {
       toast.error("Too many logs for the browser scan", {
-        description: `Pick at most ${MAX_LOGS} logs (you chose ${candidates.length}). Use the desktop playground.py for full result trees.`,
+        description: `Pick at most ${MAX_LOGS} logs (you chose ${candidates.length}). Use the desktop Studio (python studio.py) for full result trees.`,
       });
       return;
     }

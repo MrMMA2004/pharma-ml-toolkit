@@ -109,9 +109,9 @@ folder) is the point of the upgrade: one registry, one pipeline.
 | `smilestopdbqt.py` / `smiqt.py` | `docking.smiles_to_pdbqt` (Meeko, AD4 atom types) | ✅ |
 | `ligand_preparation_autodock4.py` / `others/ligand_preparation_autodock4.py` | `docking.prepare_ligand_library` (CSV → campaign folders → PDBQT with torsion reports) | ✅ |
 | `ligand_pdbqt_extracter.py` | `collect_files` (numbered .pdbqt collection with unique-name resolution) | ✅ |
-| `ligand generation/niggaqt.py` | `prepare_ligand_library` (the modern Meeko path replaces the MGLTools pythonsh subprocess; PDB → PDBQT) | ⚠ MGLTools itself is deprecated tooling — Meeko is the supported path |
-| `ligand generation/nigga.py` / `nigga2.py` | `prepare_ligand_library` + `chem.table_to_sdf` (multi-conformer 3D: ETKDG embeds + UFF, unsupported-metal filtering via validation notes) | ⚠ mol2 output not produced (PDBQT/SDF are the docking formats) |
-| `ligand generation/niggamatch.py` / `mismatch2.py` | `docking.check_torsion_consistency` + `scan_torsion_consistency` (TORSDOF vs active REMARKs vs BRANCHes) | ✅ |
+| `ligand generation/ligprep_qt.py` | `prepare_ligand_library` (the modern Meeko path replaces the MGLTools pythonsh subprocess; PDB → PDBQT) | ⚠ MGLTools itself is deprecated tooling — Meeko is the supported path |
+| `ligand generation/ligprep.py` / `ligprep2.py` | `prepare_ligand_library` + `chem.table_to_sdf` (multi-conformer 3D: ETKDG embeds + UFF, unsupported-metal filtering via validation notes) | ⚠ mol2 output not produced (PDBQT/SDF are the docking formats) |
+| `ligand generation/ligprep_match.py` / `mismatch2.py` | `docking.check_torsion_consistency` + `scan_torsion_consistency` (TORSDOF vs active REMARKs vs BRANCHes) | ✅ |
 
 ## Vina (`others/Vina/`)
 
@@ -249,7 +249,7 @@ gains or moves a card.
 | `checker.py` | Docking → *Grid, torsion & completion audit* → `folder: completion check` |
 | `gpfer.py` / `gpferreceptorni.py` / `dpfer.py` (×4) | Docking → *Grid box & docking configs* (`write_gpf` + `write_dpf`) |
 | `gpfreader.py` | *Grid, torsion & completion audit* → `GPF file → parameters` **and** `folder: ligand_types per sub-dir` |
-| `niggamatch.py` / `mismatch2.py` | same card → `folder: torsion consistency` |
+| `ligprep_match.py` / `mismatch2.py` | same card → `folder: torsion consistency` |
 | `smilestopdbqt.py` / `smiqt.py` | Docking → *SMILES → PDBQT (single ligand)*; the array card + *Ligand library* cover the batch paths |
 | `ligand_preparation_autodock4.py` (×2) | Docking → *Ligand library → PDBQT* (`prepare_ligand_library`) |
 | `smiles array docking` (the 100x-108 request) | Docking → *SMILES array docking* (`dock_smiles_array`, both engines, simultaneous) |
@@ -259,7 +259,7 @@ gains or moves a card.
 | `others/Readme.txt` | `README.md` + the home tab's *What lives where* guide |
 | `New Text Document.txt` (×2) | empty placeholders — nothing to cover |
 | `tuned_random_forest_bbb_prediction_model.pkl` | ⚠ dataset-specific weights are not shipped (the *save bundle* card writes fresh ones) |
-| `ligand generation/nigga*.py` MGLTools/`.mol2` paths | ⚠ deprecated tooling absorbed by the Meeko paths (see rows above) |
+| `ligand generation/ligprep*.py` MGLTools/`.mol2` paths | ⚠ deprecated tooling absorbed by the Meeko paths (see rows above) |
 
 Audit method: the rar re-extracted to a clean tree (118 files, `unrar
 x`), each file opened, its calls matched against
@@ -363,10 +363,10 @@ grep) whenever a card moves; a **ZERO-HIT** row is a regression.
 | `others/Docking/gpferreceptorni.py` | Docking → **receptor types field** + Batch GPF/DPF (1.2.51) | `write_gpf`×2 `write_config_batch`×2 `receptor_types`×10 |
 | `others/Docking/gpfreader.py` | Docking → Audit (GPF → parameters, ligand_types per folder) | `read_gpf`×2 `scan_gpf_ligand_types`×2 |
 | `others/Docking/ligand generation/mismatch2.py` | Docking → Audit (folder: torsion consistency) | `check_torsion_consistency`×0 `scan_torsion_consistency`×2 |
-| `others/Docking/ligand generation/nigga.py` | Docking → Ligand library + Chemistry → CSV→3D SDF (Meeko path; mol2 absorbed) | `prepare_ligand_library`×2 `table_to_sdf`×2 |
-| `others/Docking/ligand generation/nigga2.py` | Docking → Ligand library + Chemistry → CSV→3D SDF (Meeko path; mol2 absorbed) | `prepare_ligand_library`×2 `table_to_sdf`×2 |
-| `others/Docking/ligand generation/niggamatch.py` | Docking → Audit (folder: torsion consistency) | `check_torsion_consistency`×0 `scan_torsion_consistency`×2 |
-| `others/Docking/ligand generation/niggaqt.py` | Docking → Ligand library → PDBQT (MGLTools absorbed → Meeko) | `prepare_ligand_library`×2 |
+| `others/Docking/ligand generation/ligprep.py` | Docking → Ligand library + Chemistry → CSV→3D SDF (Meeko path; mol2 absorbed) | `prepare_ligand_library`×2 `table_to_sdf`×2 |
+| `others/Docking/ligand generation/ligprep2.py` | Docking → Ligand library + Chemistry → CSV→3D SDF (Meeko path; mol2 absorbed) | `prepare_ligand_library`×2 `table_to_sdf`×2 |
+| `others/Docking/ligand generation/ligprep_match.py` | Docking → Audit (folder: torsion consistency) | `check_torsion_consistency`×0 `scan_torsion_consistency`×2 |
+| `others/Docking/ligand generation/ligprep_qt.py` | Docking → Ligand library → PDBQT (MGLTools absorbed → Meeko) | `prepare_ligand_library`×2 |
 | `others/Docking/ligand_pdbqt_extracter.py` | Utilities → Campaign file tools (collect) | `collect_files`×2 |
 | `others/Docking/ligand_preparation_autodock4.py` | Docking → Ligand library → PDBQT | `prepare_ligand_library`×2 |
 | `others/Docking/main.py` | Docking → Campaign runner | `batch_run_directories`×2 |
@@ -460,7 +460,7 @@ one probe (`scratch/probe_provenance_roundtrip_115.py`):
    `docking_campaign/`). The inventory can never silently grow a file the
    demos forgot.
 3. **Builder `--check`** — the non-mutating drift audit
-   (`scratch/build_example_data.py --check`): every owned file re-generated
+   (`tools/build_example_data.py --check`): every owned file re-generated
    in memory and byte-compared (42 files), missing files and orphans
    flagged (`disk == owned`, 43 files under `examples/data`), PDB size
    pins checked without a network fetch, and the full `verify()` content
@@ -541,16 +541,16 @@ engines, absorbed like the rar's own engine payloads):
 
 | Uploaded file | PharmaML surface | Status |
 | --- | --- | --- |
-| `ligand generation/nigga.py` | `docking.generate_ligand_structures` (the whole pipeline: tautomer → ETKDG conformers → MMFF/UFF → lowest-energy PDB with CONECT + OpenBabel MOL2, the Fe/Zn/Cu/Mn/Co/Ni/Mo/W skip list, the process-pool workers) + the playground **Ligand structures (CSV → PDB + MOL2)** card | ✚ 100x-141 |
-| `ligand generation/niggaqt.py` | `docking.convert_pdb_folder_to_pdbqt` (prepare_ligand4.py over a folder of PDBs into numbered sub-folders, per-ligand timeout, conversion_log.txt) + the playground **PDB → PDBQT batch (MGLTools)** card | ✚ 100x-141 |
+| `ligand generation/ligprep.py` | `docking.generate_ligand_structures` (the whole pipeline: tautomer → ETKDG conformers → MMFF/UFF → lowest-energy PDB with CONECT + OpenBabel MOL2, the Fe/Zn/Cu/Mn/Co/Ni/Mo/W skip list, the process-pool workers) + the playground **Ligand structures (CSV → PDB + MOL2)** card | ✚ 100x-141 |
+| `ligand generation/ligprep_qt.py` | `docking.convert_pdb_folder_to_pdbqt` (prepare_ligand4.py over a folder of PDBs into numbered sub-folders, per-ligand timeout, conversion_log.txt) + the playground **PDB → PDBQT batch (MGLTools)** card | ✚ 100x-141 |
 | `ligand generation/mismatch2.py` | `docking.check_torsion_consistency` + `scan_torsion_consistency` + the audit card's torsion mode | already covered |
-| `ligand generation/niggamatch.py` | same surface (the numeric-sort variant needed none of its own) | already covered |
+| `ligand generation/ligprep_match.py` | same surface (the numeric-sort variant needed none of its own) | already covered |
 | `Vina/vina.conf` | `docking.parse_vina_config` + the grid box / config batch cards | already covered |
 | `Vina/log.txt` | `docking.parse_vina_output` + `scan_vina_directory` + the results card | already covered |
 | `Vina_contol/adder.py` | `docking.distribute_files` + the receptor distribution card | already covered |
 | `Vina_contol/batch.py` | `docking.run_vina_batch(skip_existing=True)` — the resume | ✚ 100x-141 |
 | `Vina_contol/conf.txt` | `docking.parse_vina_config` | already covered |
-| `Vina_contol/niggavina.py` | `run_vina_batch` parallel + the skip-existing resume (the empty-log rule) | ✚ resume 100x-141 |
+| `Vina_contol/batch_vina.py` | `run_vina_batch` parallel + the skip-existing resume (the empty-log rule) | ✚ resume 100x-141 |
 | `Vina_contol/vinar.py` | `docking.run_vina` + the Vina config batch card | already covered |
 | `Vina_contol/vinar_multiple.py` | `docking.run_vina_batch(max_parallel=…)` | already covered |
 | `Vina_contol/vina_reader.py` | `docking.parse_vina_output` + `scan_vina_directory` + the Vina results card | already covered |
@@ -586,6 +586,8 @@ closed in **1.2.58**:
 | `viz.plot_model_comparison` | Data & ML → Leaderboard card's *Plot leaderboard* |
 | `biology.replicate_variability` + `summarize_compounds` | Cell Lines → screen card's two readout buttons |
 | `viz.plot_receptor_atom_types` | Docking → receptor card's *Plot atom types* |
+| `viz.plot_contact_map` | Docking → Contacts & PLIF tab's *Compute contact map* (the notebook §13 twin) |
+| `viz.plot_plif_heatmap` | Docking → Contacts & PLIF tab's *Build PLIF fingerprint* (the notebook §13 twin) |
 | `viz.plot_top_ligands` | Docking → results card's *Plot top ligands* |
 
 ## Library coverage (100x-120) — round 5: the last stragglers
@@ -777,7 +779,7 @@ SOURCE this round: `check_torsion_consistency`/`TorsionCheck` are the
 single-file engine behind the ligand-audit card's
 `scan_torsion_consistency` folder walk (the audit's own per-file probe
 shows the pairing: `check_torsion_consistency:0
-scan_torsion_consistency:2` on niggamatch.py / mismatch2.py), and
+scan_torsion_consistency:2` on ligprep_match.py / mismatch2.py), and
 `PKSummary`/`aucm_trapezoid` are the return type + internal
 integrator behind the PK card's `summary.aucm` readouts
 (playground.py:6501/6568). The library axis holds; the round's
@@ -1186,14 +1188,14 @@ Standing pins updated where the markup evolved: the Contents-line
 form (now title-carrying) across test_viz (12), test_playground (7),
 smoke136/137/139, shoot137/138/139, and the report.py doctest.
 
-### Round 26 (100x-141) — the "new folder.zip" upload audited file by file: the nigga.py pipeline + the niggaqt.py converter + the Vina batch's resume
+### Round 26 (100x-141) — the "new folder.zip" upload audited file by file: the ligprep.py pipeline + the ligprep_qt.py converter + the Vina batch's resume
 
 | What shipped | The contract |
 | --- | --- |
-| The file-by-file audit | The user's new upload (22 entries; 13 script/config/log files + 6 engine binaries + folders) was checked one file at a time against the toolkit's surfaces: 9 of the 13 were already covered (the torsion pair, the Vina configs/logs, the receptor distribution, the Vina runners and reader — most of them rar twins the toolkit had already absorbed), and the audit isolated the three genuine gaps: nigga.py's structure pipeline, niggaqt.py's MGLTools converter (previously "absorbed: MGLTools deprecated" — the re-delivery says otherwise), and the batch.py/niggavina.py resume. The probe's uploads axis now maps all 13 files (14/14 with the AD upload); the engine binaries are absorbed like the rar's own payloads. |
-| `generate_ligand_structures` + the Ligand structures card | nigga.py whole: tautomer canonicalisation (best-effort, confessed per row), the Fe/Zn/Cu/Mn/Co/Ni/Mo/W skip list (`UNSUPPORTED_LIGAND_ATOMS`, per-row reason, never batch-fatal), ETKDG multi-conformer embedding, MMFF minimisation with the UFF fallback, the lowest-energy conformer kept, the one-model PDB written by the original's own writer (HEADER/COMPND/ATOM/CONECT/END — the connectivity prepare_ligand4.py reads), and the OpenBabel/Gasteiger MOL2 twin (graceful without OpenBabel — the PDB lands, the row confesses). The workers knob rides a spawn-context ProcessPoolExecutor (the GUI's worker thread makes fork the documented deadlock risk). The card: library picker reuse, conformers/workers/MOL2 knobs, report tree, CSV save. |
-| `convert_pdb_folder_to_pdbqt` + the MGLTools batch card | niggaqt.py whole: prepare_ligand4.py over every .pdb of a folder into the numbered-sub-folder tree (1/, 2/, 3/…), the 30-second per-ligand timeout (one subprocess.run(timeout=...) instead of the original's polling loop), the conversion_log.txt with its SUCCESSFUL/TIMED OUT/FAILED sections, and pre-flight path checks (a typo'd MGLTools path is a typed error before any subprocess fires). The card: source/output pickers, both MGLTools paths pre-filled with the original's Windows defaults, the timeout knob, report tree, CSV save. |
-| `run_vina_batch(skip_existing=True)` + the resume checkbox | batch.py's "already docked" skip and niggavina.py's empty-log rule, unified: a ligand is skipped only when its _out.pdbqt AND non-empty log both exist (the zero-byte log marks a crashed job and is re-docked); skipped rows return skipped=True/ok=True/seconds=0.0 and the vbatch card's table shows "skip" with the summary confessing the count. The checkbox rides the card next to the workers knob. |
+| The file-by-file audit | The user's new upload (22 entries; 13 script/config/log files + 6 engine binaries + folders) was checked one file at a time against the toolkit's surfaces: 9 of the 13 were already covered (the torsion pair, the Vina configs/logs, the receptor distribution, the Vina runners and reader — most of them rar twins the toolkit had already absorbed), and the audit isolated the three genuine gaps: ligprep.py's structure pipeline, ligprep_qt.py's MGLTools converter (previously "absorbed: MGLTools deprecated" — the re-delivery says otherwise), and the batch.py/batch_vina.py resume. The probe's uploads axis now maps all 13 files (14/14 with the AD upload); the engine binaries are absorbed like the rar's own payloads. |
+| `generate_ligand_structures` + the Ligand structures card | ligprep.py whole: tautomer canonicalisation (best-effort, confessed per row), the Fe/Zn/Cu/Mn/Co/Ni/Mo/W skip list (`UNSUPPORTED_LIGAND_ATOMS`, per-row reason, never batch-fatal), ETKDG multi-conformer embedding, MMFF minimisation with the UFF fallback, the lowest-energy conformer kept, the one-model PDB written by the original's own writer (HEADER/COMPND/ATOM/CONECT/END — the connectivity prepare_ligand4.py reads), and the OpenBabel/Gasteiger MOL2 twin (graceful without OpenBabel — the PDB lands, the row confesses). The workers knob rides a spawn-context ProcessPoolExecutor (the GUI's worker thread makes fork the documented deadlock risk). The card: library picker reuse, conformers/workers/MOL2 knobs, report tree, CSV save. |
+| `convert_pdb_folder_to_pdbqt` + the MGLTools batch card | ligprep_qt.py whole: prepare_ligand4.py over every .pdb of a folder into the numbered-sub-folder tree (1/, 2/, 3/…), the 30-second per-ligand timeout (one subprocess.run(timeout=...) instead of the original's polling loop), the conversion_log.txt with its SUCCESSFUL/TIMED OUT/FAILED sections, and pre-flight path checks (a typo'd MGLTools path is a typed error before any subprocess fires). The card: source/output pickers, both MGLTools paths pre-filled with the original's Windows defaults, the timeout knob, report tree, CSV save. |
+| `run_vina_batch(skip_existing=True)` + the resume checkbox | batch.py's "already docked" skip and batch_vina.py's empty-log rule, unified: a ligand is skipped only when its _out.pdbqt AND non-empty log both exist (the zero-byte log marks a crashed job and is re-docked); skipped rows return skipped=True/ok=True/seconds=0.0 and the vbatch card's table shows "skip" with the summary confessing the count. The checkbox rides the card next to the workers knob. |
 
 The axes after the round: rar 118 (115 covered + 3 absorbed, zero-hit
 0) + uploads 14/14 — the probe verdict line reads "every rar + upload
@@ -1210,7 +1212,7 @@ symbol test re-synced (275 symbols). The version chain moved to
 | The one-by-one audit | The instruction ("review the codebase, troubleshoot potential issues, improve the engineering details") became a tab-by-tab review of playground.py (module helpers, chrome, session machinery, Data & ML, Deep Learning, Generative; the Docking tab in parallel). The audit's harvest: one real bug (the text-map drift), five risks (the Ctrl+O race, the _poll_jobs ordering, the finder's title-only keys, the AD k-guard's condition, the shadowed tuner parameter), three polish items (fractional parse_int truncation, the _copy label clobber, _require's unguarded next()) — all nine fixed, each with its own regression test or source-level pin. |
 | The picked PATHS ride the session | `_SESSION_PATH_ATTRS` (27 pure picker attributes across Docking / conversion / Utilities) persist through the session file's new `paths` key and restore only when the folder still EXISTS on this machine (a mailed session degrades to the honest un-picked state; a live pick is never overwritten; dataset paths needing a reload stay out on purpose — a path without its frame would be a lie the label tells). `_refresh_restored_path_labels()` re-renders every picker's info label after the restore, reusing the four cards that own refresh helpers. |
 | `vina_batch_progress` + the Count remaining button | The pre-flight resume census: `VinaBatchProgress(total, docked, remaining, collisions)` applies the SAME skip rule and the SAME collision-disambiguated output names as `run_vina_batch(skip_existing=True)` — the stem logic lives in one shared `_batch_output_names` helper, so "N/M already docked · K to go" is a promise the run keeps. The vbatch card's button reports it (confessing name collisions); toggling the resume checkbox with both folders picked runs the census on its own (the trace degrades to a no-op during session restore and never fires while busy). |
-| The generate → MGLTools relay | The ligand-structures card's "Send PDBs → MGLTools" button: the structure output folder becomes the converter's PDB source, the PDBQT output folder is pre-filled BESIDE it (never inside, never over a live pick), the card's info label refreshes, and the finder's own jump + flash lands on the MGL card — the nigga.py → niggaqt.py relay in one click. |
+| The generate → MGLTools relay | The ligand-structures card's "Send PDBs → MGLTools" button: the structure output folder becomes the converter's PDB source, the PDBQT output folder is pre-filled BESIDE it (never inside, never over a live pick), the card's info label refreshes, and the finder's own jump + flash lands on the MGL card — the ligprep.py → ligprep_qt.py relay in one click. |
 | `_dl_load_frame` (the Apply-best fix) | `_ml_tune_apply` → dnn reloaded the ORIGINAL CSV (resurrecting every row the Clean card removed — the winner then trained on data it was never tuned on). The split-out `_dl_load_frame` adopts the LIVE cleaned frame; `_dl_load_path` is a thin wrapper. |
 
 The axes after the round: unchanged (rar 118, uploads 14/14, zero-hit
@@ -1289,7 +1291,7 @@ moved to 1.2.83 across all five carriers (the VERSION file included).
 
 | What shipped | The contract |
 | --- | --- |
-| The one-by-one verdict over the 8 uploaded files | `pdbqtgeneration.py` — byte-identical to the audited `niggaqt.py` (the MGLTools PDB → PDBQT batch card, 100x-141). `pdbfromsmile.py` — the STRICTER older twin of `nigga.py` (the LIGAND STRUCTURES card implements the tolerant version: auto-generated names, first-column SMILES fallback — a superset). `mismatchcheck.py` — the grid/torsion/completion audit card's TORSDOF-vs-active-REMARKs-vs-BRANCH rule, upgraded with MGLTools/Meeko convention auto-detection. `niggavinamulti.py` — the Vina config batch card's thread-pool + resume story (`run_vina_batch(skip_existing=True)` + the pre-flight census). `conf.txt` — the config-batch card's parsed-keys surface. `vina.exe` — an external engine binary (absorbed like the rar's own engines, never shipped). `Ml/pred.py` + `Ml/D2.py` — the round's genuine work, below. |
+| The one-by-one verdict over the 8 uploaded files | `pdbqtgeneration.py` — byte-identical to the audited `ligprep_qt.py` (the MGLTools PDB → PDBQT batch card, 100x-141). `pdbfromsmile.py` — the STRICTER older twin of `ligprep.py` (the LIGAND STRUCTURES card implements the tolerant version: auto-generated names, first-column SMILES fallback — a superset). `mismatchcheck.py` — the grid/torsion/completion audit card's TORSDOF-vs-active-REMARKs-vs-BRANCH rule, upgraded with MGLTools/Meeko convention auto-detection. `batch_vina_multi.py` — the Vina config batch card's thread-pool + resume story (`run_vina_batch(skip_existing=True)` + the pre-flight census). `conf.txt` — the config-batch card's parsed-keys surface. `vina.exe` — an external engine binary (absorbed like the rar's own engines, never shipped). `Ml/pred.py` + `Ml/D2.py` — the round's genuine work, below. |
 | `prepare_pic50_dataset` (chem/converters.py) | `Ml/D2.py`'s `process_data` upgraded: auto-detected or explicit SMILES/endpoint columns (the upload's own `Ligand SMILES` / `EC50 (nM)` spellings first), censored `<`/`>` magnitudes kept AND counted (the original stripped them in silence), the `0 < EC50 ≤ upper_limit` cap (default 1e9 nM — D2.py's own), the duplicate-SMILES collapse as a parameter (`median`/`mean`/`first`/`keep`; the original hard-coded the median), the conversion through `ic50_to_pic50` (any unit), and a typed `EndpointDatasetReport` whose buckets satisfy the accounting identity (valid + missing-SMILES + unparsable + out-of-range == rows in; rows out == valid − duplicates collapsed). |
 | The EC50 → pEC50 prep card (Data & ML) | The Dataset card's third row: the duplicate-rule combobox + the prep button + the save button. The audit lands in the status line ("5 rows in → 2 out · 1 censored magnitudes used · 1 duplicates collapsed (median) …"), one click adopts the prepared set as the active dataset with pEC50 pre-picked as the target, and declining keeps the loaded frame untouched. |
 | `permutation_feature_importance` (ml/evaluation.py) | `Ml/D2.py`'s interpretability step, typed: a `PermutationImportance` record (names/means/stds/scoring/repeats/n) with `as_frame()` and first-declared-wins `ranking()`. Works with bare estimators AND fitted pipelines (the preprocessing reruns on every shuffle, so the measure reflects the whole model), defaults D2.py's own choices (r2/accuracy, 5 repeats, seed 42), pins `n_jobs=1` (the nested-parallelism trap the original's comment confessed), and raises the house `ModelError` for every bad input (task, repeats, row mismatch, names mismatch). |
@@ -1458,14 +1460,14 @@ naive-Bayes ModelSpecs (`gaussian_nb` / `multinomial_nb` /
 | 23 | 03.02-Data-Indexing-and-Selection | Data Indexing and Selection | `iloc`/`loc`, masking on frames. | **N-A-HONEST** — `split_features_target`/column pickers are the controlled subset a pharma GUI needs. |
 | 24 | 03.03-Operations-in-Pandas | Operating on Data in Pandas | Index alignment; ufuncs on frames. | **N-A-HONEST**. |
 | 25 | 03.04-Missing-Values | Handling Missing Data | NaN semantics; `isnull`/`fillna`/`dropna`; imputation idea. | **COVERED-ALREADY** — `clean_numeric_frame` (drop/impute with a dropped-column ledger) + `build_preprocessor`'s `SimpleImputer` branch (median/mean/most-frequent). |
-| 26 | 03.05-Hierarchical-Indexing | Hierarchical Indexing | MultiIndex, stack/unstack. | **STRETCH** — a MultiIndex-aware Data tab (dose × replicate hierarchy browsing). |
-| 27 | 03.06-Concat-And-Append | Combining Datasets: concat and append | `pd.concat`, append, repeated-index. | **STRETCH** — dataset-stacking card (combine replicate assay CSVs). |
-| 28 | 03.07-Merge-and-Join | Combining Datasets: merge and join | `pd.merge` one-to-one/many-to-many on keys. | **STRETCH** — merge-two-loaded-tables-on-a-key card. |
-| 29 | 03.08-Aggregation-and-Grouping | Aggregation and Grouping | Split-apply-combine, aggregation, `apply`, pivot preview. | **STRETCH** — groupby summary card (per-compound/batch aggregate stats). |
-| 30 | 03.09-Pivot-Tables | Pivot Tables | `pivot_table`, `cut`/`qcut` binning. | **STRETCH** — pivot card (rows/cols/values pickers over the loaded frame). |
-| 31 | 03.10-Working-With-Strings | Vectorized String Operations | `.str` accessor, regex extraction. | **STRETCH** — string-ops card (SMILES/categorical column cleaning). |
-| 32 | 03.11-Working-with-Time-Series | Working with Time Series | DatetimeIndex, resample, rolling, shifting. | **STRETCH** — pharma time series already have a home (PK tab's `plot_concentration_profile`/`plot_dose_accumulation`); a generic resample/rolling card is the stretch. |
-| 33 | 03.12-Performance-Eval-and-Query | High-Performance Pandas: eval and query | `pd.eval`/`query`, numexpr. | **STRETCH** — filter-expression card over the loaded frame. |
+| 26 | 03.05-Hierarchical-Indexing | Hierarchical Indexing | MultiIndex, stack/unstack. | **WIRED (part8 r9)** — combine/merge/groupby/pivot cover the reshape use cases through Table Tools; the MultiIndex browsing surface remains a documented future refinement. |
+| 27 | 03.06-Concat-And-Append | Combining Datasets: concat and append | `pd.concat`, append, repeated-index. | **WIRED (part8 r9)** — Table Tools ▸ Combine (stack with source_frame identity, or side-by-side with equal-row-count validation). |
+| 28 | 03.07-Merge-and-Join | Combining Datasets: merge and join | `pd.merge` one-to-one/many-to-many on keys. | **WIRED (part8 r9)** — Table Tools ▸ Merge (inner/left/outer on one key; shared-key counts and fan-out warnings in the report). |
+| 29 | 03.08-Aggregation-and-Grouping | Aggregation and Grouping | Split-apply-combine, aggregation, `apply`, pivot preview. | **WIRED (part8 r9)** — Table Tools ▸ GroupBy (validated aggregations, per-group statistics table). |
+| 30 | 03.09-Pivot-Tables | Pivot Tables | `pivot_table`, `cut`/`qcut` binning. | **WIRED (part8 r9)** — Table Tools ▸ Pivot (long → wide; missing combinations stay NaN). |
+| 31 | 03.10-Working-With-Strings | Vectorized String Operations | `.str` accessor, regex extraction. | **WIRED (part8 r9)** — Table Tools ▸ Clean text (strip/collapse/case/drop-missing on one column; source never mutated). |
+| 32 | 03.11-Working-with-Time-Series | Working with Time Series | DatetimeIndex, resample, rolling, shifting. | **STRETCH** — pharma time series already have a home (PK tab's `plot_concentration_profile`/`plot_dose_accumulation`); the generic card shipped (part8 r9): Table Tools ▸ Time series (resample with rule validation + rolling with time-sort). |
+| 33 | 03.12-Performance-Eval-and-Query | High-Performance Pandas: eval and query | `pd.eval`/`query`, numexpr. | **WIRED (part8 r9)** — Table Tools ▸ Filter (pandas query grammar, keyword-column escaping, honest kept/total reporting). |
 | 34 | 03.13-Further-Resources | Further Resources | Pure link list. | **N-A-HONEST** — no content. |
 | 35 | 04.00-Introduction-To-Matplotlib | Visualization with Matplotlib | pyplot vs axes; figure/axes anatomy; styles. | **N-A-HONEST** — the toolkit's house plot style already embodies it (every `viz` function). |
 | 36 | 04.01-Simple-Line-Plots | Simple Line Plots | Color/linestyle, axes limits/labels, legend. | **COVERED-ALREADY** — every house plot is a styled line plot: `plot_concentration_profile`, `plot_predicted_vs_actual`, `plot_learning_curve`. |
@@ -1549,7 +1551,10 @@ of the same content), `website/` (Pelican infra), `tools/` (build tooling) and
 the `figures/` directories carry no additional teachable items.
 
 **Disposition tallies (67 rows):** COVERED-ALREADY **10** · ADDED-THIS-ROUND **7**
-· STRETCH **10** · N-A-HONEST **40**.
+· STRETCH **10** · N-A-HONEST **40**.  *(part8 r9 update: seven of the ten STRETCH rows —
+the pandas-reshaping family, rows 26-33 — are now WIRED as the Datasets workspace's Table
+Tools tab; the remaining three stretch items (MultiIndex browsing, 3D plotting, text-feature
+basis) stay documented future work.)*
 
 ### Round-40 verification rows
 
@@ -1753,3 +1758,116 @@ COVERED(≈) · 13 N-A-HONEST · 9 STRETCH.
 | The GUI | playground.py's four cards: **Run board** (loss curves + smoothing spin, weight histogram + per-layer stats strip, hparams table), **UMAP map** (knobs, target-coloured map, trustworthiness title, nearest rows, CSV export), **Data curation** (filter chains + the four audits), **Interactive figure** (kind/x/y/colour/template, hover columns, ASCII preview, hover-HTML export). |
 | Tests | `tests/test_runboard.py` (36) · `tests/test_umap.py` (27, incl. the sklearn parity pins) · `tests/test_curation.py` (26) · `tests/test_interactive.py` (20) · `TestRound186Gui` (13 headless drives) — 122 new, suite 4,032 collected across 147 files. |
 | Fixed on the way | The SELFIES samplers' PYTHONHASHSEED determinism bug (the default alphabet iterated as a raw SET in three call sites — same seed, different molecules per process; the flaky doctest gate's root cause), the EXE002 exec-bit sweep (385 files), the round-185 lint debt (S110/RUF046/RUF059/UP032/I001), and the zip-walk lesson (research clones deleted before shipping — RESUME.md rule 7). |
+
+## Round 222 (v1.2.135) — the Part-3 §17 image-export engine
+
+*The Part-3 directive's first section made TIFF and JPEG first-class export formats throughout the application — the engine below carries the section's scientific-integrity rules in code, and every GUI export path routes through it.*
+
+| What | Where it landed |
+| --- | --- |
+| The engine | `viz/export.py` — `export_image` (array / PIL image / existing file → PNG/TIFF/JPEG by extension), `export_matrix` (+ multi-page TIFF stacks, per-page bit-depth checks), `export_figure` (matplotlib → raster through Agg, or native vectorial SVG), `export_widget_image` (Qt-rendered bytes). |
+| TIFF, the scientific path (§17.2) | `uint16` → genuine `I;16` (bit-identical reopen, pinned by test); lossless `tiff_lzw` / `tiff_deflate` / `none`; `save_all`+`append_images` stacks with `n_frames` validation; dpi resolution tags. |
+| JPEG, the presentation path (§17.3) | quality 1-95 (validated); 16-bit sources REFUSE without explicit `downcast_16bit=True` (warning recorded); RGBA/LA/PA composited onto the chosen background (never a silent alpha drop); float matrices refuse without `normalize_float=True`. |
+| Validation as part of the export (§17.4) | every write reopened + `sniff_format` magic-byte check (PNG / JPEG / TIFF II+MM / SVG) + dimension check before success; `validate_export` (never raises — reports `ok`/`reason`) catches extension/content lies and wrong sizes; extension must MATCH format (§17.4's no-silent-extension rule). |
+| The reusable manager (§17.4) | `ExportManager` — batch to a directory with a `{name}` pattern, per-write validation, JSON `manifest.json` (name/format/size/mode/compression/warnings); `EXPORT_FILTERS` the §17.1 dialog strings (`.tif .tiff`, `.jpg .jpeg`). |
+| The GUI bridge | `ui/widgets/image_export.py` (`grab_png_bytes` offscreen-safe + `export_widget_grab`); `ImagePanel.export_image` (with the `export_png` boolean shim) and the new `PlotPanel.export_image` — the GUI renders, the engine decides format policy. |
+| The Image Lab row | `ui/pages/image_lab.py` — format combo (TIFF default), JPEG quality spin 1-95, TIFF compression combo (LZW/DEFLATE/None), the three-filter dialog, the extension-stamping rule, and the honest status line (format/dimensions/bytes + every integrity warning; failures surface the engine's error). |
+| Dependency honesty | Pillow optional exactly like matplotlib (`reports` extra; verified stack pins 11.3.0) — importing is free, exporting without it raises the actionable `DependencyError`. |
+| Tests | `tests/test_export_images.py` (29 collected items: the 16-bit roundtrip, the three compressions parametrised, quality monotonicity, every refusal, the stack, the liar/dimension/missing/corrupt validation cases, the manager manifest + override, the Pillow-free error shape) · `tests/ui/test_export_gui.py` (7 offscreen: both panels' three formats at the exact rendered size, the compat shim, the control-row contract, the result-card status, the extension stamping, the honest FAILURE). 36 items + 7 doctests; honest totals 5,575 = 4,790 collect + 785 doctest. |
+
+## Round 229 (v1.2.142) — the Part-3 §20 checkpoint engine
+
+*The directive's pause/resume/stop section became durable state: long jobs write self-verifying checkpoints after every completed unit, Stop keeps the finished work on disk, and the next Start resumes instead of recomputing.*
+
+| What | Where it landed |
+| --- | --- |
+| The engine | `utils/checkpoints.py` — `CheckpointManager.save` (atomic: temp + `fsync` + `os.replace` + directory `fsync`; SHA-256 over the canonical record), `latest`/`list` (newest first, corrupt files QUARANTINED to `*.json.corrupt` with the resume falling back to the previous valid checkpoint), `clear`, rotation (`keep` newest), `default_directory` (`~/.pharmaml/checkpoints/<name>/`), JSON states (no pickle — a malicious checkpoint cannot execute on load). |
+| The benchmark wiring (§20) | `ml/training.py::benchmark_feature_families` — `checkpoint_dir`/`checkpoint_name`/`resume` params; after EVERY completed row (success or NaN-swallowed failure, BEFORE the stop check) the board-so-far is saved; a matching signature (task + cv + metric + resolved model + family list + SMILES digest) resumes at the first unscored family — consecutive-from-the-front, any gap stops the reuse; write failures degrade to warnings, never kill the sweep. The enumerate-`start=`-offsets-only-not-skips bug the smoke caught: the resume must SLICE `family_list[start_position-1:]`, or reused rows recompute and re-save at shifted steps. |
+| The Studio wiring | `ui/pages/ml_workbench.py` — the Leaderboards benchmark checkpoints into `~/.pharmaml/checkpoints/family-benchmark` (an unwritable home degrades to fresh runs, never fails the page); the job surfaces the resume story before the run; the status line leads with "checkpoint found: k/n families already scored — resuming there" when a checkpoint matched; the Start button's tooltip carries the Stop→resume contract. |
+| Tests | `tests/test_checkpoints.py` (36: the round-trip, unicode, JSON-document shape, step/state/name/keep validation, directory-on-demand, rotation keep=1/2, newest-first listing, truncated/tampered/foreign quarantine + fallback, re-quarantine naming, all-corrupt → None, foreign-name invisibility, clear) · `tests/test_ml_pipeline.py` +6 (cancel keeps finished families, resume computes only the unscored families — featuriser-counting spy, resumed board == uninterrupted board with the ORIGINAL wall-clock fit times, signature mismatch starts fresh, `resume=False` recomputes, an unwritable checkpoint path never kills the board) · `tests/ui/test_ml_workbench_page.py` +1 (the two-Start GUI loop: run 1 fills the checkpoint, run 2 reuses every family and the status leads with the resume note). |
+
+## Round 230 (v1.2.143) — the Part-3 §24 SA engine (completing the interrupted round's ship)
+
+*The directive's synthetic-accessibility section landed end-to-end — and the round also finished the work an interrupted session had committed half-done: the syntax fix, the true-value pins, the docs, and the release ritual.*
+
+| What | Where it landed |
+| --- | --- |
+| The engine (§24.2) | `chem/sa_scoring.py` — the Ertl–Schuffenhauer score on the REAL fragment model (the RDKit wheel's own `Contrib/SA_Score/fpscores.pkl.gz`, loaded lazily; aspirin 1.58, caffeine 2.30 — the reference Contrib values): `sa_scores` (batch rows keep original + canonical SMILES, score, easy/moderate/hard band, per-row parse errors — invalid rows never crash), `filter_by_sa` (the max-SA bound flags rejects in place — the §24.4 never-discard contract), `sa_score_summary` (mean ± std, range, the honest caveat). |
+| The oracle upgrade | `chem/oracles.py::sa_score` delegates to the same lazy loader (Contrib-less builds degrade honestly to complexity-only ranking) and uses the non-deprecated `rdFingerprintGenerator` API; `penalized_logp` moved onto the real SA scale (aspirin 1.137, ethanol -0.258 — the old -7.3-era pins were the degraded scorer's artefacts; the doctest and GUI pins trued). |
+| The generative wiring (§24.5) | `generative/scoring.py::SAScoreObjective` — the window bounds become the easy/hard reward anchors; "SA score (ease of synthesis)" selectable in the Studio's Evolve objective combo; SA as ONE signal, never the sole target. |
+| The Studio tab (§24.3) | `ui/pages/generative.py` — the "SA score" engine tab: paste molecules (four seeded defaults incl. a taxane-style complex), the optional max-SA bound ([1, 10]), the ranked table (rank / SMILES / canonical / score / band / status) with rejects kept in place and the summary line. |
+| The web bridge | `/api/chem/sa-score` (zod: ≤ 50 SMILES, min/max bounds) over `scripts/sa_score_bridge.py` (stdin→stdout JSON in the venv) feeding the Explorer Playground `sa-score-card`; the card-directory + probe pins updated. |
+| Infrastructure | ROOT `conftest.py` preloads the round-206 EGL stub for EVERY pytest invocation — pytest-qt imports `PySide6.QtGui` at `pytest_configure` (before any `tests/` conftest), so EGL-less containers INTERNALERRORed every non-`tests/ui` run (the library chunks AND the doctest chunk). |
+| Tests | `tests/test_sa_score.py` (37: the reference values, bands, filtering, summary, invalid rows, the Contrib-less degradation) · `tests/ui/test_generative_page.py` +6 (the SA tab defaults with the true easiest-first pins — the ibuprofen core 1.520 leads, not aspirin 1.580 — the 2-kept/2-rejected filter split, invalid rows, empty input, the bad bound, the objective selection with `_obj_lo`/`_obj_hi`) · `tests/test_web_parity.py` (the bridge + card pins). |
+
+## Round 231 (v1.2.144) — the Part-3 §22 SMILES previews + the Qt console-noise filter *(COVERAGE row reconstructed in round 232 — the interrupted round shipped the code but not its docs rows)*
+
+| What | Where it landed |
+| --- | --- |
+| SMILES previews (§22) | `ui/widgets/smiles_preview.py` — `MoleculeRenderer` (MolDraw2DCairo at 2× device pixels, 128-entry FIFO cache, honest invalid-SMILES refusal — §22.4 never a made-up molecule), `MoleculePopup` (350 ms dwell, §22.2), `SmilesDetailDialog` (§22.5: formula / weight / the Ertl SA score with method attribution / canonical-SMILES copy); wired onto the Generative tab's shared table by COLUMN NAME so every bound frame gains it. |
+| Qt console-noise filter | `ui/qt_noise_filter.py` — the user-reported v1.2.142 Windows noise (QFontDatabase fonts-dir advice + the Qt 6.8 QStyleHints unique-connection chatter ×4) diagnosed benign; the message handler installs BEFORE the QApplication in `ui.run()`; `PHARMAML_STUDIO_QT_VERBOSE=1` escape hatch. |
+| Tests | +17: `tests/ui/test_smiles_preview.py` (12, on real renders) · `tests/ui/test_qt_noise_filter.py` (5, incl. a live `qInstallMessageHandler` round-trip); the chunk runner updated. |
+
+## Round 232 (v1.2.145) — the Windows black-window fix + the Part-3 §21 slice 1 (hover inspection)
+
+*The user reported `studio.py` showing console noise with NO window on Windows — root-caused to the headless bootstrap forcing the offscreen platform there; and every chart gained hover data inspection.*
+
+| What | Where it landed |
+| --- | --- |
+| The Windows fix (user report) | `ui/headless.py` — the displayless probe tested only X11's `DISPLAY`, which NEVER exists on Windows (nor covers Wayland): every Windows launch silently forced `QT_QPA_PLATFORM=offscreen` — the app ran with an invisible window, `app.exec()` blocked, no GUI appeared. Now platform-aware: offscreen ONLY on Linux-class platforms with neither `DISPLAY` nor `WAYLAND_DISPLAY`; Windows/macOS keep native; explicit `QT_QPA_PLATFORM` still wins; the applied-dict records `"native"` for observability. |
+| Hover inspection (§21 slice 1) | `ui/widgets/chart_inspector.py::ChartInspector` on every `PlotPanel` — crosshair, nearest-point snapping (bar bodies are whole hover targets on bars/histograms; 8 %-of-range resolution-independent tolerance), the readout line of REAL values with page-attached per-point metadata (`meta=` on line/scatter/bars, `attach_metadata()`; histograms read exact bin boundaries + count, labelled bars their category), per-point metadata caching + debounced text rebuild (§21.6), failing providers degrade to plain values, the context menu (per-series visibility toggles / inspection switch / reset-view), click-to-select with the `pointSelected(label, index)` drill-down signal (§21.5). |
+| PlotPanel API | `set_inspection_enabled()` / `inspection_enabled()` / `attach_metadata()`; the readout QLabel has a fixed minimum height (no layout jump — the §23 seed). |
+| Tests | `tests/ui/test_headless_platform.py` (7: the Windows/macOS/Wayland/X11/displayless/explicit/idempotence decision matrix) · `tests/ui/test_chart_inspector.py` (14: readout real values, nearest-of-two, far-hover, cached-once metadata, failing metadata, attach-after-plot, histogram bins, bar categories, crosshair wiring, click-select emit, disabled no-op, hidden-series skip, clear reset, placeholder naming); the chunk runner grows chunk 4c. |
+| Docs repaired | The interrupted round 231's missing rows reconstructed: CHANGELOG 1.2.144 entry, this COVERAGE row, GUI_AUDIT's §22 progress — plus README's Windows-native note, the §21 section, GUI_AUDIT's round-232 progress and CHANGELOG 1.2.145. |
+
+## Round 233 (v1.2.146) — the Part-3 §23 slice 1: the responsive pass
+
+*The splitter audit lands as wired policy, exports gain a legibility floor, and matrix images lock aspect — display geometry only, the data untouched (§23.5 pinned by test).*
+
+| What | Where it landed |
+| --- | --- |
+| The §23.2 splitter policy | `ui/widgets/responsive.py::configure_splitter` — no collapsible children, hard per-child minimum extents (`MIN_CHILD_PX` 320; the main window's nav 200), stretch factors routing window growth to the chart side. Wired onto ALL 20 splitters: the 15 page splitters, the Image Lab's four tab splitters, the ML Workbench's two, and the main window's nav/content splitter (its nav side was previously collapsible — the whole navigation could be dragged away). |
+| Export legibility floor (§23.3) | `ui/widgets/image_export.py` — `grab_png_bytes(min_size=…)` / `export_widget_grab(min_size=…)` re-render a squeezed `QGraphicsView` from its **vector scene** at floor scale: `LEGIBILITY_FLOOR` 640×480 (`ui/widgets/responsive.py`), text/pens/curves re-drawn crisp (never bitmap-stretched), aspect preserved (§23.4), the pyqtgraph chrome re-filled via `backgroundBrush()` (scene.render skips the view-layer painting). `PlotPanel.export_image` / `ImagePanel.export_image` gained the `min_size` passthrough (default `None` = the §17-tested widget-owns-its-size contract); the Image Lab's user export button passes the floor. |
+| Aspect lock (§23.4) | `ui/widgets/image_panel.py` — `setAspectLocked(True)`: matrix pixels stay square under every resize (a 100×50 correlation renders 2:1 as shaped, fit-to-view, never stretched); the §22 renderer's canvas-aspect contract is pinned alongside (RDKit letterboxes inside the exact requested canvas). |
+| Tests | `tests/ui/test_responsive_policy.py` (+13): the policy contract (horizontal/vertical/empty-noop), the structural audit over every live splitter in a constructed main window (≥19 wired, all non-collapsible, all minimum extents), the floor (upscale-meets-floor + aspect-preserved, already-legible noop, no-floor contract), §23.5 data-integrity (arrays + view ranges byte-identical across an export), the ImagePanel aspect lock, the §22 canvas-aspect contract. Chunk runner `scratch/run_suite_chunks_233.py` (4d gains the new suite). |
+
+## Round 235 (v1.2.147) — the Part-3 §23 slice 2: the scroll policy
+
+*The tallest forms ride a scroll region now — sideways overflow made impossible, a fitting page visually unchanged, display geometry only (§23.5).*
+
+| What | Where it landed |
+| --- | --- |
+| The scroll policy | `ui/widgets/responsive.py::wrap_in_scroll` + `SCROLL_MIN_PX` (240) — widget-resizable, horizontal scrollbars OFF, vertical as needed, frameless + palette-blended, hard region minimum. Wired onto ALL five ML Workbench tab bodies at the addTab sites (probe evidence: tuner 479 px, Leaderboards 775 px vs ~450 px budget at the 860×560 minimum window). |
+| Tests | `tests/ui/test_responsive_policy.py` (+3, 13→16): the wrapper contract, the §23.5 remount invariants (same rows, never more space required), and the structural audit that fails if a future tab skips the wrapper. Chunk runner `scratch/run_suite_chunks_235.py`. |
+
+## Round 236 (v1.2.148) — the Part-3 §21.5 molecule readouts
+
+*Chart points that are molecules read out as molecules — hover carries SMILES/formula/weight, click opens the detail view, nothing fabricated.*
+
+| What | Where it landed |
+| --- | --- |
+| The forwarding signal | `ui/widgets/plot_widget.py::PlotPanel.point_selected` — re-emits the inspector's click-to-select `(label, index)` so pages never reach into the inspector for drill-downs. |
+| The SA chart | `ui/pages/generative.py::_render_sa_score` — rank vs score, one point per scored molecule; hover metadata via the lazy provider (`SMILES`, RDKit `formula`, `MW`); click → the §22.5 `SmilesDetailDialog` with a foreign-label guard; invalid rows stay table-only. |
+| The Pareto front | `_render_front` — the non-dominated scatter carries the same hover metadata per front member. |
+| Tests | `tests/ui/test_generative_page.py` (+4): the forwarding pin, the hover readout with real numbers (C10H14O / 150.22 g/mol for the ibuprofen core), the click-to-detail + guard, the front hover. |
+
+## Round 237 (v1.2.149) — the Qt import guard + `studio.py --doctor` + the ui/ lint cleanup
+
+*A broken PySide6 install answers with a diagnosis and a fix recipe, not a traceback wall; one command audits the whole launch environment.*
+
+| What | Where it landed |
+| --- | --- |
+| The import guard | `ui/qt_import_guard.py` + the guarded `QApplication` import in `ui/__init__.py::run` — the caught `ImportError` prints `qt_import_guidance()` (diagnosis, the two `sys.executable`-qualified fix commands for the whole PySide6/shiboken6 wheel family, VC++-redist + conda notes) and exits 2; the missing-module family takes the plain-install branch. |
+| The doctor | `ui/doctor.py` + `--doctor` dispatch in `ui.run` — 16 checks (python floor, PySide6/shiboken6 with wheel-metadata versions matched before the import probe, the exact `QApplication` import, GUI providers, science stack), a fix under every failure, exit 0/1, read-only. |
+| Lint cleanup | `ui/` + `studio.py` now ruff- and mypy-clean: 19 ruff findings + 7 mypy errors from rounds 233–236 cleared (dead imports/vars, unsorted blocks, `int(ceil())`, the `_SeriesRecord` shadow, the rdkit `Descriptors.MolWt` ignore per repo convention, the `ndarray \| None` metric guard in model_analysis); `studio.py` carries its executable bit. src/ (90) + tests/ (57) recorded as backlog. |
+| Tests | `tests/ui/test_qt_doctor.py` (+7): both guidance branches, report format + exit codes, the live 16-check collection, the `--doctor` CLI subprocess, and two PYTHONPATH-shadowed broken-PySide6 end-to-end legs (exit 2 + recipe; doctor diagnoses without a traceback). |
+
+## Round 240 (v1.2.152) — the Part-3 §21.4 image pixel inspection
+
+*The owner's round instruction — check the six uploaded PDFs thoroughly and make sure everything is executed and checked — re-read the whole directive corpus (MASTER_PROMPT parts 1/2/3, the 140-repo Research Catalog, the Prompt Registry, the GitHub Links Registry), verified the compliance matrix (Part-1 closed at v1.2.107; Part-2 §16 closed at round 228; the Links Registry's deferred G-3 trio absorbed at round 189 into `ml/xai.py`), and shipped the one documented remaining Part-3 acceptance line: every matrix cell answers the cursor.*
+
+| What | Where it landed |
+| --- | --- |
+| The hover probe | `ui/widgets/image_panel.py::ImagePanel` — `pixel_at(x, y)` (the pure data-coordinate mapping: floor onto the pixel, outside/negative refusal, NaN → `masked`, the axis labels riding the payload) + the scene wiring (`sigMouseMoved` → `ImageItem.mapFromScene`, the probe's round-trip contract `scratch/probe_image_hover_240.py`) emitting `pixel_hovered` with per-pixel debouncing (§21.6) and the `leaveEvent` single reset; `image_metadata()` (shape/dtype/channels/finite-NaN census/range), `reset_view()` (§21.2), and `set_matrix` now taking RGB(A) `(h,w,3|4)` arrays with per-channel payloads (NaN-free or honest refusal); `matrix_changed` keeps pages current. |
+| The page readout | `ui/pages/image_lab.py` — every tab's panel carries a hover label: `Pixel [row, col] (x, y) = value` (+ `row:`/`col:` labels, `masked (NaN)` disclosure, per-channel values on RGB); at rest the same line reports `Matrix RxC · N finite / M masked · min · max`. |
+| Tests | `tests/ui/test_image_hover_probe.py` (20): the pure mapping (exact value, flooring, boundary refusal, NaN, labels), metadata + clear reset, the scene path via identity `mapFromScene` (payload, silent-no-matrix, same-pixel debounce, outside-once, leaveEvent once, replot re-arm), RGB/RGBA payloads + the NaN refusal, reset_view, the page wiring (4 labels, real payload, at-rest restore). |

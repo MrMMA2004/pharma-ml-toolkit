@@ -168,7 +168,11 @@ True
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+import base64
+import hashlib
+import json
+import os
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -176,6 +180,7 @@ import numpy as np
 import pandas as pd
 
 from pharmaml.chem.descriptors import require_rdkit
+from pharmaml.exceptions import JobCancelled
 from pharmaml.logger import get_logger
 
 _LOG = get_logger(__name__)
@@ -200,10 +205,12 @@ __all__ = [
     "RDKIT_FP_BITS",
     "RISM_DESCRIPTOR_COUNT",
     "TOPOLOGICAL_BITS",
+    "FeatureConfig",
     "FeatureReport",
     "FeatureSelection",
     "VarianceFilterResult",
     "compute_feature_frame",
+    "descriptor_catalog",
     "family_of_column",
     "filter_low_variance",
     "rank_features",
@@ -279,6 +286,9 @@ RDKIT_FP_BITS = 2048
 MORGAN_BITS = 2048
 #: Morgan fingerprint radius (ECFP-style).
 MORGAN_RADIUS = 2
+
+#: (part8 Phase D) process-wide ``GetAvailableProperties`` cache.
+_DESCRIPTOR_NAMES_CACHE: tuple[str, ...] | None = None
 #: Bit length of the MACCS structure-key fingerprint (RDKit's fixed 167
 #: SMARTS keys).
 MACCS_BITS = 167
@@ -542,9 +552,48 @@ def _onbits_vector(fingerprint: Any, n_bits: int) -> np.ndarray:
     return vector
 
 
-def _morgan_computer() -> Callable[[Any], np.ndarray]:
-    """Morgan family: radius-2 2048-bit bit vector (chem/descriptors style)."""
+def _countfold_vector(fingerprint: Any, n_bits: int) -> np.ndarray:
+    """Dense float COUNT vector of a ``UIntSparseIntVect`` folded to ``n_bits``.
+
+    (part8 Phase D) the count flavour of the Morgan families: each
+    sparse position contributes its COUNT (not 1.0) at ``index %
+    n_bits`` -- the same fold ``GetCountFingerprint``'s ``fpSize``
+    performs, spelled explicitly so the width always matches the
+    requested ``morgan_bits``.
+    """
+    vector = np.zeros(n_bits, dtype=float)
+    for index, count in fingerprint.GetNonzeroElements().items():
+        vector[int(index) % n_bits] += float(count)
+    return vector
+
+
+def _morgan_computer(
+    radius: int = MORGAN_RADIUS,
+    bits: int = MORGAN_BITS,
+    as_counts: bool = False,
+) -> Callable[[Any], np.ndarray]:
+    """Morgan family: configurable radius/bits (part8 Phase D).
+
+    Historical defaults reproduce the ``MORGAN_RADIUS``/``MORGAN_BITS``
+    bit vector exactly; ``as_counts`` emits unbounded-count semantics
+    (``GetMorganCountFingerprint`` folded to ``bits``) for the families
+    with a count flavour.
+    """
     from rdkit.Chem import rdMolDescriptors
+
+    if as_counts:
+        count_fn = getattr(
+            rdMolDescriptors, "GetHashedMorganFingerprint", None
+        )
+        assert count_fn is not None, (
+            "rdkit must provide GetHashedMorganFingerprint for count mode"
+        )
+
+        def morgan_count_vector(mol: Any) -> np.ndarray:
+            fingerprint = count_fn(mol, radius=radius, nBits=bits)
+            return _countfold_vector(fingerprint, bits)
+
+        return morgan_count_vector
 
     def morgan_vector(mol: Any) -> np.ndarray:
         # The legacy GetMorganFingerprintAsBitVect call is deliberate: it
@@ -552,15 +601,19 @@ def _morgan_computer() -> Callable[[Any], np.ndarray]:
         # through rdMolDescriptors (the defining module) instead of AllChem's
         # re-export so mypy resolves the attribute the same way.
         fingerprint = rdMolDescriptors.GetMorganFingerprintAsBitVect(
-            mol, radius=MORGAN_RADIUS, nBits=MORGAN_BITS
+            mol, radius=radius, nBits=bits
         )
-        return _onbits_vector(fingerprint, MORGAN_BITS)
+        return _onbits_vector(fingerprint, bits)
 
     return morgan_vector
 
 
-def _ecfp3_computer() -> Callable[[Any], np.ndarray]:
-    """ECFP3 family: radius-3 2048-bit bit vector (``Ml/D2.py``'s R3).
+def _ecfp3_computer(
+    radius: int = ECFP3_RADIUS,
+    bits: int = ECFP3_BITS,
+    as_counts: bool = False,
+) -> Callable[[Any], np.ndarray]:
+    """ECFP3 family: configurable radius/bits (part8 Phase D override).
 
     The upload's dual-radius fingerprints were Morgan radius 2 (4096
     bits) + radius 3 (2048 bits); this family reproduces the R3 half
@@ -570,11 +623,25 @@ def _ecfp3_computer() -> Callable[[Any], np.ndarray]:
     """
     from rdkit.Chem import rdMolDescriptors
 
+    if as_counts:
+        count_fn = getattr(
+            rdMolDescriptors, "GetHashedMorganFingerprint", None
+        )
+        assert count_fn is not None, (
+            "rdkit must provide GetHashedMorganFingerprint for count mode"
+        )
+
+        def ecfp3_count_vector(mol: Any) -> np.ndarray:
+            fingerprint = count_fn(mol, radius=radius, nBits=bits)
+            return _countfold_vector(fingerprint, bits)
+
+        return ecfp3_count_vector
+
     def ecfp3_vector(mol: Any) -> np.ndarray:
         fingerprint = rdMolDescriptors.GetMorganFingerprintAsBitVect(
-            mol, radius=ECFP3_RADIUS, nBits=ECFP3_BITS
+            mol, radius=radius, nBits=bits
         )
-        return _onbits_vector(fingerprint, ECFP3_BITS)
+        return _onbits_vector(fingerprint, bits)
 
     return ecfp3_vector
 
@@ -600,8 +667,8 @@ def _maccs_computer() -> Callable[[Any], np.ndarray]:
     return maccs_vector
 
 
-def _fcfp_generator() -> Any:
-    """The feature-invariant Morgan generator (radius 2, 2048 bits).
+def _fcfp_generator(radius: int = MORGAN_RADIUS, bits: int = FCFP_BITS) -> Any:
+    """The feature-invariant Morgan generator (configurable, part8 Phase D).
 
     ``GetMorganFeatureAtomInvGen`` swaps the connectivity invariants
     for Gasteiger-Marsili feature labels (donor/acceptor/aromatic/...)
@@ -610,8 +677,8 @@ def _fcfp_generator() -> Any:
     from rdkit.Chem import rdFingerprintGenerator
 
     return rdFingerprintGenerator.GetMorganGenerator(
-        radius=MORGAN_RADIUS,
-        fpSize=FCFP_BITS,
+        radius=radius,
+        fpSize=bits,
         includeChirality=False,
         useBondTypes=True,
         atomInvariantsGenerator=rdFingerprintGenerator.GetMorganFeatureAtomInvGen(),
@@ -801,12 +868,232 @@ def _morgan_scaffold_computer(
     return scaffold_vector
 
 
+
+# -- (round 6, §13) resumable-checkpoint helpers --------------------------------
+#
+# The descriptor batch's "complete state" (§13's requirement before a
+# Pause/Resume may exist): the per-row float vectors computed so far, the
+# dropped (row, smiles) pairs, and the fingerprints that make a resume
+# EXACT rather than assumed -- config (families/n_conformers) and dataset
+# (the full input list).  Vectors ride as base64-packed float64 so the
+# JSON round-trip is bit-exact (the numpy_neural `_b64_pack` contract).
+
+
+def _pack_vector(array: np.ndarray) -> dict[str, object]:
+    """One float vector -> a JSON-safe bit-exact ``{dtype, shape, data}``."""
+    contiguous = np.ascontiguousarray(np.asarray(array, dtype=float))
+    return {
+        "dtype": str(contiguous.dtype),
+        "shape": list(contiguous.shape),
+        "data": base64.b64encode(contiguous.tobytes()).decode("ascii"),
+    }
+
+
+def _unpack_vector(payload: object) -> np.ndarray:
+    """Rebuild one :func:`_pack_vector` payload into a fresh array."""
+    if not isinstance(payload, dict):
+        raise TypeError(f"packed vector must be a dict, got {type(payload).__name__}")
+    dtype = np.dtype(str(payload["dtype"]))
+    shape = tuple(int(dim) for dim in payload["shape"])
+    raw = base64.b64decode(str(payload["data"]), validate=True)
+    if raw and len(raw) != int(np.prod(shape)) * dtype.itemsize:
+        raise ValueError("packed vector payload size mismatch")
+    return np.frombuffer(raw, dtype=dtype).reshape(shape).copy()
+
+
+def _batch_config_fingerprint(
+    families: Sequence[str], n_conformers: int, width: int
+) -> str:
+    """SHA-256 over the batch's config: family set, conformer count, and
+    the resulting column width (a resume must land the same columns)."""
+    blob = json.dumps(
+        {"families": list(families), "n_conformers": int(n_conformers), "width": int(width)},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _batch_dataset_fingerprint(smiles_list: Sequence[str]) -> str:
+    """SHA-256 over the exact input list -- a resume against different
+    data is detected, not guessed at (the envelope rule 3, applied
+    in-batch for callers with no on-disk input artifacts)."""
+    digest = hashlib.sha256()
+    for text in smiles_list:
+        digest.update(text.encode("utf-8"))
+        digest.update(b"\x00")  # delimiter: no concatenation ambiguity
+    return digest.hexdigest()
+
+
+# ---------------------------------------------------------------------
+# (part8 Phase D) the structured feature-generation configuration
+# ---------------------------------------------------------------------
+
+#: The Morgan-style families a radius/bit-width override applies to.
+#: Count-mode applies only to families with a count flavour.
+_RADIUS_FAMILIES = ("ecfp", "ecfp3", "morgan_full", "morgan_scaffold", "fcfp")
+_COUNT_FAMILIES = ("ecfp", "ecfp3", "morgan_full", "fcfp")
+
+
+def descriptor_catalog() -> list[str]:
+    """The exact ``descriptors``-family property names RDKit offers.
+
+    One stable, importable answer for GUI pickers and config
+    persistence: the names behind the ``desc_`` columns
+    (:func:`rdMolDescriptors.Properties.GetAvailableProperties` at call
+    time, order preserved).  Requires RDKit (the same guard as the
+    family itself).
+    """
+    require_rdkit()
+
+    names, _computer = _descriptor_computer()
+    return list(names)
+
+
+@dataclass(slots=True, frozen=True)
+class FeatureConfig:
+    """A typed, validated feature-generation configuration (part8 §7.3).
+
+    The single object that flows ``GUI → validation → backend feature
+    generation → worker → DataFrame → feature metadata → export``.
+    All fields default to the historical behaviour, so the legacy
+    positional ``compute_feature_frame(smiles, families=..., n_jobs=...)``
+    calls stay byte-identical (``config=None`` builds the default).
+
+    Parameters
+    ----------
+    families:
+        The feature families to compute (canonical order is applied by
+        the backend regardless of request order).
+    descriptors:
+        Optional subset of the ``descriptors``-family property names
+        (see :func:`descriptor_catalog`).  ``None``/empty = all
+        properties (the historical behaviour).  Unknown names raise at
+        validation time.
+    morgan_radius:
+        Radius override for the Morgan-style families (``ecfp``,
+        ``ecfp3``, ``morgan_full``, ``morgan_scaffold``, ``fcfp``).
+        Default 2 = the historical ``MORGAN_RADIUS``.
+    morgan_bits:
+        Fold length override for the same families.  Must be in
+        ``(0, 65536]``; default 2048 = the historical ``MORGAN_BITS``.
+    as_counts:
+        When ``True`` the Morgan-style families with a count flavour
+        (``ecfp``, ``ecfp3``, ``morgan_full``, ``fcfp``) emit COUNT
+        vectors instead of binary bits (column names keep their
+        ``*_bit_`` prefix -- the family vocabulary is fixed, only the
+        values change semantics; this mirrors
+        :func:`pharmaml.chem.descriptors.compute_fingerprints`).
+    n_conformers, n_jobs:
+        The historical knobs, carried so ONE object describes the whole
+        generation run.
+
+    Examples
+    --------
+    >>> FeatureConfig(families=("ecfp",), morgan_radius=3, morgan_bits=1024)
+    FeatureConfig(families=('ecfp',), descriptors=None, morgan_radius=3, morgan_bits=1024, as_counts=False, n_conformers=3, n_jobs=1)
+    >>> FeatureConfig(families=("ecfp",), morgan_bits=0)
+    Traceback (most recent call last):
+        ...
+    ValueError: morgan_bits must be an integer in (0, 65536], got 0
+    """
+
+    families: tuple[str, ...] = FEATURE_FAMILIES
+    descriptors: tuple[str, ...] | None = None
+    morgan_radius: int = MORGAN_RADIUS
+    morgan_bits: int = MORGAN_BITS
+    as_counts: bool = False
+    n_conformers: int = 3
+    n_jobs: int = 1
+
+    def __post_init__(self) -> None:
+        for name in self.families:
+            if name not in FEATURE_FAMILIES:
+                raise ValueError(
+                    f"unknown feature family {name!r}; valid families are: "
+                    + ", ".join(FEATURE_FAMILIES)
+                )
+        if (
+            not isinstance(self.morgan_radius, (int, np.integer))
+            or isinstance(self.morgan_radius, bool)
+            or int(self.morgan_radius) < 0
+        ):
+            raise ValueError(
+                f"morgan_radius must be an integer >= 0, got {self.morgan_radius!r}"
+            )
+        if (
+            not isinstance(self.morgan_bits, (int, np.integer))
+            or isinstance(self.morgan_bits, bool)
+            or not 0 < int(self.morgan_bits) <= 65_536
+        ):
+            raise ValueError(
+                f"morgan_bits must be an integer in (0, 65536], got {self.morgan_bits!r}"
+            )
+        if self.descriptors is not None:
+            if not self.descriptors:
+                raise ValueError(
+                    "descriptors must be None (all properties) or a non-empty "
+                    "tuple of property names"
+                )
+            unknown = [
+                name for name in self.descriptors
+                if name not in _descriptor_names_cached()
+            ]
+            if unknown:
+                raise ValueError(
+                    f"unknown descriptor names: {', '.join(unknown[:5])}"
+                    f" (of {len(unknown)}); see descriptor_catalog()"
+                )
+
+    def as_dict(self) -> dict[str, Any]:
+        """The reproducibility record (JSON-ready)."""
+        return {
+            "families": list(self.families),
+            "descriptors": list(self.descriptors) if self.descriptors is not None else None,
+            "morgan_radius": int(self.morgan_radius),
+            "morgan_bits": int(self.morgan_bits),
+            "as_counts": bool(self.as_counts),
+            "n_conformers": int(self.n_conformers),
+            "n_jobs": int(self.n_jobs),
+        }
+
+    @classmethod
+    def from_dict(cls, record: dict[str, Any]) -> FeatureConfig:
+        """Rebuild from :meth:`as_dict` output (unknown keys ignored)."""
+        known = {f: record.get(f) for f in (
+            "families", "descriptors", "morgan_radius", "morgan_bits",
+            "as_counts", "n_conformers", "n_jobs",
+        ) if f in record}
+        if "families" in known and known["families"] is not None:
+            known["families"] = tuple(known["families"])
+        if "descriptors" in known and known["descriptors"] is not None:
+            known["descriptors"] = tuple(known["descriptors"])
+        # as_dict() output is __post_init__-validated; the narrow here
+        # documents that the dict values are the serialised field types
+        return cls(**known)  # type: ignore[arg-type]
+
+
+def _descriptor_names_cached() -> tuple[str, ...]:
+    """``GetAvailableProperties`` once per process (it hits the C++ registry)."""
+    global _DESCRIPTOR_NAMES_CACHE
+    if _DESCRIPTOR_NAMES_CACHE is None:
+        require_rdkit()
+        names, _computer = _descriptor_computer()
+        _DESCRIPTOR_NAMES_CACHE = tuple(names)
+    return _DESCRIPTOR_NAMES_CACHE
+
+
 def compute_feature_frame(
     smiles: Sequence[str],
     families: Iterable[str] = FEATURE_FAMILIES,
     n_conformers: int = 3,
     n_jobs: int = 1,
     progress: Callable[..., Any] | None = None,
+    *,
+    checkpoint_dir: str | os.PathLike[str] | None = None,
+    checkpoint_every: int = 1,
+    checkpoint_resume: bool = True,
+    config: FeatureConfig | None = None,
 ) -> tuple[pd.DataFrame, FeatureReport]:
     """Compute a multi-family feature matrix for a batch of SMILES.
 
@@ -820,9 +1107,11 @@ def compute_feature_frame(
         :data:`FEATURE_FAMILIES`).  Unknown names raise; duplicates are
         ignored.  The output column order is the CANONICAL
         :data:`FEATURE_FAMILIES` order regardless of the request order.
+        Ignored when ``config`` is given (the config carries its own).
     n_conformers:
         ETKDG conformer count for the ``shape_3d`` family only (the
         ``xxx.ipynb`` cell 6 default 3); every other family ignores it.
+        Ignored when ``config`` is given.
     n_jobs:
         Worker count for the per-molecule loop, joblib convention
         (``1`` = serial, ``-1`` = all cores, ``0`` invalid).  Threads,
@@ -830,13 +1119,52 @@ def compute_feature_frame(
         GIL, so real parallelism needs no pickling of the per-family
         computers (which are closures and would not survive a process
         boundary).  Order, drops and the report are byte-identical to
-        the serial run whatever the worker count.
+        the serial run whatever the worker count.  Ignored when
+        ``config`` is given.
     progress:
         (100x-169) Optional ``progress(done, total, note)`` callback,
         fired on the calling thread as molecule batches COMPLETE --
         the GUI's determinate progress bar + ETA convention (the
         docking ``_progress_sink`` twin).  ``None`` keeps the silent
+        behaviour byte for byte.  (round 205) The callback's RETURN
+        value is the cooperative-stop channel: returning ``False``
+        stops the batch at the next batch boundary with
+        :class:`~pharmaml.exceptions.JobCancelled`; ``None``/truthy
+        returns never cancel (every historical callback is
+        unaffected).  The GUI's Stop button and its live memory
+        watchdog speak through this channel, so a run-away batch can
+        be halted BEFORE the OS would kill the whole window.
+    checkpoint_dir:
+        (part5-continuation round 6, §13) Optional directory for
+        resumable checkpoints: one envelope-carrying checkpoint per
+        ``checkpoint_every`` chunk boundaries, carrying every completed
+        row's exact float vector, the dropped pairs, and the
+        config/dataset fingerprints.  A later call with the same
+        ``smiles``/``families``/``n_conformers`` resumes from the newest
+        valid checkpoint -- completed molecules are NEVER recomputed and
+        the resumed ``frame``/``report`` are bit-identical to an
+        uninterrupted run (the registered proof test pins this).  A
+        checkpoint from a different config or input list is refused with
+        a warning and the batch starts fresh (exact restore or nothing).
+        ``None`` (the default) keeps the historical checkpoint-less
         behaviour byte for byte.
+    checkpoint_every:
+        How many chunk boundaries between checkpoint saves (1 = every
+        chunk; the chunk size itself stays the internal 25-molecule
+        dispatch unit).  Must be a positive int.
+    checkpoint_resume:
+        When ``True`` (default) and ``checkpoint_dir`` is given, resume
+        from the newest valid checkpoint whose fingerprints match.
+        ``False`` still writes checkpoints but always computes from
+        scratch -- the fresh-run twin the resume tests compare against.
+    config:
+        (part8 Phase D) The structured, validated
+        :class:`FeatureConfig` -- family list, optional descriptor
+        subset, Morgan radius/bit overrides, count mode, ``n_jobs`` and
+        ``n_conformers`` in ONE object.  When given it takes precedence
+        over the legacy ``families``/``n_conformers``/``n_jobs``
+        arguments (backwards compatibility: ``None`` keeps the legacy
+        path byte for byte).
 
     Returns
     -------
@@ -866,6 +1194,10 @@ def compute_feature_frame(
     DependencyError
         If RDKit is not installed (raised by the shared
         :func:`pharmaml.chem.descriptors.require_rdkit` guard).
+    JobCancelled
+        (round 205) If the ``progress`` callback returns ``False`` at
+        a batch boundary -- the cooperative stop; the message names
+        how many molecules completed before the stop.
 
     Examples
     --------
@@ -886,6 +1218,21 @@ def compute_feature_frame(
     ... )
     >>> seen
     [(2, 2, 'feature factory')]
+
+    (round 205) a callback that returns ``False`` stops the batch at
+    the boundary -- the cooperative-stop channel the playground's Stop
+    button and memory watchdog speak:
+
+    >>> stopped = []
+    >>> try:
+    ...     compute_feature_frame(
+    ...         ["CCO"] * 60, families=("ecfp",),
+    ...         progress=lambda done, total, note: False if done >= 25 else None,
+    ...     )
+    ... except JobCancelled as exc:
+    ...     stopped.append(str(exc))
+    >>> stopped
+    ['feature batch cancelled after 25/60 molecules -- stopped at a checkpoint by the caller']
 
     Notes
     -----
@@ -945,6 +1292,13 @@ def compute_feature_frame(
       ``rism_gsolv_kcalmol`` ... ``rism_q_neg_frac``.
     """
     smiles_list = _as_smiles_list(smiles, "smiles")
+    # (part8 Phase D) the structured config takes precedence; when absent
+    # the legacy arguments build the equivalent default config so both
+    # paths share ONE downstream flow.
+    if config is not None:
+        families = config.families
+        n_conformers = config.n_conformers
+        n_jobs = config.n_jobs
     # Cheap validation BEFORE any parsing: caller bugs must not wait for a
     # full RDKit pass to surface (the chem/descriptors.py ordering lesson).
     if not smiles_list:
@@ -983,7 +1337,11 @@ def compute_feature_frame(
     requested = [family for family in FEATURE_FAMILIES if family in requested_set]
 
     Chem = require_rdkit()
-    computers, columns, family_widths = _family_plan(requested, int(n_conformers))
+    computers, columns, family_widths = _family_plan(
+        requested,
+        int(n_conformers),
+        config=config,
+    )
 
     def compute_one(pair: tuple[int, str]) -> tuple[int, str, np.ndarray | None, str]:
         """One molecule -> ``(row, text, vector-or-None, error-or-"")``.
@@ -998,11 +1356,22 @@ def compute_feature_frame(
         try:
             # Blank cells parse as valid 0-atom molecules in RDKit; they are
             # failures here (the chem/descriptors.py convention).
-            mol = (
-                Chem.MolFromSmiles(text)
-                if isinstance(smi, str) and smi.strip()
-                else None
-            )
+            # (P-9) Invalid SMILES make RDKit dump multi-line parse errors
+            # to stderr; the caller drops the row and reports it in the UI,
+            # so the console trail is noise (and reads as a crash trail in
+            # a packaged app).  Silence rdApp around the parse — the same
+            # quiet convention as chem/csv_standardize._parse_smiles.
+            from rdkit.rdBase import DisableLog, EnableLog
+
+            DisableLog("rdApp.error")
+            try:
+                mol = (
+                    Chem.MolFromSmiles(text)
+                    if isinstance(smi, str) and smi.strip()
+                    else None
+                )
+            finally:
+                EnableLog("rdApp.error")
             if mol is None:
                 raise ValueError("SMILES did not parse to a valid molecule")
             vector = np.concatenate([computers[family](mol) for family in requested])
@@ -1021,6 +1390,147 @@ def compute_feature_frame(
     chunk = max(1, min(25, total))
     results: list[tuple[int, str, np.ndarray | None, str]] = []
     done = 0
+
+    # -- (round 6, §13) the resumable wrapper around the same loop ------
+    #
+    # When ``checkpoint_dir`` is given the batch becomes a §13 operation:
+    # checkpoints carry the complete state (every completed row's exact
+    # vector + the dropped pairs + the fingerprints), a resume replays
+    # them and skips the completed prefix, and a cooperative stop
+    # PRESERVES the partial results on the exception instead of
+    # discarding them.  Without ``checkpoint_dir`` none of this code
+    # runs -- the loop below is the historical one, byte for byte.
+    if checkpoint_dir is not None:
+        if (
+            not isinstance(checkpoint_every, int)
+            or isinstance(checkpoint_every, bool)
+            or checkpoint_every < 1
+        ):
+            raise ValueError(
+                f"checkpoint_every must be a positive int, got {checkpoint_every!r}"
+            )
+        from pharmaml.utils.checkpoint_schema import OperationSpec
+        from pharmaml.utils.checkpoints import CheckpointManager, PersistenceError
+
+        try:
+            manager = CheckpointManager(
+                checkpoint_dir, name="descriptor-batch"
+            )
+            spec = OperationSpec(
+                operation_type="descriptor_batch", operation_id=f"features-{id(smiles_list):x}"
+            )
+        except PersistenceError as exc:
+            _LOG.warning(
+                "checkpoint home unusable (%s); computing without checkpoints", exc
+            )
+            manager = None  # type: ignore[assignment]
+            spec = None  # type: ignore[assignment]
+        config_fp = _batch_config_fingerprint(requested, int(n_conformers), len(columns))
+        dataset_fp = _batch_dataset_fingerprint(smiles_list)
+        if manager is not None and checkpoint_resume:
+            try:
+                latest = manager.latest()
+            except OSError as exc:  # pragma: no cover - scan failure
+                latest = None
+                _LOG.warning("checkpoint scan failed (%s); starting fresh", exc)
+            if latest is not None and latest.resumable:
+                state = latest.state
+                if (
+                    state.get("config_fp") != config_fp
+                    or state.get("dataset_fp") != dataset_fp
+                ):
+                    _LOG.warning(
+                        "descriptor-batch checkpoint at step %d is for a different "
+                        "config/dataset; starting fresh (exact restore or nothing)",
+                        latest.step,
+                    )
+                else:
+                    try:
+                        results = [
+                            (
+                                int(entry["row"]),
+                                str(entry["text"]),
+                                None if entry.get("vector") is None
+                                else _unpack_vector(entry["vector"]),
+                                str(entry.get("error", "")),
+                            )
+                            for entry in state["rows"]
+                        ]
+                        done = int(latest.step)
+                        _LOG.info(
+                            "descriptor batch resumed from checkpoint step %d (%d/%d "
+                            "molecules already computed)",
+                            done,
+                            done,
+                            total,
+                        )
+                    except (KeyError, TypeError, ValueError) as exc:
+                        _LOG.warning(
+                            "checkpoint payload unreadable (%s); starting fresh", exc
+                        )
+                        results = []
+                        done = 0
+
+        boundaries_since_save = 0
+        for start in range(done, total, chunk):
+            batch = pairs[start : start + chunk]
+            if int(n_jobs) != 1 and len(batch) > 1:
+                from joblib import Parallel, delayed  # sklearn's own dependency
+
+                results.extend(
+                    Parallel(n_jobs=int(n_jobs), prefer="threads")(
+                        delayed(compute_one)(pair) for pair in batch
+                    )
+                )
+            else:
+                results.extend(compute_one(pair) for pair in batch)
+            done += len(batch)
+            boundaries_since_save += 1
+            if (
+                manager is not None
+                and spec is not None
+                and (start + chunk >= total or boundaries_since_save >= checkpoint_every)
+            ):
+                boundaries_since_save = 0
+                try:
+                    manager.save(
+                        step=done,
+                        total=total,
+                        state={
+                            "config_fp": config_fp,
+                            "dataset_fp": dataset_fp,
+                            "rows": [
+                                {
+                                    "row": row,
+                                    "text": text,
+                                    "vector": None if vector is None else _pack_vector(vector),
+                                    "error": error,
+                                }
+                                for row, text, vector, error in results
+                            ],
+                        },
+                        note=f"descriptor batch {done}/{total} molecules",
+                        operation=spec,
+                    )
+                except (PersistenceError, OSError, TypeError, ValueError) as exc:
+                    _LOG.warning(
+                        "checkpoint write failed at %d/%d (%s); continuing without it",
+                        done,
+                        total,
+                        exc,
+                    )
+            # (round 205) the cooperative stop -- now §13-complete: the
+            # partial results ride the exception (the data contract
+            # permits it: rows are independent, order is preserved).
+            if progress is not None and progress(done, total, "feature factory") is False:
+                raise JobCancelled(
+                    f"feature batch cancelled after {done}/{total} molecules "
+                    "-- stopped at a checkpoint by the caller",
+                    partial_results=_partial_frame_and_report(results, columns, family_widths),
+                )
+
+        return _finish_batch(results, columns, family_widths)
+
     for start in range(0, total, chunk):
         batch = pairs[start : start + chunk]
         if int(n_jobs) != 1 and len(batch) > 1:
@@ -1034,9 +1544,41 @@ def compute_feature_frame(
         else:
             results.extend(compute_one(pair) for pair in batch)
         done += len(batch)
-        if progress is not None:
-            progress(done, total, "feature factory")
+        # (round 205) inside the guard: the cooperative stop -- the
+        # caller's reporter answered False -- the GUI's Stop button or
+        # its memory watchdog.  Halt at this batch boundary with the
+        # named error so the poller can tell a stop apart from a
+        # failure (the window survives either way; the half-computed
+        # batch is discarded).
+        if progress is not None and progress(done, total, "feature factory") is False:
+            raise JobCancelled(
+                f"feature batch cancelled after {done}/{total} molecules "
+                "-- stopped at a checkpoint by the caller"
+            )
 
+    return _finish_batch(results, columns, family_widths)
+
+
+def _partial_frame_and_report(
+    results: Sequence[tuple[int, str, np.ndarray | None, str]],
+    columns: list[str],
+    family_widths: dict[str, int],
+) -> tuple[pd.DataFrame, FeatureReport]:
+    """(round 6, §13) The preserved partial ``(frame, report)`` on cancel."""
+    return _finish_batch(list(results), columns, family_widths)
+
+
+def _finish_batch(
+    results: Sequence[tuple[int, str, np.ndarray | None, str]],
+    columns: list[str],
+    family_widths: dict[str, int],
+) -> tuple[pd.DataFrame, FeatureReport]:
+    """Assemble the final ``(frame, report)`` from completed row results.
+
+    Shared by the plain loop, the resumable loop and the cancel path so
+    all three produce byte-identical output for the same rows (the
+    §13 exact-restore contract: one assembly, no divergent twins).
+    """
     rows: list[np.ndarray] = []
     valid_smiles: list[str] = []
     valid_positions: list[int] = []
@@ -1075,18 +1617,56 @@ def compute_feature_frame(
 def _family_plan(
     requested: list[str],
     n_conformers: int = 3,
+    *,
+    config: FeatureConfig | None = None,
 ) -> tuple[dict[str, Callable[[Any], np.ndarray]], list[str], dict[str, int]]:
-    """Build per-family computers, column names and widths for the request."""
+    """Build per-family computers, column names and widths for the request.
+
+    (part8 Phase D) When ``config`` carries overrides the plan honours
+    them: a descriptor SUBSET (fewer ``desc_*`` columns), Morgan
+    radius/bit-width overrides for the five Morgan-style families, and
+    count mode for the families with a count flavour.  ``None`` keeps
+    the historical behaviour byte for byte.
+    """
     computers: dict[str, Callable[[Any], np.ndarray]] = {}
     property_names: list[str] = []
     if "descriptors" in requested:
         property_names, computers["descriptors"] = _descriptor_computer()
+        if config is not None and config.descriptors is not None:
+            # the SUBSET contract: keep the catalog's own order (stable
+            # columns), restrict both the computer and the names
+            keep = [n for n in property_names if n in set(config.descriptors)]
+            missing = set(config.descriptors) - set(keep)
+            if missing:
+                raise ValueError(
+                    "descriptor subset names not in the RDKit catalog: "
+                    + ", ".join(sorted(missing)[:5])
+                )
+            from rdkit.Chem import rdMolDescriptors
+
+            subset_getter = rdMolDescriptors.Properties(keep)
+
+            def subset_vector(mol: Any) -> np.ndarray:
+                return np.asarray(
+                    subset_getter.ComputeProperties(mol), dtype=float
+                )
+
+            computers["descriptors"] = subset_vector
+            property_names = keep
     if "atompair_count" in requested:
         computers["atompair_count"] = _atompair_computer()
     if "avalon_count" in requested:
         computers["avalon_count"] = _avalon_computer()
     if "ecfp" in requested or "morgan_full" in requested or "morgan_scaffold" in requested:
-        morgan_vector = _morgan_computer()
+        # (part8 Phase D) overrides apply ONLY when a config carries them;
+        # no config keeps every family's own historical defaults.
+        if config is not None:
+            morgan_vector = _morgan_computer(
+                radius=int(config.morgan_radius), bits=int(config.morgan_bits),
+                as_counts=bool(config.as_counts) and "ecfp" in requested,
+            )
+        else:
+            morgan_vector = _morgan_computer()
         if "ecfp" in requested:
             computers["ecfp"] = morgan_vector
         if "morgan_full" in requested:
@@ -1094,11 +1674,22 @@ def _family_plan(
         if "morgan_scaffold" in requested:
             computers["morgan_scaffold"] = _morgan_scaffold_computer(morgan_vector)
     if "ecfp3" in requested:
-        computers["ecfp3"] = _ecfp3_computer()
+        if config is not None:
+            computers["ecfp3"] = _ecfp3_computer(
+                radius=int(config.morgan_radius), bits=int(config.morgan_bits),
+                as_counts=bool(config.as_counts),
+            )
+        else:
+            computers["ecfp3"] = _ecfp3_computer()
     if "maccs" in requested:
         computers["maccs"] = _maccs_computer()
     if "fcfp" in requested or "fcfp_count" in requested:
-        fcfp_generator = _fcfp_generator()
+        if config is not None:
+            fcfp_generator = _fcfp_generator(
+                radius=int(config.morgan_radius), bits=int(config.morgan_bits)
+            )
+        else:
+            fcfp_generator = _fcfp_generator()
         if "fcfp" in requested:
             computers["fcfp"] = _fcfp_computer(fcfp_generator)
         if "fcfp_count" in requested:
@@ -1162,12 +1753,28 @@ def _family_plan(
             names = list(_D3D_FAMILY_COLUMNS)
             width = len(names)
             columns.extend(names)
+        elif config is not None and family in _RADIUS_FAMILIES:
+            # (part8 Phase D) the overridden width drives the column
+            # count; count mode keeps the SAME names (the vocabulary is
+            # fixed, only the values change semantics)
+            width = int(config.morgan_bits)
+            prefix = FAMILY_PREFIXES[family]
+            columns.extend(f"{prefix}{index}" for index in range(width))
         else:
             width = _FAMILY_BITS[family]
             prefix = FAMILY_PREFIXES[family]
             columns.extend(f"{prefix}{index}" for index in range(width))
         family_widths[family] = width
     return computers, columns, family_widths
+
+
+def _cfg_radius(config: FeatureConfig | None) -> int:
+    """The effective Morgan radius (config override or the MORGAN default).
+
+    NOTE: only the plain Morgan families use this default; ``ecfp3``
+    keeps its own historical :data:`ECFP3_RADIUS` when no config rides.
+    """
+    return int(config.morgan_radius) if config is not None else MORGAN_RADIUS
 
 
 def _lightgbm_estimators() -> tuple[Any, Any] | None:
@@ -1538,6 +2145,191 @@ def selection_metadata(
         "dropped": [[int(row), str(smi)] for row, smi in report.dropped],
         "total_features": int(report.total_columns),
     }
+
+
+def recalculate_selected_features(
+    smiles: Sequence[str],
+    metadata: Mapping[str, Any],
+    *,
+    n_jobs: int = 1,
+    progress: Callable[..., Any] | None = None,
+) -> tuple[pd.DataFrame, FeatureReport]:
+    """Recalculate a frozen feature selection for NEW molecules.
+
+    The roundtrip half of :func:`selection_metadata`: the metadata dict
+    a selection run saved (``selected_features`` in rank order, the
+    family ledger, the fingerprint sizes) is replayed against a fresh
+    SMILES batch -- only the families the selected columns actually
+    need are computed, and the result carries exactly the recorded
+    columns, in the recorded rank order.  This is the QSAR workflow's
+    "apply the frozen feature set" step: train once, select once, then
+    recompute the SAME features for every new screening batch without
+    re-running the ranking.
+
+    Parameters
+    ----------
+    smiles:
+        SMILES strings for the new batch (a DataFrame column works
+        directly).  A bare string is rejected -- wrap it in a list.
+    metadata:
+        The dict produced by :func:`selection_metadata` (a mapping of
+        the same shape; ``json.load`` of a saved file works directly).
+        Only ``selected_features`` is required; the ledger keys
+        (``fingerprint_sizes``, ``families_computed``) are cross-checked
+        for consistency when present, so a stale metadata file from a
+        different build fails loudly instead of silently recomputing a
+        drifted vocabulary.
+    n_jobs:
+        Worker count passed through to :func:`compute_feature_frame`.
+    progress:
+        Optional ``progress(done, total, note)`` callback passed
+        through to :func:`compute_feature_frame` -- including the
+        (round 205) cooperative-stop contract: returning ``False``
+        halts the replay at a batch boundary with
+        :class:`~pharmaml.exceptions.JobCancelled`.
+
+    Returns
+    -------
+    tuple
+        ``(frame, report)``.  ``frame`` has one row per molecule that
+        parsed AND computed cleanly (indexed by original input row
+        position, name ``"original_index"``) and one column per
+        recorded feature, in the metadata's rank order.  ``report`` is
+        the :class:`FeatureReport` of the underlying computation -- its
+        ``families`` ledger covers every family the selected columns
+        needed (NOT the original run's full family set), and its
+        ``dropped`` pairs carry the new batch's failures.
+
+    Raises
+    ------
+    ValueError
+        If ``smiles`` is a bare string; ``metadata`` is not a mapping;
+        ``selected_features`` is missing, empty or holds duplicates;
+        a recorded column has an unknown prefix; the metadata's
+        ``fingerprint_sizes`` or ``families_computed`` entries
+        contradict this build; or a recorded column does not exist in
+        the recomputed frame (a descriptor property this RDKit no
+        longer offers -- the honest stale-metadata stop).
+
+    Examples
+    --------
+    A selection roundtrip: compute, select, record, then recalculate
+    the recorded columns for a different molecule set:
+
+    >>> from pharmaml.chem.features import (
+    ...     compute_feature_frame, rank_features, select_top_features,
+    ... )
+    >>> frame, report = compute_feature_frame(
+    ...     ["CCO", "CCC", "CCN"], families=("ecfp", "descriptors"))
+    >>> scores = rank_features(frame, None, method="variance")
+    >>> selection = select_top_features(
+    ...     frame, scores.reindex(frame.columns), 5)
+    >>> meta = selection_metadata(selection, report, k=5)
+    >>> new_frame, new_report = recalculate_selected_features(
+    ...     ["CCO", "c1ccccc1"], meta)
+    >>> list(new_frame.columns) == meta["selected_features"]
+    True
+    >>> len(new_report.smiles), new_report.dropped
+    (2, [])
+
+    Empty metadata cannot be replayed:
+
+    >>> recalculate_selected_features(["CCO"], {"selected_features": []})
+    Traceback (most recent call last):
+    ...
+    ValueError: metadata carries no selected_features -- recompute a selection with compute_feature_frame + select_top_features first
+
+    A fingerprint-size contradiction is the loud stale-metadata stop:
+
+    >>> recalculate_selected_features(
+    ...     ["CCO"], {"selected_features": ["ecfp_bit_17"],
+    ...               "fingerprint_sizes": {"ecfp": 1024}})
+    Traceback (most recent call last):
+    ...
+    ValueError: metadata's fingerprint_sizes['ecfp'] says 1024 bits, but this build computes 2048 -- the metadata comes from a different toolkit version; re-select and re-save it
+    """
+    smiles_list = _as_smiles_list(smiles, "smiles")
+    if not isinstance(metadata, Mapping):
+        raise ValueError(  # noqa: TRY004 — the contract pins ValueError
+            f"metadata must be a mapping (the dict selection_metadata "
+            f"returns, or json.load of a saved file), not {type(metadata).__name__}"
+        )
+    selected_raw = metadata.get("selected_features")
+    if not isinstance(selected_raw, (list, tuple)) or not selected_raw:
+        raise ValueError(
+            "metadata carries no selected_features -- recompute a selection "
+            "with compute_feature_frame + select_top_features first"
+        )
+    selected: list[str] = [str(column) for column in selected_raw]
+    if len(set(selected)) != len(selected):
+        duplicates = sorted(
+            {column for column in selected if selected.count(column) > 1}
+        )
+        raise ValueError(
+            f"metadata's selected_features holds duplicates: {duplicates}; "
+            "a rank order cannot repeat a column -- the file is corrupt"
+        )
+    if any(not column.strip() for column in selected):
+        raise ValueError(
+            "metadata's selected_features holds an empty column name -- "
+            "the file is corrupt"
+        )
+
+    # which families do the recorded columns need?  (family_of_column
+    # raises on an unknown prefix; the error gains the metadata context)
+    needed: list[str] = []
+    for column in selected:
+        try:
+            family = family_of_column(column)
+        except ValueError as exc:
+            raise ValueError(
+                f"metadata's selected_features names {column!r}, which is "
+                f"not a column this module can compute: {exc}"
+            ) from exc
+        if family not in needed:
+            needed.append(family)
+
+    # cross-check the ledger keys the metadata itself carries -- a
+    # stale file from a different build must fail LOUDLY here, not
+    # silently recompute a drifted vocabulary.
+    recorded_sizes = metadata.get("fingerprint_sizes")
+    if isinstance(recorded_sizes, Mapping):
+        for family, recorded_bits in recorded_sizes.items():
+            if family in _FINGERPRINT_SIZES and int(recorded_bits) != _FINGERPRINT_SIZES[family]:
+                raise ValueError(
+                    f"metadata's fingerprint_sizes[{family!r}] says "
+                    f"{recorded_bits} bits, but this build computes "
+                    f"{_FINGERPRINT_SIZES[family]} -- the metadata comes from "
+                    "a different toolkit version; re-select and re-save it"
+                )
+    recorded_families = metadata.get("families_computed")
+    if isinstance(recorded_families, Mapping):
+        for family in needed:
+            if family not in recorded_families:
+                raise ValueError(
+                    f"metadata's families_computed has no {family!r} entry, "
+                    f"yet selected_features names its columns -- the file is "
+                    "internally inconsistent"
+                )
+
+    # compute only the needed families, in the canonical order
+    families = [family for family in FEATURE_FAMILIES if family in needed]
+    frame, report = compute_feature_frame(
+        smiles_list, families=families, n_jobs=n_jobs, progress=progress
+    )
+
+    # restrict to the recorded columns in the recorded rank order; a
+    # column that vanished (an RDKit property this build dropped) is
+    # the honest stop, not a silent NaN column.
+    missing = [column for column in selected if column not in frame.columns]
+    if missing:
+        preview = ", ".join(missing[:5]) + (" ..." if len(missing) > 5 else "")
+        raise ValueError(
+            f"{len(missing)} recorded features no longer exist in this "
+            f"build's frame ({preview}); the metadata predates a "
+            "vocabulary change -- re-select and re-save it"
+        )
+    return frame.loc[:, selected], report
 
 
 @dataclass(frozen=True, slots=True)

@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files (the local SQLite template is safe to commit)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -53,3 +54,29 @@ server.log
 # Skills directory
 /skills/tool-results/
 tool-results/
+
+# Token-bearing prompt files (contain GitHub PATs) — never commit
+upload/Command.txt
+upload/Command.docx
+upload/MASTER_PROMPT.docx
+# 2026-11-12 security hardening: the two vectors that actually leaked
+# (part1 PDF §12.1 carries the PAT font-encoded; so does its text extraction)
+upload/MASTER_PROMPT part*.pdf
+scratch/pdf-extract/MASTER_PROMPT*.txt
+*.token
+*.key
+*.pid
+
+# 2026-11-17 hardening: automated cron snapshot commits (webDevReview) once
+# committed .credentials/github_pat wholesale (leaked-commit f2607a2, purged
+# locally before any push). Never let that happen again.
+.credentials/
+
+# python build cache (r260 guard)
+__pycache__/
+*.pyc
+
+# r272: the root dist-archive/ is home 5 of the six-home zip ritual
+# (the task-text home) -- a local mirror, deliberately untracked like
+# the offsite ~/pharma-ml-toolkit-zips/ mirror.
+/dist-archive/

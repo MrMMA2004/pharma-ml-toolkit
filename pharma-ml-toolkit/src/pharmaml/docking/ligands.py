@@ -16,13 +16,13 @@ campaign tree every other docking utility expects.  Invalid SMILES are
 reported, written to ``failed_smiles.csv`` and never abort the batch.
 
 It also carries the torsion-consistency audit of
-``others/Docking/ligand generation/niggamatch.py`` and
+``others/Docking/ligand generation/ligprep_match.py`` and
 ``mismatch2.py``: a prepared PDBQT is only trustworthy when its
 TORSDOF equals both the count of active ``REMARK`` torsion definitions
 and the count of ``BRANCH`` records.
 
 And it carries the ligand-structure generator of the same folder's
-``nigga.py`` (the 2026-10 "new folder" upload re-delivered it):
+``ligprep.py`` (the 2026-10 "new folder" upload re-delivered it):
 :func:`generate_ligand_structures` runs the full tautomer →
 multi-conformer ETKDG → MMFF/UFF-lowest-energy pipeline and writes the
 one-model PDB (with CONECT records) plus the OpenBabel MOL2 twin, with
@@ -432,7 +432,7 @@ class TorsionCheck:
     """Torsion-consistency audit of one prepared ligand PDBQT.
 
     Mirrors the mismatch report columns of
-    ``others/Docking/ligand generation/niggamatch.py`` / ``mismatch2.py``.
+    ``others/Docking/ligand generation/ligprep_match.py`` / ``mismatch2.py``.
 
     Attributes
     ----------
@@ -546,7 +546,7 @@ def scan_torsion_consistency(directory: str | Path) -> pd.DataFrame:
 
     Walks ``directory`` recursively and applies
     :func:`check_torsion_consistency` to each ligand, producing the
-    mismatch report of ``niggamatch.py`` as a DataFrame (unparseable
+    mismatch report of ``ligprep_match.py`` as a DataFrame (unparseable
     files are skipped with a warning instead of aborting the scan).
 
     Returns
@@ -740,7 +740,7 @@ def prepare_ligand_library(
 
 
 #: Elements the ligand-structure generator refuses by default -- the
-#: ``unsupported_atoms`` set of ``others/Docking/ligand generation/nigga.py``
+#: ``unsupported_atoms`` set of ``others/Docking/ligand generation/ligprep.py``
 #: (metals without a reliable force-field / charge model for the
 #: MMFF/UFF + Gasteiger pipeline; carried as a tuple so the prisma of
 #: "no list primitives" stays satisfied -- it is a module constant, not
@@ -765,7 +765,7 @@ def _pdb_block_with_conect(
 ) -> str:
     """One-conformer PDB block with HEADER/COMPND and CONECT records.
 
-    Mirrors the ``generate_pdb_block`` helper of ``nigga.py``: RDKit's
+    Mirrors the ``generate_pdb_block`` helper of ``ligprep.py``: RDKit's
     own ``MolToPDBBlock`` drops bond information MGLTools' ligand
     reader relies on, so the connectivity is written explicitly as
     ``CONECT`` records (one line per atom listing every neighbour).
@@ -813,7 +813,7 @@ def _generate_one_structure(
 ) -> dict[str, object]:
     """Worker body of :func:`generate_ligand_structures` (top-level so a
     process pool can pickle it -- exactly the ``process_ligand`` shape of
-    ``nigga.py``, carrying only plain strings/numbers)."""
+    ``ligprep.py``, carrying only plain strings/numbers)."""
     smiles, name, pdb_dir, num_confs, default_b_factor, write_mol2 = args
     from rdkit import Chem
     from rdkit.Chem import rdDistGeom, rdForceFieldHelpers
@@ -946,7 +946,7 @@ def generate_ligand_structures(
 ) -> pd.DataFrame:
     """Generate 3D ligand structures (PDB + MOL2) from a SMILES library.
 
-    The ``others/Docking/ligand generation/nigga.py`` pipeline, library
+    The ``others/Docking/ligand generation/ligprep.py`` pipeline, library
     edition: every valid SMILES is canonicalised to its preferred
     tautomer, embedded as ``num_confs`` ETKDG conformers, minimised
     (MMFF, falling back to UFF when the molecule lacks MMFF

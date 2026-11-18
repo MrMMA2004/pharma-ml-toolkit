@@ -1,7 +1,7 @@
 """Tests for molecular standardization and 3D ligand generation.
 
-Mirrors the upgrade of ``others/Docking/ligand generation/nigga.py``
-and ``nigga2.py``: tautomer canonicalization (keto/enol collapse),
+Mirrors the upgrade of ``others/Docking/ligand generation/ligprep.py``
+and ``ligprep2.py``: tautomer canonicalization (keto/enol collapse),
 unsupported-metal screening, ETKDG multi-conformer embedding with MMFF
 (UFF fallback) optimisation, lowest-energy conformer selection and PDB
 export with CONECT connectivity records and the AutoDock B-factor
@@ -30,7 +30,19 @@ from pharmaml.chem.standardize import (
 )
 from pharmaml.exceptions import DataValidationError, DependencyError
 
-logging.disable(logging.CRITICAL)
+
+# (round-249) the module-level ``logging.disable(logging.CRITICAL)``
+# this fixture replaces leaked for the WHOLE pytest process and silently
+# broke ``caplog`` assertions in sibling modules sharing a pytest process
+# (the nine-chunk gate caught it: test_format_converters before
+# test_numpy_neural_checkpoints).  Same silence, correct scope: applied
+# around each test of THIS module only, previous level restored after.
+@pytest.fixture(autouse=True)
+def _quiet_module_logging():
+    prev = logging.root.manager.disable
+    logging.disable(logging.CRITICAL)
+    yield
+    logging.disable(prev)
 
 ASPIRIN = "CC(=O)OC1=CC=CC=C1C(=O)O"
 

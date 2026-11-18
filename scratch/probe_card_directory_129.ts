@@ -28,6 +28,7 @@ const SOURCES: Record<string, string> = {
   "pk-nca": "src/components/explorer/playground/nca-panel.tsx",
   "ml-setup": "src/components/explorer/playground/ml-playground.tsx",
   "ml-calibration": "src/components/explorer/playground/calibration-widget.tsx",
+  "ml-drugresponse": "src/components/explorer/playground/responseai-card.tsx",
   "bio-biomarkers": "src/components/explorer/playground/biology-playground.tsx",
   "dock-parse": "src/components/explorer/playground/docking-parser.tsx",
   "dock-torsion": "src/components/explorer/playground/docking-parser.tsx",
@@ -39,12 +40,20 @@ const SOURCES: Record<string, string> = {
   "ligand-sets": "src/components/explorer/playground/ligand-reconciler.tsx",
   "gen-topology": "src/components/explorer/playground/surgery-cards.tsx",
   "gen-breed": "src/components/explorer/playground/surgery-cards.tsx",
+  "gen-sa-score": "src/components/explorer/playground/sa-score-card.tsx",
+  "gen-mcts": "src/components/explorer/playground/mcts-card.tsx",
+  "md-xvg": "src/components/explorer/playground/md-analysis.tsx",
+  "md-traj": "src/components/explorer/playground/md-analysis.tsx",
+  "md-hbond": "src/components/explorer/playground/md-analysis.tsx",
+  "md-saltbridge": "src/components/explorer/playground/md-analysis.tsx",
+  "md-cv": "src/components/explorer/playground/md-analysis.tsx",
+  "md-eco": "src/components/explorer/playground/md-analysis.tsx",
   "session-report": "src/components/explorer/playground/session-report.tsx",
 };
 
 const VALID_TABS = new Set([
   "calculators", "pk", "ml", "biology", "docking",
-  "features", "ligandprep", "reconciler", "generative", null,
+  "features", "ligandprep", "reconciler", "generative", "md", null,
 ]);
 const VALID_INNER = new Set(["regimen", "pd", "nca", undefined]);
 

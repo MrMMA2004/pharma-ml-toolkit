@@ -547,6 +547,151 @@ def plot_calibration_curve(
     return fig
 
 
+
+def plot_decision_curve(
+    curve: Any,
+    title: str = "Decision curve",
+    *,
+    annotate_region: bool = True,
+) -> Any:
+    """Decision curve — net benefit against the "treat all" / "treat none" defaults.
+
+    The companion to the reliability diagram: calibration says whether the
+    probabilities are honest, the decision curve says whether *acting* on
+    them beats the two strategies that need no model.  The model's net
+    benefit (net true positives per subject) is drawn against the threshold
+    grid, over the "treat all" line and the "treat none" line at zero; the
+    band where the model clears "treat all" is the useful region.
+
+    Parameters
+    ----------
+    curve:
+        A :class:`pharmaml.ml.decision.DecisionCurve`.
+    title:
+        Plot title.
+    annotate_region:
+        Shade and label the threshold interval where the model beats
+        "treat all".
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If the curve carries no points.
+    """
+    from pharmaml.exceptions import DataValidationError
+
+    points = list(curve.points)
+    if not points:
+        raise DataValidationError("decision curve has no points to plot")
+    thresholds = np.array([p.threshold for p in points], dtype=float)
+    net = np.array([p.net_benefit for p in points], dtype=float)
+    treat_all = np.array([p.treat_all_net_benefit for p in points], dtype=float)
+
+    fig, ax = new_figure(figsize=(7.4, 5.6))
+    region = curve.useful_region
+    if annotate_region and region is not None:
+        ax.axvspan(region[0], region[1], color=PALETTE[0], alpha=0.10, lw=0)
+        ax.annotate(
+            "beats 'treat all'",
+            xy=((region[0] + region[1]) / 2, 0.0),
+            xytext=(0, 6), textcoords="offset points",
+            ha="center", va="bottom", fontsize=8, color=PALETTE[0],
+        )
+    ax.axhline(0.0, color="#9CA3AF", linestyle="--", lw=1.4, label="treat none")
+    ax.plot(thresholds, treat_all, color="#9CA3AF", linestyle="-", lw=1.8,
+            label="treat all")
+    ax.plot(thresholds, net, color=PALETTE[1 % len(PALETTE)], lw=2.2, label="model")
+
+    ax.set_xlabel("threshold probability")
+    ax.set_ylabel("net benefit (net true positives / subject)")
+    ax.set_title(f"{title}  ·  cost ratio {curve.cost_ratio:g}")
+    ax.set_xlim(0.0, 1.0)
+    ax.legend(loc="upper right", fontsize=9)
+    return fig
+
+
+def plot_subgroup_performance(
+    report: Any,
+    metric: str = "accuracy",
+    title: str | None = None,
+    *,
+    annotate_overall: bool = True,
+) -> Any:
+    """Subgroup bar chart — one bar per group, against the overall value.
+
+    The visual twin of :class:`pharmaml.ml.subgroups.SubgroupReport`: a
+    horizontal bar per subgroup for the chosen metric, ordered weakest to
+    strongest, with the aggregate drawn as a dashed reference line so the
+    gap that matters (the group that underperforms the whole) is read off
+    at a glance.  Groups flagged ``insufficient`` are drawn hollow and
+    hatched — a slice too small to trust is shown, not hidden.
+
+    Parameters
+    ----------
+    report:
+        A :class:`pharmaml.ml.subgroups.SubgroupReport`.
+    metric:
+        Which metric to plot (must be one the report carries).
+    title:
+        Plot title (defaults to the metric name and grouping column).
+    annotate_overall:
+        Draw the dashed overall-value reference line and label it.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    DataValidationError
+        If the metric is unknown or no subgroup carries a numeric value
+        for it.
+    """
+    from pharmaml.exceptions import DataValidationError
+
+    if metric not in report.metric_names:
+        raise DataValidationError(
+            f"metric {metric!r} is not in this report; "
+            f"known: {', '.join(report.metric_names)}"
+        )
+    rows = [
+        (group.value, group.metrics.get(metric), group.sufficient)
+        for group in report.subgroups
+        if group.metrics.get(metric) is not None
+    ]
+    if not rows:
+        raise DataValidationError(
+            f"no subgroup carries a numeric {metric!r} to plot"
+        )
+    rows.sort(key=lambda row: row[1])  # weakest at the bottom
+    labels = [row[0] for row in rows]
+    values = [float(row[1]) for row in rows]
+    sufficient = [row[2] for row in rows]
+
+    fig, ax = new_figure(figsize=(7.6, 0.5 * len(rows) + 2.4))
+    y = np.arange(len(rows))
+    colors = [PALETTE[1 % len(PALETTE)] if ok else "white" for ok in sufficient]
+    ax.barh(y, values, color=colors, edgecolor=PALETTE[0], lw=1.0)
+    for index, ok in enumerate(sufficient):
+        if not ok:
+            ax.patches[index].set_hatch("///")
+
+    overall = report.overall.get(metric)
+    if annotate_overall and overall is not None:
+        ax.axvline(float(overall), color="#9CA3AF", linestyle="--", lw=1.4,
+                   label=f"overall = {float(overall):.3f}")
+        ax.legend(loc="lower right", fontsize=9)
+
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels)
+    ax.set_xlabel(metric)
+    ax.set_ylabel(report.column)
+    ax.set_title(title or f"{metric} by {report.column!r}")
+    return fig
 def plot_learning_curve(
     model: Any,
     X: np.ndarray | pd.DataFrame,

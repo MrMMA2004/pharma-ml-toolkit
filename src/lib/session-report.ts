@@ -27,11 +27,13 @@ import type {
   MLTrainResponse,
   SurgeryResponse,
 } from "@/lib/toolkit-types";
-import type {
-  MlRunRecord,
-  NcaState,
-  PdParams,
-  PkParams,
+import {
+  RECONCILE_BUCKET_CAP,
+  type MlRunRecord,
+  type NcaState,
+  type PdParams,
+  type PkParams,
+  type ReconcileResultState,
 } from "@/lib/store";
 
 /* ------------------------------------------------------------------ */
@@ -43,13 +45,17 @@ export type ReportTheme = "auto" | "light" | "dark";
 /** One drawable series inside a figure section. */
 export interface ReportFigureTrace {
   name: string;
-  style: "line" | "band" | "scatter";
+  style: "line" | "band" | "scatter" | "bar";
   /**
    * `[x, y]` pairs; `band` traces carry `[x, y, lo, hi]` (mean ± band
    * edges).  Numbers stay raw — the bridge's matplotlib does the
    * formatting, exactly like the desktop figures.
    */
   points: Array<[number, number] | [number, number, number, number]>;
+  /** (R30-a) `bar` traces carry `[y, value]` pairs — one horizontal
+   *  bar per point, value labelled at the end (the comparison-figure
+   *  convention; the bridge renders it like the library's own
+   *  plot_table_comparison count panel). */
   /** Per-point class (0/1) for classification scatters — color split. */
   classes?: number[];
   /** Per-point class-1 probability — opacity = |p − 0.5| × 2. */
@@ -121,6 +127,9 @@ export interface SessionSnapshot {
   /** (100x-131) the last molecule-surgery run (topology or breed — the
    *  latest run wins, exactly like mlResult); null = no surgery yet. */
   surgery: SurgeryResponse | null;
+  /** (R30-a) the last ligand-set reconciliation from the Ligand Sets
+   *  tab; null = none yet. */
+  ligands: ReconcileResultState | null;
 }
 
 /** (100x-131) Per-group section control — the report card's toggles.
@@ -134,6 +143,7 @@ export interface SessionReportOptions {
   nca?: boolean;
   history?: boolean;
   surgery?: boolean;
+  ligands?: boolean;
 }
 
 /** One report group's id (the toggle + reorder axis). */
@@ -150,6 +160,7 @@ export const SESSION_GROUP_ORDER: SessionGroupId[] = [
   "nca",
   "history",
   "surgery",
+  "ligands",
 ];
 
 /** (100x-132) Normalize a walking order: unknown ids dropped,
@@ -194,6 +205,7 @@ export function sessionGroupsAvailable(
     nca: rows.length > 0,
     history: snapshot.mlHistory.length > 0,
     surgery: snapshot.surgery !== null,
+    ligands: snapshot.ligands !== null,
   };
 }
 
@@ -202,12 +214,20 @@ export function sessionGroupsAvailable(
 /* ------------------------------------------------------------------ */
 
 /** Compact number formatting for table cells (≤ 4 significant digits,
- *  trailing zeros trimmed — the fmtNum convention of the web cards). */
+ *  trailing zeros trimmed — the fmtNum convention of the web cards).
+ *
+ *  r268 (review P-6): plain integers 1,000–999,999 keep grouped digits
+ *  ("1,234", not "1.234e+03") — the exponential form was surprising in
+ *  metrics cards; true magnitudes (≥ 1e6) and tiny values (< 0.001)
+ *  still use exponential. */
 export function fmtCell(value: number): string {
   if (!Number.isFinite(value)) return "—";
   if (value === 0) return "0";
   const abs = Math.abs(value);
-  if (abs >= 1000 || abs < 0.001) return value.toExponential(3);
+  if (Number.isInteger(value) && abs >= 1000 && abs < 1e6) {
+    return value.toLocaleString("en-US");
+  }
+  if (abs >= 1e6 || abs < 0.001) return value.toExponential(3);
   const fixed = abs >= 100 ? 1 : abs >= 1 ? 3 : 4;
   return String(Number(value.toFixed(fixed)));
 }
@@ -481,6 +501,103 @@ function surgerySections(snapshot: SessionSnapshot): ReportSection[] {
   ];
 }
 
+/** (R30-a) The ligand-set reconciliation group — the chem-compare
+ *  buckets as the report sees them.  Mirrors the plot_table_comparison
+ *  story (common / only-in-A / only-in-B) in report sections: a
+ *  metrics card with the bucket counts and one name table per
+ *  non-empty bucket, each capped at the store's RECONCILE_BUCKET_CAP
+ *  rows with an honest "+N more" confession row when the bucket
+ *  overflows (the report is a summary, not a data dump).
+ *  The normalisation flags ride along in the metrics card because they
+ *  change what the numbers MEAN ("aspirin.pdbqt" equals "aspirin"
+ *  only when extension-stripping is on). */
+function ligandsSections(snapshot: SessionSnapshot): ReportSection[] {
+  const lig = snapshot.ligands;
+  if (lig === null) return [];
+  const { counts } = lig;
+  const total = counts.common + counts.onlyA + counts.onlyB;
+  const norms: string[] = [];
+  if (lig.stripExtension) norms.push("extensions stripped");
+  if (lig.lowercase) norms.push("case folded");
+  const normText = norms.length > 0 ? norms.join(", ") : "raw names";
+  const sections: ReportSection[] = [
+    {
+      kind: "metrics",
+      title: `Ligand-set reconciliation — ${lig.labelA} vs ${lig.labelB}`,
+      items: [
+        ["common (both tables)", `${counts.common}`],
+        [`only in ${lig.labelA}`, `${counts.onlyA}`],
+        [`only in ${lig.labelB}`, `${counts.onlyB}`],
+        ["unique names compared", `${total}`],
+        ["normalisation", normText],
+      ],
+    },
+    {
+      // (R30-a) the comparison figure — one bar per bucket, riding the
+      // same report figure contract the ML parity plot rides.  y is
+      // categorical (0 = only-in-B at the bottom, 2 = common on top,
+      // the plot_table_comparison order); the bridge's bar style
+      // labels each bar's value at its end.
+      kind: "figure",
+      title: "Ligand-set reconciliation — bucket counts",
+      xLabel: "number of unique ligand names",
+      yLabel: "bucket",
+      traces: [
+        {
+          name: "ligands",
+          style: "bar",
+          points: [
+            [2, counts.common],
+            [1, counts.onlyA],
+            [0, counts.onlyB],
+          ],
+        },
+      ],
+    },
+  ];
+  const bucketTable = (
+    title: string,
+    names: string[],
+    count: number,
+  ): ReportTableSection | null => {
+    if (count === 0) return null;
+    const capped = names.slice(0, RECONCILE_BUCKET_CAP);
+    const rows: Array<Array<string | number>> = capped.map((name, i) => [
+      i + 1,
+      name,
+    ]);
+    if (count > capped.length) {
+      /* r268 (review P-4): the report is generated from BOTH the desktop
+       * studio and the web Explorer — name the places, not the desktop
+       * UI's reconciler panel. */
+      rows.push([
+        "",
+        `+ ${count - capped.length} more (see Ligand Sets in the Studio or the Explorer report settings)`,
+      ]);
+    }
+    return { kind: "table", title, columns: ["#", "ligand name"], rows };
+  };
+  const table = bucketTable(
+    `Common ligands — ${counts.common}`,
+    lig.common,
+    counts.common,
+  );
+  if (table) sections.push(table);
+  const onlyA = bucketTable(
+    `Only in ${lig.labelA} — ${counts.onlyA}`,
+    lig.onlyA,
+    counts.onlyA,
+  );
+  if (onlyA) sections.push(onlyA);
+  const onlyB = bucketTable(
+    `Only in ${lig.labelB} — ${counts.onlyB}`,
+    lig.onlyB,
+    counts.onlyB,
+  );
+  if (onlyB) sections.push(onlyB);
+  return sections;
+}
+
 /** Build the report payload from the session snapshot.  Pure: no DOM,
  *  no store subscription — the UI component reads the store and hands
  *  the pieces in, so the collector is trivially unit-testable.
@@ -511,6 +628,7 @@ export function collectSessionReport(
     nca: options.nca !== false,
     history: options.history !== false,
     surgery: options.surgery !== false,
+    ligands: options.ligands !== false,
   };
   const builders: Record<
     SessionGroupId,
@@ -522,6 +640,7 @@ export function collectSessionReport(
     nca: ncaSections,
     history: historySections,
     surgery: surgerySections,
+    ligands: ligandsSections,
   };
   const sections: ReportSection[] = [];
   for (const id of sanitizeSessionOrder(order)) {

@@ -10,6 +10,7 @@ import {
   Dna,
   Eye,
   FileDown,
+  FlaskConical,
   Gauge,
   GripVertical,
   History,
@@ -189,6 +190,12 @@ const GROUPS: Array<{
     label: "Surgery",
     icon: Dna,
     hint: "the surgery run's metrics + SMILES table + structure grid",
+  },
+  {
+    id: "ligands",
+    label: "Ligand sets",
+    icon: FlaskConical,
+    hint: "the reconciliation bucket counts + per-bucket name tables",
   },
 ];
 
@@ -641,6 +648,7 @@ export function SessionReport() {
   const pdParams = useToolkitStore((s) => s.pdParams);
   const ncaState = useToolkitStore((s) => s.ncaState);
   const surgeryResult = useToolkitStore((s) => s.surgeryResult);
+  const reconcileResult = useToolkitStore((s) => s.reconcileResult);
   const { resolvedTheme } = useTheme();
   const [busy, setBusy] = useState(false);
   const [options, setOptions] = useState<SessionReportOptions>({});
@@ -686,8 +694,18 @@ export function SessionReport() {
       pdParams,
       ncaState,
       surgery: surgeryResult,
+      ligands: reconcileResult,
     }),
-    [mlResult, lcResult, mlHistory, pkParams, pdParams, ncaState, surgeryResult],
+    [
+      mlResult,
+      lcResult,
+      mlHistory,
+      pkParams,
+      pdParams,
+      ncaState,
+      surgeryResult,
+      reconcileResult,
+    ],
   );
   const available = useMemo(() => sessionGroupsAvailable(snapshot), [snapshot]);
   const census = useMemo(
@@ -940,7 +958,14 @@ export function SessionReport() {
             (100x-132) the chips reorder: drag (or the arrows on each
             chip's right) walk the groups into any order. */}
         <div className="space-y-1.5">
-          <p className="text-xs font-medium text-foreground">Include in report</p>
+          <p className="text-xs font-medium text-foreground">
+            Include in report
+            {/* (P-8) the keyboard path existed but was invisible until
+             * focus landed on a chip — say it once, next to the label. */}
+            <span className="ml-2 font-normal text-muted-foreground">
+              (drag to reorder, or focus a chip and use its ▲▼ arrows)
+            </span>
+          </p>
           <div
             className="flex flex-wrap gap-1.5"
             role="list"
@@ -1015,8 +1040,10 @@ export function SessionReport() {
                   {/* the micro arrows — hover/focus reveals them; they
                       are the keyboard/touch path for the same reorder
                       the drag performs (each carries an extended hit
-                      area via its ::before) */}
-                  <span className="ml-0.5 inline-flex flex-col opacity-0 transition-opacity focus-within:opacity-100 group-hover/chip:opacity-100">
+                      area via its ::before).  (P-8) the reveal is also
+                      announced in the caption so keyboard users know
+                      the arrows exist BEFORE tabbing into the strip. */}
+                  <span className="ml-0.5 inline-flex flex-col opacity-60 transition-opacity focus-within:opacity-100 group-hover/chip:opacity-100">
                     <button
                       type="button"
                       aria-label={`Move ${group.label} earlier in the report`}

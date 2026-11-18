@@ -11,8 +11,9 @@
  * surfaces honestly as a "not found" toast instead of a silent jump to
  * the wrong card.
  *
- * The desktop registry (`playground.py`'s `_CARD_INDEX`) is built at UI
- * construction time, so it can never drift; the web catalog is static,
+ * (Historically the desktop registry was the retired Tk playground's
+ * `_CARD_INDEX`, built at UI construction time so it could never drift; the
+ * Studio pages carry those cards now.) The web catalog is static,
  * so the E2E probe walks EVERY entry and asserts the jump resolves —
  * drift is caught the round it happens, not by the user.
  *
@@ -32,7 +33,8 @@ export type PlaygroundTabId =
   | "features"
   | "ligandprep"
   | "reconciler"
-  | "generative";
+  | "generative"
+  | "md";
 
 export interface PlaygroundCardEntry {
   /** Stable slug (also the finder row's React key). */
@@ -172,6 +174,14 @@ export const PLAYGROUND_CARDS: readonly PlaygroundCardEntry[] = [
     match: "Probability Calibration",
     keywords: "calibration reliability brier probability",
   },
+  {
+    id: "ml-drugresponse",
+    tab: "ml",
+    title: "Response AI — drug-response learning",
+    blurb: "Hill 4PL fit · metrics · CaDRReS model · grouped CV",
+    match: "Response AI — drug-response learning",
+    keywords: "drug response hill ic50 cadres metrics pearson spearman kendall cross-validation",
+  },
   /* -- Cell Line Bio -------------------------------------------------- */
   {
     id: "bio-biomarkers",
@@ -265,6 +275,75 @@ export const PLAYGROUND_CARDS: readonly PlaygroundCardEntry[] = [
     blurb: "seeded scaffold-hop crossover litter",
     match: "Breed two molecules",
     keywords: "breed crossover scaffold hop children litter parents generative",
+  },
+  /* -- SA score (part3 §24 — Ertl-Schuffenhauer over the bridge) ------- */
+  {
+    id: "gen-sa-score",
+    tab: "generative",
+    title: "Synthetic Accessibility score",
+    blurb: "Ertl–Schuffenhauer SA with filter + CSV export",
+    match: "Synthetic Accessibility score",
+    keywords:
+      "sa score sascore ertl schuffenhauer synthetic accessibility ease of synthesis complexity",
+  },
+  /* -- MCTS search (the Studio Generative method's web twin) ---------- */
+  {
+    id: "gen-mcts",
+    tab: "generative",
+    title: "MCTS molecule search",
+    blurb: "ChemTSv2-style tree search over an RNN prior",
+    match: "MCTS molecule search",
+    keywords:
+      "mcts monte carlo tree search chemts uct puct rnn prior generative optimization leaderboard",
+  },
+  /* -- Molecular Dynamics (round 249 — the pharmaml.md web twins) ----- */
+  {
+    id: "md-xvg",
+    tab: "md",
+    title: "GROMACS export parser",
+    blurb: "past .xvg/.ndx → stats, plots, correlations",
+    match: "GROMACS export parser",
+    keywords: "xvg ndx gromacs parser rmsd hbond correlation",
+  },
+  {
+    id: "md-traj",
+    tab: "md",
+    title: "Trajectory analysis lab",
+    blurb: "helix demo: RMSD/Rg/Q, RMSF, contacts, PCA",
+    match: "Trajectory analysis lab",
+    keywords: "trajectory rmsd rmsf rg contact map pca anm essential dynamics",
+  },
+  {
+    id: "md-hbond",
+    tab: "md",
+    title: "H-bond timeline",
+    blurb: "gmx hbond -num: two designed bonds across the 3.5 Å cutoff",
+    match: "H-bond timeline",
+    keywords: "hbond hbond timeline hydrogen bond gmx hbnum distance cutoff",
+  },
+  {
+    id: "md-saltbridge",
+    tab: "md",
+    title: "Salt-bridge timeline",
+    blurb: "getcontacts ionic pairs: two designed bridges across the 4.0 Å cutoff",
+    match: "Salt-bridge timeline",
+    keywords: "salt bridge saltbridge ionic contact getcontacts lysine glutamate arginine aspartate charged cutoff",
+  },
+  {
+    id: "md-cv",
+    tab: "md",
+    title: "Collective variables (COLVAR)",
+    blurb: "edit a plumed.dat: DISTANCE/ANGLE/DIHEDRAL/COORDINATION/RMSD/GYRATION over the helix demo",
+    match: "Collective variables (COLVAR)",
+    keywords: "collective variable colvar plumed metadynamics umbrella sampling enhanced bias distance angle dihedral coordination rmsd gyration",
+  },
+  {
+    id: "md-eco",
+    tab: "md",
+    title: "The MD ecosystem",
+    blurb: "the reference stack behind pharmaml.md",
+    match: "The MD ecosystem",
+    keywords: "mdanalysis mdtraj gromacs prody prolif deeptime ecosystem links",
   },
   /* -- The session-report strip (rides above every sub-tab) ------------- */
   {

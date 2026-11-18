@@ -1,0 +1,59 @@
+name: Feature request
+description: Propose a focused workflow, API, interface or documentation improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the underlying workflow problem first. Substantial API or dependency changes benefit from discussion before implementation.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Cheminformatics or QSAR
+        - PK/PD or pharmacometrics
+        - Docking
+        - Explainable or generative ML
+        - Reports or visualization
+        - PharmaML Studio
+        - Web console
+        - Documentation or examples
+        - Packaging or developer experience
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to accomplish, and where does the current workflow fall short?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the API, behavior or interface you would like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing workarounds, related tools or other designs.
+  - type: textarea
+    id: reproducibility
+    attributes:
+      label: Data, reproducibility and validation considerations
+      description: Mention deterministic examples, reference implementations, licensing, optional dependencies and scientific validation needs.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched existing issues and pull requests.
+          required: true
+        - label: This proposal preserves the offline-first research-software scope.
+          required: true

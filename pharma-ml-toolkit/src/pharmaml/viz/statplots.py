@@ -656,7 +656,16 @@ def plot_box(
         "whishi": [results["whisker_hi"]], "fliers": [results["outliers"]],
         "mean": [results["mean"]],
     }
-    artists = ax.bxp([summary], widths=0.45, patch_artist=True, showmeans=True)
+    artists = ax.bxp(
+        [summary],
+        widths=0.45,
+        patch_artist=True,
+        showmeans=True,
+        # matplotlib 3.10.9's bxp indexes the (empty) flier artist list
+        # when there is nothing to draw; with zero outliers there are no
+        # fliers to show either way, so gate the fliers on their presence.
+        showfliers=results["outliers"].size > 0,
+    )
     artists["boxes"][0].set_facecolor(color)
     artists["boxes"][0].set_alpha(0.45)
     artists["medians"][0].set_color(_INK)

@@ -144,6 +144,7 @@ const sectionFigureCount = collectSessionReport({
   },
   ncaState: { rows: [], dose: "250", f: "1", terminalN: 3 },
   surgery: null,
+  ligands: null,
 }).sections.filter((section) => section.kind === "figure").length;
 
 writeFileSync(

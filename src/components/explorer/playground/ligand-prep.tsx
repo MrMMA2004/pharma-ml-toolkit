@@ -116,7 +116,7 @@ export function LigandPrep() {
     }
     if (smilesList.length > MAX_LIGANDS) {
       setError(
-        `The web calculator handles up to ${MAX_LIGANDS} ligands per run (you pasted ${smilesList.length}). Use the desktop playground.py for full libraries.`
+        `The web calculator handles up to ${MAX_LIGANDS} ligands per run (you pasted ${smilesList.length}). Use the desktop Studio (python studio.py) for full libraries.`
       );
       toast.error("Too many ligands");
       return;
@@ -267,7 +267,7 @@ export function LigandPrep() {
             </Button>
             <p className="text-[11px] text-muted-foreground">
               The box + GPF/DPF are computed from the first successfully prepared ligand — the
-              campaign runner lives in the desktop <code className="font-mono">playground.py</code>
+              campaign runner lives in the desktop Studio (<code className="font-mono">python studio.py</code> — the Docking Workbench)
             </p>
           </div>
         </CardContent>

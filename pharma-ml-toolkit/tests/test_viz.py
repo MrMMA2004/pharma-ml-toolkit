@@ -38,6 +38,7 @@ from pharmaml.viz import (
     plot_concentration_profile,
     plot_confusion_matrix,
     plot_consensus_ranking,
+    plot_contact_map,
     plot_correlation_heatmap,
     plot_cv_scores,
     plot_descriptor_distributions,
@@ -51,6 +52,7 @@ from pharmaml.viz import (
     plot_pareto_front,
     plot_permutation_heatmap,
     plot_permutation_importance,
+    plot_plif_heatmap,
     plot_pr_curves,
     plot_predicted_vs_actual,
     plot_prediction_intervals,
@@ -1147,6 +1149,76 @@ class TestDockingPlots:
 
         with pytest.raises(DataValidationError, match="must be integers"):
             plot_receptor_atom_types(_JunkReport())
+
+    # -- the contact-map / PLIF twins (r264) ------------------------------
+    def _contacts(self):
+        from pharmaml.docking.contacts import ContactAtom, compute_contacts
+
+        ligand = [
+            ContactAtom(1, "N1", "N", "LIG", "L", 1, 0.0, 0.0, 0.0, "NA"),
+            ContactAtom(2, "C1", "C", "LIG", "L", 1, 3.0, 0.0, 0.0, "C"),
+        ]
+        receptor = [
+            ContactAtom(1, "OD1", "O", "ASP", "A", 101, 0.0, 3.2, 0.0),
+            ContactAtom(2, "CZ2", "C", "TRP", "A", 62, 6.0, 3.0, 0.0),
+        ]
+        return compute_contacts(ligand, receptor, cutoff=5.0)
+
+    def test_contact_map_matrix_reading(self, close_all):
+        fig = plot_contact_map(self._contacts())
+        ax = fig.axes[0]
+        assert ax.get_title() == "Contact map — 2 residue(s) × 2 ligand atom(s), 3 contact(s)"
+        assert [t.get_text() for t in ax.get_yticklabels()] == ["A:ASP101", "A:TRP62"]
+
+    def test_contact_map_atom_level(self, close_all):
+        fig = plot_contact_map(self._contacts(), atom_level=True)
+        assert "receptor atom(s)" in fig.axes[0].get_title()
+
+    def test_contact_map_empty_raises(self, close_all):
+        with pytest.raises(DataValidationError, match="non-empty"):
+            plot_contact_map([])
+
+    def test_contact_map_rejects_a_frame(self, close_all):
+        with pytest.raises(DataValidationError, match="got DataFrame"):
+            plot_contact_map(pd.DataFrame({"x": [1]}))
+
+    def test_plif_heatmap_columns_and_annotation(self, close_all):
+        fig = plot_plif_heatmap(self._contacts())
+        ax = fig.axes[0]
+        assert [t.get_text() for t in ax.get_xticklabels()] == [
+            "salt_bridge", "hbond", "hydrophobic", "vdw"]
+        # only nonzero cells get annotated: ASP101's salt + vdw, TRP62's hydrophobic
+        assert len(ax.texts) == 3
+
+    def test_plif_bits_twin(self, close_all):
+        fig = plot_plif_heatmap(self._contacts(), bits=True)
+        assert fig.axes[0].get_title() == "PLIF bits — 2 residue(s) × 4 classes, 3 contact(s)"
+        assert len(fig.axes[0].texts) == 0  # the bits speak for themselves
+
+    def test_plif_empty_and_type_errors(self, close_all):
+        with pytest.raises(DataValidationError, match="non-empty"):
+            plot_plif_heatmap([])
+        with pytest.raises(DataValidationError, match="bits must be a bool"):
+            plot_plif_heatmap(self._contacts(), bits=1)
+        with pytest.raises(DataValidationError, match="atom_level must be a bool"):
+            plot_contact_map(self._contacts(), atom_level="yes")
+
+    def test_twins_on_the_bundled_demo_pair(self, close_all):
+        from pharmaml.docking.contacts import (
+            compute_contacts,
+            read_pdb_atoms,
+            read_pdbqt_atoms,
+        )
+
+        receptor = read_pdb_atoms(Path(__file__).resolve().parents[1]
+                                  / "examples" / "data" / "lysozyme_1aki.pdb")
+        pose = read_pdbqt_atoms(Path(__file__).resolve().parents[1]
+                                / "examples" / "data" / "contacts_demo_ligand.pdbqt")
+        contacts = compute_contacts(pose, receptor, cutoff=5.0)
+        fig_map = plot_contact_map(contacts)
+        assert "25 residue(s) × 10 ligand atom(s), 91 contact(s)" in fig_map.axes[0].get_title()
+        fig_plif = plot_plif_heatmap(contacts)
+        assert "25 residue(s) × 4 classes, 91 contact(s)" in fig_plif.axes[0].get_title()
 
 
 # ---------------------------------------------------------------- generative

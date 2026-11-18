@@ -37,3 +37,8 @@ artifacts/
 
 # CatBoost training logs (created by compare_models runs)
 catboost_info/
+
+# Experiment-tracking runtime artifact (100x-173)
+experiments.jsonl
+core/
+core*

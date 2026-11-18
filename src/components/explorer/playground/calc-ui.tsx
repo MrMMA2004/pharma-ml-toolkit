@@ -244,9 +244,9 @@ export const CHART = {
   amber: "#f59e0b",
   rose: "#f43f5e",
   teal: "#14b8a6",
-  stone: "#78716c",
-  axisTick: { fill: "#78716c", fontSize: 11 } as const,
-  gridStroke: "#78716c",
+  stone: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
+  axisTick: { fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"), fontSize: 11 } as const,
+  gridStroke: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
   gridStrokeOpacity: 0.18,
   tooltipStyle: {
     backgroundColor: "var(--popover)",
@@ -273,17 +273,17 @@ export function DedupeLegend({
   return (
     <ul
       className="flex list-none flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-1 text-[11px]"
-      style={{ color: "#78716c" }}
+      style={{ color: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c") }}
     >
       {items.map((it) => (
         <li
           key={String(it.value ?? it.dataKey)}
           className="flex items-center gap-1.5"
-          style={{ color: it.color ?? "#78716c" }}
+          style={{ color: it.color ?? (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c") }}
         >
           <span
             className="inline-block h-0.5 w-4 rounded-full"
-            style={{ backgroundColor: it.color ?? "#78716c" }}
+            style={{ backgroundColor: it.color ?? (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c") }}
             aria-hidden
           />
           <span className="text-muted-foreground">{it.value}</span>

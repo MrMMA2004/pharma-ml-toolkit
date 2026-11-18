@@ -49,8 +49,10 @@ True
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -59,7 +61,7 @@ from sklearn.metrics import get_scorer_names
 from sklearn.model_selection import GridSearchCV, cross_validate
 from sklearn.pipeline import Pipeline
 
-from pharmaml.exceptions import DataValidationError, ModelError
+from pharmaml.exceptions import DataValidationError, JobCancelled, ModelError
 from pharmaml.logger import get_logger
 from pharmaml.ml.models import (
     MODEL_REGISTRY,
@@ -577,10 +579,19 @@ def compare_models(
         except Exception as exc:  # noqa: BLE001 — keep the leaderboard alive on failures
             _LOG.warning("Model %s failed during comparison: %s", name, exc)
             rows.append({"model": name, f"{metric}_mean": np.nan, "folds": cv})
-        if on_model is not None:
-            # one call per completed row (success or failure) — the
-            # progress-bar heartbeat for the longest job in the tab.
-            on_model({"model": name, "index": position, "total": len(models)})
+        # one call per completed row (success or failure) — the
+        # progress-bar heartbeat for the longest job in the tab.
+        # (round 205) inside the guard: the cooperative-stop channel --
+        # a False answer stops the leaderboard after this row -- the
+        # GUI's Stop button / memory watchdog, so a run-away comparison
+        # halts before the OS kills the window.
+        if on_model is not None and on_model(
+            {"model": name, "index": position, "total": len(models)}
+        ) is False:
+            raise JobCancelled(
+                f"model comparison cancelled after {position}/{len(models)} "
+                "models -- stopped at a checkpoint by the caller"
+            )
 
     frame = pd.DataFrame(rows)
     column = f"{metric}_mean"
@@ -597,6 +608,9 @@ def benchmark_feature_families(
     n_jobs: int = 1,
     scoring: str | None = None,
     on_family: Callable[[dict[str, Any]], None] | None = None,
+    checkpoint_dir: str | Path | None = None,
+    checkpoint_name: str = "family-benchmark",
+    resume: bool = True,
 ) -> pd.DataFrame:
     """Cross-validated leaderboard ACROSS feature families, one model fixed.
 
@@ -642,6 +656,29 @@ def benchmark_feature_families(
         (successfully or not) with the payload
         ``{'family': name, 'index': i, 'total': n}`` -- the GUI
         progress heartbeat.  It must never raise.
+    checkpoint_dir:
+        Directory for durable per-family checkpoints (MASTER_PROMPT
+        Part-3 §20).  When given, after EVERY completed family the
+        board-so-far is written atomically (fsync + rename, SHA-256
+        self-verified, rotated) to
+        ``<checkpoint_dir>/<checkpoint_name>.step-NNNNNN.json``.  A
+        run stopped by the ``on_family`` False contract leaves its
+        finished families on disk; the NEXT call with the same
+        signature resumes from the first unscored family instead of
+        recomputing them.  Checkpoint WRITE failures degrade to log
+        warnings -- they never kill the benchmark.
+    checkpoint_name:
+        The checkpoint stem inside ``checkpoint_dir`` (default
+        ``family-benchmark``).
+    resume:
+        Reuse a valid matching checkpoint found in ``checkpoint_dir``
+        (default True; ignored when ``checkpoint_dir`` is None).  The
+        checkpoint's signature records the task, folds, metric,
+        resolved model, family list and a digest of the SMILES; ANY
+        mismatch -- different dataset, folds, scoring, model --
+        discards the stale checkpoint and starts fresh, so a resumed
+        board is only ever assembled from rows computed on exactly
+        this request.
 
     Returns
     -------
@@ -652,7 +689,8 @@ def benchmark_feature_families(
         (descending).  A family that fails to featurise or
         cross-validate keeps its row with a NaN score and sinks to the
         bottom instead of killing the board.  Only the metric columns
-        are reproducible (``fit_time_s`` is wall-clock).
+        are reproducible (``fit_time_s`` is wall-clock; a resumed row
+        carries the ORIGINAL computation's stored fit time).
 
     Raises
     ------
@@ -757,8 +795,68 @@ def benchmark_feature_families(
     )
     metric = scoring or _select_scorer(pipeline, task)
 
+    # (round 229, Part-3 §20) durable per-family checkpoints: after
+    # every completed family the board-so-far lands atomically in
+    # checkpoint_dir; a later call with the same signature resumes at
+    # the first unscored family instead of recomputing.  Resume is
+    # consecutive-from-the-front: any gap between the stored rows and
+    # the requested family list stops the reuse there, and the fresh
+    # loop recomputes the rest -- a resumed board is never silently
+    # missing a family.
+    manager = None
+    signature: dict[str, Any] | None = None
+    if checkpoint_dir is not None:
+        from pharmaml.utils.checkpoints import CheckpointManager
+
+        manager = CheckpointManager(checkpoint_dir, checkpoint_name)
+        signature = {
+            "task": task,
+            "cv": cv,
+            "metric": metric,
+            "model": resolve_model_name(model),
+            "families": family_list,
+            "smiles_sha1": hashlib.sha1(
+                "\n".join(str(item) for item in smiles).encode("utf-8")
+            ).hexdigest(),
+        }
+
     rows: list[dict[str, Any]] = []
-    for position, family in enumerate(family_list, start=1):
+    start_position = 1
+    if manager is not None and resume:
+        info = manager.latest()
+        if info is not None and info.state.get("signature") == signature:
+            stored = {
+                str(row.get("family")): row for row in info.state.get("rows", [])
+            }
+            while (
+                start_position <= len(family_list)
+                and family_list[start_position - 1] in stored
+            ):
+                rows.append(stored[family_list[start_position - 1]])
+                start_position += 1
+            if start_position > 1:
+                _LOG.info(
+                    "family benchmark resumed: %d/%d families reused from "
+                    "checkpoint %s",
+                    start_position - 1,
+                    len(family_list),
+                    info.path.name,
+                )
+        elif info is not None:
+            _LOG.info(
+                "family benchmark checkpoint %s does not match this request "
+                "(dataset or settings changed) -- starting fresh",
+                info.path.name,
+            )
+
+    # enumerate's ``start=`` only offsets the counter -- it does NOT
+    # skip elements; the resume slice must cut the already-scored
+    # families out of the list itself, or the loop would recompute the
+    # reused rows AND save them again at shifted steps (the bug the
+    # round-229 smoke caught in minutes).
+    for position, family in enumerate(
+        family_list[start_position - 1 :], start=start_position
+    ):
         try:
             frame, _report = compute_feature_frame(smiles, families=(family,))
             aligned_y = y_series.iloc[list(frame.index)]
@@ -792,8 +890,38 @@ def benchmark_feature_families(
         except Exception as exc:  # noqa: BLE001 — keep the board alive on failures
             _LOG.warning("Family %s failed during benchmarking: %s", family, exc)
             rows.append({"family": family, f"{metric}_mean": np.nan, "folds": cv})
-        if on_family is not None:
-            on_family({"family": family, "index": position, "total": len(family_list)})
+        # (round 229, Part-3 §20) checkpoint AFTER every completed row
+        # (success or NaN-swallowed failure), BEFORE the stop check --
+        # so a cancelled run keeps everything it actually finished.
+        # A write failure must never destroy the benchmark (a 40-minute
+        # family sweep losing its board to a full disk would be the
+        # real bug): degrade to a warning and keep computing.
+        if manager is not None and signature is not None:
+            try:
+                manager.save(
+                    step=position,
+                    total=len(family_list),
+                    state={"signature": signature, "rows": rows},
+                    note=f"family {family!r} scored",
+                )
+            except Exception as save_exc:  # noqa: BLE001 -- checkpoint is best-effort
+                _LOG.warning(
+                    "family benchmark checkpoint write failed at %d/%d "
+                    "(the run continues without it): %s",
+                    position,
+                    len(family_list),
+                    save_exc,
+                )
+        # (round 205) inside the guard: the same cooperative-stop
+        # contract as the compare leaderboard: False halts the family
+        # sweep after this row.
+        if on_family is not None and on_family(
+            {"family": family, "index": position, "total": len(family_list)}
+        ) is False:
+            raise JobCancelled(
+                f"family benchmark cancelled after {position}/{len(family_list)} "
+                "families -- stopped at a checkpoint by the caller"
+            )
 
     board = pd.DataFrame(rows)
     column = f"{metric}_mean"

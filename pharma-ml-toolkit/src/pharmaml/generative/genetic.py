@@ -113,11 +113,15 @@ True
 from __future__ import annotations
 
 import math
+import os
 import random
+import sys
 import time
 from collections import deque
+from collections.abc import Callable as AnyCallable
 from collections.abc import Mapping, Sequence
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from pharmaml.exceptions import DataValidationError
@@ -1053,11 +1057,78 @@ class GeneticOptimizer:
                 index += 1
         return population, kept
 
+    # -- (round 9, §13) the cooperative-stop partial result --------------
+    def _partial_result(
+        self,
+        *,
+        produced: dict[str, float],
+        history: list[dict[str, Any]],
+        population: list[str],
+        accepted_total: int,
+        operator_trajectory: list[dict[str, Any]],
+        level1_book: Any,
+        geometry_book: Any,
+        mutation_book: Any,
+    ) -> GenerationResult:
+        """The §13 partial result: everything produced so far, ranked.
+
+        Mirrors the closing block of :meth:`optimize` (same sort, same
+        metadata shape) minus the fields only a finished run can know
+        (``elapsed_s`` is still wall-clock; ``iterations`` reports the
+        generations actually completed).
+        """
+        ranked_all = sorted(produced.items(), key=lambda kv: (-kv[1], kv[0]))
+        smiles_list = [smiles for smiles, _ in ranked_all]
+        score_list = [score for _, score in ranked_all]
+        breakdown: list[dict[str, float]] = []
+        score_with_breakdown = getattr(
+            self.objective, "score_with_breakdown", None
+        )
+        for smiles in smiles_list:
+            if callable(score_with_breakdown):
+                breakdown.append(score_with_breakdown(smiles)[1])
+            else:
+                breakdown.append({})
+        metadata: dict[str, Any] = {
+            "method": "genetic_algorithm",
+            "seed": self.seed,
+            "iterations": len(history),
+            "elapsed_s": 0.0,
+            "valid_generated": accepted_total + len(population),
+            "unique_generated": len(smiles_list),
+            "population_size": self.population_size,
+            "mutation": self.mutation,
+            "crossover": self.crossover,
+            "partial": True,
+        }
+        if level1_book is not None and geometry_book is not None and mutation_book is not None:
+            metadata["operator_selection"] = "adaptive"
+            metadata["operator_stats"] = {
+                "level1": level1_book.snapshot(),
+                "geometry": geometry_book.snapshot(),
+                "mutation": mutation_book.snapshot(),
+            }
+            metadata["operator_trajectory"] = operator_trajectory
+        return GenerationResult(
+            smiles=smiles_list,
+            scores=score_list,
+            breakdown=breakdown,
+            best=smiles_list[0] if smiles_list else "",
+            best_score=score_list[0] if score_list else 0.0,
+            history=history,
+            metadata=metadata,
+        )
+
     # -- public API ------------------------------------------------------
     def optimize(
         self,
         seed_smiles: Sequence[str] | None = None,
         corpus: Sequence[str] | None = None,
+        *,
+        progress: AnyCallable | None = None,
+        checkpoint_dir: str | os.PathLike[str] | None = None,
+        checkpoint_every: int = 1,
+        checkpoint_resume: bool = True,
     ) -> GenerationResult:
         """Run the evolution and return the ranked :class:`GenerationResult`.
 
@@ -1114,6 +1185,30 @@ class GeneticOptimizer:
             provided seed molecule is invalid, or the corpus is empty
             after validity / length filtering.  Invalid corpus entries
             are dropped with a warning, never silently.
+
+        Notes
+        -----
+        (part5-continuation round 9, §13) With ``checkpoint_dir`` the
+        evolution is a resumable §13 operation: at every generation
+        boundary (thinned by ``checkpoint_every``) an envelope-carrying
+        checkpoint captures the COMPLETE state -- the population, the
+        produced-molecules book, the per-generation history, the
+        sampler's RNG state (the round-8 lesson: the history alone is
+        not the state; every tournament / mutation / crossover draw
+        advances the rng) and, on adaptive runs, the three operator
+        credit books + trajectory. Checkpointing supports only selected
+        deterministic built-in objectives; custom/stateful objectives must run
+        without a checkpoint directory. Matching configuration, corpus, source
+        and runtime metadata are required. Invalid, old or mismatched files
+        raise PersistenceError without a silent fallback; use a new directory
+        for a fresh run. Do not share the directory between concurrent writers.
+        Exact restoration is tested in the same environment, not guaranteed
+        across platforms or dependency builds. A cooperative stop
+        (``progress`` returning ``False``) raises
+        :class:`~pharmaml.exceptions.JobCancelled` with the partial
+        :class:`GenerationResult` on ``partial_results`` -- in BOTH the
+        checkpointed and the checkpoint-less mode (the partial is
+        computable from the loop state alone).
         """
         started = time.perf_counter()
         rng = random.Random(self.seed)
@@ -1227,7 +1322,193 @@ class GeneticOptimizer:
         attempts_total = 0
         last_fraction = 1.0
 
-        for generation in range(self.generations):
+        # -- (round 9, §13) the resumable generation loop -----------------
+        #
+        # The complete state at a generation boundary: population,
+        # produced, history, the rng state (round-8 lesson -- the
+        # history alone is NOT enough: every draw advances the rng and
+        # a naive replay proposes different offspring), the three
+        # operator credit books + trajectory (adaptive runs), and the
+        # two attempt counters.  Everything is JSON-safe (the Mersenne
+        # state rides as a list; the books' reward deques as lists).
+        if (
+            not isinstance(checkpoint_every, int)
+            or isinstance(checkpoint_every, bool)
+            or checkpoint_every < 1
+        ):
+            raise ValueError(
+                f"checkpoint_every must be a positive int, got {checkpoint_every!r}"
+            )
+
+        def _book_state(book: _OperatorBook) -> dict[str, Any]:
+            return {
+                "rewards": {op: list(win) for op, win in book.rewards.items()},
+                "draws": dict(book.draws),
+                "successes": dict(book.successes),
+                "best": {
+                    op: [score, child]
+                    for op, (score, child) in book.best.items()
+                },
+            }
+
+        def _restore_book(book: _OperatorBook, st: Any) -> None:
+            if not isinstance(st, dict):
+                raise TypeError("invalid operator book")
+            operators = set(book.operators)
+            for key in ("rewards", "draws", "successes"):
+                if not isinstance(st[key], dict) or set(st[key]) != operators:
+                    raise ValueError("invalid operator book keys")
+            if not isinstance(st["best"], dict) or not set(st["best"]) <= operators:
+                raise ValueError("invalid operator book best entries")
+            for op in book.operators:
+                rewards = st["rewards"][op]
+                draws, successes = st["draws"][op], st["successes"][op]
+                if (not isinstance(rewards, list) or len(rewards) > book.window
+                        or any(type(v) not in (int, float) or not math.isfinite(v) for v in rewards)
+                        or type(draws) is not int or type(successes) is not int
+                        or not 0 <= successes <= draws):
+                    raise ValueError("invalid operator book counts or rewards")
+            for pair in st["best"].values():
+                if (not isinstance(pair, list) or len(pair) != 2
+                        or type(pair[0]) not in (int, float) or not math.isfinite(pair[0])
+                        or not isinstance(pair[1], str)):
+                    raise ValueError("invalid operator book best entry")
+            book.rewards = {
+                op: deque(win, maxlen=book.window)
+                for op, win in st["rewards"].items()
+            }
+            book.draws = {op: int(n) for op, n in st["draws"].items()}
+            book.successes = {op: int(n) for op, n in st["successes"].items()}
+            book.best = {
+                op: (float(score), child)
+                for op, (score, child) in st["best"].items()
+            }
+
+        manager: Any = None
+        spec: Any = None
+        config_fp = ""
+
+        # -- (round 9, §13) where the generation loop starts.  0 is the
+        # fresh start; a successful checkpoint resume raises it to the
+        # number of completed generations.
+        start_generation = 0
+        if checkpoint_dir is not None:
+            from pharmaml import __version__
+            from pharmaml.exceptions import PersistenceError
+            from pharmaml.generative.checkpoint_identity import genetic_config_fingerprint
+            from pharmaml.utils.checkpoint_schema import (
+                OperationSpec,
+                implementation_fingerprint,
+                validate_checkpoint,
+            )
+            from pharmaml.utils.checkpoints import CheckpointManager
+
+            def current_config_fp() -> str:
+                return genetic_config_fingerprint(
+                    objective=self.objective,
+                    config={
+                        "population_size": self.population_size,
+                        "generations": self.generations,
+                        "mutation_rate": self.mutation_rate,
+                        "crossover_rate": self.crossover_rate,
+                        "mutation": self.mutation,
+                        "crossover": self.crossover,
+                        "elitism": self.elitism,
+                        "tournament_k": self.tournament_k,
+                        "max_smiles_length": self.max_smiles_length,
+                        "min_heavy_atoms": self.min_heavy_atoms,
+                        "operator_selection": self.operator_selection,
+                        "aos_window": self.aos_window,
+                        "aos_temperature": self.aos_temperature,
+                        "seed": self.seed,
+                    },
+                    canonical_pool=canonical_pool,
+                    kept_seeds=kept_seeds,
+                )
+
+            config_fp = current_config_fp()
+            manager = CheckpointManager(checkpoint_dir, name="generative-search")
+            spec = OperationSpec(operation_type="generative_search", operation_id=f"ga-{self.seed}")
+            home = Path(checkpoint_dir)
+            if home.exists() and not home.is_dir():
+                raise PersistenceError("genetic checkpoint directory is not a directory")
+            # Do not let the manager quarantine or silently fall back to older
+            # files: preserve every checkpoint until the user has investigated.
+            try:
+                files = sorted(home.glob("generative-search.step-*.json*")) if home.exists() else []
+            except OSError as exc:
+                raise PersistenceError(f"cannot inspect genetic checkpoints: {exc}") from exc
+            if any(not path.name.endswith(".json") for path in files):
+                raise PersistenceError("genetic checkpoint remnants found; preserve and inspect them")
+            if files and not checkpoint_resume:
+                raise PersistenceError("genetic checkpoints already exist; choose a new directory for a fresh run")
+            if files:
+                records = []
+                for path in files:
+                    if path.is_symlink():
+                        raise PersistenceError("genetic checkpoint symlinks are not supported")
+                    checked = validate_checkpoint(path, manager_name="generative-search")
+                    if not checked.ok or checked.record is None or checked.envelope is None:
+                        raise PersistenceError(f"invalid genetic checkpoint {path.name}; preserve and inspect it")
+                    record, envelope = checked.record, checked.envelope
+                    operation = envelope["operation"]
+                    if (operation.get("type") != "generative_search"
+                            or operation.get("id") != f"ga-{self.seed}"
+                            or envelope.get("toolkit_version") != __version__
+                            or envelope.get("implementation_fingerprint") != implementation_fingerprint(sys.modules[__name__])
+                            or not isinstance(record.get("state"), dict)
+                            or record["state"].get("config_fp") != config_fp
+                            or type(record.get("step")) is not int
+                            or not 0 < record["step"] < self.generations
+                            or record.get("total") != self.generations
+                            or path.name != f"generative-search.step-{record['step']:06d}.json"):
+                        raise PersistenceError("genetic checkpoint identity or version mismatch; "
+                                               "preserve it and choose a new directory")
+                    records.append(record)
+                latest = max(records, key=lambda record: record["step"])
+                st = latest["state"]
+                try:
+                    if (not isinstance(st["population"], list) or not st["population"]
+                            or any(not isinstance(s, str) or not s for s in st["population"])
+                            or not isinstance(st["produced"], dict)
+                            or any(not isinstance(k, str) or not k or type(v) not in (int, float)
+                                   or not math.isfinite(v) or not 0 <= v <= 1 for k, v in st["produced"].items())
+                            or not isinstance(st["history"], list)
+                            or len(st["history"]) != latest["step"]
+                            or any(not isinstance(rec, dict) or rec.get("generation") != i
+                                   for i, rec in enumerate(st["history"]))):
+                        raise ValueError("invalid population, scores or history")
+                    population = list(st["population"])
+                    produced = {k: float(v) for k, v in st["produced"].items()}
+                    history = [
+                        {
+                            "generation": int(rec["generation"]),
+                            "best_score": float(rec["best_score"]),
+                            "mean_score": float(rec["mean_score"]),
+                            "best_smiles": str(rec["best_smiles"]),
+                            "n_unique": int(rec["n_unique"]),
+                            "valid_offspring_fraction": float(rec["valid_offspring_fraction"]),
+                        }
+                        for rec in st["history"]
+                    ]
+                    operator_trajectory = [dict(rec) for rec in st.get("trajectory", [])]
+                    accepted_total = int(st["accepted_total"])
+                    attempts_total = int(st["attempts_total"])
+                    last_fraction = float(st["last_fraction"])
+                    version, internal, gauss = st["rng_state"]
+                    rng.setstate((int(version), tuple(int(x) for x in internal),
+                                  None if gauss is None else float(gauss)))
+                    if adaptive:
+                        _restore_book(level1_book, st["level1_book"])
+                        _restore_book(geometry_book, st["geometry_book"])
+                        _restore_book(mutation_book, st["mutation_book"])
+                    start_generation = len(history)
+                except (KeyError, TypeError, ValueError, OverflowError) as exc:
+                    raise PersistenceError("invalid genetic checkpoint state; preserve and inspect it") from exc
+                _LOG.info("genetic search resumed after %d generations", start_generation)
+
+        boundaries_since_save = 0
+        for generation in range(start_generation, self.generations):
             fitness = {
                 smiles: _validated_score(self.objective, smiles)
                 for smiles in population
@@ -1416,6 +1697,96 @@ class GeneticOptimizer:
                 last_fraction = accepted / attempts
             history[-1]["valid_offspring_fraction"] = last_fraction
             population = next_population
+
+            # -- (round 9, §13) the generation boundary: save + stop ------
+            boundaries_since_save += 1
+            if (
+                manager is not None
+                and spec is not None
+                and (
+                    generation >= self.generations - 2
+                    or boundaries_since_save >= checkpoint_every
+                )
+            ):
+                from pharmaml.exceptions import PersistenceError  # local: the save guard holds
+
+                boundaries_since_save = 0
+                if current_config_fp() != config_fp:
+                    raise PersistenceError("genetic checkpoint setup changed during the run; "
+                                           "preserve earlier checkpoints")
+                rng_state = rng.getstate()
+                try:
+                    manager.save(
+                        step=generation + 1,
+                        total=self.generations,
+                        state={
+                            "config_fp": config_fp,
+                            "population": list(population),
+                            "produced": dict(produced),
+                            "history": [
+                                {
+                                    "generation": rec["generation"],
+                                    "best_score": rec["best_score"],
+                                    "mean_score": rec["mean_score"],
+                                    "best_smiles": rec["best_smiles"],
+                                    "n_unique": rec["n_unique"],
+                                    "valid_offspring_fraction": rec[
+                                        "valid_offspring_fraction"
+                                    ],
+                                }
+                                for rec in history
+                            ],
+                            "trajectory": operator_trajectory,
+                            "accepted_total": accepted_total,
+                            "attempts_total": attempts_total,
+                            "last_fraction": last_fraction,
+                            "rng_state": [
+                                rng_state[0],
+                                list(rng_state[1]),
+                                rng_state[2],
+                            ],
+                            "level1_book": _book_state(level1_book),
+                            "geometry_book": _book_state(geometry_book),
+                            "mutation_book": _book_state(mutation_book),
+                        },
+                        note=f"generative search {generation + 1}/"
+                        f"{self.generations} generations",
+                        operation=spec,
+                    )
+                except (
+                    PersistenceError,
+                    OSError,
+                    TypeError,
+                    ValueError,
+                ) as exc:
+                    raise PersistenceError(
+                        f"genetic checkpoint write failed at generation {generation + 1}; "
+                        "preserve and inspect existing files"
+                    ) from exc
+            if (
+                progress is not None
+                and progress(
+                    generation + 1, self.generations, "generative search"
+                )
+                is False
+            ):
+                from pharmaml.exceptions import JobCancelled
+
+                raise JobCancelled(
+                    f"generative search cancelled after generation "
+                    f"{generation + 1}/{self.generations} -- stopped at a "
+                    "checkpoint by the caller",
+                    partial_results=self._partial_result(
+                        produced=produced,
+                        history=history,
+                        population=population,
+                        accepted_total=accepted_total,
+                        operator_trajectory=operator_trajectory,
+                        level1_book=level1_book if adaptive else None,
+                        geometry_book=geometry_book if adaptive else None,
+                        mutation_book=mutation_book if adaptive else None,
+                    ),
+                )
 
         ranked_all = sorted(produced.items(), key=lambda kv: (-kv[1], kv[0]))
         smiles_list = [smiles for smiles, _ in ranked_all]

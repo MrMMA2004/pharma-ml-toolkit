@@ -86,8 +86,13 @@ pharmaml.exceptions.DockingError: ligands directory not found: /tmp/pharmaml_doc
 
 from __future__ import annotations
 
+import hashlib
+import os
+import platform
 import shutil
+import struct
 import subprocess
+import tempfile
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -102,6 +107,8 @@ __all__ = [
     "DockingRunResult",
     "VinaBatchProgress",
     "batch_run_directories",
+    "engine_argv",
+    "locate_engine_binary",
     "parse_vina_config",
     "run_autodock4",
     "run_vina",
@@ -130,7 +137,7 @@ class DockingRunResult:
         True when the run was not started at all because its output
         already existed (``run_vina_batch(skip_existing=True)`` -- the
         resume behaviour of ``Vina_contol/batch.py`` and
-        ``niggavina.py``); such rows count as ``ok`` with zero seconds.
+        ``batch_vina.py``); such rows count as ``ok`` with zero seconds.
     """
 
     directory: Path
@@ -213,6 +220,172 @@ def _require_executable(name: str) -> str:
     return located
 
 
+# Hashes identify the executables in the existing v1.2.172 release. An
+# intentional binary update must update these references and be reviewed as a
+# separate provenance/licensing change; explicit user engines are not pinned.
+_BUNDLED_ENGINE_SHA256 = {
+    "vina.exe": "e0c4b2715e0c1a74f6e92d0f3be0328ac97542eafbc111e6b1efad897a73cce5",
+    "autogrid4.exe": "797efce687d1ae82df59726461e0e1966b3d8edb0f8b187f982fa1ab0c12da9e",
+    "autodock4.exe": "36c0b16c04d7df8e6225737bae65bb04058d1f4c90accfaf2d230dbc913954bf",
+}
+_BUNDLED_ENGINE_MACHINE = {"vina.exe": 0x8664, "autogrid4.exe": 0x14C, "autodock4.exe": 0x14C}
+
+
+def _bundled_engine_dirs() -> tuple[Path, ...]:
+    """Known resource locations only; never guess an unrelated site-packages sibling."""
+    source = Path(__file__).resolve()
+    package = source.parents[1]
+    paths = [package / "engines"]  # if a future wheel explicitly includes package data
+    if source.parents[2].name == "src":
+        root = source.parents[3]
+        if (root / "VERSION").is_file() and (root / "pyproject.toml").is_file():
+            paths.insert(0, root / "engines")
+    return tuple(paths)
+
+
+def _pe_machine(path: Path) -> int | None:
+    """Return the PE machine field, or None for a non-PE file; reject malformed MZ files."""
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(64)
+            if header[:2] != b"MZ":
+                return None
+            if len(header) != 64:
+                raise DockingError(f"invalid or truncated PE header: {path}")
+            offset = struct.unpack_from("<I", header, 0x3C)[0]
+            # Bound the seek as well as checking the signature; no full binary read.
+            if offset < 64 or offset > 16 * 1024 * 1024:
+                raise DockingError(f"invalid PE header offset: {path}")
+            handle.seek(offset)
+            coff = handle.read(6)
+            if len(coff) != 6 or coff[:4] != b"PE\0\0":
+                raise DockingError(f"invalid or truncated PE signature: {path}")
+            return struct.unpack_from("<H", coff, 4)[0]
+    except OSError as exc:
+        raise DockingError(f"cannot inspect engine binary {path}: {exc}") from exc
+
+
+def _bundled_engine(name: str) -> Path | None:
+    if "/" in name or "\\" in name:
+        return None
+    filename = name.lower() if name.lower().endswith(".exe") else name.lower() + ".exe"
+    expected = _BUNDLED_ENGINE_SHA256.get(filename)
+    if expected is None:
+        return None
+    for folder in _bundled_engine_dirs():
+        candidate = folder / filename
+        if not candidate.is_file():
+            continue
+        try:
+            digest = hashlib.sha256()
+            with candidate.open("rb") as handle:
+                for block in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(block)
+        except OSError as exc:
+            raise DockingError(f"cannot inspect bundled engine {candidate}: {exc}") from exc
+        if digest.hexdigest() != expected:
+            raise DockingError(f"bundled engine checksum mismatch: {candidate}")
+        if _pe_machine(candidate) != _BUNDLED_ENGINE_MACHINE[filename]:
+            raise DockingError(f"bundled engine PE architecture mismatch: {candidate}")
+        return candidate
+    return None
+
+
+def locate_engine_binary(
+    name: str, engine_dir: str | Path | None = None
+) -> Path | None:
+    """Locate an engine, but do not claim it is runnable on the current host.
+
+    Explicit binary paths win, then an explicitly supplied folder, then PATH,
+    then a checksum- and PE-validated bundled Windows engine. PATH precedes
+    bundled binaries so existing native installations are not silently replaced.
+    Source trees / extracted ZIPs use their toolkit-root ``engines/``; wheels
+    can only use binaries explicitly packaged in ``pharmaml/engines/``. Use
+    :func:`engine_argv` to validate host architecture and Wine availability.
+
+    >>> locate_engine_binary("definitely_not_a_real_engine_anywhere") is None
+    True
+    """
+    if "/" in name or "\\" in name:
+        candidate = Path(name)
+        return candidate.resolve() if candidate.is_file() else None
+    spellings = (name,) if name.lower().endswith(".exe") else (name, f"{name}.exe")
+    if engine_dir is not None:
+        folder = Path(engine_dir)
+        for spelling in spellings:
+            candidate = folder / spelling
+            if candidate.is_file():
+                return candidate.resolve()
+    for spelling in spellings:
+        located = shutil.which(spelling)
+        if located is not None:
+            return Path(located).resolve()
+    return _bundled_engine(name)
+
+
+def _host_platform() -> tuple[str, str]:
+    return os.name, platform.machine().lower()
+
+
+def _pe_argv(binary: Path | str) -> list[str]:
+    """Construct an argv, validating PE machine and Wine presence where required.
+
+    Discovery and a Wine binary do not prove that the engine or Wine's 32-bit
+    support works; subprocess execution remains the actual runtime test.
+    """
+    path = Path(binary)
+    if not path.is_file():  # preserve callers that inject an executable resolver
+        return [str(binary)]
+    machine = _pe_machine(path)
+    if machine is None:
+        return [str(binary)]
+    if machine not in (0x14C, 0x8664):
+        raise DockingError(f"unsupported PE architecture 0x{machine:04x}: {path}")
+    host_os, arch = _host_platform()
+    if arch not in {"x86_64", "amd64", "x64", "x86", "i386", "i486", "i586", "i686"}:
+        raise DockingError(f"cannot assume x86 PE engine compatibility on host architecture {arch!r}: {path}")
+    if machine == 0x8664 and arch in {"x86", "i386", "i486", "i586", "i686"}:
+        raise DockingError(f"64-bit PE engine requires a 64-bit x86 host: {path}")
+    if host_os == "nt":
+        return [str(binary)]
+    wine = shutil.which("wine") or shutil.which("wine64")
+    if wine is None:
+        raise DockingError(
+            f"{path.name} is a Windows PE executable and no wine was found on "
+            "PATH -- run it on Windows, install compatible wine, or use a native engine build"
+        )
+    wine_path = Path(wine)
+    return [str(wine_path.resolve() if wine_path.is_file() else wine), str(binary)]
+
+
+def engine_argv(name: str, engine_dir: str | Path | None = None) -> list[str]:
+    """Resolve an engine and validate its launch prefix; no execution occurs.
+
+    Resolution is explicit path, explicit folder, PATH, then a verified bundled
+    binary. Native PATH installations are preferred over bundled Windows builds.
+    Wine must exist for a PE on non-Windows; its presence does not prove the
+    executable will actually run. An explicit but unusable selection fails
+    rather than silently changing engines.
+    """
+    if engine_dir is None:
+        try:
+            resolved = _require_executable(name)  # preserve existing PATH hook
+        except DockingError:
+            binary = locate_engine_binary(name)
+            if binary is None:
+                raise
+            return _pe_argv(binary)
+        resolved_path = Path(resolved)
+        return _pe_argv(resolved_path.resolve() if resolved_path.is_file() else resolved)
+    binary = locate_engine_binary(name, engine_dir)
+    if binary is None:
+        raise DockingError(
+            f"executable {name!r} not found in engine folder {engine_dir}, on PATH, "
+            "or among verified bundled engines"
+        )
+    return _pe_argv(binary)
+
+
 #: Sentinel AutoDock4 writes at the very end of a healthy ``.dlg`` --
 #: the same string :func:`~pharmaml.docking.parsing.check_docking_completion`
 #: audits per directory.
@@ -241,6 +414,7 @@ def run_autodock4(
     autodock: str = "autodock4",
     skip_existing: bool = True,
     timeout_s: float = 3600.0,
+    engine_dir: str | Path | None = None,
 ) -> DockingRunResult:
     """Run autogrid4 + autodock4 for one ligand directory.
 
@@ -262,6 +436,10 @@ def run_autodock4(
         ``.dlg`` only when it carries AutoDock's ``Successful
         Completion`` sentinel -- an interrupted run is re-run, never
         trusted just because the file exists.
+    engine_dir:
+        Folder holding the engine binaries (``autogrid4`` /
+        ``autogrid4.exe`` / ``autodock4`` / ``autodock4.exe``), searched
+        before PATH -- the Windows ``.exe`` builds the toolkit ships.
 
     Returns
     -------
@@ -286,9 +464,9 @@ def run_autodock4(
         if not (work / grid_field).is_file():
             raise DockingError(f"missing {grid_field} in {work}")
         try:
-            autogrid_bin = _require_executable(autogrid)
+            autogrid_prefix = engine_argv(autogrid, engine_dir)
             subprocess.run(
-                [autogrid_bin, "-p", grid_field, "-l", "r.glg"],
+                [*autogrid_prefix, "-p", grid_field, "-l", "r.glg"],
                 cwd=work,
                 check=True,
                 capture_output=True,
@@ -298,16 +476,16 @@ def run_autodock4(
             # missing engine: a clean not-ok result (the batch wrapper
             # reports it per ligand) instead of an exception mid-run
             return _failure(str(exc))
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
             return _failure(str(exc))
 
     if not (skip_existing and _log_complete(dlg)):
         if not (work / dock_param).is_file():
             raise DockingError(f"missing {dock_param} in {work}")
         try:
-            autodock_bin = _require_executable(autodock)
+            autodock_prefix = engine_argv(autodock, engine_dir)
             subprocess.run(
-                [autodock_bin, "-p", dock_param, "-l", "r.dlg"],
+                [*autodock_prefix, "-p", dock_param, "-l", "r.dlg"],
                 cwd=work,
                 check=True,
                 capture_output=True,
@@ -315,7 +493,7 @@ def run_autodock4(
             )
         except DockingError as exc:
             return _failure(str(exc))
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
             return _failure(str(exc))
 
     if not _log_complete(dlg):
@@ -337,6 +515,7 @@ def run_vina(
     seed: int | None = None,
     vina_bin: str = "vina",
     timeout_s: float = 3600.0,
+    engine_dir: str | Path | None = None,
 ) -> DockingRunResult:
     """Run a single AutoDock Vina docking.
 
@@ -356,22 +535,29 @@ def run_vina(
         CPU count (0 = let Vina decide).
     seed:
         Random seed for reproducible docking.
+    engine_dir:
+        Folder holding the engine binary (``vina`` / ``vina.exe``),
+        searched before PATH -- the Windows ``.exe`` build the toolkit
+        ships.
 
     Returns
     -------
     DockingRunResult
+        A zero exit is not sufficient: a new non-empty output must exist.
+        Output is staged next to the destination and only replaces an older
+        file after successful execution. This does not validate the pose or
+        score scientifically and does not provide crash durability.
     """
     import time
 
-    binary = _require_executable(vina_bin)
+    prefix = engine_argv(vina_bin, engine_dir)
     out_path = Path(out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        binary,
+        *prefix,
         "--receptor", str(receptor),
         "--ligand", str(ligand),
-        "--out", str(out_path),
         "--center_x", f"{center[0]:.4f}",
         "--center_y", f"{center[1]:.4f}",
         "--center_z", f"{center[2]:.4f}",
@@ -388,16 +574,22 @@ def run_vina(
 
     started = time.perf_counter()
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=timeout_s)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        with tempfile.TemporaryDirectory(prefix=".vina-run-", dir=out_path.parent) as folder:
+            staged = Path(folder) / "pose.pdbqt"
+            subprocess.run([*cmd, "--out", str(staged)], check=True, capture_output=True, timeout=timeout_s)
+            if not staged.is_file() or staged.is_symlink() or staged.stat().st_size == 0:
+                return DockingRunResult(out_path.parent, False, None, time.perf_counter() - started,
+                                        "Vina produced no new non-empty pose file")
+            os.replace(staged, out_path)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
         return DockingRunResult(out_path.parent, False, None, time.perf_counter() - started, str(exc))
     return DockingRunResult(out_path.parent, True, out_path, time.perf_counter() - started)
 
 
-def _run_one(directory: str) -> DockingRunResult:
+def _run_one(directory: str, engine_dir: str | Path | None = None) -> DockingRunResult:
     """Top-level helper so ProcessPoolExecutor can pickle it."""
     try:
-        return run_autodock4(directory)
+        return run_autodock4(directory, engine_dir=engine_dir)
     except DockingError as exc:
         return DockingRunResult(Path(directory), False, None, 0.0, str(exc))
 
@@ -539,6 +731,7 @@ def run_vina_batch(
     vina_bin: str = "vina",
     timeout_s: float = 3600.0,
     skip_existing: bool = False,
+    engine_dir: str | Path | None = None,
 ) -> list[DockingRunResult]:
     """Dock every ``.pdbqt`` under a directory with one Vina config.
 
@@ -548,17 +741,23 @@ def run_vina_batch(
     resolved relative to the config's own directory, and every ligand
     found recursively under ``ligands_dir`` is docked with the config
     file itself (``--config``), producing ``<name>_out.pdbqt`` and
-    ``<name>.log`` in ``out_dir``.  ``max_parallel > 1`` runs the
+    ``<name>.log`` in ``out_dir``. The log contains captured engine output;
+    Vina 1.2 does not accept the old ``--log`` flag. Output is staged and
+    checked for nonempty content, not scientific validity. Promotion of the
+    pose and log is not a crash-atomic two-file transaction. ``max_parallel > 1`` runs the
     subprocesses through a ``ThreadPoolExecutor`` (subprocesses
     release the GIL, so threads are enough).
 
     ``skip_existing=True`` adds the resume behaviour of the 2026-10
-    "new folder" upload's ``Vina_contol/batch.py`` and ``niggavina.py``:
+    "new folder" upload's ``Vina_contol/batch.py`` and ``batch_vina.py``:
     a ligand whose ``<stem>_out.pdbqt`` AND ``<stem>.log`` both exist
     and are non-empty is not started again (a zero-byte log marks a
-    crashed job, exactly like ``niggavina.py``'s empty-log cleanup) --
+    crashed job, exactly like ``batch_vina.py``'s empty-log cleanup) --
     an interrupted campaign re-runs in seconds, docking only the
-    remainder.
+    remainder. The skip check is only a file-presence heuristic: it does not
+    prove a completed docking, validate content, or match the current inputs,
+    configuration, engine, or seed. Use a fresh output directory when those
+    change and independently inspect results.
 
     Parameters
     ----------
@@ -577,6 +776,10 @@ def run_vina_batch(
     skip_existing:
         Resume mode -- skip ligands whose output PDBQT and non-empty
         log already exist (``batch.py``'s "already docked" rule).
+    engine_dir:
+        Folder holding the engine binary (``vina`` / ``vina.exe``),
+        searched before PATH -- the Windows ``.exe`` build the toolkit
+        ships.
 
     Returns
     -------
@@ -615,7 +818,7 @@ def run_vina_batch(
     if not ligands:
         _LOG.warning("no .pdbqt ligands found under %s", ligands_root)
         return []
-    binary = _require_executable(vina_bin)
+    prefix = engine_argv(vina_bin, engine_dir)
 
     # (100x-142) the collision-disambiguated stems live in ONE shared
     # helper -- vina_batch_progress applies the identical naming, so
@@ -631,22 +834,28 @@ def run_vina_batch(
                 and log_file.is_file() and log_file.stat().st_size > 0:
             _LOG.info("skipping %s (already docked)", ligand.name)
             return DockingRunResult(out, True, log_file, 0.0, None, True)
-        cmd = [
-            binary,
-            "--config", str(conf),
-            "--ligand", str(ligand),
-            "--out", str(out_pdbqt),
-            "--log", str(log_file),
-        ]
         try:
-            subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                timeout=timeout_s,
-                cwd=conf.parent,
-            )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            with tempfile.TemporaryDirectory(prefix=".vina-batch-", dir=out.resolve()) as folder:
+                stage = Path(folder)
+                staged_pose = stage / out_pdbqt.name
+                staged_log = stage / log_file.name
+                cmd = [
+                    *prefix,
+                    "--config", str(conf.resolve()),
+                    "--ligand", str(ligand.resolve()),
+                    "--out", str(staged_pose),
+                ]
+                process = subprocess.run(
+                    cmd, check=True, capture_output=True, timeout=timeout_s, cwd=conf.parent,
+                )
+                if not staged_pose.is_file() or staged_pose.is_symlink() or staged_pose.stat().st_size == 0:
+                    return DockingRunResult(out, False, None, time.perf_counter() - started,
+                                            "Vina produced no new non-empty pose file")
+                captured = (process.stdout or b"") + (process.stderr or b"")
+                staged_log.write_bytes(captured or b"Vina exited successfully with no console output.\n")
+                os.replace(staged_pose, out_pdbqt)
+                os.replace(staged_log, log_file)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
             return DockingRunResult(
                 out, False, None, time.perf_counter() - started, str(exc)
             )
@@ -676,6 +885,7 @@ def batch_run_directories(
     base_directory: str | Path,
     workers: int = 4,
     engine: str = "autodock4",
+    engine_dir: str | Path | None = None,
 ) -> list[DockingRunResult]:
     """Dock every prepared ligand sub-directory in parallel.
 
@@ -695,6 +905,10 @@ def batch_run_directories(
     engine:
         ``'autodock4'`` (batch folders) -- Vina runs are single-shot
         via :func:`run_vina`.
+    engine_dir:
+        Folder holding the engine binaries, searched before PATH --
+        threaded through to every per-folder :func:`run_autodock4`
+        child process.
 
     Returns
     -------
@@ -717,7 +931,9 @@ def batch_run_directories(
     _LOG.info("Batch docking %d ligands with %d workers", len(directories), workers)
     results: list[DockingRunResult] = []
     with ProcessPoolExecutor(max_workers=workers) as executor:
-        futures = {executor.submit(_run_one, str(d)): d for d in directories}
+        futures = {
+            executor.submit(_run_one, str(d), engine_dir): d for d in directories
+        }
         for future in as_completed(futures):
             results.append(future.result())
 

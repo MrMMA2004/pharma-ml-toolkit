@@ -1,10 +1,15 @@
 # PharmaML toolkit — pinned dependency stack.
 #
 # Every version below is the EXACT stack the toolkit's QA chain runs
-# green under (the full pytest suite, ruff, mypy and the executed
-# notebooks — see CHANGELOG). `pip install -r requirements.txt` gives
-# you that same environment; the loose ranges in pyproject.toml stay
-# the compatibility contract, this file is the verified snapshot.
+# green under (the full pytest suite and the executed notebooks — see
+# CHANGELOG). `pip install -r requirements.txt` gives you that same
+# environment; the loose ranges in pyproject.toml stay the
+# compatibility contract, this file is the verified snapshot.
+#
+# Lint baseline (trued in round 237): ui/ + studio.py are ruff- AND
+# mypy-clean; src/ (90) and tests/ (57) still carry older ruff debt
+# (tracked as backlog) — the historical "zero-finding" claim was
+# scoped to the files under active QA at the time it was written.
 #
 # Python: 3.10+ (verified under 3.12).
 
@@ -20,11 +25,11 @@ tqdm==4.67.1
 # ---- Optional feature sets (uncomment what you need) -----------------
 
 # Cheminformatics (descriptors, fingerprints, Tanimoto scan):
-# rdkit==2026.9.1
+# rdkit==2026.09.1
 # mordred==1.2.0
 
 # Docking preparation (SMILES -> PDBQT, receptor grids):
-# rdkit==2026.9.1
+# rdkit==2026.09.1
 # meeko==0.8.0
 # gemmi==0.7.5
 
@@ -64,9 +69,32 @@ tqdm==4.67.1
 # seaborn==0.13.2
 # fpdf2==2.8.5
 # python-docx==1.2.0
+# Pillow==11.3.0
+#                     # (r222 / Part-3 §17) TIFF/JPEG first-class image
+#                     # export: lossless 16-bit TIFFs, multi-page stacks,
+#                     # LZW/DEFLATE, quality-controlled JPEGs
 
 # ---- Development / QA ------------------------------------------------
 # pytest==9.0.2
 # pytest-cov==7.0.0
 # mypy==2.4.0
 # ruff==0.17.1
+
+# ---- Studio GUI (directive #16, PySide6 redesign — increment 1) ------
+# Install under the numpy constraint so the resolver cannot drift the
+# pinned scientific stack:
+#   pip install PySide6==6.8.3 pyqtgraph==0.13.7 qt-material==2.17 \
+#               qdarkstyle==3.2.3 pytest-qt==4.5.0 -c <(echo numpy==1.26.4)
+# PySide6==6.8.3
+#                         # Qt 6.8 LTS; PySide6 6.9+ wheels still OK but
+#                         # 6.8.3 is the verified pin (Python 3.12)
+# pyqtgraph==0.13.7
+#                         # LAST numpy-1.x line: 0.14 requires numpy>=2.2,
+#                         # this stack pins 1.26.4 (mordred constraint)
+# qt-material==2.17
+#                         # primary Material Design provider (density via
+#                         # the extra={'density_scale': ...} template dict)
+# qdarkstyle==3.2.3
+#                         # verified alternative dark provider (via qtpy)
+# pytest-qt==4.5.0
+#                         # GUI test harness (qapp/qtbot fixtures)

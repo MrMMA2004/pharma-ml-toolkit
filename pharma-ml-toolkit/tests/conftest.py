@@ -2,10 +2,31 @@
 
 from __future__ import annotations
 
+import contextlib
+from pathlib import Path
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import pytest
 from sklearn.datasets import make_classification
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--standalone-release", action="store_true", default=False,
+        help="Skip tests requiring checkout-only files or Git remote metadata",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if config.getoption("--standalone-release"):
+        skip = pytest.mark.skip(reason="requires checkout-only files or Git remote metadata")
+        for item in items:
+            if item.get_closest_marker("checkout_only"):
+                item.add_marker(skip)
+            if item.get_closest_marker("web_checkout_only"):
+                item.add_marker(pytest.mark.skip(reason="requires companion Web Console source tree"))
 
 
 def pdbqt_atom(serial: int, name: str, x: float, y: float, z: float, atom_type: str) -> str:
@@ -92,3 +113,53 @@ def regression_frame() -> pd.DataFrame:
     frame = pd.DataFrame(X, columns=[f"descr_{i:02d}" for i in range(6)])
     frame["pIC50"] = 6.0 + X @ weight + rng.normal(scale=0.3, size=140)
     return frame
+
+
+@pytest.fixture(scope="session")
+def xvfb_display() -> Any:
+    """ONE virtual display per pytest session (the round-209 collapse fix).
+
+    The round-209 forensics: a fresh Xvfb per class/module combined with
+    a stale Tk display connection from a destroyed app means the NEXT Tk
+    event pump touches the broken connection and Tk 9's X error handler
+    terminates the whole process (``X connection to :N broken`` ->
+    ``exit(1)``, rc=1, zero output).  A session-scoped server is torn
+    down exactly once -- after the last test, when nothing pumps Tk any
+    more -- so a mid-session server death cannot happen, and the stale
+    connection an app leaves behind stays harmless for the whole run.
+    """
+    import os as _os
+    import socket as _socket
+    import subprocess as _subprocess
+    import time as _time
+
+    display = ":96"
+    process = _subprocess.Popen(
+        ["Xvfb", display, "-screen", "0", "1280x800x24"],
+        stdout=_subprocess.DEVNULL,
+        stderr=_subprocess.DEVNULL,
+    )
+    socket_path = Path(f"/tmp/.X11-unix/X{display[1:]}")
+    deadline = _time.time() + 10.0
+    ready = False
+    while _time.time() < deadline:
+        if socket_path.exists():
+            probe = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+            try:
+                probe.connect(str(socket_path))
+                ready = True
+            except OSError:
+                pass
+            finally:
+                probe.close()
+        if ready:
+            break
+        _time.sleep(0.1)
+    assert ready, "Xvfb did not come up on :96 within 10 s"
+    _os.environ["DISPLAY"] = display
+    try:
+        yield display
+    finally:
+        process.terminate()
+        with contextlib.suppress(Exception):
+            process.wait(timeout=5)

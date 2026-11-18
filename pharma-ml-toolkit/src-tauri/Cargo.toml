@@ -1,0 +1,33 @@
+[package]
+name = "pharmaml-studio"
+version = "1.2.224"
+description = "The PharmaML Studio desktop host (Tauri 2): the offline WebView2 shell, the Python backend sidecar supervisor, and nothing else — no scientific logic lives in Rust (part11 §3)."
+authors = ["PharmaML contributors"]
+license = "MIT"
+repository = "https://github.com/pharmaml/pharma-ml-toolkit"
+edition = "2021"
+rust-version = "1.77"
+
+# The Rust host stays MINIMAL (part11 §5.2: "Keep the Rust
+# implementation minimal").  Only the core crate — no plugins, no
+# shell/fs/dialog capabilities, no second backend.
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[lib]
+name = "pharmaml_studio_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+# Windows runner verification legs run `cargo build --release`;
+# release profile defaults stay sane for a desktop host.
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

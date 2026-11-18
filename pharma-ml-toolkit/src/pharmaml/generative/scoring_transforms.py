@@ -71,7 +71,7 @@ True
 >>> step = StepTransform(low=0, high=5)
 >>> step([2.0, 5.0, 7.0]).tolist()
 [1.0, 1.0, 0.0]
->>> make_transform("sigmoid", low=0.0, high=1.0, k=1.0)([0.5])[0]
+>>> float(make_transform("sigmoid", low=0.0, high=1.0, k=1.0)([0.5])[0])
 0.5
 
 The aggregators -- NaN-aware weighting (a NaN component drops out of
@@ -469,7 +469,7 @@ class ExponentialDecayTransform(ScoreTransform):
     >>> decay = ExponentialDecayTransform(k=0.5)
     >>> round(float(decay([2.0])[0]), 6)
     0.367879
-    >>> decay([-3.0])[0]                  # negative values are clamped
+    >>> float(decay([-3.0])[0])          # negative values are clamped
     1.0
     """
 
@@ -586,9 +586,9 @@ def make_transform(name: str, **params: Any) -> ScoreTransform:
 
     Example
     -------
-    >>> make_transform("DoubleSigmoid", low=250, high=450, k=100)([350.0])[0]
+    >>> float(make_transform("DoubleSigmoid", low=250, high=450, k=100)([350.0])[0])
     1.0
-    >>> make_transform("double-sigmoid", low=250, high=450, k=100)([350.0])[0]
+    >>> float(make_transform("double-sigmoid", low=250, high=450, k=100)([350.0])[0])
     1.0
     >>> make_transform("no-such-transform")
     Traceback (most recent call last):

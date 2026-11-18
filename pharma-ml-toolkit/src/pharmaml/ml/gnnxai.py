@@ -55,19 +55,19 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .autograd import Adam, Linear, Module, Parameter, ReLU, Sequential, Tensor, no_grad
-from .gnn import Batch, Data, GATConv, GraphClassifier, GnnError
+from .gnn import Batch, Data, GATConv, GnnError, GraphClassifier
 
 __all__ = [
+    "EXPLAINER_NAMES",
+    "AttentionExplainer",
     "EdgeExplanation",
     "GNNExplainer",
     "PGExplainer",
-    "AttentionExplainer",
     "SubgraphX",
-    "fidelity_plus",
-    "fidelity_minus",
-    "sparsity",
     "accuracy_at_k",
-    "EXPLAINER_NAMES",
+    "fidelity_minus",
+    "fidelity_plus",
+    "sparsity",
 ]
 
 
@@ -99,7 +99,7 @@ def _prepare(model: GraphClassifier, graph: Data) -> tuple[Batch, int]:
 
 
 def _masked_probability(
-    model: GraphClassifier, batch: Batch, target: int, weights: np.ndarray | Tensor
+    model: GraphClassifier, batch: Batch, target: int, weights: Tensor
 ) -> Tensor:
     """log-probability of ``target`` under the edge-weighted forward —
     the stable log-softmax path, differentiable through the weights."""
@@ -216,10 +216,10 @@ class PGExplainer:
 
     def fit(
         self, model: GraphClassifier, graphs: list[Data], y: np.ndarray
-    ) -> "PGExplainer":
+    ) -> PGExplainer:
         if not graphs:
             raise GnnError("PGExplainer.fit: no graphs")
-        width = int(model.history_["node_embeddings"].shape[1])
+        width = int(np.asarray(model.history_["node_embeddings"]).shape[1])
         seed = self.seed
         self.scorer = Sequential(
             Linear(2 * width, self.hidden, seed=seed),
@@ -259,9 +259,11 @@ class PGExplainer:
         batch, target = _prepare(model, graph)
         with no_grad():
             _logits, embeddings = model._decide(batch)
-            node_h = embeddings[-1]
+            # numpy first: the tape Tensor does not fancy-index (the
+            # fit() path already did this -- explain now matches it)
+            node_np = np.asarray(embeddings[-1].numpy())
             ei = batch.edge_index
-            edge_h = np.concatenate([node_h[ei[1]], node_h[ei[0]]], axis=1)
+            edge_h = np.concatenate([node_np[ei[1]], node_np[ei[0]]], axis=1)
             scores = self.scorer.forward(Tensor(edge_h)).sigmoid().reshape(-1).numpy().copy()
         scores = np.clip(scores, 0.0, 1.0)
         n_edges = scores.size

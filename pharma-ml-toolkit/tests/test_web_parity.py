@@ -613,6 +613,7 @@ class TestSessionReportSections:
         assert ts["availableEmpty"] == {
             "ml": False, "learningCurve": False, "pkpd": True,
             "nca": False, "history": False, "surgery": False,
+            "ligands": False,  # (R30-a) the reconciliation group
         }
         assert ts["available"]["surgery"] is True
         # the image section carries the grid PNG data URI verbatim
@@ -767,19 +768,22 @@ class TestSessionReportOrder:
         ts = json.loads(Path("/tmp/sr_ts_132.json").read_text())
         canonical = [
             "ml", "learningCurve", "pkpd", "nca", "history", "surgery",
+            "ligands",  # (R30-a) the reconciliation group, canonical-last
         ]
         assert ts["canonical"] == canonical
         # unknown ids dropped; missing groups appended canonical-last
         assert ts["sanitizedUnknown"] == [
             "surgery", "ml", "learningCurve", "pkpd", "nca", "history",
+            "ligands",
         ]
         # duplicates collapse (first occurrence wins)
         assert ts["sanitizedDupes"] == [
             "ml", "pkpd", "learningCurve", "nca", "history", "surgery",
+            "ligands",
         ]
         # a partial order completes (surgery stays first, the missing
         # groups appended canonical-last); empty/absent falls back
-        assert ts["sanitizedPartial"] == ["surgery"] + canonical[:5]
+        assert ts["sanitizedPartial"] == ["surgery"] + canonical[:5] + ["ligands"]
         assert ts["sanitizedEmpty"] == canonical
         assert ts["sanitizedUndefined"] == canonical
         # the ordered walk moves WHOLE groups: surgery's three sections
@@ -1017,13 +1021,17 @@ class TestCardFinderParity:
         )
         assert result.returncode == 0, result.stdout + result.stderr
         assert "CARD_DIRECTORY_OK" in result.stdout
-        # the census: 26 cards (24 + the two Surgery entries of
-        # 100x-130), 26 unique ids, zero problems
+        # the census: 35 cards (24 + the two Surgery entries of
+        # 100x-130 + the SA score card of part3 §24 + the six
+        # Molecular Dynamics entries of rounds 249/252/257/258 + the
+        # MCTS search card of the Studio-method twin + the Response AI
+        # drug-response card of the Studio-page twin), 35 unique
+        # ids, zero problems
         start = result.stdout.index("{")
         end = result.stdout.index("}", start) + 1
         report = json.loads(result.stdout[start:end])
-        assert report["entries"] == 26, report
-        assert report["ids"] == 26, report
+        assert report["entries"] == 35, report
+        assert report["ids"] == 35, report
         assert report["problems"] == [], report
 
     @needs_card_finder
@@ -1048,6 +1056,181 @@ class TestCardFinderParity:
         styles = (REPO_ROOT / "src" / "app" / "globals.css").read_text(encoding="utf-8")
         assert ".pg-card-flash" in styles
         assert "@keyframes pg-card-flash" in styles
+
+
+class TestMdCvBridge:
+    """Round 258: the COLVAR playground's bridge contract.
+
+    The Molecular Dynamics sub-tab's sixth card mirrors the shipped
+    ``md/cv.py`` (round 255's PLUMED-style collective variables) over
+    the repo-root bridge pattern: one POST pipes a pasted
+    ``plumed.dat`` snippet through ``scripts/md_bridge.py`` op ``cv``
+    — the REAL ``parse_plumed_cvs`` runs over the deterministic helix
+    demo and returns the per-CV series, honest stats and the exact
+    COLVAR text PLUMED's PRINT would have written.  These guards pin
+    the contract: the default five-action snippet, seeded determinism,
+    the COLVAR header format, and the client-error exits for every
+    malformed plumed.dat the web textarea can produce."""
+
+    BRIDGE_PY = REPO_ROOT / "scripts" / "md_bridge.py"
+
+    needs_bridge = pytest.mark.skipif(
+        not BRIDGE_PY.is_file(),
+        reason="web checkout (<repo>/scripts/md_bridge.py) required; "
+        "the zip-only tree skips — its probes live outside the shipped tree",
+    )
+
+    DEFAULT_PLUMED = (
+        "# the helix demo: 10 residues x (N, CA, C), atoms 1-30\n"
+        "d_ca: DISTANCE ATOMS=2,5\n"
+        "bend: ANGLE ATOMS=2,5,8\n"
+        "twist: DIHEDRAL ATOMS=1,2,5,8\n"
+        "rg: GYRATION ATOMS=1-30\n"
+        "fold: COORDINATION GROUPA=1-15 GROUPB=16-30 R_0=6.5\n"
+    )
+
+    def _bridge(self, payload: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+
+    @needs_bridge
+    def test_default_snippet_pins_the_five_action_table(self) -> None:
+        result = self._bridge({"op": "cv"})
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        # one declaration per supported action, in declaration order
+        assert response["names"] == ["d_ca", "bend", "twist", "rg", "fold"]
+        assert response["nAtoms"] == 30
+        assert response["nFrames"] == 60
+        assert len(response["series"]) == 5
+        assert all(len(s) == 60 for s in response["series"])
+        # the COLVAR header is PLUMED's own: FIELDS time + every label
+        assert response["colvar"].splitlines()[0] == (
+            "#! FIELDS time d_ca bend twist rg fold"
+        )
+        assert len(response["colvar"].splitlines()) == 61
+        # honest per-CV stats, aligned with the names
+        assert [s["label"] for s in response["stats"]] == response["names"]
+        d_ca = response["stats"][0]
+        assert d_ca["min"] <= d_ca["mean"] <= d_ca["max"]
+        # the coordination CV is a 0..1 fraction by construction
+        fold = response["stats"][4]
+        assert 0.0 <= fold["min"] and fold["max"] <= 1.0
+
+    @needs_bridge
+    def test_cv_is_deterministic_per_seed(self) -> None:
+        payload = {
+            "op": "cv",
+            "nFrames": 40,
+            "seed": 11,
+            "noise": 0.2,
+            "plumed": self.DEFAULT_PLUMED,
+        }
+        first = self._bridge(payload)
+        second = self._bridge(payload)
+        assert first.returncode == 0 and second.returncode == 0
+        assert json.loads(first.stdout)["series"] == json.loads(second.stdout)["series"]
+
+    @needs_bridge
+    def test_custom_snippet_rides_the_one_based_atoms(self) -> None:
+        result = self._bridge(
+            {"op": "cv", "plumed": "ro: RMSD ATOMS=1-30\nw: GYRATION ATOMS=1-30 MASS"}
+        )
+        # RMSD measures against the trajectory's own first frame (the
+        # honest subset: REFERENCE= files are refused) and GYRATION
+        # MASS rides the demo topology's masses — both compute
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["names"] == ["ro", "w"]
+        assert len(response["series"]) == 2
+        # RMSD at frame 0 is exactly zero (the reference IS frame 0)
+        assert response["series"][0][0] == 0.0
+        assert response["colvar"].splitlines()[0] == "#! FIELDS time ro w"
+
+    @needs_bridge
+    def test_bridge_rejects_malformed_plumed_as_client_errors(self) -> None:
+        for payload, fragment in (
+            ({"op": "cv", "plumed": "x: FOOBAR ATOMS=1,2"}, "unsupported action"),
+            ({"op": "cv", "plumed": "DISTANCE ATOMS=1,2"}, "every CV needs a label"),
+            ({"op": "cv", "plumed": "d: DISTANCE ATOMS=1,99"}, "out of range"),
+            ({"op": "cv", "plumed": "# only comments"}, "no CV declarations"),
+            ({"op": "cv", "plumed": "   "}, "non-empty"),
+            ({"op": "cv", "plumed": "d: DISTANCE ATOMS=1,2\nro: RMSD ATOMS=1-30 COMPONENTS"}, "KEY=VALUE"),
+            ({"op": "cv", "nFrames": 3}, "nFrames"),
+            ({"op": "cv", "seed": -1}, "seed"),
+        ):
+            result = self._bridge(payload)
+            assert result.returncode == 2, (payload, result.stdout)
+            assert fragment in json.loads(result.stdout)["error"], payload
+
+    @needs_bridge
+    def test_method_footnote_names_the_real_api(self) -> None:
+        result = self._bridge({"op": "cv", "plumed": "d: DISTANCE ATOMS=2,5"})
+        assert result.returncode == 0
+        method = json.loads(result.stdout)["method"]
+        assert "parse_plumed_cvs" in method
+        assert "pharmaml.md.cv" in method
+
+
+class TestMdCvWebWiring:
+    """Round 258: the COLVAR playground's static wiring pins.
+
+    The route, the type and the card are three files that must agree:
+    the zod-validated ``/api/md/cv`` route pipes ``op: "cv"`` into
+    ``md_bridge.py``; ``MdCvResponse`` carries the per-CV series, the
+    stats and the COLVAR text; the sixth MD card posts to the route and
+    renders the house TimelineChart.  These pins keep the wiring from
+    silently disappearing between rounds (the live E2E — the card run
+    with the default snippet — rides on top in the release ritual)."""
+
+    ROUTE_TS = REPO_ROOT / "src" / "app" / "api" / "md" / "cv" / "route.ts"
+    TYPES_TS = REPO_ROOT / "src" / "lib" / "toolkit-types.ts"
+    CARD_TSX = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "md-analysis.tsx"
+    )
+
+    needs_wiring = pytest.mark.skipif(
+        not ROUTE_TS.is_file(),
+        reason="web checkout (<repo>/src routes) required; the zip-only tree "
+        "skips — its probes live outside the shipped tree",
+    )
+
+    @needs_wiring
+    def test_route_validates_through_the_bridge(self) -> None:
+        route = self.ROUTE_TS.read_text(encoding="utf-8")
+        assert "md_bridge.py" in route
+        assert '"cv"' in route
+        assert "plumed" in route
+        assert "discriminatedUnion" not in route  # single-op route
+
+    @needs_wiring
+    def test_response_type_carries_the_colvar_contract(self) -> None:
+        types = self.TYPES_TS.read_text(encoding="utf-8")
+        assert "export interface MdCvResponse" in types
+        assert "colvar: string;" in types
+        assert "names: string[];" in types
+
+    @needs_wiring
+    def test_card_posts_to_the_cv_route(self) -> None:
+        card = self.CARD_TSX.read_text(encoding="utf-8")
+        assert '"/api/md/cv"' in card
+        assert "MdCvResponse" in card
+        assert "Collective variables (COLVAR)" in card
+        assert "parse_plumed_cvs" in card
+        # the copyable COLVAR + the honest own-scale footnote
+        assert "Copy COLVAR" in card
+        assert "own vertical scale" in card
+        # the card rides in the sub-tab's shell
+        assert "<CvCard />" in card
+        # the default snippet ships all six actions in the textarea
+        for action in ("DISTANCE", "ANGLE", "DIHEDRAL", "COORDINATION", "GYRATION"):
+            assert f": {action} " in card
 
 
 class TestSurgeryBridge:
@@ -1259,6 +1442,544 @@ class TestSurgeryWebWiring:
         assert "Recently jumped" in finder
 
 
+class TestMctsBridge:
+    """Round 270: the MCTS search bridge contract.
+
+    The Studio Generative page's third method ("monte carlo tree search
+    (MCTS)" — the ChemTSv2-style ``MctsOptimizer`` over an on-the-fly
+    SMILES RNN prior) had no web twin; the ``gen-mcts`` card closes the
+    gap over the repo-root bridge pattern.  These guards pipe fixed
+    requests through the SHIPPED bridge script and pin the contract:
+    the objective registry, seeded determinism, the corpus semantics,
+    the leaderboard + history + structure-grid payload, and the
+    client-error exits."""
+
+    BRIDGE_PY = REPO_ROOT / "scripts" / "mcts_bridge.py"
+
+    needs_bridge = pytest.mark.skipif(
+        not BRIDGE_PY.is_file(),
+        reason="web checkout (<repo>/scripts/mcts_bridge.py) required; "
+        "the zip-only tree skips — its probes live outside the shipped tree",
+    )
+
+    def _bridge(self, payload: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            timeout=240,
+            check=False,
+        )
+
+    @needs_bridge
+    def test_qed_round_trip_is_ranked_and_honest(self) -> None:
+        result = self._bridge(
+            {"objective": "qed", "iterations": 6, "treePolicy": "uct", "seed": 42}
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["objective"] == "qed"
+        assert response["objectiveLabel"] == "QED drug-likeness"
+        assert response["treePolicy"] == "uct"
+        assert response["corpusMode"] == "built-in"
+        # the leaderboard is rank-aligned, best first
+        assert [row["rank"] for row in response["leaderboard"]] == list(
+            range(1, len(response["leaderboard"]) + 1)
+        )
+        scores = [row["score"] for row in response["leaderboard"]]
+        assert scores == sorted(scores, reverse=True)
+        assert response["best"] == response["leaderboard"][0]["smiles"]
+        assert response["bestScore"] == response["leaderboard"][0]["score"]
+        # every objective scores in [0, 1]
+        assert all(0.0 <= score <= 1.0 for score in scores)
+        # single-objective runs carry no breakdown columns
+        assert response["breakdownColumns"] == []
+        assert all(row["breakdown"] == {} for row in response["leaderboard"])
+        # the history rides one record per cycle
+        assert response["history"]["cycle"] == list(range(6))
+        assert len(response["history"]["bestScore"]) == 6
+        assert len(response["history"]["meanScore"]) == 6
+        # the tree accounting is surfaced verbatim
+        stats = response["treeStats"]
+        assert stats["nNodes"] > 0 and stats["nRollouts"] > 0
+        assert stats["nValid"] == len(scores)
+        assert stats["policy"] == "smiles-rnn"
+        assert stats["corpusSize"] == 244  # the built-in prior corpus
+        # the structure grid is a real PNG
+        import base64
+
+        assert response["gridPng"].startswith("data:image/png;base64,")
+        assert (
+            base64.b64decode(response["gridPng"].split(",", 1)[1])[:8]
+            == b"\x89PNG\r\n\x1a\n"
+        )
+        assert response["gridPanels"] == min(9, len(scores))
+        assert "unique valid molecule(s)" in response["summary"]
+        assert response["rdkitVersion"]
+
+    @needs_bridge
+    def test_multi_objective_carries_the_breakdown_columns(self) -> None:
+        result = self._bridge({"objective": "multi", "iterations": 5, "seed": 9})
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["breakdownColumns"] == ["qed", "mw_band", "tpsa_band"]
+        for row in response["leaderboard"]:
+            assert set(row["breakdown"]) == {"qed", "mw_band", "tpsa_band"}
+            assert all(0.0 <= v <= 1.0 for v in row["breakdown"].values())
+
+    @needs_bridge
+    def test_search_is_deterministic_per_seed(self) -> None:
+        payload = {"objective": "qed", "iterations": 6, "seed": 42}
+        first = self._bridge(payload)
+        second = self._bridge(payload)
+        assert first.returncode == 0 and second.returncode == 0
+        assert json.loads(first.stdout)["leaderboard"] == json.loads(
+            second.stdout
+        )["leaderboard"], "the same seed must regrow the identical tree"
+
+    @needs_bridge
+    def test_corpus_semantics_mirror_the_studio_modes(self) -> None:
+        # custom corpus: the lines are the sampling pool alone
+        result = self._bridge(
+            {
+                "objective": "qed",
+                "iterations": 6,
+                "seed": 42,
+                "corpus": "CCO\nCCN\nc1ccccc1",
+                "seeded": False,
+            }
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["corpusMode"] == "custom"
+        assert response["treeStats"]["corpusSize"] == 3
+        # seeded mode: the lines anchor ahead of the built-in corpus
+        # (dict.fromkeys dedupes — a line already riding the built-in
+        # corpus collapses, so the expectation is computed from the
+        # real DEFAULT_CORPUS, never assumed to be 3 + 244)
+        from pharmaml.generative import DEFAULT_CORPUS
+
+        lines = ["CCO", "CCN", "c1ccccc1"]
+        expected_seeded = len(dict.fromkeys([*lines, *DEFAULT_CORPUS]))
+        seeded = self._bridge(
+            {
+                "objective": "qed",
+                "iterations": 6,
+                "seed": 42,
+                "corpus": "CCO\nCCN\nc1ccccc1",
+                "seeded": True,
+            }
+        )
+        seeded_response = json.loads(seeded.stdout)
+        assert seeded_response["corpusMode"] == "seeded"
+        assert seeded_response["treeStats"]["corpusSize"] == expected_seeded
+
+    @needs_bridge
+    def test_bridge_rejects_bad_requests_as_client_errors(self) -> None:
+        for payload, fragment in (
+            ({"objective": "neon", "iterations": 6, "seed": 42}, "objective must be one of"),
+            ({"objective": "qed", "iterations": 3, "seed": 42}, "between 4 and 24"),
+            ({"objective": "qed", "iterations": 25, "seed": 42}, "between 4 and 24"),
+            ({"objective": "qed", "iterations": 6, "seed": -1}, "seed must be"),
+            ({"objective": "qed", "iterations": 6, "seed": 42, "treePolicy": "greedy"}, "treePolicy"),
+            ({"objective": "qed", "iterations": 6, "seed": 42, "seeded": "yes"}, "seeded must be"),
+            ({"objective": "similarity", "iterations": 6, "seed": 42, "reference": ""}, "reference SMILES"),
+            (
+                {"objective": "similarity", "iterations": 6, "seed": 42, "reference": "not-a-smiles"},
+                "did not parse",
+            ),
+            ({"objective": "logp", "iterations": 6, "seed": 42, "lo": 5, "hi": 1}, "lo < hi"),
+        ):
+            result = self._bridge(payload)
+            assert result.returncode == 2, (payload, result.stdout)
+            response = json.loads(result.stdout)
+            assert fragment in response["error"], (payload, response["error"])
+
+
+class TestMctsWebWiring:
+    """Round 270: the gen-mcts card's static wiring pins.
+
+    The live E2E (agent-browser) clicks the real buttons; these pins
+    keep the wiring from silently disappearing between rounds: the
+    card rides on the /api/gen/mcts route, the finder's catalog gained
+    the gen-mcts entry (its drift probe lives in
+    scratch/probe_card_directory_129.ts, pinned by
+    TestCardFinderParity above), and the Studio's objective registry
+    is mirrored verbatim."""
+
+    PLAYGROUND_TSX = REPO_ROOT / "src" / "components" / "explorer" / "playground.tsx"
+    MCTS_TSX = REPO_ROOT / "src" / "components" / "explorer" / "playground" / "mcts-card.tsx"
+    ROUTE_TS = REPO_ROOT / "src" / "app" / "api" / "gen" / "mcts" / "route.ts"
+    TYPES_TS = REPO_ROOT / "src" / "lib" / "toolkit-types.ts"
+    CARD_DIRECTORY_TS = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "card-directory.ts"
+    )
+
+    needs_wiring = pytest.mark.skipif(
+        not PLAYGROUND_TSX.is_file(),
+        reason="web checkout (<repo>/src components) required; the zip-only "
+        "tree skips — its probes live outside the shipped tree",
+    )
+
+    @needs_wiring
+    def test_card_is_mounted_on_the_generative_tab(self) -> None:
+        playground = self.PLAYGROUND_TSX.read_text(encoding="utf-8")
+        assert 'value="generative"' in playground
+        assert "<MctsCard />" in playground
+        assert "mcts-card" in playground
+
+    @needs_wiring
+    def test_card_posts_to_the_mcts_route(self) -> None:
+        card = self.MCTS_TSX.read_text(encoding="utf-8")
+        assert '"/api/gen/mcts"' in card
+        assert "MctsResponse" in card
+        # the Studio objective registry rides over verbatim
+        for label in (
+            "QED drug-likeness",
+            "LogP window",
+            "Molecular weight window",
+            "TPSA window",
+            "QED + LogP blend",
+            "Multi-objective (QED × MW × TPSA)",
+            "Similarity to reference",
+            "SA score (ease of synthesis)",
+        ):
+            assert label in card, label
+        # the tree policy knob + the corpus semantics
+        assert "uct" in card and "puct" in card
+        assert "Seeded mode" in card
+        assert "the built-in 244-molecule corpus" in card
+        # the leaderboard export + the figure download
+        assert "Download PNG" in card
+        assert "Copy" in card
+        # the honest determinism note
+        assert "the same seed regrow" in card
+
+    @needs_wiring
+    def test_route_validates_through_the_bridge(self) -> None:
+        route = self.ROUTE_TS.read_text(encoding="utf-8")
+        assert "mcts_bridge.py" in route
+        assert "z.enum" in route
+        assert "objective" in route
+        assert "treePolicy" in route
+        assert "corpus" in route
+
+    @needs_wiring
+    def test_response_type_carries_the_search_contract(self) -> None:
+        types = self.TYPES_TS.read_text(encoding="utf-8")
+        assert "export interface MctsResponse" in types
+        assert "export interface MctsLeaderboardRow" in types
+        assert "export interface MctsHistory" in types
+        assert "export interface MctsTreeStats" in types
+        assert "breakdownColumns: string[];" in types
+        assert 'treePolicy: "uct" | "puct";' in types
+        assert 'corpusMode: "built-in" | "seeded" | "custom";' in types
+
+    @needs_wiring
+    def test_catalog_carries_the_mcts_entry(self) -> None:
+        catalog = self.CARD_DIRECTORY_TS.read_text(encoding="utf-8")
+        assert 'id: "gen-mcts"' in catalog
+        assert 'match: "MCTS molecule search"' in catalog
+        assert 'tab: "generative"' in catalog
+
+
+class TestDrugResponseBridge:
+    """The Response AI page's web-twin bridge contract.
+
+    The Studio's Response AI page drives ``pharmaml.ml.drugresponse``
+    (drug-response learning absorbed from CaDRReS / Precily /
+    DeepResponse) through eight tabs; the web twin carried the other ML
+    surfaces but never this module (FEATURES.md called it out as
+    Studio-only).  The ``ml-drugresponse`` card closes the gap over the
+    repo-root bridge pattern: these guards pipe fixed requests through
+    the SHIPPED bridge script and pin the contract — the seeded 4PL
+    demo's parameters-against-truth recovery, the pasted-series path,
+    the NaN-pair dropping of the metrics layer, the seeded screen's
+    training determinism, the cell-line-grouped folds, and the
+    client-error exits."""
+
+    BRIDGE_PY = REPO_ROOT / "scripts" / "drugresponse_bridge.py"
+
+    needs_bridge = pytest.mark.skipif(
+        not BRIDGE_PY.is_file(),
+        reason="web checkout (<repo>/scripts/drugresponse_bridge.py) required; "
+        "the zip-only tree skips — its probes live outside the shipped tree",
+    )
+
+    def _bridge(self, payload: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            timeout=240,
+            check=False,
+        )
+
+    @needs_bridge
+    def test_hill_seeded_round_trip_is_honest(self) -> None:
+        result = self._bridge({"analysis": "hill", "noise": 0.01, "seed": 42})
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["analysis"] == "hill"
+        assert response["source"] == "seeded 4PL demo"
+        assert response["converged"] is True
+        assert response["nPoints"] == 21
+        # the fit recovers the generating truth {1.2, 0.8, 1.0, 0.05}
+        truth = response["truth"]
+        assert truth == {"hill_coef": 1.2, "ic50": 0.8, "top": 1.0, "bottom": 0.05}
+        assert abs(response["parameters"]["hill_coef"] - 1.2) < 0.1
+        assert abs(response["parameters"]["ic50"] - 0.8) < 0.1
+        assert abs(response["parameters"]["top"] - 1.0) < 0.1
+        assert abs(response["parameters"]["bottom"] - 0.05) < 0.05
+        assert response["rSquared"] > 0.99
+        # the log-dose AUC both ways: the fitted curve against the
+        # CLEAN generating curve (the page's exact comparison)
+        assert abs(response["fittedAuc"] - response["cleanAuc"]) < 0.05
+        assert response["noise"] == 0.01
+        # the measured points and the padded fit grid ride for the chart
+        assert len(response["doses"]) == 21
+        assert len(response["response"]) == 21
+        assert len(response["curveDose"]) == 200
+        assert len(response["curveResponse"]) == 200
+        assert "seeded 4PL demo" in response["summary"]
+        assert response["pharmamlVersion"]
+
+    @needs_bridge
+    def test_hill_pasted_series_fits_without_a_truth_block(self) -> None:
+        result = self._bridge(
+            {
+                "analysis": "hill",
+                "dose": "0.1 0.3 1 3 10 30 100",
+                "response": "0.05 0.08 0.2 0.5 0.75 0.9 0.95",
+            }
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["source"] == "pasted series"
+        assert "truth" not in response
+        assert "cleanAuc" not in response
+        assert response["converged"] is True
+        assert response["rSquared"] > 0.99
+        # the mid point of the pasted series sits at the IC50
+        assert abs(response["parameters"]["ic50"] - 3.0) < 1.0
+
+    @needs_bridge
+    def test_metrics_seeded_pair_carries_both_layers(self) -> None:
+        result = self._bridge({"analysis": "metrics", "seed": 42})
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["analysis"] == "metrics"
+        assert response["source"] == "seeded noisy pair"
+        assert response["n"] == 60
+        assert response["pearson"] > 0.9
+        assert response["spearman"] > 0.9
+        assert 0.0 <= response["rmse"] < 0.2
+        assert 0.0 <= response["mae"] < 0.2
+        # the rank trio rides the same pair (the page's rank tab)
+        rank = response["rank"]
+        assert rank["n"] == 60
+        assert 0.0 < rank["kendall"] <= 1.0
+        assert len(response["yTrue"]) == 60
+        assert len(response["yPred"]) == 60
+
+    @needs_bridge
+    def test_metrics_drops_nan_pairs_before_everything(self) -> None:
+        result = self._bridge(
+            {
+                "analysis": "metrics",
+                "yTrue": "0.1 nan 0.3 0.4 0.5 nan 0.7 0.8",
+                "yPred": "0.2 nan 0.35 0.45 0.4 nan 0.75 0.7",
+            }
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["source"] == "pasted pair"
+        assert response["n"] == 6, "the two NaN pairs must drop"
+        assert response["nDropped"] == 2
+        # rank_correlations refuses NaN (its own finite-only contract),
+        # so the rank trio rides the SURVIVING pairs — same six
+        assert response["rank"]["n"] == 6
+        assert "NaN pair(s) dropped" in response["summary"]
+
+    @needs_bridge
+    def test_model_trains_the_seeded_screen_deterministically(self) -> None:
+        payload = {"analysis": "model", "epochs": 60, "factors": 2, "seed": 42}
+        first = self._bridge(payload)
+        assert first.returncode == 0, first.stdout + first.stderr
+        response = json.loads(first.stdout)
+        assert response["analysis"] == "model"
+        assert response["shape"] == {"cellLines": 12, "drugs": 4}
+        assert response["drugs"] == ["DRUG_A", "DRUG_B", "DRUG_C", "DRUG_D"]
+        assert response["nObserved"] == 40, "the 15% NaN mask drops the rest"
+        assert response["nPairs"] == 40
+        assert len(response["trainLosses"]) == 60
+        assert response["epochs"] == 60
+        # the predicted-response head: the page's CELL_00/CELL_07 pair
+        assert [row["cell"] for row in response["predictedHead"]] == [
+            "CELL_00",
+            "CELL_07",
+        ]
+        for row in response["predictedHead"]:
+            assert len(row["values"]) == 4
+            assert all(0.0 <= v <= 1.0 for v in row["values"])
+        assert -1.0 <= response["pearsonR"] <= 1.0
+        second = self._bridge(payload)
+        assert second.returncode == 0
+        repeat = json.loads(second.stdout)
+        assert repeat["trainLosses"] == response["trainLosses"]
+        assert repeat["predictedHead"] == response["predictedHead"]
+
+    @needs_bridge
+    def test_cv_folds_group_cell_lines(self) -> None:
+        result = self._bridge({"analysis": "cv", "folds": 4})
+        assert result.returncode == 0, result.stdout + result.stderr
+        response = json.loads(result.stdout)
+        assert response["analysis"] == "cv"
+        assert response["nFolds"] == 4
+        assert len(response["folds"]) == 4
+        # 12 cell lines / 4 folds = 3 test cells per fold, no straddling
+        assert all(fold["nTestCells"] == 3 for fold in response["folds"])
+        assert (
+            sum(fold["nObserved"] for fold in response["folds"]) == 40
+        ), "the folds together see every observed pair exactly once"
+        mean_of_folds = sum(fold["pearson"] for fold in response["folds"]) / 4
+        assert abs(response["meanPearson"] - mean_of_folds) < 1e-9
+        assert "grouped by cell line" in response["summary"]
+
+    @needs_bridge
+    def test_bridge_rejects_bad_requests_as_client_errors(self) -> None:
+        for payload, fragment in (
+            ({"analysis": "dreaming"}, "analysis must be one of"),
+            (
+                {"analysis": "hill", "dose": "1 2"},
+                "BOTH a dose series and a response series",
+            ),
+            (
+                {"analysis": "hill", "dose": "1 2 3 4 5 6"},
+                "BOTH a dose series and a response series",
+            ),
+            (
+                {
+                    "analysis": "hill",
+                    "dose": "1 2 3 4 5 6",
+                    "response": "0.5 0.6 0.7 0.8 0.9 1.0",
+                    "seed": -1,
+                },
+                "seed must be",
+            ),
+            ({"analysis": "metrics", "yTrue": "1 2", "yPred": "1 2"}, "at least 4"),
+            (
+                {"analysis": "metrics", "yTrue": "1 2 3 4 5", "yPred": "1 2 3 4"},
+                "same length",
+            ),
+            ({"analysis": "model", "epochs": 10}, "epochs must be between 20 and 400"),
+            ({"analysis": "model", "epochs": 401}, "epochs must be between 20 and 400"),
+            ({"analysis": "model", "epochs": 120, "factors": 5}, "factors must be"),
+            ({"analysis": "cv", "folds": 1}, "folds must be between 2 and 8"),
+            ({"analysis": "cv", "folds": 9}, "folds must be between 2 and 8"),
+            ({"analysis": "hill", "noise": 0.9}, "noise must be between 0 and 0.5"),
+        ):
+            result = self._bridge(payload)
+            assert result.returncode == 2, (payload, result.stdout)
+            response = json.loads(result.stdout)
+            assert fragment in response["error"], (payload, response["error"])
+
+
+class TestDrugResponseWebWiring:
+    """The Response AI card's static wiring pins.
+
+    The live E2E (agent-browser) clicks the real buttons; these pins
+    keep the wiring from silently disappearing between rounds: the
+    card rides on the /api/ml/drugresponse route on the Playground's
+    ML sub-tab, the finder's catalog gained the ml-drugresponse entry
+    (its drift probe lives in scratch/probe_card_directory_129.ts,
+    pinned by TestCardFinderParity above), and the Studio page's
+    seeded-demo semantics are mirrored verbatim."""
+
+    ML_PLAYGROUND_TSX = REPO_ROOT / "src" / "components" / "explorer" / "playground" / "ml-playground.tsx"
+    CARD_TSX = REPO_ROOT / "src" / "components" / "explorer" / "playground" / "responseai-card.tsx"
+    ROUTE_TS = REPO_ROOT / "src" / "app" / "api" / "ml" / "drugresponse" / "route.ts"
+    TYPES_TS = REPO_ROOT / "src" / "lib" / "toolkit-types.ts"
+    CARD_DIRECTORY_TS = (
+        REPO_ROOT / "src" / "components" / "explorer" / "playground" / "card-directory.ts"
+    )
+
+    needs_wiring = pytest.mark.skipif(
+        not ML_PLAYGROUND_TSX.is_file(),
+        reason="web checkout (<repo>/src components) required; the zip-only "
+        "tree skips — its probes live outside the shipped tree",
+    )
+
+    @needs_wiring
+    def test_card_is_mounted_on_the_ml_tab(self) -> None:
+        playground = self.ML_PLAYGROUND_TSX.read_text(encoding="utf-8")
+        assert 'from "@/components/explorer/playground/responseai-card"' in playground
+        assert "<ResponseAICard />" in playground
+        # it rides after the Probability Calibration widget — the ML
+        # tab's card column ends with the two evaluation surfaces
+        calibration_at = playground.index("<ProbabilityCalibration />")
+        card_at = playground.index("<ResponseAICard />")
+        assert calibration_at < card_at, (
+            "the Response AI card must mount after the Probability "
+            "Calibration widget"
+        )
+
+    @needs_wiring
+    def test_card_posts_to_the_drugresponse_route(self) -> None:
+        card = self.CARD_TSX.read_text(encoding="utf-8")
+        assert '"/api/ml/drugresponse"' in card
+        assert "DrugResponseResult" in card
+        # the four headline analyses of the Studio page
+        for label in (
+            "Hill curve fit",
+            "Response metrics",
+            "Response model",
+            "Cross-validation",
+        ):
+            assert label in card, label
+        # the pasted-series inputs + the seeded-demo fallbacks + the
+        # honest NaN-pair disclosure
+        assert "seeded demo" in card
+        assert "seeded pair" in card
+        assert "NaN" in card
+        # the copyable result + the honest scoping note
+        assert "Copy result" in card
+        assert "stay desktop-side" in card
+        # the determinism note
+        assert "the same seed regrow" in card
+
+    @needs_wiring
+    def test_route_validates_through_the_bridge(self) -> None:
+        route = self.ROUTE_TS.read_text(encoding="utf-8")
+        assert "drugresponse_bridge.py" in route
+        assert "z.enum" in route
+        assert "analysis" in route
+        assert "epochs" in route
+        assert "folds" in route
+
+    @needs_wiring
+    def test_response_type_carries_the_analysis_contract(self) -> None:
+        types = self.TYPES_TS.read_text(encoding="utf-8")
+        assert "export type DrugResponseAnalysis" in types
+        assert "export interface HillFitResponse" in types
+        assert "export interface ResponseMetricsResponse" in types
+        assert "export interface ResponseModelResponse" in types
+        assert "export interface ResponseCvResponse" in types
+        assert "export type DrugResponseResult" in types
+        assert 'analysis: "hill";' in types
+        assert "meanPearson: number;" in types
+        assert "rSquared: number;" in types
+
+    @needs_wiring
+    def test_catalog_carries_the_responseai_entry(self) -> None:
+        catalog = self.CARD_DIRECTORY_TS.read_text(encoding="utf-8")
+        assert 'id: "ml-drugresponse"' in catalog
+        assert 'match: "Response AI — drug-response learning"' in catalog
+        assert 'tab: "ml"' in catalog
+
+
 class TestSessionReportInspect:
     """Round 100x-134: the preview's hover INSPECT — the sketch's traces
     carry their honest numbers.
@@ -1312,7 +2033,7 @@ class TestSessionReportInspect:
         assert ts["inspectFlat"] == "flat — 2 pts · x 1 · y 5", ts
         # fmtCell's exponential branch reaches the tooltip too
         assert ts["inspectBig"] == (
-            "big — 2 pts · x 0…1 · y 1.235e+4…6.789e+4"
+            "big — 2 pts · x 0…1 · y 12,345…67,890"
         ), ts
         # every crafted trace yielded a named inspect (never a mute title)
         assert ts["allNamed"] is True, ts
@@ -1382,6 +2103,7 @@ class TestSessionReportKeyboard:
         assert "prev === traceIndex ? null : prev" in report
         assert "onKeyDown={traceKeyDown(traceIndex)}" in report
 
+    @pytest.mark.web_checkout_only
     def test_the_pin_contract_is_a_toggle(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # Enter AND Space toggle; Escape only clears THIS trace's pin
@@ -1395,6 +2117,7 @@ class TestSessionReportKeyboard:
         # the readout precedence: a PIN outlives the focus that set it
         assert "pinnedTrace ?? focusedTrace" in report
 
+    @pytest.mark.web_checkout_only
     def test_the_readout_strip_confesses_itself(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the visible strip (the honest keyboard replacement for a
@@ -1404,6 +2127,7 @@ class TestSessionReportKeyboard:
         # the pin's own confession names both keys
         assert "pinned (Esc clears, Enter toggles)" in report
 
+    @pytest.mark.web_checkout_only
     def test_focus_emphasis_mirrors_the_hover_emphasis(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the emphasis classes grew their focus-visible twins, exactly
@@ -1411,6 +2135,7 @@ class TestSessionReportKeyboard:
         assert "group-focus-visible:stroke-2" in report
         assert "group-focus-visible:fill-primary/25" in report
 
+    @pytest.mark.web_checkout_only
     def test_the_type_is_imported_not_namespaced(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # KeyboardEvent rides the type import (no React namespace);
@@ -1420,6 +2145,7 @@ class TestSessionReportKeyboard:
             ' type KeyboardEvent } from "react"'
         ) in report
 
+    @pytest.mark.web_checkout_only
     def test_the_escape_layering_holds_the_dialog(self) -> None:
         """(100x-135, E2E-caught) Radix closes the dialog on Escape at
         the document-CAPTURE phase -- before any trace group's own
@@ -1501,6 +2227,7 @@ class TestSessionReportPinStore:
         # traded for this browser key)
         assert ts["storageKey"] == "pharmaml.reportPinnedTrace", ts
 
+    @pytest.mark.web_checkout_only
     def test_the_component_reads_the_store_through_the_hook(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the hook: subscribe + THIS figure's snapshot + the null server
@@ -1519,6 +2246,7 @@ class TestSessionReportPinStore:
         # the caption confesses the persistence
         assert "a pin is remembered per" in report
 
+    @pytest.mark.web_checkout_only
     def test_the_store_file_pins_its_own_contract(self) -> None:
         store = self.STORE_TS.read_text(encoding="utf-8")
         # the exported surface the component + probe consume
@@ -1589,6 +2317,7 @@ class TestPreviewContentsTwin:
         # the file-twin parity: the derivation IS the file's block
         assert ts["fileTwinParity"] is True, ts
 
+    @pytest.mark.web_checkout_only
     def test_the_collector_exports_the_contents_contract(self) -> None:
         collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
         assert "export function sessionReportContents(" in collector
@@ -1597,6 +2326,7 @@ class TestPreviewContentsTwin:
         assert "title-page material" in collector
         assert "the noise rule" in collector
 
+    @pytest.mark.web_checkout_only
     def test_the_component_carries_the_strip_and_the_jump(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the strip: sticky at the top of the scroll area, labelled as
@@ -1668,6 +2398,7 @@ class TestPreviewContentsCensus:
         # [] and the strip (census included) never renders
         assert ts["metricsOnlyYieldsEmpty"] is True, ts
 
+    @pytest.mark.web_checkout_only
     def test_the_collector_exports_the_census_contract(self) -> None:
         collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
         assert "export function sessionContentsCensus(" in collector
@@ -1677,6 +2408,7 @@ class TestPreviewContentsCensus:
         assert "metrics are excluded by construction" in collector
         assert "the probe pins the wording" in collector
 
+    @pytest.mark.web_checkout_only
     def test_the_component_carries_the_census_line(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the strip's header row: the title on the left, the census on
@@ -1749,6 +2481,7 @@ class TestPreviewContentsSpotlight:
         # metrics can never be a spotlight target
         assert ts["metricsNeverALeg"] is True, ts
 
+    @pytest.mark.web_checkout_only
     def test_the_collector_exports_the_spotlight_contract(self) -> None:
         collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
         assert "export function contentsCensusLegs(" in collector
@@ -1758,6 +2491,7 @@ class TestPreviewContentsSpotlight:
         assert "click can spotlight exactly that kind's lines" in collector
         assert "nothing remembered: stay quiet" in collector
 
+    @pytest.mark.web_checkout_only
     def test_the_component_carries_the_spotlight_and_confession(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the legs render inside the strip (the census's clickable form)
@@ -1825,6 +2559,7 @@ class TestPreviewKeyboardSpotlight:
         # non-digits always pass — the keydown owns only the census digits
         assert ts["allNonDigitsPassed"] is True, ts
 
+    @pytest.mark.web_checkout_only
     def test_the_collector_exports_the_keyboard_contract(self) -> None:
         collector = self.COLLECTOR_TS.read_text(encoding="utf-8")
         assert "export function spotlightKeyAction(" in collector
@@ -1833,6 +2568,7 @@ class TestPreviewKeyboardSpotlight:
         assert "two paths can never disagree because they share this map" in collector
         assert "the digits" in collector and "count the line's legs" in collector
 
+    @pytest.mark.web_checkout_only
     def test_the_component_carries_the_keydown_and_the_reset(self) -> None:
         report = self.REPORT_TSX.read_text(encoding="utf-8")
         # the keydown rides the open dialog, through the pure map
@@ -1851,3 +2587,115 @@ class TestPreviewKeyboardSpotlight:
         assert "onClick={resetOrder}" in report
         # the reset stays honest about its scope (the dialog stays open)
         assert "the dialog stays open" in report
+
+
+@pytest.mark.web_checkout_only
+class TestLigandReportContract:
+    """R30-a — the ligand-set reconciliation session-report group.
+
+    The Ligand Sets tab's result now rides the session report: the
+    store slice mirrors it, the collector walks a ``ligands`` group
+    (metrics card + comparison figure + capped bucket tables), and
+    the bridge renders the figure's ``bar`` trace style.  This guard
+    pins the shipped artifacts: the TS probe runs the collector over
+    a fixed reconciliation fixture, and the bridge composes the
+    payload into a real themed HTMLReport with the bar figure
+    embedded."""
+
+    COLLECTOR_TS = REPO_ROOT / "src" / "lib" / "session-report.ts"
+    STORE_TS = REPO_ROOT / "src" / "lib" / "store.ts"
+    BRIDGE_PY = REPO_ROOT / "scripts" / "report_bridge.py"
+    PROBE_TS = REPO_ROOT / "scratch" / "probe_session_report_r30a.ts"
+
+    @pytest.mark.skipif(
+        not PROBE_TS.is_file() or not BRIDGE_PY.is_file(),
+        reason="web checkout (probe + bridge) required; the zip-only "
+        "tree skips — its probes live outside the shipped tree",
+    )
+    def test_the_collector_walks_the_ligands_group(self) -> None:
+        """The shipped probe passes: metrics card, capped tables with
+        the +N confession, availability/toggle/order semantics, the
+        bar-figure contract and null-safety."""
+        if BUN is not None:
+            _run([BUN, "run", "scratch/probe_session_report_r30a.ts"], REPO_ROOT)
+        else:  # node fallback (bun absent): strip-types runs plain TS
+            _run(
+                ["node", "--experimental-strip-types",
+                 "scratch/probe_session_report_r30a.ts"],
+                REPO_ROOT,
+            )
+
+    def test_the_store_exports_the_slice(self) -> None:
+        store = self.STORE_TS.read_text()
+        # the persisted slice + its cap
+        assert "RECONCILE_RESULT_STORAGE_KEY" in store
+        assert "reconcileResult" in store
+        assert "setReconcileResult" in store
+        assert "RECONCILE_BUCKET_CAP = 50" in store
+        # the validator restores-as-null contract
+        assert "validateReconcileResult" in store
+
+    def test_the_collector_declares_the_group(self) -> None:
+        collector = self.COLLECTOR_TS.read_text()
+        assert '"ligands"' in collector
+        assert "ligandsSections" in collector
+        # the comparison figure rides the bar trace style
+        assert 'style: "bar"' in collector
+        # the bucket tables confess their caps
+        assert "+ ${count - capped.length} more" in collector
+
+    def test_the_bridge_renders_bar_traces(self) -> None:
+        """A bar-trace figure composes into a real HTMLReport with the
+        value-labelled horizontal bars (no matplotlib backend needed
+        beyond the suite's own Agg)."""
+        import json
+
+        payload = {
+            "theme": "light",
+            "subtitle": "R30-a bridge bar-style guard",
+            "sections": [
+                {
+                    "kind": "figure",
+                    "title": "Ligand-set reconciliation — bucket counts",
+                    "xLabel": "number of unique ligand names",
+                    "yLabel": "bucket",
+                    "traces": [
+                        {"name": "ligands", "style": "bar",
+                         "points": [[2, 4], [1, 60], [0, 1]]},
+                    ],
+                },
+            ],
+        }
+        result = subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps(payload),
+            capture_output=True, text=True, timeout=120, check=True,
+        )
+        composed = json.loads(result.stdout)
+        assert composed["figures"] == 1
+        assert composed["tables"] == 0
+        assert composed["theme"] == "light"
+        html = composed["html"]
+        assert html.count("<img") == 1
+        assert "data:image/png;base64," in html
+        assert "bucket counts" in html
+
+    def test_the_bridge_rejects_a_bad_bar_trace(self) -> None:
+        import json
+
+        payload = {
+            "theme": "light",
+            "subtitle": "bad bar guard",
+            "sections": [
+                {"kind": "figure", "title": "t", "xLabel": "x", "yLabel": "y",
+                 "traces": [{"name": "b", "style": "histogram",
+                             "points": [[0, 1]]}]},
+            ],
+        }
+        result = subprocess.run(
+            [sys.executable, str(self.BRIDGE_PY)],
+            input=json.dumps(payload),
+            capture_output=True, text=True, timeout=120, check=False,
+        )
+        assert result.returncode != 0
+        assert "unknown trace style" in result.stdout

@@ -1,0 +1,94 @@
+{
+  "schema": "pharmaml-profile-results/2",
+  "generated_by": "part5-continuation round 9 (§13 second half) — the v1.2.179 ship from main",
+  "environment": {
+    "platform": "Linux 5.10 sandbox, offscreen Qt (QT_QPA_PLATFORM=offscreen via ui/headless.py EGL stub)",
+    "python": "3.12.16",
+    "stack": "PySide6 6.8.3, pyqtgraph 0.13.7, rdkit 2026.9.1, scikit-learn 1.5.2, numpy 1.26.4, torch 2.15.0+cpu, tqdm, openpyxl, python-docx"
+  },
+  "profiles": [
+    {
+      "name": "R9 audit battery (hpo ×4, generative-search proofs + regression, similarity ×2, descriptor-batch, schema, tooling, numpy-neural, pipeline, notebook-variants, carriers + doctests)",
+      "command": "python -m pytest tests/test_hpo.py tests/test_hpo_presets.py tests/test_multiobjective_hpo.py tests/test_hpo_resumability.py tests/test_generative_search_resumability.py tests/test_generative.py tests/test_generative_result_sa.py tests/test_similarity.py tests/test_similarity_campaign_resumability.py tests/test_descriptor_batch_resumability.py tests/test_checkpoint_schema.py tests/test_checkpoint_tooling.py tests/test_numpy_neural_checkpoints.py tests/test_ml_pipeline.py tests/test_notebook_variants.py tests/test_version_carriers.py src/pharmaml/ml/hpo.py src/pharmaml/generative/genetic.py src/pharmaml/chem/similarity.py src/pharmaml/utils/checkpoint_schema.py src/pharmaml/utils/checkpoints.py --doctest-modules",
+      "outcome_counts": {
+        "passed": 982,
+        "failed": 0,
+        "skipped": 2,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "notes": "run on main at the 1.2.179 bump, AFTER the notebook ritual completed (round-8's lesson: never overlap the battery with the ritual rewriting examples/); the 10-test generative-search proof suite rides this battery, as do the 322-test generative regression suites (test_generative.py + test_generative_result_sa.py) guarding the historical GA behaviour"
+    },
+    {
+      "name": "Ship safety + release portability",
+      "command": "python -m pytest tests/test_checkpoint_ship_safety.py tests/test_release_portability.py",
+      "outcome_counts": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "notes": "post-bump sanity on main"
+    },
+    {
+      "name": "Notebook re-execution at ship (8/8)",
+      "command": "python tools/reexec_notebooks.py && python tools/strip_notebook_outputs.py",
+      "outcome_counts": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "notes": "8/8 executed at pharmaml 1.2.179 in 173s; zero error outputs, zero home-path survivors; the 7 no-output twins regenerated; freshness + variants guards green in the audit battery"
+    },
+    {
+      "name": "Offscreen GUI battery (round-5 recorded evidence)",
+      "command": "python -m pytest tests/ -k gui --no-header -q",
+      "outcome_counts": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 532
+      },
+      "notes": "not executed this round; the round-5 recorded evidence (532/532 green at 1.2.174) carries the GUI leg; R9 touches no GUI code (the GA loop is headless)"
+    }
+  ],
+  "gates": [
+    {
+      "name": "ruff (full src + the four resumability suites)",
+      "outcome": "passed",
+      "detail": "genetic.py, checkpoint_schema.py and all four proof suites clean; full src/pharmaml clean"
+    },
+    {
+      "name": "mypy src/pharmaml",
+      "outcome": "passed",
+      "detail": "217 files, zero errors"
+    },
+    {
+      "name": "Four-carrier version pin (round-263)",
+      "outcome": "passed",
+      "detail": "VERSION, pyproject, __version__, SHIPPED_TOOLKIT_VERSION all 1.2.179 in one change"
+    },
+    {
+      "name": "Notebook freshness",
+      "outcome": "passed",
+      "detail": "8/8 re-executed at 1.2.179, twins stripped, guard green"
+    }
+  ],
+  "backup_and_recovery": {
+    "status": "verified this round (push below re-verifies the remote)",
+    "evidence": "main carries R8 (b23c4e6) verified on the remote at round start; the R9 commit pushed to origin/main; the v1.2.179 zip written to all four homes",
+    "power_loss_recovery": "not verified by this round"
+  },
+  "limitations": [
+    "Two §13 operation classes remain pending (docking_batch, preprocessing) — each needs its own exact-restore proof round",
+    "The resumed-vs-uninterrupted comparison necessarily excludes metadata.elapsed_s (wall-clock by nature); every substance field — smiles, scores, history, breakdown, all other metadata keys — is asserted bit-identical",
+    "The config fingerprint covers the objective's class identity, not its instance data (e.g. a SimilarityObjective built against a different reference keeps the same class name); corpus/seed_smiles are NOT in the fingerprint either — a resume against a different corpus replays the completed generations but continues from the checkpointed population (documented in the plan doc as a known limit for docking_batch to close)",
+    "The cooperative stop attaches the partial GenerationResult in both modes — a deliberate, strictly richer deviation from the round-205 None convention for checkpoint-less loops, pinned by its own test",
+    "The GUI does not yet surface JobCancelled.partial_results or offer a resume action for any registered class — the API is library-side only",
+    "The offscreen GUI battery was not re-run for 179 (round-5 recorded evidence carries it; R9 touches no GUI code)"
+  ]
+}

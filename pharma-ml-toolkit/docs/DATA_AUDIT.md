@@ -49,6 +49,6 @@ something real to demo; the tests pin their exact counts:
   the screening library's 77 valid SMILES.
 
 The provenance chain stays: every CSV regenerates byte-identically from
-`scratch/build_example_data.py` (idempotent — any drift, including venv
+`tools/build_example_data.py` (idempotent — any drift, including venv
 repr noise, is caught on the next build), and the generator itself now
 documents the assay-window rationale in its docstring.

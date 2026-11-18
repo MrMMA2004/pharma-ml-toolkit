@@ -22,6 +22,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useToolkitStore } from "@/lib/store";
+import { RECONCILE_BUCKET_CAP } from "@/lib/store";
 import { Textarea } from "@/components/ui/textarea";
 import { StatChip } from "@/components/explorer/stat-chip";
 
@@ -301,6 +303,12 @@ export function LigandReconciler() {
   const [lowercase, setLowercase] = useState(true);
   const [nameColumn, setNameColumn] = useState("Ligand");
 
+  /* (R30-a) mirror the live result into the toolkit store so the
+   * session report can walk it (the same contract surgeryResult
+   * rides).  Capped at RECONCILE_BUCKET_CAP names per bucket — the
+   * report is a summary; this component keeps the full lists. */
+  const setReconcileResult = useToolkitStore((s) => s.setReconcileResult);
+
   /* Persist inputs so a reload doesn't lose work (optional, quota-tolerant). */
   useEffect(() => {
     try {
@@ -327,6 +335,33 @@ export function LigandReconciler() {
 
   const total =
     result.common.length + result.onlyA.length + result.onlyB.length;
+
+  useEffect(() => {
+    setReconcileResult(
+      total === 0
+        ? null
+        : {
+            stripExtension,
+            lowercase,
+            labelA: "A",
+            labelB: "B",
+            counts: {
+              common: result.common.length,
+              onlyA: result.onlyA.length,
+              onlyB: result.onlyB.length,
+            },
+            common: result.common
+              .slice(0, RECONCILE_BUCKET_CAP)
+              .map((entry) => entry.name),
+            onlyA: result.onlyA
+              .slice(0, RECONCILE_BUCKET_CAP)
+              .map((entry) => entry.name),
+            onlyB: result.onlyB
+              .slice(0, RECONCILE_BUCKET_CAP)
+              .map((entry) => entry.name),
+          }
+    );
+  }, [result, total, stripExtension, lowercase, setReconcileResult]);
 
   const loadSample = () => {
     setTableA(SAMPLE_A);

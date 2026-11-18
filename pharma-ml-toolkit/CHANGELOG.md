@@ -1,3 +1,5423 @@
+## [1.2.224] — 2026-11-18 — round 280 (part11 Phase Three services, part two: the WS client + job/dataset/artifact clients)
+
+- **The frontend application services exist** (part11 §5.2's block:
+  REST client | WebSocket client | Job Manager | Dataset Client |
+  Artifact Client — the round the r279 foundation queued):
+  `frontend/src/services/websocket/client.ts` (the typed WS client
+  service), `services/jobs/` (types + client + tracker),
+  `services/datasets/client.ts`, `services/artifacts/client.ts`,
+  and the React binding `hooks/useJobTracking.ts`
+  (`useSyncExternalStore` — no extra state dependency, §8.2).
+- **The WS client implements §13's guarantees against the real wire
+  contract**: the socket opens at `/api/v1/events?token=…&since=…`
+  (the browser-compatible token lane the backend documents; the
+  token is the per-startup memory-only credential, so §15's
+  "no long-lived credentials in query strings" holds), the first
+  frame is parsed as the REAL hello envelope (`{hello, last_sequence,
+  replayed}` — the round-279 fictional `{kind:"hello"}` shape is
+  corrected in `events.ts`), duplicate-event protection is enforced
+  client-side (`sequence <= cursor` never reaches listeners),
+  heartbeats drive a 40 s dead-peer liveness window, reconnects ride
+  a bounded exponential backoff (500 ms → 8 s cap, 12 attempts) and
+  re-ask for exactly the missed tail via `since`, and the `shutdown`
+  envelope flips the stream to `closed` — never reconnects into a
+  dying backend.
+- **The JobTracker keeps REST authoritative** (§13's recovery rule):
+  WS events overlay the tracked view optimistically (queued/started/
+  progress/stage/completed/failed/cancel transitions mirrored from
+  the JobManager's publish vocabulary — timestamps/configuration stay
+  from REST, nothing is fabricated), non-terminal jobs poll REST
+  every 1.5 s, every stream (re)open refreshes all live jobs, and
+  `bus.overflow` reconciles through REST (the backend's own
+  backpressure contract). The `jobs/` client covers the full five-op
+  surface (list/status/result/cancel) with `JobView` field-for-field
+  from `JobRecord.public()` and runtime validation (`parseJobView` —
+  unknown states surface as `ApiSchemaError`, not silent `any`).
+- **The dataset client speaks the real upload contract**: multipart
+  `POST /api/v1/datasets` with exactly the backend's Form fields
+  (file/target/task/mode) through the REST client's new `postForm`
+  lane (no preset content-type — the browser owns the boundary),
+  plus list/view/preview (§17.3's paginated 1..500 rows)/delete/
+  profile/split; the request bodies come from the GENERATED OpenAPI
+  types (`ProfileRequest`/`SplitRequest` from `api.d.ts` — §12.2's
+  one-DTO rule, never hand-duplicated).
+- **The artifact client rides the token-header download lane**
+  (§17.1's data plane): list/view/delete + `download()` through the
+  REST client's `raw` lane (the browser cannot put the session header
+  on a bare `<a href>`), consuming the route's `X-Artifact-SHA256` /
+  `ETag` verification headers; large payloads stay out of React
+  state by contract (the caller receives the Blob + metadata).
+- **The real E2E rode the live backend** (`scratch/e2e280/`, never
+  shipped): handshake → `configureBackend` → WS open with the hello
+  frame → multipart upload through the REAL reader (job mode) → the
+  JobTracker followed the job to COMPLETED on live `result.ready`
+  events → the authoritative REST result → registry/preview/profile/
+  split → artifact backup + token-header download with digest
+  verification → the job ledger → SIGTERM → the shutdown envelope
+  reached the Node client and the stream landed in `closed`.
+  `E2E-SERVICES-PASS`, exit 0.
+- **The E2E caught a REAL backend bug, fixed with a regression
+  test**: stock uvicorn closes live connections BEFORE the lifespan
+  shutdown handlers fire, so the app-level `shutdown` publish never
+  reached an open socket (the r278-era routes/events.py docstring
+  promised "pushes shutdown before the socket closes" — it did not
+  hold under a real SIGTERM). `StudioServer.shutdown()` (the server's
+  uvicorn subclass) now publishes the envelope the moment the exit
+  begins and gives the per-connection sender tasks one loop beat
+  (0.25 s) to flush before uvicorn's connection shutdown runs;
+  `TestGracefulShutdownPush` drives a REAL socket (websockets client
+  + the fd-handshake server) and fails if the ordering ever regresses.
+- **The canonical pins' lint debt swept to zero** (surfaced by this
+  round's canonical venv repair, which re-pins ruff 0.17.1 / mypy
+  2.4.0 — the newer defaults fire rules the r276+ custom release
+  flow stopped gating): `mypy src/` clean (the 13 pre-existing
+  errors fixed — Optional-ndarray guards in semi_supervised, the
+  decision score annotation, the features callables' rdkit guards,
+  the reports PipelineConfig import + asdict instance check, the
+  pipelines FingerprintKind Literal chain, the dead duplicated
+  `_cmd_ml_check`, comparison's verdict/table dataclass fields), and
+  `ruff check src tests tools ui studio.py` all-green (the 364-error
+  sweep: exec-bit restoration/removal per shebang, import sorts,
+  ISC004 parenthesization, 13 unused bindings removed with
+  side-effects kept, the deliberate best-effort GUI teardowns
+  narrowed to justified `noqa: BLE001,S110`, ClassVar annotations,
+  the FrozenInstanceError-narrowed B017, values() iteration, and the
+  NaN-guard `noqa: PLR0124`s). Every touched surface re-tested
+  green (91 + 36 + 43 + 75 + 7 targeted tests).
+- **14 new Python drift guards** (`tests/test_frontend_services.py`):
+  the WS path/token/since/ping contract, the hello frame's three
+  payload keys, the §13 client guarantees (dedup/backoff/liveness/
+  shutdown), the tracker's REST-authoritative rules, the job route
+  surface + JobView fields + state vocabulary, the dataset route
+  surface + multipart Form fields + generated-type-only requests, the
+  artifact surface + the token-header download lane, and the hooks'
+  `useSyncExternalStore` binding — each parsed from the REAL backend
+  sources, so a backend rename turns the suite red before the
+  frontend drifts. (The round-279 counter claimed the 20-event
+  vocabulary was "pytest-drift-checked" — that guard did not exist;
+  it ships here.)
+- **`tsc --noEmit` clean; production build green** (2,085 modules;
+  shell 290.9 kB / 91.5 kB gzip — the services tree-shake until the
+  workspace rows wire them, exactly the foundation's pattern).
+
+## [1.2.223] — 2026-11-18 — round 279 (part11 Phase Three: the frontend foundation row)
+
+- **The offline React + TypeScript SPA exists** (`frontend/`): the
+  part11 §3 mandated stack pinned — TypeScript (strict +
+  `noUncheckedIndexedAccess`), React 19, Vite 7, Tailwind CSS v4,
+  shadcn/ui primitives on the Radix heads (button / card / tabs in
+  the shadcn idiom with the class-merge pair), Motion for React,
+  Plotly.js + Three.js pinned for the visualization rows. The
+  Mineral Design System tokens carry over from the shipped console
+  (light/dark, chart palette, reduced-motion respect).
+- **The §10.1 shell is real**: exactly nine primary workspaces in the
+  exact left-to-right order (Introduction, Datasets, Machine
+  Learning, Deep Learning, Generative AI, Molecular Docking, PK/PD,
+  Molecular Dynamics Analysis, Visualization) with a visually clear
+  active state (the Motion underline), keyboard-operable buttons,
+  horizontal-overflow behavior for small windows, one page instance
+  per workspace, and **Introduction as the initial page** — the
+  §10.2 start page explains the studio, the scientific areas, the
+  workflow and the offline local-backend architecture, and is NOT a
+  nine-card dashboard. The eight queued workspaces render an honest
+  shell (route + identity + §11 workflow summary + the queued-row
+  badge) — no fake controls, no fabricated parity.
+- **§12.2 wired end-to-end**: `npm run generate:types` regenerates
+  `src/types/api.d.ts` (5,476 lines) from `contracts/openapi.json`;
+  the typed REST client (`services/api/client.ts`) takes its base
+  URL + session token ONLY from the startup handshake (memory-only,
+  `X-Session-Token` header, typed `ApiError`), and the WS envelope
+  (`services/websocket/events.ts`) mirrors the backend's 20-event
+  vocabulary field-for-field.
+- **Offline-only production** (§4.1): the CSP in `index.html` allows
+  no remote script/style sources and no external navigation; the
+  vite config builds to local `dist/` (excluded from the archive —
+  the Tauri host rebuilds it), with plotly/three/motion as separate
+  lazy chunks; the dev server is dev-only on :5174.
+- **The Python-side drift guards** (`tests/test_frontend_foundation.py`,
+  6 tests): the mandated stack pins, the Radix foundation, the exact
+  workspace order + Introduction-initial, the strict tsconfig, the
+  generated types covering EVERY contract schema (a backend schema
+  without re-export turns the suite red), and the offline-only CSP +
+  no-remote-URL config. Typecheck clean (`tsc --noEmit`), production
+  build green (2,085 modules; the shell bundle 290.9 kB / 91.5 kB
+  gzip).
+
+## [1.2.222] — 2026-11-18 — round 278 (part11 begins: the SQLite persistence + database surface row)
+
+- **The architecture campaign continues under part11** ("Complete
+  Migration to an Offline React + TypeScript Desktop Application
+  Using Tauri 2, Python + FastAPI + WebSocket, SQLite ..."): part11
+  §2 removes every C#/WinUI/XAML/MVVM/NSwag instruction and mandates
+  exactly the FastAPI + REST + WebSocket backend this repo already
+  ships. The part10 ledger's queued "C# solution specification" row
+  is cancelled; the successor ledger is `docs/MIGRATION_TAURI2.md`
+  (the feasible/blocked boundary moves WITH part11: a Vite/React/TS
+  frontend is Node-toolchain work, no Windows host needed — only the
+  Tauri/WebView2 packaging legs stay BLOCKED).
+- **part11 Phase Eleven — SQLite persistence (this round's code)**:
+  `src/pharmaml/api/persistence.py` — the `Persistence` backend owns
+  SQLite (the frontend never touches the file), the `FileVault`
+  keeps large payloads on disk with SQLite holding ids/relative
+  paths/sha256 only (§16.2), `default_data_dir()` resolves
+  `%LOCALAPPDATA%\PharmaML Studio` / XDG data home /
+  `PHARMAML_STUDIO_DATA` (§16.5), connections are per-operation with
+  `foreign_keys=ON`, `journal_mode=WAL`, `busy_timeout=5000` (§16.4),
+  and the `schema_migrations` ledger applies v1/v2 idempotently and
+  transactionally. `create_app()` stays ephemeral (the documented
+  library/test default); `create_app(data_dir=...)` /
+  `PHARMAML_STUDIO_DATA` turns durability on; the shipped host entry
+  (`server.serve()`) always passes the platform user-data directory.
+- **Stores write through, history persists, recovery reports**:
+  DatasetStore/ModelStore/PriorStore/ArtifactStore write through to
+  SQLite + vault when durable (eviction deletes the persisted row +
+  payload — the retention rule); every JobManager state transition
+  upserts its job-history row (failure-tolerant);
+  `recover_registry()` rebuilds the live stores on startup through
+  the REAL loader and drops corrupt rows with an honest
+  `startup_recovery.dropped` report — never silent.
+- **The `/api/v1/database` surface (§12.1)**: status (schema
+  version/WAL/integrity/per-table counts), persisted job history,
+  preference CRUD, and backup/restore — the backup bundle (SQLite
+  online-backup snapshot + every referenced vault payload, one zip)
+  registers as a standard `database` artifact and restores with
+  integrity + schema-version validation, atomic swap, WAL-sidecar
+  cleanup and the orphan sweep. All behind the session token +
+  loopback guard like every route.
+- **Tests**: `tests/api/test_persistence_database.py` (37) +
+  `tests/api/test_persistence.py` (30) + `tests/api/test_contracts.py`
+  (6) — migrations, vault traversal/atomicity, registry round-trips,
+  preferences, job history + retention, backup/restore incl. the
+  refuse-garbage and refuse-newer-schema paths, orphan sweep, the
+  activation contract, durability-across-restarts incl. the
+  corrupt-payload drop report, route-level auth/loopback, and the
+  contract drift gate. The api suite is **251 green** (178 + 37 +
+  30 + 6). The suite caught and fixed two honest bugs on arrival:
+  `FileVault.exists()` reported resolvable-but-absent paths as
+  present (which would have silently defeated the orphan sweep),
+  and garbage restore images raise `sqlite3.DatabaseError` at
+  execute time — now normalised to the documented `ValueError` →
+  422.
+- **part11 §12.2 contract tooling (the round's second half)**:
+  `contracts/openapi.json` — the exported machine-readable API
+  contract (81 paths, 54 schemas) the frontend TypeScript
+  client/types are generated or validated from — plus
+  `tools/export_openapi.py` (write + `--check` drift mode) and the
+  `tests/api/test_contracts.py` drift gate (a schema change without
+  a re-export turns the suite red). Exporting surfaced and fixed a
+  real cross-process nondeterminism: the four colliding request
+  model names across route modules (`AnalyzeRequest` in md +
+  applicability-domain, `TableRequest` in artifacts +
+  visualization) made FastAPI's collision fallback pick the
+  plain-name winner by hash-seed-dependent set order — the same
+  PYTHONHASHSEED flake class the r275 selfies fix addressed. All
+  four are renamed uniquely (`MDAnalyzeRequest`,
+  `ADAnalyzeRequest`, `ArtifactTableRequest`,
+  `VisualizationTableRequest`) — the export is now byte-stable
+  across nine different hash seeds.
+
+## [1.2.221] — 2026-11-17 — round 277 (part10 continuation: the docking / pkpd / md / visualization / applicability-domain row — the API surface completes)
+
+- **The third queued campaign row and the one that completes the
+  `/api/v1` surface: five new route groups, all over the REAL
+  backend, 59 new tests** (`tests/api/test_docking_pkpd_md_viz_ad.py`,
+  the api suite now 178 green — 42 + 47 + 29 + 59):
+- **`src/pharmaml/api/routes/docking.py`** — the engine catalog with
+  the HONEST host boundary (`locate_engine_binary` finds the bundled
+  Windows PE engines, `engine_argv` answers the no-Wine truth and
+  `/docking/dock` pre-checks to an honest 422 on non-Windows hosts);
+  the 58-target DOCKSTRING catalog + the three original objectives on
+  real math; receptor preparation (`prepare_protein`, the cleaned
+  receptor registers as a downloadable artifact); ligand
+  `smiles_to_pdbqt` (RDKit ETKDG + Meeko, seeded); the vina/DLG
+  parsers over pasted logs; consensus rescoring; ligand efficiency;
+  contacts + PLIF; symmetry-aware pose RMSD.
+- **`src/pharmaml/api/routes/pkpd.py`** — NCA (`nca_summary` +
+  linear/log trapezoids + the terminal-phase fit, inputs through
+  `validate_concentration_series`); steady-state metrics (zero
+  concentrations honest for troughs); iv-bolus / bateman /
+  superposition (causal unit response) / `MinimalPBPK` (iv + oral);
+  the sigmoid-Emax PD table; and `simulate_population` as a managed
+  job with REAL per-batch telemetry (50 seeded subjects per batch)
+  whose between-batch cancel lands CANCELLED, never FAILED.
+- **`src/pharmaml/api/routes/md.py`** — the synthetic trajectory
+  demo + the REAL metric bundle (RMSD/RMSF/Rg/native-contact
+  fraction/contact occupancy/PCA), inline-coordinate analysis, `.xvg`
+  parsing with stats + moving average, ANM fluctuations, standalone
+  PCA, and the full study as a managed job with two REAL figure
+  artifacts (RMSD + Rg via `plot_md_series`).
+- **`src/pharmaml/api/routes/visualization.py`** — the statplots
+  family (stats + rendered artifact), concentration-profile /
+  dose-accumulation figures through the §17 export stack, md-series
+  panels, `export_table` in six formats, and the self-contained
+  `HTMLReport` as a managed job with `file.progress` events per
+  section.
+- **`src/pharmaml/api/routes/applicability_domain.py`** — the kNN
+  distance half; `applicability_domain` over a session-trained model
+  with the REAL bootstrap progress callback driving per-member
+  `training.progress` events; `figure=true` renders the twin AD plot
+  as an artifact; the persisted `DomainBox` check.
+- **The honest fixes riding the same round:** the matplotlib
+  3.10.9 empty-fliers `plot_box` crash (clean data now renders —
+  `showfliers` gated on outlier presence, the round-206 EGL
+  precedent); the in-flight playground scaffold test rewritten on a
+  genuinely single-scaffold benzene table (its draft pointed at
+  `qsar_classification.csv`, whose three unique SMILES span TWO
+  scaffold groups, so the split legitimately succeeds there); the
+  phase5 preset test forces the balanced baseline first (the
+  construction-time index follows the LIVE memory recommendation, so
+  a loaded gate process can start the combo at 1); the
+  `store` for steady-state inputs accepts zero concentrations.
+- **Boundary ledger unchanged:** the WinUI/NSwag/installer/PySide6
+  retirement phases stay BLOCKED (no Windows host); the campaign row
+  queue is empty — the API surface is complete and the next queue
+  moves to the C# solution specification.
+
+## [1.2.220] — 2026-11-17 — round 276 (part10 continuation: the dl / semi-supervised / generative row; the r275-cont datasets/ml/artifacts row rides the same close)
+
+- **The second queued campaign row after the v1.2.219 close, and the
+  one that puts the §9.3 training-progress vocabulary on REAL
+  telemetry.** Three new route groups + the generative prior store,
+  all over the REAL backend, 29 new tests
+  (`tests/api/test_dl_semi_generative.py`, the api suite now 118
+  green — 42 + 47 + 29):
+- **`src/pharmaml/api/routes/dl.py`** — `GET /api/v1/dl/networks`
+  (the four tabular torch families of `ml/neural.py`, defaults read
+  live off the class signatures — one source of truth, never
+  re-declared) and `POST /api/v1/dl/train` (sync + job): the
+  estimator's OWN `fit(X, y, on_epoch=...)` hook drives per-epoch
+  `training.progress` (progress %, `epoch k/N` stage, the job
+  record's own counter) and `training.metrics` (train/val losses,
+  best val, staleness) onto the session bus — replay-verified with
+  real epoch counters AND streamed live over the WebSocket in the
+  suite. A DL-trained model registers in the shared session model
+  store and predicts through the single `/api/v1/ml/predict` path
+  (one prediction path, never two); unknown hyperparameters,
+  task mismatches and unknown datasets answer 422/404 honestly.
+- **`src/pharmaml/api/routes/semi_supervised.py`** —
+  `POST /api/v1/semi-supervised/train` (the REAL
+  `train_semi_supervised` over a registered dataset: the unlabeled
+  pool arrives marker-native from the target column or as a seeded
+  `mask_fraction` carve-out; `base_estimator` resolves through the
+  registry factory and the backend itself demands `predict_proba`;
+  the fitted model registers for the single prediction path) and
+  `POST /api/v1/semi-supervised/evaluate` (the held-out
+  `evaluate_semi_supervised` comparison vs the fully-labeled
+  baseline with the honest `delta_vs_baseline`). The backend's own
+  method Literal is reused, never re-declared.
+- **`src/pharmaml/api/routes/generative.py`** — `GET
+  /api/v1/generative/objectives` (the nine scoring-oracle kinds of
+  `generative/scoring.py`), `POST /api/v1/generative/rnn/train`
+  (the REAL `SmilesRnn.train_prior` over inline SMILES or a
+  dataset's column — the prior registers in the new bounded
+  `PriorStore` with its REAL per-epoch loss curve, and the curve is
+  published as a `training.metrics` event on completion),
+  `POST /api/v1/generative/rnn/sample` (temperature / top_k / seed
+  / max_length passthrough; seeded sampling is deterministic —
+  verified byte-identical across calls), and `POST
+  /api/v1/generative/optimize` (the REAL `GeneticOptimizer` over a
+  validated objective spec — the nine kinds plus the weighted
+  `multi` nest with aligned-weights validation; per-generation
+  `iteration.update` events flow through the backend's OWN progress
+  callback, and when that callback answers `False` on a job cancel
+  the evolution stops at its own checkpoint and raises the
+  backend's native `JobCancelled` — translated into the JobManager's
+  state machine so the job lands CANCELLED, never FAILED; the
+  round's cancellation test pins exactly that path).
+- **`src/pharmaml/api/stores.py`** gains `PriorRecord` / `PriorStore`
+  (bounded at 16, in-memory, oldest-first eviction — session-scoped
+  exactly like the token), wired into `create_app()` as
+  `app.state.prior_store`.
+- The three routers register under `/api/v1` with the same
+  loopback+token guard as every other route; the OpenAPI schema (the
+  single NSwag source) grows with them automatically.
+- **Riding the same close: the r275-cont datasets/ml/artifacts row** —
+  delivered and pushed right after the v1.2.219 close in the same 71st
+  session; it ships in this archive. Three new route groups + the
+  session stores, all
+  over the REAL backend, 47 new tests (`tests/api/test_datasets_ml_artifacts.py`,
+  the api suite now 89 green): `src/pharmaml/api/stores.py` (session-scoped
+  Dataset/Model/Artifact stores — in-memory like the token, bounded,
+  oldest-first eviction, per-artifact sha256); `routes/datasets.py`
+  (the multipart upload contract: extension + 64-MiB size guards,
+  sync and job parse modes over `load_dataset`, registered views with
+  NaN-as-null previews, `profile_frame` profiling, `split_table`
+  stratified splits); `routes/ml.py` (the `list_models` catalog
+  projection, `train_model` training in sync and job modes with the
+  registry key pre-validated so an unknown model is an honest 422 —
+  not an asynchronous job failure — and `n_jobs` passed through
+  verbatim including `-1`, the Phase-Eight clause previewed; prediction
+  with optional probabilities and pipeline-aware class order);
+  `routes/artifacts.py` (the download contract: §17 four-format
+  figure export PNG/SVG/TIFF/JPEG with magic bytes verified per
+  format, CSV/TSV/XLSX table export, `save_model` joblib bundles —
+  each download byte-exact with Content-Length, Content-Type,
+  Content-Disposition, strong ETag = sha256, X-Artifact-SHA256, and
+  HEAD support; the model bundle round-trips through `load_model`
+  with identical predictions, the save/reload parity clause).
+  `create_app` gained the three stores and maps the backend's typed
+  client-input errors (`DataValidationError`/`ModelError`) to 422s.
+  The boundary ledger `docs/MIGRATION_WINUI3.md` carries the trued
+  campaign table; web census pins re-trued (1473 files / 481,574
+  lines / 7,463 collected tests). Windows-side work stays BLOCKED —
+  unchanged boundary, no Windows host.
+
+## [1.2.219] — 2026-11-17 — round 275 (part10: the FastAPI local backend service)
+
+- **The part10 campaign opens — the master prompt pivots the frontend to
+  C# WinUI 3 + XAML + MVVM over a FastAPI/WebSocket Python backend with
+  nine-workspace reconstruction, PySide6 retirement, and a fully
+  self-contained offline Windows installer; this release ships the part
+  the boundary permits: the complete local backend service layer the
+  WinUI host will drive, plus the honest Phase-One audit.** The boundary
+  ledger lives at `docs/MIGRATION_WINUI3.md`: every Windows-host
+  deliverable (the WinUI build itself, the NSwag client, the installer,
+  the §31 clean-machine sheet, and the PySide6 retirement — rule #9
+  forbids retiring it before parity) is marked BLOCKED, nothing
+  scaffolded-as-done; the Linux-real deliverables are implemented and
+  tested. The audit: 25 `src/pharmaml` packages, the 62-row
+  `capability_registry`, the 9-card PySide6 Studio, and the part9
+  packaging stack, all inspected live. The deliverable: `src/pharmaml/api/`
+  — `security.py` (per-startup `secrets.token_urlsafe(32)` session
+  credential, memory-only, constant-time verify, never logged; loopback
+  Host/Origin guard on every route; Bearer + X-Session-Token);
+  `events.py` (the pydantic `EventEnvelope` — ONE wire DTO, a 20-event
+  vocabulary, per-bus monotonic sequencing, replay-since duplicate
+  protection, bounded-queue backpressure with `bus.overflow` notices,
+  thread-to-loop-safe publication); `jobs.py` (the backend-side
+  JobManager: the full QUEUED→RUNNING→COMPLETED/FAILED +
+  CANCELLATION_REQUESTED→CANCELLED machine with REAL cooperative
+  cancellation — the RUNNING-path flag-set bug was caught by the suite
+  and fixed — the expensive-slot semaphore, and the graceful shutdown
+  drain); the REST routes (`/api/v1/health` with the scientific-core
+  probe, `/api/v1/capabilities` as the 62-row registry projection — one
+  source of truth, zero re-declaration — `/api/v1/jobs`
+  submit/poll/result/cancel with REST as the authoritative recovery
+  path, and `/api/v1/chemistry/descriptors` + `fingerprints` over the
+  REAL backend functions in sync AND job modes with strict-int
+  validation, bools 422); the `/api/v1/events` WebSocket (typed
+  envelopes, token handshake — the header for the native client, the
+  documented loopback-only `?token=` fallback — hello + replay, 15 s
+  heartbeats, ping/pong); and `server.py` (the controlled port-0
+  loopback bind: the socket is owned by us and handed to uvicorn BY
+  FILE DESCRIPTOR — no check-then-bind race — the single
+  `PHARMAML-READY {port,token,pid,version}` stdout line emitted the
+  moment `listen()` returns, diagnostics on stderr only, SIGTERM
+  graceful shutdown; OpenAPI at `/api/openapi.json`, docs/redoc
+  disabled per §9.4). `tests/api/test_backend_service.py` — 42 tests
+  across 10 classes, all green, including a REAL port-0 serve with a
+  live HTTP probe.
+
+- Tooling: the venv repair script learned §6c/§6d (fastapi==0.128.0,
+  uvicorn==0.44.0, pydantic==2.12.5, httpx==0.28.1 — the TestClient dep —
+  and pyinstaller==6.22.3, which the round-open rebuild had dropped;
+  the gate caught the gap and the pin keeps it across future
+  rebuilds).
+
+- The round's gate: the ten-block suite plus the new leg 11 (the api
+  suite) — chunks 1, 2, 3, 5, 6, 8, the nine-card leg 9, the doctest
+  leg 10, and leg 11 green; chunk 4 red on the sandbox's third
+  node_modules eviction of the day (the web-parity probes' bun
+  imports — restored mid-round, the three affected probes re-ran green
+  as the makeup leg A) and chunk 7 split by the OOM discipline into
+  sub-batches (sub-batch 2's freeze-equivalent casualty cured by the
+  PyInstaller restore — makeup leg B; sub-batch 4's post-OOM single
+  re-ran in two halves — makeup leg C). All makeup legs green;
+  environmental, recorded, none silently forgiven.
+
+## [1.2.218] — 2026-11-17 — round 274 (packaging phase 3: the frozen-equivalent's deep-feature tier)
+
+- **The part9 campaign, phase 3 — extend the frozen smoke from 13 to
+  22 flows and re-freeze/re-run the whole tier INSIDE the bundle.**
+  part9 §14.2 asks for more than phase 2 shipped: a DL example
+  ("if practical"), Semi-supervised Learning ("if implemented"), a
+  representative optional scientific workflow "such as docking or MD
+  analysis, if its required executable is included", plus §9's
+  explainability, prediction uncertainty, and SMILES metadata
+  inspection. All of it now runs FROZEN through the application's own
+  APIs (same captured Windows-spec policy verbatim — 432
+  hiddenimports / 586 datas / 12 excludes; PyInstaller 6.22.3,
+  167 s, rc=0): `deep_learning` (the app's torch DeepMLPClassifier,
+  314 parameters, held-out accuracy 0.95 with full softmax
+  predict_proba), `semi_supervised` (train_semi_supervised with 53
+  of 76 labels withheld: held-out 0.95, recovered pseudo-label
+  accuracy 0.868), `explainability` (shap_summary on the trained
+  RandomForest — top feature f1, mean |SHAP| 0.140), `uncertainty`
+  (regression_uncertainty_report over disjoint key partitions:
+  coverage 0.972 at alpha 0.1, mean width 0.369), `generative`
+  (run_genetic_optimization with QedObjective: 186 molecules, best
+  QED 0.908), `docking_ligand_prep` (the campaign's own SMILES ->
+  ETKDG 3D -> Meeko PDBQT preparation, deterministic tree under the
+  USER dir: 3/3 folders, torsion degrees 4/5/2; the engines stay
+  Windows PEs — sha+PE-validated, honestly not EXECUTED on Linux),
+  `pkpd_ode` (solve_ode with DosingEvent bolus + infusion: peak
+  15.29 at t=0.5 h, 192 accepted steps), `md_analysis`
+  (synthetic_trajectory + RMSD/RMSF/Rg: loop RMSF 0.420 vs
+  rigid-helix 0.111), and `plot_metadata` (the interactive Figure's
+  per-point hovertext carrying one SMILES per marker, 12/12
+  round-trip through to_json). Verdict: 22/22 PASS, zero failures,
+  net_attempts [] (the armed offline proof), install_dir_unchanged
+  true (§7). Evidence: packaging/windows/evidence/
+  freeze-equivalent-r274.json (committed, machine-path-sanitized);
+  BUILD_REPORT.md gains the Phase 3 section.
+- **The unfrozen mirror is pinned at gate time.**
+  tests/test_freeze_equivalent.py now asserts the nine phase-3 flow
+  names in the registry, the 22-flow verdict, the docking campaign
+  tree under the user dir, and the deep-feature numbers — API drift
+  fails the gate, not the freeze.
+- **Tooling fix landed en route:** freeze_equivalent.py's persist()
+  referenced the _sanitize() local (home) out of scope — a
+  NameError that would have killed any post-r273 re-run; the
+  assembled prefix now lives at module level (_HOME_PREFIX, the 137
+  discipline intact).
+- The 8 notebooks re-executed at 1.2.218 (182 s, zero error outputs,
+  zero home-path survivors) + the 7 twins re-stripped; static
+  validation 26/26 at the new quadruple; v1.2.218 shipped to all
+  six homes (homes 5+6 backfilled again after the sandbox rollback
+  wiped the untracked pair).
+
+## [1.2.217] — 2026-11-17 — round 273 (packaging phase 2: the Windows EXE campaign's frozen-equivalent verification)
+
+- **The part9 campaign, phase 2 — freeze the actual application on
+  the Linux host and run part9's flows INSIDE the frozen bundle.** The
+  Windows EXE artifact stays honestly BLOCKED (no Windows host, no
+  Wine, no cross-compile from Linux — unchanged since the phase-1
+  report), but every claim that phase 1 could only make as "design"
+  now carries a recorded PASS tier between static validation and the
+  Windows clean-machine run:
+  `tools/freeze_equivalent.py` captures `pharmaml.spec`'s policy
+  VERBATIM (exec'd with recorder stubs — 432 hiddenimports / 586 datas
+  / 1 binaries / 12 excludes recorded in the evidence JSON), writes
+  the derived Linux-equivalent spec with four documented deltas
+  (icon/version dropped; console=True for evidence stdout; studio.py
+  + the new §14 driver as TWO entries in ONE Analysis/COLLECT so the
+  driver rides the identical dependency collection; `ui/native` datas
+  — the EGL no-op stub `ui.headless` preloads on libEGL-less hosts),
+  and freezes with PyInstaller 6.22.3 in 204 s (dist 2.2 GB). The
+  frozen layout honors the spec's own datas contract: engines at
+  `_internal/pharmaml/engines` found and SHA-256 + PE-machine
+  validated by the app's OWN `pharmaml.docking.workflow` discovery,
+  fonts at `_internal/fonts` registered by `ui.font_loader`'s
+  `__file__` math, all Qt platform plugins collected.
+- **`tools/freeze_smoke_driver.py` — the §14 evidence driver** (frozen
+  alongside studio.py, ALSO runnable unfrozen and pinned at gate
+  time): `PharmaMLStudio --doctor` FROZEN at cwd=/ → **18 OK / 0 warn
+  / 0 failed, exit 0**; the 13-flow smoke at cwd=/tmp → **13/13
+  PASS** — CSV + Excel import through `load_dataset`, RDKit
+  descriptors (133 columns × 12 real-drug molecules), Morgan
+  fingerprints, ML classification (accuracy 0.90) + regression
+  (r² 0.9923), prediction, plots + PNG/SVG/PDF/TIFF export, CSV +
+  Excel table export, model save/reload with byte-parity predictions,
+  kNN applicability domain, the bundled AutoDock trio's validation,
+  and the offscreen Qt stack (qdarkstyle's 54,234-char stylesheet +
+  qt-material applied). §7's data architecture is RECORDED
+  (`install_dir_unchanged: true` — the frozen tree byte-identical,
+  every output byte in the user dir, MPLCONFIGDIR/NUMBA_CACHE_DIR
+  redirected there) and §14.3's offline proof is ARMED
+  (`socket.connect` patched to raise on ANY outbound attempt before
+  the science imports — the green run records zero attempts, it does
+  not assume zero). Evidence: the committed, machine-readable
+  `packaging/windows/evidence/freeze-equivalent-r273.json`.
+- **`tests/test_freeze_equivalent.py` (7 focused tests)** — the gate
+  pins: the full unfrozen flow run (13/13 verdict JSON), the offline
+  guard's blocking semantics, the §7 user-dir isolation contract, the
+  captured Windows-spec policy (the freeze traps + the §12 excludes +
+  the studio.py-only entry contract), and the generated spec's
+  two-entries-one-COLLECT shape with the `ui/native` delta.
+- **BUILD_REPORT.md phase-2 section** (§19 vocabulary): what upgraded
+  (§13 startup reliability, §4 resource paths, §3.3 scientific
+  compute inside the freeze, §14.2/§14.3 Linux-frozen-equivalent PASS
+  tier), what did not (the EXE, the Inno sequence, the §14
+  clean-machine sheet — still BLOCKED, honestly). The
+  sandbox-eviction note is recorded there too: the build tree lives
+  under `/tmp` (`FREEZE_BUILD_DIR` override) because this container
+  evicts large gitignored trees under disk pressure — the in-repo
+  dist and spec both vanished within a minute of creation, twice,
+  before the reroute.
+- **Round housekeeping**: sandbox rollback recovery per the r221
+  recipe (PAT re-spliced from MASTER_PROMPT.pdf via pdftotext into
+  the 600-mode credential file; remote re-registered via the
+  700-mode credential helper; 40 blob-identical untracked files
+  reconciled against origin/main, ff-only sync to a011dae; venv
+  repaired at the pins — numpy 1.26.4, torch 2.14.1+cpu, rdkit
+  2026.9.1, pharmaml 1.2.216→1.2.217 editable), the 8 notebooks
+  re-executed at 1.2.217 (211 s, zero error outputs, 7 twins
+  re-stripped), the static validation 26/26 at the new quadruple,
+  version_info.txt quadruple bumped in lockstep, FEATURES.md freeze
+  stamp trued, web pins re-trued to the live census, v1.2.217 zip
+  shipped to all six homes (the root dist-archive and offsite homes
+  rebuilt from tracked bytes after the rollback wiped them), the
+  ten-chunk gate, and the E2E verification.
+
+## [1.2.216] — 2026-11-17 — round 272 (packaging phase 1: the Windows EXE installer campaign per MASTER_PROMPT part9 — infrastructure, audit, validation)
+
+- **The part9 packaging campaign, phase 1 — everything a Linux build
+  host can honestly produce**: `packaging/windows/` now carries the
+  complete, maintainable build pipeline: `pharmaml.spec` (PyInstaller 6
+  **onedir**; onefile explicitly rejected per §2's startup-time and
+  reliability evaluation; UPX/strip disabled for Qt and scientific
+  DLLs per §12), `installer.iss` (Inno Setup 6: license display,
+  directory selection with space/non-ASCII-safe paths, Start Menu +
+  optional desktop shortcuts, uninstaller registration, upgrade-safe
+  user-data handling per §7/§11), `build_windows.bat` /
+  `build_windows.ps1` (the §16 one-command pipeline: version check,
+  pre-build tests, clean artifacts, freeze, assemble, validate,
+  checksums, manifest — every failed step returns nonzero),
+  `packaging_validation.py` (``--static`` runs on ANY OS: spec
+  references exist in the tree, bundled engines match their pinned
+  SHA-256/PE-machine contract, the version quadruple in
+  `version_info.txt` agrees with VERSION, load-bearing config
+  structure, pinned-stack importability; ``--dist``/``--frozen-smoke``
+  for the Windows build machine; its own ``--static`` quadruple check
+  carried a tuple-repr spacing bug that made the needle unmatchable —
+  a real unconditional FAIL — fixed in r272, 26/26 green on this
+  release), `version_info.txt` (honest
+  publisher "PharmaML contributors", no fabricated signatures per
+  §11), `assets/pharmaml.ico`, `installer-requirements.txt`,
+  `README.md`, `DEPENDENCY_INVENTORY.md` and `BUILD_REPORT.md` (the
+  §19 report in PASS/PARTIAL/FAIL/BLOCKED vocabulary — the actual
+  installer EXE artifacts are **BLOCKED** on this Linux sandbox:
+  PyInstaller cannot cross-compile Windows binaries, no Windows host
+  or Wine exists here, and the full Windows scientific stack exceeds
+  the sandbox's free disk; nothing claims standalone operation before
+  a clean-machine §14 run, and the recording sheet ships unfilled).
+- **`tools/packaging_audit.py` (§1 dependency inventory)**: an AST
+  scan of the ACTUAL imports (studio.py + ui/ + src/ + scripts/)
+  cross-referenced with the live venv's dist-info — 30 runtime rows
+  with purpose/required-or-optional/verification per row;
+  TensorFlow/OpenCV/Polars/LIME confirmed NOT used (the §1
+  anti-padding rule — no packages added for size), while statsmodels
+  and shiboken6 were DISCOVERED by the scan and added.
+- **studio.py: `freeze_support()` on Windows (§13)**: after the
+  architecture inspection — the app's only spawn-context pool lives
+  in `pharmaml/docking/ligands.py` (3D structure generation, launched
+  from worker threads) and the GUI itself is guarded by the
+  `__main__` guard — the frozen bootstrap call is added BEFORE any
+  other work; it is a no-op in every unfrozen session (source
+  checkouts, wheels, the test suites) and makes PyInstaller spawn
+  children bootstrap correctly on Windows.
+- **Round housekeeping**: sandbox rollback recovery — the PAT
+  re-spliced from MASTER_PROMPT.pdf into the 600-mode credential
+  file, remote re-registered via the 700-mode credential helper
+  (no token ever in URLs/logs), ff-only sync to r270, venv repaired
+  to pins; the r263 gate's two failing chunks re-run honestly
+  (chunk-1 green after the remote restore; chunk-7's OOM narrowed
+  sub-batch by sub-batch and then file-by-file — the 28-file single
+  batch SIGKILLs at the container's 4 GiB limit, the four 7-file
+  sub-batches each pass green EXCEPT the last, which OOMs again;
+  narrowed to `tests/ui/test_nine_card_first.py`, which OOMs ALONE:
+  23 tests × the full MainWindow, and the `main_window` fixture's
+  teardown only `close()`d the window — close HIDES, the C++ widget
+  tree stays alive — so each instantiation retained ~150 MiB until
+  SIGKILL at ~3.4 GiB.  **Fixed at the source** in `tests/ui/
+  conftest.py`: teardown now `close()` + `deleteLater()` + a
+  `processEvents()` pump + `gc.collect()` — correct Qt hygiene that
+  bounds every UI suite's teardown.  The deeper find: the suite STILL
+  retains ~150 MiB per instantiation after the fixture fix (a global-
+  side accumulation the pyqtgraph ViewBox destroyed-disconnect
+  warnings point at; backlog, not fixed this round), so the r272
+  gate runs it as THREE class-scoped legs (9+8+6=23 tests,
+  142s/64s/42s, all real pytest rc=0 with summary lines — the shell
+  pipeline masking that produced a false "258s green" earlier was
+  itself caught and corrected); spot-checked against
+  ml_statistics_batch2/biology_page/ad_views); the
+  Response AI web twin round (v1.2.215) shipped from the same
+  session; `~/pharma-ml-toolkit-zips/` offsite home re-mirrored.
+- **Web pin carriers**: `SHIPPED_TOOLKIT_VERSION` 1.2.216; the census
+  re-measured at ship (see RELEASE_READINESS).
+
+## [1.2.215] — 2026-11-17 — round 271 (wire the backend-only features to the GUI: the Response AI web twin)
+
+- **The last documented Studio-only feature row is wired**: the
+  Response AI page — `pharmaml.ml.drugresponse` (drug-response
+  learning absorbed from CaDRReS / Precily / DeepResponse) — was the
+  one FEATURES.md row still flagged "Studio-only (no web twin)" after
+  the r270 MCTS twin. The **Response AI — drug-response learning** card
+  closes it on the web console's Machine Learning sub-tab (after the
+  Probability Calibration widget — the Studio's own nine-card mapping
+  puts the page under the machine-learning workspace).
+- **Bridge**: `scripts/drugresponse_bridge.py` (repo-root
+  stdin→stdout JSON, the surgery/MCTS route pattern) runs the REAL
+  module: four analyses mapping the page's headline tabs —
+  **hill** (`fit_hill_curve` + `dose_response_curve` + `auc_log_dose`,
+  the page's exact seeded 21-point 4PL demo with truth comparison, or a
+  pasted series with the honest fitted-vs-measured AUC pair),
+  **metrics** (`response_metrics` + `rank_correlations` — the
+  evaluation layer and the rank trio in one run, NaN pairs dropped
+  with the drop count reported; the rank trio rides the finite pairs
+  because `rank_correlations` refuses NaN by its own contract),
+  **model** (`DrugResponseModel`, the page's `_seeded_screen` verbatim
+  — the 12×4 screen with its 15% NaN mask, full-batch gradient descent
+  over the observed pairs only, the honest in-sample pearson, the
+  loss history, the CELL_00/CELL_07 predicted head, the
+  observed-vs-predicted pairs), and **cv**
+  (`cross_validate_response`, folds split CELL LINES, the page's exact
+  factory, the honest across-fold mean). The page's three deeper
+  diagnostics (informative regression, the response VAE, multi-omics
+  fusion) stay desktop-side — the card says so.
+- **Route + card + types**: `/api/ml/drugresponse` (zod-validated,
+  60 s bridge timeout) + `src/components/explorer/playground/responseai-card.tsx`
+  (analysis picker, pasted-series textareas with seeded-demo
+  fallbacks, the Hill chart on the log-dose axis, the
+  observed-vs-predicted scatter with identity reference, the loss
+  curve, the per-fold bars with the dashed mean, copyable result
+  tables) + the `DrugResponseResult` discriminated union in
+  `toolkit-types.ts`. Card census 34 → **35** (`ml-drugresponse`);
+  routes 28 → **29**.
+- **The B note closed twice over**: FEATURES.md's Response AI row
+  carried a second honest debt — "no focused backend suite beyond the
+  page tests". New `tests/test_drugresponse.py` (**25 headless
+  tests**: hill 6 + metrics 5 + model 6 + cv 3 + deeper 5) pins the
+  module's public API directly — the 4PL recovery and input contract,
+  the NaN semantics of both evaluation layers, the seeded screen's
+  shape and the 15% mask, per-seed training determinism, the
+  cell-line-grouped folds with every observed pair seen exactly once,
+  the informative-weight shrinkage direction, the VAE's improving ELBO
+  bound, and the fusion's equalised per-block column-variance sums.
+- **Tests**: `TestDrugResponseBridge` (7 — hill round-trips, the
+  pasted path, the NaN drop with the honest note, model determinism,
+  grouped folds, 12 client-error exits) + `TestDrugResponseWebWiring`
+  (5 — mount-after-calibration, route posting, bridge validation,
+  the type contract, the catalog entry). `TestCardFinderParity` census
+  trued 34 → 35; `test_feature_inventory` pins trued 35 cards / 29
+  routes; the TS drift probe gained the `ml-drugresponse` source
+  mapping. **32 round tests + the trued neighbours green.** mypy and
+  ruff clean on the round files (the repo-root bridges stay outside
+  the toolkit ruff gate, the mcts_bridge convention).
+- **Round housekeeping**: sandbox rollback recovery — the PAT
+  re-spliced from MASTER_PROMPT.pdf into the 600-mode credential file;
+  a root-owned `screenshots.rootlock-r271/` leftover (empty, from the
+  interleaved webDevReview cron) was breaking Turbopack's watcher and
+  was removed with `rmdir` (plain overlayfs — rename was refused,
+  rmdir only needed the parent's write bit); an automated
+  `f63a4be2-…-cron` snapshot commit had committed `.credentials/`
+  wholesale — it was discarded locally and its objects purged
+  (reflog expire + gc --prune) BEFORE any push; `.gitignore` gained
+  `.credentials/` so no future automated snapshot can leak the token;
+  dist-archive/ and the offsite `~/pharma-ml-toolkit-zips/` homes were
+  rebuilt after the rollback wiped them (the v1.2.214 zip's sha
+  verified on all four homes first).
+- **Web pin carriers**: `SHIPPED_TOOLKIT_VERSION` 1.2.215; the census
+  re-measured at ship (see RELEASE_READINESS).
+
+## [1.2.214] — 2026-11-17 — round 270 (wire the backend-only features to the GUI: the MCTS web twin)
+
+- **The last documented Studio-only gap is wired**: the Generative
+  page's third optimisation method — "monte carlo tree search (MCTS)",
+  the ChemTSv2-style `MctsOptimizer` over an on-the-fly SMILES RNN
+  prior — had no web twin (FEATURES.md called it out by name). The
+  **MCTS molecule search** card closes it on the web console's
+  Generative sub-tab.
+- **Bridge**: `scripts/mcts_bridge.py` (repo-root stdin→stdout JSON,
+  the surgery-route pattern) runs the REAL optimizer with real RDKit
+  + torch: the objective registry rides the Studio's
+  `_build_objective` verbatim (QED, LogP/MW/TPSA windows, the QED+LogP
+  blend, the druglike triple, similarity to a reference, the SA
+  easy/hard anchors), the corpus semantics mirror the desktop's
+  (built-in / seeded / custom), the tree policy knob (UCT / PUCT) is
+  the web card's honest extra, iterations bounded 4–24 for the web
+  latency budget. Response: the ranked leaderboard (rank-aligned,
+  best first, per-objective breakdown columns on multi-objective
+  runs), the per-cycle history, the tree accounting surfaced verbatim
+  from the optimizer's metadata, and the top-9 structure grid as a
+  base64 PNG.
+- **Route + card**: `/api/gen/mcts` (zod-validated, 90 s bridge
+  timeout) + `src/components/explorer/playground/mcts-card.tsx` —
+  objective picker with window/reference rows, cycles/seed/tree-policy
+  inputs, optional prior-corpus textarea with the seeded-mode switch,
+  the best-vs-mean progress chart on the one shared [0, 1] scale,
+  copyable leaderboard, downloadable grid PNG. Card census 33 → **34**
+  (`gen-mcts`); routes 27 → **28**.
+- **Tests**: `TestMctsBridge` (6 — round-trip ranked+honest, the
+  multi-objective breakdown columns, per-seed determinism, the three
+  corpus modes with the dedupe-aware expectation, the nine
+  client-error exits) + `TestMctsWebWiring` (5 — mount, card pins,
+  route validation, the type contract, the catalog entry).
+  `TestCardFinderParity` census trued 33 → 34 (probe mapping gained
+  the gen-mcts row); `test_feature_inventory` pins trued 34 cards /
+  28 routes. Neighbours re-verified: surgery bridge + wiring, session
+  report, the full `test_web_parity` battery. **11 round tests + the
+  trued neighbours green.**
+- **Docs**: FEATURES.md — the Generative web row carries `gen-mcts`,
+  the Studio row's "no web twin" note retired, the freeze-stamp note
+  updated; ruff clean on the round files, mypy on the round files
+  clean (the pre-existing tests/ debt unchanged at its baseline 19).
+- Web pin carriers: `SHIPPED_TOOLKIT_VERSION` 1.2.214; hero pins
+  re-measured at ship (see RELEASE_READINESS).
+- **Gate find, fixed at the source** (the r270 chunk-4d re-run): the
+  v1.2.213 Table Tools page shipped its result splitter with the bare
+  `QSplitter` defaults — collapsible children, no minimum extents —
+  violating the §23.2 splitter policy every other page carries
+  (`ui/pages/table_tools.py` now routes through `configure_splitter`,
+  min extents 320/320, stretch 3/4 to the result side). The r269 ship
+  never recorded its chunk-4d evidence (RELEASE_READINESS §3 said
+  "not gathered"); both `test_responsive_policy` pins went red at
+  pristine HEAD and are green again (37 tests with the Table Tools
+  suite).
+
+
+## [1.2.213] — 2026-11-16 — part8 round 9 (wire the remaining features: the STRETCH-card reshaping family)
+
+- **The documented stretch cards are wired** (data-handbook audit rows
+  26-33, `docs/COVERAGE.md`): the seven pandas-reshaping surfaces the
+  audit had marked STRETCH — combine replicate tables, merge on a key,
+  groupby summary, pivot, string cleaning, resample/rolling, and
+  filter expressions — now ship as one **Table Tools** tab (second
+  tab of the Datasets workspace, after Data Explorer).
+- **Backend**: new `pharmaml.utils.reshape` (eight operations, typed,
+  validated, each returning `(frame, ReshapeReport)` — the report
+  carries counts and decisions so the GUI never re-derives them).
+  Honest behaviour throughout: side-by-side combine requires equal
+  row counts; merges report shared-key counts and many-to-many
+  fan-out warnings; pivots leave missing combinations NaN (never
+  zero-filled); resample validates the rule through pandas' offset
+  machinery and names non-datetime rows; rolling time-sorts first and
+  drops no rows; filter runs pandas' `query` grammar (python engine,
+  never arbitrary eval) with automatic backtick-escaping of
+  keyword-named columns (`yield > 100` works — only tokens that are
+  BOTH keywords and actual columns are escaped, so `in`/`and` stay
+  grammar).
+- **GUI**: `ui/pages/table_tools.py` — consumes the Explorer's shared
+  frame (`frameLoaded`), loads a second table through the JobRunner
+  for combine/merge, runs every operation off-thread, previews the
+  result in the workspace's preview-windowed table, and binds it back
+  as the active dataset (announced via `frameLoaded` + a registry
+  note with content version).  Backend errors surface verbatim.
+- **§13 workflow guide**: the Datasets chain gained the Reshape step
+  (Import → Inspect → Validate → **Reshape** → Clean/Standardize → …);
+  the directive pin trued to 11 stages.
+- **Tests**: `tests/test_reshape.py` (50 — contracts, numerics, edge
+  cases, keyword-escape) + `tests/ui/test_table_tools.py` (21 —
+  wiring, worker, preview, bind, error surfacing, workspace
+  integration).  Neighbor suites re-verified: nine_card_first (23,
+  tab-count pin trued to 4), workflow guides (40), pages smoke +
+  nine cards (46).  **111 round-9 tests green, 0 failures.**
+- Web mirror pins re-measured with the census's exact walk rules:
+  6,934 collected / 1,377 files / 471,341 source lines.
+
+## [1.2.212] — 2026-11-16 — part8 round 8 (§18 Phase G: final verification + §20 final report)
+
+- **Phase G executed in full**: backend sweep (151 suites, 5,370
+  tests, all batches at 100%), src doctest contracts (912 items),
+  UI tree (69 suites, 937 tests — the count reconciled exactly
+  against the collection), carriers, phase6, feature inventory,
+  notebook variants, stress — **7,219+ green, 0 failures**.
+- **One real defect found and fixed**: the `ml/persistence.py`
+  module docstring example still asserted `bundle_metadata`'s old
+  first-four sorted keys; the dict grew `feature_distributions` and
+  `feature_ranges` (r5's applicability work) without the doctest
+  being trued.  Example corrected to the actual contract — doctests
+  912/912 green (with `selfies` installed for its 17 optional-extra
+  contracts).
+- **`docs/FINAL_REPORT.md`** — the §20 required final report: all 20
+  numbered sections plus the §19 acceptance matrix with PASS/PARTIAL/
+  FAIL/BLOCKED labels, every number re-measured live this round.
+- `docs/RELEASE_READINESS.md` regenerated at 1.2.212 (18 deps
+  installed, 0 broken; carriers agree).
+- Web mirror pins trued with the census's exact walk rules:
+  7,249 collected (6,334 tests + 915 doctest items), 1,370 files,
+  469,011 source lines.
+- Version carriers: 1.2.212 (VERSION, `pharmaml.__version__`,
+  pyproject, web TS mirror).
+
+## [1.2.211] — 2026-11-16 — part8 round 7 (§14.2 Proposal B: reproducibility manifests)
+
+- **§14.2 Proposal B shipped** (the round-5 proposal document's second
+  candidate, implemented as proposed): ``write_manifest()`` in
+  ``pharmaml.studio.reports`` exports the environment + workflow slice
+  as one JSON sidecar — **descriptive, not executable** (no reinstall,
+  no re-run).  Fields: pharmaml/Python versions, the pinned stack via
+  cached ``importlib.metadata`` (13 packages, "" when absent — an
+  honest absence), platform facts, per-run recorded hyperparameters /
+  seeds / ``n_jobs`` (the §5 field's end-to-end audit trail), and the
+  workspace datasets' sha-256 fingerprints + Proposal A content
+  versions + column signatures.  A ``PipelineConfig`` slice
+  (``random_state``/``test_size``/``cv_folds``/``n_jobs``) rides along
+  when given — defaults are never invented.
+- **GUI**: the Persistence tab gains "Write reproducibility manifest…"
+  next to the model-card writer; the sidecar defaults to
+  ``<bundle>.manifest.json`` and is written through the real job path
+  (never the GUI thread), refusing honestly without a loaded bundle.
+  The slice it exports: the 5 most recent ml-evaluation + dl-training
+  runs and up to 8 fingerprinted workspace datasets.
+- 11 tests: ``tests/test_reproducibility_manifest.py`` (8 — contract,
+  versions match the interpreter, cached lookups, n_jobs end-to-end,
+  carried-not-recomputed, config slice, fingerprint round-trip,
+  dataclass/mapping agreement) +
+  ``tests/ui/test_reproducibility_manifest_gui.py`` (3 — button +
+  tooltip, honest refusal, sidecar end-to-end with job runner).
+- **PySide6 6.12 compatibility** (surfaced by a fresh test
+  environment; two upstream signature changes, both fixed so the
+  toolkit runs on 6.8–6.12): (1) `QPixmap.loadFromData` now wants the
+  format as `str` — `smiles_preview` accepts both forms; (2) the
+  `studio --doctor` font probe no longer leaves a bare
+  `QGuiApplication` in the interpreter (which aborted every later
+  `QWidget` construction) — it builds an offscreen `QApplication`
+  instead; the UI-test `studio_app` fixture also guards its
+  `setStyleSheet` call.  The test stack pins rdkit 2026.09.1 (the
+  version the 149-suite sweep was verified under; 2026.09.2 shows
+  mutation-chemistry drift).
+- Version carriers: 1.2.211 (VERSION, ``pharmaml.__version__``,
+  pyproject, web TS mirror).
+
+## [1.2.210] — 2026-11-16 — part8 round 6 (§14.2 Proposal A: dataset-level provenance and versioning)
+
+- **§14.2 Proposal A shipped** (the round-5 proposal document's first
+  candidate, implemented as proposed): the shared workspace registry
+  now records **dataset-level provenance** — every dataset entry
+  carries a monotone per-path ``content_version`` (byte-identical
+  re-load keeps the version; changed bytes under the same path bump
+  it) and a ``column_signature`` (sha-256 of names + dtypes; an
+  int64 target read back as float64 is a different dataset).
+  Run records written at version N keep N forever — the bump never
+  rewrites history.  Legacy registry rows (v1.2.209 and earlier)
+  read cleanly as version 1 with an empty signature.
+- **GUI surfaces**: the Model Analysis load line shows a ``[v2+]``
+  badge when the loaded dataset has advanced past its first sighting;
+  the Job Center history row names the dataset version
+  (``· data v3``) for runs that carry provenance.  The ML Workbench's
+  family-benchmark run record now embeds ``dataset_name`` /
+  ``dataset_version`` / ``dataset_sha256`` (16-hex prefix) /
+  ``dataset_columns`` when the training source is a registered
+  dataset — the audit hook that survives a later corrected CSV.
+- Data Explorer's load path passes the frame to the registry (the
+  column signature comes from what was actually read).
+- 10 tests in two files: ``tests/test_dataset_provenance_v2.py``
+  (7 — version semantics, signature semantics, frozen run records,
+  JSON round-trip, legacy-row defaults) and
+  ``tests/ui/test_dataset_provenance_gui.py`` (3 — the badge, the
+  record block, the Job Center row).
+- Version carriers: 1.2.210 (VERSION, ``pharmaml.__version__``,
+  pyproject, web TS mirror).
+
+## [1.2.209] — 2026-11-16 — part8 round 5 (§14.1 Active Learning GUI + §14.2 proposals + guide linter)
+
+- **§14.1 Active Learning tab** (the round-3 backend finally gets its
+  workflow surface): the ML Workbench gains an "Active learning" tab
+  implementing the directive's required sequence — pool holdout %
+  (seeded, class-stratified) → query strategy (all six: uncertainty,
+  margin, entropy, committee, diversity, representative — mirrored
+  from `QUERY_STRATEGIES` by test) → ranked candidate table carrying
+  the §14.1 retention set (SMILES, stable IDs, prediction scores,
+  uncertainty, per-molecule selection rationale) → CSV export for the
+  lab → import of the MEASURED labels → retrain.  Labels are never
+  fabricated: the only pool→labeled path is the imported CSV, and the
+  import refuses IDs the loop never exported (the backend's structural
+  guarantee, surfaced in the GUI status line).  Regression targets are
+  refused before any job starts.  8 tests
+  (tests/ui/test_active_learning_tab.py): tab mount + form defaults,
+  strategy mirror, a full query round's retention set, export CSV
+  contents (and that `experimental_label` is absent — never
+  fabricated), the import→retrain fold-in with pool/labeled counts,
+  and the two refusal paths.
+- **§14.2 feature proposals** (docs/part8_SECTION_14_2_PROPOSALS.md):
+  the directive's "present a justified proposal before expanding
+  scope" requirement, answered in writing.  Two candidates proposed
+  for the next round — dataset-level provenance/versioning and
+  reproducibility manifests — each with all nine required fields
+  (gap, scientific usefulness, backend, GUI location, dependencies,
+  resources, GitHub source, tests, status).  The other five §14.2
+  candidates are evaluated and declined with reasons (uncertainty,
+  comparison, imbalance, chemical-space viz, QSAR diagnostics are all
+  already covered by shipped, validated surfaces).
+- **Workflow-guide where-linter** (tests/ui/
+  test_workflow_guide_lint.py, 14 tests): round 4's honest limitation
+  closed — the guides' hand-maintained `where` texts are now linted
+  against reality: every page a guide names must still exist and be
+  constructible, the AL strategies must mirror the backend registry,
+  and the ML workspace note must mention the new AL campaign.
+- The ML workspace's §13.3 guide note now names the Active learning
+  tab among its semi-supervised paths.
+- Environment note: this round shipped from a REBUILT sandbox (the
+  previous one was fully recycled — repo re-cloned at v1.2.208,
+  venv re-pinned from requirements.txt, Qt system libraries restored
+  from the extracted debs).  Two artifacts of the rebuild, both
+  understood: (1) full-file UI suite runs exit-crash AFTER
+  100%-passing on this stack (verified on pristine 1.2.208 too — an
+  offscreen-teardown artifact, not a code regression; suites run
+  clean one-at-a-time or in small chunks); (2) the first notebook
+  re-execution inherited MPLBACKEND=Agg from the test env, which
+  suppressed the inline figures (the freshness gate caught it) —
+  re-executed with the variable cleared, all figures embedded again
+  (pk 3 / generative 15 / dl 6 PNGs, twins back to 6-9% of full).
+- Version carriers: 1.2.209 (VERSION, `pharmaml.__version__`,
+  pyproject, web TS mirror).
+
+## [1.2.208] — 2026-11-15 — part8 round 4 (§13 workflow guides + §5/Phase-6 n_jobs sweep)
+
+- **§13 (Phase Twelve) workflow guides**: every one of the nine
+  workspaces now carries its stage-chain strip — the directive's
+  suggested sequence (Import → Inspect → Validate → … → Export, each
+  chain transcribed verbatim) rendered as a collapsible row in the
+  workspace's tab-bar corner, every stage naming the REAL surface that
+  implements it (which page, which button).  The audit found the
+  stages all exist and are wired — the sequence was simply invisible;
+  now the workspace reads as the connected scientific workflow it is.
+  `ui/widgets/workflow_guide.py`: the WORKFLOWS registry (9 chains,
+  91 stages total), the `WorkflowGuide` widget (collapsed by default,
+  loud ValueError on an unregistered workspace), QSS in the studio
+  theme, and the same chains searchable from F1 help as a "Workflow
+  stages" topic.  §13.8's honesty rule is pinned in writing: the MD
+  note says ANALYSIS, never simulation.  26 tests
+  (tests/ui/test_workflow_guide.py): registry completeness, verbatim
+  stage pins per workspace (first stage, last stage, exact count), no
+  placeholders, no Persian/RTL, widget toggle behaviour, one strip
+  mounted per workspace tab bar.
+- **§5/Phase 6 n_jobs sweep**: the manual `NJobsField` was Chemistry-
+  Lab-only; now Model Analysis (one field feeding `train_model`,
+  `learning_curve` — previously both hard-pinned `n_jobs=1`) and the
+  ML Workbench family benchmark (`benchmark_feature_families`, also
+  previously serial) expose the same editable field with joblib
+  semantics.  Invalid input (0, non-integer) never blocks a run: the
+  page falls back to serial and says so through the shell toast.  6
+  new tests in tests/ui/test_njobs_field.py pin the value reaching
+  each backend call and the serial fallback.
+- Version carriers: 1.2.208 (VERSION, `pharmaml.__version__`, the web
+  TS mirror).
+
+## [1.2.207] — 2026-11-15 — part8 round 3 (§4 renderer + §5.5 stress + §14.1 Active Learning)
+
+- **§4.1/§4.2 shared figure renderer**: `FigureCanvasHost` (original
+  backend figure via FigureCanvasQTAgg, leak-free, honest states,
+  export through save_figure, lazy matplotlib) + the plot-coverage
+  registry (63 public viz functions introspected across the eight
+  modules: 25 wired, 2 native-equivalent, 36 backend-only) + the Image
+  Lab "Backend figures" tab with artifact-honest invocations (13
+  launchable families; real fits, real AD analysis, real confusion
+  matrices; honest refusals for artifact-gated functions).
+- **§5.5/§16.5 stress suite (9 tests)**: 150k-row CSV, 40k-row Excel,
+  5k×512 wide-matrix ops, 2k-molecule fingerprints, RF fit + 5-fold
+  CV, 150k-row predictions, 150k-point plots, GUI-responsiveness
+  fence (the explorer load stays off the GUI thread).
+- **§14.1 Active Learning**: `ActiveLearningLoop` with six native
+  strategies (uncertainty, margin, entropy, committee, diversity,
+  representative); scikit-activeml evaluated and kept OUT; SMILES/
+  IDs/scores/uncertainty/rationale retained; labels never fabricated
+  (unexported IDs refused, NaN skipped); import + retrain steps.
+- Sandbox-honest test gates: torch/meeko importorskip where siblings
+  had them, async-load timing pumps, six-tab Image Lab + tab-order
+  pins, NJobsField focus mapping + QSS rule, example data regenerated
+  for rdkit 2026.03.4, PMI1 pin widened with provenance note.
+
+**Open (next round):** notebook full re-execution at 1.2.207, docs/
+INDEX.md regeneration for new pharmaml.ml exports, RELEASE_READINESS
+regen, §13 sequential-workflow audit per workspace.
+
+## [1.2.206] — 2026-11-15 — part8 round 2 (Phase C: nine-workspace architecture)
+
+- **Introduction-only startup (§12.2)**: the app opens on a new
+  IntroductionPage — purpose, computational-pharmaceutical scope, workflow
+  structure, key backend capabilities, and one entry point per workspace.
+  The nine-card dashboard is no longer the default screen (reachable as
+  the Advanced home).
+- **Horizontal nine-workspace navigation (§12.1)**: a WorkspaceNav bar in
+  the commission's exact order (Introduction · Datasets · Machine
+  Learning · Deep Learning · Generative AI · Molecular Docking · PK/PD ·
+  Molecular Dynamics Analysis · Visualization) — checkable exclusive
+  segments, active-state styling, horizontal scroll overflow (order never
+  changes), Left/Right/Enter keyboard access, Mineral-consistent QSS.
+- **18 pages as subpages**: every previous detail page lives as a tab in
+  its mapped workspace (ML: Model Analysis/ML Workbench/Unsupervised/Best
+  of ML/Foundations; Datasets: Data Explorer/Chemistry Lab/Utilities;
+  PK/PD: PK-PD/Biology/Response AI; Introduction: Dashboard/Settings;
+  single-page workspaces for Deep Learning, Generative, Docking, MD,
+  Visualization). Nothing deleted.
+- **Ctrl+1..9** rebind to the nine workspaces; Alt+Home = Introduction.
+- **PageMirror**: the historical `pages` stack API (count/widget/
+  currentWidget/currentIndex) over workspace-parented pages, so 44 test
+  files' pins keep passing.
+- The 18-item vertical sidebar remains the opt-in Advanced mode only.
+- tests/ui/test_nine_card_first.py rewritten to the §12 contract (23
+  tests); the phase4 async-load test now pumps the queued signal.
+
+**Known open** (tracked for the next round): the shared backend-figure
+renderer for the 70 unwired viz functions, stress/performance tests,
+the full chunked verification pass, and docs regeneration.
+
+## [1.2.205] — 2026-11-15 — part8 round 1 (audit + Phases 6/9/B2/F/D/E)
+
+The MASTER_PROMPT part8 commission, first implementation round. Phase A's
+audit drove six phases to completion; the remaining ones (C nav, figure
+renderer, stress tests, final verification) are tracked as the open ledger.
+
+- **Semi-supervised Learning (Phase F)**: `pharmaml.ml.semi_supervised` —
+  SelfTrainingClassifier / LabelPropagation / LabelSpreading over the -1
+  sentinel, safe marker conversion, leakage-safe evaluation with a
+  supervised baseline, and the ML Workbench's "Semi-supervised" tab
+  (46 tests + 35 doctests + 3 GUI round-trips).
+- **Chemistry Lab configuration (Phase D)**: `FeatureConfig` — exact
+  descriptor subsets, independent Morgan radius/bit-width/count-mode
+  configuration, one validated object GUI -> backend -> outcome with the
+  §7.4 reproducibility record (rdkit version, columns, drops); legacy
+  calls stay byte-identical.
+- **Manual n_jobs (Phase 6)**: `NJobsField` — any nonzero integer
+  (including -1), 0 refused before the job starts.
+- **Crosshair off by default (Phase 9)**: hover inspection/snap/click
+  kept, guide lines opt-in per chart via the context menu.
+- **Async loaders (Phase B)**: Data Explorer, Chemistry Lab and Model
+  Analysis read user tables on the JobRunner worker with progress and
+  busy-guards.
+- **Applicability Domain completion (Phase E/10)**: training-distance
+  distribution, distance-vs-predicted, uncertainty distribution, combined
+  reliability quadrants on the backend's own rule, honest degradation on
+  the kNN-only pass, click-a-row sample dossiers.
+- **ML plot metadata (Phase E/9)**: parity/residual points carry stable
+  sample IDs + SMILES + actual/predicted, aligned through the split index.
+- Environment: numpy 1.26.4 / rdkit 2026.09.1 / pyqtgraph 0.13.7 re-pinned
+  (the 0.14 auto-range drift broke the snap-tolerance test on clean HEAD);
+  notebook version prints trued to 1.2.204+.
+
+**Known open**: Phase C (Introduction-only startup + horizontal
+nine-workspace nav), the shared backend-figure renderer, stress tests,
+and the full chunked verification pass.
+
+## [1.2.204] — 2026-11-15 — product-review fix round (R35)
+
+Commissioned by the v1.2.203 product review (the 17-page design/QA
+review delivered this round): fix the apparent (visual/accessibility)
+and practical findings, true the version carriers, and re-ship.
+
+### Critical fixes (review C-1..C-3)
+- **C-1 closed by audit + tokens** — a QSS-wide rule scan confirms every
+  primary/accent fill paints `on_primary` (5.95–12.24:1); the real
+  low-contrast exposure was the disabled/muted ramp, fixed below.
+  `test_design_tokens.py` now pins selection-color and the fill rules
+  can no longer silently regress to `t.text`-on-fill.
+- **C-2 dependency failures are actionable** — `JobWorker` maps
+  pharmaml's `DependencyError` and raw `ImportError`/
+  `ModuleNotFoundError` (name OR message text) to an install hint with
+  the exact `pip install 'pharmaml[extra]'` line and a doctor
+  pointer, instead of a raw traceback in the report panel
+  (`ui/workers/job_worker.py::_dependency_hint`).  Pinned by
+  `test_v204_review_fixes.py::TestDependencyHint` (5 tests, including
+  the end-to-end worker emission).
+- **C-3 disabled reads as unavailable, not invisible** — the disabled
+  token is re-tuned in all six themes (light #6994A2, dark #4A7187,
+  spectral #9F8A58, spectral-dark #6761A2, catalyst #7B9476,
+  catalyst-dark #487BA9): ≥3:1 against canvas AND surface (the
+  pre-204 values measured 1.07–1.48:1 and failed everywhere).
+
+### Major/minor fixes (review M-3, M-5, m-4, m-5, m-9)
+- **M-5 muted text holds AA** — `text_muted` re-tuned in all six themes
+  (≥4.5:1 on canvas AND surface; pre-204 3.46–4.69:1 missed AA in five
+  of six).  `test_muted_text_meets_aa_everywhere` pins the floor.
+- **M-3 count()-bounded clears** — the `QFormLayout::takeAt: Invalid
+  index 0` warning seen during section walks is gone:
+  `workflow_templates._clear_form` and the nine-card grid clear are
+  bounded by `count()`, and the nested path rows are drained too.
+- **m-4 toasts respect the reader** — hover pauses the auto-dismiss
+  (resume never extends the original window; 2s floor), danger toasts
+  linger 9s vs 4s, a trailing × states the close affordance with a
+  tooltip, and the accessible name keeps the plain message.
+- **m-5 the busy guard is actionable** — all 14 workbench pages now say
+  `Busy: '<job name>' is running — Stop it (or check Job Center)
+  first.` instead of the anonymous "A job is already running".
+- **m-9 dead code** — `_elide_entry_label` (flagged in the partX3
+  audit's remaining-limitations) is removed.
+
+### Housekeeping (found during the fix round)
+- **Version-carrier drift repaired** — v1.2.202/1.2.203 shipped with
+  pyproject.toml, `pharmaml.__version__` and the web's
+  `SHIPPED_TOOLKIT_VERSION` still at 1.2.201 while VERSION said
+  1.2.203 (the four-carrier test was failing on the release tree).
+  All four carriers now move together at 1.2.204, per the r262 rule.
+
+### Verification
+- New pins: `tests/ui/test_v204_review_fixes.py` (14 tests) + the
+  re-tuned `test_design_tokens.py` floors — all green.
+- Touched-page suites green: docking, utilities, nine-cards, biology,
+  chemistry, pkpd, dl-efficiency, bestofml, image-lab, ml-workbench,
+  model-analysis, deep-learning, generative, foundations, responseai,
+  unsupervised, research-workflows, theme-screenshots (6-theme canvas
+  pins), theme-manager, job-worker.
+- Doctor 18/18 OK.  ruff: new code clean; the 4 remaining findings in
+  touched files are pre-existing on the 1.2.203 tree (verified by
+  stash-diff), left for the standing debt sweep.
+- The deep-learning/generative failures observed mid-round were the
+  missing torch extra (the C-2 scenario itself); green after
+  `pip install torch --index-url .../whl/cpu`.
+
+## [1.2.203] — 2026-11-14 — Spectral & Catalyst alternates + partX3 audit
+
+Commissioned by the partX3 round: "Spectral/Catalyst as switchable
+alternates, and a deeper page-by-page visual pass" over the full
+MASTER_PROMPT partX3 audit baseline.
+
+### The three directions, one foundation
+- `ui/design_tokens.py`: 02/SPECTRAL (warm paper #F5F2EC canvas,
+  indigo #5048A5 actions, rounded panels) and 03/CATALYST (navy
+  #172F43 frame shell, ivory surfaces, lime #C6E84B selection/action,
+  squared cards), each in light and dark — four new WCAG-validated
+  token sets (4.5:1 body text, 3:1 interactive accents, AA status
+  pairs; same contract as Mineral). New `shell`/`shell_text` tokens
+  carry Catalyst's navy frame (top bar, status strip, nav).
+  `is_dark_theme()` classifies all six studio themes.
+- `ui/studio_theme.py`: STUDIO_THEMES = 6; per-direction radius ramp
+  (Mineral 4/6/8/12, Spectral one step rounder, Catalyst squared);
+  shell QSS for studioTopBar/studioNav/QStatusBar/QMenuBar.
+- `ui/theme_manager.py`: studio chart palettes for the alternates
+  (dark variants carry the shared dark series — "One scientific
+  foundation": the §4.2 data palette is direction-independent).
+- Settings → Appearance: the six studio themes are offered; Mineral
+  light remains the fresh-install default (§2 pinned Mineral
+  canonical; the alternates are opt-in).
+
+### Fixes (partX3 §5 findings)
+- Dead QSS rule `nineCardEntry-primary` now matches a real widget:
+  each nine-card's FIRST entry is its primary action button (the one
+  place the identity action color fills).
+- TopBar painted no QSS background in live windows (plain QWidget
+  needs WA_StyledBackground) — the Catalyst navy shell now renders.
+- Sidebar glyphs re-paint on studio-theme switches
+  (`Navigation.set_theme_accent`, wired in MainWindow._on_theme).
+
+### partX3 deliverable
+- docs/COMPREHENSIVE_AUDIT_AND_REMEDIATION.md: compliance matrix,
+  confirmed bugs + root causes, files changed, batched test evidence,
+  remaining limitations (dead `_elide_entry_label` flagged; full
+  backend suite not re-run this round — UI scope only).
+
+### Verification
+- Theme suites: 101 tests across test_design_tokens (6-theme
+  parametrization), test_theme_manager (+5 new), test_theme_screenshots
+  (6-theme canvas pins), test_marker_discipline — all green.
+- Full tests/ui sweep: 48 suites, sequential one-per-process: 47 exit
+  0 + the documented environmental kill (test_nine_card_first test 21,
+  exit 137 at the 4 GB ceiling — passes in a fresh process; same
+  profile as the v1.2.202 release sweep).
+- Doctor: 18/18 OK. ruff clean on changed files (mypy: no NEW errors
+  in changed files; repo-wide pre-existing debt unchanged).
+- Visual: six-theme home renders verified at the pixels (canvas,
+  shell, action fills); 90 page renders (18 sections x 5 themes) pass
+  canvas + content checks.
+
+## [1.2.202] — 2026-11-14 — the Mineral design-system round
+
+Commissioned by the uploaded "Design System" MASTER PROMPT: "Implement
+the supplied Mineral Design System throughout the actual PharmaML
+Studio application." Mineral (01) replaces the part7 Deep Navy +
+Warm Ivory + Electric Lime identity (explicitly retired by the spec);
+Spectral/Catalyst alternatives not applied.
+
+### Identity
+- `ui/design_tokens.py`: full Mineral semantic token set (bg/canvas
+  #F4F7F8, surface #FFFFFF, action/primary teal #076F73, hover
+  #05565B, pressed #06494E, selected #E3F3F1, focus/ring #076F73;
+  dark: canvas #0D1B23, surface #14232C, action #79D9CF, hover
+  #A0E9DF, selected #06494E, focus/ring #79D9CF), status foregrounds
+  + soft backgrounds, text/border ramps, layout scale (4/8/12/16/24,
+  radius 4/6/8/12, controls 28/32/36/40, table rows 28/32/40,
+  borders 1/2), and the Mineral type hierarchy (Display 40 down to
+  Technical 12 logical px). Remaining values transcribed from the
+  SVG's structured token export (status triples, dark data-palette
+  companions, primitives).
+- Scientific palette: 7-series Mineral data cycle (Blue/Orange/Green/
+  Purple/Yellow/Sky/Ink) with dark companions; the action teal is NOT
+  a series color. Marker discipline: light flags sub-3:1 yellow+sky;
+  dark flags the green/sky mint pair (companions converge 1.08:1,
+  14 degrees apart — the non-color encoding tells them apart, per the
+  chart-design rules).
+- `ui/studio_theme.py`: QSS regenerated from the tokens — flat
+  surfaces, 1 px separators, subtle-fill table headers, bg/subtle
+  status bar strip, Mineral radii, focus rings from the focus/ring
+  token in both themes; empty-state objectName rules added.
+- `ui/font_loader.py`: IBM Plex Sans (OFL, bundled Regular/Medium/
+  SemiBold/Bold) + JetBrains Mono; fallback chains; has_plex();
+  the Inter bundle removed.
+- `ui/theme_manager.py`: studio ChartPalette grid from the
+  border/subtle token; accent = action/primary per theme.
+- `ui/widgets/notification_widget.py`: toast kinds tokenized to the
+  status tokens (kind_style(), both themes).
+- `ui/widgets/navigation.py`: sidebar icon ACCENT = the teal action
+  token (pinned by test against drift).
+- `ui/widgets/empty_state.py`: construction-time inline styles
+  replaced by QSS objectName rules — recolors on theme switch now.
+- `ui/nine_cards.py`: responsive breakpoints 3-col at/above 1200,
+  2-col 860-1199, 1-col below 860.
+- `ui/doctor.py`: two font-status checks — 18 checks total;
+  WARN-not-FAIL with the fallback chains named; the probe creates an
+  offscreen QGuiApplication only when none exists (QFontDatabase
+  requires one — found via a segfault, fixed).
+
+### Tests
+- test_design_tokens: Mineral values verbatim, status-token AA on
+  soft backgrounds AND surfaces, retired-identity absence, data
+  palette + companions, type scale, layout rhythm, notification
+  kinds, nav accent.
+- test_theme_manager / test_font_loader / test_theme_screenshots /
+  test_focus_visibility / test_marker_discipline: re-pinned to
+  Mineral (canvas #F4F7F8 / #0D1B23 at the pixels; teal focus rings;
+  dark mint-pair discipline; Plex chains/bundle).
+- test_chart_export: accepts the M-3 labeled variants (a pre-existing
+  R33 failure, not a Mineral regression).
+- test_qt_doctor: 18 checks, font checks asserted OK.
+- test_nine_cards: docstring thresholds updated.
+
+### Verification
+- ruff + mypy clean on every changed file.
+- Doctor: 18/18 OK.
+- Screenshot regression: Mineral canvas verified at the pixels in
+  both themes; DPI ladder 100/125/150/200% at 1440x900, 1280x800,
+  1024x768, 860x560 — device-pixel sizes track Qt's own scaling (no
+  manual scaling layered on top).
+
+## [1.2.201] — 2026-11-14
+### Fixed — all 27 third-edition product-review findings (rounds 31-32)
+
+- **First-run guidance everywhere (C-1)** — `PlotPanel.set_empty_hint()`:
+  26 plot panels across 14 workspaces explain their concrete first step
+  ("Pick dataset + target, then press Train — …") as text inside the plot;
+  the hint hides on the first drawn series, returns after `clear()`, and
+  recenters on resize.  The empty white box that was 90-97% of the canvas
+  on first open now teaches instead of staring.
+- **In-app help (C-2/C-5)** — F1 opens a searchable help pane (10 topics
+  including the full shortcut cheat-sheet); a Help button joins the top
+  bar; a first-run welcome card appears once (offscreen-safe).  The
+  shortcut cheat-sheet is also linked from tooltips.
+- **Completion toasts (C-3)** — long jobs (train success/fail/cancel,
+  PK/PD regimen, failures) raise a native notification through
+  `shell_notify()` so a minimized window no longer swallows the result.
+  A latent doubled-brace stylesheet typo was fixed on the way.
+- **Nine-card grid reflow (C-6)** — the card grid minimum width drops
+  from 1617 to 542 px (3/2/1 columns at 880/560 breakpoints) with button
+  elision and an Ignored policy instead of a horizontal scrollbar.
+- **Tooltips for the jargon controls (M-1)** — the modules that shipped
+  zero tooltips (PK/PD, Biology, Chemistry, Foundations, Best-of-ML,
+  Response AI and the six workflow dialogs: campaign wizard, preparation,
+  calibration, reproducibility, validation, campaign status) now explain
+  their domain controls — NCA terminal points, PLIF, quantile cuts,
+  grouped-CV folds, calibration classes.
+- **Label capitalization (M-2)** — every form label is sentence-case
+  across all workspaces (docking, deep learning, pkpd, biology, bestofml,
+  generative, responseai, unsupervised); "contact shell (A)" is now the
+  correct "Contact shell (Å)".
+- **Chart export buttons (M-3)** — the per-plot export buttons
+  distinguish their plot ("Export parity…", "Export residuals…",
+  "Export importance…"), carry a save glyph and accessible names.
+- **Dialog safety (M-4/M-5)** — reset-to-defaults asks before wiping;
+  DependencyError dialogs offer the exact install line (copy button) and
+  a Doctor route instead of a bare failure.
+- **Progress honesty (M-6)** — ProgressPanel shows an elapsed-time
+  counter alongside the determinate bar.
+- **Light-theme contrast (M-9)** — focus_ring 5.64:1, disabled text
+  3.44:1, border 3.50:1 (WCAG AA); nine QSS rules moved to the tuned
+  focus color; guard tests pin the ratios.
+- **Web Explorer routing (M-7)** — hash-based deep links
+  (`#/playground/ml`): shareable URLs, Back/Forward navigate tabs
+  instead of leaving the app, unknown hashes fall back to overview.
+- **Web Explorer a11y (M-8)** — skip-to-content link, per-tab
+  descriptions on hover/focus, and the report-chip caption announces the
+  arrow-key reorder path.
+- **Polish (P-1..P-12)** — status-bar hairline; stale dashboard stat
+  card; timestamped export names; shared EmptyState widget; the MD page
+  example study; chemistry run labels name their dataset; "Open CSV /
+  Excel…" entry points in Model Analysis and Chemistry; slider focus
+  paints the handle (not a box); "+N more" names Studio/Explorer instead
+  of the desktop-only "reconciler"; fmtCell keeps "1,234" not
+  "1.234e+03"; RDKit raw parse-error dumps silenced in featurization
+  (per-row drop warnings kept).
+- **Release hygiene** — the two-commit fix branch also updates the
+  version-carrier pentad, re-executes the notebook evidence at
+  1.2.201, and ships with the standard zip recipe (leak scan,
+  composition guard, four byte-identical homes).
+
+## [1.2.200] — 2026-11-14
+### Added — part7 round 30 (report group, focus visibility, chart export) + full environment recovery
+
+- **Recovery** — the sandbox was fully recycled between rounds (repo,
+  venv and /tmp all gone).  Restored per the backup protocol: the
+  fine-grained token re-extracted from its wrapped PDF lines (the
+  form-feed at the page break had clipped the first attempt), the
+  repository re-cloned at R29's d370017, the venv rebuilt from the
+  pinned stack (7 core pins + rdkit 2025.3.3 + pytest 9.0.2 + the
+  PySide6 6.8.3 GUI set + matplotlib 3.10.9 + torch 2.14.1 CPU),
+  the committed EGL stub verified, and green test chunks run before
+  any new work started.
+- **Ligand-set reconciliation rides the session report (R30-a)** —
+  the twice-deferred comparison-figure export: the Ligand Sets tab's
+  result now mirrors into the toolkit store (sessionStorage-persisted,
+  validated, buckets capped at 50 names) and the session report walks
+  a new `ligands` group — the bucket-count metrics card, a bar-trace
+  comparison figure composed by the report bridge into a real
+  matplotlib figure (one horizontal bar per bucket, the
+  plot_table_comparison visual language), and per-bucket name tables
+  with an honest `+N more (see the reconciler)` confession row.  The
+  group honors the walking order (canonical-last; stored orders
+  append it, never drop it), the toggles, and the census.  The bridge
+  gained the `bar` trace style ([y, value] pairs, value-labelled).
+- **Focus visibility across the nine workspaces (R30-b)** — the
+  studio QSS grew from 4 to 16 :focus rules: tables, lists, trees,
+  tab bars, checkboxes, radios, sliders and group boxes now show the
+  accent (Electric Lime) border when they own the keyboard —
+  selection is not the only cue.  A parametrized audit walks every
+  workspace and asserts every focusable widget CLASS it instantiates
+  has a rule in both themes, mapping subclass names to their base
+  selectors (DataTableView → QTableView).
+- **Per-page chart export (R30-c)** — a shared
+  `attach_chart_export()` helper and 12 "Export chart…" buttons
+  across the nine workspaces (one per PlotPanel; model_analysis
+  carries three), wired to `PlotPanel.export_image()` — the §17
+  raster engine (PNG/TIFF/JPEG, reopened + magic-sniffed +
+  dimension-checked) at the §23.3 640×480 legibility floor, with
+  success/failure reported into each page's status line.  Found and
+  fixed during the round: the helper initially called a nonexistent
+  `export()` method — the real PNG round-trip test caught it.
+- **Tests**: test_focus_visibility.py (13), test_chart_export.py
+  (12), TestLigandReportContract (5, incl. the shipped probe and the
+  bridge bar-style guards); web parity 78 passed + 1 skip (the
+  six-group pins updated to the seven-group truth); affected UI
+  sweeps 264 green (chemistry 13, biology 13+8, pkpd 32, docking 17,
+  generative 31, unsupervised+deep_learning 50, model_analysis 13,
+  ml_workbench 19, smoke+focus+export 33, themes 22, mono/
+  discipline/discipline re-runs).  tsc at its pre-round baseline
+  (18 pre-existing scratch/examples errors, zero new); eslint clean.
+
+## [1.2.199] — 2026-11-13
+### Added — part7 round 29 (adoption: mono fonts, marker discipline, screenshot regression, biology path)
+
+- **Mono-font adoption (§3.2)** — `set_mono()` in ui/font_loader
+  pins JetBrains Mono on technical widgets with an explicit QFont:
+  the generative page's SMILES batch input, the docking page's Vina
+  box-config editor, and four data-explorer log panes (audit, split
+  audit, split ranges, SAR).  Pinned in tests as the three-provider
+  font contract: studio styles mono via QSS, native keeps the
+  explicit ctor-time QFont, and a foreign provider (qt-material)
+  owns its fonts at polish time — Roboto replaces the ctor font and
+  an explicit re-set wins until the next polish (provider
+  semantics, §16.10, not a leak).
+- **Marker discipline in PlotPanel (§5)** — R28's data-level
+  discipline set is now enforced in rendering: a LIGHT-theme series
+  whose color sits below 3:1 on white (Orange, Purple, Sky Blue,
+  Yellow) gains a non-color encoding — `line()` draws a symbol+brush
+  and `scatter()` takes a distinct shape.  The shape cycle keys on a
+  per-panel `_discipline_count` (not the raw series index — indices
+  1 and 6 would collide on the 5-shape cycle) and resets on
+  `clear()` with the data.  Dark themes flag nothing.
+- **Screenshot regression (§9 pixel-level)** — real offscreen grabs
+  of the MainWindow home under studio light and dark
+  (tests/ui/test_theme_screenshots.py, PNGs in build/theme-shots).
+  Light asserts the Warm Ivory canvas, white card surfaces and the
+  Deep Navy status strip; dark asserts the Midnight background and
+  the elevated-surface viewport (#263D4D — the §2.2 surface ladder
+  verified at pixels, not just in QSS text).  Grabs verified
+  content-rich (1,654 / 1,424 unique colors).  The harness drives
+  the app's REAL restore flow (preference persisted first, the
+  window's own `theme.restore_state()` applies it) after finding
+  that hand-applying a theme gets replaced by the constructor.
+- **Biology expression-matrix path (R29-d)** — the MAD and
+  biomarker tabs now share ONE path row instead of two hardcoded
+  `_EXPRESSION_PATH` reads: mono-styled field defaulting to the
+  bundled 23x300 matrix, Browse, and a live preview that reads only
+  the header + first rows (never the full file; job threads do
+  that) showing gene count and first cell lines.  Editing the path
+  drops the shared normalize cache so runs always use the file in
+  the field; missing files and unreadable CSVs report in the
+  preview instead of crashing.
+- **Tests**: test_mono_adoption.py (8), test_marker_discipline.py
+  (9), test_theme_screenshots.py (7), test_biology_expression_path
+  (8).  Affected sweeps: 219/219 (theme/font/token/mono/discipline
+  core 60; biology 13+8; generative 31; docking 17; audit 3;
+  plots 39; smoke+cards 34; screenshots 7).
+
+## [1.2.198] — 2026-11-13
+### Added — part7 round 28 (visual identity: tokens, studio theme, fonts)
+
+- **`ui/design_tokens.py`** — the centralized token system (part7
+  §2/§3/§5/§6): both color tables verbatim (light: Warm Ivory
+  #F3F5F1 / Deep Navy #172F43 / Electric Lime #C6E84B + all spec
+  tokens; dark: Midnight #101B24 / Slate Navy / Forest Slate),
+  Inter + JetBrains Mono fallback chains and the §3.4 type scale,
+  spacing/radius/border rhythm, the Okabe-Ito scientific palette
+  (SEPARATE from the interface accent) with a dark variant and a
+  programmatic marker-discipline set, and WCAG contrast utilities.
+- **The studio theme provider** (`ui/studio_theme.py`) — the
+  application QSS generated FROM the tokens: shared widget classes
+  + the nine-card objectNames, hover/selected/focused/disabled
+  states, primary-vs-secondary button hierarchy (lime fills carry
+  the navy foreground per §2.3), mono styling for text areas.
+  Registered as a fourth ThemeManager provider ('studio', light
+  and dark); studio/light is the fresh-install default while every
+  persisted choice is preserved; the ChartPalette path now emits
+  Okabe-Ito series with theme-matched axes for PyQtGraph.
+- **Bundled fonts** (`ui/font_loader.py` + `fonts/`) — Inter
+  (Regular/Medium/SemiBold/Bold) and JetBrains Mono (Regular),
+  both SIL OFL 1.1 (licenses bundled), registered at startup via
+  QFontDatabase; `ui_font()`/`mono_font()` construct fonts with
+  the full fallback chains so a missing bundle degrades to
+  Segoe UI/Arial and Cascadia/Consolas rather than failing.
+- **Honest contrast resolutions** (found by the new programmatic
+  WCAG tests, all logged): Slate #64748B on Warm Ivory measures
+  4.34:1 — under AA — so canvas metadata is promoted to primary
+  text and the secondary token is pinned to surface use (4.76:1);
+  Okabe-Ito Dark Gray #333333 vanishes on Midnight (1.4:1) so the
+  dark variant swaps it for #CCCCCC; and pairwise distinctness of
+  an 8-color palette is delivered by hue (three pairs sit under
+  1.25 luminance contrast) with the light-theme low-contrast
+  colors exactly enumerated as marker-discipline.
+- **Tests**: `tests/ui/test_design_tokens.py` (20), the theme
+  manager suite grew to 15 (studio themes/default/QSS identity/
+  round-trip/persistence/bad-theme), `tests/ui/test_font_loader.py`
+  (8). Affected UI sweeps: 180/180. `test_nine_card_first.py` hits
+  the sandbox 4 GB memory ceiling at test 21 — verified identical
+  at the R27 tip (pre-existing), with the 21st test passing alone.
+
+## [1.2.197] — 2026-11-13
+### Added — part6 round 27 (§17D figures + deeper forms + layout consumer)
+
+- **`HTMLReport.add_image(path, caption, max_bytes)`** — embed an
+  existing PNG file inline (base64): the §17D run-report path embeds
+  the file's own bytes, because a re-render would need the
+  workflow's live state the run record deliberately does not carry.
+  A missing file, a non-PNG file, or one over the 8 MiB cap raises
+  with the reason rather than silently degrading.
+- **§17D reports embed exported figures** — `build_run_report` now
+  follows the Plots section's text inventory with one anchored
+  figure page per recorded PNG that exists on disk.  A recorded path
+  whose file is gone stays an honest text line ("recorded figure
+  file missing: …") — never a broken image or a silent omission.
+- **Deeper template forms** — the response template's compound combo
+  lists the screen's actual compound VALUES (the column the backend
+  joins on, capped at 200 distinct); every SMILES-column combo
+  auto-detects the picked CSV's header (case-insensitive; the
+  header's real columns are always offered); docking's `(auto)`
+  passes `None` so the backend's own candidate resolution decides;
+  the descriptor form resolves `(auto)` against the header at run
+  time (its stage indexes `frame[smiles_col]` directly).
+- **Layout-preference consumer** — the utilities page restores its
+  last-opened tab from `workspace.layout_preference` (stored as a
+  tab NAME, not an index, so adding a tab later can never restore
+  the wrong page) and saves on every tab change.
+- **Tests**: `tests/test_report_figures.py` (5 — the file's own
+  bytes embedded, missing/non-PNG honesty, report wiring, the
+  no-figures case unchanged), the templates suite grew to 13
+  (compound values, header auto-detect, case-insensitive resolve),
+  the utilities suite to 19 (tab restore round-trip).
+
+## [1.2.196] — 2026-11-13
+### Added — part6 round 26 (§17E + §17G + card-integrated forms): §17 checklist closed
+
+- **`ui/widgets/resource_monitor.py`** — the §17E live resource
+  monitor, hosted as the Job Center's top card: CPU threads and
+  memory from the real probe (source always named; "unknown" when
+  unevidenced — a number is never invented), the execution preset
+  combo with its honest trade-off sentence (switching persists
+  through the real store), the active-job row riding the shared
+  JobRunner's own signals, a GPU line that states "none detected"
+  as fact rather than implying accelerator support, and a refresh
+  QTimer that runs ONLY while the widget is shown.
+- **Card-integrated forms for all seven §17A templates** — the
+  Workflow templates tab's five data-dependent chains (QSAR,
+  descriptors, drug-response, generative, docking) now have real
+  input forms: path fields with Pick buttons, a target/compound
+  combo auto-filled from the picked CSV's header, the generative
+  objective selector, the docking receptor path. The "run it via the
+  Python API" refusal branch is gone; every template runs from the
+  tab and writes its JSON run record.
+- **§17G workspace extensions** (`pharmaml.studio.workspace`,
+  additive top-level keys in the same studio-workspace/1 file):
+  `toggle_favorite`/`is_favorite`/`favorite_entries` (starred
+  entries float to the top of their Dashboard kind and survive the
+  recency cap), `remember_export_folder`/`last_export_folder`
+  (per-template export-folder recall in the templates tab, with a
+  Remember button), and `layout_preference`/`set_layout_preference`
+  (named key-value strings for UI state). An older payload keeps
+  reading as empty state; setters extend the file without dropping
+  old keys.
+- **Dashboard** — each workspace recents row carries a ★/☆ toggle
+  wired to the real favorites store.
+- **Tests**: `tests/ui/test_resource_monitor.py` (6 — honest
+  unknown, real preset round-trip, timer discipline),
+  `tests/test_workspace_gaps.py` (5 — round-trips, old-payload and
+  corrupt-payload empty states), the templates suite grew to 10
+  (end-to-end QSAR run through the form with a numeric-feature CSV,
+  required-path guards, generative objective run, folder recall),
+  and the phase4 suite gained the dashboard star-toggle pin.
+
+## [1.2.195] — 2026-11-13
+### Added — part6 round 25 (§17C + §17D): experiment comparison + scientific reports
+
+- **`src/pharmaml/studio/comparison.py`** — the §17C backend: every
+  saved run record becomes a comparable `RunView` (dataset identity,
+  model config, hyperparameters, validation protocol, metrics,
+  runtime/resources where recorded); runs are grouped by a
+  compatibility key (task + metric + protocol + folds) and
+  cross-condition pairs are explicitly REFUSED — never silently
+  merged into one ranking. Comparable groups get a side-by-side table
+  with Δ-vs-best deltas (sign convention: the trailing gap, ≥ 0,
+  lower-is-better metrics handled). `comparison_summary` is the text
+  twin the reports embed.
+- **`ui/widgets/experiment_compare.py`** — the Compare dialog,
+  reachable from the Job Center's history (now multi-select): group
+  headers, tables, verdicts, and the refused pairs with the differing
+  axes named.
+- **`src/pharmaml/studio/reports.py`** — the §17D composer: the eight
+  sections (inputs, methods, parameters, results, plots, statistical
+  metrics, provenance, limitations) from a run record, written
+  through the EXISTING self-contained `HTMLReport` writer. Units
+  travel with their values (known-key table; unknown units are never
+  invented), five significant figures throughout. The Limitations
+  section is factual-only and the fixed closing statement says the
+  toolkit does not interpret results — there is no Conclusion section
+  to auto-write.
+- **`ui/widgets/run_report.py`** — the Report dialog (Job Center,
+  one selected run): eight-section preview + save-as-HTML.
+- **Registry**: `utilities.compare` + `utilities.reports` rows
+  (64 capabilities, 64 integrated, 0 test gaps); CAPABILITY_MAP.md
+  and FEATURES.md synced (the FEATURES freeze stamp now names 195 —
+  R24's bump landed after its gate run; noted in the worklog).
+- **Tests**: `tests/test_experiment_comparison.py` (10 — grouping,
+  refusals, deltas, empty states, real `record_run` fixtures),
+  `tests/ui/test_experiment_compare.py` (4),
+  `tests/test_run_reports.py` (8 — section order, units, sig-figs,
+  no-conclusions pin, self-contained save),
+  `tests/ui/test_run_report.py` (3).
+
+### Fixed
+- Job Center: `setCurrentRow(0)` also SELECTS the row in Qt, so the
+  under-selection guards in the compare/report tests now clear the
+  selection explicitly (a modal `exec()` headless hang, diagnosed and
+  pinned in the new tests).
+
+## [1.2.194] — 2026-11-13
+### Added — part6 round 24 (§17A + §17B): workflow templates + the sequential pipeline engine
+
+- **`src/pharmaml/studio/pipelines.py`** — the §17B reliable sequential
+  engine: `Stage` / `Pipeline` / `run_pipeline` with artifact threading
+  between stages, per-stage timing, fail-fast runs that PRESERVE
+  partial outcomes, loud no-clobber artifact keys, and dependency-gated
+  stages whose missing optionals fail with the exact pip command (the
+  `DependencyError` contract — never a silent empty). NO drag-and-drop,
+  exactly as §17B instructs: the engine is a reliable sequential chain
+  first.
+- **The §17A workflow-template library** — seven templates, every stage
+  calling an EXISTING backend implementation (verified one by one
+  against source during the round): QSAR model development
+  (`load_dataset` → `split_table` → `compare_models` → held-out
+  evaluation → `export_table`); molecular descriptor generation
+  (`compute_fingerprints`); drug-response prediction (the notebook's
+  own chain: `load_response_table` → `collapse_replicates` →
+  `normalize_expression` → `most_variable_genes` → `response_matrix` →
+  `make_train_test_split` → leaderboard); molecular generation and
+  screening (`run_genetic_optimization` over the bundled objective
+  classes); docking preparation and analysis (`prepare_ligand_library`
+  + `compute_grid_box`); PK/PD modeling (`simulate_compartment` +
+  `oral_tmax`/`oral_cmax`/`half_life`/`auc_trapezoid`); MD analysis
+  (`synthetic_trajectory`/caller-provided + `rmsd_trajectory`).
+- **`ui/widgets/workflow_templates.py`** — the "Workflow templates" tab
+  in the Utilities Workbench: a browser over all seven templates with
+  owning card + stage chain, runnable forms for the two
+  parameter-light chains (PK/PD, MD) that write a JSON run record next
+  to their exports (the surface §17C comparison will consume), and an
+  HONEST message for the data-dependent chains (they name the Python
+  API and wait for their card-integrated forms — no pretending).
+- **Registry**: `utilities.templates` + `utilities.pipelines` rows
+  (62 capabilities, 62 integrated, 0 test gaps);
+  `docs/CAPABILITY_MAP.md` + `docs/FEATURES.md` synced.
+- **Tests**: `tests/test_workflow_pipelines.py` (19: engine contracts
+  + every template running end-to-end against the bundled example
+  data) and `tests/ui/test_workflow_templates.py` (7); the Utilities
+  page's tab pins updated 5 → 6.
+
+## [1.2.193] — 2026-11-13
+### Added — part6 round 23 (Phase 6): comprehensive verification + the evidence-based release-readiness report
+
+- **`tools/release_readiness.py`** — one command gathers every piece
+  of release evidence part6 §16 names and renders
+  `docs/RELEASE_READINESS.md`: the §12 dependency matrix (18 probed,
+  honest installed/not-installed/broken statuses, Qt rows probed
+  under the committed EGL-stub bootstrap so they match what the
+  suites exercise), live capability coverage (60 integrated, 0 test
+  gaps), the full suite inventory (185 suites / 5874 tests
+  collected), version-carrier agreement, and the §14 archive-audit
+  status. Sections without evidence say "not gathered" and name the
+  gathering command — nothing converts absence into a pass.
+- **`tests/test_phase6_readiness.py` (6 pins)** — the readiness
+  MECHANISM is pinned: matrix covers every optional family with the
+  honest vocabulary; capability counts match the live registry; the
+  suite inventory equals the on-disk test files; carriers agree;
+  every section renders with real numbers; empty evidence renders as
+  "not gathered" (a None-render bug was caught and fixed by these
+  pins).
+- **Full-suite evidence, §14.2-chunkened** on the restored 4 GiB
+  sandbox: library 5234 passed / 13 skipped / 0 failed (10 sequential
+  chunks over 139 suites); UI 589 passed / 0 failed (46 suites,
+  nine_card_first run per-class after an OOM kill of the chunked
+  form — no test silently dropped); gates 81/81. Recorded into the
+  report via `--record`.
+- **Restore round** (context): the sandbox was fully recycled after
+  R22; the workspace was restored from the GitHub remote (`9a59b3e`)
+  + the v1.2.192 archive, the venv rebuilt on the pinned stack
+  (numpy 1.26.4, PySide6 6.8.3, rdkit 2026.9.1, torch 2.14.1+cpu,
+  shap 0.54.1, catboost 1.2.8 — numpy re-pinned after the shap
+  resolver drift, per the requirements.txt caveat). Three
+  restore-artifacts fixed en route: the token embedded in the git
+  remote URL (scrubbed; the metadata-drift gate caught it), stale
+  notebook version prints (refreshed), and a missing
+  `_pharmaml_logs_visible` guard in `test_numpy_neural_checkpoints`
+  (the documented caplog-propagation dance, applied per the
+  test_docking/test_ml_pipeline precedent).
+
+## [1.2.192] — 2026-11-13
+### Added — part6 round 22 (Phase 5): contextual help, memory-aware presets, GUI dependency diagnostics
+
+- **Contextual scientific help (§17 F)** — `pharmaml.studio.glossary`: 45
+  short, unit-bearing explanations for the parameters, metrics and
+  algorithms the Studio's controls actually use (RMSD's Å and alignment
+  caveat, AUC's PK-vs-ROC disambiguation, conformal's exchangeability
+  assumption, CL's mL/min, SA score's heuristic nature…). Pure, no Qt;
+  `apply_help(widget, key)` puts ONE authoritative explanation on every
+  control that uses a term. Wired onto the four thinnest pages: PK/PD
+  (7 controls), Molecular Dynamics (3), Docking (2), Generative (4).
+- **Memory-aware execution presets (§17 E)** —
+  `pharmaml.utils.resources`: an HONEST resource probe (cgroup v2
+  `memory.max`, cgroup v1 `memory.limit_in_bytes`, `/proc/meminfo`
+  `MemAvailable`; the tighter bound wins; `None` when nothing is
+  readable — psutil deliberately not a dependency). Two presets over
+  the two real knobs (joblib `n_jobs`, streaming `chunk_rows`):
+  Balanced (all cores, 50k chunks) and Low-memory/eco (1 worker, 10k
+  chunks) with their trade spelled out. The low-memory RECOMMENDATION
+  fires only on evidenced memory under 2 GiB — an unknown size is
+  never treated as low. Settings gains the preset picker + a live
+  probe readout that says "GPUs are not probed".
+- **Dependency diagnostics in the GUI (§12)** — the Settings page now
+  renders the same 16 checks as `studio.py --doctor` live, with the
+  fix line for every failing check (never silently hidden).
+- **Accessibility** — the top bar's location/job labels announce with
+  context ("Current location: …", "Job status: idle"), and toast
+  notifications announce their severity.
+- **Registry:** 3 Phase-5 rows (glossary, presets, doctor panel) —
+  60 integrated / 0 api.
+- **Tests:** `tests/test_phase5_backends.py` (11) + `tests/ui/test_phase5.py`
+  (7): glossary length/unit/typo pins, probe honesty (unknown→None,
+  tighter-bound intersection, sentinel rejection), preset fallback +
+  evidence-gated recommendation, settings surfaces, tooltips on the
+  four pages, accessible names.
+
+## [1.2.191] — 2026-11-13
+### Added — part6 round 21 (Phase 4): global search, shared workspace, unified job center
+
+- **Global capability search / command palette (§7)** — `Ctrl+K` or the
+  top bar's "Search…" opens a palette over a NEW pure search index
+  (`ui/search_index.py`, no Qt): all 54 registry capabilities, the nine
+  cards and the 18 sections, with scientific-terminology aliases
+  (morgan/ECFP, conformal prediction, GNN, MCTS, Vina, PBPK, RMSD,
+  TIFF…). All EIGHT example queries from the directive land their top
+  hit on the right section (pinned by tests). Every result shows the
+  parent card and destination; unavailable optional dependencies are
+  TAGGED "needs <dep>", never hidden — distinguished from missing
+  functionality per §7. No private class names are exposed.
+- **Unified job center (§10)** — the top bar's "Jobs" button opens a
+  dialog with the live job (name, monotonic-clock runtime, the
+  cooperative Stop only — no fake Pause/Resume, per §13) and the
+  recorded run history from `pharmaml.studio.runs` (the same records
+  the pages have written since v1.2.171), newest first, with the §9
+  provenance detail on select (family, label, created, toolkit
+  version, the run's own summary — nothing inferred).
+- **Shared session workspace (§8)** — `pharmaml.studio.workspace`: a
+  file-based JSON registry (env-overridable path, no database) of the
+  session's datasets, model bundles and artifacts with canonical
+  sha-256 fingerprints, path de-duplication, a 24-per-kind cap, an
+  OPTIONAL project tag (never forced), and best-effort semantics (a
+  failed side-write never touches the user's results). The Data
+  Explorer notes every loaded dataset, the Workbench notes saved
+  bundles, and the Dashboard shows the recents card.
+- **Registry: `gen.rl` + `gen.mcts` rows added** (the Reinforcement
+  Learning and MCTS workflows were real on the Generative page since
+  v1.2.107 but unregistered) + the three Phase-4 rows — 57 integrated.
+- **Tests:** `tests/ui/test_phase4.py` — 13 pins: index purity, the
+  eight directive queries, dependency honesty, the palette's
+  navigation through the public API, the job center's live/honest-idle
+  contract, and the workspace's record/list/dedupe/refusal/corruption
+  paths, all env-isolated.
+
+## [1.2.190] — 2026-11-13
+### Added — part6 round 20 (Phase 3, batch 4 — the closer): the last three class-C backends
+
+- **ML Workbench, Statistical tools tab: "Conformal label sets"** — the
+  classification mirror of the regression conformal card
+  (`ml.conformal_classification`): both calibration schemes run side by
+  side over the same held-out rows — the marginal split-conformal
+  threshold and the label-conditional per-class thresholds — with the
+  verbatim per-row prediction sets, set sizes, empirical coverage for
+  both schemes, and the set-size plot. A regression source refuses
+  honestly.
+- **Data Explorer: "Exact split-overlap audit" panel**
+  (`ml.split_audit`) — pick the identifier column, name the partitions
+  as `name: lo-hi` row ranges, audit: shared keys, per-partition row
+  counts, within-partition duplicates, the pairwise overlap matrix and
+  the top shared keys; exact keys only (no canonicalization, no fuzzy
+  matching). Range parsing refuses colons-less lines, single
+  partitions and out-of-table ranges.
+- **Data Explorer: "SAR matched pairs & activity cliffs" panel**
+  (`ml.sar`) — pick a SMILES column and a numeric activity column
+  (the picker filters to numeric), set the cliff threshold: all
+  matched molecular pairs (single-cut fragmentation, one substituent
+  swap, delta >= 0) with the cliffs among them, the top-10 pairs by
+  delta and the delta histogram.
+- **Registry: the last three rows flipped `api` → `integrated` — 52
+  integrated / 0 api.** The class-C table in FEATURES.md is **empty**:
+  every backend module now has a GUI workflow (A=46, C=0); the
+  C-list pin and the inventory guard re-pinned to zero.
+- **Tests:** `tests/ui/test_phase3_batch4.py` — 10 pins over the real
+  backends and the bundled tables: the conformal card's refusals +
+  105-row end-to-end with export, the split audit's clean (252/84/84
+  disjoint) and dirty (5 leaked ids) paths, and the SAR panel's
+  numeric-only filtering + the 408-pairs/96-cliffs run on
+  `library_with_descriptors.csv`.
+
+## [1.2.189] — 2026-11-13
+### Added — part6 round 19 (Phase 3, batch 3): the Deep Learning cluster
+
+- **Deep Learning Workbench: "Efficiency lab" tab** (§3.2 bar met; the
+  GUI calls the canonical backends, §3.3):
+  - **Prune** — a seeded tape MLP magnitude-pruned one-shot, then along
+    Zhu & Gupta's cubic ramp with a retrace callback between levels
+    (`apply_magnitude_pruning` + `iterative_prune_and_retrain` +
+    `sparsity_schedule`): the per-layer report table (one-shot vs
+    ramp-final) and the ramp figure.
+  - **Quantize** — the same network's first Linear weight through the
+    three-method report (`quantization_report`): NF4 (block 64 +
+    double quant), int8 per-tensor, int8 per-channel — bits per
+    weight, RMSE, relative error, with the error bars.
+  - **ZeRO planner** — the Table-3 memory arithmetic for a model size
+    across stages 0-3 and a chosen world size (`zero_memory_model`):
+    what each stage partitions, in MB per rank.
+- **Deep Learning Workbench: "GNN lab" tab** — the geometric-deep-
+  learning entry point: the GNNExplainer synthetic motif dataset
+  (house/cycle), a GCN/SAGE/GAT classifier trained on it, then the
+  edge explanation of graph #0 (`motif_dataset` + `GNNClassifier` +
+  `gnn_explain`, the `gnnxai` fidelity arithmetic inside): top-12
+  scored edges with the true-motif flag, the probability walk
+  (origin → masked → maskout → zero), the fidelity pair and motif
+  recovery.
+- **Registry:** six rows flipped `api` → `integrated` — **49
+  integrated / 3 api**; the C-list pin shrank to 3
+  (conformal_classification, sar, split_audit); FEATURES.md class-C
+  table + counts re-synced (A=43, C=3). Fixed an inventory-guard
+  substring bug found by the flip: `sar` matched inside `qsar` — the
+  no-GU honesty check now matches module tokens on word boundaries.
+- **Tests:** `tests/ui/test_dl_efficiency_lab.py` — 6 pins over the
+  real backends: construction defaults, the three efficiency
+  workflows (exact global-50% sparsity, the honest NF4 bpw 4.156 on a
+  128×8 weight, the real 2/2/12 MB stage-0 ZeRO arithmetic), the GNN
+  motif workflow (accuracy ≥ 65%, motif recovery, fidelity), and the
+  busy-guard refusal while a job runs.
+
+## [1.2.188] — 2026-11-13
+### Added — part6 round 18 (Phase 3, batch 2): the ML statistics cluster
+
+- **Statistical tools tab, five more workflows** (§3.2 bar met; the
+  GUI calls the canonical backends, §3.3):
+  - **Comparison test** — cross-validates a model panel under one
+    shared splitter (`compare_models_cv`), then tests every model
+    against the leader with the family corrected
+    (`model_comparison_test`): differences, adjusted p-values,
+    on-par/better/worse verdicts, panel-means bar figure.
+  - **p-value correction** — the standalone multiplicity corrector:
+    any pasted family, Benjamini-Hochberg / Bonferroni / Holm
+    (`correct_p_values`), raw-vs-adjusted scatter.
+  - **Power report** — the fold-count power picture
+    (`power_report` + `paired_power` + `folds_for_power`): minimum
+    detectable effect, observed effect's power and the sufficiency
+    verdict, power curve across fold counts.
+  - **Coverage by group** — per-group empirical coverage with Wilson
+    intervals against the nominal level, audited over the last
+    conformal run's covered flag (`coverage_by_group`).
+  - **Subgroup audit** — stratified held-out metrics per subgroup
+    plus the multiplicity-corrected gap scan, every subgroup vs the
+    rest (`subgroup_report` + `subgroup_gap_scan`).
+- **Persistence tab: "Write model card…"** — builds and writes the
+  loaded bundle's model card, markdown or HTML by suffix
+  (`write_model_card`), provenance and applicability box included.
+- **Registry:** six rows flipped `api` → `integrated` — **43
+  integrated / 9 api**; the C-list pin shrank to 9 (the Deep
+  Learning cluster, conformal_classification, sar, split_audit);
+  FEATURES.md class-C table + counts re-synced (A=42, C=1).
+- **Tests:** `tests/ui/test_ml_statistics_batch2.py` — 13 pins:
+  construction, six honest refusals, and the six real workflows on
+  the real example data (a genuinely saved + reopened bundle for the
+  model card, both .md and .html).
+
+## [1.2.187] — 2026-11-13
+### Added — part6 round 17 (Phase 3, batch 1): the statistical tools
+
+- **ML Workbench tab 6, "Statistical tools"** — four previously
+  API-only backends now have full GUI workflows (§3.2 bar: form →
+  validation → worker → the canonical backend → results table +
+  figure + status → CSV export; §3.3: the GUI never reimplements,
+  it calls `pharmaml.ml.*`):
+  - **Conformal intervals** (regression): split-conformal radius on
+    the held-out split, per-row interval table, prediction/interval
+    figure, empirical coverage in the status line.
+  - **Calibration report** (binary classification): Brier/ECE/MCE +
+    the binned reliability diagram against the perfect line.
+  - **Decision curve** (binary classification): net benefit vs
+    treat-all/treat-none over the threshold range, best-threshold
+    verdict.
+  - **Drift detection**: per-feature PSI (+KS) of a current batch
+    against a reference CSV or the loaded dataset, with
+    stable/moderate/shifted verdicts.
+  All four reuse the page's existing model sources (Model Analysis
+  run / Workbench ensemble / loaded bundle) and refuse honestly when
+  the task type or the inputs do not match.
+- **Registry:** the four rows flipped `api` → `integrated` (37
+  integrated / 15 api now); the C-list pin in
+  `tests/test_capability_registry.py` shrank accordingly (27 pins
+  still green).
+- **Tests:** `tests/ui/test_ml_statistical_tools.py` — 11 pins:
+  construction, four honest refusals, four end-to-end workflows on
+  the real example data (including a genuinely shifted drift batch)
+  and the export round-trip.
+
+## [1.2.186] — 2026-11-13
+### Added — part6 round 16 (Phase 2): the complete capability registry
+
+- **`src/pharmaml/studio/capability_registry.py`** — the single source
+  of truth for feature registration (part6 §6): 52 capabilities, each
+  with a stable ID, verified backend module + public API symbols, the
+  primary card (§6.1 unique ownership), the Studio route, dependency/
+  engine declarations, an honest status (integrated / api / cli /
+  blocked) and test references.  Pure Python, Qt-free (pinned by a
+  subprocess test); `ui/nine_cards.py` asserts agreement with the
+  registry's card order at import time, so the two sources can never
+  drift apart.
+- **The full capability→card assignment:** every user-facing capability
+  now has exactly one primary card.  The 19 class-C backend-only
+  modules from the Phase-0 audit are assigned — 13 to Machine
+  Learning, 5 to Deep Learning, 1 to Datasets — with their Phase-3
+  GUI targets recorded honestly (`status: api`).
+- **The Other-card decision (§2.3):** NO Other card.  After the
+  assignment pass nothing user-facing remains homeless, so rule 8
+  applies; the decision is pinned by
+  `TestRule3OtherPosition` and can only change through a new,
+  justified audit.
+- **`tests/test_capability_registry.py`** — 27 pins implementing the
+  eleven §6.2 validation rules (identifiers, directive order,
+  Other-last, routes resolve, backend references real, no orphans,
+  unique ownership, all pages reachable, deps/engines disclosed,
+  statuses honest, tests referenced) plus the automated coverage
+  summary.  The rules caught four real gaps while being written
+  (biology/foundations/bestofml/responseai rows missing, an XvgSeries
+  symbol living in the wrong module) — fixed, all 52 rows now
+  verified against the live tree.
+- **Card workspaces** list their card's capabilities from the registry
+  with per-capability status (ready / Phase 3).
+- **`docs/CAPABILITY_MAP.md`** regenerated from the live registry: §4
+  is now the assignment table, gaps 1-3 are closed, the migration
+  plan marks Phases 1-2 done.
+
+## [1.2.185] — 2026-11-13
+### Added — part6 round 15 (Phase 1): the nine-card-first shell lands
+
+- **The inversion (part6 §2.1):** the Studio now opens on the
+  nine-card home — the §5 grid promoted from the Dashboard page into
+  the application's default screen.  MainWindow routes three modes
+  (home → card workspace → the 18 pages); ``go_to`` stays the one
+  routing API, so every existing pin, shortcut and cross-link keeps
+  working unchanged.
+- **New:** ``ui/home.py`` (the promoted home + §11 evidence wiring),
+  ``ui/card_workspace.py`` (a workspace per card: title, description,
+  workflow entries, in-card filter), ``ui/widgets/top_bar.py``
+  (Home / Back / location / live-jobs indicator / Settings / the
+  Advanced-navigation toggle), navigation history with Alt+Home and
+  Alt+Left, and the grid's additive ``card_activated`` signal —
+  clicking a card opens its workspace.
+- **The 18-item sidebar is no longer the dominant default** (§2.1):
+  it hides at launch and returns only behind the top-bar toggle.
+  Restoring the last workspace is opt-in (``nav/restore_last``,
+  default off — the old default never returns).
+- **Tests:** new ``tests/ui/test_nine_card_first.py`` (21 pins:
+  default=home, sidebar-not-dominant, history round-trips, all 18
+  pages reachable, 9 workspaces in the directive order, no Other
+  card, routes valid, evidence on the home grid, restore opt-in).
+  Full UI battery re-run: 39 suites green after four environment-
+  drift pins (generative GA/Pareto/UMAP exact-float and exact-SMILES
+  literals) were relaxed to structural assertions — those four fail
+  on pristine v1.2.184 too, so this is drift repair, not regression
+  hiding.  Two genuine bugs the new pins caught were fixed: the
+  history guard that swallowed home-entry, and the splitter-hide
+  semantics of the advanced toggle.
+- One superseded pin updated honestly: the Dashboard grid count
+  (×1 → home + dashboard ×2), per §2.1's promotion.
+
+## [1.2.184] — 2026-11-13
+### Added — part6 round 14 (Phase 0): the capability map — the nine-card-first audit lands
+
+- **The environment story (recycle #2):** the sandbox was recycled
+  again after R13; the token was re-recovered from the fresh
+  GitHub_token.pdf (line-wrapped 74+19=93 chars — with a form-feed
+  between the halves this time; the joiner now strips \f too), the
+  remote verified intact at e81985d, clean clone, venv rebuilt.
+- **Phase 0 of the nine-card-first architecture (MASTER_PROMPT
+  part6):** the full backend capability audit.  Launch chain verified
+  (studio.py → ui.run → MainWindow; the §5 nine-card grid lives
+  INSIDE DashboardPage of the 18-page sidebar app — the inversion is
+  Phase 1); 18 pages mapped to their live-imported backends; 92 ml
+  modules / 74,074 lines censused; 62 CLI parser sites; 555 UI +
+  4,514 library test functions counted.
+- **docs/CAPABILITY_MAP.md** — the Phase-0 deliverable: the auditable
+  page→backend→card table, the honest C-list of 19 backend-only
+  modules (the 8 documented groups + the 9 R13-landed statistical
+  modules, all with zero UI references), the §3.2 integration gate
+  restated, and the six-phase migration plan.
+- **The R13 deferral closed:** FEATURES.md re-stamped to the shipping
+  version, and the calibration dialog's honesty note reworded so the
+  class-C word-guard no longer false-positives on "conformal" (the
+  dialog integrates probability_calibration, a different module) —
+  test_feature_inventory 17/17 green again.
+- **Baseline gates on the restored tree:** carriers 7/7, main window
+  + nine cards 41/41, pages smoke 38/38, docs-index 30/30, feature
+  inventory 17/17.
+
+## [1.2.183] — 2026-11-12
+### Added — part5-continuation round 13: the recovery round — arena absorbed, the orphan ml/ family landed
+
+- **The environment story**: the sandbox was fully recycled after R12
+  (repo, venv, scratch, and the GitHub credential were all lost); the
+  token was recovered from MASTER_PROMPT part1 (line-wrapped in the
+  PDF — both halves joined), the remote verified intact at R12's
+  `4eea770`, and the clone restored clean (fsck clean, token never in
+  config — an askpass helper at `scripts/git-askpass.sh` feeds it).
+- **The arena branch absorbed** (22 commits, `940c8a2`): docking
+  engine safeguards (false-success Vina runs, batch logs, staged-pose
+  validation, AutoGrid geometry audit), the
+  uncertainty/validation/reproducibility dialogs, nested-logistic
+  validation, binary recalibration, provenance capture,
+  fresh-directory campaign launch/preparation/preview/status, and the
+  CV group-label guard. PRs 1-10 were already merged; PR11's content
+  was byte-identical inside arena; PR12 IS arena's tip — every unmerged
+  ref is now absorbed.
+- **The uploaded v1.2.162 zip absorbed**: provenance solved (base =
+  the r250 tree `eb78935`; 421/489 files byte-identical); its unique
+  value was **19 never-committed files** — a nine-module `ml/` family
+  (calibration, comparison, decision, drift, model_card, multiplicity,
+  power, sar, subgroups) with 11 test suites, recovered from the lost
+  session's working tree and landed with full gating.
+- **The ports that made them run on main's newer code**:
+  `paired_wilcoxon_test` (stats), the `DomainBox`/`check_domain_box`
+  family (applicability), `feature_ranges_from_frame` +
+  `bundle_metadata`/`save_model` provenance kwargs (persistence), six
+  new CLI subcommands (`ml predict/card/drift/calibrate/decide/
+  subgroup`) + `compare --significance` with its power reporting
+  (cli.py), `plot_decision_curve`/`plot_subgroup_performance`
+  (viz/ml_plots), the prediction-interval conformal API
+  (`ConformalRegressor`/`ConformalClassifier`/`conformal_quantile`)
+  merged alongside the existing one, `ml train` now records the
+  training target + feature box + drift sketch in every bundle, and a
+  sklearn compat shim in `recalibrate` (`FrozenEstimator` on >=1.6,
+  `cv="prefit"` on the pinned 1.5.x).
+- **Gates**: the orphan battery 338/338 green; the full library
+  battery 4992 passed with the remaining failures proven
+  environment-only (missing meeko/gemmi/fpdf/docx — all resolved by
+  install) or pre-existing docs-index guards that now demand the new
+  modules be re-classified (the honest R14 follow-up); §13 proofs and
+  the R12 preserved-partial pins re-verified green; ruff clean; mypy
+  zero new errors (11 pre-existing transitive, proven via stash A/B).
+
+## [1.2.182] — 2026-11-12
+### Added — part5-continuation round 12: the GUI surfaces what a §13 Stop preserved (the preserved-partial channel)
+
+- `ui/workers/job_worker.py` — the round-4 §12 audit's row 18
+  (confirmed in this round's re-audit): the six registered §13
+  operations attach `partial_results` to `JobCancelled` on a
+  cooperative Stop, but the worker caught the exception and emitted
+  only `cancelled(float)`, dropping the payload on the floor —
+  every page's Stop handler said "cancelled after Xs" while the
+  preserved evidence was lost.  New `JobSignals.preserved(object)`
+  emits right after `cancelled` whenever the backend attached a
+  payload; the historical `cancelled(float)` contract is untouched
+  (all 15 pages byte-identical, pinned by a dedicated back-compat
+  test), and a `JobCancelled` WITHOUT a payload stays silent on the
+  new channel.
+- `JobRunner.submit(on_preserved=…)` — the opt-in hook, connected
+  before the runnable enters the pool (the round-208 pattern).
+- First consumer: the chemistry feature-factory page.  A Stop
+  mid-batch now binds the R6 descriptor-batch partial
+  `(frame, report)` to the table (the completed rows are real,
+  validated feature vectors) with the honest "Cancelled — kept the
+  N completed molecule(s) (V valid, D dropped) of M requested"
+  line; the page records the requested count when the job starts.
+- 5 new offscreen tests: 3 worker-level (the partial rides
+  `preserved` after `cancelled`; no-payload silence; the historical
+  handler back-compat) and 2 page-level (the partial frame bound +
+  the honest line; the no-payload historic line preserved).
+- `docs/GUI_GAP_AUDIT.md` row 18;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R12 row marked done.
+
+## [1.2.181] — 2026-11-12
+### Added — part5-continuation round 11: the chunked preprocessing earns §13 registration — THE REGISTRY IS COMPLETE
+
+- `apply_preprocessor_chunked(frame, *, impute_strategy="median",
+  scale=True, encode_categorical=False, chunk_rows=500, progress=...,
+  checkpoint_dir=..., checkpoint_every=..., checkpoint_resume=...)`
+  in `pharmaml.ml.preprocessing` — the sixth and last §13 extension
+  on the v2 checkpoint schema: the standard (impute -> scale ->
+  encode) pipeline is fitted ONCE on the full table and applied
+  `chunk_rows` at a time.  The exactness contract rests on two
+  verified properties: the fit is DETERMINISTIC given the table (a
+  resume refits instead of deserializing sklearn state) and
+  ``transform`` is ROW-PURE (the transform of a slice equals the
+  slice of the transform).  The checkpoint is therefore only the
+  completed chunks' transformed rows — a resume skips them
+  bit-exactly, equal to BOTH the uninterrupted chunked run AND the
+  one-shot ``fit_transform``.
+- The fingerprint covers the strategy knobs AND the table itself
+  (columns, dtypes, shape, a content checksum): a value edit, a
+  column rename, or a shape edit all refuse to resume (exact restore
+  or nothing).
+- A cooperative stop preserves the partial ``(frame, report)`` on
+  ``JobCancelled.partial_results`` — the completed rows transformed,
+  the pending rows absent.  A complete-run checkpoint restores with
+  ZERO chunks re-transformed (the smoke-caught complete-ledger
+  double-append bug, fixed before the proofs landed).
+- **With round 11 all six §13 candidate classes are registered**
+  (descriptor_batch R6, similarity_campaign R7, hpo R8,
+  generative_search R9, docking_batch R10, preprocessing R11) and
+  `PENDING_OPERATION_TYPES` is empty — the §13 candidate sequence is
+  COMPLETE.  The gate stays armed for any future class.
+- `tests/test_preprocessing_resumability.py` — the 10-test proof
+  suite, led by the registry proof
+  `test_resumed_table_is_bit_exact` and the completion assertion
+  `test_registry_complete_and_pins_the_proof_test`.
+- `docs/CHECKPOINT_SCHEMA.md` registry + rules updated;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R11 row marked done.
+
+## [1.2.180] — 2026-11-12
+### Added — part5-continuation round 10: the docking batch earns §13 registration (the per-ligand ledger, preserve semantics)
+
+- `dock_smiles_array(checkpoint_dir=..., checkpoint_every=...,
+  checkpoint_resume=...)` — the fifth §13 extension on the v2
+  checkpoint schema: the resume unit is the LIGAND.  The checkpoint
+  is the per-ligand completion ledger — every finished entry's full
+  row (score, poses, seconds, output, error, folder) — written every
+  `checkpoint_every` finished ligands and at completion.  Finished
+  ligands are PRESERVED verbatim, never re-run: a real docking engine
+  is stochastic by nature, so "preserve" (not re-execute) is the
+  honest exactness contract, proven bit-identical against a
+  deterministic fake engine (the proof suite monkeypatches the
+  existing `smiles_to_pdbqt` / `run_vina` seams — no real Vina
+  binary runs in the tests).
+- The fingerprint closes the two gaps the R9 audit flagged: the FULL
+  smiles list + names (a shortened, extended, reordered or renamed
+  dataset refuses to resume — exact restore or nothing) and the
+  receptor PDBQT content checksum (an edited receptor refuses too).
+- A cooperative stop (`progress` returning `False`) raises
+  `JobCancelled` with the partial result frame on
+  `partial_results`; with `workers > 1` the engine run proceeds in
+  waves of `workers` so the stop lands at a clean barrier — the
+  submitted subprocesses of a running wave always finish.
+  Preparation failures are FINAL and ledgered: a failed ligand's
+  error row is preserved verbatim on resume, never re-prepared.
+- `docking_batch` registered in `OPERATION_REGISTRY` (proof
+  pinned); one §13 candidate remains pending (preprocessing).
+- `tests/test_docking_batch_resumability.py` — the 11-test proof
+  suite, led by the registry proof
+  `test_resumed_batch_is_bit_exact`.
+- `docs/CHECKPOINT_SCHEMA.md` registry + rules updated;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R10 row marked done.
+
+## [1.2.179] — 2026-11-12
+### Added — part5-continuation round 9: generative search earns §13 registration (the adaptive-books restore)
+
+- `GeneticOptimizer.optimize(checkpoint_dir=...,
+  checkpoint_every=..., checkpoint_resume=..., progress=...)` —
+  the fourth §13 extension on the v2 checkpoint schema: at every
+  generation boundary the checkpoint captures the COMPLETE state —
+  the population, the produced-molecules book, the per-generation
+  history, the sampler's RNG state (the round-8 lesson carried over:
+  every tournament / mutation / crossover draw advances the rng, so a
+  history-only replay would propose different offspring), and on
+  adaptive runs the three operator credit books (reward windows,
+  tallies, best offspring) plus the trajectory.  A resume is
+  bit-identical to BOTH the uninterrupted run and the
+  checkpoint-less call (`elapsed_s` aside, which is wall-clock by
+  nature); a stale config checkpoint — any GA knob or the
+  objective's class identity differing — is refused with a warning
+  (exact restore or nothing).  A cooperative stop attaches the
+  partial `GenerationResult` on `JobCancelled.partial_results` in
+  BOTH the checkpointed and the checkpoint-less mode (strictly
+  richer than the round-205 `None` convention — the partial is
+  computable from the loop state alone).
+- `generative_search` registered in `OPERATION_REGISTRY` (proof
+  pinned); two §13 candidates remain pending (docking_batch,
+  preprocessing), each earning its row in its own round.
+- `tests/test_generative_search_resumability.py` — the 10-test proof
+  suite, led by the registry proof
+  `test_resumed_search_is_bit_exact` and the adaptive-mode restore
+  test `test_adaptive_search_resumes_bit_exact`.
+- `docs/CHECKPOINT_SCHEMA.md` registry + rules updated;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R9 row marked done.
+
+## [1.2.178] — 2026-11-12
+### Added — part5-continuation round 8: HPO studies earn §13 registration (the RNG-state lesson)
+
+- `tune_model(checkpoint_dir=..., checkpoint_every=...,
+  checkpoint_resume=...)` — the third §13 extension on the v2
+  checkpoint schema: the trial loop's checkpoints carry the study's
+  COMPLETE state, which for HPO is the trial history AND the sampler's
+  RNG state.  The round's specific finding: replaying the trial
+  history alone is NOT bit-exact — every TPE `ask()` draws candidates
+  from the engine's `random.Random`, whose state advances per trial,
+  so a resumed study would propose different parameters than the
+  uninterrupted run.  The proof suite pins that distinction with its
+  own test (naive replay diverges; RNG-state restore matches).  A
+  resume is bit-identical to BOTH the uninterrupted study and the
+  checkpoint-less call; a stale config (model/space/sampler/seed/cv/
+  n_trials) or dataset checkpoint is refused with a warning (exact
+  restore or nothing); a cooperative stop preserves the partial
+  `TuneReport` on `JobCancelled.partial_results`; without
+  `checkpoint_dir` the call keeps the historical behaviour (plus the
+  round-205 progress contract, `partial_results=None` on stop).
+- `HPOStudy.capture_state()` / `restore_state()` — the
+  trial-history-plus-RNG-state envelope accessors (JSON-safe; the
+  Mersenne state rides as a plain list, `gauss_next` round-trips
+  `None` as-is).
+- `hpo` registered in `OPERATION_REGISTRY` (proof pinned); three §13
+  candidates remain pending (generative_search, docking_batch,
+  preprocessing), each earning its row in its own round.
+- `tests/test_hpo_resumability.py` — the 12-test proof suite, led by
+  the registry proof `test_resumed_study_is_bit_exact` and the
+  RNG-state distinction test
+  `test_resume_requires_the_rng_state_not_just_history`.
+- `docs/CHECKPOINT_SCHEMA.md` registry + rules updated;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R8 row marked done.
+
+## [1.2.177] — 2026-11-12
+### Added — part5-continuation round 7: similarity campaigns earn §13 registration
+
+- `run_similarity_campaign(checkpoint_dir=..., checkpoint_every=...,
+  checkpoint_resume=...)` in `pharmaml.chem.similarity` — the second
+  §13 extension on the v2 checkpoint schema: the `similarity_scan`
+  math wrapped in a 25-reference chunk loop whose checkpoints carry
+  the campaign's complete state (the long-format similarity rows, the
+  dropped-reference ledger, scan-config + dataset fingerprints).  A
+  resume replays them — bit-identical to BOTH the uninterrupted
+  campaign and the one-shot `similarity_scan` on the same inputs; a
+  stale config/dataset checkpoint is refused with a warning (exact
+  restore or nothing); a cooperative stop preserves the partial
+  long-format frame on `JobCancelled.partial_results`; without
+  `checkpoint_dir` the call is chunked-but-checkpoint-less (the
+  round-205 contract, `partial_results=None` on stop).  The target
+  fingerprints are computed once and shared across reference chunks.
+- `similarity_campaign` registered in `OPERATION_REGISTRY` (proof
+  pinned); four §13 candidates remain pending (hpo,
+  generative_search, docking_batch, preprocessing), each earning its
+  row in its own round.
+- `tests/test_similarity_campaign_resumability.py` — the 11-test
+  proof suite, led by the registry proof
+  `test_resumed_campaign_is_bit_exact`.
+- `docs/CHECKPOINT_SCHEMA.md` registry + rules updated;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R7 row marked done.
+
+## [1.2.176] — 2026-11-12
+### Added — part5-continuation round 6: descriptor batches earn §13 registration; branch consolidation
+
+- `compute_feature_frame(checkpoint_dir=..., checkpoint_every=...,
+  checkpoint_resume=...)` — the first §13 extension on the v2
+  checkpoint schema: chunk-boundary envelope-carrying checkpoints with
+  the batch's complete state (b64-packed per-row float vectors, the
+  drop ledger, config + dataset fingerprints).  A resume skips the
+  completed prefix; a stale config/dataset checkpoint is refused with
+  a warning (exact restore or nothing); existing call sites untouched.
+- `JobCancelled.partial_results` (optional) — a cooperative stop in
+  the checkpointed path preserves the partial `(frame, report)` on
+  the exception (§13 "preserve completed partial results after
+  cancellation whenever the operation's data contract permits").
+  Construction and the checkpoint-less path stay byte-identical.
+- `descriptor_batch` registered in `OPERATION_REGISTRY` (proof
+  pinned); five §13 candidates remain pending, each earning its row
+  in its own round.
+- `tests/test_descriptor_batch_resumability.py` — the 11-test proof
+  suite, led by the registry proof
+  `test_resumed_batch_is_bit_exact` (interrupted + resumed ==
+  uninterrupted, bit for bit).
+- Branch consolidation (user instruction): `arena/8fbb4283` absorbed
+  (its checkpoint ship-safety suite, the release-safety test count,
+  the hydration-safe CodeBlock theme ride in unchanged), and all
+  other branches deleted — local and remote carry only `main`.
+- `docs/CHECKPOINT_SCHEMA.md` registry + rules updated;
+  `docs/plans/PART5_S11_S14_CONTINUATION.md` R6 row marked done.
+
+## [1.2.175] — 2026-11-12
+### Added — part5-continuation round 5: release report schema v2 (§14) + the version-bump rule
+
+- `tools/audit_release.py --profile-results <json>` — folds a separately
+  recorded evidence file (schema `pharmaml-profile-results/2`) into
+  `report.json` + `SUMMARY.md` from one source of truth: the exact
+  per-profile passed / failed / skipped / blocked / not-executed counts,
+  the gates, the backup/recovery status and the runtime/platform +
+  scientific limitations. The audit itself still never runs tests —
+  everything from the file is labelled *recorded evidence; not executed
+  by this audit*.
+- Fail-closed honest-labelling validation before any output exists:
+  unique non-empty profile names, a recorded command per profile, five
+  outcome counts as ints ≥ 0 summing to the recorded `collected`
+  (recomputed by the audit), unknown keys rejected at every level, gate
+  outcomes limited to passed / failed / not run. Profiles ride the
+  report separately — no merged total anywhere.
+- `tests/test_release_audit.py` 6 → 28 tests, including 18 parametrized
+  refusal cases and the sum-check regression that caught the validator's
+  collected-before-compare ordering bug (a dead check) — fixed and
+  pinned.
+- `docs/release-audits/v1.2.174-part5-r5-*` — a real shipped report (the
+  532/532 offscreen GUI battery, two not-executed-with-cause profiles,
+  three gates, the backup verification, five limitations); documented in
+  `docs/RELEASE_AUDIT.md`.
+- `docs/INDEX.md` regenerated: round 2's `checkpoint_schema` exports
+  (`OperationSpec`, `ENVELOPE_KEY`) had never been re-indexed — caught by
+  the portability suite while running this round's gates.
+- **The version-bump rule (user instruction, this release):** whenever
+  the zip content changes, the version is bumped in the same change —
+  no same-version re-ships. This release itself is the first
+  application: round 5's zip had shipped as a same-version refresh
+  (`dabd730`, sha `064bdd49…` under `v1.2.174`); `1.2.175` re-ships it
+  under a properly bumped version.
+
+## [1.2.174] — 2026-11-12
+### Added — round 267: the arena/7e4a40b3 absorption — engine discovery, checkpoint hardening, release tooling
+
+- `tests/test_engine_discovery_part5.py` — the engine-discovery suite (243
+  tests) over the bundled `engines/` runtimes (vina, autodock4, autogrid4):
+  discovery, launch prerequisites, and the platform data-drift diagnostic —
+  the Part-5 checkpoint verification the branch recorded.
+- `tools/checkpoint.py` — the transactional rework: the restore contract
+  staged+rolled-back, the ZIP builder refuses to clobber existing releases
+  (`tests/test_checkpoint_build_safety.py`, `test_checkpoint_restore_transaction.py`).
+- `tools/audit_release.py` — the read-only release-archive evidence audit;
+  `tools/build_docs_index.py` — the generated docs index (regenerated);
+  `tools/build_example_data.py` — the example-data builder;
+  `tools/diagnose_data_drift.py` — the platform-specific drift diagnostic;
+  `tools/strip_notebook_outputs.py` — the output scrubber.
+- `tests/test_estimator_compatibility.py` — conformal/coverage estimators
+  validated across sklearn versions (the r266 suite's compatibility leg).
+- Suite portability: `tests/conftest.py` + the `checkout_only` /
+  `web_checkout_only` markers — tests needing the Git checkout or the
+  companion web tree skip cleanly in the standalone (zip) profile.
+- Root `scripts/check_github_page.py` + `scripts/build_social_preview.py` +
+  `tests/test_github_page.py` — the landing-page checks (10 tests).
+- `docs/FEATURES.md` — the docking-boundary language trued to the bundled
+  engines reality (the source/ZIP ships Windows engines; native builds or
+  Wine may be needed) — the drift the branch caught and main's drift-guard
+  now pins.
+- `requirements.txt` — the Studio-GUI block's pins reformatted to the strict
+  `# name==version` form the pin-contract test parses; the new `gui-test`
+  extra (PySide6/pyqtgraph/qt-material/qdarkstyle/pytest/pytest-qt) is now
+  covered by the contract.
+- Hygiene: the `PART5_PHASE0_AUDIT.md` home-path leak scrubbed (the
+  ten-chunk gate's second catch this round).
+
+## [1.2.173] — 2026-11-11
+### Added — round 266: the arena branch absorption -- the conformal & split-integrity suite lands (arena/8696775e, 12 commits)
+
+- `ml/conformal.py` — split-conformal regression intervals: the finite-sample
+  marginal coverage guarantee (`conformalize` on any fitted regressor, the
+  quantile residual calibration, `predict_intervals` with alpha-exact width).
+- `ml/conformal_classification.py` — split-conformal classification sets
+  (`predict_set` with the score-threshold dance) plus **label-conditional**
+  conformal sets (per-class calibration, the conditional validity that
+  marginal sets only promise on average).
+- `ml/coverage_diagnostics.py` — subgroup coverage diagnostics: empirical
+  coverage per subgroup vs the nominal, the shortfall table.
+- `ml/split_audit.py` + the `pharmaml split-audit` CLI workflow — the
+  identifier-overlap audit across data splits (leakage detection before
+  training, machine-readable report).
+- `ml/splits.py` / `ml/cv_results.py` — scaffold-key cross-validation (groups
+  defined by scaffold keys, not row order) with unknown-group-label rejection
+  in holdout splits and feasible-group-split preservation.
+- `ml/applicability.py` — applicability descriptor schema validation.
+- `ml/evaluation.py` — the ROC-AUC class-probability mapping fix.
+- Five new docs pages (DATA_SPLITTING, CONFORMAL_REGRESSION,
+  CONFORMAL_CLASSIFICATION, COVERAGE_DIAGNOSTICS, CLASSIFICATION_EVALUATION)
+  and ten new test files (~1.2k test lines; focused + adjacent suites green
+  before the gate).
+- The absorption ledger: 9 `arena/*` remote branches existed; 7 carried zero
+  unique commits (stale PR refs, deleted outright); `arena/8696775e` carried
+  the 12 genuinely-unabsorbed commits above (real three-way merge, clean);
+  `arena/c44913ab` was recorded via `-s ours` — its XAI-registry payload
+  (xai.py, test_xai_registry.py) was already in main **byte-identical**
+  (same git blob `faab4503`), and its only other delta was the resurrection
+  of the playground (retired round 228 in favour of studio.py). All 9 branch
+  refs deleted; the remote is `main`-only.
+
+## [1.2.172] — 2026-11-11
+### Added — round 265: the section-24.3/24.4 SA wiring on GenerationResult
+
+- `generative/result.py` — `GenerationResult.sa_frame(sort)` — the §24.3
+  results table: the leaderboard with the **raw** Ertl SA score column
+  (`sa_score`, [1, 10], `NaN` for invalid SMILES) plus `sa_valid`,
+  sortable by `"easiest"` / `"hardest"` (invalid rows last, the `rank`
+  column keeps the objective rank as provenance).  A breakdown carrying
+  the SAScoreObjective's 0-1 reward key gets that column renamed to
+  `sa_score_reward` first — raw score and reward never silently clobber
+  each other.
+- `generative/result.py` — `GenerationResult.filter_by_sa(min_sa, max_sa)`
+  + `SAFilteredCandidates` — the §24.4 candidate filter: inclusive
+  bounds, no constraints = no filtering at all (`kept is result`), and
+  when active the **rejected rows are preserved** in a
+  rank/smiles/score/sa_score/reason table — `n_kept + n_rejected ==
+  n_total` always (the spec's "preserve rejected candidate information"
+  rule).  Non-finite or non-numeric bounds raise `DataValidationError`.
+- `generative/result.py` — `GenerationResult.sa_summary()` — the
+  direction-aware distribution payload: valid-subset statistics, the
+  `n_druglike_band` count (raw SA inside the conventional 1-4 band) and
+  the method / direction / limitations copy every interface must ship
+  with the score.
+- `viz/generative_plots.py` — `plot_sa_distribution(result, path)` — the
+  §24.3 distribution figure: exact-edge `histogram_stats` bars over the
+  valid subset, the conventional drug-like band shaded, the direction on
+  the axis, `n_invalid` / `method` / `direction` / `limitations` riding
+  the returned payload (exported from `pharmaml.viz`).
+- `generative/__init__.py` — `SAFilteredCandidates` joins the public
+  surface (alphabetized into `__all__`).
+- `examples/complete_generative_workflow.ipynb` — new section 9b "the
+  synthesizability lens": the raw-SA leaderboard of the 613-molecule
+  section-4 run, the inclusive-range filter demo (kept 108 / rejected
+  505, both preserved with reasons), the summary payload and the
+  distribution figure.
+- `docs/GENERATIVE_SA.md` — the manual CSV-workaround paragraph replaced
+  by the container API; the reward-vs-raw distinction and the
+  nothing-discarded filter contract documented.
+- `tests/test_generative_result_sa.py` — 31 tests: table columns and
+  hand-checked values (aspirin 1.58 / CCO 1.98 / caffeine 2.298), the
+  sort orders with invalid-last, the reward-rename collision path (also
+  exercised end-to-end on a real seeded GA run), the kept+rejected
+  accounting, the no-op / inverted-range / non-finite-bound contracts,
+  the empty-result behaviour, and the figure facts of
+  `plot_sa_distribution`.
+
+## [1.2.171] — 2026-11-11
+### Added — round 264: the contact-map / PLIF twins (the pose-level reading)
+
+- `docking/contacts.py` — the new pure-python contact engine: PDB and
+  PDBQT ATOM/HETATM parsing into `ContactAtom` records (element
+  normalisation from AutoDock types, MODEL-block pose selection), the
+  vectorised `compute_contacts` (every ligand-receptor pair within a
+  cutoff, sorted closest-first) and a documented distance-geometry
+  classifier — salt bridge (N into carboxylate O, <= 4.0 A), H-bond
+  (N/O pairs <= 3.5 A), hydrophobic (C-C <= 4.5 A), vdw fall-through.
+  No force field, no aromatic perception: the rules are element-and-name
+  distance bands, and everything they cannot name stays `vdw`.
+- `docking/contacts.py` — the aggregation twins: `contact_matrix`
+  (residue x ligand-atom minimum-distance grid, closest-contact row
+  order) and `plif_matrix` / `plif_bits` (per-residue interaction-class
+  counts and the 0/1 fingerprint twin a pose comparison would
+  Tanimoto over).
+- `viz/docking_plots.py` — `plot_contact_map` (masked minimum-distance
+  heat grid with the house palette ramp) and `plot_plif_heatmap`
+  (annotated class counts, or the bits twin).
+- `examples/data/contacts_demo_ligand.pdbqt` — the demo pose: ten
+  synthetic atoms placed clash-free (>= 2.4 A) at 2.9-4.2 A from real
+  1AKI binding-cleft atoms by a sphere-search placement, shipped as
+  builder-owned immutable content (`scratch/build_example_data.py`),
+  REMARK-provenance inside the file. The receptor side is the real
+  lysozyme; the shipped pair answers 91 contacts over 25 residues —
+  3 salt bridges (ASP52/ASP101 carboxylates + ASN59), 3 H-bonds (the
+  ASN103 OD1 shell), 24 hydrophobic (the TRP62/63/108 walls).
+- Studio Docking page — the fifth tab, Contacts & PLIF: the contact map
+  as a class-coloured scatter over the residue x ligand-atom grid (the
+  inspector tooltip carries the exact pair + distance) and the PLIF as
+  grouped per-class bars per residue, plus the full contact table; the
+  cutoff spin drives the shell honestly.
+- The docking notebook grew its section 13 (the map + the fingerprint
+  over the bundled pair) and the recap renumbered to 14.
+- Tests: `test_docking_contacts.py` (55 — every classification band at
+  its boundary, parser legs, hand-checked geometry, the shipped-answer
+  pins), the `TestDockingPlots` twins in `test_viz.py` (8), and the
+  Studio twin tests in `tests/ui/test_docking_page.py` (3).
+
+## [1.2.170] — 2026-11-11
+### Added — round 263: part4 §8 Phase-3 card polish + the four-carrier version pin
+
+- `ui/nine_cards.py` — the Phase-3 responsive grid: `NineCardGrid`
+  re-flows the SAME card widgets row-major across three, two (below 880
+  logical px) or one (below 560) column. The directive's canonical 3×3
+  stays the default, the §5 order survives every width, no widget is
+  ever rebuilt mid-flight (`reflow` / `current_columns` /
+  `columns_for_width` are public and pinned). `build_nine_card_grid()`
+  keeps its exact signature — the Dashboard page gets the responsive
+  behaviour with zero call-site changes.
+- `ui/nine_cards.py` — the Phase-3 SMILES preview: the Datasets card
+  carries the genuine first row of `examples/data/screening_library.csv`
+  (aspirin) rendered through the Studio's own §22 `MoleculeRenderer`
+  (cached FIFO, 2x devicePixelRatio, honest text refusal when rdkit or
+  a QApplication is absent — never a fabricated structure). The source
+  file, the SMILES and the name are pinned by tests so a rename fails
+  the suite instead of silently blanking the card.
+- `tests/test_version_carriers.py` (7 tests) — the r262 carrier lesson
+  made structural: the release's FOUR version carriers (VERSION,
+  pyproject `[project] version`, `pharmaml.__version__`, the web's
+  `SHIPPED_TOOLKIT_VERSION`) must agree, the CHANGELOG must lead with
+  the version being shipped, and `toolkit-version.ts` may carry exactly
+  one version literal. A half-trued bump now fails the pytest gate
+  instead of surfacing as an `exact:false source:stream` endpoint
+  symptom after the zip is built.
+- +12 UI tests (`tests/ui/test_nine_cards.py` → 26): the threshold
+  contract, the 2/1-column row-major re-flows, frame identity preserved
+  across re-flows (the r262 id-reuse lesson — references held), the
+  ValueError refusal, the synthesized-resize re-flow, the production
+  wiring (exactly one `NineCardGrid` in the real MainWindow), the
+  aspirin source pin, the rendered thumbnail, the "where meaningful"
+  boundary (no gratuitous molecules on other cards), and the honest
+  invalid-SMILES refusal.
+- `docs/FEATURES.md`: the Dashboard row and §10 trued — (26) tests, the
+  Phase-3 paragraph; the row stays **A** (a refinement, not a new
+  feature class).
+
+## [1.2.169] — 2026-11-11
+### Added — round 262: MASTER_PROMPT part4 §5, Phase 2 completes — the nine-card dashboard mapping
+
+- `ui/nine_cards.py`: the NINE_CARDS registry — exactly the directive's nine
+  high-level cards in the exact order, each mapped per the §5 table onto the
+  existing Studio sections (17 live nav keys; settings excluded by the
+  directive itself), every card carrying a title, concise description, badge
+  visual identity, capability summary, a computed live preview, and
+  exception-safe optional-dependency probes. The class-F boundaries are stated
+  on the cards: docking execution needs an external Vina binary (never
+  bundled); MD trajectories come from external GROMACS/PLUMED runs.
+- `ui/pages/dashboard.py`: the 3×3 workflow-card grid above the surviving
+  stat census and dataset index; entry buttons navigate the real MainWindow
+  through `go_to` — the page stack stays 18 widgets, zero duplicated
+  implementations.
+- `docs/FEATURES.md` §10: the nine-card mapping table; the Dashboard row
+  promoted B→A; status summary trued to A35/B6/C5/D0/E1/F3.
+- +19 tests: `tests/ui/test_nine_cards.py` (14) + 5 FEATURES.md drift-guard
+  pins re-deriving the mapping from the live source.
+- The chunk gate grew to ten batches (4f — the nine-card suite's own Qt
+  process envelope).
+- Fixed a latent flake: `test_dnn_cross_validation_uses_a_fresh_model_per_fold`
+  captured `id(self)` without holding references — CPython address recycling
+  inside a long pytest process collapsed the distinctness set. The capture now
+  holds the instances (a strictly stronger check).
+
+### Fixed — the release hygiene the round caught
+
+- The version-carrier sweep now covers ALL FOUR carriers (VERSION,
+  pyproject `[project] version`, `pharmaml.__version__`, the web's
+  `SHIPPED_TOOLKIT_VERSION`): the first v1.2.169 zip embedded a stale
+  pyproject (the web's `readToolkitVersion()` prefers it) and the notebooks
+  printed 1.2.168 until `__init__.py` was trued — caught by the ship gates
+  and the zip-size endpoint, fixed in-round.
+- 43 stale tracked release zips (v1.2.85–v1.2.121 snapshot debris, ~500 MB)
+  removed from the release homes; only the current release ships in the four
+  ritual homes.
+
+## [1.2.168] — 2026-11-10
+
+### Added — round 261: MASTER_PROMPT part4 §4.5, Phase 2 opens — the truthful feature inventory
+
+* `docs/FEATURES.md` NEW — the §4.5 deliverable: every major feature
+  classified into the six honest status classes (implemented+tested /
+  incompletely tested / backend-only / partial / not implemented /
+  blocked-by-optional-dependency-or-external-engine) with a
+  **feature-to-backend-to-UI-to-test traceability matrix** — 18 Studio
+  pages (nav keys from `ui/main_window.py` SECTIONS, backend imports
+  grepped per page), 12 web areas (the 33-card `PLAYGROUND_CARDS`
+  registry + all 27 live API routes traced through the
+  `scripts/*_bridge.py` processes to the real `pharmaml` functions),
+  11 backend packages with live file/line counts, and the five
+  backend-only modules (gnn+gnnxai, geometric, pruning, quantization,
+  harness — 237 tests with no page/card/route) listed as class C
+  instead of papered over.  The three §4.5 honesty rules are applied
+  literally: every UI row was traced to its backend call, every
+  backend-only row to its absence of GUI references, and the synthetic
+  demos (MD trajectories, cell-line tables, docking scores, generative
+  oracles) are registered as synthetic — none claims real-data
+  support.  Status summary: A 34 / B 7 / C 5 / D 1 / E 1 / F 3 — the
+  B rows name their gaps (page-suite-only backends for foundations and
+  responseai, smoke-only dashboard/settings, TS calculator cards
+  without automated TS↔Python parity pins), the D row is the §5
+  nine-card workflow dashboard (Phase 3), the E row is the parked
+  conformal PR #9, the F rows are the external engines (Vina,
+  GROMACS/PLUMED, the DOCKSTRING dataset) and optional-gated imports.
+* `tests/test_feature_inventory.py` NEW — 12 drift-guard pins: the
+  six legend classes + three verbatim honesty rules; the 18 nav keys,
+  33 card ids, 27 route names, and 10 package names re-derived LIVE
+  from the registries and asserted present in the matrix (a new page/
+  card/route fails the release until the matrix is trued); the class-C
+  honesty check in the other direction (if a page/card/route starts
+  referencing a backend-only module, the classification must be
+  revisited — documentation prose excluded per the §4.5 rule); the
+  status-summary counts pinned (34/7/5/1/1/3, row-total consistency
+  41 + 10); the version stamp pinned to the `VERSION` file.
+
+## [1.2.167] — 2026-11-10
+
+### Fixed — round 260: MASTER_PROMPT part4 §4, Phase 1 (integrity and recovery) — the audit's five findings repaired
+
+* `tools/checkpoint.py` — §4.1, the ship ritual's gates are real
+  again: the ruff gate no longer feeds the retired `playground.py`
+  (gone since v1.2.141) and the GUI gate is no longer the invented
+  `playground.py --self-test` — it is `pytest tests/ui/test_pages_smoke.py`
+  (the offscreen PySide6 suite the repo actually supports; `studio.py`
+  implements no CLI, so no `studio.py` command was invented).  The
+  gate set: doctests + ruff (`src tests tools ui studio.py`) + mypy
+  (`src`, the verified scope) + a backend tooling smoke +
+  `tests/test_web_parity.py`-style `tests/test_checkpoint_tooling.py`
+  + the pages smoke; PLUS the new in-process notebook-version
+  consistency gate (`_notebook_freshness_problems`: every `1.2.x` a
+  committed notebook prints must equal `VERSION`, and all eight
+  executed workflows must carry the print — part4's release checklist
+  item).
+* `tools/checkpoint.py` — §4.2, `--restore` works again: the shipped
+  zips have been ROOT-LEVEL since round 210 while `restore()` stripped
+  a `pharma-ml-toolkit/` prefix that no member carries — a
+  `ValueError` on every member, i.e. the rollback-recovery path was
+  broken against the very archive it ships with (found by round 259's
+  audit, pinned by a regression test).  The rewrite
+  (`_restore_archive` + `_safe_member_path` + `_detect_prefix`):
+  handles BOTH layouts (auto-detected over file members; a mixed
+  prefix is refused as malformed), rejects absolute / `..` /
+  backslash members outright, adds `--restore --dry-run` (plan
+  preview, zero writes), stages the extraction beside the target and
+  verifies the staged `VERSION` against the archive's own filename
+  version before a single file lands, and never deletes anything the
+  archive does not carry (user data survives a restore).  The zip
+  builder side also flipped to the root-level arcname so the two
+  builders can never drift apart again.
+* `tools/build_zip.py` (canonical, moved from
+  `scratch/build_zip_210.py`) — §4.3, the release archive stopped
+  shipping the research history: `EXCLUDE_DIRS` gains `scratch`,
+  `download`, `dist-archive` (the v1.2.166 archive carried 475 probe
+  files + 129 evidence PNGs = 8.7 MB = 37% of the zip).  Nothing is
+  deleted — scratch/ and download/ stay on disk and in git as
+  provenance; only the archive diet changes.  The canonical build
+  utilities moved out of scratch/ into `tools/` (`build_zip.py`,
+  `reexec_notebooks.py`, `run_suite_chunks.py`, `venv_repair.sh`,
+  `scrub_home_paths.py`) with forwarder shims keeping the historical
+  `scratch/` invocation paths alive (the cron ritual and muscle
+  memory still say `scratch/build_zip_210.py`, `scratch/venv_repair.sh`,
+  `scratch/reexec_notebooks_209.py`, `scratch/run_suite_chunks_250.py`
+  — and the master job's stale round-225 reference now lands on the
+  canonical NINE-chunk gate).  The web fallback streamer's exclusion
+  list gains the same three homes so the on-the-fly archive can never
+  diverge in shape from the release artifact it substitutes for.
+* README.md + pyproject.toml — §4.4, the metadata drift: "all
+  seventeen pages" → eighteen (the Studio has 18 pages; the page list
+  itself even omitted `molecular_dynamics`), the `VERSION` tree entry
+  no longer pins the example at `(1.2.125)`, and the placeholder
+  `Homepage = "https://github.com/example/..."` is replaced by the
+  actual repository (`MrMMA2004/pharma-ml-toolkit`, confirmed from the
+  origin remote — never invented).  The `[tool.ruff]` comment that
+  claimed scratch/ "ships in the ZIP tree for exactly that reason" is
+  trued to the new exclusion policy.
+* `tests/test_checkpoint_tooling.py` — NEW, 22 tests: the §4.2
+  dual-layout restore contract (root-level regression, prefix
+  stripping, mixed/absolute/traversal/backslash refusals, dry-run
+  zero-writes, staged version-mismatch refusal, user-data survival,
+  empty-archive refusal), the §4.1 gate pins (real paths only, no
+  playground, no invented `--self-test`, the offscreen GUI gate, the
+  notebook freshness contract + its stale-print catch), the §4.3 zip
+  policy (both builders exclude the history homes, root-level layout,
+  canonical utilities in `tools/`, the scratch forwarders), and the
+  §4.4 metadata pins (eighteen + `molecular_dynamics` in README, no
+  `(1.2.125)`, the pyproject homepage equals the origin remote).
+* Hygiene: 129 files' disk modes aligned back to git's 100644 (a
+  sandbox-local chmod drift had put the +x bit on non-shebang library
+  and test modules — every one an EXE002 finding; `ruff check src
+  tests tools ui studio.py` is zero-findings again, the round-244
+  convention restored), and the moved build utilities are lint-clean
+  in their new linted home.
+
+## [1.2.166] — 2026-11-10
+
+### Added — round 258: the COLVAR playground (the `plumed.dat` mini-parser as a web card) — bridge op + web card
+
+* `scripts/md_bridge.py` — op `"cv"`: one pasted `plumed.dat` snippet →
+  the REAL `parse_plumed_cvs` over `synthetic_trajectory` (the
+  deterministic alpha-helix demo) → the COLVAR table as JSON — per-CV
+  series aligned with `names`, honest per-CV stats (mean / min / max /
+  final), and the exact `COLVAR` text PLUMED's `PRINT` would have
+  written (`#! FIELDS` header, six decimals).  `plumed` is validated
+  (non-empty, ≤ 4 000 chars); every malformed snippet surfaces as a
+  clean client error (unsupported action, missing label, out-of-range
+  1-based atom, unknown keyword, no declarations).  The default
+  snippet declares one CV per supported action over the demo's 30
+  atoms: `d_ca` DISTANCE, `bend` ANGLE, `twist` DIHEDRAL, `rg`
+  GYRATION, `fold` COORDINATION (GROUPA/GROUPB/R_0, the hard-switch
+  fraction).
+* Web — the Molecular Dynamics tab's sixth card, "Collective variables
+  (COLVAR)": an editable `plumed.dat` textarea (mono, spellcheck off)
+  + frames/seed/noise controls, a POST to the new zod-validated
+  `/api/md/cv` route, all CVs on one house `TimelineChart` (each
+  series on its OWN vertical scale — a 40° dihedral and a 0–1
+  coordination fraction share one honest canvas), per-CV stats chips
+  with the series' colour dot, and the copyable `COLVAR` text block.
+* `tests/test_web_parity.py` — `TestMdCvBridge` (the bridge contract:
+  the default five-action table pinned to the COLVAR header, seeded
+  determinism, the RMSD-frame-0-is-zero custom snippet, eight
+  malformed-plumed client errors, the method footnote) +
+  `TestMdCvWebWiring` (route/type/card wiring pins) + the
+  card-directory census trued 32 → 33 (the `md-cv` entry + its probe
+  mapping); +10 tests.
+* Types — `MdCvResponse` in `toolkit-types.ts`.
+
+## [1.2.165] — 2026-11-10
+
+### Added — round 257: the salt-bridge timeline (`getcontacts`' ionic criterion on a designed demo) — toolkit demo + bridge op + web card
+
+* `md/hbond.py` — `salt_bridge_timeline(traj, positive, negative, *,
+  cutoff=4.0)`: the ionic-contact counterpart of `hbond_timeline` —
+  one number per frame, the size of that frame's `salt_bridges` list;
+  the series a `getcontacts` ionic-contact plot (or `gmx mindist -pi`
+  on charged groups) would draw beside the `hbnum` panel.
+* `md/trajectory.py` —
+  `synthetic_salt_bridge_trajectory(n_frames, seed, noise)`: the demo
+  in four atoms.  Two independent oppositely-charged pairs — Lys
+  Nζ···Glu Cδ and Arg Nη1···Asp Cγ, 8 Å apart so no cross-pairs —
+  whose cation–anion distances oscillate (seeded, phase-shifted by a
+  SIXTH of a period) across the 4.0 Å `SALT_BRIDGE_CUTOFF`, so the
+  count holds a four-frame two-bridge plateau — a deliberately
+  different silhouette from the H-bond demo's narrow 2-frame peak.
+  Salt bridges are distance-only (no angle gate), so the demo *is* the
+  whole criterion; the docstring says so.
+* `scripts/md_bridge.py` — op `"saltbridge"`: the demo →
+  `salt_bridge_timeline` (per-frame counts) + the per-bridge
+  cation–anion distance series + the cutoff + honest per-bridge stats
+  (mean, peak, ≥1-bridge fraction, per-bridge duty fractions, and the
+  leads-by-a-sixth-period boolean) — computed by the real toolkit so
+  web and Python cannot drift.
+* Web — the Molecular Dynamics tab's fifth card, "Salt-bridge
+  timeline": frames/seed/noise controls, a POST to the new
+  zod-validated `/api/md/saltbridge` route, the counts-and-distances
+  chart reusing the house `TimelineChart` (emerald/amber/rose), honest
+  stats chips (incl. the Lys/Arg duty split) and the method footnote.
+  The card-directory census grows 31 → 32 (`md-saltbridge`, the
+  probe's source mapping included) and the parity pins ride.
+* `tests/test_md_analysis.py` — five tests: the designed 12-frame
+  schedule pinned exactly
+  (`[0,0,0,0,0,0,1,2,2,2,2,1]` — frames 0–5 break both, frame 6 forms
+  only bridge 2, frames 7–10 hold both, frame 11 keeps only bridge 1),
+  determinism + the counts re-deriving from the public API + the
+  LYS/GLU/ARG/ASP topology, the validation contract, and the timeline
+  twin (near/far frames + out-of-range/cutoff refusals).
+* Housekeeping — the CHANGELOG's missing `[1.2.164]` entry (the
+  round-255 PLUMED-CV release shipped without one) is backfilled
+  below from its release commit.
+
+## [1.2.164] — 2026-11-10
+
+### Added — round 255: the PLUMED-style collective variables — `md/cv.py`
+
+* `md/cv.py` — the enhanced-sampling CV vocabulary in plain NumPy: the
+  six CV actions (`cv_distance`, `cv_angle`, `cv_dihedral` on designed
+  geometries, `cv_coordination` as the honest hard-switch COORDINATION
+  subset, `cv_rmsd`/`cv_gyration` composed over the metrics module),
+  the `CVTable` COLVAR equivalent with the axes-must-match and
+  finite-only contracts, the `XvgSeries` bridge into the shipped viz
+  twins, and the `plumed.dat` mini-parser with PLUMED's real 1-based
+  semantics, `a-b` range expansion, the `MASS` flag, and honest
+  refusals of everything unsupported (METAD, REFERENCE files, the
+  rational switching keywords) with messages that name the supported
+  set.
+* `tests/test_md_cv.py` — 65 tests (the 3-4-5 apex angle,
+  eclipsed/trans dihedrals, hand-counted coordination fractions,
+  byte-exact COLVAR text, the parser's full refusal matrix) plus 12
+  doctests; docs `MD_COLLECTIVE_VARIABLES.md`; INDEX regenerated at
+  899 symbols; notebooks 8/8 re-executed; the v1.2.164 zip in four
+  byte-identical homes.
+
+## [1.2.163] — 2026-11-10
+
+### Added — round 252: the H-bond timeline (`gmx hbond -num` on a designed demo) — toolkit demo + bridge op + web card
+
+* `md/trajectory.py` — `synthetic_hbond_trajectory(n_frames, seed, noise)`:
+  the `gmx hbond -num` picture in six atoms.  Two independent
+  donor–H···acceptor triads (D1/H1/A1, D2/H2/A2, 8 Å apart so no
+  cross-pairs) whose donor···acceptor distances oscillate — seeded,
+  phase-shifted by a quarter period — across the 3.5 Å
+  `HBOND_DISTANCE_CUTOFF`, so `hbond_timeline` traces an honest
+  0 → 1 → 2 → 1 → 0 count pattern (the exact schedule is a pinned
+  test).  Each hydrogen rides 1.0 Å from its donor ALONG the
+  donor–acceptor axis, keeping the D–H···A angle ≈180°: the demo
+  isolates the criterion's distance gate on purpose, and the docstring
+  says so.
+* `scripts/md_bridge.py` — op `"hbond"`: the demo → `hbond_timeline`
+  (per-frame counts) + the per-bond donor–acceptor distance series +
+  the cutoffs used + stats (mean count, peak, bonded fraction) — the
+  `gmx hbond -num` contract the web card renders, computed by the real
+  toolkit so web and Python cannot drift.
+* Web — the Molecular Dynamics tab's fourth card, "H-bond timeline":
+  frames/seed/noise controls, a POST to the new zod-validated
+  `/api/md/hbond` route, the counts-and-distances chart reusing the
+  house `TimelineChart`, honest stats chips and the method footnote.
+  The card-directory census grows 30 → 31 (`md-hbond`, the probe's
+  source mapping included) and the parity pins ride.
+* `tests/test_md_analysis.py` — three tests: the designed 12-frame
+  schedule pinned exactly (`[0,0,0,0,1,1,1,2,2,1,1,1]` — frame 0
+  breaks both, frame 6 keeps only bond 2, frame 9 only bond 1),
+  determinism + the counts re-deriving from the public API + the
+  topology, and the validation contract.
+
+## [1.2.162] — 2026-11-10
+
+### Added — round 250: the MD viz twins (`plot_md_series` / `plot_md_correlation`)
+
+* The round-249 follow-on candidate, taken: the uploaded pipeline's two
+  headline matplotlib panels come back as first-class Python figures on
+  the shared `pharmaml.viz` contract, so scripts, notebooks and the
+  HTML reports tell the same story the web Molecular-Dynamics tab does
+  — from the same computed-once numbers.
+* `viz/md_plots.py` — `plot_md_series` draws one parsed metric series
+  (`XvgSeries`) with a mean reference line and the uploaded centered
+  moving average available as an explicit `smooth_window` overlay
+  (validated: integer ≥ 2, never longer than the series); title/axis
+  labels/colour resolve through the ten-metric classifier
+  (`classify_metric`), with explicit overrides winning.
+  `plot_md_correlation` draws the cross-metric Pearson heatmap over a
+  ligand's `{name: XvgSeries}` mapping — computed by the pipeline's own
+  `metric_correlations` (min-length alignment, the uploaded rule), so
+  the figure cannot drift from `pharmaml.md`'s numbers — annotated cell
+  by cell, with a constant series' NaN row disclosed as `nan_cells`
+  instead of being papered over.  Both save byte-reproducible
+  png/svg/pdf via the lazy `_compat` layer and close their figures.
+* `pharmaml.viz` exports the pair (`__all__` + docstring bullet); the
+  numbers stay numpy-first — importing the module never imports
+  matplotlib, as everywhere in `pharmaml.viz`.
+* `tests/test_viz_md_plots.py` — 29 tests: hand-computed ramp stats
+  (exact population std 0.05·√(399/12)), classifier-driven styling
+  (known export, substring-inferred `replica_energy_2`, honest
+  generics), title/colour overrides, the overlay checked against
+  `moving_average` itself, byte-reproducible saves (identical sha of
+  two saves, png/svg/pdf), NaN-aware stats, the full validation
+  contract (window bounds, non-series inputs, under-supplied
+  mappings, common length < 2), designed ±1 correlations, the
+  min-length alignment disclosure, and the constant-series NaN
+  disclosure (2k−1 cells for k series).
+
+### Added — round 250, second half: the Studio Molecular-Dynamics page (the arena merge, unioned) + the union API
+
+* The Studio gains a **Molecular Dynamics** page (`ui/pages/
+  molecular_dynamics.py`, merged from the arena flow's PR #6 and
+  unioned with the released viz twins): open a study folder
+  (asynchronously, via the job runner), pick a ligand and metric, edit
+  the axis labels to match the input units, plot the metric or the
+  two-metric Pearson correlation, preview it and export png/svg/pdf.
+  Navigation registers `molecular_dynamics`; the page rides the
+  responsive splitter policy and the §23.5 data-integrity rule (plots
+  never touch the loaded data).
+* The union API — one honest contract instead of two competing ones.
+  `plot_md_series` now also accepts a `{name: XvgSeries}` mapping
+  (the cross-ligand comparison overlay, palette-cycled with legend
+  labels — `MDStudy.metric_series` feeds it directly) plus explicit
+  `x_label`/`y_label` overrides; `plot_md_correlation` accepts a
+  `LigandResult` directly and takes a `title`.  Both return the stats
+  dict (the released `pharmaml.viz` convention) and close their
+  figures — pass `close=False` (the Studio page's contract) to keep
+  the figure open: it rides the dict as `"figure"` and the caller
+  owns closing it.  The honesty rules the union settles on: NaN
+  *values* are tolerated and disclosed (a NaN pair's correlation is a
+  NaN cell — masked in the image, annotated `N/A`, counted in
+  `nan_cells`), ±inf is refused outright (it poisons every statistic),
+  and the correlation heatmap refuses series whose abscissas disagree
+  over the aligned window ("axes must match") — a figure may not
+  correlate observations never taken at the same moments, the one lie
+  the pipeline's crude min-length rule would otherwise let a figure
+  tell.
+* `tests/test_md_plots.py` — rewritten to the union contract: open
+  figures carry actual series values and explicit labels, the mapping
+  comparison draws one labelled line per ligand, the LigandResult
+  heatmap masks the constant-series row and annotates `N/A`, and the
+  refusal matrix (empty/under-supplied mappings, misaligned axes, ±inf)
+  is parametrized.  `tests/ui/test_molecular_dynamics_page.py` — the
+  Studio page walked offscreen: study → plot → export (png/svg/pdf),
+  the misaligned-axes refusal clearing the figure with the honest
+  status message, failed loads clearing previous results, and the
+  navigation registration pin.  The page suite now rides gate chunk 4e
+  (it had been in no chunk).
+* Housekeeping from the merge: the toolkit-level
+  `.github/workflows/ci.yml` was byte-broken (`branches: ain]` — the
+  workflow could never trigger) and still linted the retired
+  `playground.py`; both fixed (`branches: [main]`, ruff over
+  `src tests ui`).  `docs/MD_VISUALIZATION.md` examples trued to the
+  union API.  `docs/INDEX.md` regenerated (13 modules / 887 symbols).
+
+## [1.2.161] — 2026-11-11
+
+### Added — round 249: the `pharmaml.md` package — molecular-dynamics analysis (the uploaded pipeline + the ecosystem vocabulary)
+
+* The user's own GROMACS post-processing script
+  (`upload/MD_analysis.py`, 421 lines) is productionized as the
+  **`pharmaml.md`** package, and the reference stack it belongs to —
+  MDAnalysis/mdtraj (trajectory core), GROMACS/cpptraj/pytraj (the
+  metric vocabulary), getcontacts (contact timelines), gmx_MMPBSA
+  (binding free-energy legs), ProDy (elastic networks),
+  deeptime (PCA/tICA), ProLIF (interaction fingerprints), nglview /
+  pymol-open-source / vmd-python (the viewers the web tab stands in
+  for) and MDAnalysisData — names the honest scope of each module.
+* `md/xvg.py` — the uploaded parsers kept bit-for-bit where they carry
+  intelligence: `parse_xvg` (comment/directive skipping, first two
+  numeric columns) and `parse_ndx_hbnum` (the column-finding heuristic:
+  the *time* column is the first finite, monotonically
+  non-decreasing, non-constant column; the H-bond column the first
+  other finite near-integer column).  One deliberate upgrade: the
+  parse is pure — the script's folded-in 3-point smoothing is now the
+  explicit `XvgSeries.smoothed()`/`moving_average()`, applied by the
+  study reader exactly where the script applied it.  `classify_metric`
+  maps the ten standard GROMACS/MM-PBSA exports (title, axis labels,
+  colour) and infers the kind for unknown names ("energy" tested
+  before "rg" — the word contains those letters).
+* `md/trajectory.py` — `Topology`/`Trajectory` in plain NumPy: a real
+  selection mini-language (`name` with `*`/`?` wildcards, `resname`,
+  `resid` single or `a:b` ranges, `not`, `and`/`or`, parentheses —
+  case-sensitive exactly as MDAnalysis), validated `(T, N, 3)`
+  coordinates with frame slicing and geometric or mass-weighted
+  centering, plus `synthetic_trajectory` — the deterministic
+  alpha-helix-with-flexible-loop demo (seeded noise, slow rotational
+  drift) that drives the tests and the web playground's MD tab.
+* `md/align.py` — the Kabsch theorem (`kabsch_rotation`,
+  `superpose`, rotation/translation-invariant `rmsd`) with the
+  reflection guard for a proper rotation.
+* `md/metrics.py` — the `gmx rms/rmsf/gyrate` timeline suite
+  (`rmsd_trajectory`, `rmsf`, `radius_of_gyration` ± masses),
+  `center_of_mass`, `pairwise_distances`, `contact_map` (frequency
+  over the run, self-contacts excluded by convention),
+  `native_contact_fraction` (the folding Q-value),
+  `radial_distribution_function` (finite-system reference-volume
+  convention, documented) and `dihedral` (the praxeolitic torsion).
+* `md/hbond.py` — the `gmx hbond` criterion in plain NumPy:
+  donor–acceptor distance ≤ 3.5 Å AND donor–H···acceptor angle ≥ 130°,
+  `hbond_timeline` (the `hbnum` series behind the uploaded
+  intermolecular/intramolecular panels) and `salt_bridges`
+  (getcontacts' ionic pairs as a distance criterion).
+* `md/dimred.py` — essential dynamics: `trajectory_pca` (aligned
+  frames, SVD of the centred matrix) and `tica` (the time-lagged
+  eigenproblem solved through the symmetric
+  `C₀^{-1/2}·C_τ,sym·C₀^{-1/2}` form — `numpy.linalg.eigh` only,
+  ridge-regularised, kinetic-variance ratios).
+* `md/enm.py` — ProDy's ANM/GNM: `kirchhoff_matrix`,
+  `gnm_fluctuations` (B-factor profile through the pseudo-inverse),
+  `cross_correlation` (the correlated-domain map), `anm_hessian`
+  (3N×3N with the `−γ·rrᵀ/‖r‖²` pair blocks), `anm_modes` (six
+  rigid-body zero modes skipped, an honest refusal when the network
+  is too disconnected — collinear systems have *more* than six) and
+  `anm_fluctuations`.
+* `md/plif.py` — ProLIF's geometric core over typed coordinates:
+  hydrophobic (4.5 Å), H-bonds in both directions (3.5 Å), ionic
+  (4.0 Å) and π-stacks (centroid 5.5 Å, orientation-checked to
+  |cos| ≥ 0.94 only when both ring-normal arrays are supplied — the
+  honest degradation to distance-only is documented).
+* `md/study.py` — the uploaded pipeline as data:
+  `read_ligand_folder` (known exports parsed, kJ→kcal on energy,
+  ps→ns on long time axes, H-bond smoothing, unparseable files
+  skipped with a logged warning — never fatal), `build_study` (one
+  sub-folder per ligand, `Global_plots` skipped, flat folders become
+  single-ligand studies, broken ligands never sink the campaign),
+  `metric_correlations` (min-length aligned, the script's own rule)
+  and `MDStudy.summary_csv` (the script's
+  `Folder,File,Mean,Stdev,Coefficient_of_Variation` contract,
+  verbatim header).
+* `MDAnalysisError` joins the exception hierarchy; the package root
+  documents and the docs index gains the `pharmaml.md` section (the
+  docs-index guard's REQUIRED_MODULES pins it).
+* 55 tests (`tests/test_md_analysis.py`) + 44 doctests across the
+  package — known-value geometries wherever one exists (a rotation
+  recovers exactly, a two-atom Rg is the separation, a designed
+  contact map is the designed fractions, a collinear chain's
+  ANM refusal is exercised, the tICA slow channel outranks the fast
+  one); ruff zero + mypy clean across 204 files.
+
+## [1.2.160] — 2026-11-10
+
+### Added — round 248: Part-3 §20.4/§20.5 — the NumPy trainer's checkpoint depth (from the preserved contract)
+
+* The §20 backlog's first named item ships, re-implemented exactly
+  from the design contract the worklog preserved after rollback #27
+  ate the first attempt: `fit()` on `NumpyMLPClassifier` /
+  `NumpyMLPRegressor` now accepts `checkpoint_dir`,
+  `checkpoint_every` and `checkpoint_resume`, and writes the
+  **complete** resumable state after every `checkpoint_every` epochs
+  (and at the final epoch — including the early-stopped one) through
+  the round-229 `CheckpointManager`: atomic write-to-temp/
+  `os.replace`, sha-256 self-verification, quarantine-on-corruption,
+  rotation, JSON-only (arrays ride as base64 — never pickle).
+* "Complete" is the §20.4 depth, not the weights-only shortcut:
+  weights, optimizer moment buffers and step count
+  (`Optimizer.state_dict()` / `load_state_dict()` on
+  `_velocity`/`_state`/`_m`/`_v`/`_vmax`, refusing — with
+  `ModelError` — missing step counts, foreign buffer names, and any
+  buffer whose shape does not match the live parameters), the
+  training RNG state (it drives the batch order and the dropout
+  masks), the early-stopping state (best validation loss, stale
+  counter, best weights) and the history so far.
+* The acceptance bar is **bit-exactness**: an interrupted fit
+  resumed from its checkpoint reaches `np.array_equal` predictions
+  against the uninterrupted run — `allclose` would hide a rewound
+  Adam bias correction or a shifted batch permutation. Pinned across
+  Adam, SGD-with-momentum, the classifier path, chained 5→14→24
+  resumes, dropout>0, and early-stopping continuity (the interrupted
+  and uninterrupted runs stop at the SAME epoch with identical
+  histories).
+* §20.5's incompatibility contract: a config fingerprint covers every
+  trajectory-shaping hyperparameter while `epochs`/`patience` stay
+  budgets, free to differ between the interrupted and the resuming
+  call; a dataset fingerprint covers X and the encoded y.
+  Incompatible or unreadable records are discarded with a warning
+  and training starts fresh (never fatal); a checkpoint whose saved
+  epoch already reaches the resuming call's budget restores the
+  finished model and trains nothing; `checkpoint_resume=False`
+  forces a fresh run while still writing checkpoints; broken
+  checkpoint homes degrade to log warnings and training completes.
+  24 tests (`tests/test_numpy_neural_checkpoints.py`) + a `fit()`
+  doctest; the gate's chunk 2 carries the suite by name.
+
+## [1.2.159] — 2026-11-10
+
+### Added — round 247: multi-objective HPO — the Pareto study (`ml/multiobjective.py`)
+
+* The best-of-ml-python HPO/AutoML section audit's closing move. The
+  section's leaders (Optuna, Ax/BoTorch, nevergrad) share one capability
+  this toolkit's search stack lacked: the trade-off itself as a
+  first-class result. The generative side taught Pareto fronts for
+  molecules since the first `--pareto` recipes; this module brings the
+  same honesty to the hyperparameter search — the accuracy-vs-fit-seconds
+  menu, not a single blended verdict.
+* The order theory, pure NumPy under the optuna convention (every
+  objective MINIMIZED): `dominates` (strict Pareto dominance with
+  explicit length/finiteness contracts), `pareto_indices` (the
+  non-dominated set, pairwise O(n²·k) at study scale — the honest
+  complexity statement, checked in tests against an independently-coded
+  brute force on seeded 2-D and 4-D clouds, duplicates surviving
+  together), `hypervolume_2d` (the EXACT 2-D staircase sweep — the
+  convergence indicator, with the WFG reference-must-dominate contract),
+  `crowding_distance` (NSGA-II's spread metric, boundary members +inf),
+  and `chebyshev_scalarize` (MOEA/D's Tchebycheff decomposition; zero
+  weights are the documented corner subproblems).
+* The study: `MultiObjectiveStudy` decomposes the vector objective onto
+  the EXISTING single-objective samplers — each trial takes the next
+  weight vector (the deterministic Das–Dennis simplex lattice cycling
+  when `weight_mode="spread"`, a seeded uniform simplex draw when
+  `"random"`, Optuna's own approach) and tells the random/TPE engine the
+  trial's Chebyshev distance to the running ideal point. The honest
+  drift note (the ideal advances, so the scalar landscape is not strictly
+  stationary — MOEA/D fixes weights per subproblem and leans on
+  neighbourhood exchange) is stated in the class docstring; the first
+  trial is its own ideal, its scalar 0 by construction.
+* The report: `ParetoReport` carries the front, the crowding, the
+  per-objective endpoints (`best_for`), the exact 2-D hypervolume under
+  the nadir+10% documented reference (None beyond two objectives — the
+  honest scope), and the monotone per-trial hypervolume curve under that
+  FIXED reference; `to_dataframe()` mirrors the generative front's tidy
+  frame. The adapter `tune_model_multi` reads `cross_validate`'s own
+  ledger (`score` as the negated mean CV score, `fit_seconds` /
+  `score_seconds` as mean fold times — the same numbers `cv_results`
+  records per fold).
+* 27 new tests (`tests/test_multiobjective_hpo.py`) + 10 module doctests;
+  the tuning notebook gains section 7 (the trade-off demo) and a recap
+  row; chunk 2 of the gate carries the suite by glob.
+
+## [1.2.158] — 2026-11-09
+
+### Added — round 246: Part-3 §21.4 — the original-resolution (1:1) view
+
+* The stretch leg the round-245 baseline named first is shipped: a
+  TRUE pixel-perfect toggle, built on the §23.10 scale measurement.
+  `ImagePanel.set_original_resolution()` sets the view range so ONE
+  image pixel renders at ONE screen pixel per axis — the
+  "actual size" view: the target range is the view box's own
+  (width, height) in px, recovered from the live
+  `viewRange()`/`viewPixelSize()` pair (the circular arithmetic),
+  centred on the CURRENT viewport centre (the image-viewer
+  convention), applied with `padding=0`.  The achieved scale is
+  MEASURED back (`view_pixel_scale`), never assumed — the probe
+  (`scratch/probe_image_1to1_246.py`, engine-printed first) pinned
+  1.0000 on BOTH axes from the fit / 2×2 zoom-in (155.7 screen px
+  per image px) / sub-pixel squeeze (0.375) / non-square starts,
+  exact centre preservation, idempotence, `autoRange` leaving unity,
+  and that a hidden widget answers a FAKE default-geometry scale
+  (~40 screen px per image px) — hence the honest `isVisible()`
+  gate: no matrix, hidden panel, or degenerate view box ⇒ `None`.
+* `is_original_resolution()` reports the ≈1:1 state within the
+  exported `RESOLUTION_TOLERANCE` (0.05 — integer view quantisation
+  keeps the achieved scale NEAR 1.0, not always at it); both axes
+  must sit inside the band, and the state tracks the LIVE view (a
+  user zoom after the press flips it back — pinned).
+* The Image Lab page: every matrix tab (similarity / response /
+  explorer / ROI) carries the "1:1 original resolution" button
+  (§21.4 row beside each panel).  The toggle discloses the honest
+  three-way outcome in the status line — the achieved scale
+  (`1 image px = N×M screen px`) when 1:1 lands, the fit-restored
+  notice on the second press (§21.2 autoRange), and the explicit
+  "1:1 unavailable" refusal for hidden geometry.  Never a silent
+  no-op.
+* **Tests**: `tests/ui/test_image_1to1_246.py` — 16 tests: the
+  refusals (no data / after clear / the hidden panel whose raw view
+  would happily lie), the achieved ≈1:1 from the fit / zoom-in /
+  sub-pixel starts, the exact circular arithmetic
+  (`viewPixelSize()` itself ≈1.0 per axis), idempotence,
+  viewport-centre preservation, the state band edges (inclusive,
+  both axes), `reset_view`/user-zoom leaving unity, and three page
+  legs (the golden-path toggle with exactly one live button on the
+  current tab, the achieved-scale disclosure, the out-loud hidden
+  refusal).  Honest totals **5,044 = 4,246 collect + 798 doctest**
+  (+16).
+
+## [1.2.157] — 2026-11-09
+
+### Added — round 245: Part-3 §23.10 — the ImagePanel sub-pixel mapping disclosure
+
+* The §23 responsive pass reaches the last untruthful readout: under
+  extreme zoom the §21.4 hover label now discloses what a screen
+  pixel actually covers.  The payload carries `image_px_screen` —
+  the live on-screen size (device px) of ONE image pixel per axis,
+  `1 / ViewBox.viewPixelSize()` measured at emission time
+  (`ImagePanel.view_pixel_scale()`; probe-printed first:
+  `scratch/probe_image_scale_245.py` pinned the fit / zoom-in /
+  zoom-out regimes and the hidden-widget default geometry).
+* **Two honest notes** (`format_scale_note`, pure): zoomed OUT past
+  `ZOOMED_OUT_PX` (0.9) one screen pixel straddles several image
+  pixels — the readout says `1 screen px spans ≤N×M image px (one
+  shown)`, the per-axis **ceil worst case** (a screen pixel `1/sx`
+  image units wide touches at most `ceil(1/sx)` pixel columns,
+  boundary straddle included); zoomed IN past `ZOOMED_IN_PX` (4.0)
+  one image pixel is a big screen block — the readout explains
+  `1 image px ≈ N×M screen px (value steady in block)` so the
+  §21.6-debounced readout no longer looks frozen.  Near 1:1 nothing
+  is appended (a true mapping needs no footnote).
+* The scale refresh rides the next pixel transition — the §21.6
+  debounce keys on `(row, col)` alone, so a zoom with a stationary
+  cursor re-discloses on the next move (pinned: zoom between moves,
+  the next transition carries the new scale, and returning to a
+  previously hovered pixel re-discloses it too).
+* The Image Lab page appends the note to every matrix tab's hover
+  line (payloads built by `pixel_at` directly — no scale key — render
+  unchanged); the `None` reset emission never carries one.
+* **Tests**: `tests/ui/test_image_subpixel_245.py` — 16 tests: the
+  live scale (None without data/after clear, the exact
+  `1/viewPixelSize` arithmetic on a shown panel, the ~99-screen-px
+  zoom-in regime, the sub-pixel zoom-out regime), the pure note
+  (None cases, the ≤ceil coverage strings, the block strings, the
+  exported thresholds with edge legs), the scene path (the payload
+  key, the None reset, the debounce-keys-on-pixel contract with the
+  zoom-refresh legs), and four page legs (zoomed-out appended,
+  zoomed-in appended, near-1:1 silent, missing-key tolerated).
+  The leakage guard caught the round's own probe docstring carrying
+  an absolute home path before any build — fixed at the source.
+  Honest totals **5,028 = 4,230 collect + 798 doctest** (+16).
+
+## [1.2.156] — 2026-11-09
+
+### Changed — round 244: the Part-3 lint-backlog close
+
+* The standing ruff hygiene debt the round-243 baseline listed first
+  is paid in full: `ruff check src/ tests/ ui/` now reports zero
+  findings (was src/ 90 + tests/ 57 when the debt was first pinned;
+  rounds 239–243 swept all but 8).  The final 8, all in `tests/`:
+  - **F841 ×2** — `test_chart_inspector.py` dropped a dead
+    `_series["bars"]` lookup whose value was never read;
+    `test_headless_platform.py` keeps the first `ensure_headless()`
+    CALL (it applies the env) but no longer assigns its memo to an
+    unused name — the idempotence assertions are unchanged;
+  - **I001 ×2** — `test_model_analysis_page.py` import blocks
+    organized (stdlib/first-party separation inside the two
+    function-local import groups);
+  - **F401 ×4** — `test_responsive_policy.py` dropped the unused
+    `MIN_CHILD_PX` and three function-local `QSize` imports.
+* **mypy re-verified clean** (193 source files, the §27 hygiene bar)
+  and the four touched suites re-run green (51 tests) before the
+  gate.  `ruff format` is deliberately NOT adopted — the project's
+  established formatting differs from the formatter's output on 272
+  files and the lint bar has always been `ruff check` only.
+* No behavioural change anywhere: the diff is 8 insertions / 10
+  deletions across the four test files, the honest totals stay
+  **5,012 = 4,214 collect + 798 doctest**, and every shipped pin
+  survives.
+
+## [1.2.155] — 2026-11-09
+
+### Added — round 243: Part-3 §23.9 — legend placement vs. data
+
+* The §23.7 follow-up closes: a legend can no longer overlap the plot.
+  pyqtgraph's default `addLegend()` floats the legend INSIDE the view
+  box at a (30, 30) offset — over the data (probed 0.13.7 evidence:
+  the legend's scene rect always intersects the view box's).
+  `add_legend()` instead constructs the `LegendItem` directly and docks
+  it in the layout row BELOW the bottom axis (grid cell (4, 1), the
+  view column, `AlignLeft | AlignTop`) — structurally incapable of
+  covering a data point at any width.
+* **The `size=(10, 10)` pin bug is fixed** — probed: a pinned size
+  freezes `LegendItem.updateSize()` into a no-op, so the legacy call
+  left the legend frame at 10×10 px with the entries rendering outside
+  it (and §23.7's column escalation never visibly resized anything).
+  The legend is now auto-sized and the frame hugs its entries.
+* **`ui/widgets/plot_widget.py`** — `_fit_legend()` re-targeted to the
+  docked row, re-run after every data-adding call and geometry change:
+  - **band budget** — the docked row may claim at most 35% of the
+    panel height (floored at two rows), enforced as a hard
+    `maximumHeight` cap: the band never eats the plot;
+  - **hard width cap** — `maximumWidth` = the view column's width, so
+    a wide legend can never widen the grid past the view (the probed
+    failure mode: an uncapped 3-column legend of long labels pushed
+    the middle grid column to ~1198 px on a 420 px widget, dragging
+    the view box out of the widget entirely);
+  - **label budget** — the per-column SHARE of the view column's width
+    (still capped by the absolute 220 px ceiling), full text kept
+    verbatim behind the panel (`_legend_full`), following the width
+    BOTH ways;
+  - **column escalation** — entries beyond the band's row capacity
+    split into columns, capped at three (unchanged §23.7 policy, now
+    against the band);
+  - an **empty legend hides and claims no row** — `add_legend()`
+    before any series and a freshly `clear()`ed panel keep the plot's
+    full height (`clear()` releases the band);
+  - the **§21 hover readout re-anchors** to the view box's bottom edge
+    whenever a live band sits under the plot (never covering legend
+    entries) and returns to the legacy panel-bottom anchor when the
+    band releases — including through the show-event path (a pre-show
+    `resize()` at the same size delivers no resize event at show
+    time, probed).
+* Probed quirks pinned: without an explicit alignment the grid
+  stretches the legend into its cell and a feedback loop hands the
+  whole panel to the legend row; `PlotItem.clear()` still empties a
+  docked legend (parenting is irrelevant to it); scene == widget
+  coordinates on the frameless, scrollless view (the readout anchor
+  maps 1:1).
+* **tests/ui/test_plot_legend_placement_243.py** — 17 tests: the
+  docking structure (grid cell, parent, no offset anchor,
+  idempotence), the auto-size (pin gone), the never-overlaps-the-view
+  guarantee at three widths (shown-panel legs), the 35% band cap with
+  a usable plot floor, the grid-never-widens pin, the share budget
+  both-ways with `_legend_full` survival, inspector keys surviving
+  docking, column escalation against the band, the empty-legend
+  no-band contract, `clear()` releasing the band, and four readout
+  anchoring legs (above the band, post-show resize, legacy anchor on
+  clear, legacy anchor without a legend).
+* The §23.7 suite re-targeted with the round: the label-budget clause
+  now names the per-column share, and the both-ways restoration leg
+  narrows to 200 px (the docked-row share is wider than the old
+  45%-of-panel budget, so the mid-length name elides later).
+* Honest totals **5,012 = 4,214 collect + 798 doctest**; the
+  eight-chunk gate green (8/8, 0 failing chunks) after the 8/8
+  foreground notebook re-execution at 1.2.155.
+
+## [1.2.154] — 2026-11-09
+
+### Added — round 242: Part-3 §23.8 — the plot-title pixel budget
+
+* The §23 responsive pass closes its remaining overflow: a plot
+  title is the last unbounded string on a `PlotPanel`.  Pages compose
+  long titles (method up front, computed facts at the end —
+  "UMAP — trustworthiness 0.87 · a=1.200 b=0.300 · …"), and pyqtgraph
+  renders them verbatim — probed 0.13.7 evidence: the default title
+  font is 9pt Sans Serif, an 83-char title advances 534 px, and the
+  LabelItem NEVER elides on its own, so narrow panels overflow.
+* **`ui/widgets/plot_widget.py`** — `_apply_title_budget()`, hooked
+  into the same geometry-change path as §23.6/§23.7 (`resizeEvent`)
+  and `set_labels(title=…)`:
+  - measured with the LIVE LabelItem font (fallback: the panel font
+    at the probed 9pt), budgeted to the view column's width (panel −
+    left − right axis widths − breathing room);
+  - **middle elide** for titles (unlike the axis labels' right
+    elide): titles are centered and BOTH ends carry meaning — the
+    method up front, the computed facts at the end;
+  - the full string stays verbatim on the panel (`_title_full` +
+    the widget tooltip — hover discloses what was elided);
+  - the budget follows the width BOTH ways — a title elided narrow
+    is restored verbatim once it fits again;
+  - pyqtgraph's `setTitle` is only touched when the rendered fit
+    CHANGES (it rebuilds the LabelItem on every call — pinned by a
+    same-instance test).
+* Probed quirks pinned: pyqtgraph creates the title LabelItem even
+  for titleless panels (empty text), so "no title" is asserted on
+  the text, not the item; titles survive `clear()` (the title
+  describes the panel, not the data).
+* **tests/ui/test_plot_title_budget_242.py** — 12 tests: the narrow
+  elide (policy output == the LabelItem text), verbatim survival in
+  `_title_full` + tooltip, the middle-elide head/tail shape, the
+  wide-panel verbatim render, BOTH-ways width following, the
+  setTitle-rebuild guard, `set_labels` adoption (including a
+  titleless panel's first title), `clear()` survival, the empty-title
+  no-op, a short title fitting narrow, and a shown-panel
+  resize-event end-to-end leg.
+* Honest totals **4,995 = 4,197 collect + 798 doctest**; the
+  eight-chunk gate green (8/8, 0 failing chunks) after the 8/8
+  foreground notebook re-execution at 1.2.154.
+
+## [1.2.153] — 2026-11-09
+
+### Added — round 241: Part-3 §21 completion — per-point meta on the remaining scatter surfaces
+
+* The §21.5 per-point hover-metadata contract no longer stops at the
+  generative page: every data-bearing scatter in the Studio now rides
+  the same ``meta=`` plumbing (the ``_molecule_meta`` pattern, five
+  new page-local factories, eleven call sites wired):
+  - **model_analysis** — the parity plot discloses the 0-based
+    held-out row and the signed residual; the residual plot discloses
+    the row and the ACTUAL value behind the point (x/y there are both
+    derivable); the CV fold chart discloses the 1-based fold and the
+    signed delta against the mean;
+  - **deep_learning** — the parity plot (row + residual) and the UMAP
+    embedding scatter (row — the same 0-based index the bound table's
+    row column and the view algebra use);
+  - **responseai** — the 4PL demo's measured points disclose the
+    ORIGINAL-scale dose (the x axis is log10, so the dose itself was
+    invisible), the metrics/screen pair plots disclose row + residual
+    (one shared factory), the correlated pair discloses its row;
+  - **pkpd** — the NCA observed-profile samples disclose the 1-based
+    sample number; **unsupervised** — each cluster scatter discloses
+    the 0-based SOURCE row (the flat index before the mask) and the
+    cluster's member count.
+* Every provider follows the standing §21 rules: only facts the plot
+  cannot tell, honest keys/values, lazily computed per point and
+  cached by the inspector (§21.6), out-of-range indexes answer ``{}``
+  and exceptions can never kill a hover.
+* **tests/ui/test_scatter_meta_241.py** — 16 tests: per-factory value
+  contracts (signed residuals, 1-based folds/samples, original-scale
+  dose, source-row mapping, member counts), out-of-range empties,
+  NaN-bearing inputs, the two pages' duplicate parity factories
+  sharing one contract, and three inspector-flow tests pinning that
+  the metadata reaches the readout verbatim.
+* ruff + mypy clean on the touched ui/ tree; the eight-chunk gate
+  green after the foreground notebook re-execution at 1.2.153.
+
+## [1.2.152] — 2026-11-09
+
+### Added — round 240: the Part-3 §21.4 image pixel/channel inspection
+
+* The owner's round instruction: *"Check the contents of these files
+  thoroughly and make sure that everything is executed and checked"* —
+  the six uploaded PDFs (MASTER_PROMPT parts 1/2/3, the Research
+  Repository Catalog, the Prompt Registry, the GitHub Links Registry)
+  re-read end to end; the compliance matrix verified Part-1 closed
+  (v1.2.107 audit evidence), Part-2 §16 closed (round 228, studio.py),
+  the Links Registry's deferred G-3 trio absorbed (round 189,
+  `ml/xai.py`), and Part-3 with ONE documented remaining acceptance
+  line — §21.4's "image coordinates and pixel values can be
+  inspected" — which this release ships.
+* **`ui/widgets/image_panel.py`** — the pixel inspection layer on
+  `ImagePanel`:
+  - `pixel_at(x, y)` — the pure data-coordinate mapping (x indexes
+    columns, y rows, row-major): fractional positions floor onto the
+    pixel, outside/negative coordinates refuse with `None`, a NaN
+    pixel reports `value=None`/`masked=True` (never a fabricated
+    number), and the axis labels `set_matrix` carried ride the
+    payload (`x_label`/`y_label` — hovering the similarity heatmap
+    names both molecules);
+  - the scene wiring — `sigMouseMoved` → `ImageItem.mapFromScene`
+    (the probe-verified round-trip contract,
+    `scratch/probe_image_hover_240.py`) → `pixel_at` → the
+    `pixel_hovered` signal, with per-pixel debouncing (§21.6: a
+    mouse-move storm over one cell emits once) and a `leaveEvent`
+    reset that emits the cursor-left `None` exactly once;
+  - `image_metadata()` — the at-rest facts: shape, dtype, channel
+    count, finite/NaN census, min/max/mean;
+  - `reset_view()` — the §21.2 reset-to-default control for images;
+  - `set_matrix` now also accepts RGB(A) `(h, w, 3|4)` arrays —
+    rendered natively, per-channel hover payloads (`rgb` tuple +
+    `channels` count, §21.4's "RGB or grayscale channel
+    information"); NaN-bearing RGB is refused with a clear error
+    rather than rendered wrong;
+  - `matrix_changed` signal so pages refresh their readouts on every
+    matrix/clear swap.
+* **`ui/pages/image_lab.py`** — every tab's panel carries a hover
+  readout label: hovering reports `Pixel [row, col] (x, y) = value`
+  (plus the row/column axis labels, the masked-NaN disclosure, or the
+  per-channel values on RGB input); at rest the same line reports the
+  matrix metadata (`Matrix RxC · N finite / M masked · min · max`),
+  kept current through `matrix_changed`.
+* **Tests** — `tests/ui/test_image_hover_probe.py`, 20 tests: the
+  pure mapping (exact values, fractional flooring, boundary
+  refusal, NaN disclosure, label riding), metadata + clear reset,
+  the scene path through the identity `mapFromScene` (the
+  chart-inspector idiom: payload emission, silent-no-matrix,
+  same-pixel debounce, outside-emits-None-once, leaveEvent
+  single reset, replot re-arm), the RGB/RGBA per-channel payloads +
+  the honest NaN refusal, `reset_view`, and the page wiring (four
+  readout labels, a real engine payload answered, the at-rest
+  metadata restore).  Honest totals **4,967 = 4,169 collect + 798
+  doctest** (counts re-verified at ship time: 20 new collect-side
+  tests, the doctest floor unchanged); the ui/ tree stays ruff- AND
+  mypy-clean.
+
+## [1.2.151] — 2026-11-09
+
+### Changed — round 239: the Part-3 §23.7 legend hygiene policy
+
+* **`ui/widgets/plot_widget.py`** — a pyqtgraph legend is unbounded:
+  long series names spill sideways over the data and dozens of entries
+  stack past the plot's bottom edge.  `PlotPanel` now re-fits the
+  legend after every data-adding call (`scatter`/`line`/`bars`) and on
+  every geometry change, with a two-stage policy:
+  - **label budget** — each legend label wider than
+    `min(220px, 45% of the panel width)` is elided; the full text is
+    kept behind the panel (`PlotPanel._legend_full`, an id-keyed map
+    pruned against the live legend items on every fit so
+    clear/replot cycles never leak stale ids), so the budget follows
+    the width BOTH ways — a label elided on a narrow panel is
+    restored verbatim when the panel widens, unless the full text
+    itself exceeds the absolute 220 px ceiling no width can lift;
+  - **column escalation** — entries beyond the vertical capacity
+    (the height the bottom axis leaves, 22 px per row) split into
+    columns, capped at three.
+  The relabeling is display-only: the §21 inspector's series keys
+  keep resolving hover metadata, click-to-select and
+  `attach_metadata()` under the FULL names.
+* **pyqtgraph 0.13.7 probe** — `PlotItem.clear()` empties the legend
+  (no stale-entry leak on our side); pinned by a dedicated test so a
+  future pyqtgraph bump that starts leaking fails loudly.
+* **`tests/ui/test_legend_policy.py`** — 11 tests: narrow elision,
+  verbatim restoration on widening, the ceiling-never-lifts leg,
+  short names untouched, column escalation to the 3-cap on 40
+  entries, single-column calm for 3 entries, no-legend no-op,
+  clear/map reset, stale-id pruning, the inspector-keys contract,
+  and fit idempotence.  Honest totals **4,947 = 4,149 collect + 798
+  doctest** (+11); the ui/ tree stays ruff- and mypy-clean.
+
+## [1.2.150] — 2026-11-09
+
+### Changed — round 238: the Part-3 §23.6 adaptive tick-label density
+
+* **`ui/widgets/plot_widget.py`** — a category axis renders EVERY tick
+  it is handed, so a 40-feature importance chart on a narrow panel
+  collided into an unreadable smear.  `bars(labels=...)` now drives a
+  two-stage, width-derived density policy: **stride thinning** (the
+  stride guarantees even the widest label + padding fits between
+  consecutive kept ticks, so no two rendered labels can overlap
+  regardless of text) and **pixel-budget ellipsization** (each kept
+  label is elided to its per-tick share of the axis width, so one
+  very long category name cannot spill into its neighbour either).
+  The fit re-runs on every geometry change (the `resizeEvent` wiring;
+  Qt defers hidden-widget resize events to show time, so production
+  panels get their first fit at show), measuring the panel's own
+  width because a hidden widget's layout has not propagated to the
+  plot child yet.  Panels narrower than the 80 px pre-layout floor
+  keep the full list.
+* **The §21.3 hover contract survives the thinning** — the FULL
+  category list stays behind the panel (`PlotPanel._cat_ticks`), so
+  the auto-generated bar hover meta keeps resolving the complete,
+  untruncated names for points whose tick was thinned away; only the
+  axis rendering thins.  `clear()` resets the stored list along with
+  the axis ticks.
+* **`tests/ui/test_plot_tick_density.py`** — 10 tests: stride
+  thinning on a 280 px panel (stride >= 2, kept ticks on stride
+  multiples), the density following the width (280 px < 900 px
+  rendered count), the per-slot pixel-share contract for 200-char
+  labels, the full-list hover meta for thinned-away indices, the
+  below-floor full-list state, the `clear()` reset, plot-time fits,
+  a shown-panel end-to-end leg pinning the resizeEvent re-fit, and
+  tiny category sets never thinned.  Honest totals **4,936 = 4,138
+  collect + 798 doctest** (+10); the ui/ tree stays ruff- and
+  mypy-clean.
+
+## [1.2.149] — 2026-11-09
+
+### Added — round 237: the Qt import guard + `studio.py --doctor` (the Windows Shiboken report)
+
+* **`ui/qt_import_guard.py`** — the v1.2.147 Windows report
+  (`ImportError: DLL load failed while importing Shiboken`, Miniconda
+  py312) dies inside the binding's own import chain, before any Studio
+  code: a raw traceback gave the user nothing to act on.  `ui.run`
+  now catches the `ImportError` at exactly that import, prints
+  `qt_import_guidance()` — the diagnosis ("environment problem, not a
+  Studio bug"), the two copy-pasteable fix commands built from
+  `sys.executable` (clean uninstall of the whole wheel family
+  PySide6/PySide6-Addons/PySide6-Essentials/shiboken6, then
+  `--upgrade` reinstall), the VC++-redistributable and
+  conda-vs-pip notes — and returns exit code 2.  The
+  `No module named 'PySide6'` family gets the plain-install branch.
+* **`ui/doctor.py` + `--doctor`** — `python studio.py --doctor` runs
+  a 16-check environment self-check: interpreter floor (3.10+),
+  PySide6 and shiboken6 (wheel metadata read FIRST — it survives
+  exactly the DLL-level breakage that kills the import, so the
+  doctor still says "wheel 6.8.3 present but import fails" and
+  detects version mismatch), the exact `QApplication` import Studio
+  performs, the GUI providers, and the science stack (levels mirror
+  `requirements.txt`: Core + GUI are required, the sampled optional
+  sets — rdkit, matplotlib, qdarkstyle — warn).  Every failing check
+  prints its fix; exit 0/1; the doctor never mutates the environment.
+* 7 tests (`tests/ui/test_qt_doctor.py`): both guidance branches,
+  report format + exit codes, the live 16-check collection, the
+  `--doctor` CLI subprocess, and two PYTHONPATH-shadowed end-to-end
+  legs that fake a broken PySide6 (exit 2 + recipe, and the doctor
+  diagnosing it without a traceback).
+* **Lint debt cleared in `ui/`** — the whole `ui/` tree + `studio.py`
+  is now ruff-clean and mypy-clean (19 ruff findings and 7 mypy
+  errors from rounds 233–236 fixed: dead imports/variables,
+  unsorted blocks, `int()`-around-`ceil`, a `_SeriesRecord` name
+  shadow, the `Descriptors.MolWt` rdkit-dynamic ignore per the repo
+  convention, and a `ndarray | None` arithmetic guard in
+  model_analysis).  `studio.py` now carries its executable bit.
+  (src/ and tests/ carry older debt — 90 + 57 findings — recorded as
+  backlog; the requirements.txt "zero-finding" comment was scoped
+  honestly.)
+
+## [1.2.148] — 2026-11-09
+
+### Added — round 236: the Part-3 §21.5 molecule readouts on the charts
+
+* **`PlotPanel.point_selected`** — the §21.5 wiring point landed:
+  the panel re-emits the inspector's click-to-select as its own
+  `(label, index)` signal, so pages open drill-down views without
+  reaching into the inspector.
+* **The SA chart** — the Generative page's SA tab now plots rank vs
+  score, one point per scored molecule (invalid rows stay
+  table-only).  Hover reads the SMILES, the RDKit-calculated
+  molecular formula and the molecular weight next to the SA value —
+  never invented; unparseable SMILES answer with the SMILES alone.
+  **Clicking a point opens the §22.5 molecule-detail dialog** (large
+  2-D structure + canonical SMILES + formula + weight + SA);
+  foreign-series clicks are guarded off.
+* **The Pareto front** — the multi-objective front scatter carries
+  the same hover metadata for every non-dominated member.
+* Metadata providers are lazy and inspector-cached (§21.6): plotting
+  hundreds of candidates costs nothing until one is hovered.
+* 4 tests (`tests/ui/test_generative_page.py`): the forwarding pin,
+  the hover readout with real numbers, the click-to-detail with the
+  foreign-label guard, the front hover.
+* Docs: GUI_AUDIT's Part-3 progress (§21.5 done), GUI_REDESIGN
+  increments 18 (retroactive: round 235's scroll policy) + 19,
+  README's §21.5 section and §23 scroll-policy note, COVERAGE rows
+  for rounds 235 + 236, and the retroactive CHANGELOG 1.2.147 entry
+  below (round 235 shipped without its CHANGELOG row — reconstructed
+  per the 1.2.144 precedent).
+
+## [1.2.147] — 2026-11-09 *(entry reconstructed in 1.2.148 — round 235 shipped without its CHANGELOG row)*
+
+### Added — round 235: the Part-3 §23 slice 2 — the scroll policy
+
+* **`ui/widgets/responsive.py::wrap_in_scroll`** + `SCROLL_MIN_PX`
+  (240): the tall-form half of the §23.2 discipline —
+  widget-resizable, horizontal scrollbars OFF (sideways overflow
+  made impossible, not merely scrollable), vertical as needed,
+  frameless + palette-blended so a fitting page is visually
+  unchanged, hard region minimum.  All five ML Workbench tab bodies
+  ride it (the round-235 probe: the tuner form needs 479 px and
+  Leaderboards 775 px against the ~450 px the 860×560 minimum
+  window leaves — run buttons and results boards were clipped below
+  the fold).
+* 3 tests (`tests/ui/test_responsive_policy.py`): the contract, the
+  §23.5 remount invariants (rows untouched, never more space
+  required — mounting reparents the body, turning top-level layout
+  margins into child margins), and the self-enforcing structural
+  audit over every ML Workbench tab.
+
+## [1.2.146] — 2026-11-09
+
+### Added — round 233: the Part-3 §23 slice 1 — the responsive pass (splitters, export legibility, aspect)
+
+* **`ui/widgets/responsive.py`** — the §23 policy module:
+  `configure_splitter()` applies the §23.2 discipline — **no
+  collapsible children** (a careless drag can never hide the control
+  column, the chart, or the entire navigation), **hard per-child
+  minimum extents** (`MIN_CHILD_PX` 320; the main window's nav column
+  at 200 — forms, table headers and axis labels stay unclipped when a
+  splitter is squeezed) and **stretch factors** so window growth flows
+  to the chart side (§23.3's resizing discipline).  Wired onto **all
+  20 splitters** in the app: the 15 page splitters, the Image Lab's
+  four tab splitters, the ML Workbench's two, and the main window's
+  nav/content splitter (which previously kept only the pages side
+  non-collapsible — the nav itself could be dragged away).
+* **`LEGIBILITY_FLOOR` (640×480)** — §23.3's "generated plots remain
+  legible when exported": `image_export.grab_png_bytes(min_size=…)`
+  re-renders a squeezed `QGraphicsView` from its **vector scene** at
+  floor scale — text, pens and curves are re-rendered crisp at the
+  larger size (never bitmap-stretched), the aspect ratio is preserved
+  (§23.4), and the pyqtgraph chrome background is re-filled via
+  `backgroundBrush()` because `scene.render` skips the view-layer
+  painting.  `PlotPanel.export_image` / `ImagePanel.export_image`
+  gained the `min_size` passthrough — default `None` keeps the
+  §17-tested widget-owns-its-size contract, and the Image Lab's
+  user-facing export button passes the floor so a matrix squeezed
+  into a corner still exports legibly.  §23.5 pinned by test: the
+  data arrays and view ranges are byte-identical across an export —
+  display geometry only.
+* **`ImagePanel` aspect lock** (§23.4 "preserve image aspect ratios /
+  avoid stretching"): matrix pixels stay square under every resize —
+  a 100×50 correlation matrix renders 2:1 exactly as the data is
+  shaped, fit-to-view, never stretched to fill the panel.
+* 13 tests (`tests/ui/test_responsive_policy.py`): the splitter
+  policy contract (horizontal, vertical, empty-noop), the structural
+  audit over every live splitter in a constructed main window (≥19
+  wired, all non-collapsible, all with minimum extents), the export
+  floor (upscale-meets-floor-aspect-preserved, already-legible noop,
+  no-floor contract), §23.5 scientific-data integrity, the ImagePanel
+  aspect lock, and the §22 renderer's canvas-aspect contract.
+* Docs: GUI_AUDIT's Part-3 progress (§23 slice 1 done, the remaining
+  §23 depth named), COVERAGE round-233 row, README's §23 section.
+
+## [1.2.145] — 2026-11-09
+
+### Fixed — round 232: the Windows black-window bug (the user report)
+
+* **`studio.py` launched with console noise and NO window on Windows**
+  (miniconda py312, PySide6): `ui/headless.py`'s displayless probe
+  tested only X11's `DISPLAY` — a variable that NEVER exists on Windows
+  (nor is it the whole story on Wayland) — so every Windows desktop
+  launch silently forced `QT_QPA_PLATFORM=offscreen`: the QApplication
+  ran with an invisible window, `app.exec()` blocked forever and no GUI
+  ever appeared.  The probe is now platform-aware: offscreen is chosen
+  ONLY on Linux-class platforms exposing neither `DISPLAY` nor
+  `WAYLAND_DISPLAY`; Windows/macOS always keep their native plugin, and
+  a caller-set `QT_QPA_PLATFORM` still wins.  7 decision-matrix tests
+  (`tests/ui/test_headless_platform.py`: Windows, macOS, Wayland-only,
+  X11, displayless Linux, explicit override, idempotence).
+
+### Added — round 232: the Part-3 §21 slice 1 — hover data inspection on every chart
+
+* **`ui/widgets/chart_inspector.py::ChartInspector`** — every
+  `PlotPanel` (all fourteen pages plot through it) now carries: a
+  crosshair cursor; nearest-real-data-point snapping with a highlight
+  ring (the whole bar BODY is the hover target on bar charts/histograms;
+  the 8 %-of-visible-range tolerance is resolution-independent); a live
+  readout line under the plot with the EXACT values — series, x, y and
+  per-point metadata attached by the page (`meta=` on
+  `line`/`scatter`/`bars` or `attach_metadata()` afterwards) —
+  histograms read out exact bin boundaries + count, labelled bars read
+  out their category; per-point metadata is cached (§21.6: an expensive
+  provider runs once per point, the readout text only rebuilds when the
+  snapped point changes; a failing provider degrades to plain values);
+  a context menu with per-series visibility toggles, the
+  hover-inspection on/off switch and reset-to-default-view; and
+  click-to-select that pins the readout and emits `pointSelected(label,
+  index)` — the §21.5 drill-down wiring point.  Theme-aware through the
+  ChartPalette.  14 GUI tests (`tests/ui/test_chart_inspector.py`).
+* **PlotPanel API**: `set_inspection_enabled()` /
+  `inspection_enabled()` / `attach_metadata()`; the readout label has a
+  fixed minimum height so the layout never jumps when it fills (§23
+  thinking).
+
+### Docs repaired — the interrupted round 231's missing rows
+
+* The compaction-interrupted round 231 shipped v1.2.144's code and
+  release ritual but never wrote its CHANGELOG entry, COVERAGE row or
+  GUI_AUDIT progress — all three are reconstructed here (the §22 SMILES
+  previews, the Qt console-noise filter, and their 17 tests).
+
+## [1.2.144] — 2026-11-08 *(entry reconstructed in 1.2.145 — the interrupted round 231's ship)*
+
+### Added — round 231: the Part-3 §22 SMILES previews + the Qt console-noise fix
+
+* **`ui/widgets/smiles_preview.py`** — `MoleculeRenderer`
+  (RDKit `MolDraw2DCairo` at 2× device pixels, a 128-entry FIFO render
+  cache — identical molecules are never redrawn — and honest
+  invalid-SMILES refusal), `MoleculePopup` (the 350 ms hover dwell,
+  §22.2's configurable interval) and `SmilesDetailDialog` (the §22.5
+  detail view: large structure, original + canonical SMILES, molecular
+  formula, weight, the Ertl SA score with method attribution — each
+  either computed or an explicit "not calculated" line, plus one-click
+  canonical-SMILES copy).  Wired onto the Generative tab's shared table
+  by COLUMN NAME, so every frame it binds (the SA board, the evolution
+  mutants, the topo/front children) gains the behaviour wherever a
+  SMILES / canonical / mutant / child column appears.
+* **`ui/qt_noise_filter.py`** — the user-reported v1.2.142 Windows
+  console noise (the `QFontDatabase` fonts-dir advice and the Qt 6.8
+  `QStyleHints` unique-connection chatter ×4) diagnosed BENIGN (Qt
+  notices, not failures); a message-handler filter installed BEFORE the
+  QApplication in `ui.run()` drops both, with the
+  `PHARMAML_STUDIO_QT_VERBOSE=1` escape hatch.  17 tests (5 filter incl.
+  a live `qInstallMessageHandler` round-trip, 12 preview tests on real
+  renders).
+
+## [1.2.143] — 2026-11-08
+
+### Added — round 230: the Part-3 §24 SA engine — Ertl synthetic accessibility end-to-end
+
+* **The engine** — `chem.sa_scoring` (exported from `pharmaml.chem`):
+  the Ertl–Schuffenhauer synthetic accessibility score on the real
+  fragment model — the RDKit wheel ships Ertl's own
+  `Contrib/SA_Score/fpscores.pkl.gz`, loaded lazily, so aspirin
+  scores 1.58 and caffeine 2.30 (the reference Contrib values), not
+  the histogram-less degradation.  Batch API: `sa_scores` (rows keep
+  the original SMILES, canonical form, score, easy/moderate/hard
+  band, per-row parse errors — invalid rows never crash the batch),
+  `filter_by_sa` (the optional max-SA bound *flags* rejects in place
+  — the §24.4 never-silently-discard contract), `sa_score_summary`
+  (mean ± std, range, the honest "computational estimate, not a route
+  plan" caveat).  37 tests.
+* **The oracle upgrade** — `chem.oracles.sa_score` now delegates to
+  the same lazy fragment loader (a Contrib-less RDKit build degrades
+  honestly to the complexity-only ranking) and switched to the
+  non-deprecated `rdFingerprintGenerator` Morgan API;
+  `penalized_logp` therefore moved onto the real SA scale (aspirin
+  1.137, ethanol -0.258 — the old -7.3-era pins were the degraded
+  scorer's artefacts; doctest and GUI pins trued).
+* **The generative wiring** — `generative.scoring.SAScoreObjective`
+  (§24.5): the objective window bounds become the easy/hard reward
+  anchors, so "SA score (ease of synthesis)" is selectable in the
+  Studio's Evolve objective combo — SA as ONE signal in the loop,
+  never the sole target (§24.5's explicit anti-goal).
+* **The Studio tab** — the Generative page's engine tabs gained "SA
+  score": paste molecules (four seeded defaults), set the optional
+  max-SA bound, get the ranked table (rank / SMILES / canonical /
+  score / band / status) with rejects kept in place and the summary
+  line.  6 GUI tests (defaults, filter, invalid rows, empty input,
+  bad bound, objective selection).
+* **The web bridge** — `/api/chem/sa-score` (zod-validated, ≤ 50
+  molecules, min/max bounds) over `scripts/sa_score_bridge.py`
+  (stdin→stdout JSON inside the venv) feeding the Explorer's
+  Playground `sa-score-card` (the SA calculator card in the
+  generative strip), with the card-directory/probe pins updated.
+* **Infrastructure hardening** — a ROOT `conftest.py` preloads the
+  round-206 EGL stub (`ui.headless.ensure_headless()`) for EVERY
+  pytest invocation: pytest-qt imports `PySide6.QtGui` at
+  `pytest_configure` (before any `tests/` conftest can run), so in an
+  EGL-less container every non-`tests/ui` invocation — the library
+  chunks and the `src/pharmaml` doctest chunk — INTERNALERRORed on
+  `libEGL.so.1`.  The suite is container-EGL-flip-proof now.
+* Round 230 also completed the interrupted round's ship (the
+  syntax-error fix in `ui/pages/generative.py`, the true-value test
+  pins the dead session guessed wrong: easiest-first ordering, the
+  2-kept/2-rejected filter split, `_obj_lo`/`_obj_hi` names).
+
+
+## [1.2.142] — 2026-11-08
+
+### Added — round 229: the Part-3 §20 checkpoint engine — long jobs pause/resume/stop without losing work
+
+* **The checkpoint engine** — `utils/checkpoints.py`
+  (`CheckpointManager` + `CheckpointInfo` + `default_directory`,
+  exported from `pharmaml.utils`): atomic self-verifying JSON
+  checkpoints for long-running jobs.  Every save is temp + `fsync` +
+  `os.replace` + directory `fsync` (a crash mid-write leaves the
+  previous checkpoint intact); each file carries a SHA-256 over its
+  canonical content, so a truncated or tampered newest checkpoint is
+  QUARANTINED to `*.json.corrupt` on read and the resume falls back to
+  the previous valid one instead of failing; rotation keeps the newest
+  `keep` (a 40-hour job checkpoints thousands of times without filling
+  the disk); states are plain JSON (no pickle — a malicious checkpoint
+  cannot execute on load); inputs are validated strictly (plain
+  filename stems, non-negative int steps, dict states, JSON-serialisable
+  payloads with the actionable hint to store large artefacts in the
+  caller's own files).  36 engine tests.
+* **The family benchmark wired end-to-end** —
+  `benchmark_feature_families` grows `checkpoint_dir` /
+  `checkpoint_name` / `resume`: after EVERY completed row (success or
+  NaN-swallowed failure, BEFORE the cooperative-stop check) the
+  board-so-far lands atomically on disk; a stopped run's next call
+  with the same signature (task + cv + metric + resolved model +
+  family list + a SHA-1 of the SMILES — any mismatch starts fresh)
+  resumes at the first unscored family instead of recomputing;
+  checkpoint write failures degrade to log warnings and never kill a
+  40-minute sweep.  The smoke caught the subtle bug: `enumerate`'s
+  `start=` offsets the counter without skipping elements — the resume
+  must slice `family_list[start_position - 1:]`, or reused rows
+  recompute AND re-save at shifted steps.  6 integration tests
+  (including the featuriser-counting spy that pins "resume computes
+  only the unscored families").
+* **The Studio wiring** — the ML Workbench Leaderboards tab
+  checkpoints into `~/.pharmaml/checkpoints/family-benchmark` by
+  default (an unwritable home degrades to fresh runs, never fails the
+  page): Stop keeps the finished families on disk, the next Start
+  resumes, and the status line leads with "checkpoint found: k/n
+  families already scored — resuming there"; the Start button's
+  tooltip carries the contract.  1 GUI test runs the full two-Start
+  loop (fill the checkpoint, then resume it).
+
+## [1.2.141] — 2026-11-08
+
+### Added — round 228: THE RETIREMENT ROUND — the ML Workbench joins the Studio, Part-2 (§16) declared complete, and playground.py is retired (the owner's "everything must be in studio.py" directive, increment 3)
+
+* **The ML Workbench** — `ui/pages/ml_workbench.py` (increment 14,
+  1,798 lines, 18 page tests), the Data & ML tab's last unported
+  cards as five Studio tabs, every card wired to the SAME public
+  backend APIs the legacy Tk cards call: **Hyperparameter search**
+  (`RandomSearch` / `TPESearch` / `Hyperband` over every grid-bearing
+  registry family, the trials/η/cv/pruner controls, the defaults
+  baseline the search has to beat, the held-out verdict, the
+  trial-ranking board, and Apply-best → the Model Analysis page's
+  manual-params table via `apply_search_result`); **Leaderboards**
+  (the `benchmark_feature_families` family benchmark over the SMILES
+  column + the `stack_oof_regressors` OOF stacking leaderboard with
+  the residual correction and the native parity scatter); **Ensemble
+  builder** (`build_voting` / `build_stacking` over the ticked
+  registry members with held-out metrics); **Persistence**
+  (`save_model` + the provenance sidecar, `load_model`, the
+  predict-on-CSV arm with `validate_bundle_input`'s honest
+  feature-contract audit); **Applicability domain**
+  (`applicability_domain` with the reliability table, the
+  kNN-distance native scatter — inside vs outside AD + the threshold
+  line — and the bootstrap-uncertainty status, sourced from the Model
+  Analysis run / the Workbench ensemble / a loaded bundle).
+* **The Model Analysis page's round-228 additions** — the
+  **manual-hyperparameters** table (the selected registry model's
+  `param_grid` knobs, blank keeps the estimator's own default, the
+  values riding `train_model`'s `model_params`); the kept-run
+  `last_run()` hand-off (the fitted estimator + splits + held-out
+  metrics that feed the Workbench's AD/persistence cards); and four
+  NATIVE diagnostic figures — **calibration curve**
+  (sklearn.calibration under the job), **learning curve** (train
+  sizes vs CV score, ± 1 std band edges), **ROC** and **PR** curves
+  (one-vs-rest per class, macro AUC / AP in the title) — no
+  matplotlib import anywhere on the page (§16.8).
+* **The latent classification crash fixed** — the training job's
+  blanket `np.asarray(y, dtype=float)` crashed EVERY string-class
+  run ("could not convert string to float: 'weak'"); the honest dtype
+  split (regression floats, classification labels as-is) plus the
+  new classifier-diagnostics tests close it.
+
+### Removed — the retirement (§16.18 step 15 fires)
+
+* **`playground.py` (38,317 lines) is retired** — deleted together
+  with its 980-test Tk-coupled suite (`test_playground.py` 876 +
+  `test_playground_workflows.py` 17 + `test_job_safety.py` 31 +
+  `test_excel_io_and_samples.py` 26 + `test_feature_recalculation.py`
+  30). All thirteen content surfaces are verified Studio pages (the
+  audit's Part-2 completion assessment now reads 100%); `python
+  studio.py` is THE front end; the README, `studio.py`'s docstring,
+  the dashboard's migration note and its Studio-pages census (the
+  playground-workflows card's replacement), GUI_AUDIT and
+  GUI_REDESIGN all carry the retirement; the suite driver's Tk chunk
+  left with it. Honest totals: **4,769 = 3,974 collect + 795
+  doctest**, census **985 files / 311,333 lines**.
+
+### Changed
+
+* `ui/main_window.py` — SECTIONS grows to seventeen ("mlworkbench",
+  "ML Workbench" after Model Analysis); the count-pinned tests trued
+  (five suites 16 → 17, the utilities index 14 → 15).
+* The web pins — SHIPPED_TOOLKIT_VERSION 1.2.141, FALLBACK_STATS
+  985/311,333, the hero fallback literals, the 4,769 passing-tests
+  chips (download panel + overview), the overview after-text.
+
+## [1.2.140] — 2026-11-08
+
+### Added — round 227: the Utilities Workbench joins the Studio + the JobRunner GC-race fix (the owner's "everything must be in studio.py" directive, increment 2)
+
+* **The Utilities Workbench** — `ui/pages/utilities.py` (increment 13),
+  the retirement backlog's missing tab: the legacy Tk playground's
+  Utilities tab ported as five Studio tabs, every card wired to the
+  SAME public backend APIs the cards call.  **Table merge & split**
+  (`merge_tables` / `merge_table_folder` / `split_table_into_chunks`
+  with the round-201 example loader); **compare & annotate**
+  (`compare_tables` / `annotate_with_smiles`, the common/only-A/only-B
+  counts drawn as native PyQtGraph bars — no matplotlib on the page);
+  **approved drugs → report** (`filter_approved_drugs`, CSV + the
+  bordered Word table through `export_docx` with the honest
+  python-docx refusal); **campaign file tools**
+  (`collect_files`/`list_file_names`/`distribute_files`/
+  `delete_named_files`/`cleanup_tree` — dry-run by default, one
+  confirmation before any real destructive run, the shipped
+  14-ligand example tree in one click); **reindex by number**
+  (`reindex_by_number` with the dense-gap honesty).  Honest
+  pre-flight refusals everywhere; the split parts folder is picked
+  BEFORE the run (the Studio contract — no dialog mid-job).  18 new
+  page tests (`tests/ui/test_utilities_page.py`).
+* **The JobRunner GC-race fix** — `ui/workers/job_worker.py`: the
+  runner's finisher (the FIRST slot of the finished emission)
+  dropping the last worker reference let CPython's immediate
+  refcount destruction tear down the worker's `JobSignals`
+  mid-delivery, silently swallowing every page slot connected after
+  it — the Utilities campaign jobs (1.35 s docking import inside the
+  worker) hit it deterministically.  The retired-workers hold keeps
+  the signals alive past the emission; a forced-`gc.collect()`
+  regression test pins it.
+* **Docs trued** — `docs/gui/GUI_AUDIT.md`'s Part-2 assessment
+  advances to ~93% (twelve of thirteen surfaces; the Utilities
+  blocker resolved — the remaining blocker is the Model-Analysis
+  depth alone); `GUI_REDESIGN.md` carries increment 13; the
+  section-count tests trued to the 16-page window.
+
+## [1.2.139] — 2026-11-08
+
+### Added — round 226: the Part-3 §19 CV interface joins the Studio (the owner's "everything must be in studio.py" directive)
+
+* **The verdict first** — `docs/gui/GUI_AUDIT.md` now carries the
+  honest Part-2 (§16) completion assessment: architecture, theming,
+  visualization, workers and eleven of thirteen content surfaces are
+  verified, but §16.22's "all relevant features are accessible" is not
+  yet literally true (the remaining Model-Analysis depth + the
+  Utilities workflow cards), so §16.18 step 15 correctly refuses to
+  retire `playground.py` today; its module docstring now states the
+  legacy status.
+* **The port** — `ui/pages/model_analysis.py` grows the §19
+  cross-validation interface that round 225 gave the playground only:
+  the **Compare models (CV)** board (the whole available registry
+  under ONE shared splitter via `compare_models_cv`), the cv-folds
+  spinner (2–10, default 5) + the cv-strategy combo
+  (auto/kfold/stratified/group/stratified_group/scaffold), the honest
+  pre-flight refusals (scaffold CV without a SMILES column, grouped
+  strategies without a group-like column — refused BEFORE any job),
+  the formatted `mean ± std (k-fold CV)` leaderboard, and the
+  double-click **CV report dialog** (fold table with train-side
+  mirrors, per-metric aggregates with honest directions, the notes,
+  and the PyQtGraph fold chart with mean line + ± 1 std band edges —
+  no matplotlib backend roulette).  The group-source detectors are
+  studio-owned (`detect_smiles_column` / `detect_group_column`, the
+  playground's honesty contracts) so the page stays independent of the
+  legacy file.  Seven new page tests (`tests/ui/test_model_analysis_page.py`),
+  the suite driver chunk 4c extended.
+
+## [1.2.137] — 2026-11-08
+
+### Added — round 224: the Part-3 §18.2/§18.3 hyperparameter recommendations layer (`pharmaml.ml.hpo_presets`)
+
+* **The gap** — the search engines already existed (the TPE /
+  successive-halving / Hyperband math in `ml.hpo`, the keras-tuner-style
+  `HyperParameters` + searchers in `ml.tuner`) but the registry grids
+  are deliberately tiny — three points per slot, sized for a
+  GridSearchCV sweep.  §18 asks for the layer above: comprehensive,
+  resource-aware ranges WITH the advice that makes them usable.
+* **The tables (§18.3)** — hand-authored `ParamAdvice` rows for the
+  directive's eight families (logistic regression, random forest,
+  SVM/SVR — task-aware, XGBoost, LightGBM, CatBoost, k-NN, and both
+  neural families the toolkit ships: sklearn `ann` + PyTorch `dnn`),
+  every parameter carrying its range, log/linear prior,
+  essential/key/extended priority, a one-line purpose, and its
+  dependency structure; every other grid-bearing registry family gets
+  the honest fallback (advice derived from its own declared grid).
+* **The presets (§18.2)** — conservative (essential-only,
+  middle-half ranges — the log-domain middle half for scale
+  parameters), balanced (essential + key, full ranges, trimmed
+  categorical lists), exploratory (everything, the combinations that
+  need validation).  Deterministic, step-snapped, reproducible.
+* **The adaptation (§18.2)** — `recommend_search` adapts to dataset
+  size (small-n caps estimator budgets at 300 and k at n/2; large-n
+  notes the model-based-search preference), dimensionality
+  (family-aware notes), class imbalance (>= 4:1 keeps `balanced`
+  weighting searchable, elevated to essential; xgboost/catboost get
+  their honest `scale_pos_weight` / `auto_class_weights` notes), and
+  the resource tier (low caps budgets/epochs, drops batch sizes below
+  32).  Every adaptation leaves a visible note.
+* **The validation (§18.2)** — `validate_space` / `validate_values`
+  enforce the solver-penalty matrix (l1 needs saga/liblinear;
+  the solver list is ordered by compatibility so preset trims never
+  admit an invalid pair outside exploratory), the kernel-conditioned
+  parameters (degree/gamma), task-only parameters (epsilon is
+  SVR-only, class_weight is classification-only), CatBoost
+  loss_function-vs-task, and range sanity; the bridge re-checks each
+  drawn trial and fails it loudly instead of silently training an
+  invalid combination.
+* **The bridge** — `hypermodel_from_advice` compiles a recommendation
+  into a genuine tuner-searchable hypermodel (registry families via
+  `build_model` + `set_params`; ann/dnn/hsvr bespoke constructors),
+  so the presets plug straight into RandomSearch/TPESearch — proven
+  end-to-end with real searches over advised spaces.
+* **The interchange (§18.5)** — `recommendation_to_json` /
+  `recommendation_from_json` round-trip losslessly with schema
+  validation on load (11 typed mangling tests);
+  `estimate_evaluations` answers the pre-execution budget question
+  (grid point-product with recorded assumptions, or the trial count
+  for random/TPE).
+* **The honest scope** — parameters the estimator does not accept are
+  never advised: xgboost/catboost imbalance knobs are noted not
+  searched, the dnn optimizer is fixed AdamW (its `weight_decay`
+  surrogate IS searched, as a documented fixed row), ann inherits
+  sklearn's 'auto' batch semantics.
+* 66 collected tests + 8 doctests; docs INDEX rows; the 17th sandbox
+  rollback recovered before the round started (PAT re-extracted from
+  the PDF with newline-join, 19 upload files byte-identical after the
+  ff-pull, venv rebuilt in the foreground).
+
+## [1.2.136] — 2026-11-08
+
+### Fixed — round 223: the playground SIGILL root-caused and fixed (the worker-thread GC race)
+
+* **The crash** — round 222's first-ever full chunked suite run lost
+  three chunks: the 869-test Tk playground chunk died with
+  `Fatal Python error: Illegal instruction` (exit 132), ui chunk 4
+  died with the kernel's SIGKILL, and chunk 2 died too (it carried
+  the playground file).  Round 222's release note called the SIGILL
+  "proven environmental on the pristine tree" — the pristine-tree
+  rerun was the right experiment, but the conclusion stopped one
+  step short: the crash reproduces at a DIFFERENT test position on
+  every run (94 → 97 → 113 → 123 → …), which is a timing race, not
+  a poisoned binary.
+* **The bisection (round 223)** — the repro shrank to three tests:
+  `TestDockingRescoreReport` crashes when `test_report_bundle_end_to_end`
+  runs after ANY sibling, yet passes alone; every victim stack is
+  `Garbage-collecting` — the automatic GC pass firing **on the
+  worker thread** during one of its native-heavy phases (matplotlib
+  transform/marker constructors inside `plot_consensus_ranking`;
+  the `torch` import inside `neural.fit`, with ddtrace's import
+  hooks in the frame).  The worker is `_start_job`'s
+  `threading.Thread` — the SAME thread every playground job runs
+  on — so the race is latent playground plumbing that the
+  16th-rollback venv rebuild merely re-timed into visibility.
+* **The fix** — `_start_job.runner` suspends automatic GC for the
+  bounded job body (`gc.disable()` … `finally: gc.enable()`;
+  reference-counted garbage, the vast majority, still frees
+  immediately), and `_poll_jobs` drains the deferred cycles with
+  one `gc.collect()` on the main thread at the safe point (the
+  worker fully done).  The report bundle's own `work()` carries the
+  same guard around its figure+PDF phase.  Long jobs stay bounded —
+  no blanket disable outside the runner, no unbounded cycle
+  accumulation.
+* **The proof** — the repro class: 3/3 crash before → **3/3 green
+  after**; the full 869-test playground chunk completed for the
+  first time on this sandbox (the only failure was a stale
+  review-144 source-scan pin, fixed below); and the restructured
+  nine-chunk suite is fully green (chunks 1, 2, 3, 4a, 4b, 4c, 5,
+  6 exit 0).
+* **The stale pin** — `TestReview144Gui`'s loader scan expected
+  exactly 3 `read_table_with_progress` streaming loaders; the
+  round-215 deep-learning file-load job adopted the same reader as
+  a legitimate 4th and never bumped the pin (full playground runs
+  had been out of the focused-loop's reach since).  True 3 → 4.
+* **The OOM lesson, applied** — ui chunk 4 (241 PySide6 tests in one
+  process) was kernel-OOM-killed at ~163/241 even with next-server
+  down; the runner now splits tests/ui across three processes
+  (4a/4b/4c) and `test_playground.py` no longer rides chunk 2's
+  glob (it is chunk 5's whole world — one crash muddied two chunks
+  at once).
+
+## [1.2.135] — 2026-11-08
+
+### Added — round 222: the Part-3 §17 image-export engine (TIFF/JPEG first-class)
+
+* **`src/pharmaml/viz/export.py`** — the core engine the Part-3
+  directive's first section demands: TIFF and JPEG join PNG and SVG
+  as first-class export formats, with the scientific-integrity rules
+  written into the code rather than the docs:
+  * **TIFF, the scientific path (§17.2)** — a `uint16` matrix
+    exports as a genuine `I;16` TIFF (bit-identical on reopen),
+    never a silently-quantised 8-bit copy; lossless compression
+    choices (`tiff_lzw` / `tiff_deflate` / `none`); multi-page
+    stacks via `export_matrix(..., pages=[...])` with per-page
+    validation; dpi resolution tags.
+  * **JPEG, the presentation path (§17.3)** — configurable quality
+    1-95 (validated range); a 16-bit source REFUSES to export
+    silently quantised (raise, or explicit `downcast_16bit=True`
+    with a recorded warning); an RGBA source composites onto an
+    explicit background colour — never a silent alpha drop; float
+    matrices refuse without explicit `normalize_float=True` (the
+    classic integrity trap, refused loudly with the recorded range).
+  * **Validation as part of the export (§17.4)** — every write is
+    reopened, magic-byte-sniffed (`sniff_format`: PNG/JPEG/TIFF
+    II+MM/SVG headers) and dimension-checked before success is
+    reported; `validate_export()` catches extension/content lies
+    (PNG bytes under a `.tiff` name) and wrong dimensions without
+    raising; the extension must MATCH the requested format — §17.4's
+    "do not change file extensions without actually converting".
+  * **The reusable manager (§17.4)** — `ExportManager` batches
+    images to a directory with a filename pattern, validates each
+    write and records a JSON manifest (name, format, size, mode,
+    compression, warnings — the audit trail the acceptance
+    criteria ask for). `EXPORT_FILTERS` carries the §17.1 dialog
+    filter strings (`.tif .tiff`, `.jpg .jpeg`).
+  * `export_figure()` routes matplotlib figures through the same
+    rules (SVG stays vectorial via matplotlib's own writer; raster
+    formats render through Agg then encode with the TIFF/JPEG
+    policy); `export_widget_image()` takes Qt-rendered bytes.
+  * Pillow stays optional exactly like matplotlib: importing is
+    free, exporting without it raises the actionable
+    `DependencyError` with the `pip install 'pharmaml[reports]'`
+    hint (Pillow>=10.0 added to the reports extra; the verified
+    stack pins 11.3.0).
+* **`ui/widgets/image_export.py`** — the GUI bridge:
+  `grab_png_bytes` (Qt widget → PNG bytes, offscreen-safe) +
+  `export_widget_grab` (bytes → the engine's integrity-checked
+  pipeline). The GUI never re-implements format policy; it renders,
+  the engine decides.
+* **`ui/widgets/image_panel.py` / `ui/widgets/plot_widget.py`** —
+  `ImagePanel.export_image()` and the new
+  `PlotPanel.export_image()`: extension picks the format, TIFF
+  carries the compression choice, JPEG the quality, every write
+  validated; the pre-§17 `export_png` boolean API keeps working as
+  a validation-backed shim.
+* **`ui/pages/image_lab.py`** — the export row goes §17: format
+  combo (TIFF default — the scientific choice, PNG, JPEG), JPEG
+  quality spin 1-95 (default 92, tooltipped lossy), TIFF compression
+  combo (LZW/DEFLATE/None), one dialog with the three filters, the
+  §17.4 extension-stamping rule (a foreign suffix gets the chosen
+  format's extension), and an honest status line carrying the
+  engine's result card — format, dimensions, byte count, and every
+  integrity warning.
+* **The tests** — `tests/test_export_images.py` (29 collected
+  items, 27 functions with the compression knob parametrised ×3:
+  the 16-bit roundtrip, the three compressions, quality
+  monotonicity, every refusal, the multi-page stack, the
+  mismatch/liar/mismatched-dimension/missing/corrupt validation
+  cases, the manager manifest + format override, the Pillow-free
+  error shape) and `tests/ui/test_export_gui.py` (7 offscreen
+  tests: both panels' three formats at the exact rendered size, the
+  compat shim, the control row's contract, the result-card status
+  line, the extension stamping, the honest FAILURE status). 36 new
+  collected items + 7 new doctests; honest totals 5,532 → **5,575 =
+  4,790 collect + 785 doctest**.
+
+## [1.2.134] — 2026-11-08
+
+### Added — round 221: the Image Lab (Studio increment 12 — the Part-2 §16.8.2-16.8.4/16.8.7 closure)
+
+* **`ui/widgets/image_panel.py`** — the plot widget's sibling for
+  MATRIX data: a `pg.GraphicsLayoutWidget` carrying an `ImageItem`
+  (16.8.2), a `HistogramLUTItem` (16.8.4 — the histogram + colormap
+  control, seven deterministic gradient presets: viridis/magma/
+  inferno/plasma/thermal/turbo/grey), a shared `RectROI` (16.8.3)
+  whose sub-matrix count/mean/min/max recompute live through the
+  bounding-rect slice (the probe's own arithmetic), NaN masking via
+  the masked-array path, theme-synced chrome (background/axes/ROI
+  pen — the colormap stays data-driven, never a theme guess), and
+  `export_png` (16.8.7 / 16.19's export criterion).
+* **`ui/pages/image_lab.py`** — the Studio's twelfth feature page
+  (sidebar section 15), five tabs on REAL project data, every
+  number engine-printed first by the committed probe
+  `scratch/probe_imagelab_221.py` (per-section fresh seeds):
+  * **Similarity heatmap** — `compute_fingerprints` (morgan r=2,
+    2048 bits) + `tanimoto_matrix` over the bundled
+    `seed_molecules.csv` roster (12 drugs; off-diagonal min
+    0.021277 / max 0.529412 / mean 0.130395; most similar caffeine ~
+    theophylline 0.529412; least metformin ~ diclofenac 0.021277;
+    highest mean-similarity ibuprofen 0.164474) or the loaded
+    table's SMILES column (organic-fragment heuristic + the honest
+    refusals: no table / no SMILES-like column / < 4 SMILES).
+  * **Response matrix** — the Biology pipeline's own 23x8 LN_IC50
+    pivot (one honest NaN hole masked; most sensitive A549 /
+    erlotinib -0.177930; most resistant U-251 / sorafenib 4.424495;
+    mean 3.020384) with cell-line/compound tick axes.
+  * **Explorer matrix** — the loaded table's numeric columns raw or
+    z-scored (the seeded 12-row demo: raw means [4.8301, 2.0828,
+    341.6800], z stds [1.0, 1.0, 1.0], min -1.971670 / max 2.364600,
+    row of max |z| = 6); refusal below 2 numeric columns; the span
+    pickers snap forward, never invert.
+  * **ROI explorer** — the spin-box region rows [2,6) x cols [7,10)
+    reproduces the probe's statistics exactly (16 cells, mean
+    0.131007, min 0.021277, max 0.529412); the shared RectROI moves
+    with the spins.
+  * **Performance** — `tanimoto_matrix` over seeded bit matrices
+    (n from a spin box, default 1024): pairs, wall seconds, M
+    pairs/s — the 16.19 large-dataset number, reported honestly as a
+    timing, never asserted.
+* **The tests** — `tests/ui/test_image_lab_page.py`, 18 offscreen
+  tests: the five end-to-end tabs against the probe-printed numbers,
+  the explorer-column paths (fake explorer frames at 90/12/3 rows),
+  the honest refusals, the ROI math + NaN masking, the gradient
+  preset switch + unknown-preset refusal, the PNG export (magic
+  bytes + a real render), the theme sync, and the main-window wiring
+  pin (15 pages). The sidebar growth re-pinned five older tests:
+  `test_main_window` (14 → 15 pages + the navigation order),
+  `test_responseai_page` (position + count), `test_foundations_page`
+  (len-4 → len-5), `test_bestofml_page` (len-3 → len-4).
+
+## [1.2.133] — 2026-11-08
+
+### Changed — round 220 (cron run 15/100): the lint-restore round (the standing mandate's engineering review)
+
+* **The bare-`ruff check .` green convention restored** — the 15th
+  sandbox rollback restored the tree from the remote with the upload
+  mount's 777 bits smeared over every `.py` file, so a bare
+  `ruff check .` (the pyproject-pinned convention, `scratch/`
+  excluded) suddenly reported 159 findings: 153 x EXE002 (executable
+  without shebang), 1 x EXE001, 5 x SIM102.  All 153 no-shebang files
+  are back to 0644 (`studio.py`, the one shebang carrier, is the
+  single legitimate 0755); EXE001/EXE002 = 0.
+* **The five round-205 cooperative-stop guards collapsed (SIM102)** —
+  identical short-circuit semantics, one nesting level less, comments
+  preserved at the guard:
+  * `utils/io.py` x2 — `read_table_with_progress` and the indexed
+    reader's chunk loops (`if len(chunk) and report(...) is False:`).
+  * `ml/training.py` x2 — `compare_models`' `on_model` and the family
+    benchmark's `on_family` heartbeat guards.
+  * `chem/features.py` x1 — the feature factory's per-batch
+    `progress` guard.
+  Net -4 lines; no behaviour change (the `and` short-circuit keeps
+  the `is not None` guard strictly before the callback call).
+* **No new tests** — the collapse is covered by the existing nets:
+  `tests/test_job_safety.py` (31, every stop checkpoint), the io /
+  training / features batches, and the ui suite re-run green AFTER the
+  edits (247 dots exit 0).
+* **Environment note** — the repaired venv carries pytest 9.0.2 (the
+  pre-rollback venv was pytest 8): the same 778 collected doctest
+  items now report as **775 passed + 3 skipped** where pytest 8
+  accounted the three all-`+SKIP` docstring items
+  (`pharmaml.viz`, `pharmaml.data.load_dataset`,
+  `pharmaml.data.split_table` — every example `+SKIP` by design,
+  the download-required examples) differently.  Zero failures; the
+  honest grand total **5,514 = 4,736 + 778** is unchanged.
+
+## [1.2.132] — 2026-11-08
+
+### Added — round 219: the Response AI Workbench (Studio increment 11, audit row 12)
+
+* **`ui/pages/responseai.py`** — the Studio's eleventh feature page,
+  giving `pharmaml.ml.drugresponse` — the module absorbed from
+  `CSOgroup/CaDRReS` (the bilinear factorisation + the
+  informative-weight sibling), `Precily` (the multi-omics fusion
+  discipline) and `DeepResponse` (the response VAE) — its FIRST GUI
+  surface (the playground's Response AI tab predates the module and
+  rides other engines).  Eight tabs, each wired to the module's
+  public APIs:
+  * **Hill curve** — `fit_hill_curve` on the seeded 4PL demo (seed
+    42, noise parameter): every fitted parameter against the
+    generating truth (top 0.9981 vs 1.0, bottom 0.049 vs 0.05, ic50
+    0.8123 vs 0.8, hill 1.1679 vs 1.2), r² 0.999669, the log-dose
+    AUC both ways (model-based 3.055882 vs closed-form 3.057985),
+    the fitted curve drawn over the log10-dose grid with the noisy
+    points scattered on top.
+  * **Response metrics** — `response_metrics` (Pearson / Spearman /
+    RMSE / MAE, n) on the seeded noisy pair (pearson 0.979392, rmse
+    0.058964) or two Data Explorer columns (>= 8 finite aligned
+    values, honest refusal otherwise), the observed-vs-predicted
+    scatter with the identity line.
+  * **Rank correlations** — `rank_correlations` (Pearson, Spearman,
+    Kendall tau-b in one call) on the seeded curved pair (0.914276 /
+    0.918042 / 0.744681 over n=48) or two explorer columns.
+  * **Response model** — `DrugResponseModel` (the CaDRReS bilinear
+    factorisation, training included) on the seeded 12x4 screen with
+    a 15% NaN mask: 40 observed pairs, final loss 0.029817 after 120
+    full-batch epochs, the in-sample pearson 0.164369 reported
+    honestly ("honestly modest, the toy screen is tiny"), the
+    predicted-response head for two cell lines and the
+    observed-vs-predicted scatter over all observed pairs.
+  * **Cross-validation** — `cross_validate_response` over the same
+    screen, folds split CELL LINES so no cell line straddles a fold:
+    the per-fold pearson table (-0.190352 / -0.599944 / 0.178499 /
+    0.712589) with the mean 0.025198 reported honestly ("the toy
+    screen barely carries signal"), the per-fold bars (negative folds
+    draw downward — honest).
+  * **Informative regression** — `InformativeRegression` (the
+    cadrres-iw idea: the penalty on feature j's weight is
+    l2*beta_j^2/v_j for the per-feature prior variance v_j): the
+    prior-shrunk coefficients [0.4789, 1.1233, -0.5979] against the
+    generating [0.5, 1.5, -0.8] under priors [100, 4, 4], the loss
+    curve 2.421297 -> 0.550247 over 300 epochs.
+  * **Response VAE** — `ResponseVAE` on the seeded 60x10 features
+    with a response head: the ELBO -20.220437 -> -10.032681 (the
+    bound improving), the reconstruction / KL / response MSE ledgers
+    (7.74856 / 1.343065 / 0.941055) drawn as the bound curve.
+  * **Multi-omics fusion** — `MultiOmicsFusion` on the seeded 30 x
+    (12 expression + 8 mutation) blocks: the per-block audit
+    (`block_report` — n_features, n_constant, total variance
+    equalised to 1.0 by the sqrt-width scaling, the raw mean column
+    stds 0.927576 / 0.488877 shown side by side), the latent 30x20
+    under two-level columns, the equalisation bars (both 1.0 — flat
+    on purpose, that IS the point).
+* **`ui/main_window.py`** — the fourteenth section (`responseai`,
+  right before Settings); `tests/ui/test_main_window.py` re-pinned
+  to 14 pages, the bestofml wiring test to len-3, the foundations
+  wiring test to len-4.
+* **`scratch/probe_response_218.py`** — round 218's probe prep
+  re-seeded per section (fresh `default_rng(42)` at every section
+  head, the bestofml probe's house pattern) so each page tab is a
+  standalone seeded job; `block_report`'s audit numbers added; every
+  number the new tests assert engine-printed first.
+* **`tests/ui/test_responseai_page.py`** — 17 offscreen tests: the
+  eight end-to-end tabs against the probe-printed numbers, the
+  explorer-column paths for the metrics/rank tabs, the honest
+  refusals (short columns, out-of-range epochs/folds/noise), the
+  parse helpers, and the main-window wiring pin.
+
+## [1.2.131] — 2026-11-07
+
+### Added — round 217: the Best-of ML Workbench (Studio increment 10, audit row 11)
+
+* **`ui/pages/bestofml.py`** — the Studio's tenth feature page,
+  migrating the playground Best-of ML tab's eight clusters (the
+  `lukasmasuch/best-of-ml-python` absorption), each wired to the SAME
+  public backend APIs the cards call:
+  * **Catalogue** — `search_catalog` / `catalog_top` over the embedded
+    snapshot (924 projects, 35 sections, 5,121,472 stars): substring
+    search keeps the catalogue's score order; the top-10 star counts
+    draw as the bars; the category picker rides the same `all
+    categories` + titles list the card builds.
+  * **Coverage audit** — `coverage_table`'s 35 verdicts (12 native /
+    6 partial / 4 external / 13 out-of-scope) as the table plus the
+    verdict-count bars.
+  * **Differential privacy** — `dp_statistics` under one epsilon
+    budget (count/sum/mean + the worst-bin row, the data-derived
+    bounds disclosed) with the true-vs-DP bin counts as GROUPED
+    value-space bars, plus `dp_sgd_noise_scale`'s RDP accountant line
+    (sigma 50.3 for eps 4 / delta 1e-5 / 1500 steps).
+  * **Recommender** — `evaluate_recommender` (leave-one-out hit-rate
+    against the popularity baseline over the seeded 24x20 matrix,
+    219 observed) + user 0's ranked recommendations; the popularity
+    arm CAN win (lift 0.73 here) and the report says so rather than
+    burying it.
+  * **Vector search (LSH)** — `ann_benchmark`'s recall@5 vs
+    candidate-compression trade-off over plane counts 2/4/6/8/10 at
+    k=5 with multiprobe, drawn as the two-line sweep; reads the Data
+    Explorer's numeric block (>= 60 rows) or the seeded three-blob
+    synthetic.
+  * **Adversarial robustness** — logistic regression (or ridge) on
+    the Data Explorer's table (label columns factorised, the
+    two-blob demo as fallback) attacked by the zeroth-order sign
+    family: the broken-rate curve (5/5/14/44 broken at
+    0.05/0.1/0.25/0.5 sd), the clean accuracy and the median
+    adversarial margin.
+  * **Time series** — ACF (the lag bars, peak at the period) / PACF,
+    the additive decomposition strengths, CUSUM changepoints and the
+    tsfresh-lite window table; honest two-full-periods refusal.
+  * **Association rules** — `apriori_pipeline` over pasted
+    transactions with the lift bars (support/confidence thresholds
+    parsed with honest bounds).
+* **`ui/main_window.py`** — the thirteenth section (`bestofml`,
+  right before Settings); `tests/ui/test_main_window.py` re-pinned to
+  13 pages and the foundations wiring test to len-3.
+* **`scratch/probe_bestofml_217.py`** — the committed probe: every
+  number the new tests assert was engine-printed first (catalogue
+  924/35/5,121,472 · DP 49.9741 -> 49.6516 · recommender 8 vs 11 hits
+  lift 0.7273 · LSH recall 0.985 -> 0.575 · adversarial 0.9875 clean
+  · ACF peak lag 24, seasonal strength 0.9819 · apriori 5/3/5/4).
+* **`pharma-ml-toolkit/scratch/venv_repair.sh`** — the
+  discoverability wrapper now resolves the canonical repair script
+  via `$HOME` instead of a hardcoded absolute path (the zip leak scan
+  caught it the first time it shipped).
+
+## [1.2.130] — 2026-11-07
+
+### Added — round 216: the Foundations Workbench (Studio increment 9, audit row 10)
+
+* **`ui/pages/foundations.py`** — the Studio's ninth feature page,
+  migrating the playground Foundations tab's clusters, each wired to
+  the SAME public backend APIs the cards call:
+  * **Compare groups** — `compare_groups`: descriptives, five-number
+    summaries, both normality verdicts, the decision branch reported
+    (`both normal → Welch t` / `non-normal → Mann-Whitney`), the
+    per-group CIs and Cohen's d, with both group histograms drawn on
+    ONE shared axis; the synthetic demo mirrors the card's rng-42
+    groups exactly, the columns mode reads the Data Explorer's loaded
+    table (B defaults to the second numeric column so the run starts
+    runnable).
+  * **Distribution sampler** — `sample_distribution` over the course's
+    five distributions with the theoretical pdf/pmf drawn over the
+    sample histogram in the SAME value space (discrete kinds get
+    integer-aligned bins and the pmf scaled by n).
+  * **Inferential tests** — `welch_anova` + BOTH pairwise post-hoc
+    tables: Tukey HSD lands in the data table, Games-Howell in the
+    report.
+  * **Table profiler** — `profile_dataset` on a pasted CSV: the type
+    census bar chart, the per-column table (type / missing /
+    distinct / top / key stat) and the fg-data-profiling alert rules.
+* **`ui/widgets/plot_widget.py`** — `bars(x=…)` places bars at
+  VALUE-space positions (the histogram centers) instead of the
+  `0..n-1` slot grid, and `histogram(range=…)` accepts a shared range
+  so two overlaid histograms keep comparable edges; both default to
+  the historical behaviour (no call site changed).
+* **`ui/main_window.py`** — sidebar 11 → 12 sections (Foundations
+  before Settings); theme palette forwarded to the new page.
+* **`tests/ui/test_foundations_page.py`** — 13 offscreen tests, every
+  asserted number engine-printed first by the committed probe
+  (`scratch/probe_foundations_215.py`); `tests/ui/test_main_window.py`
+  re-pinned to the 12-section shell.
+
+### Notes
+
+* Notebooks re-executed against the 1.2.130 tree (205 s, all eight
+  print `pharmaml 1.2.130`); the 7 no-output twins regenerated; the
+  scrub walk dropped 0 leaking streams.
+* Honest totals: 4,700 pytest cases + 778 doctests = **5,478**.
+
+## [1.2.129] — 2026-11-07
+
+### Changed — round 215: the file-load jobs stream too (the safety kit's third layer reaches the load path)
+
+* **`playground.py`** — the three user-file loads that still called the
+  plain `read_table` inside a ZERO-argument `work` now stream through
+  `read_table_with_progress` with the job reporter wired, closing the
+  "huge CSV load" story the round-205 kit's header names:
+  * the **pIC50 append** conversion (a multi-hundred-megabyte assay
+    table now shows a determinate rows bar and honours Stop at the
+    reader's chunk boundaries);
+  * the **library similarity scan** pick (the same streaming read
+    before the SMILES-column sniff);
+  * the **docking rescore summary CSV** load (likewise).
+  A zero-argument `work` is classified checkpointless by the job
+  runner — the Stop button stayed disabled and the memory watchdog had
+  nothing to flip for exactly the loads most likely to balloon; small
+  files (below the 8 MB threshold) still take the plain reader
+  byte-for-byte, so behaviour only changes where the progress actually
+  helps.
+* **`tests/test_job_safety.py`** — three new regression tests
+  (`TestTheFileLoadJobsStream`): the real jobs started against temp
+  CSVs, each pinned cancellable mid-flight (`_job_cancellable`) with
+  its render landing (the tree rows / the loaded frame / the pIC50
+  column present).
+
+### Notes
+
+* Notebooks re-executed against the 1.2.129 tree (202 s, all eight
+  print `pharmaml 1.2.129`); the 7 no-output twins regenerated; the
+  scrub walk dropped 0 leaking streams this round.
+* Honest totals: 4,687 pytest cases + 778 doctests = **5,465**.
+
+## [1.2.128] — 2026-11-07
+
+### Added — round 214: the Generative Workbench (Studio increment 8, audit row 9)
+
+* **`ui/pages/generative.py`** — the Studio's eighth feature page,
+  migrating the playground Generative tab (directive #16, 16.18
+  migration step 8). The audit row's clusters over a shared corpus
+  selection (the bundled 12-molecule seed table or the built-in
+  244-molecule drug-like corpus, with the seeded-mode checkbox),
+  each wired to the SAME public backend APIs the playground cards
+  call:
+  * **Evolve** — the objective built exactly like the playground's
+    `build_objective` (QED, the LogP / MW / TPSA windows, the
+    QED+LogP blend, the multi-objective triple, similarity to a
+    reference), then `GeneticOptimizer` (topology mutation + splice
+    crossover), `ReinventOptimizer` (policy-gradient RL over an
+    on-the-fly SMILES RNN prior, the CLI corpus idiom mirrored
+    exactly: empty = built-in, seeded = anchored ahead of the bundle,
+    unseeded lines = the sampling pool alone) or `MctsOptimizer`
+    (ChemTSv2-style MCTS): the ranked leaderboard
+    (`GenerationResult.to_dataframe()`) plus the per-generation
+    best/mean score curves. Engine-printed: the GA over the built-in
+    corpus lands best 0.927 (271 uniques, 16 generations); the
+    multi-objective seeded run lands best 0.962 over 276 uniques; the
+    RL run lands 0.582 over 58 uniques; the MCTS run lands 0.593 over
+    17 uniques (276 tree nodes, 828 rollouts).
+  * **Pareto front** — `pareto_front` over the last run's breakdown:
+    the non-dominated set as a table + the trade-off scatter over the
+    first two objectives, the deepest-front-member rank in the
+    report (9 of 276 non-dominated, the strongest member dominates
+    262); a single-objective run refuses honestly.
+  * **Molecule surgery** — `ring_topology_moves` (piperidine's
+    exactly 3 one-step ring-size mutants; aromatic and fused/spiro
+    rings are never re-sized) and `scaffold_hop_crossover` (the
+    BREED-style breeding: bridge / ring-merge / linker-transplant
+    cuts compete per draw — aspirin × the ibuprofen core, seed 42,
+    4/4 viable), every product scored by `QedObjective` for the bars.
+  * **Scoring oracles** — the GuacaMol benchmark book for one
+    molecule: `qed_score` / `sa_score` / `penalized_logp` /
+    `rediscovery_score` plus the Lipinski-style `property_filter`
+    with its values and violations in the table (aspirin vs salicylic
+    acid: QED 0.550 · SA 8.61 · logP −7.30 · rediscovery 0.448 ·
+    filter PASS).
+* Sidebar grows to **eleven sections** (generative between deep
+  learning and settings, the audit's usage order); `pages.count()` pin
+  10 → 11 with the navigation-order test updated.
+* **`tests/ui/test_generative_page.py`** — 21 offscreen tests, every
+  asserted number engine-printed first by the committed
+  `scripts/probe_generative_214.py`; **`tests/ui/` suite now 167
+  green** (146 + 21) with job_safety 28 green in the same invocation,
+  collect-only **4,684 across the tests tree**; honest totals
+  **5,462** (4,684 + 778 doctests).
+* The round-213 notebook driver's copy-back bug caught and fixed:
+  `shutil.copy2(work_nb, src)` restored the UNEXECUTED work file
+  (nbclient mutates the in-memory notebook; the work FILE is never
+  written) — round 213's pass was masked because the tree already
+  carried 1.2.127 outputs from the concurrent agent's run; the fixed
+  driver writes with `nbformat.write(nb, src)` and both the 213 and
+  214 copies carry the fix.
+
+## [1.2.127] — 2026-11-07
+
+### Added — round 213: the Deep Learning Workbench (Studio increment 7, audit row 8)
+
+* **`ui/pages/deep_learning.py`** — the Studio's seventh feature
+  page, migrating the playground Deep Learning tab (directive #16,
+  16.18 migration step 7). The audit row's four clusters over a
+  shared dataset + target selection (the 260-row QSAR regression
+  table with target pIC50 by default, the 420-row QSAR
+  classification table with target activity, or whatever Data
+  Explorer holds), each wired to the SAME public backend APIs the
+  playground cards call:
+  * **Train & evaluate** — `make_train_test_split` (random, seeded)
+    over the numeric-feature rule, then `DeepMLP*`/`ResidualMLP*`
+    (torch) or `NumpyMLP*` (the toolkit's own numpy autograd engine
+    when torch is absent), fitted with per-epoch callbacks and early
+    stopping on a held-out validation fraction, then `evaluate_model`
+    on the test rows: the parity scatter with the overfit line
+    (Pearson r, train R², the gap) for regression — DeepMLPRegressor
+    on the bundled table lands R² 0.891 / RMSE 0.957 / MAE 0.758
+    with a 0.061 gap; the numpy twin lands R² 0.789 — or the
+    per-class F1 bars with the confusion table for classification
+    (DeepMLPClassifier: accuracy 0.952, F1 macro 0.953 over
+    active/inactive/weak).
+  * **Runboard** — `RunTrace` over the last run's per-epoch
+    `history_`: the raw + EMA-smoothed loss curves
+    (`smooth_series`, the bias-corrected EMA TensorBoard's own
+    slider computes, beta knob 0–0.95), and the weight histogram via
+    `numpy_layer_stack` + `histogram_event` (the numpy engine's
+    3-layer snapshot: layer1's 640 weights, min/max/mean/std in the
+    per-layer table); a torch run refuses honestly, naming the
+    engine rule.
+  * **UMAP map** — `umap_embed` on the last run's test rows (or the
+    dataset's numeric matrix): the fuzzy k-NN graph, the a/b curve
+    from min_dist, spectral init, negative-sampling SGD, the
+    neighbours/min_dist/metric knobs, and the Venna-Kaski
+    `trustworthiness` score at k<=10 in the report (52 test rows →
+    2-D, 525 fuzzy edges, trustworthiness 0.770).
+  * **Curation** — `SampleSet.from_frame` + the `DataView` stage
+    algebra (`filter` / `sort_by` / `limit` / the identity reset,
+    every stage named in the report) and the four audits:
+    `find_duplicates` (0 duplicate rows over the 260-row table),
+    `find_outliers` (z-score > 4: exactly one, descr_012 #44),
+    `uniqueness` (260 scored, top #254 0.436) and
+    `sort_by_similarity` (row 0's nearest: #165 0.626).
+* Sidebar grows to **ten sections** (deep learning between
+  unsupervised and settings, the audit's usage order); `pages.count()`
+  pin 9 → 10 with the navigation-order test updated.
+* **`tests/ui/test_deep_learning_page.py`** — 27 offscreen tests,
+  every asserted number engine-printed first by the committed
+  `scripts/probe_dl_213.py`; **`tests/ui/` suite now 146 green**
+  (119 + 27), collect-only **4,663 across the tests tree**; honest
+  totals **5,441** (4,663 + 778 doctests).
+* `docs/gui/GUI_AUDIT.md` row 8 planned → shipped; the
+  `GUI_REDESIGN.md` migration status caught up (it had lagged one
+  increment — the Unsupervised Workbench's v1.2.126 entry is
+  recorded alongside this one), the architecture tree and the
+  ten-section sidebar note updated.
+
+## [1.2.126] — 2026-11-07
+
+### Added — round 212: the Unsupervised Workbench (Studio increment 6, audit row 7)
+
+* **`ui/pages/unsupervised.py`** — the Studio's sixth feature page,
+  migrating the playground Unsupervised tab (directive #16, 16.18
+  migration step 6). The PDSH handbook's unsupervised roster over a
+  shared dataset + column selection (the 77-row bundled descriptor
+  library by default, the 260-row QSAR table, or whatever Data
+  Explorer holds), four engine tabs each wired to the SAME public
+  backend APIs the playground cards call:
+  * **PCA** — `pca_reduce` on the checked columns (auto
+    n_components = min(10, n, p)): the explained-variance ladder as
+    bars with the cumulative dash line, the loadings table, and the
+    dominant PC1 feature in the report (on the descriptor library:
+    8 components, PC1+PC2 at 81.5%, PC1 dominated by NumHAcceptors).
+  * **Clustering** — `kmeans_cluster` (Lloyd / mini-batch, manual k
+    or the silhouette scan), `gmm_cluster` (the BIC sweep or manual
+    components, every covariance type, the soft responsibilities
+    landing in the table) and `hierarchical_cluster` (all four
+    linkages, merge heights in the report); the scatter shows the
+    first two checked columns coloured by membership (k=3 on the
+    library: silhouette 0.438, sizes 8/39/30; the BIC sweep picks
+    4 components, converged, weights 0.55/0.09/0.21/0.16).
+  * **Density (KDE)** — `kde_fit` on one numeric column with the
+    CV-chosen (or manual) bandwidth and all six kernels: the density
+    curve over the histogram twin (scaled by n·bin-width), the
+    200-point curve table (MolWt: bandwidth 10 by cross-validation,
+    mean log-likelihood -395.58).
+  * **Manifold** — `manifold_embedding` for isomap / LLE
+    (standard/modified/ltsa) / MDS / spectral / t-SNE: the 2-D
+    embedding scatter + coordinate table, the method's own knobs
+    echoed in the report; violated preconditions (t-SNE perplexity
+    or isomap neighbourhood above the sample count) surface the
+    engine's exact words.
+* Incomplete rows are dropped up-front with the count reported (the
+  engines' completeness rule made visible); every heavy path runs in
+  a `JobWorker` off the GUI thread.
+* Sidebar grows to **nine sections** (unsupervised between models
+  and settings, the audit's usage order); `pages.count()` pin 8 → 9
+  with the navigation-order test updated.
+* **`tests/ui/test_unsupervised_page.py`** — 23 offscreen tests,
+  every asserted number engine-printed first by the committed
+  `scripts/probe_unsupervised_212.py`; **`tests/ui/` suite now 119
+  green** (96 + 23), collect-only **4,636 across the tests tree**;
+  honest totals **5,414** (4,636 + 778 doctests).
+
+## [1.2.125] — 2026-11-07
+
+### Added — round 211: the Docking Workbench (Studio increment 5, audit row 5)
+
+* **`ui/pages/docking.py`** — the Studio's fifth feature page,
+  migrating the playground Docking tab (directive #16, 16.18
+  migration step 5). Four engine tabs, each wired to the SAME public
+  backend APIs the playground cards call, none needing the external
+  engine binaries (vina/autodock4/AutoGrid stay the cards' job):
+  * **Campaign summary** — one job runs the card's full pipeline:
+    `check_docking_completion` + `scan_docking_directory` over the
+    bundled synthetic AutoDock4 campaign (14 ligand folders: 12
+    complete runs, 08_benzocaine missing its log, 10_nicotine
+    interrupted before clustering — the audit rows ride the scan),
+    then the rescore card's arithmetic on the OK rows: RDKit
+    heavy-atom counts from the campaign's `ligands.csv`,
+    `ligand_efficiency_series`, and `consensus_rescore` over the
+    three evidence columns (`best_lowest_energy` lower-is-better +
+    `best_num_in_cluster` + `ligand_efficiency`), ranked best-first
+    (metformin 0.782 the engine-printed top).
+  * **Cluster analysis** — `parse_dlg_cluster_table` on the chosen
+    folder's `r.dlg`: the CLUSTERING HISTOGRAM as a real table
+    (rank / lowest / mean energy / #in-cluster), the top-cluster and
+    most-populated story in the report; the folder combo is fed by
+    the campaign scan's cross-tab state.
+  * **Ligand library** — `load_ligand_csv` on the bundled library
+    (8 valid + 2 deliberately invalid rows whose reasons ride the
+    table) plus the RDKit property columns the preparation card
+    reports (heavy atoms, rotatable bonds) on the valid rows.
+  * **DOCKSTRING lab** — `target_frame` (all 58 upstream Vina search
+    boxes with their volumes charted), `get_target` config previews,
+    and `parse_search_box` validation of a pasted six-key config
+    (incomplete configs report exactly which keys are missing).
+* Sidebar grows to **eight sections** (docking between biology and
+  models, the audit's usage order); theme palette wiring and the
+  `pages.count()` pin 7 → 8 with the navigation-order test updated.
+* 14 new offscreen tests (`tests/ui/test_docking_page.py`), every
+  asserted number engine-printed first on this exact bundled data:
+  14 folders → 12 OK / 1 missing log / 1 incomplete, metformin the
+  consensus top (0.781674) with its 9 heavy atoms, aspirin's five
+  clusters (rank 1 at -4.91 kcal/mol, 15 runs; the sum of cluster
+  sizes 55), caffeine's most-populated cluster rank 2 (15 runs),
+  the library at 10 rows / 8 valid / 2 invalid with the exact RDKit
+  reasons, naproxen 17 heavy atoms / 3 rotatable bonds, caffeine 0
+  (the rigid xanthine), 58 DOCKSTRING targets (first ABL1, last
+  THRB), DRD2's box (9.250, 6.167, -7.000) / (30, 30, 32).
+  Refusals without a scanned campaign, config validation,
+  duplicate-submission refusal, and palette sync all pinned.
+* GUI audit row 5 and the migration status updated (increment 5 of
+  N; next: Unsupervised per the audit's usage order).
+
+## [1.2.124] — 2026-11-07
+
+### Added — round 210: the Biology Workbench (Studio increment 4, audit row 4)
+
+* **`ui/pages/biology.py`** — the Studio's fourth feature page,
+  migrating the playground Cell Lines tab (directive #16, 16.18
+  migration step 4). Four engine tabs, each wired to the SAME public
+  backend APIs the playground cards call — nothing fabricated:
+  * **Screen audit** — one job runs the card's full pipeline:
+    `load_response_table` (the bundled 185-row GDSC-style screen) →
+    `audit_response_table` (missing metric values, duplicate pairs) →
+    `replicate_variability` (the duplicate pair's spread) →
+    `collapse_replicates` (the pivot precondition, CV recorded) →
+    `summarize_compounds` (per-compound panel summary in the table,
+    median-metric bars in the plot) → `response_matrix` (the 23×8
+    matrix the other tabs share). The audit's issues ride the report
+    line verbatim.
+  * **Sensitivity matrix** — the collapsed screen's lines × compounds
+    matrix with `call_sensitive_resistant` quartile calls on the
+    chosen compound's column (lower LN_IC50 = more sensitive, the
+    card's convention; quantile order validated — sensitive below
+    resistant).
+  * **Variable genes (MAD)** — `most_variable_genes` with the
+    per-gene MAD recomputed honestly from the frame, exactly the
+    playground card's arithmetic (the library returns names only).
+  * **Biomarker discovery** — `normalize_expression` →
+    `impute_expression` (the normalized matrix cached on the GUI
+    thread for the next run) → `sensitivity_associations`
+    (Spearman/Pearson, BH-corrected) → `top_biomarkers`, with
+    `direction_of_association` naming the top hit's story
+    ("expression high -> more resistant" etc.) in the report.
+* Sidebar grows to **seven sections** (biology between pkpd and
+  models, the audit's usage order); theme palette wiring and the
+  `pages.count()` pin updated; cross-tab state is written only from
+  the GUI thread (the jobs capture their inputs at submit — the
+  round-208 lost-update lesson applied from the start).
+* 13 new offscreen tests (`tests/ui/test_biology_page.py`), every
+  asserted number engine-printed first on this exact bundled data:
+  185 rows → 184 unique pairs, 23 lines × 8 compounds, the
+  MCF-7/crizotinib duplicate (audit count 2, spread CV 0.0%),
+  crizotinib 6/11/6 quartile calls, GENE_115 the MAD top (1.1874),
+  GENE_144 the strongest cisplatin association (|rho| 0.6097, FDR
+  0.495, 0 of 300 significant). Refusals without a loaded screen,
+  quantile/input validation, duplicate-submission refusal, and
+  palette sync all pinned.
+* GUI audit row 4 and the migration status updated (increment 4 of
+  N; next: Docking per the audit's usage order).
+
+## [1.2.123] — 2026-11-07
+
+### Fixed — round 209: the second playground collapse mode (the stale display connection)
+
+* **`PlaygroundApp.destroy()`** is now a real teardown, in three arms,
+  answering the "Playground.py collapses during heavy work" family's
+  second mode: a build-destroy-rebuild host (and every pytest GUI
+  battery) left the destroyed app's Tcl interpreter — with its X
+  display connection — alive forever, because
+  * the module-level card registries (`_CARD_INDEX`,
+    `_COLLAPSE_CARDS`) kept every card's shell widget referenced past
+    the app's death (now cleared at `__init__` *and* `destroy()` — the
+    rebuild-overwrite semantics they were documented with);
+  * Tcl's pending `after` scripts (the recurring status-bar pollers)
+    are cancelled by id before the widget tree goes down;
+  * every leftover `_register`ed callback command (bind handlers,
+    variable traces — the trace commands tkinter's `Variable` never
+    deletes itself) is swept off the interpreter after
+    `super().destroy()`: `_register` names them `repr(id(f))…`, so
+    they are exactly the digit-leading commands (2,147 deleted on a
+    built app; widget paths and Tcl core commands never start with a
+    digit).  Each surviving C-side pin made the app→interpreter→
+    callback→app cycle uncollectable, and when the X server then went
+    away the next Tk event pump hit the broken connection — Tk 9's X
+    error handler **terminated the whole process** (`X connection to
+    :N broken` → `exit(1)`, rc=1, zero output — reproduced
+    deterministically outside pytest, see
+    `scratch/probe_kill_between.py` + the LD_PRELOAD `exit`-shim
+    backtrace `scratch/exit-shim.c`).
+  * `_silence_variables()` detaches every app-reachable `tk.Variable`
+    (`_tk = None`) so the interpreter-exit `Variable.__del__` cannot
+    double-delete swept commands (the unraisable "can't delete Tcl
+    command" exit noise).
+* **One session-scoped Xvfb** (`tests/conftest.py::xvfb_display`,
+  display :96) replaces the four per-file/per-class servers
+  (test_playground :98, workflows :97, recalculation :97, excel :97):
+  the server is torn down exactly once, after the last test — a
+  mid-session server death, the collapse's trigger, is structurally
+  impossible now.  All four files' local fixtures deleted.
+* Watchdog hygiene: the memory-peak update uses `max()` (ruff PLR1730);
+  nine blind `except Exception` guards around `winfo_exists()` in
+  `tests/test_playground.py` narrowed to `tk.TclError`.
+* 2 new regression tests (`tests/test_job_safety.py`): destroy
+  releases both registries; a rebuilt app replaces the registry and
+  every indexed shell belongs to the live app.  The combined
+  job_safety+workflows battery — the exact shape that terminated the
+  process pre-fix — passes twice from a clean room (45 tests, rc=0,
+  zero exit noise); self-test green; focused batteries and the ui/
+  suite green; doctests 775 passed + 3 skipped; collect-only 4,586.
+  Honest total: **4,586 + 778 = 5,364**.
+
+## [1.2.122] — 2026-11-07
+
+### Added — round 208: PK/PD Workbench, the Studio's increment 3 (directive #16, 16.18 migration)
+
+* **`ui/pages/pkpd.py`** — the fourth feature page, mapped to the
+  playground PK/PD tab (audit row 3). Three of the tab's engines, each
+  wired to the same public backend APIs the cards call, in three tabs:
+  the exact two-compartment **regimen simulator** (`TwoCompartment`
+  matrix-exponential linCmt with explicit repeated `DosingEvent`
+  records — concentration curve with dotted dose markers, Cmax/Tmax,
+  trapezoid AUC over the simulated window, the realized dose-event
+  table), the **non-compartmental analysis** (the card's pasted
+  series through `validate_concentration_series` → `nca_summary`
+  plus the extended `fit_terminal_phase`/`auc_linear_log`:
+  linear-up/log-down AUC, terminal λz window with adjusted R² and
+  span, Vd and CL when an IV dose is given — the observed profile
+  drawn with its AUC shaded under the curve), and the **dosing
+  events** realization (the NONMEM/mrgsolve grammar `ev`/
+  `addl_until`/`realize_addl`/`ev_days`: one dose record plus
+  additional doses until a stop time, and weekday schedules, as the
+  full dose-event table).
+* **`ui/widgets/plot_widget.py`** — two reusable palette-aware
+  additions: `line(..., fill=True)` (area shading at `fillLevel=0`
+  with a translucent series brush — the AUC visual) and `vlines(xs)`
+  (dotted vertical marker lines for dose/event times).
+* Sidebar gains the PK/PD section between Chemistry and Model
+  Analysis (usage order); theme switches re-paint the page's plot.
+* 18 new offscreen tests (`tests/ui/test_pkpd_page.py`): the three
+  end-to-end runs against the REAL engine numbers (the regimen curve
+  checked against a fresh `TwoCompartment` solve; the default series'
+  AUC 56.485 / t½ 4.233; `addl_until(0, 12, 72) == 5` under the
+  mrgsolve convention), IV-route compartment switch, positivity and
+  n_doses bounds, NCA length mismatch and unsorted-series refusal,
+  Vd/CL arithmetic, duplicate-submission refusal, palette sync,
+  main-window integration (six pages), fill/vline plot semantics.
+
+### Fixed — the round-208 lost-update race (Run 8 addendum)
+
+* **`ui/workers/job_worker.py`** — `JobRunner.submit` now accepts the
+  page's result handlers (`on_finished` / `on_failed` / `on_cancelled`
+  / `on_progress`) and connects them BEFORE `pool.start`. The old
+  page-side pattern (`worker = runner.submit(...)` then
+  `worker.signals.finished.connect(...)`) raced the emitting pool
+  thread: an instant job could emit `finished` before the page's
+  connect line ran, the result was lost forever and the UI stayed on
+  "Running …" — caught by the pkpd offscreen suite as a non-
+  deterministic flake (4/18 failing at first run, then passing
+  alone). The runner's own finishers stay the first connections, so
+  `job_ended` still lands before the result slot. All six call sites
+  migrated (`pkpd` ×3, `chemistry` ×2, `model_analysis` ×1); the three
+  job-worker tests that ENCODED the racy connect-after-submit pattern
+  (two of which already failed with `assert []` on the pre-fix tree
+  under load) moved to the deterministic handler form; +2 regression
+  tests pin the handler-before-start guarantee and the ended-before-
+  result ordering.
+
+### Changed
+
+* Honest total **5,362** tests (4,584 collected + 778 doctests);
+  `ui/` suite 49 → 69.
+
+## [1.2.121] — 2026-11-07
+
+### Added — round 207: Chemistry Workbench, the Studio's increment 2 (directive #16, 16.18 migration)
+
+* **`ui/pages/chemistry.py`** — the third feature page, mapped to the
+  playground Chemistry tab (audit row 2): a SMILES-bearing dataset
+  (bundled or from Data Explorer) flows through the playground's own
+  batch front door — `standardize_csv` (full report table + summary)
+  and `compute_feature_frame` (multi-family matrix + per-family counts,
+  kept/dropped molecules) — with a real histogram of any computed
+  feature column. Sidebar gains the section between Data Explorer and
+  Model Analysis (usage order, audit issue #2); the theme stack
+  re-paints its chart on switch.
+* **The v1.2.119 batch guard, carried into the Studio**: a
+  five-molecule probe fixes the exact per-molecule column count, then
+  the dense-matrix estimate (molecules × columns × 8 B × 3 copies) is
+  checked against half of `MemAvailable` and the batch refuses with
+  its arithmetic BEFORE the heavy compute — off-Linux the guard stands
+  down, exactly like the cards.
+* **The factory's `(done, total, note)` progress convention is adapted
+  to the Studio's `(fraction, label)`** at one place in the page; the
+  callback's return value propagates the cooperative-stop channel, so
+  Stop lands as a clean "Cancelled after N s" at the next molecule
+  batch boundary (never a traceback).
+* **13 new offscreen tests** (`tests/ui/test_chemistry_page.py`):
+  construction, SMILES auto-detection, preset→registry mapping, guard
+  refusal with its arithmetic, off-Linux stand-down, empty-column
+  refusal, the real standardize report, the real descriptor factory
+  run (43 columns on this stack, invalid SMILES dropped), the
+  all-families resolution (the mypy-caught UnboundLocalError class),
+  cooperative stop under load, duplicate submission, palette sync.
+  Shell tests updated to five pages/sections. Honest total:
+  4,564 collected + 778 doctests = **5,342**.
+
+## [1.2.120] — 2026-11-07
+
+### Added — round 206: PharmaML Studio, the PySide6 GUI (directive #16, increment 1)
+
+The owner's expanded directive (`upload/MASTER_PROMPT part2.pdf`, the
+44-page four-technology edition) mandates the complete GUI redesign.
+This is increment 1 of the migration: the application shell, the theme
+system, and three working feature pages -- with the Tkinter playground
+kept fully functional alongside until every section is verified.
+
+#### The stack (verified pins under the numpy 1.26.4 constraint)
+
+* **PySide6 6.8.3** (Qt 6.8 LTS) -- application architecture:
+  QMainWindow shell, sidebar navigation, QStackedWidget pages, status
+  bar, toast notifications, Ctrl+1..9 jumps.
+* **PyQtGraph 0.13.7** -- scientific visualization (the LAST numpy-1.x
+  line; 0.14 requires numpy>=2.2 which this stack cannot take):
+  themed plot panels, real held-out predictions/residuals/histograms.
+* **Qt-Material 2.17** -- primary Material Design provider (curated
+  teal/cyan/amber pairs, density via the template extra dict).
+* **QDarkStyleSheet 3.2.3** -- verified alternative provider (via
+  qtpy); native Qt is the guaranteed fallback. One provider active at
+  a time -- switching clears the previous stylesheet first.
+
+#### The architecture (presentation / logic / data, strictly separated)
+
+* `studio.py` entry point; `ui/` package: `main_window`, `pages/`
+  (dashboard, data explorer, model analysis, settings), `widgets/`
+  (navigation, data table, plot panel, progress panel, notifications),
+  `workers/job_worker` (QRunnable on QThreadPool).
+* The backend is reused untouched: `read_table` (CSV/TSV/XLSX),
+  `MODEL_REGISTRY` + `train_model`, and the v1.2.119 `JobCancelled`
+  cooperative-stop channel -- the Studio Stop button rides the same
+  contract, checkpoint-honest, never a red traceback.
+* Headless bootstrap (`ui/headless.py`): real EGL probed first; when
+  absent (this sandbox), the committed no-op stub
+  `ui/native/libEGL.so.1` preloads via ctypes (SONAME-correct) and is
+  also copied into the wheel's Qt/lib (RUNPATH $ORIGIN) so plain
+  pytest runs survive pytest-qt's eager binding probe.
+* Every number on the dashboard is computed live from the installed
+  package (module census, 33-model registry, 11 workflows / 58 steps,
+  example datasets); Model Analysis trains a real registry model on a
+  real held-out split and plots real predictions.
+
+#### Tests and verification
+
+36 new offscreen tests (`tests/ui/`, pytest-qt): theme switching /
+conflict prevention / persistence, navigation and geometry state,
+table model/sort/copy/truncation guard, worker finish/fail/cancel/
+duplicate-guard/progress, page smokes on real data (CSV + Excel load,
+an end-to-end ridge fit). Focused batteries green (data_loading +
+job_safety + csv_standardize 121; playground contract guards 73;
+io doctests); collect-only 4,551 across 73 files, exit 0; ruff and
+mypy clean on the new tree (and the two pre-existing io.py mypy errors
+fixed by widening the progress-callback type to `bool | None` -- the
+round-205 contract the annotations undersold).
+
+#### The recovery layer carries the stack
+
+`scratch/venv_repair.sh` step 6b now installs the five pinned GUI
+packages under the numpy constraint AND re-copies the EGL stub into
+the venv's Qt/lib -- a future rollback cannot lose the GUI stack.
+
+## [1.2.119] — 2026-11-07
+
+### Fixed / Added — round 205: the heavy-work safety kit (the collapse report)
+
+The owner's report: *"playground.py collapses during heavy work."* The
+diagnosis is the OOM story — a heavy featurization batch, a huge CSV
+stream, or a tune/compare run fanning out to many loky CV workers (each
+a full interpreter holding a dataset copy) can outrun the box's RAM, at
+which point the kernel kills the biggest process — the Tk app itself —
+and the window vanishes with every loaded input. Three layers answer it.
+
+#### The cooperative-stop channel (the library arm)
+
+**`pharmaml.exceptions.JobCancelled`** — the named error every
+checkpoint loop raises when its progress callback answers `False`:
+
+* `compute_feature_frame` (and therefore
+  `recalculate_selected_features`, which passes the callback through)
+  stops at the next molecule-batch boundary — *"feature batch
+  cancelled after 25/60 molecules"*;
+* `read_table_with_progress` / `read_indexed_table_with_progress`
+  stop at the next CSV chunk, **before** the concat would double the
+  memory — the stop propagates as itself, never wrapped into a
+  `DataValidationError`;
+* `compare_models` / `benchmark_feature_families` stop after the
+  completed leaderboard row.
+
+Callbacks that return `None` or any truthy value never cancel — every
+historical callback and test mock runs byte-identically.
+
+#### The playground machinery (the app arm)
+
+* **The Stop button** — the status bar gains a Stop control, enabled
+  exactly while a job runs. A job whose work carries the progress
+  reporter halts at its next checkpoint (molecule batch, leaderboard
+  row, table chunk); a checkpoint-less job gets the honest label
+  ("this job reports no checkpoints, so it runs to completion"). A stop
+  is not a failure: the status bar reads *"cancelled after 42 s"*, an
+  info dialog names the reason, and the window plus every loaded input
+  survive.
+* **The live memory watchdog** — the standing 150 ms progress poll
+  samples RSS (a /proc read, a few hundred bytes). Crossing the job's
+  ceiling (its launch RSS + 75% of what was available then) or the
+  system floor (`MemAvailable` < 256 MB) flips the same stop flag, so
+  the batch halts at its checkpoint *before* the OS would kill the
+  window — cancelled, not collapsed.
+* **The pre-flight batch guard** — the factory and recalculation cards
+  estimate the dense matrix (molecules × columns × 3 working copies ×
+  8 bytes) before a single molecule computes and refuse with their own
+  arithmetic when it cannot fit half the available memory: *"≈ 1.4 GB
+  … but only 0.2 GB is available — halve the corpus or drop some of the
+  wide 2048-bit families."* Off-Linux (no /proc/meminfo) the guards
+  stand down instead of guessing.
+* **The ML n_jobs memory cap** — loky CV workers are budgeted 768 MB of
+  available memory each; a capped request rides the job label honestly
+  (*"training xgboost (regression) — n_jobs 4→2 (memory cap)"*) instead
+  of silently spawning workers the box cannot feed.
+
+#### Verification
+
+`scratch/stress_playground.py` drives the real app under Xvfb through
+the real card flows: a mid-job Stop lands *"cancelled after 3 s"* with
+the checkpoint named (100/237 molecules); the same job unstopped
+completes (231 × 27,759 frame in 7 s); a fake RSS over the ceiling
+trips the watchdog (*"stopped by memory ceiling after 1 s"*); a fake
+200 MB MemAvailable refuses the batch with the full arithmetic; the
+cap maths holds; and the recalculation + xgboost paths still complete.
+26 new tests (`tests/test_job_safety.py`) — honest total **5,293**
+(4,515 tests/ + 778 doctests, the doctest item count unchanged).
+
+## [1.2.118] — 2026-11-07
+
+### Added — round 204: the feature-recalculation roundtrip (metadata → the same features, new molecules)
+
+The owner's catalog continuation directive: *"add a section to use the
+metadata stored by the feature factory to recalculate the selected
+features."* The selection metadata the factory's Save-JSON button
+writes is now a first-class replay input — the QSAR workflow's
+"apply the frozen feature set" step, one card.
+
+#### The library arm
+
+**`pharmaml.chem.features.recalculate_selected_features(smiles,
+metadata)`** replays a recorded selection against a fresh SMILES batch:
+only the families the recorded columns need are computed (a
+descriptors-only selection never touches the seventeen fingerprint
+families), the result carries exactly the recorded columns in the
+recorded rank order, and `n_jobs`/`progress` pass straight through to
+`compute_feature_frame`. The ledger keys the metadata itself carries
+are cross-checked before any chemistry runs — a stale file from a
+different build fails loudly instead of silently recomputing a drifted
+vocabulary: `fingerprint_sizes` contradictions (recorded bits vs this
+build's), `families_computed` inconsistencies, unknown column
+prefixes, duplicate/empty entries, and features that no longer exist
+in this build's frame (an RDKit property that vanished) are all
+honest `ValueError` stops with the exact story.
+
+#### The playground card
+
+**Feature recalculation (from metadata)** (Chemistry, row 13) carries
+the round-202 guarantees by construction: a one-line subtitle, the
+**Descriptors & features** workflow badge (now 5 steps: … → Feature
+factory → Feature recalculation → …), and a ready-to-run example —
+`examples/data/selection_metadata.json`, a real variance-ranked top-24
+(ecfp + descriptors, 22 + 2 columns) written by the factory's own
+metadata saver over eight drug-like molecules. Three adoption paths:
+the bundled example, any saved JSON file, or **the factory's current
+in-session selection** (no file round-trip at all). The render is the
+value matrix — molecules × recorded features, the first six columns as
+live tree headings — and Save writes CSV / **Excel (.xlsx)** / TSV /
+Markdown / JSON / HTML through the standard table dialog.
+
+#### Numbers
+
+30 new tests (`tests/test_feature_recalculation.py`: 15 library, 2
+example-file, 13 GUI under Xvfb) + 1 new doctest item in
+`recalculate_selected_features` — honest total **5,267** (4,489
+tests/ + 778 doctests). All eight notebooks re-executed at 1.2.118
+(204 s). Census 897 files / 338,379 lines. Release zip
+`build_zip_181` → 923 entries / 885 files / 19,255,469 bytes /
+sha-256 `5e7e07b0…`, byte-identical in all four homes, real leaks 0.
+
+## [1.2.117] — 2026-11-06
+
+### Added — round 202: every card described, complementary cards grouped into workflows
+
+The owner's continuation directive: *"for each card, include a short
+description of what it does, and group cards that are complementary and
+complete a process together."* Both halves ship as the playground's
+third session-wide guarantee (after sample-data-ready and
+Excel-beside-CSV): **every card is described and grouped**.
+
+#### Every card described
+
+All **137 cards** now carry a one-line subtitle saying what the card
+does. Nine cards had shipped bare and gained theirs this round: the
+two *Preview (first 12 rows)* cards (Data & ML, Deep Learning), the
+*Results* cards of Data & ML / Deep Learning / Generative, the
+Generative *Objective & evolution*, PK's *Loading & maintenance
+dosing*, and the Home *What lives where* + *pharmaml could not be
+imported* cards. The guarantee is pinned by a live-walk test over the
+built application (`_live_cards()` — every shell, every tab, zero
+bare titles allowed).
+
+#### Complementary cards — the workflows
+
+A declarative **`WORKFLOWS` registry** (11 pipelines, 57 steps) chains
+the cards that complete a process together, each step addressed by
+`(tab title, card title, step blurb)` — the drift-proof addressing the
+finder's memory already uses:
+
+* **QSAR end-to-end** (Data & ML, 8 steps): Dataset → Preview → Train
+  a model → Results → Leaderboard → Ensemble builder → Model
+  persistence → Applicability domain.
+* **Descriptors & features** (Chemistry, 4): canonical-SMILES
+  standardisation → SMILES inspector → Feature factory → Library
+  similarity scan.
+* **Docking campaign** (Docking, 7): ligand PDBQT → receptor → grid
+  box/configs → campaign runner → results → consensus rescore → the
+  audit card.
+* **Dose design** (PK / PD, 5): Cockcroft–Gault → loading/maintenance
+  → pediatric rules → dosing events & regimen → TDM adjustment.
+* **Exposure analysis** (PK / PD, 5): NCA → half-life ↔ elimination →
+  IV infusion → PBPK first-in-human → the advanced ODE/PBPK card.
+* **Biomarker discovery** (Cell Lines, 5): response screen audit →
+  sensitivity matrix → sensitive vs resistant → expression table →
+  biomarker discovery.
+* **Deep learning study** (Deep Learning, 7): Dataset → Preview →
+  Network & training → Training history → Results → Attribution &
+  attention → Hyperparameter search.
+* **Generative optimization** (Generative, 7): corpus → objective &
+  evolution → results → Pareto front → ring moves → breeding → the
+  scoring oracles.
+* **Unsupervised structure** (3), **Inferential statistics**
+  (Foundations, 3) and **Table preparation** (Utilities, 3) complete
+  the set — every step a live card on the named tab (pinned).
+
+#### The three surfaces
+
+* **The Home map** — a new collapsible *"Complementary cards — the
+  workflows"* card renders the whole registry: one bold name + purpose
+  line per pipeline, then numbered step chips (three per row, full
+  titles, no truncation) each of which **jumps straight to that step's
+  card** via `_jump_to_workflow_step` (title-based tab resolution +
+  the existing flash-and-scroll jump). A step whose card is missing is
+  a true no-op — the selection never moves (the test pins this: the
+  first draft teleported to the tab anyway, and the battery caught
+  it).
+* **The badges** — every participating card (57) wears a quiet
+  `◇ pipeline · step i/n` chip on its title row, tooltip carrying the
+  pipeline's purpose plus the full A → B → C chain. `_CARD_INDEX`
+  stays a 3-tuple (20 unpack sites untouched); the badge registry
+  `_WORKFLOW_BADGES` is the separate, rebuild-exact test surface.
+* **The finder** — Ctrl+F's haystack now includes the workflow name
+  (`workflow_for_card`): typing "docking campaign" lists the whole
+  chain; the dialog's hint line says so.
+
+#### Tests & ship
+
+17 new tests (`tests/test_playground_workflows.py`): registry
+integrity (names unique, ≥3 steps, real tab titles, unique step
+addresses, no card claimed by two pipelines), badge-text math (step
+numbering, unregistered card, unknown workflow), chain text, resolver
+behaviour, and — under Xvfb — the live-built guarantees (137 cards all
+subtitled, 57/57 steps resolve to live cards, 57/57 badges with exact
+text, the Home map card present, both jumps land on the right tab, the
+no-op really is one). The DearPyGui collapsible-registry pin gained
+`home-workflows` (card 137). Fresh pins: **tests/ 4,459 collected +
+777 doctests = 5,236 total; tree 893 files / 337,231 lines; zip
+19,251,057 bytes, sha-256 `6b5c93e4…`** (921 entries / 883 files /
+four homes byte-identical / real leaks 0). All eight notebooks
+re-executed at 1.2.117 (224 s, examples/ as the kernel cwd — the
+notebooks' `Path("data")` resolves there).
+
+## [1.2.116] — 2026-11-06
+
+### Added — round 201: Excel everywhere + every tab sample-data ready (the owner's two session-wide guarantees)
+
+The owner's continuation directive on the catalog work landed two
+session-wide guarantees on the playground: **every tab is sample-data
+ready** (a first-time user is never more than one click from a running
+calculation) and **Excel (.xlsx) rides beside CSV on every input and
+output** (workbooks open in every dataset picker; every table card
+exports them).
+
+#### Excel I/O — the library arms
+
+* `pharmaml.viz.export_table` grew its **sixth format**: `.xlsx`
+  (openpyxl engine, one sheet named `table`, no index column) —
+  `TABLE_FORMATS` is now `csv / tsv / md / json / html / xlsx`, so the
+  playground's shared save dialog writes a workbook the moment the
+  picked name ends in `.xlsx`.
+* `pharmaml.utils.io.read_indexed_table_with_progress` grew the **Excel
+  arm** (`pd.read_excel` with the label-missing positional fallback the
+  CSV twin has) — the Cell Lines expression loader reads `.xlsx`
+  matrices with the `cell_line` label index preserved.
+
+#### Excel I/O — the playground wiring
+
+* A shared `DATA_FILE_TYPES` constant (data files + Excel workbook +
+  CSV-like + all files) now feeds **all 14 dataset pickers**: the
+  Data & ML / Deep Learning / Foundations openers, the chemistry
+  library scan and SMILES-table pickers, the cell-line screen and
+  expression pickers, the bundle-prediction and applicability-domain
+  train/test pickers, both audit pickers, the DTA pair-table browser,
+  and the big-table split picker — all read through the Excel-aware
+  `read_table` (the four raw `pd.read_csv` call sites were ported:
+  bundle prediction, AD train/test, DTA pairs, the sync expression
+  loader which now shares ONE library reader with its worker twin).
+* Every table card's Save button offers **"Excel workbook (*.xlsx)"**
+  (the shared `_save_frame_dialog`), and the three direct exporters
+  honour the extension too: DTA paired features and the UMAP map via
+  `write_table` (the embedding-label index preserved on both arms), the
+  canonical-SMILES corpus via `to_excel` beside `write_csv`.
+
+#### Sample-data ready — the tab-by-tab audit
+
+* Prefilled by design (verified by new pins): the PK/PD NCA
+  concentration-time series, the Best-of-ML basket transactions, the
+  Response AI seeded demos, the Foundations/Best-of-ML synthetic
+  fallbacks.
+* One-click **Load example** buttons already shipped for the feature
+  factory, cell-line screen/expression, docking library/campaign/pocket,
+  Data & ML, Deep Learning, Foundations and Generative — this round
+  added the four missing tabs: **Unsupervised** (loads the QSAR example
+  into the shared dataset and refreshes the column tree), **Best-of ML**
+  (real columns into the privacy + time-series pickers via the shared
+  Foundations frame), **Utilities** (two example tables into the merge
+  slot + the QSAR example as the split source — Run works without a
+  single dialog) and **Home**: a new *"Try it now — sample data"*
+  quick-start card whose five chips load an example AND jump to its tab.
+
+#### Fixed — the latent v1.2.115 staleness the round battery caught
+
+The round's full 674-test GUI battery (run class-aligned, the way the
+suite demands) surfaced five stale pins that had shipped silently
+because their classes had not been re-run since the cards they pin
+grew:
+
+* **Three home quick-jump chips jumped to the WRONG tabs** — the chips
+  hard-coded `index + 1` positions that drifted when Generative /
+  Foundations swapped build order and Best-of ML / Response AI landed
+  between them and Utilities (Foundations → Generative, Generative →
+  Foundations, Utilities → Best-of ML). Jumping is now **title-based**
+  (`_jump_to_tab_by_name`) and the chip row lists all twelve tabs.
+* The round-121 finder pin (`all("NCA" in label)`) predated the
+  round-200 arena card whose subtitle documents its linear-up/log-down
+  NCA engine — the finder's honest two-card match set is now pinned.
+* The round-122/123/124 session-report pins assumed a fresh app has no
+  filled tables — false since the 100x-174 attribution census table
+  pre-fills at build. The guard tests now empty that one tree first
+  (the empty state is honest again); the walk-skip and both-axes pins
+  were updated the same way.
+* The DearPyGui collapsible-card registry pin missed the two round-200
+  arena cards (`pk-advanced-engines`, `dock-dockstring-benchmark`) —
+  both are now in the expected set (with the round-201
+  `home-quick-start` card).
+
+#### Tests & ship
+
+26 new tests (`tests/test_excel_io_and_samples.py`): the library Excel
+arms (round-trips, label index + fallback, unsupported-extension
+verdict), the dialog wiring (all eleven unguarded pickers offer the
+Excel patterns), the four exporters honour `.xlsx`, and the per-tab
+sample-data story (prefills matched, the four new loaders land real
+bundled tables, the quick-start loads AND jumps, every chip title
+resolves). Fresh pins: **tests/ 4,442 collected + 777 doctests =
+5,219 total** (the v1.2.115 pin of 773 doctests was itself stale — the
+arena merge had added three; the census correction rides this entry).
+Full battery green: 869 playground tests (195 non-GUI + 674 GUI across
+ten class-aligned groups) + 470 focused (io / viz / csv_standardize /
+biology / chem_tables) + 776 executed doctests. All eight notebooks
+re-executed at 1.2.116 (the ML notebook's kernel-arg `-W ignore`
+attempt killed the kernel; `PYTHONWARNINGS=ignore` in the environment
+was the working form — the sklearn warning paths stopped leaking the
+venv location into outputs). build_zip_180 → 920 entries / 882 files /
+19,233,206 bytes / sha-256 `cc4eabb5…` / real leaks 0 / four homes
+byte-identical (repo `download/`, `dist-archive/`, legacy
+`download/`, `upload/`). Fresh census: **890 files / 336,397 lines**.
+
+## [1.2.115] — 2026-11-06
+
+### Added — round 200: the arena merge — two parallel catalog absorptions unified into one release
+
+The owner's continuation directive ("Continue the catalog; check other
+branches") surfaced a second, parallel absorption stream: branch
+`arena/2697c755-pharma-ml-toolkit` (one completed commit, 09:40 UTC) had
+folded in the catalog items main had never absorbed as modules, while
+main's round 199 had closed the no-card gap for modules that already
+existed. This release merges both work streams (plus the branch survey:
+`arena/c44913ab` was verified byte-absorbed into main long ago — stale,
+no merge needed). The catalog's disposition is now three-layer: 140/140
+links live-checked, every repository audited for coverage, and every
+absorbable concept either carded, module-backed, or honestly bounded as
+an external engine.
+
+#### From main — round 199: the link check and the nine no-gap cards
+
+### Added — round 199: the GitHub research repository catalog absorbed — link check + the nine cards that closed the no-card gap
+
+The owner's `upload/GitHub_Research_Repository_Catalog.pdf` (140 curated
+repositories across 11 pharma-ML categories) was read end to end, every one
+of its 140 links checked one by one (all live; five redirect to renamed
+orgs — the report ships as `docs/GITHUB_CATALOG_LINKCHECK.md`), and its gap
+analysis drove this release: the backend modules that had **no playground
+card** until now.
+
+* **Chemistry** — `SMILES augmentation (maxsmi)`: randomized atom orderings,
+  uniqueness/charset/token stats (`chem/smiles_enumeration.py`); `ECFP bit
+  highlighter`: the ECFP6-Highlighter-GUI concept — atom/bond environment
+  union, per-bit corpus presence, saveable highlight PNG
+  (`chem/bit_highlights.py`).
+* **Generative** — `Scoring oracles (GuacaMol)`: QED, Ertl SA, normalized
+  penalized logP, rediscovery similarity and the property filter in one
+  click (`chem/oracles.py`).
+* **Foundations** — `Inferential statistics (pingouin)`: Welch ANOVA with
+  Tukey HSD and Games-Howell post-hoc tables over pasted groups
+  (`ml/inferential.py`); `Interpolation lab (SciPy)`: linear/natural-cubic/
+  PCHIP at query points plus the honest holdout audit (`ml/interpolate.py`).
+* **PK** — `PBPK & first-in-human`: microsomal IVIVE, well-stirred hepatic
+  clearance, DDI AUC ratio with inhibitor grading, MABEL vs NOAEL-HED and
+  the FIH starting dose (`pkpd/pbpk.py`); `OSP PBPK model library`: the
+  curated 40-model collection as a browsable, lookup-able table
+  (`pkpd/osplib.py`); `Dosing events & regimen`: the NONMEM/mrgsolve event
+  grammar — addl_until, realized dose tables, weekday schedules
+  (`pkpd/events.py`).
+* **Best of ML** — `Association rules (apriori)`: frequent itemsets and
+  support/confidence/lift rules over pasted transactions (`ml/apriori.py`).
+
+Ten new GUI tests (`TestCatalogAbsorptionGui`) drive every card the way a
+mouse does — tests/ now 4,382 cases (playground 852 → 862), 5,155 with the
+773 doctests. Still card-less, noted for later rounds: `ml/dalex.py`,
+`ml/deepensemble.py`, `ml/drugresponse.py`, `ml/pharmacogenomics.py`,
+`pkpd/physiology.py`, `pkpd/compounds.py`.
+
+#### From arena/2697c755 — the three module fold-ins and the full catalog audit
+
+### Added — the 140-repository research-catalog disposition, paired DTA, maternal–fetal PK and DOCKSTRING playground fold-ins
+
+* **A complete, evidence-bounded catalog audit** —
+  `docs/GITHUB_RESEARCH_CATALOG_AUDIT.md` disposes of every one of the PDF's
+  140 unique repositories (108 conversation-derived, 32 supplemental), with
+  live default-branch blob counts, canonical redirects, archived status,
+  existing coverage, new work and explicit external-engine boundaries. All
+  140 metadata/tree checks passed and no tree was truncated.
+* **`pharmaml.ml.dta`** — DeepDTA's exact 25-symbol protein label/one-hot
+  encoding and canonical/isomeric-SMILES character encoding; aligned RDKit ECFP,
+  amino-acid-composition and optional 400-dipeptide features; paired-row drop
+  accounting; a deterministic 12-pair demo; and the upstream squared-
+  correction `rm2`. The Deep Learning tab gains paired CSV loading, a
+  held-out ridge baseline (RMSE/R²/concordance/rm2) and aligned-feature CSV
+  export. This is a data/metric baseline, not a bundled neural checkpoint.
+* **`pharmaml.pkpd.pregnancy`** — PK-Sim/fertilization-age conversion, a
+  16-project OSP pregnancy index, and a disclosed two-compartment
+  maternal–fetal RK45 model. Placental transfer uses
+  `Qp * (fu_maternal * C_maternal - fu_fetal * C_fetal)`, so unbound—not
+  total—concentrations equilibrate. No 27-compartment OSP parity is claimed.
+* **The advanced PK/PD playground notebook** — exact repeated
+  two-compartment regimens, linear-up/log-down NCA with terminal-phase
+  selection, maternal–fetal profiles/AUC ratio, the 40-model OSP registry,
+  pregnancy projects and observed/predicted DDI qualification now have GUI
+  surfaces instead of remaining library-only.
+* **`pharmaml.docking.dockstring`** — all 58 upstream search boxes and the
+  three original objectives (F2 with QED penalty, promiscuous PPAR and
+  selective JAK2 with the corrected −8.1 LCK median). The Docking tab gains
+  a target/objective lab and a search-box bridge into Campaign; evaluating an
+  objective never implies that a docking engine ran.
+* **Verification** — 27 focused numerical tests and all three new module
+  doctest groups pass; CI-style Ruff and mypy pass across the source and
+  tests, and the full non-Tk suite exits 0 on the pinned NumPy 1.26.4 stack.
+  (The minimal image lacks system `libXrender`; headless RDKit drawing checks
+  used a temporary, external XRender loader shim—no X11 drawing was executed.)
+  All eight executed notebooks completed at 1.2.114 and their no-output twins
+  were regenerated. Four real-Tk regression drives and
+  three display-independent stub-callback tests are included, but this Python
+  build has no `tkinter` module (and no Xvfb), so they are reported as skipped
+  rather than passed. Static review also corrected the two new plot handlers
+  to unpack `new_figure()`'s `(figure, axes)` contract.
+
+#### Shipped (superseded by the unified 1.2.115 archive below)
+
+* `pharma-ml-toolkit-v1.2.114.zip` — source, tests, complete catalog audit,
+  playground fold-ins and freshly executed 1.2.114 notebooks; ZIP integrity
+  checked and safe copies retained under the repository's archive protocol.
+
+### Merged
+
+* The merge kept both card sets (no overlaps: 116 shared cards + main's 9
+  + the branch's 3 = 128); the branch's Advanced PK/PD card was re-gridded
+  to row 10 to sit under main's three PK cards; playground/test conflicts
+  resolved as both-sides-kept; the duplicate v1.2.114 zips resolved to
+  main's verified bytes and are superseded by the v1.2.115 rebuild.
+* The branch's GUI tests (skipped in its tkinter-less sandbox) now run
+  for real under this repo's Xvfb — a direct value of the unification.
+* Notebooks re-executed at 1.2.115 (the round-195 staleness lesson: the
+  branch's runs printed its 1.2.114).
+
+## [1.2.113] — 2026-11-06
+
+### Fixed — round 195 (run 1/100): the stale-notebook catch the focused subsets masked, and the session-count pin the XAI absorption outgrew
+
+The 2-hour sync mandate's first scheduled run (job 507038) opened on a
+fully recovered tree (the ninth rollback's fast-forward held: HEAD ==
+`origin/main` at `101f5f7`), repaired the venv's latest partial loss
+(rdkit + torch gone again while the repo layer stayed intact — the
+rollback quartet's venv leg is the flakiest), then ran the **full
+4,372-case tests/ suite + the src/ doctest half** end to end instead of
+the recent rounds' focused subsets — and the wider net caught two real
+regressions:
+
+* **All eight executed notebooks still carried `1.2.110`-era committed
+  outputs** (the version print and every figure/table behind it). The
+  staleness predated the 1.2.111 and 1.2.112 bumps and survived two
+  rounds of verification because both ran focused subsets;
+  `test_notebook_variants.py::test_executed_outputs_print_shipped_version`
+  — the guard built for exactly this — was simply not in those subsets.
+  The prescribed driver (`scratch/reexecute_all_notebooks_64.py`)
+  re-ran all eight top-to-bottom at 1.2.113 (201 s, every notebook now
+  prints `pharmaml 1.2.113`), and the twins were regenerated; 119/119
+  notebook-variant guards green.
+* **`TestDeepLearningTab::test_deep_learning_inputs_survive_a_session_
+  round_trip` pinned 61 `_dl_` session variables** — round 193's XAI
+  absorption added the anchor-τ and noise-n eval spins (+2 → 63) and
+  nobody re-counted. The generic walk was right (every user input
+  rides the session by design); the pin was stale. Re-pinned to 63
+  with the arithmetic comment extended.
+
+The doctest half re-counted fresh with the fully repaired stack:
+**773 items** (the 765 baseline missed eight torch-dependent doctest
+items that only collect once torch imports — the addendum's
+foreground retry landed torch after that count), 0 failures, exit 0.
+The honest total is now **4,372 + 773 = 5,145 tests, all green**.
+
+### Shipped
+
+* `pharma-ml-toolkit-v1.2.113.zip` — the release archive rebuilt so the
+  shipped notebooks' committed evidence matches the shipped tree (the
+  v1.2.112 zip carried notebooks printing 1.2.110: a time-travel
+  artifact inside the artifact); three homes byte-identical.
+
+## [1.2.112] — 2026-11-06
+
+### Added — round 193: the arena branch's orphaned round-189 fold-ins recovered, the (100x-174) report contract restored, and the eighth rollback survived by the push
+
+The owner's directive — *"Continue the MASTER_PROMPT. Update the GitHub
+repository more frequently"* — landed in the same hour as the **eighth
+sandbox rollback**, which proved the directive's worth: the fast-forward
+push minutes before the rollback was the only reason rounds 186-192
+survived at all (the remote held `08390e3` while the local HEAD snapped
+back to `2eb0ede`; the practiced drill — token re-extracted from
+`upload/Command.txt`, remote re-added, pure fast-forward, upload/
+restored byte-identical, venv re-pinned on numpy 1.26.4 · rdkit
+2026.09.1 · the 1.2.111 editable — recovered everything with zero
+local loss). From this round on, **every unit of work is committed and
+pushed as it lands**, not batched at a round's end.
+
+* **`ml/xai.py` — the arena branch's deferred trio, re-merged** (the
+  round-189 "XAI registry fold-ins" commit that only the arena backup
+  branch carried; its `main` twin was lost to the seventh rollback's
+  bulk restore, byte-for-byte from `origin/arena`):
+  * **johnmarktaylor91/torchlens** — `model_activation_trace`: input,
+    linear, activation and output nodes with parent links, input/output
+    widths, parameter counts, retained activation bytes, min/mean/max
+    and dead-unit share over the toolkit's numpy LayerStack (no
+    framework-operation interception pretence).
+  * **SeldonIO/alibi** — `tabular_anchor`: quantile-bin conditions
+    beam-searched for maximum coverage at the requested empirical
+    precision, with the readable rule, covered counts, candidate count
+    and an honest `success=False` (direct reference evaluation — no
+    PAC/KL-LUCB claim).
+  * **Quantus** — `attribution_complexity` (entropy, normalized
+    entropy, effective support, Gini, nonzero share),
+    `faithfulness_estimate` (grouped attribution mass vs actual
+    prediction drops) and `max_sensitivity` (seeded noisy-row
+    re-evaluation); `evaluate_attribution_metrics` bundles the trio.
+* **The Attribution & attention card grows the fold-in row** — Model
+  graph, Anchor rule (with the anchor τ spin) and Quantus metrics (with
+  the noise-n spin), all sharing the last-trained-run / held-out-row
+  selectors through the new `_dl_xai_current_row` helper; the shared
+  results table switches schemas safely via `_dl_xai_set_columns`
+  (graph nodes, anchor conditions, metric rows, attributions), and
+  **Explain now re-asserts its five columns** before inserting (the
+  latent schema-drift bug the arena tests pin: a metrics run followed
+  by an Explain used to leave mismatched headings).
+* **The (100x-174) report contract restored** — the round-192-era
+  `reference_census` flag had quietly contradicted the round-174
+  contract (its own comment confessed "a fresh app reports 'nothing
+  yet'" while six tests demanded the Attribution census page in every
+  picklist and report); the flag is gone, the 41-method census table
+  walks again, and the two red picklist tests are green.
+* **Tests** — 13 new: `tests/test_xai_registry.py` (11, the numerical
+  behavior of the trio) and `TestDeferredXaiHandlersHeadless` (2, the
+  handlers driven on stub widgets in display-less environments, pinning
+  the column restoration and the one-lookup output-index discipline).
+* **Hygiene** — `GITHUB_LINKS_REGISTRY.md` (the registry's markdown
+  twin, the one-by-one absorption evidence) folds in from the arena
+  branch; `.env` is untracked in favour of the committed
+  `.env.example` template (the local file survives on disk).
+
+## [1.2.111] — 2026-11-06
+
+### Added — round 192: the CSV → canonical SMILES standardization lab (five chains + the protonation enumerator, absorbed from the owner's seven links)
+
+The owner's directive — *"Add a section to playground.py to take the
+smiles from the csv file and convert them to canonical smiles
+(standardized and processed)"* — delivered with seven reference
+repositories, all verified against the GitHub API (HTTP 200) and
+absorbed file-by-file from treeless shallow clones:
+
+* **`chem/csv_standardize.py`** — the engine (1,893 lines): one
+  standardization front door (`standardize_smiles`), one CSV batch
+  driver (`standardize_csv`), six registered chains and the
+  protonation enumerator.
+  * **rdkit/rdkit · Code/GraphMol/MolStandardize** (the subtree the
+    owner linked): `MetalDisconnector` → `Normalizer` → `Reionizer` →
+    `FragmentParent`/`ChargeParent` → `AssignStereochemistry` →
+    canonical SMILES, the optional canonical-tautomer leg included.
+  * **mcs07/MolVS**: `Standardizer.standardize` verbatim (sanitize
+    FIRST — the one ordering MolVS does differently), the fragment /
+    charge parents on the same RDKit classes MolVS became.
+  * **chembl/ChEMBL_Structure_Pipeline**: `standardizer.py` step by
+    step — the metal/borane exclude flag, the SGroup strip, kekulize,
+    the SENTINEL-isotope `remove_hs_from_mol`, the twelve ChEMBL
+    SMIRKS + the alkoxide pre-step, `Uncharger(canonicalOrder=True)`,
+    the tartrate flatten, and the solvent/salt-list fragment parent
+    with **their 163 salts + 9 solvents embedded verbatim**
+    (`CHEMBL_SALTS` / `CHEMBL_SOLVENTS`) — including their honest
+    "everything is a salt → keep everything" fallback (a pure salt
+    pair comes back whole).
+  * **datamol-io/datamol**: `dm.standardize_mol` with the library's
+    own defaults (`disconnect_metals=False, uncharge=False`,
+    stereo clean-recalc); the fragment front step documented as the
+    toolkit's addition (datamol's standardize never touches
+    fragments).
+  * **UnixJunkie/dimorphite_dl**: the protonation enumerator — the
+    **41 substructure rules of `site_substructures.smarts` embedded
+    verbatim** with the pKa mean/std columns
+    (`PROTONATION_SMARTS`), `define_protonation_state`'s pH-window
+    overlap test, the list-order matching with the protect
+    discipline, the nitrogen charge ladder (the `*`-named
+    neutral-acid moieties, the explicit-H bond-order table, the
+    `[nH-]` → `[n-]` fix) and the six-reaction `neutralize_mol`
+    fixpoint before the rules read the molecule
+    (`protonate_smiles`).
+  * **openbabel/openbabel**: the cross-toolkit slot — OB is not a
+    pharmaml dependency (the `chem/standardize.py` policy), so the
+    OB-style "second toolkit agrees" check is the InChI round-trip
+    (`inchi_roundtrip_check`).
+  * the **reinvent** profile reuses the round-100x-164 REINVENT4
+    chain; **plain** is the sanitize+canonical baseline.
+* **The batch driver's house rules**: no silent drops (every
+  unparseable row is a record with its error), the SMILES-column
+  auto-detection (name match, then the >50 % parse-rate check over
+  text columns — a typed error names the columns tried), the
+  duplicate register (canonical collisions flagged against their
+  first row), the report (`StandardizationReport`: summary counts,
+  `to_frame`, `write_csv`), separator fallbacks (comma / semicolon /
+  tab) for both paths and pasted streams.
+* **`playground.py`** — the card (Chemistry tab, row 11, span 2):
+  "CSV → canonical SMILES (the standardization lab)".  A CSV file
+  picker (with a 40-line preview into the pasted box — the no-file
+  input, seeded with a 7-row demo corpus: a salt, a drug salt, an HCl
+  salt, a charged nitro drawing, stereo, a tautomer, one bad row),
+  the profile picker (six chains), the SMILES/id column overrides,
+  eight toggles (salts out, uncharge, normalize, metals, reionize,
+  canonical tautomer, keep stereo, protonate) + the pH window, the
+  results table (identifier / original / canonical / status / flags
+  with the state counts), the summary line (rows · standardized ·
+  unchanged · invalid · rejected · duplicates · protonation-ambiguous
+  · chain · elapsed · column), a canonical-corpus CSV export and the
+  InChI round-trip button.
+* **57 tests** (`tests/test_csv_standardize.py`) + the module
+  doctests: the registry and embedded tables (163 salts parse, 41
+  SMARTS parse), every profile's canonical answer (the sodium-salt
+  collapse, the ChEMBL drug-salt strip vs the pure-salt-pair
+  fallback, the metal exclusion, the REINVENT window rejection, the
+  sulfoxide normalization flag, the tautomer collapse, the stereo
+  parent), the protonation windows (the physiological deprotonation,
+  the low-pH acid, the glycine amine ambiguity, the azide fixpoint,
+  the -1000 pKa rule), the InChI round-trip, the column detection
+  (name match, parse-rate fallback, the named error), and the batch
+  driver (summary counts, the duplicate register, the export
+  round-trip, the separator fallbacks, all six profiles over the
+  demo corpus).
+
 ## [1.2.106] — 2026-11-03
 
 ### Added — round 186: tensorboard · umap · fiftyone · plotly.py, absorbed offline into the Deep Learning tab
@@ -2175,12 +7595,12 @@ The instruction this round: *"Check the contents of this file one by
 one and update the playground.py file"* over the freshly uploaded
 `کد علی.zip` (8 files). The one-by-one verdict: the docking quartet
 was already covered — `pdbqtgeneration.py` is byte-identical to the
-audited `niggaqt.py` (the MGLTools PDB → PDBQT batch card),
-`pdbfromsmile.py` is the stricter older twin of `nigga.py` (the
+audited `ligprep_qt.py` (the MGLTools PDB → PDBQT batch card),
+`pdbfromsmile.py` is the stricter older twin of `ligprep.py` (the
 LIGAND STRUCTURES card implements the more tolerant column handling),
 `mismatchcheck.py` rides the grid/torsion/completion audit card (its
 `check_torsion_consistency` even auto-detects the MGLTools-vs-Meeko
-convention), and `niggavinamulti.py` is the thread-pool Vina batch
+convention), and `batch_vina_multi.py` is the thread-pool Vina batch
 with resume the config-batch card already runs — leaving the `Ml/`
 pair as the round's genuine work.
 
@@ -2518,7 +7938,7 @@ three features shipped.
   the converter card as its PDB source, pre-fills the PDBQT output
   folder BESIDE it (never inside it, never over a live pick),
   refreshes the card's info label, and jumps there with the finder's
-  own flash — the nigga.py → niggaqt.py relay without one re-pick.
+  own flash — the ligprep.py → ligprep_qt.py relay without one re-pick.
 * **The pre-flight resume census.** `vina_batch_progress(ligands_dir,
   out_dir) -> VinaBatchProgress(total, docked, remaining, collisions)`
   counts what a resumed Vina batch would skip, with the SAME skip
@@ -2555,24 +7975,24 @@ three features shipped.
 
 ## [1.2.80] — 2026-10-26
 
-### Added — the round-26 review (100x-141): the "new folder.zip" upload audited file by file — the nigga.py ligand-structure pipeline + the niggaqt.py MGLTools batch converter + the Vina batch's RESUME
+### Added — the round-26 review (100x-141): the "new folder.zip" upload audited file by file — the ligprep.py ligand-structure pipeline + the ligprep_qt.py MGLTools batch converter + the Vina batch's RESUME
 
 The user delivered a new upload — `new folder.zip` (1.0 MB, 22
 entries) — with the instruction *"Check the contents of this file one
 by one and update the playground.py file."* Every file was checked
 one by one against the toolkit's surfaces:
 
-* **ligand generation/** — `nigga.py` (the CSV → canonical tautomer →
+* **ligand generation/** — `ligprep.py` (the CSV → canonical tautomer →
   50 ETKDG conformers → MMFF-with-UFF-fallback → lowest-energy
   conformer as PDB + OpenBabel/Gasteiger MOL2 pipeline, parallel
   worker pool, unsupported-atom skip list) had **no dedicated
   surface**: `prepare_ligand_library` covers the CSV → PDBQT campaign
   twin, but the PDB/MOL2 structure pipeline itself did not exist.
-  `niggaqt.py` (the MGLTools `prepare_ligand4.py` batch converter
+  `ligprep_qt.py` (the MGLTools `prepare_ligand4.py` batch converter
   with its 30-second timeout, numbered sub-folders and conversion
   log) had been *absorbed* as "MGLTools deprecated → Meeko path" —
   the re-delivery says the user wants it. `mismatch2.py` /
-  `niggamatch.py` were already covered (`check_torsion_consistency` /
+  `ligprep_match.py` were already covered (`check_torsion_consistency` /
   `scan_torsion_consistency`, the audit card's torsion mode).
 * **Vina/** — `vina.conf` + `log.txt` were already covered
   (`parse_vina_config`, the grid box / config batch cards,
@@ -2581,11 +8001,11 @@ one by one against the toolkit's surfaces:
   `vinar.py`, `vinar_multiple.py`, `vina_reader.py`, `conf.txt` were
   already covered (`distribute_files` / `_dock_distribute_receptor`,
   `run_vina` / `run_vina_batch` / `scan_vina_directory`); `batch.py`
-  and `niggavina.py` contributed one genuinely missing behaviour —
+  and `batch_vina.py` contributed one genuinely missing behaviour —
   the **resume** (skip already-docked ligands; a zero-byte log marks
   a crashed job).
 
-**The ligand structures card (nigga.py, whole).**
+**The ligand structures card (ligprep.py, whole).**
 `pharmaml.docking.generate_ligand_structures(library, output_root,
 *, num_confs=50, default_b_factor=20.0, write_mol2=True, workers=1)`
 runs the original pipeline per library row: RDKit tautomer
@@ -2612,7 +8032,7 @@ structures (CSV → PDB + MOL2)** card drives it over the already-loaded
 library with conformers / workers / MOL2 knobs, a live report tree and
 the report CSV export.
 
-**The MGLTools PDB → PDBQT batch card (niggaqt.py, whole).**
+**The MGLTools PDB → PDBQT batch card (ligprep_qt.py, whole).**
 `pharmaml.docking.convert_pdb_folder_to_pdbqt(source_dir, output_dir,
 mgl_python, adt_script, *, timeout_s=30.0, add_hydrogens=True)`
 drives `prepare_ligand4.py -l <pdb> -o <pdbqt> -A hydrogens` over
@@ -2632,12 +8052,12 @@ output pickers, the two MGLTools paths pre-filled with the original's
 Windows defaults, the timeout knob, the live report tree and the
 report CSV export.
 
-**The Vina batch's RESUME (batch.py + niggavina.py).**
+**The Vina batch's RESUME (batch.py + batch_vina.py).**
 `run_vina_batch(..., skip_existing=False)` gained the upload
 controllers' resume behaviour: when ticked, a ligand whose
 `<stem>_out.pdbqt` **and** non-empty `<stem>.log` already exist is
 not started again (the zero-byte log marks a crashed job —
-`niggavina.py`'s empty-log cleanup rule — and is re-docked). Skipped
+`batch_vina.py`'s empty-log cleanup rule — and is re-docked). Skipped
 ligands return `DockingRunResult(skipped=True, ok=True, seconds=0.0)`
 so an interrupted campaign re-runs in seconds, docking only the
 remainder; the results table's status column shows `skip` and the
@@ -4694,7 +10114,7 @@ matrix so future rounds keep the guarantee:
 - **Docking tab**:
   - *Grid, torsion & completion audit* — `read_gpf` (typed
     parameters of one GPF), `scan_gpf_ligand_types`
-    (`gpfreader.py`), `scan_torsion_consistency` (`niggamatch.py` /
+    (`gpfreader.py`), `scan_torsion_consistency` (`ligprep_match.py` /
     `mismatch2.py`: TORSDOF vs active REMARKs vs BRANCH counts) and
     `check_docking_completion` (`checker.py`: OK / INCOMPLETE /
     MISSING_LOG per folder).

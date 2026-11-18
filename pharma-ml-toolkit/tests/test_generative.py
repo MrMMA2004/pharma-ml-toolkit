@@ -73,7 +73,32 @@ from pharmaml.generative.genetic import (
     _scaffold_split,
 )
 
-logging.disable(logging.CRITICAL)
+
+# (round-249) the module-level ``logging.disable(logging.CRITICAL)``
+# this fixture replaces leaked for the WHOLE pytest process and silently
+# broke ``caplog`` assertions in sibling modules sharing a pytest process
+# (the nine-chunk gate caught it: test_format_converters before
+# test_numpy_neural_checkpoints).  Same silence, correct scope: applied
+# around each test of THIS module only, previous level restored after.
+@pytest.fixture(autouse=True)
+def _quiet_module_logging():
+    prev = logging.root.manager.disable
+    pharma_root = logging.getLogger("pharmaml")
+    prev_propagate = pharma_root.propagate
+    prev_handlers = list(pharma_root.handlers)
+    prev_level = pharma_root.level
+    logging.disable(logging.CRITICAL)
+    yield
+    logging.disable(prev)
+    # (round-249b) this module's CLI tests call main() ->
+    # configure_logging(), which flips pharmaml.propagate to False and
+    # attaches a console handler bound to THIS test's captured stderr;
+    # both would leak into sibling modules sharing the process (the
+    # gate caught it via test_format_converters -> the §20.5 caplog
+    # assertions).  Restore the at-import state after every test.
+    pharma_root.propagate = prev_propagate
+    pharma_root.handlers[:] = prev_handlers
+    pharma_root.setLevel(prev_level)
 
 ASPIRIN = "CC(=O)Oc1ccccc1C(=O)O"
 PARACETAMOL = "CC(=O)Nc1ccc(O)cc1"
@@ -834,6 +859,9 @@ class TestGeneticOptimizer:
 # ---------------------------------------------------------------------------
 # The RNN prior
 # ---------------------------------------------------------------------------
+pytest.importorskip("torch", reason="the SMILES RNN needs the optional deep extra")
+
+
 class TestSmilesRnn:
     def test_train_prior_returns_per_epoch_losses(self, trained_prior) -> None:
         losses = trained_prior.train_prior(DEFAULT_CORPUS, epochs=1)
@@ -2017,6 +2045,13 @@ class TestScaffoldMutation:
         ).optimize()
         assert result.best == "COc1ccc2[nH]c(CCC(C)=O)cc2c1"
         assert result.best_score == pytest.approx(0.855097, abs=1e-6)
+        # (r263 environment: rdkit 2026.03.4 canonicalises two near-dupe
+        #  children to equal strings, so the unique set is 135, not the
+        #  137 of the pre-upgrade environment; best molecule, best score
+        #  and the full generation history are unchanged)
+        # (r265 environment: rdkit 2026.09.1 keeps the two near-dupes
+        #  distinct again — 137, matching the pre-r263 count; best
+        #  molecule and best score unchanged)
         assert len(result) == 137
 
         multi = MultiObjective(
@@ -2624,11 +2659,17 @@ class TestScaffoldHopFusedRings:
         from pharmaml.generative.scaffold_hop import _ring_units
 
         decalin = _ring_units(rdkit.Chem.MolFromSmiles("C1CCC2CCCCC2C1"))
+        # (r263: rdkit 2026.03.4 enumerates ring atoms in a different
+        #  traversal order — same memberships, same anchors, same bond
+        #  tuple; pins re-recorded against the live enumeration)
+        # (r265: rdkit 2026.09.1 traverses in index order — re-recorded
+        #  again; memberships, anchors and bond tuples still identical)
         assert decalin == [
             ((0, 1, 2, 3, 8, 9), 3, 8, ((6, 2, False, 0), (6, 2, False, 0))),
             ((3, 4, 5, 6, 7, 8), 3, 8, ((6, 2, False, 0), (6, 2, False, 0))),
         ]
         indane = _ring_units(rdkit.Chem.MolFromSmiles("C1Cc2ccccc2C1"))
+        # (r263: same re-record as the decalin pin above; r265 again)
         assert indane == [
             ((2, 3, 4, 5, 6, 7), 2, 7, ((6, 2, False, 0), (6, 2, False, 0))),
         ]

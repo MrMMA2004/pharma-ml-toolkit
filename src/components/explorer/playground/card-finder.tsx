@@ -89,6 +89,7 @@ const SUB_TAB_LABELS: Record<string, string> = {
   ligandprep: "Ligand Prep",
   reconciler: "Ligand Sets",
   generative: "Surgery",
+  md: "Molecular Dynamics",
 };
 
 /** PK / PD Explorer inner-tab labels (the NCA trigger shortens on ≤sm). */

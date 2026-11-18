@@ -1,0 +1,285 @@
+# GUI Audit — the Tkinter playground mapped for the Studio redesign
+
+Directive #16 (GUI redesign, `upload/MASTER_PROMPT part2.pdf`, 16.2/16.4):
+before redesigning the interface, inventory every existing screen and map
+it to its backend. This is the increment-1 audit (round 206); it is kept
+current as sections migrate.
+
+## The existing application
+
+`playground.py` (Tkinter + ttk, ~45k lines) is the current GUI: one
+`ttk.Notebook` with thirteen top-level tabs, 129 `make_card` cards, the
+`WORKFLOWS` registry (11 guided workflows / 58 steps), per-card
+descriptions, per-tab sample data, CSV **and** Excel I/O (v1.2.116+), and
+the v1.2.119 heavy-work safety kit (Stop button, memory watchdog,
+pre-flight batch guards, ML n_jobs cap, cooperative `JobCancelled`
+checkpoints).
+
+## Tab inventory → backend map → Studio status
+
+| # | Playground tab | Cards (approx. clusters) | Backend modules | Studio page (increment 1) |
+|---|----------------|--------------------------|-----------------|---------------------------|
+| 1 | Home | quick-jump chips, workflow guide | `WORKFLOWS` registry | **Dashboard** (live census, dataset index) |
+| 2 | Chemistry | standardize, descriptors, fingerprints, feature factory, feature recalculation | `pharmaml.chem.*` | **Chemistry Workbench** (increment 2: standardize + multi-family feature factory with the batch guard) |
+| 3 | PK / PD | dose response, exposure, pregnancy PK | `pharmaml.pkpd.*` | **PK/PD Workbench** (increment 3: exact two-compartment regimen simulator + trapezoid/linear-up-log-down NCA + the NONMEM event grammar) |
+| 4 | Cell Lines | expression, screening | `pharmaml.biology.*` | **Biology Workbench** (increment 4: screen audit + sensitivity matrix with quartile calls + MAD gene ranking + biomarker discovery) |
+| 5 | Docking | DOCKSTRING lab, affinity, campaigns | `pharmaml.docking.*` | **Docking Workbench** (increment 5: campaign scan + completion audit + 3-column consensus rescore + DLG cluster tables + ligand library audit + the 58-box DOCKSTRING registry) |
+| 6 | Data & ML | QSAR training, leaderboards, AD | `pharmaml.ml.*` | **Model Analysis** (increment 13, round 226: registry fit + curves, PLUS the Part-3 §19 CV interface ported from the playground — the Compare-models board over `compare_models_cv` with the fold-count spinner + the fold-strategy combo (auto/kfold/stratified/group/stratified_group/scaffold), the honest pre-flight refusals for scaffold/group sourcing, the formatted `mean ± std (k-fold CV)` leaderboard, and the double-click CV report dialog — fold table with train-side mirrors, per-metric aggregates with directions, notes, the PyQtGraph fold chart with the ± 1 std band edges) |
+| 7 | Unsupervised | clustering, reduction | `pharmaml.ml.unsupervised` | **Unsupervised Workbench** (increment 6: PCA variance ladder + loadings, k-means/mini-batch/GMM/hierarchical clustering with the soft responsibilities, KDE density over the histogram twin, all five manifolds) |
+| 8 | Deep Learning | runboard, UMAP, curation, figures | `pharmaml.ml.*` (torch) | **Deep Learning Workbench** (increment 7: the training run — DeepMLP*/ResidualMLP* (torch) or NumpyMLP* (numpy autograd) with early stopping + evaluate_model parity/overfit or per-class F1 + confusion; the runboard — RunTrace EMA loss curves + numpy_layer_stack weight histograms with the honest torch refusal; the UMAP map — umap_embed + Venna-Kaski trustworthiness; the fiftyone-style curation — DataView stage algebra + the four audits) |
+| 9 | Generative | RNN/RL optimization | `pharmaml.generative.*` | **Generative Workbench** (increment 8: the evolution run — GeneticOptimizer / ReinventOptimizer / MctsOptimizer over build_objective-built objectives with the ranked leaderboard + progress curves; the Pareto front — pareto_front over the multi-objective breakdown with the trade-off scatter; molecule surgery — ring_topology_moves + scaffold_hop_crossover breeding; the GuacaMol scoring oracles) |
+| 10 | Foundations | statistics, table prep | `pharmaml.utils.*`, `profiling` | **Foundations Workbench** (increment 9: compare_groups with the branch reported + two-histogram overlay, the five-distribution sampler with the theory drawn in the same value space, Welch ANOVA + Tukey HSD + Games-Howell, profile_dataset with the type census + alert rules) |
+| 11 | Best-of ML | curated model cards | `pharmaml.ml.*` | **Best-of ML Workbench** (increment 10: the 924-project catalogue as queryable data + the 35-verdict coverage audit + the five native capability surfaces — DP statistics with the RDP accountant, leave-one-out collaborative filtering, the LSH recall/compression sweep, the adversarial broken-rate audit, the time-series analysis half — plus the apriori association rules) |
+| 12 | Response AI | drug response | `pharmaml.ml.drugresponse` | **Response AI Workbench** (increment 11: the module's FIRST GUI surface — the Hill curve fit with every parameter against the generating truth + the log-dose AUC both ways, response metrics + rank correlations on the Data Explorer's columns or seeded pairs, the CaDRReS `DrugResponseModel` on the seeded 12x4 screen with the honest in-sample pearson, cell-line-grouped cross-validation with the ~0 mean reported honestly, the informative-prior regression, the `ResponseVAE` ELBO ledger, the `MultiOmicsFusion` per-block audit with total variance equalised) |
+| 13 | Utilities | CSV standardize, converters, IO | `pharmaml.utils.io`, `chem.csv_standardize` | **Data Explorer** (tables + distributions) + **Utilities Workbench** (increment 13, round 227: the rar's others/General scripts — table merge & split over `merge_tables`/`merge_table_folder`/`split_table_into_chunks`, compare & annotate over `compare_tables`/`annotate_with_smiles` with the native reconciliation bars, the approved-drugs report over `filter_approved_drugs` (CSV + the bordered Word table), the campaign file tools over `collect_files`/`list_file_names`/`distribute_files`/`delete_named_files`/`cleanup_tree` dry-run-first, and `reindex_by_number`) |
+
+Plus the cross-cutting concerns, all live in Studio: theme/appearance
+(Settings page), navigation (sidebar + Ctrl+1..9), background
+execution (JobWorker/QThreadPool with cooperative stop), state
+persistence (QSettings: geometry/nav/theme), and — increment 12
+(round 221, the Part-2 §16.8.2-16.8.4/16.8.7 closure) — matrix
+image visualization (the **Image Lab**: `ui/widgets/image_panel.py`
++ `ui/pages/image_lab.py`, an ImageItem + HistogramLUT colormap
+control + live-ROI sub-matrix statistics + PNG export, five tabs on
+real project data: the 12-drug Tanimoto similarity heatmap, the
+23x8 LN_IC50 response matrix, the explorer's numeric columns, the
+fixed-region ROI demo, and the tanimoto timing surface).
+
+## Preserved / redesigned / consolidated / replaced
+
+- **Preserved (backend)**: every `pharmaml` module is reused as-is;
+  Studio calls the same public API surface the playground cards call
+  (`read_table`, `train_model`, `MODEL_REGISTRY`, …). No backend
+  behaviour changes in this round.
+- **Preserved (GUI)**: the Tkinter playground itself stays fully
+  functional and shipped until every section above has a verified
+  Studio page (directive 16.18 step 15).
+- **Redesigned**: the presentation layer only — notebook tabs become
+  sidebar navigation; card grids become dedicated pages; matplotlib
+  report figures become live PyQtGraph panels.
+- **Consolidated**: the Stop button + memory watchdog survive as the
+  Studio's `JobWorker` cooperative-stop channel (same
+  `JobCancelled` contract as v1.2.119).
+- **Replaced**: nothing yet (increment 1; retirement happens only after
+  each replacement is verified).
+
+## Known issues found during the audit (16.4)
+
+1. The Tkinter GUI blocks on every card action — long jobs freeze the
+   whole window (the v1.2.119 Stop/watchdog kit mitigates the OOM
+   failure mode, but the thread model remains single-threaded). The
+   Studio's QThreadPool workers fix the root cause.
+2. Tab order encodes history, not workflow frequency — the sidebar's
+   eleven live sections are ordered by usage (dashboard → data →
+   chemistry → pkpd → biology → docking → models → unsupervised →
+   deep learning → generative → settings).
+3. No theme or appearance control exists in Tkinter; Studio ships the
+   full provider stack (Qt-Material primary, QDarkStyleSheet
+   alternative, native fallback) with runtime switching.
+
+## Part-2 (§16) completion assessment — round 226, the owner's question
+
+*The owner asked directly: "Check if MASTER_PROMPT part2 is completely
+done and retire playground.py (everything must be in studio.py)."  This
+is the honest verdict against directive §16.22's acceptance criteria
+(`upload/MASTER_PROMPT part2.pdf`), with the evidence.*
+
+**Done and verified** (each with its own tests in `tests/ui/`):
+
+- PySide6 integrated, the Studio architecture (`studio.py` → `ui/`)
+  with modular pages/widgets/workers/theme (16.5/16.16).
+- PyQtGraph scientific visualization: live charts everywhere, the
+  Image Lab (increment 12: ImageView-style colormap/ROI/histogram over
+  real project matrices) (16.8).
+- Qt-Material primary + QDarkStyleSheet alternative + native fallback,
+  runtime switching, ChartPalette re-colour of every plot, QSettings
+  persistence (16.9–16.11, 16.15).
+- Navigation, JobWorker background execution with the cooperative
+  Stop channel, input validation, error handling (16.14).
+- GUI documentation (`docs/gui/GUI_REDESIGN.md`, this audit) and the
+  GitHub backup of all GUI sources/tests (16.20/16.21 J).
+
+**NOT yet done — the one open parity item** (why step 15 cannot fire):
+
+1. **Model Analysis depth** — the playground's Data & ML tab carries
+   more than the registry fit + curves the Studio page had at
+   increment 1 (leaderboard variants, the family benchmark, the tuner
+   card, applicability-domain). Round 226 ported the newest and most
+   valuable piece — the §19 CV results interface — but the remaining
+   ML-tab cards still owe their Studio twin.
+
+(Resolved in round 227, increment 13: the second former blocker —
+the Utilities workflow cards — now has its dedicated Studio page,
+`ui/pages/utilities.py` + `tests/ui/test_utilities_page.py`, with
+every card wired to the same public backend APIs the playground
+cards call and the destructive campaign paths dry-run by default.)
+
+(Resolved in round 228, increment 14 — the retirement round: the
+Model-Analysis depth landed as the **ML Workbench**
+(`ui/pages/ml_workbench.py` + `tests/ui/test_ml_workbench_page.py`,
+18 page tests) — the Hyperparameter-search card (RandomSearch /
+TPESearch / Hyperband over every grid-bearing registry family with
+the defaults baseline and the held-out verdict, the trial-ranking
+board, Apply-best), the **family benchmark**
+(`benchmark_feature_families` over the SMILES column), the **OOF
+stacking leaderboard** (`stack_oof_regressors` with the residual
+correction and the native parity scatter), the **ensemble builder**
+(`build_voting` / `build_stacking`), **model persistence**
+(`save_model` / `load_model` / `validate_bundle_input` predict with
+the honest feature-contract audit) and the **applicability domain**
+(`applicability_domain` with the reliability table, the kNN-distance
+native scatter and the bootstrap-uncertainty status).  The Model
+Analysis page itself grew the manual-hyperparameters table
+(`train_model`'s `model_params`), the kept-run `last_run()` hand-off
+and four NATIVE diagnostic figures — calibration curve, learning
+curve, ROC, PR — plus the latent string-class-target crash fix the
+regression-only tests had never met.)
+
+**Therefore (round 228)**: Part-2 is **100% complete** — every
+§16.22 surface (architecture, theming, visualization, workers, docs,
+and ALL THIRTEEN content surfaces) is verified with its own tests,
+and §16.18 step 15 **fires**: `playground.py` is retired this round
+(deleted with its 980-test Tk-coupled suite: `test_playground.py`
+876 + `test_playground_workflows.py` 17 + `test_job_safety.py` 31 +
+`test_excel_io_and_samples.py` 26 + `test_feature_recalculation.py`
+30), the Studio (`python studio.py`) is THE front end, and the pins
+carry the new honest totals.
+
+
+## Part-3 progress — round 237: the Qt import guard + `--doctor` launch hardening + round 236: §21.5 molecule readouts + round 235's §23 slice 2 (the scroll policy) + round 233's §23 slice 1 (the responsive pass) + round 232's §21 slice 1 (hover inspection) + the Windows black-window fix
+
+*The Part-3 backlog after Part-2's completion: §20 checkpoint depth /
+§21 hover tooltips / §22 SMILES previews / §23 responsive pass / §24
+SA-in-generative wiring.  Round 229 landed §20; round 230 landed §24;
+round 231 landed §22; round 232 landed §21 slice 1; round 233 landed
+§23 slice 1; round 235 landed §23 slice 2 (the scroll policy); round
+236 landed §21.5; round 237 landed the launch-path hardening (the Qt
+import guard + `--doctor`, answering the v1.2.147 Windows Shiboken
+report).*
+
+- **§20 (pause/resume/stop + checkpoints) — the engine and the
+  Leaderboards tab are DONE** (round 229).  `pharmaml.utils.checkpoints`
+  (`CheckpointManager`: atomic fsync+rename saves, SHA-256
+  self-verification, corrupt-file quarantine with fallback-to-previous,
+  rotation, strict input validation, JSON states — no pickle) is the
+  durable state layer; `benchmark_feature_families` grew
+  `checkpoint_dir`/`checkpoint_name`/`resume` (per-family checkpoints
+  written BEFORE the stop check, signature-matched resume
+  consecutive-from-the-front, write failures degrade to warnings);
+  the ML Workbench Leaderboards tab checkpoints into
+  `~/.pharmaml/checkpoints/family-benchmark` so its Stop button keeps
+  the finished families and the next Start resumes, with the resume
+  story in the status line ("checkpoint found: k/n families already
+  scored — resuming there") and the tooltip.  36 engine tests + 6
+  integration tests + 1 GUI loop test.
+- **Remaining §20 surface (optional depth)**: the other long runners
+  (the docking campaign, the generative batches, the feature factory's
+  molecule loop) can adopt the same `CheckpointManager` — the engine
+  is generic and they already carry the cooperative-stop channel.
+- **§24 (SA-in-generative wiring) — DONE** (round 230).  The
+  `pharmaml.chem.sa_scoring` engine (the real Ertl fragment model from
+  the RDKit wheel's own Contrib database — aspirin 1.58, caffeine
+  2.30; batch rows keep original + canonical SMILES, an
+  easy/moderate/hard band and per-row parse errors; the optional
+  max-SA bound flags rejects in place per the §24.4 never-discard
+  contract) plus the Generative tab's "SA score" engine tab (paste
+  molecules → ranked table rank/SMILES/canonical/score/band/status,
+  the summary line with mean ± std and the honest caveat) and the
+  `SAScoreObjective` evolution wiring (§24.5: the window bounds become
+  the easy/hard reward anchors — SA as one signal, never the sole
+  target).  The oracle book grew the SA line and `penalized_logp`
+  moved onto the real fragment table.  37 engine tests + 6 GUI tests.
+- **§22 (SMILES previews) — DONE** (round 231): `ui/widgets/
+  smiles_preview.py` — the `MoleculeRenderer` (MolDraw2DCairo at 2×,
+  128-entry FIFO cache, honest invalid-SMILES refusal), the 350 ms
+  `MoleculePopup` dwell and the `SmilesDetailDialog` (formula /
+  weight / SA / copy), wired onto the Generative tab's shared table by
+  COLUMN NAME so every bound frame gains the behaviour.  12 preview
+  tests on real renders.
+- **§21 (hover inspection) — slice 1 DONE** (round 232):
+  `ui/widgets/chart_inspector.py::ChartInspector`, attached to every
+  `PlotPanel` (all fourteen pages) — crosshair, nearest-point snapping
+  (the whole bar body is the target on bars/histograms; 8 %-of-range
+  resolution-independent tolerance), the live readout of the REAL
+  values with page-attached per-point metadata (exact bin boundaries
+  on histograms, categories on labelled bars; cached per point, §21.6
+  debouncing), the context menu (per-series visibility toggles, the
+  inspection switch, reset-to-default-view) and click-to-select with
+  the `pointSelected` drill-down signal (the §21.5 wiring point).
+  14 inspector tests + the PlotPanel API
+  (`set_inspection_enabled` / `attach_metadata`).
+  **§21.5 molecule readouts — DONE** (round 236):
+  `PlotPanel.point_selected` forwards the inspector's click-to-select
+  so pages never reach into the inspector; the Generative page's SA
+  tab plots rank vs score (one point per scored molecule — hover
+  reads the SMILES, the RDKit-calculated formula and molecular
+  weight next to the SA value; click opens the §22.5 detail dialog),
+  and the multi-objective Pareto front carries the same hover
+  metadata for every non-dominated member.  Providers are lazy and
+  inspector-cached (§21.6).  4 tests in
+  `tests/ui/test_generative_page.py` (the forwarding pin, the hover
+  readout with real numbers, the click-to-detail with the
+  foreign-label guard, the front hover).
+  **Remaining §21 depth**: §21.4's image-specific inspection (pixel /
+  channel readout on the Image Lab) and per-page metadata adoption
+  on the remaining scatter pages (sample IDs through `meta=`).
+- **§23 (responsive rescaling / overlap prevention) — slice 1 DONE**
+  (round 233): `ui/widgets/responsive.py` is the policy module and
+  the audit is wired, not aspirational —
+  * `configure_splitter()` applies the §23.2 discipline to **all 20
+    splitters** in the app (15 page splitters + the Image Lab's four
+    tab splitters + the ML Workbench's two + the main window's
+    nav/content splitter): no collapsible children (a careless drag
+    can never hide the control column, the chart, or the whole
+    navigation), hard per-child minimum extents (`MIN_CHILD_PX`
+    320, the main window's nav at 200 — forms, table headers and
+    axis labels stay unclipped), and stretch factors so window
+    growth flows to the chart side (§23.3's resizing discipline).
+  * `LEGIBILITY_FLOOR` (640×480) is §23.3's "plots remain legible
+    when exported": `image_export.grab_png_bytes(min_size=…)`
+    re-renders a squeezed QGraphicsView from its **vector scene** at
+    floor scale — text, pens and curves re-rendered crisp (never
+    bitmap-stretched), aspect preserved (§23.4), the pyqtgraph
+    background re-filled via `backgroundBrush()` (scene.render skips
+    the view-layer painting), and §23.5 pinned: data arrays + view
+    ranges byte-identical across an export.  The panels' export APIs
+    gained the `min_size` passthrough (default `None` keeps the
+    §17-tested widget-owns-its-size contract); the Image Lab's user
+    export button passes the floor.
+  * `ImagePanel` locks aspect (§23.4 "preserve image aspect ratios /
+    avoid stretching"): matrix pixels stay square under every
+    resize — a 100×50 correlation matrix renders 2:1 exactly as the
+    data is shaped, fit-to-view, never stretched to fill the panel.
+  * 13 tests (`tests/ui/test_responsive_policy.py`): the policy
+    contract (horizontal/vertical/empty), the structural audit over
+    every live splitter, the floor upscale + already-legible noop +
+    no-floor contract, §23.5 data-integrity, the aspect lock and
+    the §22 renderer's canvas-aspect contract.
+  * **Slice 2 — the scroll policy — DONE** (round 235):
+    `wrap_in_scroll()` + `SCROLL_MIN_PX` (240) in
+    `ui/widgets/responsive.py`: widget-resizable, horizontal
+    scrollbars OFF (sideways overflow made impossible, not merely
+    scrollable), vertical as needed, frameless + palette-blended
+    (a fitting page is visually unchanged), hard region minimum.
+    All five ML Workbench tab bodies ride it — the probe measured
+    the tuner form at 479 px and Leaderboards at 775 px minimum
+    against the ~450 px the 860×560 minimum window leaves.  3 tests
+    (contract, §23.5 remount invariants, the self-enforcing
+    structural audit).
+  * **Remaining §23 depth**: adaptive tick/label density audits and
+    legend-collision handling on the densest charts.
+- **Round-232 platform fix (the user report)**: `studio.py` opened
+  with console noise and NO window on Windows — `ui/headless.py`'s
+  displayless probe tested only X11's `DISPLAY` (never set on
+  Windows), silently forcing the offscreen platform there.  The probe
+  is now platform-aware (Linux-displayless-only; Windows/macOS/
+  Wayland keep native).  7 decision-matrix tests in
+  `tests/ui/test_headless_platform.py`.
+- **Round-230 infrastructure hardening**: a ROOT `conftest.py` now
+  preloads the round-206 EGL stub (`ui.headless.ensure_headless()`)
+  for EVERY pytest invocation — pytest-qt imports `PySide6.QtGui` at
+  `pytest_configure`, before any test-module import, so in an
+  EGL-less container every non-`tests/ui` run (the library chunks and
+  the doctest chunk) used to INTERNALERROR on `libEGL.so.1`; the
+  tests/ui conftest only saved runs whose args pointed under
+  `tests/ui`.  The suite is EGL-flip-proof now.

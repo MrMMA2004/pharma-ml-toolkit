@@ -951,6 +951,269 @@ export interface SurgeryBreedResponse {
 export type SurgeryResponse = SurgeryTopologyResponse | SurgeryBreedResponse;
 
 /* ------------------------------------------------------------------ */
+/* MCTS molecule search (the Studio Generative method's web twin)     */
+/* ------------------------------------------------------------------ */
+
+/** One leaderboard row of an MCTS run: rank 1 = best. The breakdown
+ * carries one key per `MctsResponse.breakdownColumns` (empty for
+ * single-objective runs — the blended score is the whole story). */
+export interface MctsLeaderboardRow {
+  rank: number;
+  smiles: string;
+  score: number;
+  breakdown: Record<string, number>;
+}
+
+/** The per-cycle progress of the search (one record per iteration):
+ * best/mean score of the molecules the tree found so far, plus the
+ * unique count — scores live in [0, 1] for every objective, so one
+ * shared scale plots them honestly. */
+export interface MctsHistory {
+  cycle: number[];
+  bestScore: number[];
+  meanScore: number[];
+  nUnique: number[];
+}
+
+/** The search's own accounting, surfaced verbatim from the optimizer's
+ * metadata — the tree size, rollout count, validity and the policy
+ * knobs the run actually used. */
+export interface MctsTreeStats {
+  nNodes: number;
+  nRollouts: number;
+  nValid: number;
+  nUnique: number;
+  nCacheHits: number;
+  maxDepth: number;
+  corpusSize: number;
+  policy: string;
+  cVal: number;
+  expansionThreshold: number;
+  simulationNum: number;
+  maxLen: number;
+}
+
+/** Response of /api/gen/mcts: the ranked leaderboard of one
+ * MctsOptimizer run (ChemTSv2-style MCTS over an on-the-fly SMILES RNN
+ * prior — the desktop Studio Generative page's MCTS method), with the
+ * per-cycle history, the tree accounting and the top-molecule
+ * structure grid as a base64 PNG data URI. */
+export interface MctsResponse {
+  objective: string;
+  objectiveLabel: string;
+  iterations: number;
+  treePolicy: "uct" | "puct";
+  seed: number;
+  corpusMode: "built-in" | "seeded" | "custom";
+  best: string;
+  bestScore: number;
+  leaderboard: MctsLeaderboardRow[];
+  breakdownColumns: string[];
+  history: MctsHistory;
+  gridPng: string;
+  gridPanels: number;
+  treeStats: MctsTreeStats;
+  summary: string;
+  elapsedSeconds: number;
+  rdkitVersion: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Response AI — drug-response learning (the Studio page's web twin)  */
+/* ------------------------------------------------------------------ */
+
+/** Which analysis the Response AI card runs — the four headline tabs
+ * of the desktop Studio's Response AI page (hill / metrics / model /
+ * cv). The page's deeper diagnostics (informative regression, the
+ * response VAE, multi-omics fusion) stay desktop-side. */
+export type DrugResponseAnalysis = "hill" | "metrics" | "model" | "cv";
+
+/** Response of /api/ml/drugresponse analysis "hill": the four-parameter
+ * log-logistic fitted by the toolkit's own Levenberg-Marquardt engine
+ * (pharmaml.ml.drugresponse.fit_hill_curve) on the seeded 21-point 4PL
+ * demo or a pasted series. `top`/`bottom` follow the module's own
+ * convention: the low-dose / high-dose plateaus. The truth block and
+ * clean AUC ride only on the seeded demo; the curve arrays are the
+ * fitted curve on a padded log-dose grid for the chart. */
+export interface HillFitResponse {
+  analysis: "hill";
+  source: "seeded 4PL demo" | "pasted series";
+  parameters: {
+    hill_coef: number;
+    ic50: number;
+    top: number;
+    bottom: number;
+  };
+  rSquared: number;
+  converged: boolean;
+  nPoints: number;
+  fittedAuc: number;
+  measuredAuc: number;
+  doses: number[];
+  response: number[];
+  curveDose: number[];
+  curveResponse: number[];
+  truth?: { hill_coef: number; ic50: number; top: number; bottom: number };
+  noise?: number;
+  cleanAuc?: number;
+  summary: string;
+  elapsedSeconds: number;
+  pharmamlVersion: string;
+}
+
+/** Response of /api/ml/drugresponse analysis "metrics": the evaluation
+ * layer every response paper reports (pharmaml.ml.drugresponse
+ * .response_metrics — Pearson / Spearman / RMSE / MAE, NaN pairs
+ * dropped before everything) plus the rank trio
+ * (rank_correlations: Pearson / Spearman / Kendall tau-b) on the same
+ * pair — the page's response-metrics and rank-correlations tabs in
+ * one run. */
+export interface ResponseMetricsResponse {
+  analysis: "metrics";
+  source: "seeded noisy pair" | "pasted pair";
+  n: number;
+  /** Pairs where either side was NaN — dropped before every metric
+   * (response_metrics' own NaN semantics; the rank trio rides the
+   * surviving finite pairs because rank_correlations refuses NaN). */
+  nDropped: number;
+  pearson: number;
+  spearman: number;
+  rmse: number;
+  mae: number;
+  rank: {
+    n: number;
+    pearson: number;
+    spearman: number;
+    kendall: number;
+  };
+  yTrue: number[];
+  yPred: number[];
+  summary: string;
+  elapsedSeconds: number;
+  pharmamlVersion: string;
+}
+
+/** One predicted-response head row of the CaDRReS model run: the
+ * model's predicted response for one cell line across every drug of
+ * the seeded 12x4 screen (values are ordered by `drugs`). */
+export interface ResponseHeadRow {
+  cell: string;
+  values: number[];
+}
+
+/** Response of /api/ml/drugresponse analysis "model": the CaDRReS
+ * bilinear factorisation (pharmaml.ml.drugresponse
+ * .DrugResponseModel) trained on the seeded 12x4 screen with its 15%
+ * NaN mask — full-batch gradient descent over the observed pairs
+ * only, the honest in-sample pearson, the loss history, the predicted
+ * head for CELL_00/CELL_07, and every observed/predicted pair for the
+ * scatter. */
+export interface ResponseModelResponse {
+  analysis: "model";
+  epochs: number;
+  factors: number;
+  seed: number;
+  shape: { cellLines: number; drugs: number };
+  drugs: string[];
+  trainLosses: number[];
+  finalLoss: number;
+  nObserved: number;
+  pearsonR: number;
+  predictedHead: ResponseHeadRow[];
+  observed: number[];
+  predicted: number[];
+  nPairs: number;
+  summary: string;
+  elapsedSeconds: number;
+  pharmamlVersion: string;
+}
+
+/** One cell-line-grouped fold of the cross-validation run. */
+export interface ResponseCvFold {
+  fold: number;
+  nTestCells: number;
+  nObserved: number;
+  pearson: number;
+  rmse: number;
+}
+
+/** Response of /api/ml/drugresponse analysis "cv":
+ * cross_validate_response over the seeded screen — folds split CELL
+ * LINES (no cell line straddles a fold), each fold training a fresh
+ * model with the Studio page's exact factory, the honest across-fold
+ * mean pearson even when the toy screen barely carries signal. */
+export interface ResponseCvResponse {
+  analysis: "cv";
+  nFolds: number;
+  folds: ResponseCvFold[];
+  meanPearson: number;
+  summary: string;
+  elapsedSeconds: number;
+  pharmamlVersion: string;
+}
+
+/** Either Response AI response, discriminated on `analysis`. */
+export type DrugResponseResult =
+  | HillFitResponse
+  | ResponseMetricsResponse
+  | ResponseModelResponse
+  | ResponseCvResponse;
+
+/* ------------------------------------------------------------------ */
+/* Synthetic Accessibility scoring (part3 §24 — Ertl-Schuffenhauer)    */
+/* ------------------------------------------------------------------ */
+
+/** One molecule's SA row: score is null exactly when the SMILES is
+ * invalid (the error field then carries the reason, the original
+ * string is preserved — never a misleading number). */
+export interface SAScoreRow {
+  smiles: string;
+  score: number | null;
+  valid: boolean;
+  error: string | null;
+  canonicalSmiles: string | null;
+  method: string;
+  direction: string;
+}
+
+/** Direction-aware batch statistics over the valid subset only. */
+export interface SASummary {
+  nTotal?: number;
+  nScored?: number;
+  nInvalid?: number;
+  min?: number;
+  max?: number;
+  mean?: number;
+  median?: number;
+  std?: number;
+  method: string;
+  direction: string;
+  limitations: string;
+  elapsedSeconds?: number;
+}
+
+/** Response of /api/chem/sa-score: every row, the easiest-first
+ * ordering, the summary statistics, and — when a filter bound was
+ * requested — the kept/rejected split with both sides preserved. */
+export interface SAScoreResponse {
+  nTotal: number;
+  nScored: number;
+  nInvalid: number;
+  results: SAScoreRow[];
+  sorted: Array<{ smiles: string; score: number | null }>;
+  summary: SASummary;
+  method: string;
+  direction: string;
+  limitations: string;
+  elapsedSeconds: number;
+  rdkitVersion: string;
+  kept?: SAScoreRow[];
+  rejected?: SAScoreRow[];
+  nKept?: number;
+  nRejected?: number;
+}
+
+/* ------------------------------------------------------------------ */
 /* Docking ligand prep (SMILES -> PDBQT + grid box + GPF/DPF)          */
 /* ------------------------------------------------------------------ */
 
@@ -1115,4 +1378,173 @@ export interface MLShapResponse {
   elapsedSeconds: number;
   /** Provenance note — the card renders it verbatim under the bars. */
   splitNote: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Molecular Dynamics (round 249 — the pharmaml.md web twins)          */
+/* ------------------------------------------------------------------ */
+
+/** Mean / population std / coefficient of variation of one parsed
+ * metric — null exactly when the values carry no spread or no points
+ * (the honest-null discipline: never a made-up number). */
+export interface MdXvgStats {
+  mean: number | null;
+  std: number | null;
+  cv: number | null;
+}
+
+/** One parsed GROMACS export metric from /api/md/xvg: the time axis is
+ * already normalised server-side (long ps axes → ns), energies arrive
+ * in kcal/mol, H-bond counts carry the optional 3-point smoothing. */
+export interface MdXvgSeries {
+  time: number[];
+  values: number[];
+  /** The export file the metric was parsed from. */
+  source: string;
+  /** Human title (e.g. "Ligand RMSD"). */
+  label: string;
+  stats: MdXvgStats;
+}
+
+/** One entity's parsed metrics keyed by metric key (e.g.
+ * "ligand_rmsd") — the study reader's LigandResult.to_dict(). */
+export interface MdXvgEntity {
+  name: string;
+  series: Record<string, MdXvgSeries>;
+}
+
+/** Response of POST /api/md/xvg — the parsed ligand study, the
+ * cross-metric Pearson matrix (null when fewer than two metrics),
+ * the summary CSV and the parser's own warnings, verbatim. */
+export interface MdXvgResponse {
+  ligand: MdXvgEntity;
+  correlations: { labels: string[]; matrix: number[][] } | null;
+  summaryCsv: string;
+  warnings: string[];
+  elapsedSeconds: number;
+  method: string;
+}
+
+export interface MdHbondResponse {
+  nFrames: number;
+  seed: number;
+  noise: number;
+  time: number[];
+  /** Per-frame H-bond count from hbond_timeline (0, 1 or 2). */
+  counts: number[];
+  /** Per-bond donor-acceptor distance series (2 bonds). */
+  distances: number[][];
+  cutoffs: {
+    distance: number;
+    angle: number;
+  };
+  stats: {
+    mean: number;
+    max: number;
+    bondedFraction: number;
+    bond0Fraction: number;
+    bond1LeadsBond0: boolean;
+  };
+  elapsedSeconds: number;
+  method: string;
+}
+
+/** Response of POST /api/md/saltbridge — the designed two-bridge ionic
+ * demo (getcontacts' criterion) analysed by the real toolkit:
+ * synthetic_salt_bridge_trajectory builds two phase-shifted
+ * cation-anion pairs (Lys NZ···Glu CD, Arg NH1···Asp CG) oscillating
+ * across the 4.0 Å cutoff, salt_bridge_timeline counts per frame, and
+ * the per-bridge distance series ride along for the chart. */
+export interface MdSaltBridgeResponse {
+  nFrames: number;
+  seed: number;
+  noise: number;
+  time: number[];
+  /** Per-frame salt-bridge count from salt_bridge_timeline (0, 1 or 2). */
+  counts: number[];
+  /** Per-bridge cation-anion distance series (2 bridges). */
+  distances: number[][];
+  cutoffs: {
+    distance: number;
+  };
+  stats: {
+    mean: number;
+    max: number;
+    bondedFraction: number;
+    bridge1Fraction: number;
+    bridge2Fraction: number;
+    bridge2LeadsBridge1: boolean;
+  };
+  elapsedSeconds: number;
+  method: string;
+}
+
+/** Response of POST /api/md/cv — the COLVAR playground: the pasted
+ * plumed.dat snippet parsed and computed over the deterministic
+ * alpha-helix demo by the real toolkit's parse_plumed_cvs. Every series
+ * rides on one finite-only time axis; `colvar` is the exact text
+ * PLUMED's PRINT would have written (`#! FIELDS` header, six decimals). */
+export interface MdCvResponse {
+  nFrames: number;
+  seed: number;
+  noise: number;
+  nAtoms: number;
+  time: number[];
+  /** CV labels in declaration order (unique, identifier-safe). */
+  names: string[];
+  /** One per-CV series per label, aligned with `names`. */
+  series: number[][];
+  /** Honest per-CV stats over the frames, aligned with `names`. */
+  stats: Array<{
+    label: string;
+    mean: number;
+    min: number;
+    max: number;
+    final: number;
+  }>;
+  /** The COLVAR text (#! FIELDS header + one row per frame). */
+  colvar: string;
+  elapsedSeconds: number;
+  method: string;
+}
+
+/** Response of POST /api/md/trajectory — the deterministic synthetic
+ * alpha-helix (10 residues × N/CA/C, residues 5–7 a flexible loop)
+ * analysed by the real toolkit: RMSD after Kabsch superposition, Rg,
+ * native-contact Q, per-atom/per-residue RMSF, the contact-frequency
+ * map, the PCA projection of the frames and the ANM fluctuations of
+ * the first frame. */
+export interface MdTrajectoryResponse {
+  nFrames: number;
+  nAtoms: number;
+  nResidues: number;
+  seed: number;
+  noise: number;
+  contactCutoff: number;
+  time: number[];
+  rmsd: number[];
+  rg: number[];
+  q: number[];
+  /** Per-atom RMSF (length nAtoms). */
+  rmsf: number[];
+  /** Per-residue RMSF (length nResidues). */
+  rmsfResidues: number[];
+  /** nAtoms × nAtoms contact frequency over the frames (0..1). */
+  contactMap: number[][];
+  pca: {
+    /** One [PC1, PC2] pair per frame. */
+    projection: number[][];
+    explainedVarianceRatio: number[];
+  };
+  /** ANM fluctuations from the first frame (length nAtoms). */
+  anmFluctuations: number[];
+  stats: {
+    rmsdMean: number;
+    rmsdFinal: number;
+    rgMean: number;
+    qMean: number;
+    contactPairs: number;
+  };
+  elapsedSeconds: number;
+  method: string;
 }

@@ -132,10 +132,10 @@ FILE_MAP: dict[str, list[str]] = {
     "others/Docking/ligand_preparation_autodock4.py": ["prepare_ligand_library"],
     "others/Docking/New Text Document.txt": [],  # empty placeholder
     "others/Docking/ligand generation/mismatch2.py": ["check_torsion_consistency", "scan_torsion_consistency"],
-    "others/Docking/ligand generation/nigga.py": ["prepare_ligand_library", "table_to_sdf"],
-    "others/Docking/ligand generation/nigga2.py": ["prepare_ligand_library", "table_to_sdf"],
-    "others/Docking/ligand generation/niggamatch.py": ["check_torsion_consistency", "scan_torsion_consistency"],
-    "others/Docking/ligand generation/niggaqt.py": ["prepare_ligand_library"],  # absorbed: MGLTools deprecated
+    "others/Docking/ligand generation/ligprep.py": ["prepare_ligand_library", "table_to_sdf"],
+    "others/Docking/ligand generation/ligprep2.py": ["prepare_ligand_library", "table_to_sdf"],
+    "others/Docking/ligand generation/ligprep_match.py": ["check_torsion_consistency", "scan_torsion_consistency"],
+    "others/Docking/ligand generation/ligprep_qt.py": ["prepare_ligand_library"],  # absorbed: MGLTools deprecated
     "others/General/CSV_merger.py": ["merge_tables"],
     "others/General/Convert SMI to CSV.py": ["smi_to_csv"],
     "others/General/Nameextracter.py": ["list_file_names"],
@@ -170,7 +170,7 @@ ABSORBED = {
     "others/Readme.txt",
     "others/Docking/New Text Document.txt",
     "others/Ml/New Text Document.txt",
-    "others/Docking/ligand generation/niggaqt.py",  # MGLTools deprecated -> Meeko path
+    "others/Docking/ligand generation/ligprep_qt.py",  # MGLTools deprecated -> Meeko path
 }
 
 # ---------------------------------------------------------------
@@ -184,12 +184,12 @@ ABSORBED = {
 # binaries inside the zip are external engines, absorbed like the
 # rar's own engine payloads).  Extracted to upload/extracted_newfolder/.
 _UPLOAD_GEN = [
-    "generate_ligand_structures",  # the nigga.py pipeline (library)
+    "generate_ligand_structures",  # the ligprep.py pipeline (library)
     "_dock_gen_run",               # the Generate structures button
     "_dock_gen_save",              # the report CSV button
 ]
 _UPLOAD_MGL = [
-    "convert_pdb_folder_to_pdbqt",  # the niggaqt.py pipeline (library)
+    "convert_pdb_folder_to_pdbqt",  # the ligprep_qt.py pipeline (library)
     "_dock_mgl_run",                # the Convert the batch button
     "_dock_mgl_save",               # the report CSV button
 ]
@@ -206,13 +206,13 @@ UPLOAD_MAP: dict[str, list[str]] = {
         "Applicability_Domain_Results",  # the upload's output name
     ],
     # -- 100x-141: new folder.zip, ligand generation/ (4 files) -------- #
-    "extracted_newfolder/ligand generation/nigga.py": _UPLOAD_GEN,
-    "extracted_newfolder/ligand generation/niggaqt.py": _UPLOAD_MGL,
+    "extracted_newfolder/ligand generation/ligprep.py": _UPLOAD_GEN,
+    "extracted_newfolder/ligand generation/ligprep_qt.py": _UPLOAD_MGL,
     "extracted_newfolder/ligand generation/mismatch2.py": [
         "check_torsion_consistency",
         "scan_torsion_consistency",
     ],
-    "extracted_newfolder/ligand generation/niggamatch.py": [
+    "extracted_newfolder/ligand generation/ligprep_match.py": [
         "check_torsion_consistency",
         "scan_torsion_consistency",
     ],
@@ -229,7 +229,7 @@ UPLOAD_MAP: dict[str, list[str]] = {
         "skip_existing",            # 100x-141: the resume parameter
     ],
     "extracted_newfolder/Vina_contol/conf.txt": ["parse_vina_config"],
-    "extracted_newfolder/Vina_contol/niggavina.py": [
+    "extracted_newfolder/Vina_contol/batch_vina.py": [
         "run_vina_batch",
         "skip_existing",            # 100x-141: resume + empty-log rule
     ],

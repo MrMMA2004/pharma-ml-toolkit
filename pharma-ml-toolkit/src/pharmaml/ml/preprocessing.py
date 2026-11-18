@@ -71,6 +71,9 @@ pharmaml.exceptions.DataValidationError: y is empty -- make_train_test_split nee
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 from collections.abc import Callable
 from functools import partial
 from typing import Any
@@ -87,13 +90,18 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from pharmaml.exceptions import DataValidationError
+from pharmaml.exceptions import (
+    DataValidationError,
+    JobCancelled,
+    PersistenceError,
+)
 from pharmaml.logger import get_logger
 from pharmaml.utils.validation import looks_continuous, require_columns
 
 _LOG = get_logger(__name__)
 
 __all__ = [
+    "apply_preprocessor_chunked",
     "build_preprocessor",
     "clean_numeric_frame",
     "has_categorical_columns",
@@ -278,6 +286,7 @@ def make_train_test_split(
     random_state: int = 42,
     stratify: bool = True,
     min_class_count: int = 2,
+    on_split: Callable[[bool], None] | None = None,
 ):
     """Stratified train/test split with automatic fallback.
 
@@ -289,6 +298,10 @@ def make_train_test_split(
     fallback.  For categorical targets with a rare class a plain split
     is used and a warning is logged (the legacy scripts crashed
     outright on single-member classes).
+
+    ``on_split``, when supplied, is called after a successful split with the
+    actual stratification flag (which can differ from the requested flag after
+    fallback). It does not receive row data.
 
     Returns
     -------
@@ -339,7 +352,7 @@ def make_train_test_split(
                 )
                 use_stratify = False
     try:
-        return train_test_split(
+        split = train_test_split(
             X,
             y,
             test_size=test_size,
@@ -354,6 +367,9 @@ def make_train_test_split(
         # so the module's typed-error contract holds for the whole
         # split, not just the pre-checked inputs.
         raise DataValidationError(f"invalid split configuration: {exc}") from exc
+    if on_split is not None:
+        on_split(use_stratify)
+    return split
 
 
 def remove_outliers_iqr(
@@ -550,3 +566,327 @@ def select_kbest_union(
     # Pure column subsets of the caller's frames -- never refit on the
     # test side (the notebook's leakage discipline).
     return X_train.loc[:, columns].copy(), X_test.loc[:, columns].copy(), columns
+
+
+# ---------------------------------------------------------------------------
+# (part5-continuation round 11, §13) the resumable chunked preprocessing
+# ---------------------------------------------------------------------------
+def apply_preprocessor_chunked(
+    frame: pd.DataFrame,
+    *,
+    impute_strategy: str = "median",
+    scale: bool = True,
+    encode_categorical: bool = False,
+    chunk_rows: int = 500,
+    progress: Callable[..., Any] | None = None,
+    checkpoint_dir: str | os.PathLike[str] | None = None,
+    checkpoint_every: int = 1,
+    checkpoint_resume: bool = True,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Fit the standard preprocessor and apply it CHUNK-WISE, resumably.
+
+    The last of the six §13 operation classes: for a table too large
+    to transform in one holding (the "large preprocessing jobs" of the
+    schema header), the standard :func:`build_preprocessor` pipeline
+    is fitted once on the full table, then applied ``chunk_rows`` rows
+    at a time.  The exactness contract rests on two verified
+    properties: the fit is DETERMINISTIC given the table (so a resume
+    refits and lands on the same state -- the fitted statistics are
+    never serialized, they are recomputed), and ``transform`` is
+    ROW-PURE (the transform of a slice equals the slice of the
+    transform -- verified in the round's recon).  The checkpoint is
+    therefore only the completed chunks' transformed rows: a resume
+    skips them bit-exactly and continues with the tail.
+
+    Parameters
+    ----------
+    frame:
+        The table to preprocess.  Non-numeric columns require
+        ``encode_categorical=True`` (otherwise they are, per
+        :func:`build_preprocessor`'s ColumnTransformer contract, only
+        passable when the flag is on -- the same validation the
+        pipeline itself applies).
+    impute_strategy, scale, encode_categorical:
+        Passed verbatim to :func:`build_preprocessor` -- they are the
+        config fingerprint's core (a different strategy refuses to
+        resume: exact restore or nothing).
+    chunk_rows:
+        Rows per chunk (default 500; >= 1 enforced).  The chunk is the
+        resume unit.
+    progress:
+        Optional ``report(done, total, note)`` callback per finished
+        chunk; returning ``False`` stops at the next chunk boundary
+        with :class:`~pharmaml.exceptions.JobCancelled` carrying the
+        partial ``(frame, report)`` on ``partial_results``.
+    checkpoint_dir:
+        Optional directory for the v2-envelope checkpoints.  One
+        checkpoint per ``checkpoint_every`` chunk boundaries carrying
+        every completed row's transformed vector (JSON float
+        round-trip is bit-exact in CPython), the column list, and the
+        config/dataset fingerprint (strategy knobs + column list +
+        dtypes + shape + a content checksum).  ``None`` keeps the
+        historical one-shot behaviour available (call
+        ``build_preprocessor().fit_transform`` directly).
+    checkpoint_every:
+        Chunk boundaries between checkpoint saves (default 1; >= 1
+        enforced).
+    checkpoint_resume:
+        When ``True`` (default) and ``checkpoint_dir`` is given,
+        resume from the newest valid fingerprint-matching checkpoint.
+        ``False`` still writes checkpoints but always computes from
+        scratch -- the fresh-run twin the proof suite compares
+        against.
+
+    Returns
+    -------
+    tuple
+        ``(frame, report)`` -- the transformed float frame (same row
+        order, ``get_feature_names_out`` columns) and a report dict
+        (``chunks``, ``rows``, ``columns``, ``resumed_from_chunks``,
+        ``fitted_steps``, ``checkpoint``).
+
+    Raises
+    ------
+    DataValidationError
+        Empty frame, a bad ``chunk_rows``/``checkpoint_every``, or a
+        non-numeric table without ``encode_categorical`` (the
+        pipeline's own contract).
+    JobCancelled
+        Cooperative stop: ``partial_results`` carries the partial
+        ``(frame, report)`` -- the completed rows transformed, the
+        pending rows absent.
+
+    Example
+    -------
+    >>> import numpy as np, pandas as pd
+    >>> from pharmaml.ml.preprocessing import apply_preprocessor_chunked
+    >>> table = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [2.0, 4.0, 6.0]})
+    >>> out, report = apply_preprocessor_chunked(table, chunk_rows=2)
+    >>> report["rows"], report["chunks"]
+    (3, 2)
+    >>> bool(np.isclose(out["a"].iloc[1], 0.0))     # the imputed median z-scores to 0
+    True
+    """
+    if frame.empty:
+        raise DataValidationError("the frame is empty -- nothing to preprocess")
+    if not isinstance(chunk_rows, int) or isinstance(chunk_rows, bool) or chunk_rows < 1:
+        raise ValueError(f"chunk_rows must be a positive int, got {chunk_rows!r}")
+    if (
+        not isinstance(checkpoint_every, int)
+        or isinstance(checkpoint_every, bool)
+        or checkpoint_every < 1
+    ):
+        raise ValueError(
+            f"checkpoint_every must be a positive int, got {checkpoint_every!r}"
+        )
+
+    from pharmaml.utils.checkpoint_schema import OperationSpec
+    from pharmaml.utils.checkpoints import CheckpointManager
+
+    # -- the pipeline: fitted ONCE, deterministically ------------------- #
+    # (a resume refits rather than deserializing sklearn state -- the
+    # fit is deterministic given the table, which the recon verified)
+    pipeline = build_preprocessor(
+        impute_strategy=impute_strategy,
+        scale=scale,
+        encode_categorical=encode_categorical,
+    )
+    fitted = pipeline.fit(frame)
+    columns_out = [str(c) for c in fitted.get_feature_names_out()]
+    total_rows = len(frame)
+    total_chunks = (total_rows + chunk_rows - 1) // chunk_rows
+
+    # -- the §13 checkpoint machinery ------------------------------------ #
+    manager: Any = None
+    spec: Any = None
+    config_fp = ""
+    if checkpoint_dir is not None:
+        try:
+            manager = CheckpointManager(
+                checkpoint_dir, name="preprocessing"
+            )
+            spec = OperationSpec(
+                operation_type="preprocessing",
+                operation_id=f"table-{total_rows}x{len(frame.columns)}",
+            )
+        except PersistenceError as exc:
+            _LOG.warning(
+                "checkpoint home unusable (%s); preprocessing without "
+                "checkpoints",
+                exc,
+            )
+            manager = None
+            spec = None
+
+        # the fingerprint: the strategy knobs (the config), the shape +
+        # column list + dtypes + a content checksum (the dataset) --
+        # any edit to the table refuses the resume (exact restore or
+        # nothing).  pandas' hash_pandas_object covers mixed dtypes
+        # (including category/string columns) and the index.
+        content = hashlib.sha256(
+            pd.util.hash_pandas_object(
+                frame, index=True
+            ).to_numpy().tobytes()
+        ).hexdigest()
+        config_fp = hashlib.sha256(
+            json.dumps(
+                {
+                    "impute_strategy": impute_strategy,
+                    "scale": scale,
+                    "encode_categorical": encode_categorical,
+                    "chunk_rows": chunk_rows,
+                    "columns": [str(c) for c in frame.columns],
+                    "dtypes": [str(frame[c].dtype) for c in frame.columns],
+                    "n_rows": total_rows,
+                    "content_sha256": content,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+
+    # -- the resume: completed chunks' rows are restored verbatim ------- #
+    done_rows: list[list[float]] = []
+    start_chunk = 0
+    resumed_chunks = 0
+    if manager is not None and checkpoint_resume:
+        try:
+            latest = manager.latest()
+        except OSError:  # pragma: no cover - scan failure
+            latest = None
+            _LOG.warning("checkpoint scan failed; starting fresh")
+        if latest is not None and latest.resumable:
+            st = latest.state
+            if st.get("config_fp") != config_fp:
+                _LOG.warning(
+                    "preprocessing checkpoint at step %d is for a different "
+                    "table/config; starting fresh (exact restore or nothing)",
+                    latest.step,
+                )
+            else:
+                try:
+                    done_rows = [
+                        [float(v) for v in row] for row in st["rows"]
+                    ]
+                    if len(done_rows) > total_rows:
+                        raise ValueError(
+                            f"ledger holds {len(done_rows)} rows for a "
+                            f"{total_rows}-row table"
+                        )
+                    if len(done_rows) == total_rows:
+                        # the run was already COMPLETE -- every chunk
+                        # restored, nothing left to transform
+                        start_chunk = total_chunks
+                    elif len(done_rows) % chunk_rows:
+                        # a partial ledger must be chunk-aligned (the
+                        # checkpoint fires on chunk boundaries only)
+                        raise ValueError(
+                            f"ledger holds {len(done_rows)} rows -- not "
+                            "chunk-aligned"
+                        )
+                    else:
+                        start_chunk = len(done_rows) // chunk_rows
+                    resumed_chunks = start_chunk
+                    if start_chunk and start_chunk < total_chunks:
+                        _LOG.info(
+                            "preprocessing resumed from checkpoint step %d "
+                            "(%d chunk(s) / %d row(s) already transformed)",
+                            latest.step,
+                            start_chunk,
+                            len(done_rows),
+                        )
+                    elif start_chunk == total_chunks:
+                        _LOG.info(
+                            "preprocessing checkpoint at step %d already "
+                            "holds the complete table (%d row(s)) -- "
+                            "nothing left to transform",
+                            latest.step,
+                            len(done_rows),
+                        )
+                except (KeyError, TypeError, ValueError) as exc:
+                    _LOG.warning(
+                        "checkpoint payload unreadable (%s); starting fresh",
+                        exc,
+                    )
+                    done_rows = []
+                    start_chunk = 0
+                    resumed_chunks = 0
+
+    def _save(step: int, note: str) -> None:
+        if manager is None or spec is None:
+            return
+        try:
+            manager.save(
+                step=step,
+                total=total_chunks,
+                state={"config_fp": config_fp, "rows": done_rows},
+                note=note,
+                operation=spec,
+            )
+        except (PersistenceError, OSError, TypeError, ValueError) as exc:
+            _LOG.warning(
+                "checkpoint write failed at %s (%s); continuing without it",
+                note,
+                exc,
+            )
+
+    # -- the chunk loop --------------------------------------------------- #
+    boundaries_since_save = 0
+    for chunk_index in range(start_chunk, total_chunks):
+        lo = chunk_index * chunk_rows
+        hi = min(lo + chunk_rows, total_rows)
+        block = fitted.transform(frame.iloc[lo:hi])
+        done_rows.extend(
+            [[float(v) for v in row] for row in np.asarray(block).tolist()]
+        )
+        if (
+            progress is not None
+            and progress(
+                chunk_index + 1 - start_chunk,
+                total_chunks - start_chunk,
+                "preprocessing chunks",
+            )
+            is False
+        ):
+            partial_frame = pd.DataFrame(done_rows, columns=columns_out)
+            partial_report = {
+                "chunks": len(done_rows) // chunk_rows,
+                "rows": len(done_rows),
+                "columns": columns_out,
+                "resumed_from_chunks": resumed_chunks,
+                "fitted_steps": [s for s, _ in fitted.steps],
+                "checkpoint": manager is not None,
+                "partial": True,
+            }
+            raise JobCancelled(
+                f"preprocessing cancelled after chunk "
+                f"{chunk_index + 1}/{total_chunks} -- stopped at a "
+                "chunk boundary by the caller",
+                partial_results=(partial_frame, partial_report),
+            )
+        boundaries_since_save += 1
+        if (
+            manager is not None
+            and spec is not None
+            and (
+                chunk_index >= total_chunks - 1
+                or boundaries_since_save >= checkpoint_every
+            )
+        ):
+            boundaries_since_save = 0
+            _save(
+                chunk_index + 1,
+                f"preprocessing {chunk_index + 1}/{total_chunks} chunks",
+            )
+
+    # -- the closing frame ------------------------------------------------ #
+    out = pd.DataFrame(done_rows, columns=columns_out)
+    report = {
+        "chunks": total_chunks,
+        "rows": total_rows,
+        "columns": columns_out,
+        "resumed_from_chunks": resumed_chunks,
+        "fitted_steps": [s for s, _ in fitted.steps],
+        "checkpoint": manager is not None,
+    }
+    return out, report

@@ -22,7 +22,7 @@ Examples
 >>> from pharmaml.ml.persistence import bundle_metadata, load_model, save_model
 >>> metadata = bundle_metadata("y=2x", "regression", features=["x"], metrics={"rmse": 0.0})
 >>> sorted(metadata)[:4]
-['best_params', 'features', 'metrics', 'name']
+['best_params', 'feature_distributions', 'feature_ranges', 'features']
 >>> "sklearn_version" in metadata        # provenance pins the training stack
 True
 >>> (metadata["name"], metadata["task"], metadata["features"], metadata["metrics"])
@@ -99,11 +99,34 @@ _LOG = get_logger(__name__)
 __all__ = [
     "ModelInputReport",
     "bundle_metadata",
+    "feature_ranges_from_frame",
     "load_model",
     "save_model",
     "validate_bundle_input",
     "write_metadata_sidecar",
 ]
+
+def feature_ranges_from_frame(
+    frame: Any, features: list[str] | None = None
+) -> dict[str, dict[str, float]]:
+    """Per-feature min/max box of a training frame (the applicability domain).
+
+    Records the range each numeric feature was fitted inside, so a saved
+    bundle can flag out-of-domain queries at inference time.  Non-numeric
+    columns are skipped (they are one-hot encoded inside the pipeline, so
+    their raw range is not a meaningful box).  When ``features`` is given,
+    only those columns are considered and their order is preserved.
+    """
+    columns = list(features) if features else list(frame.columns)
+    box: dict[str, dict[str, float]] = {}
+    for name in columns:
+        if name not in frame.columns:
+            continue
+        series = frame[name]
+        if getattr(series.dtype, "kind", "") in "iufc":
+            box[str(name)] = {"min": float(series.min()), "max": float(series.max())}
+    return box
+
 
 _BUNDLE_KEY_MODEL = "model"
 _BUNDLE_KEY_META = "metadata"
@@ -116,13 +139,21 @@ def bundle_metadata(
     best_params: dict[str, Any] | None = None,
     metrics: dict[str, Any] | None = None,
     target: str | None = None,
+    feature_ranges: dict[str, dict[str, float]] | None = None,
+    feature_distributions: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Assemble the provenance metadata block for a model bundle.
 
     ``target`` records the training target column name so inference
     callers (the CLI check, the playground's predict card) can drop it
     automatically when the scored CSV still carries it -- the same
-    convention the toolkit's own check flow documents.
+    convention the toolkit's own check flow documents.  ``feature_ranges``
+    records the per-feature training box (see
+    :func:`feature_ranges_from_frame`) so inference can flag rows outside
+    it without re-reading the training data; ``feature_distributions``
+    records the per-feature quantile sketch (see
+    :func:`pharmaml.ml.drift.feature_distributions_from_frame`) so a later
+    batch can be checked for distribution shift with no training frame.
     """
     return {
         "name": name,
@@ -135,6 +166,8 @@ def bundle_metadata(
         "best_params": best_params or {},
         "metrics": metrics or {},
         "target": target,
+        "feature_ranges": feature_ranges or None,
+        "feature_distributions": feature_distributions or None,
     }
 
 
@@ -147,6 +180,8 @@ def save_model(
     best_params: dict[str, Any] | None = None,
     metrics: dict[str, Any] | None = None,
     target: str | None = None,
+    feature_ranges: dict[str, dict[str, float]] | None = None,
+    feature_distributions: dict[str, dict[str, Any]] | None = None,
 ) -> Path:
     """Persist a fitted model plus its metadata bundle.
 
@@ -165,6 +200,14 @@ def save_model(
     target:
         Training target column name; inference-time audits drop it
         automatically when the scored CSV still carries it.
+    feature_ranges:
+        Per-feature training min/max box (see
+        :func:`feature_ranges_from_frame`); inference flags rows outside
+        it without re-reading the training data.
+    feature_distributions:
+        Per-feature quantile sketch (see
+        :func:`pharmaml.ml.drift.feature_distributions_from_frame`) so a
+        later batch can be drift-checked with no training frame.
 
     Returns
     -------
@@ -185,7 +228,14 @@ def save_model(
     bundle = {
         _BUNDLE_KEY_MODEL: model,
         _BUNDLE_KEY_META: bundle_metadata(
-            name, task, features, best_params, metrics, target=target
+            name,
+            task,
+            features,
+            best_params,
+            metrics,
+            target=target,
+            feature_ranges=feature_ranges,
+            feature_distributions=feature_distributions,
         ),
     }
     try:

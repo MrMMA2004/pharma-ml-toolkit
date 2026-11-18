@@ -626,7 +626,7 @@ export function BiologyPlayground() {
                           value: `${series?.scatter.gene ?? "gene"} (log2 expression)`,
                           position: "insideBottomRight",
                           offset: -2,
-                          fill: "#78716c",
+                          fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                           fontSize: 11,
                         }}
                       />
@@ -644,7 +644,7 @@ export function BiologyPlayground() {
                           angle: -90,
                           position: "insideBottomLeft",
                           offset: 18,
-                          fill: "#78716c",
+                          fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                           fontSize: 11,
                         }}
                       />
@@ -653,7 +653,7 @@ export function BiologyPlayground() {
                         content={<ScatterTooltip />}
                       />
                       <Legend
-                        wrapperStyle={{ fontSize: 11, color: "#78716c", paddingTop: 4 }}
+                        wrapperStyle={{ fontSize: 11, color: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"), paddingTop: 4 }}
                         iconSize={8}
                       />
                       {series?.groups.map((g) => (

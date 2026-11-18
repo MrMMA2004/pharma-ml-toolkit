@@ -705,6 +705,68 @@ class Optimizer:
     def _update(self, param: Tensor, grad: np.ndarray) -> None:  # pragma: no cover
         raise NotImplementedError
 
+    # -- checkpoint state (MASTER_PROMPT Part-3 §20.4 "optimizer state") ----- #
+
+    #: The per-subclass moment-buffer attributes a checkpoint must carry.
+    #: Every entry is a list of arrays shaped like the parameters; a
+    #: subclass that does not use one simply never sets it.
+    _STATE_ATTRS: tuple[str, ...] = ("_velocity", "_state", "_m", "_v", "_vmax")
+
+    def state_dict(self) -> dict[str, object]:
+        """The resumable optimizer state: step count + every moment buffer.
+
+        MASTER_PROMPT §20.4 names optimizer state explicitly: saving the
+        weights alone would resume a mid-flight Adam with zeroed moments
+        and a rewound bias correction -- the loss curve would jump.
+        """
+        state: dict[str, object] = {"step_count": int(self._step_count)}
+        for attr in self._STATE_ATTRS:
+            if hasattr(self, attr):
+                state[attr] = [np.asarray(buf).copy() for buf in getattr(self, attr)]
+        return state
+
+    def load_state_dict(self, state: dict[str, object]) -> None:
+        """Restore :meth:`state_dict` output onto freshly built buffers.
+
+        Raises
+        ------
+        ModelError
+            On a missing step count, a buffer-name mismatch, or any
+            buffer whose shape does not match the live parameters --
+            i.e. a checkpoint from a differently shaped network must
+            never be silently half-loaded.
+        """
+        if "step_count" not in state:
+            raise ModelError("optimizer state is missing 'step_count'")
+        raw_count = state["step_count"]
+        if not isinstance(raw_count, int) or isinstance(raw_count, bool):
+            raise ModelError(
+                f"optimizer state step_count must be an int, got {type(raw_count).__name__}"
+            )
+        self._step_count = raw_count
+        for attr in self._STATE_ATTRS:
+            if attr not in state:
+                continue
+            buffers = getattr(self, attr, None)
+            if buffers is None:
+                raise ModelError(
+                    f"optimizer state carries {attr!r} but this optimizer has none"
+                )
+            saved = state[attr]
+            if not isinstance(saved, list) or len(saved) != len(buffers):
+                raise ModelError(
+                    f"optimizer state {attr!r} has {len(saved) if isinstance(saved, list) else '?'} "
+                    f"buffers, expected {len(buffers)}"
+                )
+            for index, buf in enumerate(saved):
+                arr = np.asarray(buf, dtype=float)
+                if arr.shape != buffers[index].shape:
+                    raise ModelError(
+                        f"optimizer state {attr!r}[{index}] shape {arr.shape} "
+                        f"does not match the live parameter {buffers[index].shape}"
+                    )
+                buffers[index] = arr.copy()
+
 
 class SGD(Optimizer):
     """SGD with momentum, Nesterov and (L2) weight decay.

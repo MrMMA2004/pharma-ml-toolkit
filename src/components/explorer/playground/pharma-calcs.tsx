@@ -582,7 +582,7 @@ function AucCard() {
                   tickFormatter={fmtTick}
                   tickLine={false}
                   axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
-                  label={{ value: "time (h)", position: "insideBottomRight", offset: -2, fill: "#78716c", fontSize: 11 }}
+                  label={{ value: "time (h)", position: "insideBottomRight", offset: -2, fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"), fontSize: 11 }}
                 />
                 <YAxis
                   type="number"
@@ -738,7 +738,7 @@ function PdCard() {
                   tick={CHART.axisTick}
                   tickLine={false}
                   axisLine={{ stroke: CHART.gridStroke, strokeOpacity: 0.4 }}
-                  label={{ value: "concentration (log scale)", position: "insideBottomRight", offset: -2, fill: "#78716c", fontSize: 11 }}
+                  label={{ value: "concentration (log scale)", position: "insideBottomRight", offset: -2, fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"), fontSize: 11 }}
                 />
                 <YAxis
                   type="number"
@@ -754,7 +754,7 @@ function PdCard() {
                   formatter={(value) => fmtNum(Number(value), 4)}
                   labelFormatter={(label) => `C = ${fmtNum(Number(label), 3)}`}
                 />
-                <Legend wrapperStyle={{ fontSize: 12, color: "#78716c" }} />
+                <Legend wrapperStyle={{ fontSize: 12, color: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c") }} />
                 <ReferenceLine
                   x={ec50}
                   stroke={CHART.amber}

@@ -454,7 +454,7 @@ export function NcaPanel() {
                       value: "time (h)",
                       position: "insideBottomRight",
                       offset: -2,
-                      fill: "#78716c",
+                      fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                       fontSize: 11,
                     }}
                     tickFormatter={fmtTick}
@@ -470,7 +470,7 @@ export function NcaPanel() {
                       value: "C (mg/L)",
                       angle: -90,
                       position: "insideLeft",
-                      fill: "#78716c",
+                      fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                       fontSize: 11,
                     }}
                   />
@@ -492,7 +492,7 @@ export function NcaPanel() {
                       strokeDasharray="3 3"
                       label={{
                         value: "terminal",
-                        fill: "#78716c",
+                        fill: (typeof window === "undefined" ? "#78716c" : getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#78716c"),
                         fontSize: 10,
                         position: "insideTopLeft",
                       }}

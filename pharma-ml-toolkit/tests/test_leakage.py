@@ -48,7 +48,7 @@ TEXT_SUFFIXES = {
 #: — the same convention docs/LEAKAGE_AUDIT.md uses when it cites
 #: ``~/.venv/...``) and this test (the samples below assemble their
 #: prefixes at runtime so the guard's own source scans clean).
-_DOCUMENTERS = {"tests/test_leakage.py", "scratch/scrub_home_paths_137.py"}
+_DOCUMENTERS = {"tests/test_leakage.py", "tools/scrub_home_paths.py"}
 
 #: Transient RUN ARTIFACTS the guard does not scan: the junit xmls
 #: carry pytest's own recorded skip locations (absolute paths the
@@ -114,7 +114,7 @@ def test_the_scrub_contract_is_idempotent_documented() -> None:
     """The scrub tool exists, is excluded from the scan (it documents
     the patterns it kills), and says so — the convention
     LEAKAGE_AUDIT.md established for pattern-quoting docs."""
-    scrub = TOOLKIT_ROOT / "scratch" / "scrub_home_paths_137.py"
+    scrub = TOOLKIT_ROOT / "tools" / "scrub_home_paths.py"
     assert scrub.is_file(), "the scrub tool vanished"
     doc = scrub.read_text(encoding="utf-8")
     assert "Idempotent" in doc

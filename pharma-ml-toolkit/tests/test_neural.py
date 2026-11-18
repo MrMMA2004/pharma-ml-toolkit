@@ -22,6 +22,10 @@ import joblib
 import numpy as np
 import pandas as pd
 import pytest
+
+# the neural suite exercises the torch-backed estimators end to end;
+# without the optional deep extra there is nothing honest to assert
+pytest.importorskip("torch", reason="the neural suite needs the optional deep extra")
 from sklearn.base import clone
 from sklearn.datasets import make_blobs, make_classification
 from sklearn.exceptions import NotFittedError

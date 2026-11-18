@@ -130,6 +130,7 @@ const snapshot: SessionSnapshot = {
     elapsedSeconds: 0.4,
     rdkitVersion: "2026.09.1",
   },
+  ligands: null,
 };
 
 /* -- 1. the sketch bounds arithmetic ------------------------------------ */

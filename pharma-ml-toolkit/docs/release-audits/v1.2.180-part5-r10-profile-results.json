@@ -1,0 +1,96 @@
+{
+  "schema": "pharmaml-profile-results/2",
+  "generated_by": "part5-continuation round 10 (§13 second half) — the v1.2.180 ship from main",
+  "environment": {
+    "platform": "Linux 5.10 sandbox, offscreen Qt (QT_QPA_PLATFORM=offscreen via ui/headless.py EGL stub)",
+    "python": "3.12.16",
+    "stack": "PySide6 6.8.3, pyqtgraph 0.13.7, rdkit 2026.9.1, scikit-learn 1.5.2, numpy 1.26.4, torch 2.15.0+cpu, tqdm, openpyxl, python-docx"
+  },
+  "profiles": [
+    {
+      "name": "R10 audit battery (hpo ×4, generative-search proofs + regression, similarity ×2, descriptor-batch, docking-batch proofs + docking + campaign + engine-discovery + docking-prep regression, schema, tooling, numpy-neural, pipeline, notebook-variants, carriers + doctests)",
+      "command": "python -m pytest tests/test_hpo.py tests/test_hpo_presets.py tests/test_multiobjective_hpo.py tests/test_hpo_resumability.py tests/test_generative_search_resumability.py tests/test_generative.py tests/test_generative_result_sa.py tests/test_similarity.py tests/test_similarity_campaign_resumability.py tests/test_descriptor_batch_resumability.py tests/test_docking_batch_resumability.py tests/test_docking.py tests/test_campaign.py tests/test_engine_discovery_part5.py tests/test_docking_prep.py tests/test_checkpoint_schema.py tests/test_checkpoint_tooling.py tests/test_numpy_neural_checkpoints.py tests/test_ml_pipeline.py tests/test_notebook_variants.py tests/test_version_carriers.py src/pharmaml/ml/hpo.py src/pharmaml/generative/genetic.py src/pharmaml/chem/similarity.py src/pharmaml/docking/smiles_docking.py src/pharmaml/utils/checkpoint_schema.py src/pharmaml/utils/checkpoints.py --doctest-modules",
+      "outcome_counts": {
+        "passed": 1260,
+        "failed": 0,
+        "skipped": 2,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "notes": "run on main at the 1.2.180 bump, AFTER the notebook ritual completed (the round-8 scheduling rule); the 11-test docking-batch proof suite rides this battery, as do the docking regression suites (test_docking.py, test_campaign.py, test_engine_discovery_part5.py, test_docking_prep.py) guarding the historical behaviour of the touched module"
+    },
+    {
+      "name": "Ship safety + release portability",
+      "command": "python -m pytest tests/test_checkpoint_ship_safety.py tests/test_release_portability.py",
+      "outcome_counts": {
+        "passed": 16,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "notes": "post-bump sanity on main"
+    },
+    {
+      "name": "Notebook re-execution at ship (8/8)",
+      "command": "python tools/reexec_notebooks.py && python tools/strip_notebook_outputs.py",
+      "outcome_counts": {
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 0
+      },
+      "notes": "8/8 executed at pharmaml 1.2.180 in 171s; zero error outputs, zero home-path survivors; the 7 no-output twins regenerated; freshness + variants guards green in the audit battery"
+    },
+    {
+      "name": "Offscreen GUI battery (round-5 recorded evidence)",
+      "command": "python -m pytest tests/ -k gui --no-header -q",
+      "outcome_counts": {
+        "passed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "blocked": 0,
+        "not_executed": 532
+      },
+      "notes": "not executed this round; the round-5 recorded evidence (532/532 green at 1.2.174) carries the GUI leg; R10 touches no GUI code (the docking batch loop is headless)"
+    }
+  ],
+  "gates": [
+    {
+      "name": "ruff (full src + all six resumability suites + schema suite)",
+      "outcome": "passed",
+      "detail": "smiles_docking.py, checkpoint_schema.py and all touched test suites clean"
+    },
+    {
+      "name": "mypy src/pharmaml",
+      "outcome": "passed",
+      "detail": "217 files, zero errors"
+    },
+    {
+      "name": "Four-carrier version pin (round-263)",
+      "outcome": "passed",
+      "detail": "VERSION, pyproject, __version__, SHIPPED_TOOLKIT_VERSION all 1.2.180 in one change"
+    },
+    {
+      "name": "Notebook freshness",
+      "outcome": "passed",
+      "detail": "8/8 re-executed at 1.2.180, twins stripped, guard green"
+    }
+  ],
+  "backup_and_recovery": {
+    "status": "verified this round (push below re-verifies the remote)",
+    "evidence": "main carries R9 (afb1553) verified on the remote at round start; the R10 commit pushed to origin/main; the v1.2.180 zip written to all four homes",
+    "power_loss_recovery": "not verified by this round"
+  },
+  "limitations": [
+    "One §13 operation class remains pending (preprocessing) — it needs its own exact-restore proof round",
+    "The docking-batch exactness contract is PRESERVE, not re-execute: finished ligands' rows are restored verbatim from the ledger, and the bit-identity proof runs against a deterministic fake engine (a real Vina/AutoDock4 run is stochastic by nature and cannot be bit-repeated; the §14 archive audit pins the real engine checksums separately)",
+    "The preserved rows carry the original campaign-root paths (folder/output): a resume into a DIFFERENT out_dir keeps pointing at the original folders — the realistic resume is the same out_dir (the campaign folders are the durable artifacts), and the proof suite's fresh twins compare path-independent columns",
+    "The ligand ledger is keyed by index+smiles and the fingerprint covers the full smiles list, but the on-disk campaign folders are NOT fingerprinted: a resume after the user manually deleted a finished ligand's folder preserves the row (with its now-dangling folder path) rather than re-docking it",
+    "keep_folders=False sweeps the campaign root but not the checkpoint ledger: a resume then restores rows whose folder paths were recorded at sweep time; the interaction is sound (the sweep path is fingerprinted) but subtle",
+    "The threaded stop lands at wave barriers, not instantly: a stop request during a wave waits for that wave's subprocesses (minutes per ligand with real engines)",
+    "The GUI does not yet surface JobCancelled.partial_results or offer a resume action for any registered class — the API is library-side only",
+    "The offscreen GUI battery was not re-run for 180 (round-5 recorded evidence carries it; R10 touches no GUI code)"
+  ]
+}

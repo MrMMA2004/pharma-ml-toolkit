@@ -1,6 +1,6 @@
 """Molecular standardization and 3D ligand generation.
 
-Upgrades ``others/Docking/ligand generation/nigga.py`` and ``nigga2.py``
+Upgrades ``others/Docking/ligand generation/ligprep.py`` and ``ligprep2.py``
 into one typed, single-ligand entry point.  The legacy pipeline was:
 
 SMILES parse -> tautomer canonicalization
@@ -236,7 +236,7 @@ def smiles_to_pdb(
 ) -> PdbLigandReport:
     """Generate an optimised 3D PDB ligand from a SMILES string.
 
-    Full ``nigga.py`` pipeline, single-ligand edition: parse, optional
+    Full ``ligprep.py`` pipeline, single-ligand edition: parse, optional
     tautomer canonicalization, unsupported-metal screening, explicit
     hydrogens, ETKDG embedding of ``num_confs`` conformers, MMFF (or
     UFF fallback) optimisation of every conformer, and export of the

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/MrMMA2004/pharma-ml-toolkit/security/advisories/new
+    about: Report undisclosed security issues privately; do not open a public issue.
+  - name: Documentation and examples
+    url: https://github.com/MrMMA2004/pharma-ml-toolkit#examples-and-documentation
+    about: Check the notebooks, API index, user guide and chart example first.

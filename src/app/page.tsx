@@ -25,10 +25,13 @@ import {
   CommandPaletteTrigger,
 } from "@/components/explorer/command-palette";
 import { CardFinder } from "@/components/explorer/playground/card-finder";
-import { TABS, useToolkitStore } from "@/lib/store";
+import { TABS, TAB_DESCRIPTIONS, useToolkitStore } from "@/lib/store";
 import type { TabId } from "@/lib/store";
+import { useTabRouting } from "@/lib/tab-routing";
 import { cn } from "@/lib/utils";
-import { SHIPPED_TOOLKIT_VERSION } from "@/lib/toolkit-version"
+import { SHIPPED_TOOLKIT_VERSION } from "@/lib/toolkit-version";
+import { SHIPPED_FILE_COUNT, SHIPPED_SOURCE_LINES, SHIPPED_TEST_COUNT } from "@/lib/toolkit-stats";
+import { fmtInt } from "@/lib/format";
 
 const TAB_ICONS: Record<TabId, typeof LayoutDashboard> = {
   overview: LayoutDashboard,
@@ -57,12 +60,21 @@ function ThemeToggle() {
   );
 }
 
-const FALLBACK_STATS = { files: 785, lines: "262,615" };
+/* r267 (the arena/7e4a40b3 absorption): +19 files (5 new tools, 7 new
+ * test files, 2 new root scripts+test, checkpoint/docs rework), +120
+ * collect tests (5,035 total); census verified by the endpoint-rule walk
+ * (1129 = 1110 + 19 new; 348,052 as the live /api/toolkit/tree answers --
+ * countLines' split("\n").length rule) after the notebook re-execution. */
+const FALLBACK_STATS = { files: SHIPPED_FILE_COUNT, lines: fmtInt(SHIPPED_SOURCE_LINES) };
 
 export default function Home() {
   const tab = useToolkitStore((s) => s.tab);
   const setTab = useToolkitStore((s) => s.setTab);
   const stats = useToolkitStore((s) => s.stats);
+
+  /* (M-7) hash routing: #/playground/ml is shareable, Back/Forward
+   * navigate tabs instead of leaving the app. */
+  useTabRouting();
 
   /* Tabs behave like pages: always start a fresh tab at the top (also
    * keeps deep links to the code explorer from inheriting stale scroll). */
@@ -72,6 +84,14 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
+      {/* (M-8) keyboard users land on a 40+-control page; the skip link
+       * is the first focusable element and jumps past the whole header. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg focus:border focus:border-ring"
+      >
+        Skip to content
+      </a>
       {/* ------------------------------ Header ------------------------------ */}
       <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-2.5 sm:px-6 md:flex-row md:items-center md:justify-between md:gap-4">
@@ -113,6 +133,7 @@ export default function Home() {
                   type="button"
                   onClick={() => setTab(t.id)}
                   aria-current={active ? "page" : undefined}
+                  title={TAB_DESCRIPTIONS[t.id]}
                   className={cn(
                     "relative flex h-11 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4",
                     active
@@ -145,7 +166,7 @@ export default function Home() {
       </header>
 
       {/* ------------------------------ Main ------------------------------ */}
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+      <main id="main-content" className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
         <AnimatePresence mode="wait">
           <motion.div
             key={tab}
@@ -204,7 +225,7 @@ export default function Home() {
             {stats ? `${stats.files} files · ${stats.totalLines.toLocaleString("en-US")} LOC` : `${FALLBACK_STATS.files} files · ${FALLBACK_STATS.lines} LOC`}
             {" · "}
             <span className="ping-ring relative inline-flex size-2 rounded-full bg-primary" aria-hidden />
-            <span className="text-primary">4020 tests</span>
+            <span className="text-primary">{SHIPPED_TEST_COUNT} tests</span>
           </p>
         </div>
       </footer>

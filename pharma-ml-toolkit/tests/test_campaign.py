@@ -1,11 +1,12 @@
 """Unit tests for the docking-campaign additions: DPF/GPF generation
 (``others/dpfer.py``), campaign file management (``others/General/*``),
-the torsion-consistency audit (``ligand generation/niggamatch.py``) and
+the torsion-consistency audit (``ligand generation/ligprep_match.py``) and
 the config-driven Vina batch (``others/Vina/*``)."""
 
 from __future__ import annotations
 
 import logging
+import struct
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+import pharmaml.docking.smiles_docking as smiles_mod
 import pharmaml.docking.workflow as workflow_mod
 from pharmaml.docking.campaign import (
     cleanup_tree,
@@ -36,6 +38,7 @@ from pharmaml.docking.preparation import (
     write_dpf,
     write_gpf,
 )
+from pharmaml.docking.smiles_docking import dock_smiles_array
 from pharmaml.docking.workflow import (
     parse_vina_config,
     run_autodock4,
@@ -732,6 +735,8 @@ class TestRunVinaBatch:
 
         def fake_run(cmd, **_kwargs):
             commands.append(list(cmd))
+            Path(cmd[cmd.index("--out") + 1]).write_text("poses", encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, b"log", b"")
 
         monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
 
@@ -749,15 +754,13 @@ class TestRunVinaBatch:
             assert "--config" in cmd and str(conf) in cmd
             assert "--ligand" in cmd
             assert "--out" in cmd
-            assert "--log" in cmd
+            assert "--log" not in cmd
         ligands_used = [cmd[cmd.index("--ligand") + 1] for cmd in commands]
         assert sorted(Path(p).name for p in ligands_used) == ["1.pdbqt", "2.pdbqt"]
-        out_names = {cmd[cmd.index("--out") + 1] for cmd in commands}
-        assert out_names == {
-            str(out_dir / "1_out.pdbqt"), str(out_dir / "2_out.pdbqt"),
-        }
-        log_names = {cmd[cmd.index("--log") + 1] for cmd in commands}
-        assert log_names == {str(out_dir / "1.log"), str(out_dir / "2.log")}
+        out_names = {Path(cmd[cmd.index("--out") + 1]).name for cmd in commands}
+        assert out_names == {"1_out.pdbqt", "2_out.pdbqt"}
+        assert {result.log_file.name for result in results} == {"1.log", "2.log"}
+        assert all(result.log_file.read_bytes() == b"log" for result in results)
 
     def test_parallel_batch_produces_same_results(self, tmp_path, monkeypatch) -> None:
         conf = self._make_batch(tmp_path)
@@ -803,7 +806,7 @@ class TestRunVinaBatch:
 
 
 class TestVinaBatchResume:
-    """run_vina_batch(skip_existing=True): batch.py / niggavina.py resume.
+    """run_vina_batch(skip_existing=True): batch.py / batch_vina.py resume.
 
     The 2026-10 "new folder" upload's Vina_contol controllers: a ligand
     whose ``_out.pdbqt`` AND non-empty log already exist is not docked
@@ -833,8 +836,7 @@ class TestVinaBatchResume:
             commands.append(list(cmd))
             out = Path(cmd[cmd.index("--out") + 1])
             out.write_text("poses", encoding="utf-8")
-            log = Path(cmd[cmd.index("--log") + 1])
-            log.write_text("log", encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, b"log", b"")
 
         monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
 
@@ -858,7 +860,7 @@ class TestVinaBatchResume:
         assert commands[0][commands[0].index("--ligand") + 1].endswith("2.pdbqt")
 
     def test_zero_byte_log_means_crashed_and_is_redone(self, tmp_path, monkeypatch) -> None:
-        # niggavina.py's empty-log cleanup rule: an existing but EMPTY
+        # batch_vina.py's empty-log cleanup rule: an existing but EMPTY
         # log marks a crashed job -- the ligand must be docked again.
         conf = self._make_batch(tmp_path)
         commands: list[list[str]] = []
@@ -961,6 +963,8 @@ class TestRound2Fixes:
 
         def fake_run(cmd, **_kwargs):
             commands.append(list(cmd))
+            Path(cmd[cmd.index("--out") + 1]).write_text("poses", encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, b"log", b"")
 
         monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
 
@@ -968,8 +972,7 @@ class TestRound2Fixes:
         assert len(results) == 2 and all(r.ok for r in results)
         out_names = {Path(cmd[cmd.index("--out") + 1]).name for cmd in commands}
         assert out_names == {"l_out.pdbqt", "beta_l_out.pdbqt"}
-        log_names = {Path(cmd[cmd.index("--log") + 1]).name for cmd in commands}
-        assert log_names == {"l.log", "beta_l.log"}
+        assert {result.log_file.name for result in results} == {"l.log", "beta_l.log"}
 
     def test_collect_files_invalid_pattern_raises_docking_error(
         self, tmp_path
@@ -1137,6 +1140,8 @@ class TestRunAutodock4Completion:
             raise DockingError(f"executable {name!r} not found on PATH")
 
         monkeypatch.setattr(workflow_mod, "_require_executable", no_engine)
+        monkeypatch.setattr(workflow_mod, "_bundled_engine_dirs", lambda: ())
+        monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
         result = run_autodock4(work, skip_existing=True)
         assert result.ok is False
         assert result.log_file is None
@@ -1181,6 +1186,8 @@ class TestVinaBatchRunsInConfigDirectory:
 
         def fake_run(cmd, **kwargs):
             seen.append(kwargs.get("cwd"))
+            Path(cmd[cmd.index("--out") + 1]).write_text("poses", encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, b"log", b"")
 
         monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
         results = run_vina_batch(conf, ligands, out_dir=tmp_path / "out")
@@ -1220,7 +1227,7 @@ class TestVinaBatchProgress:
         assert (progress.total, progress.docked, progress.remaining) == (2, 1, 1)
 
     def test_zero_byte_log_is_not_docked(self, tmp_path) -> None:
-        # niggavina.py's crashed-job marker: the census must agree with
+        # batch_vina.py's crashed-job marker: the census must agree with
         # the run -- a zero-byte log means REDO, not skip.
         from pharmaml.docking.workflow import vina_batch_progress
 
@@ -1247,8 +1254,7 @@ class TestVinaBatchProgress:
         def fake_run(cmd, **_kwargs) -> None:
             out_pdbqt = Path(cmd[cmd.index("--out") + 1])
             out_pdbqt.write_text("poses", encoding="utf-8")
-            log = Path(cmd[cmd.index("--log") + 1])
-            log.write_text("log", encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, b"log", b"")
 
         monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
         before = vina_batch_progress(ligands, out)
@@ -1301,3 +1307,276 @@ class TestVinaBatchProgress:
 
         assert callable(vina_batch_progress)
         assert VinaBatchProgress.__name__ == "VinaBatchProgress"
+
+
+# --------------------------------------------------------------------- #
+# (100x-171) the .exe engine folder: vina.exe / autogrid4.exe / autodock4.exe
+# --------------------------------------------------------------------- #
+class TestEngineFolderResolution:
+    """locate_engine_binary / engine_argv: ONE folder of Windows builds.
+
+    The three uploaded executables -- ``vina.exe`` (PE32+), ``autogrid4.exe``
+    and ``autodock4.exe`` (PE32 i386) -- are the engines the campaign
+    runner must drive on machines where nothing is on PATH.  The resolver
+    checks the engine folder first, then PATH, then verified bundled engines;
+    both bare and ``.exe`` spellings are searched. A Windows PE binary on a
+    non-Windows host is routed through ``wine`` by its MZ magic, not by
+    its file name (renamed copies still route correctly).
+    """
+
+    def test_locate_finds_the_exe_in_the_engine_folder(self, tmp_path) -> None:
+        engines = tmp_path / "engines"
+        engines.mkdir()
+        (engines / "vina.exe").write_bytes(b"")
+        assert workflow_mod.locate_engine_binary("vina", engines) == engines / "vina.exe"
+
+    def test_locate_bare_name_wins_over_the_exe_spelling(self, tmp_path) -> None:
+        engines = tmp_path / "engines"
+        engines.mkdir()
+        (engines / "vina").write_bytes(b"")
+        (engines / "vina.exe").write_bytes(b"")
+        assert workflow_mod.locate_engine_binary("vina", engines) == engines / "vina"
+
+    def test_locate_falls_back_to_path_and_the_exe_spelling(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(
+            workflow_mod.shutil,
+            "which",
+            lambda name: f"/usr/local/bin/{name}" if name == "vina.exe" else None,
+        )
+        assert workflow_mod.locate_engine_binary("vina", tmp_path) == Path(
+            "/usr/local/bin/vina.exe"
+        )
+
+    def test_locate_missing_everywhere_returns_none(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
+        monkeypatch.setattr(workflow_mod, "_bundled_engine_dirs", lambda: ())
+        assert workflow_mod.locate_engine_binary("vina", tmp_path) is None
+
+    def test_engine_argv_routes_a_pe_binary_through_wine(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        engines = tmp_path / "engines"
+        engines.mkdir()
+        exe = engines / "vina.exe"
+        exe.write_bytes(b"MZ" + b"\x00" * 58 + struct.pack("<I", 64) + b"PE\x00\x00" + struct.pack("<H", 0x8664))
+        monkeypatch.setattr(workflow_mod.os, "name", "posix")
+        monkeypatch.setattr(
+            workflow_mod.shutil,
+            "which",
+            lambda name: "/usr/bin/wine" if name == "wine" else None,
+        )
+        assert workflow_mod.engine_argv("vina", engines) == ["/usr/bin/wine", str(exe)]
+
+    def test_engine_argv_pe_without_wine_is_an_actionable_error(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        engines = tmp_path / "engines"
+        engines.mkdir()
+        (engines / "vina.exe").write_bytes(b"MZ" + b"\x00" * 58 + struct.pack("<I", 64) + b"PE\x00\x00" + struct.pack("<H", 0x8664))
+        monkeypatch.setattr(workflow_mod.os, "name", "posix")
+        monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
+        with pytest.raises(DockingError, match="wine"):
+            workflow_mod.engine_argv("vina", engines)
+
+    def test_engine_argv_missing_in_folder_names_both_spellings(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
+        monkeypatch.setattr(workflow_mod, "_bundled_engine_dirs", lambda: ())
+        with pytest.raises(DockingError, match="engine folder"):
+            workflow_mod.engine_argv("vina", tmp_path / "engines")
+
+    def test_engine_argv_without_folder_keeps_the_path_only_gate(
+        self, monkeypatch
+    ) -> None:
+        # Preserve the historical PATH resolver hook for existing callers.
+        monkeypatch.setattr(
+            workflow_mod, "_require_executable", lambda name: f"/fake/bin/{name}"
+        )
+        assert workflow_mod.engine_argv("autodock4") == ["/fake/bin/autodock4"]
+
+
+class TestEngineFolderRuns:
+    """The runners launch the folder's .exe binaries -- argv[0] and all."""
+
+    def _record(self, monkeypatch) -> list[list[str]]:
+        commands: list[list[str]] = []
+        monkeypatch.setattr(
+            workflow_mod.subprocess,
+            "run",
+            lambda cmd, **_kwargs: commands.append(list(cmd)),
+        )
+        return commands
+
+    def test_run_vina_launches_the_folder_exe(self, tmp_path, monkeypatch) -> None:
+        engines = tmp_path / "engines"
+        engines.mkdir()
+        (engines / "vina.exe").write_bytes(b"")  # not a PE -> direct argv
+        receptor = tmp_path / "r.pdbqt"
+        receptor.write_text("ROOT\n", encoding="utf-8")
+        ligand = tmp_path / "l.pdbqt"
+        ligand.write_text("ATOM\n", encoding="utf-8")
+        commands = []
+        def fake_success(cmd, **_kwargs):
+            commands.append(list(cmd))
+            Path(cmd[cmd.index("--out") + 1]).write_text("fake pose", encoding="utf-8")
+        monkeypatch.setattr(workflow_mod.subprocess, "run", fake_success)
+        result = workflow_mod.run_vina(
+            receptor,
+            ligand,
+            tmp_path / "out.pdbqt",
+            center=(0.0, 0.0, 0.0),
+            size=(20.0, 20.0, 20.0),
+            engine_dir=engines,
+        )
+        assert result.ok
+        assert commands[0][0] == str(engines / "vina.exe")
+        assert commands[0][commands[0].index("--receptor") + 1] == str(receptor)
+
+    def test_run_vina_missing_folder_binary_raises_typed_error(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
+        monkeypatch.setattr(workflow_mod, "_bundled_engine_dirs", lambda: ())
+        with pytest.raises(DockingError, match="engine folder"):
+            workflow_mod.run_vina(
+                tmp_path / "r.pdbqt",
+                tmp_path / "l.pdbqt",
+                tmp_path / "out.pdbqt",
+                center=(0.0, 0.0, 0.0),
+                size=(20.0, 20.0, 20.0),
+                engine_dir=tmp_path / "engines",
+            )
+
+    def test_run_autodock4_launches_both_folder_exes(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        engines = tmp_path / "engines"
+        engines.mkdir()
+        (engines / "autogrid4.exe").write_bytes(b"")
+        (engines / "autodock4.exe").write_bytes(b"")
+        work = tmp_path / "01_lig"
+        work.mkdir()
+        (work / "r.gpf").write_text("ligand_types C\n", encoding="utf-8")
+        (work / "r.dpf").write_text("ligand_types C\n", encoding="utf-8")
+        commands: list[list[str]] = []
+
+        def fake_run(cmd, **_kwargs):
+            commands.append(list(cmd))
+            if cmd[0] == str(engines / "autogrid4.exe"):
+                (work / "r.glg").write_text("autogrid4 log\n", encoding="utf-8")
+            else:
+                (work / "r.dlg").write_text(
+                    "AutoDock4 log\n\nSuccessful Completion\n", encoding="utf-8"
+                )
+
+        monkeypatch.setattr(workflow_mod.subprocess, "run", fake_run)
+        result = run_autodock4(work, engine_dir=engines)
+        assert result.ok, result.error
+        assert [cmd[0] for cmd in commands] == [
+            str(engines / "autogrid4.exe"),
+            str(engines / "autodock4.exe"),
+        ]
+        assert commands[0][1:] == ["-p", "r.gpf", "-l", "r.glg"]
+        assert commands[1][1:] == ["-p", "r.dpf", "-l", "r.dlg"]
+
+    def test_run_vina_batch_launches_the_folder_exe(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        engines = tmp_path / "engines"
+        engines.mkdir()
+        (engines / "vina.exe").write_bytes(b"")
+        conf = tmp_path / "vina.conf"
+        conf.write_text("receptor = r.pdbqt\n", encoding="utf-8")
+        (tmp_path / "r.pdbqt").write_text("ROOT\n", encoding="utf-8")
+        ligands = tmp_path / "ligands"
+        ligands.mkdir()
+        (ligands / "l.pdbqt").write_text("ATOM\n", encoding="utf-8")
+        commands = []
+        def fake_success(cmd, **_kwargs):
+            commands.append(list(cmd))
+            Path(cmd[cmd.index("--out") + 1]).write_text("pose", encoding="utf-8")
+            return subprocess.CompletedProcess(cmd, 0, b"log", b"")
+        monkeypatch.setattr(workflow_mod.subprocess, "run", fake_success)
+        results = run_vina_batch(
+            conf, ligands, out_dir=tmp_path / "out", engine_dir=engines
+        )
+        assert all(result.ok for result in results)
+        assert commands[0][0] == str(engines / "vina.exe")
+
+    def test_run_one_threads_the_engine_folder_through(self, monkeypatch) -> None:
+        seen: dict[str, object] = {}
+
+        def fake_run_autodock4(directory, engine_dir=None):
+            seen["directory"] = directory
+            seen["engine_dir"] = engine_dir
+            return workflow_mod.DockingRunResult(Path(directory), True, None, 0.0)
+
+        monkeypatch.setattr(workflow_mod, "run_autodock4", fake_run_autodock4)
+        workflow_mod._run_one("/tmp/ligand_01", "/opt/engines")
+        assert seen == {"directory": "/tmp/ligand_01", "engine_dir": "/opt/engines"}
+
+
+class TestSmilesArrayEngineFolder:
+    """dock_smiles_array(engine_dir=...): the folder pre-flight + pass-through."""
+
+    def _receptor(self, tmp_path) -> Path:
+        receptor = tmp_path / "r.pdbqt"
+        receptor.write_text("ROOT\n", encoding="utf-8")
+        return receptor
+
+    def test_missing_everywhere_names_the_folder_option(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
+        monkeypatch.setattr(workflow_mod, "_bundled_engine_dirs", lambda: ())
+        with pytest.raises(DockingError, match="engine folder"):
+            dock_smiles_array(
+                ["CCO"],
+                self._receptor(tmp_path),
+                tmp_path / "out",
+                engine="vina",
+                engine_dir=tmp_path / "engines",
+            )
+
+    def test_folder_exes_pass_the_gate_and_reach_vina(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        engines = tmp_path / "engines"
+        engines.mkdir()
+        (engines / "vina.exe").write_bytes(b"")
+        seen: dict[str, object] = {}
+
+        def fake_smiles_to_pdbqt(smiles, folder, name="l", seed=0):
+            target = Path(folder)
+            target.mkdir(parents=True, exist_ok=True)
+            ligand = target / f"{name}.pdbqt"
+            ligand.write_text("ATOM  stub\n", encoding="utf-8")
+            return ligand
+
+        monkeypatch.setattr(smiles_mod, "smiles_to_pdbqt", fake_smiles_to_pdbqt)
+
+        def fake_run_vina(*args, **kwargs):
+            seen["engine_dir"] = kwargs.get("engine_dir")
+            out = Path(kwargs["out"])
+            out.write_text(
+                "REMARK VINA RESULT:    -5.2      0.000      0.000\nEND\n",
+                encoding="utf-8",
+            )
+            return workflow_mod.DockingRunResult(out.parent, True, out, 0.0)
+
+        monkeypatch.setattr(smiles_mod, "run_vina", fake_run_vina)
+
+        frame = dock_smiles_array(
+            ["CCO"],
+            self._receptor(tmp_path),
+            tmp_path / "out",
+            engine="vina",
+            engine_dir=engines,
+        )
+        assert seen["engine_dir"] == engines
+        assert len(frame) == 1
+        row = frame.iloc[0]
+        assert bool(row["ok"]) and float(row["best_score"]) == -5.2

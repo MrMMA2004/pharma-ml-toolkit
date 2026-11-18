@@ -4,6 +4,49 @@ _Last rebuilt 2026-11-02 after the rollback that ate rounds 180–182.
 Updated 2026-11-03 after a second rollback ate round 184, and again the
 same evening after a THIRD rollback ate the first round-185 ship._
 
+## 2026-11-06 — Arena research-catalog addendum (v1.2.114)
+
+The active Arena branch is `arena/2697c755-pharma-ml-toolkit`; no older Arena
+branch is part of this ship. The 140-repository disposition lives in
+`docs/GITHUB_RESEARCH_CATALOG_AUDIT.md`. The new computation is covered by 27
+focused tests and three module doctest groups. CI-style Ruff and mypy pass;
+all eight notebooks executed at 1.2.114; the full non-Tk suite exits 0 on the
+pinned NumPy 1.26.4 stack. This minimal Python build has no `tkinter` and the
+image has no Xvfb, so the four real-Tk and three stub-callback regression
+tests are retained but skipped, never reported as executed. Headless RDKit
+rendering required a temporary external XRender loader shim because the image
+also lacks `libXrender.so.1`; the shim is not part of the archive.
+
+## Release-restore safety (Part 5, phase 0)
+
+Before using `tools/checkpoint.py --restore`, back up the current working tree
+and the release archive independently. A restore overwrites files named in the
+archive and, after success, the existing `--restore` command invokes `--light`
+to commit changes under the toolkit tree. Do not use it concurrently with
+other writers. Use `--restore --dry-run` first; dry-run validates metadata and
+CRC and writes nothing, including when the tracked archive is missing locally.
+
+Restore validates paths, archive bounds, checksums and required version carriers,
+then stages content and verifies backups before replacing files. Normal caught
+failures trigger rollback and verify restored file contents, modes and mtimes.
+User files not represented by the ZIP are left alone. Default limits are 10,000
+members, 256 MiB per file, 2 GiB total and a compression ratio of 1,000; the
+`--max-members`, `--max-file-size`, `--max-total-size` and `--max-ratio`
+flags allow deliberate overrides. Restore requires the target and its sibling
+recovery directory to be on the same filesystem and rejects mounted subtrees.
+
+**This is not crash-atomic.** Power loss, forced termination, filesystem errors,
+or concurrent changes may leave a partial install. If rollback is incomplete,
+or a process dies mid-restore, preserve the sibling `.restore-recovery-*`
+directory, its `journal.json` and `backups/`, and make an independent copy
+before attempting manual recovery. Stop all writers and inspect the journal:
+`existing`, `backup_sha256`, `backup_metadata`, `attempted`, and `created_dirs`
+record the prior files and intended operations. Compare each backup hash before
+restoring; review any newly created files and directories individually rather
+than deleting unrelated data. There is no automatic restart-recovery command.
+Do not discard backups until contents and metadata have been verified. See the
+[Part 5 phase report](PART5_PHASE0_AUDIT.md) for verified and outstanding work.
+
 ## The standing zip-safety rule (2026-11-03, user instruction)
 
 *"After each round, save the zip file in a safe place so that rollback

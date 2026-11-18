@@ -7,7 +7,7 @@ about-centroid, TORSDOF and the full AutoDock4 GA parameter block) and
 repair), plus the ligand-folder conventions of
 ``ligand generation/*.py`` -- and (the 2026-10 "new folder" upload
 re-delivered it) the MGLTools batch converter of
-``ligand generation/niggaqt.py``:
+``ligand generation/ligprep_qt.py``:
 :func:`convert_pdb_folder_to_pdbqt` drives ``prepare_ligand4.py``
 over a folder of PDB files into the numbered-subfolder PDBQT tree,
 with the original's per-ligand timeout and conversion log.
@@ -73,6 +73,7 @@ import time
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
+from numbers import Integral, Real
 from pathlib import Path
 from typing import TypedDict
 
@@ -128,10 +129,13 @@ class GridBox:
     center_x/y/z:
         Box centre in Å.
     npts:
-        Number of grid points per axis.  AutoDock's fencepost
-        convention: ``points = Å / spacing + 1`` -- the end points sit
-        ON grid nodes, so the box edge length is ``(npts - 1) *
-        spacing`` (see the :attr:`size` property).
+        Values written to AutoGrid's ``npts`` directive. The legacy
+        :attr:`size` property treats these as grid-point counts, but the
+        bundled AutoGrid4 was observed to interpret ``npts 20`` as 21 grid
+        points. Consequently the legacy Vina size and the generated AutoGrid
+        span differ by one spacing interval for that tested even value.
+        Check engine logs and explicitly review box dimensions; the existing
+        calculation is retained for compatibility, not asserted equivalent.
     spacing:
         Grid spacing in Å (0.375 is the AutoDock default).
     """
@@ -146,19 +150,52 @@ class GridBox:
     def size(self) -> tuple[float, float, float]:
         """Box edge lengths in Å along (x, y, z).
 
-        Fencepost arithmetic: ``npts`` grid points at ``spacing`` span
-        ``(npts - 1) * spacing`` Å per axis -- 60 points at 0.375 Å
-        cover 22.125 Å, not 22.5 -- matching the AutoDock convention
-        documented on :attr:`npts`.  The value feeds Vina's
-        ``--size_x/y/z`` arguments via :meth:`as_vina_kwargs`.
+        Legacy calculation ``(npts - 1) * spacing`` per axis; feeds Vina's
+        ``--size_x/y/z`` via :meth:`as_vina_kwargs`. The bundled AutoGrid4
+        was observed to use one more grid point than the even ``npts`` value
+        in the GPF. Thus this legacy size is not necessarily the AutoGrid
+        span. It is retained unchanged to avoid silently changing Vina boxes.
         """
         return tuple(
             (n - 1) * self.spacing for n in self.npts
         )  # type: ignore[return-value]
 
-    def as_vina_kwargs(self) -> dict[str, float]:
-        """Centre/size mapping consumed by ``vina`` CLI arguments."""
-        size = self.size
+    @property
+    def autogrid_size(self) -> tuple[float, float, float]:
+        """Predicted AutoGrid span for positive, even interval counts.
+
+        The bundled engine was observed to use 21/31 grid points for 20/30
+        intervals. It silently reduced an odd 21 to 20 intervals. This method
+        rejects odd values instead of guessing, but does not establish engine
+        limits or validate a generated map: inspect its NELEMENTS, SPACING and
+        CENTER headers. This property does not change the legacy ``size``.
+        """
+        if (not isinstance(self.npts, (tuple, list)) or len(self.npts) != 3
+                or any(isinstance(n, bool) or not isinstance(n, Integral)
+                                       or n <= 0 or n % 2 for n in self.npts)):
+            raise DataValidationError("AutoGrid npts must contain three positive even integers")
+        if (isinstance(self.spacing, bool) or not isinstance(self.spacing, Real)
+                or not math.isfinite(self.spacing) or self.spacing <= 0):
+            raise DataValidationError("AutoGrid spacing must be finite and positive")
+        return tuple(float(n * self.spacing) for n in self.npts)  # type: ignore[return-value]
+
+    def as_vina_kwargs(self, *, convention: str = "legacy") -> dict[str, float]:
+        """Centre/size mapping for Vina; opt in to predicted AutoGrid span.
+
+        ``legacy`` preserves the historical ``(npts - 1) * spacing``. Pass
+        ``convention='autogrid'`` to use ``npts * spacing`` for positive even
+        npts; inspect the generated AutoGrid map headers before relying on
+        equivalence. This changes Vina's search space by one spacing interval.
+        """
+        if convention == "legacy":
+            size = self.size
+        elif convention == "autogrid":
+            if any(isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value)
+                   for value in (self.center_x, self.center_y, self.center_z)):
+                raise DataValidationError("AutoGrid center must contain three finite numbers")
+            size = self.autogrid_size
+        else:
+            raise DataValidationError("convention must be 'legacy' or 'autogrid'")
         return {
             "center_x": self.center_x,
             "center_y": self.center_y,
@@ -227,7 +264,7 @@ def compute_grid_box(
     ``npts`` is a per-axis *minimum*: each axis grows as needed so the
     box size ``(npts - 1) * spacing`` encloses the ligand extent plus
     ``2 * padding`` on that axis -- the default ``60 x 60 x 60`` at
-    0.375 A (22.5 A per axis) already covers drug-like ligands with the
+    0.375 A (22.125 A per axis using the legacy size) covers many ligands with the
     default padding, so growth only shows for large ligands or margins
     (round 100x-31: ``padding`` used to be validated and then silently
     ignored -- the box never grew).
@@ -340,6 +377,12 @@ def write_gpf(
     if not ligand.is_file():
         raise DockingError(f"ligand PDBQT not found: {ligand}")
     box = box or GridBox(0.0, 0.0, 0.0)
+    if any(isinstance(n, Integral) and not isinstance(n, bool) and n % 2 for n in box.npts):
+        warnings.warn(
+            "Odd AutoGrid npts may change the generated grid: the bundled AutoGrid4 "
+            "reduced a requested 21 to 20 intervals. Inspect the map header and log.",
+            UserWarning, stacklevel=2,
+        )
     ligand_types = extract_pdbqt_atom_types(ligand)
     if not ligand_types:
         raise DockingError(f"no atom types found in {ligand}")
@@ -759,7 +802,7 @@ def smiles_to_pdbqt(
     return target
 
 
-#: Default MGLTools interpreter path of ``niggaqt.py`` (the Windows
+#: Default MGLTools interpreter path of ``ligprep_qt.py`` (the Windows
 #: MGLTools-1.5.7 layout; override for any other installation).
 DEFAULT_MGL_PYTHON = r"C:\Program Files (x86)\MGLTools-1.5.7\python.exe"
 
@@ -783,7 +826,7 @@ def convert_pdb_folder_to_pdbqt(
 ) -> pd.DataFrame:
     """Batch-convert a folder of PDB files to PDBQT via MGLTools.
 
-    The ``others/Docking/ligand generation/niggaqt.py`` pipeline (the
+    The ``others/Docking/ligand generation/ligprep_qt.py`` pipeline (the
     2026-10 "new folder" upload re-delivered it): every ``.pdb`` under
     ``source_dir`` is converted with AutoDockTools'
     ``prepare_ligand4.py`` into a numbered sub-folder (``1``, ``2``,

@@ -113,7 +113,7 @@ from .diversity import (
 from .genetic import GeneticOptimizer, run_genetic_optimization
 from .mcts import MctsOptimizer, run_mcts_optimization
 from .pareto import ParetoFront, pareto_front
-from .result import GenerationResult
+from .result import GenerationResult, SAFilteredCandidates
 from .rl import ReinventOptimizer, run_rl_optimization
 from .rnn import SmilesRnn
 from .scaffold_hop import scaffold_hop_crossover
@@ -123,6 +123,7 @@ from .scoring import (
     MultiObjective,
     NoveltyObjective,
     QedObjective,
+    SAScoreObjective,
     ScoringObjective,
     SimilarityObjective,
     SubstructureObjective,
@@ -168,6 +169,8 @@ __all__ = [
     "QedObjective",
     "RawComponentObjective",
     "ReinventOptimizer",
+    "SAFilteredCandidates",
+    "SAScoreObjective",
     "ScaffoldSimilarityFilter",
     "ScoreTransform",
     "ScoringObjective",

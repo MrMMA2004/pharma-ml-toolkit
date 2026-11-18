@@ -8,7 +8,7 @@ stable anchor cells and inserts after them:
 * after the ``write_gpf`` cell (end of §4): the ``write_dpf`` cell
   (AutoDock4 parameter file, upgrades ``dpfer.py``) and the torsion-QA
   cell (``check_torsion_consistency`` / ``scan_torsion_consistency``,
-  upgrades ``niggamatch.py`` / ``mismatch2.py``),
+  upgrades ``ligprep_match.py`` / ``mismatch2.py``),
 * after the ``batch_run_directories`` cell (end of §6): the campaign
   housekeeping cell (``collect_files`` + ``reindex_by_number``, upgrades
   ``extaacer.py`` / ``Prettier_extracted_dlgs.py``),
@@ -53,7 +53,7 @@ for line in dpf.read_text().splitlines():
 TORSION_CELL_SOURCE = """\
 from pharmaml.docking import check_torsion_consistency, scan_torsion_consistency
 
-# Torsion QA (upgrades niggamatch.py / mismatch2.py): prepare_ligand4.py
+# Torsion QA (upgrades ligprep_match.py / mismatch2.py): prepare_ligand4.py
 # writes one active-torsion REMARK and one BRANCH record per rotatable
 # bond, plus a final TORSDOF total — the ligand is only valid when they
 # agree. The legacy scripts exported this audit to Excel with red fills;

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pharmaml"
-version = "1.2.106"
+version = "1.2.224"
 description = "A production-ready toolkit for QSAR machine learning, pharmaceutical calculations (PK/PD/dosage), and molecular-docking workflows."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -81,6 +81,32 @@ reports = [
     "fpdf2>=2.7,<3",  # the maintained PyPI name for the fpdf module
     # (the verified stack pins fpdf2 2.8.5 — see requirements.txt)
     "python-docx>=1.1",
+    # (r222 / Part-3 §17) the first-class TIFF/JPEG image-export
+    # surface (viz/export.py) — Pillow writes the lossless TIFFs
+    # (16-bit I;16, multi-page stacks, LZW/DEFLATE) and the quality-
+    # controlled JPEGs. Importing the toolkit stays dependency-free;
+    # only exporting needs it (same contract as matplotlib).
+    "Pillow>=10.0",
+]
+# Offscreen Studio testing; install alongside the pinned core stack when
+# reproducing CI. This does not install optional chemistry or docking packages.
+gui-test = [
+    "PySide6>=6.8,<7",
+    "pyqtgraph>=0.13.7,<0.14",
+    "qt-material>=2.17,<3",
+    "qdarkstyle>=3.2,<4",
+    "pytest>=7.4",
+    "pytest-qt>=4.5,<5",
+]
+# The desktop Studio GUI itself (r33 review C-3.2): `python studio.py`
+# needs the Qt stack, which is NOT part of the core library dependencies.
+# Install with: pip install ".[studio]"
+studio = [
+    "PySide6>=6.8,<7",
+    "pyqtgraph>=0.13.7,<0.14",
+    "qt-material>=2.17,<3",
+    "qdarkstyle>=3.2,<4",
+    "matplotlib>=3.7",
 ]
 dev = [
     "pytest>=7.4",
@@ -96,7 +122,7 @@ dev = [
 pharmaml = "pharmaml.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/example/pharma-ml-toolkit"
+Homepage = "https://github.com/MrMMA2004/pharma-ml-toolkit"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -106,6 +132,10 @@ pharmaml = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "src"]
+markers = [
+    "checkout_only: requires checkout-only files or Git remote metadata",
+    "web_checkout_only: requires companion Web Console source tree",
+]
 pythonpath = ["src"]
 # --doctest-modules (100x-22-c): every docstring example is a tested
 # contract -- a bare `pytest` (and CI) now collects the 19 doctest items
@@ -117,10 +147,12 @@ addopts = "-q --tb=short --doctest-modules"
 line-length = 100
 target-version = "py310"
 # scratch/ is the probe-history archive: one-off exploratory drivers kept
-# for provenance (and shipped in the ZIP tree for exactly that reason),
-# never part of the linted surface. Without this pin a bare
-# `ruff check .` reported ~200 pre-existing scratch findings and hid the
-# real signal — the green convention was `--exclude scratch` all along.
+# for provenance (in git, on disk — and EXCLUDED from release zips
+# since round 260 / MASTER_PROMPT part4 §4.3, which stopped the
+# research history riding the archive), never part of the linted
+# surface. Without this pin a bare `ruff check .` reported ~200
+# pre-existing scratch findings and hid the real signal — the green
+# convention was `--exclude scratch` all along.
 extend-exclude = ["scratch"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -128,6 +160,10 @@ extend-exclude = ["scratch"]
 # a `caplog.at_level()` context (and vice versa) to keep the restore-on-exit
 # guarantee visually explicit; collapsing the two `with` blocks hides that.
 "tests/*" = ["SIM117"]
+# FastAPI's canonical parameter declarations call File()/Form()/Depends()
+# at signature defaults — the framework reads the markers there by
+# design; the B008 warning is noise for route modules.
+"src/pharmaml/api/routes/*" = ["B008"]
 # Notebooks are published artefacts with committed outputs — they are reviewed
 # by hand, never auto-rewritten by formatters.
 "*.ipynb" = ["ALL"]

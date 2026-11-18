@@ -1,0 +1,71 @@
+# PharmaML Studio — the Windows installer build stack (part9 §10/§12).
+#
+# This is the FULL offline distribution's dependency set: every optional
+# feature group that the Studio's nine workspaces exercise is included
+# (the part9 rule: do not silently omit a capability to shrink the
+# installer).  Every pin below is the EXACT stack the toolkit's QA
+# chain runs green under on this repository's verified environment —
+# the same numbers as the toolkit's own requirements.txt core plus the
+# optional groups, resolved from the live venv that produced the
+# release evidence (round 271 gate: 6415 tests).
+#
+# Install order on the Windows build machine (see build_windows.ps1):
+#   1) the torch CPU wheel FIRST, from PyTorch's CPU-only index
+#      (the +cpu local-version tag does not resolve from PyPI):
+#        pip install torch==2.14.1+cpu --index-url https://download.pytorch.org/whl/cpu
+#   2) then this file:
+#        pip install -r installer-requirements.txt
+#   (torch is intentionally NOT listed below so the resolver never
+#   pulls the default GPU-flavoured wheel, which would triple the
+#   installer size for zero benefit on CPU-only target machines.)
+#
+# Python: 3.12 x64 (the verified interpreter family; >=3.10 is the
+# source contract, 3.12 is what the pinned stack was QA'd under).
+
+# ---- Core (required) ---------------------------------------------------
+numpy==1.26.4
+pandas==2.2.3
+scikit-learn==1.5.2
+scipy==1.14.1
+joblib==1.5.3
+openpyxl==3.1.5
+tqdm==4.67.1
+
+# ---- Cheminformatics (descriptors, fingerprints) ------------------------
+rdkit==2026.9.1            # dist-info normalized form of 2026.09.1
+mordred==1.2.0
+
+# ---- Docking preparation (SMILES -> PDBQT, receptor grids) --------------
+meeko==0.8.0
+gemmi==0.7.5
+
+# ---- Gradient-boosting families ----------------------------------------
+xgboost==2.1.3
+lightgbm==4.5.0
+catboost==1.2.8
+
+# ---- SHAP explanations (ml/explain.py TreeExplainer surface) ------------
+shap==0.54.1               # pulls numba==0.61.0 + llvmlite==0.44.0
+
+# ---- Deep learning -----------------------------------------------------
+# (torch==2.14.1+cpu installed separately — see header note.)
+
+# ---- SELFIES codec ------------------------------------------------------
+selfies==2.1.1
+
+# ---- Reports / figures / documents --------------------------------------
+matplotlib==3.10.9
+seaborn==0.13.2
+fpdf2==2.8.5
+python-docx==1.2.0
+Pillow==11.3.0
+
+# ---- The Studio GUI (PySide6 + the two stylesheet engines) -------------
+PySide6==6.8.3             # Essentials + Addons metapackage
+pyqtgraph==0.13.7
+qt-material==2.17
+qdarkstyle==3.2.3
+
+# ---- Packaging tools (build-venv only; never shipped in the installer) --
+pyinstaller>=6.10,<7       # version recorded into RELEASE_MANIFEST.json at build time
+pyinstaller-hooks-contrib>=2024.10
