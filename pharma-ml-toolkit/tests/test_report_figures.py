@@ -36,7 +36,10 @@ def test_add_image_embeds_the_files_own_bytes(real_png, tmp_path) -> None:
     report = HTMLReport("t")
     report.add_image(real_png, caption="the curve")
     out = report.save(tmp_path / "r.html")
-    html = out.read_text()
+    # r297: the report is written UTF-8 (viz/report.py's own encodings)
+    # -- the unencoded read rode the locale codec (cp1252) and died at
+    # the first multi-byte continuation.
+    html = out.read_text(encoding="utf-8")
     expected = base64.b64encode(real_png.read_bytes()).decode()
     assert f"data:image/png;base64,{expected}" in html
     assert "<figcaption>the curve</figcaption>" in html
@@ -71,7 +74,8 @@ def test_run_report_embeds_recorded_figures(real_png, tmp_path) -> None:
         },
     }
     out = build_run_report(record).save(tmp_path / "report.html")
-    html = out.read_text()
+    # r297: same UTF-8 read as the embed test above.
+    html = out.read_text(encoding="utf-8")
     # the real file is embedded
     expected = base64.b64encode(real_png.read_bytes()).decode()
     assert f"data:image/png;base64,{expected}" in html

@@ -192,5 +192,10 @@ def _jsonable(obj: Any) -> Any:
     if isinstance(obj, np.ndarray):
         return obj.tolist()
     if isinstance(obj, Path):
-        return str(obj)
+        # as_posix (r297): run records are cross-platform stable
+        # documents -- str() would freeze Windows backslashes into
+        # them (the studio-evidence pin read '\\tmp\\x.png' where
+        # '/tmp/x.png' was recorded); POSIX renderings are identical
+        # to str() so no Linux record changes.
+        return obj.as_posix()
     raise TypeError(f"not JSON-serializable: {type(obj).__name__}")

@@ -9,9 +9,11 @@ from pharmaml.ml.provenance import compare_manifests, experiment_manifest
 
 def test_manifest_comparison_and_changed_input(tmp_path):
     path = tmp_path / "data.csv"
-    path.write_text("a\n1\n")
+    # r297: raw bytes -- write_text CRLF-translates on Windows and the
+    # manifest's size_bytes pin (4 B for "a\n1\n") would read 6 there.
+    path.write_bytes(b"a\n1\n")
     before = experiment_manifest(path, parameters={"model": "ridge"}, split_strategy="scaffold")
-    path.write_text("a\n2\n")
+    path.write_bytes(b"a\n2\n")
     after = experiment_manifest(path, parameters={"model": "ridge"}, split_strategy="scaffold")
     changes = compare_manifests(before, after)
     assert not changes["same_dataset_sha256"]

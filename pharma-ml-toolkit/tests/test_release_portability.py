@@ -64,7 +64,13 @@ def test_standalone_archive_profile(tmp_path: Path) -> None:
         cwd=standalone, env=env, text=True, capture_output=True, check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "2 skipped" in result.stdout, result.stdout + result.stderr
+    # r297: the standalone profile's skip count is platform-honest -- the
+    # data-provenance builder's byte-exact --check roundtrip is a Linux
+    # reproducibility pin (skipif(nt), r296-iter3), so the standalone
+    # archive shows its third skip on the Windows runner.
+    assert f"{3 if os.name == 'nt' else 2} skipped" in result.stdout, (
+        result.stdout + result.stderr
+    )
     web_guard = subprocess.run(
         base + ["tests/test_web_parity.py::TestSessionReportKeyboard::test_the_pin_contract_is_a_toggle"],
         cwd=standalone, env=env, text=True, capture_output=True, check=False,
