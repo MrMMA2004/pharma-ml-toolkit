@@ -25,12 +25,30 @@ the prefixed `uses:` paths so the 25-step order executes correctly
 against the nested checkout topology; the 9th drift guard pins the
 registration. The §46.9 "Windows x64 installer EXE generated" row's
 workflow evidence is now REAL (registered + topology-correct); its
-execution remains BLOCKED twice over — no Windows host in this
-sandbox, and the account's runner provisioning itself is currently
-failing (run 44467151243: all 13 ci.yml jobs dead in ~3 s at queue
-time, no runner assigned — the account-level Actions/billing state
-is outside this sandbox's control; see
+execution stayed BLOCKED through round 297 twice over — no Windows
+host in this sandbox, and the account's runner provisioning itself
+was failing (run 44467151243: all 13 ci.yml jobs dead in ~3 s at
+queue time, no runner assigned — the account-level Actions/billing
+state was outside this sandbox's control; see
 `packaging/windows/TAURI_RELEASE_PIPELINE.md`'s round-293 note).
+
+**Round 298 update — the execution lane is OPEN.** The owner made the
+repository public (Actions free on public repositories, Windows
+runners included), the runner supply recovered, and the r294–r297
+bring-up arc (17 iterations, each failure decoded at root cause)
+ended in the first all-green execution: run 44553307816 (head
+`7f241a4a`, 33 min on a real windows-2022 runner) built the NSIS
+Setup EXE + the WiX MSI with the embedded offline WebView2, froze
+and live-verified the sidecar ON Windows, and generated the SHA-256
+checksums on the runner itself (`a385853c…c210` EXE, `69da2837…130d`
+MSI). The `v1.2.230` tag build (run 44566101809) attaches
+EXE/MSI/SHA256SUMS/RELEASE_MANIFEST to the GitHub Release —
+part11_2 §9's artifact delivery. Five §46 rows flip from BLOCKED to
+PASS on that execution evidence (the §46.7 sidecar-start row and
+four §46.9 rows below); everything clean-machine stays BLOCKED by
+the addendum's own rule — a runner is a build environment, not a
+clean machine. The verdict line moves to **73 PASS · 1 PARTIAL · 19
+BLOCKED · 1 NOTAPPLICABLE**.
 **Spec:** MASTER_PROMPT part11_1 §46
 (Final Acceptance Criteria) with part11_2 §12's status labels.
 **Method:** every criterion below is checked against live evidence from
@@ -170,7 +188,7 @@ Labels: **PASS** · **PARTIAL** · **FAIL** · **BLOCKED** · **NOTAPPLICABLE**.
 | Production frontend needs no dev server | static build + local asset loading; dev proxy is dev-only | PASS |
 | No external browser / CDN / remote URL required | CSP + no-CDN gates | PASS |
 | Tauri capabilities/permissions restricted | the least-privilege capability + the single IPC command | PASS |
-| Python backend sidecar starts correctly | the PHARMAML-READY handshake contract + sidecar spec | PASS (contract tests; Windows runtime BLOCKED) |
+| Python backend sidecar starts correctly | the PHARMAML-READY handshake contract + sidecar spec — **executed**: run 44553307816 step 13 verified the frozen sidecar live ON Windows (handshake port/pid, authenticated health, the guard refusing the unauthenticated probe, the CTRL_BREAK graceful shutdown exiting 0) | PASS (contract tests + the Windows runner's live verification) |
 | Backend process lifecycle reliable | as 46.2 | PASS |
 | WebView2 available through the offline strategy | `webviewInstallMode: offlineInstaller` (NSIS + MSI targets) + workflow step 19 | PASS (config, drift-guarded) / BLOCKED (clean-machine runtime verification) |
 | Application works without internet access | the offline CSP + local lanes; dev-verified flows | PASS (Linux-side); the clean-Windows offline test rides the runner |
@@ -192,13 +210,13 @@ Labels: **PASS** · **PARTIAL** · **FAIL** · **BLOCKED** · **NOTAPPLICABLE**.
 
 | Criterion | Evidence | Status |
 |---|---|---|
-| Windows x64 installer EXE generated | `.github/workflows/windows-release.yml` (25 steps, windows-2022) + NSIS target — now REGISTERED at the repository root with the correct nested-checkout topology (r293's registration fix + its 9th drift guard) | BLOCKED (needs the Windows runner AND the account's runner provisioning restored; the workflow is registered + drift-guarded) |
-| MSI generated where required | the MSI target in tauri.conf + workflow step 18 | BLOCKED (same) |
-| Installer includes the complete application | the spec bundles backend + frontend + engines + resources | PASS (spec) / BLOCKED (exec.) |
-| Installer works offline | WebView2 offlineInstaller mode + no-bootstrapper rule | PASS (config) / BLOCKED (exec.) |
+| Windows x64 installer EXE generated | `.github/workflows/windows-release.yml` (25 steps, windows-2022) — **executed**: run 44553307816 (r297-iter17, head 7f241a4a) built `PharmaML_Studio_Setup_v1.2.229.exe` on a real runner; the v1.2.230 tag build (run 44566101809) attaches the EXE/MSI/SHA256SUMS/manifest to the GitHub Release | PASS (the r294–297 bring-up arc + the first all-green execution; the ~1.1 GB artifact bundle uploaded) |
+| MSI generated where required | the WiX MSI target — **executed** in the same run (`PharmaML_Studio_v1.2.229.msi`, runner-generated SHA-256 `69da2837…130d`) | PASS (execution) |
+| Installer includes the complete application | the spec bundles backend + frontend + engines + resources — **executed**: the runner's artifact validation (step 20, the 26/26 static gate) + the staged onedir tree (the directory-key resource mapping, r297-iter16) | PASS (spec + execution) |
+| Installer works offline | WebView2 offlineInstaller mode + no-bootstrapper rule — the offline runtime EMBEDDED by the executed build (the NSIS/MSI both carry it) | PASS (config + build execution) / BLOCKED (clean-machine install behavior) |
 | Build reproducible | pinned actions + lockfiles + version lockstep gate | PASS (workflow) |
-| Application version correct | VERSION == tauri.conf == package.json (1.2.228, guard-pinned) | PASS |
-| SHA-256 checksums generated | the workflow's step 22 + `packaging_audit.py --manifest` | PASS (tooling) / BLOCKED (exec.) |
+| Application version correct | VERSION == tauri.conf == package.json (1.2.230, guard-pinned) | PASS |
+| SHA-256 checksums generated | the workflow's step 22 + `packaging_audit.py --manifest` — **executed ON the runner**: `a385853c…c210` (EXE) · `69da2837…130d` (MSI) · `7d2e9b7f…d8b` (manifest) | PASS (tooling + execution) |
 | No Python/conda/pip/Node/npm/Qt/RDKit installs required | the sidecar spec + frontendDist + engines bundling | PASS (spec) / BLOCKED (clean-machine exec.) |
 | Externals handled per licenses | engines/ NOTICE files + THIRD_PARTY_LICENSES generation | PASS |
 | No developer-specific env/paths | the activation contract (data dir) + workflow hygiene | PASS |
@@ -211,8 +229,12 @@ Labels: **PASS** · **PARTIAL** · **FAIL** · **BLOCKED** · **NOTAPPLICABLE**.
 
 ## Verdict
 
-**68 PASS · 1 PARTIAL · 0 FAIL · 24 BLOCKED (all Windows-runner-gated
-executions) · 1 NOTAPPLICABLE** across §46.1–§46.9.
+**73 PASS · 1 PARTIAL · 0 FAIL · 19 BLOCKED (the clean-machine
+executions) · 1 NOTAPPLICABLE** across §46.1–§46.9 — the round-298
+update: five Windows-runner-gated rows flipped to PASS on the first
+real pipeline execution (run 44553307816 + the v1.2.230 tag build
+44566101809); the remaining BLOCKED set is exactly the clean-machine
+verification part11_2 §10/§12 reserves for a real Windows machine.
 
 The remaining PARTIAL disposition:
 

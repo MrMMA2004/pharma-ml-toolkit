@@ -16000,3 +16000,91 @@ Stage-4 parity gate stands PASS; Stage-5 (the PySide6 retirement) and
 real release — the two BLOCKED lanes, honestly labeled per part11_2
 §12. Everything committed and pushed at close; the guard cron
 (MASTER_PROMPT-2h-sync-100x, job 533878) continues its 2-hour cadence.
+
+---
+
+## Round 298 — part11 first priority: the Windows release DELIVERED — the public-repo unlock, the provenance hardware lottery closed, v1.2.230 tagged (run 89)
+
+**The rollback recovery (7th):** the object DB sat at `2eb0ede` again
+with the working tree surviving at the r293-era state, `~/.github_token`
+and the origin remote gone, the venv back on numpy 2.1.3 without the
+scientific eight. The PAT re-spliced from `upload/MASTER_PROMPT.pdf`
+via the two-line join (the round-292 protocol, `pat_recover_222.py`);
+the remote re-established with the token URL; the protective squash
+(`c807beac`) onto the stale baseline with the hardened `.gitignore`
+copied from the remote tree first; the blob-level lossless proof — the
+16-file diff decomposed into exec-bit-only noise, the accidentally
+tracked `.env`, ancient v1.2.103/105/106 zips, `__pycache__`, and the
+OLD subtree copy of `windows-release.yml` (the pre-r293 location) —
+nothing local newer than remote; `reset --hard origin/main` at
+`7f241a4a`; the venv repaired foreground (VENV-REPAIR-DONE ·
+STUDIO-REPAIR-DONE, pharmaml 1.2.229).
+
+**The find:** the owner had flipped the repository PUBLIC — Actions
+free on public repositories (Windows runners included) — and the
+runner supply recovered. The r294–r297 session (17 iterations, runs
+44512066853 → 44553307816) had already taken the authored pipeline to
+its first all-green execution on a real windows-2022 runner: the
+NSIS `PharmaML_Studio_Setup_v1.2.229.exe` + the WiX MSI with the
+embedded offline WebView2, the PyInstaller sidecar frozen and
+LIVE-VERIFIED on Windows (the PHARMAML-READY handshake, the
+authenticated health probe, the guard, the CTRL_BREAK graceful
+shutdown), the first real MSVC compile of the Tauri 2 Rust host, and
+the SHA256SUMS generated ON the runner (`a385853c…c210` EXE,
+`69da2837…130d` MSI, `7d2e9b7f…d8b` manifest) — the ~1.1 GB artifact
+bundle uploaded. C-4's execution lane: CLOSED. The one red dot in
+the post-public CI: the `Generative SA` job's data-provenance drift.
+
+**The diagnosis (the hardware lottery):** the byte-exact
+`--check` round-trip passed on this sandbox AND nine straight CI
+runners, then failed on runner `1000002660` with the SAME tree and
+pinned wheels — `tests/test_data_provenance.py::
+test_check_mode_reports_no_drift` reporting four drifted CSVs
+(`qsar_multiclass`, `qsar_regression`, `walkthrough_classification`,
+`walkthrough_multiclass`) while every Generator-only file stayed
+byte-identical. The triangulation: numpy's manylinux OpenBLAS is
+`DYNAMIC_ARCH` — it selects a CPU-specific dgemm kernel at run time,
+and GitHub's mixed Intel/AMD fleet shifts the ~15th significant
+digit of exactly the BLAS-exposed tables (the
+`make_classification` internals + the `informative @ true_weight`
+matmul). Thread counts were already capped at 1 by the builder; the
+CPU kernel is the only remaining variable.
+
+**The fix (f71b727b):** the builder now rounds the four BLAS-exposed
+tables to 6 decimals at build time (`_round_frame`) — the kernel
+noise (< 5e-7 per value) is absorbed, the output is byte-identical on
+every x86-64 CPU, the census pins hold exactly (125/102/79/54), and
+the regeneration touched exactly the four intended files (40 others
+verified unchanged). Local gates: the provenance suite 32 tests exit
+0, the standalone-archive portability profile exit 0, ruff clean.
+
+**The release (v1.2.230):** the seven carriers bumped atomically —
+VERSION, `pyproject.toml`, `__init__.py`, `tauri.conf.json` +
+`frontend/package.json`, the web `SHIPPED_TOOLKIT_VERSION`, and
+`version_info.txt`'s quadruple AND its display strings (stale at
+1.2.218 since five releases — now in lockstep). The CHANGELOG's
+[1.2.230] entry records the full arc (the r294–297 bring-up, the
+hardware-stability fix, this tag). Main pushed as `11503821`; the
+tag `v1.2.230` pushed, triggering the tag build (run 44566101809)
+whose step 23b attaches the EXE/MSI/SHA256SUMS/RELEASE_MANIFEST to
+the GitHub Release — part11_2 §9's artifact delivery, the lane the
+Blocker Register's unblock checklist step 2 described. Gates at the
+tag: 7 carrier guards, 9 windows-pipeline guards, the 26/26 static
+packaging gate.
+
+**The registers updated:** `docs/ACCEPTANCE_SWEEP.md` — the
+round-298 addendum: five §46 rows flip from BLOCKED to PASS on the
+execution evidence (the §46.7 sidecar-start row with the live Windows
+verification, and the four §46.9 rows: EXE generated, MSI generated,
+installer includes the complete application, SHA-256 generation);
+the verdict moves to **73 PASS · 1 PARTIAL · 19 BLOCKED · 1
+NOTAPPLICABLE**. Everything clean-machine stays BLOCKED by
+part11_2 §12's own rule — a runner is a build environment, not a
+clean machine.
+
+**What remains:** the tag build's conclusion and the GitHub Release
+asset verification (monitoring at close); then exactly the Blocker
+Register's steps 3–4: the clean-machine smoke test on any real
+Windows 10/11 x64 (dissolves C-3/C-5, fills §47's rows 38–48) and
+only then the §28 Stage-5 PySide6 retirement. The dev server / route
+re-verified (200).

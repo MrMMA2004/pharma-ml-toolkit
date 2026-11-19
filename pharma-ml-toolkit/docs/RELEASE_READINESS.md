@@ -65,10 +65,10 @@ bulk and no skipped test is claimed as passed.
 
 ## 4. Version carriers (§15)
 
-- VERSION: `1.2.229`
-- pyproject.toml: `1.2.229`
-- src/pharmaml/__init__.py: `1.2.229`
-- CHANGELOG.md leads with: `1.2.229`
+- VERSION: `1.2.230`
+- pyproject.toml: `1.2.230`
+- src/pharmaml/__init__.py: `1.2.230`
+- CHANGELOG.md leads with: `1.2.230`
 - Agreement: **yes**
 
 ## 5. Release-archive verification (§14)
