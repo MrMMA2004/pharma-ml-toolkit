@@ -168,14 +168,19 @@ def count_suites() -> dict[str, int]:
 
 def probe_versions() -> dict[str, str]:
     out = {}
-    out["VERSION"] = (TK / "VERSION").read_text().strip()
-    pyproject = (TK / "pyproject.toml").read_text()
+    # encoding="utf-8" (r297): read_text() defaults to the locale codec
+    # on Windows (cp1252) and every carrier below carries UTF-8 beyond
+    # ASCII — CHANGELOG.md's round notes die at byte 0x81 on the runner
+    # with UnicodeDecodeError (charmap). The carriers are UTF-8 files by
+    # authorship; the reads now say so.
+    out["VERSION"] = (TK / "VERSION").read_text(encoding="utf-8").strip()
+    pyproject = (TK / "pyproject.toml").read_text(encoding="utf-8")
     m = re.search(r'^version = "(.*?)"', pyproject, re.MULTILINE)
     out["pyproject.toml"] = m.group(1) if m else "MISSING"
-    init = (TK / "src/pharmaml/__init__.py").read_text()
+    init = (TK / "src/pharmaml/__init__.py").read_text(encoding="utf-8")
     m = re.search(r'^__version__ = "(.*?)"', init, re.MULTILINE)
     out["src/pharmaml/__init__.py"] = m.group(1) if m else "MISSING"
-    changelog = (TK / "CHANGELOG.md").read_text()
+    changelog = (TK / "CHANGELOG.md").read_text(encoding="utf-8")
     m = re.search(r"^## \[(.*?)\]", changelog, re.MULTILINE)
     out["CHANGELOG.md leads with"] = m.group(1) if m else "MISSING"
     versions = {v for k, v in out.items() if k != "CHANGELOG.md leads with"}
@@ -192,7 +197,7 @@ def find_audit_report() -> dict[str, str]:
         # look beside the freshest zip in the outer workspace upload/
         return {"status": "not gathered",
                 "how": "tools/audit_release.py <zip> after tools/build_zip.py"}
-    data = json.loads(report.read_text())
+    data = json.loads(report.read_text(encoding="utf-8"))
     return {
         "status": "passed" if data.get("archive_checks_passed") else "FAILED",
         "checks": str(len(data.get("checks", {}))),
@@ -321,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
             chunk, result = pair.split("=", 1)
             r.recorded_runs[chunk] = result
     if args.audit_report and args.audit_report.exists():
-        data = json.loads(args.audit_report.read_text())
+        data = json.loads(args.audit_report.read_text(encoding="utf-8"))
         r.archive_audit = {
             "status": "passed" if data.get("archive_checks_passed") else "FAILED",
             "checks": str(len(data.get("checks", {}))),

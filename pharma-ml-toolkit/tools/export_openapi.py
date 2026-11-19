@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
         if not CONTRACT.exists():
             print("FAIL: no committed contract — run the export once")
             return 1
-        committed = CONTRACT.read_text()
+        committed = CONTRACT.read_text(encoding="utf-8")
         if committed != rendered:
             print(
                 "FAIL: contracts/openapi.json is stale — re-run "

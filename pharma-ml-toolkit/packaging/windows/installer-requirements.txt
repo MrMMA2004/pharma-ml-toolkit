@@ -55,6 +55,14 @@ catboost==1.2.8
 numba==0.61.0
 llvmlite==0.44.0
 slicer==0.0.8
+# (r297: cloudpickle — shap/__init__'s import chain reaches
+# shap._serializable, which imports cloudpickle unconditionally; the
+# --no-deps install pulls none of shap's declared deps, and the Linux
+# QA venv only imported clean because another package had already
+# pulled cloudpickle in — the fresh Windows runner venv had no such
+# luck (run 44494806244's 7b probe: ModuleNotFoundError 'cloudpickle').
+# Pinned to the QA venv's own verified version.)
+cloudpickle==3.1.2
 
 # ---- Deep learning -----------------------------------------------------
 # (torch==2.14.1+cpu installed separately — see header note.)

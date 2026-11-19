@@ -39,7 +39,7 @@ EXECUTED = (
     "pharmaml_walkthrough",
 )
 
-VERSION = (TOOLKIT / "VERSION").read_text().strip()
+VERSION = (TOOLKIT / "VERSION").read_text(encoding="utf-8").strip()
 print(f"re-executing {len(EXECUTED)} notebooks at pharmaml {VERSION}", flush=True)
 
 started = time.time()

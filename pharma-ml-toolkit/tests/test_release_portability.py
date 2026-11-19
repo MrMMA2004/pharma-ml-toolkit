@@ -20,7 +20,13 @@ def _load_tool(name: str):
 
 
 def test_original_docs_generator_matches_shipped_index() -> None:
-    assert _load_tool("build_docs_index").render_index() == (ROOT / "docs/INDEX.md").read_text()
+    # encoding="utf-8" (r297): read_text() defaults to the locale codec
+    # (cp1252 on the Windows runner) and docs/INDEX.md carries UTF-8
+    # beyond ASCII -- the unencoded read dies there.
+    assert (
+        _load_tool("build_docs_index").render_index()
+        == (ROOT / "docs/INDEX.md").read_text(encoding="utf-8")
+    )
 
 
 def test_standalone_archive_profile(tmp_path: Path) -> None:

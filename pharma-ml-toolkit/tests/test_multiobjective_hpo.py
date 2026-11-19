@@ -384,7 +384,12 @@ def test_tune_model_multi_front_is_non_dominated() -> None:
     # score is minimized as the negated CV score: the front's best is near 0
     best = report.best_for("score")
     assert best.values[0] < 0.0
-    assert best.values[1] > 0.0
+    # r297: fit_seconds is a wall-clock measurement of a tiny ridge fit —
+    # on a fast host it legitimately rounds to 0.0 (the Windows runner's
+    # sub-millisecond fit did exactly that; time resolution, not a broken
+    # metric), so the contract is non-negative-and-finite, not strictly
+    # positive.
+    assert best.values[1] >= 0.0
     # the honest check: the front members are mutually non-dominated
     history = [t.values for t in report.trials]
     for i, a in enumerate(history):
