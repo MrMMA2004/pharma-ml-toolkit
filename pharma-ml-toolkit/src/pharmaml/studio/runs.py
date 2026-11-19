@@ -106,7 +106,21 @@ def record_run(
         "toolkit_version": _toolkit_version(),
         "summary": dict(summary or {}),
     }
-    path = root / f"{created.strftime('%Y%m%dT%H%M%S%f')}-{slugify(label)}.json"
+    # r297: Windows' Python 3.12 clock (time.time() over
+    # GetSystemTimeAsFileTime) resolves only to ~15.6 ms, so two records
+    # written inside one tick stamp IDENTICAL names and the second
+    # os.replace() silently erases the first (run 44496937643: the v1
+    # record vanished from latest_runs -- [2] where [2, 1] was pinned).
+    # Bumping the stamp's microsecond tail until the name is fresh keeps
+    # the filename a strictly monotonic ordering key while staying inside
+    # the clock's own resolution (the payload keeps the true timestamp).
+    slug = slugify(label)
+    stamp = created.strftime("%Y%m%dT%H%M%S%f")
+    path = root / f"{stamp}-{slug}.json"
+    while path.exists():
+        created += _dt.timedelta(microseconds=1)
+        stamp = created.strftime("%Y%m%dT%H%M%S%f")
+        path = root / f"{stamp}-{slug}.json"
     temp = path.with_name(path.name + ".tmp")
     try:
         root.mkdir(parents=True, exist_ok=True)

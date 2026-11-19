@@ -779,6 +779,17 @@ def xvfb_display() -> str:
     import socket
     import time
 
+    if os.name == "nt":
+        # r297: Windows has no Xvfb and needs none -- Tk renders against
+        # the session's native desktop, so the virtual-display bootstrap
+        # is a Linux-headless concern. The fixture previously Popen'd a
+        # nonexistent Xvfb.exe here and errored every dependent test at
+        # setup with WinError 2 (run 44496937643: TestSessionShareAndReset
+        # never ran its bodies). Yielding an empty DISPLAY keeps the
+        # subprocess env plumbing in the callers inert on Windows (Tk
+        # ignores DISPLAY there).
+        yield ""
+        return
     display = ":98"
     process = subprocess.Popen(
         ["Xvfb", display, "-screen", "0", "1280x800x24"],
