@@ -8,8 +8,8 @@
 # --static check against the toolkit VERSION file; bump it in lockstep.
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 2, 218, 0),
-    prodvers=(1, 2, 218, 0),
+    filevers=(1, 2, 229, 0),
+    prodvers=(1, 2, 229, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,  # VOS_NT_WINDOWS32

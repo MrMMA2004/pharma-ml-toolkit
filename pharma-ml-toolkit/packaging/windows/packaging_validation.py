@@ -208,13 +208,17 @@ def validate_static() -> int:
     ]
     import importlib
 
-    # distribution names differ from import names for the five classics:
+    # distribution names differ from import names for the six classics
+    # (r297: python-multipart renamed its module to python_multipart --
+    # the dash form was never importable, which the runner's first real
+    # validation run surfaced):
     DIST_TO_IMPORT = {
         "scikit-learn": "sklearn",
         "python-docx": "docx",
         "Pillow": "PIL",
         "qt-material": "qt_material",
         "fpdf2": "fpdf",
+        "python-multipart": "python_multipart",
     }
     bad = []
     for dist in pins:
