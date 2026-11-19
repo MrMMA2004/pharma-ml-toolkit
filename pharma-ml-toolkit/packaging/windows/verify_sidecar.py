@@ -57,7 +57,17 @@ def main() -> int:
 
     creationflags = 0
     if os.name == "nt":
-        creationflags = subprocess.CREATE_NO_WINDOW
+        # r297: CREATE_NEW_PROCESS_GROUP, NOT CREATE_NO_WINDOW -- the
+        # graceful-shutdown leg needs send_signal(CTRL_BREAK_EVENT) to
+        # REACH the child, and that requires a SHARED console. The flag
+        # still isolates the parent (the child is its own process group,
+        # so the CTRL_BREAK does not hit the verifier itself) -- the
+        # canonical Windows pattern for a graceful console child. The
+        # previous CREATE_NO_WINDOW gave the sidecar its own hidden
+        # console: the CTRL_BREAK was undeliverable, the leg always
+        # timed out, and kill() (TerminateProcess -> exit 1) reported a
+        # broken sidecar that was actually serving perfectly.
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
 
     proc = subprocess.Popen(
         [str(exe)],
