@@ -126,15 +126,22 @@ async def serve(
     out.write(line + "\n")
     out.flush()
 
+    # r297: the socket is handed to uvicorn as a SOCKET OBJECT via
+    # serve(sockets=[...]) -- uvicorn's fd= path is Unix-only by
+    # construction (its startup does socket.fromfd(fd, AF_UNIX, ...) and
+    # fromfd/AF_UNIX both do not exist on Windows, so the Windows runner
+    # crashed the serve() task before uvicorn ever accepted, while the
+    # bind-first handshake had already been emitted -- the production
+    # host entry (the frozen sidecar's own lifeline) would hang exactly
+    # like run 44509479447's two real-socket tests did.
     config = uvicorn.Config(
         app,
-        fd=sock.fileno(),
         log_level="warning",  # diagnostics on stderr only
         access_log=False,
         loop="asyncio",
     )
     server = StudioServer(config)
-    await server.serve()
+    await server.serve(sockets=[sock])
     sock.close()
     return real_port
 

@@ -640,15 +640,17 @@ class TestGracefulShutdownPush:
                 sock = bind_loopback_socket()
                 port = sock.getsockname()[1]
                 try:
+                    # r297: the socket OBJECT (serve(sockets=[...])) -- not
+                    # fd=, whose uvicorn startup path is Unix-only
+                    # (socket.fromfd(fd, AF_UNIX, ...) crashes on Windows).
                     config = uvicorn.Config(
                         app,
-                        fd=sock.fileno(),
                         log_level="warning",
                         access_log=False,
                         loop="asyncio",
                     )
                     server = StudioServer(config)
-                    task = asyncio.ensure_future(server.serve())
+                    task = asyncio.ensure_future(server.serve(sockets=[sock]))
                     deadline = time.monotonic() + 20
                     while time.monotonic() < deadline and not server.started:
                         await asyncio.sleep(0.05)
