@@ -291,11 +291,15 @@ def test_stage_order_matches_the_spec_chain() -> None:
 
 
 def test_honesty_blocks_present() -> None:
-    """§12's labels: the queued explainability note, the classification
-    gate, the bounded column bridge note."""
+    """§12's labels: the real-SHAP explainability note, the
+    classification gate, the bounded column bridge note. (r295: r290
+    closed the §12.2 queue end-to-end — POST /api/v1/ml/explain + the
+    GUI stage-12 card — and retired the queued placeholder this test
+    still pinned; the pin now guards the CURRENT honest state, the
+    real-lane hint, instead of the retired one.)"""
     page = _read(FEATURES / "ml" / "MLPage.tsx")
-    assert "no §12.2 route" in page, (
-        "the explainability card lost its honest queued note"
+    assert re.search(r"the real SHAP lane", page) is not None, (
+        "the explainability card lost its honest real-SHAP-lane note"
     )
     assert re.search(r"classification-only", page) is not None, (
         "the semi-supervised card lost its classification-only gate note"

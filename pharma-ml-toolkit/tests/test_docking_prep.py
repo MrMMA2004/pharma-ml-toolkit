@@ -12,6 +12,7 @@ structure) and the PDBQT passthrough mode that needs no Meeko at all.
 
 from __future__ import annotations
 
+import os
 import warnings
 from pathlib import Path
 
@@ -1156,6 +1157,7 @@ class TestMglToolsConversion:
         (src / "notes.txt").write_text("not a ligand\n")
         return src
 
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX shell fake MGL python")
     def test_numbered_subfolders_and_log(self, tmp_path: Path) -> None:
         from pharmaml.docking.preparation import convert_pdb_folder_to_pdbqt
 
@@ -1183,6 +1185,7 @@ class TestMglToolsConversion:
         assert "a" in text and "b" in text
         assert "All PDB files converted successfully." in text
 
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX shell fake MGL python")
     def test_timeout_marks_the_row_and_cleans_up(self, tmp_path: Path) -> None:
         from pharmaml.docking.preparation import convert_pdb_folder_to_pdbqt
 
@@ -1198,6 +1201,7 @@ class TestMglToolsConversion:
         text = (out / "conversion_log.txt").read_text(encoding="utf-8")
         assert "TIMED OUT FILES (1+ seconds):" in text
 
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX shell fake MGL python")
     def test_failing_script_records_nonzero_exit(self, tmp_path: Path) -> None:
         from pharmaml.docking.preparation import convert_pdb_folder_to_pdbqt
 
@@ -1231,6 +1235,7 @@ class TestMglToolsConversion:
                 tmp_path / "ghost_src", tmp_path / "out", "/bin/sh", "/bin/sh"
             )
 
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX shell fake MGL python")
     def test_empty_folder_writes_the_honest_log(self, tmp_path: Path) -> None:
         from pharmaml.docking.preparation import convert_pdb_folder_to_pdbqt
 

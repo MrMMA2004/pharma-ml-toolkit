@@ -18,7 +18,10 @@ def checkpoint(tmp_path, monkeypatch):
     source = tmp_path / "toolkit"
     source.mkdir()
     (source / "VERSION").write_text("9.9.9\n")
-    (source / "example.txt").write_text("payload\n")
+    # r295 Windows honesty: byte-asserted fixture written as raw bytes
+    # (text-mode write would CRLF-translate on the Windows runner while
+    # the builder copies files verbatim into the ZIP).
+    (source / "example.txt").write_bytes(b"payload\n")
     monkeypatch.setattr(module, "ROOT", source)
     monkeypatch.setattr(module, "REPO", tmp_path)
     monkeypatch.setattr(module, "DOWNLOAD", tmp_path / "download")
@@ -107,9 +110,22 @@ def test_output_directory_inside_toolkit_is_not_nested_in_zip(checkpoint, tmp_pa
 
 
 def test_unreadable_source_tree_does_not_publish_partial_zip(checkpoint, tmp_path, monkeypatch):
-    def fail_walk(_root, *, onerror):
-        onerror(PermissionError("cannot read source"))
-        yield  # pragma: no cover -- turns this into an iterator
+    # r295 Windows honesty: full os.walk signature + source-root gating
+    # (the mirror of the build_zip guard) -- the Windows rmtree cleanup
+    # walk passes keyword arguments a keyword-only fake cannot accept,
+    # and the staging dir lives under DOWNLOAD, so every non-source walk
+    # delegates to the genuine os.walk and cleanup still succeeds.
+    real_walk = checkpoint.os.walk
+
+    def fail_walk(top, topdown=True, onerror=None, followlinks=False):
+        if Path(top) == checkpoint.ROOT:
+            assert onerror is not None  # the production call always passes one
+            onerror(PermissionError("cannot read source"))
+        else:
+            yield from real_walk(
+                top, topdown=topdown, onerror=onerror, followlinks=followlinks
+            )
+
     monkeypatch.setattr(checkpoint.os, "walk", fail_walk)
     assert checkpoint._build_zip("9.9.9") is None
     assert list((tmp_path / "download").iterdir()) == []

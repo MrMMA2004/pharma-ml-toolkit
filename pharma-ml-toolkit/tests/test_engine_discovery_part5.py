@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import struct
 import subprocess
 from pathlib import Path
@@ -146,11 +147,17 @@ def test_relative_path_engine_is_resolved_before_changing_cwd(tmp_path, monkeypa
     monkeypatch.chdir(tmp_path)
     folder = tmp_path / "bin"
     folder.mkdir()
-    exe = folder / "vina"
+    # r295 Windows honesty: CPython's shutil.which() consults PATHEXT on
+    # Windows and an extensionless stub is invisible with the default
+    # X_OK mode (the direct match is only honored for names already
+    # carrying a PATHEXT extension) -- so the fake engine carries the
+    # platform's own spelling and the assertion follows it. POSIX keeps
+    # the classic extensionless stub; no execution happens either way.
+    exe = folder / ("vina.exe" if os.name == "nt" else "vina")
     exe.write_text("stub")
     exe.chmod(0o755)
     monkeypatch.setenv("PATH", "bin")
-    assert workflow.engine_argv("vina") == [str(exe)]
+    assert workflow.engine_argv("vina") == [str(exe.resolve())]
 
 
 def test_batch_passes_absolute_paths_with_config_cwd(tmp_path, monkeypatch):

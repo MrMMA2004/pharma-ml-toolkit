@@ -277,7 +277,9 @@ class TestDistributeFiles:
         source = tmp_path / "r.pdbqt"
         source.write_text("receptor", encoding="utf-8")
         written = distribute_files([source], target)
-        assert sorted(str(w.relative_to(target)) for w in written) == [
+        # r295: as_posix -- str() renders backslashes on the Windows
+        # runner; the expectation is a stable POSIX-relative path.
+        assert sorted(w.relative_to(target).as_posix() for w in written) == [
             "ligand_01/r.pdbqt", "ligand_02/r.pdbqt",
         ]
         assert (target / "ligand_02" / "r.pdbqt").read_text(encoding="utf-8") == "receptor"

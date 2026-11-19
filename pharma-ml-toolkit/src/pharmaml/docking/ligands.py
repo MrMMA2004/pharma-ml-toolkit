@@ -572,7 +572,12 @@ def scan_torsion_consistency(directory: str | Path) -> pd.DataFrame:
             continue
         rows.append(
             {
-                "ligand": str(path.relative_to(base)),
+                # as_posix (r295): the report key is a cross-platform
+                # stable identifier -- ``str()`` would emit backslashes on
+                # the Windows runner and break every keyed consumer; on
+                # POSIX the two renderings are byte-identical, so the
+                # Linux CI's pinned outputs do not drift.
+                "ligand": path.relative_to(base).as_posix(),
                 "torsdof": check.torsdof,
                 "active_remarks": check.active_remarks,
                 "branches": check.branches,

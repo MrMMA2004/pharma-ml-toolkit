@@ -1,5 +1,6 @@
 """Review and preparation of real small receptor/ligand fixtures."""
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -173,6 +174,7 @@ def test_changed_receptor_rejected_but_plan_is_not_an_authorization_token(tmp_pa
     assert result["plan"]["options"]["seed"] == 17
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX synthetic shebang engine")
 def test_prepared_inputs_launch_with_synthetic_engine(tmp_path):
     import os
     import sys

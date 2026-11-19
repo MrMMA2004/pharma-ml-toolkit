@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -4715,6 +4716,7 @@ class TestDockingCoverageGui:
         pdbqt = list(smi_dir.glob("*.pdbqt")) if smi_dir.exists() else []
         assert len(pdbqt) == 1
 
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX bash synthetic vina engine")
     def test_vina_config_batch_fake_engine(
         self,
         app: Any,

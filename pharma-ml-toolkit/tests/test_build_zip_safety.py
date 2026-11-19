@@ -17,8 +17,14 @@ def publisher(tmp_path, monkeypatch):
     spec.loader.exec_module(module)
     root = tmp_path / "toolkit"
     root.mkdir()
+    # r295 Windows honesty: fixtures that are later byte-asserted inside
+    # the shipped ZIP are written as raw bytes -- ``write_text`` would
+    # translate ``\n`` to ``\r\n`` on the Windows runner (text-mode
+    # newline translation) while the publisher copies files verbatim,
+    # so the archive member would legitimately carry CRLF and every
+    # ``b"original\n"`` comparison would fail. Bytes are OS-agnostic.
     (root / "VERSION").write_text("9.9.9\n")
-    (root / "data.txt").write_text("original\n")
+    (root / "data.txt").write_bytes(b"original\n")
     homes = (tmp_path / "download", root / "dist-archive", root / "download", tmp_path / "upload")
     for folder in homes:
         folder.mkdir()
@@ -61,7 +67,7 @@ def test_scrub_operates_on_staged_copy_not_source(publisher):
     (tools / "scrub_home_paths.py").write_text(
         'from pathlib import Path\n'
         'root = Path(__file__).resolve().parents[1]\n'
-        '(root / "data.txt").write_text("scrubbed\\n")\n'
+        '(root / "data.txt").write_bytes(b"scrubbed\\n")\n'
     )
     assert publisher.main() == 0
     assert (publisher.ROOT / "data.txt").read_text() == "original\n"
@@ -169,9 +175,25 @@ def test_corrupt_copy_is_not_published(publisher, monkeypatch):
 
 
 def test_source_walk_error_does_not_publish(publisher, monkeypatch):
-    def fail_walk(_root, *, onerror):
-        onerror(PermissionError("source unreadable"))
-        yield  # pragma: no cover
+    # r295 Windows honesty: the fake must carry os.walk's FULL signature.
+    # CPython 3.12's Windows rmtree (tempfile's staging-dir cleanup) calls
+    # os.walk(path, topdown=False, onerror=..., followlinks=...) -- Linux
+    # rmtree is fd-based and never walks -- so a keyword-only ``onerror``
+    # fake TypeErrors inside TemporaryDirectory.__exit__ and replaces the
+    # intended PermissionError with a cleanup TypeError. The fake fires the
+    # injected error only for the SOURCE-root walk and delegates every
+    # other walk (the staging cleanup walk) to the genuine os.walk.
+    real_walk = publisher.os.walk
+
+    def fail_walk(top, topdown=True, onerror=None, followlinks=False):
+        if Path(top) == publisher.ROOT:
+            assert onerror is not None  # the production call always passes one
+            onerror(PermissionError("source unreadable"))
+        else:
+            yield from real_walk(
+                top, topdown=topdown, onerror=onerror, followlinks=followlinks
+            )
+
     monkeypatch.setattr(publisher.os, "walk", fail_walk)
     assert publisher.main() != 0
     assert all(not (home / publisher.NAME).exists() for home in publisher.HOMES)

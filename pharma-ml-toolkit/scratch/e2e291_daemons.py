@@ -28,7 +28,7 @@ VITE_LOG = REPO / "scratch" / "e2e291-vite.log"
 TOKEN = "e2e-r291-session-token-0123456789"
 PORT = 8017
 VITE_PORT = 5174
-VENV_PY = "/home/z/.venv/bin/python3"
+VENV_PY = "python3"
 
 
 def _forked(child: "function") -> None:  # type: ignore[name-defined]
