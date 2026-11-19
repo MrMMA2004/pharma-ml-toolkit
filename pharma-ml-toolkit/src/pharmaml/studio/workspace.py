@@ -166,7 +166,7 @@ def note(kind: str, path: str | Path, *, project: str = "", note: str = "",
     payload = _load()
     previous = next((
         e for e in payload["entries"]
-        if e.get("kind") == kind and e.get("path") == str(real)
+        if e.get("kind") == kind and e.get("path") == real.as_posix()
     ), None)
     digest = _fingerprint(real) if with_hash and real.is_file() else ""
     if previous is not None and digest and previous.get("sha256") == digest:
@@ -177,7 +177,12 @@ def note(kind: str, path: str | Path, *, project: str = "", note: str = "",
         version = 1
     entry = WorkspaceEntry(
         kind=kind,
-        path=str(real),
+        # as_posix (r297): workspace payloads are cross-platform stable
+        # documents -- str(Path) would freeze Windows backslashes into
+        # entries, favorites and export folders in three different
+        # spellings; the posix rendering is byte-identical to str() on
+        # POSIX, so no Linux payload changes.
+        path=real.as_posix(),
         name=real.name,
         recorded=_now(),
         sha256=digest,
@@ -268,7 +273,7 @@ def toggle_favorite(path: str | Path) -> bool:
     OLDEST rows first, so a starred path is kept as long as it stays
     recorded at all.
     """
-    real = str(Path(path))
+    real = Path(path).as_posix()
     payload = _load()
     favorites = set(payload.get("favorites", []))
     now_starred = real not in favorites
@@ -283,7 +288,7 @@ def toggle_favorite(path: str | Path) -> bool:
 
 def is_favorite(path: str | Path) -> bool:
     """Whether ``path`` is currently starred."""
-    real = str(Path(path))
+    real = Path(path).as_posix()
     return real in set(_load().get("favorites", []))
 
 
@@ -310,7 +315,7 @@ def remember_export_folder(folder: str | Path, template: str = "") -> bool:
     folders = payload.get("export_folders", {})
     if not isinstance(folders, dict):
         folders = {}
-    folders[template or "_shared"] = str(Path(folder))
+    folders[template or "_shared"] = Path(folder).as_posix()
     payload["export_folders"] = folders
     return _save(payload)
 
