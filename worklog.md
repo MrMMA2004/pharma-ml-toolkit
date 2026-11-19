@@ -16158,3 +16158,29 @@ CLOSED; §47's report rows 38-41 (location, filename, size,
 checksum) now have real release values. What remains is exactly
 the Blocker Register's steps 3-4: the clean-machine ritual, then
 the Stage-5 PySide6 retirement.
+
+---
+
+## Round 299 (continued) — the hardware lottery's second door: the choke point generalized
+
+**The find:** CI on the close-out commit `c0762f19` failed the Generative
+SA job on yet another runner (1000002747) — this time drifting
+`pk_profile.csv`, a file the r298 fix deliberately left unrounded
+because it rides no BLAS matmul. The second door decoded: numpy's
+manylinux wheels dispatch the VECTORISED exp/log loops by CPU feature
+at run time — the same runtime-dispatch machinery as DYNAMIC_ARCH
+OpenBLAS dgemm — so the pk builder's `np.exp` term shifts its ~15th
+significant digit across the mixed fleet exactly like the matmul
+tables. The hazard class is not "BLAS" but "any SIMD-dispatched numpy
+kernel."
+
+**The fix (89f76ab6):** the choke point generalized — `_write_frame`
+now rounds EVERY float64 column to 6 decimals before serialisation
+(the r298 per-call `_round_frame` wrappers retired; the round table
+set now also covers cellline_expression, cellline_screen, pk_profile,
+qsar_classification, and walkthrough_compounds). The regeneration wrote
+exactly those 5 files, 39 unchanged; the census pins hold exactly, the
+AUC pins hold inside their 5e-5 tolerance, and the full local gate set
+(provenance + release portability + checkpoint tooling) exits 0. The
+v1.2.230 release zip stays pinned to the tag commit (byte-parity with
+the release; the data bytes ride the next bump).
