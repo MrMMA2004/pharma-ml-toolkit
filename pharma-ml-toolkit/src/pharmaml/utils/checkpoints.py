@@ -262,11 +262,19 @@ class CheckpointManager:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp, final)  # atomic: readers see all-or-nothing
-        dir_fd = os.open(self._dir, os.O_RDONLY)
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
+        if os.name == "posix":
+            # POSIX-only durability: fsyncing the directory handle makes
+            # the rename itself durable. Windows cannot open a directory
+            # with plain O_RDONLY (EACCES on every os.open of a dir) and
+            # offers no directory fsync; NTFS metadata journaling carries
+            # the rename's durability there instead -- the same
+            # platform split the freeze tooling already documents. (The
+            # Windows runner proved the crash: run 44487380952 step 12.)
+            dir_fd = os.open(self._dir, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
         self._rotate()
         return self._info(record, final)
 

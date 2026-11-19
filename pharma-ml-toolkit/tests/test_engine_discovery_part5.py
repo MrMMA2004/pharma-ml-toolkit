@@ -43,7 +43,11 @@ def test_explicit_directory_takes_priority_over_path_and_bundle(tmp_path, monkey
 
 def test_path_has_priority_over_bundled_copy(monkeypatch, bundled):
     monkeypatch.setattr(workflow.shutil, "which", lambda name: "/native/vina" if name == "vina" else None)
-    assert workflow.locate_engine_binary("vina") == Path("/native/vina")
+    # r296: the resolver returns Path(located).resolve() -- resolve() maps
+    # a drive-relative POSIX literal onto the current drive on Windows, so
+    # the expectation must go through the same transform (identity on
+    # POSIX, where the Linux CI's pins do not drift).
+    assert workflow.locate_engine_binary("vina") == Path("/native/vina").resolve()
     assert workflow.engine_argv("vina") == ["/native/vina"]
 
 

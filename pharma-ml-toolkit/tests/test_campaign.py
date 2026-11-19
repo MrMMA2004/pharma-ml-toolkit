@@ -1349,7 +1349,7 @@ class TestEngineFolderResolution:
         )
         assert workflow_mod.locate_engine_binary("vina", tmp_path) == Path(
             "/usr/local/bin/vina.exe"
-        )
+        ).resolve()
 
     def test_locate_missing_everywhere_returns_none(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
@@ -1363,7 +1363,13 @@ class TestEngineFolderResolution:
         engines.mkdir()
         exe = engines / "vina.exe"
         exe.write_bytes(b"MZ" + b"\x00" * 58 + struct.pack("<I", 64) + b"PE\x00\x00" + struct.pack("<H", 0x8664))
-        monkeypatch.setattr(workflow_mod.os, "name", "posix")
+        # r296: fake the host through the established _host_platform hook,
+        # not a global os.name flip -- patching os.name makes pathlib
+        # construct PosixPath on a Windows host (NotImplementedError from
+        # inside locate_engine_binary's folder / spelling join).
+        monkeypatch.setattr(
+            workflow_mod, "_host_platform", lambda: ("posix", "x86_64")
+        )
         monkeypatch.setattr(
             workflow_mod.shutil,
             "which",
@@ -1377,7 +1383,10 @@ class TestEngineFolderResolution:
         engines = tmp_path / "engines"
         engines.mkdir()
         (engines / "vina.exe").write_bytes(b"MZ" + b"\x00" * 58 + struct.pack("<I", 64) + b"PE\x00\x00" + struct.pack("<H", 0x8664))
-        monkeypatch.setattr(workflow_mod.os, "name", "posix")
+        # r296: same _host_platform hook as the wine-routing test above.
+        monkeypatch.setattr(
+            workflow_mod, "_host_platform", lambda: ("posix", "x86_64")
+        )
         monkeypatch.setattr(workflow_mod.shutil, "which", lambda _name: None)
         with pytest.raises(DockingError, match="wine"):
             workflow_mod.engine_argv("vina", engines)
