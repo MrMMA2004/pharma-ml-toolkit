@@ -30,7 +30,7 @@
     "targets": ["nsis", "msi"],
     "icon": ["../packaging/windows/assets/pharmaml.ico"],
     "resources": {
-      "resources/backend/**/*": "backend/"
+      "resources/backend": "backend/"
     },
     "windows": {
       "webviewInstallMode": {
