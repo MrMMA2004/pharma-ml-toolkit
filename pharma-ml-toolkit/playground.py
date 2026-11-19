@@ -4316,6 +4316,22 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         traceback.print_exception(exc, val, tb)
         messagebox.showerror("Unexpected error", f"{type(val).__name__}: {val}")
 
+    def _cancel_idle_reset(self) -> None:
+        """Drop a pending auto-idle reset -- a newer label message owns it.
+
+        (r297: ``_copy`` arms a 1.4 s auto-idle, and ``_copy_tab_inputs``
+        overwrites the label right after that -- the STALE timer then
+        reverted the "copied as JSON" status at a random offset within
+        1.4 s on every platform. The Windows runner's slower clipboard
+        round-trip made the race deterministic and the test caught it:
+        'copied as JSON' was already back to 'idle' by assertion time.)
+        """
+        handle = getattr(self, "_idle_after", None)
+        if handle is not None:
+            with contextlib.suppress(tk.TclError):
+                self.after_cancel(handle)
+            self._idle_after = None
+
     def _copy(self, text: str) -> None:
         self.clipboard_clear()
         self.clipboard_append(text)
@@ -4325,8 +4341,9 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
             # line); the clipboard write -- the user's real intent --
             # still happens.
             return
+        self._cancel_idle_reset()
         self._job_label.configure(text="copied to clipboard")
-        self.after(1400, lambda: self._job_label.configure(text="idle"))
+        self._idle_after = self.after(1400, lambda: self._job_label.configure(text="idle"))
 
     def _close_embedded(self, host: Any) -> None:
         figure = getattr(host, "_pg_figure", None)
@@ -5354,6 +5371,10 @@ class PlaygroundApp(_TkBase):  # type: ignore[misc]
         }
         items = len(variables) + len(families) + len(texts)
         self._copy(json.dumps(payload, indent=2, sort_keys=True))
+        # the copy-tab message owns the status bar (no auto-idle of its
+        # own): cancel the reset _copy just armed so the message persists
+        # instead of being reverted at a random offset within 1.4 s.
+        self._cancel_idle_reset()
         self._job_label.configure(text=f"{label.lower()} inputs copied as JSON · {items} items")
 
     def _walk_widgets(self, widget: Any) -> Iterator[Any]:
