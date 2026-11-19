@@ -34,7 +34,7 @@ separate clean-machine installation and upgrade ritual.
 
 | part11 deliverable | Current status |
 |---|---|
-| React + TypeScript + Vite frontend (Phase Three) | **BUILT** — all nine workspaces connect to the real API; PR CI type-checks and builds the offline SPA and runs its contract/workspace drift guards. |
+| React + TypeScript + Vite frontend (Phase Three) | **BUILT** — eight scientific workflows connect to the real API, alongside the Introduction start page; PR CI type-checks/builds the offline SPA and runs contract/workspace drift guards. |
 | FastAPI backend integration layer (Phase Seven) | **BUILT** — the versioned API surface is exercised by the API/database test suite. |
 | SQLite persistence + file vault (Phase Eleven) | **BUILT** — `src/pharmaml/api/persistence.py` + `/api/v1/database`; see §2. |
 | Backend process lifecycle + handshake (Phase Nine) | **BUILT** — port-0 loopback bind, `PHARMAML-READY` handshake, graceful shutdown, and the packaged sidecar's live Windows-runner probe. |
