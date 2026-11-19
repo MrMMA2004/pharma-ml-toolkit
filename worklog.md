@@ -16088,3 +16088,73 @@ Register's steps 3–4: the clean-machine smoke test on any real
 Windows 10/11 x64 (dissolves C-3/C-5, fills §47's rows 38–48) and
 only then the §28 Stage-5 PySide6 retirement. The dev server / route
 re-verified (200).
+
+---
+
+## Round 299 — the v1.2.230 ship ritual, the re-tag, and the register re-issue (the round-298 close-out; same run 89 continued)
+
+**The first tag build died exactly as the ship gates predicted.** The
+v1.2.230 tag fired the Windows Release workflow (run 44566101809) on
+the bump commit `11503821` — but that commit's notebooks still
+printed `pharmaml 1.2.229`, so step 10's backend-unit gate (which
+carries the checkpoint ship suite) failed the notebook-freshness
+guard, and the run died before the freeze. The diagnosis was
+pre-local: `test_notebook_freshness_green_on_the_live_tree` names
+the stale notebooks; the "GitHub page" CI job independently wanted
+`download/pharma-ml-toolkit-v1.2.230.zip` — the four-home zip
+ritual had not run either.
+
+**The ritual, completed:** the eight example notebooks re-executed on
+the 1.2.230 tree (`scratch/reexec_notebooks_257.py`, 447s, home-path
+survivors 0 — the five earliest rode the guard-cron's own mid-ritual
+round-299 commit `0b020c22`, the three long ones (ml/pk/tuning) rode
+the close-out commit `bb5a29e7`); the zip ritual published
+`pharma-ml-toolkit-v1.2.230.zip` (15,753,579 bytes, sha-256
+`7fde4d08…7ab0`, zero leaks / zero nested zips / zero placeholders,
+the v1.2.229 predecessors rotated out of all four homes); the local
+ship gates all exit 0 (checkpoint tooling + release portability +
+version carriers + windows-pipeline guards + the 26/26 static gate).
+The token-embedded remote URL was replaced by the askpass credential
+lane (the local homepage guard green again). The tag was force-moved
+to the ritual-complete commit and re-fired (run 44569220942); CI on
+both the ritual commit and the register commit (`d2cabe78`) is
+all-green — the provenance hardware fix, the fresh notebooks, and the
+published zip all verified on a fresh mixed-fleet runner.
+
+**The register re-issued (`d2cabe78`):** the part11 Blocker Register
+rebuilt at 13 pages — C-4's status row flips to PASS-EXECUTED with
+the run evidence, layer 2 marked RESOLVED (the owner's
+public-repository flip), the deliberate-restraint premise dissolved
+(free public-repo minutes), a 5b addendum section records the full
+execution narrative, and the unblock checklist's steps 1-2 are DONE
+with steps 3-4 (the clean-machine ritual and the Stage-5 retirement)
+explicitly remaining.
+
+**The web console re-verified on the / route:** v1.2.230 pin
+rendering, all five tabs navigating (Overview / Code Explorer / API
+Reference / Playground / Download), the Download panel answering the
+exact release (`{"zipBytes":15753579,"version":"1.2.230","exact":true,
+"source":"release"}`), zero console errors, the footer landing flush
+at the natural document end, desktop + mobile evidence shots
+(`scratch/r298-web-desktop.png`, `r298-web-mobile.png`).
+
+**The tag build completed GREEN — the release is delivered.** Run
+`44569220942` (v1.2.230 at `bb5a29e7`) finished all 25 steps: step
+10's ship gates passed on the Windows runner (fresh notebooks +
+the four-home zip), the freeze + live sidecar verification + the
+Tauri/NSIS/WiX build + the validation + the checksums + the upload
+all green, and step 23b attached the artifacts to the GitHub
+Release. The release `v1.2.230` at
+github.com/MrMMA2004/pharma-ml-toolkit/releases/tag/v1.2.230 now
+carries: `PharmaML_Studio_Setup_v1.2.230.exe` (477,595,658 B,
+sha-256 `38c0f667221ebe6544b7e1a9fed0a3bbf57b1c8ddae1fab122b8ff32f62e8a13`),
+`PharmaML_Studio_v1.2.230.msi` (631,078,245 B, sha-256
+`c02b831a58bc9566b851f2cfc454fedb5c3d571d4969c47f35140f4386f129e4`),
+`RELEASE_MANIFEST.json` (built at `bb5a29e7` on windows-2022,
+Python 3.12 / Node 22 / Rust 1.90.0 / PyInstaller 6.22.3 /
+WebView2 offlineInstaller), and `SHA256SUMS.txt` — the runner
+generated every checksum. part11_2 §9's artifact delivery is
+CLOSED; §47's report rows 38-41 (location, filename, size,
+checksum) now have real release values. What remains is exactly
+the Blocker Register's steps 3-4: the clean-machine ritual, then
+the Stage-5 PySide6 retirement.

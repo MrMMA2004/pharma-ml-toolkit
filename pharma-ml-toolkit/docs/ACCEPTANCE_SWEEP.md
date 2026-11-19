@@ -41,9 +41,15 @@ ended in the first all-green execution: run 44553307816 (head
 Setup EXE + the WiX MSI with the embedded offline WebView2, froze
 and live-verified the sidecar ON Windows, and generated the SHA-256
 checksums on the runner itself (`a385853c…c210` EXE, `69da2837…130d`
-MSI). The `v1.2.230` tag build (run 44566101809) attaches
-EXE/MSI/SHA256SUMS/RELEASE_MANIFEST to the GitHub Release —
-part11_2 §9's artifact delivery. Five §46 rows flip from BLOCKED to
+MSI). The `v1.2.230` tag build then completed all-green (run
+44569220942, head `bb5a29e7` — the first attempt 44566101809 died
+at step 10 on the stale notebooks, exactly as the ship gates
+predicted, until the ritual completed) and the GitHub Release
+`v1.2.230` carries the four attached artifacts: PharmaML_Studio_Setup_v1.2.230.exe
+(477,595,658 B, sha-256 `38c0f667…e8a13`), PharmaML_Studio_v1.2.230.msi
+(631,078,245 B, sha-256 `c02b831a…129e4`), RELEASE_MANIFEST.json,
+and SHA256SUMS.txt — part11_2 §9's artifact delivery, and real
+values for §47's report rows 38-41. Five §46 rows flip from BLOCKED to
 PASS on that execution evidence (the §46.7 sidecar-start row and
 four §46.9 rows below); everything clean-machine stays BLOCKED by
 the addendum's own rule — a runner is a build environment, not a
