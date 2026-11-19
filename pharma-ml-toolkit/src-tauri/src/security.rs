@@ -24,15 +24,18 @@ use crate::backend_manager::BackendEndpoint;
 /// 127.0.0.1 — never 0.0.0.0).
 pub fn assert_loopback(endpoint: &BackendEndpoint) -> Result<(), String> {
     let prefix = "http://127.0.0.1:";
-    if endpoint.base_url.starts_with(prefix) && endpoint.base_url[16..].parse::<u16>().is_ok() {
-        Ok(())
-    } else {
-        Err(format!(
+    // r297: strip_prefix, not a fixed [16..] slice -- the prefix is 17
+    // bytes and the authored-era off-by-one left the ':' glued to the
+    // port, so parse::<u16> failed and EVERY valid handshake would have
+    // been refused at app startup (a runtime bug no compiler could see).
+    match endpoint.base_url.strip_prefix(prefix) {
+        Some(rest) if rest.parse::<u16>().is_ok() => Ok(()),
+        _ => Err(format!(
             "the backend handshake named a NON-LOOPBACK endpoint \
              ({}), refusing to hand it to the WebView — the local API \
              contract is 127.0.0.1-only (part11 §15)",
             endpoint.base_url
-        ))
+        )),
     }
 }
 

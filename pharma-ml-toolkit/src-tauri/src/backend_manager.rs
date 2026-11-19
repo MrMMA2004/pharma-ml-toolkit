@@ -177,8 +177,11 @@ fn spawn_and_handshake(exe: &std::path::Path) -> SpawnOutcome {
         }
     });
 
-    let deadline = Instant::now() + STARTUP_TIMEOUT;
-    let ready_line = match line_rx.recv_timeout(deadline) {
+    // r297: recv_timeout takes a Duration, not an Instant (the
+    // authored-era file had never compiled anywhere -- the Blocker
+    // Register's C-2, caught by the first real rustc pass, run
+    // 44528322869's E0308).
+    let ready_line = match line_rx.recv_timeout(STARTUP_TIMEOUT) {
         Ok(line) => line,
         Err(mpsc::RecvTimeoutError::Timeout) => {
             let _ = child.kill();
