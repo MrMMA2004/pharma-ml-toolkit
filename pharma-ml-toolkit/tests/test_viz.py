@@ -1397,7 +1397,10 @@ class TestHTMLReport:
             .add_figure(plot_confusion_matrix(report), caption="Confusion")
         )
         out = page.save(tmp_path / "report.html")
-        text = out.read_text()
+        # r297: the report embeds base64 PNGs and themes beyond ASCII --
+        # read it UTF-8 (the writer's own encoding), not the locale codec
+        # (cp1252 dies at the first multi-byte continuation on Windows).
+        text = out.read_text(encoding="utf-8")
         assert "<h1>Test report</h1>" in text
         assert "data:image/png;base64," in text
         assert "Confusion" in text
@@ -1584,7 +1587,7 @@ class TestHTMLReportContents:
             close=False,
         )
         assert written, "the bundle wrote nothing"
-        text = (tmp_path / "bundle" / "report.html").read_text()
+        text = (tmp_path / "bundle" / "report.html").read_text(encoding="utf-8")
         assert "<nav class='contents'" in text
         assert "<li><a href='#pg-1' title='Jump to this page in the report'>Leaderboard</a></li>" in text
         assert "<li><a href='#pg-2' title='Jump to this page in the report'>Confusion</a></li>" in text
@@ -1654,7 +1657,9 @@ class TestHTMLReportTheme:
             metrics_to_dataframe(report).to_dict(orient="list")
         )
         out = page.save(tmp_path / "themed.html")
-        text = out.read_text()
+        # r297: same UTF-8 read -- the theme button is U+263D, far beyond
+        # the cp1252 the unencoded read would ride on Windows.
+        text = out.read_text(encoding="utf-8")
         assert "data-theme='dark'" in text and "\u263d dark</button>" in text
 
 
@@ -1694,7 +1699,7 @@ class TestVisualBundle:
         assert "report.html" in names
         assert {"confusion.png", "confusion.svg", "roc.png", "roc.svg"} <= names
         assert {"metrics.csv", "metrics.md"} <= names
-        html = (tmp_path / "bundle" / "report.html").read_text()
+        html = (tmp_path / "bundle" / "report.html").read_text(encoding="utf-8")
         assert html.count("data:image/png;base64,") == 2
 
     def test_bundle_rejects_path_escape(self, trained_classifier, tmp_path):
@@ -2556,7 +2561,7 @@ class TestHTMLReportBackLinks:
             close=False,
         )
         assert written, "the bundle wrote nothing"
-        text = (tmp_path / "bundle" / "report.html").read_text()
+        text = (tmp_path / "bundle" / "report.html").read_text(encoding="utf-8")
         assert "<nav class='contents' id='contents' tabindex='-1'" in text
         assert text.count(self.BACK_LINK) == 2
         assert "id='pg-1'" in text and "id='pg-2'" in text
@@ -2641,7 +2646,7 @@ class TestContentsForwardTooltips:
             close=False,
         )
         assert written, "the bundle wrote nothing"
-        text = (tmp_path / "bundle" / "report.html").read_text()
+        text = (tmp_path / "bundle" / "report.html").read_text(encoding="utf-8")
         assert text.count(self.FORWARD_TITLE) == 2
         # the bundle's own Contents lines carry it in the same minting
         # order the direct render does
