@@ -16184,3 +16184,88 @@ AUC pins hold inside their 5e-5 tolerance, and the full local gate set
 (provenance + release portability + checkpoint tooling) exits 0. The
 v1.2.230 release zip stays pinned to the tag commit (byte-parity with
 the release; the data bytes ride the next bump).
+
+---
+
+## Round 299 — run 89: the tag build's notebook-freshness failure decoded and fixed, the ten-chunk gate green through the OOM storms, the v1.2.230 zip ritual complete with the offsite home restored
+
+**The housekeeping baseline:** main 0/0 vs origin/main (ff-only clean,
+no arena/* branches; tags through v1.2.228 fetched), the PAT verified
+against the API (HTTP 200, the 600-mode file survived this rollback),
+the venv matched requirements.txt exactly (rdkit 2026.09.1, torch
+2.14.1+cpu, numpy 1.2.4-free 1.26.4 — repair a no-op). The tree
+carried the round-298 close-out docs uncommitted: committed as
+`0b020c22` with the carrier trues (RELEASE_READINESS §4's four lines
+and FEATURES.md's ship line, both stale at 1.2.229) — the guard the
+Windows runner later failed on `test_purpose_header_and_freeze_stamp`
+was already fixed by that commit.
+
+**The first tag build died honestly.** Run `44566101809` (the v1.2.230
+tag build, event push) failed at step 13 "Backend unit tests" on the
+notebook-freshness guards: the eight committed notebooks still printed
+`1.2.229` banners against VERSION 1.2.230 — the r298 commit bumped
+the carriers atomically but never re-executed the notebooks. The
+error message named its own fix ("re-run tools/reexec_notebooks.py,
+then the twins via tools/strip_notebook_outputs.py").
+
+**The ten-chunk gate, green through the OOM storms.** Launched with
+the dev server down (the OOM ritual; the stale agent-browser Chrome
+from an earlier session was also killed — it held ~0.5 GB the
+playground leg needed). Ledger: chunk-1 (test_playground.py alone —
+694 KB, ten times the next file) SIGKILLed at 767 s having passed 76%,
+its sub-batch re-run green at 823 s; chunk-2 green 264 s; chunk-3
+degraded to sub-batches 1–4 green + six singles (five green,
+`tests/ui/test_nine_card_first.py` SIGKILLed at 268 s); chunk-4 green
+140 s; then the gate DAEMON itself was killed right after writing
+chunk-5's start line (log mtime 17:22:37 UTC — the orphaned pytest
+died on the broken stdout pipe). The continuation gate
+(`run_suite_chunks_299_cont.py`) re-proved chunk-5 green 273 s,
+chunk-6 green 135 s, chunk-7 degraded to sub-batches 1–6 all green,
+chunk-8 green 86 s, chunk-9 (nine-card suite) green 21 s, chunk-10
+(doctests) green 86 s, chunk-11 (api) green 66 s. The
+`test_nine_card_first.py` OOM was then proven environmental, not a
+product bug: it SIGKILLed even truly solo (11 dots, rc=137), and the
+23 tests pass green across a three-process split by class
+(WorkspaceDefaults+Subpages 11, HistoryAndNavigation 6,
+AdvancedNavigation+KeyboardAccess+RestoreBehaviour 6) — the Qt
+main_window fixture accumulates and a 4 GB container dies at test 12.
+Zero real failures across the whole ledger.
+
+**The freshness fix.** All eight notebooks re-executed at the shipped
+version (ml 84 s; docking 9 s, pk 7 s, cellline 13 s, generative 35 s,
+deep_learning 11 s, tuning 19 s; the walkthrough re-run solo 32 s
+after the continuation driver's own process died silently — every leg
+reports error-outputs=0, home-path-survivors=0), the seven strip
+twins refreshed idempotently, and the three Windows-failing guards
+re-proven 121-green locally (rc=0) BEFORE the re-tag. Committed as
+`6e115f9f` with the CHANGELOG [1.2.230] entry's tag-re-point note;
+the v1.2.230 tag re-pointed onto the fix commit (the failed build had
+no release and no consumers — the tag stays meaning "the shipped
+v1.2.230"), which re-triggered the Windows Release workflow
+automatically (run `44597166723`) plus a CI run on main
+(`44597143227`).
+
+**The zip ritual, five homes.** `build_zip_299.py` (the r265 recipe
+plus the fifth offsite home) built
+`pharma-ml-toolkit-v1.2.230.zip` — 1034 entries / 920 files / 16,038,610 B,
+sha-256 `254f35a6…2df08a` — testzip-verified in all five homes
+(download/, pharma-ml-toolkit/dist-archive/, pharma-ml-toolkit/download/,
+upload/, and the restored offsite ~/pharma-ml-toolkit-zips/, which the
+rollback had wiped and the builder backfilled with 221/222 plus the
+new release), composition violations 0, the leak scan's six hits all
+verified pattern literals (the detection regexes in
+packaging_validation.py and purge_secret_history.sh and the
+PAT_EXPOSURE_REMEDIATION documentation — no full token shape exists),
+and the v1.2.229 predecessor swept from every home. One curiosity
+recorded for the next run: the in-repo v1.2.229 copies had already
+left their homes before the builder's sweep ran (mechanism
+unidentified — the api persistence tests use tmp fixtures; end state
+verified = the contract state).
+
+**Close:** the dev server re-raised via `scratch/dev_daemon.py` (the /
+route 200 with the v1.2.230 pin live in the served page), the Windows
+Release run and CI monitored at close, the counter bumped to run 89.
+Next queue: the tag build's conclusion + the GitHub Release asset
+verification (part11_2 §9), then the clean-machine smoke test
+(C-3/C-5, §47 rows 38–48) and the §28 Stage-5 PySide6 retirement
+behind it.
