@@ -10,25 +10,25 @@
  */
 
 /** Collected pytest cases at the shipped revision (repo-wide
- *  ``pytest --collect-only -q`` sum, 2026-11-19 the r289 firing walk:
+ *  ``pytest --collect-only -q`` sum, 2026-11-20 the r300 firing walk:
  *  the default collection (testpaths tests+src, doctest-modules on)
- *  collects 8,576 = tests/ 7,661 (of which tests/ui 971, tests/api 261)
- *  + src doctests 915. The r288 molecular3d family (27 guards) and the
- *  r289 §14.1 startup-gate family (8 guards) ride the count. The
- *  previous 8,541 pin was the r287 close-out walk. */
-export const SHIPPED_TEST_COUNT = 8576;
+ *  collects 8,590. The tree re-trued after the ff-only re-sync absorbed
+ *  rounds 290-299 (the Windows-release arc) plus the arena/f5c3dd10
+ *  merge (the landing-page redesign + Studio CI guards, whose
+ *  test_ml_workspace / test_datasets_ml_artifacts deltas ride the
+ *  count). The previous 8,576 pin was the r289 firing walk. */
+export const SHIPPED_TEST_COUNT = 8590;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
- *  docs, tools — the same census /api/toolkit/tree walks). The r289
- *  firing re-trued walk: 1,569 (the §14.1 startup trio + its drift
- *  guard + the browser-verify harness ride the live walk; the same
- *  convention the r287/288 rounds used for their in-flight rounds). */
-export const SHIPPED_FILE_COUNT = 1569;
+ *  docs, tools — the same census /api/toolkit/tree walks). The r300
+ *  firing re-trued walk: 1,584 (post-re-sync + arena merge). The
+ *  previous 1,569 pin was the r289 firing walk. */
+export const SHIPPED_FILE_COUNT = 1584;
 
 /** Source lines of the shipped tree, formatted with thousands
- *  separators at render time (raw number kept for math). The r289
- *  firing live census: 588,975. */
-export const SHIPPED_SOURCE_LINES = 588975;
+ *  separators at render time (raw number kept for math). The r300
+ *  firing live census: 595,238. */
+export const SHIPPED_SOURCE_LINES = 595238;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

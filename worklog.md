@@ -16294,3 +16294,93 @@ part11_2 §9's artifact delivery COMPLETE on a public release. The
 remaining lane is unchanged and honest: the clean-machine smoke test
 on a real Windows 10/11 x64 (dissolves C-3/C-5, fills §47's rows
 38–48) and the §28 Stage-5 PySide6 retirement behind it.
+
+## Round 300 — run 90: the rollback recovery, the arena absorption, and the seven-carrier v1.2.231 ship (the housekeeping firing)
+
+**The firing opened on a rolled-back checkout.** HEAD sat at
+`2eb0ede4` (the UUID snapshot commit, 476 behind `origin/main`) while
+the working tree carried the r290–r299 content uncommitted — the
+sandbox recycle had preserved the files but reverted the refs, and
+the origin remote itself was gone from `.git/config`. The recovery
+sequence, in order: the PAT re-recovered from
+`upload/MASTER_PROMPT.pdf` (the two-line splice, 93 chars, verified
+HTTP 200 against the API, never printed); origin re-added as a clean
+URL (auth via a 700-mode askpass shim so no token ever touched a
+URL, a log, or a credential file); `fetch --prune` restored the
+remote refs and tags. The collision audit before the merge: 1,035
+untracked files byte-identical to `origin/main` blobs, 0 differing,
+5 local extras (the v1.2.229 ghosts + the two new scripts). The
+ff-merge then refused on both fronts (untracked-overwrite and the
+156 locally-modified tracked files) — resolved by removing the
+verified-identical untracked blockers (each hash re-checked
+immediately before deletion), stashing the mods (their content was
+already proven equal to origin's), and dropping the stash after the
+merge landed: main at `62fac28e`, a 0-file diff against origin.
+
+**The arena branch was absorbed for real.** 4 commits — the
+redesigned scientific landing page (`github-hero.svg`, the social
+preview, `check_github_page.py` +20, the root `test_github_page.py`
++16), the `studio-frontend` CI job with the pinned npm + pytest
+guards, and the Tauri/frontend status docs — merged `--no-ff` with
+the ort strategy, zero conflicts, then the ref deleted on the
+remote. Two of the arena's claims failed the live-API check and
+were fixed in the README: the Windows release is **published**
+(draft=false, EXE 477,600,707 B + MSI 631,070,053 B + manifest +
+SHA256SUMS attached), not a draft; and the "broken link" the
+terminal showed (`the igration ledger]`) turned out to be a display
+artifact — the file carries `[migration ledger]` intact.
+
+**The venv repair ran foreground** and restored the full pinned
+stack after the rollback had wiped rdkit/torch/shap and drifted
+numpy to 2.1.3 / matplotlib to 3.9.2: numpy 1.26.4, rdkit 2026.9.1
+(+ the stub syntax patch), torch 2.14.1+cpu, matplotlib 3.10.9, the
+Studio GUI layer (PySide6 6.8.3 + the libEGL stub copy), the FastAPI
+service pins, PyInstaller 6.22.3 — both the import-surface probe and
+the offscreen QApplication probe green.
+
+**The ship: v1.2.231 across SEVEN carriers.** The first bump
+(VERSION, pyproject, `__init__`, `toolkit-version.ts`) passed the
+arena smoke (80 workspace/api tests, the page guard, 11 unittests)
+but the gate's `test_windows_pipeline` lockstep guard caught the
+three carriers the four-bump missed — `frontend/package.json`,
+`src-tauri/tauri.conf.json`, and the lockfile's two root version
+fields (the guard's message names the consequence: the workflow's
+step 2 would refuse to build). All seven now agree at 1.2.231. The
+eight notebooks re-executed at the shipped version (208 s, zero
+error-outputs, zero home-path survivors), twins stripped,
+`test_viz` 229 green (the r299 `pk 1.620` pin held under the
+repaired stack), `RELEASE_READINESS` regenerated (18 deps, carriers
+agree), the census re-trued (1,584 files / 595,238 lines / 8,590
+collected) into `toolkit-stats.ts`, and the CHANGELOG gained the
+[1.2.231] entry.
+
+**The gate, honestly.** Twelve legs on the merged, bumped,
+notebook-fresh tree: chunks 1–2 and 5–8 green, chunk-9 (nine-card
+Qt envelope) green, chunk-10 (src doctests) green, chunk-11 (api
+suite) green, chunk-12b (root unittests) green. Three legs earned
+their marks: chunk-1 (`test_playground.py` alone) pushed ~3 GB RSS
+and survived at 748 s only after the runner gained the notebook
+re-exec's thread caps; chunk-3 OOM'd and degraded through
+sub-batches and singles (all green except `test_nine_card_first.py`,
+which OOM'd even solo at rc=137 and was re-run green 23/23 via the
+six-class split — the r299 three-way doctrine, tightened);
+chunk-4's two failures were the carrier lockstep (decoded, fixed,
+the file re-run 9/9); chunk-12a's archive check was deferred by
+design and went green once the ritual shipped the archive.
+
+**The zip ritual, five homes.** `build_zip_300.py` (the r299 recipe)
+built v1.2.231: 1,032 entries / 919 files / 16,031,042 B,
+sha-256 `5a60c16a…4600b`, testzip-None, stamp parity, composition 0,
+and the same six leak hits r299 re-confirmed as pattern literals
+(the security docs' own token-prefix documentation). Byte-parity
+verified across all five homes; the offsite
+`~/pharma-ml-toolkit-zips/` was rebuilt (the rollback wiped it a
+second time) and backfilled with the 221–231 history — after one
+repair where the offsite's copy turned out to carry build-1 bytes
+and was re-copied from the canonical home; the predecessor v1.2.230
+and the untracked v1.2.229 rollback ghosts left the four in-repo
+homes (7 files swept). The / route serves 200 with the 1.2.231 pin
+live; the counter reads 90. The remaining lane is unchanged and
+honest: the clean-machine smoke test on a real Windows 10/11 x64
+(dissolves C-3/C-5, fills §47's rows 38–48) and the §28 Stage-5
+PySide6 retirement behind it.

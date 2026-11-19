@@ -1,3 +1,38 @@
+## [1.2.231] — 2026-11-20 — round 300 (the 90th recorded run: the sandbox-rollback recovery — a 476-commit ff-only re-sync, the arena/f5c3dd10 absorption, the venv repair, and the re-trued census)
+
+- **The rollback recovery, on the record.** The sandbox recycle rolled
+  the checkout back to `2eb0ede4` (a snapshot commit 476 behind
+  `origin/main`) while the working tree carried the r290–r299 content
+  uncommitted: every shared tracked file matched `origin/main`
+  byte-for-byte (verified by blob-hash comparison, 1,035 untracked
+  files identical, 0 differing), so the sync was a verified ff-only
+  merge — the 1,035 identical untracked blockers were removed after
+  re-verification (each candidate's blob hash re-checked immediately
+  before deletion), the stale stash dropped, and main landed at
+  `62fac28e` with a 0-file diff against `origin/main`. The PAT was
+  re-recovered from `upload/MASTER_PROMPT.pdf` (the two-line splice,
+  93 chars, 600-mode file) and verified against the API (HTTP 200,
+  token never printed). The fresh `origin/arena/f5c3dd10-pharma-ml-toolkit`
+  branch was absorbed by a real merge (`--no-ff`, ort strategy, zero
+  conflicts: the redesigned scientific landing page with its `github-hero.svg`
+  + social preview, the `studio-frontend` and `github-page` CI jobs,
+  the Tauri/frontend status docs) and the ref deleted on the remote.
+- **The venv repair ran foreground** (`scratch/venv_repair.sh`): the
+  rollback had left rdkit/torch/shap missing, numpy drifted to 2.1.3,
+  matplotlib to 3.9.2 — the script restored the pinned stack (numpy
+  1.26.4, rdkit 2026.9.1, torch 2.14.1+cpu, matplotlib 3.10.9, the
+  Studio GUI layer with the libEGL stub, the FastAPI service pins,
+  PyInstaller 6.22.3) and verified both the import surface and the
+  offscreen QApplication probe.
+- **The carriers bumped to 1.2.231** (VERSION, pyproject,
+  `pharmaml.__version__`, `toolkit-version.ts`) and the eight
+  notebooks re-executed at the shipped version (208 s, zero
+  error-outputs, zero home-path survivors), twins stripped; the
+  `test_viz` artifact pins held (229 passed — the r299 `pk 1.620`
+  pin re-verified under the repaired stack). The census re-trued to
+  1,584 files / 595,238 lines / 8,590 collected tests, riding the
+  `toolkit-stats.ts` pins forward from the r289 walk.
+
 ## [1.2.230] — 2026-11-19 — round 298 (part11: the first REAL Windows release — the pipeline executed end-to-end on the GitHub Actions windows-2022 runner, the provenance audit made hardware-stable, and the tag-built release delivers the EXE/MSI/checksum/manifest artifacts; run 89)
 
 - **The Windows Release pipeline ran.** Run `44553308203`'s sibling —

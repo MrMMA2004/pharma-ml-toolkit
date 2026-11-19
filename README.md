@@ -130,7 +130,7 @@ For supported checkpoint objectives and refusal behavior, see the [genetic check
 
 ### Desktop migration status
 
-The established desktop Studio still uses **PySide6**. The React/TypeScript, Tauri 2 and local Python API migration is in progress alongside it; the [migration ledger](pharma-ml-toolkit/docs/MIGRATION_TAURI2.md) tracks what is implemented and what remains. The v1.2.230 Windows workflow generated an EXE and MSI, but they are currently attached to a **draft**, not the latest public GitHub release. **A clean-machine offline-install/upgrade check has not been completed, and full parity with every legacy Studio workflow is not established; PySide6 remains available.** The separate Next.js web console and source archives are not the desktop installer.
+The established desktop Studio still uses **PySide6**. The React/TypeScript, Tauri 2 and local Python API migration is in progress alongside it; the [migration ledger](pharma-ml-toolkit/docs/MIGRATION_TAURI2.md) tracks what is implemented and what remains. The v1.2.230 Windows release is **published** (not a draft) with the NSIS `PharmaML_Studio_Setup_v1.2.230.exe`, the WiX `PharmaML_Studio_v1.2.230.msi` (offline WebView2), `RELEASE_MANIFEST.json` and `SHA256SUMS.txt` attached. **A clean-machine offline-install/upgrade check has not been completed, and full parity with every legacy Studio workflow is not established; PySide6 remains available.** The separate Next.js web console and source archives are not the desktop installer.
 
 ## Documentation
 

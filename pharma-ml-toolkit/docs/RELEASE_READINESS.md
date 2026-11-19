@@ -1,6 +1,6 @@
 # Release readiness — the Phase-6 evidence report (part6 §16)
 
-Generated 2026-11-18 by `tools/release_readiness.py`.
+Generated 2026-11-19 by `tools/release_readiness.py`.
 Every number below comes from a live probe or a recorded test
 run; sections without gathered evidence say so and name the
 command that gathers them. Nothing here converts absence of
@@ -43,35 +43,22 @@ All probed dependencies import cleanly in this environment (the Qt rows are prob
 ## 3. Test evidence
 
 - Suites discovered: **243** (72 UI, 171 library)
-- Tests collected: **7400**
+- Tests collected: **7401**
 
-| Suite chunk (as actually run) | Result |
-| --- | --- |
-| `1 (a-l)` | 3156 passed, 1 skipped |
-| `2 (m-p)` | 904 passed, 1 skipped |
-| `3 (r-z)` | 1326 passed, 1 skipped (re-run green after the CHANGELOG-lead heading fix; the first run's 2 failures were the version-carrier guards reading the '-r289' suffix heading — the r287 precedent) |
-| `4a (ui bestof..docking)` | 97 passed |
-| `4b (ui export..generative)` | 51 passed |
-| `4c (ui chart..legend)` | 126 passed |
-| `4d (ui imagelab..responsive)` | 53 passed |
-| `4e (ui mlworkbench..utilities)` | 182 passed |
-| `4f (ui nine-cards)` | 26 passed |
-| `6 (src doctests)` | 912 passed, 3 skipped |
-| `7 (api + frontend guards)` | 282 passed, 1 skipped |
-
-Chunkening follows §14.2 (low-memory constraints): suites
-run sequentially in small groups; nothing was skipped in
-bulk and no skipped test is claimed as passed.
+**Not gathered this run** — run the §14.2-chunkened suites
+and record results, then re-generate with
+`--record <chunk>=<result>` (repeatable).
 
 ## 4. Version carriers (§15)
 
-- VERSION: `1.2.230`
-- pyproject.toml: `1.2.230`
-- src/pharmaml/__init__.py: `1.2.230`
-- CHANGELOG.md leads with: `1.2.230`
+- VERSION: `1.2.231`
+- pyproject.toml: `1.2.231`
+- src/pharmaml/__init__.py: `1.2.231`
+- CHANGELOG.md leads with: `1.2.231`
 - Agreement: **yes**
 
 ## 5. Release-archive verification (§14)
 
-- Status: **passed** (8 checks)
+- Status: **not gathered**
+- How to gather: `tools/audit_release.py <zip> after tools/build_zip.py`
 
