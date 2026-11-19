@@ -2134,7 +2134,13 @@ class TestNotebookArtifacts:
             assert symbol in sources, f"PK notebook lost its {symbol} section"
 
         # The NCA numbers must stay committed (fixed-seed demo profile:
-        # AUC 17.961 ng·h/mL, terminal half-life 1.623 h).
+        # AUC 17.961 ng·h/mL, terminal half-life 1.620 h).  The 1.623
+        # the pin carried through r298 rode a drifted-era execution
+        # (the r290-292 venv had numpy 2.1.3 before the repair); the
+        # pinned-stack re-exec at the r299 notebook-freshness fix
+        # produces 1.620 on the requirements.txt stack — the profile
+        # itself is unchanged (AUC, AUMC, Cmax, Tmax all agree), only
+        # the terminal-slope fit's last-digit numerics moved.
         nca_cell = next(
             (c for c in code_cells if "summary = nca_summary" in c.source), None
         )
@@ -2145,7 +2151,7 @@ class TestNotebookArtifacts:
         )
         assert "AUC" in nca_text, "NCA cell lost its output"
         assert "17.961" in nca_text, "NCA AUC value changed"
-        assert "1.623" in nca_text, "terminal half-life value changed"
+        assert "1.620" in nca_text, "terminal half-life value changed"
 
         # §3 exposes the AUC math: linear vs log trapezoid on the same
         # shipped profile.  The log value is the post-round-20a

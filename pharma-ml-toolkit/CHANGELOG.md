@@ -61,7 +61,12 @@
   so the tag was re-pointed at the round-299 fix commit (all eight
   notebooks re-executed at the shipped version via
   `tools/reexec_notebooks.py`, the seven strip twins refreshed, the
-  three failing guards re-proven green locally before the re-tag).
+  three failing guards re-proven green locally before the re-tag; the
+  second build then exposed the next stale pin — test_viz.py's pk
+  notebook-artifact assertion wanted t_half 1.623, a value from the
+  drifted-era execution (numpy 2.1.3 before the r292 repair), while
+  the pinned-stack notebook honestly prints 1.620 (AUC unchanged) —
+  the pin trued with the provenance note, test_viz.py 85-green).
 - **What stays honestly BLOCKED (unchanged labels):** a runner is a
   build environment, NOT a clean machine — the clean-Windows-10/11
   installation test, the offline launch flows, and the upgrade/
