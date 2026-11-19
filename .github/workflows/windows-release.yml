@@ -159,6 +159,11 @@ jobs:
           # the torch CPU wheel rides the CPU index (the venv-repair pin)
           pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
           pip install -r packaging/windows/installer-requirements.txt
+          # shap rides --no-deps: its 0.54 metadata demands numpy>=2 while
+          # the verified stack pins numpy 1.26.4 — runtime-clean (the
+          # requirements.txt resolver-vs-runtime note); its companions
+          # (numba/llvmlite/slicer) are pinned in the -r file above
+          pip install --no-deps shap==0.54.1
           pip install pyinstaller==6.22.3 pytest
           pip install --no-deps -e .
           python -c "import pharmaml, fastapi, uvicorn; print('stack OK', pharmaml.__version__)"

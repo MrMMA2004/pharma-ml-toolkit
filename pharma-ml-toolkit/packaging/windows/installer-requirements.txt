@@ -45,7 +45,16 @@ lightgbm==4.5.0
 catboost==1.2.8
 
 # ---- SHAP explanations (ml/explain.py TreeExplainer surface) ------------
-shap==0.54.1               # pulls numba==0.61.0 + llvmlite==0.44.0
+# (r294: shap==0.54.1's METADATA demands numpy>=2 — a pip resolver
+# warning, not a runtime break on the verified numpy 1.26.4 stack
+# (requirements.txt's own resolver-vs-runtime note). The full-resolve
+# -r install therefore DIES with ResolutionImpossible on the runner;
+# shap installs separately with --no-deps in the workflow's step 7,
+# and its hard runtime companions are pinned here instead (a
+# --no-deps install pulls none of them):
+numba==0.61.0
+llvmlite==0.44.0
+slicer==0.0.8
 
 # ---- Deep learning -----------------------------------------------------
 # (torch==2.14.1+cpu installed separately — see header note.)
