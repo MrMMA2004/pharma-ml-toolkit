@@ -35,12 +35,13 @@ Also ensures examples/data/lysozyme_1aki.pdb (1AKI) and tests/data/1crn.pdb
 Properties: deterministic, idempotent (files are only rewritten when their
 bytes actually change -- a second run touches nothing), cwd-independent
 (all paths resolve from ``__file__``), single-threaded (worker-cap env vars
-are set before numpy/sklearn/RDKit import), and hardware-stable (the four
-BLAS-exposed tables -- qsar_multiclass, qsar_regression,
-walkthrough_classification, walkthrough_multiclass -- are rounded to 6
-decimals at build time; DYNAMIC_ARCH OpenBLAS picks a CPU-specific dgemm
-kernel at run time, and GitHub's mixed Intel/AMD runner fleet exposed the
-unrounded last digit as byte drift -- round 298).
+are set before numpy/sklearn/RDKit import), and hardware-stable (EVERY
+float table is rounded to 6 decimals at the single ``_write_frame`` choke
+point; numpy's manylinux wheels dispatch CPU-specific SIMD kernels --
+DYNAMIC_ARCH OpenBLAS dgemm AND the vectorised exp/log loops -- at run
+time, and GitHub's mixed Intel/AMD runner fleet exposed the unrounded
+last digit as byte drift on the make_classification/matmul tables and
+the np.exp pk_profile -- rounds 298-299).
 
 ``--check`` mode (100x-115): the non-mutating round-trip audit.  Nothing
 is written and no network fetch happens; every file the builder owns is
@@ -180,24 +181,40 @@ def _write_if_changed(path: Path, data: bytes) -> None:
 
 
 def _write_frame(path: Path, frame: pd.DataFrame, **to_csv: object) -> None:
-    """Serialise a DataFrame exactly as ``to_csv`` would and write idempotently."""
+    """Serialise a DataFrame exactly as ``to_csv`` would and write idempotently.
+
+    Every float64 column is rounded to ``_ROUND_DECIMALS`` places BEFORE
+    serialisation — the hardware-stability choke point (round 298/299):
+    numpy's manylinux wheels dispatch SIMD kernels (dgemm, but also the
+    vectorised exp/log loops) by CPU feature at RUN TIME, so GitHub's
+    mixed Intel/AMD runner fleet shifts the ~15th significant digit of
+    BLAS- and transcendental-exposed tables (run 44553308203: the four
+    make_classification and matmul tables; run 44578335524: the np.exp
+    pk_profile). Rounding at this single choke point absorbs the noise
+    for EVERY float table the builder owns; computations above stay
+    full-precision, only the serialised bytes are stabilised.
+    """
     buffer = io.StringIO()
-    frame.to_csv(buffer, **to_csv)  # type: ignore[arg-type]
+    _round_frame(frame).to_csv(buffer, **to_csv)  # type: ignore[arg-type]
     _write_if_changed(path, buffer.getvalue().encode("utf-8"))
 
 
-# Hardware-stability pin (round 298): numpy's manylinux wheels carry
-# DYNAMIC_ARCH OpenBLAS, which selects a CPU-specific dgemm kernel at RUN
-# TIME. GitHub's hosted fleet mixes Intel and AMD microarchitectures, so
-# otherwise-seeded deterministic generation (thread counts are already
-# capped at 1 above) still varies in the ~15th significant digit across
-# runners -- enough to break the byte-exact provenance audit on an
-# unpredictable subset of machines (run 44553308203, runner 1000002660:
-# same tree, same pinned wheels, four BLAS-exposed CSVs drifted). Rounding
-# the BLAS-exposed tables to 6 decimals at BUILD time absorbs that
-# last-digit kernel noise (< 5e-7 per value) and restores byte-identical
-# output on every x86-64 CPU; the values stay scientifically identical and
-# the notebook inline cells agree to within the rounding width.
+# Hardware-stability pin (rounds 298-299): numpy's manylinux wheels carry
+# DYNAMIC_ARCH OpenBLAS and runtime-dispatched SIMD transcendental loops,
+# both of which select CPU-specific kernels at RUN time. GitHub's hosted
+# fleet mixes Intel and AMD microarchitectures, so otherwise-seeded
+# deterministic generation (thread counts already capped at 1 above)
+# still varies in the ~15th significant digit across runners -- enough to
+# break the byte-exact provenance audit on an unpredictable subset of
+# machines (run 44553308203, runner 1000002660: four make_classification/
+# matmul-exposed CSVs; run 44578335524, runner 1000002747: the np.exp
+# pk_profile). Rounding every float table to 6 decimals at the
+# _write_frame choke point absorbs that last-digit kernel noise
+# (< 5e-7 per value) and restores byte-identical output on every
+# x86-64 CPU; the values stay scientifically identical, the census/AUC
+# pins hold inside their tolerances (the AUC tolerance is 5e-5, the
+# rounding shifts it by < ~1e-5), and the notebook inline cells agree to
+# within the rounding width.
 _ROUND_DECIMALS = 6
 
 
@@ -387,11 +404,11 @@ def build_qsar_multiclass_and_regression() -> None:
         class_labels=["inactive", "weak", "moderate", "strong", "potent"][:4],
         seed=11,
     )
-    _write_frame(DATA_DIR / "qsar_multiclass.csv", _round_frame(multi), index=False)
+    _write_frame(DATA_DIR / "qsar_multiclass.csv", multi, index=False)
 
     # cell 35: continuous pIC50 endpoint.
     reg_table = generator.make_regression_table(n_samples=260, seed=21)
-    _write_frame(DATA_DIR / "qsar_regression.csv", _round_frame(reg_table), index=False)
+    _write_frame(DATA_DIR / "qsar_regression.csv", reg_table, index=False)
 
 
 # ---------------------------------------------------------------------------
@@ -529,7 +546,7 @@ def build_walkthrough_tables() -> None:
     )
     frame = pd.DataFrame(X, columns=[f"descr_{i:02d}" for i in range(X.shape[1])])
     frame["Target"] = y
-    _write_frame(DATA_DIR / "walkthrough_classification.csv", _round_frame(frame), index=False)
+    _write_frame(DATA_DIR / "walkthrough_classification.csv", frame, index=False)
 
     # cell 10: 3-class variant.
     X3, y3 = make_classification(
@@ -538,7 +555,7 @@ def build_walkthrough_tables() -> None:
     )
     multi = pd.DataFrame(X3, columns=[f"descr_{i:02d}" for i in range(X3.shape[1])])
     multi["Target"] = y3
-    _write_frame(DATA_DIR / "walkthrough_multiclass.csv", _round_frame(multi), index=False)
+    _write_frame(DATA_DIR / "walkthrough_multiclass.csv", multi, index=False)
 
 
 # ---------------------------------------------------------------------------
