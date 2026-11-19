@@ -1,4 +1,4 @@
-"""part10's queued row — the datasets / ml / artifacts API surface.
+"""The part11 Datasets/ML workflow's API and artifact surface.
 
 Test-alongside-every-change, exactly like the opening suite: every
 route here runs the REAL backend (load_dataset / profile_frame /

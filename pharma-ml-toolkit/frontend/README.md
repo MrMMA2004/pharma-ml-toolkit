@@ -15,10 +15,10 @@ boundary rule — no science in TypeScript, none in Rust).
 ## Commands
 
 ```
-npm install            # once per sandbox (node_modules is never shipped)
+npm ci                 # restore exact dependencies from package-lock.json
 npm run generate:types # regenerate src/types/api.d.ts from the backend contract
-npm run typecheck      # strict tsc --noEmit (the foundation gate)
-npm run build          # typecheck + the production vite build -> dist/
+npm run typecheck      # strict tsc --noEmit
+npm run build          # typecheck + the production Vite build -> dist/
 npm run dev            # DEV-ONLY server on :5174 (never used in production)
 ```
 
@@ -30,7 +30,7 @@ src/
   components/
     ui/         the shadcn/ui primitives (button, card, tabs; Radix heads)
     layout/     WorkspaceNav, WorkspaceShell
-  features/     introduction/ (the §10.2 start page; the other eight are queued rows)
+  features/     eight API-backed scientific workflows + the Introduction start page
   services/     api/ (typed REST client), websocket/ (typed envelope)
   types/        api.d.ts — GENERATED from ../contracts/openapi.json (§12.2: one DTO source)
   styles/       the Mineral tokens (light/dark, chart palette)
@@ -40,12 +40,12 @@ src/
 ## Honesty rules carried over
 
 The workspace registry (`src/app/workspaces.ts`) states each
-workspace's build state; all nine rows are `workflow`-connected to
-the real backend through their service clients (verified by the
-`tests/test_frontend_services.py` route-surface guards and the
-scratch browser drivers). The shell still renders the honest
-queued-row placeholder for any registry row that regresses — no
-fake controls, no fabricated data. The registry order is
-drift-guarded by `tests/test_frontend_foundation.py` on the Python
-side, and the whole app boots through the §14.1 `StartupGate`
-(`tests/test_frontend_startup.py`).
+workspace's build state; the eight scientific workflow pages call the
+real backend through their service clients (verified by the
+`tests/test_frontend_services.py` and workspace route-contract guards
+plus live browser drivers). Introduction is the informational start
+page. The shell still renders the honest queued-row placeholder for
+any workflow row that regresses — no fake controls or fabricated data.
+The registry order is drift-guarded by
+`tests/test_frontend_foundation.py`, and the whole app boots through
+the §14.1 `StartupGate` (`tests/test_frontend_startup.py`).

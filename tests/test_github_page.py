@@ -41,7 +41,7 @@ class GitHubPageValidationTests(unittest.TestCase):
             '[Changelog](pharma-ml-toolkit/CHANGELOG.md)\n'
             '[Install](pharma-ml-toolkit/README.md#installation)\n'
             'Historical v1.2.161 capture\n'
-            '<img src="pharma-ml-toolkit/docs/assets/web-console-v1.2.161.png">\n'
+            '<img src="pharma-ml-toolkit/docs/assets/web-console-v1.2.161.png" alt="Historical web console">\n'
         )
         self.write("README.md", self.readme)
         self.root_patch = patch.object(check, "ROOT", self.root)
@@ -114,6 +114,20 @@ class GitHubPageValidationTests(unittest.TestCase):
         self.write("README.md", self.readme)
         self.write("pharma-ml-toolkit/docs/assets/github-hero.svg", "<svg>")
         with self.assertRaisesRegex(ValueError, "invalid SVG"):
+            self.validate()
+
+    def test_all_screenshot_images_require_alternative_text(self):
+        self.write("README.md", self.readme.replace(' alt="Historical web console"', ""))
+        with self.assertRaisesRegex(ValueError, "HTML images must have nonempty alternative text"):
+            self.validate()
+        self.write("README.md", self.readme.replace('alt="Historical web console"', 'alt="  "'))
+        with self.assertRaisesRegex(ValueError, "HTML images must have nonempty alternative text"):
+            self.validate()
+        self.write("README.md", self.readme.replace('alt="Historical web console"', 'data-alt="Not an alternative"'))
+        with self.assertRaisesRegex(ValueError, "HTML images must have nonempty alternative text"):
+            self.validate()
+        self.write("README.md", self.readme + '<img src="pharma-ml-toolkit/docs/assets/github-social-preview.png">\n')
+        with self.assertRaisesRegex(ValueError, "HTML images must have nonempty alternative text"):
             self.validate()
 
     def test_bad_cross_document_anchor_is_rejected(self):

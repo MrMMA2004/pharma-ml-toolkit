@@ -26,22 +26,25 @@ and in one decisive way more honest — frontend host.
 
 ## 0. The environment boundary (re-stated for part11)
 
-The development container is **Linux-only**. The boundary MOVES with
-part11 — in part11's favour:
+The interactive development sandbox is **Linux-only**. A GitHub Actions
+Windows runner has built and verified the v1.2.230 EXE/MSI release
+artifacts. They are attached to a **draft** GitHub release, not the
+latest public release. A runner build is not a substitute for the
+separate clean-machine installation and upgrade ritual.
 
-| part11 deliverable | Linux-container status |
+| part11 deliverable | Current status |
 |---|---|
-| React + TypeScript + Vite frontend (Phase Three) | **REAL (feasible)** — a Vite/React/TS build is a plain Node toolchain; unlike WinUI 3 it needs no Windows host. The part10 frontend BLOCKED line is lifted. |
-| FastAPI backend integration layer (Phase Seven) | **REAL (built)** — part10 rows 1–4 delivered the complete API surface; part11 adopts it unchanged. |
-| SQLite persistence + file vault (Phase Eleven) | **REAL (built this round)** — `src/pharmaml/api/persistence.py` + `/api/v1/database`; see §2. |
-| Backend process lifecycle + handshake (Phase Nine) | **REAL (backend side)** — port-0 loopback bind, `PHARMAML-READY` handshake, graceful shutdown; the *Tauri-side* supervisor moves to the host. |
-| Background job architecture (Phase Thirteen) | **REAL (built)** — JobManager state machine, cooperative cancellation, `n_jobs` passthrough incl. `-1`, never `0`. |
-| Tauri 2 Rust host (Phase Four) | **PARTIAL (feasible)** — Tauri compiles on Linux (webkit2gtk) for host-side logic and contract verification; the *Windows* packaging legs stay host-bound. |
-| Windows EXE/MSI bundling, WebView2 runtime verification, clean-machine §14-equivalent | **BLOCKED** — unchanged: no Windows host (same boundary as part10 and part9's `packaging/windows/BLOCKED` reports). |
-| PySide6 retirement (Phase Sixteen) | **BLOCKED** — rule unchanged: parity first; PySide6 stays production. |
+| React + TypeScript + Vite frontend (Phase Three) | **BUILT** — eight scientific workflows connect to the real API, alongside the Introduction start page; PR CI type-checks/builds the offline SPA and runs contract/workspace drift guards. |
+| FastAPI backend integration layer (Phase Seven) | **BUILT** — the versioned API surface is exercised by the API/database test suite. |
+| SQLite persistence + file vault (Phase Eleven) | **BUILT** — `src/pharmaml/api/persistence.py` + `/api/v1/database`; see §2. |
+| Backend process lifecycle + handshake (Phase Nine) | **BUILT** — port-0 loopback bind, `PHARMAML-READY` handshake, graceful shutdown, and the packaged sidecar's live Windows-runner probe. |
+| Background job architecture (Phase Thirteen) | **BUILT** — JobManager state machine, cooperative cancellation, `n_jobs` passthrough including `-1`, never `0`. |
+| Tauri 2 host and Windows packaging (Phase Four / part11_2) | **PARTIAL** — the v1.2.230 Windows runner generated the EXE/MSI, manifest and checksums and attached them to a draft release; clean-machine install/upgrade and runtime verification remain pending. |
+| PySide6 retirement (Phase Sixteen) | **NOT DONE** — PySide6 remains the production Studio until the remaining migration/release gates pass. |
 
-No BLOCKED line is claimed as done. The feasible-but-unbuilt lines
-are queued rows, not claims.
+The remaining BLOCKED items are named explicitly; completed builds and
+workflows below carry their own evidence and are not described as
+queued.
 
 ---
 
@@ -54,7 +57,7 @@ one codebase, **251 api tests green** this round:
 | part11 requirement | Delivered as | Test evidence |
 |---|---|---|
 | §12.1 REST route groups (versioned `/api/v1`) | health, capabilities, chemistry, datasets (+profile/split), ml, dl, semi-supervised, generative, docking, pkpd, md, visualization, applicability-domain, jobs, artifacts, models, **database** (this round) | `tests/api/` — 6 files, 251 tests |
-| §12.2 Pydantic schemas → OpenAPI → *TypeScript* client | `/api/openapi.json` served (docs disabled per §15) + **`contracts/openapi.json` exported this round** (`tools/export_openapi.py`, drift-gated by `tests/api/test_contracts.py`); part11 replaces NSwag with openapi-typescript/Orval — the generated TS client is a queued frontend row, generated FROM the committed contract (one DTO definition, never two) | contract exported + committed + drift-gated; no hand-written duplicate |
+| §12.2 Pydantic schemas → OpenAPI → *TypeScript* client | `/api/openapi.json` served (docs disabled per §15) + **`contracts/openapi.json` exported** (`tools/export_openapi.py`, drift-gated by `tests/api/test_contracts.py`); `openapi-typescript` generates the committed frontend types, and service request bodies use those types (one DTO definition, never two) | contract exported + committed + drift-gated; generated types and clients integrated |
 | §13 WebSocket events | typed `EventEnvelope` (single wire DTO), 20-event vocabulary, per-bus monotonic sequence, replay-since dedup, bounded-queue backpressure + `bus.overflow`, heartbeats, REST stays authoritative | TestEventBus, TestWebSocketEvents, TestDLTrain live-stream |
 | §14.1 startup handshake | port-0 socket owned by the server, fd handed to uvicorn (no check-then-bind race); single `PHARMAML-READY {port, token, pid, version}` stdout line; machine-readable line separate from logs | TestStartupHandshake (real serve probe) |
 | §15 local API security | per-startup `secrets.token_urlsafe(32)`, memory-only, constant-time verify, loopback-only bind, Host/Origin guard on every route, upload size/extension guards, docs disabled | TestSessionSecurity, TestLoopbackGuard |
@@ -153,9 +156,13 @@ All behind the same session token + loopback guard as every route
 | queued | Phase Three services, part two: the WS client service (hello/replay/heartbeats/reconnection) + the job manager client + dataset/artifact clients on the generated types (§5.2) — the typed REST client + envelope mirror shipped in 279 | done in 280 |
 | queued | Datasets workspace workflow on the real API (§11.1), then ML (§11.2), then the remaining seven workspaces row by row | done in 281 (Datasets) |
 | 281 | The Datasets workspace workflow (§11.1) + the part11_2 Windows release pipeline addendum: the `features/datasets/DatasetsPage` — the complete sequential chain on the REAL backend (multipart import with live job tracking → the registry/paginated-preview Inspect → the profile-frame Validate evidence → the loader-policy Clean/Select display → the Chemistry Lab engines through the NEW bounded column bridge → the stratified split report → the statplots Visualize → the digest-verified Export); the chemistry client (`services/chemistry/client.ts`, requests from the generated types) + the column bridge (`GET /datasets/{id}/column/{column}` — bounded by the chemistry engine's own 500 cap, `truncated` explicit) + the split route's sklearn boundary fixed to a clean 422 (the live E2E caught the raw 500); **E2E-DATASETS-PASS** (`scratch/e2e281/`: handshake→WS→upload→column bridge→descriptors(job)→fingerprints(sync)→profile→split→the digest-verified export→shutdown envelope); part11_2: `.github/workflows/windows-release.yml` (23 stages, pinned actions, least-privilege, the honest BLOCKED closing note) + `src-tauri/` (the conf with offline WebView2 + NSIS/MSI + the loopback CSP; the least-privilege capability; the Rust host — backend_manager implements the TESTED PHARMAML-READY handshake contract with the startup timeout + graceful window, security.rs's loopback assertion, the single backend_endpoint IPC command) + `packaging/windows/pharmaml_backend.spec` (the sidecar entry, the Qt stack excluded) + `backend_entry.py`/`verify_sidecar.py` + `TAURI_RELEASE_PIPELINE.md` (the §12 honest labels) + 8 pipeline drift guards (`tests/test_windows_pipeline.py`); the lost r280 artifacts client restored (a rollback had eaten it — the guard was red) | done (v1.2.224) |
-| queued | ML workspace (§11.2), then the remaining seven workspaces row by row | queued |
-| Windows host | Tauri 2 host + sidecar supervision (§14.2), WebView2 packaging, EXE/MSI installer, clean-machine verification, PySide6 retirement | **PARTIAL** (the host skeleton + workflow + pipeline docs exist, guarded — first compile/freeze/NSIS/MSI run and the clean-machine verification remain **BLOCKED** on a real Windows runner; see `packaging/windows/TAURI_RELEASE_PIPELINE.md`'s label table) |
+| 282 | §11.2 Machine Learning workflow on the real API: dataset/model selection, training jobs, evaluation, comparison, applicability-domain analysis, semi-supervised learning and export; the live backend driver completed **E2E-ML-PASS**. | done |
+| 283–287 | §11.3–§11.8: Deep Learning, Generative AI, Docking, PK/PD, Molecular Dynamics Analysis and Visualization workflows completed against their real backend services; the nine-workspace reconstruction completed. | done; round-specific E2E and browser evidence is recorded in the repository work log |
+| 288–291 | 3D visualization, startup/integration audit, SHAP explainability and Plotly adoption across the workflows; live browser verification includes ML parity/sample inspection, applicability-domain and SHAP charts. | done; all nine workspaces usable, plotting integration closed |
+| 298–299 | v1.2.230 Windows release ritual: fresh notebooks and source archive, Windows sidecar verification, Tauri/NSIS EXE + WiX MSI build, validation, manifest/checksums and GitHub Release upload. | build and uploads succeeded; assets are attached to a draft release, not yet public |
+| Windows clean-machine gate | Install, offline launch, WebView2/runtime behavior, upgrade/data retention and uninstall on a genuinely clean Windows 10/11 machine; only after this gate may PySide6 retirement be considered. | **BLOCKED / not yet verified**; the hosted release runner is build evidence, not the clean-machine ritual |
 
-The queued rows are honest plans, not claims. The frontend rows are
-NEW-feasible (Node toolchain); the Windows rows stay blocked until a
-Windows host exists.
+The React workflows and Windows release artifacts are implemented and
+have execution evidence. The remaining desktop-migration boundary is
+the clean-machine gate and the resulting retirement decision; do not
+label either as complete until that evidence exists.

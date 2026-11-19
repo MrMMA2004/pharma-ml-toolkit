@@ -1,35 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
-  <title id="title">PharmaML Toolkit</title>
-  <desc id="desc">An abstract illustration of molecular structure and a research data curve.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 370" role="img" aria-labelledby="title description">
+  <title id="title">PharmaML Toolkit — science, from data to insight</title>
+  <desc id="description">An abstract molecular network and an illustrative research curve accompany the PharmaML Toolkit title.</desc>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0a2027"/><stop offset="1" stop-color="#07131e"/></linearGradient>
-    <linearGradient id="line" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#50d9bd"/><stop offset="1" stop-color="#adee9a"/></linearGradient>
-    <radialGradient id="glow"><stop stop-color="#0f8279" stop-opacity=".32"/><stop offset="1" stop-color="#0f8279" stop-opacity="0"/></radialGradient>
-    <pattern id="grid" width="38" height="38" patternUnits="userSpaceOnUse"><path d="M38 0H0V38" fill="none" stroke="#b8e9de" stroke-opacity=".045"/></pattern>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#102936"/><stop offset="1" stop-color="#071a24"/></linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#a6ecd0"/><stop offset="1" stop-color="#68c7c3"/></linearGradient>
+    <pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#bee9df" stroke-opacity=".045"/></pattern>
   </defs>
-  <rect width="1200" height="340" rx="20" fill="url(#bg)"/>
-  <rect width="1200" height="340" rx="20" fill="url(#grid)"/>
-  <ellipse cx="952" cy="132" rx="320" ry="235" fill="url(#glow)"/>
-  <rect x="54" y="43" width="10" height="10" rx="3" fill="#8de6ba"/>
-  <text x="76" y="53" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="3" fill="#a4dbc9">PHARMAML TOOLKIT</text>
-  <text x="54" y="132" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="700" letter-spacing="-1" fill="#f4fbf8">From compound data</text>
-  <text x="54" y="183" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="700" letter-spacing="-1" fill="#f4fbf8">to research insight<tspan fill="#8de6ba">.</tspan></text>
-  <text x="56" y="225" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#bbd2cb">Machine learning  /  pharmacology  /  molecular science</text>
-  <path d="M56 261h49" stroke="#7ee0bc" stroke-width="3" stroke-linecap="round"/>
-  <text x="119" y="266" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="2" fill="#8caaa3">OPEN SOURCE · OFFLINE FIRST</text>
-  <g transform="translate(728 45)">
-    <rect x="0" y="0" width="400" height="250" rx="16" fill="#102a31" fill-opacity=".8" stroke="#82d9c5" stroke-opacity=".22"/>
-    <text x="24" y="36" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="2" fill="#9bbeb4">A WORKFLOW FOR EXPLORATION</text>
-    <path d="M24 56H376" stroke="#a2d8ca" stroke-opacity=".14"/>
-    <g fill="none" stroke="#92d9c7" stroke-width="2" stroke-opacity=".7" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M57 103l29-17 29 17v34l-29 17-29-17z M115 103l29-17 29 17v34l-29 17-29-17 M86 86V68 M173 103l21-12 M144 154l12 19"/>
-      <circle cx="86" cy="68" r="4" fill="#8de6ba" stroke="none"/><circle cx="194" cy="91" r="4" fill="#8de6ba" stroke="none"/><circle cx="156" cy="173" r="4" fill="#8de6ba" stroke="none"/>
+  <rect width="1200" height="370" rx="18" fill="url(#background)"/>
+  <rect width="1200" height="370" rx="18" fill="url(#grid)"/>
+  <rect x="52" y="43" width="9" height="9" rx="2" fill="#9de5c4"/>
+  <text x="75" y="52" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="2.8" fill="#a8dacb">PHARMAML TOOLKIT</text>
+  <text x="52" y="122" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="700" letter-spacing="-.8" fill="#f4fbf8">Science, from data</text>
+  <text x="52" y="174" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="700" letter-spacing="-.8" fill="#f4fbf8">to insight<tspan fill="#9de5c4">.</tspan></text>
+  <text x="54" y="213" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#c2d7d2">Molecular science  /  machine learning  /  PK–PD</text>
+  <path d="M54 250H104" stroke="#9de5c4" stroke-width="3" stroke-linecap="round"/>
+  <text x="118" y="254" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="1.7" fill="#a9c5bd">OPEN SOURCE · LOCAL-FIRST RESEARCH</text>
+  <text x="54" y="326" font-family="Arial, Helvetica, sans-serif" font-size="11" letter-spacing=".5" fill="#88aaa4">TOOLS FOR EXPLORATION, EVALUATION AND REVIEW</text>
+  <g transform="translate(725 37)">
+    <rect width="420" height="296" rx="16" fill="#112f38" stroke="#91d8c6" stroke-opacity=".27"/>
+    <text x="24" y="33" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="1.6" fill="#b3d8cb">A RESEARCH WORKFLOW</text>
+    <text x="396" y="33" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#8eafa8">ILLUSTRATIVE</text>
+    <path d="M24 50H396" stroke="#b1ded2" stroke-opacity=".17"/>
+    <text x="25" y="81" font-family="Arial, Helvetica, sans-serif" font-size="10" letter-spacing="1.4" fill="#a3c6bd">MOLECULAR DATA</text>
+    <g fill="none" stroke="#95ddc8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M48 133l30-18 30 18v35l-30 18-30-18z M108 133l30-18 30 18v35l-30 18-30-18 M78 115V97 M168 133l18-11 M138 186l10 16"/>
+      <circle cx="78" cy="97" r="4" fill="#9de5c4" stroke="none"/><circle cx="186" cy="122" r="4" fill="#9de5c4" stroke="none"/><circle cx="148" cy="202" r="4" fill="#9de5c4" stroke="none"/>
     </g>
-    <path d="M225 178h145 M225 90v88" stroke="#b3d7cc" stroke-opacity=".25"/>
-    <path d="M227 165 C246 160 252 151 264 134 S288 102 302 113 324 146 338 128 356 99 369 95" fill="none" stroke="url(#line)" stroke-width="3" stroke-linecap="round"/>
-    <circle cx="302" cy="113" r="4" fill="#c8f4b6"/><circle cx="369" cy="95" r="4" fill="#c8f4b6"/>
-    <rect x="24" y="207" width="99" height="22" rx="11" fill="#c2f4d8" fill-opacity=".09"/><text x="39" y="222" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="1" fill="#b6deca">CHEMISTRY</text>
-    <rect x="132" y="207" width="76" height="22" rx="11" fill="#c2f4d8" fill-opacity=".09"/><text x="148" y="222" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="1" fill="#b6deca">MODELS</text>
-    <rect x="217" y="207" width="75" height="22" rx="11" fill="#c2f4d8" fill-opacity=".09"/><text x="233" y="222" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="1" fill="#b6deca">PK / PD</text>
+    <path d="M210 93V212" stroke="#b1ded2" stroke-opacity=".13"/>
+    <text x="235" y="81" font-family="Arial, Helvetica, sans-serif" font-size="10" letter-spacing="1.4" fill="#a3c6bd">MODEL &amp; EVALUATE</text>
+    <path d="M238 190H385 M238 190V106" fill="none" stroke="#afcfc6" stroke-opacity=".35"/>
+    <path d="M240 178 C258 174 269 159 282 144 S307 116 321 129 343 159 356 142 373 118 384 113" fill="none" stroke="url(#accent)" stroke-width="3" stroke-linecap="round"/>
+    <g fill="#c5f3d0"><circle cx="282" cy="144" r="3.5"/><circle cx="321" cy="129" r="3.5"/><circle cx="384" cy="113" r="3.5"/></g>
+    <path d="M24 229H396" stroke="#b1ded2" stroke-opacity=".17"/>
+    <text x="25" y="262" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="1" fill="#b7dcd0">EXPLORE</text>
+    <text x="145" y="262" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="1" fill="#b7dcd0">MODEL</text>
+    <text x="250" y="262" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="1" fill="#b7dcd0">VALIDATE</text>
+    <text x="357" y="262" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="1" fill="#b7dcd0">REPORT</text>
   </g>
 </svg>
