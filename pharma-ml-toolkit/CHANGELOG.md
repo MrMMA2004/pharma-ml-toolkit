@@ -55,6 +55,13 @@
   `frontend/package.json`, the web `SHIPPED_TOOLKIT_VERSION`, and the
   `version_info.txt` quadruple — its display strings finally bumped
   in lockstep after five releases of staleness) agreeing atomically.
+  The first tag build (run `44566101809`) died honestly at step 13 on
+  the notebook-freshness guards — the eight committed notebooks still
+  printed `1.2.229` banners and FEATURES.md's freeze stamp lagged —
+  so the tag was re-pointed at the round-299 fix commit (all eight
+  notebooks re-executed at the shipped version via
+  `tools/reexec_notebooks.py`, the seven strip twins refreshed, the
+  three failing guards re-proven green locally before the re-tag).
 - **What stays honestly BLOCKED (unchanged labels):** a runner is a
   build environment, NOT a clean machine — the clean-Windows-10/11
   installation test, the offline launch flows, and the upgrade/
