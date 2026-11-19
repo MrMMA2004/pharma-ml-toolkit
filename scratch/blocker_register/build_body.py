@@ -229,7 +229,7 @@ def on_page(canvas, doc):
     canvas.line(MARGIN, 0.62 * inch, PAGE_W - MARGIN, 0.62 * inch)
     canvas.setFont("FreeSerif-Italic", 7.5)
     canvas.drawString(MARGIN, 0.45 * inch,
-                      "Repository MrMMA2004/pharma-ml-toolkit · v1.2.229 · round 293")
+                      "Repository MrMMA2004/pharma-ml-toolkit · v1.2.230 · round 299")
     canvas.setFont("FreeSerif", 7.5)
     canvas.drawRightString(PAGE_W - MARGIN, 0.45 * inch,
                            "Page %d" % doc.page)
@@ -468,10 +468,23 @@ mk_table(story,
               "Windows runner (windows-2022), execute the full 25-step "
               "release, and deliver the EXE/MSI/checksum/manifest "
               "artifacts"],
-             ["Status", "workflow deliverable: <b>PASS</b> (fixed, "
-              "registered, topology-correct — this session, round 293); "
-              "execution: <b>BLOCKED</b> by an account-level provisioning "
-              "failure outside this sandbox's control"],
+             ["Status",
+              "workflow deliverable: <b>PASS</b> (fixed, registered, "
+              "topology-correct — round 293); execution: <b>PASS</b> — "
+              "EXECUTED (rounds 294–298): the owner made the repository "
+              "public (Actions free on public repositories, Windows "
+              "runners included), the runner supply recovered, and the "
+              "r294–r297 bring-up arc (17 iterations, every failure "
+              "decoded at root cause) ended in the first all-green "
+              "execution — run 44553307816 on a real windows-2022 "
+              "runner (head 7f241a4a): all 25 steps green in 33 "
+              "minutes, the NSIS EXE + WiX MSI built with the embedded "
+              "offline WebView2, the frozen sidecar live-verified ON "
+              "Windows, the SHA256SUMS generated on the runner "
+              "(a385853c…c210 / 69da2837…130d / 7d2e9b7f…d8b), the ~1.1 GB "
+              "artifact bundle uploaded. The v1.2.230 tag build attaches "
+              "EXE/MSI/SHA256SUMS/manifest to the GitHub Release — the "
+              "artifact delivery §9 asked for"],
              ["Exact reason — layer 1 (fixed this session)",
               "The workflow was committed at "
               "pharma-ml-toolkit/.github/workflows/ — a path GitHub Actions "
@@ -482,26 +495,31 @@ mk_table(story,
               "Both defects are now repaired: the file lives at the "
               "repository root with a defaults: working-directory block and "
               "prefixed action paths; the API now lists it as active"],
-             ["Exact reason — layer 2 (still blocking)",
-              "The account's runner provisioning is failing: run "
+             ["Exact reason — layer 2 (RESOLVED — round 298)",
+              "The account's runner provisioning was failing: run "
               "44467151243 (2026-11-19, HEAD 0abcb634) died with all 13 "
               "ci.yml jobs failing in about three seconds at queue time, "
               "no runner ever assigned, no step ever executed — the "
               "signature of exhausted private-repo Actions minutes, a "
-              "spending limit, or disabled billing (the same repository "
-              "shows 122 historically successful runs). Restoring "
-              "provisioning requires the owner's GitHub account settings; "
-              "no action inside this sandbox can do it"],
-             ["Deliberate restraint",
+              "spending limit, or disabled billing. <b>The owner executed "
+              "this register's own unblock step 1: the repository went "
+              "public</b> (Actions is free on public repositories), the "
+              "runner supply recovered the same day, and the r294–r297 "
+              "iterations then executed the pipeline for real"],
+             ["Deliberate restraint (dissolved — round 298)",
               "The sandbox's API token could dispatch the workflow, but "
-              "doing so would spend the account's paid Windows-runner "
+              "doing so would have spent the account's paid Windows-runner "
               "minutes (billed at the 2x multiplier on private "
               "repositories) without authorization — the dispatch "
-              "decision is left to the owner"],
+              "decision was left to the owner. The public-repository flip "
+              "dissolved the premise: Actions on public repositories is "
+              "free, Windows runners included, so the dispatch and the "
+              "tag-built release cost the owner nothing"],
          ],
          [0.20, 0.80],
          caption="Table 5 — C-4: the runner execution lane (registration "
-                 "fixed; provisioning account-level).")
+                 "fixed round 293; provisioning restored by the owner; "
+                 "EXECUTED rounds 294–298).")
 
 h2(story, "3.5 C-5 — WebView2 offline runtime verification")
 mk_table(story,
@@ -676,6 +694,56 @@ body(story,
      "exactly the account-level provisioning failure documented in "
      "C-4's layer 2, and then the clean-machine ritual of C-3.")
 
+h1(story, "5b. Rounds 294-299: the execution happened — this "
+          "register's C-4 row is closed")
+body(story,
+     "The account-level barrier this register documented was dissolved "
+     "by the owner's public-repository flip, and the pipeline then ran "
+     "for real. Between rounds 294 and 297 seventeen iterations took "
+     "the authored workflow from zero real Windows executions to its "
+     "first all-green run — each failure decoded at root cause: the "
+     "AV/Defender tcl races (bounded retries at every GUI construction "
+     "site), the vite PostCSS discovery colliding with the repository "
+     "root's Next.js config, the Rust host's never-compiled code (the "
+     "Instant/Duration mismatch and the assert_loopback off-by-one "
+     "that would have refused every valid handshake at app startup), "
+     "the MSI's 262k ICE30 collisions (tauri-utils' glob-mode resource "
+     "flattening, replaced by the structure-preserving directory key), "
+     "and the packaging gate's own first-run catches (the version "
+     "quadruple staleness, the never-importable dashed python-"
+     "multipart name).")
+body(story,
+     "Run 44553307816 (head 7f241a4a, 33 minutes, a real windows-2022 "
+     "runner) is the first all-green execution: the full test ladder, "
+     "the PyInstaller freeze with the sidecar LIVE-VERIFIED on Windows "
+     "(handshake, authenticated health, the guard, the graceful "
+     "CTRL_BREAK shutdown exiting 0), the first real MSVC compile of "
+     "the Tauri 2 host, the NSIS PharmaML_Studio_Setup_v1.2.229.exe "
+     "and the WiX PharmaML_Studio_v1.2.229.msi with the embedded "
+     "offline WebView2, the release manifest, and the SHA256SUMS "
+     "generated on the runner itself: a385853c…c210 (EXE), "
+     "69da2837…130d (MSI), 7d2e9b7f…d8b (manifest).")
+body(story,
+     "Round 298 then closed the one defect the first executions "
+     "surfaced — the provenance audit's hardware lottery: numpy's "
+     "DYNAMIC_ARCH OpenBLAS selects CPU-specific dgemm kernels, so "
+     "GitHub's mixed Intel/AMD fleet shifted the 15th significant "
+     "digit of exactly the four BLAS-exposed example tables, breaking "
+     "the byte-exact check on an unpredictable runner subset (runner "
+     "1000002660: same tree, same wheels, four drifted CSVs). The "
+     "builder now rounds those four tables to 6 decimals at build "
+     "time — byte-identical output on every x86-64 CPU, the census "
+     "pins exact, nothing else touched. And v1.2.230 is the first "
+     "tag-built release: the tag build attaches the EXE/MSI/"
+     "SHA256SUMS/RELEASE_MANIFEST to the GitHub Release itself — "
+     "part11_2 §9's artifact delivery, with the version-carrier "
+     "quadruple (and version_info.txt's display strings, stale since "
+     "five releases) finally riding in lockstep. The acceptance "
+     "sweep's verdict moves to 73 PASS · 1 PARTIAL · 19 BLOCKED · 1 "
+     "NOTAPPLICABLE — five rows flipped on the execution evidence; "
+     "the remaining 19 are exactly the clean-machine ritual of C-3/"
+     "C-5/C-6/C-7, which no runner can substitute.")
+
 # ══ 6. What is done ═════════════════════════════════════════════════════
 h1(story, "6. What Is Done and Verified on This Host (Context)")
 body(story,
@@ -705,7 +773,7 @@ mk_table(story,
               "golden paths with evidence screenshots"],
              ["Release zips", "the toolkit ships as versioned zips across "
               "four homes with SHA-256 parity and leak audits "
-              "(v1.2.229 is current)"],
+              "(v1.2.230 is current)"],
              ["Guards", "123 frontend drift guards + the 9 Windows-pipeline "
               "guards + the acceptance sweep keep every claim pinned to "
               "evidence"],
@@ -717,31 +785,37 @@ mk_table(story,
 # ══ 7. The unblock checklist ════════════════════════════════════════════
 h1(story, "7. The Unblock Checklist: Exact Owner Actions")
 body(story,
-     "Nothing else from this sandbox can dissolve the BLOCKED set. The "
-     "four actions below, performed by the repository owner, complete "
-     "the master prompt's Windows half in order.")
+     "Status at round 299: steps 1 and 2 are DONE — executed by the "
+     "owner (the public-repository flip) and by the pipeline itself "
+     "(the r294–r298 executions and the v1.2.230 tag-built release). "
+     "What still stands between the project and full closure is "
+     "exactly steps 3 and 4 — the clean-machine ritual and the "
+     "Stage-5 retirement that depends on it.")
+
 mk_table(story,
          ["#", "Owner action", "What it achieves"],
          [
-             ["1", "On the GitHub account (not the repository): open "
-              "Settings → Billing and plans, and restore Actions "
-              "runner provisioning for the private repository — set a "
-              "spending limit above zero, add a payment method, or make "
-              "MrMMA2004/pharma-ml-toolkit public (Actions is free on "
-              "public repositories)",
-              "Ends the three-second queue-time deaths (run 44467151243 "
-              "evidence); runners get assigned again, exactly as in the "
-              "122 historically successful runs"],
-             ["2", "In the repository's Actions tab: select the "
-              "now-registered Windows Release workflow and run it "
-              "(or push a v1.2.230 tag)",
-              "The 25-step pipeline executes on windows-2022: the full "
+             ["1 — DONE (2026-11-19, round 298)",
+              "The owner made MrMMA2004/pharma-ml-toolkit PUBLIC — "
+              "the third option this register offered (Actions is "
+              "free on public repositories, Windows runners "
+              "included)",
+              "Ended the three-second queue-time deaths (run "
+              "44467151243 evidence); runners get assigned again — "
+              "verified by the day's run history going green"],
+             ["2 — DONE (rounds 294–298)",
+              "The Windows Release workflow executed for real — the "
+              "17-iteration bring-up arc, then the first all-green run "
+              "44553307816, then the v1.2.230 tag build (run "
+              "44569220942) attaching EXE/MSI/SHA256SUMS/manifest to "
+              "the GitHub Release",
+              "The 25-step pipeline executed on windows-2022: the full "
               "test ladder, the PyInstaller freeze with live sidecar "
-              "verification, the Tauri NSIS EXE + WiX MSI build with the "
-              "offline WebView2 runtime, SHA256SUMS and the release "
-              "manifest; artifacts land on the run page. Budget roughly "
-              "120 minutes (Windows minutes bill at the 2x multiplier on "
-              "private repositories)"],
+              "verification ON Windows, the Tauri NSIS EXE + WiX MSI "
+              "build with the offline WebView2 runtime, the runner-"
+              "generated SHA256SUMS and the release manifest; the "
+              "artifacts land on the run page AND on the GitHub "
+              "Release — part11_2 §9's artifact delivery"],
              ["3", "On any real Windows 10/11 x64 machine (Windows "
               "Sandbox or a clean VM): run the clean-machine smoke test "
               "from packaging/windows/TAURI_RELEASE_PIPELINE.md — "
@@ -829,7 +903,7 @@ mk_table(story,
          ],
          [0.28, 0.72],
          caption="Table 12 — the provenance of every claim in this "
-                 "register. All probes ran on 2026-11-19.")
+                 "register. All probes ran 2026-11-19; the round-298/299 addendum probes ran the same day.")
 
 doc.multiBuild(story, onFirstPage=on_page, onLaterPages=on_page)
 print("body PDF built:", OUT)
