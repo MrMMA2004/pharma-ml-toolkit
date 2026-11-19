@@ -1,3 +1,70 @@
+## [1.2.230] — 2026-11-19 — round 298 (part11: the first REAL Windows release — the pipeline executed end-to-end on the GitHub Actions windows-2022 runner, the provenance audit made hardware-stable, and the tag-built release delivers the EXE/MSI/checksum/manifest artifacts; run 89)
+
+- **The Windows Release pipeline ran.** Run `44553308203`'s sibling —
+  the `Windows Release` workflow dispatch at head `7f241a4a` (run
+  `44553307816`, 33 minutes on a real `windows-2022` runner) — executed
+  every authored stage green: the full test ladder (frontend `tsc` +
+  contract guards, backend units, the API + database suite), the
+  PyInstaller onedir freeze of the FastAPI sidecar **with live
+  verification on Windows** (the PHARMAML-READY handshake, the
+  authenticated health probe, the guard refusing the unauthenticated
+  probe, and the CTRL_BREAK graceful-shutdown lane exiting 0 — the
+  r297-iter11/12 signal work proven on the real OS), the Tauri 2 Rust
+  host's first real MSVC compile, the NSIS `PharmaML_Studio_Setup_v1.2.229.exe`
+  + the WiX `PharmaML_Studio_v1.2.229.msi` with the **offline**
+  WebView2 runtime embedded, the static packaging validation (26/26 —
+  the version quadruple and the `python_multipart` import probe it
+  caught on its first real run), the release manifest, and the
+  SHA256SUMS generated **on the runner**: `a385853c…c210` (EXE),
+  `69da2837…130d` (MSI), `7d2e9b7f…d8b` (manifest). The ~1.1 GB
+  artifact bundle uploaded as `pharmaml-studio-windows-7f241a4a…`.
+  No placeholder, no renamed Linux artifact, no fabricated checksum —
+  the C-4 execution lane is CLOSED and the C-1/C-2 build legs with it.
+- **The r294–r297 bring-up arc, on the record.** Seventeen iterations
+  took the authored pipeline from zero real Windows executions to the
+  green run, each failure decoded at root cause: the AV/Defender tcl
+  race (bounded retries at every construction site), the vite PostCSS
+  discovery colliding with the repo root's Next.js config (the inline
+  empty `css.postcss` shadow), the Rust host's never-compiled code
+  (the `Instant`/`Duration` mismatch; the `assert_loopback` off-by-one
+  that would have refused EVERY valid handshake at app startup), the
+  MSI's 262k ICE30 collisions (tauri-utils' glob-mode resource
+  resolver flattens by design — the directory-key Walk mode now stages
+  the onedir tree structure-preserving), and the packaging gate's own
+  first-run catches (the `version_info.txt` quadruple staleness and
+  the dashed `python-multipart` name that was never importable).
+- **The provenance audit's hardware lottery closed (round 298).** The
+  byte-exact `--check` round-trip passed on this sandbox and nine
+  straight CI runners yet failed on runner `1000002660` with the SAME
+  tree and pinned wheels — numpy's manylinux OpenBLAS is
+  `DYNAMIC_ARCH`, selecting a CPU-specific dgemm kernel at run time,
+  and GitHub's mixed Intel/AMD fleet shifts the ~15th significant digit
+  of exactly the four BLAS-exposed tables (`qsar_multiclass`,
+  `qsar_regression`, `walkthrough_classification`,
+  `walkthrough_multiclass`) while every Generator-only file stays
+  byte-identical. The builder now rounds those four to 6 decimals at
+  build time — the kernel noise (< 5e-7 per value) is absorbed, the
+  output is byte-identical on every x86-64 CPU, the census pins hold
+  exactly (125/102/79/54), and the regeneration touched nothing else
+  (40 files verified unchanged).
+- **The tag-built release.** `v1.2.230` is the first tag build: the
+  workflow's step 23b attaches the EXE/MSI/`SHA256SUMS.txt`/
+  `RELEASE_MANIFEST.json` to the GitHub Release (part11_2 §9's
+  artifact delivery), with the version-carrier quadruple
+  (VERSION, `pyproject.toml`, `__init__.py`, `tauri.conf.json` +
+  `frontend/package.json`, the web `SHIPPED_TOOLKIT_VERSION`, and the
+  `version_info.txt` quadruple — its display strings finally bumped
+  in lockstep after five releases of staleness) agreeing atomically.
+- **What stays honestly BLOCKED (unchanged labels):** a runner is a
+  build environment, NOT a clean machine — the clean-Windows-10/11
+  installation test, the offline launch flows, and the upgrade/
+  uninstall behavior remain BLOCKED until the
+  `packaging/windows/TAURI_RELEASE_PIPELINE.md` smoke test runs on a
+  real clean machine; the §28 Stage-5 PySide6 retirement stays gated
+  on exactly that evidence; the §47 report rows 38–48 now have real
+  artifacts to cite but their installation-test rows still need the
+  clean machine.
+
 ## [1.2.229] — 2026-11-19 — round 289 (part11 Phase Sixteen: the §14.1 startup gate — the app boots ITSELF, the backend–GUI integration audit's central fix; run 87)
 
 - **The audit's one FAIL row is closed.** The Phase Sixteen

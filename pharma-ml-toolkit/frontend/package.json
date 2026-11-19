@@ -1,7 +1,7 @@
 {
   "name": "pharmaml-studio-frontend",
   "private": true,
-  "version": "1.2.229",
+  "version": "1.2.230",
   "description": "PharmaML Studio \u2014 the offline React + TypeScript SPA (part11 Phase Three). Production builds are static assets loaded by the Tauri 2 host through WebView2; no dev server, no remote URL, no CDN.",
   "type": "module",
   "scripts": {
