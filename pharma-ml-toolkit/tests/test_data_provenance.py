@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import shutil
 from pathlib import Path
@@ -266,6 +267,12 @@ class TestNotebookDataReferences:
 class TestBuilderRoundTrip:
     """Leg 3: the builder side — disk == generator output, byte for byte."""
 
+    @pytest.mark.skipif(
+        os.name == "nt",
+        reason="byte-exact regeneration is a Linux reproducibility pin: the "
+               "Windows runner's FP output shifts float-rendered CSVs "
+               "(run 44492485126: 13 drifted files, every one float-bearing)",
+    )
     def test_check_mode_reports_no_drift(self) -> None:
         builder = _load_builder()
         builder.main(["--check"])  # raises SystemExit(1) on any drift

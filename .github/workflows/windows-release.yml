@@ -175,6 +175,25 @@ jobs:
           pip install --no-deps -e .
           python -c "import pharmaml, fastapi, uvicorn; print('stack OK', pharmaml.__version__)"
 
+      # ---- 7b. shap import probe (r296 diagnostic, non-gating) ----
+      # The freeze smoke driver's explainability flow died on the runner
+      # (run 44492485126): shap 0.54.1 installs clean (its win_amd64
+      # wheel + the pinned numba/llvmlite/slicer companions all resolved
+      # in step 7) yet `import shap` raises ImportError inside
+      # shap_summary's optional-dependency guard. This probe prints the
+      # REAL traceback chain (never masked by the typed guard) without
+      # gating the pipeline, so the root cause lands in this run's log.
+      - name: "7b. Probe the shap import (diagnostic, non-gating)"
+        shell: pwsh
+        run: |
+          python -c "import traceback
+          try:
+              import shap
+              print('SHAP-IMPORT-PROBE: OK', shap.__version__)
+          except BaseException:
+              print('SHAP-IMPORT-PROBE: FAILED -- full chain follows')
+              traceback.print_exc()"
+
       # ---- 8. frontend type checking ----------------------------
       - name: "8. Frontend type check (tsc --noEmit)"
         shell: pwsh

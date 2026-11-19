@@ -830,7 +830,11 @@ class TestEvaluationEdgeCases:
         # "Mix of label input types" ValueError from deep inside the
         # metric calls -- the guard names the mismatch instead.
         X = np.arange(6).reshape(-1, 1)
-        y_int = np.array([0, 1, 0, 1, 0, 1])
+        # r296: dtype pinned -- np.array over a small int list defaults
+        # to int32 on Windows (C long is 32 bits there) and the typed
+        # error below faithfully reports the dtype it saw, so the
+        # regex pinned "int64" only where Linux's default produced it.
+        y_int = np.array([0, 1, 0, 1, 0, 1], dtype=np.int64)
 
         class StrPredicting:
             classes_ = np.array([0, 1])
