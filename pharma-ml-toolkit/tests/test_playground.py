@@ -1237,7 +1237,7 @@ class TestGuiUnderXvfb:
 class TestDockingGuiUnderXvfb:
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp()
+        application = _fresh_playground_app(playground)
         yield application
         application.destroy()
         import gc
@@ -1764,7 +1764,7 @@ class TestSessionGuiUnderXvfb:
     ) -> None:
         import gc
 
-        first = playground.PlaygroundApp()  # persist_session=True (default)
+        first = _fresh_playground_app(playground)  # persist_session=True (default)
         self._drain(first)
         first._aff_value.delete(0, "end")
         first._aff_value.insert(0, "3.14")
@@ -1778,7 +1778,7 @@ class TestSessionGuiUnderXvfb:
         gc.collect()
 
         assert (isolated_home / ".pharmaml" / "playground-session.json").is_file()
-        second = playground.PlaygroundApp()
+        second = _fresh_playground_app(playground)
         self._drain(second)
         assert second._aff_value.get() == "3.14"
         assert bool(second._tune_var.get()) is True
@@ -1794,7 +1794,7 @@ class TestSessionGuiUnderXvfb:
     def test_persist_session_false_never_writes(
         self, playground: Any, xvfb_display: str, isolated_home: Path
     ) -> None:
-        app = playground.PlaygroundApp(persist_session=False)
+        app = _fresh_playground_app(playground, persist_session=False)
         self._drain(app)
         app._aff_value.delete(0, "end")
         app._aff_value.insert(0, "9.99")
@@ -1806,7 +1806,7 @@ class TestSessionGuiUnderXvfb:
     ) -> None:
         import gc
 
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         self._drain(app)
         assert str(app.cget("background")) == playground._LIGHT_PALETTE["BG"]
         app._theme_var.set("dark")
@@ -1829,7 +1829,7 @@ class TestSessionGuiUnderXvfb:
         app.destroy()
         del app
         gc.collect()
-        reopened = playground.PlaygroundApp()
+        reopened = _fresh_playground_app(playground)
         self._drain(reopened)
         assert reopened._theme == "light"  # the last flip was persisted
         reopened.destroy()
@@ -1856,7 +1856,7 @@ class TestSessionGuiUnderXvfb:
         (isolated_home / ".pharmaml" / "playground-session.json").write_text(
             __import__("json").dumps(payload), encoding="utf-8"
         )
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         self._drain(app)
         assert app._aff_value.get() == "1.5"  # inputs restored
         assert app.winfo_width() <= 1000  # size honoured (Xvfb 1280x800)
@@ -1934,7 +1934,7 @@ class TestFeatureFactorySurface:
 class TestFeatureFactoryGuiUnderXvfb:
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp()
+        application = _fresh_playground_app(playground)
         yield application
         application.destroy()
         import gc
@@ -2238,7 +2238,7 @@ class TestSessionShareAndReset:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         app.update_idletasks()
         app._aff_value.delete(0, "end")
         app._aff_value.insert(0, "9.9")
@@ -2261,7 +2261,7 @@ class TestSessionShareAndReset:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         app.update_idletasks()
         app._aff_value.delete(0, "end")
         app._aff_value.insert(0, "9.9")
@@ -2284,7 +2284,7 @@ class TestSessionShareAndReset:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         app.update_idletasks()
         app._aff_value.delete(0, "end")
         app._aff_value.insert(0, "7.7")
@@ -2307,7 +2307,7 @@ class TestSessionShareAndReset:
         xvfb_display: str,
         isolated_home: Path,
     ) -> None:
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         app.update_idletasks()
         default_aff = app._aff_value.get()
         default_tune = bool(app._tune_var.get())
@@ -2331,7 +2331,7 @@ class TestSessionShareAndReset:
         xvfb_display: str,
         isolated_home: Path,
     ) -> None:
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         app.update_idletasks()
         owners = app._tab_input_owners
         every_name = {name for names in owners.values() for name in names}
@@ -2385,7 +2385,7 @@ class TestPerTabResetButtons:
         xvfb_display: str,
         isolated_home: Path,
     ) -> None:
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         app.update_idletasks()
         for index in range(len(app._book.tabs())):
             page = app._book.nametowidget(app._book.tabs()[index])
@@ -2410,7 +2410,7 @@ class TestPerTabResetButtons:
         xvfb_display: str,
         isolated_home: Path,
     ) -> None:
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         app.update_idletasks()
         default_aff = app._aff_value.get()
         default_tune = bool(app._tune_var.get())
@@ -2440,7 +2440,7 @@ class TestPerTabResetButtons:
         xvfb_display: str,
         isolated_home: Path,
     ) -> None:
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         app.update_idletasks()
         default_tune = bool(app._tune_var.get())
         app._aff_value.delete(0, "end")
@@ -2461,7 +2461,7 @@ class TestPerTabResetButtons:
         xvfb_display: str,
         isolated_home: Path,
     ) -> None:
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         app.update_idletasks()
         style = playground.ttk.Style(app)
         light_bg = playground.BG
@@ -2738,7 +2738,7 @@ class TestShortcutHints:
         # docstring) since 100x-54 with NO binding behind it -- pressing
         # it did nothing.  This pins every advertised sequence (the
         # card-finder Ctrl+F joined in 100x-120) to a real binding.
-        app = playground.PlaygroundApp(persist_session=False)
+        app = _fresh_playground_app(playground, persist_session=False)
         try:
             for label, sequence in self.ACCELERATORS.items():
                 assert app.bind_all(sequence), f"{label} ({sequence}) is advertised but not bound"
@@ -2752,7 +2752,7 @@ class TestShortcutHints:
     ) -> None:
         from tkinter import ttk
 
-        app = playground.PlaygroundApp(persist_session=False)
+        app = _fresh_playground_app(playground, persist_session=False)
         try:
             text = playground.shortcut_hints_text()
             for keys, what in playground.SHORTCUT_HINTS:
@@ -2770,7 +2770,7 @@ class TestShortcutHints:
         playground: Any,
         xvfb_display: str,
     ) -> None:
-        app = playground.PlaygroundApp(persist_session=False)
+        app = _fresh_playground_app(playground, persist_session=False)
         try:
             app.update_idletasks()
             assert app._hint_bar.winfo_rooty() < app._status_bar.winfo_rooty()
@@ -2782,7 +2782,7 @@ class TestShortcutHints:
         playground: Any,
         xvfb_display: str,
     ) -> None:
-        app = playground.PlaygroundApp(persist_session=False)
+        app = _fresh_playground_app(playground, persist_session=False)
         try:
             assert app._hints_var.get() is True
             assert app._hint_bar.pack_info()["side"] == "bottom"
@@ -2803,8 +2803,8 @@ class TestShortcutHints:
         playground: Any,
         xvfb_display: str,
     ) -> None:
-        first = playground.PlaygroundApp(persist_session=False)
-        second = playground.PlaygroundApp(persist_session=False)
+        first = _fresh_playground_app(playground, persist_session=False)
+        second = _fresh_playground_app(playground, persist_session=False)
         try:
             first._hide_hints()
             payload = first._collect_session()
@@ -3099,8 +3099,8 @@ class TestDeepLearningTab:
         # strategy comboboxes since round 179; the six XAI-card inputs
         # since round 185), the mutated values restored verbatim onto a
         # freshly built window.
-        first = playground.PlaygroundApp(persist_session=False)
-        second = playground.PlaygroundApp(persist_session=False)
+        first = _fresh_playground_app(playground, persist_session=False)
+        second = _fresh_playground_app(playground, persist_session=False)
         try:
             first._dl_arch_combo.set("Residual MLP (skip connections)")
             first._dl_optimizer_combo.set("rmsprop")
@@ -3235,7 +3235,7 @@ class TestDefaultTargetColumn:
     ) -> None:
         # end to end on the classification example: BOTH dataset cards
         # must preselect activity, not compound_id (the 420-class trap).
-        app = playground.PlaygroundApp(persist_session=False)
+        app = _fresh_playground_app(playground, persist_session=False)
         try:
             path = TOOLKIT_ROOT / "examples" / "data" / "qsar_classification.csv"
             app._ml_load_path(path)
@@ -9296,7 +9296,7 @@ class TestReview135Gui:
         replants it before the first picklist ever opens."""
         import gc
 
-        app = playground.PlaygroundApp()  # persist_session=True
+        app = _fresh_playground_app(playground)  # persist_session=True
         self._drain(app)
         live = [[None, "alpha plot", object()], [None, "beta plot", object()]]
         tables = [("T one", ["a"], [["1"]])]
@@ -9318,7 +9318,7 @@ class TestReview135Gui:
         app._on_close()  # writes the session file, then destroys
         gc.collect()
 
-        reopened = playground.PlaygroundApp()
+        reopened = _fresh_playground_app(playground)
         self._drain(reopened)
         # the memory rode the file: the fresh launch replanted it
         assert reopened._report_page_order == {
@@ -9336,7 +9336,7 @@ class TestReview135Gui:
         and the next LAUNCH starts at the walk order."""
         import gc
 
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         self._drain(app)
         app._report_page_order = {
             "figure": ["beta plot", "alpha plot"],
@@ -9345,7 +9345,7 @@ class TestReview135Gui:
         app._on_close()
         gc.collect()
 
-        reopened = playground.PlaygroundApp()
+        reopened = _fresh_playground_app(playground)
         self._drain(reopened)
         assert reopened._report_page_order["figure"] == [
             "beta plot",
@@ -9367,7 +9367,7 @@ class TestReview135Gui:
         reopened._on_close()  # the auto-save writes the EMPTY state
         gc.collect()
 
-        third = playground.PlaygroundApp()
+        third = _fresh_playground_app(playground)
         self._drain(third)
         assert third._report_page_order == {}  # the forget survived restart
         third.destroy()
@@ -9381,7 +9381,7 @@ class TestReview135Gui:
         confession rendered and the Reset button armed."""
         import gc
 
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         self._drain(app)
         app._report_page_order = {
             "figure": ["beta plot", "alpha plot"],
@@ -9390,7 +9390,7 @@ class TestReview135Gui:
         app._on_close()
         gc.collect()
 
-        reopened = playground.PlaygroundApp()
+        reopened = _fresh_playground_app(playground)
         self._drain(reopened)
         live = [[None, "alpha plot", object()], [None, "beta plot", object()]]
         captured: dict[str, Any] = {}
@@ -9462,7 +9462,7 @@ class TestReview135Gui:
             (isolated_home / ".pharmaml" / "playground-session.json").write_text(
                 _json.dumps(payload), encoding="utf-8"
             )
-            app = playground.PlaygroundApp()
+            app = _fresh_playground_app(playground)
             self._drain(app)
             # the memory landed on its sanitized self, never an error
             assert app._report_page_order == expected, (
@@ -9592,7 +9592,7 @@ class TestReview136Gui:
         import gc
         import json as _json
 
-        app = playground.PlaygroundApp()  # persist_session=True
+        app = _fresh_playground_app(playground)  # persist_session=True
         self._drain(app)
         app._report_page_order = {
             "figure": ["beta plot", "alpha plot"],
@@ -9674,20 +9674,20 @@ class TestReview136Gui:
         the close-time auto-save to it)."""
         import gc
 
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         self._drain(app)
         app._report_page_order = {"figure": ["beta plot", "alpha plot"], "table": []}
         app._on_close()  # the memory lands on the file
         gc.collect()
 
-        reopened = playground.PlaygroundApp()  # replants the memory
+        reopened = _fresh_playground_app(playground)  # replants the memory
         self._drain(reopened)
         assert reopened._report_page_order["figure"] == ["beta plot", "alpha plot"]
         reopened._clear_report_order()  # forgets AND writes through
         reopened.destroy()
         gc.collect()
 
-        third = playground.PlaygroundApp()
+        third = _fresh_playground_app(playground)
         self._drain(third)
         assert third._report_page_order == {}  # the forget survived
         third.destroy()
@@ -9720,7 +9720,7 @@ class TestReview136Gui:
         monkeypatch.setattr(
             playground.PlaygroundApp, "_write_session_file", lambda self: False
         )
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         self._drain(app)
         app._report_page_order = {"figure": ["beta plot"], "table": []}
         app._clear_report_order()
@@ -9981,7 +9981,7 @@ class TestReview137Gui:
         monkeypatch.setattr(
             playground.filedialog, "askopenfilename", lambda **_k: str(source)
         )
-        app = playground.PlaygroundApp()  # persist_session=True
+        app = _fresh_playground_app(playground)  # persist_session=True
         self._drain(app)
         app._import_report_order()
         assert app._report_page_order == {
@@ -10447,7 +10447,7 @@ class TestReview138Gui:
         monkeypatch.setattr(
             playground.filedialog, "askopenfilename", lambda **_k: str(source)
         )
-        seeding = playground.PlaygroundApp()
+        seeding = _fresh_playground_app(playground)
         self._drain(seeding)
         seeding._import_report_order()
         seeding.destroy()
@@ -10455,7 +10455,7 @@ class TestReview138Gui:
         session_file = isolated_home / ".pharmaml" / "playground-session.json"
         assert session_file.is_file(), "the import never wrote the session file"
 
-        app = playground.PlaygroundApp()  # restores from the session file
+        app = _fresh_playground_app(playground)  # restores from the session file
         self._drain(app)
         assert app._report_page_order == {
             "figure": ["beta plot", "alpha plot"],
@@ -11232,7 +11232,7 @@ class TestReview142Gui:
         (isolated_home / ".pharmaml" / "playground-session.json").write_text(
             _json.dumps(payload), encoding="utf-8"
         )
-        app = playground.PlaygroundApp()
+        app = _fresh_playground_app(playground)
         for _ in range(4):
             app.update_idletasks()
             app.update()
