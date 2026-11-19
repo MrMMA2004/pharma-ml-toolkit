@@ -80,3 +80,6 @@ __pycache__/
 # (the task-text home) -- a local mirror, deliberately untracked like
 # the offsite ~/pharma-ml-toolkit-zips/ mirror.
 /dist-archive/
+
+# 2026-11-19 (6th-rollback recovery): the ROOT MASTER_PROMPT.pdf also carries the font-encoded PAT
+upload/MASTER_PROMPT.pdf
