@@ -5,10 +5,18 @@ these guards keep them honest (a rename/move/regression anywhere in
 the pipeline turns this suite red before the claim drifts):
 
 * ``.github/workflows/windows-release.yml`` — the Windows GitHub
-  Actions release workflow exists, runs on a Windows runner, walks
-  the documented 25-step order, pins action versions, carries
-  least-privilege permissions, and never treats a build as a
-  clean-machine verification (§12's honest labels);
+  Actions release workflow exists at the REPOSITORY root (round 293:
+  the ONLY path GitHub Actions registers — the live repo's checkout
+  nests the toolkit under ``pharma-ml-toolkit/``, so a workflow filed
+  inside the subtree is invisible to Actions; verified against the
+  live repo's ``/actions/workflows`` API, which listed no such
+  workflow before the move), runs on a Windows runner, walks the
+  documented 25-step order, pins action versions, carries
+  least-privilege permissions, executes its ``run:`` steps from the
+  toolkit subtree (the ``defaults: run: working-directory`` rule) with
+  every workspace-root-relative ``uses:`` path explicitly prefixed,
+  and never treats a build as a clean-machine verification (§12's
+  honest labels);
 * ``src-tauri/`` — the Tauri 2 host skeleton: the conf (offline
   WebView2 installer mode, NSIS + MSI targets, the loopback CSP),
   the least-privilege capability, and the Rust modules (the sidecar
@@ -31,8 +39,27 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
-WORKFLOWS = ROOT / ".github" / "workflows"
+
+
+def _repo_root() -> Path:
+    """The git repository root holding ``.git`` (round 293).
+
+    The live checkout nests the toolkit at ``<repo>/pharma-ml-toolkit``
+    so the repository root is an ancestor — not the toolkit itself.
+    Walk up until ``.git`` appears; the standalone archive (no Git
+    metadata) is guarded by the ``checkout_only`` markers below.
+    """
+    for candidate in (ROOT, *ROOT.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return ROOT
+
+
+REPO_ROOT = _repo_root()
+WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 SRC_TAURI = ROOT / "src-tauri"
 PACKAGING = ROOT / "packaging" / "windows"
 FRONTEND = ROOT / "frontend"
@@ -42,11 +69,15 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+@pytest.mark.checkout_only
 def test_windows_release_workflow_exists_and_is_windows_only() -> None:
     workflow = WORKFLOWS / "windows-release.yml"
     assert workflow.is_file(), (
-        "part11_2 §3's named deliverable is missing: "
-        ".github/workflows/windows-release.yml"
+        "part11_2 §3's named deliverable is missing at the REPOSITORY "
+        "root: .github/workflows/windows-release.yml — GitHub Actions "
+        "registers ONLY root-level workflow files, so a copy filed "
+        "inside pharma-ml-toolkit/.github/ is invisible to the runner "
+        "(the round-293 registration fix)"
     )
     src = _read(workflow)
     assert "runs-on: windows-2022" in src, (
@@ -57,6 +88,46 @@ def test_windows_release_workflow_exists_and_is_windows_only() -> None:
     assert "workflow_dispatch:" in src and 'tags:' in src
 
 
+@pytest.mark.checkout_only
+def test_windows_release_workflow_is_registered_for_the_repo_topology() -> None:
+    """The round-293 registration fix: the workflow must execute its
+    ``run:`` steps from the toolkit subtree and prefix every
+    workspace-root-relative ``uses:`` path — the repository checkout
+    nests the toolkit under ``pharma-ml-toolkit/``, so the authored
+    toolkit-relative paths (``VERSION``, ``frontend/``, ``src-tauri/``,
+    ``packaging/windows/``) only resolve from inside the subtree."""
+    src = _read(WORKFLOWS / "windows-release.yml")
+    # the job-level working-directory keeps every run: step's authored
+    # toolkit-relative paths correct
+    assert "working-directory: pharma-ml-toolkit" in src, (
+        "the run: steps execute from the toolkit subtree — without the "
+        "defaults block every VERSION/frontend/src-tauri reference "
+        "resolves against the repository root and the build dies"
+    )
+    # uses: steps ignore that default — their path inputs must carry
+    # the explicit prefix
+    assert "cache-dependency-path: pharma-ml-toolkit/frontend/package-lock.json" in src, (
+        "setup-node resolves its cache path against the workspace root "
+        "— the frontend lockfile lives under the toolkit subtree"
+    )
+    assert "workspaces: pharma-ml-toolkit/src-tauri -> target" in src, (
+        "rust-cache resolves its workspaces against the workspace root"
+    )
+    # the upload/release paths ride the workspace-anchored env so both
+    # the run: steps (working-directory) and the uses: steps
+    # (workspace root) resolve the SAME directory
+    assert "RELEASE_DIR: ${{ github.workspace }}/pharma-ml-toolkit/release/windows" in src
+    assert "path: ${{ env.RELEASE_DIR }}" in src
+    assert "files: ${{ env.RELEASE_DIR }}/*" in src
+    # and no unprefixed leftover of the old relative form remains
+    assert "path: release/windows/" not in src, (
+        "upload-artifact resolves paths against the workspace root — the "
+        "unprefixed form would upload nothing and fail with "
+        "if-no-files-found: error"
+    )
+
+
+@pytest.mark.checkout_only
 def test_windows_release_workflow_walks_the_documented_order() -> None:
     src = _read(WORKFLOWS / "windows-release.yml")
     # §4's numbered stages in FILE order (Node 4 precedes restore 3

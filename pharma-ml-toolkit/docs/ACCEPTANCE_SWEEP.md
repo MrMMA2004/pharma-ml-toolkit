@@ -14,7 +14,24 @@ MD curves — each browser-verified end-to-end over the real backend
 with the oklch→sRGB theme resolution (bit-exact against Chromium's
 own rasterizer); `predict`'s dataset mode gained the §22.5
 evaluation block (5 new API pins). The §46.1/§46.5 Plotly rows
-flip to PASS. **Spec:** MASTER_PROMPT part11_1 §46
+flip to PASS. · **r293 addendum:** the Windows-pipeline
+REGISTRATION fix — `.github/workflows/windows-release.yml` moved to
+the REPOSITORY root (GitHub Actions registers only root-level
+workflow files; the repo's live `/actions/workflows` API listed no
+such workflow while the file sat invisibly at
+`pharma-ml-toolkit/.github/workflows/`), gained the
+`defaults: run: working-directory: pharma-ml-toolkit` block plus
+the prefixed `uses:` paths so the 25-step order executes correctly
+against the nested checkout topology; the 9th drift guard pins the
+registration. The §46.9 "Windows x64 installer EXE generated" row's
+workflow evidence is now REAL (registered + topology-correct); its
+execution remains BLOCKED twice over — no Windows host in this
+sandbox, and the account's runner provisioning itself is currently
+failing (run 44467151243: all 13 ci.yml jobs dead in ~3 s at queue
+time, no runner assigned — the account-level Actions/billing state
+is outside this sandbox's control; see
+`packaging/windows/TAURI_RELEASE_PIPELINE.md`'s round-293 note).
+**Spec:** MASTER_PROMPT part11_1 §46
 (Final Acceptance Criteria) with part11_2 §12's status labels.
 **Method:** every criterion below is checked against live evidence from
 this round's gates (the browser-verified startup bridge, the §21
@@ -175,7 +192,7 @@ Labels: **PASS** · **PARTIAL** · **FAIL** · **BLOCKED** · **NOTAPPLICABLE**.
 
 | Criterion | Evidence | Status |
 |---|---|---|
-| Windows x64 installer EXE generated | `.github/workflows/windows-release.yml` (25 steps, windows-2022) + NSIS target | BLOCKED (needs the Windows runner; the workflow is built + drift-guarded) |
+| Windows x64 installer EXE generated | `.github/workflows/windows-release.yml` (25 steps, windows-2022) + NSIS target — now REGISTERED at the repository root with the correct nested-checkout topology (r293's registration fix + its 9th drift guard) | BLOCKED (needs the Windows runner AND the account's runner provisioning restored; the workflow is registered + drift-guarded) |
 | MSI generated where required | the MSI target in tauri.conf + workflow step 18 | BLOCKED (same) |
 | Installer includes the complete application | the spec bundles backend + frontend + engines + resources | PASS (spec) / BLOCKED (exec.) |
 | Installer works offline | WebView2 offlineInstaller mode + no-bootstrapper rule | PASS (config) / BLOCKED (exec.) |

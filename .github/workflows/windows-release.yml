@@ -5,6 +5,20 @@ name: Windows Release
 # React + TypeScript + Vite frontend, the Tauri 2 + WebView2 host,
 # the PyInstaller-frozen FastAPI backend sidecar, NSIS EXE + WiX MSI).
 #
+# REGISTRATION (round 293): this file lives at the REPOSITORY root's
+# .github/workflows/ — the ONLY path GitHub Actions registers.  It
+# was previously committed at pharma-ml-toolkit/.github/workflows/
+# (invisible to Actions on this repository, whose checkout nests the
+# toolkit under pharma-ml-toolkit/), so the drift guards were green
+# while GitHub listed no such workflow — verified against the live
+# repo's /actions/workflows API before the move.  The job-level
+# ``defaults: run: working-directory: pharma-ml-toolkit`` below keeps
+# every ``run:`` step's toolkit-relative paths (VERSION, frontend/,
+# src-tauri/, packaging/windows/) exactly as authored; every
+# ``uses:`` step that resolves paths against the workspace root
+# (setup-node's cache path, rust-cache's workspaces, upload-artifact,
+# gh-release) carries the explicit pharma-ml-toolkit/ prefix instead.
+#
 # This workflow is the Windows-only half of the build: every Linux-
 # compatible gate (backend unit tests, the full api/database suites,
 # lint/typecheck, the frontend drift guards) runs on this runner
@@ -39,14 +53,28 @@ env:
   PYTHON_VERSION: "3.12"
   NODE_VERSION: "22"
   RUST_TOOLCHAIN: "1.85.0"
-  TOOLKIT_ROOT: ${{ github.workspace }}
-  RELEASE_DIR: release/windows
+  # the toolkit subtree — the checkout's workspace root is the REPO
+  # root (Next.js wrapper + toolkit), so every workspace-root-relative
+  # reference below must carry this prefix (the registration note)
+  TOOLKIT_ROOT: ${{ github.workspace }}/pharma-ml-toolkit
+  # absolute, workspace-anchored: `run:` steps resolve it identically
+  # from their working-directory, and the `uses:` upload steps resolve
+  # it against the workspace root — one definition, both correct
+  RELEASE_DIR: ${{ github.workspace }}/pharma-ml-toolkit/release/windows
 
 jobs:
   windows-release:
     name: Build the Windows installer (NSIS EXE + MSI)
     runs-on: windows-2022
     timeout-minutes: 120
+    # every `run:` step executes from the toolkit subtree — the
+    # authored toolkit-relative paths (VERSION, frontend/, src-tauri/,
+    # packaging/windows/) resolve exactly as written. `uses:` steps
+    # do NOT honor this default: their path inputs carry the explicit
+    # pharma-ml-toolkit/ prefix (see the registration note above).
+    defaults:
+      run:
+        working-directory: pharma-ml-toolkit
 
     steps:
       # ---- 1. check out the exact intended source revision --------
@@ -84,7 +112,10 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          # workspace-root-relative (uses: steps ignore the job's
+          # working-directory) — the pharma-ml-toolkit/ prefix is the
+          # registration note's rule
+          cache-dependency-path: pharma-ml-toolkit/frontend/package-lock.json
 
       # ---- 3. restore frontend dependencies from the lock file --
       - name: "3. Restore frontend dependencies (npm ci from the committed lock)"
@@ -112,7 +143,8 @@ jobs:
       - name: "6b. Cache the Rust build (the tauri host compiles)"
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri -> target
+          # workspace-root-relative — the prefixed src-tauri
+          workspaces: pharma-ml-toolkit/src-tauri -> target
 
       # ---- 7. the pinned Python stack (the freeze input) ---------
       - name: "7. Install the pinned backend stack (installer-requirements + the freeze tool)"
@@ -315,14 +347,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pharmaml-studio-windows-${{ github.sha }}
-          path: release/windows/
+          # workspace-root-relative — RELEASE_DIR is absolute +
+          # workspace-anchored precisely so this resolves correctly
+          path: ${{ env.RELEASE_DIR }}
           if-no-files-found: error
 
       - name: "23b. Attach to the GitHub Release (tag builds only)"
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: release/windows/*
+          files: ${{ env.RELEASE_DIR }}/*
           generate_release_notes: true
           fail_on_unmatched_files: true
 

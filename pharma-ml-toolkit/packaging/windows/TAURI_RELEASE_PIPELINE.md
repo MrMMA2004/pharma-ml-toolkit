@@ -1,6 +1,6 @@
 # The part11_2 Windows release pipeline — build documentation
 
-**Status date**: round 281 (v1.2.224). **Master prompt part11_2** — the
+**Status date**: round 293 (v1.2.229). **Master prompt part11_2** — the
 Linux-host addendum: the Linux development environment must not
 prevent the Windows release pipeline from existing, being validated,
 and being honestly reported. This document is the §13 deliverable
@@ -14,8 +14,20 @@ and being honestly reported. This document is the §13 deliverable
 | Backend sidecar | `pharmaml-backend` onedir (PyInstaller 6.22.3, `pharmaml_backend.spec`) | `python -m PyInstaller` | the Windows runner (step 12) — **PyInstaller is not a cross-compiler** (part11_2 §5): the Linux host never fakes it |
 | Desktop host | Tauri 2 + WebView2 (NSIS EXE + WiX MSI) | `cargo tauri build` | the Windows runner (steps 16–19) |
 
-The workflow: **`.github/workflows/windows-release.yml`** — the §3
-named deliverable. `workflow_dispatch` (manual) and `v*` tags trigger
+The workflow: **`.github/workflows/windows-release.yml` — at the
+REPOSITORY root** (round 293's registration fix: the live repository's
+checkout nests the toolkit under `pharma-ml-toolkit/`, and GitHub
+Actions registers ONLY root-level workflow files — the copy
+previously committed at `pharma-ml-toolkit/.github/workflows/` was
+invisible to Actions on this repository, verified against the live
+repo's `/actions/workflows` API, which listed no such workflow). The
+job-level `defaults: run: working-directory: pharma-ml-toolkit` keeps
+every `run:` step's toolkit-relative paths (VERSION, frontend/,
+src-tauri/, packaging/windows/) exactly as authored, while every
+`uses:` step that resolves paths against the workspace root
+(setup-node's cache path, rust-cache's workspaces, upload-artifact,
+action-gh-release) carries the explicit `pharma-ml-toolkit/` prefix —
+the §3 named deliverable. `workflow_dispatch` (manual) and `v*` tags trigger
 it; it runs on `windows-2022`, validates the version carriers first
 (VERSION == tauri.conf.json == frontend/package.json), restores the
 frontend deps from the committed lockfile, runs the full test ladder
@@ -38,7 +50,7 @@ by the tagged release upload — never echoed, §4's rule).
 
 | §13 deliverable | File | Status |
 | --- | --- | --- |
-| `.github/workflows/windows-release.yml` | `.github/workflows/windows-release.yml` | **PARTIAL** — exists, YAML-validated, all 23 stages named in the documented order; NOT yet executed on a real runner (no Windows host in this environment) |
+| `.github/workflows/windows-release.yml` | `.github/workflows/windows-release.yml` (REPOSITORY root — round 293) | **PARTIAL** — exists at the path GitHub actually registers (moved from the invisible toolkit-subtree location; the repo's `/actions/workflows` API verified the miss), YAML-validated, all 23 stages named in the documented order, executes `run:` steps from the toolkit subtree with prefixed `uses:` paths; NOT yet executed on a real runner (no Windows host in this environment — and the account's runner provisioning currently fails: see the round-293 note below) |
 | Windows backend build scripts | `packaging/windows/pharmaml_backend.spec` + `backend_entry.py` + `build_windows.ps1` (the part9 pipeline, retained for the legacy tier) | **PARTIAL** — the sidecar spec/entry are new and guarded; first real freeze happens on the runner |
 | Tauri Windows build configuration | `src-tauri/{tauri.conf.json, Cargo.toml, capabilities/default.json}` | **PARTIAL** — the conf (offline WebView2, NSIS+MSI targets, loopback CSP) + the least-privilege capability are validated JSON; the Rust host compiles on the runner for the first time |
 | PyInstaller Windows packaging config | `packaging/windows/pharmaml_backend.spec` | **PARTIAL** — excludes the Qt stack (§5's no-PySide6 rule), keeps the scientific stack; spec-validated by `tests/test_windows_pipeline.py` |
@@ -49,12 +61,27 @@ by the tagged release upload — never echoed, §4's rule).
 | Checksum generation | workflow step 22 (`SHA256SUMS.txt`) | **PARTIAL** — same |
 | Build documentation | this document | **PASS** (this file) |
 
-The drift guards: **`tests/test_windows_pipeline.py`** (8 tests) —
-they pin the workflow's stage order and action pins, the
+The drift guards: **`tests/test_windows_pipeline.py`** (9 tests) —
+they pin the workflow's stage order and action pins, its REPOSITORY-root
+registration + the working-directory/prefix topology (the round-293
+guard), the
 offline-WebView2 + loopback-CSP conf, the least-privilege capability,
 the Rust host's handshake contract, the sidecar spec's Qt excludes,
 and the version-carrier lockstep. A regression in any of part11_2's
 deliverables turns the suite red.
+
+**Round-293 runner-provisioning note (honest evidence, part11_2 §12):**
+the repository's `ci.yml` push runs now fail in ~3 seconds per job
+with no runner ever assigned (run 44467151243 on HEAD `0abcb634`,
+2026-11-19: all 13 jobs dead at queue time — no step ever executed).
+Jobs that never receive a runner indicate an account-level
+Actions-provisioning problem on this PRIVATE repository (included
+private-repo minutes exhausted, a spending limit, or Actions billing
+disabled — none of which are inspectable or fixable from inside this
+sandbox). Until the owner restores runner provisioning on their
+GitHub account (Settings → Billing → spending limit, or making the
+repo public), even the now-registered `windows-release.yml` cannot
+run. This is reported, not silently assumed.
 
 ## The honest labels (part11_2 §12)
 

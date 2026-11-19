@@ -30,7 +30,7 @@ jobs:
       - name: Lint (ruff)
         run: ruff check src tests ui
 
-      - name: Type-check (mypy, blocking since 100x-22-c: 0-error baseline)
+      - name: "Type-check (mypy, blocking since 100x-22-c: 0-error baseline)"
         run: mypy src/pharmaml
 
       - name: Run test suite
