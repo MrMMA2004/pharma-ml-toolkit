@@ -15923,3 +15923,80 @@ Next queue: §47's final engineering report riding the Windows
 runner's first real release (the last part11_1 deliverable that
 needs the runner). Everything committed and pushed (the askpass
 lane) at close.
+
+---
+
+## Round 292 — the 6th-rollback recovery (the interactive continuation; run 88)
+
+**The rollback find:** the sandbox reset the git object DB back to the
+round-186 era again (`2eb0ede`, the reflog truncated with it) — but the
+WORKING TREE survived at the round-291 state this time (the r290 explain
+lane + the r291 Plotly campaign were already in it), the origin remote
+and `~/.github_token` were gone, and `/home/z/.venv` reverted to numpy
+2.1.3 with the 8 scientific packages missing — the r289-era damage
+profile exactly.
+
+**The recovery, in order:**
+- **PAT first** — the credential file re-spliced from
+  `upload/MASTER_PROMPT.pdf`, and the trap that cost one probe: the PDF
+  line-wraps the token across two lines, so a naive single-line regex
+  yields a truncated 76-char token that answers 401 (looks revoked); the
+  guard cron's own protocol says "two-line splice, 93 chars" — joining
+  across the wrap gives the real 93-char token (API 200). The 401 was
+  never a revocation.
+- **Protective commits before any sync** — 1,111 files squashed onto the
+  stale baseline (`c18ee49` + the evidence sweep `370e613`), with the
+  .gitignore hardened first so the token-bearing root
+  `upload/MASTER_PROMPT.pdf` could not ride the `git add -A`.
+- **The fetch reveal** — origin/main sat AHEAD at `9de3f14e` (the r290 +
+  r291 sessions had pushed before this rollback). The blob-level
+  lossless proof: the 49-file diff between the local protective commit
+  and the remote tree decomposed into exec-bit-only differences, the
+  local .gitignore hardening, an accidentally-tracked `.env` +
+  `__pycache__`, and the token-bearing files the remote still tracked.
+  Nothing local was newer than the remote — `git reset --hard
+  origin/main` lost nothing.
+- **The hardening commit `40b6bc32`, pushed** — the 5 token-bearing
+  `upload/MASTER_PROMPT*.pdf` + the 3 `scratch/pdf-extract/*.txt`
+  untracked from the index (they stay on disk; the Nov-12 `.gitignore`
+  rules finally bite — tracked files had been ignoring them), the
+  root-pdf rule added. Earlier blobs remain in remote history;
+  `tools/purge_secret_history.sh` stays available for a full rewrite if
+  ever commissioned.
+- **The venv repair** — `scratch/venv_repair.sh` foreground: numpy
+  1.26.4 · torch 2.14.1+cpu · rdkit 2026.9.1 · meeko 0.8.0 · gemmi 0.7.5
+  · shap 0.54.1 · matplotlib 3.10.9 · the FastAPI/pydantic stack · the
+  Studio PySide6 stack · pyinstaller 6.22.3 · the rdkit-stub patch —
+  both verification lines green (VENV-REPAIR-DONE · STUDIO-REPAIR-DONE,
+  pharmaml 1.2.229).
+- **The lint repair `d962e3a8`, pushed** — the tree as pushed by r291
+  carried 2 errors + 1 warning under the current `bun run lint`
+  (react-hooks v6): `useJobTracking`'s snapshot cache moved to a
+  `useRef` (the sanctioned render-scope mutable slot —
+  `EventStreamStatus` is an object, so the cached `getSnapshot` stays
+  necessary), `StartupGate`'s boot coroutine dropped its
+  synchronous-in-effect setState prefix (the Retry click handler re-arms
+  `connecting`/`failed` from an event, the sanctioned site; the effect's
+  one-time §14.1 external-sync call carries a documented suppression for
+  the async boundary the heuristic cannot see), and `tab-routing`'s
+  stale exhaustive-deps disable retired.
+
+**The gates re-proven on the restored tree:** frontend `tsc --noEmit`
+0 errors · `bun run lint` clean · the API suite green (exit 0) · the 30
+frontend guards green · the 7 version-carrier guards green. **Browser
+E2E on the / route:** the v1.2.229 pin renders, all five tabs navigate,
+the Download panel answers the exact release
+(`{"zipBytes":12155988,"version":"1.2.229","exact":true,"source":"release"}`),
+the streamed download is byte-identical to the shipped artifact
+(SHA-256 `6d412b87…c46a2c`, matching the audit289 record), zero console
+errors, mobile 390 + desktop 1280 evidence shots, the footer at the
+natural document end.
+
+**Queue state after the recovery:** Q1 (the Plotly.js src adoption
+campaign) and Q2 (the ML explainability lane) were already CLOSED by
+the r290/r291 sessions and are now genuinely local again. The §28
+Stage-4 parity gate stands PASS; Stage-5 (the PySide6 retirement) and
+§47's final engineering report both wait on the Windows runner's first
+real release — the two BLOCKED lanes, honestly labeled per part11_2
+§12. Everything committed and pushed at close; the guard cron
+(MASTER_PROMPT-2h-sync-100x, job 533878) continues its 2-hour cadence.
