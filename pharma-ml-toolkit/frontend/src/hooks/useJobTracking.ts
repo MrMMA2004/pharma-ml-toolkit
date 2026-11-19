@@ -20,7 +20,7 @@
  * error, loudly, instead of rendering a silent fake.
  */
 
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { jobsApi } from "@/services/jobs/client";
 import {
@@ -35,12 +35,16 @@ import {
 /** The live WS connection state (idle/connecting/open/…/closed). */
 export function useEventStreamState(): EventStreamStatus {
   const stream = getEventStream();
+  // The snapshot cache must be a ref: `EventStreamStatus` is an object
+  // (a fresh literal per state transition), so `getSnapshot` needs a
+  // stable reference between notifications — and a ref is the one
+  // render-scope slot React sanctions for reassignment after render.
+  const cache = useRef(stream.status);
   const [subscribe, getSnapshot] = useMemo(() => {
-    let cache = stream.status;
-    const get = () => cache;
+    const get = () => cache.current;
     const sub = (cb: () => void) =>
       stream.onStateChange((status) => {
-        cache = status;
+        cache.current = status;
         cb();
       });
     return [sub, get] as const;

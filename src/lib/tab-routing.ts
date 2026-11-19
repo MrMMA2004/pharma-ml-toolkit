@@ -53,7 +53,6 @@ export function useTabRouting() {
         setPlaygroundTab(sub);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* STORE -> HASH: tab switches update the URL without adding history

@@ -37,9 +37,12 @@ export function StartupGate({ children }: { children: ReactNode }) {
   const [failure, setFailure] = useState<Failure | null>(null);
   const booted = useRef(false);
 
+  // The boot coroutine: every state transition inside it happens
+  // after an await (the handshake is genuinely async), so nothing
+  // synchronous-in-effect ever touches setState — the effect below
+  // only kicks it, and the Retry button re-arms the `connecting`
+  // state from the click handler (an event, the sanctioned site).
   const run = useCallback(async () => {
-    setPhase("connecting");
-    setFailure(null);
     try {
       const started = await initializeBackend();
       setInfo(started);
@@ -57,6 +60,12 @@ export function StartupGate({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const retry = useCallback(() => {
+    setPhase("connecting");
+    setFailure(null);
+    void run();
+  }, [run]);
+
   useEffect(() => {
     if (booted.current) {
       // React StrictMode mounts effects twice in dev — the §14.1
@@ -64,6 +73,14 @@ export function StartupGate({ children }: { children: ReactNode }) {
       return;
     }
     booted.current = true;
+    // The §14.1 boot is exactly the "synchronize React with an
+    // external system" case effects exist for (the external system
+    // is the Python sidecar handshake). Every setState in `run`
+    // happens strictly after `await initializeBackend()` — the
+    // async boundary the set-state-in-effect heuristic cannot see,
+    // so this one-time external-sync call is suppressed, not
+    // restructured into a fake.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void run();
   }, [run]);
 
@@ -103,7 +120,7 @@ export function StartupGate({ children }: { children: ReactNode }) {
           </p>
           <button
             type="button"
-            onClick={() => void run()}
+            onClick={retry}
             className="mt-4 inline-flex h-9 items-center justify-center rounded-md bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-primary-foreground)] transition-colors hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             Retry the startup handshake
