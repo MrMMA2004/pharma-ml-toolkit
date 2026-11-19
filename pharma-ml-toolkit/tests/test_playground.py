@@ -759,6 +759,31 @@ XVFB_SKIP = pytest.mark.skipif(
 )
 
 
+def _fresh_playground_app(playground: Any, **kwargs: Any) -> Any:
+    """Construct a PlaygroundApp, retrying the transient Windows Tk race.
+
+    The Windows runner's Defender real-time scan occasionally holds the
+    hostedtoolcache tcl init.tcl mid-read for exactly the instant a new Tk
+    root sources it (run 44514423817: "couldn't read file .../tcl8.6/
+    init.tcl: No error" -- the file was FOUND at its canonical path and
+    the read hiccupped; hundreds of sibling Tk roots in the same run
+    succeeded). A bounded retry on the acquisition is the standard answer
+    to a transient resource race -- and a constructor that dies inside
+    tkinter.Tk.__init__ has built nothing that needs cleaning up.
+    """
+    import time
+    import tkinter
+
+    for attempt in range(3):
+        try:
+            return playground.PlaygroundApp(**kwargs)
+        except tkinter.TclError:
+            if attempt == 2:
+                raise
+            time.sleep(1.0)
+    raise AssertionError("unreachable")
+
+
 @pytest.fixture()
 def picklist_accept_all(playground: Any, monkeypatch: Any) -> None:
     """(100x-132) Bypass the report menus' pre-save picklist by accepting
@@ -828,7 +853,7 @@ class TestGuiUnderXvfb:
     def app(self, playground: Any, xvfb_display: str) -> Any:
         # persist_session=False keeps the suite deterministic: it must
         # neither read nor write the developer's real session file.
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         # collect the (destroyed) widget/Variable cycles NOW, in the main
@@ -1619,7 +1644,7 @@ class TestDockingRescoreReport:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -2468,7 +2493,7 @@ class TestGenerativeParetoCard:
     def app(self, playground: Any, xvfb_display: str) -> Any:
         # persist_session=False: the suite must not leak the mutated
         # Generative inputs into the developer's real session file.
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -2609,7 +2634,7 @@ class TestCopyTabInputs:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str, isolated_home: Path) -> Any:
-        application = playground.PlaygroundApp()
+        application = _fresh_playground_app(playground)
         yield application
         application.destroy()
         import gc
@@ -2807,7 +2832,7 @@ class TestDeepLearningTab:
     def app(self, playground: Any, xvfb_display: str) -> Any:
         # persist_session=False: the suite must not leak the mutated
         # Deep Learning inputs into the developer's real session file.
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -3231,7 +3256,7 @@ class TestNumericFeatureGuard:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -3316,7 +3341,7 @@ class TestTunerCard:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -3712,7 +3737,7 @@ class TestGenerativeRLCard:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -3880,7 +3905,7 @@ class TestMLReportBundle:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -4001,7 +4026,7 @@ class TestMLCheckCSV:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -4119,7 +4144,7 @@ class TestDLCheckCSV:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -4245,7 +4270,7 @@ class TestUtilitiesCoverageGui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -4617,7 +4642,7 @@ class TestDockingCoverageGui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -4905,7 +4930,7 @@ class TestApplicabilityDomainGui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -5041,7 +5066,7 @@ class TestCompletenessReviewGui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -5199,7 +5224,7 @@ class TestCompletenessReviewGui:
 class TestReview120Gui:
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -5454,7 +5479,7 @@ class TestReview121Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -5778,7 +5803,7 @@ class TestReview122Gui:
     def app(
         self, playground: Any, xvfb_display: str, picklist_accept_all: None
     ) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -6130,7 +6155,7 @@ class TestReview123Gui:
     def app(
         self, playground: Any, xvfb_display: str, picklist_accept_all: None
     ) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -6396,7 +6421,7 @@ class TestReview124Gui:
     def app(
         self, playground: Any, xvfb_display: str, picklist_accept_all: None
     ) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -6663,7 +6688,7 @@ class TestReview125Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -6878,7 +6903,7 @@ class TestReview126Gui:
     def app(
         self, playground: Any, xvfb_display: str, picklist_accept_all: None
     ) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -7058,7 +7083,7 @@ class TestReview127Gui:
     def app(
         self, playground: Any, xvfb_display: str, picklist_accept_all: None
     ) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -7323,7 +7348,7 @@ class TestReview128Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -7540,7 +7565,7 @@ class TestReview129Gui:
     def app(
         self, playground: Any, xvfb_display: str, picklist_accept_all: None
     ) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -7801,7 +7826,7 @@ class TestReview130Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -8006,7 +8031,7 @@ class TestReview131Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -8150,7 +8175,7 @@ class TestReview132Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -8474,7 +8499,7 @@ class TestReview133Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -8796,7 +8821,7 @@ class TestReview134Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -9178,7 +9203,7 @@ class TestReview135Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -9504,7 +9529,7 @@ class TestReview136Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -9810,7 +9835,7 @@ class TestReview137Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -10119,7 +10144,7 @@ class TestReview138Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -10500,7 +10525,7 @@ class TestReview139Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -10648,7 +10673,7 @@ class TestReview140Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -10788,7 +10813,7 @@ class TestReview141Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -10937,7 +10962,7 @@ class TestReview142Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -11442,7 +11467,7 @@ class TestReview143Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -11855,7 +11880,7 @@ class TestReview144Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -12178,7 +12203,7 @@ class TestReview145Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -12371,7 +12396,7 @@ class TestReview146Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -12630,7 +12655,7 @@ class TestReview148Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -12883,7 +12908,7 @@ class TestReview149Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -13203,7 +13228,7 @@ class TestReview150Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -13319,7 +13344,7 @@ class TestReview151Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -13427,7 +13452,7 @@ class TestPredictionIntervalsGui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -13616,7 +13641,7 @@ class TestOverfitGapGui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -13765,7 +13790,7 @@ class TestInterpretabilityGui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -14248,7 +14273,7 @@ class TestCrossModelImportanceGui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -14393,7 +14418,7 @@ class TestVarianceFilterGui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -14551,7 +14576,7 @@ class TestVarianceFilterGui:
 class TestUnsupervisedTab:
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -14715,7 +14740,7 @@ class TestUnsupervisedTab:
 class TestDearPyGuiAffordances:
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -14961,7 +14986,7 @@ class TestDearPyGuiAffordances:
 class TestDearPyGuiRoundTwo:
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -15197,7 +15222,7 @@ class TestShapOptunaAbsorptionGui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -15510,7 +15535,7 @@ class TestReinvent4DiffDockAbsorptionGui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -15956,7 +15981,7 @@ class TestXaiAbsorptionGui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
@@ -16114,7 +16139,7 @@ class TestRound186Gui:
 
     @pytest.fixture()
     def app(self, playground: Any, xvfb_display: str) -> Any:
-        application = playground.PlaygroundApp(persist_session=False)
+        application = _fresh_playground_app(playground, persist_session=False)
         yield application
         application.destroy()
         import gc
