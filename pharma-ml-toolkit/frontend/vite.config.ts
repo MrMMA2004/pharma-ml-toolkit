@@ -9,6 +9,16 @@ import { fileURLToPath } from "node:url";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: "./",
+  css: {
+    // r297: an inline EMPTY postcss config SHADOWS vite's upward file
+    // discovery. Tailwind 4 needs no PostCSS pipeline here (the
+    // @tailwindcss/vite plugin owns the transform), but the discovery
+    // walk finds the repository ROOT's postcss.config.mjs -- the Next.js
+    // wrapper around this tree, whose plugin shape vite cannot load
+    // ("Invalid PostCSS Plugin found at: plugins[0]", run 44525087953).
+    // The empty config says: nothing to load, anywhere.
+    postcss: {},
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
