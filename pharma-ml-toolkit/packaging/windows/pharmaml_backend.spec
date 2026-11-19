@@ -43,7 +43,12 @@ ICON_FILE = str(SPEC_DIR / "assets" / "pharmaml.ico")
 # The dynamic-import inventory (part9 §3.1's rule, preserved for the
 # backend sidecar — "do not omit modules simply because they are
 # loaded dynamically"):
-hiddenimports = (
+# r297: a LIST literal, not a tuple — PyInstaller 6.22's Analysis
+# extends the passed hiddenimports in place (self.hiddenimports.extend),
+# and the tuple form dies with AttributeError on the very first real
+# freeze (run 44512065289, the spec's authored-era latent bug: the file
+# had never executed anywhere before the Windows runner unblocked).
+hiddenimports = [
     # mordred's descriptor registry is discovered dynamically.
     *collect_submodules("mordred"),
     # matplotlib figure-export backends the backend figure routes
@@ -72,7 +77,7 @@ hiddenimports = (
     "uvicorn.protocols.http.h11_impl",
     "uvicorn.protocols.websockets.auto",
     "uvicorn.lifespan.on",
-)
+]
 
 datas = [
     # the engines' pinned AutoDock trio (docking routes locate them
