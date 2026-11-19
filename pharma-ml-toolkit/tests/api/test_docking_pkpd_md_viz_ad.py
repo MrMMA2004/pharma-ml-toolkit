@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import io
 import math
+import os
 import time
 
 import numpy as np
@@ -153,9 +154,21 @@ class TestDockingCatalogs:
         assert names == {"vina", "autogrid4", "autodock4"}
         # bundled Windows binaries, no wine on this host: not launchable
         assert all(e["bundled"] for e in payload["engines"])
-        assert all(not e["launchable"] for e in payload["engines"])
-        assert any("Windows" in (e["boundary_note"] or "")
-                   for e in payload["engines"])
+        if os.name == "nt":
+            # r297: on a Windows host the bundled PEs are NATIVE -- the
+            # catalog's launchable flag is honestly True there (the design's
+            # whole Windows deployment: the sha256-verified engines/vina.exe
+            # + friends, tracked in this very repository) and the boundary
+            # note says so. The runner carries all three.
+            assert all(e["launchable"] for e in payload["engines"])
+            assert all(
+                e["boundary_note"] == "engine resolves and launches on this host"
+                for e in payload["engines"]
+            )
+        else:
+            assert all(not e["launchable"] for e in payload["engines"])
+            assert any("Windows" in (e["boundary_note"] or "")
+                       for e in payload["engines"])
         assert payload["dockstring"]["n_targets"] == 58
         assert payload["dockstring"]["objectives"] == [
             "F2", "promiscuous_PPAR", "selective_JAK2"
@@ -414,8 +427,24 @@ class TestDockingParsingScoring:
         )
         assert r.status_code == 422
 
-    def test_dock_engine_boundary_422(self, client):
+    def test_dock_engine_boundary_422(self, client, monkeypatch):
         """The honest host boundary: bundled Windows PE + no wine."""
+        from pharmaml.exceptions import DockingError
+
+        # r297: the boundary is forced EXPLICITLY -- on the POSIX sandbox it
+        # arose naturally (bundled PE + no wine), but the Windows runner
+        # carries the bundled engines as NATIVE binaries, so engine_argv
+        # succeeds there BY DESIGN and this route's honest-refusal contract
+        # needs the refusal injected to be verified on every host.
+        def _unavailable(name: str, engine_dir=None):
+            raise DockingError(
+                f"engine unavailable: bundled Windows PE without wine "
+                f"({name!r} not launchable on this host)"
+            )
+
+        monkeypatch.setattr(
+            "pharmaml.api.routes.docking.engine_argv", _unavailable
+        )
         r = client.post(
             "/api/v1/docking/dock",
             headers=auth_headers(),

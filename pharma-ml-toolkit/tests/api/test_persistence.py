@@ -28,6 +28,7 @@ Covers (per the master prompt's test-alongside-every-change rule):
 from __future__ import annotations
 
 import io
+import os
 import sqlite3
 import threading
 import time
@@ -646,9 +647,19 @@ class TestSafetyMechanics:
     def test_data_dir_default_shape(self, monkeypatch, tmp_path):
         monkeypatch.delenv("PHARMAML_STUDIO_DATA", raising=False)
         monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
-        assert default_data_dir() == (
-            tmp_path / "xdg" / "PharmaML Studio"
-        )
+        if os.name == "nt":
+            # r297: the design's own platform split (§16.5) -- Windows
+            # hosts use %LOCALAPPDATA%\PharmaML Studio and the XDG var
+            # stays inert there; the posix branch keeps the XDG pin.
+            from pathlib import Path as _Path
+
+            assert default_data_dir() == _Path(
+                os.environ["LOCALAPPDATA"]
+            ) / "PharmaML Studio"
+        else:
+            assert default_data_dir() == (
+                tmp_path / "xdg" / "PharmaML Studio"
+            )
 
     def test_serve_uses_platform_data_dir(self, monkeypatch, tmp_path):
         from pharmaml.api import server

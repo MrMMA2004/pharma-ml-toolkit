@@ -591,7 +591,12 @@ class TestStartupHandshake:
             assert line.startswith(HANDSHAKE_PREFIX)
             payload = json.loads(line[len(HANDSHAKE_PREFIX) + 1:])
             async with httpx.AsyncClient(
-                base_url=f"http://127.0.0.1:{payload['port']}"
+                base_url=f"http://127.0.0.1:{payload['port']}",
+                # r297: trust_env=False -- the runner's proxy environment
+                # (httpx honors HTTP(S)_PROXY with trust_env=True) must not
+                # intercept a loopback request; the proxy black-hole reads
+                # as a ReadTimeout that says nothing about the server.
+                trust_env=False,
             ) as hc:
                 resp = await hc.get(
                     "/api/v1/health",
@@ -647,6 +652,12 @@ class TestGracefulShutdownPush:
                     deadline = time.monotonic() + 20
                     while time.monotonic() < deadline and not server.started:
                         await asyncio.sleep(0.05)
+                        if task.done():
+                            # r297: surface the serve() task's REAL error --
+                            # the previous bare "never started" pin swallowed
+                            # the startup exception entirely (the next failure
+                            # must arrive with its traceback attached).
+                            await task
                     assert server.started, "the studio server never started"
                     async with websockets.connect(
                         f"ws://127.0.0.1:{port}/api/v1/events"
