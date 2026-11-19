@@ -31,6 +31,46 @@ jobs:
           python scripts/check_github_page.py
           python -m unittest discover -s tests -p 'test_github_page.py' -v
 
+  studio-frontend:
+    name: Studio frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pharma-ml-toolkit
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: pharma-ml-toolkit/frontend/package-lock.json
+
+      - name: Set up Python for workflow contract tests
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install the locked Studio frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Type-check and build the offline Studio frontend
+        run: npm --prefix frontend run build
+
+      - name: Install the pinned test runner
+        run: python -m pip install pytest==9.0.2
+
+      - name: Run frontend and workspace contract guards
+        run: >-
+          python -m pytest
+          tests/test_frontend_foundation.py
+          tests/test_frontend_services.py
+          tests/test_frontend_startup.py
+          tests/test_*_workspace.py
+          tests/test_windows_pipeline.py
+          -o addopts="-q --tb=short"
+
   python:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest

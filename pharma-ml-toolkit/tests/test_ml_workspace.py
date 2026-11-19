@@ -18,11 +18,12 @@ frontend drifts:
 * the export lane: rows-based ``POST /visualization/table`` with the
   backend's own 5000-row cap mirrored client-side + the
   digest-verified download labels;
-* the workspace registry flip (machine-learning ``shell`` →
-  ``workflow``) + the App wiring;
+* the workspace registry state (machine-learning ``workflow``) + the
+  App wiring;
 * the §11.2 stage order (the page's StageHeader sequence) and the
-  honesty blocks (the queued explainability note, the classification
-  gate, the bounded column bridge) — the §12 labels, pinned.
+  honest capability boundaries (real SHAP explainability, the
+  classification-only gate, the bounded column bridge) — the §12
+  labels, pinned.
 """
 
 from __future__ import annotations
