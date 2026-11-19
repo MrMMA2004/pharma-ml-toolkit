@@ -81,6 +81,13 @@ jobs:
 
     steps:
       # ---- 1. check out the exact intended source revision --------
+      # Byte-faithful checkout (round 296): the repository root's
+      # .gitattributes (`* -text`) disables Git-for-Windows' default
+      # core.autocrlf LF->CRLF smudge for every file, so this checkout
+      # delivers the index's bytes exactly -- the data-suite byte pins
+      # (seed_molecules.csv 443 B, the 682 B r.dlg campaign tally) and
+      # the builder's --check drift gate all compare raw bytes and
+      # the smudged working tree failed all three on run 44490024011.
       - name: "1. Checkout the exact source revision"
         uses: actions/checkout@v4
         with:

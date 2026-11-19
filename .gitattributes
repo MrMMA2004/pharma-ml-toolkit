@@ -1,0 +1,26 @@
+# Byte-faithful checkouts everywhere (round 296).
+#
+# Git-for-Windows defaults to core.autocrlf=true, which smudges every
+# file git sniffs as text LF->CRLF in the working tree. The Windows
+# release runner (and any clean Windows machine the Stage-5 smoke test
+# will use) therefore received CRLF-mangled bytes, and the toolkit's
+# own gates caught it exactly as designed:
+#
+#   * test_database_audit's structural integrity guard: "CR bytes
+#     present" in cellline_expression.csv;
+#   * the seed_molecules.csv byte pin: 455 B on disk vs the 443 B the
+#     index carries (exactly 12 lines x 1 CR);
+#   * the docking-campaign tally: every size-pinned r.dlg (682 B)
+#     grew past its pin and fell out of "OK" into "UNEXPECTED";
+#   * the data builder's --check drift gate: the regenerated (LF)
+#     bytes stopped matching the smudged working tree.
+#
+# Marking every path `-text` disables the EOL smudge/clean filters for
+# all files on every platform: the working tree is byte-identical to
+# the index, which is what every byte-pinned guard in this repository
+# assumes and what the shipped archive must contain. The repository is
+# authored LF-only from Linux, so there is nothing to normalize and
+# nothing to renormalize -- verified by scanning the index for CR
+# bytes (only the binary ZIP archives in dist-archive/ contain 0x0D,
+# and those are untouched by -text).
+* -text
