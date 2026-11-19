@@ -26,8 +26,10 @@ Startup contract (machine-readable, **separate from diagnostic logs**):
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
+import signal
 import socket
 import sys
 from typing import Any
@@ -141,8 +143,39 @@ async def serve(
         loop="asyncio",
     )
     server = StudioServer(config)
-    await server.serve(sockets=[sock])
-    sock.close()
+    # r297: the graceful-signal lanes, wired for real. The shipped entry
+    # previously had NO handler at all -- the docstrings promised
+    # SIGTERM-graceful shutdown while the process actually died on the
+    # OS default path (the Windows runner's CTRL_BREAK verification
+    # caught it: the frozen sidecar exited 1, abruptly, never running
+    # StudioServer's envelope-first shutdown). A console child receives
+    # CTRL_BREAK as SIGBREAK and Ctrl+C as SIGINT on Windows; SIGTERM is
+    # the POSIX lane. The handler flips uvicorn's should_exit, which the
+    # serve loop polls -- the shutdown envelope publishes BEFORE the
+    # sockets close, then serve() returns and the process exits 0.
+    previous: dict[int, Any] = {}
+
+    def _graceful(signum: int, _frame: object) -> None:
+        server.should_exit = True
+
+    lanes: list[int] = [int(signal.SIGINT)]
+    lanes.append(
+        # SIGBREAK exists only on Windows; a direct constant access would
+        # not even type-check on the POSIX dev host.
+        int(getattr(signal, "SIGBREAK")) if os.name == "nt" else int(signal.SIGTERM)  # noqa: B009
+    )
+    for sig in lanes:
+        with contextlib.suppress(ValueError, OSError):
+            previous[sig] = signal.signal(sig, _graceful)
+    try:
+        await server.serve(sockets=[sock])
+    finally:
+        # restore the surrounding process's handlers (tests drive serve()
+        # inside the pytest process; the sidecar exits before this anyway)
+        for sig, old in previous.items():
+            with contextlib.suppress(ValueError, OSError):
+                signal.signal(sig, old)  # type: ignore[arg-type]
+        sock.close()
     return real_port
 
 

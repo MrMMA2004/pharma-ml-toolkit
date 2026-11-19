@@ -134,8 +134,17 @@ def main() -> int:
         except subprocess.TimeoutExpired:
             proc.kill()
             code = proc.wait()
-        print(f"OK shutdown: exit={code}")
-        if code not in (0, None):
+        if code in (0, None):
+            print(f"OK shutdown: exit={code}")
+        else:
+            # r297: the previous shape printed "OK shutdown: exit=1" and
+            # THEN failed the run -- the OK line was a lie the step log
+            # carried into every diagnosis. The verdict is honest now.
+            print(
+                f"FAIL: the sidecar exited {code} on the graceful shutdown "
+                "(the envelope-first path must exit 0)",
+                file=sys.stderr,
+            )
             return 1
         print("SIDECAR-VERIFIED")
         return 0
