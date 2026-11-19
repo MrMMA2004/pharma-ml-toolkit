@@ -16,6 +16,7 @@ import re
 import struct
 import sys
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,6 +81,24 @@ def check_local_links(path: Path) -> int:
     return checked
 
 
+def check_image_alternatives(text: str) -> None:
+    """Require readable alternatives on the page's meaningful HTML images.
+
+    Markdown badges carry their own alt text. Parse HTML attributes rather
+    than mistaking a data-alt attribute for an actual image alternative.
+    """
+    class ImageParser(HTMLParser):
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            if tag == "img":
+                alt = dict(attrs).get("alt")
+                if alt is None or not alt.strip():
+                    fail("README HTML images must have nonempty alternative text")
+
+    parser = ImageParser()
+    parser.feed(text)
+    parser.close()
+
+
 def main() -> None:
     version = VERSION_FILE.read_text(encoding="utf-8").strip()
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
@@ -129,6 +148,7 @@ def main() -> None:
     hero_path = "pharma-ml-toolkit/docs/assets/github-hero.svg"
     if not re.search(rf'<img\s+[^>]*src="{re.escape(hero_path)}"[^>]*alt="[^"\s][^"]*"', text):
         fail("README must embed the hero illustration with alternative text")
+    check_image_alternatives(text)
     try:
         hero = ET.parse(ROOT / hero_path).getroot()
     except ET.ParseError as exc:
