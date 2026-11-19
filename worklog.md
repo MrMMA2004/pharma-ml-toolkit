@@ -16269,3 +16269,28 @@ Next queue: the tag build's conclusion + the GitHub Release asset
 verification (part11_2 §9), then the clean-machine smoke test
 (C-3/C-5, §47 rows 38–48) and the §28 Stage-5 PySide6 retirement
 behind it.
+
+**The close (amended after the monitoring window):** the second tag
+build (run `44597166723`, at the freshness fix `6e115f9f`) got PAST
+the notebook-freshness guards and died honestly at the NEXT stale
+pin — `tests/test_viz.py::TestNotebookArtifacts::
+test_complete_pk_workflow_notebook` asserting `t_half_terminal 1.623`
+against the fresh notebook's `1.620` (the first build's `maxfail=5`
+had stopped at the freshness guards, so this pin never ran there).
+The provenance: the 1.623 rode the r290-292 drifted-era venv (numpy
+2.1.3 before the repair); the pinned-stack re-exec produces 1.620
+with AUC/AUMC/Cmax/Tmax unchanged — the pin was trued with the full
+note (`54d5bf8c`; test_viz.py 85-green + ruff clean; the whole
+TestNotebookArtifacts class audited — exactly one stale pin). The
+tag re-pointed again and the THIRD build (run `44601195433`) went
+**all the way**: step 13 green, the PyInstaller freeze green, the
+MSVC Rust compile green, NSIS + WiX green, and the run concluded
+**success** — the GitHub Release `v1.2.230` published at
+20:19:15 UTC with the four delivery assets attached: the NSIS
+`PharmaML_Studio_Setup_v1.2.230.exe` (455 MB), the WiX
+`PharmaML_Studio_v1.2.230.msi` (601 MB, the offline WebView2
+embedded), `RELEASE_MANIFEST.json`, and `SHA256SUMS.txt` —
+part11_2 §9's artifact delivery COMPLETE on a public release. The
+remaining lane is unchanged and honest: the clean-machine smoke test
+on a real Windows 10/11 x64 (dissolves C-3/C-5, fills §47's rows
+38–48) and the §28 Stage-5 PySide6 retirement behind it.
