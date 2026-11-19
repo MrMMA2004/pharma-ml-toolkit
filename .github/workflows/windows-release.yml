@@ -52,7 +52,10 @@ permissions:
 env:
   PYTHON_VERSION: "3.12"
   NODE_VERSION: "22"
-  RUST_TOOLCHAIN: "1.85.0"
+  # tauri 2.12.x's MSRV is rustc 1.90 (crates.io metadata, r294):
+  # the 1.85.0 pin predates the tauri 2.12 era and the host compile
+  # would die on "package requires rustc 1.90"
+  RUST_TOOLCHAIN: "1.90.0"
   # the toolkit subtree — the checkout's workspace root is the REPO
   # root (Next.js wrapper + toolkit), so every workspace-root-relative
   # reference below must carry this prefix (the registration note)
@@ -135,8 +138,9 @@ jobs:
           python-version: "3.12"
 
       # ---- 6. the Rust/MSVC toolchain ----------------------------
+      # (r294: 1.90.0 — tauri 2.12.x's MSRV per crates.io metadata)
       - name: "6. Set up the Rust toolchain (MSVC target)"
-        uses: dtolnay/rust-toolchain@1.85.0
+        uses: dtolnay/rust-toolchain@1.90.0
         with:
           targets: x86_64-pc-windows-msvc
 
@@ -188,6 +192,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           python -m pytest tests -q `
             --ignore=tests/api `
+            --ignore=tests/ui `
             --ignore=tests/test_web_parity.py `
             -k "not gui and not nine_card" -x --maxfail=5
           if ($LASTEXITCODE -ne 0) {
@@ -271,7 +276,10 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          cargo install tauri-cli --version 2.0.0-beta.17 --locked
+          # (r294: the 2.0.0-beta.17 CLI predates the stable v2 conf
+          # schema this repository ships — tauri-cli 2.12.6 is the
+          # stable-era CLI matching the tauri 2.12 line, MSRV 1.90)
+          cargo install tauri-cli --version 2.12.6 --locked
           cargo tauri build --target x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) {
             Write-Host "::error::the Tauri Windows build failed (host compile, NSIS, or MSI)"

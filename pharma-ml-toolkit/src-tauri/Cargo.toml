@@ -1,12 +1,12 @@
 [package]
 name = "pharmaml-studio"
-version = "1.2.224"
+version = "1.2.229"
 description = "The PharmaML Studio desktop host (Tauri 2): the offline WebView2 shell, the Python backend sidecar supervisor, and nothing else — no scientific logic lives in Rust (part11 §3)."
 authors = ["PharmaML contributors"]
 license = "MIT"
-repository = "https://github.com/pharmaml/pharma-ml-toolkit"
+repository = "https://github.com/MrMMA2004/pharma-ml-toolkit"
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.90"  # tauri 2.12.x MSRV (r294; was 1.77 — predates the tauri 2.12 era)
 
 # The Rust host stays MINIMAL (part11 §5.2: "Keep the Rust
 # implementation minimal").  Only the core crate — no plugins, no

@@ -66,6 +66,23 @@ pyqtgraph==0.13.7
 qt-material==2.17
 qdarkstyle==3.2.3
 
+# ---- The part11 API server (the FastAPI sidecar surface) ---------------
+# (r294: the file predates the part11 API era — the runner-exposed gap;
+# pins match the repository's QA-verified venv, the same contract as
+# every block above. pydantic/starlette/anyio ride fastapi's own tree.)
+fastapi==0.128.0
+uvicorn==0.44.0
+python-multipart==0.0.24
+websockets==16.0
+
+# ---- The API test client + guard deps (build-venv only; never shipped) --
+# (httpx feeds fastapi.testclient (tests/api, workflow step 11); nbformat
+# feeds the notebook-variant guards; pypdf feeds the playground PDF guards
+# — test-time only, the frozen sidecar never imports them.)
+httpx==0.28.1
+nbformat==5.10.4
+pypdf==6.6.0
+
 # ---- Packaging tools (build-venv only; never shipped in the installer) --
 pyinstaller>=6.10,<7       # version recorded into RELEASE_MANIFEST.json at build time
 pyinstaller-hooks-contrib>=2024.10
