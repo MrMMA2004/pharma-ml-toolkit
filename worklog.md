@@ -16913,3 +16913,65 @@ close-out claim re-verified true.**
    (clean-machine smoke test C-3/C-5, the Stage-5 PySide6 retirement
    gated behind it, installer signing certificate-gated). Counter
    95 → 96.
+
+---
+
+**Round 306 (the 97th recorded run — the 02:30 +08:00 cron firing of
+MASTER_PROMPT-2h-sync-100x, job 533878).** The firing arrived onto a
+**sandbox rollback**: git HEAD reverted to the ancient 2eb0ede snapshot
+commit, the `origin` remote definition gone, the 600-mode credential
+file wiped, `/home/z/.venv` broken (torch missing), the offsite
+`~/pharma-ml-toolkit-zips/` directory gone, AND the swept ghosts
+resurrected (the 229/230 predecessor zips in the three homes + the
+nested `pharma-ml-toolkit/.github/workflows/windows-release.yml` —
+files deleted by the r300/r301 sweeps, restored by the snapshot; the
+r305-era local uncommitted .gitignore edit that had hidden them was
+lost with it). The filesystem otherwise carried the r305 content
+(worklog ends with the round-305 entry, counter 96, both evidence
+pngs). **Full recovery executed, every step real:**
+
+1. **PAT re-spliced from the PDF** — exactly one 93-char token-pattern
+   candidate (lines 1440+1441), validated against the GitHub API
+   (authenticated as MrMMA2004), stored at the 600-mode credential
+   file; never printed.
+2. **origin re-added** (clean https URL, no token), `git fetch` clean:
+   origin/main = 239ef4ee (the durable r305 push), tags v1.2.228/230/
+   231 back.
+3. **reset --hard origin/main**: 1,243 files materialized; post-sweep
+   `git status` = 0 — the working tree byte-identical to the pushed
+   r305 tree.
+4. **Ghost sweep** (the r300/r301 precedent re-executed): the 6
+   resurrected zips (229/230 × download/, dist-archive/, toolkit
+   download/) + the nested `pharma-ml-toolkit/.github/` removed. The
+   canonical tracked zip layout re-verified per home: download 7
+   (223-228+231), dist-archive 9 (221-228+231), toolkit download 7,
+   upload 3 (225+228+231); zero 229/230 entries tracked at origin/main.
+5. **Offsite rebuilt**: 11 zips (221-231) — 221-228+231 copied from the
+   tracked homes, **229 extracted from git c7989dc9 and 230 from
+   62fac28e** (the r301 recovery method); testzip 11/11 OK; the
+   offsite 231 sha d3673da7.
+6. **Five-home 231 parity**: download/, dist-archive/, toolkit
+   download/, upload/, offsite — all byte-identical d3673da7 /
+   15,407,168 B.
+7. **venv repaired foreground**: VENV-REPAIR-DONE (numpy 1.26.4 /
+   torch 2.14.1+cpu / matplotlib 3.10.9 / openpyxl 3.1.5 / pharmaml
+   1.2.231 / fastapi 0.128.0 / uvicorn 0.44.0) + STUDIO-REPAIR-DONE
+   (PySide6 OK, pyqtgraph 0.13.7); rdkit 2026.09.1 at pin.
+8. **Dev server up** (:3000 HTTP 200); the census walk 1,591 files /
+   552,786 lines / v1.2.231 exact; zip-size API 15,407,168 B
+   exact:true — **the pins stayed true** (no tree change).
+9. **CI on 239ef4ee verified via the API**: CI + Push on main both
+   completed/success — the r305 push is green on the remote.
+10. **Gate legs this cycle**: collection 8,362 / 0 / 456 files on the
+    repaired venv; chunk-1 and chunk-2 legs run foreground (exit 0
+    both) with the OOM-cap env (LOKY/OMP/OPENBLAS/MKL/NUMEXPR/NUMBA=1)
+    from the r304 chunk runner's balance() layout; inherited this
+    cycle from r305 (same tree): hygiene 472/472, windows pipeline
+    9/9, phase6 6/6, tests/api 284+1s exit 0, the github-page guard,
+    frontend typecheck.
+
+**Verdict:** the tree is byte-identical to 239ef4ee (origin/main) —
+no CHANGELOG / FEATURES / RELEASE_READINESS / pin changes owed (no
+toolkit change). Counter 96 → 97. Still honestly BLOCKED: the
+clean-machine smoke test (C-3/C-5), the Stage-5 PySide6 retirement
+behind it, installer signing (certificate-gated).
