@@ -86,17 +86,21 @@ export const SHIPPED_FILE_COUNT = 1608;
  *  walk of 552,998; found and trued this round — the pin now EQUALS
  *  the live /api/toolkit/tree walk); the doc-only round again
  *  touches zero src/tests bytes. The round-310 re-true (part13
- *  Phase 3): 554,157 — the r309 base plus +884 the frontend
+ *  Phase 3, taken after the notebook re-execution and the last doc
+ *  edit): 552,641 — the r309 base plus +884 the frontend
  *  package-lock.json growth (the vitest/jsdom/testing-library
  *  dev-dependency trees the component-test lane added — .json is a
- *  counted viewable extension) and +88 the round's own counted doc
- *  delta (the CHANGELOG entry + the PROJECT_STATUS Phase-3 addenda;
- *  the .ts/.tsx test files are tree nodes but never counted, by the
- *  long-standing census rule) minus the 330 lines of the stale
- *  pre-r293 windows-release.yml ghost the rollback resurrected —
- *  caught and removed with the census; verified pin = live walk =
- *  page render three-way. */
-export const SHIPPED_SOURCE_LINES = 554157;
+ *  counted viewable extension) and +100 the round's counted doc
+ *  delta (the CHANGELOG entry incl. the CI-catch bullet + the
+ *  PROJECT_STATUS Phase-3 addenda; the .ts/.tsx test files are tree
+ *  nodes but never counted, by the long-standing census rule)
+ *  minus 330 lines of the stale pre-r293 windows-release.yml ghost
+ *  the rollback resurrected (caught and removed with the census) and
+ *  minus 1,198 the eight-notebook re-execution at 1.2.232 (the CI's
+ *  notebook-freshness gate caught the stale 1.2.231 prints; the
+ *  re-executed outputs are leaner); verified pin = live walk = page
+ *  render three-way. */
+export const SHIPPED_SOURCE_LINES = 552641;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

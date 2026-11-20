@@ -45,15 +45,17 @@
   pyproject, pharmaml.__version__, frontend/package.json,
   tauri.conf.json, version_info.txt quadruple + strings,
   SHIPPED_TOOLKIT_VERSION, the pins) — the lockstep guard green.
-- **Census/pins re-trued**: files 1,593→1,608 (+9 the lane files, +4
-  the rollback-restored 229/230 zips, +2 the v1.2.232 ship zip in its
-  two in-tree homes; the resurrected pre-r293 .github ghost nets to
-  zero — caught and removed); lines 553,185→554,157 (+884 the
-  package-lock growth, +88 the round's counted doc delta, −330 the
-  ghost); tests 8,362 Python unchanged + the NEW component-test pin
-  48 (the overview card carries it beside the pytest pin). Verified
-  three-way (pin = live /api/toolkit/tree walk = page render) — the
-  final walk taken AFTER the doc edits and the zip homes landed.
+- **Census/pins re-trued at the fixed point**: files 1,593→1,608 (+9
+  the lane files, +4 the rollback-restored 229/230 zips, +2 the
+  v1.2.232 ship zip in its two in-tree homes; the resurrected
+  pre-r293 .github ghost nets to zero — caught and removed); lines
+  553,185→552,641 (+884 the package-lock growth, +100 the round's
+  counted doc delta, −330 the ghost, −1,198 the eight-notebook
+  re-execution at 1.2.232 — the executed outputs are leaner than the
+  1.2.231-era ones); tests 8,362 Python unchanged + the NEW
+  component-test pin 48 (the overview card carries it beside the
+  pytest pin). Verified three-way (pin = live /api/toolkit/tree walk
+  = page render), the final walk taken after the last doc edit.
 - **Gates**: vitest 48/48 fresh, tsc --noEmit clean, the production
   vite build green (25.95 s), the version-lockstep guard 9/9, the
   frontend contract guards 66/66, collection 8,362/0 fresh. Archive
@@ -61,6 +63,16 @@
   offsite, must-carry includes the lane, retired-pair negative,
   version_info quadruple, composition 0, real leaks 0; the terminal
   sha/bytes live in the worklog (the archive cannot carry its own).
+- **The first push's two real CI catches, both fixed at the source**:
+  the Web console job failed on `@next/next/
+  no-assign-module-variable` (the plotly mock factory's `module`
+  variable — renamed `plotlyModule`) and the Generative SA job on
+  the notebook version-freshness gate (the eight executed notebooks
+  still printed 1.2.231 against VERSION 1.2.232); the notebooks
+  re-executed at 1.2.232 (231 s, 8/8 OK, zero error outputs, the 7
+  no-output twins regenerated, the freshness gate green) and the
+  lane re-linted clean before the second push — the CI gates caught
+  exactly what they exist to catch.
 - **BLOCKED (unchanged, honest)**: clean-machine smoke test (C-3/C-5),
   the Stage-5 PySide6 retirement behind it, installer signing
   (certificate-gated). Playwright/browser E2E stays queued for the

@@ -31,7 +31,7 @@ const plotlyState = vi.hoisted(() => {
 });
 
 vi.mock("plotly.js-dist-min", () => {
-  const module = {
+  const plotlyModule = {
     react: (el: unknown, data: unknown, layout: unknown, config: unknown) => {
       const div = el as GraphDiv;
       plotlyState.reactCalls.push({
@@ -62,7 +62,7 @@ vi.mock("plotly.js-dist-min", () => {
   };
   // the real dist-min bundle arrives as the interop `default` (Vite's
   // CJS wrapping) AND as named exports — the mock mirrors both shapes
-  return { default: module, ...module };
+  return { default: plotlyModule, ...plotlyModule };
 });
 
 beforeEach(() => {

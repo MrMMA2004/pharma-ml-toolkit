@@ -311,14 +311,14 @@ Next: part13 Phase 3 (frontend quality) per `docs/PROJECT_STATUS.md` §6.
   argument: diff ca1accc9 -- tests src = 0 files).
 - **Ship v1.2.232** (terminal build, self-reference-free claims
   inside the archive per the r301 convention): 938 files /
-  15,448,901 B, sha-256
-  fbe8ef2a94133b6a4659050eaf0d8e736ca6549324d016bccd235bdf2322203f,
+  15,439,877 B, sha-256
+  1b6284cea6fc4f7a9c4bb2282cbf3c6ce326594df89c8c0fe30f594a971130fc,
   testzip-OK five homes + offsite (12 zips), must-carry includes the
   lane files, retired-pair negative, version_info quadruple 1.2.232,
-  composition 0, real leaks 0; the zip-size API serves 15,448,901
+  composition 0, real leaks 0; the zip-size API serves 15,439,877
   exact:true.
 - **Pins re-trued three-way** (pin = live /api/toolkit/tree walk =
-  page render): files 1,593→1,608, lines 553,185→554,157, the NEW
+  page render): files 1,593→1,608, lines 553,185→552,641, the NEW
   component-test pin 48 painted on the overview card beside the
   pytest pin; Python tests 8,362 unchanged.
 - **BLOCKED (unchanged, honest)**: clean-machine smoke (C-3/C-5),
@@ -330,3 +330,24 @@ Next: part13 Phase 4 (scientific workflow improvements) per
 `docs/PROJECT_STATUS.md` §6 — Active Learning, Chemical Space
 Explorer, Conformal Prediction audit, Automated Benchmarking, Report
 Builder, Model Cards.
+
+- **The first push's two real CI catches — the gates did their job**:
+  the Web console job failed on `@next/next/
+  no-assign-module-variable` (the plotly mock factory's `module`
+  variable — renamed `plotlyModule`) and the Generative SA job on
+  the notebook version-freshness gate (the eight executed notebooks
+  still printed 1.2.231 against VERSION 1.2.232). Fixes: the venv's
+  pharmaml re-installed EDITABLE against the source tree (1.2.232),
+  the eight notebooks re-executed (231 s, 8/8 OK, zero error
+  outputs, the 7 no-output twins regenerated), the round-250
+  builder-path scrubber applied to the executed outputs (the
+  ConvergenceWarning traces carried the live venv prefix — «venv»
+  form restored, the zip leak scan back to real leaks 0), the
+  freshness gate green locally (72/72 over the failing jobs' test
+  files), vitest 48/48 re-green, and the terminal ship rebuilt:
+  938 files / 15,439,877 B / sha
+  1b6284cea6fc4f7a9c4bb2282cbf3c6ce326594df89c8c0fe30f594a971130fc.
+  Census fixed point re-trued three-way after the notebook
+  re-execution: files 1,608 (unchanged), lines 553,185→552,641 (the
+  re-executed outputs are 1,198 lines leaner than the 1.2.231-era
+  ones).
