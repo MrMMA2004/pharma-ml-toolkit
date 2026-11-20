@@ -280,3 +280,33 @@ def test_the_version_carriers_stay_in_lockstep() -> None:
     )
     conf = json.loads(_read(SRC_TAURI / "tauri.conf.json"))
     assert conf["version"] == version
+    # (r301: the EIGHTH carrier — the Windows version resource. The
+    # first v1.2.231 tag build (run 44681637758) died at the runner's
+    # step-20 packaging validation because round 300's seven-carrier
+    # bump missed packaging/windows/version_info.txt (the quadruple
+    # stayed 1.2.230 while VERSION went 1.2.231). The guard now enforces
+    # it between builds too — same parsing semantics as the runner's
+    # --static gate (space-stripped tuple needles) plus the two string
+    # fields the EXE properties dialog paints.
+    vi = _read(PACKAGING / "version_info.txt")
+    vi_flat = vi.replace(" ", "")
+    quad = "(" + version.replace(".", ",") + ",0)"
+    assert f"filevers={quad}" in vi_flat, (
+        "version_info.txt filevers drifted from VERSION — the runner's "
+        "packaging validation --static gate fails the release on "
+        "exactly this (run 44681637758, step 20); bump the quadruple "
+        "in lockstep with the seven carriers"
+    )
+    assert f"prodvers={quad}" in vi_flat, (
+        "version_info.txt prodvers drifted from VERSION — the runner's "
+        "packaging validation --static gate fails the release on "
+        "exactly this; bump the quadruple in lockstep"
+    )
+    assert f"'FileVersion','{version}.0'" in vi_flat, (
+        "version_info.txt FileVersion string drifted from VERSION — "
+        "the EXE properties dialog paints it; keep it in lockstep"
+    )
+    assert f"'ProductVersion','{version}'" in vi_flat, (
+        "version_info.txt ProductVersion string drifted from VERSION — "
+        "the EXE properties dialog paints it; keep it in lockstep"
+    )

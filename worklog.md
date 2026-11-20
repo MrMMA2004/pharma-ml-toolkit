@@ -16384,3 +16384,84 @@ live; the counter reads 90. The remaining lane is unchanged and
 honest: the clean-machine smoke test on a real Windows 10/11 x64
 (dissolves C-3/C-5, fills §47's rows 38–48) and the §28 Stage-5
 PySide6 retirement behind it.
+
+## Round 301 — run 91: the second rollback recovery, the eighth version carrier found the hard way, and the v1.2.231 Windows release re-fire (the part11_1+2 continuation + the housekeeping firing)
+
+**The firing opened on the same rolled-back checkout as r300** — HEAD
+at `2eb0ede4` (482 behind `origin/main` this time), the origin remote
+gone, the credential file wiped, the venv rolled back (numpy 2.1.3,
+rdkit/torch/shap/PySide6/pyinstaller missing). The recovery: PAT
+re-recovered from `upload/MASTER_PROMPT.pdf` (93-char two-line
+splice, 600-mode, verified HTTP 200 as `MrMMA2004`, never printed),
+origin re-added as a clean URL with the askpass shim, `fetch
+--prune`, the collision audit (154/156 tracked identical — the 2
+"differing" were locally-deleted zips origin had also deleted;
+598+441 untracked identical, removed with immediate re-verification;
+8 not-in-origin swept: the 229/230 zip ghosts + the stale
+toolkit-dir `windows-release.yml`), then a verified ff-only to
+`35aab254` — zero diff, no arena branches this time. The venv
+repair ran foreground again (the full pinned stack restored, both
+probes green). The offsite home, wiped a THIRD time by the
+rollback, was rebuilt with the full 221–231 history before anything
+else shipped — the real 229 recovered from git history at
+`c7989dc9`, the real 230 at `62fac28e` (the rebuilt byte-parity
+zip, sha `70d96665…`).
+
+**part11_1+2, verified against the live API before anything
+touched the tree:** the repo is public (the C-4 unlock holds), CI
+green on the round-300 push, the Windows Release workflow active
+with 28 runs, and the v1.2.230 release published with real assets
+(EXE 477,600,707 B, MSI 631,070,053 B, manifest, checksums). The
+part11_2 continuation then fired the release pipeline for the
+SHIPPED-but-unreleased v1.2.231: the tag pushed at `35aab254`
+triggered run `44681637758` — and it died honestly at step 20:
+`packaging_validation.py --static` failed with "version_info.txt
+quadruple disagrees with VERSION (1.2.231)". The EIGHTH carrier:
+round 300's seven-carrier bump missed
+`packaging/windows/version_info.txt` (the PyInstaller version
+resource stayed at 1.2.230), and the local lockstep guard never
+covered it — exactly the gap the runner's gate exists to catch.
+
+**The fix landed three ways.** The carrier's quadruple and both
+string fields now carry 1.2.231; `test_the_version_carriers_
+stay_in_lockstep` now enforces the eighth carrier between builds
+(the runner's exact space-stripped tuple parsing + the
+FileVersion/ProductVersion strings, with the run number in the
+assertion message); and the archive re-shipped — `build_zip_301.py`
+rebuilt v1.2.231 from the fixed tree (1,032 entries / 919 files /
+16,031,493 B, sha-256 `47dbb712…de31c35`, testzip-None, composition
+0, the same six pattern-literal leak hits) with a NEW in-archive
+gate: the zip's own `version_info.txt` must carry the 231
+quadruple. Byte-parity verified across all five homes (the stale
+r300 zips of the same name replaced). The local verification of the
+runner's exact failure: `packaging_validation.py --static` now
+26/26 locally, the extended guard 9/9.
+
+**The gate on the repaired venv** (the tree unchanged from
+`35aab254` — the venv is what the rollback broke, so the gate
+re-ran fresh): chunks 1–2, 4–11 green outright (chunk-1's solo
+`test_playground.py` 762 s under the thread caps), chunk-3 degraded
+through the OOM storm exactly like r300 — sub-batches + singles
+green except `test_nine_card_first.py`, which OOM'd solo again
+(rc=-9 at 277 s) and was re-run green 23/23 through the six-class
+split (six separate pytest invocations, one per test class). The
+collected census re-verified at 8,590 (the pin's own
+collect-only method). The dev server ran via `dev_daemon.py` (GET /
+200, the 1.2.231 pin live) and stayed down only while the gate
+ran.
+
+**The census pins re-trued, with the drift decoded.** The r300
+pins (1,584 files / 595,238 lines) measured a mid-round tree — the
+walk is sensitive to the ritual's own evidence artifacts (the
+theme-screenshot PNGs the gate leaves in `build/theme-shots/`) and
+to when in the round the walk ran. The r301 re-true: 1,583 files /
+595,025 lines — the tree exactly as the re-ship blessed it, both
+census replicas agreeing, the delta (the eighth-carrier fix, the
+extended guard, the CHANGELOG entry, the two evidence PNGs)
+documented in `toolkit-stats.ts`.
+
+**The tag re-points at this commit and re-fires** the Windows
+Release; the release result rides the round close-out. The honest
+remaining lane is unchanged: the clean-machine smoke test on a
+real Windows 10/11 x64 (C-3/C-5, §47's rows 38–48) and the §28
+Stage-5 PySide6 retirement behind it.

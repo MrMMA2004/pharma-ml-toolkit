@@ -1,3 +1,77 @@
+## [1.2.231-r301] — 2026-11-20 — round 301 (the 91st recorded run: the second rollback recovery, the eighth version carrier found the hard way — the first v1.2.231 Windows tag build died at the runner's packaging validation — and the re-ship)
+
+- **The second rollback recovery.** The sandbox recycle rolled the
+  checkout back to `2eb0ede4` again (482 behind `origin/main`) with
+  the r301+ content riding uncommitted, the origin remote gone from
+  `.git/config`, and the credential file wiped. The recovery: the PAT
+  re-recovered from `upload/MASTER_PROMPT.pdf` (the two-line splice,
+  93 chars, 600-mode file, verified HTTP 200 as `MrMMA2004`, never
+  printed); origin re-added as a clean URL (auth via the askpass
+  shim — no token in any URL, log, or argv); `fetch --prune` restored
+  the refs. The collision audit before the merge: 154/156 locally
+  modified tracked files byte-identical to `origin/main` (the 2
+  "differing" were locally-deleted upload zips that `origin/main` had
+  also deleted — the merge finalized them), 598+441 untracked files
+  byte-identical (removed, each re-hash-verified immediately before
+  deletion), 8 not-in-origin (the swept 229/230 zip ghosts + the
+  stale toolkit-dir `windows-release.yml` — swept to match
+  `origin/main`; the credential/pdf-extract/upload-PDF files are
+  `.gitignore`d by design). The ff-only merge landed `main` at
+  `35aab254` (= `origin/main`, zero diff). No `arena/*` branches
+  existed to absorb this firing.
+- **The venv repaired foreground again** from a wiped state (numpy
+  drifted to 2.1.3, rdkit/torch/shap/PySide6/pyinstaller missing,
+  matplotlib at 3.9.2): `scratch/venv_repair.sh` restored the pinned
+  stack (numpy 1.26.4, rdkit 2026.9.1 + the stub patch, torch
+  2.14.1+cpu, matplotlib 3.10.9, PySide6 6.8.3 + the libEGL stub, the
+  FastAPI pins, PyInstaller 6.22.3) — import surface and the
+  offscreen QApplication probe both green.
+- **The Windows release for v1.2.231 fired — and failed honestly at
+  step 20.** The `v1.2.231` tag pushed at `35aab254` triggered run
+  `44681637758` (windows-2022): the checkout, carrier validation,
+  npm ci, Python/Rust setup, backend freeze, sidecar verification,
+  frontend build and the Tauri compile (NSIS + MSI + offline
+  WebView2) all passed — then step 20's `packaging_validation.py
+  --static` failed with **"version_info.txt quadruple disagrees with
+  VERSION (1.2.231)"**: round 300's seven-carrier bump missed the
+  EIGHTH carrier, `packaging/windows/version_info.txt` (the PyInstaller
+  version resource), whose quadruple still said 1.2.230. Exactly the
+  guard the runner exists to be.
+- **The fix landed three ways.** (1) The carrier:
+  `version_info.txt`'s filevers/prodvers quadruple and the
+  FileVersion/ProductVersion strings now carry 1.2.231. (2) The
+  guard: `test_the_version_carriers_stay_in_lockstep` now enforces
+  the eighth carrier between builds too (space-stripped tuple
+  needles — the runner's exact parsing — plus the two string fields
+  the EXE properties dialog paints), closing the coverage gap that
+  let round 300's gate stay green while the runner's gate went red.
+  (3) The re-ship: the v1.2.231 archive rebuilt from the fixed tree
+  (1,032 entries / 919 files / 16,031,493 B, sha-256 `47dbb712…`,
+  testzip-verified) with a new in-archive gate — the zip's own
+  `version_info.txt` must carry the 231 quadruple — and placed
+  byte-identically in all five homes (repo `download/`, toolkit
+  `dist-archive/`, toolkit `download/`, `upload/`, and the offsite
+  `~/pharma-ml-toolkit-zips/`, which the rollback had wiped again and
+  which was rebuilt first with the full 221–231 history: the 221–228
+  + 231 copies from the in-repo homes, the real 229 recovered from
+  git history at `c7989dc9`, the real 230 at `62fac28e`).
+- **The ten-chunk gate on the repaired venv** (the tree unchanged
+  from `35aab254`): chunks 1–2, 4–11 green outright (chunk-1's solo
+  `test_playground.py` 762 s under the thread caps), chunk-3
+  degraded through the OOM storm exactly like r300 — sub-batches +
+  singles green except `test_nine_card_first.py` which OOM'd solo
+  again and was re-run green 23/23 via the six-class split; the
+  collected census re-verified at **8,590**.
+- **The census pins re-trued.** The r300 pins (1,584 files / 595,238
+  lines) measured a mid-round tree — the shipped tree (verified by
+  both census replicas walking exactly the `toolkit-fs.ts` walk)
+  measures differently: re-trued to the live numbers with the delta
+  documented in `toolkit-stats.ts`.
+- The dev server ran via `scratch/dev_daemon.py` (GET / 200, the
+  1.2.231 pin live) and stays down only while the gate runs. The
+  tag re-points at this commit and re-fires the Windows Release; the
+  release result is recorded in the round close-out.
+
 ## [1.2.231] — 2026-11-20 — round 300 (the 90th recorded run: the sandbox-rollback recovery — a 476-commit ff-only re-sync, the arena/f5c3dd10 absorption, the venv repair, and the re-trued census)
 
 - **The rollback recovery, on the record.** The sandbox recycle rolled

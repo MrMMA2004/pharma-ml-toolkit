@@ -20,15 +20,23 @@
 export const SHIPPED_TEST_COUNT = 8590;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
- *  docs, tools — the same census /api/toolkit/tree walks). The r300
- *  firing re-trued walk: 1,584 (post-re-sync + arena merge). The
- *  previous 1,569 pin was the r289 firing walk. */
-export const SHIPPED_FILE_COUNT = 1584;
+ *  docs, tools — the same census /api/toolkit/tree walks). The r301
+ *  re-true: 1,583 — the r300 pin (1,584) measured a mid-round tree
+ *  (the census walk ran before that round's final sweeps/edits), and
+ *  the walk is sensitive to the ritual's own evidence artifacts:
+ *  the r301 number is the tree exactly as the v1.2.231 re-ship
+ *  blessed it — the git tree plus the two build/theme-shots evidence
+ *  PNGs the gate's theme-screenshot test leaves behind (they ride
+ *  the shipped zip too, exactly as they rode r300's). */
+export const SHIPPED_FILE_COUNT = 1583;
 
 /** Source lines of the shipped tree, formatted with thousands
- *  separators at render time (raw number kept for math). The r300
- *  firing live census: 595,238. */
-export const SHIPPED_SOURCE_LINES = 595238;
+ *  separators at render time (raw number kept for math). The r301
+ *  re-true: 595,025 (the r300 pin's 595,238 measured a pre-final
+ *  tree; both census replicas walk the shipped revision at 595,025 —
+ *  the eighth-carrier fix, the extended lockstep guard and the
+ *  CHANGELOG entry ride the delta). */
+export const SHIPPED_SOURCE_LINES = 595025;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */
