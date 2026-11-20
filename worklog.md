@@ -17052,3 +17052,53 @@ supersede; the published v1.2.231 EXE/MSI stay THE release). Counter
 97 → 98. **Still honestly BLOCKED:** the clean-machine smoke test
 (C-3/C-5), the Stage-5 PySide6 retirement behind it, installer signing
 (certificate-gated).
+
+---
+
+**Round 308 (the 99th recorded run — the 04:30 +08:00 cron housekeeping
+firing of MASTER_PROMPT-2h-sync-100x, job 533878).** Opened onto the
+THIRD sandbox rollback — the file-snapshot-level one: HEAD reverted to
+the ancient 2eb0ede again, the origin remote gone, the 600-mode
+credential file wiped, the venv broken (rdkit/pharmaml missing from the
+interpreter), the offsite gone, and the swept ghosts resurrected (the
+229/230 zips in three homes + the nested pharma-ml-toolkit/.github/) —
+while the process tree survived (the dev server still answered :3000),
+proving the rollback was file-restore-only, not a container recycle.
+**The full recovery re-executed (the r306/r307 precedent, every step
+real):** the PAT re-spliced from the PDF (93-char, API-verified
+/user 200, 600-mode, never printed); origin re-added; fetch clean
+(tags through v1.2.231, zero arena/* refs to absorb); origin/main found
+ADVANCED to 991a2fc9 (r307's push); the pre-reset safety check first —
+1,082 same-path untracked files ALL byte-identical to origin/main
+(0 conflicts, 9 survivors) — then reset --hard origin/main: tracked
+tree clean at 991a2fc9. The venv repaired foreground (VENV-REPAIR-DONE
+numpy 1.26.4 / torch 2.14.1+cpu / pharmaml 1.2.231 + STUDIO-REPAIR-DONE
+pyqtgraph 0.13.7; rdkit 2026.09.1; the rdkit-stub patch applied — zero
+drift vs requirements.txt). **Gates (honest, and this round's fresh
+legs double as the repaired-venv validation):** collection 8,362 / 0
+fresh; hygiene 472/472 + windows pipeline 9/9 + phase6 6/6 = 487
+passed in one fresh leg; tests/api 284+1s fresh; the nine-card Qt
+suite 26 passed fresh (the EGL stub re-validated post-repair); src
+doctests 914+3s fresh (chunk-10); chunk-1 fresh 809 passed in 94s
+(chunk-11/12 = the api + github-page legs above, both fresh); chunks
+2-8 inherited over the byte-identical test surface (git diff 239ef4ee
+HEAD -- pharma-ml-toolkit/tests pharma-ml-toolkit/src = 0 files; HEAD
+IS r307's fresh-leg commit 991a2fc9). **The zip ritual:** the four
+homes' v1.2.231 all 15,413,809 B sha 2c4de09d; testzip 9/9 (download),
+9/9 (toolkit download), 11/11 (dist-archive), 3/3 (upload); the
+offsite rebuilt from the homes — 11 zips (221-231), testzip 11/11,
+current-version parity 2c4de09d, and the 229/230 copies hash-EQUAL to
+their git-history provenance blobs (6d412b87… from c7989dc9,
+70d96665… from 62fac28e — the offsite is byte-for-byte r307's). The
+ghost sweep re-executed (the 6 resurrected zips + the nested .github
+deleted; post-sweep untracked non-round-tooling = 0). The web pins
+verified unchanged (SHIPPED_TEST_COUNT 8362 / SHIPPED_FILE_COUNT 1592
+/ SHIPPED_SOURCE_LINES 553002 carriers; VERSION 1.2.231; the zip-size
+API serves live release.size — no drift, no edits, zero carrier bytes
+touched). **part13 status:** Phase 1 closed in r307
+(docs/PROJECT_STATUS.md carries the Phase 2-7 map); this housekeeping
+firing makes no tree change beyond the round's own tooling — Phase 2+
+awaits its interactive directive. The dev server restored post-gate
+(double-fork daemon). Counter 98 → 99. **Still honestly BLOCKED:** the
+clean-machine smoke test (C-3/C-5), the Stage-5 PySide6 retirement
+behind it, installer signing (certificate-gated).
