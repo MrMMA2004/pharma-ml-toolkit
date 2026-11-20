@@ -39,6 +39,7 @@ import {
   SHIPPED_FILE_COUNT,
   SHIPPED_SOURCE_LINES,
   SHIPPED_TEST_COUNT,
+  SHIPPED_COMPONENT_TEST_COUNT,
   SHIPPED_MODEL_REGISTRY_SIZE,
   SHIPPED_SKLEARN_FAMILIES,
 } from "@/lib/toolkit-stats";
@@ -455,6 +456,13 @@ export function Overview() {
                 countTo={SHIPPED_TEST_COUNT}
                 label="passing tests"
                 hint="pytest suite covering every domain"
+              />
+              <StatChip
+                icon={CircleCheck}
+                value={String(SHIPPED_COMPONENT_TEST_COUNT)}
+                countTo={SHIPPED_COMPONENT_TEST_COUNT}
+                label="component tests"
+                hint="Vitest + React Testing Library over the Studio frontend"
               />
               <StatChip
                 icon={Brain}

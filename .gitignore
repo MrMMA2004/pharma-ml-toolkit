@@ -49,6 +49,10 @@ dev.log
 dev.out.log
 test
 prompt
+# the part13 Phase-3 component-test lane's setup directory — the
+# bare `test` rule above would swallow it (vitest.config.ts references
+# src/test/setup.ts; a fresh CI clone needs it tracked)
+!pharma-ml-toolkit/frontend/src/test/
 
 server.log
 # Skills directory

@@ -1,3 +1,72 @@
+## [1.2.232] — 2026-11-21 — round 310 (the 101st recorded run: the interactive part13 Phase-3 firing over the fourth sandbox rollback — the component-test lane round; a NEW version ship, the v1.2.232 source archive carrying the Vitest/RTL suite)
+
+- **part13 Phase 3 (frontend quality — the component-test lane).**
+  The audit's standing gap — "limited dedicated component-level
+  interaction testing" — closed with a real lane: **Vitest 5.1 +
+  jsdom 31 + React Testing Library 16.3 + user-event 14.6 +
+  jest-dom 8** installed as pinned devDependencies (npm-locked,
+  `package-lock.json` in sync for the CI's `npm ci`), a
+  `vitest.config.ts` (jsdom, the `@` alias, the test-setup module),
+  and **7 test files / 48 tests** over the REAL component tree:
+  the shell navigation (App.test.tsx — the §10.1 nine-entry order,
+  Introduction first, the switch mounts exactly the selected page,
+  aria-current follows), the §14.1 startup gate (connecting/failed/
+  ready states, the typed stage + message verbatim, the §14.2
+  controlled restart via the Retry click, the WS degradation banner),
+  the §13 event-stream reconnection ENGINE (hello handshake, replay
+  cursor + duplicate protection, the doubling backoff with cap, the
+  max-attempt give-up, graceful shutdown vs user close, the 4008
+  dead-peer liveness close, the ping probe, listener isolation,
+  malformed-frame drops), the nine-workspace registry guard, the UI
+  atoms (Button variants/disabled honesty, Card semantics, Tabs
+  tablist + keyboard roving), the §22 chart surface (empty state,
+  lazy-chunk loading, hovermode "closest" §22.4 pin, the §22.5
+  point-identity customdata contract, §23 purge-on-unmount), and the
+  Datasets workflow's complete first stage (file-selection gating,
+  the multipart upload with the real File, the typed ApiError
+  verbatim, the JobRunCard progress/stage/percent + cooperative
+  Cancel, the COMPLETED result relay selecting the registered dataset
+  end-to-end, the registry table + row-limit control, the registry
+  failure banner).
+- **The CI studio-frontend job gains the lane**: `npm --prefix
+  frontend test` runs after the build — the workflow file at the
+  repository root (the ONLY registered path) carries it.
+- **THE FIND OF THE ROUND (the fourth rollback)**: the rollback
+  resurrected the pre-r293 `pharma-ml-toolkit/.github/workflows/
+  windows-release.yml` GHOST — the pre-registration-era workflow
+  (rust 1.85.0, tauri-cli 2.0.0-beta.17, no SBOM step) that GitHub
+  never registered and no archive ever carried — caught via the
+  census delta and REMOVED (untracked, Actions-invisible, but it
+  polluted the census and would have ridden the v1.2.232 archive).
+  The offsite zip home was wiped by the same rollback: the history
+  re-seeded (221-228 from dist-archive, 229/230 from git blobs, 231
+  from the on-disk re-ship) — 12 zips incl. this round's ship.
+- **Version bump 1.2.231 → 1.2.232 in all eight carriers** (VERSION,
+  pyproject, pharmaml.__version__, frontend/package.json,
+  tauri.conf.json, version_info.txt quadruple + strings,
+  SHIPPED_TOOLKIT_VERSION, the pins) — the lockstep guard green.
+- **Census/pins re-trued**: files 1,593→1,608 (+9 the lane files, +4
+  the rollback-restored 229/230 zips, +2 the v1.2.232 ship zip in its
+  two in-tree homes; the resurrected pre-r293 .github ghost nets to
+  zero — caught and removed); lines 553,185→554,157 (+884 the
+  package-lock growth, +88 the round's counted doc delta, −330 the
+  ghost); tests 8,362 Python unchanged + the NEW component-test pin
+  48 (the overview card carries it beside the pytest pin). Verified
+  three-way (pin = live /api/toolkit/tree walk = page render) — the
+  final walk taken AFTER the doc edits and the zip homes landed.
+- **Gates**: vitest 48/48 fresh, tsc --noEmit clean, the production
+  vite build green (25.95 s), the version-lockstep guard 9/9, the
+  frontend contract guards 66/66, collection 8,362/0 fresh. Archive
+  v1.2.232: 938 files, testzip-OK in five homes + the re-seeded
+  offsite, must-carry includes the lane, retired-pair negative,
+  version_info quadruple, composition 0, real leaks 0; the terminal
+  sha/bytes live in the worklog (the archive cannot carry its own).
+- **BLOCKED (unchanged, honest)**: clean-machine smoke test (C-3/C-5),
+  the Stage-5 PySide6 retirement behind it, installer signing
+  (certificate-gated). Playwright/browser E2E stays queued for the
+  Phase-3 continuation (the agent-browser verification lane covers
+  this round's page smoke).
+
 ## [1.2.231] — 2026-11-21 — round 309 (the 100th recorded run: the part13 Phase-2 continuation — the blocker-lane assessment round; same-version re-ship, no version bump, no Windows fire; the v1.2.231 release stays THE release, the source archive re-ships carrying the Phase-2 deliverables)
 
 - **part13 Phase 2 (remaining release blockers) — the executable legs

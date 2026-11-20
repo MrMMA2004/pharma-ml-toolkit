@@ -5,10 +5,12 @@ document with the actual current state"). Replaces no audit; it
 summarises them and wins any status disagreement.
 
 - **Audit date**: 2026-11-21 (round 307, the 98th recorded run;
-  Phase-2 addendum round 309 — the interactive part13 continuation).
+  Phase-2 addendum round 309; Phase-3 addendum round 310 — the
+  interactive part13 continuation, trace 1a1fb0a0b935472d).
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
-  Phase-2 addendum on `19effec8` (the r308 close-out) — this document
-  lands with the round-309 commit.
+  Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
+  addendum verifies `ca1accc9` (the r309 close-out) clean and lands
+  with the round-310 commit.
 - **Scope**: whole repository — source, tests, docs, release
   artifacts, web pins, archive ritual.
 - **Status labels** (part13 §22): PASS / PARTIAL / FAIL / BLOCKED /
@@ -32,14 +34,14 @@ summarises them and wins any status disagreement.
 | Item | Value | Evidence (this session) |
 | --- | --- | --- |
 | Repository | public, default branch `main` | GitHub API, authenticated |
-| HEAD | r307 audited at `5446e89b` = `origin/main`; the Phase-2 addendum verified `19effec8` (the r308 close-out) clean, and this document's addendum lands with the round-309 commit | fetch + reset --hard + ghost sweep (r307/r308) |
-| CI at HEAD | green — 19/19 check-runs completed/success at `19effec8` (the r308 push); r307's evidence: CI + Push both success at `5446e89b` | `check-runs?head_sha=19effec8` (r308 poll, final) |
-| Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt | `releases/tags/v1.2.231` |
-| Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json — all 1.2.231 | read directly this session |
-| Test surface | 8,362 collected / 0 errors / 456 files (`tests/` + `src/pharmaml` `--doctest-modules`) | this round's fresh collection on the repaired venv |
-| Census | 1,593 files / 553,185 lines / v1.2.231 (the round-309 final walk with the empty-file true-up — equals the live /api/toolkit/tree walk; doc-only delta since r307 — zero src/tests bytes) | this round's fresh census walk |
-| Source archive | v1.2.231 zip same-version re-ship cadence: the r307 close stood at 15,413,809 B sha `2c4de09d`; the round-309 re-ship supersedes it (same version — §5; the per-round sha/bytes live in the CHANGELOG/worklog per §7, never here — the archive cannot carry its own hash) | sha256 across five homes + offsite |
-| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.231 — zero drift vs `requirements.txt` | import probes post-repair |
+| HEAD | r307 audited at `5446e89b`; the Phase-2 addendum verified `19effec8`; this Phase-3 addendum verifies `ca1accc9` (the r309 close-out) clean and lands with the round-310 commit (the fourth rollback recovered first: PAT/origin/reset/venv per the r306–r308 playbook) | fetch + reset --hard + ghost sweep (r307/r308/r310) |
+| CI at HEAD | green — 18/18 at `ca1accc9` (the r309 push); r308's evidence: 18/18 at `19effec8`; this round's push re-verifies (the studio-frontend job gains the component-test step) | `check-runs?head_sha=ca1accc9` (r309 poll) |
+| Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.232 SOURCE archive shipped (five homes + offsite) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
+| Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.232 | read directly this session, lockstep guard 9/9 |
+| Test surface | 8,362 collected / 0 errors / 456 files (`tests/` + `src/pharmaml` `--doctest-modules`) — UNCHANGED in round 310 (zero Python src/tests bytes) — PLUS the new component-test lane: 48 Vitest tests / 7 files over the Studio frontend (jsdom + React Testing Library) | fresh collection + `npm --prefix frontend test` this round |
+| Census | 1,608 files / 554,157 lines / v1.2.232 (the round-310 FINAL walk, taken after the doc edits and the zip homes landed: +9 the component-test lane files, +884 the package-lock growth, +88 the round's counted doc delta, +4 the rollback-restored 229/230 zips, +2 the v1.2.232 ship zip in its two in-tree homes, the resurrected pre-r293 `.github` ghost netting zero — equals the live /api/toolkit/tree walk, verified three-way) | this round's final census walk |
+| Source archive | v1.2.232 — a NEW version ship (the part13 Phase-3 component-test lane rides: 938 files; the per-round sha/bytes live in the CHANGELOG/worklog per §7 — the archive cannot carry its own hash) | sha256 across five homes + offsite (12 zips re-seeded) |
+| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.232 — zero drift vs `requirements.txt` | import probes post-repair |
 
 ## 3. The six previously-open audit items — CLOSED (re-verified in-tree this round)
 
@@ -111,10 +113,27 @@ summarises them and wins any status disagreement.
   assessment deliverable). The machine/certificate legs stay honestly
   BLOCKED — full evidence table in
   `docs/part12_audit/WINDOWS_CLEAN_INSTALL_REPORT.md` § "part13
-  Phase 2". **Phase 3 is next.**
-- **Phase 3** — frontend quality: component tests, E2E workflows,
-  visual regression (Vitest / React Testing Library / Playwright
-  lanes), error/empty/loading state coverage.
+  Phase 2".
+- **Phase 3** — EXECUTED (round 310, the interactive continuation,
+  trace 1a1fb0a0b935472d): the component-test lane is real — Vitest
+  5.1 + jsdom 31 + React Testing Library 16.3 + user-event 14.6 +
+  jest-dom 8 as pinned devDependencies (npm-locked for the CI's
+  `npm ci`), `vitest.config.ts` + the setup module, and 7 test files /
+  48 tests over the REAL component tree: the shell navigation, the
+  §14.1 startup-gate states + §14.2 controlled restart, the §13
+  event-stream reconnection engine (hello/replay/backoff/liveness/
+  shutdown), the nine-workspace registry guard, the UI atoms'
+  a11y contracts, the §22 chart-surface contracts (hovermode pin,
+  point identity, purge), and the Datasets workflow's first stage
+  end-to-end (file selection, upload submission, typed API errors,
+  job progress + cancellation, the COMPLETED relay, the registry
+  table + row limit, the registry failure state). The CI
+  studio-frontend job runs the lane after the build. The part13
+  interaction-list lanes NOT yet covered stay honestly queued for
+  the Phase-3 continuation (Playwright/browser E2E over the vite
+  proxy — the pattern the molecular3d round proved — plus the
+  remaining workspaces' page lanes and visual regression).
+  **Phase 4 is next.**
 - **Phase 4** — scientific workflow improvements: Active Learning,
   Chemical Space Explorer, Conformal Prediction audit, Automated
   Benchmarking, Report Builder, Model Cards.

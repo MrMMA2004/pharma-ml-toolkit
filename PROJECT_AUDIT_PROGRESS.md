@@ -256,3 +256,77 @@ Next: part13 Phases 2–7 per `docs/PROJECT_STATUS.md` §6.
   exact requirement now documented).
 
 Next: part13 Phase 3 (frontend quality) per `docs/PROJECT_STATUS.md` §6.
+
+## Round 310 — 2026-11-21 — part13 Phase 3 (frontend quality: the component-test lane), over the fourth sandbox rollback
+
+- **The fourth rollback arrived with the firing** (trace
+  1a1fb0a0b935472d): HEAD reverted to the ancient 2eb0ede, the origin
+  remote gone, the 600-mode credential file gone, the venv broken —
+  but the working tree mostly preserved at the r309/r310 frontier
+  (the root worklog/counter/scripts survived; the git objects for
+  recent commits wiped). Full recovery per the r306–r308 playbook:
+  PAT re-spliced (93-char, 600-mode, API-validated 200), origin
+  re-added, fetch, pre-reset check (1,092 shared-path untracked files
+  byte-identical, 0 conflicts), reset --hard to `ca1accc9` (the r309
+  close-out, fetched), venv repaired foreground (torch 2.14.1+cpu,
+  PySide6 6.8.3, pharmaml 1.2.231→232 pins verified).
+- **part13 Phase 3 EXECUTED — the component-test lane is real**:
+  Vitest 5.1.1 + jsdom 31.0.1 + React Testing Library 16.3.3 +
+  user-event 14.6.13 + jest-dom 8.0.0 as pinned devDependencies
+  (npm install — package-lock.json in sync for the CI's npm ci;
+  esbuild postinstall approved), `vitest.config.ts` (jsdom, the `@`
+  alias, setup file), and 7 test files / 48 tests over the REAL
+  component tree: the §10 shell navigation + nine-entry registry
+  order, the §14.1 startup-gate states (connecting/failed/ready,
+  typed stage verbatim, §14.2 controlled restart, the WS degradation
+  banner), the §13 event-stream reconnection ENGINE (hello handshake,
+  replay cursor + duplicate protection, doubling backoff with cap +
+  max-attempt give-up, graceful shutdown vs user close, 4008
+  dead-peer liveness, ping probe, listener isolation, malformed
+  drops), the UI atoms (Button/Card/Tabs a11y + keyboard roving), the
+  §22 chart surface (empty state, chunk loading, hovermode closest
+  pin, §22.5 customdata point identity, §23 purge), and the Datasets
+  workflow first stage end-to-end (file-selection gating, the real
+  File upload, typed ApiError verbatim, JobRunCard progress/stage/
+  Cancel, the COMPLETED relay auto-selecting the registered dataset,
+  the registry table + row limit + failure banner).
+- **CI wired**: the studio-frontend job runs `npm --prefix frontend
+  test` after the build (the registered root .github/workflows/ci.yml
+  — the ONLY registered path).
+- **THE FIND (the ghost)**: the rollback resurrected the pre-r293
+  `pharma-ml-toolkit/.github/workflows/windows-release.yml` ghost
+  (rust 1.85.0, tauri-cli 2.0.0-beta.17 — the pre-registration era).
+  GitHub never registered it and no archive ever carried it (verified:
+  the r309 zip has zero .github entries) — caught via the census
+  delta and REMOVED. The offsite zip home was wiped by the same
+  rollback: history re-seeded (221-228 dist-archive, 229/230 git
+  blobs, 231 on-disk) — 12 zips incl. this round's ship.
+- **Version bump 1.2.231 → 1.2.232, all eight carriers in lockstep**
+  (VERSION, pyproject, pharmaml.__version__, frontend/package.json,
+  tauri.conf.json, version_info.txt quadruple+strings,
+  SHIPPED_TOOLKIT_VERSION) — the lockstep guard 9/9 green.
+- **Gates**: vitest 48/48 fresh, tsc --noEmit clean, production build
+  green (25.95s), frontend contract guards 66/66, collection
+  8,362/0 fresh (zero Python src/tests bytes — the inheritance
+  argument: diff ca1accc9 -- tests src = 0 files).
+- **Ship v1.2.232** (terminal build, self-reference-free claims
+  inside the archive per the r301 convention): 938 files /
+  15,448,901 B, sha-256
+  fbe8ef2a94133b6a4659050eaf0d8e736ca6549324d016bccd235bdf2322203f,
+  testzip-OK five homes + offsite (12 zips), must-carry includes the
+  lane files, retired-pair negative, version_info quadruple 1.2.232,
+  composition 0, real leaks 0; the zip-size API serves 15,448,901
+  exact:true.
+- **Pins re-trued three-way** (pin = live /api/toolkit/tree walk =
+  page render): files 1,593→1,608, lines 553,185→554,157, the NEW
+  component-test pin 48 painted on the overview card beside the
+  pytest pin; Python tests 8,362 unchanged.
+- **BLOCKED (unchanged, honest)**: clean-machine smoke (C-3/C-5),
+  Stage-5 PySide6 retirement, installer signing (certificate-gated).
+  Playwright E2E + the remaining workspace page lanes + visual
+  regression honestly queued for the Phase-3 continuation.
+
+Next: part13 Phase 4 (scientific workflow improvements) per
+`docs/PROJECT_STATUS.md` §6 — Active Learning, Chemical Space
+Explorer, Conformal Prediction audit, Automated Benchmarking, Report
+Builder, Model Cards.

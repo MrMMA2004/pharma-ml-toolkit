@@ -20,6 +20,17 @@
  *  parity grid, the SBOM artifact pins). */
 export const SHIPPED_TEST_COUNT = 8362;
 
+/** Collected Vitest component tests at the shipped revision — the
+ *  part13 Phase-3 lane (2026-11-21, `npm --prefix frontend test`:
+ *  7 files / 48 tests over jsdom + React Testing Library: the shell
+ *  navigation, the §14.1 startup-gate states + controlled restart,
+ *  the §13 event-stream reconnection engine, the registry guard, the
+ *  UI atoms' a11y contracts, the §22 chart surface contracts, and
+ *  the Datasets workflow's import/validate/progress/cancel/complete
+ *  lanes). This pin moves independently of the Python suite above —
+ *  the CI's studio-frontend job runs both lanes. */
+export const SHIPPED_COMPONENT_TEST_COUNT = 48;
+
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
  *  docs, tools — the same census /api/toolkit/tree walks). The round-302
  *  re-true: 1,591 — the part12 audit-round tree: the r301 pin (1,583)
@@ -34,8 +45,17 @@ export const SHIPPED_TEST_COUNT = 8362;
  *  round-307 re-true (part13 Phase 1): 1,592 — +1 the authoritative
  *  docs/PROJECT_STATUS.md. The round-309 re-true (part13 Phase 2):
  *  1,593 — +1 the installer-signing assessment deliverable
- *  (docs/security/INSTALLER_SIGNING_ASSESSMENT.md). */
-export const SHIPPED_FILE_COUNT = 1593;
+ *  (docs/security/INSTALLER_SIGNING_ASSESSMENT.md). The round-310
+ *  re-true (part13 Phase 3, the component-test lane): 1,608 — +9
+ *  the vitest lane itself (the 7 test files under the src
+ *  __tests__ folders, the test setup module, the vitest config), +4
+ *  the retired v1.2.229/230 zip pair in both homes the rollback
+ *  restored to disk, +2 the v1.2.232 ship zip in its two in-tree
+ *  homes, and the stale pre-r293 windows-release.yml ghost at the
+ *  toolkit .github path — resurrected by the same rollback, never
+ *  registered at GitHub and never shipped in any archive — nets to
+ *  zero (caught, removed); verified pin = live walk = page render. */
+export const SHIPPED_FILE_COUNT = 1608;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). The round-304
@@ -65,8 +85,18 @@ export const SHIPPED_FILE_COUNT = 1593;
  *  every census since r303; the r307-era pin 553,002 answered a live
  *  walk of 552,998; found and trued this round — the pin now EQUALS
  *  the live /api/toolkit/tree walk); the doc-only round again
- *  touches zero src/tests bytes. */
-export const SHIPPED_SOURCE_LINES = 553185;
+ *  touches zero src/tests bytes. The round-310 re-true (part13
+ *  Phase 3): 554,157 — the r309 base plus +884 the frontend
+ *  package-lock.json growth (the vitest/jsdom/testing-library
+ *  dev-dependency trees the component-test lane added — .json is a
+ *  counted viewable extension) and +88 the round's own counted doc
+ *  delta (the CHANGELOG entry + the PROJECT_STATUS Phase-3 addenda;
+ *  the .ts/.tsx test files are tree nodes but never counted, by the
+ *  long-standing census rule) minus the 330 lines of the stale
+ *  pre-r293 windows-release.yml ghost the rollback resurrected —
+ *  caught and removed with the census; verified pin = live walk =
+ *  page render three-way. */
+export const SHIPPED_SOURCE_LINES = 554157;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */
