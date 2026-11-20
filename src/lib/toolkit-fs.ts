@@ -16,15 +16,20 @@ export const TOOLKIT_NAME = "pharma-ml-toolkit";
 /** Generated artifacts that should never appear in the explorer or ZIP.
  * The virtualenv entries matter: a stray `uv venv` / `python -m venv` inside
  * the toolkit once inflated the live stats from 93 to 6,732 files — local
- * environments must never leak into the served tree. `artifacts` covers
- * generated example output (e.g. examples/artifacts/ leaderboards), which
- * is .gitignored on the Python side but was leaking into tree/ZIP stats. */
+ * environments must never leak into the served tree.
+ *
+ * (round 302 / MASTER_PROMPT part12 Phase-2) `artifacts` was REMOVED from
+ * this any-depth basename set: the bare name match also swallowed
+ * `frontend/src/services/artifacts/` — REAL React source — hiding the
+ * artifact client from the explorer and dropping it from the streamed AND
+ * shipped archives (the v1.2.231 zip shipped 919 files with exactly that
+ * one source file missing). Generated-output dirs are now excluded by the
+ * scoped RELATIVE paths in EXCLUDED_REL_DIRS below. */
 export const EXCLUDED_DIRS = new Set([
   ".pytest_cache",
   "__pycache__",
   "node_modules",
   "catboost_info",
-  "artifacts",
   ".venv",
   "venv",
   "env",
@@ -35,6 +40,19 @@ export const EXCLUDED_DIRS = new Set([
   ".idea",
   ".vscode",
   ".cache",
+]);
+
+/** Generated-output directories on the Python side, excluded by RELATIVE
+ * path only (anchored at the toolkit root) so the same basename can never
+ * hide a real source tree the way `artifacts` hid the frontend's artifact
+ * client. examples/artifacts/ appears only after example runs.
+ * frontend/dist is the Vite build output — regenerated on every build,
+ * never source, and (round 302) it leaks into the census/ZIP the moment a
+ * local frontend build exists (5.7 MB of bundles). */
+const EXCLUDED_REL_DIRS = new Set([
+  "artifacts",
+  "examples/artifacts",
+  "frontend/dist",
 ]);
 
 /** Exclusion arguments shared by the ZIP streamer (/api/toolkit/download)
@@ -56,8 +74,22 @@ export const ZIP_EXCLUDE_ARGS: readonly string[] = [
   "*/*.log",
   // Generated example output (leaderboards etc.) — .gitignored on the
   // Python side, excluded here so the archive ships source only.
+  // (round 302) scoped to the two REAL generated-output paths: the previous
+  // any-depth `artifacts/*` + `*/artifacts/*` pair matched at every depth
+  // and dropped frontend/src/services/artifacts/client.ts from the
+  // archive — real source, missing from the shipped v1.2.231 zip.
   "artifacts/*",
-  "*/artifacts/*",
+  "examples/artifacts/*",
+  // (round 302) the Vite build output — 5.7 MB of regenerated bundles
+  // that must never ride the archive just because a local build exists.
+  "frontend/dist/*",
+  // (round 302) npm's dependency tree — ~250 MB of local install state.
+  // The tree walk always excluded it; the ZIP list never did because no
+  // local build existed when the list was authored (rollbacks always
+  // wiped node_modules). The round-302 local frontend verification made
+  // the fallback streamer balloon to 76 MB — the same latent class.
+  "node_modules/*",
+  "*/node_modules/*",
   "*.egg-info",
   "*.egg-info/*",
   "*/src/*.egg-info/*",
@@ -192,7 +224,15 @@ async function walk(dirAbs: string, relDir: string, acc: WalkAccumulator): Promi
     const abs = path.join(dirAbs, entry.name);
     if (entry.isDirectory()) {
       // Build/install metadata (e.g. pharmaml.egg-info) never ships.
-      if (EXCLUDED_DIRS.has(entry.name) || entry.name.endsWith(".egg-info")) continue;
+      // Generated-output dirs are scoped by relative path (EXCLUDED_REL_DIRS)
+      // so `frontend/src/services/artifacts/` stays a visible, shipped
+      // source directory.
+      if (
+        EXCLUDED_DIRS.has(entry.name) ||
+        entry.name.endsWith(".egg-info") ||
+        EXCLUDED_REL_DIRS.has(rel)
+      )
+        continue;
       acc.dirs += 1;
       const node = await walk(abs, rel, acc);
       children.push(node);

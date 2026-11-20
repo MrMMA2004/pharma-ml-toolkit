@@ -62,3 +62,37 @@ and record results, then re-generate with
 - Status: **not gathered**
 - How to gather: `tools/audit_release.py <zip> after tools/build_zip.py`
 
+
+---
+
+## part12 addendum — Phase-1 re-probe (2026-11-20, round 302)
+
+Re-probed against the audited baseline v1.2.231 / `7bbc41ed` (live
+session; full detail in `docs/part12_audit/`):
+
+- **Dependencies**: 18/18 installed on the repaired venv (numpy 1.26.4 ·
+  torch 2.14.1+cpu · rdkit 2026.9.1 · shap 0.54.1 · PySide6 6.8.3 ·
+  FastAPI 0.128.0 · PyInstaller 6.22.3 · pharmaml 1.2.231 editable) —
+  import-surface + offscreen-QApplication probes green.
+- **Version carriers**: 8/8 at 1.2.231 (VERSION, pyproject,
+  `__version__`, toolkit-version.ts, frontend package.json,
+  tauri.conf.json, lockfile, version_info.txt quadruple) — read directly
+  this session; the two named guard tests enforce them.
+- **Test collection**: 8,590 collected / 0 errors (25.6 s) — matches the
+  shipped pin.
+- **Census**: live `/api/toolkit/tree?fresh=1` walk = 1,582 files /
+  594,987 lines after this round's B-1/B-1b exclusion scoping and the
+  B-3 nested-CI removal (the 1,583/595,039 r301 pin predates those tree
+  changes + counted 2 never-committed evidence PNGs; pins re-trued at
+  this round's close-out per the standing census discipline).
+- **Live release**: v1.2.231 published (not draft) with EXE
+  557,655,583 B + MSI 710,122,853 B + manifest + checksums; CI green on
+  the audited commit; Windows Release run 44693818307 all-26-green.
+- **Archive note (new)**: the shipped v1.2.231 source zip is missing
+  exactly one real source file (`frontend/src/services/artifacts/
+  client.ts` — the B-1 exclusion defect); the release EXE/MSI are
+  unaffected (they build from the repo tree). This round's archive
+  re-ships complete.
+- **Honest gaps carried**: SBOM (open, CycloneDX lane documented),
+  signing (certificate-gated), clean-machine ladder (BLOCKED — see
+  part12_audit/WINDOWS_CLEAN_INSTALL_REPORT.md).

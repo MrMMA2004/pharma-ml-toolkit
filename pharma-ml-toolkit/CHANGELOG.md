@@ -1,3 +1,86 @@
+## [1.2.231] — 2026-11-20 — round 302 (the 92nd recorded run: the part12 Phase-1 audit campaign — the same-version audit round; no version bump, no Windows fire; the v1.2.231 release stays THE release, the source archive re-ships carrying the audit + fixes)
+
+- **The third rollback recovery (the part12 session open).** The sandbox
+  recycle rolled the checkout to `2eb0ede4` again (485 behind
+  `origin/main`) with the r301 close-out content riding uncommitted, the
+  origin remote and the credential file wiped, and the venv reverted
+  (numpy 2.1.3, rdkit/torch/shap/PySide6/pyinstaller missing). The
+  standard drill: PAT re-recovered from `upload/MASTER_PROMPT.pdf`
+  (93-char splice, 600-mode, verified HTTP 200 as `MrMMA2004`, never
+  printed); origin re-added clean (askpass shim); `fetch --prune`;
+  collision audit — **all 2,716 tracked files byte-identical to
+  `origin/main` (`7bbc41ed`), zero different, zero missing** (the first
+  audit pass reported 245 "missing" purely from git's default quotepath
+  escaping non-ASCII paths); the ff-only sync landed `main` at
+  `7bbc41ed` with pre+post hash parity proven; the 229/230 ghost zips
+  and the stale toolkit-dir `windows-release.yml` re-swept (the same
+  sweep as r301); zero arena branches. `venv_repair.sh` foreground:
+  the pinned stack restored, import surface + offscreen QApplication
+  green, `pharmaml` 1.2.231 editable.
+- **The part12 Phase-1 audit campaign** (MASTER_PROMPT part12, baseline
+  v1.2.231 / `7bbc41ed`): nine deliverable documents in
+  `docs/part12_audit/` — the compliance matrix (live-evidence verdicts:
+  repo public, release published EXE 557,655,583 B + MSI 710,122,853 B,
+  CI + Windows Release green on the audited commit, 8 version carriers
+  in lockstep read directly, 8,590 tests collected / 0 errors), the
+  backend–GUI integration matrix (89 endpoints, route-level consumer
+  verdicts, seven documented non-GUI lanes), the architecture review,
+  the bug report, the scientific validation, performance, security +
+  packaging audits, and the honest BLOCKED clean-install report (all 24
+  rows gated on a real Windows machine; "a runner is not a clean
+  machine").
+- **B-1 (HIGH, packaging): the shipped v1.2.231 source zip was missing
+  exactly one real source file.** The explorer/ZIP exclusion used the
+  bare basename `artifacts` at any depth — intended for Python
+  generated-output dirs — and swallowed `frontend/src/services/
+  artifacts/` (the React artifact client): tracked-vs-zip diff proved
+  `frontend/src/services/artifacts/client.ts` the ONLY absent viewable
+  source; the web census undercounted the same file (walk 1,581 vs the
+  1,582 tracked); the explorer could not browse it. Fixed by scoping
+  the exclusions to relative paths (`artifacts`, `examples/artifacts`)
+  in `src/lib/toolkit-fs.ts` (tree walk + ZIP pattern list — ONE list).
+  Verified live (walk 1,581→1,582, the file browsable) and by test-zip
+  semantics (real source in, generated output out). The published
+  EXE/MSI are unaffected (they build from the repo tree); the source
+  archive re-ships complete with this round.
+- **B-1b (latent, same class): `frontend/dist` leaked into census and
+  archive the moment a local Vite build exists.** The session's own
+  `npm run build` created `frontend/dist` (5.7 MB of bundles) and the
+  census jumped +7 files — the shipped zips never carried it only
+  because rollbacks always wiped local build state before. Fixed with
+  the scoped `frontend/dist` exclusion (tree + ZIP); the walk re-reads
+  the true tracked set.
+- **B-2 (MEDIUM, integration): the `/api/v1/database` persistence
+  surface gained its first product consumer.** The route group (status,
+  job history, preferences, backup, restore — 67 persistence tests
+  green) had NO GUI consumer while the Introduction page claimed
+  "backup and restore built in". Wired: a new runtime-narrowed
+  `frontend/src/services/database/client.ts` + the Introduction
+  "studio database" card — live status + row counts, the persisted job
+  history table, backup → digest-verified artifact download, and a
+  two-step-confirm restore that states the replace-registry semantics
+  plainly. `tsc --noEmit` clean, frontend drift guards green, the
+  offline production build green (2,085 modules).
+- **B-3 (LOW, hygiene): the malformed nested
+  `pharma-ml-toolkit/.github/workflows/ci.yml` is removed** — its
+  trigger read `branches: ain]` (a corrupted edit), it was invisible
+  to Actions (root registration is the real CI), and it duplicated a
+  stale subset of the root workflow. Census effect documented: -1
+  file / -52 lines.
+- **Gates this round**: mypy 0 errors in 281 files; ruff clean (71
+  findings were all EXE002 — the sandbox restored every file mode 755
+  while git tracks 644; CI is green on the identical content, and
+  `--extend-ignore EXE002` passes all checks); 8,590 collected / 0
+  errors; frontend contract guards + production build green; the web
+  dev server verified live (tree/zip-size routes, the fixed census).
+- **The honest lanes are unchanged**: the clean-machine smoke test
+  (C-3/C-5, all 24 rows) and the §28 Stage-5 PySide6 retirement stay
+  BLOCKED; the audit documents them per-row. Still open with owners:
+  SBOM generation (CycloneDX lane documented), installer signing
+  (certificate-gated), the Williams/leverage AD method, the fingerprint
+  chirality toggle, the Tk playground true retirement (30,047 lines
+  retired-but-shipped — a Phase-8 gate decision).
+
 ## [1.2.231] — 2026-11-20 — round 301 (the 91st recorded run: the second rollback recovery, the eighth version carrier found the hard way — the first v1.2.231 Windows tag build died at the runner's packaging validation — and the re-ship; same version as round 300's entry below — the carrier fix and re-ship, no version bump)
 
 - **The second rollback recovery.** The sandbox recycle rolled the

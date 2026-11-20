@@ -16508,3 +16508,105 @@ final census 1,583 files / 595,039 lines rides `toolkit-stats.ts`
 (the mid-round walk read 595,025 before the round's own CHANGELOG
 bytes landed); the live `/api/toolkit/tree` walk confirms both
 numbers.
+
+**Round 302 close-out — the part12 Phase-1 audit campaign (MASTER_PROMPT
+part12, baseline v1.2.231 / `7bbc41ed`).** The session opened on the
+third sandbox rollback of the arc: the checkout sat at `2eb0ede4` (485
+behind `origin/main`) with the r301 close-out content riding uncommitted,
+the origin remote and the credential file wiped, and the venv reverted
+to the broken pins. The standard drill ran clean: the PAT re-recovered
+from `upload/MASTER_PROMPT.pdf` (the 93-char splice, 600-mode, verified
+HTTP 200 as `MrMMA2004`, never printed), origin re-added as a clean URL
+with the askpass shim, `fetch --prune`, and a byte-level collision audit
+that came out **2,716/2,716 tracked files identical to `origin/main` —
+zero different, zero missing** (the first audit pass had reported 245
+"missing" purely from git's default quotepath escaping the
+Persian-named `extracted/` paths — quotepath=false resolved it to
+perfect parity). The ff-only sync landed `main` at `7bbc41ed` with
+pre-merge and post-merge hash parity proven, the 229/230 ghost zips and
+the stale toolkit-dir `windows-release.yml` re-swept with immediate
+re-verification, and `venv_repair.sh` ran foreground: the pinned stack
+restored (numpy 1.26.4, rdkit 2026.9.1 + stub patch, torch 2.14.1+cpu,
+PySide6 6.8.3 + libEGL stub, FastAPI pins, PyInstaller 6.22.3), import
+surface and the offscreen QApplication both green, `pharmaml` 1.2.231
+editable.
+
+**The audit itself** (three parallel exploration passes over the backend,
+the GUI layers, and the docs/claims register, then live verification):
+the compliance matrix's PASS rows carry this-session execution evidence
+— repo public + release published (EXE 557,655,583 B / MSI 710,122,853
+B, live API), CI and the Windows Release run green on the audited
+commit, the 8 version carriers read directly, **8,590 tests collected /
+0 errors**, the frontend `tsc` clean + guards green + offline production
+build green (2,085 modules). Nine deliverables live in
+`docs/part12_audit/` (compliance matrix, 89-endpoint integration matrix
+with consumer verdicts and seven documented non-GUI lanes, architecture
+review, bug report, scientific/performance/security/packaging audits,
+feature gap with dispositioned GitHub references, and the honest BLOCKED
+clean-install report whose 24 rows all wait on a real Windows machine).
+The migration ledger and release-readiness doc carry the part12
+addenda.
+
+**B-1 — the find of the round (HIGH, packaging).** The explorer/ZIP
+exclusion used the bare basename `artifacts` at any depth, which
+swallowed `frontend/src/services/artifacts/` — REAL React source. The
+tracked-vs-zip diff proved the shipped v1.2.231 source zip carried 919
+files with **exactly one real source file missing** (the artifact
+client), the web census undercounted the same file (1,581 vs the 1,582
+tracked), and the explorer couldn't browse it. The fix scopes the
+exclusions to relative paths (`artifacts`, `examples/artifacts`) in
+`src/lib/toolkit-fs.ts` — ONE list serving the tree walk and the ZIP
+streamer. Verified live: the walk reads 1,582 with the file browsable,
+and a test-zip proves the semantics (real source in, generated output
+out).
+
+**B-1b — the same class, three more times.** The session's own local
+frontend verification made the latent leaks fire: `frontend/dist` (the
+Vite build output, 5.7 MB) rode the census AND would ride the archive;
+`node_modules` (~250 MB installed) rode the first r302 zip build —
+**13,912 entries / 76 MB** — because no local build state had EVER
+existed when the exclusion lists were authored (rollbacks always wiped
+it; builds ran on the CI runner). Both are now scoped-excluded (tree +
+ZIP); the first bloated build was torn down and re-run clean.
+
+**B-2 — the persistence wiring.** The `/api/v1/database` group (status,
+job history, preferences, backup, restore — 67 persistence tests green)
+had NO GUI consumer while the Introduction page claimed "backup and
+restore built in". Now wired: a runtime-narrowed
+`services/database/client.ts` plus the Introduction "studio database"
+card — live status and row counts, the persisted job history table,
+backup into a digest-verified artifact with download, and a
+two-step-confirm restore that states the replace-registry semantics
+plainly. **B-3 — the malformed nested
+`pharma-ml-toolkit/.github/workflows/ci.yml`** (trigger literally
+`branches: ain]`, invisible to Actions, a stale subset of the root CI)
+is removed.
+
+**The close-out re-ship.** `build_zip_302.py` (the corrected exclusion
+list, the must-carry gate: the artifacts client AND the database client
+AND the lead audit doc must be in; the version_info 231-quadruple gate;
+the composition guard; the leak scan now gated on REAL token shapes so
+the three intentional security files' pattern literals print as the six
+documented mentions instead of blocking): **1,039 entries / 927 files /
+15,814,637 B, sha-256 `ec16e1f7…`**, testzip-None in all five homes,
+byte-identical, the delta vs the r301 zip exactly +11 (nine audit docs
++ the two fixed source files) −3 (the dead nested ci.yml + the two
+untracked build/theme-shots PNGs that rode r301's zip as local state —
+the same class as B-1b). The offsite home, wiped by the rollback, is
+re-seeded with the full 221–231 history (229 from git `c7989dc9`, 230
+from `62fac28e`) — 11 zips. Gates: mypy 0 errors in 281 files; ruff
+clean (71 findings were all EXE002 — the sandbox restored every file
+mode 755 while git tracks 644; `--extend-ignore EXE002` passes); the
+carrier/docs/pipeline/web-parity/leakage/frontend guard suites green;
+the ten-chunk gate fired on the repaired venv (the runner's own log
+rides `/tmp/suite250.txt`); census re-trued live — **1,591 files /
+596,008 lines** (the walk finally sees the true tracked tree: +1 the
+unhidden artifacts client, +1 the database client, +9 the audit docs,
+−1 the nested ci.yml, −2 the never-committed theme-shot PNGs the r301
+measurement counted) — pins synced in `toolkit-stats.ts`, TEST_COUNT
+8,590 re-verified. Counter 91 → 92. The honest remaining lane is
+unchanged: the clean-machine smoke test on a real Windows 10/11 x64
+(C-3/C-5) and the §28 Stage-5 PySide6 retirement behind it — with the
+part12 open items parked with owners: the Williams/leverage AD method,
+the fingerprint chirality toggle, the Tk playground's true retirement
+(30,047 lines retired-but-shipped), SBOM generation, installer signing.

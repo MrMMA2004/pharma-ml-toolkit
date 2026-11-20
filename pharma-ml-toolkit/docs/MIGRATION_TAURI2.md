@@ -166,3 +166,38 @@ The React workflows and Windows release artifacts are implemented and
 have execution evidence. The remaining desktop-migration boundary is
 the clean-machine gate and the resulting retirement decision; do not
 label either as complete until that evidence exists.
+
+---
+
+## part12 addendum — the Phase-1 audit campaign (2026-11-20, round 302)
+
+The part12 MASTER_PROMPT ("Comprehensive Repository Audit, Architecture
+Hardening, Scientific Feature Expansion, GUI–Backend Verification,
+Performance Optimization, and Production Release Validation") opened
+against baseline v1.2.231 / `7bbc41ed`. Its Phase-1 deliverables live in
+`docs/part12_audit/` (nine documents: compliance matrix, integration
+matrix, architecture review, bug report, scientific/performance/security
+reports, feature gap + GitHub references, clean-install report). Ledger
+changes this round:
+
+1. **Database persistence: GUI status flipped from "no consumer" to
+   BUILT+WIRED.** The `/api/v1/database` group (status/job history/
+   preferences/backup/restore — always backend-BUILT with 67 tests) gained
+   its first product consumer: the typed `services/database/client.ts` +
+   the Introduction "studio database" card (B-2). The §10.2 Introduction
+   claim "backup and restore built in" is now substantiated.
+2. **Source-archive integrity defect closed (B-1):** the any-depth
+   `artifacts` exclusion dropped `frontend/src/services/artifacts/
+   client.ts` from the shipped v1.2.231 zip AND hid it from the explorer +
+   census. Scoped relative-path exclusions fixed walk + streamer + builder;
+   this round's archive re-ships complete (composition audit re-run at
+   close-out).
+3. **Latent `frontend/dist` leak closed (B-1b)** — build output can no
+   longer ride the census/archive after local builds.
+4. **Hygiene (B-3):** the malformed, unregistered nested
+   `pharma-ml-toolkit/.github/workflows/ci.yml` (`branches: ain]`) is
+   removed; root registration remains the single CI truth.
+5. **The honest lanes are unchanged**: clean-machine smoke test
+   (C-3/C-5) and the §28 Stage-5 PySide6 retirement stay BLOCKED behind
+   it; the new part12 audit documents them per-row
+   (WINDOWS_CLEAN_INSTALL_REPORT.md).
