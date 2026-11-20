@@ -27,13 +27,14 @@ OUT = Path("/tmp/suite304_rerun.txt")
 
 def main() -> int:
     log = OUT.open("w")
+    wanted = [int(a) for a in sys.argv[1:]] or [3, 4, 5, 6]
     files = sorted((TOOLKIT / "tests").rglob("test_*.py"))
     nine = TOOLKIT / "tests" / "ui" / "test_nine_cards.py"
     files.remove(nine)
     files = [f for f in files if "tests/api" not in str(f)]
     groups = balance(files, 8)
     total_failed = 0
-    for idx in (3, 4, 5, 6):
+    for idx in wanted:
         group = groups[idx - 1]
         log.write(f"=== chunk-{idx} re-run: start ({len(group)} files)\n")
         log.flush()

@@ -35,19 +35,19 @@ export const SHIPPED_FILE_COUNT = 1591;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). The round-304
- *  re-true: 552,780 — the part12 Phase-3 tree (the r303 pin's 597,658
+ *  re-true: 552,786 — the part12 Phase-3 tree (the r303 pin's 597,658
  *  minus the 46,417 retired lines — the Tk playground's 30,047 plus its
- *  753-test suite's 16,370 — plus the round's +1,539: the
+ *  753-test suite's 16,370 — plus the round's +1,545: the
  *  architecture-hygiene guard, the SBOM artifact, the ten
  *  docstring-map sites, the windows-release step 22b, the
  *  README/COVERAGE/FEATURES/RELEASE_READINESS/CHANGELOG addenda; the
  *  file count stays 1,591 — the two retirements offset by the hygiene
  *  test and the SBOM). The same-version re-ship carries exactly this
- *  state. (Honest note: a concurrent 2h-sync firing measured 552,625
- *  mid-round and wrote a provisional pin at 16:39; this is the final
- *  fresh `?fresh=1` walk after the round's own CHANGELOG entry
- *  landed.) */
-export const SHIPPED_SOURCE_LINES = 552780;
+ *  state. (Honest note: the round had two concurrent close-out passes
+ *  — their walks measured 552,625 pre-CHANGELOG-entry and 552,780
+ *  post-entry/pre-merge; the final post-merge walk 552,786 is the
+ *  canonical pin.) */
+export const SHIPPED_SOURCE_LINES = 552786;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

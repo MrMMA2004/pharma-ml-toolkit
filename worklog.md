@@ -16797,3 +16797,52 @@ the Stage-5 PySide6 retirement behind it; installer signing
 (certificate-gated, owner). The part12 open map after this round:
 signing + clean-machine + installer tiering (all owner/machine-
 gated) — the audit's three top items (#3, #6, #8) are all landed.
+
+---
+
+**The concurrent firing's ledger appends here, per the drill.** The
+94th run's verification pass (the 95th recorded run, the r289
+double-session precedent): the 2h-sync firing re-synced over
+996c3a53 (fetch + ff-only, origin/main already the durable head —
+no arena branches), re-recovered the PAT from the PDF splice (93
+chars, the 600-mode credential file, never printed), repaired the
+wiped venv foreground (VENV-REPAIR-DONE + STUDIO-REPAIR-DONE,
+numpy 1.26.4 / torch 2.14.1+cpu / pharmaml 1.2.231 editable),
+re-verified the collection **8,362 / 0 errors** (456 files), and
+re-decoded the ten-chunk gate INDEPENDENTLY: the surviving
+/tmp/suite304.txt carried a NUL hole (two gate runners racing the
+same log at different offsets — the forensic wrinkle this entry
+documents), so chunks 3-6 were re-run foreground (193s/362s/…/
+141s, all rc=0), chunk-5's group OOM decoded via 31 singles (30
+green + test_nine_card_first.py rc=-9 → the six-class split
+**23/23, zero assertion failures** — the r301/r303 verdict a third
+time; chunk-9's nine-card envelope ran 28s green on the lighter
+post-retirement tree). The dev server came up via dev_daemon.py for
+the canonical census walks (three over the round: 552,625
+pre-CHANGELOG-entry → 552,780 post-entry → **552,786 final
+post-merge**, 1,591 files throughout).
+
+**The real defect this pass found and fixed: the shipped CHANGELOG
+carried the round-304 entry TWICE** — the two close-out passes both
+wrote a full r304 entry (the 94th run's committed at lines 1-95,
+the 95th's drafted one landed beneath it before its merge), and
+1bfeef3e shipped both. The merge: one canonical r304 entry (the
+B-6/A-7 + B-7/A-6 + B-8 + gates + re-ship bullets) with the
+95th-run pass's own bullets folded in (the independent gate
+re-decode, the collection re-verification, the census sentence).
+The pin re-trued to the final fresh walk (552,786, the honest
+three-measurement note kept in the comment).
+
+**The superseding re-ship (the r301 three-sha convention once
+more):** the mid-round 15,406,821 B sha 85da1efe (CHANGELOG) → the
+94th run's final 15,407,022 B sha 1bfeef3e (superseded by this
+pass) → the final-final **1,041 entries / 927 files / 15,407,168 B,
+sha d3673da7…**: testzip-None in all five homes, byte-identical,
+must-carry gate clean, the NEGATIVE retired-pair gate clean
+(playground.py + test_playground.py truly absent from the archive),
+version_info 1.2.231 in-archive, composition 0, real leaks 0, the
+6 documented pattern-literal mentions, offsite inventory 11 zips
+(history intact). Counter 94 → 95 per the r289 precedent (the
+concurrent firing records its own run). Still honestly BLOCKED:
+the clean-machine smoke test (C-3/C-5), the Stage-5 PySide6
+retirement behind it, installer signing (certificate-gated).

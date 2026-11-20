@@ -144,14 +144,20 @@
 
 - **Test collection re-trued 8,643 → 8,362** (−753 the retired Tk
   suite, +472 the hygiene guard; 456 collected files, 0 errors —
-  verified on the round's repaired venv: PAT re-spliced 93 chars,
-  ff-only re-synced, rdkit/torch per requirements, torch 2.14.1+cpu).
-
-- **Census re-trued 1,591 files / 552,625 lines** (the file count
-  unchanged: −2 the retirement offset by +1 the hygiene guard +1 the
-  SBOM; lines 597,658 − 46,417 the retirement + 1,384 the round's
-  additions) — the CANONICAL live /api/toolkit/tree walk, pins synced
-  in `toolkit-stats.ts` (web overview renders the live walk).
+  verified twice on the round's repaired venv (PAT re-spliced 93
+  chars, ff-only re-synced, rdkit/torch per requirements, torch
+  2.14.1+cpu): at the close-out and again at the 94th-run firing's
+  own recovery pass, which also re-decoded the ten-chunk gate
+  independently (same failures=1, same verdict — the six-class split
+  23/23, zero assertion failures) and caught one forensic wrinkle:
+  the two close-out passes' gate runners raced the same chunk log —
+  the surviving log carries a NUL hole where the raced writes
+  collided; the affected chunks 3-6 were re-run foreground, all
+  green). Census re-trued by the CANONICAL live /api/toolkit/tree
+  walk: 1,591 files (unchanged: −2 the retirement offset by +1 the
+  hygiene guard +1 the SBOM) / 552,786 lines (597,658 − 46,417 the
+  retirement + the round's additions) — pins synced in
+  `toolkit-stats.ts`.
 
 ## [1.2.231] — 2026-11-20 — round 303 (the 93rd recorded run: the part12 Phase-2 scientific-feature round — the same-version re-ship; no version bump, no Windows fire; the v1.2.231 release stays THE release, the source archive re-ships carrying the three evidence-justified increments)
 
