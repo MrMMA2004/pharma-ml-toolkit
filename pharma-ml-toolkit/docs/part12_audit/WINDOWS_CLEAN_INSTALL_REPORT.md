@@ -72,3 +72,28 @@ retirement gate opens behind it).
 
 Until then, every round's honest close repeats this register's line:
 **clean-machine smoke test — BLOCKED; the runner is not a clean machine.**
+
+---
+
+## part13 Phase 2 — the in-tree static verification (round 309)
+
+Part13 Phase 2's six items each got their executable-in-tree leg this
+round. Nothing below converts absence of evidence into a pass: every
+row either names its in-tree evidence or stays BLOCKED on the machine.
+
+| Phase-2 item | Status | In-tree evidence (this round, static/config-level) |
+| --- | --- | --- |
+| Clean Windows installation | **BLOCKED** | Unchanged — no genuine Windows 10/11 x64 clean machine exists in this environment (part13 §4 Blocker A's own rule). The 28-row ladder's machine legs remain the missing evidence. |
+| Offline runtime | **PARTIAL — config-verified, machine-unverified** | `src-tauri/tauri.conf.json` `webviewInstallMode: offlineInstaller` (the NSIS package embeds the WebView2 Evergreen OFFLINE installer — workflow step 16-19's own comment + the MSI's 710 MB offline-WebView2 size confirm); the backend sidecar is a PyInstaller **onedir** freeze (`packaging/windows/pharmaml_backend.spec`) carrying its own CPython (runner-verified `PHARMAML-READY` handshake — startup without separately installed Python by construction); `frontendDist` compiles the SPA into the host (no Node.js at runtime); the host is a compiled Rust binary (no Rust toolchain at runtime); the CSP (`connect-src ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*`) pins the runtime network surface to the local loopback. The clean-HW execution rows stay BLOCKED. |
+| Upgrade / uninstall | **PARTIAL — design-verified, machine-unverified** | NSIS `installMode: currentUser` (per-user install, no admin elevation requirement); the WiX MSI is the per-machine complement; upgrade = install-over semantics with Tauri's standard GUID-identity upgrade handling; the workflow's own honest closing note declares "BLOCKED: upgrade + uninstall behavior (user data retention)" — this round adds the design evidence, not a machine pass. |
+| User-data preservation | **PARTIAL — design-verified, machine-unverified** | `src/pharmaml/api/persistence.py::default_data_dir()` resolves to `%LOCALAPPDATA%\PharmaML Studio` on Windows — the data home is OUTSIDE the install directory, so uninstall (which removes only the install dir) and upgrade-by-install-over preserve user data by design; the backup/restore surface (`/database` routes, §16/§35) carries 67 tests green in CI. The machine leg (install → use → uninstall → reinstall → data survives) stays BLOCKED. |
+| PySide6 retirement decision | **DECISION: stays gated — documented, not executed** | Blocker B's own rule: retire only after feature parity + clean-machine validation pass. The parity evidence today: CAPABILITY_INTEGRATION_MATRIX 73 React rows (65 PASS / 6 PARTIAL / 0 FAIL / 3 N/A — §3.5: the legacy registry's 62 rows + 873 tests remain the preserved reference frontend). Retirement does NOT proceed this phase; the decision itself is now recorded (this row + PROJECT_STATUS §4) instead of implicit. |
+| Digital signing assessment | **DELIVERED — gate BLOCKED** | The Blocker C evaluation now exists as `docs/security/INSTALLER_SIGNING_ASSESSMENT.md`: the exact certificate requirement (Authenticode OV/EV code-signing cert for the publishing identity), RFC 3161 timestamping (SHA-256 dual digest), GitHub Actions secrets custody (PFX + passphrase as separate secrets, never the repo), `signtool verify /pa /all` verification, provenance chaining into the existing SHA256SUMS/RELEASE_MANIFEST/SBOM spine, and the staged conditional workflow lane. No certificate exists — the gate stays BLOCKED with the requirement specified to the day it arrives. |
+
+**Phase-2 verdict: no lane opened, no lane silently closed.** The
+machine-gated rows keep their single root cause (no clean Windows
+machine); the certificate-gated lane keeps its own (no certificate).
+What this round added is the executable evidence that was missing
+around them: the offline-runtime configuration audit, the
+data-directory design proof, the PySide6 decision record, and the
+signing assessment deliverable.

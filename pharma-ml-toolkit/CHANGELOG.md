@@ -1,3 +1,52 @@
+## [1.2.231] — 2026-11-21 — round 309 (the 100th recorded run: the part13 Phase-2 continuation — the blocker-lane assessment round; same-version re-ship, no version bump, no Windows fire; the v1.2.231 release stays THE release, the source archive re-ships carrying the Phase-2 deliverables)
+
+- **part13 Phase 2 (remaining release blockers) — the executable legs
+  executed; the machine/certificate legs honestly stay BLOCKED.** The
+  six Phase-2 items each got their in-tree evidence:
+- **Clean Windows installation** — unchanged BLOCKED (no genuine
+  clean machine in this environment; part13 §4 Blocker A's own rule:
+  report BLOCKED, never fabricate).
+- **Offline runtime** — PARTIAL (config-verified): the tauri.conf
+  `webviewInstallMode: offlineInstaller` (NSIS embeds the WebView2
+  Evergreen OFFLINE installer; the MSI's 710 MB offline size), the
+  PyInstaller-**onedir** frozen sidecar carrying its own CPython
+  (runner-verified `PHARMAML-READY` handshake — startup without
+  separately installed Python by construction), `frontendDist`
+  compiled into the host (no Node.js at runtime), the compiled Rust
+  host (no Rust toolchain), and the CSP pinning `connect-src` to
+  loopback — the machine legs stay BLOCKED.
+- **Upgrade/uninstall + user-data preservation** — PARTIAL
+  (design-verified): NSIS `installMode: currentUser` per-user install;
+  `persistence.py::default_data_dir()` resolves the data home to
+  `%LOCALAPPDATA%\PharmaML Studio` OUTSIDE the install dir — data
+  survives uninstall and upgrade-by-install-over by design; the
+  backup/restore surface carries its 67-test CI-green suite. The
+  machine leg stays BLOCKED.
+- **PySide6 retirement decision** — recorded, stays gated: the
+  Blocker-B rule (parity + clean-machine first) stands; the parity
+  ledger (§3.5 of CAPABILITY_INTEGRATION_MATRIX: 65 PASS / 6 PARTIAL /
+  3 N-A React rows) plus the machine gate both hold. The decision is
+  now explicit in PROJECT_STATUS §4 instead of implicit.
+- **Digital signing assessment** — DELIVERED: the new
+  `docs/security/INSTALLER_SIGNING_ASSESSMENT.md` (part13 §4 Blocker
+  C): the exact certificate requirement (Authenticode OV/EV for the
+  publishing identity), RFC 3161 SHA-256 dual-digest timestamping,
+  GitHub Actions secrets custody (PFX + passphrase as separate
+  secrets, never the repo — the PAT-hygiene rules one class harder),
+  `signtool verify /pa /all` verification, provenance chaining into
+  the existing SHA256SUMS/RELEASE_MANIFEST/SBOM spine, and the staged
+  conditional workflow lane. Gate stays BLOCKED — no certificate
+  exists, none fabricated.
+- **Same-version re-ship**: the source archive re-ships carrying the
+  Phase-2 deliverables (the new sha/bytes supersede 2c4de09d per the
+  r301 three-sha convention; the published v1.2.231 EXE/MSI stay THE
+  release). Census/pins re-trued: files 1,592→1,593 (the signing
+  assessment), lines 553,002→553,185 (+183 doc-only minus the -4
+  empty-file true-up, story in worklog r309); tests 8,362 unchanged.
+- **BLOCKED (unchanged, honest)**: clean-machine smoke test (C-3/C-5),
+  the Stage-5 PySide6 retirement behind it, installer signing
+  (certificate-gated, now with the exact requirement documented).
+
 ## [1.2.231] — 2026-11-21 — round 307 (the 98th recorded run: the part13 Phase-1 state-reconciliation round — the same-version re-ship; no version bump, no Windows fire; the v1.2.231 release stays THE release, the source archive re-ships carrying the part13 Phase-1 deliverables: the authoritative status doc, the stale-statement reconciliation, the second-rollback recovery)
 
 - **part13 Phase 1 (state reconciliation and release integrity).** The

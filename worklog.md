@@ -17102,3 +17102,95 @@ awaits its interactive directive. The dev server restored post-gate
 (double-fork daemon). Counter 98 → 99. **Still honestly BLOCKED:** the
 clean-machine smoke test (C-3/C-5), the Stage-5 PySide6 retirement
 behind it, installer signing (certificate-gated).
+
+---
+
+**Round 309 (the 100th recorded run — the interactive "Continue
+MASTER_PROMPT part13" firing, trace 1a1facbe3ef8dd89; the milestone
+run of MASTER_PROMPT-2h-sync-100x).** Part13 Phase 2 (the remaining
+release blockers) executed over the clean 19effec8 base — the six
+items each got their executable leg, nothing gated on owner
+resources was fabricated:
+
+- **Clean Windows installation** — BLOCKED, unchanged (no genuine
+  clean machine; part13 §4 Blocker A's own rule).
+- **Offline runtime** — PARTIAL (config-verified):
+  tauri.conf `webviewInstallMode: offlineInstaller` (the NSIS embeds
+  the WebView2 Evergreen OFFLINE installer; the MSI's 710 MB size),
+  the PyInstaller-**onedir** frozen sidecar carrying its own CPython
+  (the runner-verified `PHARMAML-READY` handshake — startup without
+  separately installed Python by construction), `frontendDist`
+  compiled into the host (no Node.js at runtime), the compiled Rust
+  host (no Rust toolchain), the CSP `connect-src` pinned to loopback.
+- **Upgrade/uninstall + user-data preservation** — PARTIAL
+  (design-verified): NSIS `installMode: currentUser` per-user install;
+  `persistence.py::default_data_dir()` → `%LOCALAPPDATA%\PharmaML
+  Studio` OUTSIDE the install dir (data survives uninstall and
+  upgrade-by-install-over by design); the backup/restore surface
+  carries its 67-test CI-green suite.
+- **PySide6 retirement decision** — recorded, stays gated: the
+  Blocker-B rule stands; the parity ledger (§3.5: 65 PASS / 6
+  PARTIAL / 3 N-A of 73 React rows; the legacy registry's 62 rows +
+  873 tests remain the preserved reference) plus the machine gate
+  both hold; the decision is now explicit in PROJECT_STATUS §4.
+- **Digital signing assessment** — DELIVERED: the new
+  `docs/security/INSTALLER_SIGNING_ASSESSMENT.md` (Blocker C): the
+  exact certificate requirement (Authenticode OV/EV for the
+  publishing identity), RFC 3161 SHA-256 dual-digest timestamping,
+  GitHub Actions secrets custody (PFX + passphrase as separate
+  secrets, never the repo — the PAT-hygiene rules one class harder),
+  `signtool verify /pa /all`, provenance chaining into the existing
+  SHA256SUMS/RELEASE_MANIFEST/SBOM spine, the staged conditional
+  lane. Gate stays BLOCKED — no certificate exists, none fabricated.
+  (In-tree corroboration: grep for signtool/.pfx/.p12 = zero hits;
+  the workflow has no sign step; the leak scan stays clean.)
+
+**Deliverables trued**: WINDOWS_CLEAN_INSTALL_REPORT.md gained the
+part13 Phase-2 evidence table; PROJECT_STATUS.md gained the Phase-2
+addenda (§4 lanes + §6 phase map + the §2 rows: HEAD/CI at
+19effec8 19/19 green, census, archive cadence per §7 — the moving sha
+deliberately NOT pinned in-tree: the archive cannot carry its own
+hash); PROJECT_AUDIT_PROGRESS.md (the ROOT carrier — a stray
+toolkit-path duplicate was caught and removed the moment it
+appeared) appended the Phase-2 entry; CHANGELOG leads with the
+round-309 entry.
+
+**The find of the round (the census empty-file bias):** the hero
+rendered 553,185 while the census walk said 553,189 — a 4-line
+mismatch traced to the JS carrier's `countLines()` (empty file → 0,
+in place since 2026-10-13) vs the Python replica's
+`len("".split("\n"))` == 1: exactly the four 0-byte `__init__.py`
+files (tests/api, ui/pages, ui/widgets, ui/workers). Every census
+since r303 carried the +4 bias; the r307-era pin 553,002 answered a
+live walk of 552,998. Trued this round: the pin now EQUALS the live
+walk (scratch/census_walk_309.py — the JS-faithful replica), the
+carrier comment carries the full story, the CHANGELOG note stays
+terse (line-neutral to the fixed point). Census fixed point: 1,593
+files / 553,185 lines — verified three-way (pin = live API = page
+render).
+
+**Gates:** collection 8,362 / 0 fresh; the test surface byte-count
+unchanged (git diff 19effec8 -- pharma-ml-toolkit/tests
+pharma-ml-toolkit/src = 0 files — doc-only round; the r308 fresh
+legs on the same venv stand); the page renders 1,593 / 553,185 /
+8,362 / 33 in both viewports with zero console/page errors, no
+horizontal scroll at 390px, footer in place; screenshots committed
+(scratch/p13r309-desktop.png + scratch/p13r309-mobile.png).
+
+**Same-version re-ship (terminal build at the fixed point):**
+929 files / 1,042 entries / 15,420,408 B sha `8535cd80` — supersedes
+2c4de09d per the r301 three-sha convention (the two intermediate
+builds of the pin-chase never landed as claims); all gates green
+(must-carry incl. the signing assessment + the clean-install
+report; retired-pair negative; version_info quadruple; composition
+0; real leaks 0 with 6 documented pattern-literals); five homes +
+offsite byte-identical `8535cd80`, testzip-OK, offsite inventory 11;
+the zip-size API serves 15,420,408 exact:true.
+
+Counter 99 → 100 — the 100x milestone the job name promised, closed
+on a round whose centerpiece was exactly the campaign's ethic: a
+4-line bias found by refusing to wave a mismatch through, trued to
+the carrier, and fixed at the fixed point. **Still honestly
+BLOCKED:** the clean-machine smoke test (C-3/C-5), the Stage-5
+PySide6 retirement behind it, installer signing (certificate-gated,
+the exact requirement now documented).

@@ -221,3 +221,38 @@ authoritative project-status document):
   PySide6 retirement, installer signing.
 
 Next: part13 Phases 2–7 per `docs/PROJECT_STATUS.md` §6.
+
+## part13 Phase 2 — round 309 (the 100th recorded run: the interactive continuation)
+
+- **Phase 2 executed** (the remaining-release-blockers assessment; base
+  19effec8, the r308 close-out): the six items each got their in-tree
+  leg — the offline-runtime config audit (tauri.conf
+  `webviewInstallMode: offlineInstaller`; the PyInstaller onedir
+  sidecar carrying its own CPython; frontendDist compiled in; the
+  compiled Rust host; CSP connect-src loopback-only), the
+  upgrade/uninstall + user-data design proof (NSIS currentUser
+  per-user install; `%LOCALAPPDATA%\PharmaML Studio` data home
+  outside the install dir; the 67-test backup/restore suite), the
+  PySide6 retirement decision record (stays gated — parity ledger
+  65/6/3 + the machine gate both stand; now explicit in
+  PROJECT_STATUS §4), and the digital-signing assessment deliverable
+  (`pharma-ml-toolkit/docs/security/INSTALLER_SIGNING_ASSESSMENT.md`:
+  the exact certificate requirement, RFC 3161 timestamping,
+  Actions-secrets custody, signtool verification, provenance
+  chaining, the staged conditional lane).
+- **Machine/certificate legs honestly stay BLOCKED** — no clean
+  Windows machine, no certificate; full evidence table in
+  WINDOWS_CLEAN_INSTALL_REPORT.md § "part13 Phase 2".
+- **Same-version re-ship** (the r301 three-sha convention:
+  2c4de09d → the round's final sha): 929 files / 1,042 entries /
+  testzip-OK across five homes + offsite; must-carry (incl. the
+  signing assessment + the clean-install report), retired-pair
+  negative, version_info quadruple, composition 0, real leaks 0 (6
+  documented pattern-literals).
+- **Pins re-trued**: census doc-only delta (zero src/tests bytes —
+  git-diff verified); tests 8,362/0 fresh collection this round.
+- **BLOCKED (unchanged)**: clean-machine smoke (C-3/C-5), Stage-5
+  PySide6 retirement, installer signing (certificate-gated, the
+  exact requirement now documented).
+
+Next: part13 Phase 3 (frontend quality) per `docs/PROJECT_STATUS.md` §6.

@@ -4,9 +4,11 @@ Part13 §2 deliverable ("Create a single authoritative project-status
 document with the actual current state"). Replaces no audit; it
 summarises them and wins any status disagreement.
 
-- **Audit date**: 2026-11-21 (round 307, the 98th recorded run).
+- **Audit date**: 2026-11-21 (round 307, the 98th recorded run;
+  Phase-2 addendum round 309 — the interactive part13 continuation).
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
-  this document lands with the round-307 commit.
+  Phase-2 addendum on `19effec8` (the r308 close-out) — this document
+  lands with the round-309 commit.
 - **Scope**: whole repository — source, tests, docs, release
   artifacts, web pins, archive ritual.
 - **Status labels** (part13 §22): PASS / PARTIAL / FAIL / BLOCKED /
@@ -30,13 +32,13 @@ summarises them and wins any status disagreement.
 | Item | Value | Evidence (this session) |
 | --- | --- | --- |
 | Repository | public, default branch `main` | GitHub API, authenticated |
-| HEAD | `5446e89b` = `origin/main` at audit time; post-recovery `git status` = 0 (byte-identical) | fetch + reset --hard + ghost sweep |
-| CI at HEAD | green — `CI` and `Push on main` both completed/success | `actions/runs?head_sha=5446e89b` |
+| HEAD | r307 audited at `5446e89b` = `origin/main`; the Phase-2 addendum verified `19effec8` (the r308 close-out) clean, and this document's addendum lands with the round-309 commit | fetch + reset --hard + ghost sweep (r307/r308) |
+| CI at HEAD | green — 19/19 check-runs completed/success at `19effec8` (the r308 push); r307's evidence: CI + Push both success at `5446e89b` | `check-runs?head_sha=19effec8` (r308 poll, final) |
 | Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt | `releases/tags/v1.2.231` |
 | Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json — all 1.2.231 | read directly this session |
 | Test surface | 8,362 collected / 0 errors / 456 files (`tests/` + `src/pharmaml` `--doctest-modules`) | this round's fresh collection on the repaired venv |
-| Census | 1,591 files / 552,786 lines / v1.2.231 at the audited base (+ the r307 doc-reconciliation delta) | live `/api/toolkit/tree` walk |
-| Source archive | v1.2.231 zip 15,407,168 B sha `d3673da7` at the audited base; the r307 re-ship supersedes it (same version — §5) | sha256 across five homes + offsite |
+| Census | 1,593 files / 553,185 lines / v1.2.231 (the round-309 final walk with the empty-file true-up — equals the live /api/toolkit/tree walk; doc-only delta since r307 — zero src/tests bytes) | this round's fresh census walk |
+| Source archive | v1.2.231 zip same-version re-ship cadence: the r307 close stood at 15,413,809 B sha `2c4de09d`; the round-309 re-ship supersedes it (same version — §5; the per-round sha/bytes live in the CHANGELOG/worklog per §7, never here — the archive cannot carry its own hash) | sha256 across five homes + offsite |
 | venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.231 — zero drift vs `requirements.txt` | import probes post-repair |
 
 ## 3. The six previously-open audit items — CLOSED (re-verified in-tree this round)
@@ -68,16 +70,23 @@ summarises them and wins any status disagreement.
    workflow's step 22b regenerates it on the runner and self-registers
    its hash into SHA256SUMS.txt.
 
-## 4. The three honest BLOCKED lanes (unchanged; owner-gated)
+## 4. The three honest BLOCKED lanes (unchanged gates; Phase 2 executed around them)
 
 - **C-3/C-5 clean-machine smoke test** — a genuine Windows 10/11 x64
   machine (physical or fresh VM, no dev tools) is required; a GitHub
   Windows runner is not a clean machine. BLOCKED.
 - **Stage-5 PySide6 retirement** — gated behind the clean-machine pass
   + demonstrated feature parity (the rule the campaign set). BLOCKED.
+  Phase-2 decision record (round 309): retirement does NOT proceed this
+  phase — the parity ledger (§3.5: 65/73 PASS React rows, 6 PARTIAL)
+  plus the machine gate both stand; the decision is now explicit, not
+  implicit.
 - **Installer digital signing** — certificate-gated (Authenticode +
   timestamping; secrets in GitHub Actions, never in the repository).
-  BLOCKED.
+  BLOCKED. Phase-2 deliverable: the exact requirement + staged lane now
+  documented in `docs/security/INSTALLER_SIGNING_ASSESSMENT.md` (round
+  309) — the gate opens the day the certificate exists in Actions
+  secrets; nothing about the current unsigned state was embellished.
 
 ## 5. Release posture (part13 §5)
 
@@ -93,7 +102,16 @@ summarises them and wins any status disagreement.
 
 ## 6. Next-campaign priorities (part13 Phases 2–7, in order)
 
-- **Phase 2** — the three BLOCKED lanes above (owner resources).
+- **Phase 2** — EXECUTED (round 309, the interactive continuation):
+  the six items each got their in-tree leg (the offline-runtime config
+  audit — offlineInstaller WebView2 + frozen-own-Python sidecar +
+  compiled host; the upgrade/uninstall + user-data design proof —
+  `%LOCALAPPDATA%` data home outside the install dir + 67-test
+  backup/restore surface; the PySide6 decision record; the signing
+  assessment deliverable). The machine/certificate legs stay honestly
+  BLOCKED — full evidence table in
+  `docs/part12_audit/WINDOWS_CLEAN_INSTALL_REPORT.md` § "part13
+  Phase 2". **Phase 3 is next.**
 - **Phase 3** — frontend quality: component tests, E2E workflows,
   visual regression (Vitest / React Testing Library / Playwright
   lanes), error/empty/loading state coverage.

@@ -32,8 +32,10 @@ export const SHIPPED_TEST_COUNT = 8362;
  *  and its suite left the tree (-2, B-6) offset by the
  *  architecture-hygiene guard (+1) and the SBOM artifact (+1). The
  *  round-307 re-true (part13 Phase 1): 1,592 — +1 the authoritative
- *  docs/PROJECT_STATUS.md. */
-export const SHIPPED_FILE_COUNT = 1592;
+ *  docs/PROJECT_STATUS.md. The round-309 re-true (part13 Phase 2):
+ *  1,593 — +1 the installer-signing assessment deliverable
+ *  (docs/security/INSTALLER_SIGNING_ASSESSMENT.md). */
+export const SHIPPED_FILE_COUNT = 1593;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). The round-304
@@ -52,8 +54,19 @@ export const SHIPPED_FILE_COUNT = 1592;
  *  the r306 base plus the doc-reconciliation delta (+216:
  *  docs/PROJECT_STATUS.md, the seven stale-statement trues, the
  *  CHANGELOG entry, the PROJECT_AUDIT_PROGRESS append); the doc-only
- *  round touches zero src/tests bytes (verified by git diff). */
-export const SHIPPED_SOURCE_LINES = 553002;
+ *  round touches zero src/tests bytes (verified by git diff). The
+ *  round-309 re-true (part13 Phase 2): 553,185 — the r307 live-walk
+ *  base plus the Phase-2 doc delta (+183: the signing assessment,
+ *  the clean-install report's Phase-2 section, the PROJECT_STATUS
+ *  addenda + row trues, the CHANGELOG entry) MINUS the round-309
+ *  empty-file true-up (-4: the JS carrier's countLines() has counted
+ *  the four 0-byte __init__.py files as 0 lines since 2026-10-13
+ *  while the Python census replica counted 1 each — a +4 bias in
+ *  every census since r303; the r307-era pin 553,002 answered a live
+ *  walk of 552,998; found and trued this round — the pin now EQUALS
+ *  the live /api/toolkit/tree walk); the doc-only round again
+ *  touches zero src/tests bytes. */
+export const SHIPPED_SOURCE_LINES = 553185;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */
