@@ -16657,11 +16657,16 @@ exclusion now lives in all four canonical surfaces (both Python
 builders + the drift-guard pin + toolkit-fs.ts), and the fresh-build
 guard fixes `zip -r`'s stale-member semantics (the update-without-
 removal lesson). The final re-ship: 1,039 entries / 927 files /
-15,836,081 B, sha-256 `a561bc59…` (the mid-round clean build after
-the ghost sweep: `ce5646b4…` at 15,835,239 B — the CHANGELOG
-documents the mid-round artifact per the r301 convention), +0/−0 file
-delta vs the r302 zip, testzip-None in all five homes, byte-identical
-(the offsite re-seeded with the full 221–231 history, 11 zips). Five
+15,836,081 B, sha-256 `a561bc59…` — superseded by the final
+`4bbe8330…` at 15,836,078 B after the census pins re-trued to the
+CANONICAL live /api/toolkit/tree walk (597,658 — the replica census
+script's +4-line drift caught by the browser verify: the page renders
+the live walk, and 597,662 disagreed; the mid-round clean build was
+`ce5646b4…` at 15,835,239 B — the CHANGELOG documents the mid-round
+artifact per the r301 convention, this entry records all three),
++0/−0 file delta vs the r302 zip, testzip-None in all five homes,
+byte-identical (the offsite re-seeded with the full 221–231 history,
+11 zips). Five
 census-riding ghosts swept (the stale toolkit-dir windows-release.yml
 + the 229/230 zip-recovery residue in three homes). Census re-trued
 1,591 files / 597,662 lines; pins synced (8,643 / 1,591 / 597,662).

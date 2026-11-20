@@ -32,11 +32,11 @@ export const SHIPPED_FILE_COUNT = 1591;
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). The round-303
  *  re-true: 597,606 — the part12 Phase-2 tree (the r302 pin's 596,008
- *  plus the round's +1,654 viewable lines (the +15: the build/theme-shots anchored exclusion across both canonical builders, the drift-guard pin, and the docs/INDEX.md regeneration): the Williams backend +
+ *  plus the round's +1,650 viewable lines (the +15: the build/theme-shots anchored exclusion across both canonical builders, the drift-guard pin, and the docs/INDEX.md regeneration): the Williams backend +
  *  plot + route + tests, the chirality threading, the /evaluate
  *  job-mode fix, the CHANGELOG entry and the FEATURES.md addenda).
  *  The same-version re-ship carries exactly this state. */
-export const SHIPPED_SOURCE_LINES = 597662;
+export const SHIPPED_SOURCE_LINES = 597658;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

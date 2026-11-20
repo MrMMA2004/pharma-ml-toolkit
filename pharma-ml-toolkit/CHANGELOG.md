@@ -95,9 +95,9 @@
   `tests/api/test_contracts.py` green); the frontend tsc + guards
   green, the offline production build green; mypy 0 errors across all
   281 source files, ruff clean (the sandbox's 755-mode EXE002 aside);
-  the census re-trued (1,591 files / 597,662 lines — the same tracked
+  the census re-trued (1,591 files / 597,658 lines — the same tracked
   set as the r302 pin: the round changed content, not existence; the
-  +1,654 viewable lines ride the Python backend + tests + docs (the +9:
+  +1,650 viewable lines ride the Python backend + tests + docs (the +9:
   the docs/INDEX.md regeneration; the +15: the build/theme-shots
   anchored exclusion across the canonical builders); five
   census-riding ghosts swept: the stale toolkit-dir windows-release.yml

@@ -83,9 +83,9 @@ session; full detail in `docs/part12_audit/`):
   r303 additions over the r302 8,590: the Williams lane (23 unit +
   3 figure + 7 route), the chirality toggle (8 descriptor + 8 factory +
   3 route), and the /evaluate job-mode COMPLETION pin (1).
-- **Census (r303 re-true)**: the walk = 1,591 files / 597,662 lines —
+- **Census (r303 re-true)**: the walk = 1,591 files / 597,658 lines —
   the r302 tree (the same tracked set: the round changed no file's
-  existence, only content) plus the round's +1,654 viewable lines (the +9: the docs/INDEX.md regeneration for the WilliamsResult/leverage_williams entries; the +15: the build/theme-shots anchored exclusion across the canonical builders);
+  existence, only content) plus the round's +1,650 viewable lines (the +9: the docs/INDEX.md regeneration for the WilliamsResult/leverage_williams entries; the +15: the build/theme-shots anchored exclusion across the canonical builders);
   the five census-riding ghosts swept (the stale toolkit-dir
   windows-release.yml + the 229/230 zip recovery residue in three
   local homes; the offsite home keeps the full 221-231 history).
