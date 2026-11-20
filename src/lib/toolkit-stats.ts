@@ -32,11 +32,13 @@ export const SHIPPED_FILE_COUNT = 1583;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). The r301
- *  re-true: 595,025 (the r300 pin's 595,238 measured a pre-final
- *  tree; both census replicas walk the shipped revision at 595,025 —
- *  the eighth-carrier fix, the extended lockstep guard and the
- *  CHANGELOG entry ride the delta). */
-export const SHIPPED_SOURCE_LINES = 595025;
+ *  re-true: 595,039 — the close-out tree the final re-ship blesses
+ *  (the r300 pin's 595,238 measured a pre-final tree; the mid-round
+ *  r301 walk read 595,025 before this round's own CHANGELOG bytes
+ *  landed — the eighth-carrier fix, the extended lockstep guard,
+ *  the re-ship gates and the CHANGELOG entry ride the delta, and the
+ *  final zip ships exactly this state). */
+export const SHIPPED_SOURCE_LINES = 595039;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

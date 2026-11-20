@@ -68,9 +68,23 @@
   measures differently: re-trued to the live numbers with the delta
   documented in `toolkit-stats.ts`.
 - The dev server ran via `scratch/dev_daemon.py` (GET / 200, the
-  1.2.231 pin live) and stays down only while the gate runs. The
-  tag re-points at this commit and re-fires the Windows Release; the
-  release result is recorded in the round close-out.
+  1.2.231 pin live) and stays down only while the gate runs. **The
+  release took three fires — the runner earned its keep twice.**
+  Fire 2 (`44689315323`, at the fix commit `6588a268`) died at
+  step 10: `test_version_carriers_agree` — the round-301 CHANGELOG
+  header's `-r301` suffix disagreed with `VERSION` (the suffixed
+  style was an r288-era pattern that predates the workflow
+  registration; with the runner now running the backend unit gate,
+  the plain-version header is the only legal form). Fire 3
+  (`44693818307`, at `3da0ff96`) completed all 26 steps: the
+  **v1.2.231 Windows release is published** — the NSIS
+  `PharmaML_Studio_Setup_v1.2.231.exe` (557,655,583 B), the WiX
+  `PharmaML_Studio_v1.2.231.msi` (710,122,853 B, offline WebView2),
+  `RELEASE_MANIFEST.json`, `SHA256SUMS.txt` — verified against the
+  live API (draft=false), and the README's release claim trued to
+  it. Still honestly BLOCKED (the runner is a build environment,
+  not a clean machine): the clean-Windows-10/11 installation test,
+  the offline launch flows, and the upgrade/uninstall behavior.
 
 ## [1.2.231] — 2026-11-20 — round 300 (the 90th recorded run: the sandbox-rollback recovery — a 476-commit ff-only re-sync, the arena/f5c3dd10 absorption, the venv repair, and the re-trued census)
 

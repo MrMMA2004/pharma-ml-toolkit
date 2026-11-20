@@ -16465,3 +16465,46 @@ Release; the release result rides the round close-out. The honest
 remaining lane is unchanged: the clean-machine smoke test on a
 real Windows 10/11 x64 (C-3/C-5, §47's rows 38–48) and the §28
 Stage-5 PySide6 retirement behind it.
+
+**Round 301 close-out — the release took three fires, and the runner
+earned its keep twice.** Fire 2 (`44689315323`, at the fix commit
+`6588a268`) cleared step 20's packaging validation (the
+version_info fix held) but died at step 10:
+`test_phase6_readiness::test_version_carriers_agree` — the round-301
+CHANGELOG header's `-r301` suffix made `probe_versions` read
+`1.2.231-r301` against `VERSION`'s `1.2.231`. The suffixed-header
+style was an r288-era pattern that predates the round-293 workflow
+registration — no Windows runner ever enforced the carrier gate on
+it; with the runner now running the backend unit gate, the
+plain-version header is the only legal form for a same-version
+round. The fix-up (one line, `3da0ff96`) re-trued the header, the
+exact test plus windows-pipeline/version-carriers/web-parity/
+release-audit/portability/recovery all re-run green locally, and
+fire 3 (`44693818307`) completed all 26 steps. **The v1.2.231
+Windows release is published**: the NSIS
+`PharmaML_Studio_Setup_v1.2.231.exe` (557,655,583 B), the WiX
+`PharmaML_Studio_v1.2.231.msi` (710,122,853 B, offline WebView2),
+`RELEASE_MANIFEST.json` + `SHA256SUMS.txt` — verified against the
+live API (draft=false, published 2026-11-20T08:02:55Z), the README's
+release claim trued to it, and the counter closed at 91. The
+honest remaining lane is unchanged: the clean-machine smoke test
+on a real Windows 10/11 x64 (C-3/C-5, §47's rows 38–48) and the
+§28 Stage-5 PySide6 retirement behind it — the runner's own
+closing note says the same: a build environment is not a clean
+machine.
+
+**The close-out re-ship.** After the release verification, the archive
+was re-shipped one more time so the shipped zip carries the round's
+own CHANGELOG entry (the r300 standard: the zip rides the round's
+close-out tree) — `build_zip_301.py` rebuilt from the close-out tree:
+1,032 entries / 919 files / 16,033,638 B, sha-256 `240a5f32…a45055f`,
+the in-archive version_info gate green, testzip-None in all five
+homes, composition 0, the six pattern-literal leak hits, VERSION
+stamp 1.2.231. This supersedes the mid-round carrier-fix re-ship
+(`47dbb712…`, 16,031,493 B) that the CHANGELOG entry names — the
+self-referential sha chase ends by convention: the CHANGELOG
+documents the mid-round artifact, the worklog records both. The
+final census 1,583 files / 595,039 lines rides `toolkit-stats.ts`
+(the mid-round walk read 595,025 before the round's own CHANGELOG
+bytes landed); the live `/api/toolkit/tree` walk confirms both
+numbers.
