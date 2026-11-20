@@ -16846,3 +16846,70 @@ version_info 1.2.231 in-archive, composition 0, real leaks 0, the
 concurrent firing records its own run). Still honestly BLOCKED:
 the clean-machine smoke test (C-3/C-5), the Stage-5 PySide6
 retirement behind it, installer signing (certificate-gated).
+
+---
+
+**Round 305 (the 96th recorded run, the r289 double-session precedent —
+the 4th interactive "Continue MASTER_PROMPT part12" continuation).**
+The part12 campaign map on arrival: Phases 1–3 landed (r302 the audit
+campaign + nine deliverables; r303 the scientific round — B-4/B-5 +
+the /evaluate card; r304 the architecture-hygiene round — B-6/B-7/B-8
++ the 472-test guard + the SBOM), and the worklog's open map after
+r304 = the three owner/machine-gated lanes only (clean-machine C-3/C-5,
+Stage-5 PySide6 retirement behind it, installer signing). This firing
+therefore ran the part12 continuation as an **independent full
+verification pass over the pushed debda000 state** — the campaign
+principle applied to itself: verify what is claimed. Every check below
+ran for real this session; **zero new defects found — every r304
+close-out claim re-verified true.**
+
+1. **Repo state:** fetch clean; HEAD == origin/main == debda000;
+   working tree clean except this round's own two browser-evidence
+   pngs (untracked at audit time). Credential file present (600 mode,
+   94 B), never printed; `git grep` over HEAD: zero token-pattern
+   matches (hygiene re-confirmed).
+2. **Environment:** venv intact — numpy 1.26.4 / torch 2.14.1+cpu /
+   rdkit 2026.9.1 (no repair needed); dev server up on :3000 (HTTP
+   200, / route serving).
+3. **GitHub API (the queued part11_1and2 re-verification closed):**
+   repo `MrMMA2004/pharma-ml-toolkit` public (visibility=public); the
+   v1.2.231 Release published (draft=false, 2026-11-20T08:02:55Z)
+   with the real assets intact — Setup EXE 557,655,583 B, MSI
+   710,122,853 B, RELEASE_MANIFEST.json, SHA256SUMS.txt; latest CI at
+   HEAD debda000 completed/success (2026-11-20T17:46:01Z).
+4. **Collection (canonical form, tests/ + src/pharmaml
+   --doctest-modules):** 8,362 / 0 errors / 456 files — the r304
+   claim exact.
+5. **Gates executed foreground:** test_architecture_hygiene.py 472/472
+   green; test_windows_pipeline.py 9/9; test_phase6_readiness.py 6/6
+   (version carriers + web parity + lockstep); the FastAPI service
+   leg tests/api/ = 285 collected → 284 passed + 1 skipped, exit 0;
+   the ROOT github-page guard passed (release carriers 1.2.231, 48
+   local links, images OK); frontend typecheck exit 0. (The root-tree
+   `tsc --noEmit` shows 243 hits, all outside the root app's src/ —
+   185 of them the frontend's own `@/…` alias map under the root
+   tsconfig — the frontend's own gate is the green one; recorded here
+   so the distinction is honest, not discovered-and-misread.)
+6. **Live web verification:** /api/toolkit/tree census = 1,591 files /
+   552,786 lines / v1.2.231 (the pins exact); /api/toolkit/zip-size =
+   15,407,168 B, exact:true, source:release; the download stream
+   content-length 15,407,168 B with the version-pinned ETag
+   zip-v1.2.231-15407168; agent-browser: the pins render on desktop
+   AND 390px mobile (1,591 / 552,786 / 8,362 / 1.2.231), zero console
+   errors (benign HMR/DevTools only), the footer at document end in
+   both viewports (desktop 3967==3967; mobile 7799) — screenshots
+   committed as evidence (scratch/p12r305-desktop.png +
+   scratch/p12r305-mobile.png).
+7. **Zip ritual parity (no re-ship — no tree change):** all five homes
+   + offsite byte-identical sha d3673da7 / 15,407,168 B (download/,
+   pharma-ml-toolkit/dist-archive/, pharma-ml-toolkit/download/,
+   upload/, ~/pharma-ml-toolkit-zips/ with 11 zips, history intact);
+   scratch/ confirmed outside the archive scope (0 of the 1,041 zip
+   entries), so the evidence pngs + this ledger + the counter do not
+   touch the must-carry set — the d3673da7 artifact stays exactly
+   correct for this tree.
+8. **Verdict:** part12 actionable engineering = COMPLETE through the
+   landed phases; the open map stays the three honest BLOCKED lanes
+   (clean-machine smoke test C-3/C-5, the Stage-5 PySide6 retirement
+   gated behind it, installer signing certificate-gated). Counter
+   95 → 96.
