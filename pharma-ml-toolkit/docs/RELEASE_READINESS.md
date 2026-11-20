@@ -78,21 +78,24 @@ session; full detail in `docs/part12_audit/`):
   `__version__`, toolkit-version.ts, frontend package.json,
   tauri.conf.json, lockfile, version_info.txt quadruple) — read directly
   this session; the two named guard tests enforce them.
-- **Test collection**: 8,590 collected / 0 errors (25.6 s) — matches the
-  shipped pin.
-- **Census**: live `/api/toolkit/tree?fresh=1` walk = 1,582 files /
-  594,987 lines after this round's B-1/B-1b exclusion scoping and the
-  B-3 nested-CI removal (the 1,583/595,039 r301 pin predates those tree
-  changes + counted 2 never-committed evidence PNGs; pins re-trued at
-  this round's close-out per the standing census discipline).
+- **Test collection (r303 re-true)**: 8,643 collected / 0 errors
+  (46 collected-file tally, 456 files) — matches the shipped pin; the
+  r303 additions over the r302 8,590: the Williams lane (23 unit +
+  3 figure + 7 route), the chirality toggle (8 descriptor + 8 factory +
+  3 route), and the /evaluate job-mode COMPLETION pin (1).
+- **Census (r303 re-true)**: the walk = 1,591 files / 597,662 lines —
+  the r302 tree (the same tracked set: the round changed no file's
+  existence, only content) plus the round's +1,654 viewable lines (the +9: the docs/INDEX.md regeneration for the WilliamsResult/leverage_williams entries; the +15: the build/theme-shots anchored exclusion across the canonical builders);
+  the five census-riding ghosts swept (the stale toolkit-dir
+  windows-release.yml + the 229/230 zip recovery residue in three
+  local homes; the offsite home keeps the full 221-231 history).
 - **Live release**: v1.2.231 published (not draft) with EXE
   557,655,583 B + MSI 710,122,853 B + manifest + checksums; CI green on
   the audited commit; Windows Release run 44693818307 all-26-green.
-- **Archive note (new)**: the shipped v1.2.231 source zip is missing
-  exactly one real source file (`frontend/src/services/artifacts/
-  client.ts` — the B-1 exclusion defect); the release EXE/MSI are
-  unaffected (they build from the repo tree). This round's archive
-  re-ships complete.
+- **Archive note (r302, closed)**: the shipped v1.2.231 source zip was
+  missing exactly one real source file (`frontend/src/services/artifacts/
+  client.ts` — the B-1 exclusion defect); the r302 re-ship carries it
+  complete, and the r303 archive re-ships over that fixed base.
 - **Honest gaps carried**: SBOM (open, CycloneDX lane documented),
   signing (certificate-gated), clean-machine ladder (BLOCKED — see
   part12_audit/WINDOWS_CLEAN_INSTALL_REPORT.md).

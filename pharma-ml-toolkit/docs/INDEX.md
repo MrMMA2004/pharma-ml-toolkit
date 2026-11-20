@@ -426,6 +426,7 @@ after adding new public functions.
 | `VisibleForward` | class | One forward pass through the hierarchy. |
 | `VisibleHistory` | class | The training curve plus the final agreement numbers. |
 | `VisibleNetwork` | class | DrugCell's architecture in plain NumPy, training included. |
+| `WilliamsResult` | class | Outcome of a leverage/Williams applicability-domain analysis. |
 | `WindowDataset` | class | A windowed timeseries: the chapter's dataset object, NumPy edition. |
 | `adapt` | function | Clone-and-fine-tune on a support set (the inner loop alone). |
 | `adversarial_audit` | function | Run the sign-pattern family across a radius grid. |
@@ -517,6 +518,7 @@ after adding new public functions.
 | `label_smiles` | function | Encode SMILES with DeepDTA's exact labels, truncation and zero padding. |
 | `laplace_mechanism` | function | The Laplace mechanism: exact (ε, 0)-differential privacy. |
 | `levenberg_marquardt` | function | Levenberg-Marquardt least squares, plain NumPy, deterministic. |
+| `leverage_williams` | function | Leverage/Williams applicability domain (the regression companion). |
 | `linear_regression_gd` | function | Batch gradient descent on the squared error (DSBC's centrepiece). |
 | `list_models` | function | List registry entries with availability information. |
 | `load_model` | function | Load a model bundle saved by :func:`save_model`. |

@@ -58,6 +58,7 @@ class FingerprintsRequest(BaseModel):
     radius: StrictInt = Field(default=2, ge=0, le=6)
     n_bits: StrictInt = Field(default=2048, gt=32, le=16384)
     as_counts: bool = False
+    include_chirality: bool = False
     mode: Literal["job", "sync"] = "job"
 
     @field_validator("radius", "n_bits")
@@ -131,6 +132,7 @@ def _fingerprints_body(
     radius: int,
     n_bits: int,
     as_counts: bool,
+    include_chirality: bool = False,
     cancel_event=None,
 ) -> dict:
     if cancel_event is not None and cancel_event.is_set():
@@ -143,6 +145,7 @@ def _fingerprints_body(
         radius=radius,
         n_bits=n_bits,
         as_counts=as_counts,
+        include_chirality=include_chirality,
     )
     return _fp_to_payload(arr, invalid)
 
@@ -178,7 +181,7 @@ def fingerprints(req: FingerprintsRequest, request: Request) -> dict:
             "mode": "sync",
             "result": _fingerprints_body(
                 req.smiles, req.kind, req.radius, req.n_bits,
-                req.as_counts,
+                req.as_counts, req.include_chirality,
             ),
         }
     record = manager.submit(
@@ -191,11 +194,13 @@ def fingerprints(req: FingerprintsRequest, request: Request) -> dict:
             "radius": req.radius,
             "n_bits": req.n_bits,
             "as_counts": req.as_counts,
+            "include_chirality": req.include_chirality,
         },
         smiles=req.smiles,
         kind=req.kind,
         radius=req.radius,
         n_bits=req.n_bits,
         as_counts=req.as_counts,
+        include_chirality=req.include_chirality,
     )
     return {"mode": "job", "job": record.public()}

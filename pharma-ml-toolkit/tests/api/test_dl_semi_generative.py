@@ -390,6 +390,46 @@ class TestSemiSupervisedRoutes:
         assert "delta_vs_baseline" in evaluation
         assert evaluation["n_repeats"] == 2
 
+    def test_evaluate_job_mode_completes(self, client):
+        # r303: the job lane was never exercised — the route passed a
+        # spurious manager kwarg into _evaluate_body and every job-mode
+        # submission FAILED with TypeError. This test pins the lane.
+        dataset = _upload(client)
+        r = client.post(
+            "/api/v1/semi-supervised/evaluate",
+            headers=auth_headers(),
+            json={
+                "dataset_id": dataset["dataset_id"],
+                "method": "self_training",
+                "test_size": 0.25,
+                "n_repeats": 3,
+                "mode": "job",
+            },
+        )
+        assert r.status_code == 200, r.text
+        job = r.json()["job"]
+        assert job["operation"] == "semi_supervised.evaluate"
+        assert job["workspace"] == "machine-learning"
+        deadline = time.monotonic() + 120.0
+        final = job
+        while time.monotonic() < deadline:
+            final = client.get(
+                f"/api/v1/jobs/{job['job_id']}", headers=auth_headers()
+            ).json()
+            if final["state"] in ("COMPLETED", "FAILED", "CANCELLED"):
+                break
+            time.sleep(0.05)
+        assert final["state"] == "COMPLETED", final
+        result = client.get(
+            f"/api/v1/jobs/{job['job_id']}/result", headers=auth_headers()
+        )
+        assert result.status_code == 200, result.text
+        evaluation = result.json()["result"]["evaluation"]
+        assert 0.0 <= evaluation["heldout_accuracy"] <= 1.0
+        assert 0.0 <= evaluation["baseline_accuracy"] <= 1.0
+        assert "delta_vs_baseline" in evaluation
+        assert evaluation["n_repeats"] == 3
+
 
 # ------------------------------------------------------------- generative
 

@@ -48,11 +48,19 @@ export const EXCLUDED_DIRS = new Set([
  * client. examples/artifacts/ appears only after example runs.
  * frontend/dist is the Vite build output — regenerated on every build,
  * never source, and (round 302) it leaks into the census/ZIP the moment a
- * local frontend build exists (5.7 MB of bundles). */
+ * local frontend build exists (5.7 MB of bundles).
+ *
+ * (round 303) build/theme-shots: the theme regression suite's offscreen
+ * grabs (tests/ui/test_theme_screenshots.py writes SHOT_DIR there) —
+ * regenerated local state that rode the r303 archive the moment the
+ * ten-chunk gate ran the theme suite before the ship; the same
+ * generated-output class as frontend/dist, anchored so a real source
+ * tree named "build" elsewhere can never hide. */
 const EXCLUDED_REL_DIRS = new Set([
   "artifacts",
   "examples/artifacts",
   "frontend/dist",
+  "build/theme-shots",
 ]);
 
 /** Exclusion arguments shared by the ZIP streamer (/api/toolkit/download)
@@ -83,6 +91,10 @@ export const ZIP_EXCLUDE_ARGS: readonly string[] = [
   // (round 302) the Vite build output — 5.7 MB of regenerated bundles
   // that must never ride the archive just because a local build exists.
   "frontend/dist/*",
+  // (round 303) the theme regression suite's offscreen grabs — the
+  // ten-chunk gate regenerates build/theme-shots/*.png right before the
+  // ship, the same generated-output class as frontend/dist.
+  "build/theme-shots/*",
   // (round 302) npm's dependency tree — ~250 MB of local install state.
   // The tree walk always excluded it; the ZIP list never did because no
   // local build existed when the list was authored (rollbacks always

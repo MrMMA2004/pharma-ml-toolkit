@@ -271,7 +271,11 @@ class TestZipPolicy:
         # execution, the r287 close-out find) -- regenerable output
         # never rides the archive
         assert set(cp.ZIP_EXCLUDE_DIR_PATHS) == set(bz.EXCLUDE_DIR_PATHS)
-        assert cp.ZIP_EXCLUDE_DIR_PATHS == frozenset({"data/artifacts", "examples/artifacts"})
+        # (r303) build/theme-shots joins the anchored set: the theme
+        # regression suite regenerates the PNGs before every ship
+        assert cp.ZIP_EXCLUDE_DIR_PATHS == frozenset(
+            {"data/artifacts", "examples/artifacts", "build/theme-shots"}
+        )
         # the shared component-level dirs (history homes + build output)
         assert {"scratch", "download", "dist-archive", "dist"} <= cp.ZIP_EXCLUDE_DIRS
         assert {"scratch", "download", "dist-archive", "dist"} <= bz.EXCLUDE_DIRS

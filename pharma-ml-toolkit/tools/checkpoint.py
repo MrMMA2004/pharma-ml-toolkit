@@ -107,7 +107,12 @@ ZIP_EXCLUDE_DIR_SUFFIX = ".egg-info"
 #: services lane always ships. (r287 close-out) examples/artifacts
 #: (the notebook-execution output home, regenerable, never in git) is
 #: anchored out alongside data/artifacts.
-ZIP_EXCLUDE_DIR_PATHS = frozenset({"data/artifacts", "examples/artifacts"})
+#: (r303) build/theme-shots rides the anchored set with the same
+#: generated-output rationale as tools/build_zip.py's entry (the theme
+#: regression suite regenerates the PNGs before every ship).
+ZIP_EXCLUDE_DIR_PATHS = frozenset(
+    {"data/artifacts", "examples/artifacts", "build/theme-shots"}
+)
 
 #: (round-184 lesson, 2026-11-03) the SAFE COPY home: inside the toolkit
 #: tree, so the ship commit's ``-- ROOT`` pathspec carries it in the SAME

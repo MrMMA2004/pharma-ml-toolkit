@@ -5,16 +5,19 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.linear_model import LogisticRegression, Ridge
+from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 from pharmaml.exceptions import DataValidationError, ModelError
 from pharmaml.ml.applicability import (
     ApplicabilityDomainResult,
     BootstrapUncertainty,
+    WilliamsResult,
     applicability_domain,
     bootstrap_uncertainty,
     knn_applicability_domain,
+    leverage_williams,
     quantile_prediction_intervals,
 )
 
@@ -551,3 +554,272 @@ class TestQuantilePredictionIntervals:
             x, y, x.iloc[:4], y.iloc[:4], n_estimators=20)
         text = str(res)
         assert "mean_width=" in text and "coverage=" in text
+
+
+class TestLeverageWilliams:
+    """The B-4 method: hat-matrix leverage + standardized residuals
+    (part12 Phase 2 — the regression companion to the kNN half)."""
+
+    def _data(self, n: int = 60) -> tuple[pd.DataFrame, pd.Series, LinearRegression]:
+        rng = np.random.default_rng(0)
+        x = pd.DataFrame({"a": rng.normal(size=n), "b": rng.normal(size=n)})
+        y = pd.Series(2.0 * x["a"] - x["b"] + 0.05 * rng.normal(size=n))
+        model = LinearRegression().fit(x, y)
+        return x, y, model
+
+    def test_hat_diagonal_closed_form(self) -> None:
+        # p=1: h_i = 1/n + (x_i - x̄)² / Σ(x - x̄)² — the textbook
+        # simple-regression leverage, checked exactly
+        x = pd.DataFrame({"a": np.linspace(0.0, 10.0, 40)})
+        y = pd.Series(3.0 * x["a"] + 2.0)
+        model = LinearRegression().fit(x, y)
+        res = leverage_williams(model, x, y)
+        closed = 1.0 / 40 + (x["a"] - x["a"].mean()) ** 2 / float(
+            ((x["a"] - x["a"].mean()) ** 2).sum()
+        )
+        np.testing.assert_allclose(res.train_leverage, closed, rtol=1e-9)
+
+    def test_trace_identity_and_threshold(self) -> None:
+        x, y, model = self._data()
+        res = leverage_williams(model, x, y)
+        # Σh_i = p+1 (the hat-matrix trace identity)
+        assert float(res.train_leverage.sum()) == pytest.approx(3.0, rel=1e-9)
+        # h* = 3(p+1)/n
+        assert res.leverage_threshold == pytest.approx(3.0 * 3 / 60)
+        assert res.n_train == 60 and res.n_features == 2
+        assert res.rmse > 0.0
+
+    def test_extrapolation_outside_interpolation_inside(self) -> None:
+        x, y, model = self._data()
+        far = pd.DataFrame({"a": [50.0], "b": [0.0]})
+        mid = pd.DataFrame({"a": [0.1], "b": [-0.2]})
+        res = leverage_williams(model, x, y, pd.concat([mid, far]))
+        assert bool(res.test_inside[0])
+        assert not bool(res.test_inside[1])
+        assert res.test_leverage is not None
+        assert float(res.test_leverage[1]) > res.leverage_threshold
+        assert res.test_predicted is not None
+        assert res.test_predicted.shape == (2,)
+
+    def test_response_outlier_flagged_by_residual_band(self) -> None:
+        rng = np.random.default_rng(1)
+        x = pd.DataFrame({"a": rng.normal(size=80), "b": rng.normal(size=80)})
+        y = pd.Series(1.5 * x["a"] + 0.05 * rng.normal(size=80))
+        # corrupt ONE training row's response by ~20 sigma of the noise
+        y_corrupt = y.copy()
+        y_corrupt.iloc[7] += 20.0
+        res = leverage_williams(
+            LinearRegression().fit(x, y_corrupt), x, y_corrupt
+        )
+        assert not bool(res.train_inside[7])
+        assert float(np.abs(res.train_std_residuals[7])) > 3.0
+        # definitional identity: inside == (h <= h*) & (|r| <= 3) — the
+        # honest population carries its own high-leverage tail (Gaussian
+        # 3x-mean cutoff flags real points; the corrupted row is the
+        # only response outlier)
+        expected = (res.train_leverage <= res.leverage_threshold) & (
+            np.abs(res.train_std_residuals) <= res.residual_limit
+        )
+        np.testing.assert_array_equal(res.train_inside, expected)
+        assert int((np.abs(res.train_std_residuals) > 3.0).sum()) == 1
+
+    def test_to_frame_columns_and_names(self) -> None:
+        x, y, model = self._data()
+        res = leverage_williams(model, x, y)
+        frame = res.to_frame(names=[f"row{i}" for i in range(60)])
+        assert list(frame.columns) == ["name", "leverage", "std_residual", "inside"]
+        assert frame["name"].iloc[0] == "row0"
+        assert len(frame) == 60
+
+    def test_as_dict_summary_counts(self) -> None:
+        x, y, model = self._data()
+        res = leverage_williams(model, x, y, pd.DataFrame({"a": [0.0], "b": [0.0]}))
+        payload = res.as_dict()
+        assert payload["n_train"] == 60
+        assert payload["n_features"] == 2
+        assert payload["n_test"] == 1
+        assert payload["test_inside"] == 1
+        assert payload["residual_limit"] == 3.0
+        # the summary counts re-derive exactly from the arrays
+        assert payload["train_inside"] == int(np.count_nonzero(res.train_inside))
+        assert payload["n_train_outlier_leverage"] == int(
+            np.count_nonzero(res.train_leverage > res.leverage_threshold)
+        )
+        assert payload["n_train_outlier_residual"] == int(
+            np.count_nonzero(np.abs(res.train_std_residuals) > 3.0)
+        )
+        # the honest population: a Gaussian 3x-mean cutoff flags a real
+        # high-leverage tail — both counters stay inside their bounds
+        assert 50 <= payload["train_inside"] <= 60
+
+    def test_scale_invariance_of_leverage(self) -> None:
+        # leverage is invariant to nonsingular descriptor rescaling:
+        # multiply one column by 7 -> identical hat values
+        x, y, model = self._data()
+        res = leverage_williams(model, x, y)
+        scaled_x = x.copy()
+        scaled_x["b"] = scaled_x["b"] * 7.0
+        scaled_model = LinearRegression().fit(scaled_x, y)
+        res_scaled = leverage_williams(scaled_model, scaled_x, y)
+        np.testing.assert_allclose(
+            res.train_leverage, res_scaled.train_leverage, rtol=1e-9
+        )
+
+    def test_pipeline_model_accepted(self) -> None:
+        # the toolkit's own trained models are pipelines — estimator-agnostic
+        rng = np.random.default_rng(2)
+        x = pd.DataFrame({"a": rng.normal(size=50), "b": rng.normal(size=50)})
+        y = pd.Series(x["a"] * 2.0 + 0.1 * rng.normal(size=50))
+        pipe = Pipeline([("sc", StandardScaler()), ("m", Ridge())]).fit(x, y)
+        res = leverage_williams(pipe, x, y)
+        assert float(res.train_leverage.sum()) == pytest.approx(3.0, rel=1e-9)
+
+    def test_no_test_rows_leaves_test_fields_none(self) -> None:
+        x, y, model = self._data()
+        res = leverage_williams(model, x, y)
+        assert res.test_leverage is None
+        assert res.test_inside is None
+        assert res.test_predicted is None
+        assert res.as_dict()["n_test"] is None
+
+    def test_needs_p_plus_two_rows(self) -> None:
+        x, y, _model = self._data()
+        tiny = x.iloc[:3]  # n=3, p=2 -> p+2=4 > 3
+        with pytest.raises(ModelError, match="p\\+2 = 4"):
+            leverage_williams(LinearRegression().fit(tiny, y.iloc[:3]), tiny, y.iloc[:3])
+
+    def test_rank_deficient_design_rejected(self) -> None:
+        x, y, _model = self._data()
+        collinear = pd.DataFrame({"a": x["a"], "b": x["a"]})
+        with pytest.raises(ModelError, match="rank-deficient"):
+            leverage_williams(LinearRegression(), collinear, y)
+
+    def test_perfect_fit_rejected(self) -> None:
+        x = pd.DataFrame({"a": np.linspace(0.0, 1.0, 60)})
+        zero_y = pd.Series(np.zeros(60))
+        model = LinearRegression().fit(x, zero_y)
+        with pytest.raises(ModelError, match="rmse=0"):
+            leverage_williams(model, x, zero_y)
+
+    def test_bad_residual_limit_rejected(self) -> None:
+        x, y, model = self._data()
+        for bad in (0, -3.0, True):
+            with pytest.raises(ModelError, match="residual_limit"):
+                leverage_williams(model, x, y, residual_limit=bad)
+
+    def test_not_a_model_rejected(self) -> None:
+        x, y, _model = self._data()
+        with pytest.raises(ModelError, match="fitted estimator"):
+            leverage_williams("not a model", x, y)
+
+    def test_non_numeric_y_rejected(self) -> None:
+        x, _y, _model = self._data()
+        with pytest.raises(DataValidationError, match="y_train must be numeric"):
+            leverage_williams(LinearRegression(), x, ["low", "high"] * 30)
+
+    def test_non_numeric_predictions_rejected(self) -> None:
+        rng = np.random.default_rng(3)
+        x = pd.DataFrame({"a": rng.normal(size=50)})
+        y = pd.Series(rng.normal(size=50))
+
+        class StringPredictor:
+            def predict(self, frame):  # a classifier's labels
+                return np.array(["low", "high"] * 25)
+
+        with pytest.raises(DataValidationError, match="regression companion"):
+            leverage_williams(StringPredictor(), x, y)
+
+    def test_y_misaligned_rejected(self) -> None:
+        x, y, model = self._data()
+        with pytest.raises(ModelError, match="must align"):
+            leverage_williams(model, x, y.iloc[:59])
+
+    def test_test_feature_mismatch_rejected(self) -> None:
+        x, y, model = self._data()
+        with pytest.raises(ModelError, match="descriptor spaces must match"):
+            leverage_williams(model, x, y, pd.DataFrame({"a": [0.5]}))
+
+    def test_nan_descriptors_rejected(self) -> None:
+        x, y, model = self._data()
+        bad = x.copy()
+        bad.loc[0, "a"] = np.nan
+        with pytest.raises(DataValidationError, match="X_train contains"):
+            leverage_williams(model, bad, y)
+
+    def test_williams_result_dataclass_fields(self) -> None:
+        x, y, model = self._data()
+        res = leverage_williams(model, x, y)
+        assert isinstance(res, WilliamsResult)
+        assert res.feature_names == ["a", "b"]
+        assert res.residual_limit == 3.0
+        text = str(res)
+        assert "h*=" in text and "train_inside=" in text and "/60" in text
+
+    def test_classifier_labels_have_no_residual_scale(self) -> None:
+        # the honest classifier path: LogisticRegression's class labels
+        # are numeric 0/1 and would silently "work" — the documented
+        # regression-only contract names this squarely; the route layer
+        # refuses classification models with its own 422 before here
+        rng = np.random.default_rng(4)
+        xc = pd.DataFrame({"a": rng.normal(size=40), "b": rng.normal(size=40)})
+        yc = pd.Series((xc["a"] > 0).astype(int))
+        # flip 8 labels so the classifier cannot fit exactly (a perfectly
+        # separating fit hits the rmse=0 guard — the same honest raise)
+        flip = rng.choice(40, size=8, replace=False)
+        yc.iloc[flip] = 1 - yc.iloc[flip]
+        clf = LogisticRegression().fit(xc, yc)
+        res = leverage_williams(clf, xc, yc)
+        # a binary-target "rmse" is honest garbage the caller sees coming
+        # (the route layer refuses classification models with its own
+        # 422 before this library path)
+        assert res.rmse > 0.0
+        assert res.train_std_residuals.shape == (40,)
+
+
+@pytest.mark.skipif(not HAS_MPL, reason="matplotlib not installed")
+class TestWilliamsPlot:
+    def test_two_panels_and_labels(self) -> None:
+        from pharmaml.viz import close_figure
+        from pharmaml.viz.ml_plots import plot_williams
+
+        x, y, model = _ridge_data()
+        res = leverage_williams(
+            model, x, y, pd.DataFrame({"a": [0.5, 100.0]})
+        )
+        fig = plot_williams(res, y_label="predicted pIC50")
+        try:
+            assert len(fig.axes) == 2
+            ax_a, ax_b = fig.axes
+            assert ax_a.get_xlabel() == "leverage h(i)"
+            assert ax_a.get_ylabel() == "standardized residual"
+            assert ax_b.get_ylabel() == "predicted pIC50"
+            assert ax_b.get_xlabel().startswith("leverage h(i)")
+            legend_a = [t.get_text() for t in ax_a.get_legend().get_texts()]
+            assert "inside domain" in legend_a
+            assert any(text.startswith("h*") for text in legend_a)
+            # the 100.0 query row is the extrapolation outlier: panel (b)
+            legend_b = [t.get_text() for t in ax_b.get_legend().get_texts()]
+            assert "outside domain" in legend_b
+            assert any(text.startswith("h*") for text in legend_b)
+        finally:
+            close_figure(fig)
+
+    def test_no_test_rows_fallback_histogram(self) -> None:
+        from pharmaml.viz import close_figure
+        from pharmaml.viz.ml_plots import plot_williams
+
+        x, y, model = _ridge_data()
+        res = leverage_williams(model, x, y)
+        fig = plot_williams(res)
+        try:
+            ax_b = fig.axes[1]
+            assert ax_b.get_ylabel() == "compounds"
+            assert ax_b.get_xlabel().startswith("leverage h(i) (training")
+        finally:
+            close_figure(fig)
+
+    def test_wrong_result_rejected(self) -> None:
+        from pharmaml.viz.ml_plots import plot_williams
+
+        with pytest.raises(DataValidationError, match="WilliamsResult"):
+            plot_williams({"nope": True})

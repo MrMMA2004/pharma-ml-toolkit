@@ -28,9 +28,11 @@ from pharmaml.ml.applicability import (
     ApplicabilityDomainResult,
     BootstrapUncertainty,
     QuantileIntervals,
+    WilliamsResult,
     applicability_domain,
     bootstrap_uncertainty,
     knn_applicability_domain,
+    leverage_williams,
     quantile_prediction_intervals,
 )
 from pharmaml.ml.attention import (
@@ -597,6 +599,7 @@ __all__ = [
     "VisibleForward",
     "VisibleHistory",
     "VisibleNetwork",
+    "WilliamsResult",
     "WindowDataset",
     "adapt",
     "adversarial_audit",
@@ -688,6 +691,7 @@ __all__ = [
     "label_smiles",
     "laplace_mechanism",
     "levenberg_marquardt",
+    "leverage_williams",
     "linear_regression_gd",
     "list_models",
     "load_model",

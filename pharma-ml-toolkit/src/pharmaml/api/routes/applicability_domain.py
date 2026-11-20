@@ -1,7 +1,7 @@
 """``/api/v1/applicability-domain`` — the AD analysis surface over the
 REAL backend (part10's row four).
 
-* ``GET /api/v1/applicability-domain/catalog`` — the two entry
+* ``GET /api/v1/applicability-domain/catalog`` — the four entry
   points + their defaults (one source: the backend signatures).
 * ``POST /api/v1/applicability-domain/knn`` —
   :func:`pharmaml.ml.applicability.knn_applicability_domain` (the
@@ -16,6 +16,14 @@ REAL backend (part10's row four).
   ``figure=true`` renders
   :func:`pharmaml.viz.ml_plots.plot_applicability_domain` and
   registers it as a downloadable artifact.
+* ``POST /api/v1/applicability-domain/leverage-williams`` —
+  :func:`pharmaml.ml.applicability.leverage_williams` (B-4, part12
+  Phase 2: the hat-matrix leverage + standardized-residual band —
+  the regression companion to the kNN-distance half).  Regression
+  models only (the route 422s a classification dataset up front —
+  a classifier's labels have no residual scale); ``figure=true``
+  renders :func:`pharmaml.viz.ml_plots.plot_williams` and registers
+  it as a downloadable artifact.
 * ``POST /api/v1/applicability-domain/domain-box`` —
   :func:`pharmaml.ml.applicability.check_domain_box` (the persisted
   feature-range box checked against new rows).
@@ -36,10 +44,11 @@ from pharmaml.ml.applicability import (
     applicability_domain,
     check_domain_box,
     knn_applicability_domain,
+    leverage_williams,
 )
 from pharmaml.viz._compat import close_figure
 from pharmaml.viz.export import export_figure
-from pharmaml.viz.ml_plots import plot_applicability_domain
+from pharmaml.viz.ml_plots import plot_applicability_domain, plot_williams
 
 from ..events import EventType
 from ..jobs import CancelledJob
@@ -85,6 +94,19 @@ class DomainBoxRequest(BaseModel):
     rows: list[dict[str, Any]] = Field(min_length=1, max_length=2000)
 
 
+class WilliamsRequest(BaseModel):
+    # unique OpenAPI component name (the KnnRequest/ADAnalyzeRequest/
+    # DomainBoxRequest neighbours follow the same anti-collision rule)
+    model_id: str
+    dataset_id: str | None = None
+    x_test: list[list[float]] | None = Field(
+        default=None, min_length=1, max_length=_MAX_TEST_ROWS
+    )
+    residual_limit: float = Field(default=3.0, gt=0.0, le=10.0)
+    figure: bool = False
+    mode: Literal["job", "sync"] = "job"
+
+
 @router.get("/catalog")
 def catalog(request: Request) -> dict:
     return {
@@ -103,6 +125,11 @@ def catalog(request: Request) -> dict:
                 },
             },
             {
+                "route": "/leverage-williams",
+                "backend": "leverage_williams (regression models only)",
+                "defaults": {"residual_limit": 3.0, "figure": False},
+            },
+            {
                 "route": "/domain-box",
                 "backend": "check_domain_box (persisted feature_ranges)",
             },
@@ -111,6 +138,7 @@ def catalog(request: Request) -> dict:
             "name", "predicted", "prediction_sd", "knn_distance",
             "inside_ad", "low_uncertainty", "reliable",
         ],
+        "williams_columns": ["name", "leverage", "std_residual", "inside"],
     }
 
 
@@ -306,6 +334,160 @@ def analyze(req: ADAnalyzeRequest, request: Request) -> dict:
         n_models=req.n_models,
         uncertainty=req.uncertainty,
         random_state=req.random_state,
+        figure=req.figure,
+        artifact_store=request.app.state.artifact_store,
+        manager=manager,
+    )
+    return {"mode": "job", "job": record.public()}
+
+
+def _williams_body(
+    model_record,
+    X_train,
+    y_train,
+    x_test: np.ndarray | None,
+    residual_limit: float,
+    figure: bool,
+    artifact_store=None,
+    manager=None,
+    job_id: str | None = None,
+    cancel_event=None,
+) -> dict:
+    """Job/sync body: the REAL leverage_williams analysis (B-4)."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledJob("Cancelled before the leverage stage.")
+    if manager is not None and job_id is not None:
+        manager.report_progress(
+            job_id, 20, "building the hat matrix",
+            event=EventType.TRAINING_PROGRESS,
+        )
+    try:
+        result = leverage_williams(
+            model_record.model,
+            X_train,
+            y_train,
+            x_test,
+            residual_limit=residual_limit,
+        )
+    except (DataValidationError, ModelError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if manager is not None and job_id is not None:
+        manager.report_progress(
+            job_id, 70, "standardizing the residuals",
+            event=EventType.TRAINING_PROGRESS,
+        )
+    payload = result.as_dict()
+    frame = result.to_frame()
+    test_frame = [
+        {
+            "leverage": float(h),
+            "inside": bool(inside),
+            "predicted": float(pred),
+        }
+        for h, inside, pred in zip(
+            [] if result.test_leverage is None else result.test_leverage,
+            [] if result.test_inside is None else result.test_inside,
+            [] if result.test_predicted is None else result.test_predicted,
+        )
+    ]
+    artifact: dict | None = None
+    if figure:
+        try:
+            fig = plot_williams(result)
+        except (DataValidationError, DependencyError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if artifact_store is not None:
+            with tempfile.TemporaryDirectory(prefix="pharmaml-williams-") as tmp:
+                target = Path(tmp) / "williams-plot.png"
+                export_figure(fig, target)
+                data = target.read_bytes()
+            record = artifact_store.register(
+                kind="figure",
+                filename="williams-plot.png",
+                content_type="image/png",
+                data=data,
+                meta={"model_id": model_record.model_id, "residual_limit": residual_limit},
+            )
+            artifact = record.view()
+        close_figure(fig)
+    return {
+        "analysis": {
+            **json_safe(payload),
+            "frame": json_safe(frame.to_dict(orient="records")),
+            "test_frame": test_frame,
+            "feature_names": [str(n) for n in result.feature_names],
+        },
+        "artifact": artifact,
+    }
+
+
+@router.post("/leverage-williams")
+def leverage_williams_route(req: WilliamsRequest, request: Request) -> dict:
+    model_store = request.app.state.model_store
+    model_record = model_store.get(req.model_id)
+    if model_record is None:
+        raise HTTPException(status_code=404, detail="Unknown model_id.")
+    dataset_store = request.app.state.dataset_store
+    dataset_id = req.dataset_id or model_record.dataset_id
+    dataset = dataset_store.get(dataset_id) if dataset_id else None
+    if dataset is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "the model's training dataset is not registered in this "
+                "session; re-upload it (POST /api/v1/datasets) and pass "
+                "dataset_id"
+            ),
+        )
+    if getattr(dataset, "task", "regression") != "regression":
+        # the honest lane note, stated up front (the backend's own 422):
+        # a classifier's labels have no residual scale to standardize
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "leverage/Williams is a regression companion — this model "
+                f"was trained on a {dataset.task} target; run the kNN / "
+                "bootstrap analyze lane instead"
+            ),
+        )
+    X_train = dataset.X
+    y_train = dataset.y
+    x_test = _matrix(req.x_test, "x_test") if req.x_test is not None else None
+    if x_test is not None and X_train.shape[1] != x_test.shape[1]:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"the model was trained on {X_train.shape[1]} features "
+                f"({list(dataset.X.columns)}); x_test has "
+                f"{x_test.shape[1]}"
+            ),
+        )
+    if req.mode == "sync":
+        return {
+            "mode": "sync",
+            **_williams_body(
+                model_record, X_train, y_train, x_test, req.residual_limit,
+                req.figure,
+                artifact_store=request.app.state.artifact_store,
+            ),
+        }
+    manager = request.app.state.job_manager
+    record = manager.submit(
+        "ad.williams",
+        "machine-learning",
+        _williams_body,
+        configuration={
+            "model_id": req.model_id,
+            "dataset_id": dataset_id,
+            "n_test": len(req.x_test) if req.x_test is not None else 0,
+            "residual_limit": req.residual_limit,
+            "figure": req.figure,
+        },
+        model_record=model_record,
+        X_train=X_train,
+        y_train=y_train,
+        x_test=x_test,
+        residual_limit=req.residual_limit,
         figure=req.figure,
         artifact_store=request.app.state.artifact_store,
         manager=manager,

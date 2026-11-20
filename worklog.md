@@ -16610,3 +16610,63 @@ unchanged: the clean-machine smoke test on a real Windows 10/11 x64
 part12 open items parked with owners: the Williams/leverage AD method,
 the fingerprint chirality toggle, the Tk playground's true retirement
 (30,047 lines retired-but-shipped), SBOM generation, installer signing.
+
+**Round 303 — run 93: the part12 Phase-2 scientific-feature round (the
+rollback-recovery edition: the cut-off session's surviving work
+completed, wired, and shipped).** The sandbox rolled back a FOURTH time
+before this session: the checkout sat at `2eb0ede4` (487 behind
+`origin/main`), the origin remote and the credential file wiped, the
+venv reverted (numpy 2.1.3, rdkit/torch/shap/PySide6/pyqtgraph
+missing) — but the working tree carried a CUT-OFF round-303 session's
+surviving in-progress work: the backend half of the round (the
+`leverage_williams` implementation + `plot_williams` + the chirality
+threading + their unit tests + a drafted CHANGELOG entry) sat untracked
+over the origin tip. The standard drill ran clean (PAT re-recovered
+from the 93-char splice, 600-mode, API-verified 200, never printed;
+origin re-added; fetch + reset to the tip `f58cb9a8` with the ten
+round-303 files byte-audited and restored over it; venv repaired
+foreground), and the round COMPLETED the cut-off work: the
+`/api/v1/applicability-domain/leverage-williams` route (job/sync +
+the real plot_williams artifact + the four-entry catalog), the
+`include_chirality` field through the chemistry fingerprints route,
+the ML workspace's Williams lane (the live two-panel Plotly — the
+Williams scatter with the h* line + ±band, the query extrapolation
+view — over the SAME assembled x_test, per-row tables, the
+digest-verified figure download, the honest classification refusal),
+the Datasets fingerprint-card chirality toggle (morgan-only shown,
+the semantics note), and the semi-supervised /evaluate GUI card whose
+wiring fired a REAL latent bug: the route's job mode passed a
+spurious `manager` kwarg into `_evaluate_body` — every job-mode
+submission FAILED with TypeError while sync mode masked it (the suite
+never exercised the lane); fixed + pinned by a job-mode COMPLETION
+test. 8,643 collected / 0 errors (+53 over the r302 8,590); mypy 0
+across 281 files; ruff clean; the OpenAPI contract re-exported (84
+paths, WilliamsRequest + the chirality field) with the generated
+types + tsc + guards + the offline production build green. The ten-
+chunk gate fired with `failures=2`, both decoded honestly: chunk-2's
+docs-index drift (the regenerated INDEX now carries the
+WilliamsResult/leverage_williams entries — the portability suite
+32/32 after the canonical `tools/build_docs_index.py` re-run) and
+chunk-5's test_nine_card_first Qt OOM envelope (SIGKILLed twice at
+the 4 GB container limit; 23/23 via the six-class split, zero
+assertion failures — the r301 verdict repeated). **The re-ship's own
+find (B-1c, the B-1b class once more): the theme regression suite
+regenerates `build/theme-shots/*.png` right before the ship** — the
+first r303 zip carried them; the anchored `build/theme-shots`
+exclusion now lives in all four canonical surfaces (both Python
+builders + the drift-guard pin + toolkit-fs.ts), and the fresh-build
+guard fixes `zip -r`'s stale-member semantics (the update-without-
+removal lesson). The final re-ship: 1,039 entries / 927 files /
+15,836,081 B, sha-256 `a561bc59…` (the mid-round clean build after
+the ghost sweep: `ce5646b4…` at 15,835,239 B — the CHANGELOG
+documents the mid-round artifact per the r301 convention), +0/−0 file
+delta vs the r302 zip, testzip-None in all five homes, byte-identical
+(the offsite re-seeded with the full 221–231 history, 11 zips). Five
+census-riding ghosts swept (the stale toolkit-dir windows-release.yml
++ the 229/230 zip-recovery residue in three homes). Census re-trued
+1,591 files / 597,662 lines; pins synced (8,643 / 1,591 / 597,662).
+Counter 92 → 93. Still honestly BLOCKED: the clean-machine smoke
+test (C-3/C-5) and the Stage-5 PySide6 retirement behind it — with
+the remaining part12 open items parked with owners: the Tk
+playground's true retirement, SBOM generation, installer signing, the
+doctest-only module + duplicate-symbol hygiene.

@@ -1,3 +1,117 @@
+## [1.2.231] — 2026-11-20 — round 303 (the 93rd recorded run: the part12 Phase-2 scientific-feature round — the same-version re-ship; no version bump, no Windows fire; the v1.2.231 release stays THE release, the source archive re-ships carrying the three evidence-justified increments)
+
+- **B-4 (MEDIUM, scientific): the standalone leverage/Williams AD method
+  lands.** The part12 Phase-1 audit's top open item (FEATURE_GAP #3):
+  the hat-matrix leverage existed only inside Cook's distance
+  diagnostics — now a first-class applicability-domain lane.
+  `ml/applicability.py::leverage_williams` — the intercept-augmented
+  design matrix's hat diagonal `h_i = a_i(AᵀA)⁻¹a_iᵀ`, the warning
+  leverage `h* = 3(p+1)/n` (the trace identity's own centre), the
+  standardized residuals `r_i = (y_i − ŷ_i)/rmse` with the ±3σ band,
+  and the query rows' leverage-only extrapolation verdicts (no ground
+  truth, honestly). Guards: `n ≥ p+2`, rank-deficiency refused (never
+  pseudo-inverted), `rmse=0` perfect-fit refused, regression-only (a
+  classifier's labels have no residual scale — the route 422s first).
+  Scale-invariance pinned (leverage is invariant to nonsingular
+  descriptor rescaling). 23 unit tests + 7 route tests: the closed-form
+  simple-regression hat diagonal, the trace identity `Σh = p+1`,
+  interpolation/extrapolation verdicts, the response-outlier band, and
+  the parity evidence. `viz/ml_plots.py::plot_williams` — the classic
+  two-panel figure (the Williams scatter + the query extrapolation
+  view, the no-query fallback histogram), 3 figure tests.
+  `routes/applicability_domain.py` gains `/leverage-williams`
+  (job/sync + the real `plot_williams` artifact); the catalog now
+  carries the four entry points. The ML workspace's Applicability
+  Domain stage gains the Williams lane over the SAME assembled x_test:
+  the live Plotly scatter (train points, the h* line, the ±band, the
+  query rows on a secondary predicted-value axis), the per-row tables,
+  the digest-verified figure download — classification models get the
+  honest disabled-lane note (the backend's own 422 stated up front).
+- **B-5 (LOW, scientific): the fingerprint chirality toggle.**
+  `includeChirality` was pinned `False` while nBits/radius/counts were
+  configurable — the audit's documented gap. Now exposed, default OFF
+  (byte-identical history preserved; enabling it CHANGES FEATURE
+  SEMANTICS — a data-compat decision the caller owns): through
+  `compute_fingerprints(include_chirality=…)` (the morgan kind only,
+  the `as_counts` refusal convention), through `FeatureConfig.
+  include_chirality` (recorded in `as_dict()` like the other fingerprint
+  parameters, threaded to the morgan-style families), and through the
+  `/api/v1/chemistry/fingerprints` request (+ the morgan-only 422 for
+  the other kinds). The Datasets workspace's fingerprint card gains
+  the toggle (shown for the morgan kind only). Verified: the
+  enantiomer pair `C[C@H](F)Cl` / `C[C@@H](F)Cl` collides OFF,
+  separates ON, byte-parity against the direct RDKit call, the count
+  flavour both ways, achiral molecules unchanged. The honest RDKit
+  limit is documented + pinned: the FCFP feature-invariant generator
+  (Gasteiger feature labels replacing the connectivity invariants)
+  drops the chiral tag — the flag passes but the pair stays identical
+  there, verified against the direct `rdFingerprintGenerator` call.
+  8 descriptor tests + 8 factory tests + 4 route tests.
+- **The semi-supervised `/evaluate` lane gains its GUI consumer.** The
+  Phase-1 matrix documented the route as a tested-but-non-GUI lane
+  (FEATURE_GAP #5); now the ML workspace's Semi-supervised stage carries
+  the held-out evaluation card: one button firing the REAL
+  `evaluate_semi_supervised` engine (3 seeded repeats, test_size 0.25)
+  through the job lane, the held-out accuracy/F1 vs the labelled-only
+  baseline chips, and the honest negative-delta note (a pool that did
+  not help on this split is a result, not a failure). **The wiring
+  fired a real latent bug**: the route's job mode passed a spurious
+  `manager` kwarg into `_evaluate_body` (sync mode masked it — the
+  suite never exercised the lane), so EVERY job-mode submission
+  FAILED with TypeError; the kwarg is removed and the lane is pinned
+  by a new job-mode COMPLETION test.
+- **B-1c (the B-1b class, once more): the theme regression suite's
+  output rides the archive.** The ten-chunk gate regenerates
+  `build/theme-shots/home-{light,dark}.png` (tests/ui/
+  test_theme_screenshots.py's SHOT_DIR) right before the ship — the
+  first r303 zip build carried them (+2 files). The anchored
+  `build/theme-shots` exclusion now lives in ALL FOUR canonical
+  surfaces (tools/build_zip.py + tools/checkpoint.py
+  EXCLUDE_DIR_PATHS with the drift-guard pin in
+  test_checkpoint_tooling.py, and toolkit-fs.ts's EXCLUDED_REL_DIRS +
+  ZIP_EXCLUDE_ARGS) — the same generated-output class as
+  frontend/dist. **The re-ship's own find**: `zip -r` UPDATES an
+  existing archive without dropping stale members — the first rebuild
+  after the sweep still carried the PNGs until the builder learned to
+  delete the target first (the fresh-build guard).
+- **The close-out re-ship.** `build_zip_303.py` (the twelve-file
+  must-carry gate: the Williams route + backend + plot + both frontend
+  consumers + the chirality route + the /evaluate fix + the standing
+  B-1/B-2/audit pins; the version_info quadruple; the composition +
+  leak gates): **1,039 entries / 927 files / 15,835,239 B, sha-256
+  `ce5646b4…`** — the delta vs the r302 zip is exactly +0/−0 files
+  (content-only: this round changed no file's existence), testzip-None
+  in all five homes, byte-identical, the offsite home re-seeded with
+  the full 221–231 history (11 zips; the rollback had wiped it again).
+  The ten-chunk gate fired with `failures=2`, both decoded: chunk-2's
+  docs-index drift (docs/INDEX.md regenerated via the canonical
+  `tools/build_docs_index.py` — 943 symbols; the portability suite
+  re-verified 32/32) and chunk-5's `test_nine_card_first.py` Qt OOM
+  envelope (the single SIGKILLed twice at the 4 GB container limit;
+  23/23 via the six-class split, zero assertion failures — the r301
+  verdict repeated).
+- **Close-out:** the OpenAPI contract re-exported (84 paths, the
+  WilliamsRequest schema + the chirality field;
+  `tests/api/test_contracts.py` green); the frontend tsc + guards
+  green, the offline production build green; mypy 0 errors across all
+  281 source files, ruff clean (the sandbox's 755-mode EXE002 aside);
+  the census re-trued (1,591 files / 597,662 lines — the same tracked
+  set as the r302 pin: the round changed content, not existence; the
+  +1,654 viewable lines ride the Python backend + tests + docs (the +9:
+  the docs/INDEX.md regeneration; the +15: the build/theme-shots
+  anchored exclusion across the canonical builders); five
+  census-riding ghosts swept: the stale toolkit-dir windows-release.yml
+  + the 229/230 zip-recovery residue in three local homes, the offsite
+  home keeps the full history; pins synced in `toolkit-stats.ts`);
+  TEST_COUNT re-verified live at **8,643 collected / 0 errors** (456
+  collected files; +53 over the r302 8,590: 23 Williams unit + 3 figure
+  + 7 route, 8 descriptor + 8 factory + 3 route chirality, 1
+  /evaluate job-mode pin). Still honestly BLOCKED: the clean-machine
+  smoke test (C-3/C-5, all 24 rows) and the Stage-5 PySide6 retirement
+  behind it; still open with owners: Tk playground true retirement
+  (B-6, the Phase-8 rule), SBOM generation, installer signing, the
+  doctest-only module + duplicate-symbol hygiene (B-7).
+
 ## [1.2.231] — 2026-11-20 — round 302 (the 92nd recorded run: the part12 Phase-1 audit campaign — the same-version audit round; no version bump, no Windows fire; the v1.2.231 release stays THE release, the source archive re-ships carrying the audit + fixes)
 
 - **The third rollback recovery (the part12 session open).** The sandbox

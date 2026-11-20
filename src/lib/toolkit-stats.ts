@@ -10,11 +10,13 @@
  */
 
 /** Collected pytest cases at the shipped revision (repo-wide
- *  ``pytest --collect-only -q`` sum, re-verified on the part12 audit
- *  session's repaired venv, 2026-11-20: 8,590 collected / 0 errors.
- *  The tree is engine-identical to the r301 close-out (the part12
- *  round changed docs/frontend/web only), so the count stands. */
-export const SHIPPED_TEST_COUNT = 8590;
+ *  ``pytest --collect-only -q`` sum, re-verified on the part12 Phase-2
+ *  session's repaired venv, 2026-11-20: 8,643 collected / 0 errors
+ *  across 456 collected files — the r303 additions over the r302 pin
+ *  (8,590): the leverage/Williams lane (23 unit + 3 figure + 7 route),
+ *  the chirality toggle (8 descriptor + 8 factory + 3 route), and the
+ *  /evaluate job-mode COMPLETION pin (1). */
+export const SHIPPED_TEST_COUNT = 8643;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
  *  docs, tools — the same census /api/toolkit/tree walks). The round-302
@@ -28,13 +30,13 @@ export const SHIPPED_TEST_COUNT = 8590;
 export const SHIPPED_FILE_COUNT = 1591;
 
 /** Source lines of the shipped tree, formatted with thousands
- *  separators at render time (raw number kept for math). The round-302
- *  re-true: 596,008 — the part12 audit-round close-out tree (the r301
- *  pin's 595,039 minus the removed nested ci.yml's 52 lines, plus the
- *  round-302 CHANGELOG entry, the nine part12_audit deliverables and
- *  the MIGRATION/READINESS addenda). The final re-ship carries exactly
- *  this state. */
-export const SHIPPED_SOURCE_LINES = 596008;
+ *  separators at render time (raw number kept for math). The round-303
+ *  re-true: 597,606 — the part12 Phase-2 tree (the r302 pin's 596,008
+ *  plus the round's +1,654 viewable lines (the +15: the build/theme-shots anchored exclusion across both canonical builders, the drift-guard pin, and the docs/INDEX.md regeneration): the Williams backend +
+ *  plot + route + tests, the chirality threading, the /evaluate
+ *  job-mode fix, the CHANGELOG entry and the FEATURES.md addenda).
+ *  The same-version re-ship carries exactly this state. */
+export const SHIPPED_SOURCE_LINES = 597662;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

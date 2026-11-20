@@ -271,6 +271,7 @@ export function DatasetsPage() {
   const [radius, setRadius] = useState(2);
   const [nBits, setNBits] = useState(2048);
   const [asCounts, setAsCounts] = useState(false);
+  const [includeChirality, setIncludeChirality] = useState(false);
   const [chemJobId, setChemJobId] = useState<string | null>(null);
   const [chemError, setChemError] = useState<string | null>(null);
   const [descriptorFrame, setDescriptorFrame] = useState<DescriptorFrame | null>(null);
@@ -447,6 +448,7 @@ export function DatasetsPage() {
         radius,
         nBits,
         asCounts,
+        includeChirality: fpKind === "morgan" ? includeChirality : false,
         mode: "job",
       });
       if (response.mode === "job") {
@@ -455,7 +457,7 @@ export function DatasetsPage() {
     } catch (error) {
       setChemError(describeError(error));
     }
-  }, [smiles, fpKind, radius, nBits, asCounts]);
+  }, [smiles, fpKind, radius, nBits, asCounts, includeChirality]);
 
   const handleChemResult = useCallback((result: unknown) => {
     const record = result as Record<string, unknown>;
@@ -1013,7 +1015,28 @@ export function DatasetsPage() {
                       />
                       count representation
                     </label>
+                    {fpKind === "morgan" ? (
+                      <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                        <input
+                          type="checkbox"
+                          checked={includeChirality}
+                          onChange={(event) => setIncludeChirality(event.target.checked)}
+                          className="h-4 w-4 rounded border-[var(--color-border)]"
+                        />
+                        include chirality
+                      </label>
+                    ) : null}
                   </div>
+                  {fpKind === "morgan" ? (
+                    <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                      Chirality (morgan only): off keeps the historical
+                      vectors byte-identical; on folds stereochemistry-annotated
+                      environments into distinct bits — an enantiomer pair
+                      becomes distinguishable. Changing it mid-workflow changes
+                      feature semantics, so computed matrices from the other
+                      setting are not comparable.
+                    </p>
+                  ) : null}
                   <Button size="sm" className="mt-3" onClick={() => void handleFingerprints()}>
                     Generate fingerprints
                   </Button>

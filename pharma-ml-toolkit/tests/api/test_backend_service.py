@@ -492,6 +492,59 @@ class TestChemistryRoutes:
         )
         assert r.status_code == 422
 
+    # -- B-5 (part12 Phase 2): the includeChirality toggle, morgan only --
+
+    def test_fingerprint_chirality_separates_enantiomers(self, client):
+        enantiomers = ["C[C@H](F)Cl", "C[C@@H](F)Cl"]
+        off = client.post(
+            "/api/v1/chemistry/fingerprints",
+            headers=auth_headers(),
+            json={"smiles": enantiomers, "kind": "morgan",
+                  "n_bits": 1024, "mode": "sync"},
+        ).json()["result"]
+        on = client.post(
+            "/api/v1/chemistry/fingerprints",
+            headers=auth_headers(),
+            json={"smiles": enantiomers, "kind": "morgan", "n_bits": 1024,
+                  "include_chirality": True, "mode": "sync"},
+        ).json()["result"]
+        # OFF (the default): the historical byte-identical vectors collide
+        assert off["matrix"][0] == off["matrix"][1]
+        # ON: the stereochemistry-annotated environments fold into distinct bits
+        assert on["matrix"][0] != on["matrix"][1]
+
+    def test_fingerprint_chirality_default_is_off(self, client):
+        # the default must stay False: enabling it CHANGES FEATURE
+        # SEMANTICS, so the request surface cannot flip it silently
+        r = client.post(
+            "/api/v1/chemistry/fingerprints",
+            headers=auth_headers(),
+            json={"smiles": ["C[C@H](F)Cl"], "kind": "morgan",
+                  "n_bits": 1024, "mode": "sync"},
+        )
+        assert r.status_code == 200
+        # and the job-mode configuration carries the flag through
+        r = client.post(
+            "/api/v1/chemistry/fingerprints",
+            headers=auth_headers(),
+            json={"smiles": ["C[C@H](F)Cl"], "kind": "morgan",
+                  "include_chirality": True, "mode": "job"},
+        )
+        job = r.json()["job"]
+        assert job["configuration"]["include_chirality"] is True
+        assert job["configuration"]["as_counts"] is False
+
+    def test_fingerprint_chirality_non_morgan_refused(self, client):
+        for kind in ("rdkit", "atom_pair", "avalon"):
+            r = client.post(
+                "/api/v1/chemistry/fingerprints",
+                headers=auth_headers(),
+                json={"smiles": ["CCO"], "kind": kind,
+                      "include_chirality": True, "mode": "sync"},
+            )
+            assert r.status_code == 422, kind
+            assert "morgan" in r.json()["detail"]
+
     def test_empty_smiles_rejected(self, client):
         r = client.post(
             "/api/v1/chemistry/descriptors",

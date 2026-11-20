@@ -66,7 +66,13 @@ EXCLUDE_DIRS = {
 # left it on disk where the rebuild would have shipped 372 KB of
 # runtime products — caught by the file-count delta (891 -> 915) on the
 # rebuilt archive.
-EXCLUDE_DIR_PATHS = {"data/artifacts", "examples/artifacts"}
+# (r303) build/theme-shots (the theme regression suite's offscreen
+# grabs — tests/ui/test_theme_screenshots.py writes SHOT_DIR there) is
+# anchored out too: the ten-chunk gate regenerates the two PNGs right
+# before the ship, and they rode the r303 archive until this anchor —
+# the same generated-output class as frontend/dist.
+EXCLUDE_DIR_PATHS = {"data/artifacts", "examples/artifacts",
+                     "build/theme-shots"}
 EXCLUDE_SUFFIXES = {".log", ".zip"}
 EXCLUDE_DIR_SUFFIX = ".egg-info"
 

@@ -62,8 +62,11 @@ type TrainRequest = components["schemas"]["TrainRequest"];
 type PredictRequest = components["schemas"]["PredictRequest"];
 type ExplainRequest = components["schemas"]["ExplainRequest"];
 type ADAnalyzeRequest = components["schemas"]["ADAnalyzeRequest"];
+type WilliamsRequest = components["schemas"]["WilliamsRequest"];
 type SemiSupervisedTrainRequest =
   components["schemas"]["SemiSupervisedTrainRequest"];
+type SemiSupervisedEvaluateRequest =
+  components["schemas"]["SemiSupervisedEvaluateRequest"];
 
 /**
  * The AD analyze engine's own feature cap (applicability_domain.py's
@@ -204,6 +207,59 @@ export interface ADAnalyzeResult {
   readonly artifact: ArtifactView | null;
 }
 
+/** One row of the Williams training table (`WilliamsResult.to_frame()`). */
+export interface WilliamsFrameRow {
+  readonly name: string;
+  readonly leverage: number;
+  readonly std_residual: number;
+  readonly inside: boolean;
+}
+
+/** One query row: leverage verdict + the model's own prediction. */
+export interface WilliamsTestRow {
+  readonly leverage: number;
+  readonly inside: boolean;
+  readonly predicted: number;
+}
+
+/**
+ * The `analysis` dict — `WilliamsResult.as_dict()` plus the
+ * route-added `frame` / `test_frame` records (B-4, part12 Phase 2).
+ * The count fields are COUNTS over the training rows; `n_test` /
+ * `test_inside` are null when no query rows were passed (the
+ * training-only Williams plot lane).
+ */
+export interface WilliamsAnalysis {
+  readonly n_train: number;
+  readonly n_features: number;
+  readonly leverage_threshold: number;
+  readonly residual_limit: number;
+  readonly rmse: number;
+  readonly train_inside: number;
+  readonly n_train_outlier_leverage: number;
+  readonly n_train_outlier_residual: number;
+  readonly n_test: number | null;
+  readonly test_inside: number | null;
+  readonly frame: readonly WilliamsFrameRow[];
+  readonly test_frame: readonly WilliamsTestRow[];
+  readonly feature_names: readonly string[];
+}
+
+/** The williams result payload (job COMPLETED / the sync result half). */
+export interface WilliamsResultPayload {
+  readonly analysis: WilliamsAnalysis;
+  readonly artifact: ArtifactView | null;
+}
+
+/** The sync-mode williams answer. */
+export interface WilliamsSyncResponse {
+  readonly mode: "sync";
+  readonly analysis: WilliamsAnalysis;
+  readonly artifact: ArtifactView | null;
+}
+
+export type WilliamsResponse = MLJobResponse | WilliamsSyncResponse;
+
 /** The sync-mode analyze answer. */
 export interface ADAnalyzeSyncResponse {
   readonly mode: "sync";
@@ -247,6 +303,34 @@ export interface SemiSupervisedSyncResponse {
 export type SemiSupervisedTrainResponse =
   | MLJobResponse
   | SemiSupervisedSyncResponse;
+
+/**
+ * The `/evaluate` body's `evaluation` view — the REAL held-out
+ * comparison (`evaluate_semi_supervised`, r303's GUI lane over the
+ * tested-but-non-GUI route): held-out accuracy/F1 against the
+ * labelled-only baseline over seeded repeats.
+ */
+export interface SemiSupervisedEvaluation {
+  readonly method: string;
+  readonly dataset_id: string;
+  readonly n_repeats: number;
+  readonly heldout_accuracy: number | null;
+  readonly heldout_f1_macro: number | null;
+  readonly baseline_accuracy: number | null;
+  readonly baseline_f1_macro: number | null;
+  readonly train_accuracy_on_labeled: number | null;
+  readonly delta_vs_baseline: number | null;
+}
+
+/** The sync-mode evaluate answer (`{mode: "sync", evaluation}`). */
+export interface SemiSupervisedEvaluateSyncResponse {
+  readonly mode: "sync";
+  readonly evaluation: SemiSupervisedEvaluation;
+}
+
+export type SemiSupervisedEvaluateResponse =
+  | MLJobResponse
+  | SemiSupervisedEvaluateSyncResponse;
 
 /** One row of the explain ranking (all features, descending). */
 export interface ExplainRankingRow {
@@ -316,6 +400,15 @@ export interface ADAnalyzeOptions {
   readonly mode?: "job" | "sync";
 }
 
+export interface WilliamsOptions {
+  readonly modelId: string;
+  readonly datasetId: string;
+  readonly xTest: readonly (readonly number[])[] | null;
+  readonly residualLimit: number;
+  readonly figure: boolean;
+  readonly mode?: "job" | "sync";
+}
+
 export interface SemiSupervisedOptions {
   readonly datasetId: string;
   readonly method: "self_training" | "label_spreading" | "label_propagation";
@@ -327,6 +420,15 @@ export interface SemiSupervisedOptions {
   readonly kernel: "knn" | "rbf";
   readonly nNeighbors: number;
   readonly gamma: number;
+  readonly randomState: number;
+  readonly mode?: "job" | "sync";
+}
+
+export interface SemiSupervisedEvaluateOptions {
+  readonly datasetId: string;
+  readonly method: "self_training" | "label_spreading" | "label_propagation";
+  readonly testSize: number;
+  readonly nRepeats: number;
   readonly randomState: number;
   readonly mode?: "job" | "sync";
 }
@@ -499,6 +601,37 @@ export const mlApi = {
   },
 
   /**
+   * `POST /api/v1/applicability-domain/leverage-williams` — the REAL
+   * hat-matrix leverage / Williams analysis over a session-trained
+   * REGRESSION model (B-4, part12 Phase 2; the route 422s a
+   * classification target up front). `xTest: null` runs the
+   * training-only lane. Job mode (the default): the COMPLETED result
+   * payload is `{analysis, artifact}` (parse with
+   * parseWilliamsResult).
+   */
+  async williams(options: WilliamsOptions): Promise<WilliamsResponse> {
+    const request: WilliamsRequest = {
+      model_id: options.modelId,
+      dataset_id: options.datasetId,
+      x_test: options.xTest === null ? null : options.xTest.map((row) => [...row]),
+      residual_limit: options.residualLimit,
+      figure: options.figure,
+      mode: options.mode ?? "job",
+    };
+    const raw = (await api.post(
+      "/api/v1/applicability-domain/leverage-williams",
+      request,
+    )) as Record<string, unknown>;
+    if (raw["mode"] === "sync") {
+      return {
+        mode: "sync",
+        ...parseWilliamsResult(raw, "williams(sync)"),
+      };
+    }
+    return { mode: "job", job: parseJobView(raw["job"], "williams(job)") };
+  },
+
+  /**
    * `POST /api/v1/semi-supervised/train` — the REAL
    * train_semi_supervised engine on a registered dataset
    * (classification only; the backend 422s regression datasets).
@@ -539,6 +672,44 @@ export const mlApi = {
     return {
       mode: "job",
       job: parseJobView(raw["job"], "semi_supervised(job)"),
+    };
+  },
+
+  /**
+   * `POST /api/v1/semi-supervised/evaluate` — the REAL held-out
+   * evaluation: the semi-supervised method's accuracy/F1 on a seeded
+   * test split against the labelled-only baseline, over
+   * `n_repeats` repeats (r303's GUI consumer of the tested route).
+   * Job mode (the default): the COMPLETED result payload is
+   * `{evaluation: view}` (parse with parseSemiSupervisedEvaluation).
+   */
+  async semiSupervisedEvaluate(
+    options: SemiSupervisedEvaluateOptions,
+  ): Promise<SemiSupervisedEvaluateResponse> {
+    const request: SemiSupervisedEvaluateRequest = {
+      dataset_id: options.datasetId,
+      method: options.method,
+      test_size: options.testSize,
+      n_repeats: options.nRepeats,
+      random_state: options.randomState,
+      mode: options.mode ?? "job",
+    };
+    const raw = (await api.post(
+      "/api/v1/semi-supervised/evaluate",
+      request,
+    )) as Record<string, unknown>;
+    if (raw["mode"] === "sync") {
+      return {
+        mode: "sync",
+        evaluation: parseSemiSupervisedEvaluation(
+          raw["evaluation"],
+          "semi_supervised evaluate(sync)",
+        ),
+      };
+    }
+    return {
+      mode: "job",
+      job: parseJobView(raw["job"], "semi_supervised evaluate(job)"),
     };
   },
 };
@@ -769,6 +940,96 @@ export function parseTrainResult(raw: unknown, what: string): TrainedModelView {
 }
 
 /**
+ * Narrow the williams result payload (the job COMPLETED result, or the
+ * sync answer's own halves): `{analysis: {…, frame, test_frame}, artifact}`.
+ */
+export function parseWilliamsResult(
+  raw: unknown,
+  what: string,
+): WilliamsResultPayload {
+  const r = expectObject(raw, what);
+  return {
+    analysis: parseWilliamsAnalysis(r["analysis"], `${what} analysis`),
+    artifact:
+      typeof r["artifact"] === "object" && r["artifact"] !== null
+        ? parseArtifactView(r["artifact"], `${what} artifact`)
+        : null,
+  };
+}
+
+/** Narrow the williams analysis dict — every key surfaced as it arrives. */
+function parseWilliamsAnalysis(
+  raw: unknown,
+  what: string,
+): WilliamsAnalysis {
+  const r = expectObject(raw, what);
+  const nTrain = r["n_train"];
+  const threshold = r["leverage_threshold"];
+  if (typeof nTrain !== "number" || typeof threshold !== "number") {
+    throw new Error(
+      `${what}: n_train/leverage_threshold are not numbers`,
+    );
+  }
+  const frameRaw = r["frame"];
+  const frame: WilliamsFrameRow[] = [];
+  if (Array.isArray(frameRaw)) {
+    for (const rowRaw of frameRaw as unknown[]) {
+      const row = expectObject(rowRaw, `${what} frame row`);
+      const leverage = asNumber(row["leverage"]);
+      const stdResidual = asNumber(row["std_residual"]);
+      if (leverage === null || stdResidual === null) {
+        throw new Error(`${what} frame row: leverage/std_residual missing`);
+      }
+      frame.push({
+        name: asString(row["name"]) ?? "",
+        leverage,
+        std_residual: stdResidual,
+        inside: row["inside"] === true,
+      });
+    }
+  }
+  const testFrameRaw = r["test_frame"];
+  const testFrame: WilliamsTestRow[] = [];
+  if (Array.isArray(testFrameRaw)) {
+    for (const rowRaw of testFrameRaw as unknown[]) {
+      const row = expectObject(rowRaw, `${what} test_frame row`);
+      const leverage = asNumber(row["leverage"]);
+      const predicted = asNumber(row["predicted"]);
+      if (leverage === null || predicted === null) {
+        throw new Error(`${what} test_frame row: leverage/predicted missing`);
+      }
+      testFrame.push({
+        leverage,
+        inside: row["inside"] === true,
+        predicted,
+      });
+    }
+  }
+  const featureNamesRaw = r["feature_names"];
+  return {
+    n_train: nTrain,
+    n_features: asNumber(r["n_features"]) ?? 0,
+    leverage_threshold: threshold,
+    residual_limit: asNumber(r["residual_limit"]) ?? 3.0,
+    rmse: asNumber(r["rmse"]) ?? 0,
+    train_inside: asNumber(r["train_inside"]) ?? 0,
+    n_train_outlier_leverage:
+      asNumber(r["n_train_outlier_leverage"]) ?? 0,
+    n_train_outlier_residual:
+      asNumber(r["n_train_outlier_residual"]) ?? 0,
+    n_test: asNumber(r["n_test"]),
+    test_inside: asNumber(r["test_inside"]),
+    frame,
+    test_frame: testFrame,
+    feature_names: Array.isArray(featureNamesRaw)
+      ? (featureNamesRaw as unknown[]).map((f) =>
+          typeof f === "string" ? f : String(f),
+        )
+      : [],
+  };
+}
+
+/**
  * Narrow the semi-supervised train result payload:
  * `{semi_supervised: SemiSupervisedView}`.
  */
@@ -778,6 +1039,34 @@ export function parseSemiSupervisedResult(
 ): SemiSupervisedView {
   const r = expectObject(raw, what);
   return parseSemiSupervisedView(r["semi_supervised"], what);
+}
+
+/**
+ * Narrow the evaluate job's result payload / the sync `evaluation`
+ * view: every key surfaced as it arrives, counts as numbers, nullables
+ * stated honestly.
+ */
+export function parseSemiSupervisedEvaluation(
+  raw: unknown,
+  what: string,
+): SemiSupervisedEvaluation {
+  const r = expectObject(raw, what);
+  const method = r["method"];
+  const datasetId = r["dataset_id"];
+  if (typeof method !== "string" || typeof datasetId !== "string") {
+    throw new Error(`${what}: method/dataset_id are not strings`);
+  }
+  return {
+    method,
+    dataset_id: datasetId,
+    n_repeats: asNumber(r["n_repeats"]) ?? 0,
+    heldout_accuracy: asNumber(r["heldout_accuracy"]),
+    heldout_f1_macro: asNumber(r["heldout_f1_macro"]),
+    baseline_accuracy: asNumber(r["baseline_accuracy"]),
+    baseline_f1_macro: asNumber(r["baseline_f1_macro"]),
+    train_accuracy_on_labeled: asNumber(r["train_accuracy_on_labeled"]),
+    delta_vs_baseline: asNumber(r["delta_vs_baseline"]),
+  };
 }
 
 /** Narrow the explain job result payload: `{explain: ExplainResult}`. */

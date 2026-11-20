@@ -72,6 +72,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/applicability-domain/leverage-williams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Leverage Williams Route */
+        post: operations["leverage_williams_route_api_v1_applicability_domain_leverage_williams_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/artifacts": {
         parameters: {
             query?: never;
@@ -1829,6 +1846,11 @@ export interface components {
              */
             as_counts: boolean;
             /**
+             * Include Chirality
+             * @default false
+             */
+            include_chirality: boolean;
+            /**
              * Kind
              * @default morgan
              * @enum {string}
@@ -2718,6 +2740,31 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** WilliamsRequest */
+        WilliamsRequest: {
+            /** Dataset Id */
+            dataset_id?: string | null;
+            /**
+             * Figure
+             * @default false
+             */
+            figure: boolean;
+            /**
+             * Mode
+             * @default job
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /** Model Id */
+            model_id: string;
+            /**
+             * Residual Limit
+             * @default 3
+             */
+            residual_limit: number;
+            /** X Test */
+            x_test?: number[][] | null;
+        };
         /** XvgRequest */
         XvgRequest: {
             /**
@@ -2839,6 +2886,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["KnnRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    leverage_williams_route_api_v1_applicability_domain_leverage_williams_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WilliamsRequest"];
             };
         };
         responses: {

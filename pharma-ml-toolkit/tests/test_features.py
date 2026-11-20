@@ -67,6 +67,7 @@ from pharmaml.chem.features import (
     MORGAN_RADIUS,
     RDKIT_FP_BITS,
     RISM_DESCRIPTOR_COUNT,
+    FeatureConfig,
     FeatureReport,
     FeatureSelection,
     VarianceFilterResult,
@@ -1394,3 +1395,78 @@ class TestFilterLowVariance:
         frame = pd.DataFrame({"moves": [1.0]})
         with pytest.raises(ValueError, match="at least 2 rows"):
             filter_low_variance(frame)
+
+
+class TestFeatureConfigChirality:
+    """B-5, part12 Phase 2 — the FeatureConfig include_chirality field
+    threads through the morgan-style family factory."""
+
+    ENANTIOMER_A = "C[C@H](F)Cl"
+    ENANTIOMER_B = "C[C@@H](F)Cl"
+    PAIR = (ENANTIOMER_A, ENANTIOMER_B)
+
+    def _rows_identical(self, config: FeatureConfig) -> bool:
+        frame, _report = compute_feature_frame(self.PAIR, config=config)
+        return bool(np.array_equal(
+            frame.iloc[0].to_numpy(), frame.iloc[1].to_numpy()
+        ))
+
+    def test_ecfp_separates_enantiomers_when_enabled(self) -> None:
+        assert self._rows_identical(FeatureConfig(families=("ecfp",)))
+        assert not self._rows_identical(
+            FeatureConfig(families=("ecfp",), include_chirality=True)
+        )
+
+    def test_ecfp3_separates_enantiomers_when_enabled(self) -> None:
+        assert self._rows_identical(FeatureConfig(families=("ecfp3",)))
+        assert not self._rows_identical(
+            FeatureConfig(families=("ecfp3",), include_chirality=True)
+        )
+
+    def test_morgan_full_separates_enantiomers_when_enabled(self) -> None:
+        assert not self._rows_identical(
+            FeatureConfig(families=("morgan_full",), include_chirality=True)
+        )
+
+    def test_fcfp_flag_passes_but_feature_invariants_drop_chirality(self) -> None:
+        # RDKit's own design: the Gasteiger feature labels replace the
+        # connectivity invariants (where the chiral tag rides), so the
+        # flag passes through yet the pair stays identical -- verified
+        # against the direct rdFingerprintGenerator call in
+        # test_descriptors.py's chirality suite (the same generator,
+        # the same result).  The honest expectation is pinned here so a
+        # future RDKit behaviour change surfaces loudly.
+        assert self._rows_identical(
+            FeatureConfig(families=("fcfp",), include_chirality=True)
+        )
+
+    def test_as_dict_records_the_flag(self) -> None:
+        record = FeatureConfig(
+            families=("ecfp",), include_chirality=True
+        ).as_dict()
+        assert record["include_chirality"] is True
+        assert record["as_counts"] is False
+
+    def test_from_dict_roundtrip(self) -> None:
+        config = FeatureConfig(families=("fcfp",), include_chirality=True)
+        rebuilt = FeatureConfig.from_dict(config.as_dict())
+        assert rebuilt.include_chirality is True
+        assert rebuilt.families == ("fcfp",)
+
+    def test_default_off_is_byte_compatible_with_no_config(self) -> None:
+        # config=None keeps the historical path; the default-off config
+        # produces the identical frame (the byte-compat promise)
+        legacy, _ = compute_feature_frame(self.PAIR, families=("ecfp",))
+        default_cfg, _ = compute_feature_frame(
+            self.PAIR, config=FeatureConfig(families=("ecfp",))
+        )
+        np.testing.assert_array_equal(
+            legacy.to_numpy(), default_cfg.to_numpy()
+        )
+
+    def test_chirality_flag_does_not_leak_into_non_morgan_families(self) -> None:
+        # maccs is a fixed 167-bit key set: the flag must be inert there
+        assert self._rows_identical(FeatureConfig(families=("maccs",)))
+        assert self._rows_identical(
+            FeatureConfig(families=("maccs",), include_chirality=True)
+        )

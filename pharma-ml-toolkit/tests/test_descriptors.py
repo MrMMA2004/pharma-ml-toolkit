@@ -655,3 +655,89 @@ class TestCompute3dDescriptors:
     def test_non_positive_or_non_int_conformers_rejected(self, value) -> None:
         with pytest.raises(DataValidationError, match="n_conformers"):
             compute_3d_descriptors([ETHANOL], n_conformers=value, progress=False)
+
+
+class TestFingerprintChirality:
+    """B-5, part12 Phase 2 — the include_chirality toggle (morgan)."""
+
+    ENANTIOMER_A = "C[C@H](F)Cl"
+    ENANTIOMER_B = "C[C@@H](F)Cl"
+
+    def test_default_off_keeps_enantiomers_identical(self) -> None:
+        # the historical semantics: chirality is NOT folded in
+        matrix, _ = compute_fingerprints(
+            [self.ENANTIOMER_A, self.ENANTIOMER_B], kind="morgan", n_bits=2048
+        )
+        assert np.array_equal(matrix[0], matrix[1])
+
+    def test_on_separates_enantiomers(self) -> None:
+        matrix, _ = compute_fingerprints(
+            [self.ENANTIOMER_A, self.ENANTIOMER_B], kind="morgan",
+            n_bits=2048, include_chirality=True,
+        )
+        assert not np.array_equal(matrix[0], matrix[1])
+
+    def test_on_is_rdkit_parity(self) -> None:
+        # the flag passes RDKit's own useChirality through -- byte parity
+        # against the direct GetMorganFingerprintAsBitVect call
+        from rdkit import Chem, DataStructs
+        from rdkit.Chem import rdMolDescriptors
+
+        matrix, _ = compute_fingerprints(
+            [self.ENANTIOMER_A, self.ENANTIOMER_B], kind="morgan",
+            n_bits=512, include_chirality=True,
+        )
+        reference = np.zeros((2, 512), dtype=np.uint8)
+        for row, smiles in enumerate((self.ENANTIOMER_A, self.ENANTIOMER_B)):
+            mol = Chem.MolFromSmiles(smiles)
+            fp = rdMolDescriptors.GetMorganFingerprintAsBitVect(
+                mol, radius=2, nBits=512, useChirality=True
+            )
+            buffer = np.zeros(512, dtype=np.uint8)
+            DataStructs.ConvertToNumpyArray(fp, buffer)
+            reference[row] = buffer
+        assert np.array_equal(matrix, reference)
+
+    def test_count_mode_chirality(self) -> None:
+        off, _ = compute_fingerprints(
+            [self.ENANTIOMER_A, self.ENANTIOMER_B], kind="morgan",
+            n_bits=2048, as_counts=True,
+        )
+        on, _ = compute_fingerprints(
+            [self.ENANTIOMER_A, self.ENANTIOMER_B], kind="morgan",
+            n_bits=2048, as_counts=True, include_chirality=True,
+        )
+        assert np.array_equal(off[0], off[1])
+        assert not np.array_equal(on[0], on[1])
+        assert on.dtype == np.uint32
+
+    def test_off_is_historical_byte_compatibility(self) -> None:
+        # include_chirality=False (explicit) == the default == history:
+        # the three spellings produce identical vectors
+        explicit_off, _ = compute_fingerprints(
+            [ETHANOL, BENZENE], kind="morgan", n_bits=512,
+            include_chirality=False,
+        )
+        default, _ = compute_fingerprints([ETHANOL, BENZENE], kind="morgan", n_bits=512)
+        assert np.array_equal(explicit_off, default)
+
+    def test_non_morgan_kinds_rejected(self) -> None:
+        for kind in ("rdkit", "atom_pair", "avalon"):
+            with pytest.raises(DataValidationError, match="include_chirality=True is only supported for morgan"):
+                compute_fingerprints(
+                    [ETHANOL], kind=kind, n_bits=512, include_chirality=True
+                )
+
+    def test_non_bool_chirality_rejected(self) -> None:
+        with pytest.raises(DataValidationError, match="include_chirality must be a bool"):
+            compute_fingerprints([ETHANOL], kind="morgan", include_chirality=1)
+
+    def test_achiral_molecules_unchanged_by_flag(self) -> None:
+        # no stereo annotations -> the flag changes nothing
+        off, _ = compute_fingerprints(
+            [ETHANOL, BENZENE], kind="morgan", n_bits=512
+        )
+        on, _ = compute_fingerprints(
+            [ETHANOL, BENZENE], kind="morgan", n_bits=512, include_chirality=True
+        )
+        assert np.array_equal(off, on)

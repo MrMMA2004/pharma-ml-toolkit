@@ -571,13 +571,16 @@ def _morgan_computer(
     radius: int = MORGAN_RADIUS,
     bits: int = MORGAN_BITS,
     as_counts: bool = False,
+    include_chirality: bool = False,
 ) -> Callable[[Any], np.ndarray]:
     """Morgan family: configurable radius/bits (part8 Phase D).
 
     Historical defaults reproduce the ``MORGAN_RADIUS``/``MORGAN_BITS``
     bit vector exactly; ``as_counts`` emits unbounded-count semantics
     (``GetMorganCountFingerprint`` folded to ``bits``) for the families
-    with a count flavour.
+    with a count flavour.  (B-5, part12 Phase 2) ``include_chirality``
+    passes ``includeChirality`` through to the RDKit generator — the
+    default ``False`` keeps the historical vectors byte-identical.
     """
     from rdkit.Chem import rdMolDescriptors
 
@@ -590,7 +593,10 @@ def _morgan_computer(
         )
 
         def morgan_count_vector(mol: Any) -> np.ndarray:
-            fingerprint = count_fn(mol, radius=radius, nBits=bits)
+            fingerprint = count_fn(
+                mol, radius=radius, nBits=bits,
+                useChirality=include_chirality,
+            )
             return _countfold_vector(fingerprint, bits)
 
         return morgan_count_vector
@@ -599,9 +605,12 @@ def _morgan_computer(
         # The legacy GetMorganFingerprintAsBitVect call is deliberate: it
         # matches pharmaml.chem.descriptors.compute_fingerprints.  Spelled
         # through rdMolDescriptors (the defining module) instead of AllChem's
-        # re-export so mypy resolves the attribute the same way.
+        # re-export so mypy resolves the attribute the same way.  The
+        # binding's own spelling is useChirality (the generator API's is
+        # includeChirality -- both mean the same RDKit flag).
         fingerprint = rdMolDescriptors.GetMorganFingerprintAsBitVect(
-            mol, radius=radius, nBits=bits
+            mol, radius=radius, nBits=bits,
+            useChirality=include_chirality,
         )
         return _onbits_vector(fingerprint, bits)
 
@@ -612,6 +621,7 @@ def _ecfp3_computer(
     radius: int = ECFP3_RADIUS,
     bits: int = ECFP3_BITS,
     as_counts: bool = False,
+    include_chirality: bool = False,
 ) -> Callable[[Any], np.ndarray]:
     """ECFP3 family: configurable radius/bits (part8 Phase D override).
 
@@ -632,14 +642,18 @@ def _ecfp3_computer(
         )
 
         def ecfp3_count_vector(mol: Any) -> np.ndarray:
-            fingerprint = count_fn(mol, radius=radius, nBits=bits)
+            fingerprint = count_fn(
+                mol, radius=radius, nBits=bits,
+                useChirality=include_chirality,
+            )
             return _countfold_vector(fingerprint, bits)
 
         return ecfp3_count_vector
 
     def ecfp3_vector(mol: Any) -> np.ndarray:
         fingerprint = rdMolDescriptors.GetMorganFingerprintAsBitVect(
-            mol, radius=radius, nBits=bits
+            mol, radius=radius, nBits=bits,
+            useChirality=include_chirality,
         )
         return _onbits_vector(fingerprint, bits)
 
@@ -667,19 +681,25 @@ def _maccs_computer() -> Callable[[Any], np.ndarray]:
     return maccs_vector
 
 
-def _fcfp_generator(radius: int = MORGAN_RADIUS, bits: int = FCFP_BITS) -> Any:
+def _fcfp_generator(
+    radius: int = MORGAN_RADIUS,
+    bits: int = FCFP_BITS,
+    include_chirality: bool = False,
+) -> Any:
     """The feature-invariant Morgan generator (configurable, part8 Phase D).
 
     ``GetMorganFeatureAtomInvGen`` swaps the connectivity invariants
     for Gasteiger-Marsili feature labels (donor/acceptor/aromatic/...)
     -- the FCFP/ECFC distinction in the fak_ml notebook's own spelling.
+    (B-5, part12 Phase 2) ``include_chirality`` passes through to the
+    generator's own parameter (the historical default stays ``False``).
     """
     from rdkit.Chem import rdFingerprintGenerator
 
     return rdFingerprintGenerator.GetMorganGenerator(
         radius=radius,
         fpSize=bits,
-        includeChirality=False,
+        includeChirality=include_chirality,
         useBondTypes=True,
         atomInvariantsGenerator=rdFingerprintGenerator.GetMorganFeatureAtomInvGen(),
     )
@@ -984,6 +1004,22 @@ class FeatureConfig:
         ``*_bit_`` prefix -- the family vocabulary is fixed, only the
         values change semantics; this mirrors
         :func:`pharmaml.chem.descriptors.compute_fingerprints`).
+    include_chirality:
+        (B-5, part12 Phase 2) When ``True`` the Morgan-style families
+        that own the parameter (``ecfp``, ``ecfp3``, ``morgan_full``,
+        ``morgan_scaffold``, ``fcfp``, ``fcfp_count``) pass
+        ``includeChirality`` to the RDKit generator so
+        stereochemistry-annotated environments fold into distinct
+        bits/columns.  Default ``False`` -- the historical vectors stay
+        byte-identical; enabling it CHANGES FEATURE SEMANTICS (a
+        data-compat decision the caller owns, recorded in
+        ``as_dict()`` like the other fingerprint parameters).  The
+        ``fcfp`` pair carries the flag but the feature-invariant
+        generator (Gasteiger feature labels replacing the connectivity
+        invariants) drops the chiral tag by RDKit's own design -- a
+        chirality-sensitive pair stays identical there (verified
+        against the direct RDKit call); ``ecfp``/``ecfp3``/
+        ``morgan_full`` separate it.
     n_conformers, n_jobs:
         The historical knobs, carried so ONE object describes the whole
         generation run.
@@ -991,7 +1027,9 @@ class FeatureConfig:
     Examples
     --------
     >>> FeatureConfig(families=("ecfp",), morgan_radius=3, morgan_bits=1024)
-    FeatureConfig(families=('ecfp',), descriptors=None, morgan_radius=3, morgan_bits=1024, as_counts=False, n_conformers=3, n_jobs=1)
+    FeatureConfig(families=('ecfp',), descriptors=None, morgan_radius=3, morgan_bits=1024, as_counts=False, include_chirality=False, n_conformers=3, n_jobs=1)
+    >>> FeatureConfig(families=("fcfp",), include_chirality=True)
+    FeatureConfig(families=('fcfp',), descriptors=None, morgan_radius=2, morgan_bits=2048, as_counts=False, include_chirality=True, n_conformers=3, n_jobs=1)
     >>> FeatureConfig(families=("ecfp",), morgan_bits=0)
     Traceback (most recent call last):
         ...
@@ -1003,6 +1041,7 @@ class FeatureConfig:
     morgan_radius: int = MORGAN_RADIUS
     morgan_bits: int = MORGAN_BITS
     as_counts: bool = False
+    include_chirality: bool = False
     n_conformers: int = 3
     n_jobs: int = 1
 
@@ -1053,6 +1092,7 @@ class FeatureConfig:
             "morgan_radius": int(self.morgan_radius),
             "morgan_bits": int(self.morgan_bits),
             "as_counts": bool(self.as_counts),
+            "include_chirality": bool(self.include_chirality),
             "n_conformers": int(self.n_conformers),
             "n_jobs": int(self.n_jobs),
         }
@@ -1062,7 +1102,7 @@ class FeatureConfig:
         """Rebuild from :meth:`as_dict` output (unknown keys ignored)."""
         known = {f: record.get(f) for f in (
             "families", "descriptors", "morgan_radius", "morgan_bits",
-            "as_counts", "n_conformers", "n_jobs",
+            "as_counts", "include_chirality", "n_conformers", "n_jobs",
         ) if f in record}
         if "families" in known and known["families"] is not None:
             known["families"] = tuple(known["families"])
@@ -1664,6 +1704,7 @@ def _family_plan(
             morgan_vector = _morgan_computer(
                 radius=int(config.morgan_radius), bits=int(config.morgan_bits),
                 as_counts=bool(config.as_counts) and "ecfp" in requested,
+                include_chirality=bool(config.include_chirality),
             )
         else:
             morgan_vector = _morgan_computer()
@@ -1678,6 +1719,7 @@ def _family_plan(
             computers["ecfp3"] = _ecfp3_computer(
                 radius=int(config.morgan_radius), bits=int(config.morgan_bits),
                 as_counts=bool(config.as_counts),
+                include_chirality=bool(config.include_chirality),
             )
         else:
             computers["ecfp3"] = _ecfp3_computer()
@@ -1686,7 +1728,8 @@ def _family_plan(
     if "fcfp" in requested or "fcfp_count" in requested:
         if config is not None:
             fcfp_generator = _fcfp_generator(
-                radius=int(config.morgan_radius), bits=int(config.morgan_bits)
+                radius=int(config.morgan_radius), bits=int(config.morgan_bits),
+                include_chirality=bool(config.include_chirality),
             )
         else:
             fcfp_generator = _fcfp_generator()

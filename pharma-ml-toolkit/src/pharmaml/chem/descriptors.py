@@ -367,6 +367,7 @@ def compute_fingerprints(
     radius: int = 2,
     n_bits: int = 2048,
     as_counts: bool = False,
+    include_chirality: bool = False,
 ) -> tuple[np.ndarray, list[int]]:
     """Compute fingerprints for a list of SMILES.
 
@@ -390,6 +391,16 @@ def compute_fingerprints(
         Return count fingerprints instead of binary bits (Morgan and
         Avalon -- the only two kinds with a count flavour; the rar's
         Avalon block used counts).
+    include_chirality:
+        (B-5, part12 Phase 2) Morgan only: pass
+        ``includeChirality`` through to the RDKit generator so
+        stereochemistry-annotated environments fold into distinct
+        bits.  Default ``False`` keeps the historical vectors
+        byte-identical — enabling it CHANGES FEATURE SEMANTICS (a
+        chirality-sensitive pair becomes distinguishable; a
+        data-compat decision the caller owns).  The other kinds have
+        no such native parameter here and are refused, mirroring the
+        ``as_counts`` rule.
 
     Returns
     -------
@@ -406,10 +417,11 @@ def compute_fingerprints(
         If RDKit is not installed.
     DataValidationError
         If ``smiles`` is a bare string, ``radius`` / ``n_bits`` are not
-        integers or are out of range, or ``as_counts=True`` is combined
+        integers or are out of range, ``as_counts=True`` is combined
         with a ``kind`` that has no count flavour (only ``'morgan'`` and
         ``'avalon'`` do -- other kinds would silently return binary
-        bits instead).  bools count as non-integers here by
+        bits instead), or ``include_chirality=True`` is combined with a
+        kind other than ``'morgan'``.  bools count as non-integers here by
         decision: ``True``/``False`` are nonsense as a radius or bit
         count, so they are rejected instead of being silently read as
         ``1``/``0``.
@@ -438,6 +450,16 @@ def compute_fingerprints(
             f"('morgan', 'avalon'); got kind={kind!r} -- pass "
             "as_counts=False or switch to morgan/avalon"
         )
+    if include_chirality and kind != "morgan":
+        raise DataValidationError(
+            "include_chirality=True is only supported for morgan "
+            f"fingerprints (the RDKit includeChirality parameter); got "
+            f"kind={kind!r}"
+        )
+    if not isinstance(include_chirality, bool):
+        raise DataValidationError(
+            f"include_chirality must be a bool, got {include_chirality!r}"
+        )
 
     smiles_list = _as_smiles_list(smiles, "smiles")
     require_rdkit()
@@ -451,7 +473,10 @@ def compute_fingerprints(
     if kind == "morgan":
         if as_counts:
             fps = [
-                rdMolDescriptors.GetHashedMorganFingerprint(m, radius=radius, nBits=n_bits)
+                rdMolDescriptors.GetHashedMorganFingerprint(
+                    m, radius=radius, nBits=n_bits,
+                    useChirality=include_chirality,
+                )
                 for m in molecules
             ]
             matrix = np.zeros((len(fps), n_bits), dtype=np.uint32)
@@ -460,7 +485,10 @@ def compute_fingerprints(
                     matrix[row, idx] = value
             return matrix, valid_idx
         fps = [
-            rdMolDescriptors.GetMorganFingerprintAsBitVect(m, radius=radius, nBits=n_bits)
+            rdMolDescriptors.GetMorganFingerprintAsBitVect(
+                m, radius=radius, nBits=n_bits,
+                useChirality=include_chirality,
+            )
             for m in molecules
         ]
     elif kind == "rdkit":

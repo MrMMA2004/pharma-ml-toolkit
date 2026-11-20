@@ -40,15 +40,20 @@ import {
   mlApi,
   parseADAnalyzeResult,
   parseSemiSupervisedResult,
+  parseSemiSupervisedEvaluation,
   parseTrainResult,
+  parseWilliamsResult,
   type ADAnalyzeResult,
   type ADFrameRow,
   type ExplainResult,
   type EvaluationRow,
   type ModelCatalogEntry,
   type PredictResponse,
+  type SemiSupervisedEvaluation,
   type SemiSupervisedView,
   type TrainedModelView,
+  type WilliamsFrameRow,
+  type WilliamsResultPayload,
 } from "@/services/ml/client";
 import type { components } from "@/types/api.d";
 import {
@@ -308,6 +313,15 @@ export function MLPage() {
   const [adResult, setAdResult] = useState<ADAnalyzeResult | null>(null);
   const [adArtifactStatus, setAdArtifactStatus] = useState<string | null>(null);
 
+  // stage 10b: the leverage/Williams regression lane (B-4, part12 Phase 2)
+  const [williamsResidualLimit, setWilliamsResidualLimit] = useState(3);
+  const [williamsFigure, setWilliamsFigure] = useState(true);
+  const [williamsBusy, setWilliamsBusy] = useState(false);
+  const [williamsJobId, setWilliamsJobId] = useState<string | null>(null);
+  const [williamsError, setWilliamsError] = useState<string | null>(null);
+  const [williamsResult, setWilliamsResult] = useState<WilliamsResultPayload | null>(null);
+  const [williamsArtifactStatus, setWilliamsArtifactStatus] = useState<string | null>(null);
+
   // stage 11: semi-supervised learning (classification-only)
   const [ssMethod, setSsMethod] = useState<
     "self_training" | "label_spreading" | "label_propagation"
@@ -324,6 +338,13 @@ export function MLPage() {
   const [ssJobId, setSsJobId] = useState<string | null>(null);
   const [ssError, setSsError] = useState<string | null>(null);
   const [ssResult, setSsResult] = useState<SemiSupervisedView | null>(null);
+
+  // stage 11b: the held-out evaluation lane (r303 — the /evaluate GUI
+  // consumer over the REAL evaluate_semi_supervised engine)
+  const [ssEvalBusy, setSsEvalBusy] = useState(false);
+  const [ssEvalJobId, setSsEvalJobId] = useState<string | null>(null);
+  const [ssEvalError, setSsEvalError] = useState<string | null>(null);
+  const [ssEvalResult, setSsEvalResult] = useState<SemiSupervisedEvaluation | null>(null);
 
   // stage 12: explainability (the real SHAP lane)
   const [exMaxRows, setExMaxRows] = useState(200);
@@ -661,6 +682,47 @@ export function MLPage() {
     }
   }, []);
 
+  // stage 10b: the leverage/Williams lane — the regression companion,
+  // over the SAME assembled x_test (training-only when not assembled)
+  const isRegressionModel =
+    selectedTrained !== null && selectedTrained.task === "regression";
+
+  const handleWilliams = useCallback(async () => {
+    if (selectedTrained === null) {
+      return;
+    }
+    setWilliamsBusy(true);
+    setWilliamsError(null);
+    setWilliamsResult(null);
+    setWilliamsJobId(null);
+    setWilliamsArtifactStatus(null);
+    try {
+      const response = await mlApi.williams({
+        modelId: selectedTrained.model_id,
+        datasetId: selectedTrained.dataset_id,
+        xTest: adXTest,
+        residualLimit: williamsResidualLimit,
+        figure: williamsFigure,
+        mode: "job",
+      });
+      if (response.mode === "job") {
+        setWilliamsJobId(response.job.job_id);
+      }
+    } catch (error) {
+      setWilliamsError(describeError(error));
+    } finally {
+      setWilliamsBusy(false);
+    }
+  }, [selectedTrained, adXTest, williamsResidualLimit, williamsFigure]);
+
+  const handleWilliamsResult = useCallback((result: unknown) => {
+    try {
+      setWilliamsResult(parseWilliamsResult(result, "williams result"));
+    } catch (error) {
+      setWilliamsError(describeError(error));
+    }
+  }, []);
+
   // stage 11: the semi-supervised train (classification-only gate)
   const isClassification = selected?.task === "classification";
 
@@ -734,6 +796,52 @@ export function MLPage() {
     [refreshTrained],
   );
 
+  // stage 11b: the held-out evaluation (3 seeded repeats, test_size
+  // 0.25 — the route's own defaults surfaced, one button, job lane)
+  const handleSemiEvaluate = useCallback(async () => {
+    if (selectedId === null || !isClassification) {
+      return;
+    }
+    setSsEvalBusy(true);
+    setSsEvalError(null);
+    setSsEvalResult(null);
+    setSsEvalJobId(null);
+    try {
+      const response = await mlApi.semiSupervisedEvaluate({
+        datasetId: selectedId,
+        method: ssMethod,
+        testSize: 0.25,
+        nRepeats: 3,
+        randomState: 42,
+        mode: "job",
+      });
+      if (response.mode === "job") {
+        setSsEvalJobId(response.job.job_id);
+      }
+    } catch (error) {
+      setSsEvalError(describeError(error));
+    } finally {
+      setSsEvalBusy(false);
+    }
+  }, [selectedId, isClassification, ssMethod]);
+
+  const handleSemiEvaluateResult = useCallback(
+    (result: unknown) => {
+      try {
+        const record = result as Record<string, unknown>;
+        setSsEvalResult(
+          parseSemiSupervisedEvaluation(
+            record["evaluation"] ?? record,
+            "semi evaluate result",
+          ),
+        );
+      } catch (error) {
+        setSsEvalError(describeError(error));
+      }
+    },
+    [],
+  );
+
   // stage 12: the SHAP explainability lane (sync by default; job mode
   // relays the same payload through the JobRunCard)
   const handleExplain = useCallback(async () => {
@@ -805,10 +913,23 @@ export function MLPage() {
     setAdArtifactStatus(null);
     try {
       setAdArtifactStatus(await verifiedDownload(adResult.artifact));
+
     } catch (error) {
       setAdArtifactStatus(describeError(error));
     }
   }, [adResult, verifiedDownload]);
+
+  const handleWilliamsArtifactDownload = useCallback(async () => {
+    if (williamsResult === null || williamsResult.artifact === null) {
+      return;
+    }
+    setWilliamsArtifactStatus(null);
+    try {
+      setWilliamsArtifactStatus(await verifiedDownload(williamsResult.artifact));
+    } catch (error) {
+      setWilliamsArtifactStatus(describeError(error));
+    }
+  }, [williamsResult, verifiedDownload]);
 
   const handleExplainArtifactDownload = useCallback(
     async (artifactId: string) => {
@@ -1674,6 +1795,84 @@ export function MLPage() {
                     onDownload={() => void handleAdArtifactDownload()}
                   />
                 ) : null}
+
+                {/* B-4 (part12 Phase 2): the leverage/Williams regression lane */}
+                <div className="mt-4 rounded-lg border border-[var(--color-border)] p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-[var(--color-foreground)]">
+                      Leverage / Williams lane
+                    </span>
+                    <span className="rounded-md bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+                      regression models only
+                    </span>
+                  </div>
+                  {!isRegressionModel ? (
+                    <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                      The backend refuses this lane honestly for a
+                      classification model — a classifier&apos;s labels have
+                      no residual scale to standardize (the route 422s).
+                      Train or select a regression model to arm it.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="mt-3 flex flex-wrap items-end gap-3">
+                        <label className="text-xs text-[var(--color-muted-foreground)]">
+                          residual_limit (± band)
+                          <input
+                            type="number"
+                            min={0.5}
+                            max={10}
+                            step={0.5}
+                            value={williamsResidualLimit}
+                            onChange={(event) => setWilliamsResidualLimit(Number(event.target.value))}
+                            className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                          />
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                          <input
+                            type="checkbox"
+                            checked={williamsFigure}
+                            onChange={(event) => setWilliamsFigure(event.target.checked)}
+                            className="h-4 w-4"
+                          />
+                          figure artifact
+                        </label>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={williamsBusy}
+                          onClick={() => void handleWilliams()}
+                        >
+                          {williamsBusy ? "Submitting…" : "Run the Williams analysis"}
+                        </Button>
+                      </div>
+                      <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                        The hat-matrix leverage of every training row
+                        against the warning cut-off h* = 3(p+1)/n, with the
+                        standardized-residual ±{williamsResidualLimit} band —
+                        over{" "}
+                        {adXTest !== null
+                          ? "the SAME assembled x_test (the query rows' leverage-only extrapolation verdicts)"
+                          : "the training set only (assemble x_test above to add the query extrapolation view)"}
+                        . The figure toggle registers the real plot_williams
+                        artifact.
+                      </p>
+                      {williamsError !== null ? <div className="mt-3"><ErrorBanner message={williamsError} /></div> : null}
+                      {williamsJobId !== null ? (
+                        <div className="mt-3">
+                          <JobRunCard jobId={williamsJobId} resultLabel="the leverage/Williams analysis" onResult={handleWilliamsResult} />
+                        </div>
+                      ) : null}
+                      {williamsResult !== null ? (
+                        <WilliamsResultCard
+                          result={williamsResult}
+                          artifactStatus={williamsArtifactStatus}
+                          onDownload={() => void handleWilliamsArtifactDownload()}
+                        />
+                      ) : null}
+                    </>
+                  )}
+                </div>
               </>
             )}
           </CardContent>
@@ -1899,6 +2098,85 @@ export function MLPage() {
                     </p>
                   </div>
                 ) : null}
+
+                {/* stage 11b (r303): the held-out evaluation card — the
+                    tested-but-non-GUI /evaluate route's first product
+                    consumer */}
+                <div className="mt-4 rounded-lg border border-[var(--color-border)] p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-[var(--color-foreground)]">
+                      Held-out evaluation
+                    </span>
+                    <span className="rounded-md bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+                      the real evaluate_semi_supervised engine
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <span className="text-xs text-[var(--color-muted-foreground)]">
+                      method {ssMethod} · 3 seeded repeats · test_size 0.25
+                      · random_state 42
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={ssEvalBusy}
+                      onClick={() => void handleSemiEvaluate()}
+                    >
+                      {ssEvalBusy ? "Submitting…" : "Evaluate vs the labelled-only baseline"}
+                    </Button>
+                  </div>
+                  <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                    The semi-supervised method&apos;s held-out accuracy/F1
+                    against the labelled-only baseline over seeded
+                    repeats of a test split — the honest evidence the
+                    unlabeled pool helped or did not.
+                  </p>
+                  {ssEvalError !== null ? <div className="mt-3"><ErrorBanner message={ssEvalError} /></div> : null}
+                  {ssEvalJobId !== null ? (
+                    <div className="mt-3">
+                      <JobRunCard jobId={ssEvalJobId} resultLabel="the held-out semi-supervised evaluation" onResult={handleSemiEvaluateResult} />
+                    </div>
+                  ) : null}
+                  {ssEvalResult !== null ? (
+                    <div className="mt-3">
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+                          held-out accuracy:{" "}
+                          {ssEvalResult.heldout_accuracy === null ? "—" : ssEvalResult.heldout_accuracy.toFixed(4)}
+                        </span>
+                        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+                          held-out F1 (macro):{" "}
+                          {ssEvalResult.heldout_f1_macro === null ? "—" : ssEvalResult.heldout_f1_macro.toFixed(4)}
+                        </span>
+                        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+                          baseline accuracy:{" "}
+                          {ssEvalResult.baseline_accuracy === null ? "—" : ssEvalResult.baseline_accuracy.toFixed(4)}
+                        </span>
+                        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+                          baseline F1 (macro):{" "}
+                          {ssEvalResult.baseline_f1_macro === null ? "—" : ssEvalResult.baseline_f1_macro.toFixed(4)}
+                        </span>
+                        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+                          delta vs baseline:{" "}
+                          {ssEvalResult.delta_vs_baseline === null
+                            ? "—"
+                            : `${ssEvalResult.delta_vs_baseline >= 0 ? "+" : ""}${ssEvalResult.delta_vs_baseline.toFixed(4)}`}
+                        </span>
+                        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+                          repeats: {ssEvalResult.n_repeats}
+                        </span>
+                      </div>
+                      {ssEvalResult.delta_vs_baseline !== null && ssEvalResult.delta_vs_baseline < 0 ? (
+                        <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                          A negative delta is a result, not a failure — the
+                          unlabeled pool did not help this method on this
+                          split; the seeded repeats make the number
+                          reproducible, not a promise.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
               </>
             )}
           </CardContent>
@@ -2769,6 +3047,337 @@ function ADResultCard({
       {artifactStatus !== null ? (
         <p className="mt-2 text-xs font-medium text-[var(--color-foreground)]">{artifactStatus}</p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The Williams result card (B-4, part12 Phase 2): the analysis chips
+ * (h*, residual band, rmse, the outlier counts), the live Plotly
+ * Williams scatter + query extrapolation view, the per-row training
+ * table and the query verdict table, and the digest-verified
+ * plot_williams figure download.
+ */
+function WilliamsResultCard({
+  result,
+  artifactStatus,
+  onDownload,
+}: {
+  result: WilliamsResultPayload;
+  artifactStatus: string | null;
+  onDownload: () => void;
+}) {
+  const analysis = result.analysis;
+  return (
+    <div className="mt-4 rounded-lg border border-[var(--color-border)] p-4">
+      <div className="flex flex-wrap gap-2">
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          h* = {analysis.leverage_threshold.toFixed(4)}
+        </span>
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          residual band ±{analysis.residual_limit}
+        </span>
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          rmse: {analysis.rmse.toFixed(4)}
+        </span>
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          n_train: {analysis.n_train} · p: {analysis.n_features}
+        </span>
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          inside: {analysis.train_inside}/{analysis.n_train}
+        </span>
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          leverage outliers: {analysis.n_train_outlier_leverage}
+        </span>
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          residual outliers: {analysis.n_train_outlier_residual}
+        </span>
+        <span className="rounded-md bg-[var(--color-muted)] px-2 py-1 text-[11px] text-[var(--color-muted-foreground)]">
+          queries:{" "}
+          {analysis.n_test === null
+            ? "none (training-only)"
+            : `${analysis.test_inside ?? 0}/${analysis.n_test} inside`}
+        </span>
+      </div>
+      <WilliamsScatter analysis={analysis} />
+      {analysis.frame.length > 0 ? (
+        <div className="mt-3 overflow-hidden rounded-lg border border-[var(--color-border)]">
+          <div className="max-h-64 overflow-auto">
+            <table className="w-full border-collapse text-[11px]">
+              <thead className="sticky top-0 bg-[var(--color-muted)]">
+                <tr>
+                  {["name", "leverage", "std_residual", "inside"].map((header) => (
+                    <th key={header} scope="col" className="whitespace-nowrap px-2 py-1 text-left font-semibold text-[var(--color-foreground)]">
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {analysis.frame.slice(0, 20).map((row) => (
+                  <tr key={row.name} className="border-t border-[var(--color-border)] bg-[var(--color-card)]">
+                    <td className="whitespace-nowrap px-2 py-1 font-medium text-[var(--color-foreground)]">{row.name}</td>
+                    <td className="whitespace-nowrap px-2 py-1 text-[var(--color-muted-foreground)]">{row.leverage.toFixed(4)}</td>
+                    <td className="whitespace-nowrap px-2 py-1 text-[var(--color-muted-foreground)]">{row.std_residual.toFixed(4)}</td>
+                    <td className="whitespace-nowrap px-2 py-1 text-[var(--color-muted-foreground)]">{formatValue(row.inside)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="border-t border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-[11px] text-[var(--color-muted-foreground)]">
+            20 of {analysis.n_train} training rows shown — the table
+            scrolls; the trace identity Σh = p+1 underlies the threshold.
+          </p>
+        </div>
+      ) : null}
+      {analysis.test_frame.length > 0 ? (
+        <div className="mt-3 overflow-hidden rounded-lg border border-[var(--color-border)]">
+          <div className="max-h-64 overflow-auto">
+            <table className="w-full border-collapse text-[11px]">
+              <thead className="sticky top-0 bg-[var(--color-muted)]">
+                <tr>
+                  {["query row", "leverage", "inside (leverage-only)", "predicted"].map((header) => (
+                    <th key={header} scope="col" className="whitespace-nowrap px-2 py-1 text-left font-semibold text-[var(--color-foreground)]">
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {analysis.test_frame.slice(0, 20).map((row, i) => (
+                  <tr key={`query-${i}`} className="border-t border-[var(--color-border)] bg-[var(--color-card)]">
+                    <td className="whitespace-nowrap px-2 py-1 font-medium text-[var(--color-foreground)]">x_test[{i}]</td>
+                    <td className="whitespace-nowrap px-2 py-1 text-[var(--color-muted-foreground)]">{row.leverage.toFixed(4)}</td>
+                    <td className="whitespace-nowrap px-2 py-1 text-[var(--color-muted-foreground)]">{formatValue(row.inside)}</td>
+                    <td className="whitespace-nowrap px-2 py-1 text-[var(--color-muted-foreground)]">{row.predicted.toFixed(4)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="border-t border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-[11px] text-[var(--color-muted-foreground)]">
+            The query rows carry no ground truth — the verdict is
+            leverage-only (no residual axis); the predicted column is the
+            model&apos;s own extrapolation-axis value.
+          </p>
+        </div>
+      ) : null}
+      {result.artifact !== null ? (
+        <div className="mt-3">
+          <p className="text-xs text-[var(--color-muted-foreground)]">
+            figure artifact registered: {result.artifact.filename} (
+            {result.artifact.size_bytes} bytes · sha256{" "}
+            {result.artifact.sha256.slice(0, 16)}…) — the real
+            plot_williams rendering.
+          </p>
+          <Button size="sm" variant="outline" className="mt-2" onClick={onDownload}>
+            <ArrowDownToLine aria-hidden className="h-4 w-4" />
+            Download the figure
+          </Button>
+        </div>
+      ) : null}
+      {artifactStatus !== null ? (
+        <p className="mt-2 text-xs font-medium text-[var(--color-foreground)]">{artifactStatus}</p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The Williams result's two live Plotly lanes: (a) the Williams
+ * scatter — training leverage h(i) against standardized residual r(i),
+ * the h* vertical line and the ±band; (b) the query extrapolation —
+ * the query rows' leverage against the model's own predictions
+ * (omitted honestly when no query rows were passed).
+ */
+function WilliamsScatter({
+  analysis,
+}: {
+  analysis: WilliamsResultPayload["analysis"];
+}) {
+  const frame = analysis.frame;
+  const band = analysis.residual_limit;
+  const hStar = analysis.leverage_threshold;
+  const scatterTraces = useMemo<readonly PlotTrace[]>(() => {
+    const inside = frame.filter((row) => row.inside === true);
+    const outside = frame.filter((row) => row.inside !== true);
+    const point = (row: WilliamsFrameRow): readonly unknown[] => [
+      row.name,
+      row.inside === true ? "inside domain" : "outside domain",
+    ];
+    return [
+      {
+        type: "scatter",
+        mode: "markers",
+        name: "inside domain",
+        x: inside.map((row) => row.leverage),
+        y: inside.map((row) => row.std_residual),
+        customdata: inside.map(point),
+        hovertemplate:
+          "%{customdata[0]}<br>leverage h(i) %{x:.4g}" +
+          "<br>std residual %{y:.4g}<br>%{customdata[1]}<extra></extra>",
+        marker: { color: "var(--chart-1)", size: 7, opacity: 0.85 },
+      },
+      {
+        type: "scatter",
+        mode: "markers",
+        name: "outside domain",
+        x: outside.map((row) => row.leverage),
+        y: outside.map((row) => row.std_residual),
+        customdata: outside.map(point),
+        hovertemplate:
+          "%{customdata[0]}<br>leverage h(i) %{x:.4g}" +
+          "<br>std residual %{y:.4g}<br>%{customdata[1]}<extra></extra>",
+        marker: { color: "var(--chart-3)", size: 8, opacity: 0.9, symbol: "diamond" },
+      },
+    ];
+  }, [frame]);
+  const scatterLayout = useMemo(
+    () => ({
+      xaxis: { title: { text: "leverage h(i)" } },
+      yaxis: { title: { text: "standardized residual" } },
+      shapes: [
+        {
+          type: "line",
+          x0: hStar,
+          x1: hStar,
+          y0: 0,
+          y1: 1,
+          yref: "paper",
+          line: { color: "var(--chart-3)", width: 1, dash: "dash" },
+        },
+        {
+          type: "line",
+          x0: 0,
+          x1: 1,
+          xref: "paper",
+          y0: band,
+          y1: band,
+          line: { color: "var(--chart-4)", width: 1, dash: "dot" },
+        },
+        {
+          type: "line",
+          x0: 0,
+          x1: 1,
+          xref: "paper",
+          y0: -band,
+          y1: -band,
+          line: { color: "var(--chart-4)", width: 1, dash: "dot" },
+        },
+      ],
+      annotations: [
+        {
+          x: hStar,
+          y: 1,
+          yref: "paper",
+          text: `h* = ${hStar.toFixed(3)}`,
+          showarrow: false,
+          yanchor: "bottom",
+          font: { size: 10 },
+        },
+      ],
+      margin: { l: 56, r: 12, t: 8, b: 40 },
+    }),
+    [hStar, band],
+  );
+  const queryTraces = useMemo<readonly PlotTrace[]>(() => {
+    const rows = analysis.test_frame;
+    if (rows.length === 0) {
+      return [];
+    }
+    const inside = rows.filter((row) => row.inside === true);
+    const outside = rows.filter((row) => row.inside !== true);
+    return [
+      {
+        type: "scatter",
+        mode: "markers",
+        name: "inside domain",
+        x: inside.map((row) => row.leverage),
+        y: inside.map((row) => row.predicted),
+        hovertemplate:
+          "query row<br>leverage h(i) %{x:.4g}" +
+          "<br>predicted %{y:.4g}<extra></extra>",
+        marker: { color: "var(--chart-1)", size: 8, opacity: 0.85 },
+      },
+      {
+        type: "scatter",
+        mode: "markers",
+        name: "outside domain",
+        x: outside.map((row) => row.leverage),
+        y: outside.map((row) => row.predicted),
+        hovertemplate:
+          "query row<br>leverage h(i) %{x:.4g}" +
+          "<br>predicted %{y:.4g}<extra></extra>",
+        marker: { color: "var(--chart-3)", size: 10, opacity: 0.9, symbol: "diamond" },
+      },
+    ];
+  }, [analysis.test_frame]);
+  const queryLayout = useMemo(
+    () => ({
+      xaxis: { title: { text: "leverage h(i) — query compounds" } },
+      yaxis: { title: { text: "predicted value" } },
+      shapes: [
+        {
+          type: "line",
+          x0: hStar,
+          x1: hStar,
+          y0: 0,
+          y1: 1,
+          yref: "paper",
+          line: { color: "var(--chart-3)", width: 1, dash: "dash" },
+        },
+      ],
+      annotations: [
+        {
+          x: hStar,
+          y: 1,
+          yref: "paper",
+          text: `h* = ${hStar.toFixed(3)}`,
+          showarrow: false,
+          yanchor: "bottom",
+          font: { size: 10 },
+        },
+      ],
+      margin: { l: 56, r: 12, t: 8, b: 40 },
+    }),
+    [hStar],
+  );
+  return (
+    <div className="mt-3 grid gap-3 lg:grid-cols-2">
+      <div>
+        <p className="mb-1 text-xs font-medium text-[var(--color-foreground)]">
+          (a) Williams plot — h(i) vs standardized residual
+        </p>
+        <PlotlyFigure
+          data={scatterTraces}
+          layout={scatterLayout}
+          height={300}
+          ariaLabel="the Williams plot: training leverage against standardized residual with the warning-leverage line and residual band"
+          emptyHint="No training rows to chart."
+        />
+      </div>
+      <div>
+        <p className="mb-1 text-xs font-medium text-[var(--color-foreground)]">
+          {queryTraces.length > 0
+            ? "(b) query extrapolation — leverage vs predicted"
+            : "(b) no query rows — the training-only lane"}
+        </p>
+        {queryTraces.length > 0 ? (
+          <PlotlyFigure
+            data={queryTraces}
+            layout={queryLayout}
+            height={300}
+            ariaLabel="the query extrapolation view: query compounds' leverage against the model's own predictions"
+            emptyHint="No query rows to chart."
+          />
+        ) : (
+          <p className="rounded-md border border-dashed border-[var(--color-border)] p-3 text-xs text-[var(--color-muted-foreground)]">
+            Assemble x_test in the kNN/bootstrap lane above and re-run —
+            the query rows&apos; leverage-only verdicts land here.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

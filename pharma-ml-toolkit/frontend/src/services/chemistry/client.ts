@@ -11,8 +11,10 @@
  *   mode}` → `{mode: "job", job: JobView}` or `{mode: "sync",
  *   result: DescriptorFrame}`.
  * * `POST /api/v1/chemistry/fingerprints` — `{smiles, kind, radius,
- *   n_bits, as_counts, mode}` → job/sync answers; the sync result is
- *   the `FingerprintMatrix` payload.
+ *   n_bits, as_counts, include_chirality, mode}` → job/sync answers;
+ *   the sync result is the `FingerprintMatrix` payload
+ *   (`include_chirality` is morgan-only — B-5, part12 Phase 2: the
+ *   other kinds carry no such native parameter and 422).
  *
  * The smiles source for a registered dataset is the datasets
  * client's bounded `column()` bridge (`CHEMISTRY_MAX_SMILES` = the
@@ -72,6 +74,14 @@ export interface FingerprintOptions {
   readonly radius: number;
   readonly nBits: number;
   readonly asCounts: boolean;
+  /**
+   * Morgan only (B-5, part12 Phase 2): pass `includeChirality` through
+   * so stereochemistry-annotated environments fold into distinct bits.
+   * Default OFF keeps the historical vectors byte-identical — enabling
+   * it CHANGES FEATURE SEMANTICS (a chirality-sensitive pair becomes
+   * distinguishable); a data-compat decision the caller owns.
+   */
+  readonly includeChirality: boolean;
   readonly mode?: "job" | "sync";
 }
 
@@ -110,6 +120,7 @@ export const chemistryApi = {
       radius: options.radius,
       n_bits: options.nBits,
       as_counts: options.asCounts,
+      include_chirality: options.includeChirality,
       mode: options.mode ?? "job",
     };
     const raw = (await api.post(

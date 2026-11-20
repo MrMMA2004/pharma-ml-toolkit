@@ -45,6 +45,18 @@ def _csv_bytes(rows: int = 24) -> bytes:
     return buf.getvalue().encode()
 
 
+def _regression_csv_bytes(rows: int = 40) -> bytes:
+    """A continuous-target CSV for the regression-only lanes (B-4)."""
+    rng = np.random.default_rng(0)
+    buf = io.StringIO()
+    buf.write("x1,x2,y\n")
+    for _ in range(rows):
+        a = round(float(rng.normal()), 4)
+        b = round(float(rng.normal()), 4)
+        buf.write(f"{a},{b},{round(2.0 * a - b + 0.05 * float(rng.normal()), 4)}\n")
+    return buf.getvalue().encode()
+
+
 def _upload(client, data: bytes | None = None, name: str = "toy.csv",
             target: str = "y", mode: str = "sync") -> dict:
     r = client.post(
@@ -1020,7 +1032,15 @@ class TestApplicabilityDomain:
         )
         assert r.status_code == 200
         payload = r.json()
-        assert len(payload["entry_points"]) == 3
+        assert [e["route"] for e in payload["entry_points"]] == [
+            "/knn", "/analyze", "/leverage-williams", "/domain-box",
+        ]
+        williams = payload["entry_points"][2]
+        assert williams["backend"].startswith("leverage_williams")
+        assert williams["defaults"] == {"residual_limit": 3.0, "figure": False}
+        assert payload["williams_columns"] == [
+            "name", "leverage", "std_residual", "inside",
+        ]
         assert payload["result_columns"] == [
             "name", "predicted", "prediction_sd", "knn_distance",
             "inside_ad", "low_uncertainty", "reliable",
@@ -1191,3 +1211,140 @@ class TestApplicabilityDomain:
         payload = r.json()
         assert payload["checked"] is False
         assert "feature_ranges" in payload["reason"]
+
+    # -- B-4 (part12 Phase 2): the leverage/Williams regression lane ---
+
+    def _prepare_regression_model(self, client):
+        ds = _upload(client, data=_regression_csv_bytes())
+        model = _train(client, ds["dataset_id"], task="regression")
+        return ds, model
+
+    def test_williams_sync_interpolation_vs_extrapolation(self, client):
+        _ds, model = self._prepare_regression_model(client)
+        r = client.post(
+            "/api/v1/applicability-domain/leverage-williams",
+            headers=auth_headers(),
+            json={
+                "model_id": model["model_id"],
+                "x_test": [[0.1, -0.2], [50.0, -40.0]],
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        analysis = r.json()["analysis"]
+        # h* = 3(p+1)/n = 3(2+1)/40
+        assert analysis["n_train"] == 40
+        assert analysis["n_features"] == 2
+        assert analysis["leverage_threshold"] == pytest.approx(0.225)
+        assert analysis["n_test"] == 2
+        assert analysis["test_inside"] == 1
+        assert len(analysis["frame"]) == 40
+        assert {row["name"] for row in analysis["frame"]} <= {
+            f"compound_{i}" for i in range(40)
+        }
+        # the query verdicts: interpolation inside, wild point outside
+        test_frame = analysis["test_frame"]
+        assert [row["inside"] for row in test_frame] == [True, False]
+        assert test_frame[0]["leverage"] < 0.225
+        assert test_frame[1]["leverage"] > 0.225
+        # the model's own query predictions ride the extrapolation axis
+        assert all(row["predicted"] is not None for row in test_frame)
+        # the descriptor columns the leverages were measured in
+        assert analysis["feature_names"] == ["x1", "x2"]
+        assert r.json()["artifact"] is None  # figure off by default
+
+    def test_williams_job_mode_completes_with_figure(self, client):
+        _ds, model = self._prepare_regression_model(client)
+        r = client.post(
+            "/api/v1/applicability-domain/leverage-williams",
+            headers=auth_headers(),
+            json={
+                "model_id": model["model_id"],
+                "x_test": [[0.0, 0.0]],
+                "figure": True,
+            },
+        )
+        assert r.status_code == 200, r.text
+        job = r.json()["job"]
+        assert job["operation"] == "ad.williams"
+        assert job["workspace"] == "machine-learning"
+        final = _wait_job(client, job["job_id"])
+        assert final["state"] == "COMPLETED", final
+        result = _job_result(client, job["job_id"])
+        analysis = result["analysis"]
+        assert analysis["leverage_threshold"] == pytest.approx(0.225)
+        artifact = result["artifact"]
+        assert artifact["kind"] == "figure"
+        assert artifact["filename"] == "williams-plot.png"
+        dl = client.get(
+            f"/api/v1/artifacts/{artifact['artifact_id']}/download",
+            headers=auth_headers(),
+        )
+        assert dl.status_code == 200
+        assert dl.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_williams_no_x_test_training_only(self, client):
+        _ds, model = self._prepare_regression_model(client)
+        r = client.post(
+            "/api/v1/applicability-domain/leverage-williams",
+            headers=auth_headers(),
+            json={"model_id": model["model_id"], "mode": "sync"},
+        )
+        assert r.status_code == 200, r.text
+        analysis = r.json()["analysis"]
+        assert analysis["n_test"] is None
+        assert analysis["test_inside"] is None
+        assert analysis["test_frame"] == []
+        assert len(analysis["frame"]) == 40  # the training Williams table
+
+    def test_williams_classification_refused_up_front(self, client):
+        ds = _upload(client)  # the binary-target fixture
+        model = _train(client, ds["dataset_id"])
+        r = client.post(
+            "/api/v1/applicability-domain/leverage-williams",
+            headers=auth_headers(),
+            json={
+                "model_id": model["model_id"],
+                "x_test": [[0.5, 0.5]],
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 422
+        assert "regression companion" in r.json()["detail"]
+        assert "classification" in r.json()["detail"]
+
+    def test_williams_unknown_model_404(self, client):
+        r = client.post(
+            "/api/v1/applicability-domain/leverage-williams",
+            headers=auth_headers(),
+            json={"model_id": "mdl-bogus", "x_test": [[0.5, 0.5]]},
+        )
+        assert r.status_code == 404
+
+    def test_williams_feature_mismatch_422(self, client):
+        _ds, model = self._prepare_regression_model(client)
+        r = client.post(
+            "/api/v1/applicability-domain/leverage-williams",
+            headers=auth_headers(),
+            json={
+                "model_id": model["model_id"],
+                "x_test": [[0.5, 0.5, 0.5]],
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 422
+
+    def test_williams_bad_residual_limit_422(self, client):
+        _ds, model = self._prepare_regression_model(client)
+        r = client.post(
+            "/api/v1/applicability-domain/leverage-williams",
+            headers=auth_headers(),
+            json={
+                "model_id": model["model_id"],
+                "x_test": [[0.5, 0.5]],
+                "residual_limit": 0.0,
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 422  # pydantic gt=0 gates the route first
+

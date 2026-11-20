@@ -3235,6 +3235,157 @@ def plot_applicability_domain(
     return fig
 
 
+def plot_williams(
+    result: Any,
+    y_label: str = "predicted value",
+    title: str = "Williams plot",
+    bins: int = 40,
+) -> Any:
+    """The leverage/Williams applicability-domain figure (B-4, part12
+    Phase 2) — the regression companion to the distance figure above.
+
+    Two panels:
+
+    * **(a) the Williams scatter** — every TRAINING compound at its
+      hat leverage ``h_i`` against its standardized residual ``r_i``,
+      green inside (``h <= h*`` and ``|r| <= 3``), red outside, the
+      warning-leverage vertical line ``h* = 3(p+1)/n`` and the
+      ``±residual_limit`` horizontal band;
+    * **(b) the query extrapolation view** — the query compounds'
+      leverage against the model's own predictions, colour-coded by
+      the leverage verdict.  Without query rows the panel falls back
+      to the training-leverage histogram + the ``h*`` line — honestly
+      the same information the scatter encodes on its x axis.
+
+    Parameters
+    ----------
+    result:
+        A :class:`~pharmaml.ml.applicability.WilliamsResult` (from
+        ``leverage_williams``).
+    y_label:
+        Axis label for the prediction axis of panel (b).
+    title:
+        Figure title.
+    bins:
+        Histogram bin count for the fallback panel (b).
+
+    Raises
+    ------
+    DataValidationError
+        When ``result`` is not a WilliamsResult.
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd
+    >>> from sklearn.linear_model import LinearRegression
+    >>> from pharmaml.ml import leverage_williams
+    >>> from pharmaml.viz import close_figure
+    >>> rng = np.random.default_rng(0)
+    >>> x = pd.DataFrame({"a": rng.normal(size=60), "b": rng.normal(size=60)})
+    >>> y = pd.Series(2.0 * x["a"] - x["b"] + 0.05 * rng.normal(size=60))
+    >>> model = LinearRegression().fit(x, y)
+    >>> res = leverage_williams(model, x, y,
+    ...                          pd.DataFrame({"a": [0.1, 50.0], "b": [0.0, 0.0]}))
+    >>> fig = plot_williams(res, y_label="predicted pIC50")
+    >>> len(fig.axes)
+    2
+    >>> ax_a, ax_b = fig.axes
+    >>> ax_a.get_xlabel()
+    'leverage h(i)'
+    >>> ax_b.get_ylabel()
+    'predicted pIC50'
+    >>> [text.get_text() for text in ax_a.get_legend().get_texts()]
+    ['inside domain', 'outside domain', 'h* = 0.15']
+    >>> plot_williams({"not": "a result"})
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.DataValidationError: result must be a WilliamsResult, got dict
+    >>> close_figure(fig)
+    """
+    needed = (
+        "train_leverage", "train_std_residuals", "train_inside",
+        "leverage_threshold", "residual_limit",
+    )
+    if any(not hasattr(result, name) for name in needed):
+        raise DataValidationError(
+            "result must be a WilliamsResult, got "
+            f"{type(result).__name__}"
+        )
+    train_h = np.asarray(result.train_leverage, dtype=float).reshape(-1)
+    train_r = np.asarray(result.train_std_residuals, dtype=float).reshape(-1)
+    inside = np.asarray(result.train_inside, dtype=bool).reshape(-1)
+    if train_h.size != train_r.size or train_h.size != inside.size:
+        raise DataValidationError(
+            "train_leverage, train_std_residuals and train_inside must "
+            "carry the same row count"
+        )
+    h_star = float(result.leverage_threshold)
+    band = float(result.residual_limit)
+    p = int(getattr(result, "n_features", 0))
+    n = int(getattr(result, "n_train", train_h.size))
+
+    fig, (ax_a, ax_b) = new_figure(1, 2, figsize=(12.4, 5.2))
+    fig.subplots_adjust(wspace=0.28)
+
+    # panel (a): the Williams scatter — h vs standardized residual
+    ax_a.scatter(train_h[inside], train_r[inside], s=30, alpha=0.85,
+                 color=PALETTE[4], edgecolor="white", linewidth=0.4,
+                 label="inside domain")
+    if (~inside).any():
+        ax_a.scatter(train_h[~inside], train_r[~inside], s=44, alpha=0.9,
+                      color=PALETTE[3], edgecolor="white", linewidth=0.5,
+                      marker="D", label="outside domain")
+    ax_a.axvline(h_star, color=PALETTE[1], linestyle="--", lw=1.8,
+                 label=f"h* = {h_star:.3g}")
+    ax_a.axhline(band, color=PALETTE[2], linestyle=":", lw=1.2)
+    ax_a.axhline(-band, color=PALETTE[2], linestyle=":", lw=1.2)
+    ax_a.set_xlabel("leverage h(i)")
+    ax_a.set_ylabel("standardized residual")
+    ax_a.set_title(f"(a) Williams plot — p={p}, n={n} "
+                   f"({int(inside.sum())}/{train_h.size} inside)")
+    ax_a.legend(fontsize=9, loc="best")
+
+    # panel (b): the query extrapolation view (or the fallback histogram)
+    test_h = getattr(result, "test_leverage", None)
+    test_inside = getattr(result, "test_inside", None)
+    test_pred = getattr(result, "test_predicted", None)
+    if (
+        test_h is not None
+        and test_inside is not None
+        and test_pred is not None
+        and np.asarray(test_h).size == np.asarray(test_pred).size
+    ):
+        test_h = np.asarray(test_h, dtype=float).reshape(-1)
+        test_pred = np.asarray(test_pred, dtype=float).reshape(-1)
+        t_in = np.asarray(test_inside, dtype=bool).reshape(-1)
+        ax_b.scatter(test_h[t_in], test_pred[t_in], s=30, alpha=0.85,
+                     color=PALETTE[4], edgecolor="white", linewidth=0.4,
+                     label="inside domain")
+        if (~t_in).any():
+            ax_b.scatter(test_h[~t_in], test_pred[~t_in], s=44, alpha=0.9,
+                         color=PALETTE[3], edgecolor="white", linewidth=0.5,
+                         marker="D", label="outside domain")
+        ax_b.axvline(h_star, color=PALETTE[1], linestyle="--", lw=1.8,
+                     label=f"h* = {h_star:.3g}")
+        ax_b.set_xlabel("leverage h(i) (query compounds)")
+        ax_b.set_ylabel(y_label)
+        ax_b.set_title(f"(b) query extrapolation — "
+                       f"{int(t_in.sum())}/{test_h.size} inside")
+        ax_b.legend(fontsize=9, loc="best")
+    else:
+        ax_b.hist(train_h, bins=bins, color=PALETTE[0], alpha=0.85,
+                  edgecolor="white", linewidth=0.4)
+        ax_b.axvline(h_star, color=PALETTE[3], linestyle="--", lw=1.8,
+                     label=f"h* = {h_star:.3g}")
+        ax_b.set_xlabel("leverage h(i) (training set)")
+        ax_b.set_ylabel("compounds")
+        ax_b.set_title(f"(b) training leverage density — "
+                       f"{int((train_h > h_star).sum())} beyond h*")
+        ax_b.legend(fontsize=9)
+    fig.suptitle(title, fontsize=12)
+    return fig
+
+
 # -- unsupervised twins (PDSH 05.09-05.13, 100x-157) ------------------ #
 def plot_pca_variance(
     result: Any,

@@ -941,6 +941,11 @@
             "title": "As Counts",
             "type": "boolean"
           },
+          "include_chirality": {
+            "default": false,
+            "title": "Include Chirality",
+            "type": "boolean"
+          },
           "kind": {
             "default": "morgan",
             "enum": [
@@ -2935,6 +2940,70 @@
         "title": "VisualizationTableRequest",
         "type": "object"
       },
+      "WilliamsRequest": {
+        "properties": {
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          },
+          "figure": {
+            "default": false,
+            "title": "Figure",
+            "type": "boolean"
+          },
+          "mode": {
+            "default": "job",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "residual_limit": {
+            "default": 3.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 10.0,
+            "title": "Residual Limit",
+            "type": "number"
+          },
+          "x_test": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "maxItems": 1000,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Test"
+          }
+        },
+        "required": [
+          "model_id"
+        ],
+        "title": "WilliamsRequest",
+        "type": "object"
+      },
       "XvgRequest": {
         "properties": {
           "moving_average_window": {
@@ -3112,6 +3181,49 @@
           }
         },
         "summary": "Knn",
+        "tags": [
+          "applicability-domain"
+        ]
+      }
+    },
+    "/api/v1/applicability-domain/leverage-williams": {
+      "post": {
+        "operationId": "leverage_williams_route_api_v1_applicability_domain_leverage_williams_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WilliamsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Leverage Williams Route Api V1 Applicability Domain Leverage Williams Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Leverage Williams Route",
         "tags": [
           "applicability-domain"
         ]

@@ -343,6 +343,5 @@ def evaluate(req: SemiSupervisedEvaluateRequest, request: Request) -> dict:
         method=req.method,
         eval_kwargs=eval_kwargs,
         n_repeats_requested=req.n_repeats,
-        manager=manager,
     )
     return {"mode": "job", "job": record.public()}

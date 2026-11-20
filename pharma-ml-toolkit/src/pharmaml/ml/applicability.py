@@ -163,9 +163,11 @@ __all__ = [
     "ApplicabilityDomainResult",
     "BootstrapUncertainty",
     "QuantileIntervals",
+    "WilliamsResult",
     "applicability_domain",
     "bootstrap_uncertainty",
     "knn_applicability_domain",
+    "leverage_williams",
     "quantile_prediction_intervals",
 ]
 
@@ -1043,6 +1045,312 @@ def applicability_domain(
     result.uncertainty_kind = boot.kind
     result.fit_seconds = boot.fit_seconds
     return result
+
+
+@dataclass(slots=True)
+class WilliamsResult:
+    """Outcome of a leverage/Williams applicability-domain analysis.
+
+    The regression-domain companion to the kNN-distance half
+    (part12 PART 11's "Leverage / Williams plot where implemented"):
+    the hat-matrix leverage of every row against the warning cut-off
+    ``h* = 3(p+1)/n`` plus the standardized-residual ±3σ band that
+    separates good leverage from outliers.
+
+    Attributes
+    ----------
+    n_train / n_features:
+        Training rows ``n`` and descriptor columns ``p``.
+    leverage_threshold:
+        ``h* = 3(p+1)/n`` — the warning leverage (three times the mean
+        hat value ``(p+1)/n``, the trace identity's own centre).
+    residual_limit:
+        The standardized-residual band (default 3.0 — the Williams
+        convention; pass it through the caller to change).
+    train_leverage:
+        Hat diagonal ``h_i`` per training row (clipped at 0 — the
+        eigensum can return a -1e-17 numerical ghost).
+    train_std_residuals:
+        ``r_i = (y_i - ŷ_i) / rmse`` per training row.
+    train_inside:
+        ``h_i <= h*`` AND ``|r_i| <= residual_limit`` — the Williams
+        plot's in-domain population.
+    test_leverage / test_inside:
+        Hat values of the query rows (no ground truth, so the verdict
+        is leverage-only) — ``None`` when no query rows were passed.
+    test_predicted:
+        The model's own predictions on the query rows (the
+        extrapolation panel's ``y`` axis) — ``None`` likewise.
+    rmse:
+        The residual scale the standardization divides by.
+    feature_names:
+        The descriptor columns the leverages were measured in.
+    """
+
+    n_train: int
+    n_features: int
+    leverage_threshold: float
+    residual_limit: float
+    train_leverage: np.ndarray
+    train_std_residuals: np.ndarray
+    train_inside: np.ndarray
+    rmse: float
+    feature_names: list[str]
+    test_leverage: np.ndarray | None = None
+    test_inside: np.ndarray | None = None
+    test_predicted: np.ndarray | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        """Flat dict summary (no per-row arrays) for logs and reports."""
+        return {
+            "n_train": int(self.n_train),
+            "n_features": int(self.n_features),
+            "leverage_threshold": float(self.leverage_threshold),
+            "residual_limit": float(self.residual_limit),
+            "rmse": float(self.rmse),
+            "train_inside": int(np.count_nonzero(self.train_inside)),
+            "n_train_outlier_leverage": int(
+                np.count_nonzero(self.train_leverage > self.leverage_threshold)
+            ),
+            "n_train_outlier_residual": int(
+                np.count_nonzero(
+                    np.abs(self.train_std_residuals) > self.residual_limit
+                )
+            ),
+            "n_test": None if self.test_leverage is None
+            else int(self.test_leverage.size),
+            "test_inside": None if self.test_inside is None
+            else int(np.count_nonzero(self.test_inside)),
+        }
+
+    def to_frame(self, names: list[str] | pd.Series | None = None) -> pd.DataFrame:
+        """The Williams table, one row per TRAINING compound.
+
+        Columns: ``name, leverage, std_residual, inside`` — the plot's
+        own population (the query rows carry no ground truth and live
+        in ``test_leverage`` / ``test_predicted``).
+        """
+        n = int(self.train_leverage.size)
+        if names is None:
+            labels = [f"compound_{i}" for i in range(n)]
+        else:
+            labels = [str(v) for v in list(names)[:n]]
+            labels += [f"compound_{i}" for i in range(len(labels), n)]
+        return pd.DataFrame(
+            {
+                "name": labels,
+                "leverage": self.train_leverage,
+                "std_residual": self.train_std_residuals,
+                "inside": self.train_inside,
+            }
+        )
+
+    def __str__(self) -> str:  # pragma: no cover - presentation only
+        inside = int(np.count_nonzero(self.train_inside))
+        text = (f"p={self.n_features} h*={self.leverage_threshold:.4g} "
+                f"train_inside={inside}/{self.n_train}")
+        if self.test_leverage is not None and self.test_inside is not None:
+            t_in = int(np.count_nonzero(self.test_inside))
+            text += f" test_inside={t_in}/{self.test_leverage.size}"
+        return text
+
+
+def leverage_williams(
+    model: Any,
+    X_train: pd.DataFrame | np.ndarray,
+    y_train: pd.Series | np.ndarray | list,
+    X_test: pd.DataFrame | np.ndarray | None = None,
+    *,
+    residual_limit: float = 3.0,
+) -> WilliamsResult:
+    """Leverage/Williams applicability domain (the regression companion).
+
+    Mathematical definition
+    ----------------------
+    With the intercept-augmented design matrix ``A = [1 | X]``
+    (``n`` rows, ``p+1`` columns), the hat matrix
+    ``H = A (AᵀA)⁻¹ Aᵀ`` has diagonal
+
+    ``h_i = a_i (AᵀA)⁻¹ a_iᵀ``
+
+    — the leverage of row ``i``: its pull on the fitted plane and the
+    Mahalanobis-style distance of its descriptors from the training
+    centroid, in one number.  Leverage is invariant to any
+    nonsingular rescaling of the descriptors (a StandardScaler
+    changes nothing), so the raw design matrix is used directly.
+
+    Thresholds
+    ----------
+    * warning leverage ``h* = 3(p+1)/n`` — three times the mean
+      leverage ``(p+1)/n`` (the trace identity ``Σh_i = p+1``);
+      rows beyond it extrapolate the model's own regression plane.
+    * standardized residuals ``r_i = (y_i - ŷ_i)/rmse`` with the
+      ±3 band (the ``residual_limit`` knob) separating response
+      outliers from the population.
+
+    Assumptions / limitations
+    -------------------------
+    * **Regression task types** — the residual axis needs a numeric
+      target and numeric predictions (a classifier's labels have no
+      honest residual scale).
+    * The hat matrix is a LINEAR-model geometry: for nonlinear
+      models the leverages still describe the descriptor space
+      (where the rows sit), while ``rmse`` remains the model's own
+      in-sample scale — the standard QSAR usage of the Williams
+      plot as a domain-readout regardless of the fitted estimator.
+    * Requires ``n >= p+2`` (at least one residual degree of
+      freedom) and a full-rank design; collinear descriptors are
+      refused rather than silently pseudo-inverted.
+
+    Examples
+    --------
+    >>> import numpy as np, pandas as pd
+    >>> from sklearn.linear_model import LinearRegression
+    >>> rng = np.random.default_rng(0)
+    >>> x = pd.DataFrame({"a": rng.normal(size=60), "b": rng.normal(size=60)})
+    >>> y = pd.Series(2.0 * x["a"] - x["b"] + 0.05 * rng.normal(size=60))
+    >>> model = LinearRegression().fit(x, y)
+    >>> res = leverage_williams(model, x, y)
+    >>> res.n_train, res.n_features, res.leverage_threshold
+    (60, 2, 0.15)
+    >>> float(res.train_leverage.sum()) >= 3.0 - 1e-9   # trace identity: p+1
+    True
+    >>> far = pd.DataFrame({"a": [50.0], "b": [0.0]})
+    >>> out = leverage_williams(model, x, y, far)
+    >>> bool(out.test_inside[0])                        # wild extrapolation
+    False
+    >>> mid = pd.DataFrame({"a": [0.1], "b": [-0.2]})
+    >>> bool(leverage_williams(model, x, y, mid).test_inside[0])
+    True
+
+    Error contracts (the house style):
+
+    >>> leverage_williams(model, x, y, residual_limit=0)
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: residual_limit must be > 0, got 0
+    >>> tiny = pd.DataFrame({"a": [1.0], "b": [2.0]})          # n < p+2
+    >>> leverage_williams(model, tiny, pd.Series([1.0]), residual_limit=3)
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: leverage/Williams needs at least p+2 = 4 training rows (p=2), got 1
+    >>> collinear = pd.DataFrame({"a": x["a"], "b": x["a"]})   # rank-deficient
+    >>> leverage_williams(model, collinear, y)
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: the design matrix is rank-deficient (rank 2 < p+1 = 3) — drop the collinear descriptors
+    >>> zero_y = pd.Series(np.zeros(60))                        # perfect fit
+    >>> zero_model = LinearRegression().fit(x, zero_y)
+    >>> leverage_williams(zero_model, x, zero_y)
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: the model fits the training set exactly (rmse=0) — the residual scale cannot standardize; use a model with honest in-sample error
+    >>> leverage_williams("not a model", x, y)
+    Traceback (most recent call last):
+    ...
+    pharmaml.exceptions.ModelError: model must be a fitted estimator with predict(), got str
+    """
+    if (
+        isinstance(residual_limit, bool)
+        or not isinstance(residual_limit, (int, float, np.floating))
+        or not float(residual_limit) > 0.0
+    ):
+        raise ModelError(f"residual_limit must be > 0, got {residual_limit!r}")
+    if not hasattr(model, "predict"):
+        raise ModelError(
+            f"model must be a fitted estimator with predict(), got {type(model).__name__}"
+        )
+    train = _numeric_matrix(X_train, "X_train")
+    y = _numeric_vector(y_train, "y_train", finite=True)
+    n, p = train.shape
+    if y.size != n:
+        raise ModelError(
+            f"X_train has {n} row(s) but y_train has {y.size} — they must align"
+        )
+    if n < p + 2:
+        raise ModelError(
+            f"leverage/Williams needs at least p+2 = {p + 2} training rows "
+            f"(p={p}), got {n}"
+        )
+
+    design = np.column_stack([np.ones(n), train])
+    gram = design.T @ design
+    rank = int(np.linalg.matrix_rank(gram))
+    if rank < p + 1:
+        raise ModelError(
+            f"the design matrix is rank-deficient (rank {rank} < p+1 = {p + 1}) "
+            "— drop the collinear descriptors"
+        )
+    try:
+        gram_inv = np.linalg.inv(gram)
+    except np.linalg.LinAlgError as exc:  # pragma: no cover - rank guard above
+        raise ModelError(f"the design matrix is singular: {exc}") from exc
+    train_leverage = np.clip(
+        np.einsum("ij,jk,ik->i", design, gram_inv, design), 0.0, None
+    )
+
+    try:
+        fitted = np.asarray(model.predict(X_train), dtype=float).reshape(-1)
+    except (TypeError, ValueError) as exc:
+        raise DataValidationError(
+            "leverage/Williams is a regression companion — the model's "
+            f"training predictions must be numeric: {exc}"
+        ) from exc
+    if fitted.size != n:
+        raise ModelError(
+            f"the model returned {fitted.size} training prediction(s) for {n} row(s)"
+        )
+    residuals = y - fitted
+    rmse = float(np.sqrt(np.mean(residuals**2)))
+    if rmse == 0.0:
+        raise ModelError(
+            "the model fits the training set exactly (rmse=0) — the residual "
+            "scale cannot standardize; use a model with honest in-sample error"
+        )
+    std_residuals = residuals / rmse
+
+    h_star = 3.0 * (p + 1) / n
+    train_inside = (train_leverage <= h_star) & (np.abs(std_residuals) <= residual_limit)
+
+    test_leverage: np.ndarray | None = None
+    test_inside: np.ndarray | None = None
+    test_predicted: np.ndarray | None = None
+    if X_test is not None:
+        test = _numeric_matrix(X_test, "X_test")
+        _validate_descriptor_schema(X_train, X_test, train, test)
+        m = test.shape[0]
+        query_design = np.column_stack([np.ones(m), test])
+        test_leverage = np.clip(
+            np.einsum("ij,jk,ik->i", query_design, gram_inv, query_design), 0.0, None
+        )
+        test_inside = test_leverage <= h_star
+        try:
+            test_predicted = np.asarray(model.predict(X_test), dtype=float).reshape(-1)
+        except (TypeError, ValueError) as exc:
+            raise DataValidationError(
+                "leverage/Williams is a regression companion — the model's "
+                f"query predictions must be numeric: {exc}"
+            ) from exc
+        if test_predicted.size != m:
+            raise ModelError(
+                f"the model returned {test_predicted.size} query prediction(s) "
+                f"for {m} row(s)"
+            )
+
+    return WilliamsResult(
+        n_train=int(n),
+        n_features=int(p),
+        leverage_threshold=float(h_star),
+        residual_limit=float(residual_limit),
+        train_leverage=train_leverage,
+        train_std_residuals=std_residuals,
+        train_inside=train_inside,
+        rmse=rmse,
+        feature_names=_feature_names(X_train),
+        test_leverage=test_leverage,
+        test_inside=test_inside,
+        test_predicted=test_predicted,
+    )
 
 
 @dataclass(slots=True)
