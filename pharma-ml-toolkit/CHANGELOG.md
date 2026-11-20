@@ -1,4 +1,4 @@
-## [1.2.231-r301] — 2026-11-20 — round 301 (the 91st recorded run: the second rollback recovery, the eighth version carrier found the hard way — the first v1.2.231 Windows tag build died at the runner's packaging validation — and the re-ship)
+## [1.2.231] — 2026-11-20 — round 301 (the 91st recorded run: the second rollback recovery, the eighth version carrier found the hard way — the first v1.2.231 Windows tag build died at the runner's packaging validation — and the re-ship; same version as round 300's entry below — the carrier fix and re-ship, no version bump)
 
 - **The second rollback recovery.** The sandbox recycle rolled the
   checkout back to `2eb0ede4` again (482 behind `origin/main`) with
