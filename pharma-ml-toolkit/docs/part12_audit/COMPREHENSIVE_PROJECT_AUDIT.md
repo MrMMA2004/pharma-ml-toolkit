@@ -64,9 +64,9 @@ route (chains traced in BACKEND_GUI_INTEGRATION_MATRIX.md).
 | Focus area | Verdict | Evidence / gaps |
 | --- | --- | --- |
 | Chemistry Lab descriptors | PASS | `chem/descriptors.py` (rdkit_all/morgan/mordred + 3D ETKDG) + `chem/features.py` 19–20 families, >27k columns; Datasets workspace exposes them |
-| Fingerprint engines | PASS (chirality PARTIAL) | morgan/rdkit/atom_pair/avalon (+MACCS, FCFP, topological, layered, estate, erg via features.py); nBits/radius/count modes; `includeChirality` fixed off in features.py — a chirality toggle is NOT exposed (documented gap, see FEATURE_GAP) |
-| Semi-supervised learning | PASS | `ml/semi_supervised.py` 1,152 lines: SelfTraining/LabelPropagation/LabelSpreading + `-1` sentinel + leakage-safe evaluation; GUI lane `/semi-supervised/train` wired; `/evaluate` route unconsumed (non-GUI documented) |
-| Applicability Domain | PARTIAL | kNN distance + bootstrap uncertainty + DomainBox implemented and plotted; **leverage/Williams standalone method absent** (hat matrix exists only inside Cook's distance) — see SCIENTIFIC_VALIDATION_REPORT §AD |
+| Fingerprint engines | PASS | morgan/rdkit/atom_pair/avalon (+MACCS, FCFP, topological, layered, estate, erg via features.py); nBits/radius/count modes; **chirality toggle CLOSED r303** — `include_chirality` through `compute_fingerprints`/`FeatureConfig`/`/api/v1/chemistry/fingerprints` + the Datasets card (morgan-only, default OFF, the byte-identical history preserved) |
+| Semi-supervised learning | PASS | `ml/semi_supervised.py` 1,152 lines: SelfTraining/LabelPropagation/LabelSpreading + `-1` sentinel + leakage-safe evaluation; GUI lane `/semi-supervised/train` wired; the `/evaluate` GUI consumer landed r303 (its wiring exposed and fixed the job-mode TypeError — the COMPLETION pin rides RELEASE_READINESS) |
+| Applicability Domain | PASS | kNN distance + bootstrap uncertainty + DomainBox implemented and plotted; **the standalone leverage/Williams method landed r303** (`ml/applicability.py::leverage_williams` + `/api/v1/applicability-domain/leverage-williams` job/sync + the ML workspace Williams lane; 23 unit + 3 figure + 7 route tests) — see SCIENTIFIC_VALIDATION_REPORT §AD |
 | Resource manager / job management | PASS | `api/jobs.py` JobManager (state machine, cooperative cancel, semaphore, history upsert) + `utils/resources.py` (cgroup/proc probe, presets); psutil deliberately not a dependency |
 | Experiment tracking / model registry | PASS (local-first) | Multi-layer: MODEL_REGISTRY (33), ModelStore write-through, `ml/persistence.py` provenance, runboard (TensorBoard absorbed), `studio/runs.py` + `studio/comparison.py`; no external server (by design) |
 | Visualization engine | PASS | `viz/` 22 modules, 33 ML plot fns incl. 7 SHAP plots + AD plot; statplots/diagnostics/chem/pharma/docking/md/generative/multiobjective/3D; catalogued route |
@@ -89,7 +89,7 @@ route (chains traced in BACKEND_GUI_INTEGRATION_MATRIX.md).
 | --- | --- | --- |
 | Loopback binding + Host/Origin validation | PASS | `api/security.py` + Tauri `assert_loopback`; CSP `connect-src ipc: http://127.0.0.1:* ws://127.0.0.1:*` |
 | Session token handling | PASS | `secrets.token_urlsafe(32)` in-backend, memory-only, constant-time verify, never argv/env/log |
-| SBOM generation | NOT APPLICABLE (this round) | Release manifest + SHA256SUMS shipped; CycloneDX SBOM not yet generated (documented gap) |
+| SBOM generation | PASS (CLOSED r304) | `packaging/sbom/sbom.cdx.json` (CycloneDX 1.6, 40 components, validated + reproducible) ships in the archive; the Windows workflow step 22b regenerates it on the runner and self-registers its hash into SHA256SUMS.txt |
 | Artifact integrity | PASS (route) / PARTIAL (archive) | Digest-verified downloads (X-Artifact-SHA256 + local recompute); **the shipped v1.2.231 source zip is missing exactly one real source file** (B-1) — fixed for this round's archive |
 | Installer size investigation | PARTIAL | EXE 557.7 MB / MSI 710.1 MB: PyInstaller onedir sidecar (torch CPU + rdkit + scipy stack) + offline WebView2 bundle dominate; no unnecessary bundled scientific file found; size breakdown documented in SECURITY_AND_PACKAGING_AUDIT.md |
 | Digital signing | BLOCKED | No certificate available (owner decision required) |
@@ -144,9 +144,11 @@ PySide6 reference; PySide6 remains a dev/test-environment dependency only).
 ## 10. Verdict summary
 
 - Requirements verified PASS with this-session execution evidence: 24
-- PARTIAL (documented gaps with owners): 6 (census re-true, AD leverage,
-  chirality toggle, SBOM, installer size, dist leak remediation now done →
-  archive re-ship pending close-out)
+- PARTIAL (documented gaps with owners): 6 — of which the census re-true,
+  AD leverage, chirality toggle, SBOM, and dist-leak lanes all CLOSED by
+  the r303/r304 follow-up rounds (re-verified in-tree at the r307
+  part13 reconciliation); the installer-size tiering decision stays OPEN
+  (torch-in-bundle vs on-demand — owner call, never taken silently)
 - BLOCKED (external dependency): 3 lanes (clean-machine, signing, retirement)
 - FAIL: 0 — no requirement was found claimed-but-absent except B-1's
   archive omission (fixed) and B-2's claim (wired).

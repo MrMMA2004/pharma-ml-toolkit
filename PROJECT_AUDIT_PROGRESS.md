@@ -187,3 +187,37 @@ ml/quantization.py, ml/harness.py (lost in rollbacks).**
 None for the MASTER_PROMPT — closed. Standing opportunities: the G-3
 torchlens/alibi/Quantus compact fold-ins (spec recorded), and the guard
 cron (495807) keeps the minimal-action protocol.
+
+---
+
+## part13 Phase 1 — state reconciliation (2026-11-21, round 307, the 98th recorded run)
+
+The MASTER_PROMPT continued past the closure recorded above through the
+part2–part12 installments (ledger: repo-root worklog.md rounds 108–306,
+CHANGELOG.md, docs/part12_audit/). This round executed the part13
+Phase-1 mandate (verify the actual repository state; reconcile audit
+documents; update outdated status statements; create a single
+authoritative project-status document):
+
+- **Authoritative status doc created**: `docs/PROJECT_STATUS.md` (the
+  single current-state source; it wins status disagreements; carries
+  the part13 §22 labels and the evidence table).
+- **Stale statements trued in-place**: the six previously-open items
+  (B-4 leverage/Williams, B-5 chirality, the /evaluate GUI lane + its
+  job-mode fix, B-6 Tk retirement, B-8 SBOM) marked CLOSED with the
+  landing round + evidence across COMPREHENSIVE_PROJECT_AUDIT.md,
+  BUG_REPORT.md, SCIENTIFIC_VALIDATION_REPORT.md,
+  FEATURE_GAP_AND_GITHUB_REFERENCES.md, SECURITY_AND_PACKAGING_AUDIT.md,
+  CAPABILITY_INTEGRATION_MATRIX.md, BACKEND_GUI_INTEGRATION_MATRIX.md.
+- **Verified this round**: repo public / CI green at HEAD 5446e89b /
+  v1.2.231 release assets intact / carriers 1.2.231 / collection 8,362 /
+  census 1,591 files / five-home + offsite zip parity d3673da7.
+- **Sandbox rollback recovered** (the second rollback; the r306
+  precedent re-executed): PAT re-spliced (93-char, 600-mode,
+  API-verified, never printed), origin re-added, reset --hard
+  origin/main, ghosts re-swept (6 zips + the nested .github), offsite
+  rebuilt (11 zips, testzip 11/11), venv re-repaired foreground.
+- **BLOCKED (unchanged)**: clean-machine smoke (C-3/C-5), Stage-5
+  PySide6 retirement, installer signing.
+
+Next: part13 Phases 2–7 per `docs/PROJECT_STATUS.md` §6.

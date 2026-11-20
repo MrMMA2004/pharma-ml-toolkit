@@ -1,3 +1,43 @@
+## [1.2.231] — 2026-11-21 — round 307 (the 98th recorded run: the part13 Phase-1 state-reconciliation round — the same-version re-ship; no version bump, no Windows fire; the v1.2.231 release stays THE release, the source archive re-ships carrying the part13 Phase-1 deliverables: the authoritative status doc, the stale-statement reconciliation, the second-rollback recovery)
+
+- **part13 Phase 1 (state reconciliation and release integrity).** The
+  firing arrived onto the SECOND sandbox rollback (the r306 recovery
+  lost with it): HEAD reverted to the ancient 2eb0ede snapshot, the
+  origin remote definition gone, the 600-mode credential file wiped,
+  the venv broken (torch/rdkit/pharmaml missing), the offsite home
+  gone, and the swept ghosts resurrected (229/230 zips in the homes +
+  the nested `.github`). Full recovery re-executed per the r306
+  precedent: PAT re-spliced from the PDF (one 93-char candidate,
+  API-validated, 600-mode, never printed); origin re-added; reset
+  --hard origin/main (5446e89b, post-sweep status 0); the ghost sweep;
+  the offsite rebuilt (11 zips, testzip 11/11); the venv repaired
+  foreground (VENV-REPAIR-DONE + STUDIO-REPAIR-DONE); CI verified
+  green at 5446e89b (CI + Push both success); the v1.2.231 release
+  assets verified intact.
+- **The authoritative status document**: `docs/PROJECT_STATUS.md` —
+  part13 §2's single-authoritative-doc deliverable (the verified
+  current-state evidence table; the six closed items; the three
+  BLOCKED lanes; the release posture; the part13 Phase 2–7 map).
+- **Stale-statement reconciliation**: the six previously-open items
+  (B-4 leverage/Williams, B-5 chirality, the /evaluate GUI lane + its
+  job-mode fix, B-6 Tk retirement, B-8 SBOM) trued to CLOSED across
+  seven documents (COMPREHENSIVE_PROJECT_AUDIT, BUG_REPORT,
+  SCIENTIFIC_VALIDATION_REPORT, FEATURE_GAP_AND_GITHUB_REFERENCES,
+  SECURITY_AND_PACKAGING_AUDIT, CAPABILITY_INTEGRATION_MATRIX,
+  BACKEND_GUI_INTEGRATION_MATRIX) — each with the landing round and
+  the in-tree verification evidence; PROJECT_AUDIT_PROGRESS.md
+  re-opened with the part13 Phase-1 entry; docs/INDEX.md regenerated
+  (no drift — 13 modules / 943 symbols).
+- **Same-version re-ship**: the source archive re-ships carrying the
+  reconciliation (the new sha/bytes supersede d3673da7 per the r301
+  three-sha convention; the published v1.2.231 EXE/MSI stay THE
+  release). Census/pins re-trued (files 1,591→1,592 with
+  PROJECT_STATUS.md; lines re-walked; tests 8,362 unchanged — the
+  doc-only delta provably touches zero src/tests bytes).
+- **BLOCKED (unchanged, honest)**: clean-machine smoke test (C-3/C-5),
+  the Stage-5 PySide6 retirement behind it, installer signing
+  (certificate-gated).
+
 ## [1.2.231] — 2026-11-20 — round 304 (the 94th recorded run: the part12 Phase-3 architecture-hygiene round — the same-version re-ship; no version bump, no Windows fire; the v1.2.231 release stays THE release, the source archive re-ships carrying the three owner-directed increments of the audit's own next-campaign verdict: the Tk true retirement, the duplicate-symbol guard, the SBOM)
 
 - **B-6/A-7 (MEDIUM, dead weight): the Tk playground's TRUE retirement.**

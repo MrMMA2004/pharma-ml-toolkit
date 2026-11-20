@@ -30,8 +30,10 @@ export const SHIPPED_TEST_COUNT = 8362;
  *  the part12_audit deliverables, -1 the removed malformed nested
  *  ci.yml (B-3). The round-304 re-true: still 1,591 — the Tk playground
  *  and its suite left the tree (-2, B-6) offset by the
- *  architecture-hygiene guard (+1) and the SBOM artifact (+1). */
-export const SHIPPED_FILE_COUNT = 1591;
+ *  architecture-hygiene guard (+1) and the SBOM artifact (+1). The
+ *  round-307 re-true (part13 Phase 1): 1,592 — +1 the authoritative
+ *  docs/PROJECT_STATUS.md. */
+export const SHIPPED_FILE_COUNT = 1592;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). The round-304
@@ -46,8 +48,12 @@ export const SHIPPED_FILE_COUNT = 1591;
  *  state. (Honest note: the round had two concurrent close-out passes
  *  — their walks measured 552,625 pre-CHANGELOG-entry and 552,780
  *  post-entry/pre-merge; the final post-merge walk 552,786 is the
- *  canonical pin.) */
-export const SHIPPED_SOURCE_LINES = 552786;
+ *  canonical pin.) The round-307 re-true (part13 Phase 1): 553,002 —
+ *  the r306 base plus the doc-reconciliation delta (+216:
+ *  docs/PROJECT_STATUS.md, the seven stale-statement trues, the
+ *  CHANGELOG entry, the PROJECT_AUDIT_PROGRESS append); the doc-only
+ *  round touches zero src/tests bytes (verified by git diff). */
+export const SHIPPED_SOURCE_LINES = 553002;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

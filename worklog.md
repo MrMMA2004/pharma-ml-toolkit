@@ -16975,3 +16975,80 @@ no CHANGELOG / FEATURES / RELEASE_READINESS / pin changes owed (no
 toolkit change). Counter 96 → 97. Still honestly BLOCKED: the
 clean-machine smoke test (C-3/C-5), the Stage-5 PySide6 retirement
 behind it, installer signing (certificate-gated).
+
+---
+
+**Round 307 (the 98th recorded run — the interactive "MASTER_PROMPT
+part13" firing, trace 1a1fa732358a6555; the 02:30 housekeeping firing
+was r306's own recovery round, closed there).** The part13 PDF
+("PharmaML Studio v1.2.232+" — Advanced Repository Verification,
+Remaining Blockers, Scientific Platform Expansion, Architecture
+Optimization, and Production Release Engineering) opened its Phase 1
+(state reconciliation and release integrity) onto the SECOND sandbox
+rollback: HEAD reverted to the ancient 2eb0ede, the origin remote
+gone, the 600-mode credential file wiped, the venv broken (torch/
+rdkit/pharmaml missing, numpy drifted to 2.1.3), the offsite gone,
+and the swept ghosts resurrected (the 229/230 zips in the homes + the
+nested pharma-ml-toolkit/.github/). **The full recovery re-executed
+(the r306 precedent, every step real):** the PAT re-spliced from the
+PDF (the one 93-char candidate, API-verified MrMMA2004, 600-mode,
+never printed); origin re-added; fetch clean; reset --hard
+origin/main = 5446e89b (the r306 push; the local worklog byte-identical
+— no local loss); the ghost sweep (6 zips + the nested .github;
+post-sweep status 0); the offsite rebuilt (11 zips 221-231, 229 from
+c7989dc9 + 230 from 62fac28e, testzip 11/11); the venv repaired
+foreground (VENV-REPAIR-DONE numpy 1.26.4 / torch 2.14.1+cpu /
+pharmaml 1.2.231 + STUDIO-REPAIR-DONE pyqtgraph 0.13.7; rdkit
+2026.09.1 — zero drift vs requirements.txt); CI verified green at
+5446e89b (CI + Push both success); the v1.2.231 release assets
+verified intact via the API (EXE 557,655,583 B / MSI 710,122,853 B /
+manifest / sums). **part13 Phase 1 executed:** all 14 referenced
+documents verified present; the six previously-open items verified
+CLOSED in-tree (leverage_williams at ml/applicability.py:1158 + the
+route + the ML-workspace Williams lane; include_chirality through
+features/descriptors/the chemistry route + the Datasets card; POST
+/semi-supervised/evaluate at routes/semi_supervised.py:303 with the
+guarded manager=None job fix; playground.py absent + the negative
+gate; packaging/sbom/sbom.cdx.json 22,759 B + workflow step 22b) and
+the stale statements trued across seven audit docs
+(COMPREHENSIVE_PROJECT_AUDIT, BUG_REPORT, SCIENTIFIC_VALIDATION_REPORT,
+FEATURE_GAP_AND_GITHUB_REFERENCES, SECURITY_AND_PACKAGING_AUDIT,
+CAPABILITY_INTEGRATION_MATRIX, BACKEND_GUI_INTEGRATION_MATRIX); the
+authoritative docs/PROJECT_STATUS.md created (the single-status-source
+deliverable with the evidence table + the three BLOCKED lanes + the
+part13 Phase 2-7 map); PROJECT_AUDIT_PROGRESS.md re-opened with the
+part13 entry; docs/INDEX.md regenerated (no drift, 13 modules / 943
+symbols); version carriers verified 1.2.231 across every surface.
+**Gates (honest):** collection 8,362 / 0 / 456 fresh; hygiene 472/472,
+windows pipeline 9/9, phase6 6/6, tests/api 284+1s, the root
+github-page guard (script + the 11-test unittest) — all fresh; the
+frontend typecheck inherited-green with named evidence (the CI at
+byte-identical 5446e89b ran tsc --noEmit inside the studio-frontend
+build job, green; r305's local exit-0 over the same bytes; this
+round's git diff proves zero frontend bytes changed — the
+rollback-wiped node_modules makes a fresh local tsc resolution-noise
+only); chunk-1 fresh green (110s, rc=0); chunk-2 one-shot SIGKILLed
+at ~93% by the container OOM envelope and decoded green via the
+7-file sub-batch drill (all 5 sub-batches rc=0, zero assertion
+failures — the r275/r304 precedent); chunks 3-10 + the api/github-page
+legs inherited over the byte-identical test surface (git diff
+239ef4ee HEAD -- tests src = empty, the r304 full-ten-chunk evidence
+chain). **The same-version re-ship:** 1,041 entries / 928 files (+1
+PROJECT_STATUS.md) / 15,413,809 B sha 2c4de09d — must-carry gate
+(incl. PROJECT_STATUS.md), the retired-pair negative gate, the
+version_info quadruple 1.2.231, composition 0, real leaks 0 (6
+documented pattern-literals), the five homes + offsite testzip-OK and
+byte-identical; the pins re-trued (files 1,591→1,592, lines
+552,786→553,002, tests 8,362 unchanged); the zip-size API serves
+15,413,809 exact:true; the census walk 1,592 / 553,002 / v1.2.231
+exact. **Browser evidence:** desktop + 390px — all stats pins render
+in both viewports, the version badge in-DOM at 390px behind its
+responsive breakpoint (desktop paints it — a responsive hide, not a
+defect), zero page/console errors, the footer at doc end in both
+viewports, no horizontal scroll at 390; screenshots committed
+(scratch/p13r307-desktop.png + scratch/p13r307-mobile.png). The r301
+three-sha convention: d3673da7 → 2c4de09d (the same-version
+supersede; the published v1.2.231 EXE/MSI stay THE release). Counter
+97 → 98. **Still honestly BLOCKED:** the clean-machine smoke test
+(C-3/C-5), the Stage-5 PySide6 retirement behind it, installer signing
+(certificate-gated).

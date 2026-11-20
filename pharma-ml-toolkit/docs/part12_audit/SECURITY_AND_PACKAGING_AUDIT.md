@@ -27,7 +27,7 @@ live release this session.
 | SHA-256 verification | PASS | `SHA256SUMS.txt` + release manifest attached; digest-verified artifact downloads in-app (X-Artifact-SHA256 + local recompute) |
 | Release provenance | PASS | Tag → run → commit chain verified live (fire 3 at `3da0ff96`, all 26 steps) |
 | Source-archive integrity | **PARTIAL → fixed this round** | The shipped v1.2.231 source zip omitted exactly one real source file (`frontend/src/services/artifacts/client.ts` — B-1); scoped exclusions fixed the builder/streamer; this round's archive re-ships complete |
-| SBOM | NOT DONE | CycloneDX lane documented (FEATURE_GAP #8); manifest + checksums ship today |
+| SBOM | PASS (CLOSED r304) | `packaging/sbom/sbom.cdx.json` (CycloneDX 1.6, 40 components, validated + reproducible) ships in the archive; the Windows workflow step 22b regenerates it on the runner + self-registers its hash into SHA256SUMS.txt |
 | Vulnerability scanning | PARTIAL | Pinned-stack policy + `requirements.txt` snapshot; no automated scanner lane yet (owner decision) |
 | Digital signing | BLOCKED | No certificate available |
 | Installer integrity validation | PASS | Static packaging validation step 20 (26/26) + in-archive version gate |
@@ -59,6 +59,7 @@ live release this session.
 ## 5. Verdict
 
 Runtime security: **PASS** across every control audited. Packaging:
-**PASS** with two honest lanes — the source-archive omission (fixed
-this round, re-ship rides the close-out) and the external-gated items
-(SBOM OPEN, signing + clean-machine BLOCKED).
+**PASS** — the source-archive omission fixed at the r302 re-ship (the
+d3673da7 archive carries it), SBOM CLOSED by r304 (re-verified in-tree
+at the r307 reconciliation), and the external-gated items remain
+honestly BLOCKED (signing certificate-gated; clean-machine no-machine).

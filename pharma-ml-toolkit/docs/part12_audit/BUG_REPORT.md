@@ -67,7 +67,7 @@ verification; regression coverage is listed per bug.
   windows-release.yml). Census effect documented (-1 file / -52 lines;
   pins re-trued this round).
 
-## Documented, not fixed this round (owner decisions / later phases)
+## Documented, not fixed this round (owner decisions / later phases) — r307 reconciliation: B-4/B-5/B-6 closed and B-7 dispositioned by the r303/r304 follow-ups (statuses below trued; evidence in CHANGELOG [1.2.231] + RELEASE_READINESS.md)
 
 ### B-4 — Applicability Domain: no standalone leverage/Williams method (MEDIUM, scientific)
 
@@ -78,6 +78,13 @@ currently it is not, and the GUI does not pretend otherwise (no Williams
 plot is exposed). See SCIENTIFIC_VALIDATION_REPORT.md §AD for the
 add-or-document decision frame.
 
+**CLOSED r303**: `ml/applicability.py::leverage_williams` (hat-matrix
+leverage, h\* = 3(p+1)/n, standardized-residual band, regression-only
+guards) + `plot_williams` + `/api/v1/applicability-domain/leverage-williams`
+(job/sync + the figure artifact + the four-entry catalog) + the
+React/Tauri ML workspace's Williams lane; 23 unit + 3 figure + 7 route
+tests. Verified in-tree at the r307 reconciliation.
+
 ### B-5 — chirality fixed OFF in fingerprint feature factory (LOW, scientific)
 
 `chem/features.py` generators pin `includeChirality=False`; the
@@ -85,6 +92,12 @@ fingerprint configuration exposes nBits/radius/count modes but no chirality
 toggle. Documented as a gap (FEATURE_GAP §fingerprint parameters) —
 enabling it changes feature semantics (a data-compat decision, not a
 mechanical edit).
+
+**CLOSED r303**: `include_chirality` exposed through
+`compute_fingerprints`/`FeatureConfig`/`/api/v1/chemistry/fingerprints` +
+the Datasets fingerprint-card toggle (morgan-only, default OFF — the
+data-compat caution honored, byte-identical history preserved); 8
+descriptor + 8 factory + 3 route tests.
 
 ### B-6 — Tk playground retired-but-shipped (MEDIUM, dead weight)
 
@@ -96,11 +109,21 @@ retired once per README) and zip composition — an owner-gated Phase-8
 decision under the same rule as PySide6 retirement (preserve working
 functionality; retire legacy only with evidence).
 
+**CLOSED r304**: both files left the shipped tree (the v1.2.141
+declaration executed; the final version preserved in git history); the
+collection re-trued 8,643 → 8,362; the zip builder's NEGATIVE gate pins
+the pair's absence. Verified in-tree at the r307 reconciliation.
+
 ### B-7 — 9 doctest-only modules + 3 duplicate-symbol families (LOW, maintainability)
 
 See ARCHITECTURE_REVIEW A-6. No user-facing defect; matrix rows carry the
 "verified-by-doctest-only" tier and the duplicate-symbol map for the next
 hardening campaign.
+
+**Dispositioned r304**: pinned-not-rewritten — the ten docstring-map
+cross-reference sites + `tests/test_architecture_hygiene.py` (472 tests)
+guard the definition-site sets, the zero-importer census, and the numeric
+parities; drift fires a test, not an audit.
 
 ## Cleared (audited, no defect found)
 

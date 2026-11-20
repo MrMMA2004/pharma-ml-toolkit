@@ -27,7 +27,7 @@ status"); **LEGACY** = served to the PySide6/CLI surfaces instead.
 | `POST /ml/train` | `training.py` | same | ML stage 7 (job mode) | WIRED |
 | `GET /dl/networks`, `POST /dl/train` | `ml/numpy_neural.py` | `services/dl/client.ts` | Deep Learning | WIRED (+ live `training.metrics` WS) |
 | `POST /semi-supervised/train` | `ml/semi_supervised.py` | `services/ml/client.ts` | ML semi-supervised stage | WIRED |
-| `POST /semi-supervised/evaluate` | `ml/semi_supervised.py` | — | none | NON-GUI (documented): leakage-safe evaluation lane; the GUI runs evaluation through the train route's verdict payload |
+| `POST /semi-supervised/evaluate` | `ml/semi_supervised.py` | the /evaluate GUI consumer (r303) | ML semi-supervised stage | WIRED (r303; the wiring exposed + fixed the job-mode TypeError — the COMPLETION pin; NON-GUI at this audit, trued r307) |
 | `GET /generative/objectives` (+ priors, rnn train/sample, optimize) | `generative/*` | `services/generative/client.ts` | Generative AI | WIRED |
 | `GET /docking/engines`, dockstring catalog/objective, receptor/ligand prep, parse vina/dlg, scoring×2, contacts, pose-rmsd, `POST /dock` | `docking/*` | `services/docking/client.ts` | Molecular Docking | WIRED (3D via Molecule3D; dock execution honestly 422 off-Windows) |
 | `GET /pkpd/catalog` + nca/steady-state/iv-bolus/bateman/superposition/pbpk/pd/population | `pharma/pk.py`, `pkpd/*` | `services/pkpd/client.ts` | PK/PD | WIRED |
@@ -62,9 +62,11 @@ status"); **LEGACY** = served to the PySide6/CLI surfaces instead.
 
 - **GUI controls with no real backend**: none found (every control traces
   to a route or an explicitly client-side calculator in the web explorer).
-- **Backend routes with no GUI consumer**: 7, all now carrying explicit
-  NON-GUI (documented) status in section A (capabilities, AD catalog/knn/
-  domain-box, semi-supervised/evaluate, artifacts/table creation lane).
+- **Backend routes with no GUI consumer**: 6 as of the r303 follow-up
+  (the semi-supervised/evaluate lane gained its consumer); the remaining
+  six carry explicit NON-GUI (documented) status in section A
+  (capabilities, AD catalog/knn/domain-box, artifacts/table creation
+  lane) — re-verified at the r307 reconciliation.
 - **Mock-only integrations**: none in the desktop app. The Next.js web
   explorer intentionally mirrors some calculators client-side (pk-simulator,
   pd-effect, pharma-calcs, ml/train mirror) with parity probes
