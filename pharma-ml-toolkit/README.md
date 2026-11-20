@@ -130,10 +130,13 @@ WCAG-verified tokens; optional Qt-Material / QDarkStyleSheet providers) and QThr
 cooperative Stop button (directive #16's complete redesign; see
 `docs/gui/GUI_REDESIGN.md` and the tab-by-tab `docs/gui/GUI_AUDIT.md`).
 
-*(History: the original single-file Tkinter `playground.py` was fully
+*(History: the original single-file Tkinter `playground.py` was declared
 retired in v1.2.141 — round 228 — after every one of its tabs landed a
-verified Studio page; the card-level descriptions below describe the
-capabilities, which now live in the Studio's pages and the CLI.)*
+verified Studio page; round 304 completed the true retirement — the file
+itself (30,047 lines) and its 753-test suite left the shipped tree, the
+final version staying in the git history. The card-level descriptions
+below describe the capabilities, which live in the Studio's pages and
+the CLI.)*
 
 The capability map, in brief (every item wired to the same public
 backend APIs, grouped as named workflows — 11 pipelines, 57 steps):
@@ -286,8 +289,9 @@ Engineering notes:
 
 *(The retired Tk playground's own affordances — the session-JSON
 export/import, the Ctrl+F card finder, the Tk widget census, the
-matplotlib TkAgg toolbars — retired with it in v1.2.141; their
-capabilities live on through the Studio pages above and the CLI.)*
+matplotlib TkAgg toolbars — declared retired with it in v1.2.141 and the
+file truly removed in round 304; their capabilities live on through the
+Studio pages above and the CLI.)*
 
 ---
 
@@ -343,7 +347,8 @@ pharma-ml-toolkit/
 │                            # studio-token theming (Qt-Material/QDarkStyle optional), QThreadPool workers with
 │                            # the cooperative Stop; runs offscreen for CI (`ui/headless.py`
 │                            # preloads the committed EGL stub when the box has none); the
-│                            # legacy Tkinter playground.py was retired in v1.2.141
+│                            # legacy Tkinter playground.py (declared retired v1.2.141) left the
+│                            # shipped tree in round 304 — 30,047 lines, git history keeps it
 ├── ui/                      # the Studio package: main_window · theme_manager · app_settings · pages/
 │                            # (dashboard · data_explorer · chemistry · pkpd · biology · docking · model_analysis ·
 │                            # ml_workbench · unsupervised · deep_learning · generative · foundations · bestofml ·
@@ -356,7 +361,7 @@ pharma-ml-toolkit/
 ├── docs/LEAKAGE_AUDIT.md   # the data-leakage audit: the rar's 28 leaky files, the toolkit's guards, the web mirror's fix
 ├── docs/DATA_AUDIT.md     # the database audit: every shipped data file checked for gaps and errors (2 real ones fixed)
 ├── docs/RELEASE_READINESS.md # the Phase-6 evidence report (part6 §16): dependency matrix, capability coverage, §14.2-chunkened suite results, carrier agreement, archive audit — regenerate via tools/release_readiness.py
-├── tests/                   # Extensive pytest coverage across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards, tests/ui/ — the eighteen Studio pages' offscreen suites + data/ fixtures; the retired Tk playground's 980-test suite left with it in v1.2.141)
+├── tests/                   # Extensive pytest coverage across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards, tests/ui/ — the eighteen Studio pages' offscreen suites + data/ fixtures; the retired Tk playground's 753-test suite — 980 before the v1.2.141 trim — left the tree with the file's true retirement in round 304)
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~720 KB (audited 526-check clean, docs/DATA_AUDIT.md), every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);

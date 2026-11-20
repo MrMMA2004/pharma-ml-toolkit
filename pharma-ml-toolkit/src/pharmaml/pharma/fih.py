@@ -157,6 +157,14 @@ def mabel_dose(
 ) -> float:
     """The MABEL starting dose in mg.
 
+    Duplicate-symbol map (round 304, part12 A-6): ``mabel_dose`` also
+    exists at :mod:`pharmaml.pharma.pbpk` — the mg-chain twin whose
+    math-parity with THIS canonical chain is pinned by tests — and at
+    :mod:`pharmaml.pkpd.pbpk` (the unitless registry-referenced
+    variant, dose in the input's own units). The family's definition
+    sites and parity are pinned by
+    ``tests/test_architecture_hygiene.py``.
+
     The portfolio's project-03 chain: free target concentration from
     the occupancy inversion, scaled to total by ``1/fu``, converted to
     mg/L by the molecular weight, multiplied by the volume of
@@ -190,6 +198,14 @@ def noael_hed(
     exponent: float = CLEARANCE_EXPONENT,
 ) -> float:
     """The NOAEL-scaled human equivalent dose, in mg.
+
+    Duplicate-symbol map (round 304, part12 A-6): ``noael_hed`` also
+    exists at :mod:`pharmaml.pharma.pbpk` (the math-parity twin,
+    equivalence pinned by tests) and :mod:`pharmaml.pkpd.pbpk` (the
+    fixed-exponent registry-referenced variant -- same formula at the
+    shared defaults). THIS one is the canonical (configurable
+    ``exponent``); the family's sites and parity are pinned by
+    ``tests/test_architecture_hygiene.py``.
 
     ``HED = NOAEL [mg/kg] · BW_animal · (BW_human / BW_animal)^(1 −
     exponent)`` -- the toxicology convention that dose scales with

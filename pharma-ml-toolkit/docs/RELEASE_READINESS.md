@@ -96,6 +96,43 @@ session; full detail in `docs/part12_audit/`):
   missing exactly one real source file (`frontend/src/services/artifacts/
   client.ts` — the B-1 exclusion defect); the r302 re-ship carries it
   complete, and the r303 archive re-ships over that fixed base.
-- **Honest gaps carried**: SBOM (open, CycloneDX lane documented),
-  signing (certificate-gated), clean-machine ladder (BLOCKED — see
-  part12_audit/WINDOWS_CLEAN_INSTALL_REPORT.md).
+- **Honest gaps carried**: signing (certificate-gated),
+  clean-machine ladder (BLOCKED — see
+  part12_audit/WINDOWS_CLEAN_INSTALL_REPORT.md); SBOM was open here
+  and CLOSED by the r304 Phase-3 addendum below.
+
+## part12 addendum — Phase-3 (2026-11-20, round 304: the architecture-hygiene round)
+
+- **B-6/A-7 (the Tk playground true retirement)**: `playground.py`
+  (30,047 lines) and `tests/test_playground.py` (16,370 lines, 753
+  collected) left the shipped tree — the v1.2.141 declaration
+  completed, the final version preserved in git history. The
+  collection re-trued 8,643 → 8,362 (−753 retired, +472 the new
+  architecture-hygiene guard). README/COVERAGE/requirements trued to
+  the honest wording (declared v1.2.141, truly removed r304).
+- **B-7/A-6 (duplicate symbols + the import-graph guard)**: the
+  gdsc_anova ×2 / mabel_dose + noael_hed ×3 / scaffold_split ×2
+  families carry docstring cross-reference maps at all ten definition
+  sites, and `tests/test_architecture_hygiene.py` (472 tests) pins
+  the definition-site sets, the nine-module library-surface
+  zero-importer census, the mabel mg-chain NUMERIC parity (fih ↔
+  pbpk over a 144-point grid), the unitless pkpd relationship
+  (mg = raw · MW/1e6), the noael trio's default parity, and the
+  registry references — drift now fires a test, not an audit.
+- **B-8 (SBOM — CLOSED this round)**:
+  `packaging/sbom/sbom.cdx.json` — the CycloneDX 1.6 SBOM of the
+  release stack (installer-requirements + the step-7 extras: torch,
+  shap, the exact pyinstaller pin, pytest; 40 components, validated,
+  reproducible) ships in the source archive, and the Windows
+  workflow's new step 22b regenerates it on the runner with
+  `--validate`, writes it into the release dir (riding the artifact
+  upload and the release attach untouched) and self-registers its
+  hash into SHA256SUMS.txt; the step is order-pinned by
+  `test_windows_pipeline.py`'s walk. Signing remains certificate-
+  gated; the clean-machine ladder remains BLOCKED (no machine).
+- **Test collection (r304 re-true)**: 8,362 collected / 0 errors —
+  8,643 − 753 (the retired Tk suite) + 472 (the hygiene guard).
+- **Census (r304 re-true)**: the live `/api/toolkit/tree` walk
+  re-trued after the ship (the −2 files / −46,417 lines of the
+  retirement plus the round's additions); pins synced in
+  `toolkit-stats.ts`.

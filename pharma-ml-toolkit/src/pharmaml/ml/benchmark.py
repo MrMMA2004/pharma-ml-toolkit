@@ -223,6 +223,14 @@ def scaffold_split(
 ) -> dict[str, np.ndarray]:
     """The deepchem scaffold split (cumulative-coverage Murcko groups).
 
+    Duplicate-symbol map (round 304, part12 A-6): ``scaffold_split``
+    also exists at :mod:`pharmaml.ml.dataset` — the ``Dataset``-API
+    library-surface variant (Datasets in and out, pluggable
+    ``scaffold_fn``). THIS one is the canonical index-array variant
+    the capability registry references (``ml.benchmark``); the
+    family's definition sites are pinned by
+    ``tests/test_architecture_hygiene.py``.
+
     Murcko scaffolds (chirality dropped, atom maps zeroed -- chemprop's
     preprocessing) group the molecules; groups sort by ``(size desc,
     first member desc)``; whole groups fill train, then valid, then

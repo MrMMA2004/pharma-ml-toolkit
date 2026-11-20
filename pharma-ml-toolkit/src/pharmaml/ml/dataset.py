@@ -483,6 +483,14 @@ def scaffold_split(
 ) -> tuple[Dataset, ...]:
     """Deepchem's ``ScaffoldSplitter``: Murcko groups, greedy fill.
 
+    Duplicate-symbol map (round 304, part12 A-6): ``scaffold_split``
+    also exists at :mod:`pharmaml.ml.benchmark` — the
+    registry-referenced index-array variant (SMILES in, index dict +
+    ``dropped`` out, chemprop's atom-map zeroing). THIS one is the
+    ``Dataset``-API library-surface variant (Datasets in, Datasets
+    out, pluggable ``scaffold_fn``); the family's definition sites
+    are pinned by ``tests/test_architecture_hygiene.py``.
+
     Groups are formed by scaffold key (default: the pure
     :func:`murcko_scaffold_key`; pass ``scaffold_fn`` for an RDKit
     ``MurckoScaffoldSmiles`` front end), sorted descending by group

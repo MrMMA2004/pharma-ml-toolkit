@@ -1,5 +1,12 @@
 # RAR → PharmaML Coverage Matrix
 
+*(Round-304 addendum: the Tk `playground.py` file and its
+`tests/test_playground.py` suite left the shipped tree in this round —
+the declared-v1.2.141 retirement completed. The historical rows below
+reference them as the surfaces of their day; those records stand
+unchanged. The current surfaces are the PySide6 Studio pages, the
+library/CLI, and the React frontend.)*
+
 Every file inside the original `کدهای ماشین لرنینگ.rar` (118 recovered
 files), audited **one by one** and mapped to the PharmaML surface that
 upgrades it. Status legend:

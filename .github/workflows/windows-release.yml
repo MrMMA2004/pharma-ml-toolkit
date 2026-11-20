@@ -382,6 +382,44 @@ jobs:
             }
           Get-Content "$env:RELEASE_DIR/SHA256SUMS.txt"
 
+      # ---- 22b. SBOM generation (round 304, part12 Phase-3) ------
+      # FEATURE_GAP item #8: the CycloneDX 1.6 SBOM of the release
+      # stack -- installer-requirements (the pinned stack this run's
+      # step 7 installed) + the step-7 extras the -r file does not
+      # carry (torch's CPU wheel at the same version, shap on
+      # --no-deps, the pyinstaller freeze tool, pytest). Validated at
+      # generation (--validate), written into RELEASE_DIR so the
+      # artifact upload (23) and the release attach (23b) carry it
+      # with zero further edits, and its hash self-registers into
+      # SHA256SUMS.txt below it. cyclonedx-py is a runner-only tool
+      # addition -- the pinned product stack is untouched.
+      - name: "22b. Generate the backend SBOM (CycloneDX 1.6)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          pip install cyclonedx-py
+          $combined = Join-Path $env:RUNNER_TEMP "sbom-combined.txt"
+          # the -r file's pyinstaller RANGE line is superseded by the
+          # exact pin below (the RELEASE_MANIFEST's own 6.22.3) -- one
+          # component, one version in the SBOM
+          Get-Content packaging/windows/installer-requirements.txt |
+            Where-Object { $_ -notmatch '^pyinstaller[><=]' } |
+            Add-Content $combined
+          Add-Content $combined ""
+          Add-Content $combined "# round-304 SBOM: the workflow step-7 extras (torch rides the CPU index at the same version, shap rides --no-deps; pyinstaller==6.22.3 replaces the -r file's range line -- the exact pin the RELEASE_MANIFEST records)"
+          @(
+            "torch==2.14.1"
+            "shap==0.54.1"
+            "pyinstaller==6.22.3"
+            "pytest"
+          ) | Add-Content $combined
+          cyclonedx-py requirements $combined `
+            --pyproject pyproject.toml --sv 1.6 --of Json --validate `
+            -o "$env:RELEASE_DIR/sbom.cdx.json"
+          $hash = (Get-FileHash "$env:RELEASE_DIR/sbom.cdx.json" -Algorithm SHA256).Hash.ToLower()
+          "$hash  sbom.cdx.json" | Add-Content "$env:RELEASE_DIR/SHA256SUMS.txt"
+          Write-Host "SBOM attached: sbom.cdx.json ($(Get-Item "$env:RELEASE_DIR/sbom.cdx.json").Length bytes, hash $hash)"
+
       # ---- 23. upload the artifacts ----------------------------
       - name: "23. Upload the release artifacts"
         uses: actions/upload-artifact@v4

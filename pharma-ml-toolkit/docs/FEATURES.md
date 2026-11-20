@@ -27,7 +27,14 @@ Phase Sixteen audit's one FAIL row — the §14.1 startup gate
 (`services/api/startup.ts` + `app/StartupGate.tsx`: the whole shell
 mounts inside the gate only after the handshake → health → WS-open
 sequence, with 8 drift guards and the 12/12 no-injection browser
-verification), an integration-level fix, not a matrix row). The §5
+verification), an integration-level fix, not a matrix row; the r304 round completed the
+Tk playground's true retirement — `playground.py` and its 753-test suite
+left the shipped tree (the v1.2.141 declaration, finally executed) and
+the r304 architecture-hygiene guard (`tests/test_architecture_hygiene.py`,
+472 tests: the duplicate-symbol map, the library-surface import graph,
+the mabel/noael parity grid, the SBOM artifact pins) re-trued the
+collection to 8,362 — no matrix row changed: the retired surfaces were
+never matrix rows). The §5
 nine-card mapping (§10 below) was
 derived live at v1.2.169.
 

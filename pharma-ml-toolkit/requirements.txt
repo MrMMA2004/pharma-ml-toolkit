@@ -63,9 +63,12 @@ tqdm==4.67.1
 
 # Plotting / PDF+DOCX report generation:
 # matplotlib==3.10.9
-#                     # 3.10+: Tcl/Tk 9 builds get LIVE TkAgg canvases
-#                     # (3.9's _tkagg could not talk to Tcl 9 -- the GUI
-#                     # fell back to static PNG figures on those stacks)
+#                     # (r304) the Tk-Agg note retired WITH the Tk
+#                     # playground's true retirement: no shipped GUI
+#                     # embeds matplotlib canvases any more (the PySide6
+#                     # studio renders figures to PNG buffers, the React
+#                     # app renders Plotly) -- the historical 3.10+
+#                     # Tcl/Tk 9 live-canvas caveat applied only to it
 # seaborn==0.13.2
 # fpdf2==2.8.5
 # python-docx==1.2.0

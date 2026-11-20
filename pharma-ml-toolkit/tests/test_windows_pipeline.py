@@ -153,6 +153,7 @@ def test_windows_release_workflow_walks_the_documented_order() -> None:
         "20. Validate the installer artifacts",
         "21. Generate the release manifest",
         "22. Generate SHA256SUMS.txt",
+        "22b. Generate the backend SBOM (CycloneDX 1.6)",
         "23. Upload the release artifacts",
     ]
     positions = [src.find(step) for step in ordered]

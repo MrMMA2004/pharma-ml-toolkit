@@ -358,6 +358,15 @@ def gdsc_anova(
 ) -> AssociationResult:
     """The GDSC drug x feature association protocol.
 
+    Duplicate-symbol map (round 304, part12 A-6): ``gdsc_anova`` also
+    exists at :mod:`pharmaml.ml.pharmacogenomics` — the
+    classic-frame variant (DataFrame + Storey-Tibshirani q-values).
+    THIS one is the association-protocol variant (``AssociationResult``,
+    global FDR, the 20-column contract) — the family is two
+    intentional interface variants over the GDSC protocol, both
+    library-surface; the definition sites are pinned by
+    ``tests/test_architecture_hygiene.py``.
+
     Parameters mirror gdsctools' ``ANOVA``/``ANOVASettings``:
     ``ic50`` is the cell-line x drug log-IC50 frame (rows indexed by
     COSMIC-like IDs, columns = drugs); ``features`` the matching

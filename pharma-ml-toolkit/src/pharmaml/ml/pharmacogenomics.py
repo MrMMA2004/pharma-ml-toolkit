@@ -416,6 +416,15 @@ def gdsc_anova(
 ) -> pd.DataFrame:
     """The classic GDSC ANOVA: every drug x feature association.
 
+    Duplicate-symbol map (round 304, part12 A-6): ``gdsc_anova`` also
+    exists at :mod:`pharmaml.biology.association` — the
+    association-protocol variant (``AssociationResult``, global FDR,
+    the 20-column contract). THIS one is the classic-frame variant
+    (DataFrame + Storey-Tibshirani q-values) — the family is two
+    intentional interface variants over the GDSC protocol, both
+    library-surface; the definition sites are pinned by
+    ``tests/test_architecture_hygiene.py``.
+
     The recipe is ``anova.py``'s, gates included: a *drug* needs
     ``>= 6`` non-NA IC50 values (``minimum_nonna_ic50``); a *feature*
     needs ``>= 3`` positives and ``>= 3`` negatives among the drug's

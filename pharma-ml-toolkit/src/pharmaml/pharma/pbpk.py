@@ -1068,6 +1068,14 @@ def noael_hed(
 ) -> float:
     """NOAEL to human-equivalent dose (mg) under ICH M3(R2).
 
+    Duplicate-symbol map (round 304, part12 A-6): ``noael_hed`` also
+    exists at :mod:`pharmaml.pharma.fih` (the configurable-exponent
+    canonical -- this one is its math-parity twin, equivalence pinned
+    by tests) and :mod:`pharmaml.pkpd.pbpk` (the fixed-exponent
+    registry-referenced variant -- same formula at the shared
+    defaults). The family's sites and parity are pinned by
+    ``tests/test_architecture_hygiene.py``.
+
     ``HED = NOAEL [mg/kg] · BW_animal · (BW_human / BW_animal)^(1−0.75)``
     — the body-surface-area correction the portfolio's preclinical
     project carries (dose scaling by ``BW^0.25`` across species).
@@ -1091,6 +1099,13 @@ def mabel_dose(
     target_occupancy: float = 0.10,
 ) -> float:
     """Minimum anticipated biological effect level dose (mg).
+
+    Duplicate-symbol map (round 304, part12 A-6): ``mabel_dose`` also
+    exists at :mod:`pharmaml.pharma.fih` — the canonical mg chain
+    (this one is its math-parity twin, the equivalence pinned by
+    tests) — and at :mod:`pharmaml.pkpd.pbpk` (the unitless
+    registry-referenced variant). The family's definition sites and
+    parity are pinned by ``tests/test_architecture_hygiene.py``.
 
     ``C_free = EC50 · occupancy / (1 − occupancy)`` (the receptor
     occupancy at 10 %), ``C_total = C_free / fu``, ``Dose =

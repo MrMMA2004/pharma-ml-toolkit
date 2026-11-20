@@ -421,6 +421,16 @@ class MinimalPBPK:
 def mabel_dose(*, ec50: float, fu_plasma: float, v_volume: float) -> float:
     """Minimal-anticipated-biological-effect dose (10 % occupancy).
 
+    Duplicate-symbol map (round 304, part12 A-6): ``mabel_dose`` also
+    exists at :mod:`pharmaml.pharma.fih` (the canonical mg chain —
+    the occupancy inversion, MW conversion, configurable ``target_ro``)
+    and at :mod:`pharmaml.pharma.pbpk` (the mg-chain twin, math-parity
+    with fih pinned by tests). THIS one is the unitless variant the
+    capability registry references (``pkpd.pbpk`` — dose in the
+    input's own units, no MW conversion); the family's definition
+    sites and parity are pinned by
+    ``tests/test_architecture_hygiene.py``.
+
     ``C_mabel_free = EC50 · 0.10/0.90``, total = free/fu, dose =
     total × V — the portfolio's translation, the standard
     first-in-human conservative starting dose.
@@ -439,6 +449,13 @@ def noael_hed(
     human_bw: float = 70.0,
 ) -> float:
     """NOAEL human-equivalent dose in mg (the ``(70/BW)^0.25`` form).
+
+    Duplicate-symbol map (round 304, part12 A-6): ``noael_hed`` also
+    exists at :mod:`pharmaml.pharma.fih` (the configurable-exponent
+    canonical) and :mod:`pharmaml.pharma.pbpk` (its math-parity twin);
+    THIS one is the unitless fixed-exponent variant of the
+    registry-referenced ``pkpd.pbpk`` family — same formula at the
+    shared defaults, pinned by ``tests/test_architecture_hygiene.py``.
 
     ``HED = NOAEL · BW_animal · (BW_human/BW_animal)^(1−0.75)`` —
     dose-per-body-area conversion by allometric exponent difference.
