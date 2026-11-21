@@ -18,7 +18,7 @@
  *  guard (tests/test_architecture_hygiene.py: the duplicate-symbol map
  *  pins, the library-surface import-graph census, the mabel/noael
  *  parity grid, the SBOM artifact pins). */
-export const SHIPPED_TEST_COUNT = 8438;
+export const SHIPPED_TEST_COUNT = 8449;
 
 /** r315 note: the canonical collection re-verified at 8,428 / 0
  *  errors / 461 files (+10 the DTA route family, − 1 re-trued A-6
@@ -41,7 +41,7 @@ export const SHIPPED_TEST_COUNT = 8438;
  *  files" was off by one, the on-disk truth at 315fdddf was 9).
  *  This pin moves independently of the Python suite above —
  *  the CI's studio-frontend job runs both lanes. */
-export const SHIPPED_COMPONENT_TEST_COUNT = 78;
+export const SHIPPED_COMPONENT_TEST_COUNT = 86;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
  *  docs, tools — the same census /api/toolkit/tree walks). The round-302
@@ -67,7 +67,7 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 78;
  *  toolkit .github path — resurrected by the same rollback, never
  *  registered at GitHub and never shipped in any archive — nets to
  *  zero (caught, removed); verified pin = live walk = page render. */
-export const SHIPPED_FILE_COUNT = 1657;
+export const SHIPPED_FILE_COUNT = 1666;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). The round-304
@@ -143,7 +143,7 @@ export const SHIPPED_FILE_COUNT = 1657;
  *  re-stripped, and the root download/ home's current zip TRAKED in
  *  git again (the r312 convention — the CI checkout must see it);
  *  re-trued pin = live walk = page render. */
-export const SHIPPED_SOURCE_LINES = 559328;
+export const SHIPPED_SOURCE_LINES = 560355;
 
 /** r315 (the v1.2.237 ship, the DTA lane): +2 the route family
  *  (routes/dta.py + tests/api/test_dta.py), +1 the DtaLane

@@ -52,6 +52,21 @@
  *   predicted IC50 matrix, the metric contract on the observed
  *   entries, and the ranked candidates per profile — every predicted
  *   value a labelled model estimate, never real pharmacology.
+ * * `GET /api/v1/drugresponse/registry` — the cancer cell-line
+ *   drug-response lane's vocabulary (part13 Phase 5): the CaDRReS
+ *   bilinear formulation with its sigmoid link, the fit
+ *   hyperparameters + the route's sync-light caps, the five-key
+ *   metric contract, the sensitivity-ranking and biomarker schemas,
+ *   the cross-cell-line validation rule, and the honest provenance
+ *   block.
+ * * `POST /api/v1/drugresponse/analyze` —
+ *   `DrugResponseAnalyzeRequest` → the sync round trip over the real
+ *   backend: the seeded SYNTHETIC screen, the bilinear fit, the
+ *   predicted response-score matrix, the metric contract on the
+ *   observed entries, the per-cell sensitivity ranking, the per-drug
+ *   biomarker weights, and the cross-cell-line validation folds —
+ *   one response scale only, every predicted value a labelled model
+ *   estimate, never real pharmacology.
  *
  * The x_test assembly for the AD stage rides the datasets client's
  * bounded `column()` bridge (each feature column ≤ 500 values — the
@@ -78,6 +93,8 @@ type AdmetScoreRequest = components["schemas"]["AdmetScoreRequest"];
 type DtaFeaturesRequest = components["schemas"]["DtaFeaturesRequest"];
 type RepurposingScreenRequest =
   components["schemas"]["RepurposingScreenRequest"];
+type DrugResponseAnalyzeRequest =
+  components["schemas"]["DrugResponseAnalyzeRequest"];
 type SemiSupervisedTrainRequest =
   components["schemas"]["SemiSupervisedTrainRequest"];
 type SemiSupervisedEvaluateRequest =
@@ -750,6 +767,147 @@ export interface RepurposingScreenResponse {
   readonly note: string;
 }
 
+// -- the drug-response lane (part13 Phase 5's next remainder item) ---
+
+/** The honest provenance + limitations block (the drugresponse lane). */
+export interface DrugResponseProvenance {
+  readonly backend: string;
+  readonly source: string;
+  readonly n_repositories: number;
+  readonly shipped_checkpoints: number;
+  readonly shipped_checkpoints_note: string;
+  readonly screen: string;
+  readonly disclaimer: string;
+}
+
+/** `GET /api/v1/drugresponse/registry` — the vocabulary answer. */
+export interface DrugResponseRegistryResponse {
+  readonly model: {
+    readonly family: string;
+    readonly formulation: string;
+    readonly direction: string;
+    readonly telemetry_fields: readonly string[];
+    readonly history_note: string;
+  };
+  readonly hyperparameters: {
+    readonly n_factors: Readonly<Record<string, number>>;
+    readonly lr: Readonly<Record<string, number>>;
+    readonly epochs: Readonly<Record<string, number>>;
+    readonly l2: Readonly<Record<string, number>>;
+    readonly seed: Readonly<Record<string, number>>;
+    readonly note: string;
+  };
+  readonly screen: {
+    readonly defaults: Readonly<Record<string, number>>;
+    readonly bounds: Readonly<Record<string, string>>;
+    readonly label: string;
+    readonly scale: string;
+  };
+  readonly sensitivity_ranking: {
+    readonly schema: readonly string[];
+    readonly ordering: string;
+    readonly source: string;
+    readonly response_limits: {
+      readonly profiles: string;
+      readonly top_k_per_profile: string;
+    };
+  };
+  readonly biomarkers: {
+    readonly schema: readonly string[];
+    readonly ordering: string;
+    readonly source: string;
+    readonly response_limits: {
+      readonly top_k_per_drug: string;
+    };
+  };
+  readonly cross_validation: {
+    readonly n_folds: string;
+    readonly rule: string;
+    readonly summary: string;
+  };
+  readonly metrics: {
+    readonly keys: readonly string[];
+    readonly note: string;
+  };
+  readonly provenance: DrugResponseProvenance;
+  readonly analyze_url: string;
+  readonly note: string;
+}
+
+/** One ranked sensitivity row — the backend's own schema. */
+export interface DrugResponseRankRow {
+  readonly drug: string;
+  readonly predicted_score: number;
+  readonly rank: number;
+}
+
+/** One biomarker weight row — the composed `W w_d` readout. */
+export interface DrugResponseBiomarkerRow {
+  readonly feature: string;
+  readonly weight: number;
+}
+
+/** One cross-cell-line validation fold. */
+export interface DrugResponseCvFold {
+  readonly fold: number;
+  readonly n_test_cells: number;
+  readonly n_observed: number;
+  readonly metrics: Readonly<Record<string, number | null>>;
+}
+
+/** `POST /api/v1/drugresponse/analyze` — the round-trip answer. */
+export interface DrugResponseAnalyzeResponse {
+  readonly request: Readonly<Record<string, number>>;
+  readonly screen: {
+    readonly cells: readonly string[];
+    readonly drugs: readonly string[];
+    readonly features: readonly string[];
+    readonly n_cells: number;
+    readonly n_drugs: number;
+    readonly n_features: number;
+    readonly n_observed: number;
+    readonly n_entries: number;
+    readonly observed_fraction: number;
+    readonly label: string;
+  };
+  readonly training: {
+    readonly epochs_run: number;
+    readonly max_epochs: number;
+    readonly final_loss: number | null;
+    readonly first_loss: number | null;
+    readonly n_observed: number;
+    readonly pearson_r: number | null;
+    readonly n_factors: number;
+    readonly note: string;
+  };
+  readonly metrics: Readonly<Record<string, number | null>>;
+  readonly ranking: {
+    readonly n_profiles: number;
+    readonly n_ranked_rows_total: number;
+    readonly top_k: number;
+    readonly per_cell: Readonly<
+      Record<string, readonly DrugResponseRankRow[]>
+    >;
+    readonly ordering: string;
+  };
+  readonly biomarkers: {
+    readonly n_drugs: number;
+    readonly top_k: number;
+    readonly per_drug: Readonly<
+      Record<string, readonly DrugResponseBiomarkerRow[]>
+    >;
+    readonly ordering: string;
+  };
+  readonly cross_validation: {
+    readonly n_folds: number;
+    readonly folds: readonly DrugResponseCvFold[];
+    readonly summary: Readonly<Record<string, number | null>>;
+    readonly note: string;
+  };
+  readonly provenance: DrugResponseProvenance;
+  readonly note: string;
+}
+
 export const mlApi = {
   /**
    * `GET /api/v1/ml/models?task=…&only_available=…` — the registry
@@ -1133,6 +1291,43 @@ export const mlApi = {
       params,
     )) as Record<string, unknown>;
     return parseRepurposingScreenResponse(raw, "repurposing screen");
+  },
+
+  /**
+   * `GET /api/v1/drugresponse/registry` — the cancer cell-line
+   * drug-response lane's own vocabulary (part13 Phase 5): the
+   * CaDRReS bilinear formulation with its sigmoid link, the fit
+   * hyperparameters + the route's sync-light caps, the five-key
+   * metric contract, the sensitivity-ranking and biomarker schemas,
+   * the cross-cell-line validation rule, and the honest provenance
+   * block — every cell the backend's own, never re-declared.
+   */
+  async drugResponseRegistry(): Promise<DrugResponseRegistryResponse> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/drugresponse/registry",
+    );
+    return parseDrugResponseRegistryResponse(raw, "drugresponse registry");
+  },
+
+  /**
+   * `POST /api/v1/drugresponse/analyze` — the full honest round trip
+   * over the real backend (sync-only light compute, bounded dense
+   * matrices): the seeded SYNTHETIC screen, the bilinear fit, the
+   * predicted response-score matrix, the metric contract on the
+   * observed entries, the per-cell sensitivity ranking, the per-drug
+   * biomarker weights, and the cross-cell-line validation folds. One
+   * response scale only; every predicted value is a labelled model
+   * estimate over the synthetic screen — never real pharmacology,
+   * never a clinical recommendation.
+   */
+  async drugResponseAnalyze(
+    params: Partial<DrugResponseAnalyzeRequest> = {},
+  ): Promise<DrugResponseAnalyzeResponse> {
+    const raw = (await api.post(
+      "/api/v1/drugresponse/analyze",
+      params,
+    )) as Record<string, unknown>;
+    return parseDrugResponseAnalyzeResponse(raw, "drugresponse analyze");
   },
 };
 
@@ -2283,6 +2478,298 @@ function parseRepurposingScreenResponse(
       ordering: asString(candidatesRaw["ordering"]) ?? "",
     },
     provenance: parseRepurposingProvenance(r["provenance"], what),
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+// -- the drug-response lane parsers (§8.1) ------------------------------
+
+function parseDrugResponseProvenance(
+  raw: unknown,
+  what: string,
+): DrugResponseProvenance {
+  const r = expectObject(raw, `${what} provenance`);
+  const backend = r["backend"];
+  const source = r["source"];
+  if (typeof backend !== "string" || typeof source !== "string") {
+    throw new Error(`${what} provenance: backend/source are not strings`);
+  }
+  return {
+    backend,
+    source,
+    n_repositories: asNumber(r["n_repositories"]) ?? 0,
+    shipped_checkpoints: asNumber(r["shipped_checkpoints"]) ?? 0,
+    shipped_checkpoints_note:
+      asString(r["shipped_checkpoints_note"]) ?? "",
+    screen: asString(r["screen"]) ?? "",
+    disclaimer: asString(r["disclaimer"]) ?? "",
+  };
+}
+
+/** Narrow the drug-response registry answer. */
+function parseDrugResponseRegistryResponse(
+  raw: unknown,
+  what: string,
+): DrugResponseRegistryResponse {
+  const r = expectObject(raw, what);
+  const modelRaw = expectObject(r["model"], `${what} model`);
+  const hyperRaw = expectObject(
+    r["hyperparameters"],
+    `${what} hyperparameters`,
+  );
+  const screenRaw = expectObject(r["screen"], `${what} screen`);
+  const rankingRaw = expectObject(
+    r["sensitivity_ranking"],
+    `${what} sensitivity_ranking`,
+  );
+  const limitsRaw = expectObject(
+    rankingRaw["response_limits"],
+    `${what} sensitivity_ranking.response_limits`,
+  );
+  const biomarkersRaw = expectObject(r["biomarkers"], `${what} biomarkers`);
+  const biomarkerLimitsRaw = expectObject(
+    biomarkersRaw["response_limits"],
+    `${what} biomarkers.response_limits`,
+  );
+  const cvRaw = expectObject(
+    r["cross_validation"],
+    `${what} cross_validation`,
+  );
+  const metricsRaw = expectObject(r["metrics"], `${what} metrics`);
+  return {
+    model: {
+      family: asString(modelRaw["family"]) ?? "",
+      formulation: asString(modelRaw["formulation"]) ?? "",
+      direction: asString(modelRaw["direction"]) ?? "",
+      telemetry_fields: Array.isArray(modelRaw["telemetry_fields"])
+        ? (modelRaw["telemetry_fields"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      history_note: asString(modelRaw["history_note"]) ?? "",
+    },
+    hyperparameters: {
+      n_factors: parseNumberRecord(
+        hyperRaw["n_factors"],
+        `${what} hyperparameters.n_factors`,
+      ),
+      lr: parseNumberRecord(hyperRaw["lr"], `${what} hyperparameters.lr`),
+      epochs: parseNumberRecord(
+        hyperRaw["epochs"],
+        `${what} hyperparameters.epochs`,
+      ),
+      l2: parseNumberRecord(hyperRaw["l2"], `${what} hyperparameters.l2`),
+      seed: parseNumberRecord(
+        hyperRaw["seed"],
+        `${what} hyperparameters.seed`,
+      ),
+      note: asString(hyperRaw["note"]) ?? "",
+    },
+    screen: {
+      defaults: parseNumberRecord(
+        screenRaw["defaults"],
+        `${what} screen.defaults`,
+      ),
+      bounds: parseStringRecord(screenRaw["bounds"], `${what} screen.bounds`),
+      label: asString(screenRaw["label"]) ?? "",
+      scale: asString(screenRaw["scale"]) ?? "",
+    },
+    sensitivity_ranking: {
+      schema: Array.isArray(rankingRaw["schema"])
+        ? (rankingRaw["schema"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      ordering: asString(rankingRaw["ordering"]) ?? "",
+      source: asString(rankingRaw["source"]) ?? "",
+      response_limits: {
+        profiles: asString(limitsRaw["profiles"]) ?? "",
+        top_k_per_profile: asString(limitsRaw["top_k_per_profile"]) ?? "",
+      },
+    },
+    biomarkers: {
+      schema: Array.isArray(biomarkersRaw["schema"])
+        ? (biomarkersRaw["schema"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      ordering: asString(biomarkersRaw["ordering"]) ?? "",
+      source: asString(biomarkersRaw["source"]) ?? "",
+      response_limits: {
+        top_k_per_drug: asString(biomarkerLimitsRaw["top_k_per_drug"]) ?? "",
+      },
+    },
+    cross_validation: {
+      n_folds: asString(cvRaw["n_folds"]) ?? "",
+      rule: asString(cvRaw["rule"]) ?? "",
+      summary: asString(cvRaw["summary"]) ?? "",
+    },
+    metrics: {
+      keys: Array.isArray(metricsRaw["keys"])
+        ? (metricsRaw["keys"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      note: asString(metricsRaw["note"]) ?? "",
+    },
+    provenance: parseDrugResponseProvenance(r["provenance"], what),
+    analyze_url: asString(r["analyze_url"]) ?? "",
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+/** Narrow one ranked sensitivity row. */
+function parseDrugResponseRankRow(
+  raw: unknown,
+  what: string,
+): DrugResponseRankRow {
+  const r = expectObject(raw, what);
+  const drug = r["drug"];
+  const rank = r["rank"];
+  const predicted = r["predicted_score"];
+  if (
+    typeof drug !== "string" ||
+    typeof rank !== "number" ||
+    typeof predicted !== "number"
+  ) {
+    throw new Error(`${what}: drug/predicted_score/rank are malformed`);
+  }
+  return { drug, predicted_score: predicted, rank };
+}
+
+/** Narrow one biomarker weight row. */
+function parseDrugResponseBiomarkerRow(
+  raw: unknown,
+  what: string,
+): DrugResponseBiomarkerRow {
+  const r = expectObject(raw, what);
+  const feature = r["feature"];
+  const weight = r["weight"];
+  if (typeof feature !== "string" || typeof weight !== "number") {
+    throw new Error(`${what}: feature/weight are malformed`);
+  }
+  return { feature, weight };
+}
+
+/** Narrow one cross-cell-line validation fold. */
+function parseDrugResponseCvFold(
+  raw: unknown,
+  what: string,
+): DrugResponseCvFold {
+  const r = expectObject(raw, what);
+  return {
+    fold: asNumber(r["fold"]) ?? 0,
+    n_test_cells: asNumber(r["n_test_cells"]) ?? 0,
+    n_observed: asNumber(r["n_observed"]) ?? 0,
+    metrics: parseMetricRecord(r["metrics"], `${what} metrics`),
+  };
+}
+
+/** Narrow the analyze answer. */
+function parseDrugResponseAnalyzeResponse(
+  raw: unknown,
+  what: string,
+): DrugResponseAnalyzeResponse {
+  const r = expectObject(raw, what);
+  const screenRaw = expectObject(r["screen"], `${what} screen`);
+  const trainingRaw = expectObject(r["training"], `${what} training`);
+  const rankingRaw = expectObject(r["ranking"], `${what} ranking`);
+  const perCellRaw = expectObject(
+    rankingRaw["per_cell"],
+    `${what} ranking.per_cell`,
+  );
+  const perCell: Record<string, DrugResponseRankRow[]> = {};
+  for (const [cellLine, rows] of Object.entries(perCellRaw)) {
+    if (!Array.isArray(rows)) {
+      continue;
+    }
+    perCell[cellLine] = rows.map((row, i) =>
+      parseDrugResponseRankRow(
+        row,
+        `${what} per_cell[${cellLine}][${i}]`,
+      ),
+    );
+  }
+  const biomarkersRaw = expectObject(r["biomarkers"], `${what} biomarkers`);
+  const perDrugRaw = expectObject(
+    biomarkersRaw["per_drug"],
+    `${what} biomarkers.per_drug`,
+  );
+  const perDrug: Record<string, DrugResponseBiomarkerRow[]> = {};
+  for (const [drug, rows] of Object.entries(perDrugRaw)) {
+    if (!Array.isArray(rows)) {
+      continue;
+    }
+    perDrug[drug] = rows.map((row, i) =>
+      parseDrugResponseBiomarkerRow(
+        row,
+        `${what} per_drug[${drug}][${i}]`,
+      ),
+    );
+  }
+  const cvRaw = expectObject(r["cross_validation"], `${what} cross_validation`);
+  const foldsRaw = Array.isArray(cvRaw["folds"])
+    ? (cvRaw["folds"] as unknown[])
+    : [];
+  return {
+    request: parseNumberRecord(r["request"], `${what} request`),
+    screen: {
+      cells: Array.isArray(screenRaw["cells"])
+        ? (screenRaw["cells"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      drugs: Array.isArray(screenRaw["drugs"])
+        ? (screenRaw["drugs"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      features: Array.isArray(screenRaw["features"])
+        ? (screenRaw["features"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      n_cells: asNumber(screenRaw["n_cells"]) ?? 0,
+      n_drugs: asNumber(screenRaw["n_drugs"]) ?? 0,
+      n_features: asNumber(screenRaw["n_features"]) ?? 0,
+      n_observed: asNumber(screenRaw["n_observed"]) ?? 0,
+      n_entries: asNumber(screenRaw["n_entries"]) ?? 0,
+      observed_fraction: asNumber(screenRaw["observed_fraction"]) ?? 0,
+      label: asString(screenRaw["label"]) ?? "",
+    },
+    training: {
+      epochs_run: asNumber(trainingRaw["epochs_run"]) ?? 0,
+      max_epochs: asNumber(trainingRaw["max_epochs"]) ?? 0,
+      final_loss: asNumber(trainingRaw["final_loss"]),
+      first_loss: asNumber(trainingRaw["first_loss"]),
+      n_observed: asNumber(trainingRaw["n_observed"]) ?? 0,
+      pearson_r: asNumber(trainingRaw["pearson_r"]),
+      n_factors: asNumber(trainingRaw["n_factors"]) ?? 0,
+      note: asString(trainingRaw["note"]) ?? "",
+    },
+    metrics: parseMetricRecord(r["metrics"], `${what} metrics`),
+    ranking: {
+      n_profiles: asNumber(rankingRaw["n_profiles"]) ?? 0,
+      n_ranked_rows_total: asNumber(rankingRaw["n_ranked_rows_total"]) ?? 0,
+      top_k: asNumber(rankingRaw["top_k"]) ?? 0,
+      per_cell: perCell,
+      ordering: asString(rankingRaw["ordering"]) ?? "",
+    },
+    biomarkers: {
+      n_drugs: asNumber(biomarkersRaw["n_drugs"]) ?? 0,
+      top_k: asNumber(biomarkersRaw["top_k"]) ?? 0,
+      per_drug: perDrug,
+      ordering: asString(biomarkersRaw["ordering"]) ?? "",
+    },
+    cross_validation: {
+      n_folds: asNumber(cvRaw["n_folds"]) ?? 0,
+      folds: foldsRaw.map((fold, i) =>
+        parseDrugResponseCvFold(fold, `${what} folds[${i}]`),
+      ),
+      summary: parseMetricRecord(cvRaw["summary"], `${what} summary`),
+      note: asString(cvRaw["note"]) ?? "",
+    },
+    provenance: parseDrugResponseProvenance(r["provenance"], what),
     note: asString(r["note"]) ?? "",
   };
 }

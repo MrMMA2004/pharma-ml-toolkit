@@ -1066,6 +1066,104 @@
         "title": "DoseAccumulationRequest",
         "type": "object"
       },
+      "DrugResponseAnalyzeRequest": {
+        "description": "One seeded synthetic screen + fit + ranking request.\n\nThe geometry bounds mirror the backend's own rules exactly\n(``>= 4`` cells, ``>= 2`` drugs, ``>= 2`` features, ``2 <=\nn_folds <= n_cells`` \u2014 the last one enforced by the backend\nitself as its own 422); the remaining caps are this route's\nsync-light budget, stated in the registry.",
+        "properties": {
+          "epochs": {
+            "default": 200,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Epochs",
+            "type": "integer"
+          },
+          "l2": {
+            "default": 0.001,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "L2",
+            "type": "number"
+          },
+          "lr": {
+            "default": 0.1,
+            "maximum": 0.5,
+            "minimum": 0.001,
+            "title": "Lr",
+            "type": "number"
+          },
+          "n_cells": {
+            "default": 12,
+            "maximum": 40.0,
+            "minimum": 4.0,
+            "title": "N Cells",
+            "type": "integer"
+          },
+          "n_drugs": {
+            "default": 4,
+            "maximum": 30.0,
+            "minimum": 2.0,
+            "title": "N Drugs",
+            "type": "integer"
+          },
+          "n_factors": {
+            "default": 3,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "N Factors",
+            "type": "integer"
+          },
+          "n_features": {
+            "default": 8,
+            "maximum": 20.0,
+            "minimum": 2.0,
+            "title": "N Features",
+            "type": "integer"
+          },
+          "n_folds": {
+            "default": 3,
+            "maximum": 5.0,
+            "minimum": 2.0,
+            "title": "N Folds",
+            "type": "integer"
+          },
+          "noise": {
+            "default": 0.05,
+            "maximum": 0.5,
+            "minimum": 0.0,
+            "title": "Noise",
+            "type": "number"
+          },
+          "observed": {
+            "default": 0.85,
+            "maximum": 1.0,
+            "minimum": 0.5,
+            "title": "Observed",
+            "type": "number"
+          },
+          "profiles": {
+            "default": 3,
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Profiles",
+            "type": "integer"
+          },
+          "seed": {
+            "default": 42,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "top_k": {
+            "default": 5,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "title": "DrugResponseAnalyzeRequest",
+        "type": "object"
+      },
       "DtaFeaturesRequest": {
         "properties": {
           "dipeptides": {
@@ -5809,6 +5907,72 @@
         "summary": "Scoring Ligand Efficiency",
         "tags": [
           "docking"
+        ]
+      }
+    },
+    "/api/v1/drugresponse/analyze": {
+      "post": {
+        "operationId": "analyze_api_v1_drugresponse_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DrugResponseAnalyzeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Analyze Api V1 Drugresponse Analyze Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analyze",
+        "tags": [
+          "drugresponse"
+        ]
+      }
+    },
+    "/api/v1/drugresponse/registry": {
+      "get": {
+        "operationId": "registry_api_v1_drugresponse_registry_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Registry Api V1 Drugresponse Registry Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Registry",
+        "tags": [
+          "drugresponse"
         ]
       }
     },

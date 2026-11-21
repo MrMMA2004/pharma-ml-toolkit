@@ -801,6 +801,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/drugresponse/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Analyze */
+        post: operations["analyze_api_v1_drugresponse_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/drugresponse/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registry */
+        get: operations["registry_api_v1_drugresponse_registry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dta/features": {
         parameters: {
             query?: never;
@@ -2037,6 +2071,83 @@ export interface components {
             title: string;
             /** Vd */
             vd: number;
+        };
+        /**
+         * DrugResponseAnalyzeRequest
+         * @description One seeded synthetic screen + fit + ranking request.
+         *
+         *     The geometry bounds mirror the backend's own rules exactly
+         *     (``>= 4`` cells, ``>= 2`` drugs, ``>= 2`` features, ``2 <=
+         *     n_folds <= n_cells`` — the last one enforced by the backend
+         *     itself as its own 422); the remaining caps are this route's
+         *     sync-light budget, stated in the registry.
+         */
+        DrugResponseAnalyzeRequest: {
+            /**
+             * Epochs
+             * @default 200
+             */
+            epochs: number;
+            /**
+             * L2
+             * @default 0.001
+             */
+            l2: number;
+            /**
+             * Lr
+             * @default 0.1
+             */
+            lr: number;
+            /**
+             * N Cells
+             * @default 12
+             */
+            n_cells: number;
+            /**
+             * N Drugs
+             * @default 4
+             */
+            n_drugs: number;
+            /**
+             * N Factors
+             * @default 3
+             */
+            n_factors: number;
+            /**
+             * N Features
+             * @default 8
+             */
+            n_features: number;
+            /**
+             * N Folds
+             * @default 3
+             */
+            n_folds: number;
+            /**
+             * Noise
+             * @default 0.05
+             */
+            noise: number;
+            /**
+             * Observed
+             * @default 0.85
+             */
+            observed: number;
+            /**
+             * Profiles
+             * @default 3
+             */
+            profiles: number;
+            /**
+             * Seed
+             * @default 42
+             */
+            seed: number;
+            /**
+             * Top K
+             * @default 5
+             */
+            top_k: number;
         };
         /** DtaFeaturesRequest */
         DtaFeaturesRequest: {
@@ -4899,6 +5010,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze_api_v1_drugresponse_analyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DrugResponseAnalyzeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registry_api_v1_drugresponse_registry_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

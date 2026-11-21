@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownToLine,
+  Activity,
   Braces,
   Brain,
   ClipboardCheck,
@@ -56,6 +57,8 @@ import {
   type DtaFeaturesResponse,
   type DtaPairCard,
   type DtaRegistryResponse,
+  type DrugResponseAnalyzeResponse,
+  type DrugResponseRegistryResponse,
   type ExplainResult,
   type EvaluationRow,
   type ModelCatalogEntry,
@@ -81,8 +84,8 @@ import {
  * Select Dataset → Target & Features → Preprocess → Configure
  * Split/CV → Algorithm → Hyperparameters → Train → Evaluate →
  * Compare → Applicability Domain → ADMET Profile → Drug–Target
- * Interaction → Drug Repurposing → Semi-supervised Learning →
- * Explainability → Export
+ * Interaction → Drug Repurposing → Cancer Cell-Line Drug Response →
+ * Semi-supervised Learning → Explainability → Export
  *
  * Every control below executes the REAL backend through the typed
  * service layer (no fabricated data, no disabled pretend buttons):
@@ -94,7 +97,12 @@ import {
  * /ml/explain SHAP lane (the real shap_summary engine over a bounded
  * sample — the r289 queue row, closed), the drug-repurposing lane
  * rides routes/repurposing.py over the seeded SYNTHETIC screen
- * (every predicted value a labelled model estimate), and the export registers a
+ * (every predicted value a labelled model estimate), the cancer
+ * cell-line drug-response lane rides routes/drugresponse.py over
+ * the seeded SYNTHETIC screen (the bilinear CaDRReS-style fit, the
+ * sensitivity ranking, the biomarker readout, and the
+ * cross-cell-line folds — every predicted value a labelled model
+ * estimate, one response scale only), and the export registers a
  * real table artifact downloaded through the token-header lane with
  * digest verification.
  */
@@ -150,6 +158,60 @@ const RP_FIELDS: readonly {
   { key: "seed", label: "seed", step: 1 },
   { key: "top_k", label: "top-k (1–10)", step: 1 },
   { key: "profiles", label: "profiles (1–8)", step: 1 },
+];
+
+/** The drug-response analyze's parameter block (the route's own defaults). */
+type DrugResponseParams = {
+  n_cells: number;
+  n_drugs: number;
+  n_features: number;
+  n_factors: number;
+  lr: number;
+  epochs: number;
+  l2: number;
+  noise: number;
+  observed: number;
+  seed: number;
+  top_k: number;
+  profiles: number;
+  n_folds: number;
+};
+
+const DRUG_RESPONSE_DEFAULTS: DrugResponseParams = {
+  n_cells: 12,
+  n_drugs: 4,
+  n_features: 8,
+  n_factors: 3,
+  lr: 0.1,
+  epochs: 200,
+  l2: 0.001,
+  noise: 0.05,
+  observed: 0.85,
+  seed: 42,
+  top_k: 5,
+  profiles: 3,
+  n_folds: 3,
+};
+
+/** The stage's numeric controls — labels state the route's own bounds. */
+const DR_FIELDS: readonly {
+  key: keyof DrugResponseParams;
+  label: string;
+  step: number;
+}[] = [
+  { key: "n_cells", label: "cells (4–40)", step: 1 },
+  { key: "n_drugs", label: "drugs (2–30)", step: 1 },
+  { key: "n_features", label: "features (2–20)", step: 1 },
+  { key: "n_factors", label: "factors (1–10)", step: 1 },
+  { key: "lr", label: "lr (0.001–0.5)", step: 0.001 },
+  { key: "epochs", label: "epochs (1–1000)", step: 10 },
+  { key: "l2", label: "l2 (0–1)", step: 0.001 },
+  { key: "noise", label: "noise (0–0.5)", step: 0.01 },
+  { key: "observed", label: "observed (0.5–1)", step: 0.05 },
+  { key: "seed", label: "seed", step: 1 },
+  { key: "top_k", label: "top-k (1–10)", step: 1 },
+  { key: "profiles", label: "profiles (1–8)", step: 1 },
+  { key: "n_folds", label: "folds (2–5)", step: 1 },
 ];
 
 function describeError(error: unknown): string {
@@ -618,6 +680,17 @@ export function MLPage() {
   const [rpResult, setRpResult] = useState<RepurposingScreenResponse | null>(null);
   const [rpRegistry, setRpRegistry] = useState<RepurposingRegistryResponse | null>(null);
 
+  // stage 13b: the cancer cell-line drug-response lane (part13 Phase 5
+  // — the bilinear CaDRReS-style model + the sensitivity ranking +
+  // the biomarker readout + the cross-cell-line folds over the
+  // SYNTHETIC seeded screen, dataset-free)
+  const [drParams, setDrParams] =
+    useState<DrugResponseParams>(DRUG_RESPONSE_DEFAULTS);
+  const [drError, setDrError] = useState<string | null>(null);
+  const [drBusy, setDrBusy] = useState(false);
+  const [drResult, setDrResult] = useState<DrugResponseAnalyzeResponse | null>(null);
+  const [drRegistry, setDrRegistry] = useState<DrugResponseRegistryResponse | null>(null);
+
   // stage 11: semi-supervised learning (classification-only)
   const [ssMethod, setSsMethod] = useState<
     "self_training" | "label_spreading" | "label_propagation"
@@ -740,6 +813,25 @@ export function MLPage() {
       .then((response) => {
         if (!cancelled) {
           setRpRegistry(response);
+        }
+      })
+      .catch(() => {
+        // the registry line stays absent — never a fabricated summary
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // the drug-response registry loads once on mount (the vocabulary
+  // line — the same decorative-context contract as the DTA lane)
+  useEffect(() => {
+    let cancelled = false;
+    mlApi
+      .drugResponseRegistry()
+      .then((response) => {
+        if (!cancelled) {
+          setDrRegistry(response);
         }
       })
       .catch(() => {
@@ -1344,6 +1436,114 @@ export function MLPage() {
       setRpBusy(false);
     }
   }, [rpParams]);
+
+  // stage 13b: the cancer cell-line drug-response analyze (sync light
+  // compute — one button, client-side validation before any request;
+  // the backend's own 422s surface verbatim; every value a labelled
+  // model estimate, one response scale only)
+  const updateDrParam = useCallback(
+    (key: keyof DrugResponseParams, value: number) => {
+      setDrParams((prev) => ({ ...prev, [key]: value }));
+    },
+    [],
+  );
+
+  const handleDrugResponseAnalyze = useCallback(async () => {
+    const p = drParams;
+    const fail = (message: string) => {
+      setDrResult(null);
+      setDrError(message);
+    };
+    if (Object.values(p).some((value) => !Number.isFinite(value))) {
+      fail("every analyze parameter must be a finite number");
+      return;
+    }
+    if (p.n_cells < 4) {
+      fail("the screen needs at least 4 cell lines (the backend's own bound)");
+      return;
+    }
+    if (p.n_drugs < 2) {
+      fail("the screen needs at least 2 drugs (the backend's own bound)");
+      return;
+    }
+    if (p.n_features < 2) {
+      fail("the screen needs at least 2 features (the backend's own bound)");
+      return;
+    }
+    if (p.n_cells > 40 || p.n_drugs > 30 || p.n_features > 20) {
+      fail("the route caps the screen at 40 cells × 30 drugs × 20 features (the sync-light budget)");
+      return;
+    }
+    if (p.n_factors < 1 || p.n_factors > 10) {
+      fail("the latent space is 1..10 factors");
+      return;
+    }
+    if (p.lr < 0.001 || p.lr > 0.5) {
+      fail("the learning rate must lie in 0.001..0.5");
+      return;
+    }
+    if (p.epochs < 1 || p.epochs > 1000) {
+      fail("the epoch ceiling is 1..1000 (the sync-light budget)");
+      return;
+    }
+    if (p.l2 < 0 || p.l2 > 1) {
+      fail("the L2 shrinkage must lie in 0..1");
+      return;
+    }
+    if (p.noise < 0 || p.noise > 0.5) {
+      fail("the noise scale must lie in 0..0.5");
+      return;
+    }
+    if (p.observed < 0.5 || p.observed > 1.0) {
+      fail("the observed fraction must lie in 0.5..1.0 (the backend's own bound)");
+      return;
+    }
+    if (p.seed < 0) {
+      fail("the seed must be non-negative");
+      return;
+    }
+    if (p.top_k < 1 || p.top_k > 10) {
+      fail("top-k per profile is 1..10");
+      return;
+    }
+    if (p.profiles < 1 || p.profiles > 8) {
+      fail("the answer carries 1..8 profiles");
+      return;
+    }
+    if (p.n_folds < 2 || p.n_folds > 5) {
+      fail("the cross-validation carries 2..5 folds");
+      return;
+    }
+    if (p.n_folds > p.n_cells) {
+      fail("the folds split cell lines — n_folds may not exceed the cell count (the backend's own 422)");
+      return;
+    }
+    setDrBusy(true);
+    setDrError(null);
+    try {
+      const response = await mlApi.drugResponseAnalyze({
+        n_cells: p.n_cells,
+        n_drugs: p.n_drugs,
+        n_features: p.n_features,
+        n_factors: p.n_factors,
+        lr: p.lr,
+        epochs: p.epochs,
+        l2: p.l2,
+        noise: p.noise,
+        observed: p.observed,
+        seed: p.seed,
+        top_k: p.top_k,
+        profiles: p.profiles,
+        n_folds: p.n_folds,
+      });
+      setDrResult(response);
+    } catch (error) {
+      setDrResult(null);
+      setDrError(describeError(error));
+    } finally {
+      setDrBusy(false);
+    }
+  }, [drParams]);
 
   // stage 11b: the held-out evaluation (3 seeded repeats, test_size
   // 0.25 — the route's own defaults surfaced, one button, job lane)
@@ -2742,6 +2942,170 @@ export function MLPage() {
 
       <StageHeader
         index={14}
+        title="Cancer Cell-Line Drug Response"
+        hint="the bilinear CaDRReS-style model over the seeded SYNTHETIC screen — sensitivity ranking + biomarkers, sync"
+        icon={<Activity aria-hidden className="h-4 w-4" />}
+      >
+        <Card>
+          <CardContent>
+            <p className="text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              The part13 Phase-5 lane over the REAL in-tree backend
+              (ml/drugresponse.py — the CaDRReS-style bilinear
+              factorisation with its sigmoid link, the per-cell
+              sensitivity ranking, the composed W w_d biomarker readout,
+              and the cross-cell-line validation folds): the seeded
+              screen, the fit, the predicted response-score matrix, the
+              metric contract on the observed entries, and the ranked
+              drugs per cell profile. No pretrained checkpoints ship;
+              the screen is SYNTHETIC — one response scale only, never
+              real pharmacology, never a clinical recommendation.
+              {drRegistry !== null ? (
+                <>
+                  {" "}The metric contract: {drRegistry.metrics.keys.length}{" "}
+                  keys; the ranking schema{" "}
+                  {drRegistry.sensitivity_ranking.schema.join(" / ")} —{" "}
+                  {drRegistry.sensitivity_ranking.ordering};{" "}
+                  {drRegistry.cross_validation.rule}.
+                </>
+              ) : null}
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              {DR_FIELDS.map(({ key, label, step }) => (
+                <label
+                  key={key}
+                  className="text-xs text-[var(--color-muted-foreground)]"
+                >
+                  {label}
+                  <input
+                    type="number"
+                    step={step}
+                    value={drParams[key]}
+                    onChange={(event) =>
+                      updateDrParam(key, Number(event.target.value))
+                    }
+                    aria-label={`drugresponse ${key}`}
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 font-mono text-xs"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <Button
+                size="sm"
+                onClick={() => void handleDrugResponseAnalyze()}
+                disabled={drBusy}
+              >
+                {drBusy ? "Fitting…" : "Run the analysis"}
+              </Button>
+            </div>
+            {drError !== null ? (
+              <div className="mt-3">
+                <ErrorBanner message={drError} />
+              </div>
+            ) : null}
+            {drResult !== null ? (
+              <>
+                <p className="mt-4 text-xs text-[var(--color-foreground)]">
+                  {drResult.screen.n_cells}×{drResult.screen.n_drugs} screen
+                  (SYNTHETIC) · {drResult.screen.n_observed}/
+                  {drResult.screen.n_entries} observed entries (
+                  {(drResult.screen.observed_fraction * 100).toFixed(0)}%) ·
+                  the fit: {drResult.training.epochs_run}/
+                  {drResult.training.max_epochs} epochs (final loss{" "}
+                  {drResult.training.final_loss?.toFixed(4) ?? "n/a"}, pearson
+                  r {drResult.training.pearson_r?.toFixed(3) ?? "null"}) · rmse{" "}
+                  {drResult.metrics.rmse?.toFixed(3) ?? "null"} ·
+                  cross-cell-line CV: {drResult.cross_validation.n_folds}{" "}
+                  folds, mean rmse{" "}
+                  {drResult.cross_validation.summary.rmse?.toFixed(3) ??
+                    "null"}
+                </p>
+                {Object.entries(drResult.ranking.per_cell).map(
+                  ([cellLine, rows]) => (
+                    <div key={cellLine} className="mt-3">
+                      <p className="text-xs font-medium text-[var(--color-foreground)]">
+                        {cellLine} — top {rows.length} of{" "}
+                        {drResult.screen.n_drugs} (highest predicted score =
+                        rank 1)
+                      </p>
+                      <table className="mt-1 w-full text-xs">
+                        <thead>
+                          <tr className="text-[var(--color-muted-foreground)]">
+                            <th className="py-1 text-left font-normal">rank</th>
+                            <th className="text-left font-normal">drug</th>
+                            <th className="text-right font-normal">
+                              predicted score (model estimate)
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row) => (
+                            <tr
+                              key={`${cellLine}-${row.drug}`}
+                              className="border-t border-[var(--color-border)]"
+                            >
+                              <td className="py-1">{row.rank}</td>
+                              <td>{row.drug}</td>
+                              <td className="text-right font-mono">
+                                {row.predicted_score.toFixed(3)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ),
+                )}
+                {Object.entries(drResult.biomarkers.per_drug).map(
+                  ([drug, rows]) => (
+                    <div key={drug} className="mt-3">
+                      <p className="text-xs font-medium text-[var(--color-foreground)]">
+                        {drug} — top {rows.length} biomarker weights (the
+                        composed W w_d readout)
+                      </p>
+                      <table className="mt-1 w-full text-xs">
+                        <thead>
+                          <tr className="text-[var(--color-muted-foreground)]">
+                            <th className="py-1 text-left font-normal">
+                              feature
+                            </th>
+                            <th className="text-right font-normal">
+                              weight (logit contribution)
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row) => (
+                            <tr
+                              key={`${drug}-${row.feature}`}
+                              className="border-t border-[var(--color-border)]"
+                            >
+                              <td className="py-1">{row.feature}</td>
+                              <td className="text-right font-mono">
+                                {row.weight.toFixed(3)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ),
+                )}
+                <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                  provenance {drResult.provenance.backend} —{" "}
+                  {drResult.provenance.shipped_checkpoints} shipped
+                  checkpoints (the honest absence, stated) · the served
+                  screen: {drResult.provenance.screen} ·{" "}
+                  {drResult.provenance.disclaimer}
+                </p>
+              </>
+            ) : null}
+          </CardContent>
+        </Card>
+      </StageHeader>
+
+      <StageHeader
+        index={15}
         title="Semi-supervised Learning"
         hint="classification datasets only — the backend's own gate"
         icon={<Network aria-hidden className="h-4 w-4" />}
@@ -3045,7 +3409,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={15}
+        index={16}
         title="Explainability & Uncertainty"
         hint="the real SHAP lane + the AD bootstrap's uncertainty surface"
         icon={<Info aria-hidden className="h-4 w-4" />}
@@ -3125,7 +3489,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={16}
+        index={17}
         title="Export"
         hint="a registered table artifact + a digest-verified download"
         icon={<ArrowDownToLine aria-hidden className="h-4 w-4" />}

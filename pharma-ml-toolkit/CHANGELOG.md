@@ -1,3 +1,121 @@
+## [1.2.239] — 2026-11-21 — round 317 (the 108th recorded run: the interactive part13 continuation, trace 1a1fe97d37b3b40d — the Phase-5 cancer cell-line drug-response lane, API + GUI; a NEW version ship)
+
+- **The tenth-arrival opening recovered in minutes — the r316 pattern
+  again, verbatim**: the stale-summary reconciliation first (the
+  inherited summary still described the world at r308/counter 99; the
+  on-disk truth: r316 had completed and pushed, the counter surviving
+  at 107 with the worklog carrying the full R316 terminal +
+  post-terminal ledgers). The recovery proper: the 600-mode credential
+  validated (`/user` 200 as MrMMA2004, never printed), the
+  post-session machinery ghost-zip commit `9e42c69e` (a UUID subject,
+  unpushed — 12 files: the four current zips tracked into the two
+  in-tree homes plus the r316-wip scratch snapshots) reset away per
+  the r312 precedent with the disk homes restored (five-home sha
+  parity `6fc0d25e` exact), the venv SURVIVED intact (pharmaml
+  1.2.238 — zero repair, the second rollback in a row to leave it
+  standing). **The pending r316 push-3 CI verdict closed GREEN on
+  arrival: `74b81167` 19/19 check-runs success** — the CI-fix +
+  same-version re-ship convention held through the superseding push.
+- **part13 Phase 5's next remainder item EXECUTED — the Cancer
+  Cell-Line Drug Response lane, both legs in one round, over the REAL
+  in-tree backend (`ml/drugresponse.py`: the CaDRReS-style bilinear
+  model in plain NumPy with its sigmoid link, training included —
+  the gamma layer `W` over cell-line features, per-drug weight
+  vectors `w_d`, squared error over the observed pairs only; the
+  five-key metric contract; the cell-line-grouped folds; the
+  composed `W w_d` biomarker readout; the seeded SYNTHETIC response
+  screen recipe from the Studio ResponseAI page, parameterised)**:
+  the API leg (`routes/drugresponse.py`, a new router family):
+  `GET /api/v1/drugresponse/registry` — the module's own vocabulary
+  verbatim (the bilinear formulation with its sigmoid link and the
+  response-score direction stated, the fit hyperparameters with the
+  route's sync-light caps, the five-key metric contract
+  `pearson/spearman/rmse/mae/n`, the sensitivity-ranking schema
+  `cell_line, drug, predicted_score, rank` with the
+  most-responsive-first ordering, the biomarker `feature, weight`
+  schema with the composed-readout source, the cross-cell-line
+  validation rule — folds split cell lines, never (cell line, drug)
+  pairs, `n_folds <= n_cells` the backend's own 422 — the
+  one-response-scale harmonisation note, and the honest provenance
+  block: no pretrained checkpoints ship, DeepCDR's multi-omics CNN
+  and the external VAE weights stay external, the served screen is
+  the route's own SYNTHETIC seeded demo, no real
+  CCLE/GDSC/CTRP/DepMap table ships); `POST
+  /api/v1/drugresponse/analyze` — the full real round trip: the
+  seeded screen → the bilinear fit (deterministic full-batch
+  gradient descent over the observed pairs, NaN entries carry no
+  gradient) → the predicted response-score matrix → the metric
+  contract on the observed entries → the per-cell sensitivity ranking
+  (most-responsive first) → the per-drug biomarker weight tables
+  (explain_drug's composed `W w_d` readout) → the cross-cell-line
+  validation folds with their across-fold summary; sync-only light
+  compute (bounded dense matrices), non-finite metrics read as null,
+  never zero — **11 route tests** (`tests/api/test_drugresponse.py`:
+  the verbatim vocabulary + provenance honesty, the real round trip
+  with end-to-end determinism, the most-responsive-first ordering,
+  the biomarker readout's |weight| ordering, the folds-split-cells
+  contract, the metric contract on observed entries, the geometry
+  bounds + the backend's own n_folds rule as 422s, the sync-light
+  caps as the route's own 422s, the custom-parameter echo). The
+  OpenAPI contract re-exported (**98 paths / 67 schemas**) + the
+  generated types regenerated before the GUI leg wrote against them.
+  The GUI leg — the "Cancer Cell-Line Drug Response" stage (stage
+  14; the later stages renumbered 15/16/17) in the Machine Learning
+  workspace: the registry vocabulary line off the backend's own
+  numbers via the once-on-mount fetch (absent on failure — never
+  fabricated), the thirteen numeric controls with the route's own
+  bounds in their labels, client-side validation BEFORE any request
+  (the finite check + every bound gate + the folds-exceed-cells
+  gate), the fit telemetry summary (the honest no-fabricated-
+  epoch-stream note), the per-cell ranked sensitivity tables with
+  the "predicted score (model estimate)" column header, the
+  per-drug biomarker weight tables with the logit-contribution
+  header, the cross-cell-line CV summary line, and the provenance
+  footer with the served-screen honesty line — **8 component tests**
+  (`DrugResponseLane.test.tsx`) + **the browser-E2E golden path over
+  the REAL backend** (the r311 double-fork daemons restarted for the
+  new route: FastAPI 8017 + Vite 5174, the dev-same-origin token):
+  the app boot ("backend 1.2.239 ready"), the registry vocabulary
+  line, the analyze round trip over the default parameter block (the
+  real ranked tables + biomarker tables + CV summary), the honest
+  client-side gate (a below-bound screen never leaves the page) —
+  **ZERO page errors, ZERO console errors**; the evidence set
+  `r317-drugresponse-card-desktop.png` +
+  `r317-drugresponse-gate-desktop.png`. **The guards trued in the
+  same commit** (the r314/r315/r316 lesson, the standing rule): the
+  ml client's REST-surface module set + the §11.2 stage-order chain
+  both carry the drugresponse rows BEFORE the push — the full CI
+  guard lane (the exact five-file pytest set the Studio frontend job
+  runs) ran locally first, **129 passed**.
+- **v1.2.239 shipped at the fixed point**: the version carriers
+  bumped in lockstep (VERSION, pyproject, `pharmaml.__version__`,
+  the frontend package.json + BOTH lock root fields, tauri.conf.json,
+  the version_info quadruple + both strings, the SBOM root component,
+  the web carrier `toolkit-version.ts`, the two frontend test mocks
+  + the ready-marker assertion) with the editable reinstall re-truing
+  the runtime metadata (pharmaml 1.2.239). The 8 notebooks re-executed
+  at v1.2.239 (210 s, zero error-outputs, zero home-path survivors) +
+  the 7 no-output twins re-stripped — the freshness contract green
+  (119 passed). The gates for the record: the canonical collection
+  **8,449 / 0 errors** (+11 this round); the CI guard lane **129
+  passed**; the api lane **353 passed + 1 skipped**; vitest **86/86**
+  (12 files, +8); the frontend build clean; `tsc --noEmit` clean; the
+  generated-types regen byte-identical on re-generation; ruff + mypy
+  clean on the new files. The census fixed point: **1,664 files /
+  560,205 lines** (the walk = the live `/api/toolkit/tree` walk = the
+  page render, the pins trued three-way); the pins
+  (SHIPPED_TEST_COUNT 8,449 / SHIPPED_COMPONENT_TEST_COUNT 86 /
+  SHIPPED_FILE_COUNT 1,664 / SHIPPED_SOURCE_LINES 560,205); the
+  zip-size API serving the terminal bytes exact:true source:release;
+  the five-home sha parity exact (the terminal sha + bytes live in
+  the worklog per the §7 convention — the archive cannot carry its
+  own hash). Still honestly BLOCKED: clean-machine smoke (C-3/C-5),
+  Stage-5 PySide6 retirement, installer signing (certificate-gated).
+  The remaining Phase-5 domains (Pharmacogenomics, multi-objective
+  optimization `ml/multiobjective.py` — each with a real backend
+  already in-tree) ride the next continuation per PROJECT_STATUS §6.
+  The next CI poll carries this round's push verdict.
+
 ## [1.2.238] — 2026-11-21 — round 316 (the 107th recorded run: the interactive part13 continuation, trace 1a1fe5e3bc4ba0f5 — the Phase-5 drug repurposing lane, API + GUI; a NEW version ship)
 
 - **The ninth-arrival opening recovered in minutes — the rollback
