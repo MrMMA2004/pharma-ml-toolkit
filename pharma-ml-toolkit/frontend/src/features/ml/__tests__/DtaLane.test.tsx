@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -388,9 +388,12 @@ describe("the drug–target interaction lane of the Machine Learning workspace",
   it("gates an over-cap batch client-side — no request fires", async () => {
     render(<MLPage />);
     const textarea = await screen.findByLabelText("DTA pairs batch");
+    // one change event, not ~2,000 simulated keystrokes: the CI runner
+    // tips over the 5 s test timeout typing a 101-line batch into the
+    // full sixteen-stage page (the r316 CI catch — the gate is the
+    // point, the keystroke simulation is not)
     const lines = Array.from({ length: 101 }, () => "CCO,MK").join("\n");
-    await userEvent.clear(textarea);
-    await userEvent.type(textarea, lines);
+    fireEvent.change(textarea, { target: { value: lines } });
     const button = screen.getByRole("button", { name: "Featurize pairs" });
     await userEvent.click(button);
     expect(

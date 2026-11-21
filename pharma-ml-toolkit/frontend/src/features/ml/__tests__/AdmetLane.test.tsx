@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -311,9 +311,12 @@ describe("the ADMET lane of the Machine Learning workspace", () => {
   it("gates an over-cap batch client-side — no request fires", async () => {
     render(<MLPage />);
     const textarea = await screen.findByLabelText("ADMET SMILES batch");
+    // one change event, not ~2,000 simulated keystrokes (the r316 CI
+    // catch: the DTA sibling timed out at the 5 s test budget typing
+    // a 101-line batch into the sixteen-stage page — the gate is the
+    // point, the keystroke simulation is not)
     const lines = Array.from({ length: 101 }, () => "CCO").join("\n");
-    await userEvent.clear(textarea);
-    await userEvent.type(textarea, lines);
+    fireEvent.change(textarea, { target: { value: lines } });
     const scoreButton = screen.getByRole("button", { name: "Score ADMET" });
     await userEvent.click(scoreButton);
     expect(
