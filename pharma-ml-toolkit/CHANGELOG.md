@@ -79,20 +79,27 @@
   pharmacogenomics, multi-objective optimization) rides the next
   continuation per PROJECT_STATUS §6.
 - **The census re-trued at the terminal fixed point**: 1,623 files /
-  557,020 lines / v1.2.234 (+2 the route family + its test file, +2 the
+  557,027 lines / v1.2.234 (+2 the route family + its test file, +2 the
   ship zip in its two in-tree homes, +2 the browser-evidence
   screenshots, + the notebook/doc/contract deltas, −1 the stale
   toolkit-path counter duplicate (84, dormant since the r288 era)
   REMOVED this round — the sixth rollback had wiped 4 untracked
   counted files the r311 walk had), verified three-way: pin = the live
-  walk = the page render; the zip-size API serves 16,693,512
-  exact:true source:release; zero page/console errors, desktop + 390px
-  mobile with zero overflow. THE TERMINAL SHIP: 954 files / 16,693,512
-  B sha-256 a6203f3051a695b7cd64c425503731b07ff35a7b5be8020d36bfa8b3
-  333757cf (the 2de8e270 build was the pre-evidence intermediate that
-  never landed as a claim — the r301 three-sha convention), testzip-OK
-  four homes + offsite (14 zips, RITUAL PASS with the offsite top-up
-  honestly the no-op check — 0 seeded).
+  walk = the page render; zero page/console errors, desktop + 390px
+  mobile with zero overflow. THE TERMINAL SHIP: 954 files / 1,075
+  entries, testzip-OK four homes + offsite (14 zips, RITUAL PASS with
+  the offsite top-up honestly the no-op check — 0 seeded); the
+  per-round sha/bytes live in the worklog per §7 — the archive cannot
+  carry its own hash (the r301 convention).
+- **The first push's CI catch, fixed at the source (the push's job)**:
+  the Studio frontend contract guard flagged the generated types
+  `src/types/api.d.ts` STALE against the re-exported contract (the six
+  new request models missing) — regenerated via the canonical
+  `npm run generate:types` (openapi-typescript 7.13.0), the guard set
+  129/129 green locally, tsc clean, vitest 48/48 re-green, and the
+  terminal rebuilt with the regenerated types riding the archive (the
+  three-sha chase honestly recorded in the worklog — the intermediate
+  builds never landed as claims).
 
 ## [1.2.233] — 2026-11-21 — round 311 (the 102nd recorded run: the interactive part13 continuation over the FIFTH sandbox rollback — the Phase-3 browser-E2E lanes closed + the Phase-4 §9.3 scaffold-aware coverage leg; a NEW version ship)
 

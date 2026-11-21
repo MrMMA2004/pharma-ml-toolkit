@@ -478,6 +478,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dl/gnn-predict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Gnn Predict */
+        post: operations["gnn_predict_api_v1_dl_gnn_predict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dl/gnn-train": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Gnn Train */
+        post: operations["gnn_train_api_v1_dl_gnn_train_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dl/networks": {
         parameters: {
             query?: never;
@@ -1141,6 +1175,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/model-evaluation/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catalog */
+        get: operations["catalog_api_v1_model_evaluation_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/model-evaluation/conformal-classification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Conformal Classification */
+        post: operations["conformal_classification_api_v1_model_evaluation_conformal_classification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/model-evaluation/conformal-regression": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Conformal Regression */
+        post: operations["conformal_regression_api_v1_model_evaluation_conformal_regression_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/model-evaluation/coverage-diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Coverage Diagnostics */
+        post: operations["coverage_diagnostics_api_v1_model_evaluation_coverage_diagnostics_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pkpd/bateman": {
         parameters: {
             query?: never;
@@ -1568,6 +1670,52 @@ export interface components {
              */
             title: string;
         };
+        /** ConformalClassificationRequest */
+        ConformalClassificationRequest: {
+            /**
+             * Alpha
+             * @default 0.1
+             */
+            alpha: number;
+            /**
+             * Conditional
+             * @default split
+             * @enum {string}
+             */
+            conditional: "split" | "label";
+            /** Model Id */
+            model_id: string;
+            /** X Cal */
+            x_cal: number[][];
+            /** X Test */
+            x_test?: number[][] | null;
+            /** Y Cal */
+            y_cal: (number | string)[];
+            /** Y Test */
+            y_test?: (number | string)[] | null;
+        };
+        /** ConformalRegressionRequest */
+        ConformalRegressionRequest: {
+            /**
+             * Alpha
+             * @default 0.1
+             */
+            alpha: number;
+            /** Groups */
+            groups?: (string | number)[] | null;
+            /** Model Id */
+            model_id: string;
+            /** Smiles */
+            smiles?: string[] | null;
+            /** X Cal */
+            x_cal: number[][];
+            /** X Test */
+            x_test?: number[][] | null;
+            /** Y Cal */
+            y_cal: number[];
+            /** Y Test */
+            y_test?: number[] | null;
+        };
         /** ConsensusRequest */
         ConsensusRequest: {
             /** Columns */
@@ -1617,6 +1765,22 @@ export interface components {
             ligand: components["schemas"]["ContactAtomSpec"][];
             /** Receptor */
             receptor: components["schemas"]["ContactAtomSpec"][];
+        };
+        /** CoverageDiagnosticsRequest */
+        CoverageDiagnosticsRequest: {
+            /**
+             * Confidence
+             * @default 0.95
+             */
+            confidence: number;
+            /** Covered */
+            covered: boolean[];
+            /** Groups */
+            groups?: (string | number)[] | null;
+            /** Sizes */
+            sizes?: number[] | null;
+            /** Smiles */
+            smiles?: string[] | null;
         };
         /** DLTrainRequest */
         DLTrainRequest: {
@@ -1874,6 +2038,92 @@ export interface components {
             radius: number;
             /** Smiles */
             smiles: string[];
+        };
+        /**
+         * GnnGraphSpec
+         * @description One graph: node features + the 2×E source→destination endpoints.
+         */
+        GnnGraphSpec: {
+            /** Edge Index */
+            edge_index: number[][];
+            /** X */
+            x: number[][];
+        };
+        /** GnnPredictRequest */
+        GnnPredictRequest: {
+            /** Graphs */
+            graphs: components["schemas"]["GnnGraphSpec"][];
+            /** Model Id */
+            model_id: string;
+            /**
+             * Probabilities
+             * @default false
+             */
+            probabilities: boolean;
+        };
+        /** GnnTrainRequest */
+        GnnTrainRequest: {
+            /**
+             * Conv
+             * @default gcn
+             * @enum {string}
+             */
+            conv: "gcn" | "sage" | "gin" | "gat" | "edge";
+            /**
+             * Epochs
+             * @default 200
+             */
+            epochs: number;
+            /** Graphs */
+            graphs?: components["schemas"]["GnnGraphSpec"][] | null;
+            /**
+             * Heads
+             * @default 1
+             */
+            heads: number;
+            /**
+             * Hidden
+             * @default 16
+             */
+            hidden: number;
+            /** Labels */
+            labels?: number[] | null;
+            /**
+             * Layers
+             * @default 2
+             */
+            layers: number;
+            /**
+             * Lr
+             * @default 0.05
+             */
+            lr: number;
+            /**
+             * Mode
+             * @default job
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /**
+             * Pool
+             * @default mean
+             * @enum {string}
+             */
+            pool: "mean" | "sum" | "max" | "topk" | "sag";
+            /**
+             * Ratio
+             * @default 0.5
+             */
+            ratio: number;
+            /** Seed */
+            seed?: number | null;
+            /** Synthetic N */
+            synthetic_n?: number | null;
+            /**
+             * Weight Decay
+             * @default 0
+             */
+            weight_decay: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3845,6 +4095,76 @@ export interface operations {
             };
         };
     };
+    gnn_predict_api_v1_dl_gnn_predict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GnnPredictRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gnn_train_api_v1_dl_gnn_train_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GnnTrainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     networks_api_v1_dl_networks_get: {
         parameters: {
             query?: never;
@@ -5068,6 +5388,133 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_api_v1_model_evaluation_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    conformal_classification_api_v1_model_evaluation_conformal_classification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConformalClassificationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    conformal_regression_api_v1_model_evaluation_conformal_regression_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConformalRegressionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    coverage_diagnostics_api_v1_model_evaluation_coverage_diagnostics_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoverageDiagnosticsRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

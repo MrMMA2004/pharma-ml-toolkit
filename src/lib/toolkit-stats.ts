@@ -100,7 +100,7 @@ export const SHIPPED_FILE_COUNT = 1623;
  *  notebook-freshness gate caught the stale 1.2.231 prints; the
  *  re-executed outputs are leaner); verified pin = live walk = page
  *  render three-way. */
-export const SHIPPED_SOURCE_LINES = 557020;
+export const SHIPPED_SOURCE_LINES = 557027;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */
