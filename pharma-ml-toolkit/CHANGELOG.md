@@ -1,3 +1,35 @@
+## [1.2.239 re-ship] — 2026-11-21 — round 317 push-2 (the same-version re-ship, the r303/r304 convention; the CI verdict's own catch fixed at the source)
+
+- **The r317 push-1 CI verdict's catch fixed at the source (the r312/r316
+  pattern, the second occurrence)**: four jobs came back red on the push
+  — the Python trio (3.10/3.11/3.12) on ruff's `I001` (the new
+  `drugresponse,` import row had landed AFTER `dta,` in
+  `src/pharmaml/api/routes/__init__.py` — isort wants it before; the
+  round had run ruff on the new files only, not the edited router —
+  the local ruff tree now re-run with the EXE002 local-mode noise
+  documented) and the GitHub page job (the round's push had failed to
+  commit the current release archive into the tracked repo-root
+  `download/` home — the check's own rule: `download/pharma-ml-toolkit-
+  v1.2.239.zip` must ride the tree). Both trued at the source: the
+  import row moved to its sorted position (byte-neutral — the same
+  line count), and the terminal zip committed into the tracked home.
+  No production surface touched beyond the one-character-class import
+  move: the router registration itself was already correct.
+- **The same-version re-ship executed per the r303/r304 convention**
+  (the superseding sha recorded per the r301 three-sha convention):
+  the re-shipped terminal **`455cf00b` — 987 files / 1,108 entries /
+  19,287,186 B, sha-256
+  `455cf00b51f7bdca9e164fd29a2d18b8d129a714d23e264fca9784cb1bf5e78c`**
+  (superseding `91b55dda` — the CI-fixed import order riding; the byte
+  count identical — the move is byte-neutral), testzip-OK across the
+  four homes + the offsite mirror (17 zips), must-carry complete, the
+  five-home sha parity exact (`455cf00b`), the zip-size API serving
+  **19,287,186 exact:true source:release**, the census fixed point
+  UNMOVED (**1,666 files / 560,355 lines** — the walk = the live API
+  = the page render, the pins exact through the re-ship). Counter
+  stays 108 — one recorded run; the CI-fix + the same-version re-ship
+  ride the same round.
+
 ## [1.2.239] — 2026-11-21 — round 317 (the 108th recorded run: the interactive part13 continuation, trace 1a1fe97d37b3b40d — the Phase-5 cancer cell-line drug-response lane, API + GUI; a NEW version ship)
 
 - **The tenth-arrival opening recovered in minutes — the r316 pattern
