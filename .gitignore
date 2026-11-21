@@ -87,3 +87,6 @@ __pycache__/
 
 # 2026-11-19 (6th-rollback recovery): the ROOT MASTER_PROMPT.pdf also carries the font-encoded PAT
 upload/MASTER_PROMPT.pdf
+
+# the 600-mode e2e session token (the r318 ghost-sweep class — never commit)
+scratch/e2e311_token.txt
