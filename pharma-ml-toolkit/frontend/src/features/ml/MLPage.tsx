@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   Database,
   Filter,
+  FlaskConical,
   GitCompare,
   Info,
   Layers,
@@ -36,6 +37,7 @@ import {
 } from "@/services/artifacts/client";
 import {
   AD_MAX_FEATURES,
+  ADMET_MAX_SMILES,
   EXPLAIN_MAX_ROWS,
   mlApi,
   parseADAnalyzeResult,
@@ -45,6 +47,9 @@ import {
   parseWilliamsResult,
   type ADAnalyzeResult,
   type ADFrameRow,
+  type AdmetEndpointsResponse,
+  type AdmetScoreResponse,
+  type AdmetScoreRow,
   type ExplainResult,
   type EvaluationRow,
   type ModelCatalogEntry,
@@ -67,8 +72,8 @@ import {
  *
  * Select Dataset → Target & Features → Preprocess → Configure
  * Split/CV → Algorithm → Hyperparameters → Train → Evaluate →
- * Compare → Applicability Domain → Semi-supervised Learning →
- * Explainability → Export
+ * Compare → Applicability Domain → ADMET Profile → Semi-supervised
+ * Learning → Explainability → Export
  *
  * Every control below executes the REAL backend through the typed
  * service layer (no fabricated data, no disabled pretend buttons):
@@ -250,6 +255,140 @@ function validateModelParams(text: string): Record<string, unknown> | null {
   return parsed as Record<string, unknown>;
 }
 
+/** The physchem panel's own display order (11 properties, the
+ * backend's own key set — never renamed here). */
+const ADMET_PHYSCHEM_ORDER: readonly string[] = [
+  "molecular_weight",
+  "logP",
+  "hydrogen_bond_acceptors",
+  "hydrogen_bond_donors",
+  "Lipinski",
+  "QED",
+  "stereo_centers",
+  "tpsa",
+  "PAINS_alert",
+  "BRENK_alert",
+  "NIH_alert",
+] as const;
+
+const ADMET_PHYSCHEM_LABELS: Readonly<Record<string, string>> = {
+  molecular_weight: "MW (Da)",
+  logP: "Crippen LogP",
+  hydrogen_bond_acceptors: "H-bond acceptors",
+  hydrogen_bond_donors: "H-bond donors",
+  Lipinski: "Lipinski (of 4)",
+  QED: "QED",
+  stereo_centers: "stereo centres",
+  tpsa: "TPSA (A²)",
+  PAINS_alert: "PAINS alerts",
+  BRENK_alert: "BRENK alerts",
+  NIH_alert: "NIH alerts",
+};
+
+/** One molecule's ADMET scorecard row — the honest per-row verdict. */
+function AdmetMoleculeCard({ row }: { row: AdmetScoreRow }) {
+  if (!row.valid) {
+    return (
+      <div className="mt-3 rounded-lg border border-[var(--color-border)] p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-xs text-[var(--color-foreground)]">
+            {row.smiles}
+          </span>
+          <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+            invalid SMILES — reported per-row
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+          {row.error}
+        </p>
+      </div>
+    );
+  }
+  const alertTotal =
+    (row.physchem["PAINS_alert"] ?? 0) +
+    (row.physchem["BRENK_alert"] ?? 0) +
+    (row.physchem["NIH_alert"] ?? 0);
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--color-border)] p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-xs text-[var(--color-foreground)]">
+          {row.smiles}
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          valid
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          Lipinski {row.physchem["Lipinski"] ?? 0}/4
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          {alertTotal} structural alerts (PAINS/BRENK/NIH)
+        </span>
+      </div>
+      <div className="mt-2 grid gap-x-6 gap-y-1 md:grid-cols-2">
+        <table className="w-full border-collapse text-xs">
+          <tbody>
+            {ADMET_PHYSCHEM_ORDER.slice(0, 6).map((key) => (
+              <tr key={key}>
+                <td className="py-0.5 pr-3 text-[var(--color-muted-foreground)]">
+                  {ADMET_PHYSCHEM_LABELS[key] ?? key}
+                </td>
+                <td className="py-0.5 text-right font-mono text-[var(--color-foreground)]">
+                  {(row.physchem[key] ?? 0).toFixed(
+                    key === "molecular_weight" || key === "tpsa" ? 1 : 2,
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <table className="w-full border-collapse text-xs">
+          <tbody>
+            {ADMET_PHYSCHEM_ORDER.slice(6).map((key) => (
+              <tr key={key}>
+                <td className="py-0.5 pr-3 text-[var(--color-muted-foreground)]">
+                  {ADMET_PHYSCHEM_LABELS[key] ?? key}
+                </td>
+                <td className="py-0.5 text-right font-mono text-[var(--color-foreground)]">
+                  {(row.physchem[key] ?? 0).toFixed(
+                    key === "tpsa" ? 1 : 2,
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-muted-foreground)]">
+        Radial summary (0–100, DrugBank percentiles — the offline stand-ins)
+      </p>
+      <div className="mt-1 space-y-1">
+        {Object.entries(row.radial).map(([label, score]) => (
+          <div key={label} className="flex items-center gap-2">
+            <span className="w-44 shrink-0 text-xs text-[var(--color-muted-foreground)]">
+              {label}
+            </span>
+            <span className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--color-muted)]">
+              <span
+                className="block h-full rounded-full bg-[var(--color-primary)]"
+                style={{ width: `${Math.max(0, Math.min(100, score)).toFixed(1)}%` }}
+              />
+            </span>
+            <span className="w-12 shrink-0 text-right font-mono text-xs text-[var(--color-foreground)]">
+              {score.toFixed(1)}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+        low-confidence endpoints (vendor&apos;s own &lt;0.6 quality rule):{" "}
+        {row.low_confidence_endpoints.length > 0
+          ? row.low_confidence_endpoints.join(", ")
+          : "none"}
+      </p>
+    </div>
+  );
+}
+
 export function MLPage() {
   // stage 1: the dataset registry + selection
   const [datasets, setDatasets] = useState<readonly DatasetView[]>([]);
@@ -321,6 +460,16 @@ export function MLPage() {
   const [williamsError, setWilliamsError] = useState<string | null>(null);
   const [williamsResult, setWilliamsResult] = useState<WilliamsResultPayload | null>(null);
   const [williamsArtifactStatus, setWilliamsArtifactStatus] = useState<string | null>(null);
+
+  // stage 10c: the ADMET profile (part13 Phase 5 — the vendored
+  // admet_ai registry + the per-molecule physchem panel, dataset-free)
+  const [admetSmilesText, setAdmetSmilesText] = useState(
+    "CC(=O)Oc1ccccc1C(=O)O\nCN1C=NC2=C1C(=O)N(C)C(=O)N2C",
+  );
+  const [admetError, setAdmetError] = useState<string | null>(null);
+  const [admetBusy, setAdmetBusy] = useState(false);
+  const [admetResult, setAdmetResult] = useState<AdmetScoreResponse | null>(null);
+  const [admetRegistry, setAdmetRegistry] = useState<AdmetEndpointsResponse | null>(null);
 
   // stage 11: semi-supervised learning (classification-only)
   const [ssMethod, setSsMethod] = useState<
@@ -394,6 +543,26 @@ export function MLPage() {
     void refreshRegistry();
     void refreshTrained();
   }, [refreshRegistry, refreshTrained]);
+
+  // the ADMET registry loads once on mount (the vocabulary line —
+  // decorative context, not a gate: the score lane surfaces its own
+  // errors and the card renders regardless)
+  useEffect(() => {
+    let cancelled = false;
+    mlApi
+      .admetEndpoints()
+      .then((response) => {
+        if (!cancelled) {
+          setAdmetRegistry(response);
+        }
+      })
+      .catch(() => {
+        // the registry line stays absent — never a fabricated summary
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // the catalog stays synced with the selected dataset's own task
   useEffect(() => {
@@ -795,6 +964,38 @@ export function MLPage() {
     },
     [refreshTrained],
   );
+
+  // stage 10c: the ADMET scorecard (sync light compute — one button,
+  // client-side validation first, the honest per-row verdicts)
+  const handleAdmetScore = useCallback(async () => {
+    const smiles = admetSmilesText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    if (smiles.length === 0) {
+      setAdmetResult(null);
+      setAdmetError("the ADMET panel needs at least one SMILES line");
+      return;
+    }
+    if (smiles.length > ADMET_MAX_SMILES) {
+      setAdmetResult(null);
+      setAdmetError(
+        `the route caps a batch at ${ADMET_MAX_SMILES} SMILES; got ${smiles.length}`,
+      );
+      return;
+    }
+    setAdmetBusy(true);
+    setAdmetError(null);
+    try {
+      const response = await mlApi.admetScore(smiles);
+      setAdmetResult(response);
+    } catch (error) {
+      setAdmetResult(null);
+      setAdmetError(describeError(error));
+    } finally {
+      setAdmetBusy(false);
+    }
+  }, [admetSmilesText]);
 
   // stage 11b: the held-out evaluation (3 seeded repeats, test_size
   // 0.25 — the route's own defaults surfaced, one button, job lane)
@@ -1881,6 +2082,84 @@ export function MLPage() {
 
       <StageHeader
         index={11}
+        title="ADMET Profile"
+        hint="the vendored admet_ai registry + the physchem panel — sync, per molecule"
+        icon={<FlaskConical aria-hidden className="h-4 w-4" />}
+      >
+        <Card>
+          <CardContent>
+            <p className="text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              The part13 §11.1 lane over the REAL vendored backend
+              (ml/admet.py — swansonk14/admet_ai&apos;s own registry): the
+              11-property physicochemical panel with the three
+              structural-alert counters, the five-axis radial summary on
+              the DrugBank percentile grid, and the low-confidence
+              warnings. Predicted values are model estimates, never
+              experimental facts; the 41 learned ensembles are not
+              shipped — the radial axes use the honest offline
+              stand-ins.
+              {admetRegistry !== null ? (
+                <>
+                  {" "}Registry: {admetRegistry.endpoints.length}{" "}
+                  endpoints across {admetRegistry.categories.length}{" "}
+                  categories ({admetRegistry.categories.join(" · ")});
+                  {" "}
+                  {admetRegistry.low_confidence_endpoints.length}{" "}
+                  endpoints below the vendor&apos;s 0.6 quality
+                  threshold.
+                </>
+              ) : null}
+            </p>
+            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                SMILES (one per line, up to {ADMET_MAX_SMILES})
+                <textarea
+                  value={admetSmilesText}
+                  onChange={(event) => setAdmetSmilesText(event.target.value)}
+                  rows={3}
+                  spellCheck={false}
+                  aria-label="ADMET SMILES batch"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-2 font-mono text-xs"
+                />
+              </label>
+              <div className="flex items-end">
+                <Button
+                  size="sm"
+                  onClick={() => void handleAdmetScore()}
+                  disabled={admetBusy}
+                >
+                  {admetBusy ? "Scoring…" : "Score ADMET"}
+                </Button>
+              </div>
+            </div>
+            {admetError !== null ? (
+              <div className="mt-3">
+                <ErrorBanner message={admetError} />
+              </div>
+            ) : null}
+            {admetResult !== null ? (
+              <>
+                <p className="mt-4 text-xs text-[var(--color-foreground)]">
+                  {admetResult.n_valid} valid · {admetResult.n_invalid}{" "}
+                  invalid (invalid rows report themselves) · provenance{" "}
+                  {admetResult.provenance.backend} —{" "}
+                  {admetResult.provenance.shipped_ensembles} shipped
+                  ensembles (the honest absence, stated)
+                </p>
+                {admetResult.molecules.map((row) => (
+                  <AdmetMoleculeCard key={row.smiles} row={row} />
+                ))}
+                <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                  {admetResult.provenance.disclaimer}
+                </p>
+              </>
+            ) : null}
+          </CardContent>
+        </Card>
+      </StageHeader>
+
+      <StageHeader
+        index={12}
         title="Semi-supervised Learning"
         hint="classification datasets only — the backend's own gate"
         icon={<Network aria-hidden className="h-4 w-4" />}
@@ -2184,7 +2463,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={12}
+        index={13}
         title="Explainability & Uncertainty"
         hint="the real SHAP lane + the AD bootstrap's uncertainty surface"
         icon={<Info aria-hidden className="h-4 w-4" />}
@@ -2264,7 +2543,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={13}
+        index={14}
         title="Export"
         hint="a registered table artifact + a digest-verified download"
         icon={<ArrowDownToLine aria-hidden className="h-4 w-4" />}

@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/api/v1/admet/endpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Endpoints */
+        get: operations["endpoints_api_v1_admet_endpoints_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admet/score": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Score */
+        post: operations["score_api_v1_admet_score_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/applicability-domain/analyze": {
         parameters: {
             query?: never;
@@ -1598,6 +1632,11 @@ export interface components {
             /** X Test */
             x_test: number[][];
         };
+        /** AdmetScoreRequest */
+        AdmetScoreRequest: {
+            /** Smiles */
+            smiles: string[];
+        };
         /** ArtifactTableRequest */
         ArtifactTableRequest: {
             /** Dataset Id */
@@ -3034,6 +3073,63 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    endpoints_api_v1_admet_endpoints_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    score_api_v1_admet_score_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdmetScoreRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     analyze_api_v1_applicability_domain_analyze_post: {
         parameters: {
             query?: never;

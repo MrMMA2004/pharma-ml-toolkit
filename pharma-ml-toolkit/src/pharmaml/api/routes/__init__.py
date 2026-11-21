@@ -12,6 +12,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from . import (
+    admet,
     applicability_domain,
     artifacts,
     capabilities,
@@ -52,6 +53,7 @@ api_router.include_router(md.router)
 api_router.include_router(visualization.router)
 api_router.include_router(applicability_domain.router)
 api_router.include_router(model_evaluation.router)
+api_router.include_router(admet.router)
 api_router.include_router(database.router)
 
 ws_router = APIRouter(prefix="/api/v1")

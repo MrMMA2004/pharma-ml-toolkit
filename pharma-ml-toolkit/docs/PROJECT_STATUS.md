@@ -11,7 +11,11 @@ summarises them and wins any status disagreement.
   part13 continuation, trace 1a1fc9a07e081d59; the Phase-4 close +
   Phase-5 open addendum round 312 — the interactive part13
   continuation, trace 1a1fd0516a6c330d, over the PARTIAL sixth
-  rollback).
+  rollback; the Phase-5 GNN-GUI addendum round 313 — the interactive
+  part13 continuation, trace 1a1fd63a737e7e29, over the seventh
+  rollback; the Phase-5 ADMET addendum round 314 — the interactive
+  part13 continuation, trace 1a1fd9525b9d5b89, over the post-session
+  machinery ghost-zip commit reset away per the r312 precedent).
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
@@ -45,20 +49,14 @@ summarises them and wins any status disagreement.
 | Item | Value | Evidence (this session) |
 | --- | --- | --- |
 | Repository | public, default branch `main` | GitHub API, authenticated |
-| HEAD | r307 audited at `5446e89b`; the Phase-2 addendum verified `19effec8`; this Phase-3 addendum verifies `ca1accc9` (the r309 close-out) clean and lands with the round-310 commit (the fourth rollback recovered first: PAT/origin/reset/venv per the r306–r308 playbook) | fetch + reset --hard + ghost sweep (r307/r308/r310) |
-| CI at HEAD | 18/19 at the r310 terminal `1bbe7316` — the Studio MD job
-  segfaulted (exit 139: a runner-side GC-time pandas frame finalize
-  inside the Qt worker thread during `test_research_workflows.py::
-  test_nested_logistic_validation_in_studio`; NOT caused by r310's
-  frontend-only diff — a flake-class crash this round's push re-runs
-  and observes); 18/18 at `ca1accc9` and `19effec8` stand; this
-  round's push re-verifies all jobs | `check-runs?head_sha=1bbe7316` (the r311 poll, authenticated) |
-| Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.234 SOURCE archive shipped (four homes + offsite, 14 zips) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
-| Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.234 | read directly this session, lockstep guard green |
-| Test surface | 8,411 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 459 files) — +30 this round (the model-evaluation route family 17 + the GNN API lane 13) — PLUS the component-test lane: 48 Vitest tests / 7 files over the Studio frontend (jsdom + React Testing Library) | fresh collection + `npm --prefix frontend test` this round |
+| HEAD | r307 audited at `5446e89b`; the Phase-2 addendum verified `19effec8`; the Phase-3 addendum verifies `ca1accc9`; the Phase-4 addendum verifies `1bbe7316`; the Phase-5 addenda verify the r312 push-2 terminal (`e28ea93c`), the r313 push-2 terminal (`ac5bcd6b` — the r314 continuation opened on it, the post-session machinery ghost-zip commit `baa55398` reset away unpushed per the r312 precedent, the disk homes restored with five-home sha parity exact) | fetch + reset --hard + ghost sweep (r307–r314) |
+| CI at HEAD | 19/19 at the r313 push-2 `ac5bcd6b` — the pending verdict closed GREEN on arrival (CI run 302 + "Push on main" 44, the authenticated check-runs poll; the first push's 2-red catch — the untracked download-home zip + the notebook freshness — was exactly the r313 addendum's fix); this round's push re-verifies all jobs | `check-runs?head_sha=ac5bcd6b` (the r314 poll, authenticated) |
+| Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.235 SOURCE archive shipped (four homes + offsite, 15 zips) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
+| Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.236 | read directly this session, lockstep guard green |
+| Test surface | 8,419 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 460 files) — +8 this round (the ADMET route family) — PLUS the component-test lane: 62 Vitest tests / 10 files over the Studio frontend (jsdom + React Testing Library) | fresh collection + `npm --prefix frontend test` this round |
 | Census | 1,623 files / 557,027 lines / v1.2.234 (the round-312 FINAL walk at the TERMINAL build: +2 the route family + its test file, +2 the ship zip in its two in-tree homes, +2 the browser-evidence screenshots, + the notebook/doc/contract deltas, −1 the stale toolkit-path counter duplicate (84, dormant since the r288 era) REMOVED this round — the sixth rollback had wiped 4 untracked counted files the r311 walk had) | this round's final census walk |
-| Source archive | v1.2.234 — a NEW version ship (the part13 Phase-4 API connection + the Phase-5 GNN/MPNN API lane + the regenerated API types ride: 954 files / 1,075 entries; the per-round sha/bytes live in the worklog per §7 — the archive cannot carry its own hash) | sha256 across four homes + offsite (14 zips) |
-| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.234 — zero drift vs `requirements.txt` | import probes post-repair |
+| Source archive | v1.2.236 — a NEW version ship (the part13 Phase-5 ADMET lane — the route family + its tests + the GUI stage + the regenerated API types + the re-executed notebooks ride; the per-round sha/bytes live in the worklog per §7 — the archive cannot carry its own hash) | sha256 across four homes + offsite (15 zips) |
+| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.236 — zero drift vs `requirements.txt` | import probes post-repair |
 
 ## 3. The six previously-open audit items — CLOSED (re-verified in-tree this round)
 
@@ -195,12 +193,31 @@ summarises them and wins any status disagreement.
   relay into the graph model card, and the predict lane on the
   graph models' own path — 7 component tests + the browser-E2E golden
   path (zero page/console errors, evidence screenshots r313-*).
-  The REMAINDER rides the next continuation: ADMET, Drug–Target
-  Interaction, Drug Repurposing, Cancer Cell-Line Drug Response,
-  Pharmacogenomics, multi-objective molecular optimization (each
-  with a real backend already in-tree — `ml/admet.py`, `ml/dta.py`,
-  the repurposing/cell-line/pharmacogenomics surfaces,
-  `ml/multiobjective.py` — awaiting their API + GUI lanes).
+  The REMAINDER rides the next continuation: **Round 314 EXECUTED the
+  ADMET item — both legs in one round** (trace 1a1fd9525b9d5b89): the
+  API lane (`GET /api/v1/admet/endpoints` — the vendored
+  swansonk14/admet_ai 52-endpoint registry with the quality joins,
+  the low-confidence warning set, the radial axes with directionality
+  and the honest provenance block; `POST /api/v1/admet/score` — the
+  per-molecule scorecard over a SMILES batch: the 11-property
+  physchem panel with the PAINS/BRENK/NIH FilterCatalog counters, the
+  five-axis radial summary on the DrugBank quantile grid, the
+  low-confidence list — sync-only light compute, batch cap 100,
+  invalid rows reported per-row, the §11.1 disclaimer riding every
+  answer; 8 route tests) + the GUI lane (the "ADMET Profile" stage
+  in the Machine Learning workspace — the registry vocabulary line,
+  the SMILES textarea with client-side validation before any
+  request, the per-molecule scorecard cards with the radial bars,
+  the honest verdict + provenance + disclaimer lines; 7 component
+  tests + the browser-E2E golden path). §11.1's own rules held: the
+  41 TDC-trained ensembles are NOT shipped and never invented — the
+  provenance block states the absence; predicted values are model
+  estimates, never experimental facts. The remaining domains (Drug–
+  Target Interaction, Drug Repurposing, Cancer Cell-Line Drug
+  Response, Pharmacogenomics, multi-objective molecular optimization
+  — each with a real backend already in-tree: `ml/dta.py`, the
+  repurposing/cell-line/pharmacogenomics surfaces,
+  `ml/multiobjective.py`) await their API + GUI lanes.
 - **Phase 6** — architecture hardening: the lightweight workflow
   engine evaluation (JobManager/capability-registry first),
   resource monitoring, security scanning lanes, documentation

@@ -18,7 +18,7 @@
  *  guard (tests/test_architecture_hygiene.py: the duplicate-symbol map
  *  pins, the library-surface import-graph census, the mabel/noael
  *  parity grid, the SBOM artifact pins). */
-export const SHIPPED_TEST_COUNT = 8411;
+export const SHIPPED_TEST_COUNT = 8419;
 
 /** r313 note: the backend tree is UNTOUCHED this round (the Phase-5
  *  GNN GUI lane is a frontend-only change) — the canonical collection
@@ -37,7 +37,7 @@ export const SHIPPED_TEST_COUNT = 8411;
  *  the typed 422 verbatim, the client-side gating — the r313
  *  addition). This pin moves independently of the Python suite
  *  above — the CI's studio-frontend job runs both lanes. */
-export const SHIPPED_COMPONENT_TEST_COUNT = 55;
+export const SHIPPED_COMPONENT_TEST_COUNT = 62;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
  *  docs, tools — the same census /api/toolkit/tree walks). The round-302
@@ -63,7 +63,7 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 55;
  *  toolkit .github path — resurrected by the same rollback, never
  *  registered at GitHub and never shipped in any archive — nets to
  *  zero (caught, removed); verified pin = live walk = page render. */
-export const SHIPPED_FILE_COUNT = 1637;
+export const SHIPPED_FILE_COUNT = 1639;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). The round-304
@@ -119,6 +119,19 @@ export const SHIPPED_FILE_COUNT = 1637;
  *  the round's own docs (CHANGELOG + PROJECT_STATUS + FEATURES);
  *  verified pin = live walk = page render.
  *
+ *  r314 (the v1.2.236 ship, the ADMET lane): +2 the route family
+ *  (routes/admet.py + tests/api/test_admet.py), +1 the AdmetLane
+ *  component suite (.tsx, a tree node never line-counted), +2 the
+ *  v1.2.236 ship zip in its two in-tree homes, +4 the round's
+ *  evidence screenshots (2 ADMET cards + the pins pair), the .md
+ *  deltas of the round's own docs (CHANGELOG + PROJECT_STATUS +
+ *  FEATURES), the line deltas of the two frontend carriers + the
+ *  re-executed notebooks/twins — and −7 the retired ancient zips
+ *  (v103/105/106/229/230 across the toolkit homes) the post-session
+ *  machinery ghost-zip commit had tracked before its reset (the
+ *  r312 precedent sweep — they had been counted on disk by the
+ *  r313 walk); verified pin = live walk = page render.
+ *
  *  The push-1 correction (the CI's own catch, the r312 pattern): the
  *  ship's first push skipped the notebook re-execution step — the
  *  eight notebooks re-executed at v1.2.235 after the red (their
@@ -126,7 +139,7 @@ export const SHIPPED_FILE_COUNT = 1637;
  *  re-stripped, and the root download/ home's current zip TRAKED in
  *  git again (the r312 convention — the CI checkout must see it);
  *  re-trued pin = live walk = page render. */
-export const SHIPPED_SOURCE_LINES = 557120;
+export const SHIPPED_SOURCE_LINES = 557686;
 
 /** r313 file-count note: the terminal census 1,637 = the walk above
  *  +2 the r313 pins evidence screenshots themselves (the fixed-point

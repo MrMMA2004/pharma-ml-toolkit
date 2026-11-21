@@ -63,6 +63,7 @@ type PredictRequest = components["schemas"]["PredictRequest"];
 type ExplainRequest = components["schemas"]["ExplainRequest"];
 type ADAnalyzeRequest = components["schemas"]["ADAnalyzeRequest"];
 type WilliamsRequest = components["schemas"]["WilliamsRequest"];
+type AdmetScoreRequest = components["schemas"]["AdmetScoreRequest"];
 type SemiSupervisedTrainRequest =
   components["schemas"]["SemiSupervisedTrainRequest"];
 type SemiSupervisedEvaluateRequest =
@@ -441,6 +442,83 @@ export interface ExplainOptions {
   readonly mode?: "job" | "sync";
 }
 
+// -- the ADMET lane (part13 Phase 5's next remainder item) -------------
+
+/** One vendored registry row — admet.csv's own cells + the quality join. */
+export interface AdmetEndpointRow {
+  readonly id: string;
+  readonly category: string;
+  readonly task_type: string;
+  readonly units: string | null;
+  readonly minimum: number | null;
+  readonly maximum: number | null;
+  readonly species: string | null;
+  readonly size: number | null;
+  readonly quality: number | null;
+  readonly low_confidence: boolean;
+}
+
+/** One radial axis: the endpoint id, its display label, directionality. */
+export interface AdmetRadialAxis {
+  readonly endpoint: string;
+  readonly label: string;
+  readonly invert: boolean;
+}
+
+/** The honest provenance + limitations block (§11.1's own rule). */
+export interface AdmetProvenance {
+  readonly backend: string;
+  readonly source: string;
+  readonly n_endpoints: number;
+  readonly n_learned_endpoints: number;
+  readonly shipped_ensembles: number;
+  readonly shipped_ensembles_note: string;
+  readonly low_performance_threshold: number;
+  readonly disclaimer: string;
+}
+
+/** `GET /api/v1/admet/endpoints` — the registry answer. */
+export interface AdmetEndpointsResponse {
+  readonly endpoints: readonly AdmetEndpointRow[];
+  readonly categories: readonly string[];
+  readonly radial_axes: readonly AdmetRadialAxis[];
+  readonly low_confidence_endpoints: readonly string[];
+  readonly provenance: AdmetProvenance;
+  readonly score_url: string;
+  readonly note: string;
+}
+
+/** The batch cap the route itself pins (`routes/admet.py`'s cap). */
+export const ADMET_MAX_SMILES = 100;
+
+/** One valid molecule's scorecard row. */
+export interface AdmetMoleculeCard {
+  readonly smiles: string;
+  readonly valid: true;
+  readonly physchem: Readonly<Record<string, number>>;
+  readonly radial: Readonly<Record<string, number>>;
+  readonly low_confidence_endpoints: readonly string[];
+}
+
+/** One invalid row — it reports itself, never dropped silently. */
+export interface AdmetInvalidRow {
+  readonly smiles: string;
+  readonly valid: false;
+  readonly error: string;
+}
+
+export type AdmetScoreRow = AdmetMoleculeCard | AdmetInvalidRow;
+
+/** `POST /api/v1/admet/score` — the per-molecule scorecard answer. */
+export interface AdmetScoreResponse {
+  readonly n_smiles: number;
+  readonly n_valid: number;
+  readonly n_invalid: number;
+  readonly molecules: readonly AdmetScoreRow[];
+  readonly provenance: AdmetProvenance;
+  readonly note: string;
+}
+
 export const mlApi = {
   /**
    * `GET /api/v1/ml/models?task=…&only_available=…` — the registry
@@ -711,6 +789,36 @@ export const mlApi = {
       mode: "job",
       job: parseJobView(raw["job"], "semi_supervised evaluate(job)"),
     };
+  },
+
+  /**
+   * `GET /api/v1/admet/endpoints` — the vendored 52-endpoint registry
+   * (part13 Phase 5's ADMET lane): admet.csv's own rows + the quality
+   * joins, the low-confidence warning set, the radial axes with
+   * directionality, and the honest provenance block — every cell the
+   * backend's own, never re-declared.
+   */
+  async admetEndpoints(): Promise<AdmetEndpointsResponse> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/admet/endpoints",
+    );
+    return parseAdmetEndpointsResponse(raw, "admet endpoints");
+  },
+
+  /**
+   * `POST /api/v1/admet/score` — the per-molecule scorecard over a
+   * SMILES batch (sync-only light compute, the chemistry-descriptors
+   * precedent): the 11-property physchem panel, the five-axis radial
+   * summary on the DrugBank grid, the low-confidence list. Invalid
+   * rows report themselves per-row — never dropped, never a 500.
+   */
+  async admetScore(smiles: readonly string[]): Promise<AdmetScoreResponse> {
+    const request: AdmetScoreRequest = { smiles: [...smiles] };
+    const raw = (await api.post(
+      "/api/v1/admet/score",
+      request,
+    )) as Record<string, unknown>;
+    return parseAdmetScoreResponse(raw, "admet score");
   },
 };
 
@@ -1212,5 +1320,177 @@ function parseSemiSupervisedView(
     confidence_summary,
     model_id: asString(r["model_id"]),
     predict_url: asString(r["predict_url"]),
+  };
+}
+
+// -- the ADMET lane's §8.1 parsers -------------------------------------
+
+/** Narrow the honest provenance block (runtime validation). */
+function parseAdmetProvenance(
+  raw: unknown,
+  what: string,
+): AdmetProvenance {
+  const r = expectObject(raw, `${what} provenance`);
+  const backend = r["backend"];
+  const source = r["source"];
+  if (typeof backend !== "string" || typeof source !== "string") {
+    throw new Error(`${what} provenance: backend/source are not strings`);
+  }
+  return {
+    backend,
+    source,
+    n_endpoints: asNumber(r["n_endpoints"]) ?? 0,
+    n_learned_endpoints: asNumber(r["n_learned_endpoints"]) ?? 0,
+    shipped_ensembles: asNumber(r["shipped_ensembles"]) ?? 0,
+    shipped_ensembles_note: asString(r["shipped_ensembles_note"]) ?? "",
+    low_performance_threshold:
+      asNumber(r["low_performance_threshold"]) ?? 0.6,
+    disclaimer: asString(r["disclaimer"]) ?? "",
+  };
+}
+
+/** Narrow one registry row (admet.csv's own cells + the quality join). */
+function parseAdmetEndpointRow(
+  raw: unknown,
+  what: string,
+): AdmetEndpointRow {
+  const r = expectObject(raw, what);
+  const id = r["id"];
+  const category = r["category"];
+  const taskType = r["task_type"];
+  if (
+    typeof id !== "string" ||
+    typeof category !== "string" ||
+    typeof taskType !== "string"
+  ) {
+    throw new Error(`${what}: id/category/task_type are not strings`);
+  }
+  return {
+    id,
+    category,
+    task_type: taskType,
+    units: asString(r["units"]),
+    minimum: asNumber(r["minimum"]),
+    maximum: asNumber(r["maximum"]),
+    species: asString(r["species"]),
+    size: asNumber(r["size"]),
+    quality: asNumber(r["quality"]),
+    low_confidence: r["low_confidence"] === true,
+  };
+}
+
+/** Narrow the registry answer. */
+function parseAdmetEndpointsResponse(
+  raw: unknown,
+  what: string,
+): AdmetEndpointsResponse {
+  const r = expectObject(raw, what);
+  const endpoints = r["endpoints"];
+  const axes = r["radial_axes"];
+  if (!Array.isArray(endpoints) || !Array.isArray(axes)) {
+    throw new Error(`${what}: endpoints/radial_axes are malformed`);
+  }
+  return {
+    endpoints: endpoints.map((row, i) =>
+      parseAdmetEndpointRow(row, `${what} endpoints[${i}]`),
+    ),
+    categories: Array.isArray(r["categories"])
+      ? (r["categories"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
+    radial_axes: axes.map((axis, i) => {
+      const a = expectObject(axis, `${what} radial_axes[${i}]`);
+      const endpoint = a["endpoint"];
+      const label = a["label"];
+      if (typeof endpoint !== "string" || typeof label !== "string") {
+        throw new Error(`${what} radial_axes[${i}]: malformed axis`);
+      }
+      return { endpoint, label, invert: a["invert"] === true };
+    }),
+    low_confidence_endpoints: Array.isArray(r["low_confidence_endpoints"])
+      ? (r["low_confidence_endpoints"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
+    provenance: parseAdmetProvenance(r["provenance"], what),
+    score_url: asString(r["score_url"]) ?? "",
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+/** Narrow one scorecard row — the valid/invalid union. */
+function parseAdmetScoreRow(
+  raw: unknown,
+  what: string,
+): AdmetScoreRow {
+  const r = expectObject(raw, what);
+  const smiles = r["smiles"];
+  if (typeof smiles !== "string") {
+    throw new Error(`${what}: smiles is not a string`);
+  }
+  if (r["valid"] !== true) {
+    return {
+      smiles,
+      valid: false,
+      error: asString(r["error"]) ?? "invalid SMILES",
+    };
+  }
+  const physchemRaw = expectObject(r["physchem"], `${what} physchem`);
+  const radialRaw = expectObject(r["radial"], `${what} radial`);
+  const physchem: Record<string, number> = {};
+  for (const [key, value] of Object.entries(physchemRaw)) {
+    if (typeof value === "number") {
+      physchem[key] = value;
+    }
+  }
+  const radial: Record<string, number> = {};
+  for (const [key, value] of Object.entries(radialRaw)) {
+    if (typeof value === "number") {
+      radial[key] = value;
+    }
+  }
+  return {
+    smiles,
+    valid: true,
+    physchem,
+    radial,
+    low_confidence_endpoints: Array.isArray(r["low_confidence_endpoints"])
+      ? (r["low_confidence_endpoints"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
+  };
+}
+
+/** Narrow the scorecard answer. */
+function parseAdmetScoreResponse(
+  raw: unknown,
+  what: string,
+): AdmetScoreResponse {
+  const r = expectObject(raw, what);
+  const molecules = r["molecules"];
+  const nSmiles = r["n_smiles"];
+  const nValid = r["n_valid"];
+  const nInvalid = r["n_invalid"];
+  if (
+    !Array.isArray(molecules) ||
+    typeof nSmiles !== "number" ||
+    typeof nValid !== "number" ||
+    typeof nInvalid !== "number"
+  ) {
+    throw new Error(
+      `${what}: n_smiles/n_valid/n_invalid/molecules are malformed`,
+    );
+  }
+  return {
+    n_smiles: nSmiles,
+    n_valid: nValid,
+    n_invalid: nInvalid,
+    molecules: molecules.map((row, i) =>
+      parseAdmetScoreRow(row, `${what} molecules[${i}]`),
+    ),
+    provenance: parseAdmetProvenance(r["provenance"], what),
+    note: asString(r["note"]) ?? "",
   };
 }

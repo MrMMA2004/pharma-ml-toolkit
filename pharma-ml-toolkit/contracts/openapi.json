@@ -85,6 +85,24 @@
         "title": "ADAnalyzeRequest",
         "type": "object"
       },
+      "AdmetScoreRequest": {
+        "properties": {
+          "smiles": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Smiles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "smiles"
+        ],
+        "title": "AdmetScoreRequest",
+        "type": "object"
+      },
       "ArtifactTableRequest": {
         "properties": {
           "dataset_id": {
@@ -3539,6 +3557,72 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admet/endpoints": {
+      "get": {
+        "operationId": "endpoints_api_v1_admet_endpoints_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Endpoints Api V1 Admet Endpoints Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Endpoints",
+        "tags": [
+          "admet"
+        ]
+      }
+    },
+    "/api/v1/admet/score": {
+      "post": {
+        "operationId": "score_api_v1_admet_score_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdmetScoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Score Api V1 Admet Score Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Score",
+        "tags": [
+          "admet"
+        ]
+      }
+    },
     "/api/v1/applicability-domain/analyze": {
       "post": {
         "operationId": "analyze_api_v1_applicability_domain_analyze_post",

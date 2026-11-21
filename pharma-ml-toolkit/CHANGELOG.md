@@ -1,3 +1,76 @@
+## [1.2.236] — 2026-11-21 — round 314 (the 105th recorded run: the interactive part13 continuation, trace 1a1fd9525b9d5b89 — the Phase-5 ADMET lane, API + GUI; a NEW version ship)
+
+- **The pending r313 CI verdict closed GREEN on arrival**: push-2
+  (`ac5bcd6b`) came back fully green — the CI workflow run 302 +
+  "Push on main" 44 both success, 19/19 check-runs (the first
+  push's 2-red catch — the missing tracked download-home zip + the
+  notebook freshness — was exactly what the r313 addendum fixed at
+  the source).
+- **The post-session machinery ghost-zip commit reset away** (the
+  r312 precedent, verbatim): a UUID-subject commit had landed after
+  the r313 close-out, tracking ~124 MB of retired/ancient zips
+  (v103/105/106/229/230) into three homes plus a scratch E2E token
+  file — never pushed. Reset `--hard` back to the CI-green
+  `ac5bcd6b` terminal; the disk homes restored (the current-version
+  zip re-copied into the toolkit download/dist-archive homes,
+  five-home sha parity exact); the retired ancient zips swept off
+  the tree; the E2E token is scratch machinery, regenerated on
+  demand.
+- **part13 Phase 5's next remainder item EXECUTED — the ADMET lane,
+  both legs in one round** (§11.1's own requirements: ADME/T +
+  solubility/permeability/CYP/PPB/BBB coverage via the vendored
+  registry; model provenance, quality and limitations exposed;
+  predicted values never presented as experimental facts):
+  - **The API leg** — `routes/admet.py`, a new router family over
+    the REAL vendored backend (`ml/admet.py`: swansonk14/admet_ai's
+    own admet.csv registry): `GET /api/v1/admet/endpoints` — the
+    52-endpoint registry verbatim (id/category/task type/units/
+    display-clipping bounds/species/TDC dataset size), each row
+    joined with its headline model quality (AUROC/AUPRC/R²), the
+    low-confidence set (the vendor's own <0.6 warning rule), the
+    five radial axes with directionality, and the honest provenance
+    block (the 41 TDC-trained chemprop ensembles are NOT shipped —
+    zero — the toolkit's learned-model path is `ml/mpnn`; the route
+    never invents endpoint predictions); `POST /api/v1/admet/score`
+    — the per-molecule scorecard over a SMILES batch
+    (`summarize_molecule`: the 11-property physchem panel with the
+    PAINS/BRENK/NIH FilterCatalog alert counters, the five-axis
+    radial summary on the vendored DrugBank quantile grid, the
+    low-confidence list), sync-only light compute (the
+    chemistry-descriptors precedent), batch cap 100, invalid rows
+    reported per-row (never dropped silently, never a 500), the
+    provenance + disclaimer riding every answer. 8 route tests.
+  - **The GUI leg** — the "ADMET Profile" stage in the Machine
+    Learning workspace (stage 11, the sequential workflow stages
+    after it renumbered): the registry vocabulary line (52
+    endpoints / 6 categories / the low-confidence count — the
+    backend's own numbers, never re-declared), the SMILES textarea
+    (one per line, up to 100) with client-side validation BEFORE
+    any request (the empty batch and the over-cap batch never
+    leave the page), the per-molecule cards (the 11-property table,
+    the five-axis radial bars with the backend's own labels, the
+    valid/invalid verdict badges, the structural-alert counts),
+    the honest verdict line (n_valid/n_invalid, the provenance
+    block, 0 shipped ensembles stated) and the §11.1 disclaimer.
+    The typed service layer rides `services/ml/client.ts` (the
+    generated OpenAPI DTO + §8.1 runtime parsers); the backend's
+    own 422s surface verbatim through the error banner. 7
+    component tests (`AdmetLane.test.tsx`).
+- **The contract re-exported** (92 paths / 63 schemas — the two new
+  endpoints; `tools/export_openapi.py`) with the generated types
+  regenerated (`npm run generate:types`) BEFORE the GUI leg wrote
+  against them (the r312 push-2 lesson, applied in the right order
+  this time).
+- **The 8 notebooks re-executed at v1.2.236** (206 s, zero
+  error-outputs, zero home-path survivors) + the 7 no-output twins
+  re-stripped — the freshness contract every version ship carries.
+- The version carriers bumped in lockstep (VERSION, pyproject,
+  `pharmaml.__version__`, the frontend package.json + BOTH lock
+  root fields — the r313 lock-root drift caught and trued —
+  tauri.conf.json, the version_info quadruple + both strings, the
+  web carrier, the two frontend test mocks); the editable
+  reinstall re-trued the runtime metadata.
+
 ## [1.2.235] — 2026-11-21 — round 313 (the 104th recorded run: the interactive part13 continuation, trace 1a1fd63a737e7e29 — the Phase-5 GNN GUI lane COMPLETED; a NEW version ship)
 
 - **The seventh sandbox rollback recovered first** (the DEEPEST yet):
