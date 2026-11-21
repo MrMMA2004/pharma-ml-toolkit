@@ -18,7 +18,7 @@
  *  guard (tests/test_architecture_hygiene.py: the duplicate-symbol map
  *  pins, the library-surface import-graph census, the mabel/noael
  *  parity grid, the SBOM artifact pins). */
-export const SHIPPED_TEST_COUNT = 8380;
+export const SHIPPED_TEST_COUNT = 8381;
 
 /** Collected Vitest component tests at the shipped revision — the
  *  part13 Phase-3 lane (2026-11-21, `npm --prefix frontend test`:
@@ -100,7 +100,7 @@ export const SHIPPED_FILE_COUNT = 1622;
  *  notebook-freshness gate caught the stale 1.2.231 prints; the
  *  re-executed outputs are leaner); verified pin = live walk = page
  *  render three-way. */
-export const SHIPPED_SOURCE_LINES = 554639;
+export const SHIPPED_SOURCE_LINES = 554717;
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

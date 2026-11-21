@@ -335,3 +335,37 @@ def test_historical_cancelled_handlers_stay_byte_identical(
     done.wait()
     _drain()
     assert cancelled and isinstance(cancelled[0], float)
+
+
+def test_worker_holds_the_cyclic_gc_during_the_run(studio_app, qtbot) -> None:
+    """r311 guard pin: the worker disables the cyclic GC for the run.
+
+    The GitHub-hosted Studio MD job died twice (exit 139, identical
+    stacks) when the worker thread's GC pass finalized native wrappers
+    owning GUI-thread state during a pandas op; the guard makes the
+    worker never run the cyclic collector — refcounting still frees
+    non-cyclic garbage immediately, and pending cycles wait for the
+    GUI thread's next natural collection. This probe runs INSIDE the
+    worker and reports the collector state it actually saw; the run
+    ends with the GUI thread's state exactly restored.
+    """
+    import gc
+
+    from ui.workers.job_worker import JobRunner
+
+    was_enabled = gc.isenabled()
+    runner = JobRunner()
+    results: list[object] = []
+
+    def job(progress):
+        return gc.isenabled()
+
+    worker = runner.submit("gc-probe", job, on_finished=results.append)
+    assert worker is not None
+    done = qtbot.waitSignal(runner.job_ended, timeout=10_000)
+    done.wait()
+    qtbot.wait(50)
+    # the guard held iff the collector was on before the submit
+    assert results == [not was_enabled]
+    # and the GUI thread's collector state is exactly restored
+    assert gc.isenabled() == was_enabled

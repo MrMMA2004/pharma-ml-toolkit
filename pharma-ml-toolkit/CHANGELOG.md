@@ -109,6 +109,24 @@
   builder-path scrubber integrated with home-path survivors=0, the
   twins regenerated canonically); the docs INDEX regenerated (13
   modules / 944 symbols).
+- **The Studio MD CI segfault — diagnosed and fixed at the source.**
+  The r311 push re-observed the r310 terminal's crash identically
+  (exit 139, the same GC-time pandas frame finalize inside the Qt
+  worker thread during `test_research_workflows.py::
+  test_nested_logistic_validation_in_studio`) — no longer flake-class.
+  The reproduction discipline: the EXACT job command under local
+  Python 3.11.18 AND 3.12.16 with the job's exact pins — 77/77 and
+  88/88 (with the worker tests) — never crash; the crash is
+  runner-environment-specific, and its mechanism is the worker
+  thread's cyclic-GC pass finalizing native wrappers that belong to
+  the GUI thread. The fix is the standard Qt-worker practice:
+  `ui/workers/job_worker.py::JobWorker.run` now disables the cyclic
+  collector for the run and re-enables WITHOUT collecting (pending
+  cycles belong to the GUI thread's next natural collection — same
+  family as the round-227 JobSignals race the runner documents); a
+  dedicated pin test runs a gc-probe INSIDE the worker and asserts
+  the held state + the exact restoration. 88/88 re-verified under
+  both interpreters; the terminal archive rebuilt with the guard.
 - **Gates**: the new file 18/18 (16 tests + 2 doctests) + the
   affected neighbours 208/209 (the one red the freeze-stamp find),
   ruff + mypy clean on the new module, the lockstep guard, the

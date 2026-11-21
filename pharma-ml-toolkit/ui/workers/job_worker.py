@@ -19,6 +19,7 @@ while one is running (the "prevent duplicate submissions" clause).
 
 from __future__ import annotations
 
+import gc
 import time
 import traceback
 from collections.abc import Callable
@@ -133,33 +134,58 @@ class JobWorker(QRunnable):
 
     # -- QRunnable entry point ------------------------------------------------
     def run(self) -> None:
+        # r311: the runner-side GC-segfault mitigation. The GitHub-hosted
+        # Studio MD job died twice with identical stacks (exit 139 at
+        # the r310 terminal `1bbe7316` and the r311 push `3b8f6ac7`)
+        # when THIS worker thread's cyclic-GC pass ran during a pandas
+        # frame operation and finalized native wrappers that belong to
+        # the GUI thread -- a GC-during-threaded-Qt race the local
+        # reproductions of the exact job command (Python 3.11.18 AND
+        # 3.12.16, the job's exact pins, 77/77 both) never hit, i.e.
+        # runner-environment-specific. The standard Qt-worker practice:
+        # the worker never runs the cyclic collector -- refcounting
+        # still frees non-cyclic garbage immediately, cyclic garbage
+        # waits for the GUI thread's next natural collection, and
+        # cross-thread native wrappers are finalized only on their
+        # owning thread (same family as the round-227 JobSignals race
+        # this runner already documents).
+        gc_was_enabled = gc.isenabled()
+        if gc_was_enabled:
+            gc.disable()
         try:
-            result = self.job(self._progress)
-        except BaseException as exc:  # noqa: BLE001 - marshalled, not swallowed
-            from pharmaml.exceptions import JobCancelled
+            try:
+                result = self.job(self._progress)
+            except BaseException as exc:  # noqa: BLE001 - marshalled, not swallowed
+                from pharmaml.exceptions import JobCancelled
 
-            if isinstance(exc, JobCancelled):
-                # (round 12) §13 "preserve": the cancelled emission keeps
-                # its historical float payload; when the backend attached
-                # a partial_results payload it rides the new ``preserved``
-                # signal immediately after -- pages that opt in surface
-                # it, every historical handler stays byte-identical.
-                partial = getattr(exc, "partial_results", None)
-                self.signals.cancelled.emit(time.monotonic() - self._t0)
-                if partial is not None:
-                    self.signals.preserved.emit(partial)
+                if isinstance(exc, JobCancelled):
+                    # (round 12) §13 "preserve": the cancelled emission keeps
+                    # its historical float payload; when the backend attached
+                    # a partial_results payload it rides the new ``preserved``
+                    # signal immediately after -- pages that opt in surface
+                    # it, every historical handler stays byte-identical.
+                    partial = getattr(exc, "partial_results", None)
+                    self.signals.cancelled.emit(time.monotonic() - self._t0)
+                    if partial is not None:
+                        self.signals.preserved.emit(partial)
+                    return
+                friendly = _dependency_hint(exc)
+                if friendly is not None:
+                    # v1.2.204 C-2: a missing optional dependency is a setup
+                    # problem, not a bug -- the user gets the install command
+                    # instead of a raw traceback (the doctor deep-links from
+                    # the install page of the README).
+                    self.signals.failed.emit(friendly)
+                    return
+                self.signals.failed.emit(f"{type(exc).__name__}: {exc}\n{traceback.format_exc(limit=3)}")
                 return
-            friendly = _dependency_hint(exc)
-            if friendly is not None:
-                # v1.2.204 C-2: a missing optional dependency is a setup
-                # problem, not a bug -- the user gets the install command
-                # instead of a raw traceback (the doctor deep-links from
-                # the install page of the README).
-                self.signals.failed.emit(friendly)
-                return
-            self.signals.failed.emit(f"{type(exc).__name__}: {exc}\n{traceback.format_exc(limit=3)}")
-            return
-        self.signals.finished.emit(result)
+            self.signals.finished.emit(result)
+        finally:
+            if gc_was_enabled:
+                # re-enable WITHOUT collecting here: pending cycles
+                # must be collected by the GUI thread, never by this
+                # worker (the exact race the guard exists for).
+                gc.enable()
 
 
 class JobRunner(QObject):
