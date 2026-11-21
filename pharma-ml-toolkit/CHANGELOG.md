@@ -68,6 +68,17 @@
   SBOM root component, the web carrier `toolkit-version.ts`, the two
   frontend test mocks + the ready-marker assertion) with the
   editable reinstall re-truing the runtime metadata.
+- **The push-1 CI verdict closed at the source + the same-version
+  re-ship**: push-1 came back 19/20 — the Studio frontend job (the
+  DTA over-cap gate test timed out at the 5 s budget keystroke-typing
+  a 101-line batch into the heavier sixteen-stage page; the ADMET
+  sibling rode the same wasteful pattern at the edge); both over-cap
+  gate tests trued with one `fireEvent.change` (78/78 locally, the
+  same suite CI runs); push-2 GREEN (both runs, every job). The
+  post-fix tree re-shipped at the SAME version per the r303/r304
+  convention: the terminal `6fc0d25e` (980 files / 1,101 entries /
+  18,791,416 B) superseding `497cdd9b`, five-home sha parity + the
+  zip-size API + the census/pins all exact and unmoved.
 - Still honestly BLOCKED: clean-machine smoke (C-3/C-5), Stage-5
   PySide6 retirement, installer signing (certificate-gated).
 
