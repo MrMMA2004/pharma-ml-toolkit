@@ -41,6 +41,17 @@
  *   `SemiSupervisedTrainRequest` (classification datasets only — the
  *   backend 422s otherwise) → job mode; the COMPLETED result payload
  *   is `{semi_supervised: {…view…}}`.
+ * * `GET /api/v1/repurposing/registry` — the drug-repurposing lane's
+ *   vocabulary (part13 Phase 5): DeepResponse's split ladder, the
+ *   CaDRReS formulation, the fit hyperparameters + the route's
+ *   sync-light caps, the ten-key metric contract, the repurposing
+ *   table schema, and the honest provenance block.
+ * * `POST /api/v1/repurposing/screen` —
+ *   `RepurposingScreenRequest` → the sync round trip over the real
+ *   backend: the seeded SYNTHETIC screen, the CaDRReS fit, the
+ *   predicted IC50 matrix, the metric contract on the observed
+ *   entries, and the ranked candidates per profile — every predicted
+ *   value a labelled model estimate, never real pharmacology.
  *
  * The x_test assembly for the AD stage rides the datasets client's
  * bounded `column()` bridge (each feature column ≤ 500 values — the
@@ -65,6 +76,8 @@ type ADAnalyzeRequest = components["schemas"]["ADAnalyzeRequest"];
 type WilliamsRequest = components["schemas"]["WilliamsRequest"];
 type AdmetScoreRequest = components["schemas"]["AdmetScoreRequest"];
 type DtaFeaturesRequest = components["schemas"]["DtaFeaturesRequest"];
+type RepurposingScreenRequest =
+  components["schemas"]["RepurposingScreenRequest"];
 type SemiSupervisedTrainRequest =
   components["schemas"]["SemiSupervisedTrainRequest"];
 type SemiSupervisedEvaluateRequest =
@@ -632,6 +645,111 @@ export interface DtaFeaturesResponse {
   readonly note: string;
 }
 
+// -- the repurposing lane (part13 Phase 5's next remainder item) ------
+
+/** The honest provenance + limitations block. */
+export interface RepurposingProvenance {
+  readonly backend: string;
+  readonly source: string;
+  readonly n_repositories: number;
+  readonly shipped_checkpoints: number;
+  readonly shipped_checkpoints_note: string;
+  readonly screen: string;
+  readonly disclaimer: string;
+}
+
+/** `GET /api/v1/repurposing/registry` — the vocabulary answer. */
+export interface RepurposingRegistryResponse {
+  readonly split_strategies: {
+    readonly within_table: readonly string[];
+    readonly cross_domain: string;
+    readonly source: string;
+  };
+  readonly model: {
+    readonly family: string;
+    readonly formulation: string;
+    readonly direction: string;
+    readonly telemetry_fields: readonly string[];
+    readonly history_note: string;
+  };
+  readonly hyperparameters: {
+    readonly n_factors: Readonly<Record<string, number>>;
+    readonly lr: Readonly<Record<string, number>>;
+    readonly max_epochs: Readonly<Record<string, number>>;
+    readonly seed: Readonly<Record<string, number>>;
+    readonly note: string;
+  };
+  readonly screen: {
+    readonly defaults: Readonly<Record<string, number>>;
+    readonly bounds: Readonly<Record<string, string>>;
+    readonly label: string;
+  };
+  readonly repurposing: {
+    readonly schema: readonly string[];
+    readonly ordering: string;
+    readonly source: string;
+    readonly response_limits: {
+      readonly profiles: string;
+      readonly top_k_per_profile: string;
+    };
+  };
+  readonly metrics: {
+    readonly keys: readonly string[];
+    readonly threshold: number;
+    readonly note: string;
+  };
+  readonly provenance: RepurposingProvenance;
+  readonly screen_url: string;
+  readonly note: string;
+}
+
+/** One ranked candidate row — the backend's own schema. */
+export interface RepurposingCandidateRow {
+  readonly drug: string;
+  readonly predicted_ic50: number;
+  readonly rank: number;
+}
+
+/** `POST /api/v1/repurposing/screen` — the round-trip answer. */
+export interface RepurposingScreenResponse {
+  readonly request: Readonly<Record<string, number>>;
+  readonly screen: {
+    readonly cells: readonly string[];
+    readonly drugs: readonly string[];
+    readonly features: readonly string[];
+    readonly n_cells: number;
+    readonly n_drugs: number;
+    readonly n_features: number;
+    readonly n_observed: number;
+    readonly n_entries: number;
+    readonly observed_fraction: number;
+    readonly label: string;
+  };
+  readonly training: {
+    readonly epochs_run: number;
+    readonly max_epochs: number;
+    readonly stopped_early: boolean;
+    readonly observed_rmse: number | null;
+    readonly first_epoch_rmse: number | null;
+    readonly first_epoch: number;
+    readonly first_epoch_ndcg: number | null;
+    readonly n_factors: number;
+    readonly note: string;
+  };
+  readonly metrics: Readonly<Record<string, number | null>>;
+  readonly candidates: {
+    readonly n_profiles: number;
+    readonly n_ranked_rows_total: number;
+    readonly top_k: number;
+    readonly per_profile: Readonly<
+      Record<string, readonly RepurposingCandidateRow[]>
+    >;
+    readonly ordering: string;
+  };
+  readonly provenance: RepurposingProvenance;
+  readonly note: string;
+}
+
 export const mlApi = {
   /**
    * `GET /api/v1/ml/models?task=…&only_available=…` — the registry
@@ -980,6 +1098,41 @@ export const mlApi = {
       request,
     )) as Record<string, unknown>;
     return parseDtaFeaturesResponse(raw, "dta features");
+  },
+
+  /**
+   * `GET /api/v1/repurposing/registry` — the drug-repurposing
+   * lane's own vocabulary (part13 Phase 5): DeepResponse's split
+   * ladder, the CaDRReS formulation, the fit hyperparameters + the
+   * route's sync-light caps, the ten-key metric contract, the
+   * repurposing table schema, and the honest provenance block —
+   * every cell the backend's own, never re-declared.
+   */
+  async repurposingRegistry(): Promise<RepurposingRegistryResponse> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/repurposing/registry",
+    );
+    return parseRepurposingRegistryResponse(raw, "repurposing registry");
+  },
+
+  /**
+   * `POST /api/v1/repurposing/screen` — the full honest round trip
+   * over the real backend (sync-only light compute, bounded dense
+   * matrices): the seeded SYNTHETIC screen, the CaDRReS fit, the
+   * predicted IC50 matrix, DeepResponse's metric contract on the
+   * observed entries, and the ranked repurposing candidates per
+   * profile. Every predicted value is a labelled model estimate over
+   * the synthetic screen — never real pharmacology, never a clinical
+   * recommendation.
+   */
+  async repurposingScreen(
+    params: Partial<RepurposingScreenRequest> = {},
+  ): Promise<RepurposingScreenResponse> {
+    const raw = (await api.post(
+      "/api/v1/repurposing/screen",
+      params,
+    )) as Record<string, unknown>;
+    return parseRepurposingScreenResponse(raw, "repurposing screen");
   },
 };
 
@@ -1862,6 +2015,274 @@ function parseDtaFeaturesResponse(
     }),
     affinity,
     provenance: parseDtaProvenance(r["provenance"], what),
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+// -- the repurposing lane's §8.1 runtime parsers ------------------------
+
+/** Narrow a record whose values are all numbers (the request echo /
+ * the screen defaults). */
+function parseNumberRecord(
+  raw: unknown,
+  what: string,
+): Record<string, number> {
+  const r = expectObject(raw, what);
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(r)) {
+    if (typeof value === "number") {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+/** Narrow a record whose values are all strings (the screen bounds). */
+function parseStringRecord(
+  raw: unknown,
+  what: string,
+): Record<string, string> {
+  const r = expectObject(raw, what);
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(r)) {
+    if (typeof value === "string") {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+function parseRepurposingProvenance(
+  raw: unknown,
+  what: string,
+): RepurposingProvenance {
+  const r = expectObject(raw, `${what} provenance`);
+  const backend = r["backend"];
+  const source = r["source"];
+  if (typeof backend !== "string" || typeof source !== "string") {
+    throw new Error(`${what} provenance: backend/source are not strings`);
+  }
+  return {
+    backend,
+    source,
+    n_repositories: asNumber(r["n_repositories"]) ?? 0,
+    shipped_checkpoints: asNumber(r["shipped_checkpoints"]) ?? 0,
+    shipped_checkpoints_note:
+      asString(r["shipped_checkpoints_note"]) ?? "",
+    screen: asString(r["screen"]) ?? "",
+    disclaimer: asString(r["disclaimer"]) ?? "",
+  };
+}
+
+/** Narrow the registry answer. */
+function parseRepurposingRegistryResponse(
+  raw: unknown,
+  what: string,
+): RepurposingRegistryResponse {
+  const r = expectObject(raw, what);
+  const strategiesRaw = expectObject(
+    r["split_strategies"],
+    `${what} split_strategies`,
+  );
+  const modelRaw = expectObject(r["model"], `${what} model`);
+  const hyperRaw = expectObject(
+    r["hyperparameters"],
+    `${what} hyperparameters`,
+  );
+  const screenRaw = expectObject(r["screen"], `${what} screen`);
+  const repurposingRaw = expectObject(
+    r["repurposing"],
+    `${what} repurposing`,
+  );
+  const limitsRaw = expectObject(
+    repurposingRaw["response_limits"],
+    `${what} repurposing.response_limits`,
+  );
+  const metricsRaw = expectObject(r["metrics"], `${what} metrics`);
+  return {
+    split_strategies: {
+      within_table: Array.isArray(strategiesRaw["within_table"])
+        ? (strategiesRaw["within_table"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      cross_domain: asString(strategiesRaw["cross_domain"]) ?? "",
+      source: asString(strategiesRaw["source"]) ?? "",
+    },
+    model: {
+      family: asString(modelRaw["family"]) ?? "",
+      formulation: asString(modelRaw["formulation"]) ?? "",
+      direction: asString(modelRaw["direction"]) ?? "",
+      telemetry_fields: Array.isArray(modelRaw["telemetry_fields"])
+        ? (modelRaw["telemetry_fields"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      history_note: asString(modelRaw["history_note"]) ?? "",
+    },
+    hyperparameters: {
+      n_factors: parseNumberRecord(
+        hyperRaw["n_factors"],
+        `${what} hyperparameters.n_factors`,
+      ),
+      lr: parseNumberRecord(
+        hyperRaw["lr"],
+        `${what} hyperparameters.lr`,
+      ),
+      max_epochs: parseNumberRecord(
+        hyperRaw["max_epochs"],
+        `${what} hyperparameters.max_epochs`,
+      ),
+      seed: parseNumberRecord(
+        hyperRaw["seed"],
+        `${what} hyperparameters.seed`,
+      ),
+      note: asString(hyperRaw["note"]) ?? "",
+    },
+    screen: {
+      defaults: parseNumberRecord(
+        screenRaw["defaults"],
+        `${what} screen.defaults`,
+      ),
+      bounds: parseStringRecord(
+        screenRaw["bounds"],
+        `${what} screen.bounds`,
+      ),
+      label: asString(screenRaw["label"]) ?? "",
+    },
+    repurposing: {
+      schema: Array.isArray(repurposingRaw["schema"])
+        ? (repurposingRaw["schema"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      ordering: asString(repurposingRaw["ordering"]) ?? "",
+      source: asString(repurposingRaw["source"]) ?? "",
+      response_limits: {
+        profiles: asString(limitsRaw["profiles"]) ?? "",
+        top_k_per_profile: asString(limitsRaw["top_k_per_profile"]) ?? "",
+      },
+    },
+    metrics: {
+      keys: Array.isArray(metricsRaw["keys"])
+        ? (metricsRaw["keys"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      threshold: asNumber(metricsRaw["threshold"]) ?? 0,
+      note: asString(metricsRaw["note"]) ?? "",
+    },
+    provenance: parseRepurposingProvenance(r["provenance"], what),
+    screen_url: asString(r["screen_url"]) ?? "",
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+/** Narrow the screen answer's metric contract (null, never a lie). */
+function parseMetricRecord(
+  raw: unknown,
+  what: string,
+): Record<string, number | null> {
+  const r = expectObject(raw, what);
+  const out: Record<string, number | null> = {};
+  for (const [key, value] of Object.entries(r)) {
+    if (typeof value === "number") {
+      out[key] = value;
+    } else {
+      out[key] = null;
+    }
+  }
+  return out;
+}
+
+/** Narrow one ranked candidate row. */
+function parseRepurposingCandidateRow(
+  raw: unknown,
+  what: string,
+): RepurposingCandidateRow {
+  const r = expectObject(raw, what);
+  const drug = r["drug"];
+  const rank = r["rank"];
+  const predicted = r["predicted_ic50"];
+  if (
+    typeof drug !== "string" ||
+    typeof rank !== "number" ||
+    typeof predicted !== "number"
+  ) {
+    throw new Error(`${what}: drug/predicted_ic50/rank are malformed`);
+  }
+  return { drug, predicted_ic50: predicted, rank };
+}
+
+/** Narrow the screen answer. */
+function parseRepurposingScreenResponse(
+  raw: unknown,
+  what: string,
+): RepurposingScreenResponse {
+  const r = expectObject(raw, what);
+  const screenRaw = expectObject(r["screen"], `${what} screen`);
+  const trainingRaw = expectObject(r["training"], `${what} training`);
+  const candidatesRaw = expectObject(r["candidates"], `${what} candidates`);
+  const perProfileRaw = expectObject(
+    candidatesRaw["per_profile"],
+    `${what} candidates.per_profile`,
+  );
+  const perProfile: Record<string, RepurposingCandidateRow[]> = {};
+  for (const [cellLine, rows] of Object.entries(perProfileRaw)) {
+    if (!Array.isArray(rows)) {
+      continue;
+    }
+    perProfile[cellLine] = rows.map((row, i) =>
+      parseRepurposingCandidateRow(row, `${what} per_profile[${cellLine}][${i}]`),
+    );
+  }
+  return {
+    request: parseNumberRecord(r["request"], `${what} request`),
+    screen: {
+      cells: Array.isArray(screenRaw["cells"])
+        ? (screenRaw["cells"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      drugs: Array.isArray(screenRaw["drugs"])
+        ? (screenRaw["drugs"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      features: Array.isArray(screenRaw["features"])
+        ? (screenRaw["features"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      n_cells: asNumber(screenRaw["n_cells"]) ?? 0,
+      n_drugs: asNumber(screenRaw["n_drugs"]) ?? 0,
+      n_features: asNumber(screenRaw["n_features"]) ?? 0,
+      n_observed: asNumber(screenRaw["n_observed"]) ?? 0,
+      n_entries: asNumber(screenRaw["n_entries"]) ?? 0,
+      observed_fraction: asNumber(screenRaw["observed_fraction"]) ?? 0,
+      label: asString(screenRaw["label"]) ?? "",
+    },
+    training: {
+      epochs_run: asNumber(trainingRaw["epochs_run"]) ?? 0,
+      max_epochs: asNumber(trainingRaw["max_epochs"]) ?? 0,
+      stopped_early: trainingRaw["stopped_early"] === true,
+      observed_rmse: asNumber(trainingRaw["observed_rmse"]),
+      first_epoch_rmse: asNumber(trainingRaw["first_epoch_rmse"]),
+      first_epoch: asNumber(trainingRaw["first_epoch"]) ?? 0,
+      first_epoch_ndcg: asNumber(trainingRaw["first_epoch_ndcg"]),
+      n_factors: asNumber(trainingRaw["n_factors"]) ?? 0,
+      note: asString(trainingRaw["note"]) ?? "",
+    },
+    metrics: parseMetricRecord(r["metrics"], `${what} metrics`),
+    candidates: {
+      n_profiles: asNumber(candidatesRaw["n_profiles"]) ?? 0,
+      n_ranked_rows_total:
+        asNumber(candidatesRaw["n_ranked_rows_total"]) ?? 0,
+      top_k: asNumber(candidatesRaw["top_k"]) ?? 0,
+      per_profile: perProfile,
+      ordering: asString(candidatesRaw["ordering"]) ?? "",
+    },
+    provenance: parseRepurposingProvenance(r["provenance"], what),
     note: asString(r["note"]) ?? "",
   };
 }

@@ -30,6 +30,7 @@ from . import (
     ml,
     model_evaluation,
     pkpd,
+    repurposing,
     semi_supervised,
     visualization,
 )
@@ -56,6 +57,7 @@ api_router.include_router(applicability_domain.router)
 api_router.include_router(model_evaluation.router)
 api_router.include_router(admet.router)
 api_router.include_router(dta.router)
+api_router.include_router(repurposing.router)
 api_router.include_router(database.router)
 
 ws_router = APIRouter(prefix="/api/v1")

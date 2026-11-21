@@ -2724,6 +2724,90 @@
         "title": "ReportRequest",
         "type": "object"
       },
+      "RepurposingScreenRequest": {
+        "description": "One seeded synthetic screen + fit + ranking request.\n\nThe geometry bounds mirror the backend's own rules exactly\n(``>= 4`` cells, ``>= 3`` drugs, ``>= 2`` features, ``observed``\nin ``[0.3, 1.0]``); the remaining caps are this route's sync-light\nbudget, stated in the registry.",
+        "properties": {
+          "lr": {
+            "default": 0.05,
+            "maximum": 0.5,
+            "minimum": 0.001,
+            "title": "Lr",
+            "type": "number"
+          },
+          "max_epochs": {
+            "default": 200,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Max Epochs",
+            "type": "integer"
+          },
+          "n_cells": {
+            "default": 12,
+            "maximum": 40.0,
+            "minimum": 4.0,
+            "title": "N Cells",
+            "type": "integer"
+          },
+          "n_drugs": {
+            "default": 8,
+            "maximum": 30.0,
+            "minimum": 3.0,
+            "title": "N Drugs",
+            "type": "integer"
+          },
+          "n_factors": {
+            "default": 3,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "N Factors",
+            "type": "integer"
+          },
+          "n_features": {
+            "default": 6,
+            "maximum": 20.0,
+            "minimum": 2.0,
+            "title": "N Features",
+            "type": "integer"
+          },
+          "noise": {
+            "default": 0.3,
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Noise",
+            "type": "number"
+          },
+          "observed": {
+            "default": 0.8,
+            "maximum": 1.0,
+            "minimum": 0.3,
+            "title": "Observed",
+            "type": "number"
+          },
+          "profiles": {
+            "default": 3,
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Profiles",
+            "type": "integer"
+          },
+          "seed": {
+            "default": 42,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "top_k": {
+            "default": 5,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "title": "RepurposingScreenRequest",
+        "type": "object"
+      },
       "RestoreRequest": {
         "properties": {
           "artifact_id": {
@@ -7278,6 +7362,72 @@
         "summary": "Superposition Route",
         "tags": [
           "pkpd"
+        ]
+      }
+    },
+    "/api/v1/repurposing/registry": {
+      "get": {
+        "operationId": "registry_api_v1_repurposing_registry_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Registry Api V1 Repurposing Registry Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Registry",
+        "tags": [
+          "repurposing"
+        ]
+      }
+    },
+    "/api/v1/repurposing/screen": {
+      "post": {
+        "operationId": "screen_api_v1_repurposing_screen_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepurposingScreenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Screen Api V1 Repurposing Screen Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Screen",
+        "tags": [
+          "repurposing"
         ]
       }
     },

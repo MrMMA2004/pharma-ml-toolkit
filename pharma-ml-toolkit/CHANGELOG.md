@@ -1,3 +1,76 @@
+## [1.2.238] — 2026-11-21 — round 316 (the 107th recorded run: the interactive part13 continuation, trace 1a1fe5e3bc4ba0f5 — the Phase-5 drug repurposing lane, API + GUI; a NEW version ship)
+
+- **The ninth-arrival opening recovered in minutes — the rollback
+  caught nothing mid-flight this time**: the stale-summary
+  reconciliation first (the inherited summary still described the
+  world at r308/counter 99; the on-disk truth: r315 had completed and
+  pushed, the counter surviving at 106 with the worklog carrying the
+  full R315 terminal ledger). The recovery proper: the 600-mode
+  credential re-spliced (API-validated, never printed), the
+  post-session machinery ghost-zip commit `1b4c061b` (a UUID subject,
+  unpushed — 114 files: the three current zips tracked into the two
+  in-tree homes plus the r315-wip scratch snapshots) reset away per
+  the r312 precedent with the disk homes restored (five-home sha
+  parity `d6d7b7a9` exact), the venv SURVIVED intact (pharmaml
+  1.2.237 — zero repair this round), the dev server alive through
+  the whole rollback.
+- **part13 Phase 5's next remainder item EXECUTED — the Drug
+  Repurposing lane, both legs in one round, over the REAL in-tree
+  backend (`ml/response_model.py`: CaDRReS's matrix-factorisation
+  recommender with the paper's update order and stop-before-diverging
+  guard, DeepResponse's split ladder + thresholded metric contract +
+  the RepurposingInferenceEngine ranking, the seeded synthetic
+  screen)**: the API leg (`routes/repurposing.py`, a new router
+  family): `GET /api/v1/repurposing/registry` — the module's own
+  vocabulary verbatim (the four within-table split strategies + the
+  two-table cross-domain entry point, the
+  S = mu + b_p + b_q + P.Q^T formulation with the IC50/sensitivity
+  direction stated, the fit hyperparameters with the route's
+  sync-light caps, the ten-key metric contract at BINARY_THRESHOLD
+  6.0, the candidate table schema + the most-sensitive-first
+  ordering) and the honest provenance block (the SELFormer/CNN/FiLM
+  PyTorch hybrid NOT shipped, zero checkpoints; the served screen is
+  the backend's own SYNTHETIC seeded demo — no real GDSC/CCLE/CTRP
+  table ships, never a clinical recommendation);
+  `POST /api/v1/repurposing/screen` — the full real round trip (the
+  seeded screen → the CaDRReS fit → the predicted IC50 matrix → the
+  metric contract on the observed entries → the ranked candidates
+  per profile; non-finite metrics read as null, never zero; the
+  geometry bounds mirror the backend's own rules) — 10 route tests
+  (`tests/api/test_repurposing.py`). The GUI leg: the "Drug
+  Repurposing" stage (stage 13, the later stages renumbered) — the
+  registry vocabulary line off the backend's own numbers via the
+  once-on-mount fetch, the eleven numeric controls with the bounds
+  in their labels, client-side validation BEFORE any request, the
+  fit telemetry (the honest no-fabricated-epoch-stream note) + the
+  per-profile ranked candidate tables with the model-estimate label,
+  the provenance footer with the served-screen honesty line — 8
+  component tests (`RepurposingLane.test.tsx`) + the browser-E2E
+  golden path over the REAL backend (zero page/console errors, the
+  r316 evidence pair: the ranked-table card + the client-side gate).
+- **The guards trued in the same commit** (the r314/r315 lesson, now
+  the standing rule): the ml client's REST-surface module set + the
+  §11.2 stage chain both carry the repurposing rows BEFORE the push —
+  the full CI guard lane (the exact five-file pytest set the Studio
+  frontend job runs) passed locally first.
+- The OpenAPI contract re-exported (96 paths / 66 schemas) + the
+  generated types regenerated BEFORE the GUI leg wrote against them.
+- Ship v1.2.238 at the fixed point (the two-build chase honestly
+  recorded; testzip-OK across the four homes + the offsite mirror;
+  must-carry complete — the route family + its test file + the
+  component suite + the r316 evidence pair; retired-pair negative;
+  composition 0; real leaks 0). The 8 notebooks re-executed at
+  1.2.238 (206 s, zero error-outputs, zero home-path survivors) +
+  the 7 no-output twins re-stripped — the freshness contract. The
+  version carriers bumped in lockstep (VERSION, pyproject, the
+  dunder, the frontend manifest + BOTH lock root fields,
+  tauri.conf.json, the version_info quadruple + both strings, the
+  SBOM root component, the web carrier `toolkit-version.ts`, the two
+  frontend test mocks + the ready-marker assertion) with the
+  editable reinstall re-truing the runtime metadata.
+- Still honestly BLOCKED: clean-machine smoke (C-3/C-5), Stage-5
+  PySide6 retirement, installer signing (certificate-gated).
+
 ## [1.2.237] — 2026-11-21 — round 315 (the 106th recorded run: the interactive part13 continuation, trace 1a1fdc2da50cd529 — the Phase-5 drug–target interaction lane, API + GUI; the CI's own catch fixed at the source; a NEW version ship)
 
 - **The pending r314 CI verdict closed RED — the CI's own catch, fixed

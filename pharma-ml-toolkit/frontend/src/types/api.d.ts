@@ -1464,6 +1464,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repurposing/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registry */
+        get: operations["registry_api_v1_repurposing_registry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repurposing/screen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Screen */
+        post: operations["screen_api_v1_repurposing_screen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/semi-supervised/evaluate": {
         parameters: {
             query?: never;
@@ -2711,6 +2745,72 @@ export interface components {
              * @default PharmaML results
              */
             title: string;
+        };
+        /**
+         * RepurposingScreenRequest
+         * @description One seeded synthetic screen + fit + ranking request.
+         *
+         *     The geometry bounds mirror the backend's own rules exactly
+         *     (``>= 4`` cells, ``>= 3`` drugs, ``>= 2`` features, ``observed``
+         *     in ``[0.3, 1.0]``); the remaining caps are this route's sync-light
+         *     budget, stated in the registry.
+         */
+        RepurposingScreenRequest: {
+            /**
+             * Lr
+             * @default 0.05
+             */
+            lr: number;
+            /**
+             * Max Epochs
+             * @default 200
+             */
+            max_epochs: number;
+            /**
+             * N Cells
+             * @default 12
+             */
+            n_cells: number;
+            /**
+             * N Drugs
+             * @default 8
+             */
+            n_drugs: number;
+            /**
+             * N Factors
+             * @default 3
+             */
+            n_factors: number;
+            /**
+             * N Features
+             * @default 6
+             */
+            n_features: number;
+            /**
+             * Noise
+             * @default 0.3
+             */
+            noise: number;
+            /**
+             * Observed
+             * @default 0.8
+             */
+            observed: number;
+            /**
+             * Profiles
+             * @default 3
+             */
+            profiles: number;
+            /**
+             * Seed
+             * @default 42
+             */
+            seed: number;
+            /**
+             * Top K
+             * @default 5
+             */
+            top_k: number;
         };
         /** RestoreRequest */
         RestoreRequest: {
@@ -6026,6 +6126,63 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SuperpositionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registry_api_v1_repurposing_registry_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    screen_api_v1_repurposing_screen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepurposingScreenRequest"];
             };
         };
         responses: {

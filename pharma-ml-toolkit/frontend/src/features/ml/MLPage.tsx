@@ -12,6 +12,7 @@ import {
   Info,
   Layers,
   Network,
+  Pill,
   Radar,
   SlidersHorizontal,
   Target,
@@ -59,6 +60,8 @@ import {
   type EvaluationRow,
   type ModelCatalogEntry,
   type PredictResponse,
+  type RepurposingRegistryResponse,
+  type RepurposingScreenResponse,
   type SemiSupervisedEvaluation,
   type SemiSupervisedView,
   type TrainedModelView,
@@ -78,7 +81,8 @@ import {
  * Select Dataset → Target & Features → Preprocess → Configure
  * Split/CV → Algorithm → Hyperparameters → Train → Evaluate →
  * Compare → Applicability Domain → ADMET Profile → Drug–Target
- * Interaction → Semi-supervised Learning → Explainability → Export
+ * Interaction → Drug Repurposing → Semi-supervised Learning →
+ * Explainability → Export
  *
  * Every control below executes the REAL backend through the typed
  * service layer (no fabricated data, no disabled pretend buttons):
@@ -88,7 +92,9 @@ import {
  * routes/semi_supervised.py behind the backend's own
  * classification-only gate, the explainability stage rides the
  * /ml/explain SHAP lane (the real shap_summary engine over a bounded
- * sample — the r289 queue row, closed), and the export registers a
+ * sample — the r289 queue row, closed), the drug-repurposing lane
+ * rides routes/repurposing.py over the seeded SYNTHETIC screen
+ * (every predicted value a labelled model estimate), and the export registers a
  * real table artifact downloaded through the token-header lane with
  * digest verification.
  */
@@ -97,6 +103,54 @@ type VisualizationTableRequest = components["schemas"]["VisualizationTableReques
 
 /** The backend's own table-export row cap (visualization.py's `_MAX_ROWS`). */
 const TABLE_EXPORT_MAX_ROWS = 5000;
+
+/** The repurposing screen's parameter block (the route's own defaults). */
+type RepurposingParams = {
+  n_cells: number;
+  n_drugs: number;
+  n_features: number;
+  n_factors: number;
+  lr: number;
+  max_epochs: number;
+  noise: number;
+  observed: number;
+  seed: number;
+  top_k: number;
+  profiles: number;
+};
+
+const REPURPOSING_DEFAULTS: RepurposingParams = {
+  n_cells: 12,
+  n_drugs: 8,
+  n_features: 6,
+  n_factors: 3,
+  lr: 0.05,
+  max_epochs: 200,
+  noise: 0.3,
+  observed: 0.8,
+  seed: 42,
+  top_k: 5,
+  profiles: 3,
+};
+
+/** The stage's numeric controls — labels state the route's own bounds. */
+const RP_FIELDS: readonly {
+  key: keyof RepurposingParams;
+  label: string;
+  step: number;
+}[] = [
+  { key: "n_cells", label: "cells (4–40)", step: 1 },
+  { key: "n_drugs", label: "drugs (3–30)", step: 1 },
+  { key: "n_features", label: "features (2–20)", step: 1 },
+  { key: "n_factors", label: "factors (1–10)", step: 1 },
+  { key: "lr", label: "lr (0.001–0.5)", step: 0.001 },
+  { key: "max_epochs", label: "epochs (1–1000)", step: 10 },
+  { key: "noise", label: "noise (0–2)", step: 0.05 },
+  { key: "observed", label: "observed (0.3–1)", step: 0.05 },
+  { key: "seed", label: "seed", step: 1 },
+  { key: "top_k", label: "top-k (1–10)", step: 1 },
+  { key: "profiles", label: "profiles (1–8)", step: 1 },
+];
 
 function describeError(error: unknown): string {
   if (error instanceof ApiError) {
@@ -554,6 +608,16 @@ export function MLPage() {
   const [dtaResult, setDtaResult] = useState<DtaFeaturesResponse | null>(null);
   const [dtaRegistry, setDtaRegistry] = useState<DtaRegistryResponse | null>(null);
 
+  // stage 12b: the drug repurposing lane (part13 Phase 5 — the
+  // CaDRReS recommender + DeepResponse's ranking over the SYNTHETIC
+  // seeded screen, dataset-free)
+  const [rpParams, setRpParams] =
+    useState<RepurposingParams>(REPURPOSING_DEFAULTS);
+  const [rpError, setRpError] = useState<string | null>(null);
+  const [rpBusy, setRpBusy] = useState(false);
+  const [rpResult, setRpResult] = useState<RepurposingScreenResponse | null>(null);
+  const [rpRegistry, setRpRegistry] = useState<RepurposingRegistryResponse | null>(null);
+
   // stage 11: semi-supervised learning (classification-only)
   const [ssMethod, setSsMethod] = useState<
     "self_training" | "label_spreading" | "label_propagation"
@@ -657,6 +721,25 @@ export function MLPage() {
       .then((response) => {
         if (!cancelled) {
           setDtaRegistry(response);
+        }
+      })
+      .catch(() => {
+        // the registry line stays absent — never a fabricated summary
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // the repurposing registry loads once on mount (the vocabulary
+  // line — the same decorative-context contract as the DTA lane)
+  useEffect(() => {
+    let cancelled = false;
+    mlApi
+      .repurposingRegistry()
+      .then((response) => {
+        if (!cancelled) {
+          setRpRegistry(response);
         }
       })
       .catch(() => {
@@ -1168,6 +1251,99 @@ export function MLPage() {
       setDtaBusy(false);
     }
   }, [dtaPairsText, dtaDipeptides]);
+
+  // stage 12b: the drug repurposing screen (sync light compute — one
+  // button, client-side validation before any request; the backend's
+  // own 422s surface verbatim; every value a labelled model estimate)
+  const updateRpParam = useCallback(
+    (key: keyof RepurposingParams, value: number) => {
+      setRpParams((prev) => ({ ...prev, [key]: value }));
+    },
+    [],
+  );
+
+  const handleRepurposingScreen = useCallback(async () => {
+    const p = rpParams;
+    const fail = (message: string) => {
+      setRpResult(null);
+      setRpError(message);
+    };
+    if (Object.values(p).some((value) => !Number.isFinite(value))) {
+      fail("every screen parameter must be a finite number");
+      return;
+    }
+    if (p.n_cells < 4) {
+      fail("the screen needs at least 4 cell lines (the backend's own bound)");
+      return;
+    }
+    if (p.n_drugs < 3) {
+      fail("the screen needs at least 3 drugs (the backend's own bound)");
+      return;
+    }
+    if (p.n_features < 2) {
+      fail("the screen needs at least 2 features (the backend's own bound)");
+      return;
+    }
+    if (p.n_cells > 40 || p.n_drugs > 30 || p.n_features > 20) {
+      fail("the route caps the screen at 40 cells × 30 drugs × 20 features (the sync-light budget)");
+      return;
+    }
+    if (p.n_factors < 1 || p.n_factors > 10) {
+      fail("the pharmacogenomic space is 1..10 factors");
+      return;
+    }
+    if (p.lr < 0.001 || p.lr > 0.5) {
+      fail("the learning rate must lie in 0.001..0.5");
+      return;
+    }
+    if (p.max_epochs < 1 || p.max_epochs > 1000) {
+      fail("the epoch ceiling is 1..1000 (the sync-light budget)");
+      return;
+    }
+    if (p.observed < 0.3 || p.observed > 1.0) {
+      fail("the observed fraction must lie in 0.3..1.0 (the backend's own bound)");
+      return;
+    }
+    if (p.noise < 0 || p.noise > 2) {
+      fail("the noise scale must lie in 0..2");
+      return;
+    }
+    if (p.seed < 0) {
+      fail("the seed must be non-negative");
+      return;
+    }
+    if (p.top_k < 1 || p.top_k > 10) {
+      fail("top-k per profile is 1..10");
+      return;
+    }
+    if (p.profiles < 1 || p.profiles > 8) {
+      fail("the answer carries 1..8 profiles");
+      return;
+    }
+    setRpBusy(true);
+    setRpError(null);
+    try {
+      const response = await mlApi.repurposingScreen({
+        n_cells: p.n_cells,
+        n_drugs: p.n_drugs,
+        n_features: p.n_features,
+        n_factors: p.n_factors,
+        lr: p.lr,
+        max_epochs: p.max_epochs,
+        noise: p.noise,
+        observed: p.observed,
+        seed: p.seed,
+        top_k: p.top_k,
+        profiles: p.profiles,
+      });
+      setRpResult(response);
+    } catch (error) {
+      setRpResult(null);
+      setRpError(describeError(error));
+    } finally {
+      setRpBusy(false);
+    }
+  }, [rpParams]);
 
   // stage 11b: the held-out evaluation (3 seeded repeats, test_size
   // 0.25 — the route's own defaults surfaced, one button, job lane)
@@ -2438,6 +2614,134 @@ export function MLPage() {
 
       <StageHeader
         index={13}
+        title="Drug Repurposing"
+        hint="the CaDRReS recommender over the seeded SYNTHETIC screen — ranked candidates, sync"
+        icon={<Pill aria-hidden className="h-4 w-4" />}
+      >
+        <Card>
+          <CardContent>
+            <p className="text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              The part13 Phase-5 lane over the REAL in-tree backend
+              (ml/response_model.py — CaDRReS&apos;s matrix-factorisation
+              recommender with the paper&apos;s update order and
+              stop-before-diverging guard, DeepResponse&apos;s metric contract
+              and RepurposingInferenceEngine ranking): the seeded screen,
+              the fit, the predicted IC50 matrix, and the ranked
+              candidates per profile. The SELFormer/CNN/FiLM hybrid is NOT
+              shipped; the screen is SYNTHETIC — never real pharmacology,
+              never a clinical recommendation.
+              {rpRegistry !== null ? (
+                <>
+                  {" "}Strategies:{" "}
+                  {rpRegistry.split_strategies.within_table.join(" · ")};
+                  the metric contract: {rpRegistry.metrics.keys.length} keys
+                  at threshold {rpRegistry.metrics.threshold}; the candidate
+                  schema {rpRegistry.repurposing.schema.join(" / ")} —{" "}
+                  {rpRegistry.repurposing.ordering}.
+                </>
+              ) : null}
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              {RP_FIELDS.map(({ key, label, step }) => (
+                <label
+                  key={key}
+                  className="text-xs text-[var(--color-muted-foreground)]"
+                >
+                  {label}
+                  <input
+                    type="number"
+                    step={step}
+                    value={rpParams[key]}
+                    onChange={(event) =>
+                      updateRpParam(key, Number(event.target.value))
+                    }
+                    aria-label={`repurposing ${key}`}
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 font-mono text-xs"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <Button
+                size="sm"
+                onClick={() => void handleRepurposingScreen()}
+                disabled={rpBusy}
+              >
+                {rpBusy ? "Fitting…" : "Run the screen"}
+              </Button>
+            </div>
+            {rpError !== null ? (
+              <div className="mt-3">
+                <ErrorBanner message={rpError} />
+              </div>
+            ) : null}
+            {rpResult !== null ? (
+              <>
+                <p className="mt-4 text-xs text-[var(--color-foreground)]">
+                  {rpResult.screen.n_cells}×{rpResult.screen.n_drugs} screen
+                  (SYNTHETIC) · {rpResult.screen.n_observed}/
+                  {rpResult.screen.n_entries} observed entries (
+                  {(rpResult.screen.observed_fraction * 100).toFixed(0)}%) ·
+                  the fit: {rpResult.training.epochs_run}/
+                  {rpResult.training.max_epochs} epochs (observed RMSE{" "}
+                  {rpResult.training.observed_rmse?.toFixed(3) ?? "n/a"}
+                  {rpResult.training.stopped_early
+                    ? ", stopped before diverging"
+                    : ""}
+                  ) · rmse {rpResult.metrics.rmse?.toFixed(3) ?? "null"} ·
+                  accuracy {rpResult.metrics.accuracy?.toFixed(3) ?? "null"}
+                </p>
+                {Object.entries(rpResult.candidates.per_profile).map(
+                  ([cellLine, rows]) => (
+                    <div key={cellLine} className="mt-3">
+                      <p className="text-xs font-medium text-[var(--color-foreground)]">
+                        {cellLine} — top {rows.length} of{" "}
+                        {rpResult.screen.n_drugs} (lowest predicted IC50 =
+                        rank 1)
+                      </p>
+                      <table className="mt-1 w-full text-xs">
+                        <thead>
+                          <tr className="text-[var(--color-muted-foreground)]">
+                            <th className="py-1 text-left font-normal">rank</th>
+                            <th className="text-left font-normal">drug</th>
+                            <th className="text-right font-normal">
+                              predicted IC50 (model estimate)
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row) => (
+                            <tr
+                              key={`${cellLine}-${row.drug}`}
+                              className="border-t border-[var(--color-border)]"
+                            >
+                              <td className="py-1">{row.rank}</td>
+                              <td>{row.drug}</td>
+                              <td className="text-right font-mono">
+                                {row.predicted_ic50.toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ),
+                )}
+                <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                  provenance {rpResult.provenance.backend} —{" "}
+                  {rpResult.provenance.shipped_checkpoints} shipped
+                  checkpoints (the honest absence, stated) · the served
+                  screen: {rpResult.provenance.screen} ·{" "}
+                  {rpResult.provenance.disclaimer}
+                </p>
+              </>
+            ) : null}
+          </CardContent>
+        </Card>
+      </StageHeader>
+
+      <StageHeader
+        index={14}
         title="Semi-supervised Learning"
         hint="classification datasets only — the backend's own gate"
         icon={<Network aria-hidden className="h-4 w-4" />}
@@ -2741,7 +3045,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={14}
+        index={15}
         title="Explainability & Uncertainty"
         hint="the real SHAP lane + the AD bootstrap's uncertainty surface"
         icon={<Info aria-hidden className="h-4 w-4" />}
@@ -2821,7 +3125,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={15}
+        index={16}
         title="Export"
         hint="a registered table artifact + a digest-verified download"
         icon={<ArrowDownToLine aria-hidden className="h-4 w-4" />}

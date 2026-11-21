@@ -125,7 +125,7 @@ def test_ml_rest_surface_covered() -> None:
     carried = _frontend_api_paths(client)
     assert carried, "the ml client lost every path literal"
     real: dict[str, set[str]] = {}
-    for module in ("ml.py", "applicability_domain.py", "semi_supervised.py", "admet.py", "dta.py"):
+    for module in ("ml.py", "applicability_domain.py", "semi_supervised.py", "admet.py", "dta.py", "repurposing.py"):
         real.update(_backend_routes(module))
     unknown = carried - set(real)
     assert not unknown, f"ml client calls undeclared routes: {sorted(unknown)}"
@@ -284,6 +284,7 @@ def test_stage_order_matches_the_spec_chain() -> None:
         "Applicability Domain",
         "ADMET Profile",
         "Drug–Target Interaction",
+        "Drug Repurposing",
         "Semi-supervised Learning",
         "Explainability & Uncertainty",
         "Export",

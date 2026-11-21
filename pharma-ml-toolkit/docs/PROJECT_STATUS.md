@@ -18,7 +18,13 @@ summarises them and wins any status disagreement.
   machinery ghost-zip commit reset away per the r312 precedent; the
   Phase-5 DTA addendum round 315 — the interactive part13
   continuation, trace 1a1fdc2da50cd529, over the post-session
-  machinery ghost-zip commit reset away per the same precedent).
+  machinery ghost-zip commit reset away per the same precedent; the
+  Phase-5 Drug Repurposing addendum round 316 — the interactive
+  part13 continuation, trace 1a1fe5e3bc4ba0f5, over the ninth
+  arrival's stale-summary reconciliation — the venv SURVIVED this
+  rollback (zero repair), the machinery ghost-zip commit reset away
+  unpushed per the same precedent, the r315 push's CI verdict closed
+  GREEN on arrival).
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
@@ -53,13 +59,13 @@ summarises them and wins any status disagreement.
 | --- | --- | --- |
 | Repository | public, default branch `main` | GitHub API, authenticated |
 | HEAD | r307 audited at `5446e89b`; the Phase-2 addendum verified `19effec8`; the Phase-3 addendum verifies `ca1accc9`; the Phase-4 addendum verifies `1bbe7316`; the Phase-5 addenda verify the r312 push-2 terminal (`e28ea93c`), the r313 push-2 terminal (`ac5bcd6b` — the r314 continuation opened on it, the post-session machinery ghost-zip commit `baa55398` reset away unpushed per the r312 precedent, the disk homes restored with five-home sha parity exact) | fetch + reset --hard + ghost sweep (r307–r314) |
-| CI at HEAD | the r314 push `315fdddf` came back **19/20 — the Studio frontend job RED** (the CI's own catch, the r312/r313 pattern's third occurrence): the ml client's REST-surface guard + the §11.2 stage-order guard had drifted with the ADMET lane; both trued at the source in the r315 commit together with the DTA lane's own guard updates, and the full guard lane now runs locally before every push; this round's push re-verifies all jobs | the authenticated check-runs poll + the job log (run 44896058665, job 136821843556) |
-| Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.235 SOURCE archive shipped (four homes + offsite, 15 zips) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
-| Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.237 | read directly this session, lockstep guard green |
-| Test surface | 8,428 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 461 files) — +10 this round (the DTA route family) − 1 re-trued A-6 param — PLUS the component-test lane: 70 Vitest tests / 10 files over the Studio frontend (the r314 row's own "10 files" count was itself off by one -- the on-disk truth at 315fdddf was 9; the DTA suite makes 10) (jsdom + React Testing Library) | fresh collection + `npm --prefix frontend test` this round |
-| Census | 1,623 files / 557,027 lines / v1.2.234 (the round-312 FINAL walk at the TERMINAL build: +2 the route family + its test file, +2 the ship zip in its two in-tree homes, +2 the browser-evidence screenshots, + the notebook/doc/contract deltas, −1 the stale toolkit-path counter duplicate (84, dormant since the r288 era) REMOVED this round — the sixth rollback had wiped 4 untracked counted files the r311 walk had) | this round's final census walk |
-| Source archive | v1.2.237 — a NEW version ship (the part13 Phase-5 DTA lane — the route family + its tests + the GUI stage + the regenerated API types + the re-executed notebooks ride; the per-round sha/bytes live in the worklog per §7 — the archive cannot carry its own hash) | sha256 across four homes + offsite |
-| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.237 — zero drift vs `requirements.txt` | import probes post-repair |
+| CI at HEAD | the r315 push `b8f2e1cf` came back **20/20 — all check-runs success**, closed GREEN on arrival this round (the r314 red's fix verified by CI); this round's push re-verifies all jobs | the authenticated check-runs poll (this round) |
+| Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.238 SOURCE archive shipped (four homes + offsite, 16 zips) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
+| Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.238 | read directly this session, lockstep guard green |
+| Test surface | 8,438 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 462 files) — +10 this round (the repurposing route family) — PLUS the component-test lane: 78 Vitest tests / 11 files over the Studio frontend (the RepurposingLane suite added, +8) (jsdom + React Testing Library) | fresh collection + `npm --prefix frontend test` this round |
+| Census | 1,655 files / 559,328 lines / v1.2.238 (the r316 walk at the pre-stage build: +3 the lane's source files — the route family, its test file, the component suite — +2 the r316 browser-E2E evidence pair, +2 the ship zip in its two in-tree homes once the pre-stage lands, + the changelog/doc/notebook deltas; the pins pair rides the terminal build on top — the worklog R316 terminal block carries the three-way trued fixed point) | this round's census walk |
+| Source archive | v1.2.238 — a NEW version ship (the part13 Phase-5 Drug Repurposing lane — the route family + its tests + the GUI stage + the regenerated API types + the re-executed notebooks ride; the per-round sha/bytes live in the worklog per §7 — the archive cannot carry its own hash) | sha256 across four homes + offsite |
+| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.238 — zero drift vs `requirements.txt` | import probes (the venv survived the ninth rollback unrepaired) |
 
 ## 3. The six previously-open audit items — CLOSED (re-verified in-tree this round)
 
@@ -215,12 +221,29 @@ summarises them and wins any status disagreement.
   tests + the browser-E2E golden path). §11.1's own rules held: the
   41 TDC-trained ensembles are NOT shipped and never invented — the
   provenance block states the absence; predicted values are model
-  estimates, never experimental facts. The remaining domains (Drug–
-  Target Interaction, Drug Repurposing, Cancer Cell-Line Drug
-  Response, Pharmacogenomics, multi-objective molecular optimization
-  — each with a real backend already in-tree: `ml/dta.py`, the
-  repurposing/cell-line/pharmacogenomics surfaces,
-  `ml/multiobjective.py`) await their API + GUI lanes.
+  estimates, never experimental facts. **Round 315 EXECUTED the DTA
+  item — both legs in one round** (trace 1a1fdc2da50cd529): the API
+  lane over the REAL in-tree backend `ml/dta.py` (`GET
+  /api/v1/dta/registry` — DeepDTA's three alphabets verbatim, the AAC
+  arithmetic, the honest 0-checkpoints provenance; `POST
+  /api/v1/dta/features` — the paired featurization, per-row verdicts,
+  the backend's own hard 422s) + the GUI lane (the "Drug–Target
+  Interaction" stage, stage 12) + the browser-E2E golden path. **Round
+  316 EXECUTED the Drug Repurposing item — both legs in one round**
+  (trace 1a1fe5e3bc4ba0f5): the API lane over the REAL in-tree
+  backend `ml/response_model.py` (`GET /api/v1/repurposing/registry`
+  — DeepResponse's split ladder verbatim + the CaDRReS formulation +
+  the ten-key metric contract + the honest 0-checkpoints provenance
+  with the SYNTHETIC-screen honesty; `POST
+  /api/v1/repurposing/screen` — the full real round trip: the seeded
+  screen → the CaDRReS fit → the predicted IC50 matrix → the metric
+  contract on the observed entries → the ranked candidates per
+  profile, non-finite metrics as null) + the GUI lane (the "Drug
+  Repurposing" stage, stage 13) + the browser-E2E golden path (zero
+  page/console errors, the r316 evidence pair). The remaining domains
+  (Cancer Cell-Line Drug Response, Pharmacogenomics, multi-objective
+  molecular optimization `ml/multiobjective.py` — each with a real
+  backend already in-tree) await their API + GUI lanes.
 - **Phase 6** — architecture hardening: the lightweight workflow
   engine evaluation (JobManager/capability-registry first),
   resource monitoring, security scanning lanes, documentation
