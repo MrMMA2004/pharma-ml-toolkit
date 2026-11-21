@@ -173,6 +173,19 @@
   No production surface touched: the round's diffs are the three
   scrubbed scratch drivers, this entry, and the re-trued status/pin
   rows — plus the absorbed API lane above.
+- **The push-1 CI verdict's catch fixed at the source (the r317
+  convention, the third occurrence)**: four jobs came back red — the
+  Python trio on ruff's ISC004 (the continuation's route family carried
+  unparenthesized implicit string concatenations and a PERF102
+  `.items()` it had never linted) with mypy's `list[IntParam]`
+  narrowing behind them, and the Studio frontend on TS2540 (the parse
+  helper assigned the readonly `crowding`/`crowding_is_boundary` fields
+  post-construction). Both trued at the source: the concatenations
+  parenthesized, the loop iterates `values()`, the accumulator typed
+  `list[IntParam | FloatParam]`, and the row builder spreads the
+  optional fields into the literal — the toolkit frontend's own tsc
+  clean, vitest 94/94, mypy 289 files clean, the api suite and the
+  doctest leg green locally before this push.
 
 ## [1.2.239 re-ship] — 2026-11-21 — round 317 push-2 (the same-version re-ship, the r303/r304 convention; the CI verdict's own catch fixed at the source)
 

@@ -191,7 +191,7 @@ def _build_space(dimensions: list[SpaceDimension]) -> SearchSpace:
     ``DataValidationError`` (a 422): a non-strictly-increasing range, a
     non-positive loguniform bound, and non-integral randint bounds.
     """
-    specs = []
+    specs: list[IntParam | FloatParam] = []
     for dim in dimensions:
         if not dim.low < dim.high:
             raise DataValidationError(
@@ -324,9 +324,9 @@ def registry(request: Request) -> dict:
         },
         "report": {
             "schema": [
-                "objective_names", "front (the non-dominated MOTrial "
-                "members in study order)", "crowding (aligned with the "
-                "front)", "ref", "hypervolume", "hypervolume_curve",
+                "objective_names", ("front (the non-dominated MOTrial "
+                "members in study order)"), ("crowding (aligned with the "
+                "front)"), "ref", "hypervolume", "hypervolume_curve",
                 "n_trials",
             ],
             "best_for": (

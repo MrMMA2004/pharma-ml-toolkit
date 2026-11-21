@@ -3623,11 +3623,13 @@ function parseMultiobjectiveTrialRow(
     values,
     weights,
     scalar: asNumber(r["scalar"]),
+    ...("crowding" in r
+      ? {
+          crowding: asNumber(r["crowding"]),
+          crowding_is_boundary: r["crowding_is_boundary"] === true,
+        }
+      : {}),
   };
-  if ("crowding" in r) {
-    row.crowding = asNumber(r["crowding"]);
-    row.crowding_is_boundary = r["crowding_is_boundary"] === true;
-  }
   return row;
 }
 

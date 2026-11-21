@@ -223,7 +223,7 @@ class TestMultiobjectiveOptimize:
         # the endpoint minimizing each objective is the front's own extreme
         assert best["score"]["values"][0] == pytest.approx(min(score_column))
         assert best["fit_seconds"]["values"][1] == pytest.approx(min(time_column))
-        for name, row in best.items():
+        for row in best.values():
             assert set(row) == {"number", "params", "values", "weights", "scalar"}
             assert any(row["values"] == f_row["values"] for f_row in front)
         assert "trade-off corners" in body["best_for_note"]

@@ -151,7 +151,7 @@ export const SHIPPED_FILE_COUNT = 1675;
  *  file pin stayed 1,672 (the hydration-restored stray zips + the
  *  orphan WIP route removed, the ritual's seven home-zips kept);
  *  verified pin = live walk = page render. */
-export const SHIPPED_SOURCE_LINES = 563161;
+export const SHIPPED_SOURCE_LINES = 563174;
 
 /** r315 (the v1.2.237 ship, the DTA lane): +2 the route family
  *  (routes/dta.py + tests/api/test_dta.py), +1 the DtaLane
