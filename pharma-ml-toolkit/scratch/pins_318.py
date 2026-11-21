@@ -9,7 +9,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-SCREENSHOTS = Path("/home/z/my-project/pharma-ml-toolkit/docs/gui/screenshots")
+SCREENSHOTS = Path("docs/gui/screenshots")
 WEB = "http://127.0.0.1:3000"
 
 

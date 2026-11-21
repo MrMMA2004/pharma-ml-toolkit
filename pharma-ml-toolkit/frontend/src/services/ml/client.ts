@@ -87,6 +87,28 @@
  *   one response scale only (the natural-log µM scale), every
  *   p-value a statistic over the synthetic screen, never real
  *   pharmacology.
+ * * `GET /api/v1/multiobjective/registry` — the multi-objective HPO
+ *   lane's vocabulary (part13 Phase 5's last remainder item): the
+ *   optuna minimize convention + the Pareto order, the exact 2-D
+ *   hypervolume with the WFG reference contract, NSGA-II's crowding
+ *   (+inf boundaries read as null), the MOEA/D Tchebycheff
+ *   decomposition, the Das-Dennis/random weight supply, the
+ *   tunable-objective ledger (score/fit_seconds/score_seconds with
+ *   their cross_validate keys and sign flips), the report schema
+ *   with the one-shot prune contract, and the honest scope block
+ *   (optuna/Ax/nevergrad reviewed; EHVI/MOTPE/NSGA-II operators
+ *   stay upstream; zero checkpoints; no real dataset ships).
+ * * `POST /api/v1/multiobjective/optimize` —
+ *   `MultiObjectiveOptimizeRequest` → the sync round trip over the
+ *   real backend: the seeded SYNTHETIC 80x6 frame, the request's own
+ *   search space, the real cross-validated study over the sklearn
+ *   registry model, the non-dominated front with its aligned
+ *   crowding, the 2-D indicator + the monotone curve (null for a
+ *   3-objective study — the exact sweep is 2-D only, never
+ *   fabricated), the per-objective trade-off corners, and the
+ *   crowding-pruned shortlist — every objective value a labelled
+ *   statistic over the synthetic dataset; the fold timings vary
+ *   run-to-run (the honest drift note rides every answer).
  *
  * The x_test assembly for the AD stage rides the datasets client's
  * bounded `column()` bridge (each feature column ≤ 500 values — the
@@ -117,6 +139,8 @@ type DrugResponseAnalyzeRequest =
   components["schemas"]["DrugResponseAnalyzeRequest"];
 type PharmacogenomicsAnalyzeRequest =
   components["schemas"]["PharmacogenomicsAnalyzeRequest"];
+type MultiobjectiveOptimizeRequest =
+  components["schemas"]["MultiObjectiveOptimizeRequest"];
 type SemiSupervisedTrainRequest =
   components["schemas"]["SemiSupervisedTrainRequest"];
 type SemiSupervisedEvaluateRequest =
@@ -1065,6 +1089,155 @@ export interface PharmacogenomicsAnalyzeResponse {
   readonly note: string;
 }
 
+// -- the multi-objective HPO lane (part13 Phase 5's last remainder item) ---
+
+/** The honest provenance + scope block (the multiobjective lane). */
+export interface MultiobjectiveProvenance {
+  readonly backend: string;
+  readonly source: string;
+  readonly n_repositories: number;
+  readonly transfers_exactly: string;
+  readonly stays_upstream: string;
+  readonly shipped_checkpoints: number;
+  readonly shipped_checkpoints_note: string;
+  readonly dataset: string;
+  readonly disclaimer: string;
+}
+
+/** `GET /api/v1/multiobjective/registry` — the vocabulary answer. */
+export interface MultiobjectiveRegistryResponse {
+  readonly order: {
+    readonly convention: string;
+    readonly dominates: string;
+    readonly pareto_indices: string;
+    readonly complexity: string;
+  };
+  readonly indicator: {
+    readonly family: string;
+    readonly reference_contract: string;
+    readonly report_reference: string;
+    readonly curve: string;
+    readonly two_d_only: string;
+  };
+  readonly spread: {
+    readonly family: string;
+    readonly rule: string;
+    readonly json_note: string;
+  };
+  readonly decomposition: {
+    readonly family: string;
+    readonly form: string;
+    readonly rule: string;
+  };
+  readonly study: {
+    readonly samplers: readonly string[];
+    readonly samplers_note: string;
+    readonly weight_modes: Readonly<Record<string, string>>;
+    readonly n_objectives: string;
+    readonly drift_note: string;
+  };
+  readonly tunable_objectives: {
+    readonly ledger: Readonly<
+      Record<string, { readonly cross_validate_key: string; readonly sign: number }>
+    >;
+    readonly note: string;
+    readonly bounds: string;
+  };
+  readonly report: {
+    readonly schema: readonly string[];
+    readonly best_for: string;
+    readonly prune: string;
+  };
+  readonly request: {
+    readonly defaults: Readonly<Record<string, unknown>>;
+    readonly bounds: Readonly<Record<string, string>>;
+    readonly dimension_kinds: readonly string[];
+    readonly model_note: string;
+  };
+  readonly dataset: {
+    readonly geometry: Readonly<Record<string, number>>;
+    readonly label: string;
+  };
+  readonly provenance: MultiobjectiveProvenance;
+  readonly optimize_url: string;
+  readonly note: string;
+}
+
+/**
+ * One trial row — the backend's MOTrial projection. Front and
+ * shortlist rows carry the aligned crowding (null for the +inf
+ * boundary members, `crowding_is_boundary` marks them); the
+ * `best_for` endpoint rows deliberately carry no crowding claim.
+ */
+export interface MultiobjectiveTrialRow {
+  readonly number: number;
+  readonly params: Readonly<Record<string, number>>;
+  readonly values: readonly number[];
+  readonly weights: readonly number[];
+  readonly scalar: number | null;
+  readonly crowding?: number | null;
+  readonly crowding_is_boundary?: boolean;
+}
+
+/** `POST /api/v1/multiobjective/optimize` — the round-trip answer. */
+export interface MultiobjectiveOptimizeResponse {
+  readonly request: {
+    readonly model: string;
+    readonly task: string;
+    readonly objectives: readonly string[];
+    readonly dimensions: readonly {
+      readonly name: string;
+      readonly kind: string;
+      readonly low: number;
+      readonly high: number;
+    }[];
+    readonly n_trials: number;
+    readonly cv: number;
+    readonly sampler: string;
+    readonly seed: number;
+    readonly weight_mode: string;
+    readonly n_weight_vectors: number;
+    readonly shortlist_keep: number;
+  };
+  readonly dataset: {
+    readonly n_samples: number;
+    readonly n_features: number;
+    readonly task: string;
+    readonly label: string;
+  };
+  readonly study: {
+    readonly n_trials: number;
+    readonly n_objectives: number;
+    readonly objective_names: readonly string[];
+    readonly sampler: string;
+    readonly weight_mode: string;
+    readonly n_weight_vectors: number;
+    readonly n_front: number;
+    readonly objectives_note: string;
+  };
+  readonly front: readonly MultiobjectiveTrialRow[];
+  readonly crowding_note: string;
+  readonly indicator: {
+    readonly ref: readonly number[] | null;
+    readonly hypervolume: number | null;
+    readonly hypervolume_curve: readonly number[];
+    readonly two_d_only: string;
+    readonly curve_note: string;
+  };
+  readonly best_for: Readonly<Record<string, MultiobjectiveTrialRow>>;
+  readonly best_for_note: string;
+  readonly shortlist: {
+    readonly keep: number;
+    readonly n_front: number;
+    readonly n_trials: number;
+    readonly trials: readonly MultiobjectiveTrialRow[];
+    readonly note: string;
+  };
+  readonly provenance: MultiobjectiveProvenance;
+  readonly timings_note: string;
+  readonly note: string;
+}
+
 export const mlApi = {
   /**
    * `GET /api/v1/ml/models?task=…&only_available=…` — the registry
@@ -1530,6 +1703,53 @@ export const mlApi = {
     return parsePharmacogenomicsAnalyzeResponse(
       raw,
       "pharmacogenomics analyze",
+    );
+  },
+
+  /**
+   * `GET /api/v1/multiobjective/registry` — the multi-objective HPO
+   * lane's own vocabulary (part13 Phase 5's last remainder item): the
+   * Pareto order + the optuna minimize convention, the exact 2-D
+   * hypervolume with the WFG reference contract, NSGA-II's crowding
+   * with the +inf-boundary-null convention, the MOEA/D Tchebycheff
+   * decomposition, the study's weight supply, the tunable-objective
+   * ledger with its cross_validate keys and sign flips, and the
+   * honest scope block — every cell the backend's own, never
+   * re-declared.
+   */
+  async multiobjectiveRegistry(): Promise<MultiobjectiveRegistryResponse> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/multiobjective/registry",
+    );
+    return parseMultiobjectiveRegistryResponse(
+      raw,
+      "multiobjective registry",
+    );
+  },
+
+  /**
+   * `POST /api/v1/multiobjective/optimize` — the full honest round
+   * trip over the real backend (sync-only light compute): the seeded
+   * SYNTHETIC 80x6 frame, the request's own search space, the real
+   * cross-validated study over the sklearn registry model, the
+   * non-dominated front with its aligned crowding, the 2-D indicator
+   * + the monotone hypervolume curve (null for a 3-objective study —
+   * the exact sweep is 2-D only, never a fabricated indicator), the
+   * per-objective trade-off corners, and the crowding-pruned
+   * shortlist. Every objective value is a labelled statistic over
+   * the synthetic dataset; the fold timings vary run-to-run (the
+   * honest drift note rides every answer).
+   */
+  async multiobjectiveOptimize(
+    params: Partial<MultiobjectiveOptimizeRequest> = {},
+  ): Promise<MultiobjectiveOptimizeResponse> {
+    const raw = (await api.post(
+      "/api/v1/multiobjective/optimize",
+      params,
+    )) as Record<string, unknown>;
+    return parseMultiobjectiveOptimizeResponse(
+      raw,
+      "multiobjective optimize",
     );
   },
 };
@@ -3224,6 +3444,296 @@ function parsePharmacogenomicsAnalyzeResponse(
       normalized_note: asString(evaluationRaw["normalized_note"]) ?? "",
     },
     provenance: parsePharmacogenomicsProvenance(r["provenance"], what),
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+// -- the multi-objective lane's §8.1 runtime parsers ---------------------
+
+/** Narrow the multi-objective provenance + scope block. */
+function parseMultiobjectiveProvenance(
+  raw: unknown,
+  what: string,
+): MultiobjectiveProvenance {
+  const r = expectObject(raw, `${what} provenance`);
+  return {
+    backend: asString(r["backend"]) ?? "",
+    source: asString(r["source"]) ?? "",
+    n_repositories: asNumber(r["n_repositories"]) ?? 0,
+    transfers_exactly: asString(r["transfers_exactly"]) ?? "",
+    stays_upstream: asString(r["stays_upstream"]) ?? "",
+    shipped_checkpoints: asNumber(r["shipped_checkpoints"]) ?? 0,
+    shipped_checkpoints_note: asString(r["shipped_checkpoints_note"]) ?? "",
+    dataset: asString(r["dataset"]) ?? "",
+    disclaimer: asString(r["disclaimer"]) ?? "",
+  };
+}
+
+/** Narrow the tunable-objective ledger (cross_validate key + sign flip). */
+function parseObjectiveLedger(
+  raw: unknown,
+  what: string,
+): Record<string, { cross_validate_key: string; sign: number }> {
+  const r = expectObject(raw, what);
+  const out: Record<string, { cross_validate_key: string; sign: number }> = {};
+  for (const [label, value] of Object.entries(r)) {
+    if (typeof value === "object" && value !== null) {
+      const entry = value as Record<string, unknown>;
+      const key = asString(entry["cross_validate_key"]);
+      const sign = asNumber(entry["sign"]);
+      if (key !== null && sign !== null) {
+        out[label] = { cross_validate_key: key, sign };
+      }
+    }
+  }
+  return out;
+}
+
+function parseMultiobjectiveRegistryResponse(
+  raw: unknown,
+  what: string,
+): MultiobjectiveRegistryResponse {
+  const r = expectObject(raw, what);
+  const orderRaw = expectObject(r["order"], `${what} order`);
+  const indicatorRaw = expectObject(r["indicator"], `${what} indicator`);
+  const spreadRaw = expectObject(r["spread"], `${what} spread`);
+  const decompositionRaw = expectObject(
+    r["decomposition"],
+    `${what} decomposition`,
+  );
+  const studyRaw = expectObject(r["study"], `${what} study`);
+  const tunableRaw = expectObject(
+    r["tunable_objectives"],
+    `${what} tunable_objectives`,
+  );
+  const reportRaw = expectObject(r["report"], `${what} report`);
+  const requestRaw = expectObject(r["request"], `${what} request`);
+  const datasetRaw = expectObject(r["dataset"], `${what} dataset`);
+  return {
+    order: {
+      convention: asString(orderRaw["convention"]) ?? "",
+      dominates: asString(orderRaw["dominates"]) ?? "",
+      pareto_indices: asString(orderRaw["pareto_indices"]) ?? "",
+      complexity: asString(orderRaw["complexity"]) ?? "",
+    },
+    indicator: {
+      family: asString(indicatorRaw["family"]) ?? "",
+      reference_contract: asString(indicatorRaw["reference_contract"]) ?? "",
+      report_reference: asString(indicatorRaw["report_reference"]) ?? "",
+      curve: asString(indicatorRaw["curve"]) ?? "",
+      two_d_only: asString(indicatorRaw["two_d_only"]) ?? "",
+    },
+    spread: {
+      family: asString(spreadRaw["family"]) ?? "",
+      rule: asString(spreadRaw["rule"]) ?? "",
+      json_note: asString(spreadRaw["json_note"]) ?? "",
+    },
+    decomposition: {
+      family: asString(decompositionRaw["family"]) ?? "",
+      form: asString(decompositionRaw["form"]) ?? "",
+      rule: asString(decompositionRaw["rule"]) ?? "",
+    },
+    study: {
+      samplers: Array.isArray(studyRaw["samplers"])
+        ? (studyRaw["samplers"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      samplers_note: asString(studyRaw["samplers_note"]) ?? "",
+      weight_modes: parseStringRecord(
+        studyRaw["weight_modes"],
+        `${what} study.weight_modes`,
+      ),
+      n_objectives: asString(studyRaw["n_objectives"]) ?? "",
+      drift_note: asString(studyRaw["drift_note"]) ?? "",
+    },
+    tunable_objectives: {
+      ledger: parseObjectiveLedger(
+        tunableRaw["ledger"],
+        `${what} tunable_objectives.ledger`,
+      ),
+      note: asString(tunableRaw["note"]) ?? "",
+      bounds: asString(tunableRaw["bounds"]) ?? "",
+    },
+    report: {
+      schema: Array.isArray(reportRaw["schema"])
+        ? (reportRaw["schema"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      best_for: asString(reportRaw["best_for"]) ?? "",
+      prune: asString(reportRaw["prune"]) ?? "",
+    },
+    request: {
+      defaults:
+        typeof r["request"] === "object" && requestRaw["defaults"] !== null
+          ? (requestRaw["defaults"] as Record<string, unknown>)
+          : {},
+      bounds: parseStringRecord(requestRaw["bounds"], `${what} request.bounds`),
+      dimension_kinds: Array.isArray(requestRaw["dimension_kinds"])
+        ? (requestRaw["dimension_kinds"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      model_note: asString(requestRaw["model_note"]) ?? "",
+    },
+    dataset: {
+      geometry: parseNumberRecord(
+        datasetRaw["geometry"],
+        `${what} dataset.geometry`,
+      ),
+      label: asString(datasetRaw["label"]) ?? "",
+    },
+    provenance: parseMultiobjectiveProvenance(r["provenance"], what),
+    optimize_url: asString(r["optimize_url"]) ?? "",
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+/** Narrow one MOTrial row (front/shortlist crowding optional). */
+function parseMultiobjectiveTrialRow(
+  raw: unknown,
+  what: string,
+): MultiobjectiveTrialRow {
+  const r = expectObject(raw, what);
+  const number = r["number"];
+  if (typeof number !== "number") {
+    throw new Error(`${what}: the trial number is malformed`);
+  }
+  const paramsRaw = expectObject(r["params"], `${what} params`);
+  const params: Record<string, number> = {};
+  for (const [key, value] of Object.entries(paramsRaw)) {
+    if (typeof value === "number") {
+      params[key] = value;
+    }
+  }
+  const values = Array.isArray(r["values"])
+    ? (r["values"] as unknown[]).filter(
+        (v): v is number => typeof v === "number",
+      )
+    : [];
+  const weights = Array.isArray(r["weights"])
+    ? (r["weights"] as unknown[]).filter(
+        (v): v is number => typeof v === "number",
+      )
+    : [];
+  const row: MultiobjectiveTrialRow = {
+    number,
+    params,
+    values,
+    weights,
+    scalar: asNumber(r["scalar"]),
+  };
+  if ("crowding" in r) {
+    row.crowding = asNumber(r["crowding"]);
+    row.crowding_is_boundary = r["crowding_is_boundary"] === true;
+  }
+  return row;
+}
+
+function parseMultiobjectiveOptimizeResponse(
+  raw: unknown,
+  what: string,
+): MultiobjectiveOptimizeResponse {
+  const r = expectObject(raw, what);
+  const requestRaw = expectObject(r["request"], `${what} request`);
+  const dimensionsRaw = Array.isArray(requestRaw["dimensions"])
+    ? (requestRaw["dimensions"] as unknown[])
+    : [];
+  const datasetRaw = expectObject(r["dataset"], `${what} dataset`);
+  const studyRaw = expectObject(r["study"], `${what} study`);
+  const frontRaw = Array.isArray(r["front"]) ? (r["front"] as unknown[]) : [];
+  const indicatorRaw = expectObject(r["indicator"], `${what} indicator`);
+  const curveRaw = Array.isArray(indicatorRaw["hypervolume_curve"])
+    ? (indicatorRaw["hypervolume_curve"] as unknown[])
+    : [];
+  const refRaw = indicatorRaw["ref"];
+  const bestRaw = expectObject(r["best_for"], `${what} best_for`);
+  const shortlistRaw = expectObject(r["shortlist"], `${what} shortlist`);
+  const shortlistTrialsRaw = Array.isArray(shortlistRaw["trials"])
+    ? (shortlistRaw["trials"] as unknown[])
+    : [];
+  return {
+    request: {
+      model: asString(requestRaw["model"]) ?? "",
+      task: asString(requestRaw["task"]) ?? "",
+      objectives: Array.isArray(requestRaw["objectives"])
+        ? (requestRaw["objectives"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      dimensions: dimensionsRaw.map((dim, i) => {
+        const d = expectObject(dim, `${what} request.dimensions[${i}]`);
+        return {
+          name: asString(d["name"]) ?? "",
+          kind: asString(d["kind"]) ?? "",
+          low: asNumber(d["low"]) ?? 0,
+          high: asNumber(d["high"]) ?? 0,
+        };
+      }),
+      n_trials: asNumber(requestRaw["n_trials"]) ?? 0,
+      cv: asNumber(requestRaw["cv"]) ?? 0,
+      sampler: asString(requestRaw["sampler"]) ?? "",
+      seed: asNumber(requestRaw["seed"]) ?? 0,
+      weight_mode: asString(requestRaw["weight_mode"]) ?? "",
+      n_weight_vectors: asNumber(requestRaw["n_weight_vectors"]) ?? 0,
+      shortlist_keep: asNumber(requestRaw["shortlist_keep"]) ?? 0,
+    },
+    dataset: {
+      n_samples: asNumber(datasetRaw["n_samples"]) ?? 0,
+      n_features: asNumber(datasetRaw["n_features"]) ?? 0,
+      task: asString(datasetRaw["task"]) ?? "",
+      label: asString(datasetRaw["label"]) ?? "",
+    },
+    study: {
+      n_trials: asNumber(studyRaw["n_trials"]) ?? 0,
+      n_objectives: asNumber(studyRaw["n_objectives"]) ?? 0,
+      objective_names: Array.isArray(studyRaw["objective_names"])
+        ? (studyRaw["objective_names"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      sampler: asString(studyRaw["sampler"]) ?? "",
+      weight_mode: asString(studyRaw["weight_mode"]) ?? "",
+      n_weight_vectors: asNumber(studyRaw["n_weight_vectors"]) ?? 0,
+      n_front: asNumber(studyRaw["n_front"]) ?? 0,
+      objectives_note: asString(studyRaw["objectives_note"]) ?? "",
+    },
+    front: frontRaw.map((row, i) =>
+      parseMultiobjectiveTrialRow(row, `${what} front[${i}]`),
+    ),
+    crowding_note: asString(r["crowding_note"]) ?? "",
+    indicator: {
+      ref: Array.isArray(refRaw)
+        ? (refRaw as unknown[]).filter(
+            (v): v is number => typeof v === "number",
+          )
+        : null,
+      hypervolume: asNumber(indicatorRaw["hypervolume"]),
+      hypervolume_curve: curveRaw.filter(
+        (v): v is number => typeof v === "number",
+      ),
+      two_d_only: asString(indicatorRaw["two_d_only"]) ?? "",
+      curve_note: asString(indicatorRaw["curve_note"]) ?? "",
+    },
+    best_for: Object.fromEntries(
+      Object.entries(bestRaw).map(([name, row]) => [
+        name,
+        parseMultiobjectiveTrialRow(row, `${what} best_for ${name}`),
+      ]),
+    ),
+    best_for_note: asString(r["best_for_note"]) ?? "",
+    shortlist: {
+      keep: asNumber(shortlistRaw["keep"]) ?? 0,
+      n_front: asNumber(shortlistRaw["n_front"]) ?? 0,
+      n_trials: asNumber(shortlistRaw["n_trials"]) ?? 0,
+      trials: shortlistTrialsRaw.map((row, i) =>
+        parseMultiobjectiveTrialRow(row, `${what} shortlist.trials[${i}]`),
+      ),
+      note: asString(shortlistRaw["note"]) ?? "",
+    },
+    provenance: parseMultiobjectiveProvenance(r["provenance"], what),
+    timings_note: asString(r["timings_note"]) ?? "",
     note: asString(r["note"]) ?? "",
   };
 }

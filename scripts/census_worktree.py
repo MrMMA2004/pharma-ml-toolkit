@@ -22,9 +22,13 @@ from pathlib import Path
 
 EXCLUDED_DIRS = {
     ".pytest_cache", "__pycache__", "node_modules", "catboost_info",
-    "artifacts", ".venv", "venv", "env", ".git", ".ruff_cache",
+    ".venv", "venv", "env", ".git", ".ruff_cache",
     ".mypy_cache", ".tox", ".idea", ".vscode", ".cache",
 }
+# the r302 rule (toolkit-fs.ts EXCLUDED_REL_DIRS): artifacts is excluded
+# only at these relative depths -- "artifacts" as a NAME hid the real
+# frontend/src/services/artifacts/ source tree (the r302 find)
+EXCLUDED_REL_DIRS = {"artifacts", "examples/artifacts"}
 ALLOWED_EXTENSIONS = {".py", ".toml", ".txt", ".md", ".yml", ".yaml",
                       ".cfg", ".ini", ".ipynb", ".json"}
 ALLOWED_BASENAMES = {"Dockerfile", ".dockerignore", ".gitignore"}
@@ -46,6 +50,7 @@ def census(root: Path) -> dict[str, int]:
         dirnames[:] = sorted(
             d for d in dirnames
             if d not in EXCLUDED_DIRS and not d.endswith(".egg-info")
+            and (rel_dir + "/" + d if rel_dir != "." else d) not in EXCLUDED_REL_DIRS
         )
         for d in dirnames:
             dirs += 1

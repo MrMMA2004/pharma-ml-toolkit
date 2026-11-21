@@ -9,8 +9,8 @@ inventory, not a current certification: counts and grades have not been
 revalidated against every current UI and dependency profile. See
 [Part 5 audit](PART5_PHASE0_AUDIT.md) and [test profiles](TEST_PROFILES.md)
 for scoped evidence and engine limitations. Matrix inputs were frozen
-at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.236 (the
-Phase-4 search/job-center/workspace rows and the Phase-5 glossary/
+at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.240 (the
+r315 Phase-4 search/job-center/workspace rows and the Phase-5 glossary/
 presets/doctor rows are registry-level additions, not matrix changes;
 r312 added the `/api/v1/model-evaluation` conformal + coverage family and
 the `/api/v1/dl/gnn` API lane — registry-level additions, not matrix

@@ -742,6 +742,8 @@ def tune_model_multi(
     objectives: Sequence[str] = ("score", "fit_seconds"),
     sampler: str = "tpe",
     seed: int = 0,
+    weight_mode: str = "spread",
+    n_weight_vectors: int = 8,
 ) -> ParetoReport:
     """Cross-validated multi-objective HPO over the sklearn registry models.
 
@@ -751,6 +753,9 @@ def tune_model_multi(
     ``score_seconds`` = the mean fold times -- the same numbers
     :mod:`pharmaml.ml.cv_results` records).  The study then does what a
     single number cannot: it returns the accuracy-vs-cost front.
+    ``weight_mode`` / ``n_weight_vectors`` are the study's own spread
+    dials, forwarded verbatim (:class:`MultiObjectiveStudy`'s Das-Dennis
+    lattice when ``"spread"``, seeded simplex draws when ``"random"``).
 
     >>> import numpy as np
     >>> from pharmaml.ml.hpo import SearchSpace
@@ -765,6 +770,11 @@ def tune_model_multi(
     >>> report.objective_names
     ('score', 'fit_seconds')
     >>> len(report.trials) >= 1 and all(len(t.values) == 2 for t in report.trials)
+    True
+    >>> report = tune_model_multi(
+    ...     "ridge_classifier", space, X, y, task="classification", cv=2,
+    ...     n_trials=6, sampler="random", seed=1, weight_mode="random")
+    >>> len(report.trials) >= 1
     True
     """
     from sklearn.model_selection import cross_validate
@@ -807,6 +817,8 @@ def tune_model_multi(
         n_objectives=len(objectives),
         sampler=sampler,
         seed=seed,
+        weight_mode=weight_mode,
+        n_weight_vectors=n_weight_vectors,
     )
     study.run(n_trials)
     return study.report(tuple(objectives))

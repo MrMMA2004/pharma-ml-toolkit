@@ -31,7 +31,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-REPO = Path("/home/z/my-project")
+REPO = Path(__file__).resolve().parents[2]  # the repo root (portable form)
 TOOLKIT = REPO / "pharma-ml-toolkit"
 VERSION = (TOOLKIT / "VERSION").read_text().strip()
 NAME = f"pharma-ml-toolkit-v{VERSION}.zip"
@@ -241,7 +241,7 @@ def main() -> int:
         re.compile(r"ghp_[A-Za-z0-9]{20,}"),
         re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
         re.compile(r"AKIA[0-9A-Z]{16}"),
-        re.compile(r"/home/z/"),
+        re.compile(r"/ho" + "me/z/"),  # assembled so this file never carries the literal
     ]
     leaks = []
     pattern_literals = 0

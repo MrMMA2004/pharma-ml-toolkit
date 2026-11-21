@@ -85,15 +85,10 @@ summarises them and wins any status disagreement.
   authenticated check-runs poll (this round) |
 | Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.240 SOURCE archive shipped (four homes + offsite, 18 zips) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
 | Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.240 | read directly this session, lockstep guard green |
-| Test surface | 8,464 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 464 files) — +15 this round (the pharmacogenomics route family) — PLUS the component-test lane: 94 Vitest tests / 13 files over the Studio frontend (the PharmacogenomicsLane suite added, +8) (jsdom + React Testing Library) | fresh collection + `npm --prefix frontend test` this round |
-| Census | 1,672 files / 561,916 lines / v1.2.240 (the r318 walk at the
-  terminal build: +3 the lane's source files — the route family,
-  its test file, the component suite — +2 the r318 browser-E2E
-  evidence pair, +2 the r318 pins pair, +2 the ship zip in its two
-  in-tree homes, −2 the r317-era retired zip pair the ghost sweep
-  took; the walk = the live API = the page render trued three-way) | this round's census walk |
-| Source archive | v1.2.240 — a NEW version ship (the part13 Phase-5 Pharmacogenomics lane — the route family + its tests + the GUI stage + the regenerated API types + the re-executed notebooks ride; the per-round sha/bytes live in the worklog per §7 — the archive cannot carry its own hash) | sha256 across four homes + offsite |
-| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.240 — zero drift vs `requirements.txt` | import probes (the venv survived the eleventh rollback unrepaired) |
+| Test surface | 8,484 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 465 files) — +20 this round (the multiobjective route family the interrupted continuation left; its API lane gated green, its GUI leg rides the next continuation) — PLUS the component-test lane: 94 Vitest tests / 13 files over the Studio frontend (jsdom + React Testing Library) | fresh collection + vitest this round |
+| Census | 1,675 files / 563,161 lines / v1.2.240 (the r319 housekeeping census, trued three-way: the walk replica re-aligned to the r302 scoped-exclusion rule — artifacts only at its two relative depths, the r302 find that had hidden the frontend's real artifacts client — so the walk = the live API = the page render agree byte-for-byte for the first time since r302; the multiobjective API lane's three source files ride, the r318 close-out tooling trio's leakage literals scrubbed, the hydration-restored ghost zips and build-theme shots swept) | this round's census walk |
+| Source archive | v1.2.240 — a NEW version ship (the part13 Phase-5 Pharmacogenomics lane — the route family + its tests + the GUI stage + the regenerated API types + the re-executed notebooks ride; the per-round sha/bytes live in the worklog per §7 — the archive cannot carry its own hash) — re-shipped same-version at r319 (the r303/r304/r317 convention: the leakage scrub + this row's re-true ride the rebuilt archive) | sha256 across four homes + offsite |
+| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.240 — zero drift vs `requirements.txt` | import probes (r319: rdkit was found missing after the eleventh rollback's partial hydration — `venv_repair.sh` ran FOREGROUND and the full import surface + the Studio GUI stack verified) |
 
 ## 3. The six previously-open audit items — CLOSED (re-verified in-tree this round)
 

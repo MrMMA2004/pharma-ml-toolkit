@@ -1976,6 +1976,100 @@
         "title": "ModelArtifactRequest",
         "type": "object"
       },
+      "MultiObjectiveOptimizeRequest": {
+        "description": "One seeded synthetic study: dataset + space + model + objectives.\n\nThe dataset is the route's own seeded 80x6 SYNTHETIC stand-in (the\nseed is the only generative dial); the space is the request's own\ndimension specs (1..4); the model is any sklearn registry name the\nbackend itself validates; the objectives are 2..3 distinct entries\nfrom the backend's own ledger.  ``weight_mode`` /\n``n_weight_vectors`` are the study's own spread dials, forwarded\nverbatim.  The default study (random_forest over n_estimators x\nmax_depth) carries a real trade-off: accuracy climbs with depth\nwhile fit seconds climb with the tree count.",
+        "properties": {
+          "cv": {
+            "default": 3,
+            "maximum": 5.0,
+            "minimum": 2.0,
+            "title": "Cv",
+            "type": "integer"
+          },
+          "dimensions": {
+            "items": {
+              "$ref": "#/components/schemas/SpaceDimension"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Dimensions",
+            "type": "array"
+          },
+          "model": {
+            "default": "random_forest",
+            "title": "Model",
+            "type": "string"
+          },
+          "n_trials": {
+            "default": 20,
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "N Trials",
+            "type": "integer"
+          },
+          "n_weight_vectors": {
+            "default": 8,
+            "maximum": 32.0,
+            "minimum": 2.0,
+            "title": "N Weight Vectors",
+            "type": "integer"
+          },
+          "objectives": {
+            "default": [
+              "score",
+              "fit_seconds"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Objectives",
+            "type": "array"
+          },
+          "sampler": {
+            "default": "tpe",
+            "enum": [
+              "random",
+              "tpe"
+            ],
+            "title": "Sampler",
+            "type": "string"
+          },
+          "seed": {
+            "default": 42,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "shortlist_keep": {
+            "default": 5,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Shortlist Keep",
+            "type": "integer"
+          },
+          "task": {
+            "default": "classification",
+            "enum": [
+              "classification",
+              "regression"
+            ],
+            "title": "Task",
+            "type": "string"
+          },
+          "weight_mode": {
+            "default": "spread",
+            "enum": [
+              "spread",
+              "random"
+            ],
+            "title": "Weight Mode",
+            "type": "string"
+          }
+        },
+        "title": "MultiObjectiveOptimizeRequest",
+        "type": "object"
+      },
       "NcaRequest": {
         "properties": {
           "conc": {
@@ -3164,6 +3258,42 @@
           "dataset_id"
         ],
         "title": "SemiSupervisedTrainRequest",
+        "type": "object"
+      },
+      "SpaceDimension": {
+        "description": "One dimension of the search space, in the backend's own terms.\n\n``uniform`` / ``loguniform`` build a ``FloatParam`` on\n``[low, high]`` (the log sampling inside); ``randint`` builds an\n``IntParam`` on the inclusive integer range.  The name must be one\nof the model's own hyperparameters \u2014 the backend's\n``build_model`` raises its typed ``ModelError`` otherwise (a 422,\nnever a 500).",
+        "properties": {
+          "high": {
+            "title": "High",
+            "type": "number"
+          },
+          "kind": {
+            "enum": [
+              "uniform",
+              "loguniform",
+              "randint"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "low": {
+            "title": "Low",
+            "type": "number"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "low",
+          "high"
+        ],
+        "title": "SpaceDimension",
         "type": "object"
       },
       "SplitRequest": {
@@ -7185,6 +7315,72 @@
         "summary": "Coverage Diagnostics",
         "tags": [
           "model-evaluation"
+        ]
+      }
+    },
+    "/api/v1/multiobjective/optimize": {
+      "post": {
+        "operationId": "optimize_api_v1_multiobjective_optimize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultiObjectiveOptimizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Optimize Api V1 Multiobjective Optimize Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Optimize",
+        "tags": [
+          "multiobjective"
+        ]
+      }
+    },
+    "/api/v1/multiobjective/registry": {
+      "get": {
+        "operationId": "registry_api_v1_multiobjective_registry_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Registry Api V1 Multiobjective Registry Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Registry",
+        "tags": [
+          "multiobjective"
         ]
       }
     },

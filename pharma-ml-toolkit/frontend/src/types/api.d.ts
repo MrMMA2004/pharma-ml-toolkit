@@ -1345,6 +1345,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/multiobjective/optimize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Optimize */
+        post: operations["optimize_api_v1_multiobjective_optimize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/multiobjective/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registry */
+        get: operations["registry_api_v1_multiobjective_registry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pharmacogenomics/analyze": {
         parameters: {
             query?: never;
@@ -2496,6 +2530,80 @@ export interface components {
             /** Model Id */
             model_id: string;
         };
+        /**
+         * MultiObjectiveOptimizeRequest
+         * @description One seeded synthetic study: dataset + space + model + objectives.
+         *
+         *     The dataset is the route's own seeded 80x6 SYNTHETIC stand-in (the
+         *     seed is the only generative dial); the space is the request's own
+         *     dimension specs (1..4); the model is any sklearn registry name the
+         *     backend itself validates; the objectives are 2..3 distinct entries
+         *     from the backend's own ledger.  ``weight_mode`` /
+         *     ``n_weight_vectors`` are the study's own spread dials, forwarded
+         *     verbatim.  The default study (random_forest over n_estimators x
+         *     max_depth) carries a real trade-off: accuracy climbs with depth
+         *     while fit seconds climb with the tree count.
+         */
+        MultiObjectiveOptimizeRequest: {
+            /**
+             * Cv
+             * @default 3
+             */
+            cv: number;
+            /** Dimensions */
+            dimensions?: components["schemas"]["SpaceDimension"][];
+            /**
+             * Model
+             * @default random_forest
+             */
+            model: string;
+            /**
+             * N Trials
+             * @default 20
+             */
+            n_trials: number;
+            /**
+             * N Weight Vectors
+             * @default 8
+             */
+            n_weight_vectors: number;
+            /**
+             * Objectives
+             * @default [
+             *       "score",
+             *       "fit_seconds"
+             *     ]
+             */
+            objectives: string[];
+            /**
+             * Sampler
+             * @default tpe
+             * @enum {string}
+             */
+            sampler: "random" | "tpe";
+            /**
+             * Seed
+             * @default 42
+             */
+            seed: number;
+            /**
+             * Shortlist Keep
+             * @default 5
+             */
+            shortlist_keep: number;
+            /**
+             * Task
+             * @default classification
+             * @enum {string}
+             */
+            task: "classification" | "regression";
+            /**
+             * Weight Mode
+             * @default spread
+             * @enum {string}
+             */
+            weight_mode: "spread" | "random";
+        };
         /** NcaRequest */
         NcaRequest: {
             /** Conc */
@@ -3112,6 +3220,30 @@ export interface components {
              * @default -1
              */
             unlabeled_marker: unknown;
+        };
+        /**
+         * SpaceDimension
+         * @description One dimension of the search space, in the backend's own terms.
+         *
+         *     ``uniform`` / ``loguniform`` build a ``FloatParam`` on
+         *     ``[low, high]`` (the log sampling inside); ``randint`` builds an
+         *     ``IntParam`` on the inclusive integer range.  The name must be one
+         *     of the model's own hyperparameters — the backend's
+         *     ``build_model`` raises its typed ``ModelError`` otherwise (a 422,
+         *     never a 500).
+         */
+        SpaceDimension: {
+            /** High */
+            high: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "uniform" | "loguniform" | "randint";
+            /** Low */
+            low: number;
+            /** Name */
+            name: string;
         };
         /** SplitRequest */
         SplitRequest: {
@@ -6074,6 +6206,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    optimize_api_v1_multiobjective_optimize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultiObjectiveOptimizeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registry_api_v1_multiobjective_registry_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

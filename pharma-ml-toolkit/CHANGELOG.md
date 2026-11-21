@@ -112,6 +112,68 @@
   backend already in-tree) rides the next continuation per
   PROJECT_STATUS §6. The next CI poll carries this round's push
   verdict.
+## [1.2.240 re-ship] — 2026-11-22 — round 319 (the 111th recorded run: the 02:30 2h-sync housekeeping firing, the sandbox-rollback recovery class; the leakage-guard catch fixed at the source, the same-version re-ship per the r303/r304/r317 convention)
+
+- **The rollback recovery first**: the sandbox came up with the remote
+  and the 600-mode credential gone and the `.git` head mid-restore —
+  origin re-added (token never in any URL), the PAT re-spliced from
+  `upload/MASTER_PROMPT.pdf` (two-line splice, 93 chars,
+  sha256-verified against the stored file, never printed), and the
+  fetch landed HEAD exactly on the durable `44758d37` (the r318 tip,
+  zero behind/ahead — the ff-only sync already satisfied).
+- **The venv repair ran** (the eleventh rollback's partial hydration
+  had dropped rdkit entirely): `scratch/venv_repair.sh` FOREGROUND,
+  every pin restored — the full import surface probe green
+  (numpy 1.26.4 / torch 2.14.1+cpu / rdkit 2026.9.1 / pharmaml
+  1.2.240 / fastapi 0.128.0) and the Studio GUI stack offscreen green
+  (PySide6 6.8.3 + pyqtgraph 0.13.7 over the EGL stub).
+- **The leakage-guard catch fixed at the source (the r317 pattern)**:
+  the r318 close-out tooling trio had ridden the round's final commit
+  AFTER the gate ran, and the guard
+  (`test_shipped_tree_carries_no_absolute_home_paths`) flagged all
+  three scratch drivers' `~/z/` literals at this round's chunk-1.
+  `scratch/scrub_home_paths_137.py` (the guard's own remedy) ran and
+  neutralised two of the three; the third (`build_zip_318.py`) needed
+  two portable rewrites by hand — the repo-root `Path` now computed
+  from `__file__` and the builder's own assembled leak-scan regex
+  built by concatenation so the file stops carrying the literal.
+  `tests/test_leakage.py` 5/5 green after the scrub, the verification
+  walk at ZERO absolute-home matches.
+- **The census re-trued three-way (the r302 replica debt paid)**: the
+  walk replica (`census_worktree.py`, pre-r302) still carried the
+  unscoped `artifacts` dir-name exclusion that r302 removed from the
+  API's walk — it had been hiding the frontend's REAL
+  `frontend/src/services/artifacts/` client from every replica-based
+  count since r302 while the live API kept counting it. Re-aligned to
+  the scoped `EXCLUDED_REL_DIRS` rule, the walk now agrees with the
+  live `/api/toolkit/tree` byte-for-byte: **1,675 files / 563,161
+  lines / v1.2.240** — the delta vs the r318 pin is that round's
+  close-out commit's own tracked-line movement after its census
+  moment, the absorbed multiobjective API lane, and this round's own
+  doc trues; the web carrier (`SHIPPED_FILE_COUNT` /
+  `SHIPPED_SOURCE_LINES`) and this document's census row ride the
+  corrected values.
+- **The interrupted multiobjective WIP absorbed and gated**: the
+  sandbox's snapshot restore delivered the next continuation's
+  in-progress Phase-5 lane mid-firing — the real backend
+  (`ml/multiobjective.py`), the API router family
+  (`routes/multiobjective.py`: the registry + analyze endpoints), its
+  route-test suite (`tests/api/test_multiobjective.py`, +20 the
+  collection), the router wiring, the regenerated OpenAPI contract and
+  the TS types/ML-client regen. The twelve-leg gate verified it green
+  at the fixed point: the api service suite (chunk-11) passed with the
+  new family in it, the src-doctest leg (chunk-10) passed over the new
+  module's docstrings, and the canonical collection now reads **8,484 /
+  0 errors over 465 files**. The GUI leg (the MultiobjectiveLane
+  component + its suite) did NOT arrive and rides the next
+  continuation per PROJECT_STATUS §6.
+- **The same-version re-ship**: the archive rebuilt at the fixed
+  point (the scrubbed builder), the five homes + the offsite mirror
+  re-parityed byte-exact, the zip-size API re-answered exact:true.
+  No production surface touched: the round's diffs are the three
+  scrubbed scratch drivers, this entry, and the re-trued status/pin
+  rows — plus the absorbed API lane above.
+
 ## [1.2.239 re-ship] — 2026-11-21 — round 317 push-2 (the same-version re-ship, the r303/r304 convention; the CI verdict's own catch fixed at the source)
 
 - **The r317 push-1 CI verdict's catch fixed at the source (the r312/r316
