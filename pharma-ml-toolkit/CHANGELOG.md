@@ -1,3 +1,128 @@
+## [1.2.233] — 2026-11-21 — round 311 (the 102nd recorded run: the interactive part13 continuation over the FIFTH sandbox rollback — the Phase-3 browser-E2E lanes closed + the Phase-4 §9.3 scaffold-aware coverage leg; a NEW version ship)
+
+- **The fifth sandbox rollback recovered first** (the r306–r308
+  playbook, re-executed): HEAD reverted to the ancient `2eb0ede`,
+  origin + the 600-mode credential wiped, the venv broken (torch +
+  pharmaml gone), the offsite home wiped, the pre-r293
+  `pharma-ml-toolkit/.github/workflows/windows-release.yml` ghost
+  resurrected AGAIN. Recovery: the PAT re-spliced from the master
+  prompt PDF (93-char two-line splice, TWO distinct candidates this
+  time — the forward splice API-validated as the repo before
+  storing, 600-mode, never printed), origin re-added + fetched clean,
+  the pre-reset safety check 1,109 same-path untracked all
+  byte-identical (0 conflicts), `reset --hard` to `1bbe7316` (the
+  r310 terminal), the ghost re-swept, the venv repaired foreground
+  (VENV-REPAIR-DONE + STUDIO-REPAIR-DONE at the pins), the offsite
+  home re-seeded 12 zips testzip-OK with the current-version parity
+  exact (15,439,877 B / `1b6284ce`), and the dev server restarted on
+  the canonical tree.
+- **part13 Phase 3 CLOSED — the browser-E2E continuation executed
+  over the vite proxy** (the r290/r291 daemon pattern, rewritten after
+  the rollback wiped the r291 driver): the double-forked FastAPI
+  backend on 8017 + the Vite dev server on 5174 with the documented
+  dev-same-origin startup channel (the session token through
+  `VITE_PHARMAML_TOKEN`, the `/api` proxy + the WS event stream),
+  both surviving the sandbox's per-call subtree reaper. The lanes,
+  driven in a REAL browser over the REAL backend: the app boot
+  through the §14.1 startup gate (`backend 1.2.232 ready via
+  dev-same-origin`, health + stream + the nine-workspace registry);
+  the **Generative AI workspace** (the r291-uncovered page) through
+  the §11.4 workflow — the genetic optimization run (real
+  `GeneticOptimizer` job, the verdict table with objective scores),
+  Validate through the REAL descriptor engine (**Valid — 10 /
+  Invalid — 0**, the frame's index as the validity verdict), the
+  Filter/Rank stages over the verdict; the **honest error-handling
+  lane** — the similarity objective submitted WITHOUT its required
+  `seed_smiles` surfaces the route's own 422 verbatim (`objective
+  'similarity' needs string 'seed_smiles'`); the **Visualization
+  workspace** (the other uncovered page) — the stat lane (histogram
+  over the 40-point sample, the backend's own stats dict: n=40,
+  n_bins=7), the md-series lane (the .xvg RMSD series, 11 points),
+  the HTML report lane (managed job → COMPLETED relay), the session
+  artifact registry (three REAL artifacts with the backend's own
+  sha256 digests + Select/Download), the kind filter (all (3) /
+  figure (2)); the visual-regression baselines captured (desktop +
+  mobile 390px with scrollWidth == clientWidth == 390, zero
+  overflow + dark mode); **zero page errors and zero console errors
+  across the entire run**. 10 evidence screenshots under
+  `docs/gui/screenshots/r311-*`.
+- **part13 Phase 4 opened — the §9.3 Conformal Prediction audit
+  + the scaffold-aware evaluation leg.** The audit found the
+  checklist overwhelmingly REAL already: split conformal regression
+  (`conformal.py`), split + label-conditional classification sets
+  (`conformal_classification.py`), coverage + width diagnostics with
+  Wilson bounds and GROUP-aware evaluation (`coverage_diagnostics.py`
+  ::`coverage_by_group`), calibration diagnostics
+  (`probability_calibration.py`), per-class coverage
+  (label-conditional). TWO real gaps: **scaffold-aware evaluation —
+  now shipped**: the new `ml/scaffold_coverage.py` bridges the
+  split strategies' own pure-Python Murcko framework extractor
+  (`splits.py::murcko_scaffold_key` — NOT duplicated, §9.3's own
+  rule) into `coverage_by_group`, with two honest sentinel groups
+  keeping the report complete (`"invalid"` for unparseable rows,
+  `"acyclic"` for ring-less rows — one extra parse of the same chem
+  core disambiguates the extractor's documented empty-key
+  conflation); 16 new tests + 2 doctests pin the grouping, the
+  sentinels, the delegation contract, and the end-to-end conformal
+  integration (`calibrate_split_conformal` → `predict_interval` →
+  per-scaffold coverage with interval widths as sizes). The
+  Model-Evaluation/Applicability-Domain API connection stays
+  honestly queued for the Phase-4 continuation (zero conformal
+  surfacing in the API today — the audit row is PARTIAL, not
+  embellished). The §9.1 Active Learning surface is REAL
+  (`ml/active_learning.py` — the loop, query records, experimental
+  label import), `ml/model_card.py`, `ml/benchmark.py` (scaffold/
+  butina/maxmin/mw/cold/duplicate splits + the metrics battery),
+  `ml/umap.py` — the Phase-4 continuation map records all of it.
+- **THREE latent r310 close-out defects found and fixed at the
+  source** (all outside r310's gate scope AND the CI's focused set):
+  1. the r310 terminal CI was 18/19 — the **Studio MD job
+  segfaulted** (exit 139: a GC-time pandas frame finalize inside the
+  Qt worker thread during `test_research_workflows.py::
+  test_nested_logistic_validation_in_studio` while `qtbot.waitUntil`
+  held the main thread — a runner-side crash, NOT caused by r310's
+  frontend-only diff; this round's push re-runs the lane and the
+  ledger records the observation honestly);
+  2. the **FEATURES.md freeze stamp stayed v1.2.231** through the
+  r310 version bump (`test_feature_inventory.py::
+  test_purpose_header_and_freeze_stamp` red at HEAD) — re-stamped
+  at 1.2.233 with the ML Workbench row carrying the new
+  `ml.scaffold_coverage` backend module;
+  3. the **notebook twins lost their variant-note cell** (the r310
+  re-execution driver's own `strip_twin` — 7 twin tests red at
+  HEAD) — the canonical `tools/strip_notebook_outputs.py`
+  re-generated all 7 twins with the note cell + the true
+  percentages; the whole variants gate 119/119 green.
+- **The eighth-carrier drift caught by this round's bump**:
+  `frontend/package-lock.json`'s root version fields stayed 1.2.231
+  through r310's package.json bump (the lockstep guard checks
+  package.json, not the lock's root fields) — both lock fields
+  re-trued to 1.2.233 with the rest of the carriers.
+- **Version bump 1.2.232 → 1.2.233 in all carriers** (VERSION,
+  pyproject, `pharmaml.__version__`, frontend package.json + the
+  lock's root fields, tauri.conf.json, version_info.txt quadruple +
+  both strings, `SHIPPED_TOOLKIT_VERSION`, the two frontend test
+  mocks) — the lockstep guard green; the eight notebooks re-executed
+  at 1.2.233 (207 s + one OOM-ritual DeadKernelError on the ML
+  notebook re-run clean after the dev server went offline per the
+  standing ritual, 8/8 OK, zero error outputs, the canonical
+  builder-path scrubber integrated with home-path survivors=0, the
+  twins regenerated canonically); the docs INDEX regenerated (13
+  modules / 944 symbols).
+- **Gates**: the new file 18/18 (16 tests + 2 doctests) + the
+  affected neighbours 208/209 (the one red the freeze-stamp find),
+  ruff + mypy clean on the new module, the lockstep guard, the
+  notebook variants gate 119/119, the docs-index guard, the release
+  portability green at the terminal; the collection + vitest +
+  typecheck + census pins re-trued at the ship (see the worklog's
+  round-311 ledger for the full numbers).
+- **BLOCKED (unchanged, honest)**: clean-machine smoke (C-3/C-5),
+  the Stage-5 PySide6 retirement behind it, installer signing
+  (certificate-gated). The Phase-4 remainder (the §9.2 Chemical Space
+  Explorer integration, §9.4 automated benchmarking surface, the
+  reusable Report Builder, Model Cards vs §13's full checklist) and
+  the conformal API connection stay queued with their audit rows.
+
 ## [1.2.232] — 2026-11-21 — round 310 (the 101st recorded run: the interactive part13 Phase-3 firing over the fourth sandbox rollback — the component-test lane round; a NEW version ship, the v1.2.232 source archive carrying the Vitest/RTL suite)
 
 - **part13 Phase 3 (frontend quality — the component-test lane).**

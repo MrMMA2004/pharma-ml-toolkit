@@ -6,11 +6,19 @@ summarises them and wins any status disagreement.
 
 - **Audit date**: 2026-11-21 (round 307, the 98th recorded run;
   Phase-2 addendum round 309; Phase-3 addendum round 310 — the
-  interactive part13 continuation, trace 1a1fb0a0b935472d).
+  interactive part13 continuation, trace 1a1fb0a0b935472d; Phase-4
+  addendum + the Phase-3 browser-E2E close round 311 — the interactive
+  part13 continuation, trace 1a1fc9a07e081d59).
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
-  with the round-310 commit.
+  with the round-310 commit; the Phase-4 addendum verifies `1bbe7316`
+  (the r310 terminal) — NOT clean: three latent r310 close-out
+  defects found and fixed at the source (the 18/19 Studio MD
+  segfault, the stale FEATURES.md freeze stamp, the twin note-cell
+  regression) — and lands with the round-311 commit (the fifth
+  rollback recovered first: PAT/origin/reset/venv per the r306–r308
+  playbook).
 - **Scope**: whole repository — source, tests, docs, release
   artifacts, web pins, archive ritual.
 - **Status labels** (part13 §22): PASS / PARTIAL / FAIL / BLOCKED /
@@ -35,13 +43,19 @@ summarises them and wins any status disagreement.
 | --- | --- | --- |
 | Repository | public, default branch `main` | GitHub API, authenticated |
 | HEAD | r307 audited at `5446e89b`; the Phase-2 addendum verified `19effec8`; this Phase-3 addendum verifies `ca1accc9` (the r309 close-out) clean and lands with the round-310 commit (the fourth rollback recovered first: PAT/origin/reset/venv per the r306–r308 playbook) | fetch + reset --hard + ghost sweep (r307/r308/r310) |
-| CI at HEAD | green — 18/18 at `ca1accc9` (the r309 push); r308's evidence: 18/18 at `19effec8`; this round's push re-verifies (the studio-frontend job gains the component-test step) | `check-runs?head_sha=ca1accc9` (r309 poll) |
-| Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.232 SOURCE archive shipped (five homes + offsite) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
-| Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.232 | read directly this session, lockstep guard 9/9 |
-| Test surface | 8,362 collected / 0 errors / 456 files (`tests/` + `src/pharmaml` `--doctest-modules`) — UNCHANGED in round 310 (zero Python src/tests bytes) — PLUS the new component-test lane: 48 Vitest tests / 7 files over the Studio frontend (jsdom + React Testing Library) | fresh collection + `npm --prefix frontend test` this round |
-| Census | 1,608 files / 552,641 lines / v1.2.232 (the round-310 FINAL walk, taken after the notebook re-execution and the last doc edit: +9 the component-test lane files, +884 the package-lock growth, +100 the round's counted doc delta, −330 the removed pre-r293 `.github` ghost, −1,198 the eight-notebook re-execution at 1.2.232 — the leaner executed outputs; +4 the rollback-restored 229/230 zips, +2 the v1.2.232 ship zip in its two in-tree homes — equals the live /api/toolkit/tree walk, verified three-way) | this round's final census walk |
-| Source archive | v1.2.232 — a NEW version ship (the part13 Phase-3 component-test lane rides: 938 files; the per-round sha/bytes live in the CHANGELOG/worklog per §7 — the archive cannot carry its own hash) | sha256 across five homes + offsite (12 zips re-seeded) |
-| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.232 — zero drift vs `requirements.txt` | import probes post-repair |
+| CI at HEAD | 18/19 at the r310 terminal `1bbe7316` — the Studio MD job
+  segfaulted (exit 139: a runner-side GC-time pandas frame finalize
+  inside the Qt worker thread during `test_research_workflows.py::
+  test_nested_logistic_validation_in_studio`; NOT caused by r310's
+  frontend-only diff — a flake-class crash this round's push re-runs
+  and observes); 18/18 at `ca1accc9` and `19effec8` stand; this
+  round's push re-verifies all jobs | `check-runs?head_sha=1bbe7316` (the r311 poll, authenticated) |
+| Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.233 SOURCE archive shipped (five homes + offsite) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
+| Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.233 (+ the frontend lock's root fields re-trued: they had stayed 1.2.231 through the r310 bump) | read directly this session, lockstep guard green |
+| Test surface | 8,380 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`) — +18 this round (the scaffold-aware coverage suite: 16 tests + 2 doctests) — PLUS the component-test lane: 48 Vitest tests / 7 files over the Studio frontend (jsdom + React Testing Library) | fresh collection + `npm --prefix frontend test` this round |
+| Census | 1,622 files / 554,639 lines / v1.2.233 (the round-311 FINAL walk, taken after the notebook re-execution and the last doc edit: +2 the scaffold-aware module + its tests, +10 the browser-E2E evidence screenshots, +2 the v1.2.233 ship zip in its two in-tree homes, +the notebook/twin/doc deltas — equals the live walk) | this round's final census walk |
+| Source archive | v1.2.233 — a NEW version ship (the part13 Phase-3 browser-E2E evidence + the Phase-4 §9.3 scaffold-aware coverage bridge ride: 950 files; the per-round sha/bytes live in the CHANGELOG/worklog per §7 — the archive cannot carry its own hash) | sha256 across five homes + offsite (13 zips) |
+| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.233 — zero drift vs `requirements.txt` | import probes post-repair |
 
 ## 3. The six previously-open audit items — CLOSED (re-verified in-tree this round)
 
@@ -128,15 +142,49 @@ summarises them and wins any status disagreement.
   end-to-end (file selection, upload submission, typed API errors,
   job progress + cancellation, the COMPLETED relay, the registry
   table + row limit, the registry failure state). The CI
-  studio-frontend job runs the lane after the build. The part13
-  interaction-list lanes NOT yet covered stay honestly queued for
-  the Phase-3 continuation (Playwright/browser E2E over the vite
-  proxy — the pattern the molecular3d round proved — plus the
-  remaining workspaces' page lanes and visual regression).
-  **Phase 4 is next.**
-- **Phase 4** — scientific workflow improvements: Active Learning,
-  Chemical Space Explorer, Conformal Prediction audit, Automated
-  Benchmarking, Report Builder, Model Cards.
+  studio-frontend job runs the lane after the build. **CLOSED by the
+  round-311 continuation** (trace 1a1fc9a07e081d59): the queued
+  browser-E2E lanes executed over the vite proxy (the r290/r291
+  daemon pattern — the double-forked FastAPI backend on 8017 + Vite
+  on 5174 with the dev-same-origin token channel, both surviving the
+  sandbox reaper): the §14.1 app boot, the Generative AI workspace's
+  full §11.4 workflow (the genetic-optimization job + verdict, the
+  descriptor-engine validation Valid—10/Invalid—0, Filter/Rank),
+  the honest error-handling lane (the similarity objective's own 422
+  verbatim), the Visualization workspace's stat/md-series/report
+  lanes + the artifact registry with the backend's sha256 digests,
+  and the visual-regression baselines (desktop + 390px mobile, zero
+  overflow + dark) — zero page/console errors across the run, 10
+  evidence screenshots under `docs/gui/screenshots/r311-*`.
+- **Phase 4** — OPENED (round 311, the §9.3 leg EXECUTED): the six
+  items' honest status after the round-311 audit — **§9.3 Conformal
+  Prediction audit**: the checklist is overwhelmingly real (split
+  conformal regression + classification sets + label-conditional
+  per-class coverage + group-aware coverage diagnostics with Wilson
+  bounds + calibration diagnostics); the scaffold-aware evaluation
+  gap CLOSED (`ml/scaffold_coverage.py` bridges the splits' own
+  Murcko framework extractor into `coverage_by_group` with honest
+  invalid/acyclic sentinels — 18 tests/doctests, no duplication per
+  §9.3's own rule); the Model-Evaluation/Applicability-Domain API
+  connection stays PARTIAL-queued (zero conformal surfacing in the
+  API today — no embellishment). **§9.1 Active Learning**: the
+  backend surface is REAL (`ml/active_learning.py` — the loop, the
+  query records, the experimental label import; the Workbench's
+  Active learning tab) — the acquisition→ranking→label-import→
+  retrain workflow rides it; the chemical-space integration stays
+  queued. **§9.2 Chemical Space Explorer**: the components are real
+  but scattered (the fingerprint/Tanimoto surface,
+  `ml/benchmark.py`'s butina/scaffold splits, `ml/umap.py` +
+  manifold, the generative diversity stack) — the integrated
+  explorer workspace stays QUEUED. **§9.4 Automated Benchmarking**:
+  `ml/benchmark.py` (six split strategies + the metrics battery) +
+  `ml/tuner.py` + `ml/cv_results.py` are real; the consistent-splits
+  shared-protocol comparison surface stays QUEUED. **Report
+  Builder**: `viz/report.py` (HTMLReport + export_table) + the
+  session-report lane are real; §12's full reusable checklist stays
+  QUEUED. **Model Cards**: `ml/model_card.py`
+  (build/markdown/html/write) is real; §13's full field checklist
+  audit stays QUEUED. **Phase 5 is next.**
 - **Phase 5** — advanced pharmaceutical AI: GNN/MPNN GUI completion,
   ADMET, Drug–Target Interaction, Drug Repurposing, Cancer Cell-Line
   Drug Response, Pharmacogenomics, multi-objective molecular

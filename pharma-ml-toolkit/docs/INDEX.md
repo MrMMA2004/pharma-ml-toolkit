@@ -563,6 +563,7 @@ after adding new public functions.
 | `resource_bounds` | function | The declared ``[min, max]`` grid of a hypermodel's resource slot. |
 | `sample_distribution` | function | Draw ``n`` seeded samples from one of the course's distributions. |
 | `save_model` | function | Persist a fitted model plus its metadata bundle. |
+| `scaffold_aware_coverage` | function | Empirical coverage summarized per Murcko scaffold. |
 | `scaffold_groups` | function | Scaffold key per SMILES, in input order (``[""]`` for failures). |
 | `search_catalog` | function | Case-insensitive substring search over names and descriptions. |
 | `seasonal_decomposition` | function | Classical additive decomposition: centered-MA trend, phase-average seasonal. |

@@ -286,6 +286,7 @@ from pharmaml.ml.recommend import (
     similarity_matrix,
     synthetic_ratings,
 )
+from pharmaml.ml.scaffold_coverage import scaffold_aware_coverage
 from pharmaml.ml.semi_supervised import (
     SemiSupervisedEvaluation,
     SemiSupervisedMethod,
@@ -736,6 +737,7 @@ __all__ = [
     "resource_bounds",
     "sample_distribution",
     "save_model",
+    "scaffold_aware_coverage",
     "scaffold_groups",
     "search_catalog",
     "seasonal_decomposition",

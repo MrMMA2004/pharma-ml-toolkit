@@ -1,0 +1,2985 @@
+MASTER PROMPT — PharmaML Studio v1.2.232+
+
+
+
+
+Advanced Repository Verification, Remaining Blockers, Scientific Platform Expansion,
+Architecture Optimization, and Production Release Engineering
+
+
+
+
+Repository: https://github.com/MrMMA2004/pharma-ml-toolkit
+
+
+
+
+Current published release: v1.2.231
+
+
+
+
+Latest verified source commit: "239ef4ee684935917fe56475086b0ab3e23c8cce"
+
+
+
+
+Default branch: main
+
+
+
+
+Latest verified CI:
+
+https://github.com/MrMMA2004/pharma-ml-toolkit/actions/runs/44790778411
+
+
+
+
+Published Windows Release:
+
+https://github.com/MrMMA2004/pharma-ml-toolkit/releases/tag/v1.2.231
+
+
+
+
+Primary audit documentation:
+
+"pharma-ml-toolkit/docs/part12_audit/"
+
+
+
+
+---
+
+
+
+
+1. PRIMARY MISSION
+Continue the engineering and scientific development of PharmaML Toolkit from its actual
+current repository state.
+
+
+
+
+Do not restart the project or repeat previously completed implementation work.
+
+
+
+
+The repository has already undergone extensive development, including:
+
+
+
+
+- React 19 + TypeScript + Vite
+
+- Tauri 2 + Rust
+
+- Python scientific backend
+
+- FastAPI
+
+- REST + WebSocket
+
+- SQLite + FileVault
+
+- Nine scientific workspaces
+
+- Machine Learning and Deep Learning workflows
+
+- Semi-supervised Learning
+
+- Applicability Domain
+
+- Interactive Plotly visualizations
+
+- Three.js molecular visualization
+
+- Molecular docking
+
+- PK/PD
+
+- Molecular dynamics trajectory analysis
+
+- Experiment tracking
+
+- Model registry
+
+- Background Job Manager
+
+- Resource-aware execution
+- Windows EXE/MSI packaging
+
+- Offline WebView2 distribution
+
+- CycloneDX SBOM generation
+
+
+
+
+The v1.2.231 Release is published, and the latest main-branch CI is green.
+
+
+
+
+However, the published installer does not automatically contain every source change made after
+its release commit.
+
+
+
+
+Your mission is to:
+
+
+
+
+1. Verify all previous requirements against the latest source.
+
+2. Reconcile source code, tests, documentation, and release artifacts.
+
+3. Resolve remaining release blockers.
+
+4. Find reproducible bugs and architectural weaknesses.
+
+5. Improve automated testing and scientific validation.
+
+6. Expand the application with high-value pharmaceutical and computational chemistry
+capabilities.
+
+7. Preserve the local-first and offline-first architecture.
+
+8. Produce a new, verified production release when all applicable acceptance gates pass.
+
+
+
+
+The objective is not to maximize the number of features. The objective is to create a reliable,
+scientifically useful, maintainable pharmaceutical research platform.
+
+
+
+
+---
+
+
+
+
+2. FIRST ACTION: VERIFY THE ACTUAL REPOSITORY STATE
+Before modifying anything, inspect:
+
+
+
+
+- Current GitHub HEAD
+
+- Recent commits
+
+- Existing release tags
+
+- GitHub Actions results
+
+- Pull requests and issues
+
+- Source tree
+
+- Backend modules
+
+- Frontend workspaces
+
+- API contracts
+
+- Existing tests
+
+- Documentation
+
+- Packaging configuration
+
+- Dependency lockfiles
+
+- Current release artifacts
+
+
+
+
+Read these existing documents first:
+
+
+
+
+- "PROJECT_AUDIT_PROGRESS.md"
+
+- "docs/MIGRATION_TAURI2.md"
+
+- "docs/RELEASE_READINESS.md"
+
+- "docs/CAPABILITY_MAP.md"
+
+- "docs/CAPABILITY_INTEGRATION_MATRIX.md"
+- "docs/part12_audit/COMPREHENSIVE_PROJECT_AUDIT.md"
+
+- "docs/part12_audit/BACKEND_GUI_INTEGRATION_MATRIX.md"
+
+- "docs/part12_audit/ARCHITECTURE_REVIEW.md"
+
+- "docs/part12_audit/BUG_REPORT.md"
+
+- "docs/part12_audit/SCIENTIFIC_VALIDATION_REPORT.md"
+
+- "docs/part12_audit/PERFORMANCE_REPORT.md"
+
+- "docs/part12_audit/SECURITY_AND_PACKAGING_AUDIT.md"
+
+- "docs/part12_audit/WINDOWS_CLEAN_INSTALL_REPORT.md"
+
+- "docs/part12_audit/FEATURE_GAP_AND_GITHUB_REFERENCES.md"
+
+
+
+
+Verify that every referenced document actually exists.
+
+
+
+
+Do not trust old documentation without checking its evidence against the current code.
+
+
+
+
+Critical documentation reconciliation
+
+
+
+
+The previous audit identified several findings that were subsequently addressed by later
+commits.
+
+
+
+
+Specifically verify:
+
+
+
+
+- Standalone Leverage/Williams Applicability Domain implementation.
+
+- Fingerprint chirality configuration.
+
+- Semi-supervised "/evaluate" GUI integration.
+
+- Semi-supervised Job Mode argument correction.
+
+- Tk playground retirement.
+- SBOM generation and release attachment.
+
+
+
+
+Some audit documents may still describe these as open gaps even though later commits
+implemented them.
+
+
+
+
+Update all outdated status statements.
+
+
+
+
+Never reimplement an already completed capability simply because an old document still lists it
+as missing.
+
+
+
+
+Create a single authoritative project-status document with the actual current state.
+
+
+
+
+---
+
+
+
+
+3. MANDATORY ARCHITECTURE — DO NOT MIGRATE AGAIN
+
+
+
+
+Preserve the existing architecture:
+
+
+
+
+Frontend
+
+
+
+
+- React 19
+
+- TypeScript
+
+- Vite
+
+- Tailwind CSS
+
+- shadcn/ui
+
+- Radix UI
+- Motion
+
+- Plotly.js
+
+- Three.js
+
+
+
+
+Desktop host
+
+
+
+
+- Tauri 2
+
+- Rust
+
+
+
+
+Backend
+
+
+
+
+- Python
+
+- FastAPI
+
+- REST
+
+- WebSocket
+
+
+
+
+Persistence
+
+
+
+
+- SQLite
+
+- FileVault
+
+- Persistent Job History
+
+- Model and Artifact Storage
+
+- Backup and Restore
+
+
+
+
+Packaging
+- PyInstaller
+
+- Tauri Bundler
+
+- NSIS EXE
+
+- WiX MSI
+
+- Offline WebView2
+
+
+
+
+Preserve the existing Mineral Design System, centralized design tokens, light/dark themes,
+typography, responsive behavior, and scientific color conventions.
+
+
+
+
+Do not reintroduce:
+
+
+
+
+- C#
+
+- WinUI 3
+
+- XAML
+
+- MVVM
+
+- .NET
+
+- Qt-based frontend replacement
+
+- Another desktop framework
+
+
+
+
+The nine-workspace React/Tauri application remains the target production GUI.
+
+
+
+
+The legacy PySide6 interface may remain temporarily until the formal retirement gate passes.
+
+
+
+
+---
+4. THREE CRITICAL RELEASE BLOCKERS
+
+
+
+
+Treat these as the highest-priority engineering tasks.
+
+
+
+
+Blocker A — Genuine Windows clean-machine validation
+
+
+
+
+The current clean-machine report explicitly identifies this gate as BLOCKED.
+
+
+
+
+A successful GitHub Windows build is not equivalent to a clean Windows installation test.
+
+
+
+
+Obtain or use a genuine Windows 10/11 x64 physical machine or fresh virtual machine without
+preinstalled development tools.
+
+
+
+
+Verify:
+
+
+
+
+1. EXE installation
+
+2. MSI installation
+
+3. Offline WebView2 installation
+
+4. Startup without Python
+
+5. Startup without Node.js
+
+6. Startup without Rust
+
+7. Backend process startup
+
+8. Backend authentication
+
+9. REST communication
+
+10. WebSocket communication
+
+11. SQLite initialization
+12. Dataset import
+
+13. Chemistry calculations
+
+14. ML execution
+
+15. DL execution
+
+16. Semi-supervised Learning
+
+17. Applicability Domain
+
+18. Plotly rendering
+
+19. Three.js rendering
+
+20. Molecular docking
+
+21. PK/PD calculations
+
+22. MD trajectory analysis
+
+23. Model save/load
+
+24. Figure export
+
+25. Backup/restore
+
+26. Upgrade
+
+27. User-data preservation
+
+28. Uninstallation
+
+
+
+
+Record screenshots, logs, versions, hashes, and exact outcomes.
+
+
+
+
+If no genuine clean Windows machine is available, report BLOCKED.
+
+
+
+
+Do not fabricate evidence.
+
+
+
+
+Blocker B — PySide6 retirement
+The legacy PySide6 production GUI must be retired only after:
+
+
+
+
+- Feature parity is demonstrated.
+
+- All required scientific workflows are available in React/Tauri.
+
+- Backend integrations are verified.
+
+- Data migration is tested.
+
+- Clean-machine validation passes.
+
+- Regression tests pass.
+
+
+
+
+Then remove obsolete GUI-only dependencies and tests carefully.
+
+
+
+
+Preserve Qt-independent scientific modules and CLI functionality.
+
+
+
+
+Blocker C — Digital signing
+
+
+
+
+Digital signing requires an appropriate certificate.
+
+
+
+
+Evaluate:
+
+
+
+
+- Authenticode signing
+
+- Timestamping
+
+- Certificate storage in GitHub Actions secrets
+
+- Signature verification
+
+- Release provenance
+Do not store certificates or private signing keys in the repository.
+
+
+
+
+If no certificate is available, keep the gate BLOCKED and document the exact requirement.
+
+
+
+
+---
+
+
+
+
+5. RELEASE VERSION AND ARTIFACT CONSISTENCY
+
+
+
+
+The published v1.2.231 release was built from an earlier commit than the latest main branch.
+
+
+
+
+Therefore:
+
+
+
+
+- Do not assume the existing EXE/MSI includes all newer commits.
+
+- Trace every new source change to its release inclusion status.
+
+- Do not overwrite an existing published release with unverified artifacts.
+
+- Prepare a new version, such as v1.2.232, after completing the release gates.
+
+
+
+
+Verify all version carriers:
+
+
+
+
+- VERSION
+
+- pyproject.toml
+
+- Python "__version__"
+
+- Frontend package.json
+
+- Tauri configuration
+- TypeScript version carrier
+
+- Lockfile
+
+- PyInstaller version metadata
+
+- CHANGELOG
+
+- Release manifest
+
+
+
+
+Ensure that the source archive and binary installers represent the same intended release
+commit.
+
+
+
+
+Verify SHA-256 checksums, SBOM, installer contents, and provenance.
+
+
+
+
+Preserve the existing reproducible archive-building workflow and scoped exclusion rules.
+
+
+
+
+---
+
+
+
+
+6. COMPREHENSIVE BACKEND–GUI INTEGRATION AUDIT
+
+
+
+
+Re-audit every backend capability.
+
+
+
+
+Create a machine-verifiable integration matrix:
+
+
+
+
+Backend module → Public API → OpenAPI schema → TypeScript client → Workspace → User
+input → Validation → Job execution → Result handler → Visualization → Export → Tests.
+
+
+
+
+Classify every capability:
+- WIRED
+
+- PARTIAL
+
+- NON-GUI
+
+- LEGACY
+
+- BLOCKED
+
+- NOT APPLICABLE
+
+
+
+
+For every NON-GUI capability, explain why it has no GUI consumer and decide whether it should
+become a user-facing feature.
+
+
+
+
+Do not treat the capability registry as proof of integration.
+
+
+
+
+Do not treat a button or API route as proof of functionality.
+
+
+
+
+Verify actual execution and result handling.
+
+
+
+
+Specifically audit:
+
+
+
+
+- Chemistry
+
+- Descriptor generation
+
+- Fingerprint generation
+
+- Feature selection
+
+- Semi-supervised Learning
+
+- ML training and prediction
+
+- DL training and prediction
+
+- GNN/MPNN
+- Explainability
+
+- Uncertainty
+
+- Applicability Domain
+
+- Generative AI
+
+- Docking
+
+- PK/PD
+
+- MD trajectory analysis
+
+- Visualization
+
+- Report generation
+
+- Model persistence
+
+- Artifact persistence
+
+- Database management
+
+
+
+
+Preserve all working integrations.
+
+
+
+
+---
+
+
+
+
+7. FRONTEND QUALITY — A MAJOR IMPROVEMENT AREA
+
+
+
+
+The existing frontend has contract and drift guards, but the audit records limited dedicated
+component-level interaction testing.
+
+
+
+
+Improve this systematically.
+
+
+
+
+Evaluate and integrate:
+- Vitest
+
+- React Testing Library
+
+- Playwright
+
+- Tauri-aware end-to-end testing
+
+
+
+
+GitHub references:
+
+
+
+
+https://github.com/vitest-dev/vitest
+
+
+
+
+https://github.com/testing-library/react-testing-library
+
+
+
+
+https://github.com/microsoft/playwright
+
+
+
+
+https://github.com/webdriverio/webdriverio
+
+
+
+
+Test actual user interactions:
+
+
+
+
+- Form submission
+
+- Validation errors
+
+- File selection
+
+- Dataset import
+
+- Table filtering
+
+- Model configuration
+
+- Training initiation
+
+- Progress display
+- Job cancellation
+
+- WebSocket reconnection
+
+- Plot interaction
+
+- Sample metadata inspection
+
+- Export
+
+- Backup/restore
+
+- Navigation
+
+- Theme switching
+
+- Application restart
+
+
+
+
+For every critical workspace, implement at least one complete frontend-to-backend E2E
+workflow.
+
+
+
+
+Test loading, empty, success, partial, failure, timeout, and cancellation states.
+
+
+
+
+Add visual regression testing for important layouts and responsive breakpoints.
+
+
+
+
+Avoid brittle screenshot tests that fail because of irrelevant pixel differences.
+
+
+
+
+---
+
+
+
+
+8. ARCHITECTURE IMPROVEMENT: SCIENTIFIC WORKFLOW ENGINE
+
+
+
+
+Evaluate a unified Scientific Workflow Engine.
+
+
+
+
+The objective is to allow users to construct, save, and reproduce multi-stage workflows.
+Example:
+
+
+
+
+Dataset Import
+
+→ Standardization
+
+→ Descriptor Generation
+
+→ Feature Selection
+
+→ Data Split
+
+→ Model Training
+
+→ Model Evaluation
+
+→ Applicability Domain
+
+→ SHAP
+
+→ Report Generation
+
+
+
+Requirements:
+
+
+
+
+- Workflow graph
+
+- Typed input/output contracts
+
+- Dependency validation
+
+- Workflow serialization
+
+- Saved workflow templates
+
+- Execution history
+
+- Progress reporting
+
+- Cancellation
+
+- Partial failure handling
+- Artifact lineage
+
+- Reproducibility metadata
+
+
+
+
+Evaluate:
+
+
+
+
+https://github.com/PrefectHQ/prefect
+
+
+
+
+https://github.com/knime
+
+
+
+
+https://github.com/jupyterlab/jupyterlab
+
+
+
+
+https://github.com/marimo-team/marimo
+
+
+
+
+Do not introduce a large workflow engine automatically.
+
+
+
+
+First assess whether the existing JobManager and capability registry can support a lightweight
+implementation.
+
+
+
+
+Keep the application fully local and offline-capable.
+
+
+
+
+---
+
+
+
+
+9. HIGH-PRIORITY SCIENTIFIC FEATURE EXPANSION
+
+
+
+
+Before adding a feature, determine:
+1. Does it already exist?
+
+2. Is it tested?
+
+3. Is it connected to the GUI?
+
+4. Is its scientific validity documented?
+
+5. Does it solve a real research problem?
+
+6. Does it justify additional dependencies?
+
+7. What are its CPU, RAM, and GPU requirements?
+
+
+
+
+Prioritize the following capabilities.
+
+
+
+
+9.1 Active Learning
+
+
+
+
+Implement an optional Active Learning workflow for molecular QSAR and drug discovery.
+
+
+
+
+Potential methods:
+
+
+
+
+- Uncertainty Sampling
+
+- Query by Committee
+
+- Diversity Sampling
+
+- Batch Selection
+
+- Expected Improvement
+
+- Human-in-the-loop Labeling
+
+- Iterative Model Retraining
+
+
+
+
+Workflow:
+Initial Dataset
+
+→ Initial Model
+
+→ Candidate Pool
+
+→ Acquisition Strategy
+
+→ Candidate Ranking
+
+→ User Selection
+
+→ Experimental Label Import
+
+→ Dataset Update
+
+→ Model Retraining
+
+→ Performance Comparison
+
+
+
+Integrate with:
+
+
+
+
+- Semi-supervised Learning
+
+- Applicability Domain
+
+- Uncertainty Estimation
+
+- Model Registry
+
+- Experiment Tracking
+
+- Chemical Space Explorer
+
+
+
+
+Important scientific requirements:
+
+
+
+
+- Prevent test-set contamination.
+
+- Preserve original labels.
+- Track newly acquired labels.
+
+- Store acquisition scores.
+
+- Record the selection strategy.
+
+- Compare against random sampling.
+
+- Use scaffold-aware evaluation where appropriate.
+
+
+
+
+References:
+
+
+
+
+https://github.com/modAL-python/modAL
+
+
+
+
+https://github.com/NUAA-AL/ALiPy
+
+
+
+
+https://github.com/scikit-learn/scikit-learn
+
+
+
+
+9.2 Chemical Space Explorer
+
+
+
+
+Build an interactive molecular-space analysis environment.
+
+
+
+
+Features:
+
+
+
+
+- Morgan/ECFP similarity
+
+- Tanimoto similarity
+
+- Fingerprint comparison
+
+- Butina clustering
+
+- Scaffold clustering
+- Maximum Common Substructure
+
+- Molecular diversity
+
+- Chemical-space embedding
+
+- UMAP
+
+- t-SNE
+
+- PCA
+
+- Similarity search
+
+- Interactive molecule selection
+
+- Cluster metadata
+
+- Export of selected compounds
+
+
+
+
+Integrate with Datasets, Chemistry Lab, ML, Generative AI, and Visualization.
+
+
+
+
+References:
+
+
+
+
+https://github.com/rdkit/rdkit
+
+
+
+
+https://github.com/EBjerrum/scikit-fingerprints
+
+
+
+
+https://github.com/lmcinnes/umap
+
+
+
+
+https://github.com/scikit-learn/scikit-learn
+
+
+
+
+9.3 Conformal Prediction
+Audit the existing conformal regression and classification implementations.
+
+
+
+
+Do not duplicate them.
+
+
+
+
+Improve where needed:
+
+
+
+
+- Split Conformal
+
+- Cross-validation-based Conformal
+
+- Prediction Intervals
+
+- Classification Prediction Sets
+
+- Coverage
+
+- Interval Width
+
+- Calibration Diagnostics
+
+- Group-aware evaluation
+
+- Scaffold-aware evaluation
+
+- Per-class coverage
+
+
+
+
+Connect the output to Model Evaluation and Applicability Domain.
+
+
+
+
+References:
+
+
+
+
+https://github.com/scikit-learn-contrib/MAPIE
+
+
+
+
+https://github.com/deel-ai/puncc
+https://github.com/scikit-learn/scikit-learn
+
+
+
+
+9.4 Automated Model Benchmarking
+
+
+
+
+Extend the existing model registry and tuner.
+
+
+
+
+Provide:
+
+
+
+
+- Consistent data splits
+
+- Shared evaluation protocols
+
+- Cross-validation
+
+- Nested cross-validation
+
+- Model comparison
+
+- Runtime comparison
+
+- Memory comparison
+
+- Metric ranking
+
+- Statistical comparisons
+
+- Pareto optimization
+
+- Exportable benchmark reports
+
+
+
+
+Compare applicable algorithms:
+
+
+
+
+- Logistic Regression
+
+- Linear and Kernel SVM
+
+- Random Forest
+- Extra Trees
+
+- Gradient Boosting
+
+- XGBoost
+
+- LightGBM
+
+- CatBoost
+
+- HistGradientBoosting
+
+- MLP
+
+- GNN/MPNN where supported
+
+
+
+
+References:
+
+
+
+
+https://github.com/autogluon/autogluon
+
+
+
+
+https://github.com/microsoft/FLAML
+
+
+
+
+https://github.com/optuna/optuna
+
+
+
+
+Do not introduce duplicate hyperparameter optimization systems if the existing tuner provides
+equivalent functionality.
+
+
+
+
+---
+
+
+
+
+10. MOLECULAR DEEP LEARNING AND GENERATIVE AI
+
+
+
+
+The repository already contains GNN/MPNN-related modules.
+Audit their current GUI integration before adding new architectures.
+
+
+
+
+Potential enhancements:
+
+
+
+
+- Graph Convolutional Networks
+
+- Graph Attention Networks
+
+- GraphSAGE
+
+- Message Passing Neural Networks
+
+- Graph-level regression
+
+- Graph-level classification
+
+- Atom-level attribution
+
+- Bond-level attribution
+
+- Molecular graph visualization
+
+- Scaffold-aware validation
+
+
+
+
+References:
+
+
+
+
+https://github.com/pyg-team/pytorch_geometric
+
+
+
+
+https://github.com/dmlc/dgl
+
+
+
+
+https://github.com/chemprop/chemprop
+
+
+
+
+https://github.com/deepchem/deepchem
+Generative AI expansion
+
+
+
+
+Evaluate:
+
+
+
+
+- VAE
+
+- Junction Tree VAE
+
+- Graph-based generation
+
+- Molecular diffusion models
+
+- Scaffold-constrained generation
+
+- Reaction-aware generation
+
+- Multi-objective molecular optimization
+
+- Novelty and diversity scoring
+
+- Synthetic accessibility
+
+- Chemical validity
+
+- ADMET filtering
+
+
+
+
+References:
+
+
+
+
+https://github.com/MolecularAI/REINVENT
+
+
+
+
+https://github.com/BenevolentAI/guacamol
+
+
+
+
+https://github.com/molecularsets/moses
+
+
+
+
+https://github.com/aspuru-guzik-group/selfies
+https://github.com/DeepGraphLearning/torchdrug
+
+
+
+
+Do not make GPU-heavy models mandatory.
+
+
+
+
+Provide a CPU-compatible baseline and resource warnings.
+
+
+
+
+---
+
+
+
+
+11. PHARMACEUTICAL SCIENCE EXPANSION
+
+
+
+
+Prioritize features that support real pharmaceutical research.
+
+
+
+
+11.1 ADMET prediction
+
+
+
+
+Evaluate integration of:
+
+
+
+
+- Absorption
+
+- Distribution
+
+- Metabolism
+
+- Excretion
+
+- Toxicity
+
+- Solubility
+
+- Permeability
+
+- CYP interactions
+- Plasma protein binding
+
+- Blood–brain barrier permeability
+
+
+
+
+References:
+
+
+
+
+https://github.com/swansonk14/admet_ai
+
+
+
+
+https://github.com/deepchem/deepchem
+
+
+
+
+Expose model provenance, applicability domain, uncertainty, and limitations.
+
+
+
+
+Do not present predicted ADMET properties as experimentally established facts.
+
+
+
+
+11.2 Drug–Target Interaction
+
+
+
+
+Evaluate:
+
+
+
+
+- Drug–Target Affinity
+
+- Protein–Ligand Interaction
+
+- Drug–Protein Binding
+
+- Target prioritization
+
+- Binding prediction
+
+- Molecular structure compatibility
+
+
+
+
+References:
+https://github.com/kexinhuang12345/DeepPurpose
+
+
+
+
+https://github.com/hkmztrk/DeepDTA
+
+
+
+
+https://github.com/gnina/gnina
+
+
+
+
+11.3 Drug Repurposing
+
+
+
+
+Evaluate knowledge-graph and representation-learning approaches.
+
+
+
+
+References:
+
+
+
+
+https://github.com/mims-harvard/TxGNN
+
+
+
+
+https://github.com/pykeen/pykeen
+
+
+
+
+Include evidence provenance and explainability.
+
+
+
+
+11.4 Cancer Cell-Line Drug Response
+
+
+
+
+Evaluate dedicated workflows for:
+
+
+
+
+- Drug-response prediction
+
+- Cell-line feature integration
+- Gene expression
+
+- Mutation features
+
+- Drug descriptors
+
+- Biomarker analysis
+
+- Drug sensitivity ranking
+
+- Cross-cell-line validation
+
+- External validation
+
+
+
+
+References:
+
+
+
+
+https://github.com/kimmo1019/DeepCDR
+
+
+
+
+https://github.com/deepchem/deepchem
+
+
+
+
+Relevant public resources include CCLE, GDSC, CTRP, and DepMap.
+
+
+
+
+Do not mix incompatible response scales without explicit harmonization.
+
+
+
+
+11.5 Pharmacogenomics
+
+
+
+
+Evaluate genotype-to-drug-response and pharmacogenomic annotation.
+
+
+
+
+Reference:
+
+
+
+
+https://github.com/PharmGKB/PharmCAT
+Keep clinical interpretations clearly separated from research predictions.
+
+
+
+
+---
+
+
+
+
+12. MULTI-OBJECTIVE MOLECULAR OPTIMIZATION
+
+
+
+
+Improve the Generative AI workflow with multi-objective optimization.
+
+
+
+
+Potential objectives:
+
+
+
+
+- Predicted binding affinity
+
+- Solubility
+
+- Lipophilicity
+
+- Molecular weight
+
+- Toxicity
+
+- Synthetic accessibility
+
+- Structural similarity
+
+- Novelty
+
+- ADMET properties
+
+
+
+
+Support:
+
+
+
+
+- Pareto fronts
+
+- Objective weighting
+- Constraint-based optimization
+
+- Diversity preservation
+
+- Candidate ranking
+
+- Multi-objective reports
+
+
+
+
+Reference:
+
+
+
+
+https://github.com/anyoptimization/pymoo
+
+
+
+
+Use existing RDKit and scientific modules wherever possible.
+
+
+
+
+Do not add a dependency when an equivalent tested implementation already exists.
+
+
+
+
+---
+
+
+
+
+13. MODEL REGISTRY, EXPERIMENT TRACKING, AND MODEL CARDS
+
+
+
+
+Preserve the existing SQLite + FileVault approach.
+
+
+
+
+Audit and enhance:
+
+
+
+
+- Model versions
+
+- Experiment history
+
+- Dataset hashes
+
+- Feature schemas
+- Hyperparameters
+
+- Random seeds
+
+- Split strategy
+
+- Validation metrics
+
+- Software versions
+
+- Hardware metadata
+
+- Training duration
+
+- Applicability Domain
+
+- Prediction uncertainty
+
+- Artifact hashes
+
+- Figure artifacts
+
+
+
+
+Add Model Cards and Dataset Cards.
+
+
+
+
+A Model Card should include:
+
+
+
+
+- Intended use
+
+- Training data
+
+- Evaluation protocol
+
+- Performance
+
+- Applicability Domain
+
+- Limitations
+
+- Known failure modes
+
+- Software versions
+
+- Reproducibility information
+References:
+
+
+
+
+https://github.com/mlflow/mlflow
+
+
+
+
+https://github.com/iterative/dvc
+
+
+
+
+https://github.com/huggingface/hub
+
+
+
+
+https://github.com/PAIR-code/datasheets-for-datasets
+
+
+
+
+Prefer the existing local SQLite architecture over introducing an external tracking server.
+
+
+
+
+---
+
+
+
+
+14. SCIENTIFIC VISUALIZATION AND REPORTING
+
+
+
+
+Continue using Plotly.js and Three.js.
+
+
+
+
+Build upon the existing shared Visualization Engine.
+
+
+
+
+Verify:
+
+
+
+
+- Correct sample identity
+
+- Actual/predicted values
+- SMILES
+
+- Residuals
+
+- Prediction confidence
+
+- Applicability Domain status
+
+- Feature importance
+
+- SHAP attribution
+
+- Conformal intervals
+
+- Interactive point selection
+
+- Export fidelity
+
+
+
+
+Add a reusable Report Builder.
+
+
+
+
+Reports should include:
+
+
+
+
+- Dataset description
+
+- Feature configuration
+
+- Model configuration
+
+- Data-splitting method
+
+- Cross-validation
+
+- Evaluation metrics
+
+- Confusion matrix
+
+- ROC/PR curves
+
+- Calibration
+
+- Applicability Domain
+
+- Uncertainty
+- SHAP
+
+- Prediction table
+
+- Sample-level metadata
+
+- Software provenance
+
+- Scientific limitations
+
+
+
+
+Evaluate:
+
+
+
+
+https://github.com/quarto-dev/quarto
+
+
+
+
+https://github.com/plotly/plotly.js
+
+
+
+
+https://github.com/plotly/plotly.py
+
+
+
+
+https://github.com/MrBitBucket/reportlab-mirror
+
+
+
+
+Reports must be reproducible and must not omit unfavorable results.
+
+
+
+
+---
+
+
+
+
+15. RESOURCE MANAGEMENT AND PERFORMANCE
+
+
+
+
+The application must remain responsive during:
+
+
+
+
+- Large CSV/Excel imports
+- Descriptor calculations
+
+- Fingerprint generation
+
+- Feature selection
+
+- Hyperparameter optimization
+
+- Model training
+
+- SHAP calculations
+
+- GNN training
+
+- Molecular generation
+
+- Large visualizations
+
+
+
+
+Preserve the existing JobManager.
+
+
+
+
+Improve only where evidence identifies a real gap.
+
+
+
+
+Requirements:
+
+
+
+
+- Background execution
+
+- Bounded concurrency
+
+- Memory estimates
+
+- CPU monitoring
+
+- RAM monitoring
+
+- Optional GPU monitoring
+
+- Progress reporting
+
+- Cooperative cancellation
+
+- Job priorities
+- Checkpointing where supported
+
+- Recovery after interruption
+
+- Resource cleanup
+
+
+
+
+Maintain manual "n_jobs" support for "-1" and all positive integers.
+
+
+
+
+Do not silently override user settings.
+
+
+
+
+Evaluate:
+
+
+
+
+https://github.com/joblib/joblib
+
+
+
+
+https://github.com/giampaolo/psutil
+
+
+
+
+https://github.com/pytorch/pytorch
+
+
+
+
+https://github.com/gpuopenanalytics/pynvml
+
+
+
+
+GPU support must be optional.
+
+
+
+
+CPU-only operation must remain supported.
+
+
+
+
+Evaluate Polars only if benchmark results demonstrate a meaningful advantage over the current
+Pandas implementation.
+
+
+
+
+Reference:
+https://github.com/pola-rs/polars
+
+
+
+
+---
+
+
+
+
+16. FRONTEND UX AND NATIVE DESKTOP INTEGRATION
+
+
+
+
+Preserve the nine-workspace navigation order:
+
+
+
+
+1. Introduction
+
+2. Datasets
+
+3. Machine Learning
+
+4. Deep Learning
+
+5. Generative AI
+
+6. Molecular Docking
+
+7. PK/PD
+
+8. Molecular Dynamics Analysis
+
+9. Visualization
+
+
+
+
+Improve usability without disrupting established workflows.
+
+
+
+
+Evaluate:
+
+
+
+
+- Native file picker
+
+- Drag-and-drop import
+- Recent files
+
+- Workspace search
+
+- Global command palette
+
+- Keyboard shortcuts
+
+- Project switching
+
+- Saved workflow templates
+
+- Persistent user preferences
+
+- Better empty states
+
+- Error recovery
+
+- Contextual help
+
+- Accessibility
+
+- Responsive layouts
+
+
+
+
+Reference:
+
+
+
+
+https://github.com/tauri-apps/plugins-workspace
+
+
+
+
+Any new Tauri plugin must follow the existing security model and capability restrictions.
+
+
+
+
+Do not expose unrestricted filesystem or shell access to the frontend.
+
+
+
+
+---
+
+
+
+
+17. SECURITY AND SUPPLY-CHAIN HARDENING
+Preserve existing:
+
+
+
+
+- Loopback binding
+
+- Per-session random token
+
+- Host/Origin validation
+
+- Constant-time token checks
+
+- CSP
+
+- Upload limits
+
+- FileVault boundaries
+
+- Artifact hash verification
+
+
+
+
+Improve:
+
+
+
+
+- Automated dependency vulnerability scanning
+
+- OSV scanning
+
+- pip-audit
+
+- Rust dependency auditing
+
+- Frontend dependency auditing
+
+- SBOM verification
+
+- Digital signing
+
+- Release provenance
+
+- Reproducible build verification
+
+- Secure update process
+
+
+
+
+References:
+https://github.com/google/osv-scanner
+
+
+
+
+https://github.com/pypa/pip-audit
+
+
+
+
+https://github.com/rustsec/rustsec
+
+
+
+
+https://github.com/sigstore/sigstore
+
+
+
+
+https://github.com/in-toto/in-toto
+
+
+
+
+https://github.com/CycloneDX/cyclonedx-python
+
+
+
+
+Do not add network-dependent security services to the runtime application.
+
+
+
+
+Security scanning may run in CI.
+
+
+
+
+---
+
+
+
+
+18. DOCUMENTATION AND AUDIT AUTOMATION
+
+
+
+
+Keep the following synchronized:
+
+
+
+
+- README
+
+- CHANGELOG
+- VERSION
+
+- Release Readiness
+
+- Migration Ledger
+
+- Capability Map
+
+- Backend–GUI Integration Matrix
+
+- Bug Report
+
+- Scientific Validation Report
+
+- Performance Report
+
+- Architecture Review
+
+- Feature Gap Registry
+
+- Clean Install Report
+
+- SBOM and Release Manifest
+
+
+
+
+Every implemented feature must update the appropriate documents.
+
+
+
+
+Every resolved bug must be marked fixed with commit and test evidence.
+
+
+
+
+Every remaining limitation must be clearly described.
+
+
+
+
+Add automated documentation consistency checks where possible.
+
+
+
+
+Prevent stale documents from causing repeated implementation of already completed features.
+
+
+
+
+---
+19. TESTING AND QUALITY GATES
+
+
+
+
+Use layered testing.
+
+
+
+
+Backend
+
+
+
+
+- Unit tests
+
+- Scientific numerical tests
+
+- Edge-case tests
+
+- API tests
+
+- Persistence tests
+
+- Serialization tests
+
+- Resource tests
+
+
+
+
+Frontend
+
+
+
+
+- Component tests
+
+- Integration tests
+
+- API contract tests
+
+- Accessibility tests
+
+- Visual regression tests
+
+
+
+
+Desktop
+
+
+
+
+- Tauri startup tests
+- Backend lifecycle tests
+
+- Native file interaction tests
+
+- Installer tests
+
+- Offline tests
+
+
+
+
+Scientific
+
+
+
+
+- Reference-value tests
+
+- Numerical invariants
+
+- External benchmark comparisons
+
+- Dataset leakage tests
+
+- Reproducibility tests
+
+- Model calibration tests
+
+
+
+
+Performance
+
+
+
+
+- Large dataset tests
+
+- RAM stress tests
+
+- CPU stress tests
+
+- Concurrent jobs
+
+- Cancellation
+
+- Large plot rendering
+
+
+
+
+Release
+- Clean Windows installation
+
+- EXE/MSI
+
+- Offline WebView2
+
+- Upgrade
+
+- Uninstall
+
+- User-data preservation
+
+- SHA-256
+
+- SBOM
+
+- Digital signature where available
+
+
+
+
+Never delete a failing test to obtain a green build.
+
+
+
+
+Never claim an unexecuted test passed.
+
+
+
+
+When a test fails due to resource exhaustion, record the failure separately from assertion
+failures and provide an isolated reproduction.
+
+
+
+
+---
+
+
+
+
+20. DEVELOPMENT PRIORITIES
+
+
+
+
+Implement in this order.
+
+
+
+
+Phase 1 — State reconciliation and release integrity
+
+
+
+
+- Verify HEAD.
+- Reconcile audit documents.
+
+- Verify completed features.
+
+- Identify release/source differences.
+
+- Update authoritative status.
+
+
+
+
+Phase 2 — Remaining release blockers
+
+
+
+
+- Clean Windows installation
+
+- Offline runtime
+
+- Upgrade/uninstall
+
+- User-data preservation
+
+- PySide6 retirement decision
+
+- Digital signing assessment
+
+
+
+
+Phase 3 — Frontend quality
+
+
+
+
+- Component tests
+
+- E2E tests
+
+- Visual regression
+
+- Error handling
+
+- Native file integration
+
+
+
+
+Phase 4 — Scientific workflow improvements
+
+
+
+
+- Active Learning
+- Chemical Space Explorer
+
+- Conformal Prediction
+
+- Automated Benchmarking
+
+- Report Builder
+
+- Model Cards
+
+
+
+
+Phase 5 — Advanced pharmaceutical AI
+
+
+
+
+- GNN/MPNN GUI completion
+
+- ADMET
+
+- Drug–Target Interaction
+
+- Drug Repurposing
+
+- Cancer Cell-Line Drug Response
+
+- Pharmacogenomics
+
+- Multi-objective Molecular Optimization
+
+
+
+
+Phase 6 — Architecture hardening
+
+
+
+
+- Workflow Engine
+
+- Plugin evaluation
+
+- Resource monitoring
+
+- Security scanning
+
+- Release provenance
+
+- Documentation automation
+Phase 7 — New production release
+
+
+
+
+- Increment version
+
+- Run all required gates
+
+- Build EXE/MSI
+
+- Verify artifacts
+
+- Publish release
+
+- Update documentation
+
+- Verify source and installer parity
+
+
+
+
+Do not implement all phases in one unreviewed batch.
+
+
+
+
+Use small, reversible, tested changes.
+
+
+
+
+---
+
+
+
+
+21. REQUIRED DELIVERABLES
+
+
+
+
+Maintain or update:
+
+
+
+
+1. "COMPREHENSIVE_PROJECT_AUDIT.md"
+
+2. "BACKEND_GUI_INTEGRATION_MATRIX.md"
+
+3. "ARCHITECTURE_REVIEW.md"
+
+4. "BUG_REPORT.md"
+
+5. "SCIENTIFIC_VALIDATION_REPORT.md"
+6. "PERFORMANCE_REPORT.md"
+
+7. "FEATURE_GAP_AND_GITHUB_REFERENCES.md"
+
+8. "SECURITY_AND_PACKAGING_AUDIT.md"
+
+9. "WINDOWS_CLEAN_INSTALL_REPORT.md"
+
+10. "RELEASE_READINESS.md"
+
+11. "MIGRATION_TAURI2.md"
+
+12. "PROJECT_AUDIT_PROGRESS.md"
+
+
+
+
+Each report must include:
+
+
+
+
+- Audit date
+
+- Exact commit SHA
+
+- Scope
+
+- Evidence
+
+- Commands executed
+
+- Test results
+
+- Known limitations
+
+- Remaining blockers
+
+
+
+
+For each proposed feature, document:
+
+
+
+
+- Problem solved
+
+- Existing equivalent
+
+- Scientific value
+
+- GitHub reference
+- Dependencies
+
+- Architecture impact
+
+- CPU/RAM/GPU requirements
+
+- GUI integration
+
+- Tests
+
+- Risks
+
+- Priority
+
+
+
+
+---
+
+
+
+
+22. FINAL ACCEPTANCE CRITERIA
+
+
+
+
+The project must not be declared complete merely because CI is green.
+
+
+
+
+Completion requires:
+
+
+
+
+- Current source and documentation agree.
+
+- Previous requirements have been verified.
+
+- No duplicate implementation of completed features.
+
+- Critical backend/frontend bugs are resolved.
+
+- Every supported capability has a verified GUI workflow or documented non-GUI status.
+
+- Scientific methods are validated.
+
+- Frontend user interactions have meaningful test coverage.
+
+- Large computations remain responsive.
+
+- Resource management works correctly.
+- Active Learning and selected high-value scientific enhancements are integrated only after
+validation.
+
+- The clean Windows installation gate passes.
+
+- Offline execution is verified.
+
+- User data survives upgrades.
+
+- PySide6 is retired only after feature parity.
+
+- A new installer is built from the exact release commit.
+
+- Release artifacts, checksums, SBOM, and provenance are consistent.
+
+
+
+
+Use these status labels:
+
+
+
+
+- PASS
+
+- PARTIAL
+
+- FAIL
+
+- BLOCKED
+
+- NOT APPLICABLE
+
+
+
+
+Do not hide blockers.
+
+
+
+
+Do not confuse implementation with validation.
+
+
+
+
+Do not confuse a successful build with a working product.
+
+
+
+
+Do not add features simply because a GitHub repository exists.
+
+
+
+
+The final goal is a robust, reproducible, offline-capable pharmaceutical research platform with
+validated scientific workflows, complete GUI integration, and trustworthy Windows distribution.
+
+
+
+
+Engineering principle: verify first, preserve working systems, prioritize scientific value, fix
+evidence-backed defects, and expand the platform only when the improvement is measurable.
+
