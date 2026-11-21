@@ -112,6 +112,70 @@
   backend already in-tree) rides the next continuation per
   PROJECT_STATUS §6. The next CI poll carries this round's push
   verdict.
+## [1.2.240 re-ship] — 2026-11-22 — round 321 (the 113th recorded run: the interactive part13 continuation, trace 1a20009805cb138d — the Phase-5 multi-objective optimization GUI leg, the domain's CLOSE; the same-version re-ship per the r303/r304/r317/r319 convention)
+
+- **part13 Phase 5's LAST remainder item EXECUTED — the Multi-objective
+  Optimization lane's GUI leg over the REAL in-tree backend the r319
+  absorption gated (`ml/multiobjective.py` + `routes/multiobjective.py`,
+  the API leg's 20 tests + the ml client surface green since the push-3
+  `cbaaf09d`)**: the "Multi-objective Optimization" stage (stage 16;
+  the later stages renumbered 17/18/19) in the Machine Learning
+  workspace: the registry vocabulary line off the backend's own answer
+  via the once-on-mount fetch (the minimize convention + the
+  tunable-objective ledger keys, absent on failure — never a
+  fabricated summary); the full honest control surface — the model
+  name + task + sampler + weight-mode selects, the three-objective
+  checkbox ledger (2..3 distinct, client-side), the two default
+  dimensions as editable integral randint bounds, and the five
+  numeric dials (trials / cv / seed / weights / keep), every one
+  validating client-side BEFORE any request (the route's own bounds
+  mirrored verbatim — a doomed request never fires); the optimize
+  round trip renders the REAL parsed payload — the study summary
+  (trials / frame / front / objectives / sampler + the 2-D
+  hypervolume with its fixed reference + the monotone curve's point
+  count), the non-dominated front table (the objective-named value
+  columns, the params cells, the scalar, and the crowding cell where
+  the +inf boundary members read as "boundary" — never a zero
+  spread), the per-objective trade-off corners, the crowding-pruned
+  shortlist over the same honest table, and the provenance footer
+  (0 shipped checkpoints + the served SYNTHETIC dataset + the
+  disclaimer). The null honesty held everywhere: a 3-objective study
+  renders a null hypervolume (the exact sweep is 2-D only, never a
+  fabricated indicator) and a null scalar reads as null. **8
+  component tests** (`frontend/src/features/ml/__tests__/
+  MultiobjectiveLane.test.tsx`: the registry line, the full round trip
+  with the honest request shape, the 3-objective null-indicator +
+  boundary-crowding honesty, the backend's own hard 422 verbatim, the
+  n_trials / objective-count / seed client-side gates, and the
+  provenance/disclaimer carriage) — the lane over the REAL parsers
+  spread from the actual module, the network boundary alone mocked.
+  The guards trued in the same commit: `tests/test_ml_workspace.py`'s
+  §11.2 stage chain carries the "Multi-objective Optimization" row
+  (19 stages); the ml REST-surface module set already carried
+  `multiobjective.py` since the r319 push-3. The browser-E2E golden
+  path over the REAL backend (the r311 daemon pattern — the
+  double-forked FastAPI 8017 + Vite 5174, the dev-same-origin token
+  channel): the boot, the registry line, the REAL study round trip
+  (20 trials / front 2 / hypervolume 0.0031 under ref [-0.831,
+  0.067] / curve 20 points, the corners, the shortlist, the
+  provenance), the negative-seed gate — **zero page errors, zero
+  console errors**, the evidence pair `docs/gui/screenshots/
+  r321-multiobjective-{card,gate}-desktop.png`. The vitest lane
+  **102/102** (14 files, +8), the frontend `tsc --noEmit` clean, the
+  Python guard set green (test_ml_workspace + the multiobjective
+  family, 58/58), the canonical collection unchanged **8,484 / 0
+  errors** (the .tsx test file is a tree node that never collects).
+  The census re-trued three-way (the walk = the live API = the page)
+  at the fixed point and the archive re-shipped same-version (the
+  pins pair rides the terminal build — the terminal sha + bytes live
+  in the worklog per the §7 convention; the six homes + the offsite
+  mirror all carry the terminal zip). Still honestly BLOCKED:
+  clean-machine smoke (C-3/C-5), Stage-5 PySide6 retirement,
+  installer signing (certificate-gated). **part13 Phase 5 is now
+  CLOSED** — every domain lane (GNN/MPNN, ADMET, DTA, Drug
+  Repurposing, Cancer Cell-Line Drug Response, Pharmacogenomics,
+  Multi-objective Optimization) carries both its API + GUI legs; the
+  campaign rides on to Phase 6 (architecture hardening) per §6.
 ## [1.2.240 re-ship] — 2026-11-22 — round 319 (the 111th recorded run: the 02:30 2h-sync housekeeping firing, the sandbox-rollback recovery class; the leakage-guard catch fixed at the source, the same-version re-ship per the r303/r304/r317 convention)
 
 - **The rollback recovery first**: the sandbox came up with the remote

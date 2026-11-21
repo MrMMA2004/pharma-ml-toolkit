@@ -28,6 +28,14 @@ backend (DeepDTA's verbatim alphabets + the ECFP/AAC pairing) plus the
 Machine Learning workspace's "Drug–Target Interaction" stage (both
 legs in one round, 10 route tests + 8 component tests) — a
 registry-level addition, not a matrix change;
+r321 added the multi-objective optimization lane — the
+`/api/v1/multiobjective` registry + optimize family over the in-tree
+`ml/multiobjective.py` backend (the r319-gated API leg: the Pareto
+front, the exact 2-D hypervolume indicator, NSGA-II's crowding, the
+MOEA/D Tchebycheff decomposition driving both samplers) plus the
+Machine Learning workspace's "Multi-objective Optimization" stage
+(the r321 GUI leg, 8 component tests) — a registry-level addition,
+not a matrix change;
 r266 arena absorption landed the former E-row conformal/coverage/split-audit
 suite from `arena/8696775e`; the r265 §24.3/24.4 rows were trued live;
 the r271 Response AI web twin closed the last Studio-only row — census

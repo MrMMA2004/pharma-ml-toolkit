@@ -38,7 +38,12 @@ summarises them and wins any status disagreement.
   rollback in a row), the machinery ghost-zip commit `c07a8a12` reset
   away unpushed per the same precedent (five-home sha parity
   `455cf00b` restored), the r317 push-2 CI verdict closed GREEN on
-  arrival: `7df1806d` 19/19 check-runs success).
+  arrival: `7df1806d` 19/19 check-runs success; the Phase-5
+  Multi-objective addendum round 321 — the interactive part13
+  continuation, trace 1a20009805cb138d, over the r320 verify-only
+  terminal (`2df658ae`, counter 112, the tree clean, the
+  four-sentinel check green) — the domain's CLOSE: the GUI leg
+  over the r319-gated API family).
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
@@ -85,7 +90,7 @@ summarises them and wins any status disagreement.
   authenticated check-runs poll (this round) |
 | Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.240 SOURCE archive shipped (four homes + offsite, 18 zips) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
 | Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.240 | read directly this session, lockstep guard green |
-| Test surface | 8,484 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 465 files) — +20 this round (the multiobjective route family the interrupted continuation left; its API lane gated green, its GUI leg rides the next continuation) — PLUS the component-test lane: 94 Vitest tests / 13 files over the Studio frontend (jsdom + React Testing Library) | fresh collection + vitest this round |
+| Test surface | 8,484 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 465 files) — the +20 multiobjective route family the r319 absorption gated (its GUI leg CLOSED at r321 — the .tsx test file is a tree node that never collects) — PLUS the component-test lane: 102 Vitest tests / 14 files over the Studio frontend (jsdom + React Testing Library; +8 the r321 MultiobjectiveLane suite) | fresh collection + vitest this round |
 | Census | 1,675 files / 563,174 lines / v1.2.240 (the r319 housekeeping census, trued three-way: the walk replica re-aligned to the r302 scoped-exclusion rule — artifacts only at its two relative depths, the r302 find that had hidden the frontend's real artifacts client — so the walk = the live API = the page render agree byte-for-byte for the first time since r302; the multiobjective API lane's three source files ride, the r318 close-out tooling trio's leakage literals scrubbed, the hydration-restored ghost zips and build-theme shots swept) | this round's census walk |
 | Source archive | v1.2.240 — a NEW version ship (the part13 Phase-5 Pharmacogenomics lane — the route family + its tests + the GUI stage + the regenerated API types + the re-executed notebooks ride; the per-round sha/bytes live in the worklog per §7 — the archive cannot carry its own hash) — re-shipped same-version at r319 (the r303/r304/r317 convention: the leakage scrub + this row's re-true ride the rebuilt archive) | sha256 across four homes + offsite |
 | venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.240 — zero drift vs `requirements.txt` | import probes (r319: rdkit was found missing after the eleventh rollback's partial hydration — `venv_repair.sh` ran FOREGROUND and the full import surface + the Studio GUI stack verified) |
@@ -311,7 +316,33 @@ summarises them and wins any status disagreement.
   paths / 68 schemas) + the types regen byte-identical; the 8
   notebooks re-executed at v1.2.240. The remaining domain
   (multi-objective molecular optimization `ml/multiobjective.py` —
-  a real backend already in-tree) awaits its API + GUI lanes.
+  a real backend already in-tree) awaited its API + GUI lanes.
+  **Round 321 EXECUTED the Multi-objective Optimization item — the
+  domain's CLOSE (trace 1a20009805cb138d)**: the API lane the r319
+  absorption had gated (`GET /api/v1/multiobjective/registry` —
+  the module's own vocabulary verbatim: the optuna minimize
+  convention + the Pareto order, the exact 2-D hypervolume with the
+  WFG reference contract, NSGA-II's crowding with the
+  +inf-boundary-null convention, the MOEA/D Tchebycheff
+  decomposition, the Das-Dennis/random weight supply, the
+  tunable-objective ledger, and the honest scope block; `POST
+  /api/v1/multiobjective/optimize` — the full real round trip over
+  the seeded SYNTHETIC 80x6 frame: the request's own search space,
+  the real cross-validated study over the sklearn registry model,
+  the front + the aligned crowding + the 2-D indicator + the
+  per-objective corners + the crowding-pruned shortlist) + this
+  round's GUI lane (the "Multi-objective Optimization" stage, stage
+  16, the later stages renumbered 17/18/19) with client-side
+  validation before any request + 8 component tests + the
+  browser-E2E golden path over the REAL backend (zero page/console
+  errors, the r321 evidence pair). The guards trued in the same
+  commit (the §11.2 stage chain carries the new row — 19 stages;
+  the ml REST-surface module row had carried `multiobjective.py`
+  since the r319 push-3); the vitest lane 102/102 over 14 files.
+  **Phase 5 is CLOSED — every domain lane (GNN/MPNN, ADMET, DTA,
+  Drug Repurposing, Cancer Cell-Line Drug Response,
+  Pharmacogenomics, Multi-objective Optimization) carries both its
+  API + GUI legs; the campaign rides on to Phase 6.**
 - **Phase 6** — architecture hardening: the lightweight workflow
   engine evaluation (JobManager/capability-registry first),
   resource monitoring, security scanning lanes, documentation

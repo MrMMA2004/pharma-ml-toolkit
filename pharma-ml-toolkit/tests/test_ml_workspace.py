@@ -287,6 +287,7 @@ def test_stage_order_matches_the_spec_chain() -> None:
         "Drug Repurposing",
         "Cancer Cell-Line Drug Response",
         "Pharmacogenomics",
+        "Multi-objective Optimization",
         "Semi-supervised Learning",
         "Explainability & Uncertainty",
         "Export",

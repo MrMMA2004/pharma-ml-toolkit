@@ -15,6 +15,7 @@ import {
   Network,
   Pill,
   Radar,
+  Scale,
   SlidersHorizontal,
   Target,
 } from "lucide-react";
@@ -62,6 +63,9 @@ import {
   type ExplainResult,
   type EvaluationRow,
   type ModelCatalogEntry,
+  type MultiobjectiveOptimizeResponse,
+  type MultiobjectiveRegistryResponse,
+  type MultiobjectiveTrialRow,
   type PredictResponse,
   type PharmacogenomicsAnalyzeResponse,
   type PharmacogenomicsRegistryResponse,
@@ -87,7 +91,8 @@ import {
  * Split/CV → Algorithm → Hyperparameters → Train → Evaluate →
  * Compare → Applicability Domain → ADMET Profile → Drug–Target
  * Interaction → Drug Repurposing → Cancer Cell-Line Drug Response →
- * Pharmacogenomics → Semi-supervised Learning → Explainability → Export
+ * Pharmacogenomics → Multi-objective Optimization → Semi-supervised
+ * Learning → Explainability → Export
  *
  * Every control below executes the REAL backend through the typed
  * service layer (no fabricated data, no disabled pretend buttons):
@@ -104,9 +109,13 @@ import {
  * the seeded SYNTHETIC screen (the bilinear CaDRReS-style fit, the
  * sensitivity ranking, the biomarker readout, and the
  * cross-cell-line folds — every predicted value a labelled model
- * estimate, one response scale only), and the export registers a
- * real table artifact downloaded through the token-header lane with
- * digest verification.
+ * estimate, one response scale only), the multi-objective
+ * optimization lane rides routes/multiobjective.py over the seeded
+ * SYNTHETIC frame (the Pareto front with its aligned crowding, the
+ * exact 2-D hypervolume indicator, the per-objective trade-off
+ * corners — every objective value a labelled statistic), and the
+ * export registers a real table artifact downloaded through the
+ * token-header lane with digest verification.
  */
 
 type VisualizationTableRequest = components["schemas"]["VisualizationTableRequest"];
@@ -236,6 +245,139 @@ const PG_FIELDS: readonly {
   { key: "seed", label: "seed (0–2147483647)", step: 1 },
   { key: "top_k", label: "top-k (1–20)", step: 1 },
 ];
+
+/** The multiobjective optimize's parameter block (the route's own
+ * defaults — the two default dimensions ride as editable integral
+ * randint bounds). */
+type MultiobjectiveParams = {
+  model: string;
+  task: "classification" | "regression";
+  objectives: string[];
+  sampler: "random" | "tpe";
+  weight_mode: "spread" | "random";
+  n_trials: number;
+  cv: number;
+  seed: number;
+  n_weight_vectors: number;
+  shortlist_keep: number;
+  n_estimators_low: number;
+  n_estimators_high: number;
+  max_depth_low: number;
+  max_depth_high: number;
+};
+
+const MULTIOBJECTIVE_DEFAULTS: MultiobjectiveParams = {
+  model: "random_forest",
+  task: "classification",
+  objectives: ["score", "fit_seconds"],
+  sampler: "tpe",
+  weight_mode: "spread",
+  n_trials: 20,
+  cv: 3,
+  seed: 42,
+  n_weight_vectors: 8,
+  shortlist_keep: 5,
+  n_estimators_low: 10,
+  n_estimators_high: 80,
+  max_depth_low: 2,
+  max_depth_high: 10,
+};
+
+/** The stage's numeric controls — labels state the route's own
+ * bounds; the dimension rows state the low < high rule. */
+type MultiobjectiveNumberKey =
+  | "n_trials"
+  | "cv"
+  | "seed"
+  | "n_weight_vectors"
+  | "shortlist_keep"
+  | "n_estimators_low"
+  | "n_estimators_high"
+  | "max_depth_low"
+  | "max_depth_high";
+
+const MO_FIELDS: readonly {
+  key: MultiobjectiveNumberKey;
+  label: string;
+  step: number;
+}[] = [
+  { key: "n_trials", label: "trials (1–60)", step: 1 },
+  { key: "cv", label: "cv (2–5)", step: 1 },
+  { key: "seed", label: "seed (0–2147483647)", step: 1 },
+  { key: "n_weight_vectors", label: "weights (2–32)", step: 1 },
+  { key: "shortlist_keep", label: "keep (1–10)", step: 1 },
+  { key: "n_estimators_low", label: "n_estimators lo", step: 1 },
+  { key: "n_estimators_high", label: "n_estimators hi", step: 1 },
+  { key: "max_depth_low", label: "max_depth lo", step: 1 },
+  { key: "max_depth_high", label: "max_depth hi", step: 1 },
+];
+
+/** The tunable-objective checkboxes (the backend's own ledger keys). */
+const MO_OBJECTIVES: readonly string[] = [
+  "score",
+  "fit_seconds",
+  "score_seconds",
+];
+
+/** The multiobjective lane's trial table — the front and the
+ * crowding-pruned shortlist share the same honest shape: the
+ * objective-named value columns, the scalar, and the crowding cell
+ * (boundary members carry the +inf extremes and read as
+ * "boundary", an interior null reads as "null" — never a zero
+ * spread). */
+function MoTrialTable({
+  rows,
+  objectiveNames,
+}: {
+  rows: readonly MultiobjectiveTrialRow[];
+  objectiveNames: readonly string[];
+}) {
+  return (
+    <table className="mt-1 w-full text-xs">
+      <thead>
+        <tr className="text-[var(--color-muted-foreground)]">
+          <th className="py-1 text-left font-normal">#</th>
+          <th className="text-left font-normal">params</th>
+          {objectiveNames.map((name) => (
+            <th key={name} className="text-right font-normal">
+              {name}
+            </th>
+          ))}
+          <th className="text-right font-normal">scalar</th>
+          <th className="text-right font-normal">crowding</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr
+            key={row.number}
+            className="border-t border-[var(--color-border)]"
+          >
+            <td className="py-1 font-mono">{row.number}</td>
+            <td className="font-mono">
+              {Object.entries(row.params)
+                .map(([name, value]) => `${name}=${value}`)
+                .join(", ")}
+            </td>
+            {row.values.map((value, i) => (
+              <td key={i} className="text-right font-mono">
+                {value.toFixed(3)}
+              </td>
+            ))}
+            <td className="text-right font-mono">
+              {row.scalar?.toFixed(3) ?? "null"}
+            </td>
+            <td className="text-right font-mono">
+              {row.crowding_is_boundary
+                ? "boundary"
+                : (row.crowding?.toFixed(3) ?? "null")}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 
 function describeError(error: unknown): string {
   if (error instanceof ApiError) {
@@ -721,6 +863,17 @@ export function MLPage() {
   const [pgBusy, setPgBusy] = useState(false);
   const [pgRegistry, setPgRegistry] = useState<PharmacogenomicsRegistryResponse | null>(null);
 
+  // stage 15b: the multi-objective optimization lane (part13 Phase
+  // 5's last remainder item — the Pareto HPO study over
+  // ml/multiobjective.py, dataset-free)
+  const [moParams, setMoParams] = useState<MultiobjectiveParams>(
+    MULTIOBJECTIVE_DEFAULTS,
+  );
+  const [moResult, setMoResult] = useState<MultiobjectiveOptimizeResponse | null>(null);
+  const [moError, setMoError] = useState<string | null>(null);
+  const [moBusy, setMoBusy] = useState(false);
+  const [moRegistry, setMoRegistry] = useState<MultiobjectiveRegistryResponse | null>(null);
+
   // stage 11: semi-supervised learning (classification-only)
   const [ssMethod, setSsMethod] = useState<
     "self_training" | "label_spreading" | "label_propagation"
@@ -881,6 +1034,25 @@ export function MLPage() {
       .then((response) => {
         if (!cancelled) {
           setPgRegistry(response);
+        }
+      })
+      .catch(() => {
+        // the registry line stays absent — never a fabricated summary
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // the multiobjective registry loads once on mount (the vocabulary
+  // line — the same decorative-context contract)
+  useEffect(() => {
+    let cancelled = false;
+    mlApi
+      .multiobjectiveRegistry()
+      .then((response) => {
+        if (!cancelled) {
+          setMoRegistry(response);
         }
       })
       .catch(() => {
@@ -1638,6 +1810,122 @@ export function MLPage() {
       setPgBusy(false);
     }
   }, [pgParams]);
+
+  // stage 15b: the multi-objective optimize (sync light compute —
+  // one button, client-side validation before any request; the
+  // backend's own 422s surface verbatim; every objective value a
+  // labelled statistic over the synthetic frame)
+  const updateMoParam = useCallback(
+    (key: MultiobjectiveNumberKey, value: number) => {
+      setMoParams((prev) => ({ ...prev, [key]: value }));
+    },
+    [],
+  );
+
+  const toggleMoObjective = useCallback((label: string, checked: boolean) => {
+    setMoParams((prev) => ({
+      ...prev,
+      objectives: checked
+        ? [...prev.objectives, label]
+        : prev.objectives.filter((name) => name !== label),
+    }));
+  }, []);
+
+  const handleMultiobjectiveOptimize = useCallback(async () => {
+    const p = moParams;
+    const fail = (message: string) => {
+      setMoResult(null);
+      setMoError(message);
+    };
+    if (p.model.trim().length === 0 || p.model.length > 64) {
+      fail("the model name must be 1..64 characters (the route's own bound)");
+      return;
+    }
+    if (p.objectives.length < 2 || p.objectives.length > 3) {
+      fail("a Pareto study needs 2..3 distinct objectives (the route's own bound)");
+      return;
+    }
+    if (!Number.isInteger(p.n_trials) || p.n_trials < 1 || p.n_trials > 60) {
+      fail("n_trials must be an integer in [1, 60] (the route's own bound)");
+      return;
+    }
+    if (!Number.isInteger(p.cv) || p.cv < 2 || p.cv > 5) {
+      fail("cv must be an integer in [2, 5] (the route's own bound)");
+      return;
+    }
+    if (!Number.isInteger(p.seed) || p.seed < 0 || p.seed > 2147483647) {
+      fail("the seed must lie in 0..2147483647 (the route's own bound)");
+      return;
+    }
+    if (
+      !Number.isInteger(p.n_weight_vectors) ||
+      p.n_weight_vectors < 2 ||
+      p.n_weight_vectors > 32
+    ) {
+      fail("n_weight_vectors must be an integer in [2, 32] (the route's own bound)");
+      return;
+    }
+    if (
+      !Number.isInteger(p.shortlist_keep) ||
+      p.shortlist_keep < 1 ||
+      p.shortlist_keep > 10
+    ) {
+      fail("shortlist_keep must be an integer in [1, 10] (the route's own bound)");
+      return;
+    }
+    if (
+      !Number.isInteger(p.n_estimators_low) ||
+      !Number.isInteger(p.n_estimators_high) ||
+      p.n_estimators_low >= p.n_estimators_high
+    ) {
+      fail("n_estimators needs integral bounds with low < high (the route's own rule)");
+      return;
+    }
+    if (
+      !Number.isInteger(p.max_depth_low) ||
+      !Number.isInteger(p.max_depth_high) ||
+      p.max_depth_low >= p.max_depth_high
+    ) {
+      fail("max_depth needs integral bounds with low < high (the route's own rule)");
+      return;
+    }
+    setMoBusy(true);
+    setMoError(null);
+    try {
+      const response = await mlApi.multiobjectiveOptimize({
+        model: p.model.trim(),
+        task: p.task,
+        objectives: p.objectives,
+        dimensions: [
+          {
+            name: "n_estimators",
+            kind: "randint",
+            low: p.n_estimators_low,
+            high: p.n_estimators_high,
+          },
+          {
+            name: "max_depth",
+            kind: "randint",
+            low: p.max_depth_low,
+            high: p.max_depth_high,
+          },
+        ],
+        n_trials: p.n_trials,
+        cv: p.cv,
+        sampler: p.sampler,
+        seed: p.seed,
+        weight_mode: p.weight_mode,
+        n_weight_vectors: p.n_weight_vectors,
+        shortlist_keep: p.shortlist_keep,
+      });
+      setMoResult(response);
+    } catch (error) {
+      setMoResult(null);
+      setMoError(describeError(error));
+    } finally {
+      setMoBusy(false);
+    }
+  }, [moParams]);
 
   // stage 11b: the held-out evaluation (3 seeded repeats, test_size
   // 0.25 — the route's own defaults surfaced, one button, job lane)
@@ -3359,6 +3647,236 @@ export function MLPage() {
 
       <StageHeader
         index={16}
+        title="Multi-objective Optimization"
+        hint="the Pareto HPO study over the seeded SYNTHETIC frame — front + crowding + the 2-D indicator, sync"
+        icon={<Scale aria-hidden className="h-4 w-4" />}
+      >
+        <Card>
+          <CardContent>
+            <p className="text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              The part13 §12 lane over the REAL in-tree backend
+              (ml/multiobjective.py — the optuna minimize convention
+              and the Pareto order, the exact 2-D hypervolume
+              staircase, NSGA-II&apos;s crowding, the MOEA/D Tchebycheff
+              decomposition driving both samplers): the seeded 80×6
+              SYNTHETIC frame, the cross-validated study over the
+              sklearn registry model, the non-dominated front with its
+              aligned crowding, the per-objective trade-off corners
+              and the crowding-pruned shortlist. No real dataset ships
+              with this route; every objective value is a
+              cross-validated statistic — front members are model
+              estimates for triage, never experimental facts.
+              {moRegistry !== null ? (
+                <>
+                  {" "}Every objective is minimized — &apos;score&apos; rides
+                  the negated mean CV score; the tunable ledger:{" "}
+                  {Object.keys(moRegistry.tunable_objectives.ledger).join(
+                    " · ",
+                  )}
+                  .
+                </>
+              ) : null}
+            </p>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                model (any sklearn registry name)
+                <input
+                  type="text"
+                  value={moParams.model}
+                  onChange={(event) =>
+                    setMoParams((prev) => ({
+                      ...prev,
+                      model: event.target.value,
+                    }))
+                  }
+                  aria-label="multiobjective model"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 font-mono text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                task
+                <select
+                  value={moParams.task}
+                  onChange={(event) =>
+                    setMoParams((prev) => ({
+                      ...prev,
+                      task: event.target.value as MultiobjectiveParams["task"],
+                    }))
+                  }
+                  aria-label="multiobjective task"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  <option value="classification">classification</option>
+                  <option value="regression">regression</option>
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                sampler
+                <select
+                  value={moParams.sampler}
+                  onChange={(event) =>
+                    setMoParams((prev) => ({
+                      ...prev,
+                      sampler: event.target.value as MultiobjectiveParams["sampler"],
+                    }))
+                  }
+                  aria-label="multiobjective sampler"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  <option value="tpe">tpe</option>
+                  <option value="random">random</option>
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                weights
+                <select
+                  value={moParams.weight_mode}
+                  onChange={(event) =>
+                    setMoParams((prev) => ({
+                      ...prev,
+                      weight_mode: event.target.value as MultiobjectiveParams["weight_mode"],
+                    }))
+                  }
+                  aria-label="multiobjective weight_mode"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  <option value="spread">spread</option>
+                  <option value="random">random</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-3">
+              {MO_OBJECTIVES.map((label) => (
+                <label
+                  key={label}
+                  className="flex items-center gap-1 text-xs text-[var(--color-muted-foreground)]"
+                >
+                  <input
+                    type="checkbox"
+                    checked={moParams.objectives.includes(label)}
+                    onChange={(event) =>
+                      toggleMoObjective(label, event.target.checked)
+                    }
+                    aria-label={`multiobjective objective ${label}`}
+                    className="h-4 w-4"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+              {MO_FIELDS.map(({ key, label, step }) => (
+                <label
+                  key={key}
+                  className="text-xs text-[var(--color-muted-foreground)]"
+                >
+                  {label}
+                  <input
+                    type="number"
+                    step={step}
+                    value={moParams[key]}
+                    onChange={(event) =>
+                      updateMoParam(key, Number(event.target.value))
+                    }
+                    aria-label={`multiobjective ${key}`}
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 font-mono text-xs"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <Button
+                size="sm"
+                onClick={() => void handleMultiobjectiveOptimize()}
+                disabled={moBusy}
+              >
+                {moBusy ? "Optimizing…" : "Run the study"}
+              </Button>
+            </div>
+            {moError !== null ? (
+              <div className="mt-3">
+                <ErrorBanner message={moError} />
+              </div>
+            ) : null}
+            {moResult !== null ? (
+              <>
+                <p className="mt-4 text-xs text-[var(--color-foreground)]">
+                  {moResult.study.n_trials} trials over{" "}
+                  {moResult.dataset.n_samples}×
+                  {moResult.dataset.n_features} (SYNTHETIC) · front{" "}
+                  {moResult.study.n_front} ·{" "}
+                  {moResult.study.objective_names.join(" vs ")} · sampler{" "}
+                  {moResult.study.sampler} ({moResult.study.weight_mode}{" "}
+                  weights) · hypervolume{" "}
+                  {moResult.indicator.hypervolume?.toFixed(4) ?? "null"}
+                  {moResult.indicator.ref !== null
+                    ? ` under ref [${moResult.indicator.ref
+                        .map((v) => v.toFixed(3))
+                        .join(", ")}]`
+                    : ""}{" "}
+                  · curve {moResult.indicator.hypervolume_curve.length}{" "}
+                  points
+                </p>
+                {moResult.front.length > 0 ? (
+                  <div className="mt-3">
+                    <p className="text-xs font-medium text-[var(--color-foreground)]">
+                      The non-dominated front ({moResult.front.length}{" "}
+                      members — every objective value a labelled
+                      statistic over the synthetic frame)
+                    </p>
+                    <MoTrialTable
+                      rows={moResult.front}
+                      objectiveNames={moResult.study.objective_names}
+                    />
+                  </div>
+                ) : null}
+                <div className="mt-3">
+                  <p className="text-xs font-medium text-[var(--color-foreground)]">
+                    Trade-off corners (the front member minimizing each
+                    objective)
+                  </p>
+                  {Object.entries(moResult.best_for).map(([name, row]) => (
+                    <p
+                      key={name}
+                      className="mt-1 text-xs text-[var(--color-foreground)]"
+                    >
+                      best {name}: trial #{row.number} ({" "}
+                      {Object.entries(row.params)
+                        .map(([k, v]) => `${k}=${v}`)
+                        .join(", ")}
+                      ) —{" "}
+                      {row.values.map((v) => v.toFixed(3)).join(" / ")}
+                    </p>
+                  ))}
+                </div>
+                {moResult.shortlist.trials.length > 0 ? (
+                  <div className="mt-3">
+                    <p className="text-xs font-medium text-[var(--color-foreground)]">
+                      Shortlist — keep {moResult.shortlist.keep} by
+                      full-front crowding ({" "}
+                      {moResult.shortlist.trials.length} rows)
+                    </p>
+                    <MoTrialTable
+                      rows={moResult.shortlist.trials}
+                      objectiveNames={moResult.study.objective_names}
+                    />
+                  </div>
+                ) : null}
+                <p className="mt-3 text-xs text-[var(--color-muted-foreground)]">
+                  provenance {moResult.provenance.backend} —{" "}
+                  {moResult.provenance.shipped_checkpoints} shipped
+                  checkpoints (the honest absence, stated) · the
+                  served dataset: {moResult.dataset.label} ·{" "}
+                  {moResult.provenance.disclaimer}
+                </p>
+              </>
+            ) : null}
+          </CardContent>
+        </Card>
+      </StageHeader>
+
+      <StageHeader
+        index={17}
         title="Semi-supervised Learning"
         hint="classification datasets only — the backend's own gate"
         icon={<Network aria-hidden className="h-4 w-4" />}
@@ -3662,7 +4180,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={17}
+        index={18}
         title="Explainability & Uncertainty"
         hint="the real SHAP lane + the AD bootstrap's uncertainty surface"
         icon={<Info aria-hidden className="h-4 w-4" />}
@@ -3742,7 +4260,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={18}
+        index={19}
         title="Export"
         hint="a registered table artifact + a digest-verified download"
         icon={<ArrowDownToLine aria-hidden className="h-4 w-4" />}
