@@ -32,9 +32,17 @@ import {
   dlApi,
   parseDLTrainResult,
   parseTrainingMetricsPayload,
+  parseGnnInlineGraphs,
+  parseGnnTrainResult,
   type DLModelView,
   type DLNetworkName,
+  type GnnConv,
+  type GnnInlineSource,
+  type GnnPool,
+  type GnnPredictResponse,
+  type GnnTrainResult,
   type NetworkCatalogEntry,
+  type NetworkCatalogGnn,
   type TrainingMetricsPoint,
 } from "@/services/dl/client";
 import type { components } from "@/types/api.d";
@@ -371,6 +379,67 @@ function DLModelCard({ model }: { model: DLModelView }) {
   );
 }
 
+/** The gnn-train result card — the graph model's own honest view. */
+function GnnModelCard({ result }: { result: GnnTrainResult }) {
+  const model = result.model;
+  return (
+    <div className="mt-4 rounded-lg border border-[var(--color-border)] p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-[var(--color-foreground)]">{model.name}</span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          {model.task}
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          engine {model.engine}
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          graph model
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          {model.model_id}
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          {result.n_graphs} graphs
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          fit {model.fit_seconds.toFixed(2)} s
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          conv {result.conv} · pool {result.pool}
+        </span>
+      </div>
+      <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+        classes {result.classes.map((c) => formatValue(c)).join(" / ")} · no
+        tabular dataset behind a graph model — the node features are
+        per-graph matrices, never columns (honest, not faked)
+      </p>
+      <div className="mt-3 flex flex-wrap gap-1">
+        {Object.entries(model.best_params).map(([key, value]) => (
+          <span
+            key={key}
+            className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted-foreground)]"
+          >
+            {key}: {formatValue(value)}
+          </span>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-[var(--color-foreground)]">
+        train accuracy {result.train_accuracy.toFixed(4)} · loss history
+        (tail) {result.loss_history_tail.map((v) => v.toFixed(3)).join(" → ")}
+      </p>
+      <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+        The authoritative REST result of the gnn-train job, parsed at
+        runtime — the fitted GraphClassifier stays server-side in the
+        session model store as a GRAPH model. The loss history is the
+        trainer&apos;s own `loss_history_` tail (the last five entries),
+        surfaced AFTER the fit — the torch GNN trainer exposes no live
+        per-epoch callback, so this lane never fabricates an epoch
+        stream (the honest stage-level telemetry the job card shows).
+      </p>
+    </div>
+  );
+}
+
 export function DLPage() {
   // stage 1: the dataset registry + selection
   const [datasets, setDatasets] = useState<readonly DatasetView[]>([]);
@@ -435,6 +504,33 @@ export function DLPage() {
   const [exportBusy, setExportBusy] = useState(false);
   const [digestStatus, setDigestStatus] = useState<string | null>(null);
 
+  // the GNN/MPNN lane (part13 Phase 5 — the graph models' own lane,
+  // parallel to the tabular §11.3 chain above)
+  const [gnnSource, setGnnSource] = useState<"synthetic" | "inline">("synthetic");
+  const [gnnSyntheticN, setGnnSyntheticN] = useState(18);
+  const [gnnSeed, setGnnSeed] = useState(11);
+  const [gnnGraphsText, setGnnGraphsText] = useState("");
+  const [gnnGraphsError, setGnnGraphsError] = useState<string | null>(null);
+  const [gnnVocab, setGnnVocab] = useState<NetworkCatalogGnn | null>(null);
+  const [gnnConv, setGnnConv] = useState<GnnConv>("gcn");
+  const [gnnPool, setGnnPool] = useState<GnnPool>("mean");
+  const [gnnHidden, setGnnHidden] = useState(16);
+  const [gnnLayers, setGnnLayers] = useState(2);
+  const [gnnEpochs, setGnnEpochs] = useState(120);
+  const [gnnLr, setGnnLr] = useState(0.08);
+  const [gnnWeightDecay, setGnnWeightDecay] = useState(0);
+  const [gnnHeads, setGnnHeads] = useState(1);
+  const [gnnRatio, setGnnRatio] = useState(0.5);
+  const [gnnTrainJobId, setGnnTrainJobId] = useState<string | null>(null);
+  const [gnnTrainError, setGnnTrainError] = useState<string | null>(null);
+  const [gnnTrainBusy, setGnnTrainBusy] = useState(false);
+  const [gnnTrainResult, setGnnTrainResult] = useState<GnnTrainResult | null>(null);
+  const [gnnPredictText, setGnnPredictText] = useState("");
+  const [gnnPredictError, setGnnPredictError] = useState<string | null>(null);
+  const [gnnPredictProba, setGnnPredictProba] = useState(true);
+  const [gnnPredictBusy, setGnnPredictBusy] = useState(false);
+  const [gnnPredictResult, setGnnPredictResult] = useState<GnnPredictResponse | null>(null);
+
   const datasetTask = selected?.task;
   const selectedTask: "classification" | "regression" | null =
     datasetTask === "classification" || datasetTask === "regression"
@@ -456,7 +552,8 @@ export function DLPage() {
   }, [refreshRegistry]);
 
   // stage 4: the live network catalog (one fetch — the signature
-  // defaults are the backend's own, never re-declared here)
+  // defaults are the backend's own, never re-declared here; since
+  // part13 Phase 5 the same response carries the live GNN vocabulary)
   useEffect(() => {
     let cancelled = false;
     dlApi
@@ -464,6 +561,7 @@ export function DLPage() {
       .then((response) => {
         if (!cancelled) {
           setNetworks(response.networks);
+          setGnnVocab(response.gnn);
           setCatalogError(null);
         }
       })
@@ -814,6 +912,106 @@ export function DLPage() {
       setDigestStatus(describeError(error));
     }
   }, [exportArtifact, verifiedDownload]);
+
+  // the GNN lane's train (job mode — the graph trainer's own lane):
+  // the inline block parses + validates client-side BEFORE any
+  // request; the synthetic fixture rides the backend's own generator
+  const handleGnnTrain = useCallback(async () => {
+    setGnnTrainBusy(true);
+    setGnnTrainError(null);
+    setGnnTrainJobId(null);
+    setGnnTrainResult(null);
+    try {
+      let inline: GnnInlineSource | null = null;
+      if (gnnSource === "inline") {
+        inline = parseGnnInlineGraphs(gnnGraphsText);
+        if (inline === null) {
+          throw new Error(
+            "the inline source needs a graphs block — {\"graphs\": " +
+              '[{"x": [[…]], "edge_index": [[…], […]}], "labels": […]}',
+          );
+        }
+        setGnnGraphsError(null);
+      }
+      const response = await dlApi.gnnTrain({
+        syntheticN: gnnSource === "synthetic" ? gnnSyntheticN : undefined,
+        seed: gnnSeed,
+        inline,
+        conv: gnnConv,
+        pool: gnnPool,
+        hidden: gnnHidden,
+        layers: gnnLayers,
+        lr: gnnLr,
+        epochs: gnnEpochs,
+        weightDecay: gnnWeightDecay,
+        heads: gnnHeads,
+        ratio: gnnRatio,
+        mode: "job",
+      });
+      if (response.mode === "job") {
+        setGnnTrainJobId(response.job.job_id);
+      }
+    } catch (error) {
+      setGnnTrainError(describeError(error));
+    } finally {
+      setGnnTrainBusy(false);
+    }
+  }, [
+    gnnSource,
+    gnnSyntheticN,
+    gnnSeed,
+    gnnGraphsText,
+    gnnConv,
+    gnnPool,
+    gnnHidden,
+    gnnLayers,
+    gnnLr,
+    gnnEpochs,
+    gnnWeightDecay,
+    gnnHeads,
+    gnnRatio,
+  ]);
+
+  // the gnn-train job's COMPLETED result is the full train body —
+  // the authoritative REST relay, parsed at runtime
+  const handleGnnTrainResult = useCallback((result: unknown) => {
+    try {
+      setGnnTrainResult(parseGnnTrainResult(result, "dl gnn-train result"));
+    } catch (error) {
+      setGnnTrainError(describeError(error));
+    }
+  }, []);
+
+  // the GNN lane's predict — the graph models' OWN prediction path
+  // (never the tabular /ml/predict, which refuses graph models)
+  const handleGnnPredict = useCallback(async () => {
+    if (gnnTrainResult === null) {
+      return;
+    }
+    setGnnPredictBusy(true);
+    setGnnPredictError(null);
+    setGnnPredictResult(null);
+    try {
+      const inline = parseGnnInlineGraphs(gnnPredictText, "predict");
+      if (inline === null) {
+        throw new Error(
+          "the predict lane needs an inline graphs block — the same " +
+            '{"graphs": […]} JSON the train lane accepts',
+        );
+      }
+      setGnnPredictResult(
+        await dlApi.gnnPredict({
+          modelId: gnnTrainResult.model.model_id,
+          graphs: inline.graphs,
+          probabilities: gnnPredictProba,
+        }),
+      );
+    } catch (error) {
+      setGnnPredictError(describeError(error));
+    } finally {
+      setGnnPredictBusy(false);
+    }
+  }, [gnnTrainResult, gnnPredictText, gnnPredictProba]);
 
   // the task gate: a network of the other task is disabled with the
   // backend's own reason (the honest 422 becomes a visible row)
@@ -1674,6 +1872,342 @@ export function DLPage() {
           </CardContent>
         </Card>
       </StageHeader>
+
+      {/*
+       * The GNN/MPNN lane — part13 Phase 5's graph card, deliberately
+       * OUTSIDE the §11.3 StageHeader chain (a different lineage: the
+       * graph models' own lane over /api/v1/dl/gnn-train +
+       * /api/v1/dl/gnn-predict, not the tabular workflow's stages).
+       */}
+      <section className="mt-12" aria-labelledby="gnn-lane-title">
+        <div className="flex flex-wrap items-baseline gap-2 border-t border-[var(--color-border)] pt-6">
+          <h2
+            id="gnn-lane-title"
+            className="text-lg font-semibold text-[var(--color-foreground)]"
+          >
+            GNN / MPNN — the graph lane
+          </h2>
+          <span className="text-xs text-[var(--color-muted-foreground)]">
+            part13 Phase 5 · the REAL GraphClassifier (conv stack → pool →
+            linear head) over inline graphs or the synthetic motif fixture
+          </span>
+        </div>
+        <Card className="mt-3">
+          <CardHeader>
+            <CardTitle className="text-base">Train a graph model</CardTitle>
+            <CardDescription>
+              the source (synthetic motifs or inline graphs) + the
+              architecture (conv · pool, the live vocabulary below) + the
+              trainer’s own controls — job mode, stage-level telemetry
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                source
+                <select
+                  value={gnnSource}
+                  onChange={(event) =>
+                    setGnnSource(event.target.value as typeof gnnSource)
+                  }
+                  className="mt-1 w-32 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  aria-label="gnn source"
+                >
+                  <option value="synthetic">synthetic motifs</option>
+                  <option value="inline">inline graphs</option>
+                </select>
+              </label>
+              {gnnSource === "synthetic" ? (
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  motif count (10–500)
+                  <input
+                    type="number"
+                    min={10}
+                    max={500}
+                    value={gnnSyntheticN}
+                    onChange={(event) => setGnnSyntheticN(Number(event.target.value))}
+                    className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  />
+                </label>
+              ) : null}
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                seed
+                <input
+                  type="number"
+                  min={0}
+                  value={gnnSeed}
+                  onChange={(event) => setGnnSeed(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                conv
+                <select
+                  value={gnnConv}
+                  onChange={(event) => setGnnConv(event.target.value as GnnConv)}
+                  className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  aria-label="gnn conv"
+                >
+                  {(gnnVocab?.convs ?? ["gcn", "sage", "gin", "gat", "edge"]).map(
+                    (token) => (
+                      <option key={token} value={token}>{token}</option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                pool
+                <select
+                  value={gnnPool}
+                  onChange={(event) => setGnnPool(event.target.value as GnnPool)}
+                  className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  aria-label="gnn pool"
+                >
+                  {(gnnVocab?.pools ?? ["mean", "sum", "max", "topk", "sag"]).map(
+                    (token) => (
+                      <option key={token} value={token}>{token}</option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                hidden
+                <input
+                  type="number"
+                  min={1}
+                  max={128}
+                  value={gnnHidden}
+                  onChange={(event) => setGnnHidden(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                layers
+                <input
+                  type="number"
+                  min={1}
+                  max={6}
+                  value={gnnLayers}
+                  onChange={(event) => setGnnLayers(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                epochs
+                <input
+                  type="number"
+                  min={1}
+                  max={2000}
+                  step={20}
+                  value={gnnEpochs}
+                  onChange={(event) => setGnnEpochs(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                lr
+                <input
+                  type="number"
+                  min={0.001}
+                  max={1}
+                  step={0.01}
+                  value={gnnLr}
+                  onChange={(event) => setGnnLr(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                weight decay
+                <input
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.0001}
+                  value={gnnWeightDecay}
+                  onChange={(event) => setGnnWeightDecay(Number(event.target.value))}
+                  className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                heads (gat)
+                <input
+                  type="number"
+                  min={1}
+                  max={8}
+                  value={gnnHeads}
+                  onChange={(event) => setGnnHeads(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                ratio (topk/sag)
+                <input
+                  type="number"
+                  min={0.05}
+                  max={0.95}
+                  step={0.05}
+                  value={gnnRatio}
+                  onChange={(event) => setGnnRatio(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+            </div>
+            {gnnSource === "inline" ? (
+              <div className="mt-3">
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  inline graphs + labels (JSON)
+                  <textarea
+                    value={gnnGraphsText}
+                    onChange={(event) => setGnnGraphsText(event.target.value)}
+                    rows={6}
+                    placeholder='{"graphs": [{"x": [[1, 0], [0, 1]], "edge_index": [[0, 1], [1, 0]]}, …], "labels": [0, 1, …]}'
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 font-mono text-xs"
+                  />
+                </label>
+                {gnnGraphsError !== null ? (
+                  <p className="mt-1 text-xs text-[var(--color-destructive)]">{gnnGraphsError}</p>
+                ) : null}
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                  Every row validates BEFORE any request fires — node
+                  features as number arrays, one width per graph, 2×E
+                  endpoints within the graph’s node count, one integer label
+                  per graph; a malformed block never leaves the page.
+                </p>
+              </div>
+            ) : null}
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button
+                size="sm"
+                disabled={gnnTrainBusy || (gnnSource === "inline" && gnnGraphsText.trim() === "")}
+                onClick={() => void handleGnnTrain()}
+              >
+                {gnnTrainBusy ? "Submitting…" : "Train the graph model"}
+              </Button>
+              <span className="text-xs text-[var(--color-muted-foreground)]">
+                {gnnSource === "synthetic"
+                  ? `synthetic motif fixture · ${gnnSyntheticN} graphs · seed ${gnnSeed}`
+                  : "inline graphs · job mode"}
+              </span>
+            </div>
+            {gnnTrainError !== null ? (
+              <div className="mt-3"><ErrorBanner message={gnnTrainError} /></div>
+            ) : null}
+            {gnnTrainJobId !== null ? (
+              <div className="mt-3">
+                <JobRunCard
+                  jobId={gnnTrainJobId}
+                  resultLabel="the trained GNN model view"
+                  onResult={handleGnnTrainResult}
+                />
+              </div>
+            ) : null}
+            {gnnTrainResult !== null ? <GnnModelCard result={gnnTrainResult} /> : null}
+            <p className="mt-3 text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              The lane rides `POST /api/v1/dl/gnn-train` in job mode — the
+              REAL `GraphClassifier` fit with HONEST stage-level telemetry
+              (assembling → training): the torch GNN trainer exposes its
+              `loss_history_` only AFTER the fit, so this card never
+              fabricates a per-epoch stream (unlike the tabular lane’s
+              real `on_epoch` callback, there is none to subscribe to).
+              The conv/pool vocabularies above arrive live from the same
+              catalog call (`gnn.convs` / `gnn.pools` — the backend’s own
+              CONV_NAMES / POOL_NAMES, never re-declared here).
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="text-base">Predict on graphs</CardTitle>
+            <CardDescription>
+              the graph models’ OWN prediction path — `/api/v1/dl/gnn-predict`,
+              never the tabular `/api/v1/ml/predict` (which refuses graph
+              models up front)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                <input
+                  type="checkbox"
+                  checked={gnnPredictProba}
+                  onChange={(event) => setGnnPredictProba(event.target.checked)}
+                  className="h-4 w-4"
+                />
+                class probabilities
+              </label>
+              <Button
+                size="sm"
+                disabled={gnnTrainResult === null || gnnPredictBusy || gnnPredictText.trim() === ""}
+                onClick={() => void handleGnnPredict()}
+              >
+                {gnnPredictBusy ? "Predicting…" : "Predict on the graphs"}
+              </Button>
+            </div>
+            <label className="mt-3 block text-xs text-[var(--color-muted-foreground)]">
+              graphs to predict (JSON — same shape as the train block, no labels)
+              <textarea
+                value={gnnPredictText}
+                onChange={(event) => setGnnPredictText(event.target.value)}
+                rows={5}
+                placeholder='{"graphs": [{"x": [[…]], "edge_index": [[…], […]]}, …]}'
+                className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 font-mono text-xs"
+              />
+            </label>
+            {gnnPredictError !== null ? (
+              <div className="mt-3"><ErrorBanner message={gnnPredictError} /></div>
+            ) : null}
+            {gnnPredictResult !== null ? (
+              <div className="mt-3">
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  model {gnnPredictResult.model_id} · {gnnPredictResult.n_graphs} graphs ·
+                  classes {gnnPredictResult.classes.map((c) => formatValue(c)).join(" / ")}
+                </p>
+                <div className="mt-2 overflow-hidden rounded-lg border border-[var(--color-border)]">
+                  <div className="max-h-64 overflow-auto">
+                    <table className="w-full border-collapse text-[11px]">
+                      <thead className="sticky top-0 bg-[var(--color-muted)]">
+                        <tr>
+                          <th scope="col" className="whitespace-nowrap px-3 py-1.5 text-left font-semibold text-[var(--color-foreground)]">graph</th>
+                          <th scope="col" className="whitespace-nowrap px-3 py-1.5 text-left font-semibold text-[var(--color-foreground)]">prediction</th>
+                          {gnnPredictResult.probabilities !== null
+                            ? gnnPredictResult.classes.map((cls, i) => (
+                                <th key={`${String(cls)}-${i}`} scope="col" className="whitespace-nowrap px-3 py-1.5 text-left font-semibold text-[var(--color-foreground)]">
+                                  p({formatValue(cls)})
+                                </th>
+                              ))
+                            : null}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {gnnPredictResult.predictions.map((prediction, i) => (
+                          <tr key={i} className="border-t border-[var(--color-border)] bg-[var(--color-card)]">
+                            <td className="whitespace-nowrap px-3 py-1 text-[var(--color-muted-foreground)]">{i}</td>
+                            <td className="whitespace-nowrap px-3 py-1 font-medium text-[var(--color-foreground)]">{formatValue(prediction)}</td>
+                            {gnnPredictResult.probabilities !== null
+                              ? (gnnPredictResult.probabilities[i] ?? []).map((p, j) => (
+                                  <td key={j} className="whitespace-nowrap px-3 py-1 text-[var(--color-muted-foreground)]">
+                                    {typeof p === "number" ? p.toFixed(4) : "—"}
+                                  </td>
+                                ))
+                              : null}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-[var(--color-muted-foreground)]">
+                Train above first — a mismatched node-feature width surfaces
+                the backend’s own 422 verbatim (“the GNN was trained on W-wide
+                node features; graph i has V”), never a silent failure.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
 }

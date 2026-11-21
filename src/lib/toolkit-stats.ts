@@ -20,16 +20,24 @@
  *  parity grid, the SBOM artifact pins). */
 export const SHIPPED_TEST_COUNT = 8411;
 
+/** r313 note: the backend tree is UNTOUCHED this round (the Phase-5
+ *  GNN GUI lane is a frontend-only change) — the canonical collection
+ *  re-verified at 8,411 / 0 errors / 459 files (the per-file sum
+ *  form); the count carries the r312 census forward unchanged. */
+
 /** Collected Vitest component tests at the shipped revision — the
- *  part13 Phase-3 lane (2026-11-21, `npm --prefix frontend test`:
- *  7 files / 48 tests over jsdom + React Testing Library: the shell
- *  navigation, the §14.1 startup-gate states + controlled restart,
- *  the §13 event-stream reconnection engine, the registry guard, the
- *  UI atoms' a11y contracts, the §22 chart surface contracts, and
- *  the Datasets workflow's import/validate/progress/cancel/complete
- *  lanes). This pin moves independently of the Python suite above —
- *  the CI's studio-frontend job runs both lanes. */
-export const SHIPPED_COMPONENT_TEST_COUNT = 48;
+ *  part13 Phase-3 lane + the Phase-5 GNN lane (2026-11-21, `npm
+ *  --prefix frontend test`: 8 files / 55 tests over jsdom + React
+ *  Testing Library: the shell navigation, the §14.1 startup-gate
+ *  states + controlled restart, the §13 event-stream reconnection
+ *  engine, the registry guard, the UI atoms' a11y contracts, the
+ *  §22 chart surface contracts, the Datasets workflow's lanes, and
+ *  the Deep Learning workspace's GNN/MPNN lane (the live-vocabulary
+ *  read, the honest request shape, the job relay, the predict table,
+ *  the typed 422 verbatim, the client-side gating — the r313
+ *  addition). This pin moves independently of the Python suite
+ *  above — the CI's studio-frontend job runs both lanes. */
+export const SHIPPED_COMPONENT_TEST_COUNT = 55;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
  *  docs, tools — the same census /api/toolkit/tree walks). The round-302
@@ -55,7 +63,7 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 48;
  *  toolkit .github path — resurrected by the same rollback, never
  *  registered at GitHub and never shipped in any archive — nets to
  *  zero (caught, removed); verified pin = live walk = page render. */
-export const SHIPPED_FILE_COUNT = 1623;
+export const SHIPPED_FILE_COUNT = 1637;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). The round-304
@@ -99,8 +107,23 @@ export const SHIPPED_FILE_COUNT = 1623;
  *  minus 1,198 the eight-notebook re-execution at 1.2.232 (the CI's
  *  notebook-freshness gate caught the stale 1.2.231 prints; the
  *  re-executed outputs are leaner); verified pin = live walk = page
- *  render three-way. */
-export const SHIPPED_SOURCE_LINES = 557027;
+ *  render three-way.
+ *
+ *  r313 (the v1.2.235 ship): +1 file the GnnLane component suite
+ *  (.tsx, a tree node never line-counted), +2 the r313 E2E evidence
+ *  screenshots, +2 the v1.2.235 ship zip in its two in-tree homes,
+ *  +7 the scratch-drift the seventh rollback restored into the
+ *  toolkit tree (probe scripts from pre-r290 rounds, back on disk
+ *  after the history reset — counted by the same walk semantics the
+ *  live API applies, so the three-way true holds), the .md deltas of
+ *  the round's own docs (CHANGELOG + PROJECT_STATUS + FEATURES);
+ *  verified pin = live walk = page render. */
+export const SHIPPED_SOURCE_LINES = 557111;
+
+/** r313 file-count note: the terminal census 1,637 = the walk above
+ *  +2 the r313 pins evidence screenshots themselves (the fixed-point
+ *  discipline: the archive is rebuilt AFTER the last tree edit, so
+ *  the pins pair rides the terminal build — the r312 convention). */
 
 /** Entries in pharmaml.ml.models.MODEL_REGISTRY at the shipped
  *  revision (verified by import, 2026-11-16). */

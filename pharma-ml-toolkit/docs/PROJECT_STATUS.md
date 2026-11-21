@@ -186,11 +186,21 @@ summarises them and wins any status disagreement.
   the fit, no fabricated epoch stream) + `POST /api/v1/dl/gnn-predict`
   (the graph models' own prediction path; `/api/v1/ml/predict` and
   `/ml/explain` refuse graph models up front with the pointer), 13
-  lane tests + the node-feature width guards. The REMAINDER rides
-  the next continuation: the GNN GUI card in the Deep Learning
-  workspace (the frontend lane over the API), ADMET, Drug–Target
+  lane tests + the node-feature width guards. **Round 313 closed the
+  first remainder item — the GNN GUI card in the Deep Learning
+  workspace** (the frontend lane over the API): the graph-lane section
+  with the live vocabulary selects off the catalog's `gnn` block, the
+  synthetic/inline source switch with client-side validation before
+  any request, the full trainer controls, the job-mode COMPLETED
+  relay into the graph model card, and the predict lane on the
+  graph models' own path — 7 component tests + the browser-E2E golden
+  path (zero page/console errors, evidence screenshots r313-*).
+  The REMAINDER rides the next continuation: ADMET, Drug–Target
   Interaction, Drug Repurposing, Cancer Cell-Line Drug Response,
-  Pharmacogenomics, multi-objective molecular optimization.
+  Pharmacogenomics, multi-objective molecular optimization (each
+  with a real backend already in-tree — `ml/admet.py`, `ml/dta.py`,
+  the repurposing/cell-line/pharmacogenomics surfaces,
+  `ml/multiobjective.py` — awaiting their API + GUI lanes).
 - **Phase 6** — architecture hardening: the lightweight workflow
   engine evaluation (JobManager/capability-registry first),
   resource monitoring, security scanning lanes, documentation

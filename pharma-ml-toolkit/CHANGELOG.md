@@ -1,3 +1,85 @@
+## [1.2.235] — 2026-11-21 — round 313 (the 104th recorded run: the interactive part13 continuation, trace 1a1fd63a737e7e29 — the Phase-5 GNN GUI lane COMPLETED; a NEW version ship)
+
+- **The seventh sandbox rollback recovered first** (the DEEPEST yet):
+  the git history itself was reset to a round-186-era machinery
+  checkpoint (UUID subject), origin detached, the 600-mode
+  credential gone, the venv gutted (torch/rdkit/pharmaml wiped),
+  the frontend node_modules wiped, the offsite mirror and the root
+  dist-archive home deleted — while the working tree kept the
+  r312-terminal state plus an INTERRUPTED, uncommitted Phase-5 GUI
+  lane (989 lines across the DL page + the dl client + a 7-test
+  component suite, cut off before any gate ran). Recovery, the
+  r306–r312 playbook: the PAT re-spliced from the source PDF
+  (93-char, 600-mode, masked), origin re-attached and fetched
+  (push-2 `e28ea93c`), the tree reset onto it (delta = the WIP +
+  retired leftovers exactly), the venv repaired foreground (the
+  pinned stack re-verified: numpy 1.26.4 / torch 2.14.1+cpu /
+  rdkit 2026.9.1 / pharmaml editable / PySide6 6.8.3 + the EGL
+  stub), the frontend dependencies reinstalled, the retired Tk
+  playground pair + the stale toolkit-path `.github/` duplicate +
+  the dormant 84-run counter copy swept, and the EXE002 exec-bit
+  rollback residue swept off 70 source files (CI-green unchanged —
+  a fresh checkout never carried the bits).
+- **The pending r312 CI verdict closed**: push-2 (`e28ea93c`) came
+  back fully GREEN — the CI workflow run 301 + "Push on main" 43
+  both success; the three-sha chase's terminal stands verified.
+- **part13 Phase 5's first remainder item EXECUTED — the GNN GUI
+  card in the Deep Learning workspace (the frontend lane over the
+  r312 API)**: the graph lane section (deliberately outside the
+  tabular workflow's stage chain — a different lineage) with the
+  LIVE vocabulary selects (`gnn.convs`/`gnn.pools` read off the
+  catalog response, never re-declared — gcn/sage/gin/gat/edge +
+  mean/sum/max/topk/sag), the synthetic-motif/inline-graph source
+  switch with client-side parse-and-validate BEFORE any request
+  (`parseGnnInlineGraphs`: JSON, shape, label parity, ≥2-graph
+  guards; a malformed block never leaves the page), the full
+  trainer control surface (hidden/layers/epochs/lr/weight-decay/
+  heads/ratio), job-mode training with the honest stage-level
+  telemetry, the COMPLETED relay into the graph model card (model
+  view + train accuracy + the `loss_history_` tail surfaced after
+  the fit — never a fabricated epoch stream), and the predict lane
+  on the graph models' OWN path (`/api/v1/dl/gnn-predict` with the
+  class-probability columns; the tabular `/ml/predict` refused
+  with the pointer, never wired). The 7-test component suite
+  covers the full user flow: the live-vocabulary read, the honest
+  request shape, the job relay, the predict table, the typed 422
+  verbatim, and the client-side gating.
+- **The browser-E2E evidence** (the r311 double-fork daemon
+  pattern over the REAL backend): the golden path green end-to-end
+  — the card renders with the backend's own vocabulary, a
+  synthetic-fixture train completes (accuracy 1.0000, the real
+  loss tail `0.022 → 0.019`, classes 0/1/2, engine torch, the
+  graph-model badge), the inline-graphs predict answers with the
+  p(0)/p(1)/p(2) probability columns, ZERO page errors and ZERO
+  console errors across the run; the r313 evidence set under
+  `docs/gui/screenshots/` — the two E2E lane screenshots (the
+  train card + the predict table) plus the two terminal pins
+  screenshots (desktop + mobile, captured at the fixed point:
+  1,637 files / 557,111 lines / 8,411 tests / v1.2.235, zero
+  page/console errors).
+- **Gates**: the frontend suite 55/55 (48 + the 7 new), tsc
+  --noEmit clean, the generated-types regeneration byte-identical
+  (the lockstep holds — no contract change this round), the
+  contract guard set 129/129, the lockstep guard 9/9 across the
+  eight carriers, the canonical collection 8,411 / 0 errors / 459
+  files (the backend tree untouched this round — the count carries
+  the r312 census), the notebook-variants + checkpoint-tooling lane
+  143/143, ruff + mypy clean, the web lint exit 0. The ship itself
+  at the fixed point: the census 1,637 files / 557,111 lines trued
+  three-way (the walk = the live `/api/toolkit/tree` = the page
+  render), the zip-size API serving the release bytes exact:true
+  source:release, the archive testzip-clean across the four homes
+  + the re-seeded offsite mirror (15 zips: the 221–234 history
+  restored after the rollback + this round's ship).
+- **The remaining Phase-5 domains stay honestly queued** (each
+  with its real backend already in-tree): ADMET, Drug–Target
+  Interaction, Drug Repurposing, Cancer Cell-Line Drug Response,
+  Pharmacogenomics, multi-objective molecular optimization — they
+  ride the next continuation per PROJECT_STATUS §6.
+- Still honestly BLOCKED: the clean-machine smoke (C-3/C-5), the
+  Stage-5 PySide6 retirement behind it, installer signing
+  (certificate-gated).
+
 ## [1.2.234] — 2026-11-21 — round 312 (the 103rd recorded run: the interactive part13 continuation, trace 1a1fd0516a6c330d — the Phase-4 API connection CLOSED + the Phase-5 GNN/MPNN API lane OPENED; a NEW version ship)
 
 - **The sixth sandbox rollback recovered first** (a PARTIAL one this
