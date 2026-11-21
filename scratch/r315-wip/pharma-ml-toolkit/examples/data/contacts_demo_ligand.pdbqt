@@ -1,0 +1,18 @@
+REMARK  contacts_demo_ligand -- SYNTHETIC ligand-pose geometry for the
+REMARK  contact-map/PLIF demo: ten atoms placed at 2.9-4.2 A from real
+REMARK  1AKI atoms (ASP52/101 carboxylates, ASN59/103 donors, TRP62/63/108
+REMARK  walls, VAL109/ALA107 carbons), clash-free (no receptor atom closer
+REMARK  than 2.4 A). Not a bonded molecule -- a documented geometry demo,
+REMARK  the twin of the synthetic r.dlg campaign. Receptor side:
+REMARK  examples/data/lysozyme_1aki.pdb (real hen egg-white lysozyme, 1.5 A).
+ATOM      1   N1 LIG L   1      22.400  37.419  12.054  1.00  0.00    0.000 NA
+ATOM      2   N2 LIG L   1      16.981  27.436  -3.992  1.00  0.00    0.000 NA
+ATOM      3   O2 LIG L   1      15.833  26.612  13.856  1.00  0.00    0.000 OA
+ATOM      4   N3 LIG L   1      13.150  28.904   7.502  1.00  0.00    0.000 ND
+ATOM      5   C4 LIG L   1      12.879  35.184   2.240  1.00  0.00    0.000  C
+ATOM      6   C5 LIG L   1      19.582  31.320   1.114  1.00  0.00    0.000  C
+ATOM      7   C6 LIG L   1      26.593  23.046   2.990  1.00  0.00    0.000  C
+ATOM      8   N4 LIG L   1      18.082  32.433  -0.803  1.00  0.00    0.000 ND
+ATOM      9   C7 LIG L   1      18.579  31.761   4.768  1.00  0.00    0.000  C
+ATOM     10   C8 LIG L   1      14.850  24.554  -4.476  1.00  0.00    0.000  C
+TER

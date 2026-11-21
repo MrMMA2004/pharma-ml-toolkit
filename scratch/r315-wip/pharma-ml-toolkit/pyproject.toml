@@ -1,0 +1,173 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pharmaml"
+version = "1.2.237"
+description = "A production-ready toolkit for QSAR machine learning, pharmaceutical calculations (PK/PD/dosage), and molecular-docking workflows."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "PharmaML contributors" }]
+keywords = [
+    "qsar",
+    "machine-learning",
+    "pharmacokinetics",
+    "pharmacodynamics",
+    "molecular-docking",
+    "autodock",
+    "cheminformatics",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scikit-learn>=1.3",
+    "scipy>=1.11",
+    "joblib>=1.3",
+    "openpyxl>=3.1",
+    "tqdm>=4.65",
+]
+
+[project.optional-dependencies]
+chem = [
+    "rdkit>=2023.9",
+    "mordred>=1.2",
+]
+docking = [
+    "rdkit>=2023.9",
+    "meeko>=0.5",
+    "gemmi>=0.6",
+]
+boosting = [
+    "xgboost>=2.0",
+    "lightgbm>=4.0",
+    "catboost>=1.2",
+]
+explain = [
+    # (100x-154) the SHAP surface (ml/explain.py) -- runtime-verified
+    # pair: shap 0.54.1 runs on the toolkit's numpy 1.26.4 stack (the
+    # 0.54 metadata asks numpy>=2 -- a pip resolver warning, not a
+    # runtime break; the toolkit pins numpy 1.x for mordred).  Only
+    # the COMPUTATION needs shap -- the plotting layer is pure
+    # matplotlib.
+    "shap>=0.45,<0.60",
+]
+deep = [
+    "torch>=2.0",
+]
+selfies = [
+    # (100x-162) the SELFIES surface (chem/selfies_codec.py) -- the
+    # robust molecular string representation (Krenn et al. 2020,
+    # the-matter-lab/selfies).  Pure-Python stdlib package, zero
+    # transitive dependencies -- the install is always fast.  Only the
+    # codec / vocabulary / constraint surfaces need it; nothing else in
+    # the toolkit does.
+    "selfies>=2.1,<3",
+]
+reports = [
+    "matplotlib>=3.7",
+    "seaborn>=0.13",
+    "fpdf2>=2.7,<3",  # the maintained PyPI name for the fpdf module
+    # (the verified stack pins fpdf2 2.8.5 — see requirements.txt)
+    "python-docx>=1.1",
+    # (r222 / Part-3 §17) the first-class TIFF/JPEG image-export
+    # surface (viz/export.py) — Pillow writes the lossless TIFFs
+    # (16-bit I;16, multi-page stacks, LZW/DEFLATE) and the quality-
+    # controlled JPEGs. Importing the toolkit stays dependency-free;
+    # only exporting needs it (same contract as matplotlib).
+    "Pillow>=10.0",
+]
+# Offscreen Studio testing; install alongside the pinned core stack when
+# reproducing CI. This does not install optional chemistry or docking packages.
+gui-test = [
+    "PySide6>=6.8,<7",
+    "pyqtgraph>=0.13.7,<0.14",
+    "qt-material>=2.17,<3",
+    "qdarkstyle>=3.2,<4",
+    "pytest>=7.4",
+    "pytest-qt>=4.5,<5",
+]
+# The desktop Studio GUI itself (r33 review C-3.2): `python studio.py`
+# needs the Qt stack, which is NOT part of the core library dependencies.
+# Install with: pip install ".[studio]"
+studio = [
+    "PySide6>=6.8,<7",
+    "pyqtgraph>=0.13.7,<0.14",
+    "qt-material>=2.17,<3",
+    "qdarkstyle>=3.2,<4",
+    "matplotlib>=3.7",
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "mypy>=1.5",
+    # Pinned major.minor (100x-22-c): the zero-finding lint baseline was
+    # verified under ruff 0.17 -- an unpinned ruff could change rules and
+    # turn CI red (or silently relax) on any future minor release.
+    "ruff>=0.17,<0.18",
+]
+
+[project.scripts]
+pharmaml = "pharmaml.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/MrMMA2004/pharma-ml-toolkit"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pharmaml = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "src"]
+markers = [
+    "checkout_only: requires checkout-only files or Git remote metadata",
+    "web_checkout_only: requires companion Web Console source tree",
+]
+pythonpath = ["src"]
+# --doctest-modules (100x-22-c): every docstring example is a tested
+# contract -- a bare `pytest` (and CI) now collects the 19 doctest items
+# from src/pharmaml alongside the regular suite.  The 1000-round loop's
+# standard `-o addopts=` invocation simply overrides this back off.
+addopts = "-q --tb=short --doctest-modules"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+# scratch/ is the probe-history archive: one-off exploratory drivers kept
+# for provenance (in git, on disk — and EXCLUDED from release zips
+# since round 260 / MASTER_PROMPT part4 §4.3, which stopped the
+# research history riding the archive), never part of the linted
+# surface. Without this pin a bare `ruff check .` reported ~200
+# pre-existing scratch findings and hid the real signal — the green
+# convention was `--exclude scratch` all along.
+extend-exclude = ["scratch"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests deliberately nest the `_pharmaml_logs_visible()` logging fixture inside
+# a `caplog.at_level()` context (and vice versa) to keep the restore-on-exit
+# guarantee visually explicit; collapsing the two `with` blocks hides that.
+"tests/*" = ["SIM117"]
+# FastAPI's canonical parameter declarations call File()/Form()/Depends()
+# at signature defaults — the framework reads the markers there by
+# design; the B008 warning is noise for route modules.
+"src/pharmaml/api/routes/*" = ["B008"]
+# Notebooks are published artefacts with committed outputs — they are reviewed
+# by hand, never auto-rewritten by formatters.
+"*.ipynb" = ["ALL"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true

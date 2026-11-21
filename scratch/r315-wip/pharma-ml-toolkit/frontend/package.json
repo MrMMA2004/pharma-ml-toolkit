@@ -1,0 +1,49 @@
+{
+  "name": "pharmaml-studio-frontend",
+  "private": true,
+  "version": "1.2.237",
+  "description": "PharmaML Studio — the offline React + TypeScript SPA (part11 Phase Three). Production builds are static assets loaded by the Tauri 2 host through WebView2; no dev server, no remote URL, no CDN.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5174",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 5174",
+    "typecheck": "tsc --noEmit",
+    "generate:types": "openapi-typescript ../contracts/openapi.json --output src/types/api.d.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@tauri-apps/api": "^2.12.5",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.548.0",
+    "motion": "^12.23.24",
+    "plotly.js-dist-min": "^3.1.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.3.1",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4",
+    "@testing-library/jest-dom": "^8.0.0",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.13",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.180.0",
+    "@vitejs/plugin-react": "^5.1.1",
+    "jsdom": "^31.0.1",
+    "openapi-typescript": "^7.9.1",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vite": "^7.1.10",
+    "vitest": "^5.1.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}
