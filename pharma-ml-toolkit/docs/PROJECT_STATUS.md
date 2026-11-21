@@ -8,7 +8,10 @@ summarises them and wins any status disagreement.
   Phase-2 addendum round 309; Phase-3 addendum round 310 — the
   interactive part13 continuation, trace 1a1fb0a0b935472d; Phase-4
   addendum + the Phase-3 browser-E2E close round 311 — the interactive
-  part13 continuation, trace 1a1fc9a07e081d59).
+  part13 continuation, trace 1a1fc9a07e081d59; the Phase-4 close +
+  Phase-5 open addendum round 312 — the interactive part13
+  continuation, trace 1a1fd0516a6c330d, over the PARTIAL sixth
+  rollback).
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
@@ -50,12 +53,12 @@ summarises them and wins any status disagreement.
   frontend-only diff — a flake-class crash this round's push re-runs
   and observes); 18/18 at `ca1accc9` and `19effec8` stand; this
   round's push re-verifies all jobs | `check-runs?head_sha=1bbe7316` (the r311 poll, authenticated) |
-| Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.233 SOURCE archive shipped (five homes + offsite) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
-| Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.233 (+ the frontend lock's root fields re-trued: they had stayed 1.2.231 through the r310 bump) | read directly this session, lockstep guard green |
-| Test surface | 8,381 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`) — +19 this round (the scaffold-aware coverage suite 16 + 2 doctests + the worker GC-guard pin) — PLUS the component-test lane: 48 Vitest tests / 7 files over the Studio frontend (jsdom + React Testing Library) | fresh collection + `npm --prefix frontend test` this round |
-| Census | 1,622 files / 554,717 lines / v1.2.233 (the round-311 FINAL walk at the TERMINAL build: +2 the scaffold-aware module + its tests, +10 the browser-E2E evidence screenshots, +2 the ship zip in its two in-tree homes, +60 the runner-segfault GC guard + its pin test + the notebook/twin/doc deltas — equals the live walk) | this round's final census walk |
-| Source archive | v1.2.233 — a NEW version ship (the part13 Phase-3 browser-E2E evidence + the Phase-4 §9.3 scaffold-aware coverage bridge ride: 950 files; the per-round sha/bytes live in the CHANGELOG/worklog per §7 — the archive cannot carry its own hash) | sha256 across five homes + offsite (13 zips) |
-| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.233 — zero drift vs `requirements.txt` | import probes post-repair |
+| Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.234 SOURCE archive shipped (four homes + offsite, 14 zips) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
+| Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.234 | read directly this session, lockstep guard green |
+| Test surface | 8,411 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 459 files) — +30 this round (the model-evaluation route family 17 + the GNN API lane 13) — PLUS the component-test lane: 48 Vitest tests / 7 files over the Studio frontend (jsdom + React Testing Library) | fresh collection + `npm --prefix frontend test` this round |
+| Census | 1,623 files / 557,020 lines / v1.2.234 (the round-312 FINAL walk at the TERMINAL build: +2 the route family + its test file, +2 the ship zip in its two in-tree homes, +2 the browser-evidence screenshots, + the notebook/doc/contract deltas, −1 the stale toolkit-path counter duplicate (84, dormant since the r288 era) REMOVED this round — the sixth rollback had wiped 4 untracked counted files the r311 walk had) | this round's final census walk |
+| Source archive | v1.2.234 — a NEW version ship (the part13 Phase-4 API connection + the Phase-5 GNN/MPNN API lane ride: 952 files / 16,339,276 B; the per-round sha/bytes live in the CHANGELOG/worklog per §7 — the archive cannot carry its own hash) | sha256 across four homes + offsite (14 zips) |
+| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.234 — zero drift vs `requirements.txt` | import probes post-repair |
 
 ## 3. The six previously-open audit items — CLOSED (re-verified in-tree this round)
 
@@ -156,39 +159,38 @@ summarises them and wins any status disagreement.
   and the visual-regression baselines (desktop + 390px mobile, zero
   overflow + dark) — zero page/console errors across the run, 10
   evidence screenshots under `docs/gui/screenshots/r311-*`.
-- **Phase 4** — OPENED (round 311, the §9.3 leg EXECUTED): the six
-  items' honest status after the round-311 audit — **§9.3 Conformal
-  Prediction audit**: the checklist is overwhelmingly real (split
-  conformal regression + classification sets + label-conditional
-  per-class coverage + group-aware coverage diagnostics with Wilson
-  bounds + calibration diagnostics); the scaffold-aware evaluation
-  gap CLOSED (`ml/scaffold_coverage.py` bridges the splits' own
-  Murcko framework extractor into `coverage_by_group` with honest
-  invalid/acyclic sentinels — 18 tests/doctests, no duplication per
-  §9.3's own rule); the Model-Evaluation/Applicability-Domain API
-  connection stays PARTIAL-queued (zero conformal surfacing in the
-  API today — no embellishment). **§9.1 Active Learning**: the
-  backend surface is REAL (`ml/active_learning.py` — the loop, the
-  query records, the experimental label import; the Workbench's
-  Active learning tab) — the acquisition→ranking→label-import→
-  retrain workflow rides it; the chemical-space integration stays
-  queued. **§9.2 Chemical Space Explorer**: the components are real
-  but scattered (the fingerprint/Tanimoto surface,
-  `ml/benchmark.py`'s butina/scaffold splits, `ml/umap.py` +
-  manifold, the generative diversity stack) — the integrated
-  explorer workspace stays QUEUED. **§9.4 Automated Benchmarking**:
-  `ml/benchmark.py` (six split strategies + the metrics battery) +
-  `ml/tuner.py` + `ml/cv_results.py` are real; the consistent-splits
-  shared-protocol comparison surface stays QUEUED. **Report
-  Builder**: `viz/report.py` (HTMLReport + export_table) + the
-  session-report lane are real; §12's full reusable checklist stays
-  QUEUED. **Model Cards**: `ml/model_card.py`
-  (build/markdown/html/write) is real; §13's full field checklist
-  audit stays QUEUED. **Phase 5 is next.**
-- **Phase 5** — advanced pharmaceutical AI: GNN/MPNN GUI completion,
-  ADMET, Drug–Target Interaction, Drug Repurposing, Cancer Cell-Line
-  Drug Response, Pharmacogenomics, multi-objective molecular
-  optimization.
+- **Phase 4** — CLOSED (rounds 311 + 312): the r311 §9.3 leg (the
+  scaffold-aware coverage bridge, `ml/scaffold_coverage.py`, 18
+  tests/doctests) + the r312 API connection — the r311-queued
+  Model-Evaluation/Applicability-Domain row EXECUTED: the
+  `/api/v1/model-evaluation` family over the REAL backend —
+  `conformal-regression` (`calibrate_split_conformal` +
+  `predict_interval` + empirical coverage + optional
+  groups/scaffold-aware diagnostics), `conformal-classification`
+  (split | label-conditional + per-class coverage rows), and
+  `coverage-diagnostics` (the standalone Wilson report, groups |
+  scaffold-aware) — 17 route tests, the OpenAPI contract re-exported
+  (90 paths). The remaining §9.1/§9.2/§9.4/Report-Builder/Model-Card
+  queued remainders stay queued, each with its honest status:
+  **§9.1 Active Learning** REAL in-tree (the chemical-space
+  integration queued); **§9.2 Chemical Space Explorer** scattered-real
+  (the integrated workspace queued); **§9.4 Automated Benchmarking**
+  real (the shared-protocol comparison surface queued); **Report
+  Builder** `viz/report.py` real (§12's checklist queued); **Model
+  Cards** `ml/model_card.py` real (§13's field audit queued).
+- **Phase 5** — OPENED (round 312, the first item's API leg): the
+  GNN/MPNN API lane EXECUTED — `POST /api/v1/dl/gnn-train` (the REAL
+  `GraphClassifier` over inline graph specs or the synthetic motif
+  fixture, sync/job, honest stage-level telemetry — the torch GNN
+  trainer has no live per-epoch callback, loss_history_ lands after
+  the fit, no fabricated epoch stream) + `POST /api/v1/dl/gnn-predict`
+  (the graph models' own prediction path; `/api/v1/ml/predict` and
+  `/ml/explain` refuse graph models up front with the pointer), 13
+  lane tests + the node-feature width guards. The REMAINDER rides
+  the next continuation: the GNN GUI card in the Deep Learning
+  workspace (the frontend lane over the API), ADMET, Drug–Target
+  Interaction, Drug Repurposing, Cancer Cell-Line Drug Response,
+  Pharmacogenomics, multi-objective molecular optimization.
 - **Phase 6** — architecture hardening: the lightweight workflow
   engine evaluation (JobManager/capability-registry first),
   resource monitoring, security scanning lanes, documentation

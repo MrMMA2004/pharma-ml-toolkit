@@ -19,6 +19,26 @@ Predictions for a DL-trained model flow through
 ``POST /api/v1/ml/predict`` — the model registers in the same
 session model store, so there is exactly one prediction path for
 every trainer, never two.
+
+The GNN/MPNN lane (part13 Phase 5's first item — the API leg):
+
+* ``GET /api/v1/dl/networks`` — the tabular families + the GNN
+  vocabulary (``CONV_NAMES`` / ``POOL_NAMES`` read off the backend —
+  one source of truth).
+* ``POST /api/v1/dl/gnn-train`` — :class:`pharmaml.ml.gnn.GraphClassifier`
+  (conv stack → pool → linear head) trained on inline graph specs
+  (node features + the 2×E endpoint list per graph) or on the
+  backend's own ``synthetic_motif_graphs`` fixture (sync or managed
+  job).  The torch GNN trainer exposes ``loss_history_`` after the
+  fit, not a live per-epoch callback — the job's progress is the
+  honest stage-level telemetry (assembling → training), never a
+  fabricated epoch stream.  The fitted estimator registers in the
+  session model store as a GRAPH model with its own predict path.
+* ``POST /api/v1/dl/gnn-predict`` — the graph models' prediction
+  path: label sets (and optional class probabilities) for inline
+  graph rows from a session-trained GNN.  ``POST /api/v1/ml/predict``
+  refuses graph models up front with the pointer here — one path
+  per model class, never a tabular predict over graph weights.
 """
 
 from __future__ import annotations
@@ -28,9 +48,18 @@ import time
 import uuid
 from typing import Any, Literal
 
+import numpy as np
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from pharmaml.exceptions import DataValidationError
+from pharmaml.ml.gnn import (
+    CONV_NAMES,
+    POOL_NAMES,
+    Data,
+    GraphClassifier,
+    synthetic_motif_graphs,
+)
 from pharmaml.ml.neural import (
     DeepMLPClassifier,
     DeepMLPRegressor,
@@ -132,6 +161,17 @@ def networks(request: Request) -> dict:
             "predictions for a DL-trained model run through the single "
             "session prediction path /api/v1/ml/predict"
         ),
+        "gnn": {
+            "convs": list(CONV_NAMES),
+            "pools": list(POOL_NAMES),
+            "defaults": {"hidden": 16, "layers": 2, "lr": 0.05, "epochs": 200},
+            "train_url": "/api/v1/dl/gnn-train",
+            "predict_url": "/api/v1/dl/gnn-predict",
+            "note": (
+                "graph models predict through their own path — never the "
+                "tabular one"
+            ),
+        },
     }
 
 
@@ -269,3 +309,235 @@ def train(req: DLTrainRequest, request: Request) -> dict:
         manager=manager,
     )
     return {"mode": "job", "job": record.public()}
+
+
+# -- the GNN/MPNN lane (part13 Phase 5, the API leg) -----------------------
+
+class GnnGraphSpec(BaseModel):
+    """One graph: node features + the 2×E source→destination endpoints."""
+
+    x: list[list[float]] = Field(min_length=1)
+    edge_index: list[list[int]] = Field(min_length=0)
+
+    def to_data(self) -> Data:
+        try:
+            return Data(
+                np.asarray(self.x, dtype=float),
+                np.asarray(self.edge_index, dtype=int),
+            )
+        except DataValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class GnnTrainRequest(BaseModel):
+    # unique OpenAPI component names (the family's anti-collision rule)
+    graphs: list[GnnGraphSpec] | None = Field(
+        default=None, min_length=2, max_length=500
+    )
+    labels: list[int] | None = Field(
+        default=None, min_length=2, max_length=500
+    )
+    synthetic_n: int | None = Field(default=None, ge=10, le=500)
+    seed: int | None = Field(default=None, ge=0, le=2**31 - 1)
+    conv: Literal["gcn", "sage", "gin", "gat", "edge"] = "gcn"
+    pool: Literal["mean", "sum", "max", "topk", "sag"] = "mean"
+    hidden: int = Field(default=16, ge=1, le=128)
+    layers: int = Field(default=2, ge=1, le=6)
+    lr: float = Field(default=0.05, gt=0.0, le=1.0)
+    epochs: int = Field(default=200, ge=1, le=2000)
+    weight_decay: float = Field(default=0.0, ge=0.0, le=1.0)
+    heads: int = Field(default=1, ge=1, le=8)
+    ratio: float = Field(default=0.5, gt=0.0, lt=1.0)
+    mode: Literal["job", "sync"] = "job"
+
+
+class GnnPredictRequest(BaseModel):
+    model_id: str
+    graphs: list[GnnGraphSpec] = Field(min_length=1, max_length=500)
+    probabilities: bool = False
+
+
+def _gnn_train_body(
+    graphs: list[Data],
+    labels: list[int],
+    hyperparams: dict[str, Any],
+    model_store,
+    manager=None,
+    job_id: str | None = None,
+    cancel_event=None,
+) -> dict:
+    """Job/sync body: the REAL GraphClassifier fit + store registration."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledJob("Cancelled before the graph assembly stage.")
+    if manager is not None and job_id is not None:
+        # stage-level telemetry only — the torch GNN trainer has no
+        # live per-epoch callback (loss_history_ lands AFTER the fit);
+        # this lane never fabricates an epoch stream
+        manager.report_progress(job_id, 5, "assembling the graph batch")
+    estimator = GraphClassifier(**hyperparams)
+    if manager is not None and job_id is not None:
+        manager.report_progress(
+            job_id, 50, "training the conv stack (history lands in loss_history_)"
+        )
+    started = time.monotonic()
+    estimator.fit(graphs, labels)
+    fit_seconds = time.monotonic() - started
+    train_accuracy = float(estimator.score(graphs, labels))
+    record = TrainedModelRecord(
+        model_id=f"mdl-{uuid.uuid4().hex[:12]}",
+        model=estimator,
+        name="gnn_graph_classifier",
+        task="classification",
+        dataset_id=None,  # no tabular dataset behind a graph model — honest
+        target=None,
+        features=[],  # node features are per-graph matrices, not columns
+        n_train_rows=len(graphs),
+        best_params={"network": "gnn", **hyperparams},
+        cv_scores=None,  # no CV in this path — honest, not faked
+        cv_mean=None,
+        cv_std=None,
+        fit_seconds=fit_seconds,
+    )
+    model_store.register(record)
+    view = record.view()
+    view["engine"] = "torch"
+    view["graph_model"] = True
+    view["predict_url"] = "/api/v1/dl/gnn-predict"
+    return {
+        "model": view,
+        "train_accuracy": train_accuracy,
+        "loss_history_tail": estimator.loss_history_[-5:],
+        "n_graphs": len(graphs),
+        "classes": [json_safe(c) for c in estimator.classes_],
+        "conv": hyperparams.get("conv"),
+        "pool": hyperparams.get("pool"),
+    }
+
+
+@router.post("/gnn-train")
+def gnn_train(req: GnnTrainRequest, request: Request) -> dict:
+    specs = req.graphs
+    synthetic_n = req.synthetic_n
+    if specs is None:
+        if synthetic_n is None:
+            raise HTTPException(
+                status_code=422,
+                detail="the trainer needs inline graphs+labels or synthetic_n",
+            )
+        fixture, y = synthetic_motif_graphs(synthetic_n, seed=req.seed)
+        graphs = list(fixture)
+        labels = [int(v) for v in y]
+    else:
+        if synthetic_n is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="pass either inline graphs or synthetic_n, not both",
+            )
+        if req.labels is None:
+            raise HTTPException(
+                status_code=422,
+                detail="inline graphs need their labels",
+            )
+        if len(specs) != len(req.labels):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"graphs has {len(specs)} rows; labels has "
+                    f"{len(req.labels)} (one label per graph)"
+                ),
+            )
+        graphs = [spec.to_data() for spec in specs]
+        labels = list(req.labels)
+    widths = {int(g.x.shape[1]) for g in graphs}
+    if len(widths) > 1:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "all graphs must share one node-feature width; got "
+                f"{sorted(widths)}"
+            ),
+        )
+    hyperparams = {
+        "hidden": req.hidden,
+        "layers": req.layers,
+        "conv": req.conv,
+        "pool": req.pool,
+        "lr": req.lr,
+        "epochs": req.epochs,
+        "weight_decay": req.weight_decay,
+        "heads": req.heads,
+        "ratio": req.ratio,
+        "seed": req.seed,
+    }
+    manager = request.app.state.job_manager
+    model_store = request.app.state.model_store
+    if req.mode == "sync":
+        return {
+            "mode": "sync",
+            **_gnn_train_body(graphs, labels, hyperparams, model_store),
+        }
+    record = manager.submit(
+        "dl.gnn-train",
+        "deep-learning",
+        _gnn_train_body,
+        configuration={
+            "n_graphs": len(graphs),
+            "conv": req.conv,
+            "pool": req.pool,
+            "epochs": req.epochs,
+            "synthetic": req.synthetic_n is not None,
+        },
+        graphs=graphs,
+        labels=labels,
+        hyperparams=hyperparams,
+        model_store=model_store,
+        manager=manager,
+    )
+    return {"mode": "job", "job": record.public()}
+
+
+@router.post("/gnn-predict")
+def gnn_predict(req: GnnPredictRequest, request: Request) -> dict:
+    model_record = request.app.state.model_store.get(req.model_id)
+    if model_record is None:
+        raise HTTPException(status_code=404, detail="Unknown model_id.")
+    if not isinstance(model_record.model, GraphClassifier):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"model {req.model_id} is not a graph model; graph "
+                "prediction needs a GNN trained through /api/v1/dl/gnn-train"
+            ),
+        )
+    graphs = [spec.to_data() for spec in req.graphs]
+    width = int(getattr(model_record.model, "n_features_in_", -1))
+    bad = [
+        i for i, g in enumerate(graphs)
+        if width >= 0 and int(g.x.shape[1]) != width
+    ]
+    if bad:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"the GNN was trained on {width}-wide node features; graph "
+                f"{bad[0]} has {int(graphs[bad[0]].x.shape[1])}"
+            ),
+        )
+    try:
+        predictions = model_record.model.predict(graphs)
+    except DataValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    payload: dict[str, Any] = {
+        "model_id": req.model_id,
+        "n_graphs": len(graphs),
+        "predictions": [json_safe(p) for p in predictions],
+        "classes": [
+            json_safe(c) for c in model_record.model.classes_
+        ],
+    }
+    if req.probabilities:
+        probabilities = model_record.model.predict_proba(graphs)
+        payload["probabilities"] = json_safe(
+            [list(row) for row in probabilities]
+        )
+    return payload

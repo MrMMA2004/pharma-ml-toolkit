@@ -49,6 +49,7 @@ from pharmaml.exceptions import (
     ModelError,
 )
 from pharmaml.ml.explain import shap_summary
+from pharmaml.ml.gnn import GraphClassifier
 from pharmaml.ml.models import list_models, resolve_model_name
 from pharmaml.ml.training import train_model
 from pharmaml.viz._compat import close_figure
@@ -351,6 +352,16 @@ def predict(req: PredictRequest, request: Request) -> dict:
     model_record = model_store.get(req.model_id)
     if model_record is None:
         raise HTTPException(status_code=404, detail="Unknown model_id.")
+    if isinstance(model_record.model, GraphClassifier):
+        # graph models predict through their own lane — never a tabular
+        # predict over node-feature matrices (one path per model class)
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"model {req.model_id} is a graph model; predict it "
+                "through POST /api/v1/dl/gnn-predict with graph rows"
+            ),
+        )
     if req.rows is not None:
         X = pd.DataFrame(req.rows)
         evaluation_dataset = None  # inline rows carry no aligned actuals
@@ -509,6 +520,18 @@ def explain(req: ExplainRequest, request: Request) -> dict:
     model_record = model_store.get(req.model_id)
     if model_record is None:
         raise HTTPException(status_code=404, detail="Unknown model_id.")
+    if isinstance(model_record.model, GraphClassifier):
+        # the SHAP surface is tabular; graph models are refused up front
+        # with the GNN explainability pointer instead of a misleading
+        # dataset miss
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"model {req.model_id} is a graph model; the SHAP summary "
+                "covers tabular models — graph explainability rides "
+                "pharmaml.ml.gnnxai in the backend library"
+            ),
+        )
     dataset_store = request.app.state.dataset_store
     dataset_id = req.dataset_id or model_record.dataset_id
     dataset = dataset_store.get(dataset_id) if dataset_id else None

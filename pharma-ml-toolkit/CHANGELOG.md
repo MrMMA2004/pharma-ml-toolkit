@@ -1,3 +1,99 @@
+## [1.2.234] — 2026-11-21 — round 312 (the 103rd recorded run: the interactive part13 continuation, trace 1a1fd0516a6c330d — the Phase-4 API connection CLOSED + the Phase-5 GNN/MPNN API lane OPENED; a NEW version ship)
+
+- **The sixth sandbox rollback recovered first** (a PARTIAL one this
+  time, milder than the r306–r311 class): origin, the 600-mode
+  credential, and the venv all SURVIVED; the rollback's machinery
+  commit (`ac6ea4c9`, the UUID-subject signature seen at every past
+  rollback boundary) had resurrected the retired-pair ghost zips
+  (229/230 at three homes) and tracked a 16 MB `upload/` zip — local
+  only, never pushed (origin/main still `1cfa0551`). Recovery: the
+  pre-reset safety (tree clean, diff = the 7 ghost binaries exactly),
+  `reset --hard 1cfa0551`, the ghost re-sweep clean, the upload home's
+  v233 copy re-placed from the offsite (sha `d36f0521` parity exact
+  across all four homes + offsite — 13 zips), the venv verified intact
+  (numpy 1.26.4 / torch 2.14.1+cpu / rdkit 2026.09.1 / pharmaml
+  editable at the source tree), the stale toolkit-path counter
+  duplicate (84, dormant since the r288 era) noted for removal.
+- **part13 Phase 4 CLOSED — the Model-Evaluation/Applicability-Domain
+  API connection, the r311-queued row**: the new
+  `/api/v1/model-evaluation` family over the REAL backend —
+  `POST /conformal-regression` (`calibrate_split_conformal` +
+  `predict_interval` over a session-trained regression model: the
+  radius/rank/mean-width calibration report, intervals on query rows,
+  empirical coverage against independent labels, and optional
+  groups/scaffold-aware coverage diagnostics with the interval widths
+  as sizes), `POST /conformal-classification`
+  (`calibrate_split_conformal_classifier` marginal OR
+  `calibrate_label_conditional_classifier` per-class thresholds + the
+  calibration summary with its fallback flags, label sets on query
+  rows, empirical coverage + per-class coverage rows), and
+  `POST /coverage-diagnostics` (the standalone Wilson-bounded report
+  — `coverage_by_group` over arbitrary groups or
+  `scaffold_aware_coverage` over SMILES with the invalid/acyclic
+  sentinels, r311's module riding the API for the first time).
+  Sync-only per the light-compute knn/domain-box precedent; every
+  honest failure mode surfaces the backend's own typed errors
+  verbatim as 422s (the too-few-calibration-rows finite-sample
+  refusal, the classifier/regressor task confusion, the
+  groups-without-labels misuse). 17 route tests.
+- **part13 Phase 5 OPENED — the GNN/MPNN API lane** (the first
+  Phase-5 item's API leg): `POST /api/v1/dl/gnn-train` — the REAL
+  `GraphClassifier` (conv stack → pool → linear head, gcn/sage/gin/
+  gat/edge × mean/sum/max/topk/sag) trained on inline graph specs or
+  the backend's own `synthetic_motif_graphs` fixture, sync or managed
+  job with honest STAGE-level telemetry (the torch GNN trainer has no
+  live per-epoch callback — loss_history_ lands after the fit; no
+  fabricated epoch stream), the fitted estimator registering in the
+  session model store as a GRAPH model; `POST /api/v1/dl/gnn-predict`
+  — the graph models' own prediction path (labels + optional class
+  probabilities); `/api/v1/ml/predict` and `/api/v1/ml/explain`
+  refuse graph models up front with the pointer (one prediction path
+  per model class, never a tabular predict over node-feature
+  matrices). Robustness guards: node-feature width consistency
+  (mixed-width batches and mismatched predict graphs 422, never a
+  deep matmul 500 — the smoke's own find, fixed at the source).
+  13 lane tests (the doctest's own bar held: motif 18/seed 11/
+  epochs 120/lr 0.08 → train accuracy 1.0).
+- **The OpenAPI contract re-exported** (90 paths / 62 schemas — the
+  six new endpoints) and the contract-drift guards green.
+- **The 8 notebooks re-executed at 1.2.234** (237 s, 8/8 OK, zero
+  error outputs, the canonical builder-path scrubber integrated —
+  home-path survivors 0 by construction); the 7 no-output twins
+  regenerated through the canonical `tools/strip_notebook_outputs.py`
+  (the note cell + true percentages — the r310 defect class's fix
+  path, not a driver-local twin writer); the freshness + variants
+  gates green (119/119 + the checkpoint tooling suite).
+- **The version bump 1.2.233 → 1.2.234 in all carriers**: VERSION,
+  pyproject, `pharmaml.__version__`, the frontend package.json +
+  BOTH lock root fields, tauri.conf.json, version_info.txt (the
+  quadruple + both strings), the web carrier, and the two frontend
+  test mocks — the lockstep guard 9/9 green.
+- Gates this round: the new file 30/30 fresh (17 + 13), the whole
+  `tests/api/` suite 318/319→green after the contract re-export, ruff
+  + mypy clean on every touched file, the lockstep/portability/
+  notebook gates green, the census re-trued at the fixed point.
+- Still honestly BLOCKED (unchanged): clean-machine smoke (C-3/C-5),
+  the Stage-5 PySide6 retirement behind it, installer signing
+  (certificate-gated). The Phase-5 remainder (the GNN GUI card in the
+  Deep Learning workspace, ADMET, DTA, repurposing, cell-line response,
+  pharmacogenomics, multi-objective optimization) rides the next
+  continuation per PROJECT_STATUS §6.
+- **The census re-trued at the terminal fixed point**: 1,623 files /
+  557,020 lines / v1.2.234 (+2 the route family + its test file, +2 the
+  ship zip in its two in-tree homes, +2 the browser-evidence
+  screenshots, + the notebook/doc/contract deltas, −1 the stale
+  toolkit-path counter duplicate (84, dormant since the r288 era)
+  REMOVED this round — the sixth rollback had wiped 4 untracked
+  counted files the r311 walk had), verified three-way: pin = the live
+  walk = the page render; the zip-size API serves 16,693,512
+  exact:true source:release; zero page/console errors, desktop + 390px
+  mobile with zero overflow. THE TERMINAL SHIP: 954 files / 16,693,512
+  B sha-256 a6203f3051a695b7cd64c425503731b07ff35a7b5be8020d36bfa8b3
+  333757cf (the 2de8e270 build was the pre-evidence intermediate that
+  never landed as a claim — the r301 three-sha convention), testzip-OK
+  four homes + offsite (14 zips, RITUAL PASS with the offsite top-up
+  honestly the no-op check — 0 seeded).
+
 ## [1.2.233] — 2026-11-21 — round 311 (the 102nd recorded run: the interactive part13 continuation over the FIFTH sandbox rollback — the Phase-3 browser-E2E lanes closed + the Phase-4 §9.3 scaffold-aware coverage leg; a NEW version ship)
 
 - **The fifth sandbox rollback recovered first** (the r306–r308

@@ -278,6 +278,224 @@
         "title": "ConcentrationProfileRequest",
         "type": "object"
       },
+      "ConformalClassificationRequest": {
+        "properties": {
+          "alpha": {
+            "default": 0.1,
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Alpha",
+            "type": "number"
+          },
+          "conditional": {
+            "default": "split",
+            "enum": [
+              "split",
+              "label"
+            ],
+            "title": "Conditional",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "x_cal": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "maxItems": 2000,
+            "minItems": 2,
+            "title": "X Cal",
+            "type": "array"
+          },
+          "x_test": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "maxItems": 1000,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Test"
+          },
+          "y_cal": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "maxItems": 2000,
+            "minItems": 2,
+            "title": "Y Cal",
+            "type": "array"
+          },
+          "y_test": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "maxItems": 1000,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y Test"
+          }
+        },
+        "required": [
+          "model_id",
+          "x_cal",
+          "y_cal"
+        ],
+        "title": "ConformalClassificationRequest",
+        "type": "object"
+      },
+      "ConformalRegressionRequest": {
+        "properties": {
+          "alpha": {
+            "default": 0.1,
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Alpha",
+            "type": "number"
+          },
+          "groups": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ]
+                },
+                "maxItems": 1000,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groups"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "smiles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 1000,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smiles"
+          },
+          "x_cal": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "maxItems": 2000,
+            "minItems": 2,
+            "title": "X Cal",
+            "type": "array"
+          },
+          "x_test": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "maxItems": 1000,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Test"
+          },
+          "y_cal": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2000,
+            "minItems": 2,
+            "title": "Y Cal",
+            "type": "array"
+          },
+          "y_test": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 1000,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y Test"
+          }
+        },
+        "required": [
+          "model_id",
+          "x_cal",
+          "y_cal"
+        ],
+        "title": "ConformalRegressionRequest",
+        "type": "object"
+      },
       "ConsensusRequest": {
         "properties": {
           "columns": {
@@ -443,6 +661,86 @@
           "receptor"
         ],
         "title": "ContactsRequest",
+        "type": "object"
+      },
+      "CoverageDiagnosticsRequest": {
+        "properties": {
+          "confidence": {
+            "default": 0.95,
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "covered": {
+            "items": {
+              "type": "boolean"
+            },
+            "maxItems": 5000,
+            "minItems": 1,
+            "title": "Covered",
+            "type": "array"
+          },
+          "groups": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ]
+                },
+                "maxItems": 5000,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groups"
+          },
+          "sizes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 5000,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sizes"
+          },
+          "smiles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5000,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smiles"
+          }
+        },
+        "required": [
+          "covered"
+        ],
+        "title": "CoverageDiagnosticsRequest",
         "type": "object"
       },
       "DLTrainRequest": {
@@ -994,6 +1292,213 @@
           "smiles"
         ],
         "title": "FingerprintsRequest",
+        "type": "object"
+      },
+      "GnnGraphSpec": {
+        "description": "One graph: node features + the 2\u00d7E source\u2192destination endpoints.",
+        "properties": {
+          "edge_index": {
+            "items": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "minItems": 0,
+            "title": "Edge Index",
+            "type": "array"
+          },
+          "x": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "minItems": 1,
+            "title": "X",
+            "type": "array"
+          }
+        },
+        "required": [
+          "x",
+          "edge_index"
+        ],
+        "title": "GnnGraphSpec",
+        "type": "object"
+      },
+      "GnnPredictRequest": {
+        "properties": {
+          "graphs": {
+            "items": {
+              "$ref": "#/components/schemas/GnnGraphSpec"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Graphs",
+            "type": "array"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "probabilities": {
+            "default": false,
+            "title": "Probabilities",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "model_id",
+          "graphs"
+        ],
+        "title": "GnnPredictRequest",
+        "type": "object"
+      },
+      "GnnTrainRequest": {
+        "properties": {
+          "conv": {
+            "default": "gcn",
+            "enum": [
+              "gcn",
+              "sage",
+              "gin",
+              "gat",
+              "edge"
+            ],
+            "title": "Conv",
+            "type": "string"
+          },
+          "epochs": {
+            "default": 200,
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Epochs",
+            "type": "integer"
+          },
+          "graphs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/GnnGraphSpec"
+                },
+                "maxItems": 500,
+                "minItems": 2,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graphs"
+          },
+          "heads": {
+            "default": 1,
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Heads",
+            "type": "integer"
+          },
+          "hidden": {
+            "default": 16,
+            "maximum": 128.0,
+            "minimum": 1.0,
+            "title": "Hidden",
+            "type": "integer"
+          },
+          "labels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 500,
+                "minItems": 2,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labels"
+          },
+          "layers": {
+            "default": 2,
+            "maximum": 6.0,
+            "minimum": 1.0,
+            "title": "Layers",
+            "type": "integer"
+          },
+          "lr": {
+            "default": 0.05,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Lr",
+            "type": "number"
+          },
+          "mode": {
+            "default": "job",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "pool": {
+            "default": "mean",
+            "enum": [
+              "mean",
+              "sum",
+              "max",
+              "topk",
+              "sag"
+            ],
+            "title": "Pool",
+            "type": "string"
+          },
+          "ratio": {
+            "default": 0.5,
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Ratio",
+            "type": "number"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "synthetic_n": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synthetic N"
+          },
+          "weight_decay": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Weight Decay",
+            "type": "number"
+          }
+        },
+        "title": "GnnTrainRequest",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -4414,6 +4919,92 @@
         ]
       }
     },
+    "/api/v1/dl/gnn-predict": {
+      "post": {
+        "operationId": "gnn_predict_api_v1_dl_gnn_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GnnPredictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Gnn Predict Api V1 Dl Gnn Predict Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Gnn Predict",
+        "tags": [
+          "dl"
+        ]
+      }
+    },
+    "/api/v1/dl/gnn-train": {
+      "post": {
+        "operationId": "gnn_train_api_v1_dl_gnn_train_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GnnTrainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Gnn Train Api V1 Dl Gnn Train Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Gnn Train",
+        "tags": [
+          "dl"
+        ]
+      }
+    },
     "/api/v1/dl/networks": {
       "get": {
         "operationId": "networks_api_v1_dl_networks_get",
@@ -5965,6 +6556,158 @@
         "summary": "Trained Model View",
         "tags": [
           "ml"
+        ]
+      }
+    },
+    "/api/v1/model-evaluation/catalog": {
+      "get": {
+        "operationId": "catalog_api_v1_model_evaluation_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Catalog Api V1 Model Evaluation Catalog Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Catalog",
+        "tags": [
+          "model-evaluation"
+        ]
+      }
+    },
+    "/api/v1/model-evaluation/conformal-classification": {
+      "post": {
+        "operationId": "conformal_classification_api_v1_model_evaluation_conformal_classification_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConformalClassificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Conformal Classification Api V1 Model Evaluation Conformal Classification Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Conformal Classification",
+        "tags": [
+          "model-evaluation"
+        ]
+      }
+    },
+    "/api/v1/model-evaluation/conformal-regression": {
+      "post": {
+        "operationId": "conformal_regression_api_v1_model_evaluation_conformal_regression_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConformalRegressionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Conformal Regression Api V1 Model Evaluation Conformal Regression Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Conformal Regression",
+        "tags": [
+          "model-evaluation"
+        ]
+      }
+    },
+    "/api/v1/model-evaluation/coverage-diagnostics": {
+      "post": {
+        "operationId": "coverage_diagnostics_api_v1_model_evaluation_coverage_diagnostics_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoverageDiagnosticsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Coverage Diagnostics Api V1 Model Evaluation Coverage Diagnostics Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Coverage Diagnostics",
+        "tags": [
+          "model-evaluation"
         ]
       }
     },
