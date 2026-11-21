@@ -35,14 +35,16 @@ import pytest
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "pharmaml"
 
-#: The nine doctest-only library-surface modules (A-6, ground-truthed
-#: by the AST import scan on the round-304 tree).
+#: The doctest-only library-surface modules (A-6, ground-truthed by
+#: the AST import scan on the round-304 tree; re-trued round 315:
+#: ml.admet gained its internal consumer pharmaml.api.routes.admet at
+#: r314 and left the doctest-only tier; the census documents the
+#: remaining set).
 LIBRARY_SURFACE_MODULES: tuple[str, ...] = (
     "pharmaml.pharma.fih",
     "pharmaml.pharma.pkstats",
     "pharmaml.pharma.odesim",
     "pharmaml.biology.association",
-    "pharmaml.ml.admet",
     "pharmaml.ml.lime",
     "pharmaml.ml.dataset",
     "pharmaml.ml.surrogate",
@@ -136,12 +138,14 @@ def _import_graph() -> dict[str, set[str]]:
 
 
 class TestLibrarySurfaceModules:
-    """A-6's nine modules: importable public API, zero internal importers.
+    """A-6's modules: importable public API, zero internal importers.
 
     (The broader zero-importer surface — routes, CLI entries — is the
     architecture's dynamic-registration reality; only the audit's
-    nine are pinned, because those are the ones whose "doctest-only
-    coverage" tier the census documents.)
+    named set is pinned, because those are the ones whose
+    "doctest-only coverage" tier the census documents. Re-trued at
+    r315: ml.admet gained its internal consumer routes/admet.py at
+    r314 and left the tier.)
     """
 
     @pytest.mark.parametrize("module", LIBRARY_SURFACE_MODULES)

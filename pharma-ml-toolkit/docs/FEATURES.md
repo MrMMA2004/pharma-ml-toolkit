@@ -22,6 +22,12 @@ family over the vendored `ml/admet.py` backend plus the Machine Learning
 workspace's "ADMET Profile" stage (both legs in one round, 8 route
 tests + 7 component tests) — a registry-level addition, not a matrix
 change;
+r315 added the drug–target interaction lane — the `/api/v1/dta`
+registry + paired-featurization family over the in-tree `ml/dta.py`
+backend (DeepDTA's verbatim alphabets + the ECFP/AAC pairing) plus the
+Machine Learning workspace's "Drug–Target Interaction" stage (both
+legs in one round, 10 route tests + 8 component tests) — a
+registry-level addition, not a matrix change;
 r266 arena absorption landed the former E-row conformal/coverage/split-audit
 suite from `arena/8696775e`; the r265 §24.3/24.4 rows were trued live;
 the r271 Response AI web twin closed the last Studio-only row — census

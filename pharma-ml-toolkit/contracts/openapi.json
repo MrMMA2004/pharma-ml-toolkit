@@ -1066,6 +1066,59 @@
         "title": "DoseAccumulationRequest",
         "type": "object"
       },
+      "DtaFeaturesRequest": {
+        "properties": {
+          "dipeptides": {
+            "default": false,
+            "title": "Dipeptides",
+            "type": "boolean"
+          },
+          "pairs": {
+            "items": {
+              "$ref": "#/components/schemas/DtaPairRow"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Pairs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pairs"
+        ],
+        "title": "DtaFeaturesRequest",
+        "type": "object"
+      },
+      "DtaPairRow": {
+        "description": "One drug--target pair: a SMILES ligand, a protein sequence, and\nan optional affinity value (the column the backend validates as\nfinite numeric at source rows when any row carries it).",
+        "properties": {
+          "affinity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Affinity"
+          },
+          "protein": {
+            "title": "Protein",
+            "type": "string"
+          },
+          "smiles": {
+            "title": "Smiles",
+            "type": "string"
+          }
+        },
+        "required": [
+          "smiles",
+          "protein"
+        ],
+        "title": "DtaPairRow",
+        "type": "object"
+      },
       "EnmRequest": {
         "properties": {
           "coords": {
@@ -5672,6 +5725,72 @@
         "summary": "Scoring Ligand Efficiency",
         "tags": [
           "docking"
+        ]
+      }
+    },
+    "/api/v1/dta/features": {
+      "post": {
+        "operationId": "features_api_v1_dta_features_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DtaFeaturesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Features Api V1 Dta Features Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Features",
+        "tags": [
+          "dta"
+        ]
+      }
+    },
+    "/api/v1/dta/registry": {
+      "get": {
+        "operationId": "registry_api_v1_dta_registry_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Registry Api V1 Dta Registry Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Registry",
+        "tags": [
+          "dta"
         ]
       }
     },

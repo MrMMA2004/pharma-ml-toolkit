@@ -44,7 +44,24 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-useless-escape": "off",
   },
 }, {
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills"]
+  // The walk covers the whole repo tree, so the ignore patterns must hold
+  // at every depth: the nested frontend/node_modules (its own npm ci),
+  // the vite build output (frontend/dist's minified bundles crash the
+  // parser -- r315's find), and the toolkit's own sub-trees that carry
+  // no root-app lint surface.
+  ignores: [
+    "node_modules/**",
+    "**/node_modules/**",
+    ".next/**",
+    "out/**",
+    "build/**",
+    "dist/**",
+    "**/dist/**",
+    "next-env.d.ts",
+    "examples/**",
+    "**/examples/**",
+    "skills",
+  ]
 }];
 
 export default eslintConfig;

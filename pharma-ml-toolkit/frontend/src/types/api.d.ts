@@ -801,6 +801,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dta/features": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Features */
+        post: operations["features_api_v1_dta_features_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dta/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registry */
+        get: operations["registry_api_v1_dta_registry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/generative/objectives": {
         parameters: {
             query?: never;
@@ -1969,6 +2003,30 @@ export interface components {
             title: string;
             /** Vd */
             vd: number;
+        };
+        /** DtaFeaturesRequest */
+        DtaFeaturesRequest: {
+            /**
+             * Dipeptides
+             * @default false
+             */
+            dipeptides: boolean;
+            /** Pairs */
+            pairs: components["schemas"]["DtaPairRow"][];
+        };
+        /**
+         * DtaPairRow
+         * @description One drug--target pair: a SMILES ligand, a protein sequence, and
+         *     an optional affinity value (the column the backend validates as
+         *     finite numeric at source rows when any row carries it).
+         */
+        DtaPairRow: {
+            /** Affinity */
+            affinity?: number | null;
+            /** Protein */
+            protein: string;
+            /** Smiles */
+            smiles: string;
         };
         /** EnmRequest */
         EnmRequest: {
@@ -4741,6 +4799,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    features_api_v1_dta_features_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DtaFeaturesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registry_api_v1_dta_registry_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

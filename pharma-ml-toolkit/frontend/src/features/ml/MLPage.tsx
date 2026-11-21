@@ -5,6 +5,7 @@ import {
   Brain,
   ClipboardCheck,
   Database,
+  Dna,
   Filter,
   FlaskConical,
   GitCompare,
@@ -38,6 +39,7 @@ import {
 import {
   AD_MAX_FEATURES,
   ADMET_MAX_SMILES,
+  DTA_MAX_PAIRS,
   EXPLAIN_MAX_ROWS,
   mlApi,
   parseADAnalyzeResult,
@@ -50,6 +52,9 @@ import {
   type AdmetEndpointsResponse,
   type AdmetScoreResponse,
   type AdmetScoreRow,
+  type DtaFeaturesResponse,
+  type DtaPairCard,
+  type DtaRegistryResponse,
   type ExplainResult,
   type EvaluationRow,
   type ModelCatalogEntry,
@@ -72,8 +77,8 @@ import {
  *
  * Select Dataset → Target & Features → Preprocess → Configure
  * Split/CV → Algorithm → Hyperparameters → Train → Evaluate →
- * Compare → Applicability Domain → ADMET Profile → Semi-supervised
- * Learning → Explainability → Export
+ * Compare → Applicability Domain → ADMET Profile → Drug–Target
+ * Interaction → Semi-supervised Learning → Explainability → Export
  *
  * Every control below executes the REAL backend through the typed
  * service layer (no fabricated data, no disabled pretend buttons):
@@ -389,6 +394,73 @@ function AdmetMoleculeCard({ row }: { row: AdmetScoreRow }) {
   );
 }
 
+/** One drug–target pair card — the honest per-row verdict (the
+ * ligand validity + the protein composition + the affinity presence). */
+function DtaPairCardView({ row }: { row: DtaPairCard }) {
+  const topAac = Object.entries(row.protein_row.aac)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--color-border)] p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-xs text-[var(--color-foreground)]">
+          {row.smiles}
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          {row.valid ? "kept" : "dropped (invalid SMILES)"}
+        </span>
+        {row.affinity !== null ? (
+          <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+            affinity {row.affinity}
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-2 grid gap-x-6 gap-y-1 text-xs md:grid-cols-2">
+        <div>
+          <p className="text-[var(--color-muted-foreground)]">
+            protein ({row.protein_row.prot_length} residues):{" "}
+            <span className="font-mono">
+              {row.protein.slice(0, 24)}
+              {row.protein.length > 24 ? "…" : ""}
+            </span>
+          </p>
+          <p className="mt-1 text-[var(--color-muted-foreground)]">
+            standard{" "}
+            {(row.protein_row.prot_standard_fraction * 100).toFixed(1)}% ·
+            non-standard{" "}
+            {(row.protein_row.prot_nonstandard_fraction * 100).toFixed(1)}%
+          </p>
+        </div>
+        <div>
+          <p className="text-[var(--color-muted-foreground)]">
+            top AAC components:
+          </p>
+          <div className="mt-1 space-y-1">
+            {topAac.map(([symbol, fraction]) => (
+              <div key={symbol} className="flex items-center gap-2">
+                <span className="w-8 shrink-0 font-mono text-[var(--color-foreground)]">
+                  {symbol}
+                </span>
+                <span className="h-2 flex-1 overflow-hidden rounded-full bg-[var(--color-muted)]">
+                  <span
+                    className="block h-full rounded-full bg-[var(--color-primary)]"
+                    style={{
+                      width: `${Math.max(0, Math.min(100, fraction * 100)).toFixed(1)}%`,
+                    }}
+                  />
+                </span>
+                <span className="w-12 shrink-0 text-right font-mono text-[var(--color-foreground)]">
+                  {(fraction * 100).toFixed(1)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function MLPage() {
   // stage 1: the dataset registry + selection
   const [datasets, setDatasets] = useState<readonly DatasetView[]>([]);
@@ -470,6 +542,17 @@ export function MLPage() {
   const [admetBusy, setAdmetBusy] = useState(false);
   const [admetResult, setAdmetResult] = useState<AdmetScoreResponse | null>(null);
   const [admetRegistry, setAdmetRegistry] = useState<AdmetEndpointsResponse | null>(null);
+
+  // stage 11b: the drug–target interaction lane (part13 Phase 5 —
+  // DeepDTA's alphabets + the paired ECFP/AAC featurization, dataset-free)
+  const [dtaPairsText, setDtaPairsText] = useState(
+    "CCO,MKTAYIAKQRQISFVKSHFSRQ,5.0\nCCN,GAVLILKKGGSSHHTRPFSL,5.5\nCCC,ACDEFGHIKLMNPQRSTVWY,6.0",
+  );
+  const [dtaDipeptides, setDtaDipeptides] = useState(false);
+  const [dtaError, setDtaError] = useState<string | null>(null);
+  const [dtaBusy, setDtaBusy] = useState(false);
+  const [dtaResult, setDtaResult] = useState<DtaFeaturesResponse | null>(null);
+  const [dtaRegistry, setDtaRegistry] = useState<DtaRegistryResponse | null>(null);
 
   // stage 11: semi-supervised learning (classification-only)
   const [ssMethod, setSsMethod] = useState<
@@ -554,6 +637,26 @@ export function MLPage() {
       .then((response) => {
         if (!cancelled) {
           setAdmetRegistry(response);
+        }
+      })
+      .catch(() => {
+        // the registry line stays absent — never a fabricated summary
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // the DTA registry loads once on mount (the vocabulary line —
+  // decorative context, not a gate: the featurization lane surfaces
+  // its own errors and the cards render regardless)
+  useEffect(() => {
+    let cancelled = false;
+    mlApi
+      .dtaRegistry()
+      .then((response) => {
+        if (!cancelled) {
+          setDtaRegistry(response);
         }
       })
       .catch(() => {
@@ -996,6 +1099,75 @@ export function MLPage() {
       setAdmetBusy(false);
     }
   }, [admetSmilesText]);
+
+  // stage 12: the DTA paired featurization (sync light compute — one
+  // button, client-side validation first, the honest per-row verdicts;
+  // the backend's own 422s surface verbatim)
+  const handleDtaFeatures = useCallback(async () => {
+    const lines = dtaPairsText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    if (lines.length === 0) {
+      setDtaResult(null);
+      setDtaError("the DTA lane needs at least one SMILES,PROTEIN line");
+      return;
+    }
+    if (lines.length > DTA_MAX_PAIRS) {
+      setDtaResult(null);
+      setDtaError(
+        `the route caps a batch at ${DTA_MAX_PAIRS} pairs; got ${lines.length}`,
+      );
+      return;
+    }
+    const pairs: {
+      smiles: string;
+      protein: string;
+      affinity?: number;
+    }[] = [];
+    for (const [i, line] of lines.entries()) {
+      const fields = line.split(",").map((field) => field.trim());
+      const [smilesField, proteinField, affinityField] = fields;
+      if (
+        smilesField === undefined ||
+        proteinField === undefined ||
+        smilesField.length === 0 ||
+        proteinField.length === 0
+      ) {
+        setDtaResult(null);
+        setDtaError(
+          `line ${i + 1} needs at least SMILES,PROTEIN (affinity is the optional third field)`,
+        );
+        return;
+      }
+      const pair: {
+        smiles: string;
+        protein: string;
+        affinity?: number;
+      } = { smiles: smilesField, protein: proteinField };
+      if (affinityField !== undefined && affinityField.length > 0) {
+        const affinity = Number(affinityField);
+        if (!Number.isFinite(affinity)) {
+          setDtaResult(null);
+          setDtaError(`line ${i + 1}: the affinity must be a finite number`);
+          return;
+        }
+        pair.affinity = affinity;
+      }
+      pairs.push(pair);
+    }
+    setDtaBusy(true);
+    setDtaError(null);
+    try {
+      const response = await mlApi.dtaFeatures(pairs, dtaDipeptides);
+      setDtaResult(response);
+    } catch (error) {
+      setDtaResult(null);
+      setDtaError(describeError(error));
+    } finally {
+      setDtaBusy(false);
+    }
+  }, [dtaPairsText, dtaDipeptides]);
 
   // stage 11b: the held-out evaluation (3 seeded repeats, test_size
   // 0.25 — the route's own defaults surfaced, one button, job lane)
@@ -2160,6 +2332,112 @@ export function MLPage() {
 
       <StageHeader
         index={12}
+        title="Drug–Target Interaction"
+        hint="DeepDTA's alphabets + the paired ECFP/AAC featurization — sync, per pair"
+        icon={<Dna aria-hidden className="h-4 w-4" />}
+      >
+        <Card>
+          <CardContent>
+            <p className="text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              The part13 Phase-5 lane over the REAL in-tree backend
+              (ml/dta.py — DeepDTA&apos;s own alphabets and rm2 metric,
+              the toolkit&apos;s 2048-bit ECFP pairing): the per-pair
+              protein composition cards, the kept/dropped row accounting,
+              and the ordinary feature matrix any in-tree regressor can
+              train on. The DeepDTA CNN and the DeepPurpose/DGL-LifeSci/
+              TorchDrug checkpoints are NOT shipped — this route never
+              invents affinity predictions.
+              {dtaRegistry !== null ? (
+                <>
+                  {" "}Alphabets: {dtaRegistry.alphabets.protein.n_symbols}{" "}
+                  protein symbols ·{" "}
+                  {dtaRegistry.alphabets.smiles_isomeric.n_symbols}{" "}
+                  isomeric /{" "}
+                  {dtaRegistry.alphabets.smiles_canonical.n_symbols}{" "}
+                  canonical SMILES symbols; the{" "}
+                  {dtaRegistry.ligand_features.n_bits}-bit ECFP +{" "}
+                  {dtaRegistry.protein_features.n_base} AAC columns →{" "}
+                  {dtaRegistry.paired_width.base} features (with the
+                  dipeptide lane: {dtaRegistry.paired_width.with_dipeptides}).
+                </>
+              ) : null}
+            </p>
+            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                Pairs — SMILES,PROTEIN[,AFFINITY] (one per line, up to{" "}
+                {DTA_MAX_PAIRS})
+                <textarea
+                  value={dtaPairsText}
+                  onChange={(event) => setDtaPairsText(event.target.value)}
+                  rows={4}
+                  spellCheck={false}
+                  aria-label="DTA pairs batch"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-2 font-mono text-xs"
+                />
+              </label>
+              <div className="flex flex-col items-end gap-2">
+                <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                  <input
+                    type="checkbox"
+                    checked={dtaDipeptides}
+                    onChange={(event) => setDtaDipeptides(event.target.checked)}
+                  />
+                  dipeptide panel (+401 columns)
+                </label>
+                <Button
+                  size="sm"
+                  onClick={() => void handleDtaFeatures()}
+                  disabled={dtaBusy}
+                >
+                  {dtaBusy ? "Featurizing…" : "Featurize pairs"}
+                </Button>
+              </div>
+            </div>
+            {dtaError !== null ? (
+              <div className="mt-3">
+                <ErrorBanner message={dtaError} />
+              </div>
+            ) : null}
+            {dtaResult !== null ? (
+              <>
+                <p className="mt-4 text-xs text-[var(--color-foreground)]">
+                  {dtaResult.n_pairs} pairs → {dtaResult.n_kept} kept ·{" "}
+                  {dtaResult.n_dropped} dropped (invalid rows report
+                  themselves) · the matrix: {dtaResult.n_features} features ={" "}
+                  {dtaResult.n_ligand_features} ECFP +{" "}
+                  {dtaResult.n_protein_features} protein columns
+                  {dtaResult.affinity !== null
+                    ? ` · affinity ${dtaResult.affinity.n} kept values, ${dtaResult.affinity.min}–${dtaResult.affinity.max} (mean ${dtaResult.affinity.mean.toFixed(2)})`
+                    : " · no affinity column supplied"}
+                </p>
+                {dtaResult.rows.map((row) => (
+                  <DtaPairCardView
+                    key={`${row.index}-${row.smiles}`}
+                    row={row}
+                  />
+                ))}
+                {dtaResult.dropped.map((drop) => (
+                  <p
+                    key={`dropped-${drop.index}`}
+                    className="mt-1 text-xs text-[var(--color-muted-foreground)]"
+                  >
+                    row {drop.index + 1} ({drop.smiles}): {drop.reason}
+                  </p>
+                ))}
+                <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                  provenance {dtaResult.provenance.backend} —{" "}
+                  {dtaResult.provenance.shipped_checkpoints} shipped
+                  checkpoints (the honest absence, stated) ·{" "}
+                  {dtaResult.provenance.disclaimer}
+                </p>
+              </>
+            ) : null}
+          </CardContent>
+        </Card>
+      </StageHeader>
+
+      <StageHeader
+        index={13}
         title="Semi-supervised Learning"
         hint="classification datasets only — the backend's own gate"
         icon={<Network aria-hidden className="h-4 w-4" />}
@@ -2463,7 +2741,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={13}
+        index={14}
         title="Explainability & Uncertainty"
         hint="the real SHAP lane + the AD bootstrap's uncertainty surface"
         icon={<Info aria-hidden className="h-4 w-4" />}
@@ -2543,7 +2821,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={14}
+        index={15}
         title="Export"
         hint="a registered table artifact + a digest-verified download"
         icon={<ArrowDownToLine aria-hidden className="h-4 w-4" />}

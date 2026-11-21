@@ -1,4 +1,128 @@
-## [1.2.236] — 2026-11-21 — round 314 (the 105th recorded run: the interactive part13 continuation, trace 1a1fd9525b9d5b89 — the Phase-5 ADMET lane, API + GUI; a NEW version ship)
+## [1.2.237] — 2026-11-21 — round 315 (the 106th recorded run: the interactive part13 continuation, trace 1a1fdc2da50cd529 — the Phase-5 drug–target interaction lane, API + GUI; the CI's own catch fixed at the source; a NEW version ship)
+
+- **The pending r314 CI verdict closed RED — the CI's own catch, fixed
+  at the source** (the r312/r313 pattern, the third occurrence):
+  push `315fdddf` came back 19/20 with the Studio frontend job red —
+  two drift guards the r314 session never ran locally: the ml
+  client's REST-surface guard (`test_ml_rest_surface_covered` — the
+  two new ADMET routes were never added to its module set) and the
+  §11.2 stage-order guard (`test_stage_order_matches_the_spec_chain`
+  — the "ADMET Profile" stage was never added to the expected
+  chain). Both trued at the source, and this round's DTA lane
+  updated the SAME guards in the same commit — the full CI guard
+  lane (foundation + services + startup + the workspace guards + the
+  windows pipeline) now runs locally before every push.
+- **Two further latent r314 defects found by the full local suite
+  and fixed at the source**: the A-6 doctest-only module list still
+  carried `pharmaml.ml.admet` after its route consumer landed
+  (`test_no_internal_importers` red — the module left the
+  doctest-only tier at r314; the list re-trued), and the SBOM root
+  component had stayed at 1.2.231 through three version ships
+  (`test_root_component_is_the_product` red — the SBOM joins the
+  version-carrier lockstep this round). Neither is CI-visible; both
+  would have failed the first full-suite run.
+- **The post-session machinery ghost-zip commit `9bfe657b` reset
+  away, never pushed** (the r312/r314 precedent, the third
+  occurrence): a UUID-subject commit had landed after the r314
+  close-out, tracking the current zips (v1.2.235 + v1.2.236, ~34 MB)
+  into the internal dist-archive/download homes plus the counter
+  bump + the worklog R314 entries + a scratch E2E token — reset
+  `--hard` back to the CI-green `315fdddf`; the disk homes restored
+  (five-home sha parity `b71466bd` exact); the R314 ledger entries +
+  the counter (105) re-applied as tracked changes to ride THIS
+  round's push (the established pattern: each session's push carries
+  the previous session's ledger).
+- **The eighth sandbox rollback recovered on arrival** (the deepest
+  class, the r313 signature again): the session opened with the git
+  history reset to the round-186-era machinery checkpoint (`2eb0ede`),
+  origin detached, the 600-mode credential gone, the venv gutted
+  (torch/pharmaml missing), the offsite mirror wiped — while the
+  working tree kept the r315 in-flight state (the DTA route family +
+  tests + the GUI lane + the 1.2.237 carrier bump wave, uncommitted).
+  Recovery (the codified playbook): the PAT re-spliced from the source
+  PDF and API-validated before storing (never printed), origin
+  re-attached and fetched (`315fdddf`), the pre-reset safety check
+  (2,829-tree-file hash comparison: 38 differing = exactly the WIP
+  set, 0 true missing — provably safe), `reset --hard` onto the
+  terminal with the WIP re-applied, the ghost sweep (the retired
+  229/230 zips across three homes, the stale toolkit-path `.github/`
+  duplicate, the dormant toolkit-path counter copy), the venv
+  repaired foreground (VENV-REPAIR-DONE + STUDIO-REPAIR-DONE), the
+  offsite mirror re-seeded to 14 zips from the intact dist-archive
+  home, the dev server restarted through the double-fork daemon (the
+  r258 lesson — the plain background spawn dies at every tool-call
+  boundary).
+- **The root web-app lint walk trued** (`eslint.config.mjs`): the
+  ignore patterns now hold at every depth (`**/node_modules/**`,
+  `dist/**`, `**/dist/**`, `**/examples/**`) — the historical
+  root-level-only ignores crashed the whole-tree walk the moment a
+  vite build output existed (frontend/dist's minified bundles abort
+  the parser); the walk surface itself is unchanged (the root app +
+  the toolkit's lintable tree), `bun run lint` exits 0 again.
+- **part13 Phase 5's next remainder item EXECUTED — the
+  drug–target interaction (DTA) lane, both legs in one round** over
+  the REAL in-tree backend (`ml/dta.py`: DeepDTA's verbatim
+  25/64/62-symbol alphabets, the AAC protein panel, the 2048-bit
+  ECFP ligand pairing, the `deepdta_rm2` external-validation
+  metric):
+  - **The API leg** — `routes/dta.py`, a new router family:
+    `GET /api/v1/dta/registry` (the three DeepDTA alphabets verbatim
+    — CHARPROTSET's 1-based codes with zero reserved for padding,
+    the 64-symbol isomeric + 62-symbol canonical SMILES alphabets —
+    the 20 standard amino acids, the AAC panel arithmetic (23 base
+    columns; +401 with the dipeptide lane), the 2048-bit ECFP
+    pairing, the paired widths 2071/2472, the rm2 metric, the demo
+    frame, and the honest provenance block: the DeepDTA CNN,
+    DeepPurpose's transformer/CNN_RNN stack, DGL-LifeSci's graph
+    models and TorchDrug's protein language models are NOT shipped —
+    the feature/metric boundary, never an invented affinity
+    prediction); `POST /api/v1/dta/features` (the paired
+    featurization over a SMILES,PROTEIN[,AFFINITY] batch through
+    `paired_dta_features`: the per-row protein composition cards,
+    the kept/dropped row accounting, the batch-level matrix shape —
+    sync-only light compute, batch cap 100, invalid ligands dropped
+    together with their protein and affinity and reported per-row,
+    protein sequence errors and non-finite affinities as the
+    backend's own hard 422s — dropping those silently would make a
+    benchmark look cleaner than its source data) — 10 route tests
+    (`tests/api/test_dta.py`): the alphabets' verbatim cells, the
+    pairing arithmetic against the backend's own doctest, the real
+    pair card, the mixed-validity batch, the dipeptide widening, the
+    three hard-422 lanes, the caps.
+  - **The GUI leg** — the "Drug–Target Interaction" stage in the
+    Machine Learning workspace (stage 12 after the ADMET Profile;
+    the three later stages renumbered 13/14/15): the registry
+    vocabulary line (the backend's own numbers via the once-on-mount
+    registry fetch, absent on failure — never a fabricated
+    summary), the pairs textarea (SMILES,PROTEIN[,AFFINITY] per
+    line, up to 100) with client-side validation BEFORE any request
+    (the empty batch, the over-cap batch and the malformed line
+    never leave the page), the dipeptide toggle, the per-pair cards
+    (the kept/dropped verdict badge, the protein composition with
+    the top-AAC bars, the affinity badges, the dropped-row reason
+    lines), and the honest footer (0 shipped checkpoints, the
+    deterministic-encodings disclaimer). The typed service layer
+    rides `services/ml/client.ts` (the generated OpenAPI DTO + the
+    §8.1 runtime parsers — `parseDtaRegistryResponse` /
+    `parseDtaFeaturesResponse`, the REAL ones under the component
+    tests); the backend's own 422s surface verbatim through the
+    error banner. **8 component tests**
+    (`frontend/src/features/ml/__tests__/DtaLane.test.tsx`).
+  - **The OpenAPI contract re-exported (94 paths / 65 schemas) with
+    the generated types regenerated BEFORE the GUI leg wrote
+    against them** (the r312 lesson, applied in the right order the
+    second round running).
+- **Ship v1.2.237 at the fixed point**: the version carriers bumped
+  in lockstep (VERSION, pyproject, `pharmaml.__version__`, the
+  frontend package.json + BOTH lock root fields, tauri.conf.json,
+  the version_info quadruple + both strings, the web carrier
+  `toolkit-version.ts`, the two frontend test mocks, and the SBOM
+  root component — the r315 catch), the editable reinstall re-truing
+  the runtime metadata. The 8 notebooks re-executed at v1.2.237 (207s,
+  zero error-outputs, zero home-path survivors) + the 7 no-output
+  twins re-stripped — the freshness contract (the variants lane
+  119/119; the dev server stopped for the kernel's memory, the OOM
+  ritual, then restarted).
 
 - **The pending r313 CI verdict closed GREEN on arrival**: push-2
   (`ac5bcd6b`) came back fully green — the CI workflow run 302 +

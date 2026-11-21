@@ -60,7 +60,7 @@ vi.mock("@/features/visualization/VisualizationPage", () => ({
 const { initializeBackend } = await import("@/services/api/startup");
 const READY_INFO: StartupInfo = {
   source: "dev-same-origin",
-  version: "1.2.236",
+  version: "1.2.237",
   scientificCore: true,
 };
 vi.mocked(initializeBackend).mockResolvedValue(READY_INFO);

@@ -48,7 +48,7 @@ const mockBoot = vi.mocked(initializeBackend);
 
 const READY_INFO: StartupInfo = {
   source: "dev-same-origin",
-  version: "1.2.236",
+  version: "1.2.237",
   scientificCore: true,
 };
 
@@ -92,7 +92,7 @@ describe("StartupGate — the §14.1 handshake states", () => {
 
     await screen.findByText("workspace-shell");
     const marker = screen.getByTestId("startup-ready");
-    expect(marker).toHaveTextContent("backend 1.2.236 ready via dev-same-origin");
+    expect(marker).toHaveTextContent("backend 1.2.237 ready via dev-same-origin");
     // the WS banner stays silent while the stream is idle/healthy
     expect(screen.queryByText(/live event stream/)).not.toBeInTheDocument();
   });

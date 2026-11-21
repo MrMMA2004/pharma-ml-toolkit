@@ -64,6 +64,7 @@ type ExplainRequest = components["schemas"]["ExplainRequest"];
 type ADAnalyzeRequest = components["schemas"]["ADAnalyzeRequest"];
 type WilliamsRequest = components["schemas"]["WilliamsRequest"];
 type AdmetScoreRequest = components["schemas"]["AdmetScoreRequest"];
+type DtaFeaturesRequest = components["schemas"]["DtaFeaturesRequest"];
 type SemiSupervisedTrainRequest =
   components["schemas"]["SemiSupervisedTrainRequest"];
 type SemiSupervisedEvaluateRequest =
@@ -519,6 +520,118 @@ export interface AdmetScoreResponse {
   readonly note: string;
 }
 
+// -- the DTA lane (part13 Phase 5's next remainder item) -------------
+
+/** One DeepDTA alphabet block — the vendored symbol→code table. */
+export interface DtaAlphabetBlock {
+  readonly n_symbols: number;
+  readonly padding_code: number;
+  readonly symbols: Readonly<Record<string, number>>;
+  readonly encoding: string;
+  readonly source: string;
+}
+
+/** The AAC panel arithmetic (the backend's own columns). */
+export interface DtaProteinFeatures {
+  readonly n_base: number;
+  readonly base_columns: readonly string[];
+  readonly n_dipeptide_extras: number;
+  readonly n_with_dipeptides: number;
+  readonly note: string;
+}
+
+/** The honest provenance + limitations block. */
+export interface DtaProvenance {
+  readonly backend: string;
+  readonly source: string;
+  readonly n_alphabets: number;
+  readonly shipped_checkpoints: number;
+  readonly shipped_checkpoints_note: string;
+  readonly disclaimer: string;
+}
+
+/** `GET /api/v1/dta/registry` — the encoding registry answer. */
+export interface DtaRegistryResponse {
+  readonly alphabets: {
+    readonly protein: DtaAlphabetBlock;
+    readonly smiles_isomeric: DtaAlphabetBlock;
+    readonly smiles_canonical: DtaAlphabetBlock;
+  };
+  readonly amino_acids: readonly string[];
+  readonly protein_features: DtaProteinFeatures;
+  readonly ligand_features: {
+    readonly family: string;
+    readonly n_bits: number;
+    readonly source: string;
+  };
+  readonly paired_width: {
+    readonly base: number;
+    readonly with_dipeptides: number;
+  };
+  readonly metrics: readonly {
+    readonly name: string;
+    readonly description: string;
+  }[];
+  readonly demo_frame: {
+    readonly rows: number;
+    readonly note: string;
+  };
+  readonly provenance: DtaProvenance;
+  readonly features_url: string;
+  readonly note: string;
+}
+
+/** The batch cap the route itself pins (`routes/dta.py`'s cap). */
+export const DTA_MAX_PAIRS = 100;
+
+/** One row's protein composition — the backend's own columns. */
+export interface DtaProteinRow {
+  readonly prot_length: number;
+  readonly prot_standard_fraction: number;
+  readonly prot_nonstandard_fraction: number;
+  readonly aac: Readonly<Record<string, number>>;
+}
+
+/** One pair card — the valid/invalid verdict rides the row itself. */
+export interface DtaPairCard {
+  readonly index: number;
+  readonly smiles: string;
+  readonly protein: string;
+  readonly valid: boolean;
+  readonly protein_row: DtaProteinRow;
+  readonly affinity: number | null;
+}
+
+/** One dropped row — it reports itself, never dropped silently. */
+export interface DtaDroppedRow {
+  readonly index: number;
+  readonly smiles: string;
+  readonly reason: string;
+}
+
+/** `POST /api/v1/dta/features` — the paired featurization answer. */
+export interface DtaFeaturesResponse {
+  readonly n_pairs: number;
+  readonly n_kept: number;
+  readonly n_dropped: number;
+  readonly kept_indices: readonly number[];
+  readonly dropped: readonly DtaDroppedRow[];
+  readonly n_ligand_features: number;
+  readonly n_protein_features: number;
+  readonly n_features: number;
+  readonly dipeptides: boolean;
+  readonly rows: readonly DtaPairCard[];
+  readonly affinity: {
+    readonly present: boolean;
+    readonly n: number;
+    readonly min: number;
+    readonly max: number;
+    readonly mean: number;
+  } | null;
+  readonly provenance: DtaProvenance;
+  readonly note: string;
+}
+
 export const mlApi = {
   /**
    * `GET /api/v1/ml/models?task=…&only_available=…` — the registry
@@ -819,6 +932,54 @@ export const mlApi = {
       request,
     )) as Record<string, unknown>;
     return parseAdmetScoreResponse(raw, "admet score");
+  },
+
+  /**
+   * `GET /api/v1/dta/registry` — the DeepDTA encoding registry
+   * (part13 Phase 5's DTA lane): the three vendored alphabets
+   * (25/64/62 symbols), the 20 standard amino acids, the AAC +
+   * dipeptide panel arithmetic, the 2048-bit ECFP pairing, the rm2
+   * metric, the demo frame, and the honest provenance block — every
+   * cell the backend's own, never re-declared.
+   */
+  async dtaRegistry(): Promise<DtaRegistryResponse> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/dta/registry",
+    );
+    return parseDtaRegistryResponse(raw, "dta registry");
+  },
+
+  /**
+   * `POST /api/v1/dta/features` — the paired featurization over a
+   * (smiles, protein, optional affinity) batch (sync-only light
+   * compute, the chemistry-descriptors precedent): the per-row
+   * protein composition cards, the kept/dropped row accounting, and
+   * the batch-level matrix shape. Sequence errors and non-finite
+   * affinities are the backend's own hard 422s — surfaced verbatim,
+   * never softened; invalid ligands are dropped together with their
+   * protein and affinity and report themselves per-row.
+   */
+  async dtaFeatures(
+    pairs: readonly {
+      smiles: string;
+      protein: string;
+      affinity?: number | null;
+    }[],
+    dipeptides: boolean = false,
+  ): Promise<DtaFeaturesResponse> {
+    const request: DtaFeaturesRequest = {
+      pairs: pairs.map((pair) => ({
+        smiles: pair.smiles,
+        protein: pair.protein,
+        affinity: pair.affinity ?? null,
+      })),
+      dipeptides,
+    };
+    const raw = (await api.post(
+      "/api/v1/dta/features",
+      request,
+    )) as Record<string, unknown>;
+    return parseDtaFeaturesResponse(raw, "dta features");
   },
 };
 
@@ -1491,6 +1652,216 @@ function parseAdmetScoreResponse(
       parseAdmetScoreRow(row, `${what} molecules[${i}]`),
     ),
     provenance: parseAdmetProvenance(r["provenance"], what),
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+// -- the DTA lane's §8.1 runtime parsers --------------------------------
+
+function parseDtaProvenance(raw: unknown, what: string): DtaProvenance {
+  const r = expectObject(raw, `${what} provenance`);
+  const backend = r["backend"];
+  const source = r["source"];
+  if (typeof backend !== "string" || typeof source !== "string") {
+    throw new Error(`${what} provenance: backend/source are not strings`);
+  }
+  return {
+    backend,
+    source,
+    n_alphabets: asNumber(r["n_alphabets"]) ?? 0,
+    shipped_checkpoints: asNumber(r["shipped_checkpoints"]) ?? 0,
+    shipped_checkpoints_note:
+      asString(r["shipped_checkpoints_note"]) ?? "",
+    disclaimer: asString(r["disclaimer"]) ?? "",
+  };
+}
+
+/** Narrow one alphabet block — the vendored symbol→code table. */
+function parseDtaAlphabetBlock(
+  raw: unknown,
+  what: string,
+): DtaAlphabetBlock {
+  const r = expectObject(raw, what);
+  const symbolsRaw = expectObject(r["symbols"], `${what} symbols`);
+  const symbols: Record<string, number> = {};
+  for (const [symbol, code] of Object.entries(symbolsRaw)) {
+    if (typeof code === "number") {
+      symbols[symbol] = code;
+    }
+  }
+  return {
+    n_symbols: asNumber(r["n_symbols"]) ?? Object.keys(symbols).length,
+    padding_code: asNumber(r["padding_code"]) ?? 0,
+    symbols,
+    encoding: asString(r["encoding"]) ?? "",
+    source: asString(r["source"]) ?? "",
+  };
+}
+
+/** Narrow the registry answer. */
+function parseDtaRegistryResponse(
+  raw: unknown,
+  what: string,
+): DtaRegistryResponse {
+  const r = expectObject(raw, what);
+  const alphabetsRaw = expectObject(r["alphabets"], `${what} alphabets`);
+  const proteinFeaturesRaw = expectObject(
+    r["protein_features"],
+    `${what} protein_features`,
+  );
+  const ligandFeaturesRaw = expectObject(
+    r["ligand_features"],
+    `${what} ligand_features`,
+  );
+  const pairedWidthRaw = expectObject(r["paired_width"], `${what} paired_width`);
+  const demoRaw = expectObject(r["demo_frame"], `${what} demo_frame`);
+  return {
+    alphabets: {
+      protein: parseDtaAlphabetBlock(
+        alphabetsRaw["protein"],
+        `${what} alphabets.protein`,
+      ),
+      smiles_isomeric: parseDtaAlphabetBlock(
+        alphabetsRaw["smiles_isomeric"],
+        `${what} alphabets.smiles_isomeric`,
+      ),
+      smiles_canonical: parseDtaAlphabetBlock(
+        alphabetsRaw["smiles_canonical"],
+        `${what} alphabets.smiles_canonical`,
+      ),
+    },
+    amino_acids: Array.isArray(r["amino_acids"])
+      ? (r["amino_acids"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
+    protein_features: {
+      n_base: asNumber(proteinFeaturesRaw["n_base"]) ?? 0,
+      base_columns: Array.isArray(proteinFeaturesRaw["base_columns"])
+        ? (proteinFeaturesRaw["base_columns"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      n_dipeptide_extras:
+        asNumber(proteinFeaturesRaw["n_dipeptide_extras"]) ?? 0,
+      n_with_dipeptides:
+        asNumber(proteinFeaturesRaw["n_with_dipeptides"]) ?? 0,
+      note: asString(proteinFeaturesRaw["note"]) ?? "",
+    },
+    ligand_features: {
+      family: asString(ligandFeaturesRaw["family"]) ?? "",
+      n_bits: asNumber(ligandFeaturesRaw["n_bits"]) ?? 0,
+      source: asString(ligandFeaturesRaw["source"]) ?? "",
+    },
+    paired_width: {
+      base: asNumber(pairedWidthRaw["base"]) ?? 0,
+      with_dipeptides: asNumber(pairedWidthRaw["with_dipeptides"]) ?? 0,
+    },
+    metrics: Array.isArray(r["metrics"])
+      ? (r["metrics"] as unknown[]).map((m, i) => {
+          const mm = expectObject(m, `${what} metrics[${i}]`);
+          return {
+            name: asString(mm["name"]) ?? "",
+            description: asString(mm["description"]) ?? "",
+          };
+        })
+      : [],
+    demo_frame: {
+      rows: asNumber(demoRaw["rows"]) ?? 0,
+      note: asString(demoRaw["note"]) ?? "",
+    },
+    provenance: parseDtaProvenance(r["provenance"], what),
+    features_url: asString(r["features_url"]) ?? "",
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+/** Narrow one row's protein composition — the backend's own columns. */
+function parseDtaProteinRow(raw: unknown, what: string): DtaProteinRow {
+  const r = expectObject(raw, `${what} protein_row`);
+  const aacRaw = expectObject(r["aac"], `${what} protein_row.aac`);
+  const aac: Record<string, number> = {};
+  for (const [symbol, value] of Object.entries(aacRaw)) {
+    if (typeof value === "number") {
+      aac[symbol] = value;
+    }
+  }
+  return {
+    prot_length: asNumber(r["prot_length"]) ?? 0,
+    prot_standard_fraction: asNumber(r["prot_standard_fraction"]) ?? 0,
+    prot_nonstandard_fraction: asNumber(r["prot_nonstandard_fraction"]) ?? 0,
+    aac,
+  };
+}
+
+/** Narrow the features answer. */
+function parseDtaFeaturesResponse(
+  raw: unknown,
+  what: string,
+): DtaFeaturesResponse {
+  const r = expectObject(raw, what);
+  const rows = r["rows"];
+  const droppedRows = r["dropped"];
+  const nPairs = r["n_pairs"];
+  const nKept = r["n_kept"];
+  const nDropped = r["n_dropped"];
+  if (
+    !Array.isArray(rows) ||
+    !Array.isArray(droppedRows) ||
+    typeof nPairs !== "number" ||
+    typeof nKept !== "number" ||
+    typeof nDropped !== "number"
+  ) {
+    throw new Error(
+      `${what}: n_pairs/n_kept/n_dropped/rows/dropped are malformed`,
+    );
+  }
+  const affinityRaw = r["affinity"];
+  let affinity: DtaFeaturesResponse["affinity"] = null;
+  if (affinityRaw !== null && affinityRaw !== undefined) {
+    const a = expectObject(affinityRaw, `${what} affinity`);
+    affinity = {
+      present: a["present"] === true,
+      n: asNumber(a["n"]) ?? 0,
+      min: asNumber(a["min"]) ?? 0,
+      max: asNumber(a["max"]) ?? 0,
+      mean: asNumber(a["mean"]) ?? 0,
+    };
+  }
+  return {
+    n_pairs: nPairs,
+    n_kept: nKept,
+    n_dropped: nDropped,
+    kept_indices: Array.isArray(r["kept_indices"])
+      ? (r["kept_indices"] as unknown[]).filter(
+          (v): v is number => typeof v === "number",
+        )
+      : [],
+    dropped: droppedRows.map((row, i) => {
+      const d = expectObject(row, `${what} dropped[${i}]`);
+      return {
+        index: asNumber(d["index"]) ?? 0,
+        smiles: asString(d["smiles"]) ?? "",
+        reason: asString(d["reason"]) ?? "",
+      };
+    }),
+    n_ligand_features: asNumber(r["n_ligand_features"]) ?? 0,
+    n_protein_features: asNumber(r["n_protein_features"]) ?? 0,
+    n_features: asNumber(r["n_features"]) ?? 0,
+    dipeptides: r["dipeptides"] === true,
+    rows: rows.map((row, i) => {
+      const c = expectObject(row, `${what} rows[${i}]`);
+      return {
+        index: asNumber(c["index"]) ?? i,
+        smiles: asString(c["smiles"]) ?? "",
+        protein: asString(c["protein"]) ?? "",
+        valid: c["valid"] === true,
+        protein_row: parseDtaProteinRow(c["protein_row"], `${what} rows[${i}]`),
+        affinity: asNumber(c["affinity"]),
+      };
+    }),
+    affinity,
+    provenance: parseDtaProvenance(r["provenance"], what),
     note: asString(r["note"]) ?? "",
   };
 }

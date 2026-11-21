@@ -18,12 +18,12 @@
  *  guard (tests/test_architecture_hygiene.py: the duplicate-symbol map
  *  pins, the library-surface import-graph census, the mabel/noael
  *  parity grid, the SBOM artifact pins). */
-export const SHIPPED_TEST_COUNT = 8419;
+export const SHIPPED_TEST_COUNT = 8428;
 
-/** r313 note: the backend tree is UNTOUCHED this round (the Phase-5
- *  GNN GUI lane is a frontend-only change) — the canonical collection
- *  re-verified at 8,411 / 0 errors / 459 files (the per-file sum
- *  form); the count carries the r312 census forward unchanged. */
+/** r315 note: the canonical collection re-verified at 8,428 / 0
+ *  errors / 461 files (+10 the DTA route family, − 1 re-trued A-6
+ *  param: ml.admet left the doctest-only tier when its route consumer
+ *  landed at r314). */
 
 /** Collected Vitest component tests at the shipped revision — the
  *  part13 Phase-3 lane + the Phase-5 GNN lane (2026-11-21, `npm
@@ -36,8 +36,12 @@ export const SHIPPED_TEST_COUNT = 8419;
  *  read, the honest request shape, the job relay, the predict table,
  *  the typed 422 verbatim, the client-side gating — the r313
  *  addition). This pin moves independently of the Python suite
- *  above — the CI's studio-frontend job runs both lanes. */
-export const SHIPPED_COMPONENT_TEST_COUNT = 62;
+ *  testing-library: 10 files / 70 tests (jsdom + React Testing
+ *  Library — the vitest file-count true: the r314 row's own "10
+ *  files" was off by one, the on-disk truth at 315fdddf was 9).
+ *  This pin moves independently of the Python suite above —
+ *  the CI's studio-frontend job runs both lanes. */
+export const SHIPPED_COMPONENT_TEST_COUNT = 70;
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
  *  docs, tools — the same census /api/toolkit/tree walks). The round-302
@@ -63,7 +67,7 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 62;
  *  toolkit .github path — resurrected by the same rollback, never
  *  registered at GitHub and never shipped in any archive — nets to
  *  zero (caught, removed); verified pin = live walk = page render. */
-export const SHIPPED_FILE_COUNT = 1639;
+export const SHIPPED_FILE_COUNT = 1648;
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). The round-304
@@ -139,7 +143,19 @@ export const SHIPPED_FILE_COUNT = 1639;
  *  re-stripped, and the root download/ home's current zip TRAKED in
  *  git again (the r312 convention — the CI checkout must see it);
  *  re-trued pin = live walk = page render. */
-export const SHIPPED_SOURCE_LINES = 557686;
+export const SHIPPED_SOURCE_LINES = 558510;
+
+/** r315 (the v1.2.237 ship, the DTA lane): +2 the route family
+ *  (routes/dta.py + tests/api/test_dta.py), +1 the DtaLane
+ *  component suite (.tsx, a tree node never line-counted), +4 the
+ *  r315 evidence screenshots (2 DTA cards + the pins pair), +2 the
+ *  v1.2.237 ship zip in its two in-tree homes, the .md deltas of the
+ *  round's own docs (CHANGELOG + PROJECT_STATUS + FEATURES), the
+ *  line deltas of the re-executed notebooks/twins and the frontend
+ *  carriers; the ghost sweep (the rollback-resurrected 229/230
+ *  zips across three homes + the stale .github duplicate + the
+ *  dormant toolkit-path counter) trued before the walk; verified
+ *  pin = live walk = page render. */
 
 /** r313 file-count note: the terminal census 1,637 = the walk above
  *  +2 the r313 pins evidence screenshots themselves (the fixed-point
