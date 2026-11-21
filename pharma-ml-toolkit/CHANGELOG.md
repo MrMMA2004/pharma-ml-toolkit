@@ -80,6 +80,26 @@
   Stage-5 PySide6 retirement behind it, installer signing
   (certificate-gated).
 
+**R313 ADDENDUM — the CI's own catch, fixed at the source (the
+push's job)**: the first push came back 2 jobs red — the GitHub-page
+job ("current release archive is missing: download/…v1.2.235.zip")
+and the Generative-SA portability lane (the notebook-freshness gate
+inside the standalone archive profile). Both were the ship ritual's
+own skipped steps, caught exactly where the ritual puts its trust:
+the root download/ home's current-version zip is a TRACKED surface
+(the CI checkout must see it — the r312 convention), and every version
+ship re-executes the eight example notebooks so their setup cells
+print the shipped version (the freshness contract). Fixed at the
+source: the eight notebooks re-executed at v1.2.235 (207s, zero
+error-outputs, zero home-path survivors, the outputs 11 lines
+leaner) + the seven no-output twins re-stripped + the download/
+home's v1.2.235 zip tracked again; the freshness + ship-gate +
+standalone-profile lanes re-green locally (26/26, the variants lane
+119/119), the census re-trued (1,637 files / 557,100 lines), and the
+archive rebuilt at the corrected fixed point (the sha/bytes of every
+build honestly recorded in the root worklog outside the archive,
+never re-claimed here). The push-2 carries the corrections.
+
 ## [1.2.234] — 2026-11-21 — round 312 (the 103rd recorded run: the interactive part13 continuation, trace 1a1fd0516a6c330d — the Phase-4 API connection CLOSED + the Phase-5 GNN/MPNN API lane OPENED; a NEW version ship)
 
 - **The sixth sandbox rollback recovered first** (a PARTIAL one this

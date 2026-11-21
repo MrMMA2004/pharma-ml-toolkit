@@ -117,8 +117,16 @@ export const SHIPPED_FILE_COUNT = 1637;
  *  after the history reset — counted by the same walk semantics the
  *  live API applies, so the three-way true holds), the .md deltas of
  *  the round's own docs (CHANGELOG + PROJECT_STATUS + FEATURES);
- *  verified pin = live walk = page render. */
-export const SHIPPED_SOURCE_LINES = 557111;
+ *  verified pin = live walk = page render.
+ *
+ *  The push-1 correction (the CI's own catch, the r312 pattern): the
+ *  ship's first push skipped the notebook re-execution step — the
+ *  eight notebooks re-executed at v1.2.235 after the red (their
+ *  outputs leaner by 11 lines: 557,111 -> 557,100) + the twins
+ *  re-stripped, and the root download/ home's current zip TRAKED in
+ *  git again (the r312 convention — the CI checkout must see it);
+ *  re-trued pin = live walk = page render. */
+export const SHIPPED_SOURCE_LINES = 557120;
 
 /** r313 file-count note: the terminal census 1,637 = the walk above
  *  +2 the r313 pins evidence screenshots themselves (the fixed-point
