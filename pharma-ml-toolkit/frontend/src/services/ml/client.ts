@@ -67,6 +67,26 @@
  *   biomarker weights, and the cross-cell-line validation folds —
  *   one response scale only, every predicted value a labelled model
  *   estimate, never real pharmacology.
+ * * `GET /api/v1/pharmacogenomics/registry` — the pharmacogenomic-
+ *   association lane's vocabulary (part13 Phase 5): the classic GDSC
+ *   ANOVA design matrix with its sequential QR F-test and the
+ *   feasibility gates, the effect-size contract, the BH FDR +
+ *   Storey-Tibshirani q-value layer with gdsctools' percent
+ *   convention, the volcano transforms with the default hit rule,
+ *   the drevalpy evaluation guards + the mean-effects ruler with
+ *   the normalized metric, the cBioPortal vocabularies, and the
+ *   honest provenance block (five repositories, zero shipped
+ *   tables).
+ * * `POST /api/v1/pharmacogenomics/analyze` —
+ *   `PharmacogenomicsAnalyzeRequest` → the sync round trip over the
+ *   real backend: the seeded SYNTHETIC screen, the real GDSC ANOVA
+ *   over every feasible drug x feature pair, the q-value/FDR
+ *   columns, the volcano verdicts, the top associations table, and
+ *   the mean-effects ruler evaluated through the guarded family
+ *   with the normalized score beyond the naive drug-mean ruler —
+ *   one response scale only (the natural-log µM scale), every
+ *   p-value a statistic over the synthetic screen, never real
+ *   pharmacology.
  *
  * The x_test assembly for the AD stage rides the datasets client's
  * bounded `column()` bridge (each feature column ≤ 500 values — the
@@ -95,6 +115,8 @@ type RepurposingScreenRequest =
   components["schemas"]["RepurposingScreenRequest"];
 type DrugResponseAnalyzeRequest =
   components["schemas"]["DrugResponseAnalyzeRequest"];
+type PharmacogenomicsAnalyzeRequest =
+  components["schemas"]["PharmacogenomicsAnalyzeRequest"];
 type SemiSupervisedTrainRequest =
   components["schemas"]["SemiSupervisedTrainRequest"];
 type SemiSupervisedEvaluateRequest =
@@ -908,6 +930,141 @@ export interface DrugResponseAnalyzeResponse {
   readonly note: string;
 }
 
+// -- the pharmacogenomics lane (part13 Phase 5's next remainder item) ---
+
+/** The honest provenance + limitations block (the pharmacogenomics lane). */
+export interface PharmacogenomicsProvenance {
+  readonly backend: string;
+  readonly source: string;
+  readonly n_repositories: number;
+  readonly shipped_tables: number;
+  readonly shipped_tables_note: string;
+  readonly shipped_checkpoints: number;
+  readonly shipped_checkpoints_note: string;
+  readonly screen: string;
+  readonly disclaimer: string;
+}
+
+/** `GET /api/v1/pharmacogenomics/registry` — the vocabulary answer. */
+export interface PharmacogenomicsRegistryResponse {
+  readonly associations: {
+    readonly family: string;
+    readonly design_matrix: string;
+    readonly feasibility_gates: Readonly<Record<string, string>>;
+    readonly row_schema: readonly string[];
+    readonly ordering: string;
+  };
+  readonly effect_sizes: {
+    readonly keys: readonly string[];
+    readonly note: string;
+  };
+  readonly multiple_testing: {
+    readonly methods: readonly string[];
+    readonly bh_fdr: string;
+    readonly qvalue: string;
+    readonly percent_convention: string;
+  };
+  readonly volcano: {
+    readonly transforms: string;
+    readonly hit_rule: string;
+    readonly verdicts: string;
+    readonly additional_fdr_lines: readonly number[];
+  };
+  readonly evaluation: {
+    readonly ruler: string;
+    readonly guarded_metrics: readonly string[];
+    readonly guards: string;
+    readonly normalized_metric: string;
+  };
+  readonly vocabulary: {
+    readonly cna_values: Readonly<Record<string, string>>;
+    readonly diploid_zscores: string;
+    readonly coexpression: string;
+    readonly enrichment_dispatchers: string;
+  };
+  readonly screen: {
+    readonly geometry: Readonly<Record<string, number>>;
+    readonly planted_associations: string;
+    readonly label: string;
+    readonly scale: string;
+    readonly missing: string;
+  };
+  readonly provenance: PharmacogenomicsProvenance;
+  readonly analyze_url: string;
+  readonly note: string;
+}
+
+/** One top-association row — the backend's own gdsctools schema. */
+export interface PharmacogenomicsAssociationRow {
+  readonly drug: string;
+  readonly feature: string;
+  readonly n_pos: number;
+  readonly n_neg: number;
+  readonly mean_pos: number | null;
+  readonly mean_neg: number | null;
+  readonly delta_mean: number | null;
+  readonly effect_size: number | null;
+  readonly glass_pos: number | null;
+  readonly glass_neg: number | null;
+  readonly t_pvalue: number | null;
+  readonly pvalue: number | null;
+  readonly qvalue: number | null;
+  readonly fdr_percent: number | null;
+  readonly tissue_pvalue: number | null;
+  readonly msi_pvalue: number | null;
+  readonly volcano_x: number | null;
+  readonly volcano_y: number | null;
+  readonly verdict: string | null;
+}
+
+/** `POST /api/v1/pharmacogenomics/analyze` — the round-trip answer. */
+export interface PharmacogenomicsAnalyzeResponse {
+  readonly request: {
+    readonly seed: number;
+    readonly top_k: number;
+    readonly include_msi: boolean;
+  };
+  readonly screen: {
+    readonly n_cells: number;
+    readonly n_drugs: number;
+    readonly n_features: number;
+    readonly drugs: readonly string[];
+    readonly features: readonly string[];
+    readonly tissues: Readonly<Record<string, number>>;
+    readonly msi: { readonly msi_positive: number; readonly msi_negative: number };
+    readonly n_observed: number;
+    readonly n_entries: number;
+    readonly observed_fraction: number;
+    readonly label: string;
+  };
+  readonly associations: {
+    readonly n_rows: number;
+    readonly n_drugs_tested: number;
+    readonly n_features_tested: number;
+    readonly top_k: number;
+    readonly top: readonly PharmacogenomicsAssociationRow[];
+    readonly ordering: string;
+  };
+  readonly volcano: {
+    readonly n_sensitive: number;
+    readonly n_resistant: number;
+    readonly n_not_significant: number;
+    readonly hit_rule: string;
+  };
+  readonly evaluation: {
+    readonly n_observed: number;
+    readonly ruler: string;
+    readonly guarded: Readonly<Record<string, number | null>>;
+    readonly naive_drug_mean: Readonly<Record<string, number | null>>;
+    readonly naive_cell_mean: Readonly<Record<string, number | null>>;
+    readonly normalized_beyond_drug_mean: Readonly<Record<string, number | null>>;
+    readonly guards_note: string;
+    readonly normalized_note: string;
+  };
+  readonly provenance: PharmacogenomicsProvenance;
+  readonly note: string;
+}
+
 export const mlApi = {
   /**
    * `GET /api/v1/ml/models?task=…&only_available=…` — the registry
@@ -1328,6 +1485,52 @@ export const mlApi = {
       params,
     )) as Record<string, unknown>;
     return parseDrugResponseAnalyzeResponse(raw, "drugresponse analyze");
+  },
+
+  /**
+   * `GET /api/v1/pharmacogenomics/registry` — the pharmacogenomic-
+   * association lane's own vocabulary (part13 Phase 5): the classic
+   * GDSC ANOVA design matrix with its QR F-test and feasibility
+   * gates, the effect-size contract, the multiple-testing layer,
+   * the volcano transforms, the evaluation guards + the
+   * mean-effects ruler, the cBioPortal vocabularies, and the
+   * honest provenance block — every cell the backend's own, never
+   * re-declared.
+   */
+  async pharmacogenomicsRegistry(): Promise<PharmacogenomicsRegistryResponse> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/pharmacogenomics/registry",
+    );
+    return parsePharmacogenomicsRegistryResponse(
+      raw,
+      "pharmacogenomics registry",
+    );
+  },
+
+  /**
+   * `POST /api/v1/pharmacogenomics/analyze` — the full honest round
+   * trip over the real backend (sync-only light compute, a 40x12
+   * screen): the seeded SYNTHETIC screen, the real GDSC ANOVA over
+   * every feasible drug x feature pair, the q-value/FDR columns,
+   * the volcano verdicts, the top associations table, and the
+   * mean-effects ruler evaluated through the guarded family with
+   * the normalized score beyond the naive drug-mean ruler. One
+   * response scale only (the natural-log µM scale); every p-value
+   * and effect size is a labelled statistic over the synthetic
+   * screen — never real pharmacology, never a clinical
+   * recommendation.
+   */
+  async pharmacogenomicsAnalyze(
+    params: Partial<PharmacogenomicsAnalyzeRequest> = {},
+  ): Promise<PharmacogenomicsAnalyzeResponse> {
+    const raw = (await api.post(
+      "/api/v1/pharmacogenomics/analyze",
+      params,
+    )) as Record<string, unknown>;
+    return parsePharmacogenomicsAnalyzeResponse(
+      raw,
+      "pharmacogenomics analyze",
+    );
   },
 };
 
@@ -2770,6 +2973,257 @@ function parseDrugResponseAnalyzeResponse(
       note: asString(cvRaw["note"]) ?? "",
     },
     provenance: parseDrugResponseProvenance(r["provenance"], what),
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+/** Narrow the pharmacogenomics provenance block. */
+function parsePharmacogenomicsProvenance(
+  raw: unknown,
+  what: string,
+): PharmacogenomicsProvenance {
+  const r = expectObject(raw, `${what} provenance`);
+  return {
+    backend: asString(r["backend"]) ?? "",
+    source: asString(r["source"]) ?? "",
+    n_repositories: asNumber(r["n_repositories"]) ?? 0,
+    shipped_tables: asNumber(r["shipped_tables"]) ?? 0,
+    shipped_tables_note: asString(r["shipped_tables_note"]) ?? "",
+    shipped_checkpoints: asNumber(r["shipped_checkpoints"]) ?? 0,
+    shipped_checkpoints_note: asString(r["shipped_checkpoints_note"]) ?? "",
+    screen: asString(r["screen"]) ?? "",
+    disclaimer: asString(r["disclaimer"]) ?? "",
+  };
+}
+
+function parsePharmacogenomicsRegistryResponse(
+  raw: unknown,
+  what: string,
+): PharmacogenomicsRegistryResponse {
+  const r = expectObject(raw, what);
+  const associationsRaw = expectObject(r["associations"], `${what} associations`);
+  const gatesRaw = expectObject(
+    associationsRaw["feasibility_gates"],
+    `${what} associations.feasibility_gates`,
+  );
+  const effectRaw = expectObject(r["effect_sizes"], `${what} effect_sizes`);
+  const multipleRaw = expectObject(
+    r["multiple_testing"],
+    `${what} multiple_testing`,
+  );
+  const volcanoRaw = expectObject(r["volcano"], `${what} volcano`);
+  const evaluationRaw = expectObject(r["evaluation"], `${what} evaluation`);
+  const vocabularyRaw = expectObject(r["vocabulary"], `${what} vocabulary`);
+  const cnaRaw = expectObject(
+    vocabularyRaw["cna_values"],
+    `${what} vocabulary.cna_values`,
+  );
+  const screenRaw = expectObject(r["screen"], `${what} screen`);
+  const geometryRaw = expectObject(
+    screenRaw["geometry"],
+    `${what} screen.geometry`,
+  );
+  return {
+    associations: {
+      family: asString(associationsRaw["family"]) ?? "",
+      design_matrix: asString(associationsRaw["design_matrix"]) ?? "",
+      feasibility_gates: parseStringRecord(
+        gatesRaw,
+        `${what} associations.feasibility_gates`,
+      ),
+      row_schema: Array.isArray(associationsRaw["row_schema"])
+        ? (associationsRaw["row_schema"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      ordering: asString(associationsRaw["ordering"]) ?? "",
+    },
+    effect_sizes: {
+      keys: Array.isArray(effectRaw["keys"])
+        ? (effectRaw["keys"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      note: asString(effectRaw["note"]) ?? "",
+    },
+    multiple_testing: {
+      methods: Array.isArray(multipleRaw["methods"])
+        ? (multipleRaw["methods"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      bh_fdr: asString(multipleRaw["bh_fdr"]) ?? "",
+      qvalue: asString(multipleRaw["qvalue"]) ?? "",
+      percent_convention: asString(multipleRaw["percent_convention"]) ?? "",
+    },
+    volcano: {
+      transforms: asString(volcanoRaw["transforms"]) ?? "",
+      hit_rule: asString(volcanoRaw["hit_rule"]) ?? "",
+      verdicts: asString(volcanoRaw["verdicts"]) ?? "",
+      additional_fdr_lines: Array.isArray(volcanoRaw["additional_fdr_lines"])
+        ? (volcanoRaw["additional_fdr_lines"] as unknown[]).filter(
+            (v): v is number => typeof v === "number",
+          )
+        : [],
+    },
+    evaluation: {
+      ruler: asString(evaluationRaw["ruler"]) ?? "",
+      guarded_metrics: Array.isArray(evaluationRaw["guarded_metrics"])
+        ? (evaluationRaw["guarded_metrics"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      guards: asString(evaluationRaw["guards"]) ?? "",
+      normalized_metric: asString(evaluationRaw["normalized_metric"]) ?? "",
+    },
+    vocabulary: {
+      cna_values: parseStringRecord(cnaRaw, `${what} vocabulary.cna_values`),
+      diploid_zscores: asString(vocabularyRaw["diploid_zscores"]) ?? "",
+      coexpression: asString(vocabularyRaw["coexpression"]) ?? "",
+      enrichment_dispatchers:
+        asString(vocabularyRaw["enrichment_dispatchers"]) ?? "",
+    },
+    screen: {
+      geometry: parseNumberRecord(
+        geometryRaw,
+        `${what} screen.geometry`,
+      ),
+      planted_associations: asString(screenRaw["planted_associations"]) ?? "",
+      label: asString(screenRaw["label"]) ?? "",
+      scale: asString(screenRaw["scale"]) ?? "",
+      missing: asString(screenRaw["missing"]) ?? "",
+    },
+    provenance: parsePharmacogenomicsProvenance(r["provenance"], what),
+    analyze_url: asString(r["analyze_url"]) ?? "",
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+/** Narrow one top-association row. */
+function parsePharmacogenomicsAssociationRow(
+  raw: unknown,
+  what: string,
+): PharmacogenomicsAssociationRow {
+  const r = expectObject(raw, what);
+  const drug = r["drug"];
+  const feature = r["feature"];
+  const nPos = r["n_pos"];
+  const nNeg = r["n_neg"];
+  if (
+    typeof drug !== "string" ||
+    typeof feature !== "string" ||
+    typeof nPos !== "number" ||
+    typeof nNeg !== "number"
+  ) {
+    throw new Error(`${what}: drug/feature/n_pos/n_neg are malformed`);
+  }
+  return {
+    drug,
+    feature,
+    n_pos: nPos,
+    n_neg: nNeg,
+    mean_pos: asNumber(r["mean_pos"]),
+    mean_neg: asNumber(r["mean_neg"]),
+    delta_mean: asNumber(r["delta_mean"]),
+    effect_size: asNumber(r["effect_size"]),
+    glass_pos: asNumber(r["glass_pos"]),
+    glass_neg: asNumber(r["glass_neg"]),
+    t_pvalue: asNumber(r["t_pvalue"]),
+    pvalue: asNumber(r["pvalue"]),
+    qvalue: asNumber(r["qvalue"]),
+    fdr_percent: asNumber(r["fdr_percent"]),
+    tissue_pvalue: asNumber(r["tissue_pvalue"]),
+    msi_pvalue: asNumber(r["msi_pvalue"]),
+    volcano_x: asNumber(r["volcano_x"]),
+    volcano_y: asNumber(r["volcano_y"]),
+    verdict: asString(r["verdict"]),
+  };
+}
+
+function parsePharmacogenomicsAnalyzeResponse(
+  raw: unknown,
+  what: string,
+): PharmacogenomicsAnalyzeResponse {
+  const r = expectObject(raw, what);
+  const requestRaw = expectObject(r["request"], `${what} request`);
+  const screenRaw = expectObject(r["screen"], `${what} screen`);
+  const tissuesRaw = expectObject(screenRaw["tissues"], `${what} screen.tissues`);
+  const msiRaw = expectObject(screenRaw["msi"], `${what} screen.msi`);
+  const associationsRaw = expectObject(r["associations"], `${what} associations`);
+  const topRaw = Array.isArray(associationsRaw["top"])
+    ? (associationsRaw["top"] as unknown[])
+    : [];
+  const volcanoRaw = expectObject(r["volcano"], `${what} volcano`);
+  const evaluationRaw = expectObject(r["evaluation"], `${what} evaluation`);
+  return {
+    request: {
+      seed: asNumber(requestRaw["seed"]) ?? 0,
+      top_k: asNumber(requestRaw["top_k"]) ?? 0,
+      include_msi: requestRaw["include_msi"] === true,
+    },
+    screen: {
+      n_cells: asNumber(screenRaw["n_cells"]) ?? 0,
+      n_drugs: asNumber(screenRaw["n_drugs"]) ?? 0,
+      n_features: asNumber(screenRaw["n_features"]) ?? 0,
+      drugs: Array.isArray(screenRaw["drugs"])
+        ? (screenRaw["drugs"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      features: Array.isArray(screenRaw["features"])
+        ? (screenRaw["features"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      tissues: parseNumberRecord(tissuesRaw, `${what} screen.tissues`),
+      msi: {
+        msi_positive: asNumber(msiRaw["msi_positive"]) ?? 0,
+        msi_negative: asNumber(msiRaw["msi_negative"]) ?? 0,
+      },
+      n_observed: asNumber(screenRaw["n_observed"]) ?? 0,
+      n_entries: asNumber(screenRaw["n_entries"]) ?? 0,
+      observed_fraction: asNumber(screenRaw["observed_fraction"]) ?? 0,
+      label: asString(screenRaw["label"]) ?? "",
+    },
+    associations: {
+      n_rows: asNumber(associationsRaw["n_rows"]) ?? 0,
+      n_drugs_tested: asNumber(associationsRaw["n_drugs_tested"]) ?? 0,
+      n_features_tested: asNumber(associationsRaw["n_features_tested"]) ?? 0,
+      top_k: asNumber(associationsRaw["top_k"]) ?? 0,
+      top: topRaw.map((row, i) =>
+        parsePharmacogenomicsAssociationRow(
+          row,
+          `${what} associations.top[${i}]`,
+        ),
+      ),
+      ordering: asString(associationsRaw["ordering"]) ?? "",
+    },
+    volcano: {
+      n_sensitive: asNumber(volcanoRaw["n_sensitive"]) ?? 0,
+      n_resistant: asNumber(volcanoRaw["n_resistant"]) ?? 0,
+      n_not_significant: asNumber(volcanoRaw["n_not_significant"]) ?? 0,
+      hit_rule: asString(volcanoRaw["hit_rule"]) ?? "",
+    },
+    evaluation: {
+      n_observed: asNumber(evaluationRaw["n_observed"]) ?? 0,
+      ruler: asString(evaluationRaw["ruler"]) ?? "",
+      guarded: parseMetricRecord(evaluationRaw["guarded"], `${what} evaluation.guarded`),
+      naive_drug_mean: parseMetricRecord(
+        evaluationRaw["naive_drug_mean"],
+        `${what} evaluation.naive_drug_mean`,
+      ),
+      naive_cell_mean: parseMetricRecord(
+        evaluationRaw["naive_cell_mean"],
+        `${what} evaluation.naive_cell_mean`,
+      ),
+      normalized_beyond_drug_mean: parseMetricRecord(
+        evaluationRaw["normalized_beyond_drug_mean"],
+        `${what} evaluation.normalized_beyond_drug_mean`,
+      ),
+      guards_note: asString(evaluationRaw["guards_note"]) ?? "",
+      normalized_note: asString(evaluationRaw["normalized_note"]) ?? "",
+    },
+    provenance: parsePharmacogenomicsProvenance(r["provenance"], what),
     note: asString(r["note"]) ?? "",
   };
 }

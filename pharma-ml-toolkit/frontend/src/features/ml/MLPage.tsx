@@ -63,6 +63,8 @@ import {
   type EvaluationRow,
   type ModelCatalogEntry,
   type PredictResponse,
+  type PharmacogenomicsAnalyzeResponse,
+  type PharmacogenomicsRegistryResponse,
   type RepurposingRegistryResponse,
   type RepurposingScreenResponse,
   type SemiSupervisedEvaluation,
@@ -85,7 +87,7 @@ import {
  * Split/CV → Algorithm → Hyperparameters → Train → Evaluate →
  * Compare → Applicability Domain → ADMET Profile → Drug–Target
  * Interaction → Drug Repurposing → Cancer Cell-Line Drug Response →
- * Semi-supervised Learning → Explainability → Export
+ * Pharmacogenomics → Semi-supervised Learning → Explainability → Export
  *
  * Every control below executes the REAL backend through the typed
  * service layer (no fabricated data, no disabled pretend buttons):
@@ -212,6 +214,27 @@ const DR_FIELDS: readonly {
   { key: "top_k", label: "top-k (1–10)", step: 1 },
   { key: "profiles", label: "profiles (1–8)", step: 1 },
   { key: "n_folds", label: "folds (2–5)", step: 1 },
+];
+
+/** The pharmacogenomics analyze's parameter block (the route's own defaults). */
+type PharmacogenomicsParams = {
+  seed: number;
+  top_k: number;
+};
+
+const PHARMACOGENOMICS_DEFAULTS: PharmacogenomicsParams = {
+  seed: 42,
+  top_k: 5,
+};
+
+/** The stage's numeric controls — labels state the route's own bounds. */
+const PG_FIELDS: readonly {
+  key: keyof PharmacogenomicsParams;
+  label: string;
+  step: number;
+}[] = [
+  { key: "seed", label: "seed (0–2147483647)", step: 1 },
+  { key: "top_k", label: "top-k (1–20)", step: 1 },
 ];
 
 function describeError(error: unknown): string {
@@ -690,6 +713,13 @@ export function MLPage() {
   const [drBusy, setDrBusy] = useState(false);
   const [drResult, setDrResult] = useState<DrugResponseAnalyzeResponse | null>(null);
   const [drRegistry, setDrRegistry] = useState<DrugResponseRegistryResponse | null>(null);
+  // stage 14b: the pharmacogenomics lane (part13 Phase 5 — the
+  // classic GDSC ANOVA over ml/pharmacogenomics.py)
+  const [pgParams, setPgParams] = useState<PharmacogenomicsParams>(PHARMACOGENOMICS_DEFAULTS);
+  const [pgResult, setPgResult] = useState<PharmacogenomicsAnalyzeResponse | null>(null);
+  const [pgError, setPgError] = useState<string | null>(null);
+  const [pgBusy, setPgBusy] = useState(false);
+  const [pgRegistry, setPgRegistry] = useState<PharmacogenomicsRegistryResponse | null>(null);
 
   // stage 11: semi-supervised learning (classification-only)
   const [ssMethod, setSsMethod] = useState<
@@ -832,6 +862,25 @@ export function MLPage() {
       .then((response) => {
         if (!cancelled) {
           setDrRegistry(response);
+        }
+      })
+      .catch(() => {
+        // the registry line stays absent — never a fabricated summary
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // the pharmacogenomics registry loads once on mount (the
+  // vocabulary line — the same decorative-context contract)
+  useEffect(() => {
+    let cancelled = false;
+    mlApi
+      .pharmacogenomicsRegistry()
+      .then((response) => {
+        if (!cancelled) {
+          setPgRegistry(response);
         }
       })
       .catch(() => {
@@ -1544,6 +1593,51 @@ export function MLPage() {
       setDrBusy(false);
     }
   }, [drParams]);
+
+  // stage 14b: the pharmacogenomics analyze (sync light compute —
+  // one button, client-side validation before any request; the
+  // backend's own 422s surface verbatim; every p-value a labelled
+  // statistic over the synthetic screen, one response scale only)
+  const updatePgParam = useCallback(
+    (key: keyof PharmacogenomicsParams, value: number) => {
+      setPgParams((prev) => ({ ...prev, [key]: value }));
+    },
+    [],
+  );
+
+  const handlePharmacogenomicsAnalyze = useCallback(async () => {
+    const p = pgParams;
+    const fail = (message: string) => {
+      setPgResult(null);
+      setPgError(message);
+    };
+    if (Object.values(p).some((value) => !Number.isFinite(value))) {
+      fail("every analyze parameter must be a finite number");
+      return;
+    }
+    if (p.seed < 0 || p.seed > 2147483647) {
+      fail("the seed must lie in 0..2147483647 (the route's own bound)");
+      return;
+    }
+    if (p.top_k < 1 || p.top_k > 20) {
+      fail("the answer carries 1..20 associations (the route's own bound)");
+      return;
+    }
+    setPgBusy(true);
+    setPgError(null);
+    try {
+      const response = await mlApi.pharmacogenomicsAnalyze({
+        seed: p.seed,
+        top_k: p.top_k,
+      });
+      setPgResult(response);
+    } catch (error) {
+      setPgResult(null);
+      setPgError(describeError(error));
+    } finally {
+      setPgBusy(false);
+    }
+  }, [pgParams]);
 
   // stage 11b: the held-out evaluation (3 seeded repeats, test_size
   // 0.25 — the route's own defaults surfaced, one button, job lane)
@@ -3106,6 +3200,165 @@ export function MLPage() {
 
       <StageHeader
         index={15}
+        title="Pharmacogenomics"
+        hint="the classic GDSC ANOVA over the seeded SYNTHETIC screen — top associations + volcano + the guarded baseline, sync"
+        icon={<Dna aria-hidden className="h-4 w-4" />}
+      >
+        <Card>
+          <CardContent>
+            <p className="text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              The part13 Phase-5 lane over the REAL in-tree backend
+              (ml/pharmacogenomics.py — the classic GDSC ANOVA with
+              its design matrix and feasibility gates, the
+              Storey-Tibshirani q-values, the volcano verdicts, the
+              guarded metric family and the additive mean-effects
+              ruler): the seeded screen, the full association table,
+              the top drug × feature rows, and the ruler&apos;s
+              guarded + normalized scores. No real
+              GDSC/CCLE/CTRP/DepMap table ships; the screen is
+              SYNTHETIC — one response scale only (the natural-log µM
+              scale), never real pharmacology, never a clinical
+              recommendation.
+              {pgRegistry !== null ? (
+                <>
+                  {" "}The feasibility gates: a drug needs ≥ 6 non-NA
+                  IC50s, a feature ≥ 3 positives AND ≥ 3 negatives;{" "}
+                  {pgRegistry.multiple_testing.percent_convention}.
+                </>
+              ) : null}
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              {PG_FIELDS.map(({ key, label, step }) => (
+                <label
+                  key={key}
+                  className="text-xs text-[var(--color-muted-foreground)]"
+                >
+                  {label}
+                  <input
+                    type="number"
+                    step={step}
+                    value={pgParams[key]}
+                    onChange={(event) =>
+                      updatePgParam(key, Number(event.target.value))
+                    }
+                    aria-label={`pharmacogenomics ${key}`}
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 font-mono text-xs"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <Button
+                size="sm"
+                onClick={() => void handlePharmacogenomicsAnalyze()}
+                disabled={pgBusy}
+              >
+                {pgBusy ? "Analyzing…" : "Run the ANOVA"}
+              </Button>
+            </div>
+            {pgError !== null ? (
+              <div className="mt-3">
+                <ErrorBanner message={pgError} />
+              </div>
+            ) : null}
+            {pgResult !== null ? (
+              <>
+                <p className="mt-4 text-xs text-[var(--color-foreground)]">
+                  {pgResult.screen.n_cells}×{pgResult.screen.n_drugs} screen
+                  (SYNTHETIC) · {pgResult.screen.n_observed}/
+                  {pgResult.screen.n_entries} observed entries (
+                  {(pgResult.screen.observed_fraction * 100).toFixed(0)}%) ·{" "}
+                  {pgResult.associations.n_rows} associations over{" "}
+                  {pgResult.associations.n_drugs_tested} drugs ×{" "}
+                  {pgResult.associations.n_features_tested} features ·
+                  volcano: {pgResult.volcano.n_sensitive} sensitive /{" "}
+                  {pgResult.volcano.n_resistant} resistant /{" "}
+                  {pgResult.volcano.n_not_significant} not significant
+                </p>
+                <div className="mt-3">
+                  <p className="text-xs font-medium text-[var(--color-foreground)]">
+                    Top {pgResult.associations.top.length} associations
+                    (statistic over the synthetic screen, sorted by p)
+                  </p>
+                  <table className="mt-1 w-full text-xs">
+                    <thead>
+                      <tr className="text-[var(--color-muted-foreground)]">
+                        <th className="py-1 text-left font-normal">drug</th>
+                        <th className="text-left font-normal">feature</th>
+                        <th className="text-right font-normal">n+ / n−</th>
+                        <th className="text-right font-normal">
+                          Δ mean (ln µM)
+                        </th>
+                        <th className="text-right font-normal">signed d</th>
+                        <th className="text-right font-normal">p</th>
+                        <th className="text-right font-normal">q</th>
+                        <th className="text-right font-normal">FDR %</th>
+                        <th className="text-right font-normal">verdict</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pgResult.associations.top.map((row) => (
+                        <tr
+                          key={`${row.drug}-${row.feature}`}
+                          className="border-t border-[var(--color-border)]"
+                        >
+                          <td className="py-1">{row.drug}</td>
+                          <td>{row.feature}</td>
+                          <td className="text-right font-mono">
+                            {row.n_pos} / {row.n_neg}
+                          </td>
+                          <td className="text-right font-mono">
+                            {row.delta_mean?.toFixed(3) ?? "null"}
+                          </td>
+                          <td className="text-right font-mono">
+                            {row.volcano_x?.toFixed(3) ?? "null"}
+                          </td>
+                          <td className="text-right font-mono">
+                            {row.pvalue?.toFixed(5) ?? "null"}
+                          </td>
+                          <td className="text-right font-mono">
+                            {row.qvalue?.toFixed(5) ?? "null"}
+                          </td>
+                          <td className="text-right font-mono">
+                            {row.fdr_percent?.toFixed(2) ?? "null"}
+                          </td>
+                          <td className="text-right">{row.verdict ?? "n/a"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-3 text-xs text-[var(--color-foreground)]">
+                  the mean-effects ruler (guarded pearson{" "}
+                  {pgResult.evaluation.guarded.pearson?.toFixed(3) ?? "null"}{" "}
+                  · spearman{" "}
+                  {pgResult.evaluation.guarded.spearman?.toFixed(3) ?? "null"}{" "}
+                  · kendall{" "}
+                  {pgResult.evaluation.guarded.kendall?.toFixed(3) ?? "null"});
+                  normalized beyond the naive drug-mean ruler (pearson{" "}
+                  {
+                    pgResult.evaluation.normalized_beyond_drug_mean.pearson?.toFixed(
+                      3,
+                    ) ?? "null"
+                  }
+                  )
+                </p>
+                <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                  provenance {pgResult.provenance.backend} —{" "}
+                  {pgResult.provenance.shipped_tables} shipped tables,{" "}
+                  {pgResult.provenance.shipped_checkpoints} shipped
+                  checkpoints (the honest absence, stated) · the served
+                  screen: {pgResult.provenance.screen} ·{" "}
+                  {pgResult.provenance.disclaimer}
+                </p>
+              </>
+            ) : null}
+          </CardContent>
+        </Card>
+      </StageHeader>
+
+      <StageHeader
+        index={16}
         title="Semi-supervised Learning"
         hint="classification datasets only — the backend's own gate"
         icon={<Network aria-hidden className="h-4 w-4" />}
@@ -3409,7 +3662,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={16}
+        index={17}
         title="Explainability & Uncertainty"
         hint="the real SHAP lane + the AD bootstrap's uncertainty surface"
         icon={<Info aria-hidden className="h-4 w-4" />}
@@ -3489,7 +3742,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={17}
+        index={18}
         title="Export"
         hint="a registered table artifact + a digest-verified download"
         icon={<ArrowDownToLine aria-hidden className="h-4 w-4" />}

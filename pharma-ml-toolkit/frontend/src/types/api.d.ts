@@ -1345,6 +1345,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/pharmacogenomics/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Analyze */
+        post: operations["analyze_api_v1_pharmacogenomics_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pharmacogenomics/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registry */
+        get: operations["registry_api_v1_pharmacogenomics_registry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pkpd/bateman": {
         parameters: {
             query?: never;
@@ -2640,6 +2674,33 @@ export interface components {
              * @default 1
              */
             hill: number;
+        };
+        /**
+         * PharmacogenomicsAnalyzeRequest
+         * @description One seeded synthetic screen + ANOVA + baseline-evaluation request.
+         *
+         *     The screen geometry is the backend's own demo contract (40 cell
+         *     lines x 12 drugs x 10 binary features, ~15 % untested); the seed
+         *     is the only generative dial.  ``include_msi`` mirrors
+         *     ``gdsc_anova``'s own parameter (the MSI factor rides the design
+         *     matrix when both sides carry ``>= 2`` lines).
+         */
+        PharmacogenomicsAnalyzeRequest: {
+            /**
+             * Include Msi
+             * @default true
+             */
+            include_msi: boolean;
+            /**
+             * Seed
+             * @default 42
+             */
+            seed: number;
+            /**
+             * Top K
+             * @default 5
+             */
+            top_k: number;
         };
         /** PopulationRequest */
         PopulationRequest: {
@@ -6013,6 +6074,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze_api_v1_pharmacogenomics_analyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PharmacogenomicsAnalyzeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registry_api_v1_pharmacogenomics_registry_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

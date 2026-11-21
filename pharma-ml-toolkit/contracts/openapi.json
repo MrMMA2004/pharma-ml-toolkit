@@ -2346,6 +2346,32 @@
         "title": "PdRequest",
         "type": "object"
       },
+      "PharmacogenomicsAnalyzeRequest": {
+        "description": "One seeded synthetic screen + ANOVA + baseline-evaluation request.\n\nThe screen geometry is the backend's own demo contract (40 cell\nlines x 12 drugs x 10 binary features, ~15 % untested); the seed\nis the only generative dial.  ``include_msi`` mirrors\n``gdsc_anova``'s own parameter (the MSI factor rides the design\nmatrix when both sides carry ``>= 2`` lines).",
+        "properties": {
+          "include_msi": {
+            "default": true,
+            "title": "Include Msi",
+            "type": "boolean"
+          },
+          "seed": {
+            "default": 42,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "top_k": {
+            "default": 5,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "title": "PharmacogenomicsAnalyzeRequest",
+        "type": "object"
+      },
       "PopulationRequest": {
         "properties": {
           "mode": {
@@ -7159,6 +7185,72 @@
         "summary": "Coverage Diagnostics",
         "tags": [
           "model-evaluation"
+        ]
+      }
+    },
+    "/api/v1/pharmacogenomics/analyze": {
+      "post": {
+        "operationId": "analyze_api_v1_pharmacogenomics_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PharmacogenomicsAnalyzeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Analyze Api V1 Pharmacogenomics Analyze Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analyze",
+        "tags": [
+          "pharmacogenomics"
+        ]
+      }
+    },
+    "/api/v1/pharmacogenomics/registry": {
+      "get": {
+        "operationId": "registry_api_v1_pharmacogenomics_registry_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Registry Api V1 Pharmacogenomics Registry Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Registry",
+        "tags": [
+          "pharmacogenomics"
         ]
       }
     },

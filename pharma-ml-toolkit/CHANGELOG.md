@@ -1,3 +1,117 @@
+## [1.2.240] — 2026-11-21 — round 318 (the 109th recorded run: the interactive part13 continuation, trace 1a1fed8994f477c1 — the Phase-5 pharmacogenomics lane, API + GUI; a NEW version ship)
+
+- **The eleventh-arrival opening recovered in minutes — the r316/r317
+  pattern again, verbatim**: the stale-summary reconciliation first (the
+  inherited summary still described the world at r308/counter 99; the
+  on-disk truth: r317 had completed AND pushed through its push-2
+  same-version re-ship, the counter surviving at 108 with the worklog
+  carrying the full R317 terminal + post-terminal ledgers). The
+  recovery proper: the 600-mode credential validated (`/user` 200 as
+  MrMMA2004, never printed), the post-session machinery ghost-zip
+  commit `c07a8a12` (a UUID subject, unpushed — 18 files: the five
+  retired zips tracked into the two in-tree homes plus the upload-home
+  zip + the r316/r317 scratch snapshots) reset away per the r312
+  precedent with the disk homes restored (five-home sha parity
+  `455cf00b` exact), the venv SURVIVED intact (pharmaml 1.2.239 — zero
+  repair, the third rollback in a row to leave it standing). **The
+  pending r317 push-2 CI verdict closed GREEN on arrival: `7df1806d`
+  19/19 check-runs success** — the CI-fix + same-version re-ship
+  convention held through the superseding re-ship push.
+- **part13 Phase 5's next remainder item EXECUTED — the Pharmacogenomics
+  lane, both legs in one round, over the REAL in-tree backend
+  (`ml/pharmacogenomics.py`: the classic GDSC ANOVA with its design
+  matrix `[1 | tissue dummies | msi | feature]` and sequential QR
+  F-test, the feasibility gates, the effect-size contract, the
+  Storey-Tibshirani q-values + BH FDR, the volcano transforms, the
+  drevalpy guarded metric family + the additive mean-effects ruler with
+  the normalized metric, the cBioPortal vocabularies — five repositories
+  reviewed file by file)**: the API leg (`routes/pharmacogenomics.py`,
+  a new router family): `GET /api/v1/pharmacogenomics/registry` — the
+  module's own vocabulary verbatim (the design matrix + QR F-test, the
+  four feasibility gates, the 18-key row schema, the effect sizes, the
+  λ-grid q-value procedure + the percent convention, the volcano
+  transforms + the default hit rule, the degenerate-input guards + the
+  ruler + the normalized metric, the CNA vocabulary + the diploid
+  z-scores + the co-expression closed form + the enrichment
+  dispatchers, and the honest provenance block: five repositories, zero
+  real GDSC/CCLE/CTRP/DepMap tables ship, zero checkpoints, the served
+  screen is the backend's own SYNTHETIC seeded demo with planted
+  TP53/KRAS associations, never a clinical recommendation); `POST
+  /api/v1/pharmacogenomics/analyze` — the full real round trip: the
+  seeded screen → the real GDSC ANOVA over every feasible drug x
+  feature pair → the q-value/FDR columns → the volcano verdict census
+  → the top associations table (the full gdsctools row schema) → the
+  tissue-aware mean-effects ruler evaluated through the guarded family
+  with the normalized score beyond the naive drug-mean ruler;
+  sync-only light compute (the 40x12 screen, the seed the only
+  generative dial), non-finite metrics read as null, never zero —
+  **15 route tests** (`tests/api/test_pharmacogenomics.py`: the
+  verbatim vocabulary (ANOVA + multiple-testing + evaluation +
+  cBioPortal blocks), the provenance honesty, the real round trip with
+  end-to-end determinism, the planted-association top table, the
+  top-k slicing, the volcano census summing to the table, the guarded
+  ruler family, the include_msi dial, the seed as the only generative
+  dial, the geometry caps as the route's own 422s, the
+  custom-parameter echo). The OpenAPI contract re-exported (**100
+  paths / 68 schemas**) + the generated types regenerated before the
+  GUI leg wrote against them. The GUI leg — the "Pharmacogenomics"
+  stage (stage 15; the later stages renumbered 16/17/18) in the Machine
+  Learning workspace: the registry vocabulary line off the backend's
+  own numbers via the once-on-mount fetch (absent on failure — never
+  fabricated), the seed + top-k controls with the route's own bounds
+  in their labels, client-side validation BEFORE any request (the
+  finite check + the seed band + the top-k band), the screen summary
+  line, the top-association table with the p/q/FDR/verdict columns and
+  the "statistic over the synthetic screen" labelling, the guarded +
+  normalized ruler scores line, and the provenance footer with the
+  honest zero-tables line — **8 component tests**
+  (`PharmacogenomicsLane.test.tsx`) + **the browser-E2E golden path
+  over the REAL backend** (the r311 double-fork daemons restarted for
+  the new route: FastAPI 8017 + Vite 5174, the dev-same-origin token):
+  the app boot ("backend 1.2.240 ready"), the registry vocabulary
+  line, the analyze round trip over the default parameter block (the
+  real ANOVA payloads: 120 associations over 12 drugs x 10 features,
+  the planted TP53_mut rows winning the top table, the volcano census,
+  the guarded pearson 0.721 ruler line), the honest client-side gate
+  (a negative seed never leaves the page) — **ZERO page errors, ZERO
+  console errors**; the evidence set
+  `r318-pharmacogenomics-card-desktop.png` +
+  `r318-pharmacogenomics-gate-desktop.png`. **The guards trued in the
+  same commit** (the r314..r317 lesson, the standing rule): the ml
+  client's REST-surface module set + the §11.2 stage-order chain both
+  carry the pharmacogenomics rows BEFORE the push — the full CI guard
+  lane (the exact five-file pytest set the Studio frontend job runs)
+  ran locally first, **129 passed**.
+- **v1.2.240 shipped at the fixed point**: the version carriers bumped
+  in lockstep (VERSION, pyproject, `pharmaml.__version__`, the
+  frontend package.json + BOTH lock root fields, the version_info
+  quadruple + both strings, the SBOM root component, the web carrier
+  `toolkit-version.ts`, the two frontend test mocks + the ready-marker
+  assertion) with the editable reinstall re-truing the runtime
+  metadata (pharmaml 1.2.240). The 8 notebooks re-executed at
+  v1.2.240 (217 s, zero error-outputs, zero home-path survivors) + the
+  7 no-output twins re-stripped — the freshness contract green (119
+  passed). The gates for the record: the canonical collection
+  **8,464 / 0 errors** (+15 this round); the CI guard lane **129
+  passed**; the api + carrier + notebook + hygiene lanes **965 passed
+  + 1 skipped**; vitest **94/94** (13 files, +8); the frontend build
+  clean; `tsc --noEmit` clean; the generated-types regen
+  byte-identical on re-generation; ruff + mypy clean (the EXE002
+  local-mode noise documented — the runner checkout is immune). The
+  census fixed point: **1672 files / 561,916 lines** (the walk = the
+  live `/api/toolkit/tree` walk = the page render, the pins trued
+  three-way); the pins (SHIPPED_TEST_COUNT 8,464 /
+  SHIPPED_COMPONENT_TEST_COUNT 94 / SHIPPED_FILE_COUNT 1672 /
+  SHIPPED_SOURCE_LINES 561,916); the zip-size API serving the terminal
+  bytes exact:true source:release; the five-home sha parity exact (the
+  terminal sha + bytes live in the worklog per the §7 convention —
+  the archive cannot carry its own hash). Still honestly BLOCKED:
+  clean-machine smoke (C-3/C-5), Stage-5 PySide6 retirement, installer
+  signing (certificate-gated). The remaining Phase-5 domain
+  (multi-objective optimization `ml/multiobjective.py` — a real
+  backend already in-tree) rides the next continuation per
+  PROJECT_STATUS §6. The next CI poll carries this round's push
+  verdict.
 ## [1.2.239 re-ship] — 2026-11-21 — round 317 push-2 (the same-version re-ship, the r303/r304 convention; the CI verdict's own catch fixed at the source)
 
 - **The r317 push-1 CI verdict's catch fixed at the source (the r312/r316
