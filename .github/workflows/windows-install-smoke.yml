@@ -706,12 +706,31 @@ jobs:
           }
           "NSIS uninstaller: $un" |
             Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"
-          Start-Process -FilePath $un -ArgumentList "/S" -Wait
-          # NSIS uninstallers re-spawn themselves — poll for the
-          # actual removal rather than trusting the launcher's exit
-          $deadline = (Get-Date).AddSeconds(150)
+          # the fifth dispatch's catch: the plain '/S' invocation runs
+          # the NSIS uninstaller ASYNC (it self-copies to %TEMP% and
+          # detaches, so -Wait returns before the removal finishes and
+          # the 150s poll can lose the race). The '_?=' pattern runs
+          # the uninstaller SYNCHRONOUSLY in place; the uninstaller
+          # cannot delete the dir it runs from, so the caller removes
+          # the empty residue afterwards.
+          Start-Process -FilePath $un -ArgumentList "/S", "_?=`"$root`"" -Wait
+          Start-Sleep -Seconds 5
+          # the residue: the uninstaller shell itself (+ the dir);
+          # anything more is recorded honestly before the removal
+          $left = @(Get-ChildItem $root -Recurse -Force -ErrorAction SilentlyContinue)
+          "NSIS uninstall residue after the sync run: $($left.Count) entries" |
+            Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"
+          foreach ($l in ($left | Select-Object -First 10)) {
+            "  residue: $($l.FullName)" |
+              Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"
+          }
+          $deadline = (Get-Date).AddSeconds(120)
           while ((Test-Path $root) -and (Get-Date) -lt $deadline) {
+            if ($left.Count -le 2) {
+              Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
+            }
             Start-Sleep -Seconds 3
+            $left = @(Get-ChildItem $root -Recurse -Force -ErrorAction SilentlyContinue)
           }
           if (Test-Path $root) {
             Write-Host "::error::the NSIS install dir survived the uninstall: $root"
