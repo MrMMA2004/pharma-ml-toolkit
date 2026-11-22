@@ -280,7 +280,10 @@ summarises them and wins any status disagreement.
   `source:"release"`, `exact:true`; the r334 fix rides main past
   the tag, a re-ship would desynchronize the homes from the
   immutable release manifest; the next owner-directed bump carries
-  it) + the r334 ledger committed and pushed over `8d92e9e0`.
+  it) + the r334 ledger committed and pushed over `8d92e9e0` — and
+  the r334 CI verdict closed GREEN on arrival: `67da10dc` 19/19
+  check-runs success (both the CI and the push workflows), the
+  Studio frontend leg green over the fix on the runner.
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

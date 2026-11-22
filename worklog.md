@@ -18266,3 +18266,8 @@ committed lock predates the four testing devDependencies the
 `user-event` / `jsdom`), so every CI install re-resolved them live;
 the install-reconciled lock closes that drift — + the evidence + the
 recovery scripts) committed and pushed over `8d92e9e0`.
+**The verdict closed on arrival**: the push `8d92e9e0..67da10dc`
+triggered CI + the push workflow at the new HEAD — **19/19
+check-runs success** (both runs completed/success), the **Studio
+frontend leg green over the fix on the runner** — the flake repair
+proven in the environment that caught it.
