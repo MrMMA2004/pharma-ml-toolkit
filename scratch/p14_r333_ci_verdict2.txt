@@ -1,0 +1,3 @@
+=== r333 CI verdict closure (661e3f65, the release terminal) ===
+total=20 check-runs, verdicts: {'success': 20}
+plus the Windows Release run 45047077848: completed/success (all 53 steps), the v1.2.240 installers attached to the release

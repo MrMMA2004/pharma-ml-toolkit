@@ -195,6 +195,42 @@ summarises them and wins any status disagreement.
   ruff/mypy — standing on the r331 runs over the identical terminal
   bytes, the venv verified importable and pin-exact at this
   arrival) + the r332 ledger committed and pushed over `74c31594`.
+  The part14 release round 333 — the interactive continuation, traces
+  1a2040a587fd6291/1a1e5c662b0b8219/1a20432a67a3244d, over the
+  owner's explicit release directive ("Release the new exe and msi
+  files" — the §5 publish-leg authorization): the **v1.2.240 Windows
+  installer set BUILT AND PUBLISHED by the CI pipeline** (the
+  `windows-release.yml` tag build, run 45047077848, all 53 steps
+  success: NSIS EXE + WiX MSI, the WebView2 offline installer, the
+  manifest + SHA256SUMS + the CycloneDX SBOM, the release attach —
+  the release live with the EXE at 558,022,042 B and the MSI at
+  710,553,078 B, the manifest's recorded commit byte-verified as the
+  r333 terminal `661e3f65`; CI 20/20 at the release terminal) after
+  the first attempt's two unit-gate failures were fixed at the source
+  (the worklog's dropped bold ledger format r326–332 — the seven
+  `**Rn — the Xth recorded run**` markers restored; the r331/r332
+  recovery prose carrying absolute home prefixes into two shipped QA
+  docs — scrubbed to the tilde convention; the freeze-policy leg
+  repaired over the runner's own pins locally) — with the
+  twenty-third deepest-class rollback recovered mid-build (history
+  reset to the r186 checkpoint, the PAT + the venv + the libEGL
+  workaround gutted, origin detached): the r322 playbook in full
+  (PAT re-spliced masked + validated as MrMMA2004; origin
+  re-attached, reset onto `661e3f65` 0/0; the resurrected residue
+  swept; `venv_repair.sh` foreground exit 0; both EGL legs standing)
+  — the build succeeding on GitHub's infrastructure through the
+  sandbox outage + the five-home zip parity re-verified with the
+  offsite re-seeded (one unique sha `0fadb6e5…`, the shipped fixed
+  point standing) + every gate re-pinned over the repaired stack (37
+  passed: trusted-origins + the three fix legs; the console 200 +
+  the zip-size API 23,489,390 exact:true; the browser E2E zero
+  errors + the footer geometry exact 3967==3967 + the live v1.2.240
+  header + the pins pair) + the §5 rule honored (the version
+  unchanged at 1.2.240 — the owner's directive opened the publish
+  leg, not a new version; the clean-machine smoke, Stage-5
+  retirement and signing lanes standing per the workflow's own
+  honest closing note) + the r333 ledger committed and pushed over
+  `661e3f65`.
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

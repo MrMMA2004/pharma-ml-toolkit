@@ -1,5 +1,20 @@
 ## [1.2.240] — 2026-11-21 — round 318 (the 109th recorded run: the interactive part13 continuation, trace 1a1fed8994f477c1 — the Phase-5 pharmacogenomics lane, API + GUI; a NEW version ship)
 
+- **The Windows installer set PUBLISHED (round 333, the owner-directed
+  release)**: `PharmaML_Studio_Setup_v1.2.240.exe` (558,022,042 B, the
+  NSIS setup with the WebView2 Evergreen offline installer embedded —
+  no online bootstrapper needed) + `PharmaML_Studio_v1.2.240.msi`
+  (710,553,078 B, the WiX package) + `RELEASE_MANIFEST.json` +
+  `SHA256SUMS.txt` + the CycloneDX 1.6 `sbom.cdx.json` — all built by
+  the `windows-release.yml` CI pipeline (run 45047077848, 53/53
+  steps: the full test battery, the PyInstaller-frozen backend
+  sidecar with its live verification, the Tauri 2 host compile, the
+  packaging validation) and attached to
+  https://github.com/MrMMA2004/pharma-ml-toolkit/releases/tag/v1.2.240
+  at the tagged terminal `661e3f65`. The installers ship unsigned per
+  the v1.2.231 precedent (BLK-3 stands); the clean-machine smoke
+  lane (BLK-1) stands per the pipeline's own honest closing note.
+
 - **The eleventh-arrival opening recovered in minutes — the r316/r317
   pattern again, verbatim**: the stale-summary reconciliation first (the
   inherited summary still described the world at r308/counter 99; the

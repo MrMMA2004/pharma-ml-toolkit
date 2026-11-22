@@ -1,0 +1,12 @@
+.......                                                                  [100%]
+=============================== warnings summary ===============================
+tests/test_freeze_equivalent.py::TestSmokeDriver::test_full_unfrozen_run_verdict_pass
+  /home/z/.venv/lib/python3.12/site-packages/ddtrace/internal/module.py:313: PythonQtWarning: Selected binding 'pyqt5' could not be found; falling back to 'pyside6'
+    self.loader.exec_module(module)
+
+tests/test_freeze_equivalent.py::TestSmokeDriver::test_full_unfrozen_run_verdict_pass
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/base.py:486: UserWarning: X has feature names, but SelfTrainingClassifier was fitted without feature names
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+7 passed, 2 warnings in 16.58s

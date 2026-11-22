@@ -18059,3 +18059,106 @@ over the identical terminal bytes).
 header; the counter 123 → 124; the round's payload (the r332
 evidence set + the pins pair + the ledger) committed and pushed
 over `74c31594`.
+
+## Round 333 — the 125th recorded run (the part14 release round: the owner-directed v1.2.240 EXE/MSI release built and published by the CI pipeline, the twenty-third deepest-class rollback recovered mid-build; traces 1a2040a587fd6291 / 1a1e5c662b0b8219 / 1a20432a67a3244d)
+
+**R333 — the 125th recorded run**
+
+**The directive**: the owner ordered the release outright ("Release
+the new exe and msi files") — the §5 publish-leg authorization the
+Phase-7 lane had been riding for since r325. **The discovery**: the
+repository already carries the full CI release pipeline
+(`.github/workflows/windows-release.yml`, the part11_2 §3/§4
+architecture — NSIS EXE + WiX MSI on a `windows-2022` runner, the
+full test battery before the packaging legs, the WebView2 offline
+installer embedded, the manifest + SHA256SUMS + CycloneDX SBOM
+generated in-run, and the release attach on tag builds) — the
+v1.2.231/v1.2.230 precedent's exact machinery. The release path: pin
+the tag `v1.2.240` at the terminal, let CI build + attach.
+
+**Stage 1 — the first tag build (run 45042967882 at `8d4d88bd`)
+failed the runner's own unit gate on two REAL defects, both fixed at
+the source**:
+
+- **The worklog ledger drifted**: rounds 326–332 dropped the bold
+  `**Rn — the Xth recorded run**` marker format the agreement guard
+  parses (`tests/test_documentation_consistency.py::TestLedgerAgreement`)
+  — the guard's last visible entry was R325 while the counter said
+  332. The seven markers restored verbatim under their `## Round`
+  headings (the round-324 documentation-consistency suite's
+  machine-caught failure mode, resurfaced through the CI-only lane
+  — the sandbox battery runs tests/api + the census collection but
+  not this file's full-run legs; the runner's full battery caught
+  what the sandbox standing set had stopped running).
+- **The shipped QA docs carried absolute home prefixes**: the
+  r331/r332 recovery prose wrote `/home/z/.local/lib/egl` (the
+  libEGL workaround path) into `docs/PROJECT_STATUS.md` and
+  `docs/QA/BLOCKED_TESTS_AND_SOLUTIONS.md` (BLK-6's mitigation cell)
+  — `tests/test_leakage.py::test_shipped_tree_carries_no_absolute_home_paths`
+  flagged both. Scrubbed to the tilde convention (`~/.local/lib/egl`).
+- The third local-only failure — the freeze-policy leg — repaired
+  over the runner's own pins (`pyinstaller==6.22.3` +
+  `mordred==1.2.0` per `packaging/windows/installer-requirements.txt`):
+  the sandbox venv lacked both; the capture then passed.
+  **Re-verified fresh: 3 passed, exit 0** (`p14_r333_fix_verification.txt`);
+  the full portable battery otherwise green per
+  `p14_r333_unit_gate_run.txt` (its sole failure was the freeze leg).
+- Stage 1 committed `661e3f65`, pushed; the tag deleted remotely and
+  re-pinned at the fixed tree (the failed run kept as evidence).
+
+**The twenty-third arrival — the DEEPEST class again, mid-build**
+(the r322/r326/r331 pattern): the four-sentinel check found history
+reset to the round-186 checkpoint `2eb0ede4` (HEAD a machinery UUID
+child `cc5e7b44` on top), the `.credentials/` directory GONE, the
+venv gutted (rdkit absent), the libEGL workaround gone, origin
+detached — with the counter (124) and the root node_modules the
+survivors. **The r322 playbook executed in full before any gate
+work**: the 93-char credential re-spliced masked from
+`upload/GitHub_token.txt` (600; never in argv/env/logs) and
+**API-validated as MrMMA2004**; origin re-attached, fetched (the
+tags restored), reset onto the durable terminal `661e3f65`
+divergence 0/0; the rollback-resurrected residue swept (the stale
+zip set v1.2.229/230/235–239 + the old-layout `pharma-ml-toolkit/.github/`
+duplicate + the stale toolkit-level counter copy);
+`scratch/venv_repair.sh` run FOREGROUND to exit 0 (rdkit 2026.09.1 /
+torch 2.14.1+cpu / numpy 1.26.4 / sklearn 1.5.2 verified, the
+wheel-bundled EGL stub riding repair step 6b) + the user-mode
+deb-extract workaround re-applied at `~/.local/lib/egl` (both legs,
+QtGui verified importable).
+
+**The build SUCCEEDED on GitHub's infrastructure during the sandbox
+outage** — run **45047077848: completed/success, all 53 steps** (the
+fixed unit gate green at 661e3f65, the API suite green, the
+PyInstaller freeze + sidecar verification green, the Tauri host
+compiled, NSIS + WiX emitted, the packaging validation passed, the
+manifest + sums + SBOM generated, the artifacts uploaded AND
+attached). **The v1.2.240 release is LIVE**:
+`https://github.com/MrMMA2004/pharma-ml-toolkit/releases/tag/v1.2.240`
+— `PharmaML_Studio_Setup_v1.2.240.exe` **558,022,042 B**,
+`PharmaML_Studio_v1.2.240.msi` **710,553,078 B**, `RELEASE_MANIFEST.json`
+(commit recorded = `661e3f65…`, verified byte-exact),
+`SHA256SUMS.txt` (four hashes), `sbom.cdx.json` (CycloneDX 1.6,
+23,634 B). **CI 20/20 check-runs success at the release terminal**
+(the release workflow adds its own check — the verdict evidence
+`p14_r333_ci_verdict2.txt`).
+
+**The housekeeping (the 2h-sync directive folded in)**: the
+five-home zip parity re-verified and the offsite re-seeded
+(`~/pharma-ml-toolkit-zips/` restored; **five homes, one unique sha
+`0fadb6e5…`** = the r329 re-ship bytes exactly, the shipped fixed
+point standing); the gates re-pinned over the repaired stack
+(trusted-origins + the three fix legs **37 passed in 8.05s**; the
+console render 200 + the zip-size API
+`{"zipBytes":23489390,...,"exact":true}`; the agent-browser E2E zero
+page/console errors + the Playground ten-tab surface + the footer
+geometry exact 3967==3967 + **the live v1.2.240 header** + the pins
+pair re-captured). The version-increment leg stays at 1.2.240 by the
+§5 rule — the owner's directive opened the publish leg, not a new
+version; the clean-machine smoke, Stage-5 retirement and signing
+lanes stand exactly where the workflow's own honest closing note
+leaves them.
+
+**The ledger**: the r333 lineage appended to the PROJECT_STATUS
+header; the counter 124 → 125; the round's payload (the release
+evidence set + the pins pair + the ledger) committed and pushed over
+`661e3f65`.

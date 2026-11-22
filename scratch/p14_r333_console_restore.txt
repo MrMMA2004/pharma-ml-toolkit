@@ -1,3 +1,6 @@
 === r333 console gates (atomic window) 2026-11-22T16:18:40Z
 GET / -> 200
 GET /api/toolkit/zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}
+=== r333 recovery-window console gates 2026-11-22T18:37:14Z
+GET / -> 200
+zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}

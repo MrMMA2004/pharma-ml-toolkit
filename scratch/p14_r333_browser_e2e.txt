@@ -37,3 +37,29 @@ playground ref: e303
 ---ROUND-CLOSE-GATES---
 GET / -> 200
 GET /api/toolkit/zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}
+
+--- BROWSER E2E (post-rollback recovery window) ---
+[agent-browser] launched browser
+✓ Page errors cleared
+✓ PharmaML Toolkit — ML · Pharma · Docking
+  http://127.0.0.1:3000/
+PharmaML Toolkit — ML · Pharma · Docking
+---FOOTER-GEOMETRY---
+"{\"footerCount\":1,\"footerBottom\":3967,\"docHeight\":3967,\"equal\":true}"
+---HEADER-VERSION---
+"v1.2.240"
+---INTERACTION---
+playground ref: e17
+✓ Done
+---TABLIST-COUNT---
+10
+---PINS---
+✓ Done
+✓ Screenshot saved to pharma-ml-toolkit/docs/gui/screenshots/p14r333-pins-desktop.png
+✓ Done
+✓ Screenshot saved to pharma-ml-toolkit/docs/gui/screenshots/p14r333-pins-mobile.png
+---FINAL-ERRORS---
+---CONSOLE-ERRS---
+---GATES---
+GET / -> 200
+zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}
