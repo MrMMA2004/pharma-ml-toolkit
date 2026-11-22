@@ -28,6 +28,17 @@
 //! contract), and a silently respawning backend would hide real
 //! failures — §14.2's "clear startup error messages" wins over
 //! silent retry.
+//!
+//! part14 §3.3 hardening (the D-4/D-5 fixes):
+//!
+//! * a MALFORMED handshake line never reaches an error surface raw —
+//!   the failure reason carries the serde error + the line's byte
+//!   length only (the line may contain the session token, which must
+//!   never leak into an exception, log, crash report, or UI message);
+//! * the parsed handshake is field-validated before it reaches the
+//!   endpoint bridge: a real bound port (never 0), the documented
+//!   urlsafe token shape, a non-zero pid, and a numeric-semver
+//!   version — every rejection redacted the same way.
 
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
@@ -83,6 +94,67 @@ enum SpawnOutcome {
 
 /// The single machine-readable prefix the backend prints (§14.1).
 const HANDSHAKE_PREFIX: &str = "PHARMAML-READY ";
+
+/// part14 §3.3 (D-4) — the redacted parse-failure reason: the raw
+/// handshake line NEVER appears (it may carry the session token);
+/// only the serde error and the line's byte length do.
+fn redacted_parse_failure(line_len: usize, error: serde_json::Error) -> String {
+    format!(
+        "the handshake line did not parse as the documented JSON \
+         shape: {error} (a {line_len}-byte malformed line was received; \
+         its raw contents are deliberately omitted — a session token \
+         must never reach an error surface: part14 §3.3)"
+    )
+}
+
+/// part14 §3.3 (D-5) — sanity-validate the parsed handshake before
+/// its fields reach the endpoint bridge.  Every rejection is a
+/// REDACTED, self-describing reason (never the raw line).
+fn validate_handshake(ready: &BackendReady) -> Result<(), String> {
+    // port: the backend binds port-0 itself and reports the ACTUAL
+    // bound port — 0 means the report never happened.
+    if ready.port == 0 {
+        return Err(String::from(
+            "the handshake reported port 0 — the backend must publish its \
+             actually bound port, not the wildcard it requested",
+        ));
+    }
+    // token: `secrets.token_urlsafe(32)` — 43 bytes of the urlsafe
+    // alphabet [A-Za-z0-9_-].  Anything shorter, longer, or outside
+    // that alphabet is not the documented token shape.
+    let token = ready.token.as_str();
+    let token_shape_ok = (16..=128).contains(&token.len())
+        && token
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    if !token_shape_ok {
+        return Err(String::from(
+            "the handshake token failed the documented shape check \
+             (16..=128 bytes of the urlsafe alphabet) — the session token \
+             is not presentable, refusing to bridge it",
+        ));
+    }
+    // pid: 0 is not a real process on any supported host.
+    if ready.pid == 0 {
+        return Err(String::from(
+            "the handshake reported pid 0 — not a real backend process",
+        ));
+    }
+    // version: the backend prints `pharmaml.__version__` — a short
+    // numeric-semver string (e.g. "1.2.240").
+    let version = ready.version.as_str();
+    if version.is_empty()
+        || version.len() > 32
+        || !version.starts_with(|c: char| c.is_ascii_digit())
+    {
+        return Err(String::from(
+            "the handshake version failed the documented shape check \
+             (a short numeric-semver string, e.g. 1.2.240) — refusing to \
+             bridge it",
+        ));
+    }
+    Ok(())
+}
 
 /// §14.2: a bounded startup timeout. The scientific stack imports
 /// (torch/rdkit) can take tens of seconds cold — 180s is the honest
@@ -213,14 +285,20 @@ fn spawn_and_handshake(exe: &std::path::Path) -> SpawnOutcome {
         Err(error) => {
             let _ = child.kill();
             let _ = child.wait();
+            // D-4: the raw line (which may contain the session token)
+            // never reaches the error surface — only the redacted form
             return SpawnOutcome::Failed {
-                reason: format!(
-                    "the handshake line did not parse as the documented JSON \
-                     shape: {error} (line: {ready_line})"
-                ),
+                reason: redacted_parse_failure(ready_line.len(), error),
             };
         }
     };
+    // D-5: field validation before the fields reach the endpoint
+    // bridge (part14 §3.3) — the rejection is redacted the same way.
+    if let Err(rejection) = validate_handshake(&parsed) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return SpawnOutcome::Failed { reason: rejection };
+    }
 
     SpawnOutcome::Ready(Box::new(BackendHandle {
         endpoint: BackendEndpoint {
@@ -273,3 +351,110 @@ pub fn terminate(handle: &BackendHandle) {
 
 /// The shared-state type managed on the Tauri app (lib.rs).
 pub type SharedBackend = Arc<BackendHandle>;
+
+#[cfg(test)]
+mod tests {
+    //! part14 §3.3 — the malformed-handshake regression tests (D-4's
+    //! redaction + D-5's field validation).  Pure-function level: the
+    //! spawn/handshake machinery needs a real sidecar binary; these
+    //! pin exactly the policy the wire contract demands.
+
+    use super::*;
+
+    /// A well-formed handshake payload (the real wire shape).
+    const VALID: &str = r#"{"port":43551,"token":"43-bytes-of-urlsafe-alphabet-Aa0-Zz9_","pid":1234,"version":"1.2.240"}"#;
+
+    fn parsed(payload: &str) -> BackendReady {
+        serde_json::from_str(payload).expect("the fixture must parse")
+    }
+
+    #[test]
+    fn a_well_formed_handshake_validates() {
+        assert!(validate_handshake(&parsed(VALID)).is_ok());
+    }
+
+    #[test]
+    fn port_zero_is_rejected() {
+        let mut ready = parsed(VALID);
+        ready.port = 0;
+        let reason = validate_handshake(&ready).unwrap_err();
+        assert!(reason.contains("port 0"));
+    }
+
+    #[test]
+    fn a_missing_token_is_rejected() {
+        let ready = parsed(
+            r#"{"port":43551,"token":"","pid":1234,"version":"1.2.240"}"#,
+        );
+        let reason = validate_handshake(&ready).unwrap_err();
+        assert!(reason.contains("token"));
+    }
+
+    #[test]
+    fn a_short_token_is_rejected() {
+        let ready = parsed(
+            r#"{"port":43551,"token":"abc","pid":1234,"version":"1.2.240"}"#,
+        );
+        assert!(validate_handshake(&ready).is_err());
+    }
+
+    #[test]
+    fn a_token_outside_the_urlsafe_alphabet_is_rejected() {
+        let ready = parsed(
+            r#"{"port":43551,"token":"bad token ! symbols here padding the length!!","pid":1234,"version":"1.2.240"}"#,
+        );
+        let reason = validate_handshake(&ready).unwrap_err();
+        assert!(reason.contains("shape"));
+    }
+
+    #[test]
+    fn a_too_long_token_is_rejected() {
+        let long = "a";
+        let ready = parsed(&format!(
+            "{{\"port\":43551,\"token\":\"{}\",\"pid\":1234,\"version\":\"1.2.240\"}}",
+            long.repeat(200)
+        ));
+        assert!(validate_handshake(&ready).is_err());
+    }
+
+    #[test]
+    fn pid_zero_is_rejected() {
+        let ready = parsed(
+            r#"{"port":43551,"token":"43-bytes-of-urlsafe-alphabet-Aa0-Zz9_","pid":0,"version":"1.2.240"}"#,
+        );
+        let reason = validate_handshake(&ready).unwrap_err();
+        assert!(reason.contains("pid 0"));
+    }
+
+    #[test]
+    fn an_empty_version_is_rejected() {
+        let ready = parsed(
+            r#"{"port":43551,"token":"43-bytes-of-urlsafe-alphabet-Aa0-Zz9_","pid":1234,"version":""}"#,
+        );
+        assert!(validate_handshake(&ready).is_err());
+    }
+
+    #[test]
+    fn a_non_numeric_version_is_rejected() {
+        let ready = parsed(
+            r#"{"port":43551,"token":"43-bytes-of-urlsafe-alphabet-Aa0-Zz9_","pid":1234,"version":"beta-release"}"#,
+        );
+        let reason = validate_handshake(&ready).unwrap_err();
+        assert!(reason.contains("version"));
+    }
+
+    #[test]
+    fn the_parse_failure_reason_never_carries_the_raw_line_or_token() {
+        // D-4: a malformed line that LOOKS like it carries a session
+        // token — the redacted reason must not contain it (or any of
+        // the raw payload), only the serde error + the byte length.
+        let malformed =
+            "PHARMAML-READY {\"port\":43551,\"token\":\"SECRET_TOKEN_VALUE_012345\"";
+        let error = serde_json::from_str::<BackendReady>(malformed).unwrap_err();
+        let reason = redacted_parse_failure(malformed.len(), error);
+        assert!(!reason.contains("SECRET_TOKEN_VALUE_012345"));
+        assert!(!reason.contains(malformed));
+        assert!(reason.contains(&malformed.len().to_string()));
+        assert!(reason.contains("deliberately omitted"));
+    }
+}

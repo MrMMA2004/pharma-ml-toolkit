@@ -1,0 +1,1 @@
+tsc --noEmit exit=0 (no output = clean, 0 bytes); run via node_modules/.bin/tsc after the one-window npm ci

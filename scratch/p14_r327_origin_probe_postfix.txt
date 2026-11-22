@@ -1,0 +1,17 @@
+P1 packaged WebView2 origin http://tauri.localhost + token, GET health
+  -> HTTP 200 | detail='' | allow=- | acao=http://tauri.localhost
+P2 packaged WebView2 origin https://tauri.localhost + token, GET health
+  -> HTTP 200 | detail='' | allow=- | acao=https://tauri.localhost
+P3 CORS preflight OPTIONS from tauri.localhost (JSON + custom header)
+  -> HTTP 200 | detail='OK' | allow=- | acao=http://tauri.localhost
+P4 CORS preflight OPTIONS from the dev origin localhost:5174
+  -> HTTP 200 | detail='OK' | allow=- | acao=http://localhost:5174
+P5 loopback origin, NO token (the auth surface)
+  -> HTTP 401 | detail='Invalid or missing session token.' | allow=- | acao=http://localhost:5174
+P6 loopback origin + valid token (the lane that must work)
+  -> HTTP 200 | detail='' | allow=- | acao=http://localhost:5174
+P7 non-loopback Host (tauri.localhost as the Host itself)
+  -> HTTP 403 | detail='Non-loopback Host rejected.' | allow=- | acao=http://localhost:5174
+P8 LAN Host 10.0.0.5 (the must-reject lane)
+  -> HTTP 403 | detail='Non-loopback Host rejected.' | allow=- | acao=-
+

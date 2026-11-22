@@ -22,13 +22,35 @@ import {
   initializeBackend,
   StartupError,
   type StartupInfo,
+  type StartupFailureCause,
 } from "@/services/api/startup";
 
 type Phase = "connecting" | "failed" | "ready";
 
 interface Failure {
   readonly stage: StartupError["stage"];
+  readonly cause: StartupFailureCause;
   readonly message: string;
+}
+
+/**
+ * The honest headline per failure cause (part14 D-3 — §3.1 item
+ * 12): "The backend did not start" is reserved for failures that
+ * actually are startup failures; authorization rejections and
+ * reachability/CORS blocks get named for what they are.
+ */
+function headlineFor(cause: StartupFailureCause): string {
+  switch (cause) {
+    case "auth":
+      return "The backend rejected this app's request";
+    case "network":
+      return "The backend could not be reached";
+    case "http":
+    case "protocol":
+      return "The backend is not healthy";
+    default:
+      return "The backend did not start";
+  }
 }
 
 export function StartupGate({ children }: { children: ReactNode }) {
@@ -50,9 +72,10 @@ export function StartupGate({ children }: { children: ReactNode }) {
     } catch (err) {
       const failure: Failure =
         err instanceof StartupError
-          ? { stage: err.stage, message: err.message }
+          ? { stage: err.stage, cause: err.cause, message: err.message }
           : {
               stage: "acquire",
+              cause: "handshake",
               message: err instanceof Error ? err.message : String(err),
             };
       setFailure(failure);
@@ -110,10 +133,10 @@ export function StartupGate({ children }: { children: ReactNode }) {
       <div className="flex min-h-screen items-center justify-center bg-[var(--color-background)] p-6">
         <div className="w-full max-w-md rounded-xl border border-red-300 bg-[var(--color-card)] p-6 shadow-sm">
           <h1 className="text-base font-semibold text-[var(--color-foreground)]">
-            The backend did not start
+            {headlineFor(failure.cause)}
           </h1>
           <p className="mt-1 text-xs font-medium uppercase tracking-wide text-[var(--color-muted-foreground)]">
-            stage: {failure.stage}
+            stage: {failure.stage} · cause: {failure.cause}
           </p>
           <p className="mt-2 break-words text-sm text-[var(--color-foreground)]">
             {failure.message}

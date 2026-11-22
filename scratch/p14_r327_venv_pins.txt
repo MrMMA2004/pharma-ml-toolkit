@@ -1,0 +1,6 @@
+numpy 1.26.4
+matplotlib 3.10.9
+fastapi 0.128.0
+rdkit 2026.09.1
+torch 2.14.1+cpu
+pharmaml 1.2.240 /home/z/my-project/pharma-ml-toolkit/src/pharmaml/__init__.py

@@ -1,0 +1,15 @@
+pre-code: 000
+node_modules: 0
+bun exit=0
+dev-daemon: forked (grandchild reparents to PID 1)
+up after 12s
+✓ Done
+✓ PharmaML Toolkit — ML · Pharma · Docking
+  http://localhost:3000/
+✓ Done
+✓ Screenshot saved to pharma-ml-toolkit/docs/gui/screenshots/p14r328-pins-desktop.png
+✓ Done
+http://localhost:3000/#/overview
+✓ Done
+✓ Screenshot saved to pharma-ml-toolkit/docs/gui/screenshots/p14r328-pins-mobile.png
+--final page errors--

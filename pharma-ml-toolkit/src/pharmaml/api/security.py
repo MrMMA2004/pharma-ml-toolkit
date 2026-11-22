@@ -10,8 +10,11 @@ service, never a network server:
 * every request must carry it (``Authorization: Bearer`` or the
   ``X-Session-Token`` header) or be the health probe with a valid
   Host/Origin pair;
-* ``Host`` must be loopback; ``Origin``/``Referer`` when present must
-  be loopback too — anything else is rejected before routing.
+* ``Host`` must be loopback; ``Origin``/``Referer`` when present
+  must be loopback **or an exact trusted application origin**
+  (part14 §3.2's narrowly scoped trusted-origin policy — see
+  :data:`TRUSTED_APP_ORIGINS`) — anything else is rejected before
+  routing.
 
 The token travels to the parent process (the WinUI host) only through
 the structured startup handshake (see :mod:`pharmaml.api.server`) — a
@@ -29,6 +32,7 @@ from fastapi import HTTPException, Request, status
 
 __all__ = [
     "LOOPBACK_HOSTS",
+    "TRUSTED_APP_ORIGINS",
     "SessionSecurity",
     "reset_session_security",
     "session_security",
@@ -36,6 +40,27 @@ __all__ = [
 
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
+
+#: The packaged Tauri 2 desktop application's WebView2 origins — the
+#: narrowly scoped trusted-origin policy of part14 §3.2 (D-1).
+#:
+#: Tauri 2 on Windows serves the packaged frontend from
+#: ``tauri.localhost`` (``tauri.conf.json`` declares no origin
+#: override, so the production and development origins differ — dev
+#: is the loopback Vite origin, production is this virtual host).
+#: Both entries are **scheme-strict and host-exact**: subdomains
+#: (``evil.tauri.localhost``), lookalike hosts
+#: (``tauri.localhost.evil.example``), port-bearing variants, and any
+#: other scheme stay untrusted.  The ``Host`` header policy is
+#: deliberately UNCHANGED — it remains loopback-only, because the
+#: packaged app's requests target ``http://127.0.0.1:<port>`` (the
+#: handshake's URL), never the virtual host itself.
+TRUSTED_APP_ORIGINS = frozenset(
+    {
+        "http://tauri.localhost",
+        "https://tauri.localhost",
+    }
+)
 
 
 def _host_is_loopback(host_header: str) -> bool:
@@ -59,6 +84,36 @@ def _origin_is_loopback(origin_header: str) -> bool:
     except ValueError:
         return False
     return host.lower() in LOOPBACK_HOSTS
+
+
+def _origin_is_trusted_app(origin_header: str) -> bool:
+    """True when a present Origin/Referer is exactly a trusted app origin.
+
+    The check is scheme-strict and host-exact against
+    :data:`TRUSTED_APP_ORIGINS` (part14 §3.2 — never a wildcard, never
+    a suffix match): ``Referer`` values, which carry paths, are parsed
+    so only scheme + host (+ no port) are compared.  An absent header
+    stays the non-browser client's lane (handled by the caller's
+    falsy short-circuit).
+    """
+    if not origin_header:
+        return False
+    try:
+        parts = urlsplit(origin_header)
+        port = parts.port  # raises ValueError on a malformed port
+    except ValueError:
+        return False
+    if parts.scheme not in ("http", "https") or port is not None:
+        return False
+    origin = f"{parts.scheme}://{(parts.hostname or '').lower()}"
+    return origin in TRUSTED_APP_ORIGINS
+
+
+def _origin_is_trusted(origin_header: str) -> bool:
+    """True when a present Origin/Referer is loopback or a trusted app origin."""
+    return _origin_is_loopback(origin_header) or _origin_is_trusted_app(
+        origin_header
+    )
 
 
 class SessionSecurity:
@@ -103,7 +158,7 @@ class SessionSecurity:
                 detail="Non-loopback Host rejected.",
             )
         for header in ("origin", "referer"):
-            if not _origin_is_loopback(request.headers.get(header, "")):
+            if not _origin_is_trusted(request.headers.get(header, "")):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Non-loopback Origin rejected.",

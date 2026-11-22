@@ -17357,3 +17357,318 @@ Every honest failure mode surfaces the backend's own typed errors verbatim as 42
 **R324 — the 116th recorded run (the interactive part13 continuation, trace 1a20277c05a55795, the Phase-6 REMAINDER — resource monitoring, security scanning lanes, documentation automation — each small reversible tested, over the FIFTEENTH and deepest-class rollback)**: the four-sentinel opening found the git history itself reset to the round-186-era machinery checkpoint `2eb0ede`, origin detached, the 600-mode credential gone, the venv gutted (numpy drifted to 2.1.3, torch/rdkit/pharmaml missing), the root web node_modules gutted (next itself absent), and the working tree carrying ~1,370 rehydrated ghost files — while the counter SURVIVED at 115 with round 323's full record and origin/main held the pushed r323 close-out `8e8515c2` (the stale inherited summary still described r308/counter 99 — the reconciliation read the R323 ledger + the counter + PROJECT_STATUS §6 before any work). The recovery, the r306–r313 playbook verbatim: the PAT re-spliced from the surviving text extract (`scratch/pat_recover_r319.py` — 93-char, masked, API-validated as MrMMA2004, never printed), origin re-attached on the clean HTTPS URL (the in-process credential-helper string form — the token never touches argv/env/logs/URLs) and fetched, the pre-reset safety check (no post-r323 work on disk — the worklog/counter both end at R323), `reset --hard 8e8515c2` (the pushed r323 terminal), the 14 untracked ghost paths swept (the retired 229/230/235–239 zips across three homes, the stale toolkit-path `.github/` duplicate, the dormant counter copy, the spent r319-WIP anchor, the stray r322 png — the tree 0/0 clean), `venv_repair.sh` FOREGROUND (VENV-REPAIR-DONE numpy 1.26.4 / torch 2.14.1+cpu / pharmaml 1.2.240 editable / STUDIO-REPAIR-DONE PySide6 + pyqtgraph 0.13.7), the Studio frontend `npm ci` (210 packages), `bun install` for the root web (828 packages — the r323 wipe class again: node_modules present but gutted, `next` absent; plus the r324 daemon find: the package.json "dev" pipe delegates to bash WITHOUT node_modules/.bin on PATH — `scratch/dev_r324.py` carries the PATH fix on the double-fork daemon, the r258/r263 shape), and the offsite mirror re-seeded from the git-tracked homes (18 zips — the reset restored a zip the r322-era disk lacked; the zip ritual's CURRENT pin + count assertion trued in-commit 233→240 / 13→18). The recovery gates re-verified at the exact r323 pins BEFORE the lane opened: the canonical collection 8,525/0/467, vitest 110/110 over 15 files, mypy clean, the zip-size API 21,724,961 exact:true, all homes testzip-OK — plus the EXE002 exec-bit residue swept directionally (102 shebang-less modules the rollback had marked executable; each file restored to its honest bit, the r313/r323 precedent). **THE LANE — the Phase-6 remainder, all three items EXECUTED per PROJECT_STATUS §6's own queue, each small reversible tested**: **§15 the resource-monitoring API lane** (`routes/system.py` + `tests/api/test_system.py`, 9 tests) — `GET /api/v1/system/resources`, the READ-ONLY snapshot over the host (CPU/memory/swap/disk), this backend process (RSS/threads/CPU) and the JobManager's own queue depth by state, §15's preserve rule verbatim (the manager's bounded concurrency, progress reporting and cooperative cancellation untouched — only the visibility gap the audit named gets closed); psutil (§15's own reference) used when importable and NEVER required — the fallback is the honest stdlib subset with the absent numbers nulled + noted and the `source` flag stating which branch answered; GPU monitoring deliberately absent (§15's optional-GPU rule — no pynvml dependency); the scope block rides every answer as a machine-readable contract (job priorities, checkpointing, recovery-after-interruption, per-job memory estimates honestly enumerated as queued). **§17 the supply-chain guard, both halves** — the CI-side `.github/workflows/security-scan.yml` (weekly + dispatch: pip-audit --strict over the pinned stack + npm audit --audit-level=high over the locked frontend + the local guard on the runner; §17's own rule verbatim: network-facing scanning lives in CI, never the runtime — the workflow never serves the app and never blocks the push lane) + the offline 8-test local suite (`tests/test_security_supply_chain.py`: the SBOM's CycloneDX validity + its coverage of the pinned core stack, the exact-pin discipline of requirements.txt, the strict full-pattern secret scan over src/tests/docs/tools/workflows — zero hits, proven by the tree grep — the `.credentials/` quarantine, and the workflow's own CI-only/no-runtime posture). **§18 the documentation-consistency guard** (`tests/test_documentation_consistency.py`, 13 tests) — the version-carrier lockstep as a CI pin (VERSION == pyproject == `pharmaml.__version__` == frontend package.json == tauri.conf.json == version_info filevers == CHANGELOG lead == FEATURES freeze stamp == the web TS carrier), the §21 twelve-deliverable existence set, the generated module index + its builder, and the ledger agreement — the worklog's newest round entry must equal the counter's round + run number (the stale-counter failure mode rounds 315/316/321 documented, now machine-caught). **The gates**: 30 new tests → the canonical collection re-trued **8,555/0/470**; the lane + guard suites green (tests/api + architecture-hygiene all-pass, the contract drift tests 6/6); ruff + mypy clean (the FURB167/ISC004/S110 finds in the new files fixed at the source); the OpenAPI contract re-exported (**109 paths** / 71 schemas — the +1 = /api/v1/system/resources) + the frontend types regenerated byte-lockstep; vitest 110/110 unchanged (no GUI lane this round). **The browser-E2E verification over the root web app** (the per-call node_modules + daemon restart procedure carrying every window): the pins render (8,555 · 110 · 1,704 · 567,706 · v1.2.240 in the page text), the hash-route workspace navigation (/#/datasets) changes the view, the footer naturally pushed on the long page, zero page errors, zero app console errors (the React DevTools info + HMR log only); the evidence pair `docs/gui/screenshots/r324-pins-{desktop,mobile}.png` (1440×900 + 390×844). **The census fixed point three-way (walk = live API = page render): 1,704 files / 567,706 lines / v1.2.240** (+6 files: the route + the three suites + the pins pair; +797 the counted delta incl. the regrown contract pair + the doc deltas); the pins trued (toolkit-stats.ts 8,555 / 110 / 1,704 / 567,706) + the pins pair captured. **The same-version re-ship at the converged fixed point**: the terminal-of-record **`19aa2d3f` at 22,092,317 B** (1,147 entries / 1,025 files, must-carry complete incl. the four r324 lane files + the pins pair, retired-pair negative, composition 0, real leaks 0 — 7 documented pattern-literals), six-home parity ALL OK (download / toolkit download / toolkit dist-archive / upload / root dist-archive / offsite, **18 zips** — RITUAL PASS with the trued CURRENT/count), the zip-size API **22,092,317 exact:true source:release**. Counter 115 → 116. Still honestly BLOCKED: clean-machine smoke (C-3/C-5), Stage-5 PySide6 retirement, installer signing (certificate-gated). **part13 Phase 6 is CLOSED** (the workflow engine + its GUI leg at r322/r323; resource monitoring, security scanning, documentation automation here); Phase 7 (the new production release, gated on the BLOCKED lanes) rides the next continuation per PROJECT_STATUS §6.
 
 **R325 — the 117th recorded run (the interactive part13 continuation, trace 1a202a6b96f48379, the part13 Phase-7 RELEASE-GATE VERIFICATION round)**: the sixteenth arrival — **the FIRST CLEAN OPENING in the recorded rollback era: no rollback, nothing recovered** — the four-sentinel check found the world exactly at the r324 terminal: HEAD `08331ee7` == origin/main (the live ls-remote), the tree 0/0 clean, the counter at 116 with the worklog ending at R324, the venv at the exact pins (Python 3.12.16 / numpy 1.26.4 / torch 2.14.1+cpu / rdkit 2026.09.1 / sklearn 1.5.2 / pandas 2.2.3 / pharmaml 1.2.240 editable — zero repair) and the Studio frontend node_modules standing; the stale inherited summary (still describing the world at r308/counter 99) reconciled against the on-disk truth before any work. **THE LANE — part13 Phase 7 ("a new production release... when all applicable acceptance gates pass") EXECUTED to its executable extent, the release-gate verification from the exact release commit**: the GitHub-side legs verified live (the authenticated API polls, the token never printed) — CI at HEAD `08331ee7` **19/19 check-runs all success** (the r324 push's verdict closed on arrival), the repo public on `main`, and the published **v1.2.231** release assets intact at the exact ledger bytes (EXE 557,655,583 B / MSI 710,122,853 B / RELEASE_MANIFEST.json / SHA256SUMS.txt — the source/installer parity verified at the asset level; the published Windows assets never overwritten, the §5 rule verbatim); the local gates re-run in full — the canonical collection **8,555 / 0 errors / 470 files** (the r324 pin re-verified); the **ten-chunk gate** all legs green: chunks 2, 3, 5, 6, 7, 8 and the nine-card (23s rc=0), doctest (107s), api (129s) and root github-page legs first-pass green; chunk-1 ran the r275 OOM-split drill (the container SIGKILL) with its one heavy single — tests/ui/test_nine_card_first.py — taking its quiet-container makeup leg **23/23 exit 0** (the first-pass contention was the round's own sequencing — ruff/mypy/vitest running concurrently with the memory-sensitive chunk; owned, not hidden); chunk-4's web-parity legs failed on the sandbox reaper's **per-call root-node_modules wipe** (the documented r323/r324 class — the probes' `zustand` import gone with the wipe landing between tool calls) and went green via the **one-window makeup** (bun install + the suite inside the same call: **100 passed / 1 skip**, exit 0 — the r320 precedent verbatim); ruff clean; mypy clean (296 source files); the frontend tsc clean; vitest **110/110**; the OpenAPI contract current at **109 paths / 71 schemas** (the byte-identical `--check` re-export, the drift gate green); the venv pins zero-drift. **The census fixed point three-way (walk = live API = page render): 1,706 files / 567,800 lines / v1.2.240** — the r325 pins pair (+2 files) + the round's counted doc deltas (+94 live-walk semantics; the Python replica's +98 counts the four 0-byte `__init__.py` files as 1 line each, the r309-documented bias — the pin EQUALS the live walk; the fixed point took two honest compression iterations to converge after the bias note's own line movement, both recorded in the round's commands) — the pins trued (toolkit-stats.ts 8,555 / 110 / 1,706 / 567,800) + the pins pair `docs/gui/screenshots/r325-pins-{desktop,mobile}.png` captured (1440×900 + 390×844, zero page errors, zero console errors, the trued stats line rendered). **The same-version re-ship at the converged fixed point** (the r303..r324 convention; the §5 no-silent-bumps rule held — the version stays 1.2.240 until the BLOCKED lanes clear): the terminal-of-record **`211c927c` at 22,449,138 B** (1,150 entries / 1,027 files, must-carry complete incl. the r325 pins pair, retired-pair negative, composition 0, real leaks 0 — 7 documented pattern-literals, the version_info quadruple 1.2.240) — **six-home parity ALL OK** (download / toolkit download / toolkit dist-archive / upload / root dist-archive / offsite — the explicit sha256 sweep `211c927c` exact across all six) + the offsite mirror at **18 zips** + the zip-size API **22,449,138 exact:true source:release** (the live fresh=1 tree walk re-verified in the same window). **The honest Phase-7 BLOCKED record — unchanged gates, zero embellishment**: the version-increment / EXE-MSI build / publish legs stay BLOCKED on the three §4 lanes (the C-3/C-5 clean-machine smoke — a genuine Windows 10/11 x64 machine; the Stage-5 PySide6 retirement — gated behind the clean-machine pass + parity; the installer digital signing — certificate-gated); the new-version ship (v1.2.241+) opens the day the owner-side gates clear; the lane re-rides each continuation until then. Counter 116 → 117.
+
+## Round 326 — the 118th recorded run (the part14 arrival — the interactive part14 continuation, trace 1a203001d56e82d9)
+
+**The arrival state: the SIXTEENTH rollback (deepest class), fully
+reconciled before any work** — the inherited stale summary's claims
+("counter 99 / Round 309 pending / HEAD 19effec8") were discarded per
+its own "do not trust" marker; the four-sentinel check found: HEAD
+`2eb0ede4` (the r186 machinery checkpoint, NOT `19effec8`), `origin`
+detached entirely, the PAT credential gone (no `gh`, no
+credentials), the venv gutted (numpy floated to 2.1.3; rdkit / torch
+/ pharmaml / PySide6 / mypy / ruff / pytest-xdist / pyinstaller
+missing), the Studio frontend node_modules wiped, the root web
+console node_modules under an ACTIVE per-call wipe (re-verified live:
+three consecutive wipes observed mid-session), the counter at 117
+(last: round 325). **The remote terminal re-verified read-only** (the
+public git protocol — the API is rate-limited for this egress):
+`origin/main` = `ad5f00a7` = the r325 close-out push, 528 commits
+ahead of local HEAD; the full-tree hash sweep (every terminal-tracked
+file vs disk `git hash-object`) proved the disk source BYTE-IDENTICAL
+to the terminal except `.zscripts/dev.pid` (runtime), with ghost
+additions = the 5 `pharmaml.egg-info` files + `tests/test_playground.py`
+(a rollback-RESURRECTED ghost — tracked at r186, deleted in the
+terminal era — carrying exactly 753 tests, reconciling the disk
+census 9,308/471 = the terminal's 8,555/470 + 753/1), and 245 absent
+files ALL under `extracted/…` (the user's legacy-upload family, not
+application source). The working tree UNDERSTOOD — Gate A's
+"no unexplained source changes" satisfied at hash level.
+
+**part14 §18's nine opening tasks executed to their read-only
+extent — the first deliverable is the audit, no code rewrite**:
+`upload/MASTER_PROMPT part14.pdf` read in full (72pp — the
+PharmaML Studio comprehensive engineering/testing/security/ECC/
+release-readiness prompt); the three-surface architecture
+reconciled (A: the Python toolkit + FastAPI + legacy PySide6
+`studio.py`; B: the React/Tauri 2 desktop app `frontend/` +
+`src-tauri/`; C: the root Next.js web console — boundaries intact,
+no merges); the version carriers reconciled at 1.2.240 everywhere
+(VERSION / pyproject / `pharmaml.__version__` / frontend
+package.json / tauri.conf.json — zero drift, the console's own
+0.2.1 distinct); `docs/PROJECT_STATUS.md` re-read (current through
+r325; its "tree 0/0" claims now stale — superseded on current state
+by the new audit, history preserved); the release-zip homes verified
+at EXACT ledger bytes (v1.2.240 = 22,449,138 B across upload/ +
+download/ + toolkit download/) and the web console's zip-size API
+answering live `22,449,138 exact:true source:release`.
+
+**The critical incident REPRODUCED from current source — §3's
+"backend did not start / stage: health / Failed to fetch" is
+D-1+D-2+D-3, not a startup failure**: the eight-leg live probe over
+the REAL `create_app()` (scratch/p14_r326_origin_probe.py/.txt) —
+`http://tauri.localhost` + a VALID token → 403 "Non-loopback Origin
+rejected" (P1); `https://tauri.localhost` → 403 (P2); OPTIONS
+preflight → 405 from ANY origin incl. the dev origin (P3/P4 — no
+CORSMiddleware exists; dev survives only via the Vite same-origin
+proxy, which is why dev works and the packaged app fails — the
+§3.1 production/dev origins differ, answered); loopback + no token
+→ 401 (P5); loopback + token → 200 (P6); non-loopback Hosts → 403
+(P7/P8). Root causes: `security.py`'s `LOOPBACK_HOSTS` lacks
+`tauri.localhost` (the packaged WebView2 origin; `tauri.conf.json`
+has no origin override and its CSP already permits 127.0.0.1 — CSP
+is NOT the blocker); `create_app()` wires the guard as a route
+dependency with no CORS lane, so the browser's mandatory preflight
+(JSON + X-Session-Token shape from client.ts) 405s and fetch rejects;
+`startup.ts` then mislabels the fetch failure as the health-stage
+"backend did not start" error verbatim. Plus two §3.3 findings from
+the Rust host review: the handshake parse-failure path prints the
+RAW PHARMAML-READY line (session token inside) into the error
+surface (D-4, potential), and no port/pid/token-format validation
+exists (D-5).
+
+**The evidence legs executed**: the venv re-pinned foreground via the
+idempotent playbook (numpy 1.26.4, torch 2.14.1+cpu, rdkit 2026.9.1,
+matplotlib 3.10.9, pharmaml 1.2.240, fastapi 0.128.0 — VENV-REPAIR-
+DONE + the PySide6 6.8.3 GUI stack verified offscreen); the pytest
+collection census 9,308/471/0-errors (terminal-equivalent
+8,555/470 after the ghost reconciliation); the ECC inspection WITHOUT
+installation (per §18): `ecc-universal@2.2.3` confirmed the current
+official release (shasum 11f410d5…, MIT, node≥18 — the sandbox's
+node 24.22.3 / npm 11.19.1 / git 2.47.3 all qualify), the Windows-
+native limits verified from the official README (continuous-learning
+v2 observer daemon + memory-vault open defects #2489/#2626;
+shell-backed skills need Git Bash/WSL), and the harness answer for
+§4.1 recorded: NO Claude Code / Codex exists in this sandbox — the
+dry-run is proposed for the Windows box, pending approval; the web
+console verified live over the per-call wipe (one-window makeup ×4:
+bun install + the r258 double-fork daemon + curl + agent-browser —
+render 200/202KB, title verified, the ML-card interaction rendering
+the registry/training surface, the pins pair
+docs/gui/screenshots/p14r326-pins-{desktop,mobile}.png captured,
+zero fresh page errors after the sticky-session error slate was
+cleared; a Turbopack error observed in one polluted window was the
+reaper's mid-session node_modules wipe — the environmental class,
+documented, not an app defect).
+
+**The deliverable**: `pharma-ml-toolkit/docs/QA/PART14_PHASE1_AUDIT.md`
+(the §18.9 prioritized audit + implementation plan, §17A–H structure,
+the defect register's opening rows D-1…D-5, the release gates
+honestly: A PARTIAL / B FAIL (the origin incident live) / C+D PARTIAL
+/ E+F+G BLOCKED-or-cited). **Nothing committed, nothing pushed** —
+part14 §16.24 supersedes the part13 push-per-round protocol (and the
+PAT is gone anyway: the push leg BLOCKED, recorded, not hidden). The
+vitest/tsc/ruff/mypy legs NOT re-run this round (node_modules wiped;
+the r325 terminal evidence stands as last-verified) — they re-ride
+with the recovery. Counter 117 → 118.
+
+## Round 327 — the 119th recorded run (the part14 Phase-2/4 execution — the incident fix, trace 1a20321350ff75d1)
+
+**The arrival state: the SEVENTEENTH rollback, the lightest class** —
+the inherited stale summary's claims ("counter 99 / Round 309
+pending / HEAD 19effec8 / part14 Phase 1 never executed") were
+discarded per its own do-not-trust marker; the four-sentinel check
+found the ledger AHEAD of the summary: the counter at 118 (round 326
+— the part14 arrival HAD executed §18's nine opening tasks
+read-only, its `pharma-ml-toolkit/docs/QA/PART14_PHASE1_AUDIT.md`
+deliverable + the eight-leg probe evidence + the pins pair all
+surviving on disk), HEAD `a4e0bc4e` (one machinery UUID checkpoint
+over the r326-era `2eb0ede4` base), `origin` detached + the PAT gone
+(unchanged BLOCKED), **the venv pins verified intact — zero repair**
+(numpy 1.26.4 / torch 2.14.1+cpu / rdkit 2026.09.1 / matplotlib
+3.10.9 / pharmaml 1.2.240 / fastapi 0.128.0), the Studio frontend
+node_modules wiped (the rollback's class — recovered via one-window
+`npm ci`), and the root web console node_modules under the ACTIVE
+per-call wipe (re-verified live AGAIN this round: the reaper struck
+between three consecutive tool calls; the one-window makeup ×3 —
+`bun install` + the r258 double-fork daemon + the wait-to-200 loop
+in a SINGLE call — landed the render 200 with the HTML head
+verified).
+
+**part14 Phase 2 completed + Phase 4 EXECUTED — the critical
+incident FIXED at the source (the audit's §G.2/§G.3 plan, in order):**
+
+- **D-1 FIXED** — `src/pharmaml/api/security.py`: `TRUSTED_APP_ORIGINS`
+  = the two packaged WebView2 origins (`http://tauri.localhost` +
+  `https://tauri.localhost`), scheme-strict and host-exact and
+  port-less; a Referer (which carries paths) is parsed so only
+  scheme+host compare; the **Host policy deliberately unchanged** —
+  loopback-only (the packaged app's requests target the handshake's
+  `127.0.0.1:<port>` URL, never the virtual host; P7/P8 stay 403).
+- **D-2 FIXED** — `create_app()`: the scoped CORS preflight lane
+  (`CORSMiddleware`, fully-anchored regex — starlette 0.50
+  fullmatch semantics verified from the installed source: the two
+  Tauri origins + loopback-any-port (the Vite dev origins), nothing
+  else; exact-origin echo, never `*`; `allow_credentials=False` —
+  the token is a header, never a cookie lane; methods + the
+  content-type/x-session-token/authorization header allowlist;
+  max_age 86400). Preflight 405→200 for trusted origins; arbitrary
+  and lookalike origins get NO allow headers (the browser keeps
+  blocking them); the lane NEVER authenticates — the 401/403 lanes
+  are pinned unchanged by test.
+- **D-3 FIXED** — `frontend/src/services/api/startup.ts`:
+  `StartupFailureCause` (handshake | network | auth | http |
+  protocol) + `classifyHealthFailure()` (a 401/403 is an
+  authorization rejection; a fetch TypeError is a reachability/
+  CORS block; another status is an honest "answered, but not ok") +
+  the cause-aware `StartupGate.tsx` headline ("The backend did not
+  start" now reserved for failures that actually are startup
+  failures; the default-cause path keeps the gate's pinned tests
+  green untouched).
+- **D-4 + D-5 FIXED at source (compile verification honestly
+  BLOCKED — no cargo/rustc in this sandbox)** —
+  `src-tauri/src/backend_manager.rs`: `redacted_parse_failure()`
+  (the raw PHARMAML-READY line NEVER reaches an error surface — the
+  serde error + the byte length only) + `validate_handshake()`
+  (port ≠ 0; the token 16..=128 bytes of the urlsafe alphabet; pid
+  ≠ 0; a short numeric-semver version) with redacted rejection
+  reasons, plus the §3.3 malformed-handshake `#[cfg(test)]` suite
+  (11 cases: port-0, missing/short/alphabet-violating/oversized
+  tokens, pid-0, empty/non-numeric versions, the redaction
+  non-leak proof) — WRITTEN, NOT EXECUTED (no Rust toolchain; never
+  marked passed; rides the first cargo-enabled environment).
+- **The §3.1-item-8 WS audit leg (read-only)**: `routes/events.py`
+  enforces the session token at the WS handshake (close 4401 —
+  consistent with REST); the Origin header is NOT checked on the WS
+  handshake — recorded as **D-6 (low, candidate)** in the new
+  register: the exposure is bounded by the loopback-only bind +
+  the memory-only token, and the fix is a designed policy
+  extension (the packaged app's own WS is ALSO cross-origin from
+  `tauri.localhost`), not a mechanical copy — queued, not silently
+  applied.
+
+**The evidence legs (all captured in `scratch/p14_r327_*`)**: the
+focused regression matrix `tests/api/test_trusted_origins.py` —
+**34/34 green** (the fixed P1–P8 legs: packaged origins 200 with
+token; preflights answered with exact-origin ACAO for the trusted +
+loopback-dev origins; the token still required (401 lane); the Host
+still loopback-only; subdomains/lookalikes/port-bearing variants
+403; disallowed preflights get NO ACAO; the preflight-then-401
+sequence proving no auth bypass); the full `tests/api/` suite —
+**449 passed + 1 skipped, 0 failed**; the r326 probe re-run
+post-fix (`p14_r327_origin_probe_postfix.txt`: P1/P2 403→200, P3/P4
+405→200 + ACAO echo, P5/P6/P7/P8 byte-identical to the pre-fix
+evidence); the frontend legs — **vitest 119/119 (16 files**,
+including the new 9-test D-3 classification suite
+`frontend/src/services/api/__tests__/startup.test.ts` AND the 6
+StartupGate tests green untouched) + **tsc --noEmit clean** (one
+initial `Error.cause` override-modifier error found and fixed —
+`override readonly cause`, TS1029's order); **ruff 0.17.1 clean**
+on both changed Python files + the new test file; **mypy 2.4.0
+clean** on both changed source files; the collection census
+**9,342 tests / 472 files / 0 collection errors** (= the r326
+9,308/471 + the 34 new; terminal-equivalent 8,589 + the
+resurrected ghost's 753); the root web console verified live (the
+one-window makeup above — render 200).
+
+**The docs legs**: `docs/PROJECT_STATUS.md` — the r326 + r327
+lineage appended to the header, the §2 incident row (Gate B's FAIL
+closed at source level), the §5 part14-§16.24 note (supersedes the
+part13 push-per-round protocol); `docs/QA/DEFECT_REGISTER.md`
+CREATED (the §13.2 deliverable seed — D-1..D-5 with fix statuses +
+evidence pointers + the FIXED-(source, compile-blocked) convention
++ the new D-6 candidate row); the Phase-1 audit doc left untouched
+as history. One process incident during the PROJECT_STATUS edit —
+a failed atomic MultiEdit had PARTIALLY applied two of its three
+edits before failing on the third (the tool's atomicity did not
+hold), duplicating two insertions — detected by the post-edit
+verification grep and both duplicates removed in the same round
+(every needle re-counted 1).
+
+**Nothing committed, nothing pushed** (part14 §16.24 — no explicit
+authorization; the PAT is gone regardless: the push leg BLOCKED,
+recorded). The branch-pointer reset onto `ad5f00a7` remains
+deliberately unexecuted — §16.24's explicit-authorization
+requirement (the r326 ruling stands; the ghost-file noise stays
+understood at census level). Counter 118 → 119.
+
+## Round 328 — the 120th recorded run (the part14 §16.24-authorized recovery + push round, trace 1a2033f36c411301)
+
+**The arrival state: the EIGHTEENTH rollback (light class)** — the
+inherited stale summary's claims ("counter 99 / Round 309 pending /
+HEAD 19effec8 / 21 consecutive summary-only turns") discarded per its
+own do-not-trust marker; the four-sentinel check found the ledger AHEAD
+of the summary: the counter at 119 (round 327 — the part14 Phase-2/4
+incident-fix round, ALL its work surviving on disk: the five D-1..D-5
+fix files re-grepped present, the ledger + Phase-1 audit + register +
+probe evidence intact), HEAD `4fb8f058` (one machinery UUID checkpoint
+over the r327-era `a4e0bc4e`), `origin` detached entirely, the PAT
+credential GONE (no `.credentials/`, no `~/.git-credentials`, no
+`~/.ssh`, no gh, no token env — the push lane's standing block), the
+venv pins verified intact — zero repair (numpy 1.26.4 / torch
+2.14.1+cpu / rdkit 2026.09.1 / matplotlib 3.10.9 / fastapi 0.128.0 /
+pharmaml 1.2.240), the root web console node_modules wiped (the render
+000 — the reaper struck THREE times this round, each observed live at
+a tool-call boundary and each recovered by the one-window makeup), and
+the Studio frontend node_modules an EMPTY SHELL (the r320 reaper
+class: the first gate attempt resolved the junk `tsc@2.0.4` through
+npx — recovered via the one-window `npm ci`, 147 packages).
+
+**The owner's explicit "Push" = the §16.24 authorization the r326
+ruling waited for — the Phase-1 audit §G.1 recovery EXECUTED in full:**
+
+- `origin` re-attached
+  (`https://github.com/MrMMA2004/pharma-ml-toolkit.git`), the full
+  fetch clean; `origin/main` = `ad5f00a7` — the r325 close-out push,
+  identity re-verified from its commit message verbatim (2026-11-22
+  11:05:20 +0000); divergence before the reset: **528 behind / 2
+  ahead** (the two machinery UUID checkpoints — discarded by the
+  reset, reflog-resident).
+- **The branch pointer reset onto `ad5f00a7`** (mixed — the working
+  tree untouched): the post-reset tree UNDERSTOOD at category level —
+  exactly the 8 intended modifications (the five D-1..D-5 fix files +
+  PROJECT_STATUS + worklog + counter), the `.zscripts/dev.pid`
+  runtime-noise deletion (unstaged, the r326-documented class), and 35
+  untracked = the tracked evidence set to commit + the documented
+  residue (the retired-era zips: 4 `download/` + 4 root
+  `dist-archive/` + 8 toolkit `download/`; the pins pairs; the QA
+  docs; the p13/p14 evidence files; the prompt copy
+  `scratch/part14.txt` — PAT-pattern-scanned 0 matches but
+  deliberately disk-only per the upload-ignore convention; the
+  p13r322-final-verify + r319-wip strays).
+- **The ghost sweep**: the resurrected Tk pair
+  (`tests/test_playground.py` + `playground.py` — retired at r304,
+  terminal-absent, rollback-resurrected) + the stale toolkit-level
+  counter copy (the round-288 era) deleted; the census re-trued
+  9,342/472 → **8,589 tests / 471 files / 0 collection errors** —
+  EXACTLY the terminal 8,555/470 + the 34 new trusted-origin tests +
+  1 file: the reconciliation arithmetic closes.
+
+**The evidence legs (all captured in `scratch/p14_r328_*`)**: the
+focused regression `tests/api/test_trusted_origins.py` — **34 passed,
+66 warnings in 6.40s** re-run at this arrival; the full `tests/api/`
+suite — **449 passed + 1 skipped, 0 failed in 118.87s**; the Studio
+frontend recovered — **vitest 119/119 (16 files)** + **tsc --noEmit
+clean (0 output bytes)** via the one-window `npm ci`; **ruff 0.17.1
+clean** on the three changed Python files; **mypy 2.4.0 clean** on
+the two changed sources; the root web console — the one-window makeup
+×3 (bun install + the r258 double-fork daemon + the wait-to-200 loop)
+landing **render 200 / 202,048 B, the title verified, the zip-size
+API 22,449,138 `exact:true source:release`** (ledger parity); the
+agent-browser verification over the LIVE console — **zero page errors,
+zero console errors, the ML-card interaction rendering the
+registry/training surface, the footer at the content-flow bottom
+(natural push-down, never overlapping)**, the pins pair
+`docs/gui/screenshots/p14r328-pins-{desktop,mobile}.png` captured at
+1440px + 390px.
+
+**The ledger + the commit**: the r328 lineage appended to the
+PROJECT_STATUS header + the §5 §16.24 note (the authorization
+RECEIVED); the counter 119 → 120; the payload committed over the
+`ad5f00a7` base (the five fix files + the two new test files + the QA
+audit + defect register + the pins pairs + the r326–r328 evidence
+set + the ledger) — the first commit of the part14 era.
+
+**The push attempt — the lane credential-BLOCKED, recorded, not
+hidden**: the real `git push origin main` attempted immediately
+post-commit; without the PAT (sentinel-verified absent everywhere)
+GitHub's https push rejects authentication before any ref
+negotiation — the live error captured at
+`scratch/p14_r328_push_attempt.txt` and committed verbatim; the
+payload rides the PAT restoration (place the token at
+`.credentials/github_pat`, 600 mode, per `scripts/git_auth.sh` —
+then `bash scripts/git_auth.sh push origin main`). The same-version
+re-ship deliberately deferred to the push-success round: the archive
+re-ship marks the SHIPPED fixed point and the ship is the gated leg
+— they ride together the moment the PAT exists (the r303/r304/r317
+convention honored). Counter 119 → 120.

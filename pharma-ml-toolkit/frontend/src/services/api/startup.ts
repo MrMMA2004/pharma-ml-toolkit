@@ -28,7 +28,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-import { api, configureBackend } from "./client";
+import { api, ApiError, configureBackend } from "./client";
 import { getEventStream } from "@/services/websocket/client";
 
 /** Which startup channel delivered the handshake (displayed by the shell). */
@@ -43,14 +43,37 @@ export interface StartupInfo {
   readonly scientificCore: boolean;
 }
 
+/**
+ * Why the startup sequence failed — the honest classification of the
+ * part14 §3.1 item-12 incident (D-3): an unreachable/CORS-blocked
+ * probe and an authorization rejection were previously all wrapped
+ * into "the backend health probe failed", which the gate rendered
+ * under the "The backend did not start" headline — mislabeling the
+ * packaged app's origin-policy 403s and the browser's CORS-blocked
+ * fetch rejections as startup crashes.
+ */
+export type StartupFailureCause =
+  | "handshake" // the endpoint/token acquisition itself failed
+  | "network" // fetch rejected — unreachable or CORS-blocked
+  | "auth" // the backend answered 401/403 — token/origin rejected
+  | "http" // the backend answered another non-ok status
+  | "protocol"; // the backend answered, but not with the payload the contract expects
+
 /** A startup failure carrying the failing §14.1 stage. */
 export class StartupError extends Error {
   readonly stage: "acquire" | "health" | "stream";
+  /** Why the sequence failed (narrows the base `Error.cause`). */
+  override readonly cause: StartupFailureCause;
 
-  constructor(stage: "acquire" | "health" | "stream", message: string) {
+  constructor(
+    stage: "acquire" | "health" | "stream",
+    message: string,
+    cause: StartupFailureCause = "handshake",
+  ) {
     super(message);
     this.name = "StartupError";
     this.stage = stage;
+    this.cause = cause;
   }
 }
 
@@ -148,16 +171,13 @@ export async function initializeBackend(): Promise<StartupInfo> {
   try {
     health = await api.get<HealthReport>("/api/v1/health");
   } catch (err) {
-    throw new StartupError(
-      "health",
-      "the backend health probe failed: " +
-        (err instanceof Error ? err.message : String(err)),
-    );
+    throw classifyHealthFailure(err);
   }
   if (health.status !== "ok") {
     throw new StartupError(
       "health",
       `the backend reported status=${health.status} instead of ok`,
+      "protocol",
     );
   }
 
@@ -179,4 +199,69 @@ export async function initializeBackend(): Promise<StartupInfo> {
     version: health.version || endpoint.version,
     scientificCore: health.scientific_core,
   };
+}
+
+/** Pull the backend's `detail` payload out of an ApiError, if any. */
+function apiErrorDetail(detail: unknown): string {
+  if (detail === null || detail === undefined) {
+    return "";
+  }
+  if (typeof detail === "object" && detail !== null && "detail" in detail) {
+    return String((detail as { detail: unknown }).detail);
+  }
+  return String(detail);
+}
+
+/**
+ * The D-3 fix (part14 §3.1 item 12): classify the health probe's
+ * failure honestly —
+ *
+ * * a 401/403 is an AUTHORIZATION rejection (the backend is up; the
+ *   token or this app's origin was not accepted);
+ * * a fetch TypeError is a REACHABILITY/CORS block (the browser either
+ *   could not connect or refused the cross-origin request — the
+ *   packaged-app origin incident class);
+ * * another HTTP status is an honest "answered, but not ok";
+ * * anything else is a protocol-level surprise.
+ *
+ * The gate renders the cause, so "The backend did not start" stays
+ * reserved for failures that actually are startup failures.
+ */
+function classifyHealthFailure(err: unknown): StartupError {
+  if (err instanceof ApiError) {
+    const detail = apiErrorDetail(err.detail);
+    if (err.status === 401 || err.status === 403) {
+      return new StartupError(
+        "health",
+        `the backend rejected the health probe with HTTP ${err.status}` +
+          (detail ? ` (${detail})` : "") +
+          " — the session token or this app's origin was not accepted; " +
+          "this is an authorization failure, not a backend startup failure",
+        "auth",
+      );
+    }
+    return new StartupError(
+      "health",
+      `the backend health probe failed with HTTP ${err.status}` +
+        (detail ? ` (${detail})` : "") +
+        " — the backend answered, but not with ok",
+      "http",
+    );
+  }
+  const reason = err instanceof Error ? err.message : String(err);
+  if (err instanceof TypeError || /fetch/i.test(reason)) {
+    return new StartupError(
+      "health",
+      `the health probe could not reach the backend (${reason}) — the ` +
+        "browser either could not connect or blocked the cross-origin " +
+        "request (network/CORS); whether the backend itself started is " +
+        "not established by this failure",
+      "network",
+    );
+  }
+  return new StartupError(
+    "health",
+    "the backend health probe failed: " + reason,
+    "protocol",
+  );
 }

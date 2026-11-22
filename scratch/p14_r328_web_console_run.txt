@@ -1,0 +1,4 @@
+web-console makeup: bun_install_exit= render_code=200 up=1
+GET / -> HTTP 200 202048B
+<title>PharmaML Toolkit — ML · Pharma · Docking</title>
+{"zipBytes":22449138,"version":"1.2.240","exact":true,"source":"release"}

@@ -71,7 +71,42 @@ summarises them and wins any status disagreement.
   aligned at 116 — the release-gate verification round EXECUTED
   (every gate re-run from the exact release commit + the published
   artifacts verified live; the version-increment/build/publish legs
-  stay honestly BLOCKED on the three §4 lanes).
+  stay honestly BLOCKED on the three §4 lanes). The part14 ARRIVAL
+  round 326 — the interactive part14 continuation, trace
+  1a203001d56e82d9, over the sixteenth (deepest-class) rollback
+  (history reset to `2eb0ede4`, origin detached, the PAT gone, the
+  venv gutted then re-pinned, the frontend node_modules wiped) —
+  part14 §18's nine opening tasks executed READ-ONLY: the
+  `docs/QA/PART14_PHASE1_AUDIT.md` deliverable, the critical
+  Tauri/WebView2 ↔ FastAPI origin incident REPRODUCED from current
+  source (D-1/D-2 live: the eight-leg probe), nothing
+  committed/pushed (part14 §16.24). The part14 Phase-2/4 round 327
+  — the interactive part14 continuation, trace 1a20321350ff75d1,
+  over the seventeenth arrival (the lightest class: the venv pins
+  verified intact — zero repair; the r326 ledger + Phase-1 audit
+  deliverable + probe evidence all survived) — the incident FIXES
+  EXECUTED: D-1 (the `TRUSTED_APP_ORIGINS` policy in `security.py`),
+  D-2 (the scoped CORS preflight lane in `create_app()`), D-3 (the
+  typed `StartupFailureCause` classification in `startup.ts` + the
+  cause-aware gate headline), D-4/D-5 (`backend_manager.rs` redaction
+  + handshake field validation), with the 34-test regression matrix
+  `tests/api/test_trusted_origins.py` + the 9-test frontend
+  classification suite green over vitest 119/119 + tsc clean +
+  ruff/mypy clean. The §16.24-AUTHORIZED RECOVERY + PUSH round 328 —
+  the interactive part14 continuation, trace 1a2033f36c411301, over
+  the eighteenth rollback (light class — the venv pins intact zero
+  repair; the root web node_modules reaper-wiped thrice, each
+  recovered by the one-window makeup; the Studio frontend
+  node_modules an empty shell recovered via npm ci): the owner's
+  explicit "Push" received as the §16.24 authorization — origin
+  re-attached, the branch reset onto the r325 terminal `ad5f00a7`
+  (the 528/2 machinery divergence closed), the Tk ghost pair swept
+  (census re-trued 8,589/471/0 = the terminal + the 34), every
+  gate re-pinned at this arrival (trusted-origins 34/34, tests/api
+  449+1s, vitest 119/119 + tsc clean, ruff/mypy clean, the web
+  console render 200 + the r328 pins pair), the payload committed
+  over `ad5f00a7` + the push ATTEMPTED — the lane
+  credential-BLOCKED (PAT absent), riding the PAT restoration. 
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
@@ -125,6 +160,7 @@ summarises them and wins any status disagreement.
 | Census | 1,706 files / 567,800 lines / v1.2.240 (the r325 re-true over the r324 1,704/567,706: +2 files — the r325 pins pair — +94 the round's counted doc deltas — live-walk semantics; the Python replica's +98 counts the four 0-byte `__init__.py` files as 1 line each, the r309-documented bias; the pin equals the live walk; verified three-way: walk = live API = page render) | this round's census walk |
 | Source archive | v1.2.240 — re-shipped same-version at r319, r321, r322, r323, r324 AND r325 (the r303/r304/r317 convention: the §15/§17/§18 remainder lanes + this row's re-true ride the r324 rebuilt archive — terminal-of-record `19aa2d3f` at 22,092,317 B, six-home parity ALL OK + the offsite mirror at 18 zips; the r325 Phase-7 verification round re-shipped at the trued fixed point — the terminal sha/bytes live in the repo-root worklog per the §7/r312 convention, never in-archive) | sha256 across the homes + offsite |
 | venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.240 — zero drift vs `requirements.txt` (re-probed at the r325 Phase-7 opening — all pins exact, zero repair, the first clean venv arrival) | import probes (r319: rdkit was found missing after the eleventh rollback's partial hydration — `venv_repair.sh` ran FOREGROUND and the full import surface + the Studio GUI stack verified) |
+| part14 trusted-origin incident (D-1..D-5) | **FIXED at r327** (the r326 audit's Gate B FAIL closed at source level): the packaged WebView2 origin `http(s)://tauri.localhost` is a scheme-strict host-exact trusted app origin (`security.py` `TRUSTED_APP_ORIGINS`); the scoped CORS lane answers preflights for the trusted + loopback-dev origins only (anchored regex, exact-origin echo, `allow_credentials=False`); the health-failure classification is typed (`StartupFailureCause`: auth/network/http/protocol) with a cause-aware gate headline; the Rust handshake path redacts the raw line and field-validates port/token/pid/version. Auth NOT bypassed (the 401 lane pinned), Host stays loopback-only (P7/P8 pinned), lookalikes/subdomains/ports stay 403 + no-CORS-grant. Rust compile verification BLOCKED (no cargo in this sandbox) — the `#[cfg(test)]` malformed-handshake suite rides the first Rust toolchain | `tests/api/test_trusted_origins.py` (34 green), `scratch/p14_r327_origin_probe_postfix.txt` (P1/P2 403→200, P3/P4 405→200, P5–P8 unchanged), vitest 119/119 incl. the 9-test D-3 suite, tsc clean, ruff/mypy clean |
 
 ## 3. The six previously-open audit items — CLOSED (re-verified in-tree this round)
 
@@ -184,6 +220,19 @@ summarises them and wins any status disagreement.
 - A NEW version (v1.2.232+) ships only after the applicable release
   gates pass (part13 Phase 7) — which requires the BLOCKED lanes to
   clear first. No silent version bumps, ever.
+- **part14 §16.24 supersedes the part13 push-per-round protocol**: no
+  commit, push, publish, tag, or branch deletion without explicit
+  authorization — **RECEIVED at round 328** (the owner's explicit
+  "Push" directive): the payload committed over the `ad5f00a7`
+  terminal and the push lane attempted — the network leg itself
+  credential-BLOCKED (the PAT sentinel-verified absent everywhere:
+  no credential file, no git-credentials, no ssh, no gh, no token
+  env; the live attempt error captured at
+  `scratch/p14_r328_push_attempt.txt`). The push rides the PAT
+  restoration (place the token at `.credentials/github_pat`, 600
+  mode, then `bash scripts/git_auth.sh push origin main`); the
+  same-version re-ship rides the push-success round (the
+  shipped-fixed-point convention).
 
 ## 6. Next-campaign priorities (part13 Phases 2–7, in order)
 

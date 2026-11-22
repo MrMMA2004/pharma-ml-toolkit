@@ -1,0 +1,28 @@
+== makeup ==
+node_modules: 0
+pre-code: 000
+bun reinstall exit=0
+dev-daemon: forked (grandchild reparents to PID 1)
+up after 10s
+== browser verify ==
+✓ PharmaML Toolkit — ML · Pharma · Docking
+  http://localhost:3000/
+✓ Done
+PharmaML Toolkit — ML · Pharma · Docking
+--page errors--
+--console error count--
+0
+--ML card interaction--
+✓ Done
+✓ Done
+11
+--desktop pin--
+✗ Failed to save screenshot to docs/gui/screenshots/p14r328-pins-desktop.png: No such file or directory (os error 2)
+✓ Done
+http://localhost:3000/#/overview
+✓ Done
+--mobile pin--
+✗ Failed to save screenshot to docs/gui/screenshots/p14r328-pins-mobile.png: No such file or directory (os error 2)
+--footer check--
+"footer:{\"bottom\":7882,\"vh\":844}"
+--final errors--

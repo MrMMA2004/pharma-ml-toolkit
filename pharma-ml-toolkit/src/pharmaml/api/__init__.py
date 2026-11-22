@@ -7,6 +7,15 @@ Tauri host will launch it:
 * a fresh :class:`~pharmaml.api.security.SessionSecurity` (the token
   is generated here, stays in memory, and reaches the parent process
   only through the structured startup handshake);
+* a narrowly scoped CORS preflight lane (part14 §3.2 — D-2): the
+  packaged Tauri 2 WebView2 origin (``tauri.localhost``, scheme-strict
+  and host-exact) and the loopback dev origins (any port — the Vite
+  dev server) are the only origins whose cross-origin requests get
+  answered with per-origin allow headers.  The lane NEVER bypasses
+  the guard — an OPTIONS preflight is a policy probe, so it is
+  answered before routing without the session token, but every
+  actual request still needs the loopback Host + the valid session
+  token exactly as before;
 * a fresh :class:`~pharmaml.api.events.EventBus` and
   :class:`~pharmaml.api.jobs.JobManager`;
 * the security dependency applied to *every* route (loopback +
@@ -45,6 +54,7 @@ import os
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from pharmaml.exceptions import DataValidationError, ModelError
@@ -130,6 +140,29 @@ def create_app(
 
     def guard(request: Request) -> None:
         secure.guard_request(request)
+
+    # part14 §3.2 (D-2) — the scoped CORS lane, BEFORE the routers so
+    # it wraps the guard: preflights from the trusted origins are
+    # answered here (200 + the exact-origin allow headers) instead of
+    # 405-ing into the browser's "Failed to fetch"; every other origin
+    # gets NO allow headers (the disallowed preflight answer carries
+    # no ACAO, so the browser keeps blocking the actual request).  The
+    # regex is fully anchored (starlette 0.50 fullmatches it) and
+    # admits exactly: the two Tauri virtual-host origins, and loopback
+    # origins with any port — nothing else.  ``allow_credentials``
+    # stays false: the session token is a custom header, never a
+    # cookie lane.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=(
+            r"^https?://tauri\.localhost$"
+            r"|^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$"
+        ),
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["content-type", "x-session-token", "authorization"],
+        allow_credentials=False,
+        max_age=86400,
+    )
 
     app.include_router(
         api_router,
