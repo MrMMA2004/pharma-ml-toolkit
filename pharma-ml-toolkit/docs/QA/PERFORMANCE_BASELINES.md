@@ -12,11 +12,11 @@ Seeded: round 329 (2026-11-22).
 
 | Metric | Value | Context | Evidence |
 | --- | --- | --- | --- |
-| Web console landing render | HTTP 200, 202,048 B document | Linux sandbox, Next.js dev server, Chromium/agent-browser; 1440px | r328/r329 console runs |
-| zip-size API latency (release path) | sub-second; answer `22,449,138 / v1.2.240 / exact:true / source:release` | same; fstat-only path, zero spawns | r329 live probe |
-| API regression suite wall time | 107.05s (449 tests + 1 skip) | sandbox venv; includes model-training fixtures | `p14_r329_api_suite_run.txt` |
-| Trusted-origin matrix wall time | 5.67s (34 tests) | same | `p14_r329_trusted_origins_run.txt` |
-| Census collection wall time | 22.10s (7,670 tests/ + 919 doctests) | same | `p14_r329_collection_census.txt` |
+| Web console landing render | HTTP 200 (r331, the rebuilt console) | Linux sandbox, Next.js dev server, Chromium/agent-browser; 1440px | `p14_r331_console_restore.txt` + `p14_r331_browser_e2e.txt` |
+| zip-size API latency (release path) | sub-second; answer `23,489,390 / v1.2.240 / exact:true / source:release` (the r329 re-ship terminal bytes; re-verified r330 ×3 and r331) | same; fstat-only path, zero spawns | `p14_r331_console_restore.txt` |
+| API regression suite wall time | 108.88s (449 tests + 1 skip) on the r331 rebuilt venv | sandbox venv; includes model-training fixtures | `p14_r331_api_suite_run2.txt` |
+| Trusted-origin matrix wall time | 5.83s (34 tests) | same | `p14_r331_trusted_origins_run.txt` |
+| Census collection wall time | 23.45s (8,589 = 7,670 tests/ + 919 doctests, 0 errors) | same | `p14_r331_collection_census.txt` |
 
 ## NOT-MEASURED (the §10 desktop matrix — rides the Windows box)
 
@@ -39,4 +39,6 @@ resource-snapshot API (`GET /api/v1/system/resources`, the r324
 deliverable — read-only host/process/queue snapshot, GPU honestly
 absent) is the in-app instrument those legs will read on the box.
 
-— seeded round 329; numbers only ever land with named evidence.
+— seeded round 329; the measured rows re-pinned round 331 (the
+r329 rows' evidence stands in `scratch/p14_r329_*`); numbers only
+ever land with named evidence.

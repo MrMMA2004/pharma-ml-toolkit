@@ -5,3 +5,7 @@ GET /api/toolkit/zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":tr
 === r330 restore#2 (the 7th reaper-wipe makeup) 2026-11-22T14:01:39Z
 GET / -> 200
 GET /api/toolkit/zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}
+
+=== r330 restore#3 (the round-close makeup after the reaper's third strike this session) 2026-11-22T14:07:01Z
+GET / -> 200
+GET /api/toolkit/zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}

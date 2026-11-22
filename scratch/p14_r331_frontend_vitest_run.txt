@@ -1,0 +1,36 @@
+
+ RUN  v5.1.1 /home/z/my-project/pharma-ml-toolkit/frontend
+
+ ✓ src/features/ml/__tests__/WorkflowBuilderLane.test.tsx (8 tests) 840ms
+ ✓ src/features/ml/__tests__/MultiobjectiveLane.test.tsx (8 tests) 994ms
+   ✓ the multi-objective optimization lane of the Machine Learning workspace (8)
+     ✓ runs the study round trip and renders the front table 305ms
+ ✓ src/features/ml/__tests__/PharmacogenomicsLane.test.tsx (8 tests) 1043ms
+   ✓ the pharmacogenomics lane of the Machine Learning workspace (8)
+     ✓ runs the analyze round trip and renders the association table 336ms
+ ✓ src/features/ml/__tests__/DrugResponseLane.test.tsx (8 tests) 903ms
+ ✓ src/features/ml/__tests__/RepurposingLane.test.tsx (8 tests) 1009ms
+ ✓ src/features/ml/__tests__/DtaLane.test.tsx (8 tests) 904ms
+ ✓ src/features/dl/__tests__/GnnLane.test.tsx (7 tests) 704ms
+ ✓ src/services/websocket/__tests__/client.test.ts (16 tests) 19ms
+ ✓ src/features/datasets/__tests__/DatasetsPage.test.tsx (8 tests) 490ms
+ ✓ src/features/ml/__tests__/AdmetLane.test.tsx (7 tests) 848ms
+   ✓ the ADMET lane of the Machine Learning workspace (7)
+     ✓ scores the textarea's SMILES and renders the per-molecule cards 328ms
+ ✓ src/app/__tests__/StartupGate.test.tsx (6 tests) 148ms
+ ✓ src/components/charts/__tests__/PlotlyFigure.test.tsx (5 tests) 109ms
+ ✓ src/services/api/__tests__/startup.test.ts (9 tests) 7ms
+ ✓ src/app/__tests__/App.test.tsx (3 tests) 173ms
+ ✓ src/components/ui/__tests__/atoms.test.tsx (6 tests) 187ms
+ ✓ src/app/__tests__/workspaces.test.ts (4 tests) 5ms
+
+ Test Files  16 passed (16)
+      Tests  119 passed (119)
+   Start at  15:10:56
+   Duration  22.52s (tests 41%, environment 39%, import 8%, setup 7%, transform 5%)
+
+Environment  jsdom was created 16 times · 8.04s total, 39% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+vitest_exit=0

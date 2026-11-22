@@ -1,0 +1,305 @@
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/__main__.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/biology/__init__.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/biology/biomarkers.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/biology/omics.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/biology/response.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/chem/converters.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/chem/graphics3d.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/chem/interactions.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/chem/interpret.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/chem/molgraph.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/chem/molgrid.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/chem/rism.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/chem/selfies_codec.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/chem/structure.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/chem/tables.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/config.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/data.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/docking/campaign.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/docking/parsing.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/docking/pose_rmsd.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/docking/receptor.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/docking/scoring.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/generative/_utils.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/generative/bioisostere.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/generative/corpus.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/generative/mcts.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/generative/pareto.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/generative/rl.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/generative/scaffold_hop.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/generative/topology.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/logger.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/adversarial.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/annsearch.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/attention.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/bayesopt.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/catalog.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/curation.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/drugresponse.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/explain.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/fitting.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/formula.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/geometric.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/hierarchical.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/interpret.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/manifold.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/metalearn.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/models.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/neural.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/privacy.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/recommend.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/runboard.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/sequences.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/stacking.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/tensors.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/timeseries.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/tuner.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/umap.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/unsupervised.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/ml/visiblenet.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/pharma/__init__.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/pharma/approvals.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/pharma/dosage.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/pharma/pd.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/pharma/pk.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/pharma/units.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/utils/validation.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/viz/_compat.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/viz/chem_plots.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/viz/interactive.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> src/pharmaml/viz/pharma_plots.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_biology.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_converters.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_curation.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_data_loading.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_database_audit.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_diversity.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_docking.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_dosage.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_explain.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_geometric.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_hierarchical.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_interactive.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_interpret.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_io.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_manifold.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_mcts.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_multiclass.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_pd.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_pk.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_pose_rmsd.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_requirements.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_rism.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_runboard.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_scoring_transforms.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_selfies_codec.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_similarity.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_stacking.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_tuner.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_umap.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_units.py:1:1
+
+EXE002 The file is executable but no shebang is present
+--> tests/test_unsupervised.py:1:1
+
+Found 101 errors.
+ruff_exit=1

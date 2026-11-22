@@ -149,7 +149,30 @@ summarises them and wins any status disagreement.
   ten-tab surface + the footer geometry exact bottom==docHeight +
   the r330 pins pair) + the r329 CI verdicts closed GREEN (both
   pushed commits 19/19 check-runs success) + the r330 ledger
-  committed and pushed over `a75cabe7`. 
+  committed and pushed over `a75cabe7`. The part14 recovery round
+  331 — the interactive part14 continuation, trace
+  1a203c9ed7cf77c5, over the twenty-first arrival (**deepest-class
+  rollback again**: history reset to the r186 checkpoint `2eb0ede4`,
+  origin detached, the PAT + the venv gutted at 9+ feature modules
+  with the surviving core rolled back to stale pins, the Studio
+  frontend node_modules wiped, AND a new damage class — the system
+  `libEGL.so.1` gone): the r322 playbook executed in full before any
+  gate work (PAT re-spliced masked + API-validated as MrMMA2004;
+  origin re-attached, fetched, reset onto the r330 terminal
+  `a6cc830b`; the Tk ghost pair + the old-layout `.github` duplicate
+  + the stale counter copy swept; the venv rebuilt pin-exact over
+  three legs with the numpy-1.x wheel class documented; the libEGL
+  user-mode deb-extract workaround at `/home/z/.local/lib/egl`; the
+  101-file mode wall restored) — then the queued items closed: the
+  r330 CI verdict GREEN (`a6cc830b` 19/19), every gate re-pinned
+  (trusted-origins 34/34 in 5.83s, tests/api 449+1s in 108.88s, the
+  census re-trued 8,589/0 with `--doctest-modules`, vitest 119/119 +
+  tsc clean, ruff + mypy clean, the console + zip-size API exact at
+  23,489,390 B, the browser E2E zero errors + the footer geometry
+  exact + the r331 pins pair) + the three living QA docs re-pinned
+  (the release report's G/D gates, the BLK-6 rollback-class row + the
+  r331 unblockings, the baselines' measured rows) + the r331 ledger
+  committed and pushed over `a6cc830b`.
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

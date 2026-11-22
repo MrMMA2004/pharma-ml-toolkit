@@ -1,0 +1,23 @@
+.                                                                        [100%]
+=============================== warnings summary ===============================
+tests/api/test_docking_pkpd_md_viz_ad.py::TestDockingPreparation::test_ligand_pdbqt_real_embedding
+  /home/z/my-project/pharma-ml-toolkit/src/pharmaml/api/__init__.py:173: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/api/test_docking_pkpd_md_viz_ad.py::TestDockingPreparation::test_ligand_pdbqt_real_embedding
+  /home/z/.venv/lib/python3.12/site-packages/fastapi/applications.py:4576: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 2 warnings in 2.64s
+exit=0

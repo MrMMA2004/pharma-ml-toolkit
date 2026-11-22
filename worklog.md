@@ -17861,3 +17861,119 @@ argv/env/logs).
 header (+ the §16.24 standing-authorization note extended); the
 counter 121 → 122; the round's payload (the r330 evidence set +
 the pins pair + the ledger) committed and pushed over `a75cabe7`.
+
+## Round 331 — the 123rd recorded run (the part14 recovery round: the twenty-first deepest-class rollback recovered, the queued items closed — the CI verdict GREEN, the living QA docs re-pinned; trace 1a203c9e)
+
+**The arrival state: the twenty-first arrival — the DEEPEST class
+again** (the r322/r326 pattern): the four-sentinel check found git
+history reset to the round-186 checkpoint `2eb0ede4` (HEAD a
+machinery UUID child on top, `cc5e7b44`), `origin` detached entirely
+(NOT merely stale), the PAT credential GONE, the venv gutted at 9+
+feature modules with the SURVIVING core rolled back to stale pins
+(numpy 2.1.3 vs the documented 1.26.4; sklearn 1.9.1 vs 1.5.2), the
+Studio frontend node_modules wiped — AND a new damage class: the
+system `libEGL.so.1` package gone (every PySide6.QtGui import
+fails). The disk tree kept the current-era files (the wall of M
+flags = current files vs the r186 baseline); the counter survived at
+122; the root web console survived alive (page 200).
+
+**The r322 playbook executed in full before any gate work:**
+
+- The credential: the owner's complete plain-text channel still on
+  disk (`upload/GitHub_token.txt`, 93 bytes) — re-spliced masked to
+  `.credentials/github_pat` (600; never in argv/env/logs) and
+  **API-validated as MrMMA2004** — the credential lane OPEN again.
+- `origin` re-attached (`https://github.com/MrMMA2004/
+  pharma-ml-toolkit.git`), the full fetch clean; `origin/main` =
+  `a6cc830b` — the r330 terminal, the part14-era history intact.
+- **The branch reset onto `a6cc830b`** (mixed — the tree untouched):
+  the post-reset tracked delta = ONE file (the r330 close-out append
+  to the console-restore evidence — a legitimate r331 payload
+  candidate); the ghost sweep — the rollback-resurrected Tk pair
+  (`playground.py` + `tests/test_playground.py`, terminal-absent
+  both verified via `git ls-tree`) + the old-layout
+  `pharma-ml-toolkit/.github/` duplicate (the r329 build-gate class)
+  + the stale toolkit-level counter copy (the r328 class) — all
+  swept; the tree understood at 0 tracked modifications + the
+  documented untracked residue (23 paths: the retired-era zips, the
+  part14.txt prompt copy, the r330 close-out stragglers, two strays).
+- The venv rebuilt **pin-exact** in three legs: (1) the core + the
+  torch-cpu wheel + the feature set (gemmi/meeko/selfies included);
+  (2) the **numpy-1.x wheel class** — the latest mdtraj/umap-learn/
+  pyarrow builds are numpy-2-only, so pyarrow 16.1.0 / umap-learn
+  0.5.12 / mdtraj 1.10.3 (the versions the documented green stack
+  rode); (3) the final numpy/sklearn/scipy re-pin after the resolver
+  drift (the requirements file's own constraint guidance). The full
+  stack verified importable: numpy 1.26.4 / torch 2.14.1+cpu / rdkit
+  2026.09.1 / matplotlib 3.10.9 / fastapi 0.128.0 / pharmaml 1.2.240
+  / pandas 2.2.3 / sklearn 1.5.2 / the md/feature set all OK.
+- **The libEGL workaround** (BLK-6's mitigation): no root apt in the
+  sandbox — `apt-get download libegl1` (user-mode, no dpkg lock) +
+  `dpkg -x` to `/home/z/.local/lib/egl` (durable, outside repo and
+  venv) + `LD_LIBRARY_PATH` on the pytest invocations — the full Qt
+  chain (PySide6 6.8.3 + pyqtgraph 0.13.7 + an offscreen
+  QApplication) verified constructible.
+- **The mode wall**: the rollback restored 101 source files with +x
+  bits (invisible to git via `core.fileMode=false`, fatal to ruff
+  EXE002: 101 errors on first run) — the exec bits stripped per-file
+  from the ruff evidence list; **`ruff check src/ tests/ ui/` "All
+  checks passed!"** again; the modes back at 644.
+
+**The queued items closed (the round's directive leg)**:
+
+- **The CI verdict queue closed GREEN**: the r330 terminal
+  `a6cc830b` — **19/19 check-runs success** via the authenticated
+  API (the r329 pair had already closed GREEN at r330).
+- **The three living QA docs re-pinned**: RELEASE_ACCEPTANCE_REPORT
+  (Gate G's basis: the CI verdict CLOSED + the CURRENT terminal
+  bytes v1.2.240 / 23,489,390 B / sha-256 `0fadb6e5…`; Gate D's
+  basis: the r331 re-pin evidence; the r331 addendum section) +
+  BLOCKED_TESTS_AND_SOLUTIONS (the new **BLK-6** row — the rollback
+  can wipe SYSTEM packages, with the user-mode deb-extract
+  mitigation; the r331 UNBLOCKED/MITIGATED table: the venv rebuild,
+  the mode wall, the r326 §D vitest/tsc queued row, the CI verdict,
+  the libEGL strike) + PERFORMANCE_BASELINES (the measured rows
+  re-pinned on the r331 named evidence — the zip-size row's stale
+  22,449,138 B superseded by the re-ship terminal 23,489,390 B).
+
+**The gates re-pinned at r329/r330 parity on the rebuilt stack (all
+captured in `scratch/p14_r331_*`)**:
+
+- `tests/api/test_trusted_origins.py` — **34 passed in 5.83s**;
+  the first full `tests/api` run showed **1 failed** (the
+  `test_ligand_pdbqt_real_embedding` leg — the gemmi/meeko lane the
+  venv gutting had taken; the module probe found them missing) —
+  after the repair legs, the re-run **449 passed + 1 skipped, 0
+  failed in 108.88s** with the focused re-run of the failed leg
+  **1 passed in 2.64s**.
+- The census — the first run showed **29 collection errors** (the
+  whole tests/ui set: PySide6 absent) and 7,670 tests; after the
+  GUI-stack install + the libEGL workaround: **8,589 tests / 0
+  errors in 23.45s** (`--doctest-modules` explicit — the addopts
+  override strips it otherwise; the three-way reconciliation
+  stands: 7,670 tests/ + 919 src doctests = 8,589 = the r328
+  byte-parity claim).
+- The Studio frontend — **vitest 119/119 (16 files)** + **tsc
+  --noEmit clean** via the one-window `npm ci` (exit 0).
+- **ruff clean + mypy clean** (security.py + server.py: "Success:
+  no issues found in 2 source files").
+- The root web console — the reaper wiped node_modules once
+  mid-round (observed live at the browser-open boundary after the
+  E2E navigation refused) — recovered by the one-window makeup:
+  **the render 200, the zip-size API live at
+  `{"zipBytes":23489390,"version":"1.2.240","exact":true,"source":
+  "release"}`** — exact parity with the r329 terminal bytes; no
+  re-ship (no tree change; the shipped fixed point stands).
+- The agent-browser E2E over the LIVE console — **zero page
+  errors, zero console errors**; the Playground interaction
+  rendering the ten-tab ML surface (the tablist + the session-report
+  system); **the footer geometry measured exact** (one semantic
+  `<footer>`, bottom 3967 == docHeight 3967 — natural push-down,
+  never overlapping); the pins pair
+  `docs/gui/screenshots/p14r331-pins-{desktop,mobile}.png` captured
+  full-page at 1440px + 390px.
+
+**The ledger**: the r331 lineage appended to the PROJECT_STATUS
+header; the counter 122 → 123; the round's payload (the r331
+evidence set + the pins pair + the three re-pinned QA docs + the
+ledger) committed and pushed over `a6cc830b`.
