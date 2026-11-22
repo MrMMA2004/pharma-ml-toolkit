@@ -264,10 +264,10 @@ jobs:
             if ($code -eq 0) {
               Write-Host "DEFENDER OK: $name clean"
             } elseif ($code -eq 2) {
-              # $($name): the subexpression form — the bare $name: parse
-              # hazard (the second dispatch's catch: PowerShell read
-              # the colon as a scope qualifier and the step died at
-              # PARSE time before Defender ever ran)
+              # the subexpression form — the bare-variable-plus-colon
+              # parse hazard (the second dispatch's catch: PowerShell
+              # read the colon as a scope qualifier and the step died
+              # at PARSE time before Defender ever ran)
               Write-Host "::error::DEFENDER DETECTED a threat in $($name):`n$($text)"
               exit 1
             } else {
@@ -303,9 +303,30 @@ jobs:
             Write-Host "::error::the MSI install dir never appeared: $root"
             exit 1
           }
-          $app = Join-Path $root "PharmaML Studio.exe"
-          if (-not (Test-Path $app)) {
-            Write-Host "::error::the installed host exe is missing: $app"
+          # the host binary keeps its CARGO name (pharmaml-studio.exe —
+          # the Tauri 2 mainBinaryName default; the third dispatch
+          # caught the wrong 'PharmaML Studio.exe' assumption: the MSI
+          # installed exit 0 with the dir present but the exe under the
+          # Cargo name) — probe the candidates, then discover by the
+          # version resource as the honest fallback, and record
+          # whichever landed
+          $app = $null
+          foreach ($cand in @(
+            (Join-Path $root "pharmaml-studio.exe"),
+            (Join-Path $root "PharmaML Studio.exe")
+          )) {
+            if (Test-Path $cand) { $app = $cand; break }
+          }
+          if (-not $app) {
+            $app = Get-ChildItem $root -Filter "*.exe" |
+              Where-Object { $_.Name -ne "pharmaml-backend.exe" -and
+                ($_.VersionInfo.ProductVersion -like "$($env:RELEASE_VERSION)*") } |
+              Select-Object -First 1 | ForEach-Object { $_.FullName }
+          }
+          if (-not $app) {
+            Get-ChildItem $root | Select-Object Name, Length |
+              Format-Table | Out-String | Write-Host
+            Write-Host "::error::no host exe discovered under $root (both the name candidates and the version-resource fallback came up empty)"
             exit 1
           }
           $fv = (Get-Item $app).VersionInfo
@@ -320,6 +341,7 @@ jobs:
             exit 1
           }
           Add-Content $env:GITHUB_ENV "MSI_INSTALL_ROOT=$root"
+          Add-Content $env:GITHUB_ENV "MSI_HOST_EXE=$app"
           Add-Content $env:GITHUB_ENV "MSI_SIDECAR_DIR=$($sidecar.DirectoryName)"
           "MSI install: root=$root" |
             Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"
@@ -355,7 +377,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:MSI_INSTALL_ROOT
-          $app = Join-Path $root "PharmaML Studio.exe"
+          $app = $env:MSI_HOST_EXE
           $proc = Start-Process -FilePath $app -WorkingDirectory $root -PassThru
           # §10 leg 2: first launch is tens of seconds (the frozen
           # torch/rdkit imports) — poll for the sidecar child
@@ -487,20 +509,49 @@ jobs:
             Write-Host "::error::the NSIS silent install failed (exit $($p.ExitCode))"
             exit 1
           }
-          # currentUser mode: the documented home is
-          # %LOCALAPPDATA%\Programs\PharmaML Studio (§10 leg 1)
-          $root = Join-Path $env:LOCALAPPDATA "Programs\PharmaML Studio"
+          # currentUser mode: poll BOTH documented candidate homes —
+          # %LOCALAPPDATA%\Programs\PharmaML Studio (the §10 claim)
+          # and %LOCALAPPDATA%\PharmaML Studio (the Tauri NSIS
+          # template's other per-user form) — whichever appears wins
+          # and is recorded; a wrong guess here must never fail a
+          # healthy install
+          $rootCandidates = @(
+            (Join-Path $env:LOCALAPPDATA "Programs\PharmaML Studio"),
+            (Join-Path $env:LOCALAPPDATA "PharmaML Studio")
+          )
+          $root = $null
           $deadline = (Get-Date).AddSeconds(120)
-          while (-not (Test-Path $root) -and (Get-Date) -lt $deadline) {
-            Start-Sleep -Seconds 2
+          while (-not $root -and (Get-Date) -lt $deadline) {
+            foreach ($r in $rootCandidates) {
+              if (Test-Path $r) { $root = $r; break }
+            }
+            if (-not $root) { Start-Sleep -Seconds 2 }
           }
-          if (-not (Test-Path $root)) {
-            Write-Host "::error::the NSIS install dir never appeared: $root"
+          if (-not $root) {
+            Write-Host "::error::no NSIS install dir appeared under either candidate home: $($rootCandidates -join ' | ')"
             exit 1
           }
-          $app = Join-Path $root "PharmaML Studio.exe"
-          if (-not (Test-Path $app)) {
-            Write-Host "::error::the installed host exe is missing: $app"
+          # the host exe keeps its CARGO name (pharmaml-studio.exe —
+          # the Tauri 2 mainBinaryName default; the same discovery
+          # pattern as step 6: probe, then the version-resource
+          # fallback, then record)
+          $app = $null
+          foreach ($cand in @(
+            (Join-Path $root "pharmaml-studio.exe"),
+            (Join-Path $root "PharmaML Studio.exe")
+          )) {
+            if (Test-Path $cand) { $app = $cand; break }
+          }
+          if (-not $app) {
+            $app = Get-ChildItem $root -Filter "*.exe" |
+              Where-Object { $_.Name -ne "pharmaml-backend.exe" -and
+                ($_.VersionInfo.ProductVersion -like "$($env:RELEASE_VERSION)*") } |
+              Select-Object -First 1 | ForEach-Object { $_.FullName }
+          }
+          if (-not $app) {
+            Get-ChildItem $root | Select-Object Name, Length |
+              Format-Table | Out-String | Write-Host
+            Write-Host "::error::no host exe discovered under $root (NSIS lane)"
             exit 1
           }
           $fv = (Get-Item $app).VersionInfo
@@ -525,6 +576,7 @@ jobs:
           $desktop = [Environment]::GetFolderPath("Desktop")
           $desktopLnk = Test-Path (Join-Path $desktop "PharmaML Studio.lnk")
           Add-Content $env:GITHUB_ENV "NSIS_INSTALL_ROOT=$root"
+          Add-Content $env:GITHUB_ENV "NSIS_HOST_EXE=$app"
           Add-Content $env:GITHUB_ENV "NSIS_SIDECAR_DIR=$($sidecar.DirectoryName)"
           "NSIS install: root=$root (ProductVersion $($fv.ProductVersion))" |
             Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"
@@ -540,7 +592,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:NSIS_INSTALL_ROOT
-          $app = Join-Path $root "PharmaML Studio.exe"
+          $app = $env:NSIS_HOST_EXE
           $proc = Start-Process -FilePath $app -WorkingDirectory $root -PassThru
           $deadline = (Get-Date).AddSeconds(150)
           $backendSeen = $false
@@ -703,12 +755,27 @@ jobs:
             exit 1
           }
           $root = Join-Path $env:ProgramFiles "PharmaML Studio"
-          $app = Join-Path $root "PharmaML Studio.exe"
-          $deadline = (Get-Date).AddSeconds(120)
-          while (-not (Test-Path $app) -and (Get-Date) -lt $deadline) {
-            Start-Sleep -Seconds 2
+          # the host exe keeps its CARGO name (pharmaml-studio.exe —
+          # the Tauri 2 mainBinaryName default, the third dispatch's
+          # discovery) — probe the same candidates at this path
+          $app = $null
+          foreach ($cand in @(
+            (Join-Path $root "pharmaml-studio.exe"),
+            (Join-Path $root "PharmaML Studio.exe")
+          )) {
+            if (Test-Path $cand) { $app = $cand; break }
           }
-          if (-not (Test-Path $app)) {
+          $deadline = (Get-Date).AddSeconds(120)
+          while (-not $app -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+            foreach ($cand in @(
+              (Join-Path $root "pharmaml-studio.exe"),
+              (Join-Path $root "PharmaML Studio.exe")
+            )) {
+              if (Test-Path $cand) { $app = $cand; break }
+            }
+          }
+          if (-not $app) {
             Write-Host "::error::the previous install's host exe never appeared"
             exit 1
           }
@@ -777,7 +844,11 @@ jobs:
           Write-Host "UPGRADE-LEG CLEANUP OK: install dir removed, the user-data marker retained=$markerSurvived (the §10 leg-6 retention rule, file-marker form)"
 
       # ---- 14. upload the evidence bundle ---------------------------
+      # if: always() — the third dispatch's diagnosis needed the
+      # installed-tree listing the failed run HAD collected but
+      # never uploaded; a failed lane still ships its evidence
       - name: "14. Upload the evidence bundle"
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: windows-install-smoke-evidence
