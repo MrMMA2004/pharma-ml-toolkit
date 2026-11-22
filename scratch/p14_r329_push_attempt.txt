@@ -1,0 +1,28 @@
+r329 PUSH ATTEMPT — the owner's token upload (upload/GitHub_token.pdf, placed 2026-11-22) extracted and tested; BLOCKED.
+
+The PDF's decodable text layer (three pdftotext modes agree + pypdf glyph cross-check):
+  a single 74-char token-shaped run (prefix github_pat_) + the literal marker
+  [REDACTED:github_token] immediately after it. A complete fine-grained PAT
+  (github_pat_ + 22 + '_' + 59) is 93 chars; 74 chars = the token TRUNCATED
+  in transit, the redaction marker sitting exactly at the cut point.
+
+Extraction discipline: token read straight from the PDF into
+.credentials/github_pat (600 mode); never echoed to argv, output, or logs.
+
+The four test lanes, all live this round:
+  1. API GET /user  (Authorization: token  <PAT>)  -> HTTP 401 Unauthorized
+  2. API GET /user  (Authorization: Bearer <PAT>)  -> HTTP 401 Unauthorized
+  3. API GET /repos/MrMMA2004/pharma-ml-toolkit/branches/main -> HTTP 401
+  4. git push origin main (scripts/git_auth.sh, askpass wrapper) ->
+       remote: Invalid username or token. Password authentication is not
+       supported for Git operations.
+       fatal: Authentication failed for
+       'https://github.com/MrMMA2004/pharma-ml-toolkit.git/'
+
+Verdict: the upload pipeline's redaction consumed the token tail; the full
+secret never reached this sandbox. The truncated 74-char artifact is NOT a
+credential and was removed from .credentials/ after the tests. The lane
+remains BLOCKED on a complete token: re-supply via a non-truncating channel
+(or verify the PDF's full string before upload), then
+  .credentials/github_pat (600 mode) + bash scripts/git_auth.sh push origin main
+The payload stands ready at a75f98eb (2 ahead of origin/main at ad5f00a7).

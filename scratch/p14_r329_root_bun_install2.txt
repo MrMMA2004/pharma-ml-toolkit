@@ -1,0 +1,2 @@
+[0.87ms] ".env"
+bun-exit=0

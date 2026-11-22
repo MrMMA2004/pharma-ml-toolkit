@@ -1,0 +1,4 @@
+r329 web-console final verification (post re-ship + disk recovery):
+GET / -> 200 202046B
+title: <title>PharmaML Toolkit — ML · Pharma · Docking</title>
+GET /api/toolkit/zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}

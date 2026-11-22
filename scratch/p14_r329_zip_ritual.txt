@@ -1,0 +1,7 @@
+download: 20 zips testzip OK
+pharma-ml-toolkit/download: 19 zips testzip OK
+pharma-ml-toolkit/dist-archive: 22 zips testzip OK
+upload: 12 zips testzip OK
+offsite: rebuilt 22 new copies, 23 zips total, testzip OK
+offsite current-version parity: 23489390 B, sha256 0fadb6e5
+RITUAL CHECK

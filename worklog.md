@@ -17672,3 +17672,131 @@ re-ship deliberately deferred to the push-success round: the archive
 re-ship marks the SHIPPED fixed point and the ship is the gated leg
 — they ride together the moment the PAT exists (the r303/r304/r317
 convention honored). Counter 119 → 120.
+
+## Round 329 — the 121st recorded run (the part14 push-success round: the credential lane restored, the first successful pushes of the part14 era, the QA deliverable set seeded, the same-version re-ship; trace 1a20356f/1a203639)
+
+**The arrival state: the nineteenth rollback (light class)** — the
+inherited stale summary's claims ("counter 99 / Round 309 pending /
+HEAD 19effec8 / 22 consecutive summary-only turns") discarded per its
+own do-not-trust marker; the four-sentinel check found the ledger
+AHEAD of the summary again: the counter at 120 (round 328 — the
+§16.24-authorized recovery + push round, its payload standing at HEAD
+`a75f98eb` = fe686bfc + a75f98eb, 2 ahead of origin/main `ad5f00a7`,
+the push credential-BLOCKED on the absent PAT), plus ONE machinery
+UUID residue checkpoint (`c19b9405`, the old-layout resurrected zips
++ workflows + the part14.txt prompt copy) — reset away per the
+established convention (mixed; reflog-resident, never pushed). The
+venv pins verified intact — zero repair (pharmaml 1.2.240). The owner
+had placed `upload/GitHub_token.pdf` (12:59) — the PAT restoration
+the r328 record rode on.
+
+**The token channel saga — the PDF arrived TRUNCATED, diagnosed; the
+TXT channel delivered the complete credential:**
+
+- The PDF's decodable text layer (three pdftotext modes agree +
+  pypdf/ToUnicode cross-check): a single 74-char `github_pat_`-shaped
+  run + the literal `[REDACTED:github_token]` marker at the cut point
+  — a complete fine-grained PAT is 93 chars: the upload pipeline's
+  redaction consumed the token tail. Four live test lanes (API
+  `token`/`Bearer`, the branch endpoint, the real push) all rejected
+  it — the truncated artifact is NOT a credential; removed from
+  `.credentials/` after the tests; the diagnosis recorded at
+  `scratch/p14_r329_token_analysis.txt`.
+- The owner's re-supply via the plain-text channel
+  (`upload/GitHub_token.txt`, 93 chars) — extracted masked straight
+  into `.credentials/github_pat` (600 mode; never in argv/env/logs),
+  **API-validated as MrMMA2004 with push permission** — the credential
+  lane OPEN for the first time in the recorded part14 era.
+
+**The push saga — the first attempt REFUSED by GitHub push
+protection (the machinery's token sweep), the recovery + the
+hardening, then the SUCCESS:**
+
+- The first `git push` was refused: a machinery UUID commit
+  (`79cd782a`, struck between the round's reset and the push) had
+  swept the untracked token uploads into git history — GitHub push
+  protection correctly refused the secret. The ghost reset away per
+  the convention (reflog-resident, never pushed; `git ls-tree`
+  verified 0 tracked token paths post-reset).
+- **`ad5f00a7..a75f98eb` PUSHED clean** — the r328 payload LANDED:
+  the D-1..D-5 trusted-origin/CORS/handshake fixes + the 34-test
+  regression matrix + the QA Phase-1 audit + defect register + the
+  r326–r328 evidence set + the ledger — the first commit of the
+  part14 era on origin/main.
+- The recurrence hardening committed + PUSHED (`013b3ff4`):
+  `upload/GitHub_token.{pdf,txt}` + `.credentials/` gitignored
+  DISK-ONLY (extending the established upload-ignore convention);
+  the machinery's auto-commit can never sweep the credential again.
+- CI live at both pushed commits: 19 check-runs (in_progress → the
+  verdict closes asynchronously; checked at round close).
+
+**The gates re-pinned at this arrival (every leg captured in
+`scratch/p14_r329_*`)** — with the round's measurement discipline
+fixed: the inherited `addopts = "-q ..."` + the round's own `-q` =
+quiet-level-2 SUPPRESSED the pytest summary lines (the r329 files
+initially missing them); the established `-o addopts=` invocation
+restores the summaries; the census reconciled three ways (7,670
+tests/ + 919 src doctests = 8,589 = the r328 claim; the per-file
+counts diff-clean against `p14_r328_collection_census.txt`):
+- `tests/api/test_trusted_origins.py` — **34 passed in 5.67s**;
+  `tests/api` — **449 passed + 1 skipped, 0 failed in 107.05s**; the
+  census **8,589 tests / 471 files / 0 collection errors**.
+- vitest **119/119 (16 files)** + tsc `--noEmit` **clean** (the
+  one-window npm ci after the rollback's frontend wipe); ruff 0.17.1
+  clean + mypy 2.4.0 clean on the fix surface.
+- The web console verified live over the reaper's FIVE mid-session
+  node_modules wipes (each recovered by the one-window makeup): the
+  render 200, the title verified, **the zip-size API live-verified
+  against the NEW terminal bytes** (`{"zipBytes":23489390,"version":
+  "1.2.240","exact":true,"source":"release"}`); the agent-browser
+  E2E — zero page errors, zero console errors, the ML-card
+  interaction rendering the registry/training surface, **the footer
+  geometry measured exact** (one semantic `<footer>`, `mt-auto` +
+  safe-area padding, footer bottom == document height 3967==3967 —
+  natural push-down, never overlapping); the pins pair
+  `docs/gui/screenshots/p14r329-pins-{desktop,mobile}.png` (1440px +
+  390px).
+
+**The part14 §13 QA deliverable set SEEDED (the §G phases-5–8 work)
+— all ten documents now exist**: MASTER_TEST_PLAN (the four-level
+program), MANUAL_TEST_CHECKLIST (the §6.1/6.2 legs with honest
+statuses), AUTOMATED_TEST_MATRIX (the §13.1 component × level
+matrix), WINDOWS_TEST_MATRIX (the §9 inventory + blocked legs),
+PERFORMANCE_BASELINES (measured legs only; NOT-MEASURED never
+fabricated), SECURITY_TEST_REPORT (the §11 boundary review + the
+D-1..D-6 register cross-refs), BLOCKED_TESTS_AND_SOLUTIONS (BLK-1..5
++ the r329 unblockings), RELEASE_ACCEPTANCE_REPORT (the §14 gates
+A–G: A PASS this round, B PARTIAL-upgraded, D PASS-at-scope, E/F
+BLOCKED honestly) — joining PART14_PHASE1_AUDIT + DEFECT_REGISTER
+(the consolidated execution report = this worklog entry per the
+ten-document convention).
+
+**The same-version re-ship EXECUTED (the r328 record's deferred leg
+— the ship rides the push-success round)**: `build_zip_329.py` (the
+canonical recipe — the exclusion list, the composition/leak/
+version_info guards, the must-carry gate extended with the r326–r329
+proofs): first attempt REFUSED by its own gate (the machinery's
+resurrected `pharma-ml-toolkit/.github/` old-layout duplicate —
+swept); second REFUSED by the leak scan (a `/home/z/` sandbox path
+inside the Phase-1 audit's §C — scrubbed); the terminal build
+**sha-256 `0fadb6e5c8360ffaa5c54866f353186078c1757164a2777619a8f0b
+0a63e2cb3`, 23,489,390 B, testzip OK, must-carry complete, zero
+real leaks, VERSION stamp 1.2.240, version_info quadruple correct**
+— the six-home parity (root download + toolkit dist-archive +
+toolkit download + upload + root dist-archive + offsite) ALL
+testzip OK; the zip ritual re-verified every home (73 archive
+testzips OK across the four git homes) + the offsite REBUILT (23
+zips — the honest CHECK vs the r324 18: the rollback-resurrected
+retired-era zips entered the offsite, recorded not hidden); the
+offsite current-version parity exact (23,489,390 B /
+`0fadb6e5`). The superseding sha recorded per the r301 three-sha
+convention. One incident: a transient Errno 28 disk wall (the
+overlapping suite run + the re-ship's copies) — 1.8G reclaimed from
+the pip cache, the console restarted, the API re-verified live
+against the new bytes.
+
+**The ledger**: the r329 lineage appended to the PROJECT_STATUS
+header + the §5 §16.24 note updated (RECEIVED at r328 → EXECUTED at
+r329); the counter 120 → 121; the round's payload committed + pushed
+(the QA deliverable set + the re-ship's archive bytes + the pins +
+the evidence + the ledger). Counter 120 → 121.

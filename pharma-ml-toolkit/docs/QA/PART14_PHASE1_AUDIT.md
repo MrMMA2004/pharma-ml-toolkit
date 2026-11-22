@@ -125,7 +125,7 @@ it), browser-shaped headers, evidence at
 "Inspect before editing" satisfied). Environment/restoration changes
 (all reversible, all documented):
 
-- `/home/z/.venv` re-pinned via the established idempotent
+- The pinned project venv re-pinned via the established idempotent
   `scratch/venv_repair.sh` (the r306–r313 playbook — the round-196
   shap/no-deps rule, the EGL stub copy, the rdkit-stub patch, the
   editable `pharmaml` install). Pins verified: numpy 1.26.4, torch

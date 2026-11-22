@@ -106,7 +106,34 @@ summarises them and wins any status disagreement.
   449+1s, vitest 119/119 + tsc clean, ruff/mypy clean, the web
   console render 200 + the r328 pins pair), the payload committed
   over `ad5f00a7` + the push ATTEMPTED — the lane
-  credential-BLOCKED (PAT absent), riding the PAT restoration. 
+  credential-BLOCKED (PAT absent), riding the PAT restoration. The
+  PUSH-SUCCESS round 329 — the interactive part14 continuation,
+  trace 1a20356f/1a203639, over the nineteenth arrival (the
+  machinery residue checkpoint reset away per convention; the
+  reaper wiped the root web node_modules five times this round,
+  each recovered by the one-window makeup): **the credential lane
+  RESTORED and the first successful pushes of the part14 era** —
+  the owner's first token channel (the PDF) arrived TRUNCATED at
+  74/93 chars (the upload pipeline's redaction marker at the cut
+  point; diagnosed, four-lane-tested, evidence
+  `scratch/p14_r329_token_analysis.txt`); the owner's second
+  channel (the plain-text file) delivered the complete 93-char
+  PAT — API-validated as MrMMA2004 with push permission, spliced
+  to `.credentials/github_pat` (600, masked discipline, never in
+  argv/env/logs) — the r328 payload PUSHED `ad5f00a7..a75f98eb`;
+  the first push attempt was REFUSED by GitHub push protection
+  (a machinery UUID commit had swept the token upload into
+  history) — the ghost reset away, `upload/GitHub_token.{pdf,txt}`
+  + `.credentials/` gitignored disk-only (the recurrence
+  hardening, committed `013b3ff4`, pushed); every sandbox gate
+  re-pinned at this arrival (trusted-origins 34/34 in 5.67s,
+  tests/api 449+1s in 107.05s, the census 8,589/471/0 at r328
+  byte-parity, vitest 119/119, tsc clean, ruff/mypy clean, the
+  web console render 200 + the zip-size API 22,449,138
+  exact:true + the r329 pins pair + the footer geometry measured
+  bottom==docHeight) + **the part14 §13 QA deliverable set seeded
+  (all ten documents)** + CI live at both pushed commits (19
+  check-runs). 
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
@@ -222,17 +249,15 @@ summarises them and wins any status disagreement.
   clear first. No silent version bumps, ever.
 - **part14 §16.24 supersedes the part13 push-per-round protocol**: no
   commit, push, publish, tag, or branch deletion without explicit
-  authorization — **RECEIVED at round 328** (the owner's explicit
-  "Push" directive): the payload committed over the `ad5f00a7`
-  terminal and the push lane attempted — the network leg itself
-  credential-BLOCKED (the PAT sentinel-verified absent everywhere:
-  no credential file, no git-credentials, no ssh, no gh, no token
-  env; the live attempt error captured at
-  `scratch/p14_r328_push_attempt.txt`). The push rides the PAT
-  restoration (place the token at `.credentials/github_pat`, 600
-  mode, then `bash scripts/git_auth.sh push origin main`); the
-  same-version re-ship rides the push-success round (the
-  shipped-fixed-point convention).
+  authorization — **RECEIVED at round 328 and EXECUTED at round
+  329**: the payload pushed `ad5f00a7..a75f98eb` after the PAT
+  restoration (the token API-validated masked; the truncated-PDF
+  channel diagnosed + the complete plain-text channel accepted);
+  the token-sweep ghost refused by GitHub push protection was
+  reset away (reflog-resident, never pushed) and the credential
+  paths gitignored disk-only (hardening commit `013b3ff4`, pushed).
+  The same-version re-ship rides this push-success round per the
+  shipped-fixed-point convention (the §5 bullets above).
 
 ## 6. Next-campaign priorities (part13 Phases 2–7, in order)
 

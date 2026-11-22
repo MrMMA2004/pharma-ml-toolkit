@@ -1,0 +1,17 @@
+building pharma-ml-toolkit-v1.2.240.zip (the r329 push-success same-version re-ship) ...
+entries=1169 files=1045 bytes=23489390
+testzip first-bad-entry=None
+sha-256=0fadb6e5c8360ffaa5c54866f353186078c1757164a2777619a8f0b0a63e2cb3
+must-carry gate: []
+retired-pair gate (must be empty): []
+version_info.txt in-archive carries 1.2.240: True
+home (testzip OK): /home/z/my-project/pharma-ml-toolkit/dist-archive/pharma-ml-toolkit-v1.2.240.zip
+home (testzip OK): /home/z/my-project/pharma-ml-toolkit/download/pharma-ml-toolkit-v1.2.240.zip
+home (testzip OK): /home/z/my-project/upload/pharma-ml-toolkit-v1.2.240.zip
+home (testzip OK): /home/z/my-project/dist-archive/pharma-ml-toolkit-v1.2.240.zip
+composition violations: 0
+real leaks: 0
+pattern-literal mentions (documented, non-blocking): 7
+archive VERSION stamp: 1.2.240
+offsite (testzip OK): /home/z/pharma-ml-toolkit-zips/pharma-ml-toolkit-v1.2.240.zip
+offsite inventory: 1 zips
