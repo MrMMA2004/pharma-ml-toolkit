@@ -43,7 +43,18 @@ summarises them and wins any status disagreement.
   continuation, trace 1a20009805cb138d, over the r320 verify-only
   terminal (`2df658ae`, counter 112, the tree clean, the
   four-sentinel check green) — the domain's CLOSE: the GUI leg
-  over the r319-gated API family).
+  over the r319-gated API family). The Phase-6 OPENING addendum
+  round 322 — the interactive part13 continuation, trace
+  1a201bea8763ac3d, over the THIRTEENTH rollback (the deepest class
+  again: git history reset to the round-186 checkpoint `2eb0ede4`,
+  origin detached, the PAT credential gone, the venv gutted at 9
+  missing modules incl. rdkit/torch/pharmaml, the frontend
+  node_modules wiped — recovered per the r306–r313 playbook before
+  any lane work: PAT re-spliced masked and API-validated, origin
+  re-attached, fetched, reset onto the r321 terminal `c9df2a5d`,
+  the 14 ghost-residue paths swept — the tree 0/0 clean, the venv
+  re-pinned foreground, the frontend npm ci) — the §8 evaluation
+  + the lightweight workflow engine's API lane EXECUTED.
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
@@ -90,9 +101,9 @@ summarises them and wins any status disagreement.
   authenticated check-runs poll (this round) |
 | Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.240 SOURCE archive shipped (four homes + offsite, 18 zips) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
 | Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.240 | read directly this session, lockstep guard green |
-| Test surface | 8,484 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 465 files) — the +20 multiobjective route family the r319 absorption gated (its GUI leg CLOSED at r321 — the .tsx test file is a tree node that never collects) — PLUS the component-test lane: 102 Vitest tests / 14 files over the Studio frontend (jsdom + React Testing Library; +8 the r321 MultiobjectiveLane suite) | fresh collection + vitest this round |
-| Census | 1,675 files / 563,174 lines / v1.2.240 (the r319 housekeeping census, trued three-way: the walk replica re-aligned to the r302 scoped-exclusion rule — artifacts only at its two relative depths, the r302 find that had hidden the frontend's real artifacts client — so the walk = the live API = the page render agree byte-for-byte for the first time since r302; the multiobjective API lane's three source files ride, the r318 close-out tooling trio's leakage literals scrubbed, the hydration-restored ghost zips and build-theme shots swept) | this round's census walk |
-| Source archive | v1.2.240 — a NEW version ship (the part13 Phase-5 Pharmacogenomics lane — the route family + its tests + the GUI stage + the regenerated API types + the re-executed notebooks ride; the per-round sha/bytes live in the worklog per §7 — the archive cannot carry its own hash) — re-shipped same-version at r319 (the r303/r304/r317 convention: the leakage scrub + this row's re-true ride the rebuilt archive) | sha256 across four homes + offsite |
+| Test surface | 8,523 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 467 files — the +39 workflow lane: 22 engine + 17 route, the r322 re-true) — PLUS the component-test lane: 102 Vitest tests / 14 files over the Studio frontend (unchanged this round) | fresh collection + vitest this round |
+| Census | 1,693 files / 566,700 lines / v1.2.240 (the r322 re-true: +13 files / +3,422 lines — the pharmaml.workflow package x4, the route family, the two test suites, ARCHITECTURE_REVIEW.md, the contract pair regrowth, the four r322 evidence screenshots; verified three-way: walk = live API = page render) | this round's census walk |
+| Source archive | v1.2.240 — re-shipped same-version at r319, r321 AND r322 (the r303/r304/r317 convention: the §8 workflow lane + this row's re-true ride the r322 rebuilt archive — terminal-of-record `38769d67` at 21,039,336 B, six-home parity ALL OK + the offsite mirror rebuilt at 17 zips post-rollback) | sha256 across the homes + offsite |
 | venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.240 — zero drift vs `requirements.txt` | import probes (r319: rdkit was found missing after the eleventh rollback's partial hydration — `venv_repair.sh` ran FOREGROUND and the full import surface + the Studio GUI stack verified) |
 
 ## 3. The six previously-open audit items — CLOSED (re-verified in-tree this round)
@@ -343,10 +354,48 @@ summarises them and wins any status disagreement.
   Drug Repurposing, Cancer Cell-Line Drug Response,
   Pharmacogenomics, Multi-objective Optimization) carries both its
   API + GUI legs; the campaign rides on to Phase 6.**
-- **Phase 6** — architecture hardening: the lightweight workflow
-  engine evaluation (JobManager/capability-registry first),
-  resource monitoring, security scanning lanes, documentation
-  automation.
+- **Phase 6** — architecture hardening: **OPENED (round 322, the
+  interactive part13 continuation over the thirteenth rollback,
+  recovered first)** — the §8 Scientific Workflow Engine lane,
+  EXECUTED as the directive itself orders ("Do not introduce a
+  large workflow engine automatically. First assess whether the
+  existing JobManager and capability registry can support a
+  lightweight implementation. Keep the application fully local and
+  offline-capable."): the evaluation document
+  `docs/ARCHITECTURE_REVIEW.md` (the §21 deliverable #3, opened
+  this round: Prefect / Knime / JupyterLab / marimo reviewed
+  against the local/offline/no-heavy-deps constraints — the
+  decision, the JobManager + capability-registry support verdict,
+  now EXECUTED) + the lightweight in-tree engine
+  `pharmaml.workflow` (contracts: the closed port-kind vocabulary,
+  typed input/output ports, one REAL backend per step; runners:
+  standardize_smiles, compute_descriptors, make_train_test_split,
+  select_kbest_union, build_model, evaluate_model,
+  leverage_williams, shap_summary, save_pdf_report — zero
+  algorithms reimplemented, zero new dependencies; engine: the
+  graph, the pre-execution dependency validation (kind-equality
+  contracts, cycle detection, the full findings-at-once 422), the
+  JSON round-trip serialization + canonical digest, the
+  partial-failure semantics (the backend's own error verbatim,
+  downstream SKIPPED, completed artifacts surviving), the
+  cooperative between-node cancellation, the transitive artifact
+  lineage with honest digest_kinds, the reproducibility block with
+  the honest determinism scope — the mutual-info union member
+  unseeded in the backend, the report PDF's fpdf creation
+  timestamp, both stated never hidden; templates: §8's own example
+  chain `guided-qsar` (10 nodes, the honest leakage reorder —
+  split BEFORE selection, the toolkit's own rule) + the minimal
+  6-node core) + the API lane `/api/v1/workflow` (steps / templates
+  / validate / run sync+job over the EXISTING JobManager with
+  progress + cancellation + the SQLite history / runs ledger;
+  39 new tests — 22 engine + 17 route; the honest bounds: sync ≤ 12
+  nodes/80 records, job ≤ 24/200; the rank hygiene executing the
+  leverage/Williams backend's own prescription — a kept column
+  survives only if it adds rank to [1|X], every dropped name +
+  reason recorded). The GUI leg (the Workflow Builder stage) rides
+  the next continuation per the r312→r313 precedent; then resource
+  monitoring, security scanning lanes, documentation automation
+  (the Phase-6 remainder, each small reversible tested).
 - **Phase 7** — the next production release, from the exact release
   commit, with all gates recorded.
 

@@ -3918,6 +3918,82 @@
         "title": "WilliamsRequest",
         "type": "object"
       },
+      "WorkflowRunRequest": {
+        "description": "One run: a template (with optional per-node parameter\noverrides) or a caller-built spec; inline records or the route's\nown seeded synthetic stand-in; sync (bounded) or job mode (the\nexisting JobManager: progress, cooperative cancellation, the\nSQLite history).",
+        "properties": {
+          "mode": {
+            "default": "sync",
+            "enum": [
+              "sync",
+              "job"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "n_synthetic": {
+            "default": 30,
+            "maximum": 30.0,
+            "minimum": 12.0,
+            "title": "N Synthetic",
+            "type": "integer"
+          },
+          "param_overrides": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Param Overrides",
+            "type": "object"
+          },
+          "records": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Records"
+          },
+          "seed": {
+            "default": 42,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "spec": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spec"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template"
+          }
+        },
+        "title": "WorkflowRunRequest",
+        "type": "object"
+      },
       "XvgRequest": {
         "properties": {
           "moving_average_window": {
@@ -8247,6 +8323,212 @@
         "summary": "Table",
         "tags": [
           "visualization"
+        ]
+      }
+    },
+    "/api/v1/workflow/run": {
+      "post": {
+        "description": "The real round trip: sync (bounded) or job mode (the existing\nJobManager).  Partial failures carry the backend's own errors\nverbatim; downstream nodes are SKIPPED; completed artifacts\nsurvive with their lineage + digests.",
+        "operationId": "run_api_v1_workflow_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Api V1 Workflow Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run",
+        "tags": [
+          "workflow"
+        ]
+      }
+    },
+    "/api/v1/workflow/runs": {
+      "get": {
+        "description": "The bounded in-session execution history.",
+        "operationId": "runs_api_v1_workflow_runs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Runs Api V1 Workflow Runs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Runs",
+        "tags": [
+          "workflow"
+        ]
+      }
+    },
+    "/api/v1/workflow/runs/{run_id}": {
+      "get": {
+        "operationId": "run_detail_api_v1_workflow_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Detail Api V1 Workflow Runs  Run Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Detail",
+        "tags": [
+          "workflow"
+        ]
+      }
+    },
+    "/api/v1/workflow/steps": {
+      "get": {
+        "description": "The step registry's typed vocabulary, verbatim.",
+        "operationId": "steps_api_v1_workflow_steps_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Steps Api V1 Workflow Steps Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Steps",
+        "tags": [
+          "workflow"
+        ]
+      }
+    },
+    "/api/v1/workflow/templates": {
+      "get": {
+        "description": "The saved workflow templates (\u00a78's own example chain among\nthem, with its honest leakage-note).",
+        "operationId": "templates_api_v1_workflow_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Templates Api V1 Workflow Templates Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Templates",
+        "tags": [
+          "workflow"
+        ]
+      }
+    },
+    "/api/v1/workflow/validate": {
+      "post": {
+        "description": "Dependency validation before any execution \u2014 every finding at\nonce plus the topological order the executor would walk.",
+        "operationId": "validate_api_v1_workflow_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Spec",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Validate Api V1 Workflow Validate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate",
+        "tags": [
+          "workflow"
         ]
       }
     }

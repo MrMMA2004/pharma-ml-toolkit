@@ -36,6 +36,7 @@ from . import (
     repurposing,
     semi_supervised,
     visualization,
+    workflow,
 )
 
 __all__ = ["api_router", "ws_router"]
@@ -64,6 +65,7 @@ api_router.include_router(repurposing.router)
 api_router.include_router(drugresponse.router)
 api_router.include_router(pharmacogenomics.router)
 api_router.include_router(multiobjective.router)
+api_router.include_router(workflow.router)
 api_router.include_router(database.router)
 
 ws_router = APIRouter(prefix="/api/v1")

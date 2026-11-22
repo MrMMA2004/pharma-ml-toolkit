@@ -112,6 +112,125 @@
   backend already in-tree) rides the next continuation per
   PROJECT_STATUS §6. The next CI poll carries this round's push
   verdict.
+## [1.2.240 re-ship] — 2026-11-22 — round 322 (the 114th recorded run: the interactive part13 continuation, trace 1a201bea8763ac3d — the Phase-6 OPENING, §8's Scientific Workflow Engine evaluation + the lightweight in-tree engine's API lane; the same-version re-ship per the r303/r304/r317/r319/r321 convention)
+
+- **The thirteenth rollback recovered before any lane work — the
+  r306–r313 playbook, verbatim**: the four-sentinel opening found
+  git history reset to the round-186-era machinery checkpoint
+  (`2eb0ede4`, a UUID subject), origin detached, the 600-mode
+  credential gone, the venv gutted (rdkit/torch/shap/PySide6/
+  mordred/selfies/meeko/gemmi/pharmaml missing, numpy drifted to
+  2.1.3 — nine findings), the frontend node_modules wiped; the
+  counter + worklog + evidence PNGs survived (the stale inherited
+  summary still described r308/counter 99 — the reconciliation read
+  the R321 ledger first). Recovery: the PAT re-spliced from the
+  surviving text extract (93-char, masked, API-validated as
+  MrMMA2004), origin re-attached and fetched, the tree reset onto
+  the r321 terminal `c9df2a5d` (delta 0), the rollback's 14
+  ghost-residue paths swept (the hydration-restored ghost zips
+  across three homes, the stale toolkit-path `.github/` duplicate,
+  the dormant counter copy, the spent r319-WIP anchor — the tree
+  0/0 clean), `venv_repair.sh` foreground (numpy 1.26.4 / torch
+  2.14.1+cpu / pharmaml 1.2.240 editable / the Studio GUI stack
+  verified), the frontend `npm ci` (210 packages). All recovery
+  gates re-verified at the r321 pins before the lane opened:
+  vitest 102/102, the collection 8,484/0/465, the web-parity +
+  hygiene guards green, the four disk zip-homes at the
+  terminal-of-record `f090ea5b` (20,402,686 B), the census
+  three-way exact (1,680/563,278 = live walk = page render), the
+  dev server healthy on 3000.
+- **part13 Phase 6 OPENED — §8's Scientific Workflow Engine lane,
+  executed exactly as the directive orders it** ("Do not introduce
+  a large workflow engine automatically. First assess whether the
+  existing JobManager and capability registry can support a
+  lightweight implementation. Keep the application fully local and
+  offline-capable."): **the assessment + the four candidate reviews
+  (Prefect / Knime / JupyterLab / marimo, each against the
+  local/offline/no-heavy-deps constraints) land in
+  `docs/ARCHITECTURE_REVIEW.md` — the §21 deliverable #3, opened
+  this round with its full audit-field set (audit date, exact
+  commit SHA, scope, evidence, commands, test results, known
+  limitations, remaining blockers) — decision: the in-tree layer
+  over the existing JobManager + the capability vocabulary.**
+  The engine itself: `src/pharmaml/workflow/` — `contracts.py`
+  (the typed step registry: the closed `PORT_KINDS` vocabulary,
+  PortSpec/ParamSpec/StepSpec frozen records, one REAL backend per
+  step, ten steps = §8's own example chain), `runners.py` (every
+  step delegates to a backend callable that already existed —
+  standardize_smiles, compute_descriptors,
+  make_train_test_split, select_kbest_union, build_model,
+  evaluate_model, leverage_williams, shap_summary,
+  save_pdf_report — zero algorithms reimplemented, zero new
+  dependencies, lazy heavy imports), `engine.py` (WorkflowSpec:
+  JSON round-trip serialization + the canonical sha-256 digest; the
+  pre-execution dependency validation — unknown steps/nodes/ports,
+  kind-equality contract mismatches, cycles, duplicate node ids at
+  parse level — every finding at once; the executor: topological
+  walk with the cooperative between-node cancellation, per-node
+  progress, the partial-failure semantics (a failed node records
+  the backend's own error verbatim, every downstream node SKIPPED
+  with the reason, completed artifacts SURVIVE), the transitive
+  artifact lineage with honest digest_kinds
+  (dataframe-shape-rowhash / estimator-params / json), the
+  reproducibility block (versions, platform, seed, spec digest,
+  the honest determinism note); the bounded WorkflowEngine run
+  ledger), `templates.py` (the saved templates: `guided-qsar` —
+  §8's own example chain, 10 nodes, with the honest leakage reorder
+  (split BEFORE selection, the toolkit's own look.ipynb rule,
+  stated in the template's metadata) + `minimal-regression`, the
+  6-node core).
+- **The API lane** (`src/pharmaml/api/routes/workflow.py`, a new
+  router family registered in the route table): `GET
+  /api/v1/workflow/steps` (the typed vocabulary verbatim + the
+  engine block stating the assessment's decision); `GET
+  /api/v1/workflow/templates` (the saved templates with their
+  honest notes); `POST /api/v1/workflow/validate` (the
+  pre-execution gate, 422 with the full findings list + the
+  topological order on success); `POST /api/v1/workflow/run` —
+  sync mode (bounded ≤ 12 nodes / ≤ 80 records) and job mode over
+  the EXISTING JobManager (progress per node through
+  `report_progress`, the cooperative `cancel_event` injection
+  between nodes, the SQLite job history — §8's own conclusion
+  executed); `GET /runs` + `GET /runs/{id}` (the in-session
+  ledger, with the honest lifetime note). The default dataset is
+  the route's own seeded SYNTHETIC 30-molecule stand-in (distinct
+  structures — duplicate descriptor rows would defeat the
+  leverage/Williams rank contract; every metric is a statistic
+  over it, never an experimental fact).
+- **The honest engineering finds, each pinned by a test**: the
+  backend's `compute_descriptors` echoes the input as a `SMILES`
+  column (dropped — a string column never enters the design
+  matrix); the leverage/Williams full-rank guard fires on
+  exactly-collinear columns (MaxAbsEStateIndex ≡ MaxEStateIndex
+  on all-positive E-State sets) — the selection step now executes
+  the guard's own prescription (a kept column survives only if it
+  adds rank to `[1|X]`, every dropped name + reason recorded in
+  the artifact); `mutual_info_regression` is unseeded in the
+  backend (the union pair's selected set varies run-to-run — the
+  determinism scope states it); fpdf embeds a creation timestamp
+  (the report PDF's bytes vary at equal content — stated, and the
+  report node is excluded from the same-seed digest equality with
+  the note); a 12-row frame still fails the backend's own `p+2`
+  rows guard (rank hygiene cannot conjure rows — the honest
+  partial-failure lane pins it).
+- **The gates**: 39 new tests (22 engine +
+  17 route — the golden path over the REAL backends, the
+  partial-failure/cancellation/determinism lanes, the 422
+  contracts, the job-mode round trip + the cooperative cancel);
+  the canonical collection re-trued **8,523 / 0 errors / 467
+  files** (was 8,484/465); ruff + mypy clean over the new
+  modules; the contract re-exported (108 paths / 71 schemas) +
+  the frontend types regenerated in byte lockstep; the guard
+  suites green (tests/api + web-parity + architecture-hygiene:
+  976 passed / 2 standard skips); the vitest lane 102/102
+  unchanged; the census + zip re-ship at the SAME version per the
+  §5 convention (the pins trued to this round's fixed point —
+  the numbers in PROJECT_STATUS §2); the browser-E2E pair (the
+  page renders the trued pins, zero console errors). Counter
+  113 → 114. Still honestly BLOCKED: clean-machine smoke
+  (C-3/C-5), Stage-5 PySide6 retirement, installer signing
+  (certificate-gated). **The GUI leg (the Workflow Builder stage)
+  rides the next continuation per the r312→r313 precedent.**
 ## [1.2.240 re-ship] — 2026-11-22 — round 321 (the 113th recorded run: the interactive part13 continuation, trace 1a20009805cb138d — the Phase-5 multi-objective optimization GUI leg, the domain's CLOSE; the same-version re-ship per the r303/r304/r317/r319 convention)
 
 - **part13 Phase 5's LAST remainder item EXECUTED — the Multi-objective

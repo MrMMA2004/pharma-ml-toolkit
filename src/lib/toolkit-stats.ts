@@ -18,7 +18,7 @@
  *  guard (tests/test_architecture_hygiene.py: the duplicate-symbol map
  *  pins, the library-surface import-graph census, the mabel/noael
  *  parity grid, the SBOM artifact pins). */
-export const SHIPPED_TEST_COUNT = 8484;
+export const SHIPPED_TEST_COUNT = 8523;
 
 /** r315 note: the canonical collection re-verified at 8,428 / 0
  *  errors / 461 files (+10 the DTA route family, − 1 re-trued A-6
@@ -43,11 +43,10 @@ export const SHIPPED_TEST_COUNT = 8484;
  *  the CI's studio-frontend job runs both lanes. */
 export const SHIPPED_COMPONENT_TEST_COUNT = 102;
 
-/*  r321 (the 1.2.240 same-version re-ship, the multiobjective GUI
- *  leg): +8 the MultiobjectiveLane suite (14 files / 102 tests — the
- *  registry line, the full round trip, the 3-objective null
- *  honesty, the 422 verbatim, the three client-side gates, the
- *  provenance carriage); verified pin = live run. */
+/*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
+    +39 the workflow engine + route suites (22 engine + 17 route —
+    the canonical collection re-trued 8,523/0/467 files);
+    verified pin = live run. */
 
 /** File count of the shipped toolkit tree (src, tests, examples, ui,
  *  docs, tools — the same census /api/toolkit/tree walks). The round-302
@@ -73,14 +72,13 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 102;
  *  toolkit .github path — resurrected by the same rollback, never
  *  registered at GitHub and never shipped in any archive — nets to
  *  zero (caught, removed); verified pin = live walk = page render. */
-export const SHIPPED_FILE_COUNT = 1680;
+export const SHIPPED_FILE_COUNT = 1693;
 
-/*  r321 (the 1.2.240 same-version re-ship, the multiobjective GUI
- *  leg): +1 the MultiobjectiveLane component suite (.tsx, a tree
- *  node never line-counted), +2 the r321 E2E evidence screenshots
- *  (the card + the gate pair), +2 the r321 pins pair riding the
- *  terminal build; the backend-daemon theme-shots swept per the
- *  r319/r320 precedent; verified pin = live walk = page render. */
+/*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
+    +13 tree files (the pharmaml.workflow package x4, the route
+    family, the two test suites, ARCHITECTURE_REVIEW.md, the regrown
+    openapi.json/api.d.ts pair, + the four r322 evidence screenshots);
+    verified pin = live walk = page render; .tsx lanes never count. */
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). The round-304
@@ -164,14 +162,14 @@ export const SHIPPED_FILE_COUNT = 1680;
  *  file pin stayed 1,672 (the hydration-restored stray zips + the
  *  orphan WIP route removed, the ritual's seven home-zips kept);
  *  verified pin = live walk = page render. */
-export const SHIPPED_SOURCE_LINES = 563278;
+export const SHIPPED_SOURCE_LINES = 566700;
 
-/*  r321 (the 1.2.240 same-version re-ship, the multiobjective GUI
- *  leg): +104 the round's counted doc delta (the CHANGELOG r321
- *  entry + the PROJECT_STATUS Phase-5 close addenda + the FEATURES
- *  r321 note + the stage-chain guard row) — the .tsx lanes never
- *  count by the long-standing census rule; verified pin = live
- *  walk = page render. */
+/*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
+    +3,422 the counted delta (the workflow package + the route family
+    + the two test suites + ARCHITECTURE_REVIEW/PROJECT_STATUS/
+    CHANGELOG doc deltas + the contract pair regrowth); the .tsx
+    lanes never count by the long-standing census rule; verified
+    pin = live walk = page render. */
 
 /** r315 (the v1.2.237 ship, the DTA lane): +2 the route family
  *  (routes/dta.py + tests/api/test_dta.py), +1 the DtaLane
