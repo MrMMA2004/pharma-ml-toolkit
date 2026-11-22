@@ -18370,3 +18370,10 @@ header; the counter 126 → 127; this entry; the round's payload (the
 `scratch/ecc_check.sh` round-check + the `.gitignore` hygiene line
 for the owner's directive file) committed and pushed over
 `494a7ab5`.
+
+**The verdict closed on arrival**: the push `494a7ab5..58f7dcbd`
+triggered CI + the push workflow at the new HEAD — run 45075969338
+(CI) + run 45075970003 (Push on main), both **completed/success**
+within the round's own window; **19/19 check-runs success** at
+`58f7dcbd` — the r335 CI verdict green on arrival, no queued item
+left for the next round.

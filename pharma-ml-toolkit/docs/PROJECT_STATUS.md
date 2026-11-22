@@ -301,7 +301,9 @@ summarises them and wins any status disagreement.
   with the standing round-check `scratch/ecc_check.sh` GREEN — and
   the r334-addendum CI verdict closed GREEN on arrival: `494a7ab5`
   19/19 check-runs success; the release assets re-verified
-  byte-exact via the authenticated API; counter 126 -> 127
+  byte-exact via the authenticated API; counter 126 -> 127 — and the
+  r335 CI verdict closed GREEN on arrival: `58f7dcbd` 19/19 check-runs
+  success (both the CI and the push workflows)
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
