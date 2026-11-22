@@ -15,7 +15,7 @@ Seeded: round 329 (2026-11-22).
 | BLK-3 | Signing certificate | signed-EXE/MSI validation | the certificate lane (owner-side) | r325 standing lane #3; rides the owner's cert decision |
 | BLK-4 | Stage-5 PySide6 retirement approval | the legacy-app retirement gate | owner decision + the box | the r325 standing lane #2 |
 | BLK-5 | ECC harness absent | the part14 §4 ECC dry-run/guided install | a harness decision (Codex on the Windows box, or an explicit alternative) | `npx ecc-universal@2.2.3 install --guided --dry-run` per the §G.3 plan; metadata/license/shasum already captured (r326) |
-| BLK-6 | **The rollback can wipe SYSTEM packages** (observed r331: `libEGL.so.1` gone — every PySide6.QtGui import fails, so the whole tests/ui collection errors) — no root apt in the sandbox | the GUI test census legs, any Qt import | the system package OR the user-mode workaround standing | the r331 mitigation: `apt-get download libegl1` + `dpkg -x` to `/home/z/.local/lib/egl` + `LD_LIBRARY_PATH=/home/z/.local/lib/egl` on the pytest invocations — the full Qt chain verified importable offscreen; re-applies after any recurrence |
+| BLK-6 | **The rollback can wipe SYSTEM packages** (observed r331: `libEGL.so.1` gone — every PySide6.QtGui import fails, so the whole tests/ui collection errors) — no root apt in the sandbox | the GUI test census legs, any Qt import | the system package OR the user-mode workaround standing | the r331 mitigation: `apt-get download libegl1` + `dpkg -x` to `~/.local/lib/egl` + `LD_LIBRARY_PATH=~/.local/lib/egl` on the pytest invocations — the full Qt chain verified importable offscreen; re-applies after any recurrence |
 
 ## UNBLOCKED / MITIGATED this round (r331)
 

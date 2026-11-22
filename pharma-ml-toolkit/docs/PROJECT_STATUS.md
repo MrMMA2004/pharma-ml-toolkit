@@ -162,7 +162,7 @@ summarises them and wins any status disagreement.
   `a6cc830b`; the Tk ghost pair + the old-layout `.github` duplicate
   + the stale counter copy swept; the venv rebuilt pin-exact over
   three legs with the numpy-1.x wheel class documented; the libEGL
-  user-mode deb-extract workaround at `/home/z/.local/lib/egl`; the
+  user-mode deb-extract workaround at `~/.local/lib/egl`; the
   101-file mode wall restored) — then the queued items closed: the
   r330 CI verdict GREEN (`a6cc830b` 19/19), every gate re-pinned
   (trusted-origins 34/34 in 5.83s, tests/api 449+1s in 108.88s, the

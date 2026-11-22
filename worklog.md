@@ -17360,6 +17360,8 @@ Every honest failure mode surfaces the backend's own typed errors verbatim as 42
 
 ## Round 326 — the 118th recorded run (the part14 arrival — the interactive part14 continuation, trace 1a203001d56e82d9)
 
+**R326 — the 118th recorded run**
+
 **The arrival state: the SIXTEENTH rollback (deepest class), fully
 reconciled before any work** — the inherited stale summary's claims
 ("counter 99 / Round 309 pending / HEAD 19effec8") were discarded per
@@ -17463,6 +17465,8 @@ the r325 terminal evidence stands as last-verified) — they re-ride
 with the recovery. Counter 117 → 118.
 
 ## Round 327 — the 119th recorded run (the part14 Phase-2/4 execution — the incident fix, trace 1a20321350ff75d1)
+
+**R327 — the 119th recorded run**
 
 **The arrival state: the SEVENTEENTH rollback, the lightest class** —
 the inherited stale summary's claims ("counter 99 / Round 309
@@ -17584,6 +17588,8 @@ understood at census level). Counter 118 → 119.
 
 ## Round 328 — the 120th recorded run (the part14 §16.24-authorized recovery + push round, trace 1a2033f36c411301)
 
+**R328 — the 120th recorded run**
+
 **The arrival state: the EIGHTEENTH rollback (light class)** — the
 inherited stale summary's claims ("counter 99 / Round 309 pending /
 HEAD 19effec8 / 21 consecutive summary-only turns") discarded per its
@@ -17674,6 +17680,8 @@ re-ship marks the SHIPPED fixed point and the ship is the gated leg
 convention honored). Counter 119 → 120.
 
 ## Round 329 — the 121st recorded run (the part14 push-success round: the credential lane restored, the first successful pushes of the part14 era, the QA deliverable set seeded, the same-version re-ship; trace 1a20356f/1a203639)
+
+**R329 — the 121st recorded run**
 
 **The arrival state: the nineteenth rollback (light class)** — the
 inherited stale summary's claims ("counter 99 / Round 309 pending /
@@ -17803,6 +17811,8 @@ the evidence + the ledger). Counter 120 → 121.
 
 ## Round 330 — the 122nd recorded run (the part14 verification round: every gate re-pinned at r329 parity, the twentieth arrival's ghost swept, the r329 CI verdicts closed GREEN, the ledger pushed; trace 1a203891)
 
+**R330 — the 122nd recorded run**
+
 **The arrival state: the twentieth arrival (light class)** — the
 four-sentinel check found the ledger AHEAD of the inherited stale
 summary yet again: the summary snapshot believed r329 mid-flight
@@ -17863,6 +17873,8 @@ counter 121 → 122; the round's payload (the r330 evidence set +
 the pins pair + the ledger) committed and pushed over `a75cabe7`.
 
 ## Round 331 — the 123rd recorded run (the part14 recovery round: the twenty-first deepest-class rollback recovered, the queued items closed — the CI verdict GREEN, the living QA docs re-pinned; trace 1a203c9e)
+
+**R331 — the 123rd recorded run**
 
 **The arrival state: the twenty-first arrival — the DEEPEST class
 again** (the r322/r326 pattern): the four-sentinel check found git
@@ -17979,6 +17991,8 @@ evidence set + the pins pair + the three re-pinned QA docs + the
 ledger) committed and pushed over `a6cc830b`.
 
 ## Round 332 — the 124th recorded run (the part14 verification round: the twenty-second arrival, light class — the r331 CI verdict closed GREEN, every gate re-pinned over the atomic-window doctrine; trace 1a203df0897e1065)
+
+**R332 — the 124th recorded run**
 
 **The arrival state (the twenty-second arrival — light class)**:
 git history at the r331 terminal `74c31594` with ONE machinery UUID

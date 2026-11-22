@@ -1,0 +1,1790 @@
+﻿2026-11-22T16:17:15.5164496Z Current runner version: '2.338.2'
+2026-11-22T16:17:15.5188743Z ##[group]Runner Image Provisioner
+2026-11-22T16:17:15.5189522Z Hosted Compute Agent
+2026-11-22T16:17:15.5190093Z Version: 20261111.635
+2026-11-22T16:17:15.5190649Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+2026-11-22T16:17:15.5191309Z Build Date: 2026-11-11T01:49:01Z
+2026-11-22T16:17:15.5191940Z Worker ID: {f42b6798-c49e-40c7-8ad0-efd145a34de5}
+2026-11-22T16:17:15.5192592Z Region: westus3
+2026-11-22T16:17:15.5193086Z Cloud: Azure
+2026-11-22T16:17:15.5193575Z ##[endgroup]
+2026-11-22T16:17:15.5194812Z ##[group]Operating System
+2026-11-22T16:17:15.5195437Z Microsoft Windows Server 2022
+2026-11-22T16:17:15.5195989Z 10.0.20348
+2026-11-22T16:17:15.5196490Z Datacenter
+2026-11-22T16:17:15.5196955Z ##[endgroup]
+2026-11-22T16:17:15.5197439Z ##[group]Runner Image
+2026-11-22T16:17:15.5197977Z Image: windows-2022
+2026-11-22T16:17:15.5198461Z Version: 20261116.370.1
+2026-11-22T16:17:15.5199792Z Included Software: https://github.com/actions/runner-images/blob/win22/20261116.370/images/windows/Windows2022-Readme.md
+2026-11-22T16:17:15.5201211Z Image Release: https://github.com/actions/runner-images/releases/tag/win22%2F20261116.370
+2026-11-22T16:17:15.5202103Z ##[endgroup]
+2026-11-22T16:17:15.5203108Z ##[group]GITHUB_TOKEN Permissions
+2026-11-22T16:17:15.5204857Z Contents: write
+2026-11-22T16:17:15.5205416Z Metadata: read
+2026-11-22T16:17:15.5205891Z ##[endgroup]
+2026-11-22T16:17:15.5207826Z Secret source: Actions
+2026-11-22T16:17:15.5208695Z Cache mode: write
+2026-11-22T16:17:15.5209377Z Prepare workflow directory
+2026-11-22T16:17:15.5954202Z Prepare all required actions
+2026-11-22T16:17:15.6024254Z Getting action download info
+2026-11-22T16:17:16.0300050Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-22T16:17:16.1505712Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-11-22T16:17:16.2990487Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-11-22T16:17:16.4403265Z Download action repository 'dtolnay/rust-toolchain@1.90.0' (SHA:547f64eaa184fd62768e02b77019e5408713ca53)
+2026-11-22T16:17:16.7260844Z Download action repository 'Swatinem/rust-cache@v2' (SHA:d1527c8f67ef9af357290475d4af4b0fab8f12e0)
+2026-11-22T16:17:17.3524988Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-22T16:17:17.5238075Z Download action repository 'softprops/action-gh-release@v2' (SHA:3bb12739c298aeb8a4eeaf626c5b8d85266b0e65)
+2026-11-22T16:17:18.2443349Z Complete job name: Build the Windows installer (NSIS EXE + MSI)
+2026-11-22T16:17:18.4225735Z ##[group]Run actions/checkout@v4
+2026-11-22T16:17:18.4227104Z with:
+2026-11-22T16:17:18.4227897Z   persist-credentials: false
+2026-11-22T16:17:18.4228856Z   repository: MrMMA2004/pharma-ml-toolkit
+2026-11-22T16:17:18.4235800Z   token: ***
+2026-11-22T16:17:18.4236560Z   ssh-strict: true
+2026-11-22T16:17:18.4237376Z   ssh-user: git
+2026-11-22T16:17:18.4238128Z   clean: true
+2026-11-22T16:17:18.4238930Z   sparse-checkout-cone-mode: true
+2026-11-22T16:17:18.4239844Z   fetch-depth: 1
+2026-11-22T16:17:18.4240600Z   fetch-tags: false
+2026-11-22T16:17:18.4241393Z   show-progress: true
+2026-11-22T16:17:18.4242178Z   lfs: false
+2026-11-22T16:17:18.4242915Z   submodules: false
+2026-11-22T16:17:18.4244311Z   set-safe-directory: true
+2026-11-22T16:17:18.4245647Z   allow-unsafe-pr-checkout: false
+2026-11-22T16:17:18.4246885Z env:
+2026-11-22T16:17:18.4247621Z   PYTHON_VERSION: 3.12
+2026-11-22T16:17:18.4248434Z   NODE_VERSION: 22
+2026-11-22T16:17:18.4249270Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:17:18.4250433Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:17:18.4252177Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:17:18.4253601Z ##[endgroup]
+2026-11-22T16:17:18.5682718Z Syncing repository: MrMMA2004/pharma-ml-toolkit
+2026-11-22T16:17:18.5689605Z ##[group]Getting Git version info
+2026-11-22T16:17:18.5691881Z Working directory is 'D:\a\pharma-ml-toolkit\pharma-ml-toolkit'
+2026-11-22T16:17:18.6798623Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-11-22T16:17:19.0098304Z git version 2.56.1.windows.1
+2026-11-22T16:17:19.0138678Z ##[endgroup]
+2026-11-22T16:17:19.0156647Z Temporarily overriding HOME='D:\a\_temp\152332e7-48ec-48be-a7b0-aca094a7cd87' before making global git config changes
+2026-11-22T16:17:19.0166947Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T16:17:19.0169179Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\pharma-ml-toolkit\pharma-ml-toolkit
+2026-11-22T16:17:19.0801729Z Deleting the contents of 'D:\a\pharma-ml-toolkit\pharma-ml-toolkit'
+2026-11-22T16:17:19.0806812Z ##[group]Initializing the repository
+2026-11-22T16:17:19.0815617Z [command]"C:\Program Files\Git\bin\git.exe" init D:\a\pharma-ml-toolkit\pharma-ml-toolkit
+2026-11-22T16:17:19.1451899Z Initialized empty Git repository in D:/a/pharma-ml-toolkit/pharma-ml-toolkit/.git/
+2026-11-22T16:17:19.1484844Z [command]"C:\Program Files\Git\bin\git.exe" remote add origin https://github.com/MrMMA2004/pharma-ml-toolkit
+2026-11-22T16:17:19.2048535Z ##[endgroup]
+2026-11-22T16:17:19.2050780Z ##[group]Disabling automatic garbage collection
+2026-11-22T16:17:19.2057643Z [command]"C:\Program Files\Git\bin\git.exe" config --local gc.auto 0
+2026-11-22T16:17:19.2333130Z ##[endgroup]
+2026-11-22T16:17:19.2334417Z ##[group]Setting up auth
+2026-11-22T16:17:19.2344577Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T16:17:19.2621989Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-22T16:17:20.5817662Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T16:17:20.6106737Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-22T16:17:21.0626727Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T16:17:21.0913272Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-22T16:17:21.5290689Z [command]"C:\Program Files\Git\bin\git.exe" config --local http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+2026-11-22T16:17:21.5576627Z ##[endgroup]
+2026-11-22T16:17:21.5577060Z ##[group]Fetching the repository
+2026-11-22T16:17:21.5589198Z [command]"C:\Program Files\Git\bin\git.exe" -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +8d4d88bd65a3b2b48b2eff3ad82e212236d502bd:refs/tags/v1.2.240
+2026-11-22T16:17:46.9542296Z From https://github.com/MrMMA2004/pharma-ml-toolkit
+2026-11-22T16:17:46.9542999Z  * [new ref]         8d4d88bd65a3b2b48b2eff3ad82e212236d502bd -> v1.2.240
+2026-11-22T16:17:46.9571537Z ##[endgroup]
+2026-11-22T16:17:46.9572179Z ##[group]Determining the checkout info
+2026-11-22T16:17:46.9574512Z ##[endgroup]
+2026-11-22T16:17:46.9589351Z [command]"C:\Program Files\Git\bin\git.exe" sparse-checkout disable
+2026-11-22T16:17:47.0027904Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all extensions.worktreeConfig
+2026-11-22T16:17:47.0327534Z ##[group]Checking out the ref
+2026-11-22T16:17:47.0341334Z [command]"C:\Program Files\Git\bin\git.exe" checkout --progress --force refs/tags/v1.2.240
+2026-11-22T16:17:48.1031674Z Updating files:  24% (785/3152)
+2026-11-22T16:17:48.1764938Z Updating files:  25% (788/3152)
+2026-11-22T16:17:48.1831362Z Updating files:  26% (820/3152)
+2026-11-22T16:17:48.1964467Z Updating files:  27% (852/3152)
+2026-11-22T16:17:48.2077852Z Updating files:  28% (883/3152)
+2026-11-22T16:17:48.2167441Z Updating files:  29% (915/3152)
+2026-11-22T16:17:48.2763777Z Updating files:  30% (946/3152)
+2026-11-22T16:17:48.2832796Z Updating files:  31% (978/3152)
+2026-11-22T16:17:48.2898707Z Updating files:  32% (1009/3152)
+2026-11-22T16:17:48.3068184Z Updating files:  33% (1041/3152)
+2026-11-22T16:17:48.3148267Z Updating files:  34% (1072/3152)
+2026-11-22T16:17:48.3245859Z Updating files:  35% (1104/3152)
+2026-11-22T16:17:48.3369989Z Updating files:  36% (1135/3152)
+2026-11-22T16:17:48.3431362Z Updating files:  37% (1167/3152)
+2026-11-22T16:17:48.3487454Z Updating files:  38% (1198/3152)
+2026-11-22T16:17:48.3548770Z Updating files:  39% (1230/3152)
+2026-11-22T16:17:48.3721926Z Updating files:  40% (1261/3152)
+2026-11-22T16:17:48.3775987Z Updating files:  41% (1293/3152)
+2026-11-22T16:17:48.3828189Z Updating files:  42% (1324/3152)
+2026-11-22T16:17:48.3885241Z Updating files:  43% (1356/3152)
+2026-11-22T16:17:48.3943555Z Updating files:  44% (1387/3152)
+2026-11-22T16:17:48.3997045Z Updating files:  45% (1419/3152)
+2026-11-22T16:17:48.4049447Z Updating files:  46% (1450/3152)
+2026-11-22T16:17:48.4115842Z Updating files:  47% (1482/3152)
+2026-11-22T16:17:48.4207269Z Updating files:  48% (1513/3152)
+2026-11-22T16:17:48.4299318Z Updating files:  49% (1545/3152)
+2026-11-22T16:17:48.4380853Z Updating files:  50% (1576/3152)
+2026-11-22T16:17:48.4479911Z Updating files:  51% (1608/3152)
+2026-11-22T16:17:48.4574236Z Updating files:  52% (1640/3152)
+2026-11-22T16:17:48.4668390Z Updating files:  53% (1671/3152)
+2026-11-22T16:17:48.4759058Z Updating files:  54% (1703/3152)
+2026-11-22T16:17:48.4837255Z Updating files:  55% (1734/3152)
+2026-11-22T16:17:48.4925294Z Updating files:  56% (1766/3152)
+2026-11-22T16:17:48.4995513Z Updating files:  57% (1797/3152)
+2026-11-22T16:17:48.5068769Z Updating files:  58% (1829/3152)
+2026-11-22T16:17:48.5149336Z Updating files:  59% (1860/3152)
+2026-11-22T16:17:48.5228944Z Updating files:  60% (1892/3152)
+2026-11-22T16:17:48.5299018Z Updating files:  61% (1923/3152)
+2026-11-22T16:17:48.5374215Z Updating files:  62% (1955/3152)
+2026-11-22T16:17:48.5437604Z Updating files:  63% (1986/3152)
+2026-11-22T16:17:48.5502727Z Updating files:  64% (2018/3152)
+2026-11-22T16:17:48.5572703Z Updating files:  65% (2049/3152)
+2026-11-22T16:17:48.5667350Z Updating files:  66% (2081/3152)
+2026-11-22T16:17:48.5737535Z Updating files:  67% (2112/3152)
+2026-11-22T16:17:48.5818156Z Updating files:  68% (2144/3152)
+2026-11-22T16:17:48.5877390Z Updating files:  69% (2175/3152)
+2026-11-22T16:17:48.5942999Z Updating files:  70% (2207/3152)
+2026-11-22T16:17:48.6114273Z Updating files:  71% (2238/3152)
+2026-11-22T16:17:48.6253193Z Updating files:  72% (2270/3152)
+2026-11-22T16:17:48.6315413Z Updating files:  73% (2301/3152)
+2026-11-22T16:17:48.6370989Z Updating files:  74% (2333/3152)
+2026-11-22T16:17:48.6436261Z Updating files:  75% (2364/3152)
+2026-11-22T16:17:48.6640735Z Updating files:  76% (2396/3152)
+2026-11-22T16:17:48.6684782Z Updating files:  77% (2428/3152)
+2026-11-22T16:17:48.6756696Z Updating files:  78% (2459/3152)
+2026-11-22T16:17:48.6825114Z Updating files:  79% (2491/3152)
+2026-11-22T16:17:48.6887244Z Updating files:  80% (2522/3152)
+2026-11-22T16:17:48.7095100Z Updating files:  81% (2554/3152)
+2026-11-22T16:17:48.7184642Z Updating files:  82% (2585/3152)
+2026-11-22T16:17:48.7262802Z Updating files:  83% (2617/3152)
+2026-11-22T16:17:48.7467653Z Updating files:  84% (2648/3152)
+2026-11-22T16:17:48.7538758Z Updating files:  85% (2680/3152)
+2026-11-22T16:17:48.7670673Z Updating files:  86% (2711/3152)
+2026-11-22T16:17:48.7724686Z Updating files:  87% (2743/3152)
+2026-11-22T16:17:48.7805011Z Updating files:  88% (2774/3152)
+2026-11-22T16:17:48.7884375Z Updating files:  89% (2806/3152)
+2026-11-22T16:17:48.7997933Z Updating files:  90% (2837/3152)
+2026-11-22T16:17:48.8094811Z Updating files:  91% (2869/3152)
+2026-11-22T16:17:48.8168211Z Updating files:  92% (2900/3152)
+2026-11-22T16:17:48.8248670Z Updating files:  93% (2932/3152)
+2026-11-22T16:17:48.8347596Z Updating files:  94% (2963/3152)
+2026-11-22T16:17:48.8423132Z Updating files:  95% (2995/3152)
+2026-11-22T16:17:48.8482669Z Updating files:  96% (3026/3152)
+2026-11-22T16:17:48.8553597Z Updating files:  97% (3058/3152)
+2026-11-22T16:17:48.8845834Z Updating files:  98% (3089/3152)
+2026-11-22T16:17:49.0694815Z Updating files:  99% (3121/3152)
+2026-11-22T16:17:49.0829575Z Updating files:  99% (3149/3152)
+2026-11-22T16:17:49.0830078Z Updating files: 100% (3152/3152)
+2026-11-22T16:17:49.0830448Z Updating files: 100% (3152/3152), done.
+2026-11-22T16:17:49.0942121Z Note: switching to 'refs/tags/v1.2.240'.
+2026-11-22T16:17:49.0942519Z 
+2026-11-22T16:17:49.0943241Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-11-22T16:17:49.0944232Z changes and commit them, and you can discard any commits you make in this
+2026-11-22T16:17:49.0945729Z state without impacting any branches by switching back to a branch.
+2026-11-22T16:17:49.0946142Z 
+2026-11-22T16:17:49.0946397Z If you want to create a new branch to retain commits you create, you may
+2026-11-22T16:17:49.0947085Z do so (now or later) by using -c with the switch command. Example:
+2026-11-22T16:17:49.0947336Z 
+2026-11-22T16:17:49.0947438Z   git switch -c <new-branch-name>
+2026-11-22T16:17:49.0947611Z 
+2026-11-22T16:17:49.0947701Z Or undo this operation with:
+2026-11-22T16:17:49.0948000Z 
+2026-11-22T16:17:49.0948129Z   git switch -
+2026-11-22T16:17:49.0948254Z 
+2026-11-22T16:17:49.0948525Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-11-22T16:17:49.0948924Z 
+2026-11-22T16:17:49.0953056Z HEAD is now at 8d4d88b part14 r332: the verification round -- the twenty-second arrival (light class; the machinery residue pair c22a421d + 4847b311 reset away and folded into this commit, NO token material, the 013b3ff4 hardening holding; origin at the r331 terminal 74c31594, the venv + the libEGL workaround surviving intact; the reaper wiping root node_modules five-plus times at the densest cadence yet -- countered by the atomic-window doctrine, the whole verification battery inside one command window); the natural queued item closed: the r331 CI verdict GREEN (74c31594 19/19 check-runs success via the authenticated API, identity MrMMA2004); every gate re-pinned (trusted-origins 34 in 5.76s live over the surviving pin-exact venv, the console 200 + the zip-size API 23,489,390 exact:true across the makeup restores, the browser E2E zero errors + the Playground ten-tab surface + the footer geometry exact 7882==7882 + the pins pair p14r332; the heavier battery -- tests/api, the census, vitest, tsc, ruff/mypy -- standing on the r331 runs over the identical terminal bytes); the r332 ledger (PROJECT_STATUS lineage + the worklog entry + the counter) committed and pushed over 74c31594; counter 123 -> 124
+2026-11-22T16:17:49.1218798Z ##[endgroup]
+2026-11-22T16:17:49.1630228Z [command]"C:\Program Files\Git\bin\git.exe" log -1 --format=%H
+2026-11-22T16:17:49.1893078Z 8d4d88bd65a3b2b48b2eff3ad82e212236d502bd
+2026-11-22T16:17:49.1924459Z ##[group]Removing auth
+2026-11-22T16:17:49.1932750Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T16:17:49.2214509Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-22T16:17:49.6852195Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T16:17:49.7103438Z http.https://github.com/.extraheader
+2026-11-22T16:17:49.7132868Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all http.https://github.com/.extraheader
+2026-11-22T16:17:49.7415729Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-22T16:17:50.1708558Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T16:17:50.1986586Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-22T16:17:50.6708624Z ##[endgroup]
+2026-11-22T16:17:50.7010915Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-22T16:17:50.7011355Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-22T16:17:50.7011691Z [36;1m$version = (Get-Content VERSION -Raw).Trim()[0m
+2026-11-22T16:17:50.7012067Z [36;1m$tauri = (Get-Content src-tauri/tauri.conf.json -Raw |[0m
+2026-11-22T16:17:50.7012417Z [36;1m  ConvertFrom-Json).version[0m
+2026-11-22T16:17:50.7012751Z [36;1m$npm = (Get-Content frontend/package.json -Raw |[0m
+2026-11-22T16:17:50.7013077Z [36;1m  ConvertFrom-Json).version[0m
+2026-11-22T16:17:50.7013442Z [36;1mWrite-Host "carriers: VERSION=$version tauri=$tauri npm=$npm"[0m
+2026-11-22T16:17:50.7013877Z [36;1mif (-not ($version -eq $tauri -and $version -eq $npm)) {[0m
+2026-11-22T16:17:50.7014725Z [36;1m  Write-Host "::error::version carriers disagree — bump all four (VERSION, pyproject.toml, __init__.py, tauri.conf.json + frontend/package.json) in one atomic change before tagging"[0m
+2026-11-22T16:17:50.7015512Z [36;1m  exit 1[0m
+2026-11-22T16:17:50.7015695Z [36;1m}[0m
+2026-11-22T16:17:50.7015897Z [36;1mif ($env:GITHUB_REF_TYPE -eq "tag") {[0m
+2026-11-22T16:17:50.7016174Z [36;1m  $tag = $env:GITHUB_REF_NAME[0m
+2026-11-22T16:17:50.7016459Z [36;1m  if (-not $tag.TrimStart("v") -eq $version) {[0m
+2026-11-22T16:17:50.7016847Z [36;1m    Write-Host "::error::tag $tag does not match VERSION $version"[0m
+2026-11-22T16:17:50.7017198Z [36;1m    exit 1[0m
+2026-11-22T16:17:50.7017383Z [36;1m  }[0m
+2026-11-22T16:17:50.7017542Z [36;1m}[0m
+2026-11-22T16:17:50.7122111Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-22T16:17:50.7122523Z env:
+2026-11-22T16:17:50.7122732Z   PYTHON_VERSION: 3.12
+2026-11-22T16:17:50.7122979Z   NODE_VERSION: 22
+2026-11-22T16:17:50.7123200Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:17:50.7123588Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:17:50.7124239Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:17:50.7124745Z ##[endgroup]
+2026-11-22T16:17:51.1045196Z carriers: VERSION=1.2.240 tauri=1.2.240 npm=1.2.240
+2026-11-22T16:17:51.1753785Z ##[group]Run actions/setup-node@v4
+2026-11-22T16:17:51.1754123Z with:
+2026-11-22T16:17:51.1754309Z   node-version: 22
+2026-11-22T16:17:51.1754503Z   cache: npm
+2026-11-22T16:17:51.1754816Z   cache-dependency-path: pharma-ml-toolkit/frontend/package-lock.json
+2026-11-22T16:17:51.1755213Z   always-auth: false
+2026-11-22T16:17:51.1755415Z   check-latest: false
+2026-11-22T16:17:51.1757784Z   token: ***
+2026-11-22T16:17:51.1757970Z env:
+2026-11-22T16:17:51.1758138Z   PYTHON_VERSION: 3.12
+2026-11-22T16:17:51.1758340Z   NODE_VERSION: 22
+2026-11-22T16:17:51.1758527Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:17:51.1758857Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:17:51.1759382Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:17:51.1759793Z ##[endgroup]
+2026-11-22T16:17:51.3469498Z Found in cache @ C:\hostedtoolcache\windows\node\22.23.5\x64
+2026-11-22T16:17:51.3476379Z (node:7392) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T16:17:51.3477580Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T16:17:51.3479883Z ##[group]Environment details
+2026-11-22T16:17:55.8615164Z node: v22.23.5
+2026-11-22T16:17:55.8615477Z npm: 10.9.9
+2026-11-22T16:17:55.8615653Z yarn: 1.22.22
+2026-11-22T16:17:55.8616455Z ##[endgroup]
+2026-11-22T16:17:55.9514693Z [command]C:\Windows\system32\cmd.exe /D /S /C "C:\hostedtoolcache\windows\node\22.23.5\x64\npm.cmd config get cache"
+2026-11-22T16:17:56.4884012Z C:\npm\cache
+2026-11-22T16:17:56.8650130Z npm cache is not found
+2026-11-22T16:17:56.8884469Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-22T16:17:56.8884880Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-22T16:17:56.8885165Z [36;1mnpm ci --prefix frontend[0m
+2026-11-22T16:17:56.8885423Z [36;1mif ($LASTEXITCODE -ne 0) {[0m
+2026-11-22T16:17:56.8885847Z [36;1m  Write-Host "::error::npm ci failed — the lockfile does not resolve on this runner"[0m
+2026-11-22T16:17:56.8886274Z [36;1m  exit 1[0m
+2026-11-22T16:17:56.8886450Z [36;1m}[0m
+2026-11-22T16:17:56.8927337Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-22T16:17:56.8927694Z env:
+2026-11-22T16:17:56.8927864Z   PYTHON_VERSION: 3.12
+2026-11-22T16:17:56.8928059Z   NODE_VERSION: 22
+2026-11-22T16:17:56.8928240Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:17:56.8928558Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:17:56.8929089Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:17:56.8929526Z ##[endgroup]
+2026-11-22T16:18:10.7673279Z 
+2026-11-22T16:18:10.7680295Z added 211 packages, and audited 218 packages in 13s
+2026-11-22T16:18:10.7680606Z 
+2026-11-22T16:18:10.7680789Z 35 packages are looking for funding
+2026-11-22T16:18:10.7681085Z   run `npm fund` for details
+2026-11-22T16:18:10.7690552Z 
+2026-11-22T16:18:10.7690794Z found 0 vulnerabilities
+2026-11-22T16:18:12.1011149Z ##[group]Run actions/setup-python@v5
+2026-11-22T16:18:12.1011488Z with:
+2026-11-22T16:18:12.1011673Z   python-version: 3.12
+2026-11-22T16:18:12.1011903Z   check-latest: false
+2026-11-22T16:18:12.1014248Z   token: ***
+2026-11-22T16:18:12.1014445Z   update-environment: true
+2026-11-22T16:18:12.1014672Z   allow-prereleases: false
+2026-11-22T16:18:12.1014882Z   freethreaded: false
+2026-11-22T16:18:12.1015068Z env:
+2026-11-22T16:18:12.1015231Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:12.1015424Z   NODE_VERSION: 22
+2026-11-22T16:18:12.1015610Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:12.1015941Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:12.1016466Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:12.1016874Z ##[endgroup]
+2026-11-22T16:18:12.2523147Z ##[group]Installed versions
+2026-11-22T16:18:12.2674749Z (node:6688) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T16:18:12.2675548Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T16:18:12.2676146Z Successfully set up CPython (3.12.10)
+2026-11-22T16:18:12.2677076Z ##[endgroup]
+2026-11-22T16:18:12.3019459Z ##[group]Run dtolnay/rust-toolchain@1.90.0
+2026-11-22T16:18:12.3019927Z with:
+2026-11-22T16:18:12.3020193Z   targets: x86_64-pc-windows-msvc
+2026-11-22T16:18:12.3020510Z env:
+2026-11-22T16:18:12.3020739Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:12.3021017Z   NODE_VERSION: 22
+2026-11-22T16:18:12.3021271Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:12.3021721Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:12.3022444Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:12.3023126Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.3023754Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:12.3024383Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.3024932Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.3025723Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.3026174Z ##[endgroup]
+2026-11-22T16:18:12.3093308Z ##[start-action display=Parse toolchain version;id=__dtolnay_rust-toolchain.parse]
+2026-11-22T16:18:12.3204321Z ##[group]Run if [[ -z $toolchain ]]; then
+2026-11-22T16:18:12.3204620Z [36;1mif [[ -z $toolchain ]]; then[0m
+2026-11-22T16:18:12.3205112Z [36;1m  # GitHub does not enforce `required: true` inputs itself. https://github.com/actions/runner/issues/1070[0m
+2026-11-22T16:18:12.3205679Z [36;1m  echo "'toolchain' is a required input" >&2[0m
+2026-11-22T16:18:12.3205958Z [36;1m  exit 1[0m
+2026-11-22T16:18:12.3206271Z [36;1melif [[ $toolchain =~ ^stable' '[0-9]+' '(year|month|week|day)s?' 'ago$ ]]; then[0m
+2026-11-22T16:18:12.3206673Z [36;1m  if [[ Windows == macOS ]]; then[0m
+2026-11-22T16:18:12.3207192Z [36;1m    echo "toolchain=1.$((($(date -v-$(sed 's/stable \([0-9]*\) \(.\).*/\1\2/' <<< $toolchain) +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-11-22T16:18:12.3207710Z [36;1m  else[0m
+2026-11-22T16:18:12.3208090Z [36;1m    echo "toolchain=1.$((($(date --date "${toolchain#stable }" +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-11-22T16:18:12.3208529Z [36;1m  fi[0m
+2026-11-22T16:18:12.3208813Z [36;1melif [[ $toolchain =~ ^stable' 'minus' '[0-9]+' 'releases?$ ]]; then[0m
+2026-11-22T16:18:12.3209412Z [36;1m  echo "toolchain=1.$((($(date +%s)/60/60/24-16569)/7/6-${toolchain//[^0-9]/}))" >> $GITHUB_OUTPUT[0m
+2026-11-22T16:18:12.3209868Z [36;1melif [[ $toolchain =~ ^1\.[0-9]+$ ]]; then[0m
+2026-11-22T16:18:12.3210370Z [36;1m  echo "toolchain=1.$((i=${toolchain#1.}, c=($(date +%s)/60/60/24-16569)/7/6, i+9*i*(10*i<=c)+90*i*(100*i<=c)))" >> $GITHUB_OUTPUT[0m
+2026-11-22T16:18:12.3210848Z [36;1melse[0m
+2026-11-22T16:18:12.3211028Z [36;1m  delimiter=EOF[0m
+2026-11-22T16:18:12.3211320Z [36;1m  while [[ $toolchain == *$delimiter* ]]; do delimiter+=_; done[0m
+2026-11-22T16:18:12.3211817Z [36;1m  printf 'toolchain<<%s\n%s\n%s\n' "$delimiter" "$toolchain" "$delimiter" >> $GITHUB_OUTPUT[0m
+2026-11-22T16:18:12.3212221Z [36;1mfi[0m
+2026-11-22T16:18:12.3226058Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-22T16:18:12.3226449Z env:
+2026-11-22T16:18:12.3226627Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:12.3226828Z   NODE_VERSION: 22
+2026-11-22T16:18:12.3227011Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:12.3240898Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:12.3241514Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:12.3242034Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.3242481Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:12.3242926Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.3243324Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.3245681Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.3246126Z   toolchain: 1.90.0
+2026-11-22T16:18:12.3246322Z ##[endgroup]
+2026-11-22T16:18:12.4789996Z ##[end-action id=__dtolnay_rust-toolchain.parse;outcome=success;conclusion=success;duration_ms=169]
+2026-11-22T16:18:12.4794631Z ##[start-action display=Set $CARGO_HOME;id=__dtolnay_rust-toolchain.__run]
+2026-11-22T16:18:12.4894682Z ##[group]Run echo CARGO_HOME=${CARGO_HOME:-"$USERPROFILE\.cargo"} >> $GITHUB_ENV
+2026-11-22T16:18:12.4895182Z [36;1mecho CARGO_HOME=${CARGO_HOME:-"$USERPROFILE\.cargo"} >> $GITHUB_ENV[0m
+2026-11-22T16:18:12.4909363Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-22T16:18:12.4909764Z env:
+2026-11-22T16:18:12.4909936Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:12.4910141Z   NODE_VERSION: 22
+2026-11-22T16:18:12.4910327Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:12.4910826Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:12.4911351Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:12.4911847Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.4912288Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:12.4912725Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.4913114Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.4913495Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.4913802Z ##[endgroup]
+2026-11-22T16:18:12.5229236Z ##[end-action id=__dtolnay_rust-toolchain.__run;outcome=success;conclusion=success;duration_ms=43]
+2026-11-22T16:18:12.5231482Z ##[start-action display=Install rustup if needed;id=__dtolnay_rust-toolchain.__run_2]
+2026-11-22T16:18:12.5240434Z ##[end-action id=__dtolnay_rust-toolchain.__run_2;outcome=skipped;conclusion=skipped;duration_ms=0]
+2026-11-22T16:18:12.5242439Z ##[start-action display=Install rustup if needed on windows;id=__dtolnay_rust-toolchain.__run_3]
+2026-11-22T16:18:12.5336415Z ##[group]Run if ! command -v rustup &>/dev/null; then
+2026-11-22T16:18:12.5336777Z [36;1mif ! command -v rustup &>/dev/null; then[0m
+2026-11-22T16:18:12.5337538Z [36;1m  curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail https://win.rustup.rs/x86_64 --output 'D:\a\_temp\rustup-init.exe'[0m
+2026-11-22T16:18:12.5338397Z [36;1m  'D:\a\_temp\rustup-init.exe' --default-toolchain none --no-modify-path -y[0m
+2026-11-22T16:18:12.5338814Z [36;1m  echo "$CARGO_HOME\bin" >> $GITHUB_PATH[0m
+2026-11-22T16:18:12.5339069Z [36;1mfi[0m
+2026-11-22T16:18:12.5354070Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-22T16:18:12.5354448Z env:
+2026-11-22T16:18:12.5354635Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:12.5354840Z   NODE_VERSION: 22
+2026-11-22T16:18:12.5355030Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:12.5355359Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:12.5355899Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:12.5356402Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.5356849Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:12.5357284Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.5357670Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.5358057Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.5358384Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:18:12.5358627Z ##[endgroup]
+2026-11-22T16:18:12.5895477Z ##[end-action id=__dtolnay_rust-toolchain.__run_3;outcome=success;conclusion=success;duration_ms=65]
+2026-11-22T16:18:12.5910158Z ##[start-action display=rustup toolchain install 1.90.0;id=__dtolnay_rust-toolchain.__run_4]
+2026-11-22T16:18:12.6004946Z ##[group]Run set -f  # split targets and components on commas and whitespace, without glob expansion
+2026-11-22T16:18:12.6005617Z [36;1mset -f  # split targets and components on commas and whitespace, without glob expansion[0m
+2026-11-22T16:18:12.6006042Z [36;1mflags=()[0m
+2026-11-22T16:18:12.6006294Z [36;1mfor t in ${targets//,/ }; do flags+=(--target "$t"); done[0m
+2026-11-22T16:18:12.6006755Z [36;1mfor c in ${components//,/ }; do flags+=(--component "$c"); done[0m
+2026-11-22T16:18:12.6007236Z [36;1mif [[ $toolchain == nightly && -n $components ]]; then flags+=(--allow-downgrade); fi[0m
+2026-11-22T16:18:12.6007641Z [36;1mlog=$(mktemp)[0m
+2026-11-22T16:18:12.6007850Z [36;1mtrap 'rm -f "$log"' EXIT[0m
+2026-11-22T16:18:12.6008086Z [36;1mfor attempt in 1 2 3 4 5; do[0m
+2026-11-22T16:18:12.6008808Z [36;1m  if rustup toolchain install "$toolchain" "${flags[@]}" --profile minimal --no-self-update --force-non-host 2>&1 | tee "$log"; then[0m
+2026-11-22T16:18:12.6009353Z [36;1m    break[0m
+2026-11-22T16:18:12.6009528Z [36;1m  else[0m
+2026-11-22T16:18:12.6009700Z [36;1m    status=$?[0m
+2026-11-22T16:18:12.6009884Z [36;1m  fi[0m
+2026-11-22T16:18:12.6010147Z [36;1m  if [[ $attempt == 5 ]] || ! grep -Fq 'checksum failed for ' "$log" \[0m
+2026-11-22T16:18:12.6010685Z [36;1m      || ! grep -Fq 'this is likely due to an ongoing update of the official release server' "$log"; then[0m
+2026-11-22T16:18:12.6011125Z [36;1m    exit "$status"[0m
+2026-11-22T16:18:12.6011322Z [36;1m  fi[0m
+2026-11-22T16:18:12.6011654Z [36;1m  echo "Retrying rustup toolchain install in 30 seconds (retry $attempt of 4)" >&2[0m
+2026-11-22T16:18:12.6012054Z [36;1m  sleep 30[0m
+2026-11-22T16:18:12.6012233Z [36;1mdone[0m
+2026-11-22T16:18:12.6026355Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-22T16:18:12.6026768Z env:
+2026-11-22T16:18:12.6026948Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:12.6027147Z   NODE_VERSION: 22
+2026-11-22T16:18:12.6027329Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:12.6027657Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:12.6028180Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:12.6028668Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.6029104Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:12.6029540Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.6029936Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.6030333Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:12.6030663Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:18:12.6030917Z   toolchain: 1.90.0
+2026-11-22T16:18:12.6031123Z   targets: x86_64-pc-windows-msvc
+2026-11-22T16:18:12.6031346Z   components: 
+2026-11-22T16:18:12.6031533Z   RUSTUP_PERMIT_COPY_RENAME: 1
+2026-11-22T16:18:12.6031751Z ##[endgroup]
+2026-11-22T16:18:13.3335109Z info: syncing channel updates for 1.90.0-x86_64-pc-windows-msvc
+2026-11-22T16:18:13.8345790Z info: latest update on 2025-09-18 for version 1.90.0 (1159e78c4 2025-09-14)
+2026-11-22T16:18:13.8500633Z info: downloading 3 components
+2026-11-22T16:18:21.4535274Z 
+2026-11-22T16:18:22.6636145Z   1.90.0-x86_64-pc-windows-msvc installed - rustc 1.90.0 (1159e78c4 2025-09-14)
+2026-11-22T16:18:22.6636755Z 
+2026-11-22T16:18:22.7114319Z ##[end-action id=__dtolnay_rust-toolchain.__run_4;outcome=success;conclusion=success;duration_ms=10120]
+2026-11-22T16:18:22.7120451Z ##[start-action display=rustup default 1.90.0;id=__dtolnay_rust-toolchain.__run_5]
+2026-11-22T16:18:22.7255885Z ##[group]Run rustup default "$toolchain" --force-non-host
+2026-11-22T16:18:22.7256406Z [36;1mrustup default "$toolchain" --force-non-host[0m
+2026-11-22T16:18:22.7276894Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-22T16:18:22.7277286Z env:
+2026-11-22T16:18:22.7277460Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:22.7277655Z   NODE_VERSION: 22
+2026-11-22T16:18:22.7277836Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:22.7278155Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:22.7278675Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:22.7279153Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:22.7279593Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:22.7280026Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:22.7280411Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:22.7282124Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:22.7282751Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:18:22.7283002Z   toolchain: 1.90.0
+2026-11-22T16:18:22.7283180Z ##[endgroup]
+2026-11-22T16:18:22.7980093Z info: using existing install for 1.90.0-x86_64-pc-windows-msvc
+2026-11-22T16:18:22.8038932Z info: default toolchain set to 1.90.0-x86_64-pc-windows-msvc
+2026-11-22T16:18:22.8039370Z 
+2026-11-22T16:18:22.8199905Z   1.90.0-x86_64-pc-windows-msvc unchanged - rustc 1.90.0 (1159e78c4 2025-09-14)
+2026-11-22T16:18:22.8200622Z 
+2026-11-22T16:18:22.8268841Z ##[end-action id=__dtolnay_rust-toolchain.__run_5;outcome=success;conclusion=success;duration_ms=114]
+2026-11-22T16:18:22.8272897Z ##[start-action display=Create cachekey;id=__dtolnay_rust-toolchain.rustc-version]
+2026-11-22T16:18:22.8395479Z ##[group]Run DATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')
+2026-11-22T16:18:22.8396367Z [36;1mDATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')[0m
+2026-11-22T16:18:22.8397033Z [36;1mHASH=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-hash: //p')[0m
+2026-11-22T16:18:22.8397528Z [36;1mecho "cachekey=$(echo $DATE$HASH | head -c12)" >> $GITHUB_OUTPUT[0m
+2026-11-22T16:18:22.8417553Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-22T16:18:22.8418098Z env:
+2026-11-22T16:18:22.8418358Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:22.8418706Z   NODE_VERSION: 22
+2026-11-22T16:18:22.8418933Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:22.8419254Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:22.8419770Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:22.8420275Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:22.8420733Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:22.8421170Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:22.8421551Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:22.8421924Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:22.8422713Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:18:22.8423303Z   toolchain: 1.90.0
+2026-11-22T16:18:22.8423497Z ##[endgroup]
+2026-11-22T16:18:23.7792630Z ##[end-action id=__dtolnay_rust-toolchain.rustc-version;outcome=success;conclusion=success;duration_ms=951]
+2026-11-22T16:18:23.7795411Z ##[start-action display=Disable incremental compilation;id=__dtolnay_rust-toolchain.__run_6]
+2026-11-22T16:18:23.7905193Z ##[group]Run if [ -z "${CARGO_INCREMENTAL+set}" ]; then
+2026-11-22T16:18:23.7905567Z [36;1mif [ -z "${CARGO_INCREMENTAL+set}" ]; then[0m
+2026-11-22T16:18:23.7905902Z [36;1m  echo CARGO_INCREMENTAL=0 >> $GITHUB_ENV[0m
+2026-11-22T16:18:23.7906289Z [36;1mfi[0m
+2026-11-22T16:18:23.7919988Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-22T16:18:23.7920378Z env:
+2026-11-22T16:18:23.7920553Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:23.7920757Z   NODE_VERSION: 22
+2026-11-22T16:18:23.7920945Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:23.7921268Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:23.7921797Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:23.7922291Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:23.7922726Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:23.7923156Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:23.7923562Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:23.7924102Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:23.7924432Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:18:23.7924681Z ##[endgroup]
+2026-11-22T16:18:23.8243236Z ##[end-action id=__dtolnay_rust-toolchain.__run_6;outcome=success;conclusion=success;duration_ms=44]
+2026-11-22T16:18:23.8245313Z ##[start-action display=Enable colors in Cargo output;id=__dtolnay_rust-toolchain.__run_7]
+2026-11-22T16:18:23.8340192Z ##[group]Run if [ -z "${CARGO_TERM_COLOR+set}" ]; then
+2026-11-22T16:18:23.8340548Z [36;1mif [ -z "${CARGO_TERM_COLOR+set}" ]; then[0m
+2026-11-22T16:18:23.8340871Z [36;1m  echo CARGO_TERM_COLOR=always >> $GITHUB_ENV[0m
+2026-11-22T16:18:23.8341150Z [36;1mfi[0m
+2026-11-22T16:18:23.8354726Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-22T16:18:23.8355139Z env:
+2026-11-22T16:18:23.8355308Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:23.8355508Z   NODE_VERSION: 22
+2026-11-22T16:18:23.8355706Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:23.8356047Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:23.8356564Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:23.8357049Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:23.8357497Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:23.8357937Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:23.8358328Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:23.8358715Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:23.8359044Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:18:23.8359292Z   CARGO_INCREMENTAL: 0
+2026-11-22T16:18:23.8359485Z ##[endgroup]
+2026-11-22T16:18:23.8657693Z ##[end-action id=__dtolnay_rust-toolchain.__run_7;outcome=success;conclusion=success;duration_ms=41]
+2026-11-22T16:18:23.8660812Z ##[start-action display=Enable Cargo sparse registry;id=__dtolnay_rust-toolchain.__run_8]
+2026-11-22T16:18:23.8757694Z ##[group]Run # implemented in 1.66, stabilized in 1.68, made default in 1.70
+2026-11-22T16:18:23.8758176Z [36;1m# implemented in 1.66, stabilized in 1.68, made default in 1.70[0m
+2026-11-22T16:18:23.8758806Z [36;1mif [ -z "${CARGO_REGISTRIES_CRATES_IO_PROTOCOL+set}" -o -f "D:\a\_temp"/.implicit_cargo_registries_crates_io_protocol ]; then[0m
+2026-11-22T16:18:23.8759476Z [36;1m  if rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[89]\.'; then[0m
+2026-11-22T16:18:23.8759986Z [36;1m    touch "D:\a\_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-11-22T16:18:23.8760448Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse >> $GITHUB_ENV[0m
+2026-11-22T16:18:23.8760942Z [36;1m  elif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[67]\.'; then[0m
+2026-11-22T16:18:23.8762207Z [36;1m    touch "D:\a\_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-11-22T16:18:23.8762711Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git >> $GITHUB_ENV[0m
+2026-11-22T16:18:23.8763048Z [36;1m  fi[0m
+2026-11-22T16:18:23.8763213Z [36;1mfi[0m
+2026-11-22T16:18:23.8776538Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-22T16:18:23.8776918Z env:
+2026-11-22T16:18:23.8777084Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:23.8777280Z   NODE_VERSION: 22
+2026-11-22T16:18:23.8777460Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:23.8777776Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:23.8778305Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:23.8778808Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:23.8779249Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:23.8779831Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:23.8780227Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:23.8780603Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:23.8780925Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:18:23.8781171Z   CARGO_INCREMENTAL: 0
+2026-11-22T16:18:23.8781367Z   CARGO_TERM_COLOR: always
+2026-11-22T16:18:23.8781564Z   toolchain: 1.90.0
+2026-11-22T16:18:23.8781745Z ##[endgroup]
+2026-11-22T16:18:24.0759992Z ##[end-action id=__dtolnay_rust-toolchain.__run_8;outcome=success;conclusion=success;duration_ms=209]
+2026-11-22T16:18:24.0764957Z ##[start-action display=Work around spurious network errors in curl 8.0;id=__dtolnay_rust-toolchain.__run_9]
+2026-11-22T16:18:24.0880446Z ##[group]Run # https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation
+2026-11-22T16:18:24.0881755Z [36;1m# https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation[0m
+2026-11-22T16:18:24.0882887Z [36;1mif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.7[01]\.'; then[0m
+2026-11-22T16:18:24.0883713Z [36;1m  echo CARGO_HTTP_MULTIPLEXING=false >> $GITHUB_ENV[0m
+2026-11-22T16:18:24.0884243Z [36;1mfi[0m
+2026-11-22T16:18:24.0908331Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-22T16:18:24.0909019Z env:
+2026-11-22T16:18:24.0909298Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:24.0909620Z   NODE_VERSION: 22
+2026-11-22T16:18:24.0909921Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:24.0910468Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:24.0911416Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:24.0912339Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:24.0913127Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:24.0913927Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:24.0914650Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:24.0915354Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:24.0915959Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:18:24.0916413Z   CARGO_INCREMENTAL: 0
+2026-11-22T16:18:24.0916760Z   CARGO_TERM_COLOR: always
+2026-11-22T16:18:24.0917113Z   toolchain: 1.90.0
+2026-11-22T16:18:24.0917423Z ##[endgroup]
+2026-11-22T16:18:24.2018540Z ##[end-action id=__dtolnay_rust-toolchain.__run_9;outcome=success;conclusion=success;duration_ms=125]
+2026-11-22T16:18:24.2022450Z ##[start-action display=rustc +1.90.0 --version --verbose;id=__dtolnay_rust-toolchain.__run_10]
+2026-11-22T16:18:24.2124060Z ##[group]Run rustc +"$toolchain" --version --verbose
+2026-11-22T16:18:24.2124402Z [36;1mrustc +"$toolchain" --version --verbose[0m
+2026-11-22T16:18:24.2141292Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-22T16:18:24.2141963Z env:
+2026-11-22T16:18:24.2142243Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:24.2142562Z   NODE_VERSION: 22
+2026-11-22T16:18:24.2142867Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:24.2143425Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:24.2144371Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:24.2145274Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:24.2146061Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:24.2146842Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:24.2147567Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:24.2148376Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:24.2149190Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:18:24.2149627Z   CARGO_INCREMENTAL: 0
+2026-11-22T16:18:24.2149957Z   CARGO_TERM_COLOR: always
+2026-11-22T16:18:24.2150294Z   toolchain: 1.90.0
+2026-11-22T16:18:24.2150587Z ##[endgroup]
+2026-11-22T16:18:24.2853158Z rustc 1.90.0 (1159e78c4 2025-09-14)
+2026-11-22T16:18:24.2853770Z binary: rustc
+2026-11-22T16:18:24.2854190Z commit-hash: 1159e78c4747b02ef996e55082b704c09b970588
+2026-11-22T16:18:24.2854588Z commit-date: 2025-09-14
+2026-11-22T16:18:24.2854892Z host: x86_64-pc-windows-msvc
+2026-11-22T16:18:24.2855176Z release: 1.90.0
+2026-11-22T16:18:24.2856043Z LLVM version: 20.1.8
+2026-11-22T16:18:24.2940209Z ##[end-action id=__dtolnay_rust-toolchain.__run_10;outcome=success;conclusion=success;duration_ms=91]
+2026-11-22T16:18:24.3101425Z ##[group]Run Swatinem/rust-cache@v2
+2026-11-22T16:18:24.3101750Z with:
+2026-11-22T16:18:24.3101991Z   workspaces: pharma-ml-toolkit/src-tauri -> target
+2026-11-22T16:18:24.3102317Z   prefix-key: v0-rust
+2026-11-22T16:18:24.3102531Z   add-job-id-key: true
+2026-11-22T16:18:24.3102749Z   add-rust-environment-hash-key: true
+2026-11-22T16:18:24.3102993Z   cache-targets: true
+2026-11-22T16:18:24.3103190Z   cache-all-crates: false
+2026-11-22T16:18:24.3103408Z   cache-workspace-crates: false
+2026-11-22T16:18:24.3103625Z   save-if: true
+2026-11-22T16:18:24.3103808Z   cache-provider: github
+2026-11-22T16:18:24.3104005Z   cache-bin: true
+2026-11-22T16:18:24.3104184Z   lookup-only: false
+2026-11-22T16:18:24.3104369Z   cmd-format: {0}
+2026-11-22T16:18:24.3104533Z env:
+2026-11-22T16:18:24.3104688Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:24.3104874Z   NODE_VERSION: 22
+2026-11-22T16:18:24.3105057Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:24.3105455Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:24.3106052Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:24.3121638Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:24.3122329Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:24.3123121Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:24.3123803Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:24.3124478Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:24.3125074Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:18:24.3125339Z   CARGO_INCREMENTAL: 0
+2026-11-22T16:18:24.3125549Z   CARGO_TERM_COLOR: always
+2026-11-22T16:18:24.3125760Z ##[endgroup]
+2026-11-22T16:18:29.0054121Z ##[group]Cache Configuration
+2026-11-22T16:18:29.0054706Z Cache Provider:
+2026-11-22T16:18:29.0055102Z     github
+2026-11-22T16:18:29.0055404Z Workspaces:
+2026-11-22T16:18:29.0055959Z     D:\a\pharma-ml-toolkit\pharma-ml-toolkit\pharma-ml-toolkit\src-tauri
+2026-11-22T16:18:29.0056579Z Cache Paths:
+2026-11-22T16:18:29.0056985Z     C:\Users\runneradmin\.cargo\bin
+2026-11-22T16:18:29.0057535Z     C:\Users\runneradmin\.cargo\.crates.toml
+2026-11-22T16:18:29.0058115Z     C:\Users\runneradmin\.cargo\.crates2.json
+2026-11-22T16:18:29.0058649Z     C:\Users\runneradmin\.cargo\registry
+2026-11-22T16:18:29.0059134Z     C:\Users\runneradmin\.cargo\git
+2026-11-22T16:18:29.0059750Z     D:\a\pharma-ml-toolkit\pharma-ml-toolkit\pharma-ml-toolkit\src-tauri\target
+2026-11-22T16:18:29.0060384Z Restore Key:
+2026-11-22T16:18:29.0060854Z     v0-rust-windows-release-Windows_NT-x64-374b704b
+2026-11-22T16:18:29.0061313Z Cache Key:
+2026-11-22T16:18:29.0061740Z     v0-rust-windows-release-Windows_NT-x64-374b704b-64b95b6f
+2026-11-22T16:18:29.0062304Z .. Prefix:
+2026-11-22T16:18:29.0062757Z   - v0-rust-windows-release-Windows_NT-x64
+2026-11-22T16:18:29.0063358Z .. Environment considered:
+2026-11-22T16:18:29.0063867Z   - Rust Versions:
+2026-11-22T16:18:29.0064604Z     - 1.100.0 x86_64-pc-windows-msvc 0ef1bc386059596dada8fb65b50425aab2ea637a
+2026-11-22T16:18:29.0065913Z     - 1.90.0 x86_64-pc-windows-msvc 1159e78c4747b02ef996e55082b704c09b970588
+2026-11-22T16:18:29.0066587Z   - CARGO_HOME
+2026-11-22T16:18:29.0066987Z   - CARGO_INCREMENTAL
+2026-11-22T16:18:29.0067377Z   - CARGO_TERM_COLOR
+2026-11-22T16:18:29.0067759Z   - RUST_TOOLCHAIN
+2026-11-22T16:18:29.0068151Z .. Lockfiles considered:
+2026-11-22T16:18:29.0068917Z   - D:\a\pharma-ml-toolkit\pharma-ml-toolkit\pharma-ml-toolkit\src-tauri\Cargo.toml
+2026-11-22T16:18:29.0069911Z ##[endgroup]
+2026-11-22T16:18:29.0070111Z 
+2026-11-22T16:18:29.0070291Z ... Restoring cache ...
+2026-11-22T16:18:29.2854656Z No cache found.
+2026-11-22T16:18:29.3064612Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-22T16:18:29.3065037Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-22T16:18:29.3065356Z [36;1mpython -m pip install --upgrade pip[0m
+2026-11-22T16:18:29.3065729Z [36;1m# the torch CPU wheel rides the CPU index (the venv-repair pin)[0m
+2026-11-22T16:18:29.3066232Z [36;1mpip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu[0m
+2026-11-22T16:18:29.3066749Z [36;1mpip install -r packaging/windows/installer-requirements.txt[0m
+2026-11-22T16:18:29.3067181Z [36;1m# shap rides --no-deps: its 0.54 metadata demands numpy>=2 while[0m
+2026-11-22T16:18:29.3067595Z [36;1m# the verified stack pins numpy 1.26.4 — runtime-clean (the[0m
+2026-11-22T16:18:29.3068014Z [36;1m# requirements.txt resolver-vs-runtime note); its companions[0m
+2026-11-22T16:18:29.3068444Z [36;1m# (numba/llvmlite/slicer/cloudpickle — r297: cloudpickle is on[0m
+2026-11-22T16:18:29.3068937Z [36;1m# shap's unconditional import chain) are pinned in the -r file above[0m
+2026-11-22T16:18:29.3069327Z [36;1mpip install --no-deps shap==0.54.1[0m
+2026-11-22T16:18:29.3069615Z [36;1mpip install pyinstaller==6.22.3 pytest[0m
+2026-11-22T16:18:29.3069894Z [36;1mpip install --no-deps -e .[0m
+2026-11-22T16:18:29.3070297Z [36;1mpython -c "import pharmaml, fastapi, uvicorn; print('stack OK', pharmaml.__version__)"[0m
+2026-11-22T16:18:29.3111035Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-22T16:18:29.3111373Z env:
+2026-11-22T16:18:29.3111541Z   PYTHON_VERSION: 3.12
+2026-11-22T16:18:29.3111734Z   NODE_VERSION: 22
+2026-11-22T16:18:29.3111919Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:18:29.3112243Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:18:29.3112764Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:18:29.3113253Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:29.3113712Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:18:29.3114168Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:29.3114560Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:29.3114944Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:18:29.3115277Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:18:29.3115525Z   CARGO_INCREMENTAL: 0
+2026-11-22T16:18:29.3115722Z   CARGO_TERM_COLOR: always
+2026-11-22T16:18:29.3115923Z   CACHE_ON_FAILURE: false
+2026-11-22T16:18:29.3116121Z ##[endgroup]
+2026-11-22T16:18:33.2344468Z Requirement already satisfied: pip in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (26.3)
+2026-11-22T16:18:34.8651959Z Looking in indexes: https://download.pytorch.org/whl/cpu
+2026-11-22T16:18:35.1404980Z Collecting torch==2.14.1
+2026-11-22T16:18:35.3528291Z   Downloading torch-2.14.1%2Bcpu-cp312-cp312-win_amd64.whl.metadata (38 kB)
+2026-11-22T16:18:35.3745219Z Requirement already satisfied: filelock in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from torch==2.14.1) (4.2.10)
+2026-11-22T16:18:35.4199805Z Collecting typing-extensions>=4.10.0 (from torch==2.14.1)
+2026-11-22T16:18:35.6007482Z   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+2026-11-22T16:18:35.6507607Z Collecting setuptools>=77.0.3 (from torch==2.14.1)
+2026-11-22T16:18:35.6644851Z   Downloading setuptools-78.1.0-py3-none-any.whl.metadata (6.6 kB)
+2026-11-22T16:18:35.7284757Z Collecting sympy>=1.13.3 (from torch==2.14.1)
+2026-11-22T16:18:35.7399394Z   Downloading sympy-1.14.0-py3-none-any.whl.metadata (12 kB)
+2026-11-22T16:18:35.8088849Z Collecting networkx>=2.5.1 (from torch==2.14.1)
+2026-11-22T16:18:35.8210260Z   Downloading networkx-3.7-py3-none-any.whl.metadata (6.7 kB)
+2026-11-22T16:18:35.8648923Z Collecting jinja2 (from torch==2.14.1)
+2026-11-22T16:18:35.8704970Z   Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+2026-11-22T16:18:35.9196361Z Collecting fsspec>=0.8.5 (from torch==2.14.1)
+2026-11-22T16:18:35.9313958Z   Downloading fsspec-2026.9.0-py3-none-any.whl.metadata (10 kB)
+2026-11-22T16:18:36.0043579Z Collecting mpmath<1.4,>=1.1.0 (from sympy>=1.13.3->torch==2.14.1)
+2026-11-22T16:18:36.0162962Z   Downloading mpmath-1.3.0-py3-none-any.whl.metadata (8.6 kB)
+2026-11-22T16:18:36.0788908Z Collecting MarkupSafe>=2.0 (from jinja2->torch==2.14.1)
+2026-11-22T16:18:36.0841833Z   Downloading markupsafe-3.0.3-cp312-cp312-win_amd64.whl.metadata (2.8 kB)
+2026-11-22T16:18:36.1223848Z Downloading torch-2.14.1%2Bcpu-cp312-cp312-win_amd64.whl (124.0 MB)
+2026-11-22T16:18:42.2495122Z    ---------------------------------------- 124.0/124.0 MB 20.2 MB/s  0:00:06
+2026-11-22T16:18:42.4271294Z Downloading fsspec-2026.9.0-py3-none-any.whl (221 kB)
+2026-11-22T16:18:42.4992448Z Downloading networkx-3.7-py3-none-any.whl (2.1 MB)
+2026-11-22T16:18:42.7002488Z    ---------------------------------------- 2.1/2.1 MB 10.9 MB/s  0:00:00
+2026-11-22T16:18:42.7063772Z Downloading setuptools-78.1.0-py3-none-any.whl (1.3 MB)
+2026-11-22T16:18:42.7513717Z    ---------------------------------------- 1.3/1.3 MB 21.1 MB/s  0:00:00
+2026-11-22T16:18:42.7630729Z Downloading sympy-1.14.0-py3-none-any.whl (6.3 MB)
+2026-11-22T16:18:42.9765045Z    ---------------------------------------- 6.3/6.3 MB 29.7 MB/s  0:00:00
+2026-11-22T16:18:42.9879177Z Downloading mpmath-1.3.0-py3-none-any.whl (536 kB)
+2026-11-22T16:18:43.0170957Z    ---------------------------------------- 536.2/536.2 kB 18.3 MB/s  0:00:00
+2026-11-22T16:18:43.0416924Z Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+2026-11-22T16:18:43.0620043Z Downloading jinja2-3.1.6-py3-none-any.whl (134 kB)
+2026-11-22T16:18:43.0895212Z Downloading markupsafe-3.0.3-cp312-cp312-win_amd64.whl (15 kB)
+2026-11-22T16:18:43.5449680Z Installing collected packages: mpmath, typing-extensions, sympy, setuptools, networkx, MarkupSafe, fsspec, jinja2, torch
+2026-11-22T16:19:41.7675952Z 
+2026-11-22T16:19:41.7699570Z Successfully installed MarkupSafe-3.0.3 fsspec-2026.9.0 jinja2-3.1.6 mpmath-1.3.0 networkx-3.7 setuptools-78.1.0 sympy-1.14.0 torch-2.14.1+cpu typing-extensions-4.16.0
+2026-11-22T16:19:43.0629823Z Collecting numpy==1.26.4 (from -r packaging/windows/installer-requirements.txt (line 26))
+2026-11-22T16:19:43.2336449Z   Downloading numpy-1.26.4-cp312-cp312-win_amd64.whl.metadata (61 kB)
+2026-11-22T16:19:43.4731370Z Collecting pandas==2.2.3 (from -r packaging/windows/installer-requirements.txt (line 27))
+2026-11-22T16:19:43.4786850Z   Downloading pandas-2.2.3-cp312-cp312-win_amd64.whl.metadata (19 kB)
+2026-11-22T16:19:43.6376284Z Collecting scikit-learn==1.5.2 (from -r packaging/windows/installer-requirements.txt (line 28))
+2026-11-22T16:19:43.6428930Z   Downloading scikit_learn-1.5.2-cp312-cp312-win_amd64.whl.metadata (13 kB)
+2026-11-22T16:19:43.8023312Z Collecting scipy==1.14.1 (from -r packaging/windows/installer-requirements.txt (line 29))
+2026-11-22T16:19:43.8080697Z   Downloading scipy-1.14.1-cp312-cp312-win_amd64.whl.metadata (60 kB)
+2026-11-22T16:19:43.8755218Z Collecting joblib==1.5.3 (from -r packaging/windows/installer-requirements.txt (line 30))
+2026-11-22T16:19:43.8799996Z   Downloading joblib-1.5.3-py3-none-any.whl.metadata (5.5 kB)
+2026-11-22T16:19:43.9277989Z Collecting openpyxl==3.1.5 (from -r packaging/windows/installer-requirements.txt (line 31))
+2026-11-22T16:19:43.9321271Z   Downloading openpyxl-3.1.5-py2.py3-none-any.whl.metadata (2.5 kB)
+2026-11-22T16:19:43.9812340Z Collecting tqdm==4.67.1 (from -r packaging/windows/installer-requirements.txt (line 32))
+2026-11-22T16:19:43.9852299Z   Downloading tqdm-4.67.1-py3-none-any.whl.metadata (57 kB)
+2026-11-22T16:19:44.0782354Z Collecting rdkit==2026.9.1 (from -r packaging/windows/installer-requirements.txt (line 35))
+2026-11-22T16:19:44.0835484Z   Downloading rdkit-2026.9.1-cp312-cp312-win_amd64.whl.metadata (3.9 kB)
+2026-11-22T16:19:44.1850487Z Collecting mordred==1.2.0 (from -r packaging/windows/installer-requirements.txt (line 36))
+2026-11-22T16:19:44.1906942Z   Downloading mordred-1.2.0.tar.gz (128 kB)
+2026-11-22T16:19:44.4091977Z   Installing build dependencies: started
+2026-11-22T16:19:46.2611092Z   Installing build dependencies: finished with status 'done'
+2026-11-22T16:19:46.2627579Z   Getting requirements to build wheel: started
+2026-11-22T16:19:46.8976582Z   Getting requirements to build wheel: finished with status 'done'
+2026-11-22T16:19:46.9011226Z   Preparing metadata (pyproject.toml): started
+2026-11-22T16:19:47.2226640Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-11-22T16:19:47.2547055Z Collecting meeko==0.8.0 (from -r packaging/windows/installer-requirements.txt (line 39))
+2026-11-22T16:19:47.2600040Z   Downloading meeko-0.8.0-py3-none-any.whl.metadata (3.8 kB)
+2026-11-22T16:19:47.3498714Z Collecting gemmi==0.7.5 (from -r packaging/windows/installer-requirements.txt (line 40))
+2026-11-22T16:19:47.4291265Z   Downloading gemmi-0.7.5-cp312-cp312-win_amd64.whl.metadata (2.3 kB)
+2026-11-22T16:19:47.4889569Z Collecting xgboost==2.1.3 (from -r packaging/windows/installer-requirements.txt (line 43))
+2026-11-22T16:19:47.5583184Z   Downloading xgboost-2.1.3-py3-none-win_amd64.whl.metadata (2.1 kB)
+2026-11-22T16:19:47.6151985Z Collecting lightgbm==4.5.0 (from -r packaging/windows/installer-requirements.txt (line 44))
+2026-11-22T16:19:47.6210914Z   Downloading lightgbm-4.5.0-py3-none-win_amd64.whl.metadata (17 kB)
+2026-11-22T16:19:47.7280570Z Collecting catboost==1.2.8 (from -r packaging/windows/installer-requirements.txt (line 45))
+2026-11-22T16:19:47.7335952Z   Downloading catboost-1.2.8-cp312-cp312-win_amd64.whl.metadata (1.5 kB)
+2026-11-22T16:19:47.8880706Z Collecting numba==0.61.0 (from -r packaging/windows/installer-requirements.txt (line 55))
+2026-11-22T16:19:47.8936429Z   Downloading numba-0.61.0-cp312-cp312-win_amd64.whl.metadata (2.8 kB)
+2026-11-22T16:19:47.9766348Z Collecting llvmlite==0.44.0 (from -r packaging/windows/installer-requirements.txt (line 56))
+2026-11-22T16:19:47.9821537Z   Downloading llvmlite-0.44.0-cp312-cp312-win_amd64.whl.metadata (5.0 kB)
+2026-11-22T16:19:48.0200538Z Collecting slicer==0.0.8 (from -r packaging/windows/installer-requirements.txt (line 57))
+2026-11-22T16:19:48.0253996Z   Downloading slicer-0.0.8-py3-none-any.whl.metadata (4.0 kB)
+2026-11-22T16:19:48.0695137Z Collecting cloudpickle==3.1.2 (from -r packaging/windows/installer-requirements.txt (line 65))
+2026-11-22T16:19:48.0743452Z   Downloading cloudpickle-3.1.2-py3-none-any.whl.metadata (7.1 kB)
+2026-11-22T16:19:48.1745252Z Collecting selfies==2.1.1 (from -r packaging/windows/installer-requirements.txt (line 71))
+2026-11-22T16:19:48.1801089Z   Downloading selfies-2.1.1-py3-none-any.whl.metadata (13 kB)
+2026-11-22T16:19:48.3444416Z Collecting matplotlib==3.10.9 (from -r packaging/windows/installer-requirements.txt (line 74))
+2026-11-22T16:19:48.3505759Z   Downloading matplotlib-3.10.9-cp312-cp312-win_amd64.whl.metadata (52 kB)
+2026-11-22T16:19:48.4038726Z Collecting seaborn==0.13.2 (from -r packaging/windows/installer-requirements.txt (line 75))
+2026-11-22T16:19:48.4128560Z   Downloading seaborn-0.13.2-py3-none-any.whl.metadata (5.4 kB)
+2026-11-22T16:19:48.4537505Z Collecting fpdf2==2.8.5 (from -r packaging/windows/installer-requirements.txt (line 76))
+2026-11-22T16:19:48.4584796Z   Downloading fpdf2-2.8.5-py3-none-any.whl.metadata (76 kB)
+2026-11-22T16:19:48.5050939Z Collecting python-docx==1.2.0 (from -r packaging/windows/installer-requirements.txt (line 77))
+2026-11-22T16:19:48.5096829Z   Downloading python_docx-1.2.0-py3-none-any.whl.metadata (2.0 kB)
+2026-11-22T16:19:48.7069027Z Collecting Pillow==11.3.0 (from -r packaging/windows/installer-requirements.txt (line 78))
+2026-11-22T16:19:48.7127311Z   Downloading pillow-11.3.0-cp312-cp312-win_amd64.whl.metadata (9.2 kB)
+2026-11-22T16:19:48.9818714Z Collecting PySide6==6.8.3 (from -r packaging/windows/installer-requirements.txt (line 81))
+2026-11-22T16:19:48.9872435Z   Downloading PySide6-6.8.3-cp39-abi3-win_amd64.whl.metadata (5.7 kB)
+2026-11-22T16:19:49.0332331Z Collecting pyqtgraph==0.13.7 (from -r packaging/windows/installer-requirements.txt (line 82))
+2026-11-22T16:19:49.0383302Z   Downloading pyqtgraph-0.13.7-py3-none-any.whl.metadata (1.3 kB)
+2026-11-22T16:19:49.1375348Z Collecting qt-material==2.17 (from -r packaging/windows/installer-requirements.txt (line 83))
+2026-11-22T16:19:49.1467405Z   Downloading qt_material-2.17-py3-none-any.whl.metadata (12 kB)
+2026-11-22T16:19:49.1914165Z Collecting qdarkstyle==3.2.3 (from -r packaging/windows/installer-requirements.txt (line 84))
+2026-11-22T16:19:49.1970817Z   Downloading QDarkStyle-3.2.3-py2.py3-none-any.whl.metadata (3.2 kB)
+2026-11-22T16:19:49.2641868Z Collecting fastapi==0.128.0 (from -r packaging/windows/installer-requirements.txt (line 90))
+2026-11-22T16:19:49.2699418Z   Downloading fastapi-0.128.0-py3-none-any.whl.metadata (30 kB)
+2026-11-22T16:19:49.3212633Z Collecting uvicorn==0.44.0 (from -r packaging/windows/installer-requirements.txt (line 91))
+2026-11-22T16:19:49.3255171Z   Downloading uvicorn-0.44.0-py3-none-any.whl.metadata (6.7 kB)
+2026-11-22T16:19:49.3662011Z Collecting python-multipart==0.0.24 (from -r packaging/windows/installer-requirements.txt (line 92))
+2026-11-22T16:19:49.3716274Z   Downloading python_multipart-0.0.24-py3-none-any.whl.metadata (1.8 kB)
+2026-11-22T16:19:49.5650369Z Collecting websockets==16.0 (from -r packaging/windows/installer-requirements.txt (line 93))
+2026-11-22T16:19:49.5713114Z   Downloading websockets-16.0-cp312-cp312-win_amd64.whl.metadata (7.0 kB)
+2026-11-22T16:19:49.6115915Z Collecting httpx==0.28.1 (from -r packaging/windows/installer-requirements.txt (line 99))
+2026-11-22T16:19:49.6162017Z   Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2026-11-22T16:19:49.6633456Z Collecting nbformat==5.10.4 (from -r packaging/windows/installer-requirements.txt (line 100))
+2026-11-22T16:19:49.6694791Z   Downloading nbformat-5.10.4-py3-none-any.whl.metadata (3.6 kB)
+2026-11-22T16:19:49.7151535Z Collecting pypdf==6.6.0 (from -r packaging/windows/installer-requirements.txt (line 101))
+2026-11-22T16:19:49.7197360Z   Downloading pypdf-6.6.0-py3-none-any.whl.metadata (7.1 kB)
+2026-11-22T16:19:49.7985455Z Collecting pyinstaller<7,>=6.10 (from -r packaging/windows/installer-requirements.txt (line 104))
+2026-11-22T16:19:49.8029329Z   Downloading pyinstaller-6.22.3-py3-none-win_amd64.whl.metadata (8.5 kB)
+2026-11-22T16:19:49.8470761Z Collecting pyinstaller-hooks-contrib>=2024.10 (from -r packaging/windows/installer-requirements.txt (line 105))
+2026-11-22T16:19:49.8511387Z   Downloading pyinstaller_hooks_contrib-2026.10-py3-none-any.whl.metadata (16 kB)
+2026-11-22T16:19:49.8928319Z Collecting python-dateutil>=2.8.2 (from pandas==2.2.3->-r packaging/windows/installer-requirements.txt (line 27))
+2026-11-22T16:19:49.8973197Z   Downloading python_dateutil-4.0.0-py3-none-any.whl.metadata (7.3 kB)
+2026-11-22T16:19:49.9629821Z Collecting pytz>=2020.1 (from pandas==2.2.3->-r packaging/windows/installer-requirements.txt (line 27))
+2026-11-22T16:19:49.9714965Z   Downloading pytz-2026.6-py2.py3-none-any.whl.metadata (22 kB)
+2026-11-22T16:19:50.0263935Z Collecting tzdata>=2022.7 (from pandas==2.2.3->-r packaging/windows/installer-requirements.txt (line 27))
+2026-11-22T16:19:50.0309797Z   Downloading tzdata-2026.6-py2.py3-none-any.whl.metadata (1.4 kB)
+2026-11-22T16:19:50.0751584Z Collecting threadpoolctl>=3.1.0 (from scikit-learn==1.5.2->-r packaging/windows/installer-requirements.txt (line 28))
+2026-11-22T16:19:50.1506692Z   Downloading threadpoolctl-3.8.0-py3-none-any.whl.metadata (29 kB)
+2026-11-22T16:19:50.1915965Z Collecting et-xmlfile (from openpyxl==3.1.5->-r packaging/windows/installer-requirements.txt (line 31))
+2026-11-22T16:19:50.1959577Z   Downloading et_xmlfile-2.0.0-py3-none-any.whl.metadata (2.7 kB)
+2026-11-22T16:19:50.4815253Z Requirement already satisfied: colorama in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from tqdm==4.67.1->-r packaging/windows/installer-requirements.txt (line 32)) (0.4.6)
+2026-11-22T16:19:50.5131843Z Collecting six==1.* (from mordred==1.2.0->-r packaging/windows/installer-requirements.txt (line 36))
+2026-11-22T16:19:50.5175457Z   Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+2026-11-22T16:19:50.5670368Z Collecting networkx==2.* (from mordred==1.2.0->-r packaging/windows/installer-requirements.txt (line 36))
+2026-11-22T16:19:50.5733480Z   Downloading networkx-2.8.8-py3-none-any.whl.metadata (5.1 kB)
+2026-11-22T16:19:50.6214114Z Collecting graphviz (from catboost==1.2.8->-r packaging/windows/installer-requirements.txt (line 45))
+2026-11-22T16:19:50.6357823Z   Downloading graphviz-0.21-py3-none-any.whl.metadata (12 kB)
+2026-11-22T16:19:50.6973406Z Collecting plotly (from catboost==1.2.8->-r packaging/windows/installer-requirements.txt (line 45))
+2026-11-22T16:19:50.7021781Z   Downloading plotly-7.1.0-py3-none-any.whl.metadata (8.8 kB)
+2026-11-22T16:19:50.8056483Z Collecting contourpy>=1.0.1 (from matplotlib==3.10.9->-r packaging/windows/installer-requirements.txt (line 74))
+2026-11-22T16:19:50.8117906Z   Downloading contourpy-1.4.0-cp312-cp312-win_amd64.whl.metadata (3.8 kB)
+2026-11-22T16:19:50.8530811Z Collecting cycler>=0.10 (from matplotlib==3.10.9->-r packaging/windows/installer-requirements.txt (line 74))
+2026-11-22T16:19:50.8589028Z   Downloading cycler-0.12.1-py3-none-any.whl.metadata (3.8 kB)
+2026-11-22T16:19:51.0482833Z Collecting fonttools>=4.22.0 (from matplotlib==3.10.9->-r packaging/windows/installer-requirements.txt (line 74))
+2026-11-22T16:19:51.0549389Z   Downloading fonttools-4.68.0-cp312-cp312-win_amd64.whl.metadata (142 kB)
+2026-11-22T16:19:51.1830829Z Collecting kiwisolver>=1.3.1 (from matplotlib==3.10.9->-r packaging/windows/installer-requirements.txt (line 74))
+2026-11-22T16:19:51.1877771Z   Downloading kiwisolver-1.5.1-cp312-cp312-win_amd64.whl.metadata (5.2 kB)
+2026-11-22T16:19:51.2087362Z Requirement already satisfied: packaging>=20.0 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from matplotlib==3.10.9->-r packaging/windows/installer-requirements.txt (line 74)) (26.3)
+2026-11-22T16:19:51.2433763Z Collecting pyparsing>=3 (from matplotlib==3.10.9->-r packaging/windows/installer-requirements.txt (line 74))
+2026-11-22T16:19:51.2474527Z   Downloading pyparsing-3.3.3-py3-none-any.whl.metadata (5.9 kB)
+2026-11-22T16:19:51.2981691Z Collecting defusedxml (from fpdf2==2.8.5->-r packaging/windows/installer-requirements.txt (line 76))
+2026-11-22T16:19:51.3024189Z   Downloading defusedxml-0.7.1-py2.py3-none-any.whl.metadata (32 kB)
+2026-11-22T16:19:51.6160017Z Collecting lxml>=3.1.0 (from python-docx==1.2.0->-r packaging/windows/installer-requirements.txt (line 77))
+2026-11-22T16:19:51.6209215Z   Downloading lxml-6.1.3-cp312-cp312-win_amd64.whl.metadata (3.4 kB)
+2026-11-22T16:19:51.6397662Z Requirement already satisfied: typing_extensions>=4.9.0 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from python-docx==1.2.0->-r packaging/windows/installer-requirements.txt (line 77)) (4.16.0)
+2026-11-22T16:19:51.6735800Z Collecting shiboken6==6.8.3 (from PySide6==6.8.3->-r packaging/windows/installer-requirements.txt (line 81))
+2026-11-22T16:19:51.6794218Z   Downloading shiboken6-6.8.3-cp39-abi3-win_amd64.whl.metadata (2.8 kB)
+2026-11-22T16:19:51.7249114Z Collecting PySide6-Essentials==6.8.3 (from PySide6==6.8.3->-r packaging/windows/installer-requirements.txt (line 81))
+2026-11-22T16:19:51.7304978Z   Downloading PySide6_Essentials-6.8.3-cp39-abi3-win_amd64.whl.metadata (4.1 kB)
+2026-11-22T16:19:51.7879158Z Collecting PySide6-Addons==6.8.3 (from PySide6==6.8.3->-r packaging/windows/installer-requirements.txt (line 81))
+2026-11-22T16:19:51.7932198Z   Downloading PySide6_Addons-6.8.3-cp39-abi3-win_amd64.whl.metadata (4.4 kB)
+2026-11-22T16:19:51.8137064Z Requirement already satisfied: Jinja2 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from qt-material==2.17->-r packaging/windows/installer-requirements.txt (line 83)) (3.1.6)
+2026-11-22T16:19:51.8396449Z Collecting qtpy>=2 (from qdarkstyle==3.2.3->-r packaging/windows/installer-requirements.txt (line 84))
+2026-11-22T16:19:51.8448062Z   Downloading QtPy-2.4.3-py3-none-any.whl.metadata (12 kB)
+2026-11-22T16:19:51.8992494Z Collecting starlette<0.51.0,>=0.40.0 (from fastapi==0.128.0->-r packaging/windows/installer-requirements.txt (line 90))
+2026-11-22T16:19:51.9036566Z   Downloading starlette-0.50.0-py3-none-any.whl.metadata (6.3 kB)
+2026-11-22T16:19:52.0388918Z Collecting pydantic>=2.7.0 (from fastapi==0.128.0->-r packaging/windows/installer-requirements.txt (line 90))
+2026-11-22T16:19:52.0434354Z   Downloading pydantic-2.14.4-py3-none-any.whl.metadata (143 kB)
+2026-11-22T16:19:52.0888764Z Collecting annotated-doc>=0.0.2 (from fastapi==0.128.0->-r packaging/windows/installer-requirements.txt (line 90))
+2026-11-22T16:19:52.0931942Z   Downloading annotated_doc-0.0.7-py3-none-any.whl.metadata (6.4 kB)
+2026-11-22T16:19:52.1115568Z Requirement already satisfied: click>=7.0 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from uvicorn==0.44.0->-r packaging/windows/installer-requirements.txt (line 91)) (8.5.1)
+2026-11-22T16:19:52.1350388Z Collecting h11>=0.8 (from uvicorn==0.44.0->-r packaging/windows/installer-requirements.txt (line 91))
+2026-11-22T16:19:52.1395447Z   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-11-22T16:19:52.1898854Z Collecting anyio (from httpx==0.28.1->-r packaging/windows/installer-requirements.txt (line 99))
+2026-11-22T16:19:52.1946281Z   Downloading anyio-4.16.0-py3-none-any.whl.metadata (4.7 kB)
+2026-11-22T16:19:52.2423540Z Collecting certifi (from httpx==0.28.1->-r packaging/windows/installer-requirements.txt (line 99))
+2026-11-22T16:19:52.2467177Z   Downloading certifi-2026.11.20-py3-none-any.whl.metadata (2.5 kB)
+2026-11-22T16:19:52.2934293Z Collecting httpcore==1.* (from httpx==0.28.1->-r packaging/windows/installer-requirements.txt (line 99))
+2026-11-22T16:19:52.2976562Z   Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2026-11-22T16:19:52.3394952Z Collecting idna (from httpx==0.28.1->-r packaging/windows/installer-requirements.txt (line 99))
+2026-11-22T16:19:52.3438481Z   Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+2026-11-22T16:19:52.3822202Z Collecting fastjsonschema>=2.15 (from nbformat==5.10.4->-r packaging/windows/installer-requirements.txt (line 100))
+2026-11-22T16:19:52.3865297Z   Downloading fastjsonschema-2.22.3-py3-none-any.whl.metadata (2.1 kB)
+2026-11-22T16:19:52.4368845Z Collecting jsonschema>=2.6 (from nbformat==5.10.4->-r packaging/windows/installer-requirements.txt (line 100))
+2026-11-22T16:19:52.4414434Z   Downloading jsonschema-4.26.0-py3-none-any.whl.metadata (7.6 kB)
+2026-11-22T16:19:52.4989913Z Collecting jupyter-core!=5.0.*,>=4.12 (from nbformat==5.10.4->-r packaging/windows/installer-requirements.txt (line 100))
+2026-11-22T16:19:52.5033722Z   Downloading jupyter_core-5.9.1-py3-none-any.whl.metadata (1.5 kB)
+2026-11-22T16:19:52.5682304Z Collecting traitlets>=5.1 (from nbformat==5.10.4->-r packaging/windows/installer-requirements.txt (line 100))
+2026-11-22T16:19:52.5724174Z   Downloading traitlets-5.16.1-py3-none-any.whl.metadata (10 kB)
+2026-11-22T16:19:52.6280673Z Collecting altgraph (from pyinstaller<7,>=6.10->-r packaging/windows/installer-requirements.txt (line 104))
+2026-11-22T16:19:52.6323441Z   Downloading altgraph-0.17.5-py2.py3-none-any.whl.metadata (7.5 kB)
+2026-11-22T16:19:52.6761903Z Collecting pefile>=2022.5.30 (from pyinstaller<7,>=6.10->-r packaging/windows/installer-requirements.txt (line 104))
+2026-11-22T16:19:52.6809488Z   Downloading pefile-2024.8.26-py3-none-any.whl.metadata (1.4 kB)
+2026-11-22T16:19:52.7192734Z Collecting pywin32-ctypes>=0.2.1 (from pyinstaller<7,>=6.10->-r packaging/windows/installer-requirements.txt (line 104))
+2026-11-22T16:19:52.7234932Z   Downloading pywin32_ctypes-0.2.3-py3-none-any.whl.metadata (3.9 kB)
+2026-11-22T16:19:52.7390808Z Requirement already satisfied: setuptools>=42.0.0 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from pyinstaller<7,>=6.10->-r packaging/windows/installer-requirements.txt (line 104)) (78.1.0)
+2026-11-22T16:19:52.7500862Z Collecting contourpy>=1.0.1 (from matplotlib==3.10.9->-r packaging/windows/installer-requirements.txt (line 74))
+2026-11-22T16:19:52.7553085Z   Downloading contourpy-1.3.3-cp312-cp312-win_amd64.whl.metadata (5.5 kB)
+2026-11-22T16:19:52.7970277Z Collecting attrs>=22.2.0 (from jsonschema>=2.6->nbformat==5.10.4->-r packaging/windows/installer-requirements.txt (line 100))
+2026-11-22T16:19:52.8100799Z   Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+2026-11-22T16:19:52.8476788Z Collecting jsonschema-specifications>=2023.03.6 (from jsonschema>=2.6->nbformat==5.10.4->-r packaging/windows/installer-requirements.txt (line 100))
+2026-11-22T16:19:52.8519896Z   Downloading jsonschema_specifications-2025.9.1-py3-none-any.whl.metadata (2.9 kB)
+2026-11-22T16:19:52.8955795Z Collecting referencing>=0.28.4 (from jsonschema>=2.6->nbformat==5.10.4->-r packaging/windows/installer-requirements.txt (line 100))
+2026-11-22T16:19:52.8997400Z   Downloading referencing-0.37.0-py3-none-any.whl.metadata (2.8 kB)
+2026-11-22T16:19:53.1999704Z Collecting rpds-py>=0.25.0 (from jsonschema>=2.6->nbformat==5.10.4->-r packaging/windows/installer-requirements.txt (line 100))
+2026-11-22T16:19:53.2050109Z   Downloading rpds_py-2026.9.1-cp312-cp312-win_amd64.whl.metadata (4.2 kB)
+2026-11-22T16:19:53.2247420Z Requirement already satisfied: platformdirs>=2.5 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from jupyter-core!=5.0.*,>=4.12->nbformat==5.10.4->-r packaging/windows/installer-requirements.txt (line 100)) (4.14.5)
+2026-11-22T16:19:53.2515584Z Collecting annotated-types>=0.6.0 (from pydantic>=2.7.0->fastapi==0.128.0->-r packaging/windows/installer-requirements.txt (line 90))
+2026-11-22T16:19:53.2559556Z   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+2026-11-22T16:19:54.1008887Z Collecting pydantic-core==2.50.5 (from pydantic>=2.7.0->fastapi==0.128.0->-r packaging/windows/installer-requirements.txt (line 90))
+2026-11-22T16:19:54.1071280Z   Downloading pydantic_core-2.50.5-cp312-cp312-win_amd64.whl.metadata (6.7 kB)
+2026-11-22T16:19:54.1921192Z Collecting typing-inspection>=0.4.4 (from pydantic>=2.7.0->fastapi==0.128.0->-r packaging/windows/installer-requirements.txt (line 90))
+2026-11-22T16:19:54.1967994Z   Downloading typing_inspection-0.4.5-py3-none-any.whl.metadata (2.6 kB)
+2026-11-22T16:19:54.2389086Z Requirement already satisfied: MarkupSafe>=2.0 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from Jinja2->qt-material==2.17->-r packaging/windows/installer-requirements.txt (line 83)) (3.0.3)
+2026-11-22T16:19:54.2844808Z Collecting narwhals>=1.15.1 (from plotly->catboost==1.2.8->-r packaging/windows/installer-requirements.txt (line 45))
+2026-11-22T16:19:54.2966257Z   Downloading narwhals-2.29.0-py3-none-any.whl.metadata (15 kB)
+2026-11-22T16:19:54.3247152Z Downloading numpy-1.26.4-cp312-cp312-win_amd64.whl (15.5 MB)
+2026-11-22T16:19:54.5488107Z    ---------------------------------------- 15.5/15.5 MB 70.0 MB/s  0:00:00
+2026-11-22T16:19:54.5564028Z Downloading pandas-2.2.3-cp312-cp312-win_amd64.whl (11.5 MB)
+2026-11-22T16:19:54.6385222Z    ---------------------------------------- 11.5/11.5 MB 142.3 MB/s  0:00:00
+2026-11-22T16:19:54.6463196Z Downloading scikit_learn-1.5.2-cp312-cp312-win_amd64.whl (11.0 MB)
+2026-11-22T16:19:54.7533719Z    ---------------------------------------- 11.0/11.0 MB 97.5 MB/s  0:00:00
+2026-11-22T16:19:54.7585278Z Downloading scipy-1.14.1-cp312-cp312-win_amd64.whl (44.5 MB)
+2026-11-22T16:19:55.4048907Z    ---------------------------------------- 44.5/44.5 MB 69.2 MB/s  0:00:00
+2026-11-22T16:19:55.4094920Z Downloading joblib-1.5.3-py3-none-any.whl (309 kB)
+2026-11-22T16:19:55.4401421Z Downloading openpyxl-3.1.5-py2.py3-none-any.whl (250 kB)
+2026-11-22T16:19:55.4670456Z Downloading tqdm-4.67.1-py3-none-any.whl (78 kB)
+2026-11-22T16:19:55.4898523Z Downloading rdkit-2026.9.1-cp312-cp312-win_amd64.whl (25.4 MB)
+2026-11-22T16:19:56.0017707Z    ---------------------------------------- 25.4/25.4 MB 48.7 MB/s  0:00:00
+2026-11-22T16:19:56.0071206Z Downloading meeko-0.8.0-py3-none-any.whl (1.4 MB)
+2026-11-22T16:19:56.0397973Z    ---------------------------------------- 1.4/1.4 MB 37.5 MB/s  0:00:00
+2026-11-22T16:19:56.0443814Z Downloading gemmi-0.7.5-cp312-cp312-win_amd64.whl (2.3 MB)
+2026-11-22T16:19:56.0824427Z    ---------------------------------------- 2.3/2.3 MB 62.8 MB/s  0:00:00
+2026-11-22T16:19:56.1528612Z Downloading xgboost-2.1.3-py3-none-win_amd64.whl (124.9 MB)
+2026-11-22T16:20:07.9635421Z    ---------------------------------------- 124.9/124.9 MB 10.6 MB/s  0:00:11
+2026-11-22T16:20:07.9689832Z Downloading lightgbm-4.5.0-py3-none-win_amd64.whl (1.4 MB)
+2026-11-22T16:20:08.0038175Z    ---------------------------------------- 1.4/1.4 MB 36.9 MB/s  0:00:00
+2026-11-22T16:20:08.0730465Z Downloading catboost-1.2.8-cp312-cp312-win_amd64.whl (102.4 MB)
+2026-11-22T16:20:12.7941494Z    ---------------------------------------- 102.4/102.4 MB 21.7 MB/s  0:00:04
+2026-11-22T16:20:12.8842379Z Downloading numba-0.61.0-cp312-cp312-win_amd64.whl (2.8 MB)
+2026-11-22T16:20:12.9288731Z    ---------------------------------------- 2.8/2.8 MB 55.8 MB/s  0:00:00
+2026-11-22T16:20:12.9361268Z Downloading llvmlite-0.44.0-cp312-cp312-win_amd64.whl (30.3 MB)
+2026-11-22T16:20:13.3857444Z    ---------------------------------------- 30.3/30.3 MB 68.7 MB/s  0:00:00
+2026-11-22T16:20:13.3900510Z Downloading slicer-0.0.8-py3-none-any.whl (15 kB)
+2026-11-22T16:20:13.6287957Z Downloading cloudpickle-3.1.2-py3-none-any.whl (22 kB)
+2026-11-22T16:20:13.6474925Z Downloading selfies-2.1.1-py3-none-any.whl (35 kB)
+2026-11-22T16:20:13.6770701Z Downloading matplotlib-3.10.9-cp312-cp312-win_amd64.whl (8.2 MB)
+2026-11-22T16:20:13.7559277Z    ---------------------------------------- 8.2/8.2 MB 100.7 MB/s  0:00:00
+2026-11-22T16:20:13.7601766Z Downloading seaborn-0.13.2-py3-none-any.whl (294 kB)
+2026-11-22T16:20:13.7931181Z Downloading fpdf2-2.8.5-py3-none-any.whl (301 kB)
+2026-11-22T16:20:13.8121725Z Downloading python_docx-1.2.0-py3-none-any.whl (252 kB)
+2026-11-22T16:20:13.8362062Z Downloading pillow-11.3.0-cp312-cp312-win_amd64.whl (7.0 MB)
+2026-11-22T16:20:13.8917751Z    ---------------------------------------- 7.0/7.0 MB 108.5 MB/s  0:00:00
+2026-11-22T16:20:13.8971727Z Downloading PySide6-6.8.3-cp39-abi3-win_amd64.whl (561 kB)
+2026-11-22T16:20:13.9274662Z    ---------------------------------------- 561.1/561.1 kB 9.6 MB/s  0:00:00
+2026-11-22T16:20:13.9321512Z Downloading pyqtgraph-0.13.7-py3-none-any.whl (1.9 MB)
+2026-11-22T16:20:13.9695476Z    ---------------------------------------- 1.9/1.9 MB 53.7 MB/s  0:00:00
+2026-11-22T16:20:13.9744184Z Downloading qt_material-2.17-py3-none-any.whl (1.7 MB)
+2026-11-22T16:20:14.0106279Z    ---------------------------------------- 1.7/1.7 MB 44.5 MB/s  0:00:00
+2026-11-22T16:20:14.0182856Z Downloading QDarkStyle-3.2.3-py2.py3-none-any.whl (871 kB)
+2026-11-22T16:20:14.0527921Z    ---------------------------------------- 871.8/871.8 kB 19.7 MB/s  0:00:00
+2026-11-22T16:20:14.0568103Z Downloading fastapi-0.128.0-py3-none-any.whl (103 kB)
+2026-11-22T16:20:14.0771903Z Downloading uvicorn-0.44.0-py3-none-any.whl (69 kB)
+2026-11-22T16:20:14.0976611Z Downloading python_multipart-0.0.24-py3-none-any.whl (24 kB)
+2026-11-22T16:20:14.1164933Z Downloading websockets-16.0-cp312-cp312-win_amd64.whl (178 kB)
+2026-11-22T16:20:14.1373558Z Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+2026-11-22T16:20:14.1578391Z Downloading nbformat-5.10.4-py3-none-any.whl (78 kB)
+2026-11-22T16:20:14.1870677Z Downloading pypdf-6.6.0-py3-none-any.whl (328 kB)
+2026-11-22T16:20:14.2080897Z Downloading PySide6_Addons-6.8.3-cp39-abi3-win_amd64.whl (127.9 MB)
+2026-11-22T16:20:16.4915638Z    ---------------------------------------- 127.9/127.9 MB 55.9 MB/s  0:00:02
+2026-11-22T16:20:16.4971307Z Downloading PySide6_Essentials-6.8.3-cp39-abi3-win_amd64.whl (72.2 MB)
+2026-11-22T16:20:18.1980712Z    ---------------------------------------- 72.2/72.2 MB 42.2 MB/s  0:00:01
+2026-11-22T16:20:18.2043203Z Downloading shiboken6-6.8.3-cp39-abi3-win_amd64.whl (1.2 MB)
+2026-11-22T16:20:18.2275730Z    ---------------------------------------- 1.2/1.2 MB 59.3 MB/s  0:00:00
+2026-11-22T16:20:18.2327222Z Downloading pyinstaller-6.22.3-py3-none-win_amd64.whl (1.5 MB)
+2026-11-22T16:20:18.2675662Z    ---------------------------------------- 1.5/1.5 MB 38.5 MB/s  0:00:00
+2026-11-22T16:20:18.2719513Z Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+2026-11-22T16:20:18.3005126Z Downloading networkx-2.8.8-py3-none-any.whl (2.0 MB)
+2026-11-22T16:20:18.3311642Z    ---------------------------------------- 2.0/2.0 MB 55.1 MB/s  0:00:00
+2026-11-22T16:20:18.3367713Z Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+2026-11-22T16:20:18.3536702Z Downloading starlette-0.50.0-py3-none-any.whl (74 kB)
+2026-11-22T16:20:18.3740248Z Downloading anyio-4.16.0-py3-none-any.whl (134 kB)
+2026-11-22T16:20:18.3936231Z Downloading pyinstaller_hooks_contrib-2026.10-py3-none-any.whl (463 kB)
+2026-11-22T16:20:18.4144995Z Downloading annotated_doc-0.0.7-py3-none-any.whl (5.3 kB)
+2026-11-22T16:20:18.4428099Z Downloading contourpy-1.3.3-cp312-cp312-win_amd64.whl (226 kB)
+2026-11-22T16:20:18.4627334Z Downloading cycler-0.12.1-py3-none-any.whl (8.3 kB)
+2026-11-22T16:20:18.4892093Z Downloading fastjsonschema-2.22.3-py3-none-any.whl (28 kB)
+2026-11-22T16:20:18.5112264Z Downloading fonttools-4.68.0-cp312-cp312-win_amd64.whl (2.5 MB)
+2026-11-22T16:20:18.5438668Z    ---------------------------------------- 2.5/2.5 MB 73.3 MB/s  0:00:00
+2026-11-22T16:20:18.5481550Z Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+2026-11-22T16:20:18.5745187Z Downloading idna-3.20-py3-none-any.whl (69 kB)
+2026-11-22T16:20:18.5934394Z Downloading jsonschema-4.26.0-py3-none-any.whl (90 kB)
+2026-11-22T16:20:18.6106733Z Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+2026-11-22T16:20:18.6341537Z Downloading jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)
+2026-11-22T16:20:18.6556129Z Downloading jupyter_core-5.9.1-py3-none-any.whl (29 kB)
+2026-11-22T16:20:18.6741991Z Downloading kiwisolver-1.5.1-cp312-cp312-win_amd64.whl (70 kB)
+2026-11-22T16:20:18.6949333Z Downloading lxml-6.1.3-cp312-cp312-win_amd64.whl (4.0 MB)
+2026-11-22T16:20:18.7400313Z    ---------------------------------------- 4.0/4.0 MB 79.7 MB/s  0:00:00
+2026-11-22T16:20:18.7460503Z Downloading pefile-2024.8.26-py3-none-any.whl (74 kB)
+2026-11-22T16:20:18.7681667Z Downloading pydantic-2.14.4-py3-none-any.whl (494 kB)
+2026-11-22T16:20:18.7956388Z Downloading pydantic_core-2.50.5-cp312-cp312-win_amd64.whl (2.3 MB)
+2026-11-22T16:20:18.8369788Z    ---------------------------------------- 2.3/2.3 MB 62.7 MB/s  0:00:00
+2026-11-22T16:20:18.8411473Z Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+2026-11-22T16:20:18.8618937Z Downloading pyparsing-3.3.3-py3-none-any.whl (126 kB)
+2026-11-22T16:20:18.8805897Z Downloading python_dateutil-4.0.0-py3-none-any.whl (92 kB)
+2026-11-22T16:20:18.9069460Z Downloading pytz-2026.6-py2.py3-none-any.whl (506 kB)
+2026-11-22T16:20:18.9282323Z Downloading pywin32_ctypes-0.2.3-py3-none-any.whl (30 kB)
+2026-11-22T16:20:18.9485680Z Downloading QtPy-2.4.3-py3-none-any.whl (95 kB)
+2026-11-22T16:20:18.9686843Z Downloading referencing-0.37.0-py3-none-any.whl (26 kB)
+2026-11-22T16:20:19.2182925Z Downloading rpds_py-2026.9.1-cp312-cp312-win_amd64.whl (222 kB)
+2026-11-22T16:20:19.2410190Z Downloading threadpoolctl-3.8.0-py3-none-any.whl (32 kB)
+2026-11-22T16:20:19.2618870Z Downloading traitlets-5.16.1-py3-none-any.whl (86 kB)
+2026-11-22T16:20:19.2804832Z Downloading typing_inspection-0.4.5-py3-none-any.whl (14 kB)
+2026-11-22T16:20:19.3005921Z Downloading tzdata-2026.6-py2.py3-none-any.whl (348 kB)
+2026-11-22T16:20:19.3250192Z Downloading altgraph-0.17.5-py2.py3-none-any.whl (21 kB)
+2026-11-22T16:20:19.3480049Z Downloading certifi-2026.11.20-py3-none-any.whl (127 kB)
+2026-11-22T16:20:19.3675529Z Downloading defusedxml-0.7.1-py2.py3-none-any.whl (25 kB)
+2026-11-22T16:20:19.3950854Z Downloading et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
+2026-11-22T16:20:19.4141692Z Downloading graphviz-0.21-py3-none-any.whl (47 kB)
+2026-11-22T16:20:19.4324354Z Downloading plotly-7.1.0-py3-none-any.whl (9.7 MB)
+2026-11-22T16:20:19.5000211Z    ---------------------------------------- 9.7/9.7 MB 200.6 MB/s  0:00:00
+2026-11-22T16:20:19.5043397Z Downloading narwhals-2.29.0-py3-none-any.whl (501 kB)
+2026-11-22T16:20:20.4885978Z Building wheels for collected packages: mordred
+2026-11-22T16:20:20.4920540Z   Building wheel for mordred (pyproject.toml): started
+2026-11-22T16:20:21.3034466Z   Building wheel for mordred (pyproject.toml): finished with status 'done'
+2026-11-22T16:20:21.3055088Z   Created wheel for mordred: filename=mordred-1.2.0-py3-none-any.whl size=176809 sha256=a8b35aaaccc6281c0b3928027bf9edd9a0914fd1c26e96d9d0ca187528710aaa
+2026-11-22T16:20:21.3057216Z   Stored in directory: c:\users\runneradmin\appdata\local\pip\cache\wheels\e8\79\b8\f4f1dfbb736c2b8605cf5068cd633f4d2869defb89908aef93
+2026-11-22T16:20:21.3092868Z Successfully built mordred
+2026-11-22T16:20:21.5850642Z Installing collected packages: pytz, meeko, altgraph, websockets, tzdata, typing-inspection, traitlets, tqdm, threadpoolctl, slicer, six, shiboken6, selfies, rpds-py, qtpy, pywin32-ctypes, python-multipart, pypdf, pyparsing, pyinstaller-hooks-contrib, pydantic-core, Pillow, pefile, numpy, networkx, narwhals, lxml, llvmlite, kiwisolver, joblib, idna, h11, graphviz, gemmi, fonttools, fastjsonschema, et-xmlfile, defusedxml, cycler, cloudpickle, certifi, attrs, annotated-types, annotated-doc, uvicorn, scipy, referencing, rdkit, qt-material, qdarkstyle, python-docx, python-dateutil, PySide6-Essentials, pyqtgraph, pyinstaller, pydantic, plotly, openpyxl, numba, mordred, jupyter-core, httpcore, fpdf2, contourpy, anyio, xgboost, starlette, scikit-learn, PySide6-Addons, pandas, matplotlib, lightgbm, jsonschema-specifications, httpx, seaborn, PySide6, jsonschema, fastapi, catboost, nbformat
+2026-11-22T16:20:31.1299395Z   Attempting uninstall: networkx
+2026-11-22T16:20:31.1330477Z     Found existing installation: networkx 3.7
+2026-11-22T16:20:31.2629668Z     Uninstalling networkx-3.7:
+2026-11-22T16:20:31.2849984Z       Successfully uninstalled networkx-3.7
+2026-11-22T16:21:37.3472087Z 
+2026-11-22T16:21:37.3556176Z Successfully installed Pillow-11.3.0 PySide6-6.8.3 PySide6-Addons-6.8.3 PySide6-Essentials-6.8.3 altgraph-0.17.5 annotated-doc-0.0.7 annotated-types-0.8.0 anyio-4.16.0 attrs-26.1.0 catboost-1.2.8 certifi-2026.11.20 cloudpickle-3.1.2 contourpy-1.3.3 cycler-0.12.1 defusedxml-0.7.1 et-xmlfile-2.0.0 fastapi-0.128.0 fastjsonschema-2.22.3 fonttools-4.68.0 fpdf2-2.8.5 gemmi-0.7.5 graphviz-0.21 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.20 joblib-1.5.3 jsonschema-4.26.0 jsonschema-specifications-2025.9.1 jupyter-core-5.9.1 kiwisolver-1.5.1 lightgbm-4.5.0 llvmlite-0.44.0 lxml-6.1.3 matplotlib-3.10.9 meeko-0.8.0 mordred-1.2.0 narwhals-2.29.0 nbformat-5.10.4 networkx-2.8.8 numba-0.61.0 numpy-1.26.4 openpyxl-3.1.5 pandas-2.2.3 pefile-2024.8.26 plotly-7.1.0 pydantic-2.14.4 pydantic-core-2.50.5 pyinstaller-6.22.3 pyinstaller-hooks-contrib-2026.10 pyparsing-3.3.3 pypdf-6.6.0 pyqtgraph-0.13.7 python-dateutil-4.0.0 python-docx-1.2.0 python-multipart-0.0.24 pytz-2026.6 pywin32-ctypes-0.2.3 qdarkstyle-3.2.3 qt-material-2.17 qtpy-2.4.3 rdkit-2026.9.1 referencing-0.37.0 rpds-py-2026.9.1 scikit-learn-1.5.2 scipy-1.14.1 seaborn-0.13.2 selfies-2.1.1 shiboken6-6.8.3 six-1.17.0 slicer-0.0.8 starlette-0.50.0 threadpoolctl-3.8.0 tqdm-4.67.1 traitlets-5.16.1 typing-inspection-0.4.5 tzdata-2026.6 uvicorn-0.44.0 websockets-16.0 xgboost-2.1.3
+2026-11-22T16:21:38.9810831Z Collecting shap==0.54.1
+2026-11-22T16:21:39.1329821Z   Downloading shap-0.54.1-cp312-abi3-win_amd64.whl.metadata (23 kB)
+2026-11-22T16:21:39.1841945Z Downloading shap-0.54.1-cp312-abi3-win_amd64.whl (751 kB)
+2026-11-22T16:21:39.2778170Z    ---------------------------------------- 751.9/751.9 kB 15.8 MB/s  0:00:00
+2026-11-22T16:21:39.3252317Z Installing collected packages: shap
+2026-11-22T16:21:40.0885561Z Successfully installed shap-0.54.1
+2026-11-22T16:21:40.7333410Z Requirement already satisfied: pyinstaller==6.22.3 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (6.22.3)
+2026-11-22T16:21:41.2421694Z Collecting pytest
+2026-11-22T16:21:41.4056108Z   Downloading pytest-9.2.0-py3-none-any.whl.metadata (7.9 kB)
+2026-11-22T16:21:41.4231155Z Requirement already satisfied: altgraph in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from pyinstaller==6.22.3) (0.17.5)
+2026-11-22T16:21:41.4237681Z Requirement already satisfied: packaging>=22.0 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from pyinstaller==6.22.3) (26.3)
+2026-11-22T16:21:41.4244332Z Requirement already satisfied: pefile>=2022.5.30 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from pyinstaller==6.22.3) (2024.8.26)
+2026-11-22T16:21:41.4249359Z Requirement already satisfied: pyinstaller-hooks-contrib>=2026.7 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from pyinstaller==6.22.3) (2026.10)
+2026-11-22T16:21:41.4255880Z Requirement already satisfied: pywin32-ctypes>=0.2.1 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from pyinstaller==6.22.3) (0.2.3)
+2026-11-22T16:21:41.4260592Z Requirement already satisfied: setuptools>=42.0.0 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from pyinstaller==6.22.3) (78.1.0)
+2026-11-22T16:21:41.4270990Z Requirement already satisfied: colorama>=0.4 in C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages (from pytest) (0.4.6)
+2026-11-22T16:21:41.4462267Z Collecting iniconfig>=2 (from pytest)
+2026-11-22T16:21:41.4511797Z   Downloading iniconfig-2.3.1-py3-none-any.whl.metadata (2.8 kB)
+2026-11-22T16:21:41.4860920Z Collecting pluggy<2,>=1.6 (from pytest)
+2026-11-22T16:21:41.4909111Z   Downloading pluggy-1.7.0-py3-none-any.whl.metadata (5.0 kB)
+2026-11-22T16:21:41.5365821Z Collecting pygments>=2.15 (from pytest)
+2026-11-22T16:21:41.5413895Z   Downloading pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+2026-11-22T16:21:41.5720374Z Downloading pytest-9.2.0-py3-none-any.whl (411 kB)
+2026-11-22T16:21:41.6773170Z Downloading pluggy-1.7.0-py3-none-any.whl (27 kB)
+2026-11-22T16:21:41.6978143Z Downloading iniconfig-2.3.1-py3-none-any.whl (7.6 kB)
+2026-11-22T16:21:41.7170072Z Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+2026-11-22T16:21:41.7472620Z    ---------------------------------------- 1.3/1.3 MB 30.9 MB/s  0:00:00
+2026-11-22T16:21:41.9173611Z Installing collected packages: pygments, pluggy, iniconfig, pytest
+2026-11-22T16:21:44.3077055Z 
+2026-11-22T16:21:44.3153130Z Successfully installed iniconfig-2.3.1 pluggy-1.7.0 pygments-2.21.0 pytest-9.2.0
+2026-11-22T16:21:44.9842086Z Obtaining file:///D:/a/pharma-ml-toolkit/pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:21:44.9876978Z   Installing build dependencies: started
+2026-11-22T16:21:47.0071117Z   Installing build dependencies: finished with status 'done'
+2026-11-22T16:21:47.0087286Z   Checking if build backend supports build_editable: started
+2026-11-22T16:21:47.4638207Z   Checking if build backend supports build_editable: finished with status 'done'
+2026-11-22T16:21:47.4662452Z   Getting requirements to build editable: started
+2026-11-22T16:21:47.9947945Z   Getting requirements to build editable: finished with status 'done'
+2026-11-22T16:21:47.9961132Z   C:\Users\runneradmin\AppData\Local\Temp\pip-build-env-rkdh7rg7\overlay\Lib\site-packages\setuptools\config\_apply_pyprojecttoml.py:82: BuildBackendWarning: `project.license` as a TOML table is deprecated
+2026-11-22T16:21:47.9962539Z   !!
+2026-11-22T16:21:47.9963022Z   
+2026-11-22T16:21:47.9963442Z           ********************************************************************************
+2026-11-22T16:21:47.9964705Z           Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+2026-11-22T16:21:47.9965606Z   
+2026-11-22T16:21:47.9966132Z           By 2027-Feb-18, you need to update your project and remove deprecated calls
+2026-11-22T16:21:47.9966862Z           or your builds will no longer be supported.
+2026-11-22T16:21:47.9967337Z   
+2026-11-22T16:21:47.9967943Z           See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+2026-11-22T16:21:47.9968571Z           ********************************************************************************
+2026-11-22T16:21:47.9968882Z   
+2026-11-22T16:21:47.9969047Z   !!
+2026-11-22T16:21:47.9969252Z     corresp(dist, value, root_dir)
+2026-11-22T16:21:47.9970205Z   C:\Users\runneradmin\AppData\Local\Temp\pip-build-env-rkdh7rg7\overlay\Lib\site-packages\setuptools\config\_apply_pyprojecttoml.py:61: BuildBackendWarning: License classifiers are deprecated.
+2026-11-22T16:21:47.9971033Z   !!
+2026-11-22T16:21:47.9971191Z   
+2026-11-22T16:21:47.9971451Z           ********************************************************************************
+2026-11-22T16:21:47.9972008Z           Please consider removing the following classifiers in favor of a SPDX license expression:
+2026-11-22T16:21:47.9972461Z   
+2026-11-22T16:21:47.9972788Z           License :: OSI Approved :: MIT License
+2026-11-22T16:21:47.9973056Z   
+2026-11-22T16:21:47.9973507Z           See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+2026-11-22T16:21:47.9974170Z           ********************************************************************************
+2026-11-22T16:21:47.9974644Z   
+2026-11-22T16:21:47.9974935Z   !!
+2026-11-22T16:21:47.9975265Z     dist._finalize_license_expression()
+2026-11-22T16:21:47.9976486Z   C:\Users\runneradmin\AppData\Local\Temp\pip-build-env-rkdh7rg7\overlay\Lib\site-packages\setuptools\dist.py:765: BuildBackendWarning: License classifiers are deprecated.
+2026-11-22T16:21:47.9977214Z   !!
+2026-11-22T16:21:47.9977369Z   
+2026-11-22T16:21:47.9977627Z           ********************************************************************************
+2026-11-22T16:21:47.9978170Z           Please consider removing the following classifiers in favor of a SPDX license expression:
+2026-11-22T16:21:47.9978593Z   
+2026-11-22T16:21:47.9978811Z           License :: OSI Approved :: MIT License
+2026-11-22T16:21:47.9979061Z   
+2026-11-22T16:21:47.9979485Z           See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+2026-11-22T16:21:47.9980039Z           ********************************************************************************
+2026-11-22T16:21:47.9980330Z   
+2026-11-22T16:21:47.9980475Z   !!
+2026-11-22T16:21:47.9980683Z     self._finalize_license_expression()
+2026-11-22T16:21:48.0002966Z   Preparing editable metadata (pyproject.toml): started
+2026-11-22T16:21:48.3544136Z   Preparing editable metadata (pyproject.toml): finished with status 'done'
+2026-11-22T16:21:48.3552580Z   C:\Users\runneradmin\AppData\Local\Temp\pip-build-env-rkdh7rg7\overlay\Lib\site-packages\setuptools\config\_apply_pyprojecttoml.py:82: BuildBackendWarning: `project.license` as a TOML table is deprecated
+2026-11-22T16:21:48.3553502Z   !!
+2026-11-22T16:21:48.3553664Z   
+2026-11-22T16:21:48.3553933Z           ********************************************************************************
+2026-11-22T16:21:48.3555054Z           Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+2026-11-22T16:21:48.3555865Z   
+2026-11-22T16:21:48.3556438Z           By 2027-Feb-18, you need to update your project and remove deprecated calls
+2026-11-22T16:21:48.3557200Z           or your builds will no longer be supported.
+2026-11-22T16:21:48.3557485Z   
+2026-11-22T16:21:48.3557941Z           See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+2026-11-22T16:21:48.3558661Z           ********************************************************************************
+2026-11-22T16:21:48.3558974Z   
+2026-11-22T16:21:48.3559131Z   !!
+2026-11-22T16:21:48.3559338Z     corresp(dist, value, root_dir)
+2026-11-22T16:21:48.3560428Z   C:\Users\runneradmin\AppData\Local\Temp\pip-build-env-rkdh7rg7\overlay\Lib\site-packages\setuptools\config\_apply_pyprojecttoml.py:61: BuildBackendWarning: License classifiers are deprecated.
+2026-11-22T16:21:48.3562074Z   !!
+2026-11-22T16:21:48.3562267Z   
+2026-11-22T16:21:48.3562549Z           ********************************************************************************
+2026-11-22T16:21:48.3563126Z           Please consider removing the following classifiers in favor of a SPDX license expression:
+2026-11-22T16:21:48.3563564Z   
+2026-11-22T16:21:48.3563837Z           License :: OSI Approved :: MIT License
+2026-11-22T16:21:48.3564102Z   
+2026-11-22T16:21:48.3564550Z           See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+2026-11-22T16:21:48.3565257Z           ********************************************************************************
+2026-11-22T16:21:48.3565664Z   
+2026-11-22T16:21:48.3565825Z   !!
+2026-11-22T16:21:48.3566044Z     dist._finalize_license_expression()
+2026-11-22T16:21:48.3567031Z   C:\Users\runneradmin\AppData\Local\Temp\pip-build-env-rkdh7rg7\overlay\Lib\site-packages\setuptools\dist.py:765: BuildBackendWarning: License classifiers are deprecated.
+2026-11-22T16:21:48.3567920Z   !!
+2026-11-22T16:21:48.3568078Z   
+2026-11-22T16:21:48.3568335Z           ********************************************************************************
+2026-11-22T16:21:48.3568886Z           Please consider removing the following classifiers in favor of a SPDX license expression:
+2026-11-22T16:21:48.3569305Z   
+2026-11-22T16:21:48.3569527Z           License :: OSI Approved :: MIT License
+2026-11-22T16:21:48.3569777Z   
+2026-11-22T16:21:48.3570218Z           See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+2026-11-22T16:21:48.3570785Z           ********************************************************************************
+2026-11-22T16:21:48.3571089Z   
+2026-11-22T16:21:48.3571236Z   !!
+2026-11-22T16:21:48.3571440Z     self._finalize_license_expression()
+2026-11-22T16:21:48.3716886Z Building wheels for collected packages: pharmaml
+2026-11-22T16:21:48.3743256Z   Building editable for pharmaml (pyproject.toml): started
+2026-11-22T16:21:48.8093955Z   Building editable for pharmaml (pyproject.toml): finished with status 'done'
+2026-11-22T16:21:48.8102130Z   C:\Users\runneradmin\AppData\Local\Temp\pip-build-env-rkdh7rg7\overlay\Lib\site-packages\setuptools\config\_apply_pyprojecttoml.py:82: BuildBackendWarning: `project.license` as a TOML table is deprecated
+2026-11-22T16:21:48.8103164Z   !!
+2026-11-22T16:21:48.8103346Z   
+2026-11-22T16:21:48.8103641Z           ********************************************************************************
+2026-11-22T16:21:48.8104634Z           Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+2026-11-22T16:21:48.8105605Z   
+2026-11-22T16:21:48.8106507Z           By 2027-Feb-18, you need to update your project and remove deprecated calls
+2026-11-22T16:21:48.8107162Z           or your builds will no longer be supported.
+2026-11-22T16:21:48.8107778Z   
+2026-11-22T16:21:48.8108359Z           See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+2026-11-22T16:21:48.8109105Z           ********************************************************************************
+2026-11-22T16:21:48.8109449Z   
+2026-11-22T16:21:48.8109602Z   !!
+2026-11-22T16:21:48.8109804Z     corresp(dist, value, root_dir)
+2026-11-22T16:21:48.8110840Z   C:\Users\runneradmin\AppData\Local\Temp\pip-build-env-rkdh7rg7\overlay\Lib\site-packages\setuptools\config\_apply_pyprojecttoml.py:61: BuildBackendWarning: License classifiers are deprecated.
+2026-11-22T16:21:48.8112629Z   !!
+2026-11-22T16:21:48.8112921Z   
+2026-11-22T16:21:48.8113392Z           ********************************************************************************
+2026-11-22T16:21:48.8114362Z           Please consider removing the following classifiers in favor of a SPDX license expression:
+2026-11-22T16:21:48.8115215Z   
+2026-11-22T16:21:48.8115635Z           License :: OSI Approved :: MIT License
+2026-11-22T16:21:48.8116095Z   
+2026-11-22T16:21:48.8116874Z           See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+2026-11-22T16:21:48.8117922Z           ********************************************************************************
+2026-11-22T16:21:48.8118468Z   
+2026-11-22T16:21:48.8118768Z   !!
+2026-11-22T16:21:48.8119150Z     dist._finalize_license_expression()
+2026-11-22T16:21:48.8120567Z   C:\Users\runneradmin\AppData\Local\Temp\pip-build-env-rkdh7rg7\overlay\Lib\site-packages\setuptools\dist.py:765: BuildBackendWarning: License classifiers are deprecated.
+2026-11-22T16:21:48.8121827Z   !!
+2026-11-22T16:21:48.8122066Z   
+2026-11-22T16:21:48.8122457Z           ********************************************************************************
+2026-11-22T16:21:48.8123377Z           Please consider removing the following classifiers in favor of a SPDX license expression:
+2026-11-22T16:21:48.8124078Z   
+2026-11-22T16:21:48.8124437Z           License :: OSI Approved :: MIT License
+2026-11-22T16:21:48.8124825Z   
+2026-11-22T16:21:48.8125505Z           See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+2026-11-22T16:21:48.8126493Z           ********************************************************************************
+2026-11-22T16:21:48.8126992Z   
+2026-11-22T16:21:48.8127255Z   !!
+2026-11-22T16:21:48.8127621Z     self._finalize_license_expression()
+2026-11-22T16:21:48.8150303Z   Created wheel for pharmaml: filename=pharmaml-1.2.240-0.editable-py3-none-any.whl size=58738 sha256=3b761d429945d4af1505dc462a7c4f8ccf99fd73815a161062ca8034ae3c9a14
+2026-11-22T16:21:48.8152787Z   Stored in directory: C:\Users\runneradmin\AppData\Local\Temp\pip-ephem-wheel-cache-t8wx1k48\wheels\41\ef\8c\839ccaf33935514969871f4547258853e987eb41280965538b
+2026-11-22T16:21:48.8252626Z Successfully built pharmaml
+2026-11-22T16:21:48.8487553Z Installing collected packages: pharmaml
+2026-11-22T16:21:48.8909488Z Successfully installed pharmaml-1.2.240
+2026-11-22T16:21:50.1608943Z stack OK 1.2.240
+2026-11-22T16:21:50.2942299Z ##[group]Run python -c "import traceback
+2026-11-22T16:21:50.2942755Z [36;1mpython -c "import traceback[0m
+2026-11-22T16:21:50.2943010Z [36;1mtry:[0m
+2026-11-22T16:21:50.2943206Z [36;1m    import shap[0m
+2026-11-22T16:21:50.2943491Z [36;1m    print('SHAP-IMPORT-PROBE: OK', shap.__version__)[0m
+2026-11-22T16:21:50.2943820Z [36;1mexcept BaseException:[0m
+2026-11-22T16:21:50.2944147Z [36;1m    print('SHAP-IMPORT-PROBE: FAILED -- full chain follows')[0m
+2026-11-22T16:21:50.2944499Z [36;1m    traceback.print_exc()"[0m
+2026-11-22T16:21:50.2984244Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-22T16:21:50.2984596Z env:
+2026-11-22T16:21:50.2984776Z   PYTHON_VERSION: 3.12
+2026-11-22T16:21:50.2984977Z   NODE_VERSION: 22
+2026-11-22T16:21:50.2985163Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:21:50.2985659Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:21:50.2986211Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:21:50.2986724Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:21:50.2987165Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:21:50.2987599Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:21:50.2987989Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:21:50.2988377Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:21:50.2988711Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:21:50.2988990Z   CARGO_INCREMENTAL: 0
+2026-11-22T16:21:50.2989235Z   CARGO_TERM_COLOR: always
+2026-11-22T16:21:50.2989462Z   CACHE_ON_FAILURE: false
+2026-11-22T16:21:50.2989663Z ##[endgroup]
+2026-11-22T16:21:55.0621743Z SHAP-IMPORT-PROBE: OK 0.54.1
+2026-11-22T16:21:55.3509795Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-22T16:21:55.3510231Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-22T16:21:55.3510545Z [36;1mnpm --prefix frontend run typecheck[0m
+2026-11-22T16:21:55.3510832Z [36;1mif ($LASTEXITCODE -ne 0) {[0m
+2026-11-22T16:21:55.3511238Z [36;1m  Write-Host "::error::the strict TS gate failed — the frontend does not type-check"[0m
+2026-11-22T16:21:55.3511632Z [36;1m  exit 1[0m
+2026-11-22T16:21:55.3511803Z [36;1m}[0m
+2026-11-22T16:21:55.3551879Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-22T16:21:55.3552220Z env:
+2026-11-22T16:21:55.3552397Z   PYTHON_VERSION: 3.12
+2026-11-22T16:21:55.3552593Z   NODE_VERSION: 22
+2026-11-22T16:21:55.3552778Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:21:55.3553096Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:21:55.3553620Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:21:55.3554225Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:21:55.3554686Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:21:55.3555130Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:21:55.3555519Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:21:55.3555897Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:21:55.3556214Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:21:55.3556467Z   CARGO_INCREMENTAL: 0
+2026-11-22T16:21:55.3556660Z   CARGO_TERM_COLOR: always
+2026-11-22T16:21:55.3556859Z   CACHE_ON_FAILURE: false
+2026-11-22T16:21:55.3557051Z ##[endgroup]
+2026-11-22T16:21:56.0057852Z 
+2026-11-22T16:21:56.0058680Z > pharmaml-studio-frontend@1.2.240 typecheck
+2026-11-22T16:21:56.0059306Z > tsc --noEmit
+2026-11-22T16:21:56.0059521Z 
+2026-11-22T16:22:06.0963279Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-22T16:22:06.0963743Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-22T16:22:06.0964109Z [36;1mpython -m pytest tests/test_frontend_services.py -q[0m
+2026-11-22T16:22:06.0964467Z [36;1mif ($LASTEXITCODE -ne 0) {[0m
+2026-11-22T16:22:06.0965022Z [36;1m  Write-Host "::error::the frontend service drift guards failed — the typed clients drifted from the backend contract"[0m
+2026-11-22T16:22:06.0965555Z [36;1m  exit 1[0m
+2026-11-22T16:22:06.0965737Z [36;1m}[0m
+2026-11-22T16:22:06.1005842Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-22T16:22:06.1006192Z env:
+2026-11-22T16:22:06.1006361Z   PYTHON_VERSION: 3.12
+2026-11-22T16:22:06.1006564Z   NODE_VERSION: 22
+2026-11-22T16:22:06.1006751Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:22:06.1007082Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:22:06.1007657Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:22:06.1008333Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:22:06.1008785Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:22:06.1009241Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:22:06.1009659Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:22:06.1010053Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:22:06.1010390Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:22:06.1010645Z   CARGO_INCREMENTAL: 0
+2026-11-22T16:22:06.1010846Z   CARGO_TERM_COLOR: always
+2026-11-22T16:22:06.1011052Z   CACHE_ON_FAILURE: false
+2026-11-22T16:22:06.1011252Z ##[endgroup]
+2026-11-22T16:22:08.1161200Z ................                                                         [100%]
+2026-11-22T16:22:08.3228447Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-22T16:22:08.3228864Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-22T16:22:08.3229172Z [36;1mpython -m pytest tests -q `[0m
+2026-11-22T16:22:08.3229436Z [36;1m  --ignore=tests/api `[0m
+2026-11-22T16:22:08.3229670Z [36;1m  --ignore=tests/ui `[0m
+2026-11-22T16:22:08.3229927Z [36;1m  --ignore=tests/test_web_parity.py `[0m
+2026-11-22T16:22:08.3230260Z [36;1m  -k "not gui and not nine_card" -x --maxfail=5[0m
+2026-11-22T16:22:08.3230562Z [36;1mif ($LASTEXITCODE -ne 0) {[0m
+2026-11-22T16:22:08.3230918Z [36;1m  Write-Host "::error::the backend unit gate failed on the Windows runner"[0m
+2026-11-22T16:22:08.3231295Z [36;1m  exit 1[0m
+2026-11-22T16:22:08.3231472Z [36;1m}[0m
+2026-11-22T16:22:08.3271113Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-22T16:22:08.3271454Z env:
+2026-11-22T16:22:08.3271629Z   PYTHON_VERSION: 3.12
+2026-11-22T16:22:08.3271824Z   NODE_VERSION: 22
+2026-11-22T16:22:08.3272040Z   RUST_TOOLCHAIN: 1.90.0
+2026-11-22T16:22:08.3272367Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T16:22:08.3272901Z   RELEASE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit/release/windows
+2026-11-22T16:22:08.3273394Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:22:08.3273835Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-22T16:22:08.3274274Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:22:08.3274670Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:22:08.3275060Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-22T16:22:08.3275393Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-22T16:22:08.3275645Z   CARGO_INCREMENTAL: 0
+2026-11-22T16:22:08.3275841Z   CARGO_TERM_COLOR: always
+2026-11-22T16:22:08.3276046Z   CACHE_ON_FAILURE: false
+2026-11-22T16:22:08.3276247Z ##[endgroup]
+2026-11-22T16:22:36.0072106Z ........................................................................ [  1%]
+2026-11-22T16:22:42.7570797Z ........................................................................ [  2%]
+2026-11-22T16:22:46.8105532Z ........................................................................ [  3%]
+2026-11-22T16:22:46.9131450Z ........................................................................ [  4%]
+2026-11-22T16:22:47.0167101Z ........................................................................ [  5%]
+2026-11-22T16:22:47.1194511Z ........................................................................ [  7%]
+2026-11-22T16:22:47.2215021Z ........................................................................ [  8%]
+2026-11-22T16:22:47.3223832Z ........................................................................ [  9%]
+2026-11-22T16:22:49.3056625Z ........................................................................ [ 10%]
+2026-11-22T16:22:50.3013018Z ......................................................................s. [ 11%]
+2026-11-22T16:22:50.8844804Z ........................................................................ [ 12%]
+2026-11-22T16:22:51.2958179Z ................................................................ssssssss [ 14%]
+2026-11-22T16:22:56.9569027Z sss..............s.........ssssssssssssss............................... [ 15%]
+2026-11-22T16:22:58.4968170Z ........................................................................ [ 16%]
+2026-11-22T16:22:59.3570453Z ........................................................................ [ 17%]
+2026-11-22T16:22:59.8818702Z ........................................................................ [ 18%]
+2026-11-22T16:23:07.7777176Z ........................................................................ [ 19%]
+2026-11-22T16:23:24.1567328Z ........................................................................ [ 21%]
+2026-11-22T16:23:42.8595156Z ........................................................................ [ 22%]
+2026-11-22T16:23:43.3183606Z ........................................................................ [ 23%]
+2026-11-22T16:23:43.4477723Z ........................................................................ [ 24%]
+2026-11-22T16:23:43.7785602Z ........................................................................ [ 25%]
+2026-11-22T16:23:45.2922246Z ........................................................................ [ 26%]
+2026-11-22T16:23:51.0729654Z ..............................................................s......... [ 28%]
+2026-11-22T16:23:53.0776947Z ........................................................................ [ 29%]
+2026-11-22T16:23:54.5958569Z ........................................................................ [ 30%]
+2026-11-22T16:23:54.8844565Z ........................................................................ [ 31%]
+2026-11-22T16:23:55.8912816Z ........................................................................ [ 32%]
+2026-11-22T16:23:56.3873472Z ........................................................................ [ 34%]
+2026-11-22T16:24:03.8221337Z .....................................sss..s............................. [ 35%]
+2026-11-22T16:24:04.1534182Z ............................F........................................... [ 36%]
+2026-11-22T16:24:04.8315602Z ........................................................................ [ 37%]
+2026-11-22T16:24:05.3212347Z ........................................................................ [ 38%]
+2026-11-22T16:24:07.0127170Z ........................................................................ [ 39%]
+2026-11-22T16:24:07.5391786Z ........................................................................ [ 41%]
+2026-11-22T16:24:08.2027660Z ........................................................................ [ 42%]
+2026-11-22T16:24:10.0980617Z ..........................................s............................. [ 43%]
+2026-11-22T16:24:14.7761274Z ........................................................................ [ 44%]
+2026-11-22T16:24:22.5553136Z ........................................................................ [ 45%]
+2026-11-22T16:24:33.1876509Z ........................................................................ [ 46%]
+2026-11-22T16:24:46.4697678Z ........................................................................ [ 48%]
+2026-11-22T16:24:59.4841260Z ........................................................................ [ 49%]
+2026-11-22T16:25:31.7446017Z ........................................................................ [ 50%]
+2026-11-22T16:25:48.6031701Z ........................................................................ [ 51%]
+2026-11-22T16:25:50.1375109Z ........................................................................ [ 52%]
+2026-11-22T16:25:51.0735154Z ........................................................................ [ 53%]
+2026-11-22T16:25:51.3911417Z ........................................................................ [ 55%]
+2026-11-22T16:25:56.3151717Z ........................................................................ [ 56%]
+2026-11-22T16:25:57.0580286Z ........................................................................ [ 57%]
+2026-11-22T16:26:00.2401901Z ........................................................................ [ 58%]
+2026-11-22T16:26:01.9105213Z ....................................................................F... [ 59%]
+2026-11-22T16:26:05.4793089Z ........................................................................ [ 61%]
+2026-11-22T16:26:05.6299454Z ........................................................................ [ 62%]
+2026-11-22T16:26:06.8062897Z ................................................s....................... [ 63%]
+2026-11-22T16:26:08.4925532Z ........................................................................ [ 64%]
+2026-11-22T16:26:12.7758248Z ........................................................................ [ 65%]
+2026-11-22T16:26:13.5378893Z ........................................................................ [ 66%]
+2026-11-22T16:26:14.4286264Z ........................................................................ [ 68%]
+2026-11-22T16:26:22.4259908Z ........................................................................ [ 69%]
+2026-11-22T16:26:26.5745677Z ........................................................................ [ 70%]
+2026-11-22T16:26:27.0595466Z ........................................................................ [ 71%]
+2026-11-22T16:26:28.2702875Z ........................................................................ [ 72%]
+2026-11-22T16:26:47.6114733Z ........................................................................ [ 73%]
+2026-11-22T16:26:47.9100406Z ........................................................................ [ 75%]
+2026-11-22T16:26:48.0502114Z ........................................................................ [ 76%]
+2026-11-22T16:26:56.4411930Z ........................................................................ [ 77%]
+2026-11-22T16:26:56.6657651Z ........................................................................ [ 78%]
+2026-11-22T16:27:13.3335581Z ........................................................................ [ 79%]
+2026-11-22T16:27:13.6983551Z ........................................................................ [ 80%]
+2026-11-22T16:27:14.3173007Z ..................s..................................................... [ 82%]
+2026-11-22T16:27:15.3964703Z ........................................................................ [ 83%]
+2026-11-22T16:27:15.5776577Z ........................................................................ [ 84%]
+2026-11-22T16:27:16.1353340Z ........................................................................ [ 85%]
+2026-11-22T16:27:17.1087332Z .....................s.................................................. [ 86%]
+2026-11-22T16:27:18.0060122Z ........................................................................ [ 88%]
+2026-11-22T16:28:11.1679712Z ........................................................................ [ 89%]
+2026-11-22T16:28:13.0648190Z ........................................................................ [ 90%]
+2026-11-22T16:28:19.2502136Z ........................................................................ [ 91%]
+2026-11-22T16:28:24.7535046Z ........................................................................ [ 92%]
+2026-11-22T16:28:33.6924285Z ........................................................................ [ 93%]
+2026-11-22T16:28:37.1811870Z ........................................................................ [ 95%]
+2026-11-22T16:28:39.0463461Z ........................................................................ [ 96%]
+2026-11-22T16:28:43.0065797Z ........................................................................ [ 97%]
+2026-11-22T16:28:46.4479036Z ........................................................................ [ 98%]
+2026-11-22T16:28:52.1436759Z ........................................................................ [ 99%]
+2026-11-22T16:28:52.5060591Z ...............                                                          [100%]
+2026-11-22T16:28:52.5061421Z ================================== FAILURES ===================================
+2026-11-22T16:28:52.5062145Z ______ TestLedgerAgreement.test_worklog_newest_round_matches_the_counter ______
+2026-11-22T16:28:52.5063064Z tests\test_documentation_consistency.py:145: in test_worklog_newest_round_matches_the_counter
+2026-11-22T16:28:52.5063740Z     assert int(last_round) == round_no, (
+2026-11-22T16:28:52.5065526Z E   AssertionError: worklog's newest entry is R325 but the counter says round 332 � one ledger is stale
+2026-11-22T16:28:52.5066408Z E   assert 325 == 332
+2026-11-22T16:28:52.5066774Z E    +  where 325 = int('325')
+2026-11-22T16:28:52.5067590Z ______________ test_shipped_tree_carries_no_absolute_home_paths _______________
+2026-11-22T16:28:52.5068361Z tests\test_leakage.py:106: in test_shipped_tree_carries_no_absolute_home_paths
+2026-11-22T16:28:52.5068910Z     assert not leaks, (
+2026-11-22T16:28:52.5070452Z E   AssertionError: absolute home-directory prefixes leaked into the shipped tree (2 file(s)) � run scratch/scrub_home_paths_137.py and re-verify: ["docs\\PROJECT_STATUS.md: '/home/z/'", "docs\\QA\\BLOCKED_TESTS_AND_SOLUTIONS.md: '/home/z/'"]
+2026-11-22T16:28:52.5071849Z E   assert not ["docs\\PROJECT_STATUS.md: '/home/z/'", "docs\\QA\\BLOCKED_TESTS_AND_SOLUTIONS.md: '/home/z/'"]
+2026-11-22T16:28:52.5072528Z ============================== warnings summary ===============================
+2026-11-22T16:28:52.5072965Z tests/test_active_learning.py: 25 warnings
+2026-11-22T16:28:52.5073883Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but RandomForestClassifier was fitted with feature names
+2026-11-22T16:28:52.5074710Z     warnings.warn(
+2026-11-22T16:28:52.5074875Z 
+2026-11-22T16:28:52.5075360Z tests/test_active_learning.py::TestWorkflowContract::test_custom_model_accepted
+2026-11-22T16:28:52.5076035Z tests/test_active_learning.py::TestWorkflowContract::test_custom_model_accepted
+2026-11-22T16:28:52.5077062Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but LogisticRegression was fitted with feature names
+2026-11-22T16:28:52.5077862Z     warnings.warn(
+2026-11-22T16:28:52.5078023Z 
+2026-11-22T16:28:52.5078357Z tests/test_calibration.py::TestCalibrateCli::test_bundle_flow_reports_and_writes_table
+2026-11-22T16:28:52.5079371Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\base.py:486: UserWarning: X has feature names, but LogisticRegression was fitted without feature names
+2026-11-22T16:28:52.5080119Z     warnings.warn(
+2026-11-22T16:28:52.5080274Z 
+2026-11-22T16:28:52.5080680Z tests/test_cli_features.py::TestMLTuneCommand::test_random_search_regression_with_out_and_save_best
+2026-11-22T16:28:52.5081481Z tests/test_cli_features.py::TestMLTuneCommand::test_random_search_regression_with_out_and_save_best
+2026-11-22T16:28:52.5082213Z tests/test_tuner.py::TestRandomSearch::test_search_scores_and_refits_the_best
+2026-11-22T16:28:52.5082808Z tests/test_tuner.py::TestRandomSearch::test_on_trial_progress_payloads
+2026-11-22T16:28:52.5083388Z tests/test_tuner.py::TestTPESearch::test_search_scores_a_learnable_surface
+2026-11-22T16:28:52.5084585Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\neural_network\_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (700) reached and the optimization hasn't converged yet.
+2026-11-22T16:28:52.5085595Z     warnings.warn(
+2026-11-22T16:28:52.5085728Z 
+2026-11-22T16:28:52.5086070Z tests/test_cli_features.py::TestMLTuneCommand::test_float_targets_flip_to_regression
+2026-11-22T16:28:52.5086753Z tests/test_cli_features.py::TestMLTuneCommand::test_float_targets_flip_to_regression
+2026-11-22T16:28:52.5087425Z tests/test_cli_features.py::TestMLTuneCommand::test_float_targets_flip_to_regression
+2026-11-22T16:28:52.5088808Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\neural_network\_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (500) reached and the optimization hasn't converged yet.
+2026-11-22T16:28:52.5089779Z     warnings.warn(
+2026-11-22T16:28:52.5089915Z 
+2026-11-22T16:28:52.5090100Z tests/test_cli_features.py: 18 warnings
+2026-11-22T16:28:52.5090456Z tests/test_tuner.py: 54 warnings
+2026-11-22T16:28:52.5091510Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\neural_network\_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (1) reached and the optimization hasn't converged yet.
+2026-11-22T16:28:52.5092508Z     warnings.warn(
+2026-11-22T16:28:52.5092715Z 
+2026-11-22T16:28:52.5092899Z tests/test_cli_features.py: 16 warnings
+2026-11-22T16:28:52.5093244Z tests/test_tuner.py: 48 warnings
+2026-11-22T16:28:52.5094290Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\neural_network\_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (3) reached and the optimization hasn't converged yet.
+2026-11-22T16:28:52.5095282Z     warnings.warn(
+2026-11-22T16:28:52.5095414Z 
+2026-11-22T16:28:52.5095587Z tests/test_cli_features.py: 13 warnings
+2026-11-22T16:28:52.5095931Z tests/test_tuner.py: 39 warnings
+2026-11-22T16:28:52.5096960Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\neural_network\_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (9) reached and the optimization hasn't converged yet.
+2026-11-22T16:28:52.5097951Z     warnings.warn(
+2026-11-22T16:28:52.5098080Z 
+2026-11-22T16:28:52.5098454Z tests/test_comparison.py::TestCompareSignificanceCLI::test_wilcoxon_and_correction_flags
+2026-11-22T16:28:52.5099156Z tests/test_power.py::TestCLIPowerFlag::test_wilcoxon_power_points_back_at_paired_t
+2026-11-22T16:28:52.5100064Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\scipy\stats\_wilcoxon.py:199: UserWarning: Sample size too small for normal approximation.
+2026-11-22T16:28:52.5100903Z     temp = _wilcoxon_iv(x, y, zero_method, correction, alternative, method, axis)
+2026-11-22T16:28:52.5101233Z 
+2026-11-22T16:28:52.5101411Z tests/test_descriptors.py: 111 warnings
+2026-11-22T16:28:52.5102306Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\mordred\_base\descriptor.py:46: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+2026-11-22T16:28:52.5103177Z     dict["since"] = StrictVersion(dict["since"])
+2026-11-22T16:28:52.5103421Z 
+2026-11-22T16:28:52.5103736Z tests/test_descriptors.py::TestMordredDescriptorSet::test_column_names_are_strings
+2026-11-22T16:28:52.5104799Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\mordred\AdjacencyMatrix.py:10: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+2026-11-22T16:28:52.5105674Z     _version_remove_SM1_A = StrictVersion("1.1.0")
+2026-11-22T16:28:52.5105917Z 
+2026-11-22T16:28:52.5106224Z tests/test_descriptors.py::TestMordredDescriptorSet::test_column_names_are_strings
+2026-11-22T16:28:52.5107260Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\mordred\AtomCount.py:20: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+2026-11-22T16:28:52.5108103Z     _version_add_Nhetero = StrictVersion("1.1.0")
+2026-11-22T16:28:52.5108322Z 
+2026-11-22T16:28:52.5108662Z tests/test_descriptors.py::TestMordredDescriptorSet::test_column_names_are_strings
+2026-11-22T16:28:52.5109704Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\mordred\DistanceMatrix.py:10: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+2026-11-22T16:28:52.5110597Z     _version_remove_SM1_D = StrictVersion("1.1.0")
+2026-11-22T16:28:52.5111736Z 
+2026-11-22T16:28:52.5112113Z tests/test_descriptors.py::TestMordredDescriptorSet::test_column_names_are_strings
+2026-11-22T16:28:52.5112891Z tests/test_descriptors.py::TestMordredDescriptorSet::test_columns_indexable_by_name_with_pinned_values
+2026-11-22T16:28:52.5113714Z tests/test_descriptors.py::TestMordredDescriptorSet::test_failed_cells_become_nan_not_error_objects
+2026-11-22T16:28:52.5114462Z tests/test_descriptors.py::TestMordredDescriptorSet::test_mixed_batch_frame_is_ml_ready
+2026-11-22T16:28:52.5115229Z tests/test_descriptors.py::TestMordredDescriptorSet::test_aggregate_warning_names_cell_counts
+2026-11-22T16:28:52.5116026Z tests/test_descriptors.py::TestMordredDescriptorSet::test_warning_fires_once_per_call_not_per_molecule
+2026-11-22T16:28:52.5117677Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\mordred\_base\calculator.py:196: DeprecationWarning: distutils Version classes are deprecated. Use packaging.version instead.
+2026-11-22T16:28:52.5118585Z     version = StrictVersion(version)
+2026-11-22T16:28:52.5118804Z 
+2026-11-22T16:28:52.5118995Z tests/test_descriptors.py: 209 warnings
+2026-11-22T16:28:52.5119994Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\mordred\_base\calculator.py:247: DeprecationWarning: `product` is deprecated as of NumPy 1.25.0, and will be removed in NumPy 2.0. Please use `prod` instead.
+2026-11-22T16:28:52.5120921Z     r = desc.calculate(**args)
+2026-11-22T16:28:52.5121118Z 
+2026-11-22T16:28:52.5121493Z tests/test_docking_contacts.py::TestBundledDemoPair::test_the_shipped_answer
+2026-11-22T16:28:52.5122528Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\fixtures.py:1392: PytestRemovedIn10Warning: Class-scoped fixtures defined as instance methods are deprecated.
+2026-11-22T16:28:52.5123513Z   Instance attributes set in the 'contacts' fixture will NOT be visible to test methods,
+2026-11-22T16:28:52.5124130Z   as each test gets a new instance while the fixture runs only once per class.
+2026-11-22T16:28:52.5124740Z   Use a @classmethod decorator below @pytest.fixture and set attributes on cls instead.
+2026-11-22T16:28:52.5125510Z   See https://docs.pytest.org/en/stable/deprecations.html#class-scoped-fixture-as-instance-method
+2026-11-22T16:28:52.5126138Z     fixturefunc = resolve_fixture_function(fixturedef, request)
+2026-11-22T16:28:52.5126403Z 
+2026-11-22T16:28:52.5126717Z tests/test_docking_prep.py::TestProteinMeekoPipeline::test_report_contents
+2026-11-22T16:28:52.5127717Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\fixtures.py:1392: PytestRemovedIn10Warning: Class-scoped fixtures defined as instance methods are deprecated.
+2026-11-22T16:28:52.5128742Z   Instance attributes set in the 'crambin_report' fixture will NOT be visible to test methods,
+2026-11-22T16:28:52.5129371Z   as each test gets a new instance while the fixture runs only once per class.
+2026-11-22T16:28:52.5129975Z   Use a @classmethod decorator below @pytest.fixture and set attributes on cls instead.
+2026-11-22T16:28:52.5130680Z   See https://docs.pytest.org/en/stable/deprecations.html#class-scoped-fixture-as-instance-method
+2026-11-22T16:28:52.5131382Z     fixturefunc = resolve_fixture_function(fixturedef, request)
+2026-11-22T16:28:52.5131670Z 
+2026-11-22T16:28:52.5132030Z tests/test_docking_prep.py::TestProteinMeekoPipeline::test_broken_residue_raises_docking_error
+2026-11-22T16:28:52.5133004Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\meeko\polymer.py:1237: RuntimeWarning: Input residues {'A:1': 'XXX'} not in residue_templates
+2026-11-22T16:28:52.5133714Z   
+2026-11-22T16:28:52.5133977Z     warnings.warn(err, RuntimeWarning)
+2026-11-22T16:28:52.5134194Z 
+2026-11-22T16:28:52.5134556Z tests/test_docking_prep.py::TestProteinMeekoPipeline::test_broken_residue_raises_docking_error
+2026-11-22T16:28:52.5135571Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\meeko\polymer.py:1238: RuntimeWarning: Trying to resolve unknown residues by building chemical templates... 
+2026-11-22T16:28:52.5136694Z     warnings.warn("Trying to resolve unknown residues by building chemical templates... ", RuntimeWarning)
+2026-11-22T16:28:52.5137102Z 
+2026-11-22T16:28:52.5137441Z tests/test_docking_prep.py::TestProteinMmcifImport::test_cif_matches_pdb_pipeline
+2026-11-22T16:28:52.5138447Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\fixtures.py:1392: PytestRemovedIn10Warning: Class-scoped fixtures defined as instance methods are deprecated.
+2026-11-22T16:28:52.5139460Z   Instance attributes set in the 'crambin_cif' fixture will NOT be visible to test methods,
+2026-11-22T16:28:52.5140144Z   as each test gets a new instance while the fixture runs only once per class.
+2026-11-22T16:28:52.5140837Z   Use a @classmethod decorator below @pytest.fixture and set attributes on cls instead.
+2026-11-22T16:28:52.5141557Z   See https://docs.pytest.org/en/stable/deprecations.html#class-scoped-fixture-as-instance-method
+2026-11-22T16:28:52.5142185Z     fixturefunc = resolve_fixture_function(fixturedef, request)
+2026-11-22T16:28:52.5142473Z 
+2026-11-22T16:28:52.5142810Z tests/test_docking_prep.py::TestProteinMmcifImport::test_cif_matches_pdb_pipeline
+2026-11-22T16:28:52.5143818Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\fixtures.py:1392: PytestRemovedIn10Warning: Class-scoped fixtures defined as instance methods are deprecated.
+2026-11-22T16:28:52.5144807Z   Instance attributes set in the 'crambin_ref' fixture will NOT be visible to test methods,
+2026-11-22T16:28:52.5145420Z   as each test gets a new instance while the fixture runs only once per class.
+2026-11-22T16:28:52.5146050Z   Use a @classmethod decorator below @pytest.fixture and set attributes on cls instead.
+2026-11-22T16:28:52.5146762Z   See https://docs.pytest.org/en/stable/deprecations.html#class-scoped-fixture-as-instance-method
+2026-11-22T16:28:52.5147518Z     fixturefunc = resolve_fixture_function(fixturedef, request)
+2026-11-22T16:28:52.5148175Z 
+2026-11-22T16:28:52.5148376Z tests/test_evaluation_auc_integrity.py: 3 warnings
+2026-11-22T16:28:52.5148845Z tests/test_ml_pipeline.py: 3 warnings
+2026-11-22T16:28:52.5149199Z tests/test_subgroups.py: 63 warnings
+2026-11-22T16:28:52.5150378Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\metrics\_classification.py:409: UserWarning: A single label was found in 'y_true' and 'y_pred'. For the confusion matrix to have the correct shape, use the 'labels' parameter to pass all known labels.
+2026-11-22T16:28:52.5151449Z     warnings.warn(
+2026-11-22T16:28:52.5151606Z 
+2026-11-22T16:28:52.5151936Z tests/test_features.py::TestFilterLowVariance::test_inf_poisoned_column_is_cut
+2026-11-22T16:28:52.5152624Z tests/test_features.py::TestFilterLowVariance::test_inf_column_agrees_with_ranker_undefined
+2026-11-22T16:28:52.5153361Z tests/test_features.py::TestFilterLowVariance::test_inf_column_agrees_with_ranker_undefined
+2026-11-22T16:28:52.5154256Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\pandas\core\nanops.py:1016: RuntimeWarning: invalid value encountered in subtract
+2026-11-22T16:28:52.5154967Z     sqr = _ensure_numeric((avg - values) ** 2)
+2026-11-22T16:28:52.5155203Z 
+2026-11-22T16:28:52.5155546Z tests/test_freeze_equivalent.py::TestSmokeDriver::test_full_unfrozen_run_verdict_pass
+2026-11-22T16:28:52.5156547Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\qdarkstyle\__init__.py:236: PythonQtWarning: Selected binding 'pyqt5' could not be found; falling back to 'pyside6'
+2026-11-22T16:28:52.5157429Z     from qtpy.QtCore import QCoreApplication, QFile, QTextStream
+2026-11-22T16:28:52.5157720Z 
+2026-11-22T16:28:52.5158034Z tests/test_freeze_equivalent.py::TestSmokeDriver::test_full_unfrozen_run_verdict_pass
+2026-11-22T16:28:52.5159056Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\base.py:486: UserWarning: X has feature names, but SelfTrainingClassifier was fitted without feature names
+2026-11-22T16:28:52.5159956Z     warnings.warn(
+2026-11-22T16:28:52.5160115Z 
+2026-11-22T16:28:52.5160397Z tests/test_interpret.py::TestEBMRegressor::test_linear_surface_r2_and_rmse
+2026-11-22T16:28:52.5161378Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\fixtures.py:1392: PytestRemovedIn10Warning: Class-scoped fixtures defined as instance methods are deprecated.
+2026-11-22T16:28:52.5162452Z   Instance attributes set in the 'regression_model' fixture will NOT be visible to test methods,
+2026-11-22T16:28:52.5163118Z   as each test gets a new instance while the fixture runs only once per class.
+2026-11-22T16:28:52.5163717Z   Use a @classmethod decorator below @pytest.fixture and set attributes on cls instead.
+2026-11-22T16:28:52.5164425Z   See https://docs.pytest.org/en/stable/deprecations.html#class-scoped-fixture-as-instance-method
+2026-11-22T16:28:52.5165119Z     fixturefunc = resolve_fixture_function(fixturedef, request)
+2026-11-22T16:28:52.5165414Z 
+2026-11-22T16:28:52.5165741Z tests/test_interpret.py::TestFastPairSelection::test_true_interacting_pair_selected
+2026-11-22T16:28:52.5166785Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\_pytest\fixtures.py:1392: PytestRemovedIn10Warning: Class-scoped fixtures defined as instance methods are deprecated.
+2026-11-22T16:28:52.5167769Z   Instance attributes set in the 'pair_model' fixture will NOT be visible to test methods,
+2026-11-22T16:28:52.5168373Z   as each test gets a new instance while the fixture runs only once per class.
+2026-11-22T16:28:52.5168973Z   Use a @classmethod decorator below @pytest.fixture and set attributes on cls instead.
+2026-11-22T16:28:52.5169696Z   See https://docs.pytest.org/en/stable/deprecations.html#class-scoped-fixture-as-instance-method
+2026-11-22T16:28:52.5170311Z     fixturefunc = resolve_fixture_function(fixturedef, request)
+2026-11-22T16:28:52.5170597Z 
+2026-11-22T16:28:52.5170953Z tests/test_manifold.py::TestManifoldEmbedding::test_every_method_returns_two_d_coords[isomap]
+2026-11-22T16:28:52.5171633Z tests/test_manifold.py::TestManifoldEmbedding::test_one_d_output_supported
+2026-11-22T16:28:52.5172274Z tests/test_manifold.py::TestManifoldEmbedding::test_params_recorded_for_replay
+2026-11-22T16:28:52.5172915Z tests/test_viz.py::TestUnsupervisedPlots::test_manifold_scatter_three_colour_modes
+2026-11-22T16:28:52.5174276Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\manifold\_isomap.py:383: UserWarning: The number of connected components of the neighbors graph is 3 > 1. Completing the graph to fit Isomap might be slow. Increase the number of neighbors to avoid this issue.
+2026-11-22T16:28:52.5175380Z     self._fit_transform(X)
+2026-11-22T16:28:52.5175560Z 
+2026-11-22T16:28:52.5175727Z tests/test_manifold.py: 9 warnings
+2026-11-22T16:28:52.5176046Z tests/test_viz.py: 3 warnings
+2026-11-22T16:28:52.5176993Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\scipy\sparse\_index.py:108: SparseEfficiencyWarning: Changing the sparsity structure of a csr_matrix is expensive. lil and dok are more efficient.
+2026-11-22T16:28:52.5177907Z     self._set_intXint(row, col, x.flat[0])
+2026-11-22T16:28:52.5178136Z 
+2026-11-22T16:28:52.5178499Z tests/test_manifold.py::TestManifoldEmbedding::test_every_method_returns_two_d_coords[spectral]
+2026-11-22T16:28:52.5179237Z tests/test_manifold.py::TestManifoldEmbedding::test_seeded_methods_are_deterministic
+2026-11-22T16:28:52.5179908Z tests/test_manifold.py::TestManifoldEmbedding::test_seeded_methods_are_deterministic
+2026-11-22T16:28:52.5180961Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\manifold\_spectral_embedding.py:329: UserWarning: Graph is not fully connected, spectral embedding may not work as expected.
+2026-11-22T16:28:52.5181783Z     warnings.warn(
+2026-11-22T16:28:52.5181937Z 
+2026-11-22T16:28:52.5182254Z tests/test_md_plots.py::test_correlation_ligand_values_and_undefined_constant
+2026-11-22T16:28:52.5182900Z tests/test_viz_md_plots.py::TestPlotMDCorrelation::test_constant_series_nan_disclosure
+2026-11-22T16:28:52.5183866Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\numpy\lib\function_base.py:2897: RuntimeWarning: invalid value encountered in divide
+2026-11-22T16:28:52.5184537Z     c /= stddev[:, None]
+2026-11-22T16:28:52.5184714Z 
+2026-11-22T16:28:52.5185017Z tests/test_md_plots.py::test_correlation_ligand_values_and_undefined_constant
+2026-11-22T16:28:52.5185662Z tests/test_viz_md_plots.py::TestPlotMDCorrelation::test_constant_series_nan_disclosure
+2026-11-22T16:28:52.5186539Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\numpy\lib\function_base.py:2898: RuntimeWarning: invalid value encountered in divide
+2026-11-22T16:28:52.5187198Z     c /= stddev[None, :]
+2026-11-22T16:28:52.5187370Z 
+2026-11-22T16:28:52.5187861Z tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_compare_keeps_nan_row_and_warns_on_degenerate_target
+2026-11-22T16:28:52.5188741Z tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_compare_keeps_nan_row_and_warns_on_degenerate_target
+2026-11-22T16:28:52.5189999Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\model_selection\_validation.py:982: UserWarning: Scoring failed. The score on this train-test partition for these parameters will be set to nan. Details: 
+2026-11-22T16:28:52.5190960Z   Traceback (most recent call last):
+2026-11-22T16:28:52.5191656Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\model_selection\_validation.py", line 971, in _score
+2026-11-22T16:28:52.5192413Z       scores = scorer(estimator, X_test, y_test, **score_params)
+2026-11-22T16:28:52.5192831Z                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5193507Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\metrics\_scorer.py", line 279, in __call__
+2026-11-22T16:28:52.5194245Z       return self._score(partial(_cached_call, None), estimator, X, y_true, **_kwargs)
+2026-11-22T16:28:52.5194755Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5195422Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\metrics\_scorer.py", line 371, in _score
+2026-11-22T16:28:52.5196018Z       y_pred = method_caller(
+2026-11-22T16:28:52.5196294Z                ^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5196893Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\metrics\_scorer.py", line 89, in _cached_call
+2026-11-22T16:28:52.5197500Z       result, _ = _get_response_values(
+2026-11-22T16:28:52.5197842Z                   ^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5198507Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\utils\_response.py", line 214, in _get_response_values
+2026-11-22T16:28:52.5199150Z       y_pred = _process_predict_proba(
+2026-11-22T16:28:52.5199463Z                ^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5200140Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\utils\_response.py", line 51, in _process_predict_proba
+2026-11-22T16:28:52.5200768Z       raise ValueError(
+2026-11-22T16:28:52.5201208Z   ValueError: Got predict_proba of shape (47, 1), but need classifier with two classes.
+2026-11-22T16:28:52.5201648Z   
+2026-11-22T16:28:52.5201869Z     warnings.warn(
+2026-11-22T16:28:52.5202028Z 
+2026-11-22T16:28:52.5202472Z tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_compare_keeps_nan_row_and_warns_on_degenerate_target
+2026-11-22T16:28:52.5203729Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\model_selection\_validation.py:982: UserWarning: Scoring failed. The score on this train-test partition for these parameters will be set to nan. Details: 
+2026-11-22T16:28:52.5204705Z   Traceback (most recent call last):
+2026-11-22T16:28:52.5205374Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\model_selection\_validation.py", line 971, in _score
+2026-11-22T16:28:52.5206186Z       scores = scorer(estimator, X_test, y_test, **score_params)
+2026-11-22T16:28:52.5206598Z                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5207241Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\metrics\_scorer.py", line 279, in __call__
+2026-11-22T16:28:52.5207974Z       return self._score(partial(_cached_call, None), estimator, X, y_true, **_kwargs)
+2026-11-22T16:28:52.5208505Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5209166Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\metrics\_scorer.py", line 371, in _score
+2026-11-22T16:28:52.5209733Z       y_pred = method_caller(
+2026-11-22T16:28:52.5210005Z                ^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5211162Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\metrics\_scorer.py", line 89, in _cached_call
+2026-11-22T16:28:52.5211839Z       result, _ = _get_response_values(
+2026-11-22T16:28:52.5212159Z                   ^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5212829Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\utils\_response.py", line 214, in _get_response_values
+2026-11-22T16:28:52.5213493Z       y_pred = _process_predict_proba(
+2026-11-22T16:28:52.5213803Z                ^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5214466Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\utils\_response.py", line 51, in _process_predict_proba
+2026-11-22T16:28:52.5215090Z       raise ValueError(
+2026-11-22T16:28:52.5215549Z   ValueError: Got predict_proba of shape (46, 1), but need classifier with two classes.
+2026-11-22T16:28:52.5215986Z   
+2026-11-22T16:28:52.5216199Z     warnings.warn(
+2026-11-22T16:28:52.5216355Z 
+2026-11-22T16:28:52.5216757Z tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+2026-11-22T16:28:52.5217889Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\model_selection\_split.py:776: UserWarning: The least populated class in y has only 1 members, which is less than n_splits=5.
+2026-11-22T16:28:52.5218732Z     warnings.warn(
+2026-11-22T16:28:52.5218860Z 
+2026-11-22T16:28:52.5219279Z tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+2026-11-22T16:28:52.5220079Z tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+2026-11-22T16:28:52.5220868Z tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+2026-11-22T16:28:52.5221669Z tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+2026-11-22T16:28:52.5222893Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\model_selection\_validation.py:982: UserWarning: Scoring failed. The score on this train-test partition for these parameters will be set to nan. Details: 
+2026-11-22T16:28:52.5223850Z   Traceback (most recent call last):
+2026-11-22T16:28:52.5224519Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\model_selection\_validation.py", line 971, in _score
+2026-11-22T16:28:52.5225238Z       scores = scorer(estimator, X_test, y_test, **score_params)
+2026-11-22T16:28:52.5225654Z                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5226315Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\metrics\_scorer.py", line 279, in __call__
+2026-11-22T16:28:52.5227073Z       return self._score(partial(_cached_call, None), estimator, X, y_true, **_kwargs)
+2026-11-22T16:28:52.5227592Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5228253Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\metrics\_scorer.py", line 376, in _score
+2026-11-22T16:28:52.5229036Z       return self._sign * self._score_func(y_true, y_pred, **scoring_kwargs)
+2026-11-22T16:28:52.5229529Z                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5230221Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\utils\_param_validation.py", line 213, in wrapper
+2026-11-22T16:28:52.5230842Z       return func(*args, **kwargs)
+2026-11-22T16:28:52.5231137Z              ^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5231778Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\metrics\_ranking.py", line 640, in roc_auc_score
+2026-11-22T16:28:52.5232392Z       return _average_binary_score(
+2026-11-22T16:28:52.5232697Z              ^^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5233409Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\metrics\_base.py", line 76, in _average_binary_score
+2026-11-22T16:28:52.5234176Z       return binary_metric(y_true, y_score, sample_weight=sample_weight)
+2026-11-22T16:28:52.5234633Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5235352Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\metrics\_ranking.py", line 382, in _binary_roc_auc_score
+2026-11-22T16:28:52.5235980Z       raise ValueError(
+2026-11-22T16:28:52.5236459Z   ValueError: Only one class present in y_true. ROC AUC score is not defined in that case.
+2026-11-22T16:28:52.5236905Z   
+2026-11-22T16:28:52.5237118Z     warnings.warn(
+2026-11-22T16:28:52.5237274Z 
+2026-11-22T16:28:52.5237668Z tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+2026-11-22T16:28:52.5238535Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\model_selection\_validation.py:540: FitFailedWarning: 
+2026-11-22T16:28:52.5239182Z   1 fits failed out of a total of 5.
+2026-11-22T16:28:52.5239643Z   The score on these train-test partitions for these parameters will be set to nan.
+2026-11-22T16:28:52.5240347Z   If these failures are not expected, you can try to debug them by setting error_score='raise'.
+2026-11-22T16:28:52.5240806Z   
+2026-11-22T16:28:52.5241064Z   Below are more details about the failures:
+2026-11-22T16:28:52.5241527Z   --------------------------------------------------------------------------------
+2026-11-22T16:28:52.5241952Z   1 fits failed with the following error:
+2026-11-22T16:28:52.5242288Z   Traceback (most recent call last):
+2026-11-22T16:28:52.5242988Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\model_selection\_validation.py", line 888, in _fit_and_score
+2026-11-22T16:28:52.5243703Z       estimator.fit(X_train, y_train, **fit_params)
+2026-11-22T16:28:52.5244320Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\base.py", line 1473, in wrapper
+2026-11-22T16:28:52.5244905Z       return fit_method(estimator, *args, **kwargs)
+2026-11-22T16:28:52.5245268Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5245872Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\pipeline.py", line 473, in fit
+2026-11-22T16:28:52.5246509Z       self._final_estimator.fit(Xt, y, **last_step_params["fit"])
+2026-11-22T16:28:52.5247170Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\base.py", line 1473, in wrapper
+2026-11-22T16:28:52.5247750Z       return fit_method(estimator, *args, **kwargs)
+2026-11-22T16:28:52.5248129Z              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-11-22T16:28:52.5248771Z     File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\linear_model\_logistic.py", line 1301, in fit
+2026-11-22T16:28:52.5249367Z       raise ValueError(
+2026-11-22T16:28:52.5249910Z   ValueError: This solver needs samples of at least 2 classes in the data, but the data contains only one class: 0
+2026-11-22T16:28:52.5250535Z   
+2026-11-22T16:28:52.5250858Z     warnings.warn(some_fits_failed_message, FitFailedWarning)
+2026-11-22T16:28:52.5251119Z 
+2026-11-22T16:28:52.5251541Z tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+2026-11-22T16:28:52.5252603Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\model_selection\_search.py:1103: UserWarning: One or more of the test scores are non-finite: [nan]
+2026-11-22T16:28:52.5253351Z     warnings.warn(
+2026-11-22T16:28:52.5253508Z 
+2026-11-22T16:28:52.5253881Z tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+2026-11-22T16:28:52.5254611Z tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+2026-11-22T16:28:52.5255393Z tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+2026-11-22T16:28:52.5256110Z tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+2026-11-22T16:28:52.5256823Z tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+2026-11-22T16:28:52.5257556Z tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+2026-11-22T16:28:52.5258267Z tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+2026-11-22T16:28:52.5259296Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\base.py:493: UserWarning: X does not have valid feature names, but LinearRegression was fitted with feature names
+2026-11-22T16:28:52.5260079Z     warnings.warn(
+2026-11-22T16:28:52.5260235Z 
+2026-11-22T16:28:52.5260602Z tests/test_ml_pipeline.py::TestGaussianProcessClassifierFamily::test_kernel_grid_tuning
+2026-11-22T16:28:52.5261316Z tests/test_ml_pipeline.py::TestGaussianProcessClassifierFamily::test_kernel_grid_tuning
+2026-11-22T16:28:52.5262031Z tests/test_ml_pipeline.py::TestGaussianProcessClassifierFamily::test_kernel_grid_tuning
+2026-11-22T16:28:52.5263505Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\gaussian_process\kernels.py:452: ConvergenceWarning: The optimal value found for dimension 0 of parameter k2__alpha is close to the specified upper bound 100000.0. Increasing the bound and calling fit again may find a better value.
+2026-11-22T16:28:53.2637765Z     warnings.warn(
+2026-11-22T16:28:53.2638079Z 
+2026-11-22T16:28:53.2638874Z tests/test_subgroups.py::TestSubgroupGap::test_worse_group_is_flagged_and_delta_is_negative
+2026-11-22T16:28:53.2639968Z tests/test_subgroups.py::TestSubgroupGap::test_better_group_is_flagged
+2026-11-22T16:28:53.2641026Z tests/test_subgroups.py::TestSubgroupGap::test_regression_gap_uses_rmse_direction
+2026-11-22T16:28:53.2642014Z tests/test_subgroups.py::TestSubgroupGap::test_significant_when_the_gap_is_total_and_large
+2026-11-22T16:28:53.2642965Z tests/test_subgroups.py::TestSubgroupGapScan::test_regression_scan_defaults_to_rmse
+2026-11-22T16:28:53.2643783Z tests/test_subgroups.py::TestSubgroupGapScan::test_regression_scan_defaults_to_rmse
+2026-11-22T16:28:53.2644630Z tests/test_subgroups.py::TestSubgroupGapScan::test_nan_p_value_is_left_out_of_the_family
+2026-11-22T16:28:53.2645477Z tests/test_subgroups.py::TestSubgroupGapScan::test_nan_p_value_is_left_out_of_the_family
+2026-11-22T16:28:53.2647148Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\scipy\stats\_axis_nan_policy.py:573: RuntimeWarning: Precision loss occurred in moment calculation due to catastrophic cancellation. This occurs when the data are nearly identical. Results may be unreliable.
+2026-11-22T16:28:53.2648527Z     res = hypotest_fun_out(*samples, **kwds)
+2026-11-22T16:28:53.2648805Z 
+2026-11-22T16:28:53.2649335Z tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+2026-11-22T16:28:53.2650334Z tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+2026-11-22T16:28:53.2651139Z tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+2026-11-22T16:28:53.2652501Z tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+2026-11-22T16:28:53.2653571Z tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+2026-11-22T16:28:53.2654622Z tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+2026-11-22T16:28:53.2655703Z tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+2026-11-22T16:28:53.2656636Z tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+2026-11-22T16:28:53.2657645Z tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+2026-11-22T16:28:53.2659789Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\neural_network\_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (50) reached and the optimization hasn't converged yet.
+2026-11-22T16:28:53.2661396Z     warnings.warn(
+2026-11-22T16:28:53.2661584Z 
+2026-11-22T16:28:53.2662005Z tests/test_tuner.py::TestRandomSearch::test_classification_objective
+2026-11-22T16:28:53.2662831Z tests/test_tuner.py::TestRandomSearch::test_classification_objective
+2026-11-22T16:28:53.2663633Z tests/test_tuner.py::TestRandomSearch::test_classification_objective
+2026-11-22T16:28:53.2664557Z tests/test_tuner.py::TestTPESearch::test_startup_trials_reproduce_random_search
+2026-11-22T16:28:53.2665593Z tests/test_tuner.py::TestTPESearch::test_startup_trials_reproduce_random_search
+2026-11-22T16:28:53.2666563Z tests/test_tuner.py::TestTPESearch::test_startup_trials_reproduce_random_search
+2026-11-22T16:28:53.2667552Z tests/test_tuner.py::TestTPESearch::test_startup_trials_reproduce_random_search
+2026-11-22T16:28:53.2669452Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\neural_network\_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (300) reached and the optimization hasn't converged yet.
+2026-11-22T16:28:53.2671028Z     warnings.warn(
+2026-11-22T16:28:53.2671275Z 
+2026-11-22T16:28:53.2671829Z tests/test_tuner.py::TestResourceBounds::test_the_declared_grid_sizes_a_real_hyperband
+2026-11-22T16:28:53.2672920Z tests/test_tuner.py::TestResourceBounds::test_the_declared_grid_sizes_a_real_hyperband
+2026-11-22T16:28:53.2674912Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\neural_network\_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (333) reached and the optimization hasn't converged yet.
+2026-11-22T16:28:53.2676407Z     warnings.warn(
+2026-11-22T16:28:53.2676588Z 
+2026-11-22T16:28:53.2676922Z tests/test_tuner.py::TestTPESearch::test_determinism_twin
+2026-11-22T16:28:53.2677677Z tests/test_tuner.py::TestTPESearch::test_determinism_twin
+2026-11-22T16:28:53.2678444Z tests/test_tuner.py::TestTPESearch::test_determinism_twin
+2026-11-22T16:28:53.2679430Z tests/test_tuner.py::TestTPESearch::test_determinism_twin
+2026-11-22T16:28:53.2681290Z   C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\sklearn\neural_network\_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (200) reached and the optimization hasn't converged yet.
+2026-11-22T16:28:53.2682861Z     warnings.warn(
+2026-11-22T16:28:53.2683060Z 
+2026-11-22T16:28:53.2683538Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-11-22T16:28:53.2684412Z =========================== short test summary info ===========================
+2026-11-22T16:28:53.2686776Z FAILED tests/test_documentation_consistency.py::TestLedgerAgreement::test_worklog_newest_round_matches_the_counter - AssertionError: worklog's newest entry is R325 but the counter says round 332 � one ledger is stale
+2026-11-22T16:28:53.2688382Z assert 325 == 332
+2026-11-22T16:28:53.2688847Z  +  where 325 = int('325')
+2026-11-22T16:28:53.2694087Z FAILED tests/test_leakage.py::test_shipped_tree_carries_no_absolute_home_paths - AssertionError: absolute home-directory prefixes leaked into the shipped tree (2 file(s)) � run scratch/scrub_home_paths_137.py and re-verify: ["docs\\PROJECT_STATUS.md: '/home/z/'", "docs\\QA\\BLOCKED_TESTS_AND_SOLUTIONS.md: '/home/z/'"]
+2026-11-22T16:28:53.2697506Z assert not ["docs\\PROJECT_STATUS.md: '/home/z/'", "docs\\QA\\BLOCKED_TESTS_AND_SOLUTIONS.md: '/home/z/'"]
+2026-11-22T16:28:55.0614423Z ##[error]the backend unit gate failed on the Windows runner
+2026-11-22T16:28:55.0794998Z ##[error]Process completed with exit code 1.
+2026-11-22T16:28:55.1059550Z Post job cleanup.
+2026-11-22T16:28:55.2924258Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-11-22T16:28:55.3195468Z git version 2.56.1.windows.1
+2026-11-22T16:28:55.3253021Z Temporarily overriding HOME='D:\a\_temp\25690d96-44f8-41ec-87cd-6a5d467cc8ae' before making global git config changes
+2026-11-22T16:28:55.3253913Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T16:28:55.3264526Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\pharma-ml-toolkit\pharma-ml-toolkit
+2026-11-22T16:28:55.3562636Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T16:28:55.3870126Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-22T16:28:55.8576030Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T16:28:55.8865421Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-22T16:28:56.3737396Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T16:28:56.4019549Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-22T16:28:56.8788623Z Cleaning up orphan processes
+2026-11-22T16:28:56.8861792Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4, actions/setup-python@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

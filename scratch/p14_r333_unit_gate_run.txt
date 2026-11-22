@@ -1,0 +1,384 @@
+........................................................................ [  1%]
+........................................................................ [  2%]
+........................................................................ [  3%]
+........................................................................ [  4%]
+........................................................................ [  5%]
+........................................................................ [  7%]
+........................................................................ [  8%]
+........................................................................ [  9%]
+........................................................................ [ 10%]
+........................................................................ [ 11%]
+........................................................................ [ 12%]
+........................................................................ [ 14%]
+........................................................................ [ 15%]
+........................................................................ [ 16%]
+........................................................................ [ 17%]
+........................................................................ [ 18%]
+........................................................................ [ 19%]
+........................................................................ [ 21%]
+........................................................................ [ 22%]
+........................................................................ [ 23%]
+........................................................................ [ 24%]
+........................................................................ [ 25%]
+........................................................................ [ 26%]
+........................................................................ [ 28%]
+........................................................................ [ 29%]
+................................................ssssss.................. [ 30%]
+........................................................................ [ 31%]
+........................................................................ [ 32%]
+........................................................................ [ 34%]
+........................................................................ [ 35%]
+........................................................................ [ 36%]
+........................................................................ [ 37%]
+........................................................................ [ 38%]
+........................................................................ [ 39%]
+........................................................................ [ 41%]
+........................................................................ [ 42%]
+..........................................s............................. [ 43%]
+............................................................F........... [ 44%]
+........................................................................ [ 45%]
+........................................................................ [ 46%]
+........................................................................ [ 48%]
+........................................................................ [ 49%]
+........................................................................ [ 50%]
+........................................................................ [ 51%]
+........................................................................ [ 52%]
+........................................................................ [ 53%]
+........................................................................ [ 55%]
+........................................................................ [ 56%]
+........................................................................ [ 57%]
+........................................................................ [ 58%]
+........................................................................ [ 59%]
+........................................................................ [ 61%]
+........................................................................ [ 62%]
+................................................s....................... [ 63%]
+........................................................................ [ 64%]
+........................................................................ [ 65%]
+........................................................................ [ 66%]
+........................................................................ [ 68%]
+........................................................................ [ 69%]
+........................................................................ [ 70%]
+........................................................................ [ 71%]
+........................................................................ [ 72%]
+........................................................................ [ 73%]
+........................................................................ [ 75%]
+........................................................................ [ 76%]
+........................................................................ [ 77%]
+........................................................................ [ 78%]
+........................................................................ [ 79%]
+........................................................................ [ 80%]
+........................................................................ [ 82%]
+........................................................................ [ 83%]
+........................................................................ [ 84%]
+........................................................................ [ 85%]
+.....................s.................................................. [ 86%]
+........................................................................ [ 88%]
+........................................................................ [ 89%]
+........................................................................ [ 90%]
+........................................................................ [ 91%]
+........................................................................ [ 92%]
+........................................................................ [ 93%]
+........................................................................ [ 95%]
+........................................................................ [ 96%]
+........................................................................ [ 97%]
+........................................................................ [ 98%]
+........................................................................ [ 99%]
+...............                                                          [100%]
+=================================== FAILURES ===================================
+___ TestFreezeEquivalentBuilder.test_capture_carries_the_windows_spec_policy ___
+tests/test_freeze_equivalent.py:139: in test_capture_carries_the_windows_spec_policy
+    policy = fe.capture_spec()
+             ^^^^^^^^^^^^^^^^^
+tools/freeze_equivalent.py:104: in capture_spec
+    import PyInstaller  # noqa: F401 - presence check
+    ^^^^^^^^^^^^^^^^^^
+E   ModuleNotFoundError: No module named 'PyInstaller'
+=============================== warnings summary ===============================
+tests/test_active_learning.py: 25 warnings
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/base.py:493: UserWarning: X does not have valid feature names, but RandomForestClassifier was fitted with feature names
+    warnings.warn(
+
+tests/test_active_learning.py::TestWorkflowContract::test_custom_model_accepted
+tests/test_active_learning.py::TestWorkflowContract::test_custom_model_accepted
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/base.py:493: UserWarning: X does not have valid feature names, but LogisticRegression was fitted with feature names
+    warnings.warn(
+
+tests/test_calibration.py::TestCalibrateCli::test_bundle_flow_reports_and_writes_table
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/base.py:486: UserWarning: X has feature names, but LogisticRegression was fitted without feature names
+    warnings.warn(
+
+tests/test_cli_features.py::TestMLTuneCommand::test_random_search_regression_with_out_and_save_best
+tests/test_cli_features.py::TestMLTuneCommand::test_random_search_regression_with_out_and_save_best
+tests/test_tuner.py::TestRandomSearch::test_search_scores_and_refits_the_best
+tests/test_tuner.py::TestRandomSearch::test_on_trial_progress_payloads
+tests/test_tuner.py::TestTPESearch::test_search_scores_a_learnable_surface
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/neural_network/_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (700) reached and the optimization hasn't converged yet.
+    warnings.warn(
+
+tests/test_cli_features.py::TestMLTuneCommand::test_float_targets_flip_to_regression
+tests/test_cli_features.py::TestMLTuneCommand::test_float_targets_flip_to_regression
+tests/test_cli_features.py::TestMLTuneCommand::test_float_targets_flip_to_regression
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/neural_network/_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (500) reached and the optimization hasn't converged yet.
+    warnings.warn(
+
+tests/test_cli_features.py: 18 warnings
+tests/test_tuner.py: 54 warnings
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/neural_network/_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (1) reached and the optimization hasn't converged yet.
+    warnings.warn(
+
+tests/test_cli_features.py: 16 warnings
+tests/test_tuner.py: 48 warnings
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/neural_network/_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (3) reached and the optimization hasn't converged yet.
+    warnings.warn(
+
+tests/test_cli_features.py: 13 warnings
+tests/test_tuner.py: 39 warnings
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/neural_network/_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (9) reached and the optimization hasn't converged yet.
+    warnings.warn(
+
+tests/test_comparison.py::TestCompareSignificanceCLI::test_wilcoxon_and_correction_flags
+tests/test_power.py::TestCLIPowerFlag::test_wilcoxon_power_points_back_at_paired_t
+  /home/z/.venv/lib/python3.12/site-packages/scipy/stats/_wilcoxon.py:199: UserWarning: Sample size too small for normal approximation.
+    temp = _wilcoxon_iv(x, y, zero_method, correction, alternative, method, axis)
+
+tests/test_data_provenance.py::TestDocsDataReferences::test_docs_references_in_builder_inventory
+tests/test_data_provenance.py::TestBuilderRoundTrip::test_check_mode_reports_no_drift
+tests/test_data_provenance.py::TestBuilderRoundTrip::test_check_mode_flags_planted_drift
+  /home/z/.local/share/uv/python/cpython-3.12.16-linux-x86_64-gnu/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=16490) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    self.pid = os.fork()
+
+tests/test_docking_prep.py::TestProteinMeekoPipeline::test_broken_residue_raises_docking_error
+  /home/z/.venv/lib/python3.12/site-packages/meeko/polymer.py:1237: RuntimeWarning: Input residues {'A:1': 'XXX'} not in residue_templates
+  
+    warnings.warn(err, RuntimeWarning)
+
+tests/test_docking_prep.py::TestProteinMeekoPipeline::test_broken_residue_raises_docking_error
+  /home/z/.venv/lib/python3.12/site-packages/meeko/polymer.py:1238: RuntimeWarning: Trying to resolve unknown residues by building chemical templates... 
+    warnings.warn("Trying to resolve unknown residues by building chemical templates... ", RuntimeWarning)
+
+tests/test_evaluation_auc_integrity.py: 3 warnings
+tests/test_ml_pipeline.py: 3 warnings
+tests/test_subgroups.py: 63 warnings
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/metrics/_classification.py:409: UserWarning: A single label was found in 'y_true' and 'y_pred'. For the confusion matrix to have the correct shape, use the 'labels' parameter to pass all known labels.
+    warnings.warn(
+
+tests/test_features.py::TestFilterLowVariance::test_inf_poisoned_column_is_cut
+tests/test_features.py::TestFilterLowVariance::test_inf_column_agrees_with_ranker_undefined
+tests/test_features.py::TestFilterLowVariance::test_inf_column_agrees_with_ranker_undefined
+  /home/z/.venv/lib/python3.12/site-packages/pandas/core/nanops.py:1016: RuntimeWarning: invalid value encountered in subtract
+    sqr = _ensure_numeric((avg - values) ** 2)
+
+tests/test_freeze_equivalent.py::TestSmokeDriver::test_full_unfrozen_run_verdict_pass
+  /home/z/.venv/lib/python3.12/site-packages/ddtrace/internal/module.py:313: PythonQtWarning: Selected binding 'pyqt5' could not be found; falling back to 'pyside6'
+    self.loader.exec_module(module)
+
+tests/test_freeze_equivalent.py::TestSmokeDriver::test_full_unfrozen_run_verdict_pass
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/base.py:486: UserWarning: X has feature names, but SelfTrainingClassifier was fitted without feature names
+    warnings.warn(
+
+tests/test_manifold.py::TestManifoldEmbedding::test_every_method_returns_two_d_coords[isomap]
+tests/test_manifold.py::TestManifoldEmbedding::test_one_d_output_supported
+tests/test_manifold.py::TestManifoldEmbedding::test_params_recorded_for_replay
+tests/test_viz.py::TestUnsupervisedPlots::test_manifold_scatter_three_colour_modes
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/manifold/_isomap.py:383: UserWarning: The number of connected components of the neighbors graph is 3 > 1. Completing the graph to fit Isomap might be slow. Increase the number of neighbors to avoid this issue.
+    self._fit_transform(X)
+
+tests/test_manifold.py: 9 warnings
+tests/test_viz.py: 3 warnings
+  /home/z/.venv/lib/python3.12/site-packages/scipy/sparse/_index.py:108: SparseEfficiencyWarning: Changing the sparsity structure of a csr_matrix is expensive. lil and dok are more efficient.
+    self._set_intXint(row, col, x.flat[0])
+
+tests/test_manifold.py::TestManifoldEmbedding::test_every_method_returns_two_d_coords[spectral]
+tests/test_manifold.py::TestManifoldEmbedding::test_seeded_methods_are_deterministic
+tests/test_manifold.py::TestManifoldEmbedding::test_seeded_methods_are_deterministic
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/manifold/_spectral_embedding.py:329: UserWarning: Graph is not fully connected, spectral embedding may not work as expected.
+    warnings.warn(
+
+tests/test_md_plots.py::test_correlation_ligand_values_and_undefined_constant
+tests/test_viz_md_plots.py::TestPlotMDCorrelation::test_constant_series_nan_disclosure
+  /home/z/.venv/lib/python3.12/site-packages/numpy/lib/function_base.py:2897: RuntimeWarning: invalid value encountered in divide
+    c /= stddev[:, None]
+
+tests/test_md_plots.py::test_correlation_ligand_values_and_undefined_constant
+tests/test_viz_md_plots.py::TestPlotMDCorrelation::test_constant_series_nan_disclosure
+  /home/z/.venv/lib/python3.12/site-packages/numpy/lib/function_base.py:2898: RuntimeWarning: invalid value encountered in divide
+    c /= stddev[None, :]
+
+tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_compare_keeps_nan_row_and_warns_on_degenerate_target
+tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_compare_keeps_nan_row_and_warns_on_degenerate_target
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/model_selection/_validation.py:982: UserWarning: Scoring failed. The score on this train-test partition for these parameters will be set to nan. Details: 
+  Traceback (most recent call last):
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/model_selection/_validation.py", line 971, in _score
+      scores = scorer(estimator, X_test, y_test, **score_params)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/metrics/_scorer.py", line 279, in __call__
+      return self._score(partial(_cached_call, None), estimator, X, y_true, **_kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/metrics/_scorer.py", line 371, in _score
+      y_pred = method_caller(
+               ^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/metrics/_scorer.py", line 89, in _cached_call
+      result, _ = _get_response_values(
+                  ^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/utils/_response.py", line 214, in _get_response_values
+      y_pred = _process_predict_proba(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/utils/_response.py", line 51, in _process_predict_proba
+      raise ValueError(
+  ValueError: Got predict_proba of shape (47, 1), but need classifier with two classes.
+  
+    warnings.warn(
+
+tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_compare_keeps_nan_row_and_warns_on_degenerate_target
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/model_selection/_validation.py:982: UserWarning: Scoring failed. The score on this train-test partition for these parameters will be set to nan. Details: 
+  Traceback (most recent call last):
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/model_selection/_validation.py", line 971, in _score
+      scores = scorer(estimator, X_test, y_test, **score_params)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/metrics/_scorer.py", line 279, in __call__
+      return self._score(partial(_cached_call, None), estimator, X, y_true, **_kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/metrics/_scorer.py", line 371, in _score
+      y_pred = method_caller(
+               ^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/metrics/_scorer.py", line 89, in _cached_call
+      result, _ = _get_response_values(
+                  ^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/utils/_response.py", line 214, in _get_response_values
+      y_pred = _process_predict_proba(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/utils/_response.py", line 51, in _process_predict_proba
+      raise ValueError(
+  ValueError: Got predict_proba of shape (46, 1), but need classifier with two classes.
+  
+    warnings.warn(
+
+tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/model_selection/_split.py:776: UserWarning: The least populated class in y has only 1 members, which is less than n_splits=5.
+    warnings.warn(
+
+tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/model_selection/_validation.py:982: UserWarning: Scoring failed. The score on this train-test partition for these parameters will be set to nan. Details: 
+  Traceback (most recent call last):
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/model_selection/_validation.py", line 971, in _score
+      scores = scorer(estimator, X_test, y_test, **score_params)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/metrics/_scorer.py", line 279, in __call__
+      return self._score(partial(_cached_call, None), estimator, X, y_true, **_kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/metrics/_scorer.py", line 376, in _score
+      return self._sign * self._score_func(y_true, y_pred, **scoring_kwargs)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/utils/_param_validation.py", line 213, in wrapper
+      return func(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/metrics/_ranking.py", line 640, in roc_auc_score
+      return _average_binary_score(
+             ^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/metrics/_base.py", line 76, in _average_binary_score
+      return binary_metric(y_true, y_score, sample_weight=sample_weight)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/metrics/_ranking.py", line 382, in _binary_roc_auc_score
+      raise ValueError(
+  ValueError: Only one class present in y_true. ROC AUC score is not defined in that case.
+  
+    warnings.warn(
+
+tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/model_selection/_validation.py:540: FitFailedWarning: 
+  1 fits failed out of a total of 5.
+  The score on these train-test partitions for these parameters will be set to nan.
+  If these failures are not expected, you can try to debug them by setting error_score='raise'.
+  
+  Below are more details about the failures:
+  --------------------------------------------------------------------------------
+  1 fits failed with the following error:
+  Traceback (most recent call last):
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/model_selection/_validation.py", line 888, in _fit_and_score
+      estimator.fit(X_train, y_train, **fit_params)
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/base.py", line 1473, in wrapper
+      return fit_method(estimator, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/pipeline.py", line 473, in fit
+      self._final_estimator.fit(Xt, y, **last_step_params["fit"])
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/base.py", line 1473, in wrapper
+      return fit_method(estimator, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "/home/z/.venv/lib/python3.12/site-packages/sklearn/linear_model/_logistic.py", line 1301, in fit
+      raise ValueError(
+  ValueError: This solver needs samples of at least 2 classes in the data, but the data contains only one class: 0
+  
+    warnings.warn(some_fits_failed_message, FitFailedWarning)
+
+tests/test_ml_pipeline.py::TestTrainingEdgeCases::test_train_all_nan_cv_scores_warns_and_keeps_result
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/model_selection/_search.py:1103: UserWarning: One or more of the test scores are non-finite: [nan]
+    warnings.warn(
+
+tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+tests/test_ml_pipeline.py::TestPermutationImportance::test_dataframe_columns_become_names
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/base.py:493: UserWarning: X does not have valid feature names, but LinearRegression was fitted with feature names
+    warnings.warn(
+
+tests/test_ml_pipeline.py::TestGaussianProcessClassifierFamily::test_kernel_grid_tuning
+tests/test_ml_pipeline.py::TestGaussianProcessClassifierFamily::test_kernel_grid_tuning
+tests/test_ml_pipeline.py::TestGaussianProcessClassifierFamily::test_kernel_grid_tuning
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/gaussian_process/kernels.py:452: ConvergenceWarning: The optimal value found for dimension 0 of parameter k2__alpha is close to the specified upper bound 100000.0. Increasing the bound and calling fit again may find a better value.
+    warnings.warn(
+
+tests/test_subgroups.py::TestSubgroupGap::test_worse_group_is_flagged_and_delta_is_negative
+tests/test_subgroups.py::TestSubgroupGap::test_better_group_is_flagged
+tests/test_subgroups.py::TestSubgroupGap::test_regression_gap_uses_rmse_direction
+tests/test_subgroups.py::TestSubgroupGap::test_significant_when_the_gap_is_total_and_large
+tests/test_subgroups.py::TestSubgroupGapScan::test_regression_scan_defaults_to_rmse
+tests/test_subgroups.py::TestSubgroupGapScan::test_regression_scan_defaults_to_rmse
+tests/test_subgroups.py::TestSubgroupGapScan::test_nan_p_value_is_left_out_of_the_family
+tests/test_subgroups.py::TestSubgroupGapScan::test_nan_p_value_is_left_out_of_the_family
+  /home/z/.venv/lib/python3.12/site-packages/scipy/stats/_axis_nan_policy.py:573: RuntimeWarning: Precision loss occurred in moment calculation due to catastrophic cancellation. This occurs when the data are nearly identical. Results may be unreliable.
+    res = hypotest_fun_out(*samples, **kwds)
+
+tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+tests/test_tuner.py::TestRandomSearch::test_failed_trials_are_recorded_not_fatal
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/neural_network/_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (50) reached and the optimization hasn't converged yet.
+    warnings.warn(
+
+tests/test_tuner.py::TestRandomSearch::test_classification_objective
+tests/test_tuner.py::TestRandomSearch::test_classification_objective
+tests/test_tuner.py::TestRandomSearch::test_classification_objective
+tests/test_tuner.py::TestTPESearch::test_startup_trials_reproduce_random_search
+tests/test_tuner.py::TestTPESearch::test_startup_trials_reproduce_random_search
+tests/test_tuner.py::TestTPESearch::test_startup_trials_reproduce_random_search
+tests/test_tuner.py::TestTPESearch::test_startup_trials_reproduce_random_search
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/neural_network/_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (300) reached and the optimization hasn't converged yet.
+    warnings.warn(
+
+tests/test_tuner.py::TestResourceBounds::test_the_declared_grid_sizes_a_real_hyperband
+tests/test_tuner.py::TestResourceBounds::test_the_declared_grid_sizes_a_real_hyperband
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/neural_network/_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (333) reached and the optimization hasn't converged yet.
+    warnings.warn(
+
+tests/test_tuner.py::TestTPESearch::test_determinism_twin
+tests/test_tuner.py::TestTPESearch::test_determinism_twin
+tests/test_tuner.py::TestTPESearch::test_determinism_twin
+tests/test_tuner.py::TestTPESearch::test_determinism_twin
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/neural_network/_multilayer_perceptron.py:690: ConvergenceWarning: Stochastic Optimizer: Maximum iterations (200) reached and the optimization hasn't converged yet.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_freeze_equivalent.py::TestFreezeEquivalentBuilder::test_capture_carries_the_windows_spec_policy
+exit=1

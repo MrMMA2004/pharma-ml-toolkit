@@ -1,0 +1,39 @@
+=== r333 agent-browser E2E (the release round) 2026-11-22T16:18:01Z ===
+✓ Console log cleared
+✓ Page errors cleared
+✓ PharmaML Toolkit — ML · Pharma · Docking
+  http://127.0.0.1:3000/
+PharmaML Toolkit — ML · Pharma · Docking
+http://127.0.0.1:3000/#/overview
+---FOOTER-GEOMETRY---
+"{\"footerCount\":1,\"footerBottom\":7882,\"docHeight\":7882,\"equal\":true}"
+---INTERACTION: Playground---
+playground ref: e303
+✓ Done
+---TABLIST---
+- tablist [ref=e347] focusable [tabindex]
+  - tab "Calculators" [selected, ref=e352]
+    - StaticText "Calculators"
+  - tab "PK / PD" [ref=e353]
+    - StaticText "PK / PD"
+  - tab "ML Training" [ref=e354]
+    - StaticText "ML Training"
+  - tab "Cell Line Bio" [ref=e355]
+    - StaticText "Cell Line Bio"
+  - tab "Docking Parser" [ref=e356]
+    - StaticText "Docking Parser"
+  - tab "Features" [ref=e357]
+    - StaticText "Features"
+  - tab "Ligand Prep" [ref=e358]
+    - StaticText "Session report"
+    - StaticText "opens "
+---PINS---
+✓ Done
+✓ Screenshot saved to pharma-ml-toolkit/docs/gui/screenshots/p14r333-pins-desktop.png
+✓ Done
+✓ Screenshot saved to pharma-ml-toolkit/docs/gui/screenshots/p14r333-pins-mobile.png
+---FINAL-ERRORS---
+---FINAL-CONSOLE---
+---ROUND-CLOSE-GATES---
+GET / -> 200
+GET /api/toolkit/zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}
