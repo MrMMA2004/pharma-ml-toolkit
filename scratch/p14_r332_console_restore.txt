@@ -1,0 +1,16 @@
+
+=== r332 one-window makeup (the reaper's strike #1 this round) 2026-11-22T15:32:54Z
+GET / -> 000
+GET /api/toolkit/zip-size -> 
+=== r332 restore #2 (server death during reinstall -> fresh restart) 2026-11-22T15:33:11Z
+GET / -> 000
+GET /api/toolkit/zip-size -> 
+=== r332 restore #3 (the one-window makeup, server-restart form) 2026-11-22T15:34:21Z
+GET / -> 200
+GET /api/toolkit/zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}
+=== r332 restore #4 (the browser-open-boundary strike, makeup) 2026-11-22T15:35:38Z
+GET / -> 200
+GET /api/toolkit/zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}
+=== r332 round-close restore 2026-11-22T15:37:33Z
+GET / -> 200
+GET /api/toolkit/zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}

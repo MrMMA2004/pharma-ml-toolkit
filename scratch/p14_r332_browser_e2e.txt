@@ -1,0 +1,62 @@
+=== r332 agent-browser E2E (light verification round) 2026-11-22T15:34:44Z ===
+✓ Console log cleared
+✓ Page errors cleared
+✗ Navigation failed: net::ERR_CONNECTION_REFUSED
+127.0.0.1
+---FOOTER-GEOMETRY---
+---HEADER-VERSION---
+"no-version-string"
+
+--- BROWSER E2E (retry post-restore) ---
+✗ Navigation failed: net::ERR_CONNECTION_RESET
+127.0.0.1
+chrome-error://chromewebdata/
+---FOOTER-GEOMETRY---
+---HEADER-VERSION---
+"no-version-string"
+---PAGE-ERRORS---
+---CONSOLE---
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+
+--- BROWSER E2E (atomic window: server + E2E in one command) ---
+✓ PharmaML Toolkit — ML · Pharma · Docking
+  http://127.0.0.1:3000/
+PharmaML Toolkit — ML · Pharma · Docking
+http://127.0.0.1:3000/#/overview
+---FOOTER-GEOMETRY---
+"{\"footerCount\":1,\"footerBottom\":7882,\"docHeight\":7882,\"equal\":true}"
+---HEADER-VERSION---
+"v1.2.142"
+---INTERACTION: Playground tab---
+playground ref: e161
+✓ Done
+---TABLIST---
+- tablist [ref=e205] focusable [tabindex]
+  - tab "Calculators" [selected, ref=e210]
+    - StaticText "Calculators"
+  - tab "PK / PD" [ref=e211]
+    - StaticText "PK / PD"
+  - tab "ML Training" [ref=e212]
+    - StaticText "ML Training"
+  - tab "Cell Line Bio" [ref=e213]
+    - StaticText "Cell Line Bio"
+  - tab "Docking Parser" [ref=e214]
+    - StaticText "Docking Parser"
+  - tab "Features" [ref=e215]
+    - StaticText "Features"
+  - tab "Ligand Prep" [ref=e216]
+    - StaticText "Ligand Prep"
+    - StaticText "Session report"
+    - StaticText "opens "
+---PINS---
+✓ Done
+✓ Screenshot saved to pharma-ml-toolkit/docs/gui/screenshots/p14r332-pins-desktop.png
+✓ Done
+✓ Screenshot saved to pharma-ml-toolkit/docs/gui/screenshots/p14r332-pins-mobile.png
+---FINAL-ERRORS---
+---FINAL-CONSOLE---
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+---ROUND-CLOSE-GATES---
+GET / -> 200
+GET /api/toolkit/zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}

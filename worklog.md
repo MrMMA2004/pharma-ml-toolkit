@@ -17977,3 +17977,71 @@ captured in `scratch/p14_r331_*`)**:
 header; the counter 122 → 123; the round's payload (the r331
 evidence set + the pins pair + the three re-pinned QA docs + the
 ledger) committed and pushed over `a6cc830b`.
+
+## Round 332 — the 124th recorded run (the part14 verification round: the twenty-second arrival, light class — the r331 CI verdict closed GREEN, every gate re-pinned over the atomic-window doctrine; trace 1a203df0897e1065)
+
+**The arrival state (the twenty-second arrival — light class)**:
+git history at the r331 terminal `74c31594` with ONE machinery UUID
+child on top (`c22a421d`, 22 residue paths — the scratch evidence
+copies + the retired-era zips + the part14.txt prompt copy, NO
+token material, the `013b3ff4` hardening holding); `origin/main`
+already at `74c31594` (the r331 ledger pushed clean — divergence
+0/1 pre-sweep); the working tree clean at the r331 bytes; the venv
+surviving intact and pin-exact (numpy 1.26.4 / sklearn 1.5.2
+importable live); the libEGL user-mode workaround surviving at
+`/home/z/.local/lib/egl`; the root web console DEAD (nothing
+listening on 3000 — the dev server died at the prior round's end;
+the root node_modules wiped by the reaper, `next: command not
+found`); the Studio frontend node_modules wiped (not needed for
+this round's legs — the vitest/tsc pins stand on the r331 runs
+over the identical terminal bytes).
+
+**The round's work — the standing verification/maintenance leg:**
+
+- **The ghost sweep**: the UUID commit inspected (all 22 paths
+  residue class, zero token material) and reset away per the
+  established convention — `git reset --hard 74c31594`; divergence
+  0/0; the tree understood at the r332 evidence set only
+  (12 untracked paths, all `p14_r332_*` + the pins pair).
+- **The natural queued item CLOSED**: the r331 CI verdict —
+  `74c31594` (the pushed r331 terminal) **19/19 check-runs
+  success via the authenticated API**, identity MrMMA2004 (the
+  masked-credential discipline held: the token read inside the
+  process only). Evidence: `scratch/p14_r332_ci_verdict.txt`.
+- **The reaper's densest cadence countered**: root node_modules
+  wiped five-plus times this round (the install itself completing
+  then the tree vanishing seconds later; the dev server dying with
+  each spawning-command's end — even `setsid` nohup children not
+  surviving the command boundary under the strike cadence). The
+  counter: **the atomic-window doctrine** — the entire verification
+  battery (install → `setsid` server → E2E → pins → round-close
+  gates) executed inside ONE command window; the makeup restores
+  banked at 200 + the zip-size API exact on every leg (evidence:
+  `scratch/p14_r332_console_restore.txt`).
+- **The gates re-pinned** (live this round unless stated):
+  - `tests/api/test_trusted_origins.py` — **34 passed in 5.76s**
+    (exit 0) over the surviving pin-exact venv — the security lane
+    re-pinned live.
+  - The web console — **the render 200 + the zip-size API
+    `{"zipBytes":23489390,"version":"1.2.240","exact":true,
+    "source":"release"}`** — exact parity with the r331 terminal
+    bytes across the makeup restores; no re-ship (no tree change;
+    the shipped fixed point stands).
+  - The agent-browser E2E over the LIVE console — **zero page
+    errors, zero console errors**; the Playground interaction
+    rendering the ten-tab ML surface (the tablist + the
+    session-report system); **the footer geometry measured exact**
+    (one semantic `<footer>`, bottom 7882 == docHeight 7882 —
+    natural push-down, never overlapping); the pins pair
+    `docs/gui/screenshots/p14r332-pins-{desktop,mobile}.png`
+    captured full-page at 1440px + 390px.
+  - The heavier battery — tests/api 449+1s, the census 8,589/0,
+    vitest 119/119, tsc clean, ruff + mypy clean — **standing on
+    the r331 runs over the identical terminal bytes** (the tree
+    unchanged since; the venv verified importable and pin-exact at
+    this arrival).
+
+**The ledger**: the r332 lineage appended to the PROJECT_STATUS
+header; the counter 123 → 124; the round's payload (the r332
+evidence set + the pins pair + the ledger) committed and pushed
+over `74c31594`.

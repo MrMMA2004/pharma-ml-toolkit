@@ -172,7 +172,29 @@ summarises them and wins any status disagreement.
   exact + the r331 pins pair) + the three living QA docs re-pinned
   (the release report's G/D gates, the BLK-6 rollback-class row + the
   r331 unblockings, the baselines' measured rows) + the r331 ledger
-  committed and pushed over `a6cc830b`.
+  committed and pushed over `a6cc830b`. The part14 verification
+  round 332 — the interactive part14 continuation, trace
+  1a203df0897e1065, over the twenty-second arrival (light class —
+  the machinery UUID ghost `c22a421d` with its 22 residue paths
+  reset away unpushed per the established convention, NO token
+  material in it, the `013b3ff4` hardening holding; `origin` at
+  the r331 terminal `74c31594`, the venv + the libEGL workaround
+  surviving intact; the reaper wiping root node_modules five-plus
+  times at a denser cadence than any prior round, the dev server
+  dying with each spawning-command's end — countered by the
+  atomic-window doctrine, the whole verification battery run
+  inside one command window): the standing verification/maintenance
+  leg — the natural queued item closed (the r331 CI verdict GREEN:
+  `74c31594` 19/19 check-runs success via the authenticated API)
+  + the gates re-pinned (trusted-origins 34/34 in 5.76s live; the
+  console render 200 + the zip-size API 23,489,390 exact:true on
+  the terminal bytes across the makeup restores; the agent-browser
+  E2E zero page/console errors + the Playground ten-tab surface +
+  the footer geometry exact bottom==docHeight + the r332 pins
+  pair; the heavier battery — tests/api, the census, vitest, tsc,
+  ruff/mypy — standing on the r331 runs over the identical terminal
+  bytes, the venv verified importable and pin-exact at this
+  arrival) + the r332 ledger committed and pushed over `74c31594`.
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
