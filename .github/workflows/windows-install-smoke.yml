@@ -264,7 +264,11 @@ jobs:
             if ($code -eq 0) {
               Write-Host "DEFENDER OK: $name clean"
             } elseif ($code -eq 2) {
-              Write-Host "::error::DEFENDER DETECTED a threat in $name:`n$text"
+              # $($name): the subexpression form — the bare $name: parse
+              # hazard (the second dispatch's catch: PowerShell read
+              # the colon as a scope qualifier and the step died at
+              # PARSE time before Defender ever ran)
+              Write-Host "::error::DEFENDER DETECTED a threat in $($name):`n$($text)"
               exit 1
             } else {
               Write-Host "DEFENDER-SCAN: INCONCLUSIVE for $name (MpCmdRun exit $code) — recorded, never a silent pass"
