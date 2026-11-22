@@ -183,7 +183,15 @@ jobs:
             Write-Host "SHA256 OK: $name = $actualHash"
             $listed[$name] = $true
           }
+          # the coverage sweep: every downloaded asset must be listed —
+          # EXCEPT the sumfile itself (a checksum file can never
+          # contain its own hash; the release pipeline's step 22
+          # excludes it at generation with the same rule). The first
+          # dispatch (run 45078553767) failed exactly here: the
+          # sweep flagged SHA256SUMS.txt as unlisted — fixed at the
+          # source, never by weakening the check.
           foreach ($f in (Get-ChildItem $dest -File)) {
+            if ($f.Name -eq "SHA256SUMS.txt") { continue }
             if (-not $listed.ContainsKey($f.Name)) {
               Write-Host "::error::unlisted asset rides the release: $($f.Name) — SHA256SUMS.txt must cover it"
               exit 1
@@ -202,8 +210,15 @@ jobs:
             Write-Host "::error::manifest version '$($manifest.version)' != the tag's version '$($env:RELEASE_VERSION)'"
             exit 1
           }
-          if ($manifest.commit -ne $env:GITHUB_SHA) {
-            Write-Host "::error::manifest commit $($manifest.commit) != the checked-out tag revision $env:GITHUB_SHA — the tag moved after the build"
+          # the manifest's build commit must equal the revision the
+          # tag checkout ACTUALLY landed on — resolved from the
+          # workspace, NOT $env:GITHUB_SHA (a workflow_dispatch on
+          # main carries main's HEAD as GITHUB_SHA, while step 1
+          # checked out the TAG; the first-dispatch audit caught this
+          # class before it could misfire)
+          $checkoutSha = (git rev-parse HEAD).Trim()
+          if ($manifest.commit -ne $checkoutSha) {
+            Write-Host "::error::manifest commit $($manifest.commit) != the checked-out tag revision $checkoutSha — the tag moved after the build"
             exit 1
           }
           foreach ($a in $manifest.artifacts) {
@@ -217,7 +232,7 @@ jobs:
           }
           "manifest: product=$($manifest.product) version=$($manifest.version) runner=$($manifest.runner) webview2=$($manifest.webview2)" |
             Add-Content "$env:EVIDENCE_DIR/manifest-crosscheck.txt"
-          Write-Host "MANIFEST VERIFIED: version + commit ($($manifest.commit.Substring(0,8))) + artifact bytes"
+          Write-Host "MANIFEST VERIFIED: version + commit ($($checkoutSha.Substring(0,8))) + artifact bytes"
 
       # ---- 5. Windows Defender scan of both installers -------------
       # The BLK-1 antivirus leg on a genuinely clean machine: exit 0
