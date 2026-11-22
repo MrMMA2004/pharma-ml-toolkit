@@ -792,9 +792,19 @@ jobs:
       # ---- 13. the upgrade leg (v1.2.231 -> v1.2.240) -------------
       # §10's upgrade + user-data retention lane, CI-executed: install
       # the previous published MSI, plant a marker in the identifier's
-      # user-data dir, upgrade in place, verify the version moved and
-      # the marker survived. The full DB/artifact persistence lane
-      # still rides the box (honest scope).
+      # user-data dir, install the current release over it, verify the
+      # version + the marker survived, and RECORD the cross-scope
+      # behavior honestly. The seventh dispatch's discovery shaped
+      # this leg: the v1.2.231-era MSI installs PER-USER under
+      # %LOCALAPPDATA%\PharmaML while the v1.2.240 MSI installs
+      # PER-MACHINE under Program Files\PharmaML Studio — the two
+      # generations do NOT share a home, so the leg discovers each
+      # root empirically (the step-6 pattern: probe candidates, then
+      # the version-resource fallback) and records whether the old
+      # per-user tree survives the new per-machine install (the
+      # side-by-side verdict — exactly the upgrade behavior §10 asks
+      # about). The full DB/artifact persistence lane still rides the
+      # box (honest scope).
       - name: "13. The upgrade leg (previous release -> current, user-data retention)"
         shell: pwsh
         env:
@@ -825,43 +835,49 @@ jobs:
             Write-Host "::error::the previous MSI ($prevVersion) install failed (exit $($p.ExitCode))"
             exit 1
           }
-          $root = Join-Path $env:ProgramFiles "PharmaML Studio"
-          # the host exe keeps its CARGO name (pharmaml-studio.exe —
-          # the Tauri 2 mainBinaryName default, the third dispatch's
-          # discovery) — probe the same candidates at this path
-          $app = $null
-          foreach ($cand in @(
-            (Join-Path $root "pharmaml-studio.exe"),
-            (Join-Path $root "PharmaML Studio.exe")
-          )) {
-            if (Test-Path $cand) { $app = $cand; break }
-          }
+          # discover the previous install's ACTUAL root — both scopes'
+          # candidate homes, then any exe carrying the previous version
+          $prevHomes = @(
+            (Join-Path $env:LOCALAPPDATA "PharmaML"),
+            (Join-Path $env:LOCALAPPDATA "PharmaML Studio"),
+            (Join-Path $env:ProgramFiles "PharmaML Studio"),
+            (Join-Path $env:ProgramFiles "PharmaML")
+          )
+          $prevApp = $null
           $deadline = (Get-Date).AddSeconds(120)
-          while (-not $app -and (Get-Date) -lt $deadline) {
-            Start-Sleep -Seconds 2
-            foreach ($cand in @(
-              (Join-Path $root "pharmaml-studio.exe"),
-              (Join-Path $root "PharmaML Studio.exe")
-            )) {
-              if (Test-Path $cand) { $app = $cand; break }
+          while (-not $prevApp -and (Get-Date) -lt $deadline) {
+            foreach ($home in $prevHomes) {
+              if (-not (Test-Path $home)) { continue }
+              $found = Get-ChildItem $home -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -ne "pharmaml-backend.exe" -and
+                  ($_.VersionInfo.ProductVersion -like "$prevVersion*") } |
+                Select-Object -First 1
+              if ($found) { $prevApp = $found.FullName; break }
             }
+            if (-not $prevApp) { Start-Sleep -Seconds 3 }
           }
-          if (-not $app) {
-            Write-Host "::error::the previous install's host exe never appeared"
+          if (-not $prevApp) {
+            foreach ($home in $prevHomes) {
+              "  prev-home $home exists=$(Test-Path $home)" | Write-Host
+            }
+            Write-Host "::error::the previous install's host exe (ProductVersion $prevVersion) was not discovered under any candidate home"
             exit 1
           }
-          $prevInstalled = (Get-Item $app).VersionInfo.ProductVersion
+          $prevRoot = Split-Path $prevApp
+          $prevInstalled = (Get-Item $prevApp).VersionInfo.ProductVersion
           if (-not ($prevInstalled -like "$prevVersion*")) {
             Write-Host "::error::the fresh install reports ProductVersion '$prevInstalled', expected $prevVersion"
             exit 1
           }
-          Write-Host "UPGRADE LEG: previous release $prevVersion installed (ProductVersion $prevInstalled)"
+          "upgrade leg: the previous $prevVersion install discovered at $prevRoot (ProductVersion $prevInstalled)" |
+            Add-Content "$env:EVIDENCE_DIR/upgrade-leg.txt"
+          Write-Host "UPGRADE LEG: previous release $prevVersion installed (discovered at $prevRoot)"
           # plant the user-data marker in the identifier's roaming dir
           $userData = Join-Path $env:APPDATA "com.pharmaml.studio"
           New-Item -ItemType Directory -Force $userData | Out-Null
           $marker = Join-Path $userData "smoke-upgrade-marker.txt"
           Set-Content $marker "pharmaml install-smoke upgrade marker (round 336 leg)"
-          # the in-place upgrade to the current release
+          # the current release installed over it
           $msi = Join-Path $env:ASSET_DIR "PharmaML_Studio_v$($env:RELEASE_VERSION).msi"
           $log2 = "$env:EVIDENCE_DIR/upgrade-upgrade.log"
           $p2 = Start-Process msiexec.exe `
@@ -871,16 +887,30 @@ jobs:
             Write-Host "::error::the upgrade to $($env:RELEASE_VERSION) failed (exit $($p2.ExitCode)) — see upgrade-upgrade.log"
             exit 1
           }
-          Start-Sleep -Seconds 5
+          # discover the CURRENT install's root (the step-6 pattern)
+          $curHomes = @(
+            (Join-Path $env:ProgramFiles "PharmaML Studio"),
+            (Join-Path $env:LOCALAPPDATA "PharmaML Studio"),
+            (Join-Path $env:LOCALAPPDATA "PharmaML")
+          )
+          $curApp = $null
           $deadline = (Get-Date).AddSeconds(120)
-          while (-not (Test-Path $app) -and (Get-Date) -lt $deadline) {
-            Start-Sleep -Seconds 2
+          while (-not $curApp -and (Get-Date) -lt $deadline) {
+            foreach ($home in $curHomes) {
+              if (-not (Test-Path $home)) { continue }
+              $found = Get-ChildItem $home -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -ne "pharmaml-backend.exe" -and
+                  ($_.VersionInfo.ProductVersion -like "$($env:RELEASE_VERSION)*") } |
+                Select-Object -First 1
+              if ($found) { $curApp = $found.FullName; break }
+            }
+            if (-not $curApp) { Start-Sleep -Seconds 3 }
           }
-          if (-not (Test-Path $app)) {
-            Write-Host "::error::the upgraded host exe never re-appeared at $app"
+          if (-not $curApp) {
+            Write-Host "::error::the current release's host exe (ProductVersion $($env:RELEASE_VERSION)) was not discovered after the upgrade"
             exit 1
           }
-          $upgradedTo = (Get-Item $app).VersionInfo.ProductVersion
+          $upgradedTo = (Get-Item $curApp).VersionInfo.ProductVersion
           if (-not ($upgradedTo -like "$($env:RELEASE_VERSION)*")) {
             Write-Host "::error::after the upgrade the install still reports ProductVersion '$upgradedTo', expected $($env:RELEASE_VERSION)"
             exit 1
@@ -889,11 +919,16 @@ jobs:
             Write-Host "::error::the upgrade WIPED the user-data marker ($marker) — the §10 leg-6 retention rule failed"
             exit 1
           }
-          "upgrade: $prevVersion -> $($env:RELEASE_VERSION) in place; the user-data marker retained" |
+          # the honest cross-scope record: does the previous
+          # per-user tree survive the current per-machine install?
+          $prevTreeSurvived = Test-Path $prevRoot
+          "upgrade: $prevVersion ($prevRoot) -> $($env:RELEASE_VERSION) ($curApp); the user-data marker retained; the previous tree survived=$prevTreeSurvived (the cross-scope side-by-side verdict)" |
             Add-Content "$env:EVIDENCE_DIR/upgrade-leg.txt"
-          Write-Host "UPGRADE OK: $prevVersion -> $($env:RELEASE_VERSION) in place, the user-data marker RETAINED"
-          # cleanup: uninstall the current release, verify removal,
-          # record the final user-data state
+          Write-Host "UPGRADE OK: $prevVersion -> $($env:RELEASE_VERSION) discovered at $curApp, the user-data marker RETAINED, the previous tree survived=$prevTreeSurvived"
+          # cleanup: uninstall the current release, remove the
+          # previous generation's leftover tree as the LANE's cleanup
+          # (recorded — the cross-scope upgrade leaves it behind),
+          # verify the final states
           $p3 = Start-Process msiexec.exe `
             -ArgumentList "/x", "`"$msi`"", "/qn", "/norestart" `
             -Wait -PassThru
@@ -901,18 +936,22 @@ jobs:
             Write-Host "::error::the post-upgrade cleanup uninstall failed (exit $($p3.ExitCode))"
             exit 1
           }
+          $curRoot = Split-Path $curApp
           $deadline = (Get-Date).AddSeconds(90)
-          while ((Test-Path $root) -and (Get-Date) -lt $deadline) {
+          while ((Test-Path $curRoot) -and (Get-Date) -lt $deadline) {
             Start-Sleep -Seconds 2
           }
-          if (Test-Path $root) {
-            Write-Host "::error::the install dir survived the post-upgrade uninstall: $root"
+          if (Test-Path $curRoot) {
+            Write-Host "::error::the current install dir survived the post-upgrade uninstall: $curRoot"
             exit 1
           }
+          if ($prevTreeSurvived) {
+            Remove-Item $prevRoot -Recurse -Force -ErrorAction SilentlyContinue
+          }
           $markerSurvived = Test-Path $marker
-          "upgrade-leg cleanup: install dir removed; user-data marker retained=$markerSurvived" |
+          "upgrade-leg cleanup: the current install dir removed; the previous generation's leftover tree removed=$(-not (Test-Path $prevRoot)); the user-data marker retained=$markerSurvived" |
             Add-Content "$env:EVIDENCE_DIR/upgrade-leg.txt"
-          Write-Host "UPGRADE-LEG CLEANUP OK: install dir removed, the user-data marker retained=$markerSurvived (the §10 leg-6 retention rule, file-marker form)"
+          Write-Host "UPGRADE-LEG CLEANUP OK: the current install removed, the previous leftover tree removed, the user-data marker retained=$markerSurvived (the §10 leg-6 retention rule, file-marker form)"
 
       # ---- 14. upload the evidence bundle ---------------------------
       # if: always() — the third dispatch's diagnosis needed the
