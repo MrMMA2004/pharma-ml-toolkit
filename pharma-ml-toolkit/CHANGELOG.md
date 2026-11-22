@@ -112,6 +112,86 @@
   backend already in-tree) rides the next continuation per
   PROJECT_STATUS §6. The next CI poll carries this round's push
   verdict.
+## [1.2.240 re-ship] — 2026-11-23 — round 324 (the 116th recorded run: the interactive part13 continuation, trace 1a20277c05a55795 — the Phase-6 REMAINDER, each small reversible tested: §15 resource monitoring, §17 security scanning, §18 documentation automation; the same-version re-ship per the r303..r323 convention)
+
+- **The fifteenth arrival — the deepest rollback class again, the
+  codified playbook executed clean**: the four-sentinel check found the
+  git history reset to the round-186-era machinery checkpoint `2eb0ede`,
+  origin detached, the 600-mode credential gone, the venv gutted (numpy
+  drifted to 2.1.3; torch/rdkit/pharmaml missing) and the tree carrying
+  ~1,370 rehydrated ghost files — while the counter SURVIVED at 115 with
+  round 323's full record and origin/main held the r323 close-out
+  `8e8515c2`. The recovery: the PAT re-spliced from the surviving text
+  extract (`scratch/pat_recover_r319.py`, masked, API-validated as
+  MrMMA2004, never printed), origin re-attached on the clean HTTPS URL
+  with the in-process credential-helper string form, `reset --hard
+  8e8515c2`, the 14 untracked ghost paths swept, `venv_repair.sh`
+  FOREGROUND (the full pinned stack + STUDIO-REPAIR-DONE), the Studio
+  frontend `npm ci`, the offsite mirror re-seeded (18 zips — the reset
+  restored a zip the r322-era disk lacked; the zip ritual's CURRENT pin
+  + count assertion trued in-commit 233→240 / 13→18), and the EXE002
+  exec-bit residue swept directionally (the rollback had marked
+  shebang-less modules executable; 102 files restored to their honest
+  bits — the r313/r323 precedent). The recovery gates re-verified at
+  the exact r323 pins before the lane opened: collection 8,525/0/467,
+  vitest 110/110 over 15 files, mypy clean, zip-size API 21,724,961
+  exact:true, all homes testzip-OK.
+- **§15 EXECUTED — the resource-monitoring API lane**
+  (`routes/system.py` + `tests/api/test_system.py`, 9 tests): `GET
+  /api/v1/system/resources` — the READ-ONLY snapshot over the host
+  (CPU/memory/swap/disk), this backend process (RSS/threads/CPU) and
+  the JobManager's own queue depth by state, with §15's preserve rule
+  verbatim (the manager's bounded concurrency, progress reporting and
+  cooperative cancellation untouched — only the visibility gap the
+  audit named gets closed). psutil (§15's own reference) is used when
+  importable and NEVER required — the fallback is the honest stdlib
+  subset with the absent numbers nulled + noted and the `source` flag
+  stating which branch answered; GPU monitoring stays deliberately
+  absent (§15's optional-GPU rule — no pynvml dependency); the scope
+  block rides every answer as a machine-readable contract (job
+  priorities, checkpointing, recovery-after-interruption and per-job
+  memory estimates stay honestly enumerated as queued).
+- **§17 EXECUTED — the supply-chain guard, both halves**: the CI-side
+  `.github/workflows/security-scan.yml` (weekly + dispatch: pip-audit
+  --strict over the pinned stack, npm audit --audit-level=high over the
+  locked frontend, and the local guard on the runner — §17's own rule
+  verbatim: network-facing scanning lives in CI, never the runtime;
+  the workflow never serves the app and never blocks the push lane) +
+  the offline 8-test local suite (`tests/test_security_supply_chain.py`):
+  the SBOM's CycloneDX validity + its coverage of the pinned core stack,
+  the exact-pin discipline of requirements.txt, the strict full-pattern
+  secret scan over src/tests/docs/tools/workflows (zero hits), the
+  `.credentials/` quarantine, and the workflow's own CI-only posture.
+- **§18 EXECUTED — the documentation-consistency guard**
+  (`tests/test_documentation_consistency.py`, 13 tests): the
+  version-carrier lockstep as a CI pin (VERSION == pyproject ==
+  `pharmaml.__version__` == frontend package.json == tauri.conf.json ==
+  version_info filevers == CHANGELOG lead == FEATURES freeze stamp ==
+  the web TS carrier), the §21 twelve-deliverable existence set, the
+  generated module index + its builder, and the ledger agreement — the
+  worklog's newest round entry must equal the counter's round + run
+  number (the stale-counter failure mode rounds 315/316/321 documented,
+  now machine-caught).
+- **The gates**: 30 new tests → the canonical collection re-trued
+  **8,555/0/470**; the lane + guard suites green (tests/api +
+  architecture-hygiene all-pass); ruff + mypy clean; the OpenAPI
+  contract re-exported (**109 paths** / 71 schemas) + the frontend
+  types regenerated + the contract drift tests 6/6; vitest 110/110
+  unchanged (no GUI lane this round). The census fixed point three-way
+  (walk = live API = page render): **1,704 files / 567,706 lines /
+  v1.2.240** (+6 files: the route + the three suites + the pins pair;
+  the pins trued 8,555/110/1,704/567,706 + the pins pair captured
+  desktop + 390px, zero page/console errors). The same-version re-ship:
+  the terminal-of-record at 22,092,317 B (sha-256 `19aa2d3f…`, 1,147
+  entries / 1,025 files, must-carry complete incl. the four r324 lane
+  files + the pins pair) — six-home parity ALL OK + the offsite mirror
+  at 18 + the zip-size API 22,092,317 exact:true source:release. Counter 115 → 116. Still honestly BLOCKED:
+  clean-machine smoke (C-3/C-5), Stage-5 PySide6 retirement, installer
+  signing (certificate-gated). **The Phase-6 remainder is CLOSED**
+  (workflow engine + GUI leg at r322/r323; resource monitoring,
+  security scanning, documentation automation here); Phase 7 rides the
+  next continuation per PROJECT_STATUS §6.
+
 ## [1.2.240 re-ship] — 2026-11-23 — round 323 (the 115th recorded run: the interactive part13 continuation, trace 1a2022c2d26dbc05 — the Phase-6 §8 GUI leg, the Workflow Builder stage over the r322 engine; the same-version re-ship per the r303/r304/r317/r319/r321/r322 convention)
 
 - **The fourteenth arrival recovered in minutes — the lightest

@@ -35,6 +35,7 @@ from . import (
     pkpd,
     repurposing,
     semi_supervised,
+    system,
     visualization,
     workflow,
 )
@@ -67,6 +68,7 @@ api_router.include_router(pharmacogenomics.router)
 api_router.include_router(multiobjective.router)
 api_router.include_router(workflow.router)
 api_router.include_router(database.router)
+api_router.include_router(system.router)
 
 ws_router = APIRouter(prefix="/api/v1")
 ws_router.include_router(events.router)

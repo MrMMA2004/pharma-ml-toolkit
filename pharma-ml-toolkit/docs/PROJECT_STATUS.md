@@ -108,9 +108,9 @@ summarises them and wins any status disagreement.
   authenticated check-runs poll (this round) |
 | Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.240 SOURCE archive shipped (four homes + offsite, 18 zips) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
 | Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.240 | read directly this session, lockstep guard green |
-| Test surface | 8,525 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 467 files — the r323 re-true: +2 the workflow-lane drift guards over the r322 +39) — PLUS the component-test lane: 110 Vitest tests / 15 files over the Studio frontend (+8 the r323 Workflow Builder suite: the registry line, the template chain, the validate/run round trips, the 422 verbatim, the client-side gate, the job relay, the runs ledger) | fresh collection + vitest this round |
-| Census | 1,693 files / 566,700 lines / v1.2.240 (the r322 re-true: +13 files / +3,422 lines — the pharmaml.workflow package x4, the route family, the two test suites, ARCHITECTURE_REVIEW.md, the contract pair regrowth, the four r322 evidence screenshots; verified three-way: walk = live API = page render) | this round's census walk |
-| Source archive | v1.2.240 — re-shipped same-version at r319, r321 AND r322 (the r303/r304/r317 convention: the §8 workflow lane + this row's re-true ride the r322 rebuilt archive — terminal-of-record `38769d67` at 21,039,336 B, six-home parity ALL OK + the offsite mirror rebuilt at 17 zips post-rollback) | sha256 across the homes + offsite |
+| Test surface | 8,555 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 470 files — the r324 re-true: +30 the Phase-6 remainder lanes over the r323 8,525 — 9 the §15 resource-monitoring route suite + 8 the §17 supply-chain guard + 13 the §18 documentation-consistency guard) — PLUS the component-test lane: 110 Vitest tests / 15 files over the Studio frontend (+8 the r323 Workflow Builder suite: the registry line, the template chain, the validate/run round trips, the 422 verbatim, the client-side gate, the job relay, the runs ledger) | fresh collection + vitest this round |
+| Census | 1,704 files / 567,706 lines / v1.2.240 (the r324 re-true over the r323 1,698/566,909: +6 files — the §15 system route + its 9-test suite + the two guard suites + the r324 pins pair — plus the contract-pair regrowth lines; verified three-way: walk = live API = page render) | this round's census walk |
+| Source archive | v1.2.240 — re-shipped same-version at r319, r321, r322, r323 AND r324 (the r303/r304/r317 convention: the §15/§17/§18 remainder lanes + this row's re-true ride the r324 rebuilt archive — terminal-of-record `19aa2d3f` at 22,092,317 B, six-home parity ALL OK + the offsite mirror at 18 zips) | sha256 across the homes + offsite |
 | venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.240 — zero drift vs `requirements.txt` | import probes (r319: rdkit was found missing after the eleventh rollback's partial hydration — `venv_repair.sh` ran FOREGROUND and the full import surface + the Studio GUI stack verified) |
 
 ## 3. The six previously-open audit items — CLOSED (re-verified in-tree this round)
@@ -425,7 +425,29 @@ summarises them and wins any status disagreement.
   reason recorded). The GUI leg (the Workflow Builder stage) EXECUTED
   at round 323 (the record above); the Phase-6 remainder — resource
   monitoring, security scanning lanes, documentation automation —
-  rides the next continuation, each small reversible tested.
+  EXECUTED at round 324, each small reversible tested: **§15** the
+  resource-monitoring API lane (`routes/system.py` — the READ-ONLY
+  host/process/JobManager queue snapshot with psutil optional and the
+  honest stdlib fallback, GPU deliberately absent per the optional-GPU
+  rule, the scope block enumerating the queued §15 items; 9 route
+  tests), **§17** the supply-chain guard (the CI-side
+  `.github/workflows/security-scan.yml` — pip-audit + npm audit + the
+  local guard on the runner, network-facing scanning in CI only per
+  §17's own rule — plus the offline 8-test local suite over the SBOM's
+  CycloneDX validity + its pinned-stack coverage, the exact-pin
+  discipline, the strict full-pattern secret scan, the credential
+  quarantine, and the workflow's CI-only posture), and **§18** the
+  documentation-consistency guard (the 13-test suite pinning the
+  version-carrier lockstep across all nine carriers, the §21
+  twelve-deliverable existence set, the generated module index, and
+  the worklog/counter ledger agreement — the stale-counter failure
+  mode now machine-caught). The gates: the collection re-trued
+  8,555/0/470, the contract re-exported at 109 paths, ruff+mypy clean,
+  the census fixed point three-way 1,704/567,706/v1.2.240 with the
+  pins pair captured, the same-version re-ship at six-home parity +
+  the offsite at 18. **Phase 6 is CLOSED** — the workflow engine +
+  its GUI leg (r322/r323) and the three remainder lanes all carry
+  their tested surfaces.
 - **Phase 7** — the next production release, from the exact release
   commit, with all gates recorded.
 

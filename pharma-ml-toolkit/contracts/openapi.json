@@ -8045,6 +8045,30 @@
         ]
       }
     },
+    "/api/v1/system/resources": {
+      "get": {
+        "description": "The \u00a715 resource snapshot (see the module docstring for scope).",
+        "operationId": "resources_api_v1_system_resources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Resources Api V1 System Resources Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Resources",
+        "tags": [
+          "system"
+        ]
+      }
+    },
     "/api/v1/visualization/catalog": {
       "get": {
         "operationId": "catalog_api_v1_visualization_catalog_get",

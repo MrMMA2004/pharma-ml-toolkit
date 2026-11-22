@@ -14,7 +14,7 @@ HOMES = [
     REPO / "upload",
 ]
 OFFSITE = Path("/home/z/pharma-ml-toolkit-zips")
-CURRENT = "pharma-ml-toolkit-v1.2.233.zip"
+CURRENT = "pharma-ml-toolkit-v1.2.240.zip"
 
 
 def testzip_all(home: Path) -> tuple[int, list[str]]:
@@ -55,5 +55,7 @@ print(f"offsite: rebuilt {copied} new copies, {n} zips total, testzip {'OK' if n
 cur = OFFSITE / CURRENT
 print(f"offsite current-version parity: {cur.stat().st_size} B, "
       f"sha256 {__import__('hashlib').sha256(cur.read_bytes()).hexdigest()[:8]}")
-# r311: 13 zips = the v1.2.221-233 span (11 through v1.2.231, 12 through v1.2.232)
-print("RITUAL " + ("PASS" if not all_bad and not bad and n == 13 else "CHECK"))
+# r324: 18 zips = the v1.2.221-240 span restored whole (the git-tracked
+# homes carry every retired version again after the fifteenth rollback's
+# reset -- one more than the r323 disk state had, recorded honestly).
+print("RITUAL " + ("PASS" if not all_bad and not bad and n == 18 else "CHECK"))
