@@ -1,0 +1,30 @@
+
+ RUN  v5.1.1 /home/z/my-project/pharma-ml-toolkit/frontend
+
+ ✓ src/features/ml/__tests__/WorkflowBuilderLane.test.tsx (8 tests) 817ms
+ ✓ src/features/ml/__tests__/MultiobjectiveLane.test.tsx (8 tests) 807ms
+ ✓ src/features/ml/__tests__/PharmacogenomicsLane.test.tsx (8 tests) 869ms
+ ✓ src/features/ml/__tests__/DrugResponseLane.test.tsx (8 tests) 924ms
+ ✓ src/features/ml/__tests__/RepurposingLane.test.tsx (8 tests) 880ms
+ ✓ src/features/ml/__tests__/DtaLane.test.tsx (8 tests) 913ms
+ ✓ src/features/dl/__tests__/GnnLane.test.tsx (7 tests) 578ms
+ ✓ src/services/websocket/__tests__/client.test.ts (16 tests) 18ms
+ ✓ src/features/datasets/__tests__/DatasetsPage.test.tsx (8 tests) 504ms
+ ✓ src/features/ml/__tests__/AdmetLane.test.tsx (7 tests) 672ms
+ ✓ src/app/__tests__/StartupGate.test.tsx (6 tests) 131ms
+ ✓ src/components/charts/__tests__/PlotlyFigure.test.tsx (5 tests) 120ms
+ ✓ src/services/api/__tests__/startup.test.ts (9 tests) 7ms
+ ✓ src/app/__tests__/App.test.tsx (3 tests) 217ms
+ ✓ src/components/ui/__tests__/atoms.test.tsx (6 tests) 208ms
+ ✓ src/app/__tests__/workspaces.test.ts (4 tests) 5ms
+
+ Test Files  16 passed (16)
+      Tests  119 passed (119)
+   Start at  13:57:30
+   Duration  20.19s (tests 41%, environment 38%, import 8%, setup 7%, transform 5%)
+
+Environment  jsdom was created 16 times · 6.96s total, 38% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+vitest_exit=0

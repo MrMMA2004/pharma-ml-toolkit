@@ -1,0 +1,7 @@
+=== r330 root console restore (post-6th-wipe one-window makeup) 2026-11-22T13:57:11Z
+GET / -> 200
+GET /api/toolkit/zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}
+
+=== r330 restore#2 (the 7th reaper-wipe makeup) 2026-11-22T14:01:39Z
+GET / -> 200
+GET /api/toolkit/zip-size -> {"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}

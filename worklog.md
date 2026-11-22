@@ -17800,3 +17800,64 @@ header + the §5 §16.24 note updated (RECEIVED at r328 → EXECUTED at
 r329); the counter 120 → 121; the round's payload committed + pushed
 (the QA deliverable set + the re-ship's archive bytes + the pins +
 the evidence + the ledger). Counter 120 → 121.
+
+## Round 330 — the 122nd recorded run (the part14 verification round: every gate re-pinned at r329 parity, the twentieth arrival's ghost swept, the r329 CI verdicts closed GREEN, the ledger pushed; trace 1a203891)
+
+**The arrival state: the twentieth arrival (light class)** — the
+four-sentinel check found the ledger AHEAD of the inherited stale
+summary yet again: the summary snapshot believed r329 mid-flight
+(the pytest-evidence gap + the QA-doc authoring pending), while the
+repo had already closed it (the continuation executed, committed,
+and pushed: the counter at 121, the r329 close-out `a75cabe7` =
+origin/main, the ten-document QA set on disk, the re-ship terminal
+`0fadb6e5` standing at 23,489,390 B, the `-o addopts=` summary
+restoration having fixed the measurement discipline). ONE machinery
+UUID residue checkpoint (`9fe19bd0`, struck 13:47 UTC — 19 residue
+paths: the retired-era zips across the four homes, the part14.txt
+prompt copy, two strays) reset away per the established convention
+(mixed; reflog-resident, never pushed) — the ghost carried NO
+token material (the 19-path file list verified — no
+`upload/GitHub_token.*`, no `.credentials/`; the `013b3ff4`
+hardening holding). The venv pins verified intact — zero repair
+(pharmaml 1.2.240; the suite import legs green as-is); the Studio
+frontend node_modules intact at arrival; the PAT standing on disk
+(`.credentials/github_pat`, 600, gitignored disk-only).
+
+**The gates re-pinned at exact r329 parity (all captured in
+`scratch/p14_r330_*`)**:
+- `tests/api/test_trusted_origins.py` — **34 passed in 5.90s**;
+  `tests/api` — **449 passed + 1 skipped, 0 failed in 107.21s**
+  (the `-o addopts=` summary restoration holding; the exit codes
+  captured).
+- The Studio frontend — **vitest 119/119 (16 files)** + **tsc
+  --noEmit clean** via the one-window `npm ci` (exit 0).
+- The root web console — the reaper's SIXTH strike of the part14
+  era observed live at a tool-call boundary (the node_modules
+  wiped between the first restore's verification and the browser
+  open; the process dead, dev.log cut mid-line) — recovered by the
+  one-window makeup #2 (bun install + the background daemon + the
+  wait-to-200 loop): **the render 200, the zip-size API live at
+  `{"zipBytes":23489390,"version":"1.2.240","exact":true,"source":
+  "release"}` at BOTH restores** — exact parity with the r329
+  terminal bytes; no re-ship (no tree change; the shipped fixed
+  point stands).
+- The agent-browser E2E over the LIVE console — **zero page
+  errors, zero console errors**; the Playground interaction
+  rendering the ten-tab ML surface (the tablist + the
+  session-report system + the fully-populated Calculators
+  tabpanel, the live v1.2.240 header); **the footer geometry
+  measured exact** (one semantic `<footer>`, bottom 3967 ==
+  docHeight 3967 — natural push-down, never overlapping); the
+  pins pair `docs/gui/screenshots/p14r330-pins-{desktop,mobile}.png`
+  captured full-page at 1440px + 390px.
+
+**The r329 CI verdicts closed GREEN at this round's close** — both
+pushed commits (`a75cabe7` + `013b3ff4`): **19/19 check-runs
+success** each, checked via the authenticated API with the masked
+credential discipline (the token read inside the process, never in
+argv/env/logs).
+
+**The ledger**: the r330 lineage appended to the PROJECT_STATUS
+header (+ the §16.24 standing-authorization note extended); the
+counter 121 → 122; the round's payload (the r330 evidence set +
+the pins pair + the ledger) committed and pushed over `a75cabe7`.

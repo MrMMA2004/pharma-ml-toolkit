@@ -133,7 +133,23 @@ summarises them and wins any status disagreement.
   exact:true + the r329 pins pair + the footer geometry measured
   bottom==docHeight) + **the part14 §13 QA deliverable set seeded
   (all ten documents)** + CI live at both pushed commits (19
-  check-runs). 
+  check-runs). The part14 verification round 330 — the interactive
+  part14 continuation, trace 1a203891ebfdbdf9, over the twentieth
+  arrival (light class — the machinery residue checkpoint
+  `9fe19bd0` with its 19 residue paths reset away unpushed per the
+  established convention, NO token material in it, the `013b3ff4`
+  hardening holding; the venv + the Studio frontend surviving, the
+  root web node_modules reaper-wiped once mid-round and recovered by
+  the one-window makeup): the standing verification/maintenance leg
+  — every gate re-pinned at r329 parity (trusted-origins 34/34 in
+  5.90s, tests/api 449+1s in 107.21s, vitest 119/119, tsc clean,
+  the web console render 200 + the zip-size API 23,489,390
+  exact:true on the r329 terminal bytes at both restores, the
+  agent-browser E2E zero page/console errors + the Playground
+  ten-tab surface + the footer geometry exact bottom==docHeight +
+  the r330 pins pair) + the r329 CI verdicts closed GREEN (both
+  pushed commits 19/19 check-runs success) + the r330 ledger
+  committed and pushed over `a75cabe7`. 
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
@@ -249,15 +265,20 @@ summarises them and wins any status disagreement.
   clear first. No silent version bumps, ever.
 - **part14 §16.24 supersedes the part13 push-per-round protocol**: no
   commit, push, publish, tag, or branch deletion without explicit
-  authorization — **RECEIVED at round 328 and EXECUTED at round
-  329**: the payload pushed `ad5f00a7..a75f98eb` after the PAT
+  authorization — **RECEIVED at round 328, EXECUTED at round 329,
+  and EXERCISED standing at round 330+**: the r328 payload pushed
+  `ad5f00a7..a75f98eb` after the PAT
   restoration (the token API-validated masked; the truncated-PDF
   channel diagnosed + the complete plain-text channel accepted);
   the token-sweep ghost refused by GitHub push protection was
   reset away (reflog-resident, never pushed) and the credential
   paths gitignored disk-only (hardening commit `013b3ff4`, pushed).
   The same-version re-ship rides this push-success round per the
-  shipped-fixed-point convention (the §5 bullets above).
+  shipped-fixed-point convention (the §5 bullets above). The r330
+  maintenance push (the ledger payload over `a75cabe7`) rides the
+  same standing authorization — the owner's "Push" directive
+  re-received every round; the r329 CI verdicts closed GREEN at
+  r330's close (both commits 19/19 check-runs success).
 
 ## 6. Next-campaign priorities (part13 Phases 2–7, in order)
 
