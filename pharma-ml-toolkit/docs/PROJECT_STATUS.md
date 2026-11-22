@@ -231,6 +231,56 @@ summarises them and wins any status disagreement.
   retirement and signing lanes standing per the workflow's own
   honest closing note) + the r333 ledger committed and pushed over
   `661e3f65`.
+  The part14 housekeeping round 334 — the 2h-sync cron firing
+  (04:30 +08:00, job 533878, trace
+  1a1e5c662b0b8219-cron-agent-loop-202611230430), over the
+  twenty-fourth deepest-class arrival — the SECOND rollback wave of
+  the r333 window: the sandbox recycle gutted the git lane again
+  AFTER the r333 ledger push (history reset to the r186 checkpoint
+  `2eb0ede4` under a machinery UUID child, `.credentials/` gone,
+  origin detached, the `661e3f65`/`8d92e9e0` objects absent locally,
+  the venv + the offsite + the deb-extract EGL leg wiped) with the
+  working tree surviving at the r333 terminal (VERSION 1.2.240, the
+  R333 worklog entry, counter 125 — the disk blobs byte-identical
+  to origin/main for all six ledger files, proven BEFORE any
+  destructive step): the r322 playbook re-run in full (the 93-char
+  PAT re-spliced masked from `upload/MASTER_PROMPT.pdf` +
+  API-validated as MrMMA2004; origin re-attached, the tags restored,
+  `git reset --hard` onto the durable terminal `8d92e9e0`
+  divergence 0/0; the residue swept — the retired zip strays
+  v1.2.229/230/235–239 + the stale `pharma-ml-toolkit/.github/`
+  workflow duplicate + the scratch strays; the offsite re-seeded,
+  five homes one unique sha `0fadb6e5…`; `venv_repair.sh`
+  FOREGROUND exit 0 — numpy 1.26.4 / rdkit 2026.9.1 / torch
+  2.14.1+cpu / PySide6 6.8.3 with the wheel EGL stub / pyinstaller
+  6.22.3 / mordred 1.2.0 with the runner-parity networkx 2.8.8
+  downgrade; the BLK-6 deb-extract leg re-applied at
+  `~/.local/lib/egl`, both EGL legs verified importable) + the
+  published release verified directly asset-by-asset via the
+  authenticated API (run 45047077848 completed/success at
+  `661e3f65`; the five release assets byte-verified: EXE
+  558,022,042 B, MSI 710,553,078 B, manifest 510 B, SHA256SUMS
+  368 B, SBOM 23,634 B; no arena refs) + the round's NEW catch —
+  the post-ledger push run 45056299925 went 18/19 with the Studio
+  frontend leg FAILED on a runner-load timing flake (the
+  StartupGate live-update health-strip test lost both stream
+  emissions to the useSyncExternalStore pre-subscribe
+  passive-effect window; frontend bytes identical to `661e3f65`
+  where the job passed within the release run's 20/20) — fixed at
+  source in two pieces with the assertions unchanged (the test
+  drains the passive effect queue with an empty async act before
+  the first emission; `useEventStreamState` resyncs its snapshot
+  cache from the live store on (re)subscribe so a pre-subscribe
+  transition self-heals through React's post-subscribe consistency
+  check — the production edge the flake exposed), verified 5×6
+  single-file + the full 16-file/119-test suite + `tsc --noEmit`
+  clean + the docs-consistency suite 12/12 + the console 200 + the
+  zip-size API 23,489,390 exact:true + the zip-freeze ruling (the
+  five-home zip stays byte-frozen at the published release —
+  `source:"release"`, `exact:true`; the r334 fix rides main past
+  the tag, a re-ship would desynchronize the homes from the
+  immutable release manifest; the next owner-directed bump carries
+  it) + the r334 ledger committed and pushed over `8d92e9e0`.
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

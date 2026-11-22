@@ -42,11 +42,19 @@ export function useEventStreamState(): EventStreamStatus {
   const cache = useRef(stream.status);
   const [subscribe, getSnapshot] = useMemo(() => {
     const get = () => cache.current;
-    const sub = (cb: () => void) =>
-      stream.onStateChange((status) => {
+    const sub = (cb: () => void) => {
+      const unsubscribe = stream.onStateChange((status) => {
         cache.current = status;
         cb();
       });
+      // Resync from the live store on (re)subscribe — a transition that
+      // lands before the passive effect attaches (the interleaving window
+      // the CI flake in run 45056299925 exposed) is not lost: React's
+      // post-subscribe snapshot consistency check sees the fresh value
+      // and re-renders the banner to the store's true state.
+      cache.current = stream.status;
+      return unsubscribe;
+    };
     return [sub, get] as const;
   }, [stream]);
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);

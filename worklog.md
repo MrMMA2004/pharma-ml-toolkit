@@ -18162,3 +18162,107 @@ leaves them.
 header; the counter 124 → 125; the round's payload (the release
 evidence set + the pins pair + the ledger) committed and pushed over
 `661e3f65`.
+
+## Round 334 — the 126th recorded run (the part14 housekeeping round: the second rollback wave of the r333 window recovered, the published release verified asset-by-asset via the API, the post-ledger CI flake caught and fixed at source; trace 1a1e5c662b0b8219-cron-agent-loop-202611230430)
+
+**R334 — the 126th recorded run**
+
+**The directive**: the 04:30 +08:00 2h-sync cron firing (job 533878)
+— the standing housekeeping ritual over the repo the r333 release
+round left at its terminal `8d92e9e0`.
+
+**The discovery — the twenty-fourth arrival, the SECOND rollback
+wave of the r333 window**: the sandbox recycle gutted the git lane
+again AFTER the r333 ledger had been pushed and verified: history
+reset to the round-186 checkpoint `2eb0ede4` under a machinery UUID
+child, `.credentials/` gone, origin detached entirely, the
+`661e3f65`/`8d92e9e0` objects absent from the local object store,
+the venv gutted (rdkit/torch/pyinstaller/mordred absent, numpy
+drifted to 2.1.3), the offsite wiped, the deb-extract EGL leg gone
+— while the working tree survived at the r333 terminal (VERSION
+1.2.240, the R333 worklog entry, the counter at 125; the disk blobs
+of all six ledger files byte-identical to origin/main, proven
+BEFORE any destructive step).
+
+**The r322 playbook re-run in full**: the 93-char credential
+re-spliced masked from `upload/MASTER_PROMPT.pdf` (600-mode,
+`scripts/pat_recover_r333.py`; never in argv/env/logs) and
+API-validated as MrMMA2004; origin re-attached (the
+credential-helper askpass lane, the token never in a URL), fetched,
+the tags restored including `v1.2.240`; `git reset --hard
+origin/main` onto the durable terminal `8d92e9e0` — divergence 0/0;
+the rollback-resurrected residue swept (the retired zip strays
+v1.2.229/230/235–239 across the homes + the stale
+`pharma-ml-toolkit/.github/` workflow duplicate + the scratch
+strays: the r332 supervisor script, the r331/r332 push-result
+fragments, the r333 manifest copy, the toolkit-level counter copy,
+the r319 WIP); the offsite `~/pharma-ml-toolkit-zips/` re-seeded —
+**five homes, one unique sha `0fadb6e5…`**, the shipped fixed point
+standing; `scratch/venv_repair.sh` run FOREGROUND to exit 0 (numpy
+1.26.4 / rdkit 2026.9.1 / torch 2.14.1+cpu / matplotlib 3.10.9 /
+openpyxl 3.1.5 / PySide6 6.8.3 with the wheel-bundled EGL stub /
+pyinstaller 6.22.3 / mordred 1.2.0 — its networkx downgraded to
+2.8.8, the runner-parity state, arrived automatically); the BLK-6
+deb-extract workaround re-applied at `~/.local/lib/egl` — **both
+EGL legs verified importable**.
+
+**The published release verified directly, asset-by-asset, via the
+authenticated API**: run 45047077848 completed/**success** at
+`661e3f65` (the event=push tag build); the release `v1.2.240` live,
+draft=false, **five assets byte-exact**:
+`PharmaML_Studio_Setup_v1.2.240.exe` **558,022,042 B**,
+`PharmaML_Studio_v1.2.240.msi` **710,553,078 B**,
+`RELEASE_MANIFEST.json` 510 B, `SHA256SUMS.txt` 368 B,
+`sbom.cdx.json` 23,634 B (CycloneDX 1.6); the download counters
+ticking — the r333 ledger's byte claims re-proven against GitHub's
+own state, not the local evidence. Branches: one, `main` at
+`8d92e9e0`; no `arena/*` refs to absorb.
+
+**The round's NEW catch — the post-ledger CI flake, fixed at
+source**: the push of `8d92e9e0` (docs-only) had triggered CI run
+45056299925, which arrived 18/19 with the **Studio frontend leg
+FAILED** — `StartupGate.test.tsx > the live-update health strip >
+stays silent while the stream is open, and degrades visibly when it
+drops`: `TestingLibraryElementError: Unable to find an element with
+the text: reconnecting the live event stream (attempt 2)` (1 failed
+/ 118 passed of 119). **The diagnosis**: frontend bytes identical
+to `661e3f65`, where the same job passed within the release run's
+20/20 — a runner-load timing flake, not a regression. The race: the
+health strip subscribes through `useSyncExternalStore`, whose
+subscription attaches in a PASSIVE effect; both test emissions
+landed inside that window on the loaded runner — the store events
+were lost, the silence assertion cannot catch a lost event, and the
+reconnecting assertion failed. **The fix at source, two pieces,
+assertions unchanged**: (1) the test drains the pending passive
+effect queue (`await act(async () => {})`) after the boot await,
+before the first emission — the subscription is live
+deterministically; (2) `useEventStreamState`
+(`src/hooks/useJobTracking.ts`) resyncs its snapshot cache from the
+live store on (re)subscribe, so a transition landing before the
+effect attaches self-heals through React's post-subscribe snapshot
+consistency check — the production edge the flake exposed, not just
+the test. **Verified**: the single file 5× (6 passed each), the
+full suite **16 files / 119 tests green**, `tsc --noEmit` exit 0,
+the docs-consistency suite 12/12 over the fixed tree; the runner
+log preserved as `p14_r334_frontend_fail_log.txt`.
+
+**The housekeeping legs**: the console render **200** with the live
+v1.2.240 header + the zip-size API
+`{"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}`
+— the prebuilt release zip untouched by the fix. **The zip-freeze
+ruling**: the five-home zip stays byte-frozen at the published
+release — the manifest + SHA256SUMS + SBOM are attached to the
+immutable release at the tag commit; re-shipping new bytes would
+desynchronize the homes from those checksums and flip `exact:true`
+false; the r334 frontend fix rides main past the tag and the next
+owner-directed version bump carries it into a new zip (the §5
+no-silent-bumps rule).
+
+**The ledger**: the r334 lineage appended to the PROJECT_STATUS
+header; the counter 125 → 126; this entry; the round's payload (the
+two-piece flake fix + the reconciled `frontend/bun.lock` — the
+committed lock predates the four testing devDependencies the
+`package.json` declares (`@testing-library/jest-dom` / `react` /
+`user-event` / `jsdom`), so every CI install re-resolved them live;
+the install-reconciled lock closes that drift — + the evidence + the
+recovery scripts) committed and pushed over `8d92e9e0`.

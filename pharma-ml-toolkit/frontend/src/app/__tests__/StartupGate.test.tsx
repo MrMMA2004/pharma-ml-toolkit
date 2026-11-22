@@ -150,6 +150,15 @@ describe("StartupGate — the live-update health strip", () => {
       </StartupGate>,
     );
     await screen.findByText("workspace-shell");
+    // Drain the banner's passive subscription effect BEFORE any emission.
+    // The runner-load flake (CI run 45056299925) exposed the interleaving
+    // window: both store emissions landed before useSyncExternalStore had
+    // attached its listener, the silence assertion could not catch the
+    // loss, and the reconnecting assertion failed. An empty async act
+    // flushes the pending effect queue, making the subscription live
+    // deterministically first. The assertions below are unchanged —
+    // they remain the spec.
+    await act(async () => {});
 
     // healthy + open — the banner is absent by design
     emitStreamState({ state: "open", lastSequence: 3, attempts: 0, hello: null });

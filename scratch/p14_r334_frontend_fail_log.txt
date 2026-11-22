@@ -1,0 +1,483 @@
+﻿2026-11-22T18:39:14.5582529Z Current runner version: '2.338.2'
+2026-11-22T18:39:14.5607465Z ##[group]Runner Image Provisioner
+2026-11-22T18:39:14.5608368Z Hosted Compute Agent
+2026-11-22T18:39:14.5608949Z Version: 20261111.635
+2026-11-22T18:39:14.5609637Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+2026-11-22T18:39:14.5610460Z Build Date: 2026-11-11T01:49:01Z
+2026-11-22T18:39:14.5611159Z Worker ID: {02bfe1d3-416a-4d1c-8e87-4796b426e13c}
+2026-11-22T18:39:14.5612062Z Region: eastus2
+2026-11-22T18:39:14.5612608Z Cloud: Azure
+2026-11-22T18:39:14.5613146Z ##[endgroup]
+2026-11-22T18:39:14.5614964Z ##[group]Operating System
+2026-11-22T18:39:14.5615569Z Ubuntu
+2026-11-22T18:39:14.5616148Z 26.04.1
+2026-11-22T18:39:14.5616649Z LTS
+2026-11-22T18:39:14.5617152Z ##[endgroup]
+2026-11-22T18:39:14.5617737Z ##[group]Runner Image
+2026-11-22T18:39:14.5618287Z Image: ubuntu-26.04
+2026-11-22T18:39:14.5619277Z Version: 20261116.202.1
+2026-11-22T18:39:14.5620511Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261116.202/images/ubuntu/Ubuntu2604-Readme.md
+2026-11-22T18:39:14.5622352Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261116.202
+2026-11-22T18:39:14.5623277Z ##[endgroup]
+2026-11-22T18:39:14.5624397Z ##[group]GITHUB_TOKEN Permissions
+2026-11-22T18:39:14.5627786Z Contents: read
+2026-11-22T18:39:14.5628461Z Metadata: read
+2026-11-22T18:39:14.5629008Z ##[endgroup]
+2026-11-22T18:39:14.5631101Z Secret source: Actions
+2026-11-22T18:39:14.5632412Z Cache mode: write
+2026-11-22T18:39:14.5633762Z Prepare workflow directory
+2026-11-22T18:39:14.6023335Z Prepare all required actions
+2026-11-22T18:39:14.6073564Z Getting action download info
+2026-11-22T18:39:14.7654149Z Download action repository 'actions/checkout@v7' (SHA:3d3c42e5aac5ba805825da76410c181273ba90b1)
+2026-11-22T18:39:14.8808511Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-11-22T18:39:14.9770348Z Download action repository 'actions/setup-python@v7' (SHA:6d4fd22b20465ccc0f7354476588e8df7c9ca0e0)
+2026-11-22T18:39:15.1473984Z Complete job name: Studio frontend
+2026-11-22T18:39:15.2300450Z ##[group]Run actions/checkout@v7
+2026-11-22T18:39:15.2301340Z with:
+2026-11-22T18:39:15.2302311Z   repository: MrMMA2004/pharma-ml-toolkit
+2026-11-22T18:39:15.2306423Z   token: ***
+2026-11-22T18:39:15.2306916Z   ssh-strict: true
+2026-11-22T18:39:15.2307438Z   ssh-user: git
+2026-11-22T18:39:15.2307983Z   persist-credentials: true
+2026-11-22T18:39:15.2308538Z   clean: true
+2026-11-22T18:39:15.2309097Z   sparse-checkout-cone-mode: true
+2026-11-22T18:39:15.2309681Z   fetch-depth: 1
+2026-11-22T18:39:15.2310188Z   fetch-tags: false
+2026-11-22T18:39:15.2310730Z   show-progress: true
+2026-11-22T18:39:15.2311237Z   lfs: false
+2026-11-22T18:39:15.2312008Z   submodules: false
+2026-11-22T18:39:15.2312579Z   set-safe-directory: true
+2026-11-22T18:39:15.2313181Z   allow-unsafe-pr-checkout: false
+2026-11-22T18:39:15.2314014Z ##[endgroup]
+2026-11-22T18:39:15.4878647Z Syncing repository: MrMMA2004/pharma-ml-toolkit
+2026-11-22T18:39:15.4882289Z ##[group]Getting Git version info
+2026-11-22T18:39:15.4883839Z Working directory is '/home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit'
+2026-11-22T18:39:15.4885785Z [command]/usr/bin/git version
+2026-11-22T18:39:15.4895103Z git version 2.56.1
+2026-11-22T18:39:15.4898783Z ##[endgroup]
+2026-11-22T18:39:15.4909744Z Temporarily overriding HOME='/home/runner/work/_temp/8e9bd490-1b0e-496a-991d-5a97fe79c52f' before making global git config changes
+2026-11-22T18:39:15.4912822Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T18:39:15.4915368Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T18:39:15.4974435Z Deleting the contents of '/home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit'
+2026-11-22T18:39:15.4983856Z ##[group]Determining repository object format
+2026-11-22T18:39:15.4986577Z ##[endgroup]
+2026-11-22T18:39:15.4988431Z ##[group]Initializing the repository
+2026-11-22T18:39:15.4991896Z [command]/usr/bin/git init /home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T18:39:15.5085656Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-22T18:39:15.5087218Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-22T18:39:15.5088445Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-22T18:39:15.5089437Z hint: call:
+2026-11-22T18:39:15.5090460Z hint:
+2026-11-22T18:39:15.5091348Z hint: 	git config --global init.defaultBranch <name>
+2026-11-22T18:39:15.5092873Z hint:
+2026-11-22T18:39:15.5093885Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-22T18:39:15.5095032Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-22T18:39:15.5096077Z hint:
+2026-11-22T18:39:15.5096840Z hint: 	git branch -m <name>
+2026-11-22T18:39:15.5097837Z hint:
+2026-11-22T18:39:15.5099041Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-22T18:39:15.5101089Z Initialized empty Git repository in /home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit/.git/
+2026-11-22T18:39:15.5113613Z [command]/usr/bin/git remote add origin https://github.com/MrMMA2004/pharma-ml-toolkit
+2026-11-22T18:39:15.5160386Z ##[endgroup]
+2026-11-22T18:39:15.5162639Z ##[group]Disabling automatic garbage collection
+2026-11-22T18:39:15.5164492Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-22T18:39:15.5201299Z ##[endgroup]
+2026-11-22T18:39:15.5203291Z ##[group]Setting up auth
+2026-11-22T18:39:15.5204409Z Removing SSH command configuration
+2026-11-22T18:39:15.5207532Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T18:39:15.5246360Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T18:39:15.7048686Z Removing HTTP extra header
+2026-11-22T18:39:15.7056025Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T18:39:15.7088518Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T18:39:15.7306913Z Removing includeIf entries pointing to credentials config files
+2026-11-22T18:39:15.7310919Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T18:39:15.7340670Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-22T18:39:15.7558611Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-fb305493-4979-44b5-a334-6642d4997e7e.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-22T18:39:15.7592974Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit/.git.path /home/runner/work/_temp/git-credentials-fb305493-4979-44b5-a334-6642d4997e7e.config
+2026-11-22T18:39:15.7621433Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-fb305493-4979-44b5-a334-6642d4997e7e.config
+2026-11-22T18:39:15.7653561Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-fb305493-4979-44b5-a334-6642d4997e7e.config
+2026-11-22T18:39:15.7684143Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-fb305493-4979-44b5-a334-6642d4997e7e.config
+2026-11-22T18:39:15.7712746Z ##[endgroup]
+2026-11-22T18:39:15.7714280Z ##[group]Fetching the repository
+2026-11-22T18:39:15.7720390Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +8d92e9e0622731197f408fd6d6928f1651115506:refs/remotes/origin/main
+2026-11-22T18:39:40.6069725Z From https://github.com/MrMMA2004/pharma-ml-toolkit
+2026-11-22T18:39:40.6070835Z  * [new ref]         8d92e9e0622731197f408fd6d6928f1651115506 -> origin/main
+2026-11-22T18:39:40.6078036Z [command]/usr/bin/git branch --list --remote origin/main
+2026-11-22T18:39:40.6103560Z   origin/main
+2026-11-22T18:39:40.6109883Z [command]/usr/bin/git rev-parse refs/remotes/origin/main
+2026-11-22T18:39:40.6129912Z 8d92e9e0622731197f408fd6d6928f1651115506
+2026-11-22T18:39:40.6132544Z ##[endgroup]
+2026-11-22T18:39:40.6133525Z ##[group]Determining the checkout info
+2026-11-22T18:39:40.6138193Z ##[endgroup]
+2026-11-22T18:39:40.6139075Z [command]/usr/bin/git sparse-checkout disable
+2026-11-22T18:39:40.6188498Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-22T18:39:40.6216808Z ##[group]Checking out the ref
+2026-11-22T18:39:40.6220019Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-11-22T18:39:41.6671951Z Updating files:  25% (799/3173)
+2026-11-22T18:39:41.6692156Z Updating files:  26% (825/3173)
+2026-11-22T18:39:41.6792094Z Updating files:  27% (857/3173)
+2026-11-22T18:39:41.6839626Z Updating files:  28% (889/3173)
+2026-11-22T18:39:41.6875147Z Updating files:  29% (921/3173)
+2026-11-22T18:39:41.7438631Z Updating files:  30% (952/3173)
+2026-11-22T18:39:41.7454635Z Updating files:  31% (984/3173)
+2026-11-22T18:39:41.7497612Z Updating files:  32% (1016/3173)
+2026-11-22T18:39:41.7588949Z Updating files:  33% (1048/3173)
+2026-11-22T18:39:41.7617500Z Updating files:  34% (1079/3173)
+2026-11-22T18:39:41.7687079Z Updating files:  35% (1111/3173)
+2026-11-22T18:39:41.7765572Z Updating files:  36% (1143/3173)
+2026-11-22T18:39:41.7781780Z Updating files:  37% (1175/3173)
+2026-11-22T18:39:41.7795935Z Updating files:  38% (1206/3173)
+2026-11-22T18:39:41.7815740Z Updating files:  39% (1238/3173)
+2026-11-22T18:39:41.7970555Z Updating files:  40% (1270/3173)
+2026-11-22T18:39:41.7979904Z Updating files:  41% (1301/3173)
+2026-11-22T18:39:41.7992451Z Updating files:  42% (1333/3173)
+2026-11-22T18:39:41.8008498Z Updating files:  43% (1365/3173)
+2026-11-22T18:39:41.8028914Z Updating files:  44% (1397/3173)
+2026-11-22T18:39:41.8037381Z Updating files:  45% (1428/3173)
+2026-11-22T18:39:41.8049172Z Updating files:  46% (1460/3173)
+2026-11-22T18:39:41.8072019Z Updating files:  47% (1492/3173)
+2026-11-22T18:39:41.8118193Z Updating files:  48% (1524/3173)
+2026-11-22T18:39:41.8161284Z Updating files:  49% (1555/3173)
+2026-11-22T18:39:41.8196467Z Updating files:  50% (1587/3173)
+2026-11-22T18:39:41.8244551Z Updating files:  51% (1619/3173)
+2026-11-22T18:39:41.8286213Z Updating files:  52% (1650/3173)
+2026-11-22T18:39:41.8330760Z Updating files:  53% (1682/3173)
+2026-11-22T18:39:41.8368276Z Updating files:  54% (1714/3173)
+2026-11-22T18:39:41.8408050Z Updating files:  55% (1746/3173)
+2026-11-22T18:39:41.8436469Z Updating files:  56% (1777/3173)
+2026-11-22T18:39:41.8463948Z Updating files:  57% (1809/3173)
+2026-11-22T18:39:41.8489461Z Updating files:  58% (1841/3173)
+2026-11-22T18:39:41.8521070Z Updating files:  59% (1873/3173)
+2026-11-22T18:39:41.8555986Z Updating files:  60% (1904/3173)
+2026-11-22T18:39:41.8575267Z Updating files:  61% (1936/3173)
+2026-11-22T18:39:41.8603745Z Updating files:  62% (1968/3173)
+2026-11-22T18:39:41.8623702Z Updating files:  63% (1999/3173)
+2026-11-22T18:39:41.8645432Z Updating files:  64% (2031/3173)
+2026-11-22T18:39:41.8679901Z Updating files:  65% (2063/3173)
+2026-11-22T18:39:41.8725230Z Updating files:  66% (2095/3173)
+2026-11-22T18:39:41.8745551Z Updating files:  67% (2126/3173)
+2026-11-22T18:39:41.8775899Z Updating files:  68% (2158/3173)
+2026-11-22T18:39:41.8785787Z Updating files:  69% (2190/3173)
+2026-11-22T18:39:41.8921306Z Updating files:  70% (2222/3173)
+2026-11-22T18:39:41.9034191Z Updating files:  71% (2253/3173)
+2026-11-22T18:39:41.9044914Z Updating files:  72% (2285/3173)
+2026-11-22T18:39:41.9055726Z Updating files:  73% (2317/3173)
+2026-11-22T18:39:41.9066922Z Updating files:  74% (2349/3173)
+2026-11-22T18:39:41.9137437Z Updating files:  75% (2380/3173)
+2026-11-22T18:39:41.9246577Z Updating files:  76% (2412/3173)
+2026-11-22T18:39:41.9252241Z Updating files:  77% (2444/3173)
+2026-11-22T18:39:41.9286654Z Updating files:  78% (2475/3173)
+2026-11-22T18:39:41.9311406Z Updating files:  79% (2507/3173)
+2026-11-22T18:39:41.9324405Z Updating files:  80% (2539/3173)
+2026-11-22T18:39:41.9486218Z Updating files:  81% (2571/3173)
+2026-11-22T18:39:41.9517983Z Updating files:  82% (2602/3173)
+2026-11-22T18:39:41.9542421Z Updating files:  83% (2634/3173)
+2026-11-22T18:39:41.9694328Z Updating files:  84% (2666/3173)
+2026-11-22T18:39:41.9706260Z Updating files:  85% (2698/3173)
+2026-11-22T18:39:41.9817500Z Updating files:  86% (2729/3173)
+2026-11-22T18:39:41.9827232Z Updating files:  87% (2761/3173)
+2026-11-22T18:39:41.9850518Z Updating files:  88% (2793/3173)
+2026-11-22T18:39:41.9879114Z Updating files:  89% (2824/3173)
+2026-11-22T18:39:41.9919318Z Updating files:  90% (2856/3173)
+2026-11-22T18:39:41.9968348Z Updating files:  91% (2888/3173)
+2026-11-22T18:39:41.9988144Z Updating files:  92% (2920/3173)
+2026-11-22T18:39:42.0010412Z Updating files:  93% (2951/3173)
+2026-11-22T18:39:42.0050679Z Updating files:  94% (2983/3173)
+2026-11-22T18:39:42.0079446Z Updating files:  95% (3015/3173)
+2026-11-22T18:39:42.0089196Z Updating files:  96% (3047/3173)
+2026-11-22T18:39:42.0117705Z Updating files:  97% (3078/3173)
+2026-11-22T18:39:42.0392959Z Updating files:  98% (3110/3173)
+2026-11-22T18:39:42.2362383Z Updating files:  99% (3142/3173)
+2026-11-22T18:39:42.2363554Z Updating files: 100% (3173/3173)
+2026-11-22T18:39:42.2364432Z Updating files: 100% (3173/3173), done.
+2026-11-22T18:39:42.2409011Z Switched to a new branch 'main'
+2026-11-22T18:39:42.2423611Z branch 'main' set up to track 'origin/main'.
+2026-11-22T18:39:42.2474091Z ##[endgroup]
+2026-11-22T18:39:42.2521218Z [command]/usr/bin/git log -1 --format=%H
+2026-11-22T18:39:42.2547830Z 8d92e9e0622731197f408fd6d6928f1651115506
+2026-11-22T18:39:42.2825282Z ##[group]Run actions/setup-node@v4
+2026-11-22T18:39:42.2825697Z with:
+2026-11-22T18:39:42.2826092Z   node-version: 22
+2026-11-22T18:39:42.2826400Z   cache: npm
+2026-11-22T18:39:42.2826832Z   cache-dependency-path: pharma-ml-toolkit/frontend/package-lock.json
+2026-11-22T18:39:42.2827292Z   always-auth: false
+2026-11-22T18:39:42.2827618Z   check-latest: false
+2026-11-22T18:39:42.2830146Z   token: ***
+2026-11-22T18:39:42.2830478Z ##[endgroup]
+2026-11-22T18:39:42.4253907Z Found in cache @ /opt/hostedtoolcache/node/22.23.5/x64
+2026-11-22T18:39:42.4258376Z ##[group]Environment details
+2026-11-22T18:39:42.4259570Z (node:2411) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T18:39:42.4260636Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T18:39:42.8189458Z node: v22.23.5
+2026-11-22T18:39:42.8189931Z npm: 10.9.9
+2026-11-22T18:39:42.8190494Z yarn: 1.22.22
+2026-11-22T18:39:42.8192183Z ##[endgroup]
+2026-11-22T18:39:42.8209621Z [command]/opt/hostedtoolcache/node/22.23.5/x64/bin/npm config get cache
+2026-11-22T18:39:42.9544464Z /home/runner/.npm
+2026-11-22T18:39:43.0575511Z Cache hit for: node-cache-Linux-x64-npm-049c817ac5cdb9e5ced26a91cf180c2693e7e9e2b57b22707d62041a3593c69a
+2026-11-22T18:39:43.0680192Z (node:2411) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-22T18:39:43.4460221Z Received 49142908 of 49142908 (100.0%), 143.8 MBs/sec
+2026-11-22T18:39:43.4461251Z Cache Size: ~47 MB (49142908 B)
+2026-11-22T18:39:43.4486289Z [command]/usr/bin/tar -xf /home/runner/work/_temp/4556d8a4-dbf5-4889-87ba-f440c6cddb71/cache.tzst -P -C /home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit --use-compress-program unzstd
+2026-11-22T18:39:43.5188526Z Cache restored successfully
+2026-11-22T18:39:43.5208806Z Cache restored from key: node-cache-Linux-x64-npm-049c817ac5cdb9e5ced26a91cf180c2693e7e9e2b57b22707d62041a3593c69a
+2026-11-22T18:39:43.5453901Z ##[group]Run actions/setup-python@v7
+2026-11-22T18:39:43.5454375Z with:
+2026-11-22T18:39:43.5454676Z   python-version: 3.12
+2026-11-22T18:39:43.5455047Z   cache: pip
+2026-11-22T18:39:43.5455557Z   cache-dependency-path: pharma-ml-toolkit/pyproject.toml
+pharma-ml-toolkit/requirements.txt
+
+2026-11-22T18:39:43.5456202Z   check-latest: false
+2026-11-22T18:39:43.5458958Z   token: ***
+2026-11-22T18:39:43.5459443Z   mirror: https://raw.githubusercontent.com/actions/python-versions/main
+2026-11-22T18:39:43.5459937Z   update-environment: true
+2026-11-22T18:39:43.5460301Z   allow-prereleases: false
+2026-11-22T18:39:43.5460697Z   freethreaded: false
+2026-11-22T18:39:43.5461051Z ##[endgroup]
+2026-11-22T18:39:43.6602105Z ##[group]Installed versions
+2026-11-22T18:39:43.6732454Z Successfully set up CPython (3.12.16)
+2026-11-22T18:39:43.6733259Z ##[endgroup]
+2026-11-22T18:39:43.7129375Z [command]/opt/hostedtoolcache/Python/3.12.16/x64/bin/pip cache dir
+2026-11-22T18:39:43.9832817Z /home/runner/.cache/pip
+2026-11-22T18:39:44.0773803Z Cache hit for: setup-python-Linux-x64-26.04-Ubuntu-python-3.12.16-pip-ed5df667e3577355b5fd2c3d86e136c2bc65ab6aecda9a09a96dda9a67b3cf5a
+2026-11-22T18:39:44.8483613Z Received 151505453 of 151505453 (100.0%), 203.2 MBs/sec
+2026-11-22T18:39:44.8508179Z Cache Size: ~144 MB (151505453 B)
+2026-11-22T18:39:44.8567259Z [command]/usr/bin/tar -xf /home/runner/work/_temp/da5bca02-55e9-4879-87d6-163162aa50cc/cache.tzst -P -C /home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit --use-compress-program unzstd
+2026-11-22T18:39:45.0226214Z Cache restored successfully
+2026-11-22T18:39:45.0283120Z Cache restored from key: setup-python-Linux-x64-26.04-Ubuntu-python-3.12.16-pip-ed5df667e3577355b5fd2c3d86e136c2bc65ab6aecda9a09a96dda9a67b3cf5a
+2026-11-22T18:39:45.0461234Z ##[group]Run npm ci --prefix frontend
+2026-11-22T18:39:45.0462034Z [36;1mnpm ci --prefix frontend[0m
+2026-11-22T18:39:45.0496097Z shell: /usr/bin/bash -e {0}
+2026-11-22T18:39:45.0496571Z env:
+2026-11-22T18:39:45.0497012Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T18:39:45.0497551Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T18:39:45.0498289Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T18:39:45.0498772Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T18:39:45.0499262Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T18:39:45.0499777Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T18:39:45.0500355Z ##[endgroup]
+2026-11-22T18:39:49.4108309Z 
+2026-11-22T18:39:49.4109216Z added 210 packages, and audited 217 packages in 4s
+2026-11-22T18:39:49.4109732Z 
+2026-11-22T18:39:49.4109984Z 35 packages are looking for funding
+2026-11-22T18:39:49.4110740Z   run `npm fund` for details
+2026-11-22T18:39:49.4118100Z 
+2026-11-22T18:39:49.4119219Z found 0 vulnerabilities
+2026-11-22T18:39:49.4506841Z ##[group]Run npm --prefix frontend run build
+2026-11-22T18:39:49.4507356Z [36;1mnpm --prefix frontend run build[0m
+2026-11-22T18:39:49.4531871Z shell: /usr/bin/bash -e {0}
+2026-11-22T18:39:49.4532374Z env:
+2026-11-22T18:39:49.4532757Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T18:39:49.4533364Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T18:39:49.4533870Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T18:39:49.4534354Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T18:39:49.4534864Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T18:39:49.4535315Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T18:39:49.4535835Z ##[endgroup]
+2026-11-22T18:39:49.5436373Z 
+2026-11-22T18:39:49.5437143Z > pharmaml-studio-frontend@1.2.240 build
+2026-11-22T18:39:49.5437717Z > tsc --noEmit && vite build
+2026-11-22T18:39:49.5437979Z 
+2026-11-22T18:39:58.7339774Z [36mvite v7.3.8 [32mbuilding client environment for production...[36m[39m
+2026-11-22T18:39:58.8007923Z transforming...
+2026-11-22T18:40:17.7778088Z [32m✓[39m 2127 modules transformed.
+2026-11-22T18:40:18.4358861Z rendering chunks...
+2026-11-22T18:40:19.4961331Z computing gzip size...
+2026-11-22T18:40:19.6371102Z [2mdist/[22m[32mindex.html                     [39m[1m[2m    0.87 kB[22m[1m[22m[2m │ gzip:     0.45 kB[22m
+2026-11-22T18:40:19.6373167Z [2mdist/[22m[2massets/[22m[35mindex-BFolYtD-.css      [39m[1m[2m   28.77 kB[22m[1m[22m[2m │ gzip:     6.09 kB[22m
+2026-11-22T18:40:19.6374785Z [2mdist/[22m[2massets/[22m[36mplotly.min-DJYGR8IL.js  [39m[1m[2m    0.47 kB[22m[1m[22m[2m │ gzip:     0.33 kB[22m
+2026-11-22T18:40:19.6376698Z [2mdist/[22m[2massets/[22m[36mmotion-CdoKHwap.js      [39m[1m[2m   94.95 kB[22m[1m[22m[2m │ gzip:    31.37 kB[22m
+2026-11-22T18:40:19.6378198Z [2mdist/[22m[2massets/[22m[36mthree-CUDDg4sp.js       [39m[1m[2m  476.83 kB[22m[1m[22m[2m │ gzip:   119.99 kB[22m
+2026-11-22T18:40:19.6379661Z [2mdist/[22m[2massets/[22m[36mindex-LCba82nS.js       [39m[1m[33m  926.55 kB[39m[22m[2m │ gzip:   241.08 kB[22m
+2026-11-22T18:40:19.6380740Z [33m
+2026-11-22T18:40:19.6381471Z (!) Some chunks are larger than 500 kB after minification. Consider:
+2026-11-22T18:40:19.6382472Z - Using dynamic import() to code-split the application
+2026-11-22T18:40:19.6384159Z - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+2026-11-22T18:40:19.6385553Z - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+2026-11-22T18:40:19.6386934Z [2mdist/[22m[2massets/[22m[36mplotly-B20fKkf_.js      [39m[1m[33m4,840.90 kB[39m[22m[2m │ gzip: 1,467.84 kB[22m
+2026-11-22T18:40:19.6387887Z [32m✓ built in 20.88s[39m
+2026-11-22T18:40:19.7477022Z ##[group]Run npm --prefix frontend test
+2026-11-22T18:40:19.7477451Z [36;1mnpm --prefix frontend test[0m
+2026-11-22T18:40:19.7500311Z shell: /usr/bin/bash -e {0}
+2026-11-22T18:40:19.7500767Z env:
+2026-11-22T18:40:19.7501180Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T18:40:19.7501929Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib/pkgconfig
+2026-11-22T18:40:19.7502470Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T18:40:19.7502939Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T18:40:19.7503409Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.16/x64
+2026-11-22T18:40:19.7503921Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.16/x64/lib
+2026-11-22T18:40:19.7504359Z ##[endgroup]
+2026-11-22T18:40:19.8431124Z 
+2026-11-22T18:40:19.8431865Z > pharmaml-studio-frontend@1.2.240 test
+2026-11-22T18:40:19.8432510Z > vitest run
+2026-11-22T18:40:19.8432753Z 
+2026-11-22T18:40:20.1373715Z 
+2026-11-22T18:40:20.1376525Z [1m[30m[46m RUN [49m[39m[22m [36mv5.1.1 [39m[90m/home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit/pharma-ml-toolkit/frontend[39m
+2026-11-22T18:40:20.1377607Z 
+2026-11-22T18:40:24.3019257Z  [32m✓[39m src/features/ml/__tests__/WorkflowBuilderLane.test.tsx [2m([22m[2m8 tests[22m[2m)[22m[33m 2360[2mms[22m[39m
+2026-11-22T18:40:24.3073434Z    [32m✓[39m the §8 Workflow Builder lane of the Machine Learning workspace [2m(8)[22m
+2026-11-22T18:40:24.3093549Z      [33m[2m✓[22m[39m validates the spec as edited and renders the verdict, the order, and the digest[33m 406[2mms[22m[39m
+2026-11-22T18:40:24.3097658Z      [33m[2m✓[22m[39m runs the sync round trip and renders the REAL parsed run record[33m 307[2mms[22m[39m
+2026-11-22T18:40:24.3103787Z      [33m[2m✓[22m[39m relays the job-mode COMPLETED result through the authoritative REST lane[33m 439[2mms[22m[39m
+2026-11-22T18:40:24.3108271Z  [32m✓[39m src/features/ml/__tests__/MultiobjectiveLane.test.tsx [2m([22m[2m8 tests[22m[2m)[22m[33m 2360[2mms[22m[39m
+2026-11-22T18:40:24.3113216Z    [32m✓[39m the multi-objective optimization lane of the Machine Learning workspace [2m(8)[22m
+2026-11-22T18:40:24.3115364Z      [33m[2m✓[22m[39m runs the study round trip and renders the front table[33m 471[2mms[22m[39m
+2026-11-22T18:40:24.3172127Z      [33m[2m✓[22m[39m gates a negative seed client-side — no request fires[33m 315[2mms[22m[39m
+2026-11-22T18:40:24.6734638Z  [32m✓[39m src/features/ml/__tests__/PharmacogenomicsLane.test.tsx [2m([22m[2m8 tests[22m[2m)[22m[33m 2726[2mms[22m[39m
+2026-11-22T18:40:24.6753426Z    [32m✓[39m the pharmacogenomics lane of the Machine Learning workspace [2m(8)[22m
+2026-11-22T18:40:24.6779634Z      [33m[2m✓[22m[39m runs the analyze round trip and renders the association table[33m 480[2mms[22m[39m
+2026-11-22T18:40:24.6781878Z      [33m[2m✓[22m[39m labels the estimates and renders null telemetry honestly[33m 325[2mms[22m[39m
+2026-11-22T18:40:24.6791305Z      [33m[2m✓[22m[39m gates an over-range seed client-side — no request fires[33m 628[2mms[22m[39m
+2026-11-22T18:40:24.6795708Z      [33m[2m✓[22m[39m gates an out-of-band top-k client-side — no request fires[33m 348[2mms[22m[39m
+2026-11-22T18:40:28.2354451Z  [32m✓[39m src/features/ml/__tests__/RepurposingLane.test.tsx [2m([22m[2m8 tests[22m[2m)[22m[33m 2581[2mms[22m[39m
+2026-11-22T18:40:28.2363807Z    [32m✓[39m the drug repurposing lane of the Machine Learning workspace [2m(8)[22m
+2026-11-22T18:40:28.2383606Z      [33m[2m✓[22m[39m runs the screen and renders the ranked candidate tables[33m 400[2mms[22m[39m
+2026-11-22T18:40:28.2413625Z      [33m[2m✓[22m[39m labels the estimates and renders null telemetry honestly[33m 323[2mms[22m[39m
+2026-11-22T18:40:28.2415309Z      [33m[2m✓[22m[39m gates a below-bound screen client-side — no request fires[33m 364[2mms[22m[39m
+2026-11-22T18:40:28.2424548Z      [33m[2m✓[22m[39m gates an over-cap screen client-side — no request fires[33m 401[2mms[22m[39m
+2026-11-22T18:40:28.2426463Z      [33m[2m✓[22m[39m gates a bad learning rate client-side — no request fires[33m 384[2mms[22m[39m
+2026-11-22T18:40:28.3906518Z  [32m✓[39m src/features/ml/__tests__/DrugResponseLane.test.tsx [2m([22m[2m8 tests[22m[2m)[22m[33m 2739[2mms[22m[39m
+2026-11-22T18:40:28.3954124Z    [32m✓[39m the cancer cell-line drug-response lane of the Machine Learning workspace [2m(8)[22m
+2026-11-22T18:40:28.3956027Z      [33m[2m✓[22m[39m runs the analyze round trip and renders the ranking + biomarker tables[33m 477[2mms[22m[39m
+2026-11-22T18:40:28.3981337Z      [33m[2m✓[22m[39m labels the estimates and renders null telemetry honestly[33m 333[2mms[22m[39m
+2026-11-22T18:40:28.3983526Z      [33m[2m✓[22m[39m surfaces the backend's own hard 422 verbatim through the banner[33m 301[2mms[22m[39m
+2026-11-22T18:40:28.3985140Z      [33m[2m✓[22m[39m gates a below-bound screen client-side — no request fires[33m 358[2mms[22m[39m
+2026-11-22T18:40:28.4015611Z      [33m[2m✓[22m[39m gates an over-cap screen client-side — no request fires[33m 376[2mms[22m[39m
+2026-11-22T18:40:28.4029219Z      [33m[2m✓[22m[39m gates a folds-exceed-cells request client-side — no request fires[33m 415[2mms[22m[39m
+2026-11-22T18:40:28.8764075Z  [32m✓[39m src/features/ml/__tests__/DtaLane.test.tsx [2m([22m[2m8 tests[22m[2m)[22m[33m 2948[2mms[22m[39m
+2026-11-22T18:40:28.8793683Z    [32m✓[39m the drug–target interaction lane of the Machine Learning workspace [2m(8)[22m
+2026-11-22T18:40:28.8843453Z      [33m[2m✓[22m[39m featurizes the textarea's pairs and renders the per-pair cards[33m 358[2mms[22m[39m
+2026-11-22T18:40:28.8845063Z      [33m[2m✓[22m[39m gates an empty batch client-side — no request fires[33m 330[2mms[22m[39m
+2026-11-22T18:40:28.8846409Z      [33m[2m✓[22m[39m gates a malformed line client-side — no request fires[33m 1125[2mms[22m[39m
+2026-11-22T18:40:29.5929923Z  [32m✓[39m src/services/websocket/__tests__/client.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+2026-11-22T18:40:30.7508187Z  [32m✓[39m src/features/dl/__tests__/GnnLane.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[33m 1223[2mms[22m[39m
+2026-11-22T18:40:31.2013406Z  [32m✓[39m src/features/datasets/__tests__/DatasetsPage.test.tsx [2m([22m[2m8 tests[22m[2m)[22m[33m 860[2mms[22m[39m
+2026-11-22T18:40:32.1704378Z  [31m❯[39m src/app/__tests__/StartupGate.test.tsx [2m([22m[2m6 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 218[2mms[22m[39m
+2026-11-22T18:40:32.1773830Z    [32m✓[39m StartupGate — the §14.1 handshake states [2m(5)[22m
+2026-11-22T18:40:32.1803293Z      [32m✓[39m shows the honest connecting card while the handshake is in flight[32m 82[2mms[22m[39m
+2026-11-22T18:40:32.1833524Z      [32m✓[39m mounts the workspaces with the sr-only ready marker once healthy[32m 11[2mms[22m[39m
+2026-11-22T18:40:32.1835111Z      [32m✓[39m surfaces the typed failure stage + message verbatim with a Retry[32m 45[2mms[22m[39m
+2026-11-22T18:40:32.1882228Z      [32m✓[39m treats a non-StartupError rejection as an acquire-stage failure, not a crash[32m 10[2mms[22m[39m
+2026-11-22T18:40:32.1913290Z      [32m✓[39m re-arms the handshake from the Retry click — the §14.2 controlled restart[32m 46[2mms[22m[39m
+2026-11-22T18:40:32.1943205Z    [31m❯[39m StartupGate — the live-update health strip [2m(1)[22m
+2026-11-22T18:40:32.1945298Z [31m     [31m×[31m stays silent while the stream is open, and degrades visibly when it drops[39m[32m 20[2mms[22m[39m
+2026-11-22T18:40:32.5164422Z  [32m✓[39m src/components/charts/__tests__/PlotlyFigure.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[32m 153[2mms[22m[39m
+2026-11-22T18:40:33.0110302Z  [32m✓[39m src/features/ml/__tests__/AdmetLane.test.tsx [2m([22m[2m7 tests[22m[2m)[22m[33m 1967[2mms[22m[39m
+2026-11-22T18:40:33.0184078Z    [32m✓[39m the ADMET lane of the Machine Learning workspace [2m(7)[22m
+2026-11-22T18:40:33.0223685Z      [33m[2m✓[22m[39m scores the textarea's SMILES and renders the per-molecule cards[33m 340[2mms[22m[39m
+2026-11-22T18:40:33.0253650Z      [33m[2m✓[22m[39m reports an invalid SMILES row per-row, never silently[33m 316[2mms[22m[39m
+2026-11-22T18:40:33.0279300Z      [33m[2m✓[22m[39m gates an empty batch client-side — no request fires[33m 336[2mms[22m[39m
+2026-11-22T18:40:33.2165405Z  [32m✓[39m src/services/api/__tests__/startup.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+2026-11-22T18:40:34.0614431Z  [32m✓[39m src/app/__tests__/App.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 269[2mms[22m[39m
+2026-11-22T18:40:34.2794208Z  [32m✓[39m src/app/__tests__/workspaces.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+2026-11-22T18:40:34.3421188Z  [32m✓[39m src/components/ui/__tests__/atoms.test.tsx [2m([22m[2m6 tests[22m[2m)[22m[32m 233[2mms[22m[39m
+2026-11-22T18:40:34.3494818Z 
+2026-11-22T18:40:34.3496166Z [31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+2026-11-22T18:40:34.3496587Z 
+2026-11-22T18:40:34.3500140Z [41m[1m FAIL [22m[49m src/app/__tests__/StartupGate.test.tsx[2m > [22mStartupGate — the live-update health strip[2m > [22mstays silent while the stream is open, and degrades visibly when it drops
+2026-11-22T18:40:34.3506530Z [31m[1mTestingLibraryElementError[22m: Unable to find an element with the text: reconnecting the live event stream (attempt 2). This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+2026-11-22T18:40:34.3507792Z 
+2026-11-22T18:40:34.3508004Z Ignored nodes: comments, script, style
+2026-11-22T18:40:34.3508573Z [36m<body>[31m
+2026-11-22T18:40:34.3508942Z   [36m<div>[31m
+2026-11-22T18:40:34.3509353Z     [36m<span[31m
+2026-11-22T18:40:34.3509801Z       [33mclass[31m=[32m"sr-only"[31m
+2026-11-22T18:40:34.3510379Z       [33mdata-testid[31m=[32m"startup-ready"[31m
+2026-11-22T18:40:34.3510846Z     [36m>[31m
+2026-11-22T18:40:34.3511246Z       [0mbackend [0m
+2026-11-22T18:40:34.3512132Z       [0m1.2.240[0m
+2026-11-22T18:40:34.3512708Z       [0m ready via [0m
+2026-11-22T18:40:34.3513290Z       [0mdev-same-origin[0m
+2026-11-22T18:40:34.3513726Z     [36m</span>[31m
+2026-11-22T18:40:34.3514060Z     [36m<div>[31m
+2026-11-22T18:40:34.3514523Z       [0mworkspace-shell[0m
+2026-11-22T18:40:34.3514897Z     [36m</div>[31m
+2026-11-22T18:40:34.3515266Z   [36m</div>[31m
+2026-11-22T18:40:34.3515673Z [36m</body>[31m[39m
+2026-11-22T18:40:34.3516427Z [90m [2m❯[22m Object.getElementError node_modules/@testing-library/dom/dist/config.js:[2m37:19[22m[39m
+2026-11-22T18:40:34.3533039Z [90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m76:38[22m[39m
+2026-11-22T18:40:34.3533914Z [90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m52:17[22m[39m
+2026-11-22T18:40:34.3534791Z [90m [2m❯[22m node_modules/@testing-library/dom/dist/query-helpers.js:[2m95:19[22m[39m
+2026-11-22T18:40:34.3535532Z [36m [2m❯[22m src/app/__tests__/StartupGate.test.tsx:[2m160:19[22m[39m
+2026-11-22T18:40:34.3544247Z     [90m158|[39m     [90m// a drop degrades to a visible, honest strip[39m
+2026-11-22T18:40:34.3545334Z     [90m159|[39m     emitStreamState({ state: "reconnecting", lastSequence: 3, attempts…
+2026-11-22T18:40:34.3546421Z     [90m160|[39m     expect(screen.getByText("reconnecting the live event stream (attem…
+2026-11-22T18:40:34.3547098Z     [90m   |[39m                   [31m^[39m
+2026-11-22T18:40:34.3547650Z     [90m161|[39m
+2026-11-22T18:40:34.3548407Z     [90m162|[39m     [90m// terminal close — the REST fallback notice, never a blocker[39m
+2026-11-22T18:40:34.3548738Z 
+2026-11-22T18:40:34.3549028Z [31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+2026-11-22T18:40:34.3549336Z 
+2026-11-22T18:40:34.3550254Z 
+2026-11-22T18:40:34.3555149Z [2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m15 passed[39m[22m[90m (16)[39m
+2026-11-22T18:40:34.3556410Z [2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m118 passed[39m[22m[90m (119)[39m
+2026-11-22T18:40:34.3557119Z [2m   Start at [22m 18:40:20
+2026-11-22T18:40:34.3562872Z [2m   Duration [22m 14.20s[2m (tests 52%, environment 28%, setup 8%, import 7%, transform 6%)[22m
+2026-11-22T18:40:34.3567468Z 
+2026-11-22T18:40:34.3568289Z [2mEnvironment [22m [33mjsdom was created 16 times[39m[2m · 11.01s total, 28% of tracked time[22m
+2026-11-22T18:40:34.3569542Z [2m            [22m [2mcreate it once per worker with [22m[33mpool: 'vmThreads'[39m[2m (keeps per-file isolation) or [22m[33misolate: false[39m[2m (shares it across files)[22m
+2026-11-22T18:40:34.3570640Z [2m            [22m [2mlearn more: https://vitest.dev/guide/improving-performance#test-environments[22m
+2026-11-22T18:40:34.3571080Z 
+2026-11-22T18:40:34.3580996Z 
+2026-11-22T18:40:34.3606151Z ##[error]TestingLibraryElementError: Unable to find an element with the text: reconnecting the live event stream (attempt 2). This could be because the text is broken up by multiple elements. In this case, you can provide a function for your text matcher to make your matcher more flexible.
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <span
+      class="sr-only"
+      data-testid="startup-ready"
+    >
+      backend 
+      1.2.240
+       ready via 
+      dev-same-origin
+    </span>
+    <div>
+      workspace-shell
+    </div>
+  </div>
+</body>
+ ❯ Object.getElementError node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/app/__tests__/StartupGate.test.tsx:160:19
+
+
+2026-11-22T18:40:34.3909290Z ##[error]Process completed with exit code 1.
+2026-11-22T18:40:34.4068311Z Post job cleanup.
+2026-11-22T18:40:34.4915800Z [command]/usr/bin/git version
+2026-11-22T18:40:34.4956098Z git version 2.56.1
+2026-11-22T18:40:34.4988587Z Temporarily overriding HOME='/home/runner/work/_temp/e1818b70-1e04-4bfe-8abd-0f3963afa690' before making global git config changes
+2026-11-22T18:40:34.4990640Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T18:40:34.4997266Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-22T18:40:34.5026719Z Removing SSH command configuration
+2026-11-22T18:40:34.5033122Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T18:40:34.5068050Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T18:40:34.5324998Z Removing HTTP extra header
+2026-11-22T18:40:34.5335328Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T18:40:34.5374881Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T18:40:34.5632141Z Removing includeIf entries pointing to credentials config files
+2026-11-22T18:40:34.5653354Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T18:40:34.5703397Z includeif.gitdir:/home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit/.git.path
+2026-11-22T18:40:34.5732948Z includeif.gitdir:/home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit/.git/worktrees/*.path
+2026-11-22T18:40:34.5734095Z includeif.gitdir:/github/workspace/.git.path
+2026-11-22T18:40:34.5735285Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-22T18:40:34.5738470Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit/.git.path
+2026-11-22T18:40:34.5740333Z /home/runner/work/_temp/git-credentials-fb305493-4979-44b5-a334-6642d4997e7e.config
+2026-11-22T18:40:34.5743118Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-fb305493\-4979\-44b5\-a334\-6642d4997e7e\.config
+2026-11-22T18:40:34.5781113Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit/.git/worktrees/*.path
+2026-11-22T18:40:34.5806575Z /home/runner/work/_temp/git-credentials-fb305493-4979-44b5-a334-6642d4997e7e.config
+2026-11-22T18:40:34.5814989Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/pharma-ml-toolkit/pharma-ml-toolkit/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-fb305493\-4979\-44b5\-a334\-6642d4997e7e\.config
+2026-11-22T18:40:34.5846725Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-11-22T18:40:34.5867411Z /github/runner_temp/git-credentials-fb305493-4979-44b5-a334-6642d4997e7e.config
+2026-11-22T18:40:34.5873247Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-fb305493\-4979\-44b5\-a334\-6642d4997e7e\.config
+2026-11-22T18:40:34.5906491Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-11-22T18:40:34.5926071Z /github/runner_temp/git-credentials-fb305493-4979-44b5-a334-6642d4997e7e.config
+2026-11-22T18:40:34.5932639Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-fb305493\-4979\-44b5\-a334\-6642d4997e7e\.config
+2026-11-22T18:40:34.5966294Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-22T18:40:34.6194302Z Removing credentials config '/home/runner/work/_temp/git-credentials-fb305493-4979-44b5-a334-6642d4997e7e.config'
+2026-11-22T18:40:34.6352891Z Cleaning up orphan processes
+2026-11-22T18:40:34.6682788Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
