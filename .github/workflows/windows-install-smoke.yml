@@ -683,57 +683,101 @@ jobs:
           }
 
       # ---- 12. uninstall the NSIS package + verify removal --------
+      # The honest §10 leg-6 semantics (the sixth dispatch's discovery
+      # trued them): the NSIS currentUser install home
+      # %LOCALAPPDATA%\PharmaML Studio is ALSO the backend's default
+      # data dir (APP_DIR_NAME) — the two COLLIDE by naming, so the
+      # launched app legitimately wrote studio.db + files/ there. The
+      # verdict therefore checks THE APP FILES' removal (the host
+      # exe + the backend subtree + the uninstaller shell) while the
+      # user-data files may remain (the documented retention rule);
+      # the leftover dir is then removed as the LANE's cleanup, not
+      # the app's behavior.
       - name: "12. Uninstall the NSIS package + verify removal"
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $root = $env:NSIS_INSTALL_ROOT
           $un = Join-Path $root "uninstall.exe"
-          if (-not (Test-Path $un)) {
-            # locate via the registry uninstall key (recorded)
-            $key = Get-ChildItem "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall" |
-              Where-Object { $_.GetValue("DisplayName") -like "*PharmaML*" } |
-              Select-Object -First 1
-            if ($key) {
-              "NSIS uninstall registry key: $($key.PSChildName) — $($key.GetValue('DisplayName')) $($key.GetValue('DisplayVersion'))" |
-                Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"
-              $un = ($key.GetValue("UninstallString") -replace '"', "")
-            }
+          # the registry entry recorded upfront (form B needs it)
+          $regUninstall = $null
+          $reg = Get-ChildItem "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall" |
+            Where-Object { $_.GetValue("DisplayName") -like "*PharmaML*" } |
+            Select-Object -First 1
+          if ($reg) {
+            $regUninstall = ($reg.GetValue("UninstallString") -replace '"', "")
+            "NSIS uninstall registry key: $($reg.PSChildName) — $($reg.GetValue('DisplayName')) $($reg.GetValue('DisplayVersion')); UninstallString=$regUninstall" |
+              Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"
           }
           if (-not (Test-Path $un)) {
-            Write-Host "::error::no uninstaller found for the NSIS package (neither $root\uninstall.exe nor a registry entry)"
+            if ($regUninstall) { $un = $regUninstall }
+          }
+          if (-not (Test-Path $un)) {
+            Write-Host "::error::no uninstaller found for the NSIS package (neither the install-dir uninstall.exe nor a registry entry)"
             exit 1
           }
           "NSIS uninstaller: $un" |
             Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"
-          # the fifth dispatch's catch: the plain '/S' invocation runs
-          # the NSIS uninstaller ASYNC (it self-copies to %TEMP% and
-          # detaches, so -Wait returns before the removal finishes and
-          # the 150s poll can lose the race). The '_?=' pattern runs
-          # the uninstaller SYNCHRONOUSLY in place; the uninstaller
-          # cannot delete the dir it runs from, so the caller removes
-          # the empty residue afterwards.
-          Start-Process -FilePath $un -ArgumentList "/S", "_?=`"$root`"" -Wait
-          Start-Sleep -Seconds 5
-          # the residue: the uninstaller shell itself (+ the dir);
-          # anything more is recorded honestly before the removal
-          $left = @(Get-ChildItem $root -Recurse -Force -ErrorAction SilentlyContinue)
-          "NSIS uninstall residue after the sync run: $($left.Count) entries" |
+          # FORM A: the canonical silent uninstall invoked as a CHILD
+          # of this shell (the & call operator, NOT Start-Process) so
+          # the uninstaller's console diagnostics (Tauri's
+          # WriteErrorToConsole abort reasons — e.g. the
+          # CheckIfAppIsRunning guard) land in the job log: the
+          # fifth/sixth dispatches ran it detached and any abort
+          # reason was invisible
+          $null = & $un /S
+          Write-Host "uninstall.exe /S (form A, direct child) exit: $LASTEXITCODE"
+          # the async self-copy may still be deleting — poll for the
+          # APP FILES' removal, not the dir
+          $appFiles = @(
+            (Join-Path $root "pharmaml-studio.exe"),
+            (Join-Path $root "backend"),
+            (Join-Path $root "uninstall.exe")
+          )
+          $deadline = (Get-Date).AddSeconds(240)
+          $appsGone = $false
+          while ((Get-Date) -lt $deadline) {
+            $left = @($appFiles | Where-Object { Test-Path $_ })
+            if ($left.Count -eq 0) { $appsGone = $true; break }
+            Start-Sleep -Seconds 5
+          }
+          if (-not $appsGone -and $regUninstall -and ($regUninstall -ne $un)) {
+            # FORM B: the registry UninstallString verbatim + /S
+            Write-Host "form A left the app files — trying the registry UninstallString form"
+            $null = & $regUninstall /S
+            Write-Host "registry UninstallString /S (form B) exit: $LASTEXITCODE"
+            $deadline = (Get-Date).AddSeconds(240)
+            while ((Get-Date) -lt $deadline) {
+              $left = @($appFiles | Where-Object { Test-Path $_ })
+              if ($left.Count -eq 0) { $appsGone = $true; break }
+              Start-Sleep -Seconds 5
+            }
+          }
+          if (-not $appsGone) {
+            Get-ChildItem $root | Select-Object Name, Length |
+              Format-Table | Out-String | Write-Host
+            Write-Host "::error::the NSIS uninstall did not remove the app files within the window — the console diagnostics above carry the uninstaller's abort reason if any"
+            exit 1
+          }
+          # the honest residue: the user-data files legitimately remain
+          # (the §10 leg-6 retention rule — studio.db / files/ under
+          # the collided dir); record them
+          $residue = @(Get-ChildItem $root -Recurse -Force -ErrorAction SilentlyContinue)
+          "NSIS uninstall residue (the user-data retention rule): $($residue.Count) entries" |
             Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"
-          foreach ($l in ($left | Select-Object -First 10)) {
+          foreach ($l in ($residue | Select-Object -First 10)) {
             "  residue: $($l.FullName)" |
               Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"
           }
-          $deadline = (Get-Date).AddSeconds(120)
+          # the LANE cleanup (never the app's behavior — the upgrade
+          # leg needs a clean machine): remove the leftover dir
+          $deadline = (Get-Date).AddSeconds(60)
           while ((Test-Path $root) -and (Get-Date) -lt $deadline) {
-            if ($left.Count -le 2) {
-              Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
-            }
+            Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 3
-            $left = @(Get-ChildItem $root -Recurse -Force -ErrorAction SilentlyContinue)
           }
           if (Test-Path $root) {
-            Write-Host "::error::the NSIS install dir survived the uninstall: $root"
+            Write-Host "::error::the lane cleanup could not remove the leftover dir: $root"
             exit 1
           }
           foreach ($d in @(
@@ -743,7 +787,7 @@ jobs:
             "NSIS uninstall: user-data dir $d exists=$(Test-Path $d)" |
               Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"
           }
-          Write-Host "NSIS UNINSTALL OK: install dir removed; the user-data retention state recorded"
+          Write-Host "NSIS UNINSTALL OK: the app files removed (the §10 leg-6 app-leaves rule); the user-data residue recorded (the retention rule); the lane cleanup removed the leftover dir"
 
       # ---- 13. the upgrade leg (v1.2.231 -> v1.2.240) -------------
       # §10's upgrade + user-data retention lane, CI-executed: install
