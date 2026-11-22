@@ -54,7 +54,14 @@ summarises them and wins any status disagreement.
   re-attached, fetched, reset onto the r321 terminal `c9df2a5d`,
   the 14 ghost-residue paths swept — the tree 0/0 clean, the venv
   re-pinned foreground, the frontend npm ci) — the §8 evaluation
-  + the lightweight workflow engine's API lane EXECUTED.
+  + the lightweight workflow engine's API lane EXECUTED. The
+  Phase-6 GUI addendum round 323 — the interactive part13
+  continuation, trace 1a2022c2d26dbc05, over the fourteenth
+  (lightest) arrival: the venv + the Studio frontend survived
+  intact (zero repair), the root web node_modules wiped and
+  reinstalled in the same tool-call window, one unpushed machinery
+  UUID commit reset away per the r312 precedent — the §8 GUI leg
+  (the Workflow Builder stage) EXECUTED.
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
@@ -101,7 +108,7 @@ summarises them and wins any status disagreement.
   authenticated check-runs poll (this round) |
 | Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.240 SOURCE archive shipped (four homes + offsite, 18 zips) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
 | Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.240 | read directly this session, lockstep guard green |
-| Test surface | 8,523 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 467 files — the +39 workflow lane: 22 engine + 17 route, the r322 re-true) — PLUS the component-test lane: 102 Vitest tests / 14 files over the Studio frontend (unchanged this round) | fresh collection + vitest this round |
+| Test surface | 8,525 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 467 files — the r323 re-true: +2 the workflow-lane drift guards over the r322 +39) — PLUS the component-test lane: 110 Vitest tests / 15 files over the Studio frontend (+8 the r323 Workflow Builder suite: the registry line, the template chain, the validate/run round trips, the 422 verbatim, the client-side gate, the job relay, the runs ledger) | fresh collection + vitest this round |
 | Census | 1,693 files / 566,700 lines / v1.2.240 (the r322 re-true: +13 files / +3,422 lines — the pharmaml.workflow package x4, the route family, the two test suites, ARCHITECTURE_REVIEW.md, the contract pair regrowth, the four r322 evidence screenshots; verified three-way: walk = live API = page render) | this round's census walk |
 | Source archive | v1.2.240 — re-shipped same-version at r319, r321 AND r322 (the r303/r304/r317 convention: the §8 workflow lane + this row's re-true ride the r322 rebuilt archive — terminal-of-record `38769d67` at 21,039,336 B, six-home parity ALL OK + the offsite mirror rebuilt at 17 zips post-rollback) | sha256 across the homes + offsite |
 | venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.240 — zero drift vs `requirements.txt` | import probes (r319: rdkit was found missing after the eleventh rollback's partial hydration — `venv_repair.sh` ran FOREGROUND and the full import surface + the Studio GUI stack verified) |
@@ -354,9 +361,32 @@ summarises them and wins any status disagreement.
   Drug Repurposing, Cancer Cell-Line Drug Response,
   Pharmacogenomics, Multi-objective Optimization) carries both its
   API + GUI legs; the campaign rides on to Phase 6.**
-- **Phase 6** — architecture hardening: **OPENED (round 322, the
-  interactive part13 continuation over the thirteenth rollback,
-  recovered first)** — the §8 Scientific Workflow Engine lane,
+- **Phase 6** — architecture hardening: **OPENED (round 322) — the
+  §8 GUI leg EXECUTED (round 323, the interactive part13
+  continuation, trace 1a2022c2d26dbc05, over the fourteenth —
+  lightest — rollback: the venv + the Studio frontend survived, the
+  root node_modules reinstalled in the same window, one machinery
+  UUID commit reset away per the r312 precedent)**: the Workflow
+  Builder stage (stage 17, the later stages renumbered 18/19/20) —
+  §8's construct/save/reproduce surface over the REAL in-tree
+  engine: the template select seeding the editable spec JSON canvas
+  from the REAL templates answer (guided-qsar with its honest
+  leakage note + the minimal core), the validate gate (the verdict +
+  the executor's order + the canonical digest), the run lane (sync
+  bounded + job mode over the EXISTING JobManager through the §13
+  JobRunCard relay), the REAL parsed run record rendering (the
+  per-node states, the artifact lineage with the honest
+  digest_kinds, the reproducibility block with the determinism
+  note), and the bounded runs ledger with its honest lifetime note;
+  the client family + the mirrored route bounds in the ml client
+  (row-validated parsers, the one-DTO rule, the 12/24/seed caps
+  mirrored beside the client); the guards trued (the §11.2 stage
+  chain now 20 stages, the REST-surface module set + the five
+  workflow paths, the two new drift guards — the DTO parity + the
+  caps mirror); 8 component tests + the browser-E2E golden path
+  over the REAL backend (zero page/console errors, the r323 evidence
+  pair); the vitest lane 110/110 over 15 files; the collection
+  re-trued 8,525/0/467. The r322 API lane's own record follows —
   EXECUTED as the directive itself orders ("Do not introduce a
   large workflow engine automatically. First assess whether the
   existing JobManager and capability registry can support a
@@ -392,10 +422,10 @@ summarises them and wins any status disagreement.
   nodes/80 records, job ≤ 24/200; the rank hygiene executing the
   leverage/Williams backend's own prescription — a kept column
   survives only if it adds rank to [1|X], every dropped name +
-  reason recorded). The GUI leg (the Workflow Builder stage) rides
-  the next continuation per the r312→r313 precedent; then resource
-  monitoring, security scanning lanes, documentation automation
-  (the Phase-6 remainder, each small reversible tested).
+  reason recorded). The GUI leg (the Workflow Builder stage) EXECUTED
+  at round 323 (the record above); the Phase-6 remainder — resource
+  monitoring, security scanning lanes, documentation automation —
+  rides the next continuation, each small reversible tested.
 - **Phase 7** — the next production release, from the exact release
   commit, with all gates recorded.
 

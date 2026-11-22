@@ -112,6 +112,112 @@
   backend already in-tree) rides the next continuation per
   PROJECT_STATUS §6. The next CI poll carries this round's push
   verdict.
+## [1.2.240 re-ship] — 2026-11-23 — round 323 (the 115th recorded run: the interactive part13 continuation, trace 1a2022c2d26dbc05 — the Phase-6 §8 GUI leg, the Workflow Builder stage over the r322 engine; the same-version re-ship per the r303/r304/r317/r319/r321/r322 convention)
+
+- **The fourteenth arrival recovered in minutes — the lightest
+  rollback class yet**: the four-sentinel opening found the venv
+  SURVIVED intact at the exact r322 pins (numpy 1.26.4 / torch
+  2.14.1+cpu / rdkit 2026.09.1 / sklearn 1.5.2 / pandas 2.2.3 /
+  pharmaml 1.2.240 — zero repair, the fifth rollback in a row to
+  leave it standing), the Studio frontend node_modules SURVIVED, the
+  PAT held (the stored 600-mode 93-char credential,
+  API-validated as MrMMA2004, never printed), and the tree clean at
+  `722aaee0` == origin/main (the r322 push landed) with ONE
+  unpushed machinery UUID-commit (`5466d16e`: the dev.pid churn +
+  one post-session verify screenshot — not referenced by the r322
+  ledger) **reset away per the r312 precedent**; the tree 0/0 clean.
+  The one real damage: the root web-app node_modules wiped —
+  `bun install` (828 packages) restored it in the same tool-call
+  window (the r320 procedure). The stale inherited summary still
+  described the world at r308/counter 99 (the sixteenth consecutive
+  summary-only turn) — the reconciliation read the R322 ledger + the
+  counter (114) + PROJECT_STATUS §6 before any work.
+- **part13 Phase 6 continued — the §8 GUI leg EXECUTED per the
+  r312→r313 API-then-GUI precedent: the Workflow Builder stage
+  (stage 17; the later stages renumbered 18/19/20), §8's own
+  construct/save/reproduce surface over the REAL in-tree engine**
+  (`pharmaml.workflow`, the r322 lane — zero new dependencies, no
+  external engine): the client family in
+  `frontend/src/services/ml/client.ts` (the typed views + the
+  runtime parsers for the steps/templates/validate/run/runs answers
+  — row-validated, never trusted; the route's own bounds mirrored
+  once beside the client: `WORKFLOW_SYNC_MAX_NODES` 12 /
+  `WORKFLOW_JOB_MAX_NODES` 24 / `WORKFLOW_MAX_SEED` 2147483647, so
+  the builder states the doomed request honestly instead of firing
+  it), and the stage itself in `MLPage.tsx`: **construct** — the
+  template select seeds the editable spec JSON canvas (the full
+  serialisable `to_dict` form — nodes, wiring, per-node params) from
+  the REAL templates answer (`guided-qsar`, §8's own example chain
+  with its honest leakage reorder stated in the metadata; the
+  minimal 6-node core), the chain rendered with the registry's own
+  step titles; **save** — the canonical sha-256 digest renders as
+  the spec's identity (the reproduce anchor that rides every run's
+  reproducibility block); **validate** — the pre-execution gate over
+  the spec as edited (the verdict, every finding at once, the
+  executor's topological order); **run** — sync mode (bounded) with
+  the REAL parsed run record rendering the per-node ledger (the
+  states, the errors/skipped reasons verbatim, the artifact lineage
+  with its honest digest_kinds) + job mode over the EXISTING
+  JobManager through the §13 JobRunCard relay (the authoritative
+  REST result parsed through the REAL run-record parser, progress
+  per node, cooperative cancellation); **reproduce** — the run's
+  reproducibility block (toolkit version, python, platform, seed,
+  spec digest, the honest determinism note verbatim) + the bounded
+  in-session runs ledger with its honest lifetime note. The honest
+  scope lines ride every answer: the default dataset is the route's
+  own seeded SYNTHETIC stand-in, never an experimental fact; the
+  kind-equality rule (two ports compatible only when their kinds are
+  EQUAL); the run bounds (the route's own).
+- **The guards trued in the same commit**: the §11.2 stage chain now
+  **20 stages** (the Workflow Builder inserted at 17, Semi-supervised
+  → 18, Explainability → 19, Export → 20); the ml client REST-surface
+  guard carries `routes/workflow.py` + the five workflow paths
+  method-for-method; two new drift guards —
+  `test_workflow_run_request_fields_mirror_the_backend` (the
+  generated `WorkflowRunRequest` DTO, the one-DTO rule) +
+  `test_workflow_client_mirrors_the_route_bounds` (the mirrored caps
+  vs workflow.py's own literals + the honest bound/leakage/synthetic
+  labels pinned in the page).
+- **The gates**: **8 component tests**
+  (`frontend/src/features/ml/__tests__/WorkflowBuilderLane.test.tsx`
+  — the registry line, the template chain + leakage note, the
+  validate round trip, the sync run with the REAL parsed run record
+  + lineage + reproducibility, the backend's own hard 422 verbatim,
+  the negative-seed client-side gate, the job-mode COMPLETED relay,
+  the runs ledger + lifetime note) → the vitest lane **110/110 over
+  15 files** (was 102/14); `tsc --noEmit` clean; the canonical
+  collection re-trued **8,525 / 0 errors / 467 files** (+2 the new
+  drift guards; was 8,523); the guard suites green (tests/api +
+  web-parity + architecture-hygiene: 976 passed / 2 standard skips —
+  the exact r322 pin); the workflow engine + route suites 39/39 +
+  the §11.2 guard file 13/13; ruff + mypy clean (the EXE002 exec-bit
+  rollback residue swept off 102 files per the r313 precedent).
+- **The browser-E2E golden path over the REAL backend** (the r311
+  daemon pattern — the double-forked FastAPI 8017 + Vite 5174, the
+  dev-same-origin token channel): the boot, the registry line (10
+  steps · 8 port kinds), the template chain with the leakage note,
+  the validate round trip (the order + digest), the REAL sync run
+  round trip (`run wf-run-… · guided-qsar · COMPLETED · seed 42 · 10
+  completed / 0 failed / 0 skipped / 0 cancelled` with the lineage +
+  the reproducibility block), the runs ledger, the negative-seed
+  gate — **zero page errors, zero console errors**; the evidence pair
+  `docs/gui/screenshots/r323-workflowbuilder-{card,gate}-desktop.png`.
+- **The census + the same-version re-ship at the converged fixed
+  point** (the r313/r321 convention: the pins pair created as 0-byte
+  placeholders BEFORE the capture so the page's live stats rendered
+  the true terminal number): the walk = the live `/api/toolkit/tree`
+  = the page render three-way, the pins trued
+  (`SHIPPED_TEST_COUNT` 8,525 / `SHIPPED_COMPONENT_TEST_COUNT` 110 /
+  the file + line counts of this round's walk); the terminal-of-record
+  rebuilt at the same v1.2.240 with the must-carry extended (the
+  WorkflowBuilderLane suite + the four r323 screenshots riding),
+  six-home parity + the offsite mirror. Counter 114 → 115. Still
+  honestly BLOCKED: clean-machine smoke (C-3/C-5), Stage-5 PySide6
+  retirement, installer signing (certificate-gated). **The Phase-6
+  remainder (resource monitoring, security scanning lanes,
+  documentation automation) rides the next continuation, each small
+  reversible tested.**
+
 ## [1.2.240 re-ship] — 2026-11-22 — round 322 (the 114th recorded run: the interactive part13 continuation, trace 1a201bea8763ac3d — the Phase-6 OPENING, §8's Scientific Workflow Engine evaluation + the lightweight in-tree engine's API lane; the same-version re-ship per the r303/r304/r317/r319/r321 convention)
 
 - **The thirteenth rollback recovered before any lane work — the

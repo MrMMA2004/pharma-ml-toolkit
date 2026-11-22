@@ -142,9 +142,17 @@ by a test):
 
 ## 4. Next (the Phase-6 remainder, in order)
 
-- The **GUI lane** (the Workflow Builder stage over the engine —
-  the construct/save/reproduce surface §8's objective names) rides
-  the next continuation, per the r312→r313 API-then-GUI precedent.
+- The **GUI lane EXECUTED (round 323, the interactive part13
+  continuation, trace 1a2022c2d26dbc05)**: the Workflow Builder
+  stage (stage 17 of the Machine Learning workspace, the later
+  stages renumbered 18/19/20) — the construct/save/reproduce
+  surface §8's objective names, over this engine: the template
+  select seeding the editable spec JSON canvas, the validate gate,
+  the sync + job run lanes (the JobManager relay), the run record's
+  lineage + reproducibility rendering, and the bounded runs ledger;
+  8 component tests + the browser-E2E golden path over the REAL
+  backend (zero page/console errors, the r323 evidence pair under
+  `docs/gui/screenshots/r323-*`).
 - Resource monitoring, security scanning lanes, release-provenance
   and documentation-automation sub-lanes follow (Phase 6's own
   list), each small, reversible, tested.

@@ -110,6 +110,42 @@
  *   statistic over the synthetic dataset; the fold timings vary
  *   run-to-run (the honest drift note rides every answer).
  *
+ * * `GET /api/v1/workflow/steps` — the §8 Scientific Workflow Engine
+ *   lane's typed vocabulary (part13 Phase 6, the r322 API lane this
+ *   client's GUI leg rides): the engine block's own decision text
+ *   (the in-tree layer over the existing JobManager — Prefect /
+ *   Knime / JupyterLab / marimo reviewed in
+ *   docs/ARCHITECTURE_REVIEW.md, none adopted), the closed
+ *   port-kind vocabulary, and every step's typed input/output ports,
+ *   parameter dials, the REAL backend it delegates to, and its
+ *   honest notes — zero new dependencies, zero algorithms
+ *   reimplemented.
+ * * `GET /api/v1/workflow/templates` — the saved workflow templates
+ *   (§8's own example chain `guided-qsar` with its honest leakage
+ *   reorder — the split runs before feature selection because the
+ *   toolkit's own leakage rule is a contract — plus the 6-node
+ *   minimal-regression core), each entry carrying the full
+ *   serialisable spec the builder edits.
+ * * `POST /api/v1/workflow/validate` — the pre-execution dependency
+ *   validation: every finding at once (unknown steps/nodes/ports,
+ *   contract mismatches, cycles) plus the topological order the
+ *   executor would walk and the canonical spec digest.
+ * * `POST /api/v1/workflow/run` — the real round trip over the
+ *   engine's REAL backend runners: sync mode (bounded ≤ 12 nodes /
+ *   ≤ 80 records) answers the run record inline — the per-node
+ *   states, the artifact lineage with honest digest_kinds, the
+ *   partial-failure ledger (the backend's own error verbatim,
+ *   downstream SKIPPED, completed artifacts surviving), and the
+ *   reproducibility block with the honest determinism scope; job
+ *   mode (≤ 24 nodes / ≤ 200 records) rides the EXISTING
+ *   JobManager (progress per node, cooperative cancellation between
+ *   nodes, the SQLite job history). The default dataset is the
+ *   route's own seeded SYNTHETIC 30-molecule stand-in — every
+ *   metric a statistic over it, never an experimental fact.
+ * * `GET /api/v1/workflow/runs` — the bounded in-session execution
+ *   history + the honest lifetime note (job-mode runs persist
+ *   through the JobManager's own SQLite history).
+ *
  * The x_test assembly for the AD stage rides the datasets client's
  * bounded `column()` bridge (each feature column ≤ 500 values — the
  * backend's own request cap, §17.3: explicit, never silent).
@@ -141,6 +177,7 @@ type PharmacogenomicsAnalyzeRequest =
   components["schemas"]["PharmacogenomicsAnalyzeRequest"];
 type MultiobjectiveOptimizeRequest =
   components["schemas"]["MultiObjectiveOptimizeRequest"];
+type WorkflowRunRequest = components["schemas"]["WorkflowRunRequest"];
 type SemiSupervisedTrainRequest =
   components["schemas"]["SemiSupervisedTrainRequest"];
 type SemiSupervisedEvaluateRequest =
@@ -1238,6 +1275,179 @@ export interface MultiobjectiveOptimizeResponse {
   readonly note: string;
 }
 
+// -- the workflow engine lane (part13 Phase 6, §8 — the round-323 GUI
+// leg over the r322 /api/v1/workflow family) --------------------------
+
+/** One typed input/output port of a workflow step (the registry's own). */
+export interface WorkflowPortView {
+  readonly name: string;
+  readonly kind: string;
+  readonly required: boolean;
+  readonly description: string;
+}
+
+/** One tunable parameter of a workflow step (the registry's own dial). */
+export interface WorkflowParamView {
+  readonly name: string;
+  readonly default: unknown;
+  readonly description: string;
+}
+
+/** One step of the registry: the closed typed contract + the REAL
+ * backend it delegates to (never reimplemented here). */
+export interface WorkflowStepView {
+  readonly step_id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly backend: string;
+  readonly workspace: string;
+  readonly inputs: readonly WorkflowPortView[];
+  readonly outputs: readonly WorkflowPortView[];
+  readonly parameters: readonly WorkflowParamView[];
+  readonly notes: string;
+}
+
+/** `GET /api/v1/workflow/steps` — the typed vocabulary, verbatim. */
+export interface WorkflowStepsResponse {
+  readonly engine: {
+    readonly layer: string;
+    readonly decision: string;
+    readonly port_kinds: readonly string[];
+    readonly job_integration: string;
+  };
+  readonly steps: readonly WorkflowStepView[];
+}
+
+/** One saved workflow template (§8's own example chain among them). */
+export interface WorkflowTemplateView {
+  readonly template_id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly node_count: number;
+  readonly nodes: readonly {
+    readonly node_id: string;
+    readonly step_id: string;
+  }[];
+  readonly metadata: Readonly<Record<string, unknown>>;
+  readonly spec: Readonly<Record<string, unknown>>;
+}
+
+/** `GET /api/v1/workflow/templates` — the template index. */
+export interface WorkflowTemplatesResponse {
+  readonly templates: readonly WorkflowTemplateView[];
+}
+
+/** `POST /api/v1/workflow/validate` — the pre-execution gate's answer:
+ * every finding at once, the topological order, the spec digest. */
+export interface WorkflowValidateResponse {
+  readonly valid: boolean;
+  readonly errors: readonly string[];
+  readonly topological_order: readonly string[] | null;
+  readonly spec_digest: string;
+  readonly node_count: number;
+}
+
+/** One output artifact + its honest lineage (§8's artifact lineage —
+ * the digest_kind says what the digest is, never pretends). */
+export interface WorkflowArtifactView {
+  readonly node: string;
+  readonly port: string;
+  readonly kind: string;
+  readonly digest: string;
+  readonly digest_kind: string;
+  readonly lineage: readonly {
+    readonly node: string;
+    readonly port: string;
+  }[];
+}
+
+/** One node's execution verdict (the partial-failure ledger). */
+export interface WorkflowNodeResultView {
+  readonly node_id: string;
+  readonly step_id: string;
+  readonly state: string;
+  readonly started_at: string | null;
+  readonly duration_ms: number | null;
+  readonly error: string | null;
+  readonly skipped_reason: string | null;
+  readonly artifacts: readonly WorkflowArtifactView[];
+}
+
+/** One execution's full ledger — the run record the engine answers. */
+export interface WorkflowRunRecordView {
+  readonly run_id: string;
+  readonly workflow_name: string;
+  readonly spec_digest: string;
+  readonly state: string;
+  readonly seed: number;
+  readonly started_at: string;
+  readonly completed_at: string | null;
+  readonly reproducibility: {
+    readonly toolkit_version: string;
+    readonly python: string;
+    readonly implementation: string;
+    readonly platform: string;
+    readonly seed: number;
+    readonly spec_digest: string;
+    readonly determinism_note: string;
+  };
+  readonly node_counts: Readonly<Record<string, number>>;
+  readonly nodes: readonly WorkflowNodeResultView[];
+}
+
+/** `POST /api/v1/workflow/run` sync mode — the run record inline. */
+export interface WorkflowRunSyncResponse {
+  readonly mode: "sync";
+  readonly run: WorkflowRunRecordView;
+}
+
+/** `POST /api/v1/workflow/run` job mode — the JobManager lane. */
+export interface WorkflowRunJobResponse {
+  readonly mode: "job";
+  readonly job_id: string;
+  readonly job_state: string;
+  readonly note: string;
+}
+
+export type WorkflowRunResponse =
+  | WorkflowRunSyncResponse
+  | WorkflowRunJobResponse;
+
+/** One row of the bounded in-session run ledger. */
+export interface WorkflowRunsLedgerRow {
+  readonly run_id: string;
+  readonly workflow_name: string;
+  readonly state: string;
+  readonly seed: number;
+  readonly started_at: string;
+  readonly completed_at: string | null;
+  readonly node_counts: Readonly<Record<string, number>>;
+}
+
+/** `GET /api/v1/workflow/runs` — the execution history + the honest
+ * lifetime note. */
+export interface WorkflowRunsResponse {
+  readonly runs: readonly WorkflowRunsLedgerRow[];
+  readonly note: string;
+}
+
+/**
+ * The run route's own bounds (workflow.py's `_MAX_NODES_SYNC` /
+ * `_MAX_NODES_JOB`) — mirrored once beside the client so the builder
+ * states the doomed request honestly instead of firing it.
+ */
+export const WORKFLOW_SYNC_MAX_NODES = 12;
+export const WORKFLOW_JOB_MAX_NODES = 24;
+/**
+ * The synthetic stand-in's own record bounds (workflow.py's
+ * `_MAX_RECORDS_SYNC` / `_MAX_RECORDS_JOB` intersected with the
+ * request dial `n_synthetic`'s 12..30 range).
+ */
+export const WORKFLOW_MIN_SYNTHETIC = 12;
+export const WORKFLOW_MAX_SYNTHETIC = 30;
+/** The route's own seed ceiling (`_MAX_SEED`, a signed 32-bit int). */
+export const WORKFLOW_MAX_SEED = 2147483647;
+
 export const mlApi = {
   /**
    * `GET /api/v1/ml/models?task=…&only_available=…` — the registry
@@ -1751,6 +1961,81 @@ export const mlApi = {
       raw,
       "multiobjective optimize",
     );
+  },
+
+  /**
+   * `GET /api/v1/workflow/steps` — the §8 workflow engine's typed
+   * vocabulary, verbatim: the engine block's own decision text, the
+   * closed port-kind list, and every step's ports, dials, REAL
+   * backend, and honest notes (part13 Phase 6's GUI lane over the
+   * r322 route family).
+   */
+  async workflowSteps(): Promise<WorkflowStepsResponse> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/workflow/steps",
+    );
+    return parseWorkflowStepsResponse(raw, "workflow steps");
+  },
+
+  /**
+   * `GET /api/v1/workflow/templates` — the saved templates (§8's own
+   * example chain with its honest leakage reorder + the minimal
+   * 6-node core), each carrying the full serialisable spec the
+   * builder edits.
+   */
+  async workflowTemplates(): Promise<WorkflowTemplatesResponse> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/workflow/templates",
+    );
+    return parseWorkflowTemplatesResponse(raw, "workflow templates");
+  },
+
+  /**
+   * `POST /api/v1/workflow/validate` — the pre-execution dependency
+   * validation over the spec as edited: every finding at once, the
+   * topological order the executor would walk, the canonical digest.
+   * The body IS the spec dict (the route's own shape — no wrapper).
+   */
+  async workflowValidate(
+    spec: Record<string, unknown>,
+  ): Promise<WorkflowValidateResponse> {
+    const raw = await api.post<Record<string, unknown>>(
+      "/api/v1/workflow/validate",
+      spec,
+    );
+    return parseWorkflowValidateResponse(raw, "workflow validate");
+  },
+
+  /**
+   * `POST /api/v1/workflow/run` — the real round trip over the
+   * engine's REAL backend runners: the spec as edited, the route's
+   * own seeded SYNTHETIC stand-in as the default dataset, sync mode
+   * (bounded — the run record inline, partial failures carried
+   * verbatim with downstream SKIPPED and completed artifacts
+   * surviving) or job mode over the EXISTING JobManager (progress
+   * per node, cooperative cancellation between nodes, the SQLite
+   * history). Every metric a statistic over the synthetic rows.
+   */
+  async workflowRun(
+    params: Partial<WorkflowRunRequest> = {},
+  ): Promise<WorkflowRunResponse> {
+    const raw = await api.post<Record<string, unknown>>(
+      "/api/v1/workflow/run",
+      params,
+    );
+    return parseWorkflowRunResponse(raw, "workflow run");
+  },
+
+  /**
+   * `GET /api/v1/workflow/runs` — the bounded in-session execution
+   * history with the honest lifetime note (job-mode runs persist
+   * through the JobManager's own SQLite history).
+   */
+  async workflowRuns(): Promise<WorkflowRunsResponse> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/workflow/runs",
+    );
+    return parseWorkflowRunsResponse(raw, "workflow runs");
   },
 };
 
@@ -3736,6 +4021,399 @@ function parseMultiobjectiveOptimizeResponse(
     },
     provenance: parseMultiobjectiveProvenance(r["provenance"], what),
     timings_note: asString(r["timings_note"]) ?? "",
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+// -- workflow lane parsers (part13 Phase 6, §8 — the round-323 GUI
+// leg; row-validated, never trusted) -------------------------------------
+
+/** Narrow one port of a workflow step. */
+function parseWorkflowPortView(
+  raw: unknown,
+  what: string,
+): WorkflowPortView {
+  const r = expectObject(raw, what);
+  const name = r["name"];
+  const kind = r["kind"];
+  if (typeof name !== "string" || typeof kind !== "string") {
+    throw new Error(`${what}: name/kind are not strings`);
+  }
+  return {
+    name,
+    kind,
+    required: r["required"] === true,
+    description: asString(r["description"]) ?? "",
+  };
+}
+
+/** Narrow one parameter dial of a workflow step. */
+function parseWorkflowParamView(
+  raw: unknown,
+  what: string,
+): WorkflowParamView {
+  const r = expectObject(raw, what);
+  const name = r["name"];
+  if (typeof name !== "string") {
+    throw new Error(`${what}: name is not a string`);
+  }
+  return {
+    name,
+    default: r["default"],
+    description: asString(r["description"]) ?? "",
+  };
+}
+
+/** Narrow one step of the registry (the typed contract verbatim). */
+function parseWorkflowStepView(
+  raw: unknown,
+  what: string,
+): WorkflowStepView {
+  const r = expectObject(raw, what);
+  const stepId = r["step_id"];
+  const title = r["title"];
+  const backend = r["backend"];
+  if (
+    typeof stepId !== "string" ||
+    typeof title !== "string" ||
+    typeof backend !== "string"
+  ) {
+    throw new Error(`${what}: step_id/title/backend are not strings`);
+  }
+  return {
+    step_id: stepId,
+    title,
+    description: asString(r["description"]) ?? "",
+    backend,
+    workspace: asString(r["workspace"]) ?? "",
+    inputs: Array.isArray(r["inputs"])
+      ? (r["inputs"] as unknown[]).map((p, i) =>
+          parseWorkflowPortView(p, `${what} inputs[${i}]`),
+        )
+      : [],
+    outputs: Array.isArray(r["outputs"])
+      ? (r["outputs"] as unknown[]).map((p, i) =>
+          parseWorkflowPortView(p, `${what} outputs[${i}]`),
+        )
+      : [],
+    parameters: Array.isArray(r["parameters"])
+      ? (r["parameters"] as unknown[]).map((p, i) =>
+          parseWorkflowParamView(p, `${what} parameters[${i}]`),
+        )
+      : [],
+    notes: asString(r["notes"]) ?? "",
+  };
+}
+
+/** Narrow the `GET /steps` answer (the engine block + the registry). */
+export function parseWorkflowStepsResponse(
+  raw: unknown,
+  what: string,
+): WorkflowStepsResponse {
+  const r = expectObject(raw, what);
+  const engineRaw = r["engine"];
+  const stepsRaw = r["steps"];
+  if (typeof engineRaw !== "object" || engineRaw === null) {
+    throw new Error(`${what}: engine block has the wrong shape`);
+  }
+  const engine = engineRaw as Record<string, unknown>;
+  if (typeof engine["layer"] !== "string") {
+    throw new Error(`${what}: engine.layer is not a string`);
+  }
+  if (!Array.isArray(stepsRaw)) {
+    throw new Error(`${what}: steps is not an array`);
+  }
+  return {
+    engine: {
+      layer: engine["layer"] as string,
+      decision: asString(engine["decision"]) ?? "",
+      port_kinds: Array.isArray(engine["port_kinds"])
+        ? (engine["port_kinds"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      job_integration: asString(engine["job_integration"]) ?? "",
+    },
+    steps: (stepsRaw as unknown[]).map((s, i) =>
+      parseWorkflowStepView(s, `${what} steps[${i}]`),
+    ),
+  };
+}
+
+/** Narrow one saved template (the full serialisable spec included). */
+function parseWorkflowTemplateView(
+  raw: unknown,
+  what: string,
+): WorkflowTemplateView {
+  const r = expectObject(raw, what);
+  const templateId = r["template_id"];
+  const name = r["name"];
+  if (typeof templateId !== "string" || typeof name !== "string") {
+    throw new Error(`${what}: template_id/name are not strings`);
+  }
+  const nodesRaw = r["nodes"];
+  const specRaw = r["spec"];
+  return {
+    template_id: templateId,
+    name,
+    description: asString(r["description"]) ?? "",
+    node_count: asNumber(r["node_count"]) ?? 0,
+    nodes: Array.isArray(nodesRaw)
+      ? (nodesRaw as unknown[])
+          .map((n, i) => {
+            const nr = expectObject(n, `${what} nodes[${i}]`);
+            return {
+              node_id: asString(nr["node_id"]) ?? "",
+              step_id: asString(nr["step_id"]) ?? "",
+            };
+          })
+          .filter((n) => n.node_id !== "" && n.step_id !== "")
+      : [],
+    metadata:
+      typeof r["metadata"] === "object" && r["metadata"] !== null
+        ? (r["metadata"] as Record<string, unknown>)
+        : {},
+    spec:
+      typeof specRaw === "object" && specRaw !== null
+        ? (specRaw as Record<string, unknown>)
+        : {},
+  };
+}
+
+/** Narrow the `GET /templates` answer. */
+export function parseWorkflowTemplatesResponse(
+  raw: unknown,
+  what: string,
+): WorkflowTemplatesResponse {
+  const r = expectObject(raw, what);
+  const templatesRaw = r["templates"];
+  if (!Array.isArray(templatesRaw)) {
+    throw new Error(`${what}: templates is not an array`);
+  }
+  return {
+    templates: (templatesRaw as unknown[]).map((t, i) =>
+      parseWorkflowTemplateView(t, `${what} templates[${i}]`),
+    ),
+  };
+}
+
+/** Narrow the `POST /validate` answer (the pre-execution gate). */
+export function parseWorkflowValidateResponse(
+  raw: unknown,
+  what: string,
+): WorkflowValidateResponse {
+  const r = expectObject(raw, what);
+  const valid = r["valid"];
+  const errorsRaw = r["errors"];
+  if (typeof valid !== "boolean" || !Array.isArray(errorsRaw)) {
+    throw new Error(`${what}: valid/errors have wrong shapes`);
+  }
+  const orderRaw = r["topological_order"];
+  return {
+    valid,
+    errors: (errorsRaw as unknown[]).filter(
+      (e): e is string => typeof e === "string",
+    ),
+    topological_order: Array.isArray(orderRaw)
+      ? (orderRaw as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : null,
+    spec_digest: asString(r["spec_digest"]) ?? "",
+    node_count: asNumber(r["node_count"]) ?? 0,
+  };
+}
+
+/** Narrow one artifact + its honest lineage. */
+function parseWorkflowArtifactView(
+  raw: unknown,
+  what: string,
+): WorkflowArtifactView {
+  const r = expectObject(raw, what);
+  const node = r["node"];
+  const port = r["port"];
+  const digest = r["digest"];
+  if (
+    typeof node !== "string" ||
+    typeof port !== "string" ||
+    typeof digest !== "string"
+  ) {
+    throw new Error(`${what}: node/port/digest are not strings`);
+  }
+  const lineageRaw = r["lineage"];
+  return {
+    node,
+    port,
+    kind: asString(r["kind"]) ?? "",
+    digest,
+    digest_kind: asString(r["digest_kind"]) ?? "",
+    lineage: Array.isArray(lineageRaw)
+      ? (lineageRaw as unknown[])
+          .map((l, i) => {
+            const lr = expectObject(l, `${what} lineage[${i}]`);
+            return {
+              node: asString(lr["node"]) ?? "",
+              port: asString(lr["port"]) ?? "",
+            };
+          })
+          .filter((l) => l.node !== "" && l.port !== "")
+      : [],
+  };
+}
+
+/** Narrow one node's execution verdict (the partial-failure ledger). */
+function parseWorkflowNodeResultView(
+  raw: unknown,
+  what: string,
+): WorkflowNodeResultView {
+  const r = expectObject(raw, what);
+  const nodeId = r["node_id"];
+  const stepId = r["step_id"];
+  const state = r["state"];
+  if (
+    typeof nodeId !== "string" ||
+    typeof stepId !== "string" ||
+    typeof state !== "string"
+  ) {
+    throw new Error(`${what}: node_id/step_id/state are not strings`);
+  }
+  const artifactsRaw = r["artifacts"];
+  return {
+    node_id: nodeId,
+    step_id: stepId,
+    state,
+    started_at: asString(r["started_at"]),
+    duration_ms: asNumber(r["duration_ms"]),
+    error: asString(r["error"]),
+    skipped_reason: asString(r["skipped_reason"]),
+    artifacts: Array.isArray(artifactsRaw)
+      ? (artifactsRaw as unknown[]).map((a, i) =>
+          parseWorkflowArtifactView(a, `${what} artifacts[${i}]`),
+        )
+      : [],
+  };
+}
+
+/** Narrow one run record (the engine's own ledger — the reproducibility
+ * block carries the honest determinism scope verbatim). */
+export function parseWorkflowRunRecord(
+  raw: unknown,
+  what: string,
+): WorkflowRunRecordView {
+  const r = expectObject(raw, what);
+  const runId = r["run_id"];
+  const state = r["state"];
+  const seed = r["seed"];
+  if (
+    typeof runId !== "string" ||
+    typeof state !== "string" ||
+    typeof seed !== "number"
+  ) {
+    throw new Error(`${what}: run_id/state/seed have wrong shapes`);
+  }
+  const nodesRaw = r["nodes"];
+  if (!Array.isArray(nodesRaw)) {
+    throw new Error(`${what}: nodes is not an array`);
+  }
+  const reproducibilityRaw = r["reproducibility"];
+  const reproducibility =
+    typeof reproducibilityRaw === "object" && reproducibilityRaw !== null
+      ? (reproducibilityRaw as Record<string, unknown>)
+      : {};
+  return {
+    run_id: runId,
+    workflow_name: asString(r["workflow_name"]) ?? "",
+    spec_digest: asString(r["spec_digest"]) ?? "",
+    state,
+    seed,
+    started_at: asString(r["started_at"]) ?? "",
+    completed_at: asString(r["completed_at"]),
+    reproducibility: {
+      toolkit_version: asString(reproducibility["toolkit_version"]) ?? "",
+      python: asString(reproducibility["python"]) ?? "",
+      implementation: asString(reproducibility["implementation"]) ?? "",
+      platform: asString(reproducibility["platform"]) ?? "",
+      seed: asNumber(reproducibility["seed"]) ?? seed,
+      spec_digest: asString(reproducibility["spec_digest"]) ?? "",
+      determinism_note:
+        asString(reproducibility["determinism_note"]) ?? "",
+    },
+    node_counts:
+      typeof r["node_counts"] === "object" && r["node_counts"] !== null
+        ? (r["node_counts"] as Record<string, number>)
+        : {},
+    nodes: (nodesRaw as unknown[]).map((n, i) =>
+      parseWorkflowNodeResultView(n, `${what} nodes[${i}]`),
+    ),
+  };
+}
+
+/** Narrow the `POST /run` answer — sync (the run record inline) or
+ * job mode (the JobManager lane's job id + the honest note). */
+export function parseWorkflowRunResponse(
+  raw: unknown,
+  what: string,
+): WorkflowRunResponse {
+  const r = expectObject(raw, what);
+  const mode = r["mode"];
+  if (mode === "sync") {
+    if (typeof r["run"] !== "object" || r["run"] === null) {
+      throw new Error(`${what}: the sync answer has no run record`);
+    }
+    return {
+      mode: "sync",
+      run: parseWorkflowRunRecord(r["run"], `${what} run`),
+    };
+  }
+  if (mode === "job") {
+    const jobId = r["job_id"];
+    if (typeof jobId !== "string") {
+      throw new Error(`${what}: the job answer has no job_id`);
+    }
+    return {
+      mode: "job",
+      job_id: jobId,
+      job_state: asString(r["job_state"]) ?? "",
+      note: asString(r["note"]) ?? "",
+    };
+  }
+  throw new Error(`${what}: unknown mode ${JSON.stringify(mode)}`);
+}
+
+/** Narrow the `GET /runs` answer (the bounded in-session ledger). */
+export function parseWorkflowRunsResponse(
+  raw: unknown,
+  what: string,
+): WorkflowRunsResponse {
+  const r = expectObject(raw, what);
+  const runsRaw = r["runs"];
+  if (!Array.isArray(runsRaw)) {
+    throw new Error(`${what}: runs is not an array`);
+  }
+  return {
+    runs: (runsRaw as unknown[]).map((row, i) => {
+      const rr = expectObject(row, `${what} runs[${i}]`);
+      const runId = rr["run_id"];
+      const state = rr["state"];
+      if (typeof runId !== "string" || typeof state !== "string") {
+        throw new Error(
+          `${what} runs[${i}]: run_id/state are not strings`,
+        );
+      }
+      return {
+        run_id: runId,
+        workflow_name: asString(rr["workflow_name"]) ?? "",
+        state,
+        seed: asNumber(rr["seed"]) ?? 0,
+        started_at: asString(rr["started_at"]) ?? "",
+        completed_at: asString(rr["completed_at"]),
+        node_counts:
+          typeof rr["node_counts"] === "object" &&
+          rr["node_counts"] !== null
+            ? (rr["node_counts"] as Record<string, number>)
+            : {},
+      };
+    }),
     note: asString(r["note"]) ?? "",
   };
 }

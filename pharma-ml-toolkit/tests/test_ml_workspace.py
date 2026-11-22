@@ -7,7 +7,7 @@ frontend drifts:
 
 * the ml client's REST surface vs ``pharmaml.api.routes.ml`` /
   ``routes/applicability_domain`` / ``routes/semi_supervised`` /
-  ``routes/admet`` / ``routes/dta``;
+  ``routes/admet`` / ``routes/dta`` / ``routes/workflow``;
 * the request bodies' field parity — the four request objects the
   client builds vs the pydantic request models those routes actually
   define (§12.2's one-DTO-source rule, enforced at the key level);
@@ -125,7 +125,7 @@ def test_ml_rest_surface_covered() -> None:
     carried = _frontend_api_paths(client)
     assert carried, "the ml client lost every path literal"
     real: dict[str, set[str]] = {}
-    for module in ("ml.py", "applicability_domain.py", "semi_supervised.py", "admet.py", "dta.py", "repurposing.py", "drugresponse.py", "pharmacogenomics.py", "multiobjective.py"):
+    for module in ("ml.py", "applicability_domain.py", "semi_supervised.py", "admet.py", "dta.py", "repurposing.py", "drugresponse.py", "pharmacogenomics.py", "multiobjective.py", "workflow.py"):
         real.update(_backend_routes(module))
     unknown = carried - set(real)
     assert not unknown, f"ml client calls undeclared routes: {sorted(unknown)}"
@@ -135,6 +135,13 @@ def test_ml_rest_surface_covered() -> None:
                  "/api/v1/semi-supervised/train"):
         assert path in carried, f"the workflow stopped calling {path}"
         assert path in real, f"the backend stopped declaring {path}"
+    # the §8 workflow-builder lane's own calls (the r323 GUI leg over
+    # the r322 route family)
+    for path in ("/api/v1/workflow/steps", "/api/v1/workflow/templates",
+                 "/api/v1/workflow/validate", "/api/v1/workflow/run",
+                 "/api/v1/workflow/runs"):
+        assert path in carried, f"the builder stopped calling {path}"
+        assert path in real, f"routes/workflow.py stopped declaring {path}"
 
 
 def test_ml_page_calls_only_contract_routes() -> None:
@@ -288,6 +295,7 @@ def test_stage_order_matches_the_spec_chain() -> None:
         "Cancer Cell-Line Drug Response",
         "Pharmacogenomics",
         "Multi-objective Optimization",
+        "Workflow Builder",
         "Semi-supervised Learning",
         "Explainability & Uncertainty",
         "Export",
@@ -318,3 +326,60 @@ def test_honesty_blocks_present() -> None:
     # the bounded bridge rides the datasets client's own 500 cap
     chemistry = _read(SERVICES / "chemistry" / "client.ts")
     assert re.search(r"CHEMISTRY_MAX_SMILES\s*=\s*500", chemistry) is not None
+
+
+def test_workflow_run_request_fields_mirror_the_backend() -> None:
+    """The §8 builder's run lane rides the generated
+    WorkflowRunRequest DTO — the backend's own shape, pinned at the
+    key level (§12.2's one-DTO rule)."""
+    client = _read(SERVICES / "ml" / "client.ts")
+    backend_fields = _pydantic_fields(
+        _route_module("workflow.py"), "WorkflowRunRequest"
+    )
+    assert backend_fields == {
+        "template", "spec", "param_overrides", "records",
+        "n_synthetic", "seed", "mode",
+    }, "the backend WorkflowRunRequest changed shape (update this guard + the builder)"
+    assert "components[\"schemas\"][\"WorkflowRunRequest\"]" in client, (
+        "the builder's run lane stopped using the generated DTO"
+    )
+    page = _read(FEATURES / "ml" / "MLPage.tsx")
+    assert re.search(r"mlApi\.workflowRun\(\{", page) is not None, (
+        "the builder's run lane vanished from the page"
+    )
+
+
+def test_workflow_client_mirrors_the_route_bounds() -> None:
+    """The builder's client-side gates mirror workflow.py's own
+    bounds exactly — the doomed request is stated honestly, never
+    fired (the r323 GUI leg over the r322 API lane)."""
+    client = _read(SERVICES / "ml" / "client.ts")
+    src = _route_module("workflow.py")
+    for client_name, backend_name in (
+        ("WORKFLOW_SYNC_MAX_NODES", "_MAX_NODES_SYNC"),
+        ("WORKFLOW_JOB_MAX_NODES", "_MAX_NODES_JOB"),
+        ("WORKFLOW_MAX_SEED", "_MAX_SEED"),
+    ):
+        client_value = re.search(
+            rf"export const {client_name} = (\d+)", client
+        )
+        backend_value = re.search(rf"{backend_name}\s*=\s*(\d+)", src)
+        assert client_value is not None, (
+            f"{client_name} vanished from the workflow client"
+        )
+        assert backend_value is not None, (
+            f"{backend_name} vanished from routes/workflow.py"
+        )
+        assert client_value.group(1) == backend_value.group(1), (
+            f"the mirrored {client_name} disagrees with the route's "
+            f"{backend_name}"
+        )
+    # the page states the honest bound labels + the leakage note
+    page = _read(FEATURES / "ml" / "MLPage.tsx")
+    assert "Workflow Builder" in page, "the Workflow Builder stage vanished"
+    assert re.search(r"the honest leakage reorder", page) is not None, (
+        "the builder lost the template's honest leakage-reorder note"
+    )
+    assert re.search(
+        r"SYNTHETIC stand-in", page
+    ) is not None, "the builder lost its synthetic-dataset honesty line"

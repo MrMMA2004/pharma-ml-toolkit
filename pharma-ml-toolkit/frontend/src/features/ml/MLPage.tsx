@@ -76,6 +76,18 @@ import {
   type TrainedModelView,
   type WilliamsFrameRow,
   type WilliamsResultPayload,
+  type WorkflowRunRecordView,
+  type WorkflowRunsResponse,
+  type WorkflowStepsResponse,
+  type WorkflowTemplateView,
+  type WorkflowTemplatesResponse,
+  type WorkflowValidateResponse,
+  WORKFLOW_JOB_MAX_NODES,
+  WORKFLOW_MAX_SEED,
+  WORKFLOW_MAX_SYNTHETIC,
+  WORKFLOW_MIN_SYNTHETIC,
+  WORKFLOW_SYNC_MAX_NODES,
+  parseWorkflowRunRecord,
 } from "@/services/ml/client";
 import type { components } from "@/types/api.d";
 import {
@@ -91,8 +103,8 @@ import {
  * Split/CV → Algorithm → Hyperparameters → Train → Evaluate →
  * Compare → Applicability Domain → ADMET Profile → Drug–Target
  * Interaction → Drug Repurposing → Cancer Cell-Line Drug Response →
- * Pharmacogenomics → Multi-objective Optimization → Semi-supervised
- * Learning → Explainability → Export
+ * Pharmacogenomics → Multi-objective Optimization → Workflow
+ * Builder → Semi-supervised Learning → Explainability → Export
  *
  * Every control below executes the REAL backend through the typed
  * service layer (no fabricated data, no disabled pretend buttons):
@@ -874,6 +886,27 @@ export function MLPage() {
   const [moBusy, setMoBusy] = useState(false);
   const [moRegistry, setMoRegistry] = useState<MultiobjectiveRegistryResponse | null>(null);
 
+  // stage 17: the Workflow Builder lane (part13 Phase 6, §8 — the
+  // construct/save/reproduce surface over the r322 in-tree engine:
+  // templates, the editable spec, validation, sync + job runs, the
+  // bounded runs ledger)
+  const [wfSteps, setWfSteps] = useState<WorkflowStepsResponse | null>(null);
+  const [wfTemplates, setWfTemplates] =
+    useState<WorkflowTemplatesResponse | null>(null);
+  const [wfTemplateId, setWfTemplateId] = useState<string>("");
+  const [wfSpecText, setWfSpecText] = useState<string>("");
+  const [wfMode, setWfMode] = useState<"sync" | "job">("sync");
+  const [wfSeed, setWfSeed] = useState(42);
+  const [wfNSynthetic, setWfNSynthetic] = useState(30);
+  const [wfValidate, setWfValidate] =
+    useState<WorkflowValidateResponse | null>(null);
+  const [wfRun, setWfRun] = useState<WorkflowRunRecordView | null>(null);
+  const [wfRuns, setWfRuns] = useState<WorkflowRunsResponse | null>(null);
+  const [wfJobId, setWfJobId] = useState<string | null>(null);
+  const [wfError, setWfError] = useState<string | null>(null);
+  const [wfBusy, setWfBusy] = useState(false);
+  const [wfLedgerBusy, setWfLedgerBusy] = useState(false);
+
   // stage 11: semi-supervised learning (classification-only)
   const [ssMethod, setSsMethod] = useState<
     "self_training" | "label_spreading" | "label_propagation"
@@ -1057,6 +1090,53 @@ export function MLPage() {
       })
       .catch(() => {
         // the registry line stays absent — never a fabricated summary
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // the workflow engine's own vocabulary loads once on mount (the
+  // §8 registry line — the same decorative-context contract; the
+  // builder's controls render regardless, the lanes surface their own
+  // errors)
+  useEffect(() => {
+    let cancelled = false;
+    mlApi
+      .workflowSteps()
+      .then((response) => {
+        if (!cancelled) {
+          setWfSteps(response);
+        }
+      })
+      .catch(() => {
+        // the registry line stays absent — never a fabricated summary
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // the workflow templates load once on mount (the first entry
+  // seeds the builder's editable spec — §8's construct canvas starts
+  // from a REAL saved template, never a fabricated chain)
+  useEffect(() => {
+    let cancelled = false;
+    mlApi
+      .workflowTemplates()
+      .then((response) => {
+        if (!cancelled) {
+          setWfTemplates(response);
+          const first = response.templates[0];
+          if (first !== undefined) {
+            setWfTemplateId(first.template_id);
+            setWfSpecText(JSON.stringify(first.spec, null, 2));
+          }
+        }
+      })
+      .catch(() => {
+        // the select renders empty without the templates — never a
+        // fabricated chain
       });
     return () => {
       cancelled = true;
@@ -1926,6 +2006,176 @@ export function MLPage() {
       setMoBusy(false);
     }
   }, [moParams]);
+
+  // stage 17: the Workflow Builder handlers (§8's construct/save/
+  // reproduce surface — every gate fires client-side BEFORE any
+  // request; the backend's own errors ride the banner verbatim after)
+  const handleWfTemplateChange = useCallback(
+    (templateId: string) => {
+      setWfTemplateId(templateId);
+      const template = wfTemplates?.templates.find(
+        (t) => t.template_id === templateId,
+      );
+      if (template !== undefined) {
+        setWfSpecText(JSON.stringify(template.spec, null, 2));
+        setWfValidate(null);
+        setWfRun(null);
+        setWfJobId(null);
+        setWfError(null);
+      }
+    },
+    [wfTemplates],
+  );
+
+  /** Parse the editable spec — the thrown reason rides the banner
+   * verbatim, never a silent fallback. */
+  const parseWfSpec = useCallback((): Record<string, unknown> => {
+    const trimmed = wfSpecText.trim();
+    if (trimmed === "") {
+      throw new Error("the spec is empty — load a template or paste a spec");
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch (error) {
+      throw new Error(
+        `invalid spec JSON — ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error("the spec must be a JSON object (the route's own shape)");
+    }
+    return parsed as Record<string, unknown>;
+  }, [wfSpecText]);
+
+  const handleWorkflowValidate = useCallback(async () => {
+    let spec: Record<string, unknown>;
+    try {
+      spec = parseWfSpec();
+    } catch (error) {
+      setWfValidate(null);
+      setWfError(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    setWfBusy(true);
+    setWfError(null);
+    try {
+      const response = await mlApi.workflowValidate(spec);
+      setWfValidate(response);
+    } catch (error) {
+      setWfValidate(null);
+      setWfError(describeError(error));
+    } finally {
+      setWfBusy(false);
+    }
+  }, [parseWfSpec]);
+
+  const handleWorkflowRun = useCallback(async () => {
+    let spec: Record<string, unknown>;
+    try {
+      spec = parseWfSpec();
+    } catch (error) {
+      setWfRun(null);
+      setWfJobId(null);
+      setWfError(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    if (
+      !Number.isInteger(wfSeed) ||
+      wfSeed < 0 ||
+      wfSeed > WORKFLOW_MAX_SEED
+    ) {
+      setWfRun(null);
+      setWfJobId(null);
+      setWfError(
+        `the seed must lie in 0..${WORKFLOW_MAX_SEED} (the route's own bound)`,
+      );
+      return;
+    }
+    if (
+      !Number.isInteger(wfNSynthetic) ||
+      wfNSynthetic < WORKFLOW_MIN_SYNTHETIC ||
+      wfNSynthetic > WORKFLOW_MAX_SYNTHETIC
+    ) {
+      setWfRun(null);
+      setWfJobId(null);
+      setWfError(
+        `n_synthetic must be an integer in [${WORKFLOW_MIN_SYNTHETIC}, ${WORKFLOW_MAX_SYNTHETIC}] (the route's own dial)`,
+      );
+      return;
+    }
+    const nodes = Array.isArray(spec["nodes"]) ? spec["nodes"].length : 0;
+    const nodeCap =
+      wfMode === "sync" ? WORKFLOW_SYNC_MAX_NODES : WORKFLOW_JOB_MAX_NODES;
+    if (nodes > nodeCap) {
+      setWfRun(null);
+      setWfJobId(null);
+      setWfError(
+        `a ${wfMode}-mode run is bounded to ${nodeCap} nodes (the route's own bound — the spec carries ${nodes})`,
+      );
+      return;
+    }
+    setWfBusy(true);
+    setWfError(null);
+    setWfRun(null);
+    setWfValidate(null);
+    setWfJobId(null);
+    try {
+      const response = await mlApi.workflowRun({
+        spec,
+        seed: wfSeed,
+        n_synthetic: wfNSynthetic,
+        mode: wfMode,
+      });
+      if (response.mode === "sync") {
+        setWfRun(response.run);
+      } else {
+        setWfJobId(response.job_id);
+      }
+    } catch (error) {
+      setWfError(describeError(error));
+    } finally {
+      setWfBusy(false);
+    }
+  }, [parseWfSpec, wfMode, wfSeed, wfNSynthetic]);
+
+  /** The job-mode COMPLETED relay — the authoritative REST result
+   * parsed through the REAL run-record parser, never the WS payload
+   * alone (§13). */
+  const handleWfRunResult = useCallback((result: unknown) => {
+    try {
+      setWfRun(parseWorkflowRunRecord(result, "workflow job result"));
+    } catch (error) {
+      setWfError(describeError(error));
+    }
+  }, []);
+
+  const handleWorkflowRunsLedger = useCallback(async () => {
+    setWfLedgerBusy(true);
+    try {
+      const response = await mlApi.workflowRuns();
+      setWfRuns(response);
+    } catch (error) {
+      setWfRuns(null);
+      setWfError(describeError(error));
+    } finally {
+      setWfLedgerBusy(false);
+    }
+  }, []);
+
+  // stage 17 derived: the selected template + the step-title lookup
+  // (the chain renders the registry's own titles, never invented ones)
+  const wfTemplate: WorkflowTemplateView | null =
+    wfTemplates?.templates.find((t) => t.template_id === wfTemplateId) ??
+    null;
+  const wfStepTitles = new Map<string, string>(
+    wfSteps?.steps.map((s) => [s.step_id, s.title] as [string, string]) ??
+      [],
+  );
 
   // stage 11b: the held-out evaluation (3 seeded repeats, test_size
   // 0.25 — the route's own defaults surfaced, one button, job lane)
@@ -3877,6 +4127,317 @@ export function MLPage() {
 
       <StageHeader
         index={17}
+        title="Workflow Builder"
+        hint="§8's construct/save/reproduce surface over the in-tree engine — templates, the editable spec, validation, sync + job runs, the ledger"
+        icon={<Braces aria-hidden className="h-4 w-4" />}
+      >
+        <Card>
+          <CardContent>
+            <p className="text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              The part13 §8 lane over the REAL in-tree engine
+              (pharmaml.workflow — the lightweight layer the §8
+              assessment itself ordered: no external engine adopted,
+              every step delegating to a REAL backend that already
+              existed, zero new dependencies; job-mode runs ride the
+              EXISTING JobManager for progress, cooperative
+              cancellation between nodes, and the SQLite history).
+              {wfSteps !== null ? (
+                <>
+                  {" "}The registry: {wfSteps.steps.length} steps ·{" "}
+                  {wfSteps.engine.port_kinds.length} port kinds (
+                  {wfSteps.engine.port_kinds.join(" · ")}) — two ports
+                  compatible only when their kinds are EQUAL, never an
+                  implicit conversion.
+                </>
+              ) : null}
+              {" "}The default dataset is the route&apos;s own seeded
+              SYNTHETIC stand-in — every metric a statistic over it,
+              never an experimental fact.
+            </p>
+            {wfTemplate !== null ? (
+              <div className="mt-3">
+                <p className="text-xs font-medium text-[var(--color-foreground)]">
+                  {wfTemplate.name} — {wfTemplate.node_count} nodes (
+                  {wfTemplate.nodes.map((n) => n.node_id).join(" → ")})
+                </p>
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                  {wfTemplate.nodes
+                    .map(
+                      (n) =>
+                        `${n.node_id}: ${
+                          wfStepTitles.get(n.step_id) ?? n.step_id
+                        }`,
+                    )
+                    .join(" → ")}
+                  {typeof wfTemplate.metadata["leakage_note"] === "string" ? (
+                    <>
+                      {" "}· the honest leakage reorder: the split runs
+                      BEFORE feature selection (the toolkit&apos;s own
+                      rule, stated in the template&apos;s metadata —
+                      §8&apos;s illustrative order lists selection
+                      first, the leakage contract wins)
+                    </>
+                  ) : null}
+                </p>
+              </div>
+            ) : null}
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                template (the saved chains)
+                <select
+                  value={wfTemplateId}
+                  onChange={(event) =>
+                    handleWfTemplateChange(event.target.value)
+                  }
+                  aria-label="workflow template"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  {(wfTemplates?.templates ?? []).map((t) => (
+                    <option key={t.template_id} value={t.template_id}>
+                      {t.template_id} ({t.node_count} nodes)
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                mode
+                <select
+                  value={wfMode}
+                  onChange={(event) =>
+                    setWfMode(event.target.value as "sync" | "job")
+                  }
+                  aria-label="workflow run mode"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  <option value="sync">sync (bounded)</option>
+                  <option value="job">job (the JobManager)</option>
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                seed (0–{WORKFLOW_MAX_SEED})
+                <input
+                  type="number"
+                  value={wfSeed}
+                  onChange={(event) => setWfSeed(Number(event.target.value))}
+                  aria-label="workflow seed"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 font-mono text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                records ({WORKFLOW_MIN_SYNTHETIC}–{WORKFLOW_MAX_SYNTHETIC},{" "}
+                SYNTHETIC stand-in)
+                <input
+                  type="number"
+                  value={wfNSynthetic}
+                  onChange={(event) =>
+                    setWfNSynthetic(Number(event.target.value))
+                  }
+                  aria-label="workflow synthetic records"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 font-mono text-xs"
+                />
+              </label>
+            </div>
+            <label className="mt-3 block text-xs text-[var(--color-muted-foreground)]">
+              the workflow spec (the construct canvas — edit the
+              nodes, wiring, and per-node params as JSON; the run
+              executes the spec as edited)
+              <textarea
+                value={wfSpecText}
+                onChange={(event) => setWfSpecText(event.target.value)}
+                aria-label="workflow spec"
+                rows={8}
+                spellCheck={false}
+                className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-2 font-mono text-xs"
+              />
+            </label>
+            <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+              the run bounds (the route&apos;s own): sync ≤{" "}
+              {WORKFLOW_SYNC_MAX_NODES} nodes · job ≤{" "}
+              {WORKFLOW_JOB_MAX_NODES} nodes — the gates fire
+              client-side before any request; the records ride the
+              route&apos;s own seeded SYNTHETIC stand-in (never a
+              server-side file read)
+            </p>
+            <div className="mt-3 flex flex-wrap justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void handleWorkflowValidate()}
+                disabled={wfBusy}
+              >
+                {wfBusy ? "Working…" : "Validate the spec"}
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => void handleWorkflowRun()}
+                disabled={wfBusy}
+              >
+                {wfBusy ? "Running…" : "Run the workflow"}
+              </Button>
+            </div>
+            {wfError !== null ? (
+              <div className="mt-3">
+                <ErrorBanner message={wfError} />
+              </div>
+            ) : null}
+            {wfValidate !== null ? (
+              <div className="mt-3">
+                <p className="text-xs font-medium text-[var(--color-foreground)]">
+                  {wfValidate.valid
+                    ? `valid — ${wfValidate.node_count} nodes · digest ${wfValidate.spec_digest.slice(0, 16)}…`
+                    : `invalid — ${wfValidate.errors.length} finding(s)`}
+                </p>
+                {wfValidate.topological_order !== null ? (
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                    the executor&apos;s order:{" "}
+                    {wfValidate.topological_order.join(" → ")} · the
+                    canonical digest is the spec&apos;s identity — the
+                    reproduce anchor that rides every run&apos;s
+                    reproducibility block
+                  </p>
+                ) : null}
+                {wfValidate.errors.length > 0 ? (
+                  <ul className="mt-1 list-disc pl-4 text-xs text-[var(--color-destructive)]">
+                    {wfValidate.errors.map((e) => (
+                      <li key={e} className="font-mono">
+                        {e}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+            {wfJobId !== null ? (
+              <div className="mt-3">
+                <JobRunCard
+                  jobId={wfJobId}
+                  resultLabel="the workflow run record"
+                  onResult={handleWfRunResult}
+                />
+              </div>
+            ) : null}
+            {wfRun !== null ? (
+              <>
+                <p className="mt-4 text-xs text-[var(--color-foreground)]">
+                  run {wfRun.run_id} · {wfRun.workflow_name} ·{" "}
+                  {wfRun.state} · seed {wfRun.seed} ·{" "}
+                  {wfRun.node_counts["COMPLETED"] ?? 0} completed /{" "}
+                  {wfRun.node_counts["FAILED"] ?? 0} failed /{" "}
+                  {wfRun.node_counts["SKIPPED"] ?? 0} skipped /{" "}
+                  {wfRun.node_counts["CANCELLED"] ?? 0} cancelled
+                </p>
+                <div className="mt-2 max-h-72 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-[var(--color-muted-foreground)]">
+                        <th className="py-1 text-left font-normal">node</th>
+                        <th className="text-left font-normal">step</th>
+                        <th className="text-left font-normal">state</th>
+                        <th className="text-left font-normal">
+                          error / reason
+                        </th>
+                        <th className="text-left font-normal">
+                          artifacts (kind · digest_kind · lineage)
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {wfRun.nodes.map((n) => (
+                        <tr
+                          key={n.node_id}
+                          className="border-t border-[var(--color-border)] align-top"
+                        >
+                          <td className="py-1 font-mono">{n.node_id}</td>
+                          <td className="font-mono">
+                            {wfStepTitles.get(n.step_id) ?? n.step_id}
+                          </td>
+                          <td className="font-mono">{n.state}</td>
+                          <td
+                            className="font-mono text-[var(--color-destructive)]"
+                          >
+                            {n.error ?? n.skipped_reason ?? "—"}
+                          </td>
+                          <td className="font-mono">
+                            {n.artifacts
+                              .map(
+                                (a) =>
+                                  `${a.port} (${a.kind}, ${a.digest_kind}, ${a.lineage.length} upstream)`,
+                              )
+                              .join("; ") || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-3 text-xs text-[var(--color-muted-foreground)]">
+                  reproducibility — toolkit{" "}
+                  {wfRun.reproducibility.toolkit_version} · python{" "}
+                  {wfRun.reproducibility.python} (
+                  {wfRun.reproducibility.implementation}) ·{" "}
+                  {wfRun.reproducibility.platform} · spec digest{" "}
+                  {wfRun.reproducibility.spec_digest.slice(0, 16)}… ·{" "}
+                  {wfRun.reproducibility.determinism_note}
+                </p>
+              </>
+            ) : null}
+            <div className="mt-3">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void handleWorkflowRunsLedger()}
+                disabled={wfLedgerBusy}
+              >
+                {wfLedgerBusy ? "Reading…" : "Refresh the runs ledger"}
+              </Button>
+            </div>
+            {wfRuns !== null ? (
+              <div className="mt-3">
+                <p className="text-xs font-medium text-[var(--color-foreground)]">
+                  The execution history ({wfRuns.runs.length} runs —{" "}
+                  {wfRuns.note})
+                </p>
+                {wfRuns.runs.length > 0 ? (
+                  <table className="mt-1 w-full text-xs">
+                    <thead>
+                      <tr className="text-[var(--color-muted-foreground)]">
+                        <th className="py-1 text-left font-normal">run</th>
+                        <th className="text-left font-normal">workflow</th>
+                        <th className="text-left font-normal">state</th>
+                        <th className="text-left font-normal">seed</th>
+                        <th className="text-left font-normal">nodes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {wfRuns.runs.map((row) => (
+                        <tr
+                          key={row.run_id}
+                          className="border-t border-[var(--color-border)]"
+                        >
+                          <td className="py-1 font-mono">{row.run_id}</td>
+                          <td className="font-mono">
+                            {row.workflow_name}
+                          </td>
+                          <td className="font-mono">{row.state}</td>
+                          <td className="font-mono">{row.seed}</td>
+                          <td className="font-mono">
+                            {Object.entries(row.node_counts)
+                              .map(([state, count]) => `${count} ${state.toLowerCase()}`)
+                              .join(" / ") || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : null}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      </StageHeader>
+
+      <StageHeader
+        index={18}
         title="Semi-supervised Learning"
         hint="classification datasets only — the backend's own gate"
         icon={<Network aria-hidden className="h-4 w-4" />}
@@ -4180,7 +4741,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={18}
+        index={19}
         title="Explainability & Uncertainty"
         hint="the real SHAP lane + the AD bootstrap's uncertainty surface"
         icon={<Info aria-hidden className="h-4 w-4" />}
@@ -4260,7 +4821,7 @@ export function MLPage() {
       </StageHeader>
 
       <StageHeader
-        index={19}
+        index={20}
         title="Export"
         hint="a registered table artifact + a digest-verified download"
         icon={<ArrowDownToLine aria-hidden className="h-4 w-4" />}
