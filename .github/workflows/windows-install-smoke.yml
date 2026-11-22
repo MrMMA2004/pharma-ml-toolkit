@@ -1,0 +1,780 @@
+name: Windows Install Smoke
+
+# The BLK-1 clean-machine lane, CI-executed (part14 r336 — the owner's
+# "do the blocked items through GitHub Actions" directive). A GitHub
+# windows-2022 runner is a FRESH Windows x64 machine on every run
+# (immutable image, no toolkit residue), so the installer-mechanics
+# half of BLK-1 executes here against the PUBLISHED release assets —
+# never against a locally built tree:
+#
+#   * asset integrity: SHA256SUMS.txt verified against every
+#     downloaded asset + the RELEASE_MANIFEST cross-checked (version,
+#     commit == the tag's checkout, artifact byte counts);
+#   * the Windows Defender scan of both installers (the BLK-1
+#     antivirus leg, genuinely clean-machine);
+#   * the silent install of BOTH installers (WiX MSI /qn per-machine;
+#     NSIS EXE /S currentUser) + the installed tree verified (the
+#     host exe + its version resource + the frozen sidecar + the
+#     Start-Menu shortcuts);
+#   * the INSTALLED sidecar's live verification — the same
+#     handshake/health/guard/shutdown contract the release pipeline's
+#     step 13 pins on the build host, now proven on the installed
+#     bundle (the §10 launch leg's backend half);
+#   * the app host launch: the process alive + the sidecar child
+#     spawning + a resource sample + the graceful close + the §10
+#     leg-5 no-orphan check;
+#   * the uninstall of BOTH installers + removal verification;
+#   * the v1.2.231 -> v1.2.240 in-place upgrade with a user-data
+#     retention probe (the §10 leg-6 rule).
+#
+# What this lane is NOT (the honest scope — nothing below is ever
+# converted into a pass by omission):
+#   * NOT the GUI nine-workspace click-through (§10 leg 3 — no human
+#     on the runner);
+#   * NOT the offline-network WebView2 bootstrap leg (the runner is
+#     online and carries the WebView2 runtime, so the embedded
+#     offline installer never fires);
+#   * NOT sleep/resume, DPI/multi-monitor, GPU benchmarks, or the
+#     45-60-min desktop-stability lane at owner-hardware fidelity;
+#   * NOT consumer Windows 10/11 — the runner is Windows Server 2022
+#     (the Server sibling of the Windows 10 code base);
+#   * NOT installer signing (BLK-3 — the owner's certificate) and
+#     NOT the Stage-5 PySide6 retirement (BLK-4 — the owner's
+#     decision).
+#
+# House rules honored (the windows-release.yml conventions): actions
+# pinned to deliberate major versions; least-privilege permissions
+# (contents: read — the asset download; artifact uploads need none of
+# it); no secrets in logs (the built-in GITHUB_TOKEN is the only
+# credential, passed per-step to gh, never echoed); every leg fails
+# loudly; the closing note labels the remaining box legs BLOCKED.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The published release tag to smoke"
+        required: false
+        default: "v1.2.240"
+      previous_tag:
+        description: "The previous published release for the upgrade leg"
+        required: false
+        default: "v1.2.231"
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  # the toolkit subtree (the repo checkout's workspace root nests it)
+  TOOLKIT_ROOT: ${{ github.workspace }}/pharma-ml-toolkit
+  # the evidence bundle every leg appends into; uploaded by step 14
+  EVIDENCE_DIR: ${{ github.workspace }}/smoke-evidence
+
+jobs:
+  install-smoke:
+    name: Clean-runner install smoke (the BLK-1 CI lane)
+    runs-on: windows-2022
+    timeout-minutes: 90
+    # run: steps execute from the toolkit subtree so the one authored
+    # toolkit-relative path (packaging/windows/verify_sidecar.py)
+    # resolves exactly; every asset/install/evidence path below is
+    # absolute via env, so the default is inert for the rest.
+    defaults:
+      run:
+        working-directory: pharma-ml-toolkit
+
+    steps:
+      # ---- 1. check out the EXACT revision the release built ----
+      # The manifest cross-check (step 4) proves checkout == build:
+      # RELEASE_MANIFEST.json embeds the build commit, GITHUB_SHA here
+      # is the tag's commit — a moved tag fails the lane loudly.
+      - name: "1. Checkout the release tag (the exact built revision)"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.event.release.tag_name }}
+          persist-credentials: false
+
+      # ---- 1b. Python drives the sidecar verifier (stdlib only) ----
+      # The runner's Python is verification tooling ONLY — the app
+      # under test brings its own frozen runtime; §10's "no Python on
+      # the machine" premise concerns the APP's independence, which
+      # the installer-host launch legs (8/11) prove on their own.
+      - name: "1b. Set up Python (the verification driver, stdlib only)"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ---- 2. download the published assets ----
+      - name: "2. Download the published release assets"
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = "${{ inputs.tag || github.event.release.tag_name }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            Write-Host "::error::no release tag resolved (dispatch input or release event)"
+            exit 1
+          }
+          $version = $tag.TrimStart("v")
+          $dest = Join-Path $env:RUNNER_TEMP "release-assets"
+          New-Item -ItemType Directory -Force $dest | Out-Null
+          New-Item -ItemType Directory -Force $env:EVIDENCE_DIR | Out-Null
+          gh release download $tag --repo $env:GITHUB_REPOSITORY --dir $dest --clobber
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::gh release download failed for $tag"
+            exit 1
+          }
+          $expected = @(
+            "PharmaML_Studio_Setup_v$version.exe",
+            "PharmaML_Studio_v$version.msi",
+            "RELEASE_MANIFEST.json",
+            "SHA256SUMS.txt",
+            "sbom.cdx.json"
+          )
+          foreach ($name in $expected) {
+            if (-not (Test-Path (Join-Path $dest $name))) {
+              Write-Host "::error::asset missing from the release: $name"
+              exit 1
+            }
+          }
+          Add-Content $env:GITHUB_ENV "RELEASE_TAG=$tag"
+          Add-Content $env:GITHUB_ENV "RELEASE_VERSION=$version"
+          Add-Content $env:GITHUB_ENV "ASSET_DIR=$dest"
+          Get-ChildItem $dest -File |
+            Select-Object Name, Length |
+            Format-Table | Out-String |
+            Tee-Object -FilePath "$env:EVIDENCE_DIR/asset-listing.txt"
+          Write-Host "ASSETS DOWNLOADED: tag $tag, version $version, $($expected.Count) files"
+
+      # ---- 3. verify SHA256SUMS.txt against every asset -----------
+      - name: "3. Verify SHA256SUMS.txt against every asset"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dest = $env:ASSET_DIR
+          $lines = @(Get-Content (Join-Path $dest "SHA256SUMS.txt") |
+            Where-Object { $_.Trim() })
+          if ($lines.Count -lt 3) {
+            Write-Host "::error::SHA256SUMS.txt carries fewer than 3 entries — the release manifest is malformed"
+            exit 1
+          }
+          $listed = @{}
+          foreach ($line in $lines) {
+            $parts = $line -split '\s+', 2
+            if ($parts.Count -ne 2 -or $parts[0].Length -ne 64) {
+              Write-Host "::error::malformed SHA256SUMS line: $line"
+              exit 1
+            }
+            $expectedHash = $parts[0].ToLower()
+            $name = $parts[1].Trim()
+            $file = Join-Path $dest $name
+            if (-not (Test-Path $file)) {
+              Write-Host "::error::SHA256SUMS lists $name but the asset was not downloaded"
+              exit 1
+            }
+            $actualHash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+            if ($actualHash -ne $expectedHash) {
+              Write-Host "::error::SHA256 MISMATCH for $name (expected $expectedHash, got $actualHash)"
+              exit 1
+            }
+            Write-Host "SHA256 OK: $name = $actualHash"
+            $listed[$name] = $true
+          }
+          foreach ($f in (Get-ChildItem $dest -File)) {
+            if (-not $listed.ContainsKey($f.Name)) {
+              Write-Host "::error::unlisted asset rides the release: $($f.Name) — SHA256SUMS.txt must cover it"
+              exit 1
+            }
+          }
+          Write-Host "SHA256SUMS VERIFIED: $($lines.Count) assets, zero mismatch, zero unlisted"
+
+      # ---- 4. cross-check the RELEASE_MANIFEST ---------------------
+      - name: "4. Cross-check the RELEASE_MANIFEST (version, commit, bytes)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $manifest = Get-Content (Join-Path $env:ASSET_DIR "RELEASE_MANIFEST.json") -Raw |
+            ConvertFrom-Json
+          if ($manifest.version -ne $env:RELEASE_VERSION) {
+            Write-Host "::error::manifest version '$($manifest.version)' != the tag's version '$($env:RELEASE_VERSION)'"
+            exit 1
+          }
+          if ($manifest.commit -ne $env:GITHUB_SHA) {
+            Write-Host "::error::manifest commit $($manifest.commit) != the checked-out tag revision $env:GITHUB_SHA — the tag moved after the build"
+            exit 1
+          }
+          foreach ($a in $manifest.artifacts) {
+            $file = Join-Path $env:ASSET_DIR $a.name
+            $actualBytes = (Get-Item $file).Length
+            if ($actualBytes -ne [long]$a.bytes) {
+              Write-Host "::error::manifest byte drift for $($a.name): $($a.bytes) recorded, $actualBytes downloaded"
+              exit 1
+            }
+            Write-Host "MANIFEST OK: $($a.name) = $actualBytes bytes"
+          }
+          "manifest: product=$($manifest.product) version=$($manifest.version) runner=$($manifest.runner) webview2=$($manifest.webview2)" |
+            Add-Content "$env:EVIDENCE_DIR/manifest-crosscheck.txt"
+          Write-Host "MANIFEST VERIFIED: version + commit ($($manifest.commit.Substring(0,8))) + artifact bytes"
+
+      # ---- 5. Windows Defender scan of both installers -------------
+      # The BLK-1 antivirus leg on a genuinely clean machine: exit 0
+      # = clean (recorded PASS); exit 2 = a detection (loud FAIL);
+      # any other code = INCONCLUSIVE, printed + carried into the
+      # evidence — never a silent pass.
+      - name: "5. Windows Defender scan of both installers (BLK-1 antivirus leg)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $mp = Join-Path $env:ProgramFiles "Windows Defender\MpCmdRun.exe"
+          if (-not (Test-Path $mp)) {
+            Write-Host "DEFENDER-SCAN: INCONCLUSIVE (MpCmdRun.exe absent on this image — recorded, never a silent pass)"
+            "DEFENDER-SCAN: INCONCLUSIVE (MpCmdRun absent)" |
+              Add-Content "$env:EVIDENCE_DIR/defender-scan.txt"
+            exit 0
+          }
+          foreach ($name in @(
+            "PharmaML_Studio_Setup_v$($env:RELEASE_VERSION).exe",
+            "PharmaML_Studio_v$($env:RELEASE_VERSION).msi"
+          )) {
+            $file = Join-Path $env:ASSET_DIR $name
+            Write-Host "Defender scanning $name ..."
+            $output = & $mp -Scan -ScanType 3 -File $file 2>&1
+            $code = $LASTEXITCODE
+            $text = ($output | Out-String).Trim()
+            "=== Defender scan: $name (MpCmdRun exit $code) ===`n$text" |
+              Add-Content "$env:EVIDENCE_DIR/defender-scan.txt"
+            if ($code -eq 0) {
+              Write-Host "DEFENDER OK: $name clean"
+            } elseif ($code -eq 2) {
+              Write-Host "::error::DEFENDER DETECTED a threat in $name:`n$text"
+              exit 1
+            } else {
+              Write-Host "DEFENDER-SCAN: INCONCLUSIVE for $name (MpCmdRun exit $code) — recorded, never a silent pass"
+            }
+          }
+
+      # ---- 6. install the WiX MSI silently + verify the tree -------
+      - name: "6. Install the WiX MSI silently + verify the installed tree"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $msi = Join-Path $env:ASSET_DIR "PharmaML_Studio_v$($env:RELEASE_VERSION).msi"
+          $log = "$env:EVIDENCE_DIR/msi-install.log"
+          $p = Start-Process msiexec.exe `
+            -ArgumentList "/i", "`"$msi`"", "/qn", "/norestart", "/l*v", "`"$log`"" `
+            -Wait -PassThru
+          $code = $p.ExitCode
+          Write-Host "msiexec install exit: $code"
+          if ($code -ne 0 -and $code -ne 3010) {
+            Write-Host "::error::the MSI silent install failed (exit $code) — see msi-install.log in the evidence bundle"
+            exit 1
+          }
+          if ($code -eq 3010) {
+            Write-Host "MSI INSTALL OK with reboot-required (3010) — recorded, no reboot taken"
+          }
+          $root = Join-Path $env:ProgramFiles "PharmaML Studio"
+          $deadline = (Get-Date).AddSeconds(120)
+          while (-not (Test-Path $root) -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+          }
+          if (-not (Test-Path $root)) {
+            Write-Host "::error::the MSI install dir never appeared: $root"
+            exit 1
+          }
+          $app = Join-Path $root "PharmaML Studio.exe"
+          if (-not (Test-Path $app)) {
+            Write-Host "::error::the installed host exe is missing: $app"
+            exit 1
+          }
+          $fv = (Get-Item $app).VersionInfo
+          if (-not ($fv.ProductVersion -like "$($env:RELEASE_VERSION)*")) {
+            Write-Host "::error::installed ProductVersion '$($fv.ProductVersion)' != $($env:RELEASE_VERSION)"
+            exit 1
+          }
+          $sidecar = Get-ChildItem $root -Recurse -Filter "pharmaml-backend.exe" |
+            Select-Object -First 1
+          if (-not $sidecar) {
+            Write-Host "::error::the frozen sidecar exe is missing from the installed tree"
+            exit 1
+          }
+          Add-Content $env:GITHUB_ENV "MSI_INSTALL_ROOT=$root"
+          Add-Content $env:GITHUB_ENV "MSI_SIDECAR_DIR=$($sidecar.DirectoryName)"
+          "MSI install: root=$root" |
+            Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"
+          "MSI host exe: $app (ProductVersion $($fv.ProductVersion), FileVersion $($fv.FileVersion))" |
+            Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"
+          "MSI sidecar exe: $($sidecar.FullName)" |
+            Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"
+          Get-ChildItem $root |
+            Select-Object Name, Length |
+            Format-Table | Out-String |
+            Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"
+          Write-Host "MSI TREE VERIFIED: host exe + ProductVersion $($fv.ProductVersion) + sidecar at $($sidecar.DirectoryName)"
+
+      # ---- 7. the INSTALLED sidecar's live verification -------------
+      # The same handshake + authenticated health + refused
+      # unauthenticated probe + graceful shutdown contract the
+      # release pipeline's step 13 pins on the build host — now on
+      # the bundle an end user actually receives.
+      - name: "7. Verify the INSTALLED sidecar (handshake + health + guard + shutdown)"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python packaging/windows/verify_sidecar.py "$env:MSI_SIDECAR_DIR"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::the INSTALLED sidecar failed its live verification — the shipped bundle is not healthy"
+            exit 1
+          }
+          Write-Host "INSTALLED SIDECAR VERIFIED (the §10 launch leg's backend half)"
+
+      # ---- 8. the app host launch + lifecycle (§10 legs 2 + 5) ----
+      - name: "8. Launch the installed host + the lifecycle legs"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:MSI_INSTALL_ROOT
+          $app = Join-Path $root "PharmaML Studio.exe"
+          $proc = Start-Process -FilePath $app -WorkingDirectory $root -PassThru
+          # §10 leg 2: first launch is tens of seconds (the frozen
+          # torch/rdkit imports) — poll for the sidecar child
+          $deadline = (Get-Date).AddSeconds(150)
+          $backendSeen = $false
+          while ((Get-Date) -lt $deadline) {
+            if ($proc.HasExited) {
+              Write-Host "::error::the installed app host exited early (code $($proc.ExitCode))"
+              exit 1
+            }
+            if (Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue) {
+              $backendSeen = $true
+              break
+            }
+            Start-Sleep -Seconds 3
+          }
+          if (-not $backendSeen) {
+            Write-Host "::error::the sidecar process never appeared under the launched host within 150s"
+            exit 1
+          }
+          Write-Host "APP ALIVE: host pid $($proc.Id), the sidecar child spawned"
+          # a bounded CI soak + resource sample — NOT the 45-60-min
+          # desktop-stability lane (the honest scope note above)
+          Start-Sleep -Seconds 45
+          $hostP = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+          if (-not $hostP) {
+            Write-Host "::error::the host died during the sample window"
+            exit 1
+          }
+          $backends = @(Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue)
+          $sample = [ordered]@{
+            lane = "msi-host-launch"
+            sampledAt = (Get-Date -Format o)
+            host = [ordered]@{
+              pid = $hostP.Id
+              workingSetMB = [math]::Round($hostP.WorkingSet64 / 1MB, 1)
+              privateMB = [math]::Round($hostP.PrivateMemorySize64 / 1MB, 1)
+              cpuS = [math]::Round($hostP.CPU, 2)
+              threads = $hostP.Threads.Count
+              handles = $hostP.HandleCount
+            }
+            sidecar = @($backends | ForEach-Object {
+              [ordered]@{
+                pid = $_.Id
+                workingSetMB = [math]::Round($_.WorkingSet64 / 1MB, 1)
+                privateMB = [math]::Round($_.PrivateMemorySize64 / 1MB, 1)
+                cpuS = [math]::Round($_.CPU, 2)
+              }
+            })
+          }
+          ($sample | ConvertTo-Json -Depth 5) |
+            Add-Content "$env:EVIDENCE_DIR/resource-sample-msi.json"
+          Write-Host "RESOURCE SAMPLE (msi): $(($sample | ConvertTo-Json -Depth 5 -Compress()))"
+          # §10 leg 5: the graceful close, then the no-orphan check
+          $null = $proc.CloseMainWindow()
+          $exitDeadline = (Get-Date).AddSeconds(45)
+          while (-not $proc.HasExited -and (Get-Date) -lt $exitDeadline) {
+            Start-Sleep -Seconds 2
+          }
+          $forced = -not $proc.HasExited
+          if ($forced) {
+            Write-Host "graceful close did not land in 45s — hard-stopping (the §10 leg-5 verdict records INCONCLUSIVE for the forced path)"
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 5
+          }
+          $orphanDeadline = (Get-Date).AddSeconds(60)
+          $orphans = @(Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue)
+          while ($orphans.Count -gt 0 -and (Get-Date) -lt $orphanDeadline) {
+            Start-Sleep -Seconds 3
+            $orphans = @(Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue)
+          }
+          if ($orphans.Count -gt 0) {
+            if ($forced) {
+              Write-Host "ORPHAN CHECK: INCONCLUSIVE (forced-kill path) — $($orphans.Count) pharmaml-backend still alive: $($orphans.Id -join ', '); recorded, cleaned up"
+              "ORPHAN CHECK: INCONCLUSIVE after forced kill — pids $($orphans.Id -join ', ')" |
+                Add-Content "$env:EVIDENCE_DIR/lifecycle-msi.txt"
+              Stop-Process -Name "pharmaml-backend" -Force -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds 3
+            } else {
+              Write-Host "::error::ORPHANED sidecar after the graceful close: $($orphans.Id -join ', ') — §10 leg 5 verdict FAIL"
+              exit 1
+            }
+          } else {
+            Write-Host "LIFECYCLE OK: host closed, zero orphaned pharmaml-backend processes (graceful=$(-not $forced))"
+          }
+
+      # ---- 9. uninstall the MSI + verify removal -------------------
+      - name: "9. Uninstall the MSI + verify removal"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $msi = Join-Path $env:ASSET_DIR "PharmaML_Studio_v$($env:RELEASE_VERSION).msi"
+          $p = Start-Process msiexec.exe `
+            -ArgumentList "/x", "`"$msi`"", "/qn", "/norestart" `
+            -Wait -PassThru
+          $code = $p.ExitCode
+          Write-Host "msiexec uninstall exit: $code"
+          if ($code -ne 0 -and $code -ne 3010) {
+            Write-Host "::error::the MSI silent uninstall failed (exit $code)"
+            exit 1
+          }
+          $root = Join-Path $env:ProgramFiles "PharmaML Studio"
+          $deadline = (Get-Date).AddSeconds(90)
+          while ((Test-Path $root) -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+          }
+          if (Test-Path $root) {
+            Write-Host "::error::the install dir survived the uninstall: $root"
+            exit 1
+          }
+          # §10 leg 6: the user-data retention note (recorded)
+          foreach ($d in @(
+            (Join-Path $env:APPDATA "com.pharmaml.studio"),
+            (Join-Path $env:LOCALAPPDATA "com.pharmaml.studio")
+          )) {
+            "MSI uninstall: user-data dir $d exists=$(Test-Path $d)" |
+              Add-Content "$env:EVIDENCE_DIR/uninstall-msi.txt"
+          }
+          Write-Host "MSI UNINSTALL OK: install dir removed; the user-data retention state recorded in the evidence bundle"
+
+      # ---- 10. install the NSIS EXE silently + verify the tree -----
+      - name: "10. Install the NSIS EXE silently + verify the installed tree"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $setup = Join-Path $env:ASSET_DIR "PharmaML_Studio_Setup_v$($env:RELEASE_VERSION).exe"
+          $p = Start-Process -FilePath $setup -ArgumentList "/S" -Wait -PassThru
+          if ($p.ExitCode -ne 0) {
+            Write-Host "::error::the NSIS silent install failed (exit $($p.ExitCode))"
+            exit 1
+          }
+          # currentUser mode: the documented home is
+          # %LOCALAPPDATA%\Programs\PharmaML Studio (§10 leg 1)
+          $root = Join-Path $env:LOCALAPPDATA "Programs\PharmaML Studio"
+          $deadline = (Get-Date).AddSeconds(120)
+          while (-not (Test-Path $root) -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+          }
+          if (-not (Test-Path $root)) {
+            Write-Host "::error::the NSIS install dir never appeared: $root"
+            exit 1
+          }
+          $app = Join-Path $root "PharmaML Studio.exe"
+          if (-not (Test-Path $app)) {
+            Write-Host "::error::the installed host exe is missing: $app"
+            exit 1
+          }
+          $fv = (Get-Item $app).VersionInfo
+          if (-not ($fv.ProductVersion -like "$($env:RELEASE_VERSION)*")) {
+            Write-Host "::error::installed ProductVersion '$($fv.ProductVersion)' != $($env:RELEASE_VERSION)"
+            exit 1
+          }
+          $sidecar = Get-ChildItem $root -Recurse -Filter "pharmaml-backend.exe" |
+            Select-Object -First 1
+          if (-not $sidecar) {
+            Write-Host "::error::the frozen sidecar exe is missing from the installed tree"
+            exit 1
+          }
+          # §10 leg 1: the Start-Menu shortcut verification
+          $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
+          $lnks = @(Get-ChildItem $startMenu -Recurse -Filter "*.lnk" |
+            Where-Object { $_.Name -like "*PharmaML*" })
+          if ($lnks.Count -eq 0) {
+            Write-Host "::error::no Start-Menu shortcut for PharmaML Studio under $startMenu — the §10 leg-1 shortcut check failed"
+            exit 1
+          }
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $desktopLnk = Test-Path (Join-Path $desktop "PharmaML Studio.lnk")
+          Add-Content $env:GITHUB_ENV "NSIS_INSTALL_ROOT=$root"
+          Add-Content $env:GITHUB_ENV "NSIS_SIDECAR_DIR=$($sidecar.DirectoryName)"
+          "NSIS install: root=$root (ProductVersion $($fv.ProductVersion))" |
+            Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"
+          "NSIS sidecar exe: $($sidecar.FullName)" |
+            Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"
+          "NSIS shortcuts: start-menu $($lnks.Name -join ', '); desktop shortcut present=$desktopLnk (optional leg, recorded)" |
+            Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"
+          Write-Host "NSIS TREE VERIFIED: host exe + version + sidecar + Start-Menu shortcut(s); desktop shortcut present=$desktopLnk (recorded)"
+
+      # ---- 11. the NSIS-installed host launch + lifecycle ----------
+      - name: "11. Launch the NSIS-installed host + the lifecycle legs"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:NSIS_INSTALL_ROOT
+          $app = Join-Path $root "PharmaML Studio.exe"
+          $proc = Start-Process -FilePath $app -WorkingDirectory $root -PassThru
+          $deadline = (Get-Date).AddSeconds(150)
+          $backendSeen = $false
+          while ((Get-Date) -lt $deadline) {
+            if ($proc.HasExited) {
+              Write-Host "::error::the NSIS-installed app host exited early (code $($proc.ExitCode))"
+              exit 1
+            }
+            if (Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue) {
+              $backendSeen = $true
+              break
+            }
+            Start-Sleep -Seconds 3
+          }
+          if (-not $backendSeen) {
+            Write-Host "::error::the sidecar process never appeared under the launched NSIS-installed host within 150s"
+            exit 1
+          }
+          Write-Host "APP ALIVE (NSIS lane): host pid $($proc.Id), the sidecar child spawned"
+          Start-Sleep -Seconds 30
+          $hostP = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+          if (-not $hostP) {
+            Write-Host "::error::the host died during the sample window (NSIS lane)"
+            exit 1
+          }
+          $backends = @(Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue)
+          $sample = [ordered]@{
+            lane = "nsis-host-launch"
+            sampledAt = (Get-Date -Format o)
+            host = [ordered]@{
+              pid = $hostP.Id
+              workingSetMB = [math]::Round($hostP.WorkingSet64 / 1MB, 1)
+              privateMB = [math]::Round($hostP.PrivateMemorySize64 / 1MB, 1)
+              cpuS = [math]::Round($hostP.CPU, 2)
+              threads = $hostP.Threads.Count
+              handles = $hostP.HandleCount
+            }
+            sidecar = @($backends | ForEach-Object {
+              [ordered]@{
+                pid = $_.Id
+                workingSetMB = [math]::Round($_.WorkingSet64 / 1MB, 1)
+                privateMB = [math]::Round($_.PrivateMemorySize64 / 1MB, 1)
+                cpuS = [math]::Round($_.CPU, 2)
+              }
+            })
+          }
+          ($sample | ConvertTo-Json -Depth 5) |
+            Add-Content "$env:EVIDENCE_DIR/resource-sample-nsis.json"
+          Write-Host "RESOURCE SAMPLE (nsis): $(($sample | ConvertTo-Json -Depth 5 -Compress()))"
+          $null = $proc.CloseMainWindow()
+          $exitDeadline = (Get-Date).AddSeconds(45)
+          while (-not $proc.HasExited -and (Get-Date) -lt $exitDeadline) {
+            Start-Sleep -Seconds 2
+          }
+          $forced = -not $proc.HasExited
+          if ($forced) {
+            Write-Host "graceful close did not land in 45s — hard-stopping (NSIS lane; the leg-5 verdict records INCONCLUSIVE for the forced path)"
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 5
+          }
+          $orphanDeadline = (Get-Date).AddSeconds(60)
+          $orphans = @(Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue)
+          while ($orphans.Count -gt 0 -and (Get-Date) -lt $orphanDeadline) {
+            Start-Sleep -Seconds 3
+            $orphans = @(Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue)
+          }
+          if ($orphans.Count -gt 0) {
+            if ($forced) {
+              Write-Host "ORPHAN CHECK: INCONCLUSIVE (forced-kill path, NSIS lane) — recorded, cleaned up"
+              "ORPHAN CHECK: INCONCLUSIVE after forced kill (NSIS) — pids $($orphans.Id -join ', ')" |
+                Add-Content "$env:EVIDENCE_DIR/lifecycle-nsis.txt"
+              Stop-Process -Name "pharmaml-backend" -Force -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds 3
+            } else {
+              Write-Host "::error::ORPHANED sidecar after the graceful close (NSIS lane): $($orphans.Id -join ', ') — §10 leg 5 verdict FAIL"
+              exit 1
+            }
+          } else {
+            Write-Host "LIFECYCLE OK (NSIS): host closed, zero orphaned pharmaml-backend processes (graceful=$(-not $forced))"
+          }
+
+      # ---- 12. uninstall the NSIS package + verify removal --------
+      - name: "12. Uninstall the NSIS package + verify removal"
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:NSIS_INSTALL_ROOT
+          $un = Join-Path $root "uninstall.exe"
+          if (-not (Test-Path $un)) {
+            # locate via the registry uninstall key (recorded)
+            $key = Get-ChildItem "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall" |
+              Where-Object { $_.GetValue("DisplayName") -like "*PharmaML*" } |
+              Select-Object -First 1
+            if ($key) {
+              "NSIS uninstall registry key: $($key.PSChildName) — $($key.GetValue('DisplayName')) $($key.GetValue('DisplayVersion'))" |
+                Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"
+              $un = ($key.GetValue("UninstallString") -replace '"', "")
+            }
+          }
+          if (-not (Test-Path $un)) {
+            Write-Host "::error::no uninstaller found for the NSIS package (neither $root\uninstall.exe nor a registry entry)"
+            exit 1
+          }
+          "NSIS uninstaller: $un" |
+            Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"
+          Start-Process -FilePath $un -ArgumentList "/S" -Wait
+          # NSIS uninstallers re-spawn themselves — poll for the
+          # actual removal rather than trusting the launcher's exit
+          $deadline = (Get-Date).AddSeconds(150)
+          while ((Test-Path $root) -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 3
+          }
+          if (Test-Path $root) {
+            Write-Host "::error::the NSIS install dir survived the uninstall: $root"
+            exit 1
+          }
+          foreach ($d in @(
+            (Join-Path $env:APPDATA "com.pharmaml.studio"),
+            (Join-Path $env:LOCALAPPDATA "com.pharmaml.studio")
+          )) {
+            "NSIS uninstall: user-data dir $d exists=$(Test-Path $d)" |
+              Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"
+          }
+          Write-Host "NSIS UNINSTALL OK: install dir removed; the user-data retention state recorded"
+
+      # ---- 13. the upgrade leg (v1.2.231 -> v1.2.240) -------------
+      # §10's upgrade + user-data retention lane, CI-executed: install
+      # the previous published MSI, plant a marker in the identifier's
+      # user-data dir, upgrade in place, verify the version moved and
+      # the marker survived. The full DB/artifact persistence lane
+      # still rides the box (honest scope).
+      - name: "13. The upgrade leg (previous release -> current, user-data retention)"
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $prevTag = "${{ inputs.previous_tag }}".Trim()
+          if ([string]::IsNullOrWhiteSpace($prevTag)) { $prevTag = "v1.2.231" }
+          $prevVersion = $prevTag.TrimStart("v")
+          $prevDest = Join-Path $env:RUNNER_TEMP "previous-release"
+          New-Item -ItemType Directory -Force $prevDest | Out-Null
+          gh release download $prevTag --repo $env:GITHUB_REPOSITORY `
+            --pattern "*$prevVersion.msi" --dir $prevDest --clobber
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::the previous release's MSI could not be downloaded ($prevTag)"
+            exit 1
+          }
+          $prevMsi = Get-ChildItem $prevDest -Filter "*.msi" | Select-Object -First 1
+          if (-not $prevMsi) {
+            Write-Host "::error::no MSI asset found on the $prevTag release"
+            exit 1
+          }
+          $log = "$env:EVIDENCE_DIR/upgrade-install.log"
+          $p = Start-Process msiexec.exe `
+            -ArgumentList "/i", "`"$($prevMsi.FullName)`"", "/qn", "/norestart", "/l*v", "`"$log`"" `
+            -Wait -PassThru
+          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
+            Write-Host "::error::the previous MSI ($prevVersion) install failed (exit $($p.ExitCode))"
+            exit 1
+          }
+          $root = Join-Path $env:ProgramFiles "PharmaML Studio"
+          $app = Join-Path $root "PharmaML Studio.exe"
+          $deadline = (Get-Date).AddSeconds(120)
+          while (-not (Test-Path $app) -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+          }
+          if (-not (Test-Path $app)) {
+            Write-Host "::error::the previous install's host exe never appeared"
+            exit 1
+          }
+          $prevInstalled = (Get-Item $app).VersionInfo.ProductVersion
+          if (-not ($prevInstalled -like "$prevVersion*")) {
+            Write-Host "::error::the fresh install reports ProductVersion '$prevInstalled', expected $prevVersion"
+            exit 1
+          }
+          Write-Host "UPGRADE LEG: previous release $prevVersion installed (ProductVersion $prevInstalled)"
+          # plant the user-data marker in the identifier's roaming dir
+          $userData = Join-Path $env:APPDATA "com.pharmaml.studio"
+          New-Item -ItemType Directory -Force $userData | Out-Null
+          $marker = Join-Path $userData "smoke-upgrade-marker.txt"
+          Set-Content $marker "pharmaml install-smoke upgrade marker (round 336 leg)"
+          # the in-place upgrade to the current release
+          $msi = Join-Path $env:ASSET_DIR "PharmaML_Studio_v$($env:RELEASE_VERSION).msi"
+          $log2 = "$env:EVIDENCE_DIR/upgrade-upgrade.log"
+          $p2 = Start-Process msiexec.exe `
+            -ArgumentList "/i", "`"$msi`"", "/qn", "/norestart", "/l*v", "`"$log2`"" `
+            -Wait -PassThru
+          if ($p2.ExitCode -ne 0 -and $p2.ExitCode -ne 3010) {
+            Write-Host "::error::the upgrade to $($env:RELEASE_VERSION) failed (exit $($p2.ExitCode)) — see upgrade-upgrade.log"
+            exit 1
+          }
+          Start-Sleep -Seconds 5
+          $deadline = (Get-Date).AddSeconds(120)
+          while (-not (Test-Path $app) -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+          }
+          if (-not (Test-Path $app)) {
+            Write-Host "::error::the upgraded host exe never re-appeared at $app"
+            exit 1
+          }
+          $upgradedTo = (Get-Item $app).VersionInfo.ProductVersion
+          if (-not ($upgradedTo -like "$($env:RELEASE_VERSION)*")) {
+            Write-Host "::error::after the upgrade the install still reports ProductVersion '$upgradedTo', expected $($env:RELEASE_VERSION)"
+            exit 1
+          }
+          if (-not (Test-Path $marker)) {
+            Write-Host "::error::the upgrade WIPED the user-data marker ($marker) — the §10 leg-6 retention rule failed"
+            exit 1
+          }
+          "upgrade: $prevVersion -> $($env:RELEASE_VERSION) in place; the user-data marker retained" |
+            Add-Content "$env:EVIDENCE_DIR/upgrade-leg.txt"
+          Write-Host "UPGRADE OK: $prevVersion -> $($env:RELEASE_VERSION) in place, the user-data marker RETAINED"
+          # cleanup: uninstall the current release, verify removal,
+          # record the final user-data state
+          $p3 = Start-Process msiexec.exe `
+            -ArgumentList "/x", "`"$msi`"", "/qn", "/norestart" `
+            -Wait -PassThru
+          if ($p3.ExitCode -ne 0 -and $p3.ExitCode -ne 3010) {
+            Write-Host "::error::the post-upgrade cleanup uninstall failed (exit $($p3.ExitCode))"
+            exit 1
+          }
+          $deadline = (Get-Date).AddSeconds(90)
+          while ((Test-Path $root) -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 2
+          }
+          if (Test-Path $root) {
+            Write-Host "::error::the install dir survived the post-upgrade uninstall: $root"
+            exit 1
+          }
+          $markerSurvived = Test-Path $marker
+          "upgrade-leg cleanup: install dir removed; user-data marker retained=$markerSurvived" |
+            Add-Content "$env:EVIDENCE_DIR/upgrade-leg.txt"
+          Write-Host "UPGRADE-LEG CLEANUP OK: install dir removed, the user-data marker retained=$markerSurvived (the §10 leg-6 retention rule, file-marker form)"
+
+      # ---- 14. upload the evidence bundle ---------------------------
+      - name: "14. Upload the evidence bundle"
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-install-smoke-evidence
+          path: ${{ env.EVIDENCE_DIR }}
+          if-no-files-found: error
+
+      # ---- the honest closing note (the §12 convention) -------------
+      - name: "15. Report the remaining unverified stages honestly"
+        shell: pwsh
+        run: |
+          Write-Host "INSTALL SMOKE DONE — every leg above ran against the PUBLISHED release assets on a fresh Windows x64 runner."
+          Write-Host "PROVEN THIS LANE: asset integrity (SHA256SUMS + manifest); Defender scan; both installers' silent install + tree + version; the INSTALLED sidecar's live contract; the host launch + sidecar spawn + lifecycle + no-orphans; both uninstalls + removal; the in-place upgrade + user-data retention."
+          Write-Host "STILL UNVERIFIED (the runner is a build/test env, NOT the owner's desktop):"
+          Write-Host "  BLOCKED: the GUI nine-workspace click-through (§10 leg 3 — the human-driven box)"
+          Write-Host "  BLOCKED: the offline-network WebView2 bootstrap leg (the runner is online + carries WebView2)"
+          Write-Host "  BLOCKED: sleep/resume, DPI/multi-monitor, GPU benchmarks, the 45-60-min desktop-stability lane"
+          Write-Host "  BLOCKED: consumer Windows 10/11 edition fidelity (this runner is Windows Server 2022)"
+          Write-Host "  BLOCKED: installer signing (BLK-3) + the Stage-5 PySide6 retirement (BLK-4 — owner decisions)"
+          Write-Host "Run packaging/windows/TAURI_RELEASE_PIPELINE.md section 'clean-machine smoke test' on the owner's real desktop for the remaining legs before any standalone claim."

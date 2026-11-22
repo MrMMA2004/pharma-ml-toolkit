@@ -10,7 +10,7 @@ Seeded: round 329 (2026-11-22).
 
 | ID | Blocker | Blocks | Required environment | Lowest-cost solution |
 | --- | --- | --- | --- | --- |
-| BLK-1 | No Windows in the dev sandbox | the §6.1 desktop checklist; clean-machine smoke; installer install/upgrade/uninstall; offline WebView2; sleep/resume; DPI/multi-monitor; 45–60-min stability; GPU benchmarks; antivirus | physical Windows 10/11 (VM acceptable for most legs per §9.5) | the §9.5 clean-VM procedure (snapshot → install → probe → assert → collect) |
+| BLK-1 | No Windows in the dev sandbox | the §6.1 desktop checklist + the clean-machine smoke's DESKTOP half (the GUI nine-workspace click-through, the offline-network WebView2 bootstrap, sleep/resume, DPI/multi-monitor, the 45–60-min desktop-stability lane, GPU benchmarks, consumer-Win10/11 fidelity) — the smoke's INSTALLER-MECHANICS half (install/upgrade/uninstall, the packaged-app process lifecycle, the installed sidecar's live contract, antivirus) is CI-EXECUTED since r336 (see the section below) | physical Windows 10/11 (VM acceptable for most legs per §9.5) | the r336 CI lane for the installer mechanics; the §9.5 clean-VM procedure for the remaining desktop legs |
 | BLK-2 | No Rust toolchain (cargo/rustc) in the sandbox | the D-4/D-5 `#[cfg(test)]` suites (11 malformed-handshake cases); `tauri build` | any cargo-enabled environment | install the Rust toolchain anywhere — the unit legs do NOT need Windows |
 | BLK-3 | Signing certificate | signed-EXE/MSI validation | the certificate lane (owner-side) | r325 standing lane #3; rides the owner's cert decision |
 | BLK-4 | Stage-5 PySide6 retirement approval | the legacy-app retirement gate | owner decision + the box | the r325 standing lane #2 |
@@ -34,6 +34,51 @@ Seeded: round 329 (2026-11-22).
 | Push lane (PAT credential gone, 22+ rounds) | the owner re-supplied the token via the plain-text channel (the PDF channel had truncated at 74/93 chars — diagnosed, evidence `scratch/p14_r329_token_analysis.txt`); token API-validated as MrMMA2004 with push permission; the r328 payload pushed `ad5f00a7..a75f98eb` + the r329 hardening commit |
 | CI verification at HEAD | the authenticated API now reachable — 19 check-runs live at both pushed commits (verdict closes asynchronously) |
 | The machinery token-sweep hazard | first push attempt was REFUSED by GitHub push protection (a machinery UUID commit had swept `upload/GitHub_token.txt` into history); the ghost was reset away per convention and `upload/GitHub_token.*` + `.credentials/` gitignored disk-only — recurrence prevented |
+
+## UNBLOCKED this round (r336) — BLK-1's installer-mechanics half, CI-executed
+
+The owner's directive ("check if you can do the blocked items
+through GitHub Actions"): a GitHub windows-2022 runner is a FRESH
+Windows x64 machine on every run (immutable image, zero toolkit
+residue), so the installer-mechanics half of BLK-1 now executes in
+CI against the PUBLISHED release assets —
+`.github/workflows/windows-install-smoke.yml` (registered at the
+repository root, the round-293 rule; `contents: read` least
+privilege; runs on every published release + manual dispatch):
+
+* asset integrity — SHA256SUMS.txt verified against every
+  downloaded asset + the RELEASE_MANIFEST cross-checked (version,
+  the build commit == the tag's checkout, artifact byte counts);
+* the Windows Defender scan of both installers (the antivirus leg,
+  genuinely clean-machine; a detection fails the lane loudly, an
+  inconclusive scan is recorded — never a silent pass);
+* both silent installs (WiX MSI `/qn` per-machine; NSIS EXE `/S`
+  currentUser) + the installed tree verified (host exe + version
+  resource + the frozen sidecar + the Start-Menu shortcuts);
+* the INSTALLED sidecar's live verification — the same
+  handshake/health/guard/shutdown contract the release pipeline's
+  step 13 pins on the build host, now on the bundle an end user
+  receives (the §10 offline-launch leg's backend half);
+* the app host launch — the sidecar child spawn + a bounded
+  runner-scope resource sample (honestly NOT the desktop baseline)
+  + the graceful close + the §10 leg-5 no-orphan check;
+* both uninstalls + removal verification + the user-data retention
+  state recorded;
+* the v1.2.231 → v1.2.240 in-place upgrade with a user-data
+  retention marker (the §10 leg-6 rule, file-marker form).
+
+The first dispatch's verdict rides the round's addendum (the r334
+convention — a CI verdict closes on arrival at the next
+checkpoint). Still honestly BLOCKED even with the lane (recorded
+in the lane's own closing note, so nothing converts to a pass by
+omission): the GUI nine-workspace click-through (§10 leg 3 — no
+human on the runner); the offline-network WebView2 bootstrap (the
+runner is online + carries the WebView2 runtime, so the embedded
+offline installer never fires); sleep/resume, DPI/multi-monitor,
+GPU benchmarks, the 45–60-min desktop-stability lane at
+owner-hardware fidelity; consumer Windows 10/11 edition fidelity
+(the runner is Windows Server 2022); BLK-3 signing (the owner's
+certificate) and BLK-4 (the owner's decision) untouched.
 
 ## Standing honest-status rules
 

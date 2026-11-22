@@ -1,0 +1,10 @@
+r336 round-open poll (closing the r333 release queue):
+run 45047077848 (tag v1.2.240 at 661e3f65): status=completed conclusion=success
+steps: 31 total, 31 success, 0 failure
+release v1.2.240: draft=False prerelease=False published=2026-11-22T17:47:29Z
+  asset PharmaML_Studio_Setup_v1.2.240.exe 558022042 bytes state=uploaded
+  asset PharmaML_Studio_v1.2.240.msi 710553078 bytes state=uploaded
+  asset RELEASE_MANIFEST.json 510 bytes state=uploaded
+  asset sbom.cdx.json 23634 bytes state=uploaded
+  asset SHA256SUMS.txt 368 bytes state=uploaded
+the r333 stage-2 ledger claims confirmed true on arrival.

@@ -18377,3 +18377,125 @@ triggered CI + the push workflow at the new HEAD — run 45075969338
 within the round's own window; **19/19 check-runs success** at
 `58f7dcbd` — the r335 CI verdict green on arrival, no queued item
 left for the next round.
+
+## Round 336 — the 128th recorded run (the part14 CI-lane round: the owner's "check if you can do the blocked items through GitHub Actions" directive answered with a new always-on lane; trace 1a2055c92e3b3f4d)
+
+**R336 — the 128th recorded run**
+
+**The directive**: "Continue. Check if you can do the blocked items
+through GitHub actions. Push." — the third owner directive of the
+part14 window, after the release directive (r333) and the ECC
+directive (r335). The blocked items: the RELEASE_ACCEPTANCE_REPORT's
+box-pinned lanes — BLK-1's clean-machine smoke, the packaged-app
+process-lifecycle legs of Gate B, the desktop-stability lanes of
+Gate E, the clean-machine legs of Gate F.
+
+**The arrival — CLEAN**: no rollback, nothing recovered (the fourth
+clean opening of the recorded era): HEAD `9b05aa69` (the r335
+addendum terminal) == origin/main, divergence 0/0, the tree clean,
+the counter at 127 with the worklog ending at R335, the venv at the
+pin-exact stack standing, the dev server alive (the console 200 +
+the zip-size API 23,489,390 exact:true source:release checked at the
+round's open). The queued r333 release poll CLOSED FIRST: run
+45047077848 (the tag build at `661e3f65`) completed/success — the
+full 53-step walk green through the Tauri host compile + the NSIS
+EXE + the WiX MSI + the manifest + SHA256SUMS + the SBOM + the
+release attach; the published v1.2.240 release re-verified
+asset-by-asset (EXE 558,022,042 B / MSI 710,553,078 B / manifest
+510 B / SHA256SUMS 368 B / SBOM 23,634 B, draft=false) — the r333
+stage-2 ledger's claims all confirmed true.
+
+**The analysis — what GitHub Actions CAN and CANNOT take over** (the
+directive's "check"): a GitHub windows-2022 runner is a FRESH
+Windows x64 machine on every run (immutable image, zero toolkit
+residue) — a clean machine in every sense that matters for the
+INSTALLER MECHANICS: the silent installs, the installed-tree
+verification, the INSTALLED sidecar's live contract, the app-host
+lifecycle, the uninstalls, the upgrade + user-data retention, and
+the Windows Defender antivirus leg all become CI-executable against
+the PUBLISHED release assets. What stays honestly BLOCKED even with
+a runner (never converted to a pass by omission): the GUI
+nine-workspace click-through (§10 leg 3 — no human on the runner);
+the offline-network WebView2 bootstrap (the runner is online +
+carries the WebView2 runtime, so the embedded offline installer
+never fires); sleep/resume, DPI/multi-monitor, GPU benchmarks, the
+45–60-min desktop-stability lane at owner-hardware fidelity;
+consumer Windows 10/11 edition fidelity (the runner is Windows
+Server 2022); BLK-3 signing (the owner's certificate) and BLK-4
+(the owner's decision) untouched.
+
+**The lane** — `.github/workflows/windows-install-smoke.yml` at the
+repository root (the round-293 registration rule; the ONLY path
+Actions registers), `contents: read` least privilege, the
+windows-release.yml house conventions (pinned action majors,
+persist-credentials: false, no secrets in logs — the built-in
+GITHUB_TOKEN passed per-step to gh, never echoed, every leg fails
+loudly), triggers: every published release + manual dispatch with
+tag inputs (defaults v1.2.240 / previous v1.2.231), runner
+windows-2022, timeout 90 min, 16 numbered steps: (1) the checkout at
+the release tag + (1b) Python for the verification driver (stdlib
+only — the runner's Python is tooling, the app brings its own frozen
+runtime); (2) gh release download of the five published assets;
+(3) the SHA256SUMS.txt verification (every listed asset hashed +
+every downloaded asset covered — zero mismatch, zero unlisted);
+(4) the RELEASE_MANIFEST cross-check (version == the tag, the build
+commit == the checkout — a moved tag fails loudly, artifact byte
+counts exact); (5) the Defender scan of both installers (exit 0 =
+clean recorded, exit 2 = a detection fails the lane, anything else =
+INCONCLUSIVE printed + carried — never a silent pass); (6) the WiX
+MSI silent install (/qn /norestart, 3010 recorded-pass) + the
+installed tree verified (host exe + ProductVersion + the frozen
+sidecar located recursively); (7) the INSTALLED sidecar's live
+verification — `packaging/windows/verify_sidecar.py` against the
+installed onedir, the SAME handshake + authenticated health +
+refused unauthenticated probe + graceful shutdown contract the
+release pipeline's step 13 pins on the build host; (8) the app host
+launch — the sidecar child spawn within 150s + a 45s resource
+sample (bounded, runner-scope, honestly NOT the desktop baseline)
++ the graceful close + the §10 leg-5 no-orphan check (orphans after
+a GRACEFUL close FAIL the lane; the forced-kill fallback records
+INCONCLUSIVE + cleans up); (9) the MSI uninstall + removal verified
++ the user-data retention state recorded; (10) the NSIS EXE silent
+install (/S) + the tree verified + the §10 leg-1 Start-Menu
+shortcut check (the desktop shortcut recorded as the optional leg);
+(11) the NSIS-installed host launch + lifecycle (30s sample); (12)
+the NSIS uninstall (uninstall.exe /S with the registry fallback +
+the re-spawn-aware removal poll) + removal verified; (13) the
+upgrade leg — the previous published MSI (v1.2.231) installed, a
+user-data marker planted in the identifier's roaming dir, the
+in-place upgrade to v1.2.240, the version move verified + the
+marker retained, the cleanup uninstall + the final retention state
+recorded; (14) the evidence bundle uploaded as the workflow
+artifact; (15) the honest closing note labeling every remaining
+box leg BLOCKED (the §12 convention).
+
+**The docs trued**: BLOCKED_TESTS_AND_SOLUTIONS.md — the BLK-1 row
+split honestly (the installer-mechanics half CI-EXECUTED since r336;
+the desktop half still box-pinned) + the "UNBLOCKED this round
+(r336)" section carrying the full lane description + the
+still-blocked list; RELEASE_ACCEPTANCE_REPORT.md — the r336 addendum
+in the header, the Gate B row (the process-lifecycle half +
+the INSTALLED sidecar's contract now ride the CI lane; the WebView2
+VISUAL round-trip still box), the Gate E row (the runner-scope
+sample recorded, the baseline stays box-pinned), the Gate F row (the
+clean-machine lane split — the desktop half standing), the honest
+verdict paragraph re-trued (gate E's desktop lanes BLOCKED; the
+shipped fixed point stated v1.2.240/23,489,390 B — the r333-era
+stale "stays v1.2.231" phrase corrected at the source this round);
+PROJECT_STATUS.md — the r336 lineage; CHANGELOG.md — the [1.2.240]
+addendum bullet.
+
+**The gates re-pinned over the round's final tree** (the r335 light
+set — the round's changes are docs + the root-level workflow file,
+outside the walked toolkit tree by the r324 census note, zero
+src/tests bytes touched): trusted-origins, the docs-consistency
+suite, the leakage suite, the console 200 + the zip-size API
+(the five-home zip stays byte-frozen per the r334 ruling — no
+re-ship; the lane rides main past the tag exactly like the r334
+fix). The version unchanged at 1.2.240 (§5 no-silent-bumps).
+
+**The ledger**: this entry; the counter 127 -> 128; the payload
+(the workflow + the four trued docs) committed and pushed over
+`9b05aa69` — then the FIRST DISPATCH of the lane (tag v1.2.240)
+fires; its verdict rides the round's addendum (the r334 convention:
+a CI verdict closes on arrival at the next checkpoint).

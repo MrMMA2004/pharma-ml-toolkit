@@ -303,7 +303,25 @@ summarises them and wins any status disagreement.
   19/19 check-runs success; the release assets re-verified
   byte-exact via the authenticated API; counter 126 -> 127 — and the
   r335 CI verdict closed GREEN on arrival: `58f7dcbd` 19/19 check-runs
-  success (both the CI and the push workflows)
+  success (both the CI and the push workflows) — and the part14
+  CI-lane round 336 (the interactive continuation, the owner's
+  "check if you can do the blocked items through GitHub Actions"
+  directive): **`windows-install-smoke.yml` added at the repository
+  root** — the BLK-1 installer-mechanics legs CI-executed against
+  the PUBLISHED release assets (the SHA256SUMS verification + the
+  RELEASE_MANIFEST cross-check incl. the build-commit == the
+  tag-checkout proof, the Windows Defender scan, both silent installs
+  + the installed-tree verification, the INSTALLED sidecar's live
+  handshake/health/guard/shutdown contract, the host launch + the
+  no-orphan lifecycle, both uninstalls + removal, and the
+  v1.2.231 → v1.2.240 in-place upgrade with the user-data retention
+  marker); the desktop legs stay honestly BLOCKED (the GUI
+  click-through, the offline WebView2 bootstrap, sleep/resume, DPI/
+  multi-monitor, GPU, the 45–60-min desktop lane, consumer-edition
+  fidelity — all recorded in the lane's own closing note); BLK-3/
+  BLK-4 untouched; the first dispatch's verdict rides the round's
+  addendum; the version unchanged at 1.2.240 (§5 no-silent-bumps);
+  counter 127 -> 128
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

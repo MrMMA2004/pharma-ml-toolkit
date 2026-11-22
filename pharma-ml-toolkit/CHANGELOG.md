@@ -1,5 +1,28 @@
 ## [1.2.240] — 2026-11-21 — round 318 (the 109th recorded run: the interactive part13 continuation, trace 1a1fed8994f477c1 — the Phase-5 pharmacogenomics lane, API + GUI; a NEW version ship)
 
+- **The BLK-1 installer-mechanics lane CI-executed (round 336, the
+  owner's "do the blocked items through GitHub Actions" directive)**:
+  `windows-install-smoke.yml` at the repository root — on every
+  published release (plus manual dispatch) a fresh windows-2022
+  runner downloads the PUBLISHED assets, verifies SHA256SUMS.txt +
+  the RELEASE_MANIFEST (the build commit proven == the tag's
+  checkout), Defender-scans both installers, silently installs BOTH
+  (the WiX MSI `/qn` per-machine + the NSIS EXE `/S` currentUser),
+  verifies the installed tree (host exe + version resource + the
+  frozen sidecar + the Start-Menu shortcuts), verifies the INSTALLED
+  sidecar's live handshake/health/guard/shutdown contract, launches
+  the app host (the sidecar child spawn + a bounded runner-scope
+  resource sample + the graceful close + the §10 leg-5 no-orphan
+  check), uninstalls both + verifies removal + records the user-data
+  retention state, and runs the v1.2.231 → v1.2.240 in-place upgrade
+  with a user-data retention marker. The desktop legs stay honestly
+  BLOCKED (the GUI nine-workspace click-through, the offline-network
+  WebView2 bootstrap, sleep/resume, DPI/multi-monitor, GPU, the
+  45–60-min desktop-stability lane, consumer-edition fidelity — the
+  lane's own closing note labels them; BLK-3 signing + BLK-4
+  untouched). The first dispatch's verdict rides the round's
+  addendum (the r334 convention).
+
 - **The Windows installer set PUBLISHED (round 333, the owner-directed
   release)**: `PharmaML_Studio_Setup_v1.2.240.exe` (558,022,042 B, the
   NSIS setup with the WebView2 Evergreen offline installer embedded —
