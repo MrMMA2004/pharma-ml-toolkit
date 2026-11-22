@@ -95,3 +95,7 @@ scratch/e2e311_token.txt
 upload/GitHub_token.pdf
 upload/GitHub_token.txt
 .credentials/
+
+# owner-directive hygiene (r335): upload/skill.txt is the standing ECC directive,
+# disk-only like the token uploads (owner files are never auto-committed)
+upload/skill.txt

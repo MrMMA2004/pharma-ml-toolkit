@@ -283,7 +283,25 @@ summarises them and wins any status disagreement.
   it) + the r334 ledger committed and pushed over `8d92e9e0` — and
   the r334 CI verdict closed GREEN on arrival: `67da10dc` 19/19
   check-runs success (both the CI and the push workflows), the
-  Studio frontend leg green over the fix on the runner.
+  Studio frontend leg green over the fix on the runner; the part14
+  ECC-installation addendum round 335 — the interactive continuation,
+  trace 1a205414c4658099, over the twenty-fifth arrival (the THIRD
+  rollback wave of the r333 window) recovered via the r322 playbook
+  in full (the 93-char PAT re-spliced masked + API-validated
+  MrMMA2004; origin re-attached + reset onto the r334 addendum
+  terminal `494a7ab5` 0/0 after the six-file disk-vs-origin blob
+  parity proof; the resurrected residue swept; the offsite re-seeded
+  five homes one sha `0fadb6e5`; venv_repair.sh FOREGROUND exit 0;
+  both EGL legs standing) + THE OWNER'S STANDING ECC DIRECTIVE
+  INSTALLED (`upload/skill.txt`, disk-only + gitignored): the full
+  clone at `~/ECC` (`4adeee67`, v2.2.3, 328 skills) + the
+  harness install at `~/.claude` (core profile no-hooks + the four
+  project-relevant capabilities machine-learning/research/security/
+  documentation-governance — 14 modules, 196 skills, 628 operations)
+  with the standing round-check `scratch/ecc_check.sh` GREEN — and
+  the r334-addendum CI verdict closed GREEN on arrival: `494a7ab5`
+  19/19 check-runs success; the release assets re-verified
+  byte-exact via the authenticated API; counter 126 -> 127
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

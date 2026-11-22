@@ -18271,3 +18271,102 @@ triggered CI + the push workflow at the new HEAD — **19/19
 check-runs success** (both runs completed/success), the **Studio
 frontend leg green over the fix on the runner** — the flake repair
 proven in the environment that caught it.
+
+---
+
+## Round 335 — the 127th recorded run (the part14 ECC-installation round: the third rollback wave of the r333/r334 window recovered, the owner's standing ECC directive installed and verified; trace 1a205414c4658099)
+
+**R335 — the 127th recorded run**
+
+**The directive**: the owner's `upload/skill.txt` (Persian, 276 B,
+2026-11-22 21:54 UTC): "install this project fully, and before every
+round check that it is installed, and during the round use the related
+and needed skills and tools" — over
+https://github.com/affaan-m/ECC. A standing environmental directive
+layered onto the 2h-sync ritual, not a repo feature; the file stays
+disk-only, gitignored per the 013b3ff4 convention (owner uploads are
+never auto-committed).
+
+**The discovery — the twenty-fifth arrival, the THIRD rollback wave
+of the r333 window**: the recycle hit after the r334 addendum had
+been pushed (`494a7ab5`): history reset to the r186 checkpoint
+`2eb0ede` under the machinery UUID child again, `.credentials/`
+gone, origin detached, the post-r186 objects absent locally
+(`661e3f65`/`8d92e9e0`/`67da10dc` all unresolvable), the venv gutted
+(rdkit absent), the offsite + the deb-extract EGL leg wiped — while
+the working tree survived at the r334-addendum terminal (the counter
+at 126, the R334 entry; the disk blobs of all six ledger files
+byte-identical to origin/main, proven BEFORE any destructive step).
+
+**The r322 playbook re-run in full**: the 93-char PAT re-spliced
+masked from `upload/MASTER_PROMPT.pdf` — the splice located
+programmatically (the two token-carrying lines at positions 712+713,
+76+17 chars, concatenated == `GitHub_token.txt` byte-exact; the
+naive last-two-lines heuristic rejected at 140 chars) — + API-validated
+as MrMMA2004 (id 181644291); origin re-attached via the
+credential-helper lane (the token never in a URL), fetched, the tags
+restored including `v1.2.240`; `git reset --hard origin/main` onto
+the durable terminal `494a7ab5` — divergence 0/0; the resurrected
+residue swept (the retired zip strays v1.2.229/230/235–239 across
+the homes + the stale `pharma-ml-toolkit/.github/` workflow
+duplicate + the toolkit-level counter copy + the scratch strays: the
+r331/r332 push-result fragments, the r333 manifest copy, the r332
+supervisor, the r319 WIP); the offsite `~/pharma-ml-toolkit-zips/`
+re-seeded — **five homes, one unique sha `0fadb6e5…`**, the shipped
+fixed point standing; `venv_repair.sh` FOREGROUND exit 0 (numpy
+1.26.4 / torch 2.14.1+cpu / matplotlib 3.10.9 / openpyxl 3.1.5 /
+pharmaml 1.2.240 / PySide6 QApplication OK offscreen); the BLK-6
+deb-extract leg re-applied at `~/.local/lib/egl` — both EGL legs
+verified importable.
+
+**The round's own work — ECC fully installed (the owner's standing
+directive)**: two legs. (1) The full clone at `~/ECC` — commit
+`4adeee67`, VERSION 2.2.3, 328 skills, unshallowed to full history.
+(2) The harness install at `~/.claude/` via the official installer
+from the verified source checkout (`install.sh --profile core
+--no-hooks --target claude`): the core profile (rules-core,
+agents-core, commands-core, platform-configs, skill-unified-memory,
+workflow-quality, shared-script-utils) **+ the four project-relevant
+capabilities** (`machine-learning` — mle-workflow/pytorch-patterns/…;
+`research` — deep-research + the scientific-db skills PubMed/OpenAlex/
+USPTO/gget; `security` — security-review/scan + healthcare-PHI/
+HIPAA compliance; `documentation-governance` — docs-governance) —
+the dependency closure resolved by the installer itself: **14
+modules, 196 skills, 628 operations, install-state at
+`~/.claude/ecc/install-state.json`**; the no-hooks decision recorded
+honestly (no Claude Code runtime exists in this sandbox to fire
+hook events — the runtime would be dead weight). The standing
+round-check the directive demands: **`scratch/ecc_check.sh`** —
+deterministic, read-only, four legs (the clone leg: HEAD + VERSION;
+the harness leg: profile core + 14 modules + ≥190 skills; the eight
+domain skills incl. delivery-gate; the four capability modules in
+install-state) — **GREEN on arrival**: clone 4adeee67/2.2.3/328
+skills, harness 196 skills. The first ECC-skill applications this
+round, per the directive: **delivery-gate** (its deterministic-gate
+doctrine applied to the round close — the mechanical checks over
+self-reported status; its disk leg run: 1.7G available, recorded,
+non-blocking) and **docs-governance** (its role contract honored:
+the round ledger reuses the established sources of truth —
+worklog/counter/PROJECT_STATUS — never a parallel document).
+
+**The gates re-pinned over the recovered stack**: trusted-origins
+**34 passed** (tests/api/test_trusted_origins.py, the repaired
+pin-exact venv); the console render **200** + the zip-size API
+`{"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}`;
+the agent-browser E2E over the surviving console — **zero page/console
+errors** + the live v1.2.240 header + the footer geometry exact
+**3967==3967** + the pins pair `p14r335-{desktop,mobile}.png`
+(1440px/390px full-page); the published release re-verified directly
+via the authenticated
+API — **five assets byte-exact** (EXE 558,022,042 B / MSI
+710,553,078 B / manifest 510 B / SHA256SUMS 368 B / SBOM 23,634 B,
+draft=false, the download counters ticking) — and the **r334
+addendum's CI verdict closed GREEN on arrival**: `494a7ab5` **19/19
+check-runs success** (the queued item), branches: main only, no
+arena refs. The version stays 1.2.240 (§5 no-silent-bumps).
+
+**The ledger**: the r335 lineage appended to the PROJECT_STATUS
+header; the counter 126 → 127; this entry; the round's payload (the
+`scratch/ecc_check.sh` round-check + the `.gitignore` hygiene line
+for the owner's directive file) committed and pushed over
+`494a7ab5`.
