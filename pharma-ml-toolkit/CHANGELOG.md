@@ -112,6 +112,63 @@
   backend already in-tree) rides the next continuation per
   PROJECT_STATUS §6. The next CI poll carries this round's push
   verdict.
+## [1.2.240 re-ship] — 2026-11-23 — round 325 (the 117th recorded run: the interactive part13 continuation, trace 1a202a6b96f48379 — the Phase-7 RELEASE-GATE VERIFICATION round: every gate re-run from the exact release commit, the published artifacts verified live, the three BLOCKED lanes honestly carried; the same-version re-ship per the r303..r324 convention)
+
+- **The sixteenth arrival — the FIRST CLEAN OPENING in the recorded
+  rollback era: no rollback, nothing to recover**. The four-sentinel
+  check found the world exactly at the r324 terminal: HEAD
+  `08331ee7` == origin/main (live ls-remote), the tree 0/0 clean, the
+  counter at 116 with the worklog ending at R324, the venv at the
+  exact pins (Python 3.12.16 / numpy 1.26.4 / torch 2.14.1+cpu /
+  rdkit 2026.09.1 / sklearn 1.5.2 / pandas 2.2.3 / pharmaml 1.2.240
+  editable) and the Studio frontend node_modules standing — the
+  stale inherited summary (still describing the world at
+  r308/counter 99) reconciled against the on-disk truth before any
+  work. The one environmental wrinkle surfaced mid-round, the
+  documented class: the sandbox reaper's per-call root-node_modules
+  wipe hit again (the r323/r324 class) — caught by the gate's
+  web-parity legs and repaired in the same tool-call window per the
+  r320 precedent.
+- **part13 Phase 7 EXECUTED to its executable extent — the
+  release-gate verification from the exact release commit** (the §5
+  rule holds: the new-version ship waits for the BLOCKED lanes; no
+  silent version bumps, ever): the GitHub-side legs verified live —
+  CI at HEAD `08331ee7` **19/19 check-runs all success**, the repo
+  public on `main`, and the published **v1.2.231** release assets
+  intact at the exact ledger bytes (EXE 557,655,583 B / MSI
+  710,122,853 B / RELEASE_MANIFEST.json / SHA256SUMS.txt — the
+  source/installer parity verified at the asset level, the published
+  Windows assets never overwritten); the local gates re-run in
+  full — the canonical collection **8,555 / 0 errors / 470 files**;
+  the ten-chunk gate all legs green (chunks 2, 3, 5, 6, 7, 8 + the
+  nine-card, doctest, api and github-page legs first-pass green;
+  chunk-1's OOM-split drill green with the nine-card-first single
+  taking its quiet-container makeup leg 23/23 — the static-gate
+  concurrency contention owned; chunk-4's web-parity legs green via
+  the one-window makeup **100 passed / 1 skip** after the
+  node_modules reaper-wipe was re-repaired inside the same call);
+  ruff clean; mypy clean (296 source files); the frontend tsc
+  clean; vitest **110/110**; the OpenAPI contract current at
+  **109 paths / 71 schemas** (byte-identical re-export, the drift
+  gate green); the venv pins zero-drift.
+- **The census fixed point three-way (walk = live API = page
+  render): 1,706 files / 567,800 lines / v1.2.240** (+2 files: the
+  r325 pins pair; +94 the counted doc deltas — live-walk semantics;
+  the Python replica's +98 counts the four 0-byte `__init__.py`
+  files, the r309-documented bias); the pins trued
+  8,555/110/1,706/567,800 + the pair captured, zero errors.
+- **The same-version re-ship at the converged fixed point**: the
+  terminal-of-record (entries/files/bytes/sha-256 recorded in the
+  round ledger at the repo root per the r301/r312 convention — the
+  archive never carries its own hash) — six-home parity ALL OK +
+  the offsite mirror at 18 zips + the zip-size API exact:true
+  source:release.
+- **The honest Phase-7 BLOCKED record — unchanged gates, zero
+  embellishment**: the version-increment / EXE-MSI build / publish
+  legs stay BLOCKED on the three lanes (the C-3/C-5 clean-machine
+  smoke, the Stage-5 PySide6 retirement, the certificate-gated
+  installer signing); the lane re-rides each continuation until
+  the owner-side gates clear. Counter 116 → 117.
 ## [1.2.240 re-ship] — 2026-11-23 — round 324 (the 116th recorded run: the interactive part13 continuation, trace 1a20277c05a55795 — the Phase-6 REMAINDER, each small reversible tested: §15 resource monitoring, §17 security scanning, §18 documentation automation; the same-version re-ship per the r303..r323 convention)
 
 - **The fifteenth arrival — the deepest rollback class again, the

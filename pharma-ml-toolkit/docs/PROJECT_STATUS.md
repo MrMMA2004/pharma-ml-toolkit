@@ -61,7 +61,17 @@ summarises them and wins any status disagreement.
   intact (zero repair), the root web node_modules wiped and
   reinstalled in the same tool-call window, one unpushed machinery
   UUID commit reset away per the r312 precedent — the §8 GUI leg
-  (the Workflow Builder stage) EXECUTED.
+  (the Workflow Builder stage) EXECUTED; the Phase-6 REMAINDER
+  addendum round 324 — the interactive part13 continuation, trace
+  1a20277c05a55795, over the fifteenth (deepest-class) rollback —
+  §15/§17/§18 EXECUTED, Phase 6 CLOSED. The Phase-7 addendum round
+  325 — the interactive part13 continuation, trace
+  1a202a6b96f48379, the FIRST clean (zero-rollback) arrival in the
+  recorded era: HEAD == origin/main, the tree 0/0, the counter
+  aligned at 116 — the release-gate verification round EXECUTED
+  (every gate re-run from the exact release commit + the published
+  artifacts verified live; the version-increment/build/publish legs
+  stay honestly BLOCKED on the three §4 lanes).
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
@@ -100,18 +110,21 @@ summarises them and wins any status disagreement.
   post-session machinery ghost-zip commit `c07a8a12` reset away
   unpushed per the r312 precedent, the disk homes restored with
   five-home sha parity `455cf00b` exact), and this round's r318
-  push | fetch + reset --hard + ghost sweep (r307–r318) |
-| CI at HEAD | the r317 push-2 `7df1806d` came back **19/19 — all
-  check-runs success**, closed GREEN on arrival this round (the
-  same-version re-ship convention held through the superseding
-  re-ship push); this round's push re-verifies all jobs | the
-  authenticated check-runs poll (this round) |
+  push | fetch + reset --hard + ghost sweep (r307–r318); the
+  Phase-6 remainder closed at the r324 terminal `08331ee7`
+  (pushed, CI 19/19) and the Phase-7 verification round opened on
+  it CLEAN — the first zero-rollback arrival: HEAD == origin/main,
+  the tree 0/0, nothing recovered — riding its own push |
+| CI at HEAD | the r324 push `08331ee7` re-verified live at the
+  Phase-7 opening: **19/19 — all check-runs success** (the
+  authenticated check-runs poll, this round); this round's push
+  re-verifies all jobs | the live check-runs poll (this round) |
 | Published release | v1.2.231 (not draft): EXE 557,655,583 B · MSI 710,122,853 B · RELEASE_MANIFEST.json · SHA256SUMS.txt — the v1.2.240 SOURCE archive shipped (four homes + offsite, 18 zips) but the Windows release lane stays gated on the clean machine (§4); no silent release claims | `releases/tags/v1.2.231` |
 | Version carriers | VERSION · pyproject · `pharmaml.__version__` · TS carrier · CHANGELOG · tauri.conf.json · version_info.txt — all 1.2.240 | read directly this session, lockstep guard green |
-| Test surface | 8,555 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 470 files — the r324 re-true: +30 the Phase-6 remainder lanes over the r323 8,525 — 9 the §15 resource-monitoring route suite + 8 the §17 supply-chain guard + 13 the §18 documentation-consistency guard) — PLUS the component-test lane: 110 Vitest tests / 15 files over the Studio frontend (+8 the r323 Workflow Builder suite: the registry line, the template chain, the validate/run round trips, the 422 verbatim, the client-side gate, the job relay, the runs ledger) | fresh collection + vitest this round |
-| Census | 1,704 files / 567,706 lines / v1.2.240 (the r324 re-true over the r323 1,698/566,909: +6 files — the §15 system route + its 9-test suite + the two guard suites + the r324 pins pair — plus the contract-pair regrowth lines; verified three-way: walk = live API = page render) | this round's census walk |
-| Source archive | v1.2.240 — re-shipped same-version at r319, r321, r322, r323 AND r324 (the r303/r304/r317 convention: the §15/§17/§18 remainder lanes + this row's re-true ride the r324 rebuilt archive — terminal-of-record `19aa2d3f` at 22,092,317 B, six-home parity ALL OK + the offsite mirror at 18 zips) | sha256 across the homes + offsite |
-| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.240 — zero drift vs `requirements.txt` | import probes (r319: rdkit was found missing after the eleventh rollback's partial hydration — `venv_repair.sh` ran FOREGROUND and the full import surface + the Studio GUI stack verified) |
+| Test surface | 8,555 collected / 0 errors (`tests/` + `src/pharmaml` `--doctest-modules`, 470 files — the r324 re-true: +30 the Phase-6 remainder lanes over the r323 8,525 — 9 the §15 resource-monitoring route suite + 8 the §17 supply-chain guard + 13 the §18 documentation-consistency guard) — PLUS the component-test lane: 110 Vitest tests / 15 files over the Studio frontend (+8 the r323 Workflow Builder suite: the registry line, the template chain, the validate/run round trips, the 422 verbatim, the client-side gate, the job relay, the runs ledger) — the r325 Phase-7 verification re-ran the FULL ten-chunk gate over the collection (all legs green incl. the two makeup legs: the quiet-container Qt makeup + the one-window web-parity makeup) + ruff/mypy/tsc + vitest 110/110 + the contract drift gate | fresh collection + vitest this round |
+| Census | 1,706 files / 567,800 lines / v1.2.240 (the r325 re-true over the r324 1,704/567,706: +2 files — the r325 pins pair — +94 the round's counted doc deltas — live-walk semantics; the Python replica's +98 counts the four 0-byte `__init__.py` files as 1 line each, the r309-documented bias; the pin equals the live walk; verified three-way: walk = live API = page render) | this round's census walk |
+| Source archive | v1.2.240 — re-shipped same-version at r319, r321, r322, r323, r324 AND r325 (the r303/r304/r317 convention: the §15/§17/§18 remainder lanes + this row's re-true ride the r324 rebuilt archive — terminal-of-record `19aa2d3f` at 22,092,317 B, six-home parity ALL OK + the offsite mirror at 18 zips; the r325 Phase-7 verification round re-shipped at the trued fixed point — the terminal sha/bytes live in the repo-root worklog per the §7/r312 convention, never in-archive) | sha256 across the homes + offsite |
+| venv pins | numpy 1.26.4 · torch 2.14.1+cpu · rdkit 2026.09.1 · sklearn 1.5.2 · pandas 2.2.3 · pharmaml 1.2.240 — zero drift vs `requirements.txt` (re-probed at the r325 Phase-7 opening — all pins exact, zero repair, the first clean venv arrival) | import probes (r319: rdkit was found missing after the eleventh rollback's partial hydration — `venv_repair.sh` ran FOREGROUND and the full import surface + the Studio GUI stack verified) |
 
 ## 3. The six previously-open audit items — CLOSED (re-verified in-tree this round)
 
@@ -448,8 +461,31 @@ summarises them and wins any status disagreement.
   the offsite at 18. **Phase 6 is CLOSED** — the workflow engine +
   its GUI leg (r322/r323) and the three remainder lanes all carry
   their tested surfaces.
-- **Phase 7** — the next production release, from the exact release
-  commit, with all gates recorded.
+- **Phase 7** — the new production release, from the exact release
+  commit, with all gates recorded: **the release-gate verification
+  EXECUTED (round 325, the 117th recorded run — the interactive
+  part13 continuation, trace 1a202a6b96f48379, the first clean
+  zero-rollback arrival in the recorded era)**. Every gate re-run
+  from the exact release commit `08331ee7` and recorded — the
+  GitHub-side legs live (CI 19/19 at HEAD; the v1.2.231 release
+  assets intact at the exact ledger bytes — source/installer
+  parity at the asset level, the published Windows assets never
+  overwritten); the local gates (the canonical collection
+  8,555/0/470; the ten-chunk gate all legs green incl. the two
+  makeup legs — the quiet-container Qt makeup + the one-window
+  web-parity makeup over the reaper-wiped root node_modules, the
+  r320 precedent; ruff + mypy + the frontend tsc clean; vitest
+  110/110; the OpenAPI contract current at 109 paths/71 schemas,
+  byte-identical; the venv pins zero-drift); the census fixed
+  point re-trued three-way + the pins pair captured
+  zero-errors; the same-version re-ship at the converged fixed
+  point (six-home parity + the offsite at 18 + the zip-size API
+  exact). The version-increment / EXE-MSI build / publish legs
+  stay honestly BLOCKED on the three §4 lanes (clean-machine
+  smoke, Stage-5 PySide6 retirement, installer signing) — per
+  §5 no silent version bumps: the new-version ship (v1.2.241+)
+  opens the day the owner-side gates clear; the lane re-rides
+  each continuation until then.
 
 ## 7. Known limitations of this document
 

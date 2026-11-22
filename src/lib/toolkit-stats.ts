@@ -83,7 +83,7 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 110;
  *  toolkit .github path — resurrected by the same rollback, never
  *  registered at GitHub and never shipped in any archive — nets to
  *  zero (caught, removed); verified pin = live walk = page render. */
-export const SHIPPED_FILE_COUNT = 1704;
+export const SHIPPED_FILE_COUNT = 1706;
 
 /*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
     +13 tree files (the pharmaml.workflow package x4, the route
@@ -102,6 +102,12 @@ export const SHIPPED_FILE_COUNT = 1704;
     guard suites + the r324 pins pair); the root .github workflow and
     the web pins carrier live outside the walked toolkit tree, by
     the same census rule; verified pin = live walk = page render. */
+
+/*  r325 (the 1.2.240 same-version re-ship, the Phase-7 release-gate
+    verification round): +2 tree files (the r325 pins pair) +98 the
+    counted doc deltas (the CHANGELOG entry + the PROJECT_STATUS
+    Phase-7 addenda); no src/tests change; verified pin = live
+    walk = page render. */
 
 /** Source lines of the shipped tree, formatted with thousands
  *  separators at render time (raw number kept for math). The round-304
@@ -185,7 +191,7 @@ export const SHIPPED_FILE_COUNT = 1704;
  *  file pin stayed 1,672 (the hydration-restored stray zips + the
  *  orphan WIP route removed, the ritual's seven home-zips kept);
  *  verified pin = live walk = page render. */
-export const SHIPPED_SOURCE_LINES = 567706;
+export const SHIPPED_SOURCE_LINES = 567800;
 
 /*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
     +3,422 the counted delta (the workflow package + the route family
@@ -206,6 +212,14 @@ export const SHIPPED_SOURCE_LINES = 567706;
     PROJECT_STATUS addenda); the .tsx lanes never count by the
     long-standing census rule; verified pin = live walk = page
     render. */
+
+/*  r325 (the 1.2.240 same-version re-ship, the Phase-7 release-gate
+    verification round): +94 the counted doc delta (the CHANGELOG
+    entry + the PROJECT_STATUS Phase-7 addenda; live-walk semantics:
+    the Python replica's +98 counts the four 0-byte __init__.py
+    files as 1 line each — the r309-documented JS bias, the pin
+    equals the live walk); zero src/tests change this round;
+    verified pin = live walk = page render. */
 
 /** r315 (the v1.2.237 ship, the DTA lane): +2 the route family
  *  (routes/dta.py + tests/api/test_dta.py), +1 the DtaLane
