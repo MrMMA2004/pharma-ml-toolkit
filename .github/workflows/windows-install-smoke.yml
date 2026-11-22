@@ -430,7 +430,11 @@ jobs:
           }
           ($sample | ConvertTo-Json -Depth 5) |
             Add-Content "$env:EVIDENCE_DIR/resource-sample-msi.json"
-          Write-Host "RESOURCE SAMPLE (msi): $(($sample | ConvertTo-Json -Depth 5 -Compress()))"
+          # hoisted, never nested: the fourth dispatch's catch — the
+          # parser binds a bare '()' after a switch parameter as an
+          # empty argument ('An expression was expected after (')
+          $sampleJson = $sample | ConvertTo-Json -Depth 5 -Compress
+          Write-Host "RESOURCE SAMPLE (msi): $sampleJson"
           # §10 leg 5: the graceful close, then the no-orphan check
           $null = $proc.CloseMainWindow()
           $exitDeadline = (Get-Date).AddSeconds(45)
@@ -641,7 +645,11 @@ jobs:
           }
           ($sample | ConvertTo-Json -Depth 5) |
             Add-Content "$env:EVIDENCE_DIR/resource-sample-nsis.json"
-          Write-Host "RESOURCE SAMPLE (nsis): $(($sample | ConvertTo-Json -Depth 5 -Compress()))"
+          # hoisted, never nested (the same fourth-dispatch catch as
+          # step 8 — a switch parameter followed by a bare paren pair
+          # is a parse error, not an argument)
+          $sampleJson = $sample | ConvertTo-Json -Depth 5 -Compress
+          Write-Host "RESOURCE SAMPLE (nsis): $sampleJson"
           $null = $proc.CloseMainWindow()
           $exitDeadline = (Get-Date).AddSeconds(45)
           while (-not $proc.HasExited -and (Get-Date) -lt $exitDeadline) {
