@@ -90,3 +90,8 @@ upload/MASTER_PROMPT.pdf
 
 # the 600-mode e2e session token (the r318 ghost-sweep class — never commit)
 scratch/e2e311_token.txt
+
+# credential hygiene (r329): the owner's token uploads + the splice target stay DISK-ONLY
+upload/GitHub_token.pdf
+upload/GitHub_token.txt
+.credentials/
