@@ -19813,12 +19813,29 @@ IMPLEMENTED_AND_TESTED, the Phase-0 audit's own find closed),
 the PROJECT_STATUS lineage extension (this clause), the counter
 136 -> 137.
 
+**The CI incident, caught and fixed in-round (the honest record)**:
+the r345 payload's first CI run at `d31a469a` failed ONE check —
+the Studio frontend job's "Run frontend and workspace contract
+guards" step: `src/types/api.d.ts is stale against
+contracts/openapi.json — re-run npm run generate:types; missing:
+['LoadRequest']` — the one-DTO rule's own guard catching the
+round's missing rider (the contract carried the new LoadRequest
+schema + the three sample paths, the GENERATED types were not
+re-run with it). **Fixed at source the same round** (the r336
+precedent): `openapi-typescript` re-run over the final 112-path
+contract (+207 lines in api.d.ts), the local guard re-run green
+(test_frontend_foundation 6/6), tsc clean, vitest 131/131 — the
+rider committed as `13d19ca8` and pushed; **the CI verdict
+re-run GREEN 19/19 at `13d19ca8`** (all 19 check-runs success —
+the failure never escaped the round).
+
 **The ledger**: the version unchanged at **1.2.240**
 (no-silent-bumps; the byte-frozen r334 ruling stands, NO
 re-ship); the payload (the samples route + the pkpd fix + the
 three test lanes + the frontend client/component/wiring + the
 contract re-export + the QA surface + the worklog + the
-counter) committed and pushed under the owner's standing "Push"
+counter) committed as `d31a469a` and pushed, the generated-types
+rider `13d19ca8`, both under the owner's standing "Push"
 approval, the evidence pair riding the follow-up evidence
 commit. The campaign's next lanes: the roadmap's #4–#7 (the
 settings lane, the resource monitor, the Phase-12 sub-lanes,
