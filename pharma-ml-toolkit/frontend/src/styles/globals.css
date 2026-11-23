@@ -56,6 +56,30 @@
   --chart-5: oklch(0.553 0.016 285.938);
 }
 
+/* part16 §10 — the Phase-7 settings lane: the colorblind-safe chart
+   palette (Okabe-Ito, hex — plotly's parser reads it directly) and
+   the density scale. Both ride the same documentElement the theme
+   flips, so the PlotlyFigure theme observer (a MutationObserver on
+   the class attribute) re-draws every live chart when either lands.
+   Source order puts this AFTER .dark so the CVD palette wins the
+   chart vars in both themes (the Okabe-Ito set is theme-independent
+   by design). */
+.charts-cvd {
+  --chart-1: #0072b2; /* Okabe-Ito blue */
+  --chart-2: #e69f00; /* orange */
+  --chart-3: #009e73; /* bluish green */
+  --chart-4: #cc79a7; /* reddish purple */
+  --chart-5: #56b4e9; /* sky blue */
+}
+
+html[data-density="comfortable"] {
+  font-size: 16px;
+}
+
+html[data-density="compact"] {
+  font-size: 14px;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

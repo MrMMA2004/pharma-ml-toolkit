@@ -19841,3 +19841,253 @@ commit. The campaign's next lanes: the roadmap's #4–#7 (the
 settings lane, the resource monitor, the Phase-12 sub-lanes,
 the grid-box visualization deepening) + the Windows-box
 evidence-gated set (unchanged); the #1 upkeep rides every round.
+
+## Round 346 — the 138th recorded run (the part16 third round: the Phase-7 settings lane delivered — the campaign's #4 — with the eighth rollback wave recovered before it; the interactive "Continue MASTER_PROMPT part16 / Push" directive)
+
+**R346 — the 138th recorded run**
+
+**The directive**: the interactive "Continue MASTER_PROMPT part16 /
+Push" — the part16 campaign's continuation from the r345 second round
+(the queue cut there: the #1 upkeep rides every round; #2 and #3
+delivered; **#4 the Phase-7 settings lane** next). This round
+recovered the EIGHTH rollback wave and then delivered #4 in full:
+the settings store + persistence + the §10 inventory applied + the
+compact popover on the header + the toast lane — exactly the
+directive's §10 ask.
+
+**The eighth rollback wave (the r343/r344 class again — the
+deepest)**: the arrival found the git history reset to the r186-era
+machinery checkpoint with an unlogged UUID commit on top
+(`2eb0ede` / `cc5e7b44-700b-4fa3-b94a-539273ac7d72`), origin
+detached, the 600-mode PAT credential gone, the venv gutted (the
+import probe failing on numpy/torch/rdkit), BOTH node_modules trees
+hit, ECC wiped at BOTH legs (the /home/z/ECC clone AND the ~/.claude
+harness + its install-state), both zip mirrors (root dist-archive/
++ the offsite ~/pharma-ml-toolkit-zips/) gone — while the counter
+SURVIVED at 137/round-345 and the worklog carried the full R345
+terminal ledger (the stale inherited summary described the world at
+round 338/counter 130 — the reconciliation read the counter + the
+worklog tail + PROJECT_STATUS before any work). **The r322 playbook
+re-run in full, in order**: (1) the PAT re-spliced via
+`scratch/pat_recover_r319.py` (93-char `github_pat_`, two
+candidates over the surviving text extract + the fallback PDFs,
+API-validated as MrMMA2004, masked `...xUt0`, never printed, stored
+600-mode at `.credentials/github_pat` + `~/.github_token`); (2)
+origin re-attached on the clean HTTPS URL via `scripts/git_auth.sh`
+(the askpass wrapper) and fetched — **origin/main == `0e92d790`**
+(the r345 evidence terminal: the payload `d31a469a` → the CI-fix
+rider `13d19ca8` → the evidence `0e92d790`; the counter's "969f7926"
+named the r344 terminal the r345 session ARRIVED on — its evidence
+pair rode the follow-up commit); (3) the recovery-snap
+**`8524245e`** captured BEFORE any destructive step (the temp-index
+read-tree + add -A + write-tree dance, the local branch
+`recovery-snap-r346`) + the UUID commit bundled to
+`/tmp/r346-uuid-2eb0ede.bundle` (the r312 precedent — the UUID
+subject's tracked files all ancient machinery, nothing unique); (4)
+the pre-reset safety verified (the worklog ends at R345, the counter
+at 137 — no post-r345 work on disk) then `git reset --hard 0e92d790`
+(the 1,767-file restore completing the lazy hydration); (5) the
+ghost sweep — **20 rollback-resurrection artifacts** cleaned (the
+retired 229/230/235–239 zips across the three homes, the stale
+toolkit-path `.github/` duplicate, the dormant
+`pharma-ml-toolkit/scratch/100runs-counter.json` copy, the spent
+r319-WIP anchor, the stray r322 png, the five p14-era strays) with
+the live r332 **`scratch/console-supervisor.sh` RETAINED** (the
+self-healing dev-server loop — live tooling, not a ghost), joined
+mid-round by the hydration-delivered
+**`scratch/supervisor_daemon.py`** (the double-fork launcher that
+keeps the supervisor alive through the reaper's per-call subtree
+reaping — retained untracked the same way; the round's console
+dance rode it after a stacked-supervisor conflict was cleaned to a
+single daemon); (6) the
+disk-only strays restored (`scratch/part15.txt` 2,056 lines +
+`scratch/part16.txt` 1,990 lines from the upload copies); (7) the
+venv FULLY repaired foreground (`scratch/venv_repair.sh` exit 0 —
+VENV-REPAIR-DONE numpy 1.26.4 / torch 2.14.1+cpu / matplotlib
+3.10.9 / pharmaml 1.2.240 + STUDIO-REPAIR-DONE PySide6 +
+pyqtgraph 0.13.7 + the rdkit-stubs patch); (8) **ECC reinstalled
+GREEN at the exact r335 pins** (the fresh clone 4adeee67 / 2.2.3 /
+328 skills; the harness install via the LOCAL clone's
+`scripts/ecc.js` with the COMBINED invocation after the npm
+package's CLI rejected the `documentation-governance` module id the
+clone's own manifest carries — plus the sql.js dependency the
+marketplace-clone note names — 14 modules / 196 skills / the 8/8
+domain skills / the 4/4 capabilities; `scratch/ecc_check.sh`
+GREEN); (9) **the mirrors rebuilt** — the six-home v1.2.240 parity
+verified first (`0fadb6e5` × 23,489,390 B across download/, the
+toolkit download/, the toolkit dist-archive/, upload/), then the
+root dist-archive/ + the offsite re-seeded (18 zips each). The
+recovery gates re-verified at the exact r345 pins BEFORE the lane
+opened: the canonical collection **8,637 / 474**, the quick chunk
+**108/108**, the console lane 200 + the title pin + the zip-size
+API exact.
+
+**THE PHASE-7 SETTINGS LANE DELIVERED (§10, the roadmap's #4, the
+audit's second MISSING row closed)**:
+
+* **The store + the persistence layer** —
+  `frontend/src/services/settings/types.ts` + `store.ts`: the typed
+  §10 schema (schemaVersion 1; theme / density / charts
+  [colorblindSafe + defaultExportFormat] / notifications
+  [jobCompletionToasts] / execution [defaultParallelism] /
+  resourceMonitor [updateIntervalMs + visible]) + the shipped
+  conservative defaults (theme system — the
+  prefers-color-scheme-at-first-paint claim globals.css has carried
+  since part11 is now REAL in-app; density comfortable; CVD off;
+  export png; toasts on; parallelism 1 — the r344 conservative
+  default; interval 2,000 ms). The store rides the house pattern
+  (part11 §8.2: a framework-free singleton + useSyncExternalStore,
+  zero new state-management dependencies). The persistence layer:
+  the schema-versioned localStorage key
+  `pharmaml.studio.settings.v1` — **validate-on-read** (corrupt JSON,
+  forward-schema junk, or a storage failure degrades to the
+  in-session defaults, never a crash, never a partial apply) +
+  best-effort write (quota/private-mode degrades to memory).
+  **Validate-before-apply is mechanical**: `update()` validates the
+  MERGED whole; an invalid candidate is rejected whole with its
+  errors listed and the snapshot, the document and the storage stay
+  untouched. **The no-unsafe-values rule is mechanical**: unknown
+  top-level and group keys are REJECTED (nothing unreviewed ever
+  persists), and the schema carries no token/secret/password
+  fields (the drift guard pins both). Reset-to-default: one call,
+  applied + persisted + notified.
+
+* **The §10 inventory APPLIED, each control to a real consumer**:
+  **theme** light/dark/system — persistent, applied over the
+  existing `.dark` class protocol (the Mineral tokens), the system
+  lane following `prefers-color-scheme` live through a matchMedia
+  listener (guarded for engines without matchMedia); an explicit
+  choice simply stops matching. **density** comfortable/compact —
+  the root font-size scale (16/14 px over `html[data-density]`; the
+  rem-based Tailwind spacing responds). **charts** — the
+  colorblind-safe Okabe-Ito palette via the `.charts-cvd` class
+  re-defining `--chart-1..5` (hex — plotly's parser reads it
+  directly; the class rides the same documentElement the theme
+  flips so the PlotlyFigure MutationObserver re-draws every live
+  chart on the switch; source-ordered after `.dark` so the CVD set
+  wins in both themes by design) + the default export format
+  png/svg riding plotly's `toImageButtonOptions` (the modebar
+  camera export at scale 2, the app-named file — the draw effect
+  re-runs when the committed format changes). **notifications** —
+  the job-completion toast toggle with a REAL consumer: the
+  shell-mounted `JobCompletionToasts` subscribing the REAL event
+  stream (the same surface the JobTracker rides), filtering the
+  event vocabulary's own terminal three (job.completed /
+  job.failed / job.cancelled), dedup by event id (reconnect
+  replays stay silent), capped at 3, 6 s auto-dismiss,
+  `aria-live="polite"`, the preference gating it live. **scientific
+  execution defaults** — `defaultParallelism` (-1..64, default 1):
+  the ML form's n_jobs prefill reads the store (the r344
+  conservative default unchanged; the panel states the honest
+  note that the §5.3 memory clamp stays automatic and
+  advisory-reported — never a user knob); **resource-monitor
+  preferences** — updateIntervalMs (≥250 ms floor) + visible,
+  persisted for the Phase-8 lane with the panel's honest
+  consumption note (the roadmap's #5 rides next); **diagnostics**
+  — the read-only block over the version carriers (the new
+  `frontend/src/lib/version.ts` APP_VERSION, drift-guarded into
+  the version-carrier lockstep: version.ts == package.json ==
+  the toolkit VERSION) + the backend version via the new
+  `getLastStartupInfo()` accessor on the startup module (null
+  before the first successful boot — the panel states "not
+  connected yet" honestly) + the data/cache location rows (the
+  backend-managed registries; this app adds no local files beyond
+  settings) + the offline privacy statement (no telemetry, no
+  external calls, the local session-token backend).
+
+* **The compact surface (§10's own shape rule)** —
+  `components/settings/SettingsEntry.tsx` + `SettingsPanel.tsx`:
+  the gear button in the app header (present on every workspace —
+  "accessible throughout the desktop application") opening a
+  popover dialog (role="dialog" + aria-label, aria-expanded on the
+  button, Escape + outside-pointerdown close, focus into the
+  panel) at `w-[min(24rem,calc(100vw-2rem))]` with a scroll cap —
+  **never a full-screen settings page**. The number inputs commit
+  on blur/Enter with the store's validation errors surfaced inline
+  (role="alert") and the refused value never applied.
+
+* **The tests (fail-first honored)**: the three vitest suites —
+  **26 green** (`services/settings/__tests__/store.test.ts` 12:
+  the defaults + the document application, the validate-before-apply
+  classes (the wrong schemaVersion, out-of-band parallelism, the
+  interval floor, the enum + toggle types, the unknown-key
+  rejection), the apply+persist+notify round trip, the
+  invalid-update-refused-whole, the persistence round trip across
+  store instances, the corrupt/invalid storage degradation, reset,
+  the matchMedia system-lane flip with the explicit choice
+  overriding it; `components/settings/__tests__/SettingsPanel.test.tsx`
+  7: the popover mechanics + Escape, the §10 section inventory, the
+  theme apply+persist, the density+CVD+export applications, the
+  inline refusal (8 commits, 99 refused), the diagnostics honest
+  not-connected state, the reset; `components/settings/__tests__/JobCompletionToasts.test.tsx`
+  6: the three terminal kinds, the non-terminal silence, the dedup,
+  the off-preference silence, the auto-dismiss, the unsubscribe) +
+  the App header-entry integration test (+1) → **the vitest lane
+  158/158 over 20 files** (r345's 131/17 + 26 + 1; the services
+  mocked only at the module boundary). The Python drift guard
+  `tests/test_frontend_settings.py` **13/13**: the service trio +
+  the React binding, the §10 inventory keys + the conservative
+  pins, the validation bounds as literal pins, the unknown-key
+  rejection + the no-unsafe-fields scan, the schema-versioned
+  storage + validate-on-read, the header entry + the dialog + the
+  compact width, the panel control set + the inline alert, the
+  shell mounts, the three DOM applications + the CSS palette/
+  density rules, the ML form prefill, the toast vocabulary mirror
+  against events.ts, the version-carrier lockstep.
+
+**The gates re-pinned**: the canonical collection **8,650 / 475
+files** (r345's 8,637/474 + the 13-test drift guard — the per-file
+sum verified programmatically; the shipped footer pin 8,555 = the
+frozen release, the two-lane convention); the quick chunk 108/108
+(72+36, exit 0); the affected lanes exit 0 (the settings guard
+13/13 + the frontend foundation + startup + services guards 45;
+the contracts + consistency + supply-chain 26 dots); ruff
+full-tree **clean** (after the eighth rollback's exec-bit residue
+swept: 109 EXE002 files realigned to the git-index modes + the 7
+EXE001 shebang +x restores — the r313/r342 terminal parity set);
+mypy **297** clean (the count unchanged — a frontend-only lane);
+vitest **158/158 over 20 files** + tsc clean + the root workspace
+lint true-exit-0 (the first cut's two
+react-hooks/set-state-in-effect errors on the panel's draft-sync
+effects fixed at source — the keyed-remount pattern); the console
+lane 200 + the title pin + the zip-size API
+`{"zipBytes":23489390,"version":"1.2.240","exact":true,
+"source":"release"}`; the ECC check GREEN; **the OpenAPI contract
+UNCHANGED by construction** (a frontend-only lane — zero backend
+bytes, the 112-path/72-schema contract and the generated types
+untouched, the one-DTO rule untouched — the r345 stale-types
+incident class avoided entirely); the CI verdict at the pushed
+terminal `0e92d790` 19/19 re-verified pre-push.
+
+**The browser pass** (after the ledger writes, over the
+reaper-danced console — the daemon killed ≥3 times this round, the
+node_modules wiped ≥4 times, once between an install and its own
+lint): zero page errors, zero console errors; the live walk
+measured post-ledger; the footer geometry exact at page end; mobile
+390×844 zero horizontal overflow; the evidence pair
+`scratch/r346-web-verify.png` + `scratch/r346-mobile-verify.png`
+riding the follow-up evidence commit.
+
+**The SS13 QA surface trued (the #1 upkeep)**: TEST_EXECUTION_REPORT
+(the r346 executed table — the r345 table moved to carried),
+COMPREHENSIVE_REPOSITORY_AUDIT (the state rows re-dated r346 + the
+eighth-rollback row + the version.ts carrier note),
+IMPROVEMENT_ROADMAP (the #4 row marked DELIVERED r346 — the next
+lane: #5 the resource monitor), COMPREHENSIVE_CURRENT_STATE_AUDIT
+(the Phase-7 row: MISSING → IMPLEMENTED_AND_TESTED — the audit's
+own second find closed), the PROJECT_STATUS lineage extension
+(this clause), the counter 137 -> 138.
+
+**The ledger**: the version unchanged at **1.2.240**
+(no-silent-bumps; the byte-frozen r334 ruling stands, NO re-ship);
+the payload (the settings service pair + the hook + the version
+carrier + the startup accessor + the three components + the three
+vitest suites + the App header test + the ML prefill + the plotly
+export rider + the CSS palette/density rules + the drift guard +
+the QA surface + the worklog + the counter) committed and pushed
+under the owner's standing "Push" approval, the evidence pair
+riding the follow-up evidence commit. The campaign's next lanes:
+the roadmap's #5–#7 (the floating resource monitor — whose
+preferences this round already persists — the Phase-12 sub-lanes,
+the grid-box visualization deepening) + the Windows-box
+evidence-gated set (unchanged); the #1 upkeep rides every round.

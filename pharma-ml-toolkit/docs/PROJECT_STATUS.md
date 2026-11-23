@@ -603,7 +603,60 @@ summarises them and wins any status disagreement.
   the zip-size exact; the contract re-exported at 112
   paths/72 schemas); the version unchanged at 1.2.240
   (no-silent-bumps; the byte-frozen r334 ruling stands, NO
-  re-ship); counter 136 -> 137
+  re-ship); counter 136 -> 137 — and the part16 third round
+  346 (the interactive "Continue MASTER_PROMPT part16 / Push"
+  directive): the EIGHTH rollback wave recovered pre-work
+  (the r343/r344 class: history at the r186 checkpoint
+  `2eb0ede` + an unlogged UUID commit, origin + PAT + venv +
+  both node_modules + ECC-at-both-legs + both zip mirrors
+  wiped, the counter surviving at 137 — the r322 playbook in
+  full: the recovery-snap `8524245e`, 20 ghosts swept, the
+  disk-only strays restored, the venv repaired foreground,
+  ECC reinstalled GREEN at the r335 pins, the mirrors
+  re-seeded at the six-home `0fadb6e5` parity) — then THE
+  PHASE-7 SETTINGS LANE DELIVERED (the campaign queue's #4,
+  the Phase-0 audit's second MISSING row closed):
+  `frontend/src/services/settings/` (the typed §10 schema +
+  the framework-free store on the house useSyncExternalStore
+  pattern; the schema-versioned localStorage persistence
+  `pharmaml.studio.settings.v1`; validate-before-apply —
+  invalid candidates rejected whole with the errors listed,
+  the snapshot/document/storage untouched; validate-on-read —
+  corrupt storage degrades to defaults; unknown keys
+  rejected per the no-unsafe-values rule; reset-to-default)
+  + the §10 inventory APPLIED (theme light/dark/system
+  persistent over the `.dark` class protocol with the system
+  lane following prefers-color-scheme live; density
+  comfortable/compact over the root font-size scale; the
+  colorblind-safe Okabe-Ito palette class re-defining
+  --chart-1..5 with the live charts re-theming through the
+  existing PlotlyFigure observer; the default chart export
+  png/svg riding plotly's toImageButtonOptions; the
+  job-completion toast watcher over the REAL event stream —
+  the terminal three, dedup by event id, 6 s auto-dismiss,
+  the preference gating it; the ML form's n_jobs prefill
+  from the execution default with the r344 conservative 1
+  unchanged; the resource-monitor preferences persisted for
+  the Phase-8 lane; the diagnostics block over the version
+  carriers + getLastStartupInfo) + the compact popover on
+  the app header (every workspace's reach, Escape +
+  outside-click close) + the tests (the three vitest suites
+  26 green fail-first; the App header integration test; the
+  Python drift guard `tests/test_frontend_settings.py`
+  13/13 — the inventory keys, the bounds literals, the
+  unknown-key rejection, the storage contract, the surface
+  set, the DOM applications, the ML prefill, the toast
+  vocabulary mirror, the version-carrier lockstep); the
+  gates re-pinned (collection 8,650/475, quick chunk
+  108/108, the affected lanes exit 0, ruff full-tree clean
+  after the exec-bit residue swept — 109 EXE002 realigned +
+  the 7 EXE001 restored, mypy 297 clean, vitest 158/158
+  over 20 files + tsc clean + the root workspace lint clean,
+  console 200 + the zip-size exact; the contract UNCHANGED —
+  a frontend-only lane, the r345 stale-types incident class
+  avoided by construction); the version unchanged at 1.2.240
+  (no-silent-bumps; the byte-frozen r334 ruling stands, NO
+  re-ship); counter 137 -> 138
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

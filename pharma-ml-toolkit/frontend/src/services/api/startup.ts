@@ -194,12 +194,25 @@ export async function initializeBackend(): Promise<StartupInfo> {
   }
 
   // step 12 — the workspaces may mount
-  return {
+  const info: StartupInfo = {
     source,
     version: health.version || endpoint.version,
     scientificCore: health.scientific_core,
   };
+  lastStartupInfo = info;
+  return info;
 }
+
+/**
+ * The last SUCCESSFUL startup handshake's info — part16 §10's
+ * diagnostics block reads it (backend version + source). Null before
+ * the first successful boot (or in tests that mock the initializer).
+ */
+export function getLastStartupInfo(): StartupInfo | null {
+  return lastStartupInfo;
+}
+
+let lastStartupInfo: StartupInfo | null = null;
 
 /** Pull the backend's `detail` payload out of an ApiError, if any. */
 function apiErrorDetail(detail: unknown): string {

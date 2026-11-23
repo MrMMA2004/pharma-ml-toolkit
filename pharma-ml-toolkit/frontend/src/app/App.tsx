@@ -1,6 +1,8 @@
 import { useCallback, useState } from "react";
 import { WorkspaceNav } from "@/components/layout/WorkspaceNav";
 import { WorkspaceShell } from "@/components/layout/WorkspaceShell";
+import { SettingsEntry } from "@/components/settings/SettingsEntry";
+import { JobCompletionToasts } from "@/components/settings/JobCompletionToasts";
 import { IntroductionPage } from "@/features/introduction/IntroductionPage";
 import { DatasetsPage } from "@/features/datasets/DatasetsPage";
 import { MLPage } from "@/features/ml/MLPage";
@@ -24,7 +26,10 @@ import { INITIAL_WORKSPACE, WORKSPACES, type WorkspaceId } from "@/app/workspace
  * no duplicate mounts), Introduction selected at startup, the exact
  * §10.1 navigation order. The connected workflow rows render their
  * real API-driven pages; the queued rows keep the honest shell (the
- * campaign ledger owns the queue).
+ * campaign ledger owns the queue). The part16 §10 settings entry
+ * rides the header (present on every workspace) with the compact
+ * popover panel, and the job-completion toast lane mounts once in
+ * the shell (gated by the notifications preference).
  */
 export function App() {
   const [active, setActive] = useState<WorkspaceId>(INITIAL_WORKSPACE);
@@ -62,6 +67,9 @@ export function App() {
                 Offline computational pharmacy workbench
               </div>
             </div>
+            <div className="ml-auto">
+              <SettingsEntry />
+            </div>
           </div>
         </header>
         <WorkspaceNav active={active} onSelect={handleSelect} />
@@ -88,6 +96,7 @@ export function App() {
             <WorkspaceShell entry={entry} />
           )}
         </main>
+        <JobCompletionToasts />
       </div>
     </StartupGate>
   );

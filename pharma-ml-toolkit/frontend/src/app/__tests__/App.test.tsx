@@ -24,6 +24,8 @@ vi.mock("@/services/api/startup", async (importOriginal) => {
 const idleStream = {
   status: { state: "idle", lastSequence: -1, attempts: 0, hello: null },
   onStateChange: () => () => undefined,
+  // the toast lane's surface (the real EventStream exposes both)
+  subscribe: () => () => undefined,
 };
 vi.mock("@/services/websocket/client", () => ({
   getEventStream: () => idleStream,
@@ -120,5 +122,21 @@ describe("the application shell (§10)", () => {
     const visualization = screen.getByRole("button", { name: "Visualization" });
     await userEvent.click(visualization);
     expect(screen.getByTestId("page-visualization")).toBeInTheDocument();
+  });
+
+  it("carries the part16 §10 settings entry in the header (every workspace's reach)", async () => {
+    render(<App />);
+    await screen.findByTestId("page-introduction");
+
+    // the entry is present outside the workspace nav (the header lane)
+    const entry = screen.getByRole("button", { name: "Settings" });
+    expect(entry).toHaveAttribute("aria-haspopup", "dialog");
+    expect(screen.queryByRole("navigation", { name: "Workspaces" })).not.toContain(entry);
+
+    await userEvent.click(entry);
+    expect(screen.getByRole("dialog", { name: "Application settings" })).toBeInTheDocument();
+
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

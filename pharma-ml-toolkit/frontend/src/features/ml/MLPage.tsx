@@ -31,6 +31,7 @@ import {
 import { useJob } from "@/hooks/useJobTracking";
 import { jobsApi } from "@/services/jobs/client";
 import { api, ApiError } from "@/services/api/client";
+import { getSettingsStore } from "@/services/settings/store";
 import {
   datasetsApi,
   type DatasetView,
@@ -773,7 +774,12 @@ export function MLPage() {
   // changed with it): -1 (all cores) stays selectable in this field,
   // but the form opens sequential -- the all-cores default is the
   // TerminatedWorkerError mechanism on constrained machines.
-  const [nJobs, setNJobs] = useState(1);
+  const [nJobs, setNJobs] = useState(() =>
+    // part16 §10 — the scientific execution default rides the settings
+    // store (validated, persisted); the shipped default stays the r344
+    // conservative 1
+    getSettingsStore().snapshot().execution.defaultParallelism,
+  );
   const [randomState, setRandomState] = useState(42);
 
   // stage 5: the algorithm catalog

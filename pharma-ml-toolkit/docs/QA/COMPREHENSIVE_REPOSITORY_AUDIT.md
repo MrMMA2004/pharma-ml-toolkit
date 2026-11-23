@@ -12,18 +12,18 @@ the part15 §13 record). Statuses use
 the part15 §3.2 vocabulary; a source-only implementation is never marked
 VERIFIED COMPLETE without executed evidence.
 
-## 1. Repository state (§3.1, re-established live this round — r345)
+## 1. Repository state (§3.1, re-established live this round — r346)
 
 | Item | Value | Evidence |
 | --- | --- | --- |
 | Default branch | `main` (public repo) | live API poll, authenticated |
-| HEAD | `969f7926` == origin/main (the r344 evidence terminal; the r345 payload rides this round) | fetch via the askpass credential lane |
-| Recent commits | r344 ledger `d044e2ea` → r344 evidence `969f7926` | git log |
-| CI at HEAD | 19/19 check-runs all `completed/success` | authenticated API, check-runs endpoint (closed at r344; re-verified r345 pre-push) |
+| HEAD | `0e92d790` == origin/main (the r345 evidence terminal; the r346 payload rides this round) | fetch via the askpass credential lane |
+| Recent commits | r345 payload `d31a469a` → the CI-fix rider `13d19ca8` → the r345 evidence `0e92d790` | git log |
+| CI at HEAD | 19/19 check-runs all `completed/success` (closed GREEN at r345; re-verified r346 pre-push) | authenticated API, check-runs endpoint |
 | Release tag | `v1.2.240`, published (draft:false), five assets intact | r337 live verification + standing ruling |
-| Version declarations | 1.2.240 across all nine carriers | `test_documentation_consistency.py` 12/12 green (the r341 record correction: 12 test methods since r324; re-run 12/12 at r345) |
-| Uncommitted changes | none at the audited SHA (the r345 payload = the ledger's own committed set) | `git status` clean on arrival |
-| Rollback recovered | **none this round** — the tree arrived clean (local == origin == `969f7926`); the reaper stayed busy on the tooling lane alone (node_modules wiped ≥3 times between commands, the daemon killed between windows — the one-window dance ridden each time) | worklog R345 |
+| Version declarations | 1.2.240 across all nine carriers + the new frontend `lib/version.ts` (the r346 diagnostics carrier, drift-guarded into the lockstep) | `test_documentation_consistency.py` 12/12 green + `test_frontend_settings.py` 13/13 (the lockstep row) |
+| Uncommitted changes | none at the audited SHA (the r346 payload = the ledger's own committed set) | `git status` clean post-reset |
+| Rollback recovered | **the EIGHTH wave** — the deepest class again (the r343/r344 precedent): the history at the r186 machinery checkpoint `2eb0ede` + an unlogged UUID commit on top, origin detached, the PAT credential gone, the venv gutted, BOTH node_modules trees hit, ECC wiped at BOTH legs (the clone + the harness), both zip mirrors (root dist-archive + the offsite) gone; the counter SURVIVED at 137/r345 — the r322 playbook in full (the recovery-snap `8524245e` captured pre-reset, 20 ghosts swept, the strays restored, the venv repaired foreground, ECC reinstalled GREEN, the mirrors re-seeded 18/18 at the `0fadb6e5` six-home parity) | worklog R346 |
 
 ## 2. Previous-work verification matrix (§3.2)
 

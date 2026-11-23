@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useSettings } from "@/hooks/useSettings";
+
 /**
  * part11 §22.2 — the Plotly.js interactive chart surface.
  *
@@ -83,6 +85,14 @@ export interface PlotConfig {
   readonly responsive?: boolean;
   readonly displaylogo?: boolean;
   readonly displayModeBar?: boolean | string;
+  /** part16 §10 — the export default rides the settings store (the
+   *  modebar camera button honors format/scale/filename). */
+  readonly toImageButtonOptions?: {
+    readonly format?: string;
+    readonly scale?: number;
+    readonly filename?: string;
+    readonly [key: string]: unknown;
+  };
 }
 
 /** One selected point of a `plotly_click` (§22.5's payload). */
@@ -268,6 +278,10 @@ export function PlotlyFigure({
   const moduleRef = useRef<PlotlyModule | null>(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  // part16 §10 — the chart export default (the settings store; the
+  // draw effect re-runs when the committed format changes)
+  const settings = useSettings();
+  const exportFormat = settings.charts.defaultExportFormat;
 
   const renderable = data.some((trace) => {
     if (trace.z !== undefined) return trace.z.length > 0;
@@ -383,8 +397,20 @@ export function PlotlyFigure({
         string,
         unknown
       >;
+      // §10 export defaults: the modebar camera export honors the
+      // persisted format (png/svg) at scale 2 with the app-named file
+      const effectiveConfig: PlotConfig = {
+        responsive: true,
+        displaylogo: false,
+        toImageButtonOptions: {
+          format: exportFormat,
+          scale: 2,
+          filename: "pharmaml-chart",
+        },
+        ...(config ?? {}),
+      };
       void plotly
-        .react(div, resolvedTraces, resolvedLayout, config ?? { responsive: true, displaylogo: false })
+        .react(div, resolvedTraces, resolvedLayout, effectiveConfig)
         .then(() => {
           if (selectRef.current !== undefined) {
             void div.removeAllListeners?.("plotly_click");
@@ -453,8 +479,9 @@ export function PlotlyFigure({
       void div.removeAllListeners?.("plotly_click");
     };
     // the pages build trace arrays with useMemo from their result
-    // state, so identity-keyed deps re-run on genuine changes only
-  }, [data, layout, config, ready, renderable]);
+    // state, so identity-keyed deps re-run on genuine changes only;
+    // the export format re-draws when the setting commits (§10)
+  }, [data, layout, config, ready, renderable, exportFormat]);
 
   return (
     <div className="w-full">
