@@ -67,6 +67,13 @@ upload/MASTER_PROMPT.docx
 # (part1 PDF §12.1 carries the PAT font-encoded; so does its text extraction)
 upload/MASTER_PROMPT part*.pdf
 scratch/pdf-extract/MASTER_PROMPT*.txt
+# r340 hygiene: the owner's part-prompt copies are disk-only by
+# convention (part15 arrived as .txt; part14.txt lives in scratch/) —
+# the patterns keep any future `git add -A` from sweeping them into the
+# push lane (the r337/r338 recovery precedent: restored-from-capture,
+# never auto-committed).
+upload/MASTER_PROMPT part*.txt
+scratch/part*.txt
 *.token
 *.key
 *.pid

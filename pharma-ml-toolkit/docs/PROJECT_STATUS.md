@@ -418,7 +418,35 @@ summarises them and wins any status disagreement.
   source-delivered, honestly execution-blocked in the sandbox, riding
   the owner's Windows box); the remaining SS13 QA doc set rides the
   campaign's next rounds; the version unchanged at 1.2.240; counter
-  130 -> 131
+  130 -> 131 — and the part15 continuation round 340 (the interactive
+  "Continue MASTER_PROMPT part15 / Push" directive): the r337-class
+  rollback recovered FIRST (history reset to the r186 checkpoint,
+  remote + credentials + venv + node_modules + both zip mirrors + the
+  ECC install wiped while the working tree survived at the r339
+  terminal — the r322 playbook: PAT lane re-spliced from
+  upload/GitHub_token.txt, origin re-attached + fetched, the
+  working tree captured as the recovery-snap commit BEFORE any
+  destructive step, reset onto the durable `0132d409`, the disk-only
+  strays restored [part14.txt/part15.txt/.env/dev.pid], the mirrors
+  re-seeded — six-home parity `0fadb6e5…a63e2cb3` at 18 zips, the
+  venv FULLY repaired in one foreground window, the ECC standing
+  directive re-installed GREEN [clone 4adeee67/2.2.3 + harness 14
+  modules/196 skills]); the gates re-pinned (collection **8,601/0/472**
+  live [the shipped pin 8,555 = the frozen v1.2.240 release + the
+  46-test r327/r339 regression additions], quick chunk 108/108, ruff
+  clean after the 101-file EXE002 sweep, mypy 296 clean, vitest
+  119/119, tsc clean, console 200 + zip-size exact, CI at HEAD
+  `0132d409` **19/19** via the authenticated API, census 1,744/569,595
+  == the r339 pin via the offline replica); **D-7 found+fixed** (the
+  ordinal-blind ledger-agreement guard — the failing guard its own
+  reproduction, 13/13 post); **the SS13 QA doc set DELIVERED**
+  (COMPREHENSIVE_REPOSITORY_AUDIT with the §3.2 verification matrix,
+  BACKEND_AUDIT, FRONTEND_AUDIT incl. the root-console §6 review,
+  SECURITY_AUDIT, TEST_EXECUTION_REPORT, the MANUAL_TEST_CHECKLIST
+  part15 A–H extension, WINDOWS_VALIDATION_GUIDE, RELEASE_BLOCKERS,
+  IMPROVEMENT_ROADMAP — every status evidence-tied, the blocked legs
+  named); the version unchanged at 1.2.240 (no-silent-bumps); counter
+  131 -> 132
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

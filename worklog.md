@@ -18846,3 +18846,123 @@ version unchanged at 1.2.240 (no-silent-bumps); the payload
 (security.py + events.py + test_ws_origin.py + the 9 SS11 scripts +
 the ledger files) committed on `part15-campaign`, ff-merged to main
 under the owner's explicit "Push" approval, and pushed.
+
+---
+
+## Round 340 — the 132nd recorded run (the part15 continuation: the rollback recovered, then the SS13 QA doc set delivered; trace 1a206f8fd8f3b40d)
+
+**R340 — the 132nd recorded run**
+
+**The directive**: the owner's interactive "Continue MASTER_PROMPT
+part15 / Push" — the campaign's second round, with "Push" as the
+explicit §17 approval it grants.
+
+**The recovery (the r337-class rollback, the FIFTH of the recorded
+era)**: the four-sentinel opening found the world rolled back AGAIN
+after the r339 push — the git history reset to the r186 checkpoint
+`2eb0ede` (557 commits behind origin), the remote detached, the
+`.credentials/` lane gone, the venv gutted (rdkit absent), the root
+web node_modules + the nested frontend node_modules wiped, the root
+dist-archive + the offsite zip mirrors wiped, the ECC install wiped
+(~/ECC + ~/.claude both gone) — while the working tree SURVIVED at
+the r339 terminal (the worklog R339 entry + the counter at 131 + the
+full r339 payload on disk, byte-stable). The r322 playbook re-run in
+full: the PAT lane re-spliced from upload/GitHub_token.txt (600-mode,
+never printed), the askpass lane rebuilt, origin re-attached + fetched
+(tags restored), THE WORKING TREE CAPTURED AS THE RECOVERY-SNAP
+COMMIT `917facd2` BEFORE ANY DESTRUCTIVE STEP (1,720 files — the
+resurrected playground pair + the disk strays + the pyc junk carried
+through), then `reset --hard` onto the durable `0132d409` (the pushed
+r339 evidence terminal; the tree 0/0 clean); the delta enumerated
+exactly (the old-snapshot strays swept — the retired zips across the
+homes, the playground pair re-retired with ZERO byte loss: the
+scratch/r337-wip/ preservation standing at the exact r338 hashes
+b81faf62…/c743ff6d…; the mode-bit-only studio.py diff proving no
+mid-flight mutation this wave); the disk-only strays restored from
+the capture (part14.txt + the new part15.txt + .env + dev.pid); the
+mirrors re-seeded — **six-home parity `0fadb6e5…a63e2cb3` at
+23,489,390 B** (root download / root dist-archive / toolkit download
+/ toolkit dist-archive / upload / offsite, 18 zips in both mirrors,
+testzip OK); `venv_repair.sh` FOREGROUND exit 0 (numpy 1.26.4 /
+torch 2.14.1+cpu / matplotlib 3.10.9 / pharmaml-1.2.240 editable /
+STUDIO-REPAIR-DONE PySide6 + pyqtgraph 0.13.7 / the fastapi sidecar
+stack); the nested frontend `npm ci` (210 packages); the ECC standing
+directive RE-INSTALLED to GREEN (the clone at ~/ECC — commit 4adeee67,
+VERSION 2.2.3, 328 skills; the harness via the official installer:
+`--profile core --no-hooks --target claude` + the four capability
+components — 14 modules, 196 skills, 628 operations, hooks declined;
+`scratch/ecc_check.sh` GREEN on all four legs).
+
+**The reaper escalation, honestly recorded**: the sandbox's
+node_modules wipe now strikes BETWEEN EVERY tool-call window (the
+r323/r324 class intensified) — the root web lost `next` mid-round and
+the dev daemon died twice on Turbopack's "cannot find the Next.js
+package"; the r320 per-call procedure carried every console-dependent
+window (bun install + the direct-binary daemon start + verify inside
+one call: console 200 + the zip-size API exact). The census lane went
+OFFLINE for this round: `scratch/census_r340.py` — an exact replica of
+the route's own walk rules (the same excluded dirs, the same
+allowed-extension counting lane, the same JS split semantics) —
+**1,744 files / 569,595 lines / v1.2.240 == the r339 live-walk pin
+exactly**, the tree proven byte-stable through the rollback.
+
+**The gates re-pinned (fresh, this round)**: the canonical collection
+**8,601 / 0 errors / 472 files** (the live tree: the shipped 8,555
+pin = the frozen v1.2.240 release + the 34-test r327 trusted-origins
+suite + the 12-test r339 ws-origin suite, the arithmetic verified);
+the quick chunk 108/108 exit 0; ruff clean after the 101-file EXE002
+mode-bit sweep (the rollback exec-bit drift class); mypy 296 files
+clean; vitest **119/119 over 16 files**; tsc clean; the
+documentation-consistency guard + the security supply-chain suite
+green; console 200 + the zip-size API 23,489,390 exact:true
+source:release; **CI at HEAD `0132d409` 19/19 check-runs success**
+re-verified via the authenticated API (the r339 terminal's verdict
+closed on arrival); the ECC check GREEN.
+
+**THE ROUND'S OWN FIND — D-7 found and fixed (fail-first)**: the
+ledger-agreement guard's entry regex was ordinal-suffix-blind —
+`\*\*R(\d+) — the (\d+)th recorded run` matched only -th ordinals, so
+the R339 entry ("the 131ST recorded run") was silently DROPPED and the
+guard compared the stale R338 against the counter round 339 (the
+failing guard WAS its own reproduction; every 1st/2nd/3rd-ending run
+number would be skipped the same way, letting a stale ledger pair
+masquerade as agreement — exactly the stale-counter failure mode the
+guard was built to catch). The minimal fix: the ordinal suffix
+alternation `(?:st|nd|rd|th)`; post-fix **13/13 green** with R339
+correctly the newest entry. The register's D-7 row added with the
+executed evidence.
+
+**THE SS13 QA DOC SET DELIVERED (the campaign's remaining §13
+backlog, closed this round)**: nine documents at docs/QA/, every
+status evidence-tied and the blocked legs named —
+COMPREHENSIVE_REPOSITORY_AUDIT (the §3.2 verification matrix over 15
+task rows with the part15 status vocabulary + the §3.3 reconciliation:
+versions agree, counts agree [live 8,601 vs the shipped 8,555 two-lane
+convention stated], workspaces nine, routes 114 ops / 109 paths, the
+release artifacts verified), BACKEND_AUDIT (the Phase-Two
+module-by-module over the 27 route modules), FRONTEND_AUDIT (the
+Phase-Three audit + the Phase-Four root-console review incl. the §6
+Windows-portability caveat honestly scoped to the dev-only console),
+SECURITY_AUDIT (the Phase-Twelve supply-chain + the post-D-6 posture),
+TEST_EXECUTION_REPORT (the executed-this-round vs carried vs blocked
+three-lane record), the MANUAL_TEST_CHECKLIST part15 A–H extension
+(the five-status vocabulary, PASS only with named evidence — the WS
+origin row now PASS at the API level), WINDOWS_VALIDATION_GUIDE (the
+SS11 script usage order + the smoke lane + the honest
+never-executed-here status), RELEASE_BLOCKERS (B-1..B-7 with the
+standing byte-frozen v1.2.240 verdict), IMPROVEMENT_ROADMAP (the
+§16-C priority order + the constraint rails).
+
+**The hygiene leg**: the .gitignore extended with the disk-only
+prompt-copy patterns (upload/MASTER_PROMPT part*.txt +
+scratch/part*.txt — verified to match nothing tracked; the
+r337/r338 recovery precedent made permanent, so no future `git add -A`
+can sweep an owner prompt copy into the push lane).
+
+**The ledger**: this entry; the PROJECT_STATUS lineage extension; the
+DEFECT_REGISTER D-7 row + footer; the counter 131 -> 132; the version
+unchanged at 1.2.240 (no-silent-bumps; the byte-frozen r334 ruling
+stands, NO re-ship); the payload (the 9 SS13 docs + the D-7 guard fix
++ the census replica + the gitignore hygiene + the ledger files)
+committed on the `part15-campaign` feature branch per SS17, ff-merged
+to main, and pushed under the owner's explicit "Push" approval.

@@ -137,8 +137,12 @@ class TestLedgerAgreement:
         runs = int(counter["runs_completed"])
 
         worklog = (ROOT / "worklog.md").read_text(encoding="utf-8")
+        # The ordinal suffix must not be hardcoded: R339 is "the 131st
+        # recorded run" — a bare (\d+)th silently skipped it, so the guard
+        # compared the stale R338 against the counter (D-7, found r340:
+        # every 1st/2nd/3rd-ending run number would be dropped the same way).
         entries = re.findall(
-            r"\*\*R(\d+) — the (\d+)th recorded run", worklog
+            r"\*\*R(\d+) — the (\d+)(?:st|nd|rd|th) recorded run", worklog
         )
         assert entries, "worklog carries no bold-format round entries"
         last_round, last_run = entries[-1]

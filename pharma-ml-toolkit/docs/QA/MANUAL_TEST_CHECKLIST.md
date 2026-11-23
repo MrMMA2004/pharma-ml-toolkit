@@ -62,3 +62,85 @@ release-lane ruling).
   (1440px / 390px).
 
 — seeded round 329; statuses flip only with named evidence.
+
+---
+
+# PART15 EXTENSION — the §6 (Phase Six) checklist, A–H
+
+Instantiated round r340 (the 132nd recorded run) per part15 §6's own
+five-status vocabulary (PASS / FAIL / BLOCKED / NOT TESTED / NOT
+APPLICABLE). Environment of record for executed legs: the Linux sandbox
+(web console + API lanes, Chromium via agent-browser 1440px/390px; the
+API test suites). Windows legs ride the owner's box via the SS11 script
+set — a PASS below is always tied to named evidence; the packaged-app
+interactive rows stay BLOCKED until that box runs them.
+
+## A. Tauri and desktop integration
+
+| Row class | Status | Evidence / carrier |
+| --- | --- | --- |
+| App launch, no unwanted terminal, backend auto-start, handshake, IPC endpoint, secure token delivery, health probe, WS connect, retry, graceful termination, crash detection, restart correctness, no orphan processes, WebView2 console clean, reopen after shutdown | **BLOCKED** (interactive packaged legs) | needs the Windows box; the handshake/termination/redaction semantics are source-pinned (D-4/D-5 + 11 Rust unit cases); `test-tauri.ps1` / `test-rust.ps1` are the carriers |
+
+## B. Backend communication — EXECUTED at the API level
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| REST GET/POST/PUT/DELETE where supported | **PASS** | full `tests/api` suite exit 0 (r339); quick chunk 108/108 (r340) |
+| JSON validation / invalid payloads | **PASS** | validation lanes (400-class) in the suite |
+| Authentication / authorization | **PASS** | 401/403 lanes; the 34-leg trusted-origins matrix |
+| CORS preflight / trusted Origin / rejected Origin / Host validation | **PASS** | P3/P4 preflight legs + lookalike refusals (r327/r329) |
+| WebSocket authentication | **PASS** | close-4401 lanes (events suite) |
+| **WebSocket Origin validation** | **PASS** | `tests/api/test_ws_origin.py` 12/12 (r339, FAIL-FIRST) — evil origin WITH valid token refused 4403 pre-accept |
+| Large payload / upload-download | **PASS** | upload/download lanes in the suite; the release-zip streaming verified byte-exact |
+| WS reconnect / event replay / backend restart during active work (live desktop) | **BLOCKED** | interactive legs; the REST-recovery design is source-pinned (WS never the only source of truth) |
+
+## C. SQLite and FileVault
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| DB creation/migration, dataset/model/job-history persistence, artifact registration + retrieval, restart recovery, integrity validation, corrupted-file handling, concurrent access, orphan cleanup | **PASS** (API-level, isolated temp DBs) | persistence suites in the api lane (never user data — §4.5 rule) |
+| Backup creation/restoration | **PASS** (API-level lanes) | persistence suite |
+| Disk-full handling | **BLOCKED** | environmental leg — needs a controlled low-disk box; carried in RELEASE_BLOCKERS |
+
+## D. Plotly
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| Line/bar/scatter/heatmap/confusion/ROC-PR/feature-importance/SHAP charts; hover; responsive resize; empty datasets; correct scientific labels | **PASS** (component-level) | `PlotlyFigure.test.tsx` + viz lanes in vitest 119/119 |
+| Zoom/pan, image export incl. TIFF/JPEG where supported, large-dataset interactive performance | **BLOCKED** (interactive) | the packaged WebView2 legs ride the Windows box |
+
+## E. Three.js
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| 3D scene initialization + correct rendering (component surface) | **PASS** (component-level) | the md/visualization component suites |
+| Mouse interaction, camera controls, window resize, WebGL error handling, resource disposal, repeated navigation without leaks, large scenes | **BLOCKED** (interactive) | Windows box; the manual §E rows are the carrier |
+
+## F. UI and components
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| Navigation/tabs/dropdowns/dialogs/tooltips/forms/tables/progress/notifications; loading/empty/error states; light + dark themes; keyboard navigation; accessibility | **PASS** (component + console surfaces) | atoms + lane suites; the browser-E2E pairs (r337–r339: zero errors, theme legs) |
+| 1366×768 / 1920×1080 desktop viewports | **BLOCKED** (packaged app) / **PASS** (console surface, 1440×900 pins) | the console pins pairs; the packaged legs ride the box |
+| 1024px width / 390×844 mobile viewport / no horizontal overflow | **PASS** (console surface) | the r338/r339 browser passes (390×844, zero overflow, footer at page end) |
+
+## G. Stability and performance
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| Long-running training / multiple concurrent jobs / job cancellation (API lanes) | **PASS** | job-lifecycle lanes; the workflow cooperative-cancel tests (r322) |
+| Resource visibility (CPU/memory/queue depth) | **PASS** | the `/api/v1/system/resources` read-only lane (r324) + its 9-test suite |
+| Repeated workspace switching / large CSV import / large molecular datasets / memory-CPU-GPU profiles on the packaged app | **BLOCKED** | Windows box legs; PERFORMANCE_BASELINES.md carries the measured baselines |
+
+## H. Windows release
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| NSIS + MSI installation on Win10/11, non-admin install, offline install + WebView2, sidecar + Python deps + RDKit included, correct permissions, user-data dir, upgrade, uninstall, user-data preservation, no unexpected firewall/network dependency, clean-machine startup | **VERIFIED at release** | the ninth smoke dispatch 45086526069 GREEN end-to-end (all 16 steps incl. the installed sidecar's live contract, the cross-scope upgrade, zero orphans, uninstalls) — the standing lane re-runs on every published release |
+| Antivirus false-positive investigation | **NOT TESTED** | Defender clean on both installers in the smoke lane; third-party AV panels ride the owner's environment |
+| Installer signing | **BLOCKED** | certificate-gated (RELEASE_BLOCKERS) |
+| Owner-side manual re-runs of the installer matrix | **NOT TESTED** | the SS11 `test-installers.ps1` digest-verification script + `WINDOWS_VALIDATION_GUIDE.md` are the carriers |
+
+— part15 layer added round 340; statuses flip only with named evidence
+(the part14-era sections above stand as the historical record).
+
