@@ -1,11 +1,34 @@
-# TEST EXECUTION REPORT — part15 §13 deliverable #5
+# TEST EXECUTION REPORT — part15 §13 deliverable #5 (the part16 era rides it forward)
 
-The part15 Phase-Five honest execution record. Executed-this-round
-(r343, at the recovered 84b24f5c tree) vs carried-from-executed-rounds
-are stated separately; BLOCKED legs name their missing prerequisite
-(§7 rule: never a silent skip, never a blocked test marked passed).
+The part15 Phase-Five honest execution record, carried forward as the
+standing executed-vs-carried ledger. Executed-this-round (r344, the
+part16 opening round over the seventh-rollback-recovered `8940bd42`
+tree) vs carried-from-executed-rounds are stated separately; BLOCKED
+legs name their missing prerequisite (§7 rule: never a silent skip,
+never a blocked test marked passed).
 
-## 1. Executed this round (r343 — the sixth-rollback recovery round)
+## 1. Executed this round (r344 — the part16 opening round: the seventh rollback recovered + the Phase-2 TerminatedWorkerError fix)
+
+| Lane | Command (class) | Result |
+| --- | --- | --- |
+| Canonical collection | `pytest --collect-only -q` (per-file sum) | **8,610 tests / 473 files** (8,602 + the 8 new Phase-2 regression tests; the shipped footer pin 8,555 = the frozen v1.2.240 release archive, the two-lane convention) |
+| Quick regression chunk | `pytest tests/test_approvals.py tests/test_biology.py -q` | **108 passed (72+36), exit 0** — re-run fresh over the repaired venv |
+| The Phase-2 suite | `pytest tests/api/test_ml_worker_termination.py -q` | **8/8 exit 0** — FAIL-FIRST honored: 6 red pre-fix (the -1 default, the raw worker-death propagation ×3 lanes, the absent advisory ×2), 8 green post-fix (the sequential/concurrent lanes were already green and pin the §5.4 regression class) |
+| The affected ML + contract lanes | `pytest tests/api/test_datasets_ml_artifacts.py tests/api/test_contracts.py tests/api/test_ml_worker_termination.py -q` | **exit 0, zero failures** (83 dots) — the existing ML suite + the contract guard over the re-exported OpenAPI (the 1-line `default: 1` diff) |
+| Lint | `ruff check .` (FULL tree) | **clean, exit 0** — after the round's own hygiene incident: the realignment tooling's first two cuts carried a decimal/octal comparison bug that set 2,997 files to mode 0o420; the corrected NUL/TAB-parsed pass realigned every file back to the git index modes (54 root-owned upload/ strays excepted, EPERM-class, cosmetic — the index says 644, the disk says 777, root-owned, not writable by this user) + the 7 EXE001 shebang +x restores (the r342-terminal disk parity) |
+| Types | `mypy src/pharmaml` | **Success: no issues found in 296 source files** (the Phase-2 payload included) |
+| Documentation consistency | `pytest tests/test_documentation_consistency.py -q` | **12/12 exit 0** with the new `docs/QA/COMPREHENSIVE_CURRENT_STATE_AUDIT.md` on disk (pre-ledger; re-run post-ledger with R344 == counter 136) |
+| Frontend unit suite | `vitest run` | **126/126 over 16 files** — the GUI default change (`nJobs` 1) rides the same suite green |
+| Frontend types | `tsc --noEmit` | **clean, exit 0** |
+| Console | `GET /` | **200, title pin** (the one-window dance — the reaper wiped node_modules twice this round) |
+| Zip-size API | `GET /api/toolkit/zip-size` | `{"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}` — exact pin |
+| ECC standing check | `scratch/ecc_check.sh` | **GREEN** — clone `4adeee67`/2.2.3/328 skills; harness 14 modules/196 skills (the combined invocation, the r343 honest find re-applied) |
+| Mirrors | the six-home zip parity | **18 zips × (root dist-archive + offsite) rebuilt, cmp ok=18/bad=0; v1.2.240 sha `0fadb6e5` across all six homes; testzip OK** |
+| Recovery safety | the recovery-snap | `fae6c1c2` on the local branch `recovery-snap-r344` — captured BEFORE any destructive step (the r322 playbook) |
+| Browser verification | agent-browser desktop + 390×844 mobile | the evidence pair rides the follow-up evidence commit (the pins below) |
+| CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `8940bd42` (closed GREEN at r343; re-verified this round pre-push) |
+
+## 2. Executed round r343 (the sixth-rollback recovery round — carried)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -26,7 +49,7 @@ are stated separately; BLOCKED legs name their missing prerequisite
 | Browser verification | agent-browser desktop + 390×844 mobile | **zero page errors, zero console errors**, footer at page end both viewports (**3967 == 3967 desktop / 7882 == 7882 mobile**), mobile zero horizontal overflow (docW 390 == vw 390); evidence `scratch/r343-web-verify.png` + `scratch/r343-mobile-verify.png` — the blank mobile first frame (the daemon dead at the reload, caught by the geometry check) re-shot fresh |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `84b24f5c` (the r342 evidence terminal — closed GREEN on arrival) |
 
-## 2. Carried from executed rounds (latest full-run evidence)
+## 3. Carried from executed rounds (latest full-run evidence)
 
 - **r342** (the roadmap #3/#4 close-out round): the API suite
   **461+1 skip = 462 collected, exit 0, 117.495 s**; the

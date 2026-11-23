@@ -768,7 +768,11 @@ export function MLPage() {
   // stage 4: split/cv configuration
   const [cv, setCv] = useState(5);
   const [tune, setTune] = useState(true);
-  const [nJobs, setNJobs] = useState(-1);
+  // part16 §5.2 -- the conservative default (the API's own default
+  // changed with it): -1 (all cores) stays selectable in this field,
+  // but the form opens sequential -- the all-cores default is the
+  // TerminatedWorkerError mechanism on constrained machines.
+  const [nJobs, setNJobs] = useState(1);
   const [randomState, setRandomState] = useState(42);
 
   // stage 5: the algorithm catalog

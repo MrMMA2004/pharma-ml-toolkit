@@ -27,7 +27,14 @@ training backend (part10's queued row).
   names the permutation-importance sibling — never a silent fallback.
 
 ``n_jobs`` passes through verbatim, including ``-1`` (all cores) —
-the Phase-Eight passthrough clause, previewed here.
+the Phase-Eight passthrough clause, previewed here — but the DEFAULT
+is the conservative ``1`` (part16 §5.2: a default all-cores spawn is
+exactly the TerminatedWorkerError mechanism on constrained machines;
+all-cores stays an explicit user choice). The resource-aware lane
+(§5.3) estimates the working set before the fit and reduces
+CONCURRENCY -- never the scientific workflow -- when the estimate
+does not fit available memory, reporting the decision in the
+``parallelism`` payload block (never silent).
 """
 
 from __future__ import annotations
@@ -78,7 +85,11 @@ class TrainRequest(BaseModel):
     task: Literal["classification", "regression"] | None = None
     tune: bool = True
     cv: int = Field(default=5, ge=2, le=10)
-    n_jobs: int = Field(default=-1, ge=-1, le=64)
+    # part16 §5.2 -- the conservative default: -1 (all cores) stays
+    # explicitly requestable (ge=-1, le=64 passthrough preserved), but
+    # the default parallelism is sequential -- the all-cores default
+    # is the TerminatedWorkerError mechanism on constrained machines.
+    n_jobs: int = Field(default=1, ge=-1, le=64)
     preprocess: bool = True
     random_state: int = 42
     model_params: dict[str, Any] | None = None
@@ -133,6 +144,87 @@ def trained_model_view(model_id: str, request: Request) -> dict:
     return record.view()
 
 
+def _resolve_parallelism(
+    n_jobs: int, X: pd.DataFrame
+) -> tuple[int, dict]:
+    """part16 §5.3 -- the resource-aware parallelism lane.
+
+    Estimates the training working set BEFORE the fit spawns workers
+    and reduces concurrency -- never the scientific workflow -- when
+    the estimate does not fit available memory, reporting the clamp
+    in the returned advisory (``requested``/``executed``/``reason``/
+    ``estimated_bytes``/``available_bytes`` -- never silent).
+
+    The estimate is deliberately conservative and documented: the raw
+    feature matrix is pickled once per worker (``n_workers + 1``
+    copies), each fold fits a full pipeline (imputer + scaler + the
+    estimator's own buffers), so a 4x safety factor over the raw
+    matrix bytes per worker lane is the honest floor, not hype.  When
+    ``psutil`` is unavailable the lane degrades to the requested
+    parallelism with a best-effort advisory (``reason`` names the
+    missing instrument) -- the clause is "where practical", never a
+    hard dependency.
+    """
+    if n_jobs == 0:
+        workers = 1
+    else:
+        workers = n_jobs
+    # the ESTIMATE worker count: -1 (all cores) resolves to the real
+    # core count for the memory math only -- the passthrough value is
+    # never silently rewritten (the no-clamp path returns it verbatim).
+    if n_jobs == -1:
+        import os
+
+        est_workers = os.cpu_count() or 1
+    else:
+        est_workers = max(workers, 1)
+    advisory: dict[str, Any] = {
+        "requested": n_jobs,
+        "executed": est_workers,
+        "reason": None,
+        "estimated_bytes": None,
+        "available_bytes": None,
+    }
+    try:
+        import psutil
+    except ImportError:
+        advisory["reason"] = (
+            "psutil unavailable -- parallelism unclamped (best-effort)"
+        )
+        return (n_jobs if n_jobs != 0 else 1), advisory
+    available = int(psutil.virtual_memory().available)
+    advisory["available_bytes"] = available
+    matrix_bytes = int(
+        X.memory_usage(deep=True).sum()
+        if isinstance(X, pd.DataFrame) else int(getattr(X, "nbytes", 0))
+    )
+    # the per-worker working set: the pickled frame + the fitted
+    # pipeline buffers (the documented 4x floor).
+    per_worker = matrix_bytes * 4
+    estimated = per_worker * (est_workers + 1)
+    advisory["estimated_bytes"] = estimated
+    if estimated <= int(available * 0.75):
+        # no clamp: the requested value passes through VERBATIM (the
+        # Phase-Eight passthrough clause, preserved) -- only the
+        # reported executed count tells the user what -1 means.
+        return (n_jobs if n_jobs != 0 else 1), advisory
+    # reduce concurrency (never the science): drop workers until the
+    # estimate fits, floor at 1 -- sequential execution always fits if
+    # the matrix itself does.
+    clamped = est_workers
+    while clamped > 1 and per_worker * (clamped + 1) > int(available * 0.75):
+        clamped -= 1
+    advisory["executed"] = clamped
+    advisory["reason"] = (
+        f"memory guard: the estimated working set ({estimated} bytes over "
+        f"{est_workers} workers) exceeded the safe fraction of "
+        f"available memory ({available} bytes); concurrency reduced to "
+        f"{clamped} worker(s) -- the training itself is unchanged, only "
+        "the wall-clock is longer"
+    )
+    return clamped, advisory
+
+
 def _train_body(
     dataset_id: str,
     dataset_X: pd.DataFrame,
@@ -156,6 +248,12 @@ def _train_body(
         raise CancelledJob("Cancelled before the fit stage.")
     if manager is not None and job_id is not None:
         manager.report_progress(job_id, 10, "preparing features")
+    # part16 §5.3 -- resolve the effective parallelism BEFORE the fit
+    # (the memory-aware clamp; concurrency may reduce, the science
+    # never does, the decision is always reported).
+    effective_n_jobs, parallelism_advisory = _resolve_parallelism(
+        n_jobs, dataset_X
+    )
     result = train_model(
         model_name,
         task=task,
@@ -163,7 +261,7 @@ def _train_body(
         y_train=dataset_y,
         tune=tune,
         cv=cv,
-        n_jobs=n_jobs,
+        n_jobs=effective_n_jobs,
         preprocess=preprocess,
         random_state=random_state,
         model_params=model_params,
@@ -187,7 +285,7 @@ def _train_body(
         fit_seconds=float(result.fit_seconds),
     )
     model_store.register(record)
-    return {"model": record.view()}
+    return {"model": record.view(), "parallelism": parallelism_advisory}
 
 
 @router.post("/train")

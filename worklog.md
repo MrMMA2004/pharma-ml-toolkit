@@ -19449,3 +19449,190 @@ nine-script execution pass, the packaged-app checklist legs,
 installer signing, the v1.2.241+ ship lane behind the standing
 blockers) — the sandbox backlog stays EMPTY; the #1 upkeep rides
 every round.
+
+## Round 344 — the 136th recorded run (the part16 opening round: the seventh rollback recovered, the Phase-2 TerminatedWorkerError fix delivered at source FAIL-FIRST, the Phase-0 current-state audit born; the interactive "MASTER_PROMPT part16 / Push" directive)
+
+**R344 — the 136th recorded run**
+
+**The directive**: the interactive "MASTER_PROMPT part16 / Push" —
+the part16 era opens (the directive restructured: the 22-section
+"Master Engineering, Integration, Stabilization, UI Modernization,
+and Release Directive", 1,990 lines, ingested from
+`upload/MASTER_PROMPT part16.txt`; the disk-only copy laid at
+`scratch/part16.txt` per the part14 convention). This opening round
+= the seventh rollback recovery + the Phase-2 defect fix (the
+directive's own first-named defect, never before touched in the
+recorded era) + the Phase-0 audit deliverable.
+
+**The seventh rollback wave (the r343 class again)**: the history
+reset to the r186 checkpoint — HEAD left at `2eb0ede` (a strict
+ancestor of origin/main, rev-list 565/0); the remote + the PAT
+channels + the venv + the root node_modules + ECC (clone and
+harness) + BOTH zip mirrors (root dist-archive + the offsite) wiped;
+the working tree survived at the r343 terminal content (VERSION
+1.2.240, the worklog R343 entry, the counter at 135 — all intact on
+arrival). **The r322 playbook re-run in full, in order**: (1) the
+PAT lane re-spliced from `upload/GitHub_token.txt` (93 B
+fine-grained `github_pat_`, the 600-mode credential file + the
+askpass channel + the curl-config channel); (2) origin re-attached +
+fetched — **origin/main == `8940bd42`** (the r343 evidence terminal)
+confirmed; (3) **the recovery-snap `fae6c1c2` captured BEFORE any
+destructive step** (the full disk state via commit-tree over a temp
+index, the local branch `recovery-snap-r344`); (4) `git reset --hard
+8940bd42` (the 1,756-file update, tree clean); (5) the ghost sweep —
+**21 rollback-resurrection artifacts** cleaned; (6) the disk-only
+strays restored (`scratch/part15.txt` 2,056 lines from the upload
+copy + the new `scratch/part16.txt` 1,990 lines); (7) **the venv
+FULLY repaired** foreground (`scratch/venv_repair.sh` exit 0 — numpy
+1.26.4 / torch 2.14.1+cpu / matplotlib 3.10.9 / pharmaml 1.2.240
+editable / the full import probe / the studio stack PySide6 +
+pyqtgraph 0.13.7 / rdkit 2026.9.1 + the rdkit-stubs patch); (8) **ECC
+reinstalled GREEN at the exact r335 pins** (the clone 4adeee67 /
+2.2.3 / 328 skills — the full git clone; the harness install via the
+COMBINED invocation `--profile core --modules
+machine-learning,research-apis,security,documentation-governance
+--no-hooks --target claude` — 14 modules / 196 skills / 8/8 domain
+skills / 4/4 capabilities; `scratch/ecc_check.sh` GREEN); (9) **the
+mirrors rebuilt** — the six-home v1.2.240 parity verified first
+(`0fadb6e5` × 23,489,390 B across download/, the toolkit download/,
+the toolkit dist-archive/ [the canonical tracked 18-zip mirror],
+upload/), then the root dist-archive/ + the offsite
+`~/pharma-ml-toolkit-zips/` re-seeded (18 zips each, cmp-parity
+ok=18/bad=0, testzip OK).
+
+**THE ROUND'S OWN HYGIENE INCIDENT (recorded honestly — the
+tooling's defect, not the tree's)**: the permission-bit realignment's
+first two cuts carried a decimal-vs-octal comparison bug
+(`$((0644))`=420 decimal compared against `stat -c%a`'s octal "644"
+— every 644 file looked mismatched; `chmod 420` is VALID octal and
+set 2,997 files to owner-read-only mode 0o420; the 755-class `chmod
+493` failed as invalid octal and was harmless) AND the first
+verification script mis-split the NUL/TAB-separated `git ls-files -s
+-z` output and verified NOTHING (TOTAL_MISMATCHES=0 was vacuous).
+The spot-check (`package.json` at mode 420) exposed both; the
+corrected NUL/TAB-parsed pass realigned every file back to the git
+index modes — **the tree is bit-exact to the index again** (54
+root-owned `upload/` strays excepted: EPERM-class, index 644 vs disk
+777, root-owned, cosmetic and recorded) + the 7 EXE001 shebang-file
++x restores (the r342-terminal disk parity: packaging_validation,
+build_capability_map, build_zip, export_openapi, freeze_equivalent,
+freeze_smoke_driver, packaging_audit). Ruff clean over the FULL tree
+post-repair.
+
+**THE ROUND'S OWN WORK #1 — the part16 Phase-2 fix, delivered at
+source FAIL-FIRST**: the directive's §5 names the ML training
+`TerminatedWorkerError` ("a worker process managed by the executor
+was unexpectedly terminated...") — ZERO prior mentions in 19,451
+worklog lines; the mechanism verified REAL in the source:
+`TrainRequest.n_jobs` defaulted to **-1 (all cores)** (ml.py:81) and
+the GUI form matched (`useState(-1)`) — the all-cores loky spawn
+inside the JobManager's own ThreadPoolExecutor is exactly the
+nested-parallelism + OS-kill mechanism the directive traces, and the
+raw loky exception propagated to the user with zero guidance. The
+fix, in three pieces, each test-first (6 red pre-fix → 8 green):
+
+1. **the conservative default**: `n_jobs=1` across the API schema
+   (`Field(default=1, ge=-1, le=64)` — the -1..64 passthrough
+   PRESERVED, all-cores stays an explicit user choice) + the GUI
+   form (`MLPage.tsx` useState(1)); the OpenAPI contract re-exported
+   (the 1-line `default: 1` diff; 109 paths / 71 schemas unchanged);
+2. **the worker-death translation** (`ml/training.py`): a loky
+   `TerminatedWorkerError` / `BrokenProcessPool` at either fit site
+   (the GridSearchCV tune path + the plain pipeline fit) now raises
+   the typed `ModelError` naming the mechanism, the ORIGINAL error
+   (chained, never swallowed), and the three real retry levers
+   (n_jobs=1 / fewer features or rows / freed memory) + the
+   in-effect n_jobs — the API maps it to an honest 422 (sync) or a
+   FAILED job whose error carries the same guidance (job lane);
+3. **the §5.3 resource-aware clamp** (`api/routes/ml.py
+   _resolve_parallelism`): the working-set estimate BEFORE the fit
+   (the raw matrix bytes × the documented 4x pipeline factor ×
+   workers+1; -1 resolves to cpu_count for the estimate only and
+   passes through VERBATIM when no clamp fires — never a silently
+   forced backend), reduces CONCURRENCY never the scientific
+   workflow when the estimate exceeds 75% of available memory, and
+   reports the decision in the payload's `parallelism` block
+   (requested / executed / reason / estimated_bytes /
+   available_bytes — never silent; psutil best-effort with the
+   degraded advisory named when absent).
+
+The regression suite `tests/api/test_ml_worker_termination.py`
+(8 tests): the default pin, the library/sync/job translation lanes
+(the worker death simulated by patching GridSearchCV.fit with the
+directive's verbatim error), the clamp + no-clamp advisory lanes,
+and the §5.4 sequential/concurrent training lanes. **FAIL-FIRST
+honored: 6 red pre-fix** (the -1 default, the raw propagation ×3,
+the absent advisory ×2), **8 green post-fix**; the sequential +
+concurrent lanes were already green and pin the §5.4 regression
+class. The sandbox-unreachable §5.4 legs (Windows multiprocessing,
+frozen backend) documented in the suite docstring as the
+Windows-box lane.
+
+**THE ROUND'S OWN WORK #2 — the part16 Phase-0 deliverable**: the
+directive's §3 asks for
+`docs/QA/COMPREHENSIVE_CURRENT_STATE_AUDIT.md` — **born this round**
+(107 lines): the 9-class vocabulary (IMPLEMENTED_AND_TESTED /
+INSUFFICIENTLY_TESTED / PARTIAL / BACKEND_ONLY / FRONTEND_ONLY /
+BROKEN / MISSING / BLOCKED_ENV / DEPRECATED) applied phase-by-phase
+across the directive's sixteen phases, every row naming its
+implementation location, test evidence, status, and remaining
+defect; the honest finds: **Phase 5 demo data MISSING, Phase 7
+settings MISSING, Phase 8 the new-app resource monitor MISSING, the
+Phase-12 sub-lanes PARTIAL/BACKEND_ONLY/MISSING, Phase 15 (the
+PySide6/studio.py retirement) PARTIAL + BLOCKED_ENV (the parity
+gates on the Rust/Tauri compile lane), Phase 9's numeric form
+PRESENT with the sync-visualization gap**; the three-generation
+vocabulary mapping pinned (part11 matrix ↔ part15 audit ↔ part16
+classes) so the docs stay coherent. The campaign queue re-cut on
+the roadmap (the part16 items #3–#7 behind the #1 upkeep + the
+delivered #2).
+
+**The gates re-pinned over the recovered stack**: the canonical
+collection **8,610 / 473 files** (8,602 + the 8 new Phase-2 tests —
+the per-file sum verified programmatically; the shipped footer pin
+8,555 = the frozen release, the two-lane convention); the quick
+chunk 108/108 (72+36, exit 0); the Phase-2 suite 8/8; the affected
+ML + contract lanes (test_datasets_ml_artifacts +
+test_contracts + the new suite) exit 0 zero failures; ruff
+full-tree clean; mypy 296 clean; the supply-chain 8/8 + the
+frontend-services drift guards 17/17 (one lane, exit 0); the
+documentation consistency 12/12 with the new audit doc on disk;
+vitest 126/126 over 16 files + tsc clean (the GUI default change
+rides the same suite); console 200 + the title pin + the zip-size
+API `{"zipBytes":23489390,"version":"1.2.240","exact":true,
+"source":"release"}`; the ECC check GREEN; the CI verdict at
+`8940bd42` 19/19 (closed GREEN at r343, re-verified pre-push).
+
+**The browser pass** (the reaper struck the node_modules THREE times
+this round + killed the daemon between windows ≥4 times — the
+one-window dance ridden each time): zero page errors, zero console
+errors; the live walk **1,754 files / 571,086 LOC / 8,555 tests**
+(files +2 = the new test file + the new audit doc; LOC +653 = the
+round's payload, the arithmetic checks); the footer geometry exact
+at page end (**3967 == 3967 desktop, 7882 == 7882 mobile**); mobile
+390×844 zero horizontal overflow (docW 390 == vw 390); the blank
+mobile first frame (the daemon dead at the reload —
+chrome-error://chromewebdata/, footerBottom null, the 4.5 KB
+blank shot — caught by the geometry check per the r343 precedent)
+re-shot fresh; the evidence pair `scratch/r344-web-verify.png`
+(726,857 B full-page desktop) + `scratch/r344-mobile-verify.png`
+(627,846 B).
+
+**The SS13 QA surface trued (the #1 upkeep)**: TEST_EXECUTION_REPORT
+(the r344 executed table — the r343 table moved to carried),
+COMPREHENSIVE_REPOSITORY_AUDIT (the state rows re-dated r344 + the
+seventh-rollback row + the part16-layer pointer),
+IMPROVEMENT_ROADMAP (the part16 campaign queue — the missing-lane
+build-out), the PROJECT_STATUS lineage extension (this clause), the
+new COMPREHENSIVE_CURRENT_STATE_AUDIT, the counter 135 -> 136.
+
+**The ledger**: the version unchanged at **1.2.240**
+(no-silent-bumps; the byte-frozen r334 ruling stands, NO re-ship);
+the payload (the Phase-2 source + tests + contract + the audit doc
++ the QA surface + the worklog + the counter) committed and pushed
+under the owner's standing "Push" approval, the evidence pair
+riding the follow-up evidence commit. The campaign's next lanes:
+the roadmap's #3–#7 (the demo-data lane, the settings lane, the
+resource monitor, the Phase-12 sub-lanes, the grid-box
+visualization deepening) + the Windows-box evidence-gated set
+(unchanged); the #1 upkeep rides every round.

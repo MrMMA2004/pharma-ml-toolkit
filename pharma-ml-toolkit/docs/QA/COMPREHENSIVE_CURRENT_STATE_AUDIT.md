@@ -1,0 +1,108 @@
+# COMPREHENSIVE CURRENT STATE AUDIT — part16 §3 (Phase 0) deliverable
+
+The part16 Phase-Zero evidence report: the 9-class current-state
+classification over the directive's sixteen phases plus the
+previously-requested campaign ledger (parts 11–15), every row naming
+its implementation location, test evidence, status, and remaining
+defect. Audited commit **`8940bd42`** (main == origin/main, the r343
+evidence terminal); audited round **r344** (the 136th recorded run —
+the part16 opening round, executed over the seventh-rollback-recovered
+tree). Nothing here is copied from prose alone: each row was re-walked
+against the live source this round.
+
+Status vocabulary (the directive's §3 classes): **IMPLEMENTED_AND_TESTED**
+· **INSUFFICIENTLY_TESTED** · **PARTIAL** · **BACKEND_ONLY** ·
+**FRONTEND_ONLY** · **BROKEN** · **MISSING** · **BLOCKED_ENV** ·
+**DEPRECATED**.
+
+## 1. Repository state (re-established live this round)
+
+| Item | Value | Evidence |
+| --- | --- | --- |
+| HEAD | `8940bd42` == origin/main (r343 evidence terminal) | fetch via the askpass lane, post-recovery |
+| Version | 1.2.240, byte-frozen (the r334 ruling — no re-ship without approval) | nine-carrier lockstep, consistency 12/12 |
+| Release | `v1.2.240` published, five assets intact | r337 live verification, standing ruling |
+| CI at HEAD | 19/19 check-runs success (closed at r343) | authenticated check-runs API |
+| Tests | collection 8,602 / 0 errors / 472 files; shipped pin 8,555 | quick chunk 108/108 re-run fresh this round |
+| Rollback | the SEVENTH wave recovered pre-audit (the r343 class: history reset to the r186 checkpoint `2eb0ede`; remote + PAT + venv + node_modules + ECC + both zip mirrors wiped; the r322 playbook re-run in full — the recovery-snap `fae6c1c2` captured before any destructive step) | worklog R344 |
+
+## 2. The part16 phase-by-phase classification
+
+| Phase (directive §) | Implementation location | Test evidence | Status | Remaining defect |
+| --- | --- | --- | --- | --- |
+| 0 — repository recovery + previous-work verification | the standing 2h-sync ritual (worklog/counter/PROJECT_STATUS); this document is the phase's own deliverable | every recovery leg re-verified live this round (gates below) | IMPLEMENTED_AND_TESTED | none (the ritual itself) |
+| 1 — backend-to-frontend capability integration | `docs/CAPABILITY_INTEGRATION_MATRIX.md` (313 rows-class rows, the part11_1 §21 campaign) + the 13 domain clients in `frontend/src/services/` | `tests/api/` suites + the frontend drift guards 17/17 + vitest 126/126 | PARTIAL | 13 matrix rows PARTIAL + 2 BLOCKED (the Rust lanes) — the vocabulary mapping in §5 |
+| 2 — ML training worker termination (TerminatedWorkerError) | **OPENED THIS ROUND**: the conservative default `n_jobs=1` (`api/routes/ml.py` TrainRequest + the GUI form `MLPage.tsx`), the typed worker-death translation (`ml/training.py` — TerminatedWorkerError/BrokenProcessPool → actionable ModelError, original chained), the resource-aware clamp (`_resolve_parallelism`, concurrency-reduced never science, reported in the `parallelism` payload block) | `tests/api/test_ml_worker_termination.py` 8/8 (FAIL-FIRST: 6 red pre-fix), re-run green + the ML suite 83-dots exit 0 | IMPLEMENTED_AND_TESTED (the sandbox lanes) | the Windows multiprocessing + frozen-backend legs of §5.4 ride the Windows-box lane (BLOCKED_ENV, documented in the suite docstring); the memory-copy elimination lane (§5.2 "prevent unnecessary copying") is the continuation |
+| 3 — export + artifact integrity | the digest-verified download contract (`api/routes/artifacts.py`, ETag/sha256/Content-Length) | `test_datasets_ml_artifacts.py` download lanes (magic bytes, round-trips) | IMPLEMENTED_AND_TESTED | none found this audit |
+| 4 — dataset lifecycle + deletion | `api/routes/datasets.py` (register/preview/columns/split/delete) | `test_datasets_ml_artifacts.py` (delete-then-404, guards) | IMPLEMENTED_AND_TESTED | none found this audit |
+| 5 — demo data + sample workflows | none — no demo/sample-data service exists in the API surface (the "sample" matches are display bounds and the RNN sampler) | n/a | **MISSING** | the whole lane: per-workflow sample-data services + GUI entry points — the campaign's next candidate |
+| 6 — workflow-specific visualization architecture | the part11-era ownership lanes + `viz/` (backend figures) + the Plotly adoption (r291) | capability matrix §3.2 (the 11th-fact PARTIAL row) | PARTIAL | the residual PARTIAL rows (the Visualization workspace's general-purpose-only boundary) |
+| 7 — settings + application configuration | none in `frontend/src` (zero settings files, no persistence hooks) | n/a | **MISSING** | the settings lane (persisted config: theme, paths, defaults) — not started in the new app |
+| 8 — floating resource monitor | none in `frontend/src`; the PySide6 `ui/widgets/job_center.py` is the LEGACY GUI's lane | n/a | MISSING (the new app) / DEPRECATED (the PySide6 widget rides the Phase-15 retirement) | the React/Tauri resource monitor |
+| 9 — manual docking grid box | the numeric form EXISTS: `DockingPage.tsx` stage 4 "binding site / grid box" + the "Manual grid box" card; the backend `compute_grid_box` (docking/preparation.py) | docking suites green (the campaign lanes) | PARTIAL | the directive's deeper ask — the synchronized protein+box 3D visualization with numeric-coordinate sync — is the continuation |
+| 10 — design system + visual modernization | the part13-era design system (Tailwind tokens, the console + app surfaces) | browser passes r337–r343 (zero errors, geometry pins) | IMPLEMENTED_AND_TESTED | ongoing polish rides the roadmap |
+| 11 — installer branding + Windows packaging | v1.2.240 EXE/MSI (the r334/r337 ship, smoke-gated ninth dispatch) | release assets verified byte-level (r337) | IMPLEMENTED_AND_TESTED | the E/F clean-machine gates — BLOCKED_ENV (the owner's Windows box) |
+| 12 — Job Center / experiment tracking / model registry / data quality / diagnostics | job center: the PySide6 legacy widget (DEPRECATED-class); model registry: the backend registry catalog + session store (BACKEND implemented, connected via `/ml/models` + `/ml/trained`); experiment tracking: absent; data quality/diagnostics: partial (the profile/doctor lanes) | `/ml/models` + `/ml/trained` pinned in the ML suites | PARTIAL / BACKEND_ONLY / MISSING per sub-lane | the P0/P1 sub-lane build-out (the §15.6 prioritization) |
+| 13 — security + desktop runtime verification | the D-1..D-8 campaign (trusted origins, scoped CORS, WS guard, token lane) | `test_trusted_origins.py` 34, `test_ws_origin.py` 12/12, security suites | IMPLEMENTED_AND_TESTED | the desktop-runtime legs ride the Windows box (BLOCKED_ENV) |
+| 14 — complete test strategy | the 8,602-test collection + the ten-chunk gate + the drift guards | collection 8,602/0/472 (r343 pin, re-verified quick-chunk this round) | IMPLEMENTED_AND_TESTED | the frozen-backend E2E legs — BLOCKED_ENV |
+| 15 — legacy PySide6 + studio.py retirement | **NOT STARTED**: `studio.py` (45-line launcher) + `ui/` (the PySide6 GUI) present; the playground (Tkinter) precedent retired at r338 | the r228/r304/r338 retirement lineage in the worklog | PARTIAL (the precedent) + BLOCKED_ENV (the parity verification gates on the Rust/Tauri compile lane) | the parity proof + the retirement sweep — the campaign's large stone |
+| 16 — final build + installer validation + GitHub release | v1.2.240 shipped (five assets, manifest, SBOM) | the ninth smoke dispatch green end-to-end | IMPLEMENTED_AND_TESTED | the v1.2.241+ ship lane is closed by the byte-frozen ruling (owner approval required) |
+
+## 3. The previously-requested campaign ledger (parts 11–15)
+
+The r340-era COMPREHENSIVE_REPOSITORY_AUDIT §2 matrix (15 rows, all
+VERIFIED COMPLETE or honestly execution-blocked) was re-walked this
+round and stands — no row regressed: the backend/frontend stacks, the
+REST contract (109 paths/71 schemas, CI-guarded, re-exported this
+round with the Phase-2 default change), the WS lanes, SQLite +
+FileVault, the nine workspaces, security, the 8,555-shipped pin, the
+browser E2E lanes, the Windows installers, offline operation, and the
+documentation set (consistency 12/12). The two BLOCKED rows (Tauri
+Rust compile/test, Windows-box E/F gates) are unchanged environmental
+classes, not defects.
+
+## 4. Findings this audit
+
+1. **The Phase-2 mechanism was real and is now fixed at source**
+   (fail-first: 6 red → 8 green): the API default was `n_jobs=-1`
+   (all cores) — exactly the nested-parallelism + OS-kill mechanism
+   the directive names; the raw loky TerminatedWorkerError penetrated
+   with zero guidance. Now: default 1 (both the API schema and the
+   GUI form), the typed translation with the three retry levers
+   chained to the original, and the §5.3 memory-aware clamp that
+   reduces concurrency — never the science — and reports the
+   decision in the payload. The OpenAPI contract re-exported
+   (1-line diff, the default value).
+2. **The genuinely-missing lanes this directive adds** (Phase 5 demo
+   data, Phase 7 settings persistence, Phase 8 the new-app resource
+   monitor, the Phase 12 P0/P1 sub-lanes) — recorded here as MISSING,
+   each a concrete next-round candidate.
+3. **The Phase-15 retirement is the campaign's largest stone**: the
+   parity verification gates on the Rust/Tauri compile lane which this
+   sandbox cannot run (the D-4/D-5 class) — the honest sequencing is
+   the missing-lane build-out first, the parity proof when the
+   Windows-box lane opens.
+4. The seventh rollback wave (pre-audit) left zero content defects:
+   the recovery walked the r343 playbook in full; the round's own
+   hygiene incident (the tooling-mode corruption, 2,997 files
+   realigned back to the git index modes within the round) is
+   recorded in the worklog — the tree is bit-exact to the index again
+   (54 root-owned upload/ strays excepted, EPERM-class, cosmetic).
+
+## 5. Status vocabulary mapping (the three doc generations)
+
+The part11-era matrix labels (PASS/PARTIAL/FAIL/BLOCKED/NOTAPPLICABLE)
+and the part15-era audit labels (VERIFIED COMPLETE / SOURCE
+IMPLEMENTED — EXECUTION BLOCKED) predate part16's §4.3 vocabulary. The
+mapping, pinned here so the three docs stay coherent:
+PASS ↔ CONNECTED_AND_TESTED ↔ IMPLEMENTED_AND_TESTED · PARTIAL ↔
+PARTIAL/CONNECTED_UNTESTED per dimension · FAIL ↔ MISSING/BROKEN ·
+BLOCKED ↔ BLOCKED_ENV · NOTAPPLICABLE ↔ BACKEND_ONLY_INTERNAL
+(documented internal). The matrix itself is not rewritten wholesale —
+its §21 spec defined its own labels; this audit is the part16 layer
+over the same evidence.
+
+— audited round 344 (the 136th recorded run, the part16 opening);
+the companion docs: CAPABILITY_INTEGRATION_MATRIX (part11 §21),
+COMPREHENSIVE_REPOSITORY_AUDIT (part15 §13), TEST_EXECUTION_REPORT
+(the executed table), IMPROVEMENT_ROADMAP (the campaign queue).

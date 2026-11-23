@@ -73,6 +73,57 @@ from pharmaml.ml.preprocessing import build_preprocessor, has_categorical_column
 
 _LOG = get_logger(__name__)
 
+# ---------------------------------------------------------------------
+# part16 §5.2 -- the worker-death translation clause.
+#
+# GridSearchCV/cross_validate with n_jobs > 1 run the folds through
+# joblib's loky process pool; when the OS kills a worker (excessive
+# memory or a native-library crash -- the packaged-app TerminatedWorkerError
+# class the directive names), loky raises TerminatedWorkerError and
+# the concurrent.futures layer raises BrokenProcessPool.  Both
+# propagate raw from the fit with zero actionable guidance.  The
+# classes are collected defensively (joblib ships with scikit-learn;
+# an environment without it simply yields a smaller tuple).
+
+
+def _worker_death_exceptions() -> tuple[type[BaseException], ...]:
+    from concurrent.futures.process import BrokenProcessPool
+
+    classes: list[type[BaseException]] = [BrokenProcessPool]
+    try:
+        from joblib.externals.loky.process_executor import (
+            TerminatedWorkerError,
+        )
+    except ImportError:  # pragma: no cover -- joblib absent
+        pass
+    else:
+        classes.append(TerminatedWorkerError)
+    return tuple(classes)
+
+
+_WORKER_DEATH = _worker_death_exceptions()
+
+
+def _translate_worker_death(exc: BaseException, n_jobs: int) -> ModelError:
+    """Turn a raw worker termination into the typed, actionable error.
+
+    The translation never hides the mechanism: the original class and
+    message ride the chain (``raise ... from exc``), the guidance names
+    the three real retry levers, and the parallelism setting that was
+    in effect is reported so the user can correlate cause and lever.
+    """
+    return ModelError(
+        f"the parallel training workers were terminated by the operating "
+        f"system mid-fit (the usual cause is excessive memory use, a "
+        f"native-library crash is rarer; original error: "
+        f"{type(exc).__name__}: {exc}). Retry levers, in order of "
+        f"effectiveness: train with n_jobs=1 (sequential execution, "
+        f"identical results, longer wall-clock), reduce the number of "
+        f"features or training rows, or free memory / close other "
+        f"applications before training again. The failed run was using "
+        f"n_jobs={n_jobs}."
+    )
+
 __all__ = ["TrainingResult", "compare_models", "train_model"]
 
 
@@ -333,7 +384,13 @@ def train_model(
             n_jobs=n_jobs,
             refit=True,
         )
-        search.fit(X_train, y_train)
+        try:
+            search.fit(X_train, y_train)
+        except _WORKER_DEATH as exc:
+            # part16 §5.2 -- translate the OS worker kill into the
+            # typed, actionable ModelError (original chained, never
+            # swallowed).
+            raise _translate_worker_death(exc, n_jobs) from exc
         fitted = search.best_estimator_
         best_params = {k.removeprefix(f"{step_name}__"): v for k, v in search.best_params_.items()}
         if model_params:
@@ -346,7 +403,13 @@ def train_model(
             [search.cv_results_[f"split{i}_test_score"][best_index] for i in range(cv)]
         )
     else:
-        pipeline.fit(X_train, y_train)
+        try:
+            pipeline.fit(X_train, y_train)
+        except _WORKER_DEATH as exc:
+            # the no-tune path dies the same way when the estimator
+            # itself parallelizes internally (xgboost/lightgbm native
+            # pools die as BrokenProcessPool through joblib wrappers)
+            raise _translate_worker_death(exc, n_jobs) from exc
         fitted = pipeline
         best_params = dict(model_params) if model_params else {}
         cv_scores = None

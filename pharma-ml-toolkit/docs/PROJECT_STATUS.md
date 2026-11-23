@@ -546,7 +546,34 @@ summarises them and wins any status disagreement.
   evidence pair (the blank mobile first frame caught by the
   geometry check and re-shot fresh); the SS13 QA surface trued;
   the version unchanged at 1.2.240 (no-silent-bumps; the
-  byte-frozen r334 ruling stands, NO re-ship); counter 134 -> 135
+  byte-frozen r334 ruling stands, NO re-ship); counter 134 -> 135 —
+  and the part16 opening round 344 (the interactive "MASTER_PROMPT
+  part16 / Push" directive): the SEVENTH rollback wave recovered
+  pre-work (the r343 class: history at the r186 checkpoint
+  `2eb0ede`, remote + PAT + venv + node_modules + ECC + both zip
+  mirrors wiped, the tree survived at the r343 terminal; the r322
+  playbook in full — the recovery-snap `fae6c1c2` captured before
+  any destructive step, 21 ghosts swept, the mirrors rebuilt
+  18/18 at the `0fadb6e5` six-home parity, ECC GREEN at the exact
+  r335 pins, the one-window node_modules dance); the part16
+  Phase-2 TerminatedWorkerError fix delivered at source FAIL-FIRST
+  (the conservative `n_jobs=1` default across the API schema + the
+  GUI form, the `-1` passthrough preserved; the typed
+  worker-death translation with the original chained; the §5.3
+  memory-aware clamp — concurrency reduced, never the science, the
+  `parallelism` advisory always reported; 8 regression tests,
+  6 red pre-fix; the OpenAPI re-exported at the 1-line default
+  diff); the part16 Phase-0 audit delivered
+  (`docs/QA/COMPREHENSIVE_CURRENT_STATE_AUDIT.md` — the 9-class
+  phase map, the missing lanes named honestly: demo data, settings,
+  the new-app resource monitor, the Phase-12 sub-lanes, the
+  Phase-15 retirement stone); the QA surface trued (the r344
+  executed table, the roadmap re-cut as the part16 campaign queue);
+  the gates re-pinned (quick chunk 108/108, the affected ML +
+  contract lanes exit 0, ruff full-tree clean, mypy 296 clean,
+  vitest 126/126 + tsc clean, console 200 + the zip-size exact);
+  the version unchanged at 1.2.240 (no-silent-bumps; the
+  byte-frozen r334 ruling stands, NO re-ship); counter 135 -> 136
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

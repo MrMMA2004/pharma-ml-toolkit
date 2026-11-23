@@ -3740,7 +3740,7 @@
             "title": "Model Params"
           },
           "n_jobs": {
-            "default": -1,
+            "default": 1,
             "maximum": 64.0,
             "minimum": -1.0,
             "title": "N Jobs",
