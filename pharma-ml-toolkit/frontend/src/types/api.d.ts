@@ -1600,6 +1600,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/samples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Samples
+         * @description The catalog — optionally filtered to one workflow tag.
+         *
+         *     Every entry re-verifies its file on disk (``available``), so the
+         *     GUI can never offer an invented dataset: the listing IS the
+         *     shipped ``examples/data`` reality.
+         */
+        get: operations["list_samples_api_v1_samples_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/samples/{sample_id}/load": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Load Sample
+         * @description One-click load into the relevant workflow.
+         *
+         *     ``tabular``: the SAME import path as a manual upload — the REAL
+         *     :func:`pharmaml.data.load_dataset` (target auto-detection, task
+         *     inference, non-numeric policy) + ``DatasetStore.register``, always
+         *     a FRESH record (no overwrite of user data, structurally).
+         *
+         *     ``series``: the two numeric arrays (``times``/``conc``) the PK/PD
+         *     forms take verbatim. ``library``: the name+SMILES columns the
+         *     chemistry/generative/docking lanes take verbatim.
+         *
+         *     ``text_file``: the bounded file content itself (sha256-pinned) —
+         *     the docking/MD/visualization inputs take it verbatim.
+         */
+        post: operations["load_sample_api_v1_samples__sample_id__load_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/samples/{sample_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sample Preview
+         * @description Preview-before-load: the RAW file, never the imported view.
+         *
+         *     Tabular: the raw CSV head (columns, dtypes, full row count,
+         *     bounded rows). Text files: the first ``limit`` lines with the true
+         *     line count. A preview never registers anything.
+         */
+        get: operations["sample_preview_api_v1_samples__sample_id__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/semi-supervised/evaluate": {
         parameters: {
             query?: never;
@@ -2635,6 +2715,27 @@ export interface components {
             /** Smiles */
             smiles: string;
         };
+        /**
+         * LoadRequest
+         * @description Optional knobs for the tabular import (mirroring the upload form).
+         *
+         *     The curated defaults (target/task hints per sample) are applied
+         *     when the request omits them; ``None`` explicitly defers to the
+         *     REAL loader's auto-detection, exactly like an upload that leaves
+         *     the fields blank.
+         */
+        LoadRequest: {
+            /**
+             * Target
+             * @description Target column override; None = the curated hint (if any) then the loader's auto-detection.
+             */
+            target?: string | null;
+            /**
+             * Task
+             * @description Task hint override ('classification' / 'regression'); None = the curated hint (if any) then auto-inference.
+             */
+            task?: string | null;
+        };
         /** MDAnalyzeRequest */
         MDAnalyzeRequest: {
             /** Coords */
@@ -3585,7 +3686,7 @@ export interface components {
             } | null;
             /**
              * N Jobs
-             * @default -1
+             * @default 1
              */
             n_jobs: number;
             /**
@@ -6844,6 +6945,111 @@ export interface operations {
                 "application/json": components["schemas"]["RepurposingScreenRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_samples_api_v1_samples_get: {
+        parameters: {
+            query?: {
+                workflow?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    load_sample_api_v1_samples__sample_id__load_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LoadRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sample_preview_api_v1_samples__sample_id__preview_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
