@@ -1,30 +1,37 @@
 # TEST EXECUTION REPORT — part15 §13 deliverable #5
 
 The part15 Phase-Five honest execution record. Executed-this-round
-(r341, at the round terminal) vs carried-from-executed-rounds are stated
+(r342, at the round terminal) vs carried-from-executed-rounds are stated
 separately; BLOCKED legs name their missing prerequisite (§7 rule:
 never a silent skip, never a blocked test marked passed).
 
-## 1. Executed this round (r341 — the D-6 frontend-lane round)
+## 1. Executed this round (r342 — the roadmap #3/#4 close-out round)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
-| Canonical collection | `pytest --collect-only -q` | **8,602 tests / 0 errors / 472 files** (+1: the r341 policy-close drift guard) |
-| Quick regression chunk | `pytest tests/test_approvals.py tests/test_biology.py -q` | 108 passed, exit 0 |
-| Lint | `ruff check` (the changed Python file) | clean |
+| Canonical collection | `pytest --collect-only -q` | **8,602 tests / 0 errors / 472 files** (unchanged from r341 — no test-count change this round; measured fresh in 33.236 s) |
+| Quick regression chunk | `pytest tests/test_approvals.py tests/test_biology.py -q` | **108 passed, exit 0** (the 72+36 dot count verified exactly) |
+| Lint | `ruff check .` (FULL tree) + `ruff check src/pharmaml` (the CI scope) | **both "All checks passed!" exit 0** — after the round's own find: 15 permission-bit realignments (the r340 class) + 7 pre-existing code findings in two out-of-CI-scope dev scripts fixed minimally (no semantic change, py_compile both) |
+| Root console lint | `bun run lint` (eslint, the touched root project) | **clean, true exit 0** — the first CJS cut was rejected (3 no-require-imports errors, the fail-first signal) and re-landed as ESM `.mjs` |
 | Types | `mypy src` | Success: no issues found in 296 source files |
-| Frontend unit | `npx vitest run` (nested frontend) | **126/126 over 16 files**, exit 0 (was 119 — +7: the D-6 client lane 6 + the banner surfacing 1; FAIL-FIRST: 6 red witnessed against the un-edited client) |
-| Frontend types | `npx tsc --noEmit` | clean (silent, exit 0) |
-| Frontend-services drift guards | `pytest tests/test_frontend_services.py -q` | 17/17 (incl. the NEW terminal-close contract guard pinning the 4401/4403 pair on both sides of the wire) |
-| Documentation guards | `pytest tests/test_documentation_consistency.py -q` | green (the D-7-fixed ledger-agreement guard; re-run post-ledger) |
-| Security supply chain | `pytest tests/test_security_supply_chain.py -q` | 8/8 |
-| Console | `GET /` | 200, title pin (the r320 per-call node_modules dance — the reaper wiped the root web lane twice this round) |
-| Zip-size API | `GET /api/toolkit/zip-size` | `{"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}` |
-| Census (live) | the console's own walk | 1,752 files / 570,308 LOC / 8,555 tests — files unchanged (no new files), +32 the Python guard's counted delta (the .tsx lanes never count per the census rule) |
-| Browser verification | agent-browser desktop + 390×844 mobile | zero page errors, zero console errors, footer at page end both viewports (3967 desktop / 7882 mobile), mobile zero horizontal overflow; evidence `scratch/r341-web-verify.png` + `scratch/r341-mobile-verify.png` |
-| CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `8a14c06b` (the r340 evidence terminal, closed on arrival) |
+| Security supply chain | `pytest tests/test_security_supply_chain.py -q` | **8/8 exit 0** |
+| API regression suite (measurement lane) | `pytest tests/api -q` | **461 passed + 1 skip = 462 collected, exit 0, 117.495 s wall** (was 449+1 at r331 — the tree +13 tests, the r339/r341 WS lanes) |
+| Trusted-origin matrix (measurement lane) | `pytest tests/api/test_trusted_origins.py -q` | **34/34, exit 0, 10.955 s** (the r331 pin 5.83 s — box load honestly named) |
+| Console | `GET /` | **200, title pin** — the reaper struck between every window; the per-call node_modules dance ran at least five times (once mid-round between an install and its own lint) |
+| Zip-size API (measurement lane) | `GET /api/toolkit/zip-size` (timed) | `{"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}` at **0.308 s total** |
+| Backend perf lanes (the r324 instruments) | `scratch/p15_r342_backend_perf.py` (spawn → PHARMAML-READY → health → resources → SIGTERM) | **startup 4.138 s; health first 82.5 ms / warm 0.9 ms; idle RSS 228.4 MiB +0.00 drift / 6 threads; graceful shutdown 0.665 s exit 0** — sandbox-venv context honestly named |
+| PowerShell-safe dev scripts (roadmap #3) | executed fake-target verification (`scratch/p15_r342_portable_scripts.txt`) | copy happy-path + missing-source refusal exit 1; launcher NODE_ENV pin + 7/0 exit passthrough + missing-target surfacing; `node --check` both |
+| Census (live) | the console's own walk | **1,752 files / 570,378 LOC / 8,555 tests** — files == the r341 pin (the counted delta +70: the QA doc rewrites + the two dev-script edits; the .tsx lanes never count) |
+| Browser verification | agent-browser desktop + 390×844 mobile | **zero page errors, zero console errors**, footer at page end both viewports (**3967 desktop / 7882 mobile**), mobile zero horizontal overflow; evidence `scratch/r342-web-verify.png` + `scratch/r342-mobile-verify.png` |
+| CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `9ff53b63` (the r341 evidence terminal, closed on arrival pre-flight) |
 
 ## 2. Carried from executed rounds (latest full-run evidence)
+
+- **r341** (the D-6 frontend-lane round): vitest **126/126 over 16 files**
+  + tsc clean over the D-6/D-8 payload (unchanged-carried this round —
+  no frontend source changed in r342); the collection 8,602/0/472;
+  the frontend-services drift guards 17/17; the documentation-consistency
+  12/12 post-ledger.
 
 - **r340** (the part15 continuation round): the rollback recovery in
   full — venv/node_modules/mirrors/ECC rebuilt at the exact pins; the
@@ -72,4 +79,4 @@ full backoff ladder with no surfaced cause; the minimal close-code
 terminal fix, 126/126 post). No assertion was weakened, no failing test
 deleted (§7 rule).
 
-— reported round 341 (the 133rd recorded run).
+— reported round 342 (the 134th recorded run).

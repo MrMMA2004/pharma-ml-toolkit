@@ -469,7 +469,38 @@ summarises them and wins any status disagreement.
   `8a14c06b` **19/19** closed on arrival, the browser pass with the
   live walk 1,752/570,308/8,555 + the footer geometry exact + mobile
   390×844 zero-overflow + the evidence pair); the version unchanged
-  at 1.2.240 (no-silent-bumps); counter 132 -> 133
+  at 1.2.240 (no-silent-bumps); counter 132 -> 133 — and the part15
+  round 342 (the interactive "Continue MASTER_PROMPT part15 / Push"
+  directive; no rollback wave — the history intact at the r341
+  evidence terminal, the reaper escalated to between-window wipes
+  carried per-call): **the roadmap's #3 + #4 both DELIVERED — the
+  sandbox backlog EMPTY** — #3 the PowerShell-safe dev script set
+  (dev:portable / build:portable / start:portable over the two ESM
+  `.mjs` scripts — pure-Node cpSync, in-process NODE_ENV, faithful
+  exit passthrough; the POSIX defaults untouched; the first CJS cut
+  rejected by the root lint gate and re-landed ESM, lint clean;
+  executed fake-target verification; the §6 root-console caveat
+  CLOSED in FRONTEND_AUDIT) and #4 the performance baselines refresh
+  (PERFORMANCE_BASELINES.md re-pinned at the v1.2.240 tree: the
+  release-era rows re-measured + the NEW backend lanes — startup
+  4.138 s spawn→PHARMAML-READY, health first 82.5 ms / warm
+  0.9 ms, idle RSS 228.4 MiB zero-drift via the r324 read-only
+  instrument, graceful shutdown 0.665 s exit 0 — with the re-runnable
+  driver; the desktop matrix rows stay NOT-MEASURED by rule); the
+  round's own find — the ruff full-tree sweep beyond the CI scope:
+  15 permission-bit realignments (the r340 class) + 7 pre-existing
+  code findings in two out-of-scope dev scripts fixed minimally
+  (no semantic change, py_compile both, ruff clean both scopes);
+  the gates re-pinned (quick chunk 108/108, mypy 296 clean,
+  supply-chain 8/8, root console lint clean true-exit-0, console
+  200 + zip-size 23,489,390 exact at 0.308 s, the API suite
+  461+1 skip/462 exit 0 + the trusted-origin 34/34 + the census
+  8,602/0/472 as the measurement gates; vitest 126/126 + tsc
+  carried unchanged — no frontend source changed), the CI verdict
+  for `9ff53b63` closed GREEN on arrival **19/19**; the browser
+  pass with the live walk 1,752/570,378/8,555 + the footer geometry
+  exact + the evidence pair; the SS13 QA surface trued; the version
+  unchanged at 1.2.240 (no-silent-bumps); counter 133 -> 134
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

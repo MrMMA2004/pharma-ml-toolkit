@@ -31,7 +31,7 @@ def module_loc(module: Path) -> int:
 def test_count(pattern: str) -> int:
     n = 0
     for t in (TK / "tests").glob(pattern):
-        n += len(re.findall(r"^\s*def test_", t.read_text(encoding="utf-8"), re.M))
+        n += len(re.findall(r"^\s*def test_", t.read_text(encoding="utf-8"), re.MULTILINE))
     return n
 
 
@@ -61,7 +61,7 @@ cli_parsers = len(re.findall(r"\.add_parser\(", (TK / "src" / "pharmaml" / "cli.
 import sys
 
 sys.path.insert(0, str(TK / "src"))
-from pharmaml.studio.capability_registry import CAPABILITIES, summary  # noqa: E402
+from pharmaml.studio.capability_registry import CAPABILITIES, summary
 
 # ---- the Phase-0 editorial layer -------------------------------------------
 # Card assignment per §4 of part6, verified against the live page census.
@@ -148,7 +148,7 @@ for p, mods, _n in page_rows:
 w("")
 w(f"Tests: {test_count('ui/test_*.py')} UI test functions across")
 w(f"{len(list((TK/'tests'/'ui').glob('test_*.py')))} UI suites; page smoke")
-w(f"coverage via `tests/ui/test_pages_smoke.py`.")
+w("coverage via `tests/ui/test_pages_smoke.py`.")
 w("")
 w("## 3. Backend census")
 w("")

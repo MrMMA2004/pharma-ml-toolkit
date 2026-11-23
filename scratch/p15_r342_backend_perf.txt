@@ -1,0 +1,13 @@
+# r342 backend performance lanes (part15 roadmap #4)
+# context: Linux 5.10.134-013.15.kangaroo.al8.x86_64 py=3.12.16 pharmaml-tree=v1.2.240 cpus=2 cwd=/home/z/my-project/pharma-ml-toolkit
+# data-dir (fresh): /tmp/r342-perf-data
+backend_startup_spawn_to_ready_s: 4.138
+handshake: port=57135 pid=10066 version=1.2.240
+health_first_ms: 82.5 (status=ok core=True)
+health_warm_ms: min=0.9 median=0.9 (3 probes)
+resources_source: psutil scope={'implemented': ['host CPU/memory/swap/disk snapshot (psutil when importable, else the honest stdlib subset with nulled absent numbers)', "this backend process's own RSS/threads/CPU snapshot", 'the JobManager queue depth by state (read-only)'], 'not_implemented': ['job priorities', 'checkpointing', 'recovery after interruption', 'per-job memory estimates', "GPU monitoring (deliberately absent — §15's optional-GPU rule; no pynvml dependency)"], 'note': "Read-only snapshot lane: the JobManager itself is unchanged — its bounded concurrency, progress reporting and cooperative cancellation stay exactly as they are (§15's preserve rule). psutil is optional; without it the source flag says stdlib-fallback and the absent numbers are nulled, never fabricated."}
+backend_process_idle_rss_MiB: a=228.4 (+2 s, threads=6) b=228.4 (+12 s, threads=6) drift=+0.00 MiB
+jobs_idle: active=0 by_state={'QUEUED': 0, 'RUNNING': 0, 'CANCELLATION_REQUESTED': 0, 'CANCELLED': 0, 'COMPLETED': 0, 'FAILED': 0}
+gpu: {"available": false, "note": "GPU monitoring is deliberately absent: \u00a715 keeps GPU support optional and CPU-only operation fully supported, so no pynvml dependency enters the tree. A future lane may add it behind the same optional-import pattern this route uses for psutil."}
+system: {"cpu_count": 2, "cpu_percent": 0.0, "loadavg": [0.14, 0.2, 0.2], "memory": {"total": 4237889536, "available": 3435278336, "used": 802611200, "percent": 18.9}, "swap": {"total": 0, "used": 0, "free": 0, "percent": 0.0}, "disk": {"path": "/home/z/my-project/pharma-ml-toolkit", "total": 10531131392, "used": 7921106944, "free": 2056376320}}
+graceful_shutdown_sigterm_to_exit_s: 0.665 (exit_code=0)

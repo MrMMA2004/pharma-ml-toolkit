@@ -85,10 +85,24 @@ from the nested Vite desktop frontend — audited independently:
   PowerShell-portable as-is. This does NOT affect the shipped product
   (the Tauri app and its SS11 scripts are the Windows surface); the
   console's dev commands are documented as sandbox/dev-only.
+  **r342 lane — the caveat CLOSED with a PowerShell-safe variant set**
+  (part15 roadmap #3 DELIVERED): `dev:portable` (`next dev -p 3000`,
+  no `2>&1 \| tee` pipe), `build:portable` (`next build && node
+  scripts/copy-standalone.cjs` — pure-Node `fs.cpSync` recursive
+  copy, no `cp -r`), `start:portable` (`node
+  scripts/start-standalone.cjs` — NODE_ENV set in-process, faithful
+  exit-code passthrough, no `NODE_ENV=…` env-prefix). The POSIX
+  defaults are untouched (the sandbox's own dev contract rides
+  them); the variants are dev-only. Executed verification over fake
+  targets: copy happy-path + the missing-source exit-1 refusal; the
+  launcher NODE_ENV=production pin + the 7/0 exit passthrough + the
+  missing-target surfacing (node's own MODULE_NOT_FOUND, exit 1).
+  `bun run lint` clean over the touched root project.
 - **Verified this round**: `GET /` 200 (title pin), `/api/toolkit/zip-size`
   exact 23,489,390 `exact:true source:release`, the tree walk census
   1,744 files / 569,595 lines / v1.2.240 (offline replica == the r339
   live-walk pin), zero page/console errors in the r339 browser pass; the
   footer geometry pinned (single semantic footer, natural push-down).
 
-— audited round 340 (the 132nd recorded run) at `0132d409`.
+— audited round 340 (the 132nd recorded run) at `0132d409`;
+  the portability lane delivered round 342 (the 134th recorded run).

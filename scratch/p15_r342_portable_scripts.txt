@@ -1,0 +1,31 @@
+# r342 (part15 roadmap #3) — the PowerShell-safe dev script variants, executed verification
+/bin/bash: line 1: next: command not found
+# (fake targets in /tmp — no  run per the sandbox rule; the
+/bin/bash: line 1: next: command not found
+#  live daemon itself IS the plain  invocation)
+
+## syntax
+copy-standalone.mjs: OK
+start-standalone.mjs: OK
+
+## copy leg — happy path (fake .next/static + public in /tmp/r342-copysrc)
+[copy-standalone] .next/static -> .next/standalone/.next/static
+[copy-standalone] public -> .next/standalone/public
+chunkdata
+favicon
+
+## copy leg — missing-source refusal (empty cwd /tmp/r342-copyfail)
+[copy-standalone] missing source: .next/static (run "next build" first)
+exit=1 (expect 1)
+
+## launcher leg — NODE_ENV pin + exit-7 passthrough
+PORTABLE-START-OK-MJS runner=/usr/bin/node
+exit=7 (expect 7)
+
+## launcher leg — missing target (node's own MODULE_NOT_FOUND surfaces, exit 1)
+
+Node.js v24.22.3
+exit-code passthrough verified above
+
+## root lint over the touched console project (eslint, true exit captured)
+$ eslint .

@@ -1,0 +1,98 @@
+........................................................................ [ 15%]
+........................................................................ [ 31%]
+........................................................................ [ 46%]
+........................................................................ [ 62%]
+......................................................................s. [ 77%]
+........................................................................ [ 93%]
+..............................                                           [100%]
+=============================== warnings summary ===============================
+tests/api/test_admet.py: 8 warnings
+tests/api/test_backend_service.py: 29 warnings
+tests/api/test_contracts.py: 2 warnings
+tests/api/test_datasets_ml_artifacts.py: 68 warnings
+tests/api/test_dl_semi_generative.py: 31 warnings
+tests/api/test_docking_pkpd_md_viz_ad.py: 66 warnings
+tests/api/test_drugresponse.py: 11 warnings
+tests/api/test_dta.py: 10 warnings
+tests/api/test_model_evaluation.py: 30 warnings
+tests/api/test_multiobjective.py: 20 warnings
+tests/api/test_persistence.py: 27 warnings
+tests/api/test_persistence_database.py: 18 warnings
+tests/api/test_pharmacogenomics.py: 15 warnings
+tests/api/test_repurposing.py: 10 warnings
+tests/api/test_system.py: 10 warnings
+tests/api/test_trusted_origins.py: 33 warnings
+tests/api/test_workflow.py: 17 warnings
+tests/api/test_ws_origin.py: 11 warnings
+  /home/z/my-project/pharma-ml-toolkit/src/pharmaml/api/__init__.py:173: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/api/test_admet.py: 8 warnings
+tests/api/test_backend_service.py: 29 warnings
+tests/api/test_contracts.py: 2 warnings
+tests/api/test_datasets_ml_artifacts.py: 68 warnings
+tests/api/test_dl_semi_generative.py: 31 warnings
+tests/api/test_docking_pkpd_md_viz_ad.py: 66 warnings
+tests/api/test_drugresponse.py: 11 warnings
+tests/api/test_dta.py: 10 warnings
+tests/api/test_model_evaluation.py: 30 warnings
+tests/api/test_multiobjective.py: 20 warnings
+tests/api/test_persistence.py: 27 warnings
+tests/api/test_persistence_database.py: 18 warnings
+tests/api/test_pharmacogenomics.py: 15 warnings
+tests/api/test_repurposing.py: 10 warnings
+tests/api/test_system.py: 10 warnings
+tests/api/test_trusted_origins.py: 33 warnings
+tests/api/test_workflow.py: 17 warnings
+tests/api/test_ws_origin.py: 11 warnings
+  /home/z/.venv/lib/python3.12/site-packages/fastapi/applications.py:4576: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+tests/api/test_backend_service.py::TestStartupHandshake::test_port0_serve_binds_loopback_and_emits_handshake
+  /home/z/.venv/lib/python3.12/site-packages/websockets/legacy/__init__.py:6: DeprecationWarning: websockets.legacy is deprecated; see https://websockets.readthedocs.io/en/stable/howto/upgrade.html for upgrade instructions
+    warnings.warn(  # deprecated in 14.0 - 2024-11-09
+
+tests/api/test_backend_service.py::TestStartupHandshake::test_port0_serve_binds_loopback_and_emits_handshake
+  /home/z/.venv/lib/python3.12/site-packages/uvicorn/protocols/websockets/websockets_impl.py:17: DeprecationWarning: websockets.server.WebSocketServerProtocol is deprecated
+    from websockets.server import WebSocketServerProtocol
+
+tests/api/test_backend_service.py::TestGracefulShutdownPush::test_shutdown_envelope_reaches_open_sockets
+  /home/z/.venv/lib/python3.12/site-packages/websockets/legacy/server.py:1178: DeprecationWarning: remove second argument of ws_handler
+    warnings.warn("remove second argument of ws_handler", DeprecationWarning)
+
+tests/api/test_datasets_ml_artifacts.py::TestArtifactFigure::test_png_download_contract
+tests/api/test_datasets_ml_artifacts.py::TestArtifactFigure::test_all_four_formats_magic_bytes
+tests/api/test_datasets_ml_artifacts.py::TestArtifactFigure::test_bar_and_histogram_kinds
+tests/api/test_datasets_ml_artifacts.py::TestArtifactFigure::test_delete_artifact_then_download_404
+tests/api/test_datasets_ml_artifacts.py::TestArtifactFigure::test_head_download_headers
+tests/api/test_datasets_ml_artifacts.py::TestArtifactLifecycle::test_list_contains_artifacts
+tests/api/test_datasets_ml_artifacts.py::TestArtifactLifecycle::test_bounded_eviction
+tests/api/test_persistence.py::TestBackupRestore::test_restore_rejects_wrong_kind
+  /home/z/my-project/pharma-ml-toolkit/src/pharmaml/viz/figures.py:717: UserWarning: No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
+    ax.legend(loc="best")
+
+tests/api/test_dl_semi_generative.py::TestSemiSupervisedRoutes::test_train_with_mask_fraction_and_predict_path
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/base.py:486: UserWarning: X has feature names, but SelfTrainingClassifier was fitted without feature names
+    warnings.warn(
+
+tests/api/test_docking_pkpd_md_viz_ad.py: 11 warnings
+tests/api/test_model_evaluation.py: 6 warnings
+  /home/z/.venv/lib/python3.12/site-packages/sklearn/base.py:493: UserWarning: X does not have valid feature names, but SimpleImputer was fitted with feature names
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+
+real	1m57.495s
+user	1m44.615s
+sys	0m8.594s
+EXIT:0

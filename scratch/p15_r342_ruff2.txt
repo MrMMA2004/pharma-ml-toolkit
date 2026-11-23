@@ -1,0 +1,117 @@
+F401 [*] `json` imported but unused
+  --> packaging/windows/packaging_validation.py:30:8
+   |
+29 | import hashlib
+30 | import json
+   |        ^^^^
+31 | import re
+32 | import subprocess
+   |
+help: Remove unused import: `json`
+   |
+29 | import hashlib
+   - import json
+30 | import re
+   |
+
+FURB167 [*] Use of regular expression alias `re.S`
+   --> packaging/windows/packaging_validation.py:121:63
+    |
+119 |         encoding="utf-8"
+120 |     )
+121 |     m = re.search(r"_BUNDLED_ENGINE_SHA256 = \{(.*?)\}", src, re.S)
+    |                                                               ^^^^
+122 |     if m:
+123 |         table = dict(re.findall(r'"([a-z0-9.]+)": "([0-9a-f]{64})"', m.group(1)))
+    |
+help: Replace with `re.DOTALL`
+    |
+120 |     )
+    -     m = re.search(r"_BUNDLED_ENGINE_SHA256 = \{(.*?)\}", src, re.S)
+121 +     m = re.search(r"_BUNDLED_ENGINE_SHA256 = \{(.*?)\}", src, re.DOTALL)
+122 |     if m:
+    |
+
+BLE001 Do not catch blind exception: `Exception`
+   --> packaging/windows/packaging_validation.py:230:16
+    |
+228 |         try:
+229 |             importlib.import_module(top)
+230 |         except Exception:
+    |                ^^^^^^^^^
+231 |             bad.append(dist)
+232 |     if bad:
+    |
+
+PLW1510 `subprocess.run` without explicit `check` argument
+   --> packaging/windows/packaging_validation.py:332:16
+    |
+331 |     if frozen_smoke and sys.platform == "win32":
+332 |         proc = subprocess.run([str(exe), "--doctor"], capture_output=True, timeout=300)
+    |                ^^^^^^^^^^^^^^
+333 |         if proc.returncode == 0:
+334 |             r.ok("frozen --doctor smoke test exited 0")
+    |
+help: Add explicit `check=False`
+    |
+331 |     if frozen_smoke and sys.platform == "win32":
+    -         proc = subprocess.run([str(exe), "--doctor"], capture_output=True, timeout=300)
+332 +         proc = subprocess.run([str(exe), "--doctor"], check=False, capture_output=True, timeout=300)
+333 |         if proc.returncode == 0:
+    |
+note: This suggestion may be incorrect or produce invalid syntax. It requires manual review and cannot be applied automatically
+
+FURB167 [*] Use of regular expression alias `re.M`
+  --> scripts/build_capability_map.py:34:78
+   |
+32 |     n = 0
+33 |     for t in (TK / "tests").glob(pattern):
+34 |         n += len(re.findall(r"^\s*def test_", t.read_text(encoding="utf-8"), re.M))
+   |                                                                              ^^^^
+35 |     return n
+   |
+help: Replace with `re.MULTILINE`
+   |
+33 |     for t in (TK / "tests").glob(pattern):
+   -         n += len(re.findall(r"^\s*def test_", t.read_text(encoding="utf-8"), re.M))
+34 +         n += len(re.findall(r"^\s*def test_", t.read_text(encoding="utf-8"), re.MULTILINE))
+35 |     return n
+   |
+
+RUF100 [*] Unused `noqa` directive (non-enabled: `E402`)
+  --> scripts/build_capability_map.py:64:72
+   |
+63 | sys.path.insert(0, str(TK / "src"))
+64 | from pharmaml.studio.capability_registry import CAPABILITIES, summary  # noqa: E402
+   |                                                                        ^^^^^^^^^^^^
+65 |
+66 | # ---- the Phase-0 editorial layer -------------------------------------------
+   |
+help: Remove unused `noqa` directive
+   |
+63 | sys.path.insert(0, str(TK / "src"))
+   - from pharmaml.studio.capability_registry import CAPABILITIES, summary  # noqa: E402
+64 + from pharmaml.studio.capability_registry import CAPABILITIES, summary
+65 |
+   |
+
+F541 [*] f-string without any placeholders
+   --> scripts/build_capability_map.py:151:3
+    |
+149 | w(f"Tests: {test_count('ui/test_*.py')} UI test functions across")
+150 | w(f"{len(list((TK/'tests'/'ui').glob('test_*.py')))} UI suites; page smoke")
+151 | w(f"coverage via `tests/ui/test_pages_smoke.py`.")
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+152 | w("")
+153 | w("## 3. Backend census")
+    |
+help: Remove extraneous `f` prefix
+    |
+150 | w(f"{len(list((TK/'tests'/'ui').glob('test_*.py')))} UI suites; page smoke")
+    - w(f"coverage via `tests/ui/test_pages_smoke.py`.")
+151 + w("coverage via `tests/ui/test_pages_smoke.py`.")
+152 | w("")
+    |
+
+Found 7 errors.
+[*] 5 fixable with `--fix`.

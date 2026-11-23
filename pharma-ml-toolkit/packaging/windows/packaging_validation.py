@@ -27,7 +27,6 @@ Two modes, both failing with a nonzero exit code on any broken check:
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import subprocess
 import sys
@@ -118,7 +117,7 @@ def validate_static() -> int:
     src = (TOOLKIT / "src" / "pharmaml" / "docking" / "workflow.py").read_text(
         encoding="utf-8"
     )
-    m = re.search(r"_BUNDLED_ENGINE_SHA256 = \{(.*?)\}", src, re.S)
+    m = re.search(r"_BUNDLED_ENGINE_SHA256 = \{(.*?)\}", src, re.DOTALL)
     if m:
         table = dict(re.findall(r'"([a-z0-9.]+)": "([0-9a-f]{64})"', m.group(1)))
         if table == BUNDLED_ENGINE_SHA256:
@@ -227,7 +226,9 @@ def validate_static() -> int:
         top = DIST_TO_IMPORT.get(dist, dist)
         try:
             importlib.import_module(top)
-        except Exception:
+        except Exception:  # noqa: BLE001 — the probe's design: ANY import
+            # failure (missing, renamed, or broken-at-import) marks the pin
+            # bad here; narrowing the catch would lie about broken pins.
             bad.append(dist)
     if bad:
         r.fail(f"pinned stack NOT importable here: {', '.join(bad)}")
@@ -329,7 +330,9 @@ def validate_dist(dist: Path, frozen_smoke: bool) -> int:
         print(f"    {p.stat().st_size / (1024 * 1024):>8.1f} MiB  {p.relative_to(dist)}")
 
     if frozen_smoke and sys.platform == "win32":
-        proc = subprocess.run([str(exe), "--doctor"], capture_output=True, timeout=300)
+        proc = subprocess.run(
+            [str(exe), "--doctor"], capture_output=True, timeout=300, check=False
+        )
         if proc.returncode == 0:
             r.ok("frozen --doctor smoke test exited 0")
         else:

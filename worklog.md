@@ -19101,3 +19101,195 @@ script variants, optional) and #4 (the performance baselines
 refresh); the owner-side lanes unchanged (D-4/D-5 conversion, the
 SS11 execution pass, the packaged-app checklist legs, installer
 signing, the v1.2.241+ ship lane behind the standing blockers).
+
+**R342 — the 134th recorded run**
+
+**The directive**: the owner's interactive "Continue MASTER_PROMPT
+part15 / Push" — the campaign's fourth round, with "Push" as the
+explicit §17 approval it grants.
+
+**The opening sentinels**: NO rollback wave — the history intact at
+`9ff53b63` == origin/main (the r341 evidence terminal, the fetch
+verified), the tree 0/0 clean, the counter at 133, the venv at its
+pins (rdkit 2026.09.1 / numpy 1.26.4 / torch 2.14.1+cpu /
+pharmaml 1.2.240 import-verified), the credentials lane standing
+(the 600-mode PAT + askpass + curl.conf — the token never in
+argv/URL/log), and the r341 evidence terminal's CI verdict CLOSED
+GREEN ON ARRIVAL (19/19 check-runs success at `9ff53b63` via the
+authenticated API) — while the sandbox reaper escalated to striking
+between EVERY window this round (the root web node_modules wiped +
+the dev daemon killed repeatedly; the install+restart+verify dance
+ran at least five times, the r320 per-call procedure carrying every
+console-dependent window — one wipe even landed between an install
+and its own lint, both re-run in a single window). The
+reconciliation read the worklog R341 entry + the counter +
+PROJECT_STATUS + the trued QA doc set before any work; the part15
+prompt re-read at `upload/MASTER_PROMPT part15.txt` (disk-only per
+the .gitignore hygiene); the campaign state assembled: the roadmap's
+sandbox lane holding exactly two items — #3 (the PowerShell-safe
+dev scripts, optional) and #4 (the performance baselines refresh) —
+and THIS ROUND DELIVERED BOTH, closing the sandbox backlog to the
+per-round upkeep (#1) alone.
+
+**THE LANE #3 — the PowerShell-safe dev script set (the §6
+root-console portability caveat CLOSED)**: the root `package.json`
+dev scripts relied on POSIX constructs — `dev` pipes `2>&1 | tee
+dev.log`, `build` chains `cp -r`, `start` rides the `NODE_ENV=…`
+env-prefix syntax — fine under the sandbox's bun/POSIX shell, hard
+stops under Windows cmd.exe/PowerShell (§6's own review). The
+variants landed WITHOUT touching the defaults (the sandbox's own
+dev contract rides them): `dev:portable` (plain `next dev -p 3000`,
+the pipe dropped — the identical invocation the live daemon
+already runs), `build:portable` (`next build && node
+scripts/copy-standalone.mjs` — a pure-Node `fs.cpSync` recursive
+copy replacing `cp -r`, zero shell constructs), `start:portable`
+(`node scripts/start-standalone.mjs` — NODE_ENV set in-process,
+the standalone server spawned with inherited stdio and a faithful
+exit-code passthrough, replacing the env-prefix + tee chain). THE
+HONEST FIND ALONG THE WAY: the first cut landed as CommonJS
+(`require('node:fs')`) and the ROOT CONSOLE'S OWN LINT GATE
+REJECTED IT (`@typescript-eslint/no-require-imports`, 3 errors) —
+the fail-first signal honored: both scripts re-landed as ESM
+`.mjs` (`import fs from 'node:fs'`), `bun run lint` clean at true
+exit 0 (the evidence `scratch/p15_r342_root_lint.txt`). The
+executed verification over FAKE targets in /tmp (no `next build`
+run — the sandbox rule; the evidence
+`scratch/p15_r342_portable_scripts.txt`): the copy leg happy-path
+(fake `.next/static` + `public` trees copied byte-faithfully, the
+contents cat-verified) + the missing-source refusal (exit 1 with
+the actionable message); the launcher legs — the NODE_ENV pin
+(the fake server asserts `production` or exits 3) + the exit-code
+passthrough (7 observed, 0 observed, signal-aware) + the
+missing-target surfacing (node's own MODULE_NOT_FOUND, exit 1);
+`node --check` both. The FRONTEND_AUDIT §6 caveat row trued to
+CLOSED with the lane's evidence.
+
+**THE LANE #4 — the performance baselines refresh (PERFORMANCE_BASELINES.md
+re-pinned at the v1.2.240 byte-frozen tree)**: the release-era rows
+re-measured fresh this round — the trusted-origin matrix **34/34
+exit 0 in 10.955 s** (the r331 pin 5.83 s — the box load honestly
+named, both numbers kept); the API regression suite **461 passed +
+1 skip = 462 collected, exit 0, 117.495 s wall** (was 449+1 at
+108.88 s — the tree grew +13 tests since r331, the r339/r341 WS
+lanes); the census collection **8,602 / 0 errors / 472 files in
+33.236 s** (was 8,589 in 23.45 s — same load note); the zip-size
+API **0.308 s total, answer `23,489,390 / v1.2.240 / exact:true /
+source:release`** (sub-second as pinned); the console landing
+**HTTP 200** with the title pin. THE NEW BACKEND LANES — measured
+through the app's own instruments, honestly labeled
+sandbox-venv context (py 3.12.16, 2 cpus, fresh
+`PHARMAML_STUDIO_DATA`): the **backend startup 4.138 s
+spawn → PHARMAML-READY** (the part10 §10.1 structured handshake —
+port-0 bind, the one machine-readable stdout line); the **health
+latency first 82.5 ms** (the RDKit scientific-core probe rides
+the first call) **/ warm 0.9 ms** (min/median, 3 probes); the
+**idle backend RSS 228.4 MiB, +0.00 MiB drift over 10 s idle, 6
+threads, jobs_active=0** — the r324 read-only instrument
+`GET /api/v1/system/resources` (psutil source, GPU honestly
+absent) used for the baselines' first measured reading; the
+**graceful shutdown 0.665 s SIGTERM → exit 0** (the JobManager
+drain honored). The driver `scratch/p15_r342_backend_perf.py`
+(re-runnable) + the evidence `scratch/p15_r342_backend_perf.txt`;
+the five suite-lane evidence files
+`scratch/p15_r342_{trusted_origins,census,api_suite,zip_size}.txt`.
+The doc refresh keeps the r331 pins side-by-side for drift
+comparison and keeps the desktop matrix rows (§12/§9.5 — frontend
+startup, time-to-first-UI, Windows loopback latencies, the
+large-dataset import/filtering lanes, ML training, 3D/plot
+rendering, the long-run stability lane) honestly NOT-MEASURED by
+rule — they ride the Windows box, and the sandbox venv cannot
+host them without lying.
+
+**THE ROUND'S OWN FIND — the ruff full-tree sweep (beyond the CI
+scope, honestly named)**: the round ran `ruff check .` over the
+WHOLE toolkit tree (the CI gate's own scope is
+`ruff check src/pharmaml` — never dirty this round, clean
+throughout) and found TWO classes: (a) the r340-documented
+permission-bit class recurring — **15 files** (8 `examples/`
+EXE002 executable-without-shebang + 7 `packaging/` EXE001
+shebang-without-exec, the reaper's restore flipping disk bits
+that `core.fileMode=false` keeps invisible to git status) —
+re-aligned to the git index modes exactly (the r340 101-file
+sweep precedent, `git ls-files -s` as the source of truth);
+(b) **7 pre-existing code findings in two dev scripts outside
+the CI lint scope**, each fixed minimally with NO semantic
+change: `packaging/windows/packaging_validation.py` — the
+unused `import json` removed (zero `json.` references, the only
+remaining "json" is a string literal extension), `re.S` →
+`re.DOTALL` (the identical flag, the full name), the BLE001
+blind `except Exception` on the pinned-stack import probe
+documented with the noqa-with-reason (the probe's DESIGN: any
+import failure — missing, renamed, or broken-at-import — marks
+the pin bad; narrowing the catch would lie about broken pins),
+and the `subprocess.run` given the explicit `check=False` (the
+returncode is hand-checked immediately below); 
+`scripts/build_capability_map.py` — `re.M` → `re.MULTILINE`, the
+unused `# noqa: E402` dropped (E402 is not enabled in this
+config — the RUF100 find), the placeholder-less f-string
+de-f'd. Both files `py_compile` clean; ruff **"All checks
+passed!" over the FULL tree AND the CI scope, both exit 0**
+(the evidence `scratch/p15_r342_ruff{,2,3}.txt`); no test
+weakened, no behavior changed (both scripts are dev/release
+tools, not suite-covered surfaces).
+
+**The gates re-pinned (fresh, this round)**: the quick chunk
+**108/108 exit 0** (test_approvals + test_biology — the
+72+36 dot count verified exactly, the summary-line class
+worked around via the EXIT code + the per-line dot count);
+ruff clean (both scopes, above); mypy **296 source files
+clean**; the security supply-chain suite **8/8 exit 0**; the
+root console lint clean (true exit 0, above); the console
+**GET / 200** + the zip-size API exact (above); the API suite
++ the trusted-origin matrix + the census (above — the
+measurement lanes doubled as the gates); the vitest 126/126
+over 16 files + tsc clean CARRIED unchanged from the r341
+terminal (no frontend source changed this round — the round's
+console-lane payload is the dev script set, covered by lint +
+the executed fake-target verification + the browser pass; the
+r341 pin stands).
+
+**The browser verification pass (agent-browser)**: GET / 200
+with the title pin ("PharmaML Toolkit — ML · Pharma · Docking"),
+ZERO page errors, ZERO console errors (only the benign DevTools
+info + HMR/Fast Refresh lines, the r341-documented class); the
+footer carrying the LIVE walk — **1,752 files / 570,378 LOC /
+8,555 tests** (files == the r341 pin exactly — the round's
+counted delta is +70 LOC: the QA doc rewrites + the two
+dev-script edits; the .tsx lanes never count per the census
+rule; measured at the payload-code + QA-docs state, the ledger
+docs' counted delta lands with this entry); the footer geometry
+exact at page end (**3967 desktop / 7882 mobile**, both == the
+r341 pins); mobile 390×844 with ZERO horizontal overflow (docW
+390 == vw 390); the evidence pair `scratch/r342-web-verify.png`
+(full-page desktop) + `scratch/r342-mobile-verify.png`
+(390×844) — one mobile window re-shot after a reaper wipe
+produced a blank first frame (the blank caught by the geometry
+check, the pass re-run fresh).
+
+**The SS13 QA surface trued (the roadmap's #1 upkeep item)**:
+TEST_EXECUTION_REPORT (the r342 executed table — the measurement
+lanes as gates; the r341 table moved to carried), 
+COMPREHENSIVE_REPOSITORY_AUDIT (the matrix rows re-dated
+r337–r342, the perf-baselines row, the roadmap close-out),
+IMPROVEMENT_ROADMAP (**#3 + #4 DELIVERED r342 with their
+executed evidence — the sandbox backlog now EMPTY**, the
+remaining lanes the Windows-box evidence-gated set),
+FRONTEND_AUDIT (the §6 root-console portability caveat CLOSED
+with the variant set + the executed evidence), 
+PERFORMANCE_BASELINES (the full r342 refresh, both lane sets
+above).
+
+**The ledger**: this entry; the PROJECT_STATUS lineage
+extension; the counter 133 -> 134; the version unchanged at
+1.2.240 (no-silent-bumps; the byte-frozen r334 ruling stands, NO
+re-ship — the round's tree changes ride the next ship lane);
+the payload (the portable dev script set + the two dev-script
+lint fixes + the refreshed baselines doc + the trued QA surface
++ the evidence files + the ledger files) committed and pushed
+under the owner's explicit "Push" approval. The campaign's
+remaining lanes: the Windows-box evidence-gated set (the D-4/D-5
+Rust conversion, the SS11 nine-script execution pass, the
+packaged-app checklist legs, installer signing, the v1.2.241+
+ship lane behind the standing blockers) — the sandbox backlog
+EMPTY; the continuation rounds carry the #1 upkeep until the
+owner-side lanes move.
