@@ -500,7 +500,53 @@ summarises them and wins any status disagreement.
   for `9ff53b63` closed GREEN on arrival **19/19**; the browser
   pass with the live walk 1,752/570,378/8,555 + the footer geometry
   exact + the evidence pair; the SS13 QA surface trued; the version
-  unchanged at 1.2.240 (no-silent-bumps); counter 133 -> 134
+  unchanged at 1.2.240 (no-silent-bumps); counter 133 -> 134 — and
+  the part15 round 343 (the interactive "Continue MASTER_PROMPT
+  part15 / Push" directive; **the SIXTH rollback wave of the part15
+  era, the deepest class — the history reset to the r186 checkpoint
+  (`2eb0ede`, a strict ancestor of origin/main — nothing
+  local-only to sweep, rev-list 563/0); remote + PAT + venv + both
+  node_modules + ECC + the offsite home wiped; the working tree
+  survived at the r342 terminal content**): the r322 playbook
+  re-run in full — the PAT re-spliced (the askpass + curl-config
+  channels), origin re-attached (main == `84b24f5c` confirmed), the
+  recovery-snap `943ce622` captured before any destructive step,
+  the reset clean, 21 rollback-resurrection ghosts swept, the
+  disk-only stray `scratch/part15.txt` restored, the venv fully
+  repaired (all pins + the studio stack + the rdkit-stub patch),
+  the frontend node_modules rebuilt, **ECC reinstalled GREEN at the
+  exact r335 pins — the honest find: the plain `--profile core`
+  run resolves only 7 modules/54 skills; the pins require the
+  combined `--profile core --modules machine-learning,research-apis,
+  security,documentation-governance` invocation → 14 modules/196
+  skills**, the offsite `~/pharma-ml-toolkit-zips/` rebuilt (18
+  zips, cmp-parity ok=18/bad=0, v1.2.240 sha `0fadb6e5` — the
+  r340 pin), the four on-repo homes' v1.2.240 byte parity verified;
+  **the round's own find — the permission-bit realignment at
+  full-tree scale: 1,498 realignments (the r340/r342 reaper class
+  ×100 — the rollback restored old-era disk bits on files the reset
+  never rewrote; `git ls-files -s` the source of truth) + the 7
+  EXE001 shebang +x restores (the r342-terminal disk parity) —
+  ruff clean over the FULL tree and the CI scope after (116 → 0)**;
+  **the walk re-trued (+55): 1,752 files / 570,433 LOC / 8,555
+  tests — the offline replica proves 570,433 is the TRUE walk of
+  the 84b24f5c tree (569,252 tracked raw newlines + 1,181
+  newline-terminated counted files of 1,242 viewable; untracked
+  viewables 0; the r342-recorded 570,378 was its pass-time
+  undercount)**; the reaper striking ≥6 times (the node_modules
+  wipe + daemon kill between windows — once between an install and
+  its own lint); the gates re-pinned fresh (collection 8,602/472,
+  quick chunk 108/108, ruff both scopes clean, mypy 296 clean,
+  supply-chain 8/8, the drift guards 17/17, the consistency 12/12,
+  vitest 126/126 + tsc clean, root lint clean true-exit-0, console
+  200 + zip-size 23,489,390 exact, the ECC check GREEN, the CI
+  verdict at `84b24f5c` closed GREEN on arrival 19/19); the
+  browser pass with the live walk 1,752/570,433/8,555 + the footer
+  geometry exact (3967/7882) + mobile 390×844 zero overflow + the
+  evidence pair (the blank mobile first frame caught by the
+  geometry check and re-shot fresh); the SS13 QA surface trued;
+  the version unchanged at 1.2.240 (no-silent-bumps; the
+  byte-frozen r334 ruling stands, NO re-ship); counter 134 -> 135
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

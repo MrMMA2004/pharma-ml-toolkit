@@ -1,31 +1,41 @@
 # TEST EXECUTION REPORT — part15 §13 deliverable #5
 
 The part15 Phase-Five honest execution record. Executed-this-round
-(r342, at the round terminal) vs carried-from-executed-rounds are stated
-separately; BLOCKED legs name their missing prerequisite (§7 rule:
-never a silent skip, never a blocked test marked passed).
+(r343, at the recovered 84b24f5c tree) vs carried-from-executed-rounds
+are stated separately; BLOCKED legs name their missing prerequisite
+(§7 rule: never a silent skip, never a blocked test marked passed).
 
-## 1. Executed this round (r342 — the roadmap #3/#4 close-out round)
+## 1. Executed this round (r343 — the sixth-rollback recovery round)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
-| Canonical collection | `pytest --collect-only -q` | **8,602 tests / 0 errors / 472 files** (unchanged from r341 — no test-count change this round; measured fresh in 33.236 s) |
-| Quick regression chunk | `pytest tests/test_approvals.py tests/test_biology.py -q` | **108 passed, exit 0** (the 72+36 dot count verified exactly) |
-| Lint | `ruff check .` (FULL tree) + `ruff check src/pharmaml` (the CI scope) | **both "All checks passed!" exit 0** — after the round's own find: 15 permission-bit realignments (the r340 class) + 7 pre-existing code findings in two out-of-CI-scope dev scripts fixed minimally (no semantic change, py_compile both) |
-| Root console lint | `bun run lint` (eslint, the touched root project) | **clean, true exit 0** — the first CJS cut was rejected (3 no-require-imports errors, the fail-first signal) and re-landed as ESM `.mjs` |
-| Types | `mypy src` | Success: no issues found in 296 source files |
+| Canonical collection | `pytest --collect-only -q` (per-file sum) | **8,602 tests / 472 files** (unchanged — the same tree as r342's terminal; exit 0) |
+| Quick regression chunk | `pytest tests/test_approvals.py tests/test_biology.py -q` | **108 passed (72+36), exit 0**, 8.4 s |
+| Lint | `ruff check .` (FULL tree) + `ruff check src/pharmaml` (the CI scope) | **both clean, exit 0** — after the round's own find: **1,498 permission-bit realignments** (the r340/r342 reaper class ×100 — the rollback restored old-era disk bits on files the reset never rewrote; `git ls-files -s` the source of truth) + **the 7 EXE001 shebang +x restores** (the r342-terminal disk parity — the tree records 100644 for the shebang set; the r342 close left them +x; the rollback's tree-conformant restore broke the pinned gate) — 116 findings → 0 |
+| Root console lint | `bun run lint` (eslint, the root project) | **clean, true exit 0** — rode the per-call one-window dance (the reaper wiped node_modules ≥6 times this round, once between an install and its own lint) |
+| Types | `mypy src/pharmaml` | **Success: no issues found in 296 source files** |
 | Security supply chain | `pytest tests/test_security_supply_chain.py -q` | **8/8 exit 0** |
-| API regression suite (measurement lane) | `pytest tests/api -q` | **461 passed + 1 skip = 462 collected, exit 0, 117.495 s wall** (was 449+1 at r331 — the tree +13 tests, the r339/r341 WS lanes) |
-| Trusted-origin matrix (measurement lane) | `pytest tests/api/test_trusted_origins.py -q` | **34/34, exit 0, 10.955 s** (the r331 pin 5.83 s — box load honestly named) |
-| Console | `GET /` | **200, title pin** — the reaper struck between every window; the per-call node_modules dance ran at least five times (once mid-round between an install and its own lint) |
-| Zip-size API (measurement lane) | `GET /api/toolkit/zip-size` (timed) | `{"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}` at **0.308 s total** |
-| Backend perf lanes (the r324 instruments) | `scratch/p15_r342_backend_perf.py` (spawn → PHARMAML-READY → health → resources → SIGTERM) | **startup 4.138 s; health first 82.5 ms / warm 0.9 ms; idle RSS 228.4 MiB +0.00 drift / 6 threads; graceful shutdown 0.665 s exit 0** — sandbox-venv context honestly named |
-| PowerShell-safe dev scripts (roadmap #3) | executed fake-target verification (`scratch/p15_r342_portable_scripts.txt`) | copy happy-path + missing-source refusal exit 1; launcher NODE_ENV pin + 7/0 exit passthrough + missing-target surfacing; `node --check` both |
-| Census (live) | the console's own walk | **1,752 files / 570,378 LOC / 8,555 tests** — files == the r341 pin (the counted delta +70: the QA doc rewrites + the two dev-script edits; the .tsx lanes never count) |
-| Browser verification | agent-browser desktop + 390×844 mobile | **zero page errors, zero console errors**, footer at page end both viewports (**3967 desktop / 7882 mobile**), mobile zero horizontal overflow; evidence `scratch/r342-web-verify.png` + `scratch/r342-mobile-verify.png` |
-| CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `9ff53b63` (the r341 evidence terminal, closed on arrival pre-flight) |
+| Frontend-services drift guards | `pytest tests/test_frontend_services.py -q` | **17/17 exit 0** |
+| Documentation consistency | `pytest tests/test_documentation_consistency.py -q` | **12/12 pre-ledger; re-run post-ledger with R343 == counter 135** |
+| Frontend unit suite | `vitest run` (the rebuilt node_modules) | **126/126 over 16 files**, 19.08 s — fresh at the rebuilt frontend tree |
+| Frontend types | `tsc --noEmit` | **clean, exit 0** |
+| Console | `GET /` | **200, title pin** — via the one-window dance (the daemon re-danced ×4) |
+| Zip-size API | `GET /api/toolkit/zip-size` | `{"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}` — exact pin |
+| ECC standing check | `scratch/ecc_check.sh` (the owner's r335 directive) | **GREEN** — clone `4adeee67`/2.2.3/328 skills; harness 14 modules/196 skills (the honest find: the plain `--profile core` run resolves only 7 modules/54 skills — the pins require the combined `--profile core --modules machine-learning,research-apis,security,documentation-governance` invocation) |
+| Census (live) | the console's own walk | **1,752 files / 570,433 LOC / 8,555 tests** — files + tests == the r342 pins; **LOC re-trued +55: the offline replica proves 570,433 is the TRUE walk of the 84b24f5c tree** (569,252 tracked raw newlines + 1,181 newline-terminated counted files of 1,242 viewable; untracked viewables 0 — the r342-recorded 570,378 was its pass-time undercount) — evidence `scratch/p15_r343_walkdiff.txt` |
+| Browser verification | agent-browser desktop + 390×844 mobile | **zero page errors, zero console errors**, footer at page end both viewports (**3967 == 3967 desktop / 7882 == 7882 mobile**), mobile zero horizontal overflow (docW 390 == vw 390); evidence `scratch/r343-web-verify.png` + `scratch/r343-mobile-verify.png` — the blank mobile first frame (the daemon dead at the reload, caught by the geometry check) re-shot fresh |
+| CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `84b24f5c` (the r342 evidence terminal — closed GREEN on arrival) |
 
 ## 2. Carried from executed rounds (latest full-run evidence)
+
+- **r342** (the roadmap #3/#4 close-out round): the API suite
+  **461+1 skip = 462 collected, exit 0, 117.495 s**; the
+  trusted-origin matrix **34/34, 10.955 s**; the backend perf lanes
+  (startup 4.138 s, health first 82.5 ms / warm 0.9 ms, idle RSS
+  228.4 MiB zero-drift, graceful shutdown 0.665 s — the re-runnable
+  driver `scratch/p15_r342_backend_perf.py`); the portable-scripts
+  fake-target verification; the PowerShell-safe dev script set +
+  the PERFORMANCE_BASELINES refresh (the roadmap deliverables).
 
 - **r341** (the D-6 frontend-lane round): vitest **126/126 over 16 files**
   + tsc clean over the D-6/D-8 payload (unchanged-carried this round —

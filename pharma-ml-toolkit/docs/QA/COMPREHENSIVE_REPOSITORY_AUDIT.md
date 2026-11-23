@@ -2,29 +2,32 @@
 
 The part15 Phase-One verification matrix and reconciliation record.
 Audited commit: **`0132d409`** (main == origin/main, the r339 evidence
-terminal), audited round **r340** (the 132nd recorded run). Statuses use
+terminal), audited round **r340** (the 132nd recorded run); the state
+rows re-established live and the matrix evidence re-dated through
+**r343** (the 135th recorded run — the sixth-rollback recovery round,
+over the recovered `84b24f5c` tree). Statuses use
 the part15 §3.2 vocabulary; a source-only implementation is never marked
 VERIFIED COMPLETE without executed evidence.
 
-## 1. Repository state (§3.1, re-established live this round)
+## 1. Repository state (§3.1, re-established live this round — r343)
 
 | Item | Value | Evidence |
 | --- | --- | --- |
 | Default branch | `main` (public repo) | live API poll, authenticated |
-| HEAD | `0132d409` == origin/main | fetch via the askpass credential lane |
-| Recent commits | r339 payload `4a1b3577` → r339 evidence `0132d409` | git log |
-| CI at HEAD | 19/19 check-runs all `completed/success` | authenticated API, check-runs endpoint |
+| HEAD | `84b24f5c` == origin/main (the r342 evidence terminal; the r343 payload rides this round) | fetch via the askpass credential lane |
+| Recent commits | r342 ledger `c196849f` → r342 evidence `84b24f5c` | git log |
+| CI at HEAD | 19/19 check-runs all `completed/success` | authenticated API, check-runs endpoint (closed on arrival at r343) |
 | Release tag | `v1.2.240`, published (draft:false), five assets intact | r337 live verification + standing ruling |
-| Version declarations | 1.2.240 across all nine carriers | `test_documentation_consistency.py` 13/13 green (r340) |
-| Uncommitted changes | none (tree 0/0 clean at the audited SHA) | `git status` post-recovery |
-| Rollback recovered | the r337-class recycle (history reset to the r186 checkpoint, remote+credentials detached, venv+node_modules+mirrors wiped); r322 playbook re-run | worklog R340 |
+| Version declarations | 1.2.240 across all nine carriers | `test_documentation_consistency.py` 12/12 green (the r341 record correction: 12 test methods since r324; re-run 12/12 at r343) |
+| Uncommitted changes | none (tree 0/0 clean at the audited SHA, post-recovery post-sweep) | `git status` post-recovery |
+| Rollback recovered | the SIXTH wave of the part15 era, the deepest class again (history reset to the r186 checkpoint `2eb0ede` — a strict ancestor of origin/main, nothing local-only to sweep; remote + PAT + venv + both node_modules + ECC + the offsite home wiped, the working tree survived at the r342 terminal content); the r322 playbook re-run in full + the 1,498-file permission-bit realignment + the walk re-trued (+55) | worklog R343 |
 
 ## 2. Previous-work verification matrix (§3.2)
 
 | Task | Previously reported | Current source status | Test evidence | Actual status |
 | --- | --- | --- | --- | --- |
-| Backend implementation (FastAPI sidecar) | complete | 27 route modules, 114 path operations, factory + lifecycle + middleware present | `tests/api` full suite exit 0 (r342: 461+1 skip of 462, 117.495 s); quick chunk 108/108 + collection 8,602/0/472 (r342); the backend perf lanes measured through the app's own instruments (r342 — see PERFORMANCE_BASELINES) | VERIFIED COMPLETE |
-| Frontend implementation (React/Tauri) | complete | React 19 + TS + Vite + Tailwind + Radix stack per §2 constraints | tsc clean, vitest 126/126 (r341 — the D-6 client lane landed; unchanged-carried r342 — no frontend source changed); browser-E2E lanes r337–r342 | VERIFIED COMPLETE (source+test surface; packaged-app legs below) |
+| Backend implementation (FastAPI sidecar) | complete | 27 route modules, 114 path operations, factory + lifecycle + middleware present | `tests/api` full suite exit 0 (r342: 461+1 skip of 462, 117.495 s); quick chunk 108/108 + collection 8,602/472 re-pinned fresh (r343); the backend perf lanes measured through the app's own instruments (r342 — see PERFORMANCE_BASELINES) | VERIFIED COMPLETE |
+| Frontend implementation (React/Tauri) | complete | React 19 + TS + Vite + Tailwind + Radix stack per §2 constraints | tsc clean, vitest 126/126 (re-run fresh at r343 — the node_modules rebuilt after the rollback wipe); browser-E2E lanes r337–r343 | VERIFIED COMPLETE (source+test surface; packaged-app legs below) |
 | Tauri integration | complete (source) | `src-tauri/` conf + backend_manager.rs | D-4/D-5 unit tests written; cargo compile/test BLOCKED in sandbox | SOURCE IMPLEMENTED — EXECUTION BLOCKED |
 | REST API | complete | contract 109 paths / 71 schemas (r324 export, CI-guarded) | contract drift guards + full `tests/api` exit 0 | VERIFIED COMPLETE |
 | WebSocket (events route) | token-auth only (D-6 open) | pre-accept Origin/Referer guard (close 4403 untrusted, valid token included); the client lane now terminal-codes 4401/4403 (D-8, r341) | `tests/api/test_ws_origin.py` 12/12 (r339, FAIL-FIRST) + the client D-6 lane 6 vitest legs + the banner surfacing (r341, FAIL-FIRST: 6 red pre-fix) | VERIFIED COMPLETE (backend + client lanes) |
@@ -33,8 +36,8 @@ VERIFIED COMPLETE without executed evidence.
 | Scientific workspaces (9) | complete | the 20-stage §11.2 chain across the nine workspaces | 8,602-test collection; scientific suites in the ten-chunk gate (r325 pin, 8,555 at ship) | VERIFIED COMPLETE |
 | Rust handshake | D-4/D-5 fixed (source) | `validate_handshake` + `redacted_parse_failure` with 11 `#[cfg(test)]` cases | cargo fmt/clippy/test BLOCKED (no Rust toolchain); `scripts/windows/test-rust.ps1` delivered | SOURCE IMPLEMENTED — EXECUTION BLOCKED |
 | Security (origin/token/CORS/FS) | D-1..D-3 fixed | trusted-origin policy + scoped CORS + startup classification + WS origin guard | `test_trusted_origins.py` 34 legs (r335 pin), `test_ws_origin.py` 12/12, security suites in CI | VERIFIED COMPLETE |
-| Automated tests | 8,555 shipped | live collection 8,602 / 0 errors / 472 files (r342, fresh) | collection + quick chunk re-pinned this round | VERIFIED COMPLETE (the shipped pin 8,555 = the frozen v1.2.240 release; live tree honestly exceeds it by 47 — see §4) |
-| Browser E2E | web-console lanes green | agent-browser passes r337–r342 | zero page/console errors, pins + footer geometry (3967 desktop / 7882 mobile, zero 390×844 overflow) | VERIFIED COMPLETE (console surface; desktop-app E2E rides Windows) |
+| Automated tests | 8,555 shipped | live collection 8,602 / 0 errors / 472 files (r343, fresh) | collection + quick chunk re-pinned this round | VERIFIED COMPLETE (the shipped pin 8,555 = the frozen v1.2.240 release; live tree honestly exceeds it by 47 — see §4) |
+| Browser E2E | web-console lanes green | agent-browser passes r337–r343 | zero page/console errors, pins + footer geometry (3967 desktop / 7882 mobile, zero 390×844 overflow; the live walk re-trued 1,752/570,433/8,555 at r343) | VERIFIED COMPLETE (console surface; desktop-app E2E rides Windows) |
 | Windows installers | v1.2.240 shipped | EXE 558,022,042 B + MSI 710,553,078 B + SHA256SUMS + manifest + SBOM | ninth smoke dispatch 45086526069 green end-to-end (16 steps, r336/r337 verified) | VERIFIED COMPLETE (published artifacts; the E/F clean-machine gates below) |
 | Offline operation | local-first | no network deps in the shipped app; the scientific stack offline | CI offline lanes; local-first audit (part13 §8) | VERIFIED COMPLETE |
 | Documentation | §21 twelve-deliverable set | docs/QA set now completed by the SS13 additions + the r341–r342 truthing | `test_documentation_consistency.py` **12/12** (the r341 record correction applied here: the r340-era "13/13" was a ledger-sentence overcount, not a lost test — the suite has carried 12 test methods since its r324 creation) | VERIFIED COMPLETE |

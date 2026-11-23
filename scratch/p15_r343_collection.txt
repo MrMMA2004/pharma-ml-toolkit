@@ -1,0 +1,4 @@
+tests/ui/test_workflow_guide_lint.py: 14
+tests/ui/test_workflow_templates.py: 13
+
+EXIT:0

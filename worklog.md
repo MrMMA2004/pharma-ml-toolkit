@@ -19293,3 +19293,159 @@ packaged-app checklist legs, installer signing, the v1.2.241+
 ship lane behind the standing blockers) — the sandbox backlog
 EMPTY; the continuation rounds carry the #1 upkeep until the
 owner-side lanes move.
+
+
+## Round 343 — the 135th recorded run (the part15 fifth round: the sixth rollback recovery — the deepest class, the history reset to the r186 checkpoint; the interactive "Continue MASTER_PROMPT part15 / Push" directive; trace 1a207d483492f0bd)
+
+**R343 — the 135th recorded run**
+
+**The directive**: the interactive "Continue MASTER_PROMPT part15 /
+Push" — the fifth part15 round. The roadmap's sandbox backlog has
+been EMPTY since r342 (#1 upkeep rides every round); this round's
+work = the sixth rollback recovery of the part15 era + the standard
+gate/browser re-pin + the QA surface truthing.
+
+**The rollback (the sixth wave, the deepest class — the r337/r340
+class exact)**: the history reset to the round-186 checkpoint — HEAD
+left at `2eb0ede`, an r186-era UUID-named commit that is a strict
+ANCESTOR of origin/main (rev-list origin/main...main = 563/0 —
+unlike the r338 un-recorded-commit class, nothing local-only to
+sweep); the remote + the origin refs + the PAT + the venv + BOTH
+node_modules trees + ECC (clone and harness) + the offsite home +
+the disk-only strays all wiped; the working tree survived at the
+r342 terminal content (VERSION 1.2.240, the worklog R342 entry, the
+counter at 134 — all intact on arrival).
+
+**The r322 playbook re-run in full, in order**:
+
+1. the PAT lane re-spliced from `upload/GitHub_token.txt` (93 B
+   fine-grained `github_pat_`, the 600-mode credential file + the
+   askpass channel + the curl-config channel — the token never in
+   argv/URLs/logs);
+2. origin re-attached + fetched via askpass — **origin/main ==
+   `84b24f5c`** (the r342 evidence terminal) confirmed on arrival;
+3. **the recovery-snap `943ce622` captured BEFORE any destructive
+   step** (the full disk state committed to the local branch
+   `recovery-snap-r343` via commit-tree over a temp index — zero
+   working-tree touch, zero HEAD movement);
+4. `git reset --hard 84b24f5c` — the tree landed clean (the
+   1,741-file update, sync 0/0);
+5. the ghost sweep: **21 rollback-resurrection artifacts** cleaned
+   (`git clean -fd`) — the pre-canonical zips v1.2.229/230/235–239
+   in the three mirror homes, the nested `pharma-ml-toolkit/.github/`,
+   the inner-scratch counter copy, the r319–r333-era scratch strays —
+   the tree 0-entry clean after;
+6. the disk-only stray restored (`scratch/part15.txt`, 2,056 lines,
+   from `upload/MASTER_PROMPT part15.txt`);
+7. **the venv FULLY repaired** foreground (`scratch/venv_repair.sh`
+   — every pin: numpy 1.26.4, rdkit 2026.9.1, torch 2.14.1+cpu,
+   pharmaml 1.2.240 editable, the studio stack PySide6 6.8.3 +
+   pyqtgraph 0.13.7 + the EGL stub, the fastapi 0.128.0/uvicorn
+   0.44.0/pydantic api stack, the rdkit-stub syntax patch, openpyxl
+   3.1.5 — VENV-REPAIR-DONE + STUDIO-REPAIR-DONE both printed);
+8. the frontend node_modules rebuilt (`npm ci`, 210 packages);
+9. **ECC reinstalled GREEN at the exact r335 pins — the honest
+   find**: the plain `--profile core` run resolved only 7 modules /
+   54 skills; the r335 pins (14 modules / 196 skills) require the
+   COMBINED invocation `--profile core --modules machine-learning,
+   research-apis,security,documentation-governance --no-hooks
+   --target claude` — landed GREEN (the clone leg 4adeee67 / 2.2.3 /
+   328 skills, the harness leg 14 modules / 196 skills, the 8/8
+   domain skills, the 4/4 capability modules — `scratch/ecc_check.sh`
+   GREEN);
+10. **the offsite `~/pharma-ml-toolkit-zips/` rebuilt** from the
+    on-repo homes (18 zips, cmp-parity ok=18/bad=0, the v1.2.240 sha
+    `0fadb6e5` — matching the r340 "18 per mirror" pin), after the
+    four on-repo homes' v1.2.240 byte parity verified first
+    (23,489,390 B / sha `0fadb6e5` in download/, the toolkit
+    download/, dist-archive/, and upload/).
+
+**The round's own find — the permission-bit realignment at
+full-tree scale**: **1,498 realignments** (the r340/r342 reaper
+class at ~100× scale — the rollback restored old-era disk mode bits;
+the files whose content already matched the tree were never
+rewritten by the reset, so their exec bits kept the old-era values;
+`git ls-files -s` the source of truth, `core.fileMode=false`
+keeping the fix status-invisible) + **the 7 EXE001 shebang-file +x
+restores** (the r342-terminal disk parity: the tree records 100644
+for the shebang set — packaging_validation.py, build_capability_map,
+build_zip, export_openapi, freeze_equivalent, freeze_smoke_driver,
+packaging_audit — while the r342 close left them +x on disk, the
+state the pinned ruff gate rode; the rollback's tree-conformant
+restore broke that gate; the +x re-applied) — **ruff clean over the
+FULL tree and the CI scope after** (116 findings → 0).
+
+**The walk re-trued (+55, the honest correction)**: the live walk
+reads **1,752 files / 570,433 LOC / 8,555 tests** — files + tests ==
+the r342 pins exactly, LOC +55 vs the r342-recorded 570,378. The
+offline replica walk (the walker's rules mirrored exactly:
+EXCLUDED_DIRS + the `.egg-info` skip + EXCLUDED_REL_DIRS + the
+viewable extension set + countLines semantics) proves **570,433 is
+the TRUE walk of the `84b24f5c` tree**: 569,252 raw newlines over
+the tracked-only viewable set (**untracked viewables: 0**) + 1,181
+newline-terminated counted files of 1,242 viewable = 570,433 == the
+API number EXACT (`countLines` is split-`\n`-based — the per-file +1
+for newline-terminated files). The r342-recorded 570,378 was its
+pass-time measurement with 55 lines transitively absent at the walk
+instant (the r342 reaper era); the footer pin re-trued at
+1,752 / 570,433 / 8,555 — the evidence
+`scratch/p15_r343_walkdiff.txt` + `scratch/p15_r343_walk_pins.txt`.
+(The walker excludes `.egg-info` by design — the fresh editable
+install's `src/pharmaml.egg-info/` contributed nothing; moved to
+/tmp during the differential and the number held.)
+
+**The reaper escalation continuing**: **≥6 strikes this round**
+(node_modules wipe + daemon kill between tool windows — once
+between an install and its own lint, the exact r342-documented
+class); the per-call one-window dance ×4 (install → daemon → gates
+inside ONE window; the daemon re-danced for the browser pass and
+the mobile re-pass).
+
+**Gates re-pinned fresh** (all at the recovered 84b24f5c tree):
+
+| Gate | Result |
+| --- | --- |
+| Canonical collection | `pytest --collect-only -q` summed per-file: **8,602 tests / 472 files** (unchanged — no test change; the same tree) |
+| Quick regression chunk | `tests/test_approvals.py + tests/test_biology.py`: **108 passed (72+36), exit 0**, 8.4 s |
+| Full-tree lint | `ruff check .`: **clean exit 0** after the 1,498 + 7 realignments |
+| CI-scope lint | `ruff check src/pharmaml`: clean |
+| Types | `mypy src/pharmaml`: **Success: no issues found in 296 source files** |
+| Security supply chain | `tests/test_security_supply_chain.py`: **8/8, exit 0** |
+| Frontend-services drift guards | `tests/test_frontend_services.py`: **17/17, exit 0** |
+| Documentation consistency | `tests/test_documentation_consistency.py`: **12/12 pre-ledger** (re-run post-ledger with R343 == counter 135) |
+| Frontend unit suite | vitest: **126/126 over 16 files**, 19.08 s (fresh — the node_modules rebuilt) |
+| Frontend types | `tsc --noEmit`: clean, exit 0 |
+| Root console lint | `bun run lint`: clean, true exit 0 |
+| Console | `GET /`: **200, title pin** ("PharmaML Toolkit — ML · Pharma · Docking") |
+| Zip-size API | `{"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}` |
+| ECC standing check | `scratch/ecc_check.sh`: **GREEN** (the r335 pins) |
+| CI verdict at the r342 terminal | authenticated check-runs at `84b24f5c`: **19/19 success, all completed** — closed GREEN on arrival |
+
+**The browser pass**: zero page errors, zero console errors (only
+the benign DevTools info + HMR/Fast Refresh); the footer walk
+1,752 / 570,433 / 8,555; the footer geometry exact at page end
+(**3967 == 3967 desktop, 7882 == 7882 mobile**); mobile 390×844 with
+zero horizontal overflow (docW 390 == vw 390); the evidence pair
+`scratch/r343-web-verify.png` (full-page desktop, 743,266 B) +
+`scratch/r343-mobile-verify.png` (628,131 B) — the blank mobile
+first frame (the daemon dead at the reload →
+`chrome-error://chromewebdata/`, footerBottom null — the geometry
+check caught it) re-shot fresh per the r342 precedent.
+
+**The SS13 QA surface trued (the roadmap #1 upkeep)**:
+TEST_EXECUTION_REPORT (the r343 executed table — the r342 table
+moved to carried), COMPREHENSIVE_REPOSITORY_AUDIT (the rollback row
+re-dated + the r337–r343 evidence re-dates), the PROJECT_STATUS
+lineage extension (this clause), this worklog entry, the counter
+134 -> 135.
+
+**The ledger**: the version unchanged at **1.2.240**
+(no-silent-bumps; the byte-frozen r334 ruling stands, NO re-ship);
+the payload (the ledger files + the evidence txt set + the browser
+png pair) committed and pushed under the owner's standing "Push"
+approval. The campaign's remaining lanes: the Windows-box
+evidence-gated set (the D-4/D-5 Rust conversion, the SS11
+nine-script execution pass, the packaged-app checklist legs,
+installer signing, the v1.2.241+ ship lane behind the standing
+blockers) — the sandbox backlog stays EMPTY; the #1 upkeep rides
+every round.

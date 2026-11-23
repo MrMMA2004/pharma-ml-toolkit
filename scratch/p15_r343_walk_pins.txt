@@ -1,0 +1,7 @@
+R343 LIVE WALK (fresh daemon, egg-info absent, tracked tree == 84b24f5c byte-exact):
+files 1752 == r342 pin | tests 8555 == shipped pin | LOC 570433 vs r342-recorded 570378 (+55)
+Offline replica walk (walker rules mirrored): tracked 569252 raw newlines, untracked viewables 0,
+counted viewable files 1242 (1181 newline-terminated) -> 569252+1181 = 570433 == the API number EXACT.
+=> 570433 is the TRUE walk of the 84b24f5c terminal tree; the r342-recorded 570378 was its
+   pass-time measurement with 55 lines transitively absent at the walk instant (the r342 reaper
+   era); the r343 footer pin re-trued at 1752 / 570433 / 8555.
