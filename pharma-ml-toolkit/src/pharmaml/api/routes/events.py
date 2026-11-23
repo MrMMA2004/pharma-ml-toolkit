@@ -6,6 +6,13 @@ sequence, heartbeats, replay, graceful close):
 * connect with the session token as ``?token=`` or the
   ``X-Session-Token`` header (browsers cannot set headers on WS, so
   the query variant exists; both are loopback-only);
+* the handshake Origin (and Referer, when present) is held to the
+  exact REST-lane trusted-origin policy (part15 §4.2, D-6): loopback
+  hostnames and the packaged ``http(s)://tauri.localhost`` app origin
+  pass; a present-but-untrusted Origin is refused BEFORE accept
+  (close 4403) even with a valid token — while an absent Origin is
+  the non-browser client lane (the Rust host, curl, tests) and stays
+  allowed, token still required;
 * optional ``?since=<sequence>`` — reconnecting clients pass their
   last seen sequence and the handshake replays exactly the missed
   tail (duplicate-event protection);
@@ -22,6 +29,7 @@ import asyncio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..events import EventEnvelope, EventType
+from ..security import origin_is_trusted
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -30,6 +38,21 @@ HEARTBEAT_SECONDS = 15.0
 
 @router.websocket("")
 async def events_socket(websocket: WebSocket) -> None:
+    # part15 §4.2 (D-6): browsers cannot omit or forge the WS
+    # handshake Origin (RFC 6454/6455 — a plain header of the
+    # handshake request), so a hostile page is identifiable here;
+    # non-browser local clients send no Origin at all and stay on
+    # the token-gated lane unchanged.  A present-but-untrusted
+    # Origin/Referer is refused BEFORE accept — with a valid token
+    # too: a leaked token must not open the event stream from a
+    # hostile browser page (defense-in-depth, REST-parity).
+    for header in ("origin", "referer"):
+        value = websocket.headers.get(header, "")
+        if value and not origin_is_trusted(value):
+            await websocket.close(
+                code=4403, reason=f"untrusted {header}"
+            )
+            return
     token = websocket.query_params.get("token") or websocket.headers.get(
         "x-session-token"
     )
@@ -37,8 +60,8 @@ async def events_socket(websocket: WebSocket) -> None:
     if not security.verify(token):
         await websocket.close(code=4401, reason="invalid session token")
         return
-    # Non-loopback peers cannot reach a loopback-bound server; the
-    # token check above is the second gate.
+    # A non-loopback peer cannot reach a loopback-bound socket and
+    # Origin + token above are the two content-level gates.
     await websocket.accept()
     bus = websocket.app.state.bus
     since_param = websocket.query_params.get("since")

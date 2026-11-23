@@ -34,6 +34,7 @@ __all__ = [
     "LOOPBACK_HOSTS",
     "TRUSTED_APP_ORIGINS",
     "SessionSecurity",
+    "origin_is_trusted",
     "reset_session_security",
     "session_security",
 ]
@@ -109,8 +110,16 @@ def _origin_is_trusted_app(origin_header: str) -> bool:
     return origin in TRUSTED_APP_ORIGINS
 
 
-def _origin_is_trusted(origin_header: str) -> bool:
-    """True when a present Origin/Referer is loopback or a trusted app origin."""
+def origin_is_trusted(origin_header: str) -> bool:
+    """True when a present Origin/Referer is loopback or a trusted app origin.
+
+    The exact REST-lane policy (part14 §3.2, D-1/D-2), exported for
+    the WebSocket handshake guard (part15 §4.2, D-6): a *present*
+    header must be a loopback hostname or an exact trusted
+    application origin (:data:`TRUSTED_APP_ORIGINS`), while an
+    *absent* header is the non-browser client's lane and returns
+    ``True`` — the caller decides what that means for its protocol.
+    """
     return _origin_is_loopback(origin_header) or _origin_is_trusted_app(
         origin_header
     )
@@ -158,7 +167,7 @@ class SessionSecurity:
                 detail="Non-loopback Host rejected.",
             )
         for header in ("origin", "referer"):
-            if not _origin_is_trusted(request.headers.get(header, "")):
+            if not origin_is_trusted(request.headers.get(header, "")):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Non-loopback Origin rejected.",

@@ -389,7 +389,36 @@ summarises them and wins any status disagreement.
   check-runs success re-verified via the authenticated API); the
   standing release verdict re-confirmed with NO re-ship (the r334
   byte-frozen ruling — v1.2.240 remains the published smoke-passed
-  release); the version unchanged at 1.2.240; counter 129 -> 130
+  release); the version unchanged at 1.2.240; counter 129 -> 130 — and
+  the part15 opening round 339 (the interactive "Continue MASTER_PROMPT
+  part15 / Push" directive; the campaign's §17 feature-branch discipline
+  honored — `part15-campaign` created off the r338 terminal after one
+  more un-ledgered UUID commit swept per the r312/r318 precedent):
+  Phase A discovery (HEAD == origin at `df7d6d8c`; the defect register
+  read — D-1..D-3 FIXED, D-4/D-5 source-fixed cargo-blocked, D-6 OPEN;
+  cargo/rustc absent in the sandbox, those legs ride the new SS11
+  scripts); **the D-6 WebSocket Origin validation REMEDIATED** — the
+  headline recheck answered FAIL-FIRST (12 regression tests written
+  first, 6 red witnessed pre-fix, 12/12 post): the WS handshake now
+  holds a present Origin/Referer to the exact REST-lane policy
+  (untrusted → close 4403 before accept, VALID TOKEN INCLUDED — a
+  leaked token no longer opens the event stream from a hostile page;
+  absent Origin stays the non-browser lane, zero consumer breakage —
+  the Rust host opens no WS itself, the smoke lane is REST-only);
+  `security.py` exported `origin_is_trusted` (the REST predicate, zero
+  policy change); the unchanged lanes re-pinned (full tests/api exit 0,
+  ruff clean after the 101-file EXE002 mode-bit sweep, mypy 296 files
+  clean, vitest 119/119, tsc clean, console 200 + the zip-size API
+  23,489,390 exact:true source:release); the register's D-6 row
+  converted to FIXED with executed evidence; the SS11 Windows script
+  set delivered (nine PowerShell 5.1-compatible scripts at
+  scripts/windows/ — doctor, test-backend, test-frontend, test-rust
+  (the D-4/D-5 carrier), test-tauri, test-api-security,
+  test-persistence, test-installers, collect-diagnostics —
+  source-delivered, honestly execution-blocked in the sandbox, riding
+  the owner's Windows box); the remaining SS13 QA doc set rides the
+  campaign's next rounds; the version unchanged at 1.2.240; counter
+  130 -> 131
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

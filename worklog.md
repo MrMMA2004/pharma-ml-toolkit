@@ -18750,3 +18750,99 @@ the counter 129 -> 130; the version unchanged at 1.2.240 (§5
 no-silent-bumps); the payload committed + pushed over `bceb959d`
 (ff-only — the local branch reset onto the pushed terminal first,
 the new ledger commit lands on top cleanly).
+
+## Round 339 — the 131st recorded run (the part15 opening round: the SS1-SS20 campaign ingested, Phase A discovery + Phase B baseline + the D-6 remediation executed FAIL-FIRST, the SS11 Windows script set delivered; the interactive "Continue MASTER_PROMPT part15 / Push" directive)
+
+**R339 — the 131st recorded run**
+
+**The directive**: the owner delivered MASTER_PROMPT **part15** (the
+20-section campaign: repository verification, the backend/frontend/
+console three-surface audit, the D-1..D-6 recheck with the still-open
+WS Origin as the headline, test baselines, prioritized remediation,
+the SS6/SS8 manual matrices, the SS11 PowerShell script set, the SS13
+QA doc set) — then "Continue MASTER_PROMPT part15 / Push."
+
+**§17's new git discipline noted**: part15 changes the round
+mechanics — a dedicated feature branch, no push/merge/release
+without explicit owner approval; the branch `part15-campaign`
+created off the r338 terminal `df7d6d8c` (after sweeping one more
+un-ledgered UUID commit `0df29e65` — the same r289 cut-off class,
+tracking only `scratch/part14.txt`, byte-identical to the r338
+backup, reset away per the r312/r318 precedent with the disk copy
+restored). The owner's "Push" IS the explicit approval §17 gates on
+— the branch merges to main and pushes under it, this round.
+
+**Phase A — the discovery**: HEAD/origin verified (`df7d6d8c` ==
+origin/main, the fetch via the askpass lane); the QA doc set read
+(DEFECT_REGISTER/SECURITY_TEST_REPORT/PART14_PHASE1_AUDIT — the
+register: D-1/D-2/D-3 FIXED, D-4/D-5 FIXED-source-cargo-blocked,
+**D-6 OPEN — the WS Origin validation**); the security source read
+(`security.py`: the REST-lane predicate `_origin_is_trusted` —
+loopback OR exact `TRUSTED_APP_ORIGINS`, scheme-strict, host-exact;
+`routes/events.py`: the WS handshake verifying ONLY the token, close
+4401, with the explicit comment "non-loopback peers cannot reach a
+loopback-bound server" — the asymmetry D-6 named); cargo/rustc
+ABSENT (the D-4/D-5 compile legs stay honestly BLOCKED, riding the
+SS11 scripts on the owner's Windows box); the smoke lane + the Rust
+host checked for WS consumers (the Rust host opens no WS itself —
+the WebView consumes it, both its origins admitted; the CI smoke
+lane tests REST only — zero consumer impact from a WS guard).
+
+**The D-6 remediation (Phase C order: security first)**: FAIL-FIRST
+executed — `tests/api/test_ws_origin.py` written FIRST (12 tests:
+5 acceptance lanes — the packaged `http(s)://tauri.localhost` origins,
+the loopback dev origin any-port, the absent-Origin non-browser lane;
+7 refusal lanes — an EVIL origin WITH a valid token (the
+defense-in-depth core: a leaked token must not open the event
+stream), no-token, the lookalike subdomain `evil.tauri.localhost`,
+the suffix lookalike `tauri.localhost.evil.example`, the port-bearing
+`tauri.localhost:8080`, the Referer dodge, the `file://` scheme) and
+run against the UN-EDITED source → **6 red witnessed** (every refusal
+lane: hostile/lookalike/port-bearing origins currently connected
+with a valid token). THEN the fix, the designed policy (NOT a
+mechanical CORS copy): `security.py` exported `origin_is_trusted`
+(the exact REST predicate, zero policy change — REST calls the same
+function now); `routes/events.py` gained the pre-accept handshake
+guard (a PRESENT Origin/Referer held to the policy, untrusted →
+close 4403 BEFORE accept, the token never weakened; an ABSENT Origin
+stays the non-browser lane — the Rust host, curl, tests, the smoke
+lane — zero breakage). Post-fix: **12/12 green**, and the unchanged
+lanes re-pinned: the full `tests/api` suite exit 0, ruff clean (after
+the EXE002 mode-bit sweep — the documented 101-file local drift
+class, `core.fileMode=false`, chmod -x per the r300 precedent), mypy
+src 296 files clean, vitest **119/119**, tsc clean, the
+frontend-services Python suite green, console 200 + the zip-size
+API 23,489,390 exact:true source:release.
+
+**SS11 — the Windows script set delivered** (nine scripts at
+`scripts/windows/`, PowerShell 5.1-compatible, no admin required,
+no tokens, transcripts to `logs/windows-tests/`): `doctor.ps1`
+(prerequisite census + runnable-lane verdicts), `test-backend.ps1`
+(collection + focused/full pytest + ruff + mypy), `test-frontend.ps1`
+(npm ci + typecheck + vitest + vite build — the NESTED Vite frontend,
+never the root console), `test-rust.ps1` (fmt + clippy + test — the
+D-4/D-5 carrier: its green run converts those rows to plain FIXED),
+`test-tauri.ps1` (conf parses + capabilities audit + cargo check),
+`test-api-security.ps1` (the three security suites + optional
+5.1-compatible live probes: hostile-origin 403, no-token 401,
+trusted+token 200), `test-persistence.ps1` (isolated-temp-DB
+suites), `test-installers.ps1` (published-digest verification
+against SHA256SUMS + the manifest cross-check — never installs),
+`collect-diagnostics.ps1` (the consolidated PASS/FAIL/BLOCKED
+report). No PowerShell exists in this sandbox — the scripts are
+source-delivered, honestly BLOCKED for execution, riding the owner's
+Windows box (never marked run).
+
+**§13 (partial)**: the DEFECT_REGISTER D-6 row converted to FIXED
+with the full evidence column + the round-339 footer; the remaining
+SS13 QA doc set (COMPREHENSIVE_REPOSITORY_AUDIT/BACKEND_AUDIT/
+FRONTEND_AUDIT/SECURITY_AUDIT/TEST_EXECUTION_REPORT/
+MANUAL_TEST_CHECKLIST/WINDOWS_VALIDATION_GUIDE/RELEASE_BLOCKERS/
+IMPROVEMENT_ROADMAP) rides the campaign's next rounds.
+
+**The ledger**: this entry; the PROJECT_STATUS lineage extension;
+the DEFECT_REGISTER D-6 conversion; the counter 130 -> 131; the
+version unchanged at 1.2.240 (no-silent-bumps); the payload
+(security.py + events.py + test_ws_origin.py + the 9 SS11 scripts +
+the ledger files) committed on `part15-campaign`, ff-merged to main
+under the owner's explicit "Push" approval, and pushed.
