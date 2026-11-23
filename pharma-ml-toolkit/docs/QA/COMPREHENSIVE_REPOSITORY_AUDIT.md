@@ -23,18 +23,18 @@ VERIFIED COMPLETE without executed evidence.
 
 | Task | Previously reported | Current source status | Test evidence | Actual status |
 | --- | --- | --- | --- | --- |
-| Backend implementation (FastAPI sidecar) | complete | 27 route modules, 114 path operations, factory + lifecycle + middleware present | `tests/api` full suite exit 0 (r339); quick chunk 108/108 + collection 8,601/0/472 (r340) | VERIFIED COMPLETE |
-| Frontend implementation (React/Tauri) | complete | React 19 + TS + Vite + Tailwind + Radix stack per §2 constraints | tsc clean, vitest 119/119 (r340); browser-E2E lanes r337–r339 | VERIFIED COMPLETE (source+test surface; packaged-app legs below) |
+| Backend implementation (FastAPI sidecar) | complete | 27 route modules, 114 path operations, factory + lifecycle + middleware present | `tests/api` full suite exit 0 (r339); quick chunk 108/108 + collection 8,602/0/472 (r341) | VERIFIED COMPLETE |
+| Frontend implementation (React/Tauri) | complete | React 19 + TS + Vite + Tailwind + Radix stack per §2 constraints | tsc clean, vitest 126/126 (r341 — the D-6 client lane landed); browser-E2E lanes r337–r341 | VERIFIED COMPLETE (source+test surface; packaged-app legs below) |
 | Tauri integration | complete (source) | `src-tauri/` conf + backend_manager.rs | D-4/D-5 unit tests written; cargo compile/test BLOCKED in sandbox | SOURCE IMPLEMENTED — EXECUTION BLOCKED |
 | REST API | complete | contract 109 paths / 71 schemas (r324 export, CI-guarded) | contract drift guards + full `tests/api` exit 0 | VERIFIED COMPLETE |
-| WebSocket (events route) | token-auth only (D-6 open) | pre-accept Origin/Referer guard (close 4403 untrusted, valid token included) | `tests/api/test_ws_origin.py` 12/12 (r339, FAIL-FIRST: 6 red witnessed pre-fix) | VERIFIED COMPLETE |
+| WebSocket (events route) | token-auth only (D-6 open) | pre-accept Origin/Referer guard (close 4403 untrusted, valid token included); the client lane now terminal-codes 4401/4403 (D-8, r341) | `tests/api/test_ws_origin.py` 12/12 (r339, FAIL-FIRST) + the client D-6 lane 6 vitest legs + the banner surfacing (r341, FAIL-FIRST: 6 red pre-fix) | VERIFIED COMPLETE (backend + client lanes) |
 | SQLite | complete | schema + migrations + WAL handling in `persistence/` | persistence suites green in the api lane (isolated-temp-DB discipline) | VERIFIED COMPLETE |
 | FileVault | complete | artifact registry + integrity validation | persistence/api lanes | VERIFIED COMPLETE |
-| Scientific workspaces (9) | complete | the 20-stage §11.2 chain across the nine workspaces | 8,601-test collection; scientific suites in the ten-chunk gate (r325 pin, 8,555 at ship) | VERIFIED COMPLETE |
+| Scientific workspaces (9) | complete | the 20-stage §11.2 chain across the nine workspaces | 8,602-test collection; scientific suites in the ten-chunk gate (r325 pin, 8,555 at ship) | VERIFIED COMPLETE |
 | Rust handshake | D-4/D-5 fixed (source) | `validate_handshake` + `redacted_parse_failure` with 11 `#[cfg(test)]` cases | cargo fmt/clippy/test BLOCKED (no Rust toolchain); `scripts/windows/test-rust.ps1` delivered | SOURCE IMPLEMENTED — EXECUTION BLOCKED |
 | Security (origin/token/CORS/FS) | D-1..D-3 fixed | trusted-origin policy + scoped CORS + startup classification + WS origin guard | `test_trusted_origins.py` 34 legs (r335 pin), `test_ws_origin.py` 12/12, security suites in CI | VERIFIED COMPLETE |
-| Automated tests | 8,555 shipped | live collection 8,601 / 0 errors / 472 files (r340) | collection + quick chunk re-pinned this round | VERIFIED COMPLETE (the shipped pin 8,555 = the frozen v1.2.240 release; live tree honestly exceeds it by 46 — see §4) |
-| Browser E2E | web-console lanes green | agent-browser passes r337–r339 | zero page/console errors, pins + footer geometry | VERIFIED COMPLETE (console surface; desktop-app E2E rides Windows) |
+| Automated tests | 8,555 shipped | live collection 8,602 / 0 errors / 472 files (r341) | collection + quick chunk re-pinned this round | VERIFIED COMPLETE (the shipped pin 8,555 = the frozen v1.2.240 release; live tree honestly exceeds it by 47 — see §4) |
+| Browser E2E | web-console lanes green | agent-browser passes r337–r341 | zero page/console errors, pins + footer geometry | VERIFIED COMPLETE (console surface; desktop-app E2E rides Windows) |
 | Windows installers | v1.2.240 shipped | EXE 558,022,042 B + MSI 710,553,078 B + SHA256SUMS + manifest + SBOM | ninth smoke dispatch 45086526069 green end-to-end (16 steps, r336/r337 verified) | VERIFIED COMPLETE (published artifacts; the E/F clean-machine gates below) |
 | Offline operation | local-first | no network deps in the shipped app; the scientific stack offline | CI offline lanes; local-first audit (part13 §8) | VERIFIED COMPLETE |
 | Documentation | §21 twelve-deliverable set | docs/QA set now completed by this round's SS13 additions | `test_documentation_consistency.py` 13/13 (r340, incl. the D-7 fix) | VERIFIED COMPLETE |
@@ -46,7 +46,7 @@ VERIFIED COMPLETE without executed evidence.
   version_info, CHANGELOG lead, FEATURES freeze stamp, web TS carrier) is
   machine-checked green at 1.2.240.
 - **Test counts agree with collection**: the live collection is
-  **8,601 / 0 errors / 472 files**; the shipped footer pin 8,555 describes
+  **8,602 / 0 errors / 472 files**; the shipped footer pin 8,555 describes
   the frozen v1.2.240 release archive, not the live tree — the two-lane
   convention is documented at `src/lib/toolkit-stats.ts` (SHIPPED_* pins)
   and this audit. No contradiction: the live number is stated here.
@@ -78,10 +78,10 @@ VERIFIED COMPLETE without executed evidence.
    repo defect; the per-call restore drill is recorded in the worklog.
 3. No other new defects: the reconciliation read PROJECT_STATUS,
   DEFECT_REGISTER, SECURITY_TEST_REPORT, PART14_PHASE1_AUDIT, the worklog
-  R339 entry and the counter before any work; every r339 claim re-verified
-  true (CI, parity, gates re-run live).
+  R340 entry and the counter before any work; every r340 claim re-verified
+  true (CI 19/19 at `8a14c06b`, the gates re-run live).
 
-— audited round 340 (the 132nd recorded run) at `0132d409`;
+— audited round 341 (the 133rd recorded run);
 the SS13 companion docs: BACKEND_AUDIT, FRONTEND_AUDIT, SECURITY_AUDIT,
 TEST_EXECUTION_REPORT, MANUAL_TEST_CHECKLIST (part15 extension),
 WINDOWS_VALIDATION_GUIDE, RELEASE_BLOCKERS, IMPROVEMENT_ROADMAP.

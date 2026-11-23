@@ -18973,3 +18973,131 @@ directly and the ff-merge became a no-op; the stale branch pointer
 was deleted rather than left masquerading as unmerged work. The
 owner-approval gate is satisfied either way: "Push" preceded the
 push, and no force-push / history rewrite occurred (§17 clean).
+
+**R341 — the 133rd recorded run**
+
+**The directive**: the owner's interactive "Continue MASTER_PROMPT
+part15 / Push" — the campaign's third round, with "Push" as the
+explicit §17 approval it grants.
+
+**The opening sentinels**: NO rollback wave this round — the history
+intact at `8a14c06b` == origin/main (the r340 evidence terminal, the
+fetch verified), the tree 0/0 clean, the counter at 132, the venv at
+its pins (rdkit 2026.09.1 / numpy 1.26.4 zero-repair), the credentials
+lane standing (the 600-mode PAT + askpass + curl.conf), the mirrors at
+parity (`0fadb6e5` both lanes), the ECC install present — while the
+sandbox reaper wiped the ROOT web node_modules once more and killed
+the dev daemon (the r340-documented between-windows class; the
+r320 per-call procedure carried every console-dependent window of
+this round, the install+restart+verify dance run twice). The
+reconciliation read the worklog R340 entry + the counter +
+PROJECT_STATUS + the freshly-trued QA doc set before any work; the
+part15 prompt located at `upload/MASTER_PROMPT part15.txt` (34,654 B,
+disk-only per the .gitignore hygiene) and read in full — the campaign
+state assembled: SS11 delivered r339, SS13 delivered r340, D-1..D-7
+all closed, and the IMPROVEMENT_ROADMAP's own "now executable" lane
+naming THIS round's work: item #2, the D-6 frontend client half.
+
+**THE LANE — D-8 FOUND AND FIXED (fail-first), the roadmap's #2
+sandbox item, the D-6 regression surface on the frontend side**:
+the r339 backend guard added the pre-accept policy closes (4403 the
+untrusted-Origin refusal, 4401 the token refusal) — but the client's
+`onclose` treated EVERY close as a transient drop, so a policy
+refusal ran the full reconnect ladder: `maxReconnectAttempts` futile
+dials (the browser's Origin and the same memory-only token cannot
+change between attempts — every retry re-met the refusal, a
+guaranteed storm), then a silent terminal `closed` with no surfaced
+cause. The failing lane written FIRST (`client.test.ts` upgraded to
+pass the close code through the fake socket; the new describe
+"policy rejections are terminal, never a reconnect storm"): 6 legs —
+the 4403 handshake refusal terminal with ZERO retries after a 200 ms
+fake-timer sweep + the named cause surfaced; the 4401 same; the
+mid-stream 4403 after a healthy session; the explicit `connect()`
+retry clearing the stale reason (an operator action, never an
+automatic storm) + the token lane riding the fresh attempt; the user
+`close()` cause-free pin; the token+cursor retry-URL pin (the
+auth lane never degrades) — **6 red witnessed against the un-edited
+client** (the storm: `reconnecting` + attempts climbing + the
+undefined reason), all 23 pre-existing legs green on the upgraded
+harness (semantics preserved). THE MINIMAL FIX in
+`services/websocket/client.ts`: `onclose` reads the close code;
+`POLICY_CLOSE_REASONS` maps 4401/4403 to terminal teardown with the
+named cause surfaced on `status.terminalReason` (null everywhere
+else — a user close, the graceful shutdown, the exhausted
+transient-retry budget, every live state; `connect()` clears the
+stale reason); the wire-contract header doc extended with the
+policy-close clause. THE SURFACING (`StartupGate.tsx`
+ConnectionBanner): a closed-with-cause stream now names the cause
+beside the REST-fallback notice (the §11 user-feedback rule — the
+operator can act on a 4403 instead of a mute "closed"); the banner
+test added (the fake stream mirror trued to the real status shape,
+`terminalReason` on every emitted literal). Post-fix: the vitest
+suite **126/126 over 16 files** (was 119 — +6 the client lane, +1
+the banner), tsc clean.
+
+**The Python-side drift guard, extended**: the
+`tests/test_frontend_services.py` WS block gained
+`test_ws_client_treats_policy_close_codes_as_terminal` — the
+4401/4403 pair pinned on BOTH sides of the wire (the backend's
+`code=4401`/`code=4403` literals + the client's
+`POLICY_CLOSE_REASONS` table + the terminal-before-reconnect
+ordering + the banner's `ws.terminalReason` surfacing), so either
+lane drifting trips a red test. The collection re-trued
+**8,602 / 0 errors / 472 files** (was 8,601; the r340 arithmetic
+held: the shipped 8,555 pin + the r327/r339/r341 regression
+additions).
+
+**The gates re-pinned (fresh, this round)**: the quick chunk
+108/108 exit 0; ruff clean (the changed Python file); mypy src
+**296 files clean**; the frontend-services drift-guard suite 17/17;
+the documentation-consistency + security supply-chain suites green
+(20 tests, pre-ledger — the ledger-agreement guard re-run
+post-ledger below); vitest 126/126; tsc clean; the console 200 +
+the zip-size API **23,489,390 exact:true source:release** (the
+per-call node_modules dance twice); **CI at HEAD `8a14c06b` 19/19
+check-runs success** via the authenticated API (the r340 evidence
+terminal's verdict closed on arrival — the standing convention now
+discharged the same round it opened).
+
+**The browser verification pass (agent-browser)**: GET / 200 with
+the title pin; zero page errors; zero console errors (only the
+benign DevTools info + HMR); the footer carrying the LIVE walk —
+**1,752 files / 570,308 LOC / 8,555 tests** (files unchanged — no
+new files this round; +32 the Python guard's counted delta; the
+.tsx lanes never count per the census rule); the footer geometry
+exact at page end (3967 desktop, 7882==7882 mobile); mobile 390×844
+with ZERO horizontal overflow (docW 390 == vw 390); the evidence
+pair `scratch/r341-web-verify.png` (full-page desktop) +
+`scratch/r341-mobile-verify.png` (390×844).
+
+**The SS13 QA surface trued (the roadmap's #1 upkeep item)**:
+TEST_EXECUTION_REPORT (the r341 executed table + the r340 record
+moved to carried + the D-8 §4 compliance row),
+COMPREHENSIVE_REPOSITORY_AUDIT (the verification matrix counts —
+collection 8,602, vitest 126, the WS row extended with the client
+lane + D-8, the browser-E2E row r337–r341, the §4 reconciliation
+count + the by-47 excess note, the tail re-dated),
+IMPROVEMENT_ROADMAP (item #2 marked DELIVERED r341 with its
+executed evidence; the backlog re-based on the r341 terminal),
+DEFECT_REGISTER (the D-8 row + the footer lineage).
+
+**The record correction, honestly noted**: the
+documentation-consistency suite is **12 tests** (12/12 green
+post-ledger, the ledger-agreement guard seeing R341 == counter 133)
+— the r324/r340 records' "13/13" was an overcount in the ledger
+sentence, not a lost test (the collection cross-check proves the
+tree consistent: 8,601 + 1 = 8,602; the suite has carried 12 test
+methods since its r324 creation, both commits verified).
+
+**The ledger**: this entry; the PROJECT_STATUS lineage extension;
+the DEFECT_REGISTER D-8 row; the counter 132 -> 133; the version
+unchanged at 1.2.240 (no-silent-bumps; the byte-frozen r334 ruling
+stands, NO re-ship); the payload (the client fix + the fail-first
+lane + the banner surfacing + the drift guard + the trued QA doc
+set + the ledger files) committed and pushed under the owner's
+explicit "Push" approval. The remaining sandbox lanes for the
+campaign's next rounds: the roadmap's #3 (the PowerShell-safe dev
+script variants, optional) and #4 (the performance baselines
+refresh); the owner-side lanes unchanged (D-4/D-5 conversion, the
+SS11 execution pass, the packaged-app checklist legs, installer
+signing, the v1.2.241+ ship lane behind the standing blockers).

@@ -1,6 +1,6 @@
 # IMPROVEMENT ROADMAP — part15 §13 deliverable #9
 
-The prioritized backlog over `0132d409` (round r340), ordered per the
+The prioritized backlog over the r341 terminal, ordered per the
 part15 §16-C remediation priority (security → startup/communication →
 data integrity → API/WS correctness → frontend runtime → scientific
 correctness → performance → UX/a11y → docs). Each item names its
@@ -12,7 +12,7 @@ without an audit-named problem).
 | # | Item | Rationale (audit-named) | Shape |
 | --- | --- | --- | --- |
 | 1 | The remaining part15 QA surface upkeep — keep the SS13 doc set trued each round (test counts, CI verdicts, defect rows) | the docs are now the current-state layer; stale numbers are the exact failure mode §3.3 audits | small per-round doc deltas |
-| 2 | The GUI-lane regression surface for the WS origin guard on the frontend side (the websocket client's reconnect-with-origin behavior) | D-6 pinned the backend; the frontend client suite covers auth but not yet a hostile-origin reconnect scenario | a vitest lane over `services/websocket/client.ts` |
+| 2 | ~~The GUI-lane regression surface for the WS origin guard on the frontend side~~ **DELIVERED r341** — the D-6 client lane landed: 6 fail-first vitest legs over `services/websocket/client.ts` (the 4403/4401 policy closes are terminal with a surfaced `terminalReason`, never a reconnect storm; the auth-lane token/cursor retry pin) + the banner surfacing test + the Python drift guard `test_ws_client_treats_policy_close_codes_as_terminal`; the D-8 register row closed with executed evidence | D-6 pinned the backend; the frontend lane was the named gap | a vitest lane over `services/websocket/client.ts` |
 | 3 | The root console's dev-script portability note → a PowerShell-safe dev script set (optional; console is sandbox-only today) | §6's own review named the Bun/pipe reliance | small `package.json` script variants, documented as dev-only |
 | 4 | Performance baselines refresh (backend startup, memory idle, large-dataset lanes) at the v1.2.240 tree | PERFORMANCE_BASELINES.md is release-era; §10 asks for current measurements | re-measured baselines + doc update |
 
@@ -35,4 +35,4 @@ without an audit-named problem).
 - No new external workflow engine (the r322 in-tree decision stands).
 - No version bumps without owner approval (§5; v1.2.240 byte-frozen).
 
-— trued round 340 (the 132nd recorded run) at `0132d409`.
+— trued round 341 (the 133rd recorded run).

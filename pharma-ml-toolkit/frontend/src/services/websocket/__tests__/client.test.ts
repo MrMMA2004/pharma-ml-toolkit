@@ -38,7 +38,7 @@ class FakeSocket {
   readyState = FakeSocket.CONNECTING;
   readonly url: string;
   onmessage: ((event: { data: string }) => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((event: { code?: number; reason?: string }) => void) | null = null;
   onerror: (() => void) | null = null;
   readonly sent: string[] = [];
   closeCalls: Array<{ code?: number; reason?: string }> = [];
@@ -55,7 +55,7 @@ class FakeSocket {
   close(code?: number, reason?: string): void {
     this.closeCalls.push({ code, reason });
     this.readyState = FakeSocket.CLOSED;
-    this.onclose?.();
+    this.onclose?.({ code, reason });
   }
 
   serverSend(raw: string): void {
@@ -316,6 +316,106 @@ describe("liveness + the keepalive probe", () => {
     client.ping();
 
     expect(sockets[0]!.sent).toEqual(["ping"]);
+  });
+});
+
+describe("the D-6 lane: policy rejections are terminal, never a reconnect storm", () => {
+  // The backend's part15 §4.2 guard (routes/events.py) closes 4403
+  // BEFORE accept when a hostile page's Origin/Referer fails the
+  // trusted-origin policy — a valid token included — and 4401 when
+  // the token itself is refused. Both are PERMANENT conditions: the
+  // browser's Origin cannot change between attempts and the token is
+  // the same memory-only credential, so a retry can only re-meet the
+  // same refusal. The pre-r341 client treated every close as a
+  // transient drop: maxReconnectAttempts futile dials, then a silent
+  // terminal with no surfaced cause (the reconnect storm + the mute
+  // failure the roadmap's frontend D-6 lane names).
+  it("treats a 4403 origin-policy rejection as terminal — no retry, the cause surfaced", () => {
+    vi.useFakeTimers();
+    const client = makeClient();
+    client.connect();
+    // the hostile-origin handshake: refused BEFORE accept, token valid
+    sockets[0]!.close(4403, "untrusted origin");
+
+    expect(client.status.state).toBe("closed");
+    expect(client.status.terminalReason).toBe(
+      "origin policy rejection (close 4403)",
+    );
+    const before = sockets.length;
+    vi.advanceTimersByTime(200); // past every backoff step: zero retries
+    expect(sockets).toHaveLength(before); // no storm
+  });
+
+  it("treats a 4401 invalid-token rejection as terminal — the same no-storm contract", () => {
+    vi.useFakeTimers();
+    const client = makeClient();
+    client.connect();
+    sockets[0]!.close(4401, "invalid session token");
+
+    expect(client.status.state).toBe("closed");
+    expect(client.status.terminalReason).toBe(
+      "session token rejected (close 4401)",
+    );
+    const before = sockets.length;
+    vi.advanceTimersByTime(200);
+    expect(sockets).toHaveLength(before);
+  });
+
+  it("a mid-stream 4403 after a healthy session is terminal too — no partial retry", () => {
+    vi.useFakeTimers();
+    const client = makeClient();
+    client.connect();
+    sockets[0]!.serverHello();
+    sockets[0]!.serverEvent(frame(5, "job.progress", {}));
+    sockets[0]!.close(4403, "untrusted origin");
+
+    expect(client.status.state).toBe("closed");
+    expect(client.status.terminalReason).toBe(
+      "origin policy rejection (close 4403)",
+    );
+    const before = sockets.length;
+    vi.advanceTimersByTime(200);
+    expect(sockets).toHaveLength(before);
+  });
+
+  it("an explicit connect() after a policy rejection starts a fresh attempt — the stale reason cleared", () => {
+    vi.useFakeTimers();
+    const client = makeClient();
+    client.connect();
+    sockets[0]!.close(4403, "untrusted origin");
+    client.connect(); // the operator's explicit retry — a user action, never a storm
+
+    expect(sockets).toHaveLength(2);
+    expect(client.status.state).toBe("connecting");
+    expect(client.status.terminalReason).toBeNull(); // not pre-labeled
+    // the fresh attempt carries the token lane unchanged
+    const url = new URL(sockets[1]!.url);
+    expect(url.searchParams.get("token")).toBe("session-token-1");
+  });
+
+  it("a user close() stays cause-free — terminalReason names rejections, not deliberate exits", () => {
+    const client = makeClient();
+    client.connect();
+    sockets[0]!.serverHello();
+    client.close();
+
+    expect(client.status.state).toBe("closed");
+    expect(client.status.terminalReason).toBeNull();
+  });
+
+  it("the auth lane never degrades: every retry URL carries the token + the replay cursor", () => {
+    vi.useFakeTimers();
+    const client = makeClient();
+    client.connect();
+    sockets[0]!.serverHello();
+    sockets[0]!.serverEvent(frame(11, "job.progress", {}));
+    sockets[0]!.close(); // an ordinary transient drop (no code) — reconnectable
+
+    vi.advanceTimersByTime(4);
+    expect(sockets).toHaveLength(2);
+    const retryUrl = new URL(sockets[1]!.url);
+    expect(retryUrl.searchParams.get("token")).toBe("session-token-1"); // the credential re-attaches
+    expect(retryUrl.searchParams.get("since")).toBe("11"); // exactly the missed tail
   });
 });
 

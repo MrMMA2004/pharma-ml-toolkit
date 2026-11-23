@@ -30,8 +30,11 @@ vi.mock("@/services/api/startup", async (importOriginal) => {
 // The Tauri host wires the backend before the workspaces mount; tests
 // provide the same wiring through a controllable fake stream.
 const stateListeners = new Set<(status: unknown) => void>();
+// The fake mirrors the REAL EventStreamStatus shape (every field
+// always present — the status getter's contract), including the
+// r341 terminalReason lane.
 const fakeStream = {
-  status: { state: "idle", lastSequence: -1, attempts: 0, hello: null },
+  status: { state: "idle", lastSequence: -1, attempts: 0, hello: null, terminalReason: null },
   onStateChange(cb: (status: unknown) => void) {
     stateListeners.add(cb);
     return () => {
@@ -161,15 +164,38 @@ describe("StartupGate — the live-update health strip", () => {
     await act(async () => {});
 
     // healthy + open — the banner is absent by design
-    emitStreamState({ state: "open", lastSequence: 3, attempts: 0, hello: null });
+    emitStreamState({ state: "open", lastSequence: 3, attempts: 0, hello: null, terminalReason: null });
     expect(screen.queryByText(/live event stream/)).not.toBeInTheDocument();
 
     // a drop degrades to a visible, honest strip
-    emitStreamState({ state: "reconnecting", lastSequence: 3, attempts: 2, hello: null });
+    emitStreamState({ state: "reconnecting", lastSequence: 3, attempts: 2, hello: null, terminalReason: null });
     expect(screen.getByText("reconnecting the live event stream (attempt 2)")).toBeInTheDocument();
 
     // terminal close — the REST fallback notice, never a blocker
-    emitStreamState({ state: "closed", lastSequence: 3, attempts: 2, hello: null });
+    emitStreamState({ state: "closed", lastSequence: 3, attempts: 2, hello: null, terminalReason: null });
+    expect(screen.getByText(/job progress falls back to REST polling/)).toBeInTheDocument();
+  });
+
+  it("names the terminal cause when the policy lane refused the stream (the D-6 surfacing)", async () => {
+    mockBoot.mockResolvedValueOnce(READY_INFO);
+    render(
+      <StartupGate>
+        <div>workspace-shell</div>
+      </StartupGate>,
+    );
+    await screen.findByText("workspace-shell");
+    await act(async () => {});
+
+    // the D-6 lane: the backend closed 4403 (untrusted Origin) BEFORE
+    // accept — the banner must name the cause, not just "closed"
+    emitStreamState({
+      state: "closed",
+      lastSequence: 3,
+      attempts: 1,
+      hello: null,
+      terminalReason: "origin policy rejection (close 4403)",
+    });
+    expect(screen.getByText(/origin policy rejection \(close 4403\)/)).toBeInTheDocument();
     expect(screen.getByText(/job progress falls back to REST polling/)).toBeInTheDocument();
   });
 });

@@ -22,6 +22,14 @@
  *   never reach listeners);
  * * `shutdown` means the backend is going down — the client closes
  *   and does NOT reconnect (graceful shutdown);
+ * * policy rejections are TERMINAL, not reconnectable: the backend
+ *   closes 4403 (an untrusted Origin/Referer — the part15 §4.2 D-6
+ *   lane, closed BEFORE accept with a valid token included) or 4401
+ *   (the token itself refused). No retry can change the browser's
+ *   Origin or the same memory-only credential, so retrying can only
+ *   re-meet the refusal — the client surfaces the named cause on
+ *   `status.terminalReason` and stays closed until an explicit
+ *   `connect()` (an operator action, never an automatic storm);
  * * the client may send the literal text `ping`; the backend answers
  *   with a heartbeat envelope carrying `payload.pong = true`.
  *
@@ -53,6 +61,18 @@ export interface EventStreamStatus {
   readonly attempts: number;
   /** The latest hello frame's summary (null before the first open). */
   readonly hello: HelloPayload | null;
+  /**
+   * The named cause when the stream ended on a POLICY rejection —
+   * the D-6 lane's close 4403 (untrusted Origin/Referer, refused
+   * before accept even with a valid token) or the auth lane's close
+   * 4401 (the token itself refused). Both are permanent conditions:
+   * no retry can change the browser's Origin or the same memory-only
+   * token, so the client goes terminal immediately and surfaces the
+   * cause instead of storming. Null everywhere else (a user close,
+   * the graceful shutdown, the exhausted transient-retry budget,
+   * every live state).
+   */
+  readonly terminalReason: string | null;
 }
 
 export interface EventStreamOptions {
@@ -72,6 +92,18 @@ export interface EventStreamOptions {
 
 /** A listener receives every accepted envelope, in bus order. */
 export type EventListener = (envelope: EventEnvelope) => void;
+
+/**
+ * The backend's permanent policy rejections (the D-6 lane): the
+ * close code -> the terminal reason surfaced on the status. Both
+ * codes are closed BEFORE accept, and neither the browser's Origin
+ * nor the token can change between attempts — a retry can only
+ * re-meet the refusal, so the client never schedules one.
+ */
+const POLICY_CLOSE_REASONS: Readonly<Record<number, string>> = {
+  4401: "session token rejected (close 4401)",
+  4403: "origin policy rejection (close 4403)",
+};
 
 const DEFAULTS: Required<EventStreamOptions> = {
   heartbeatTimeoutMs: 40_000,
@@ -95,6 +127,7 @@ export class EventStreamClient {
   private _lastSequence = -1;
   private _attempts = 0;
   private _hello: HelloPayload | null = null;
+  private _terminalReason: string | null = null;
   private socket: WebSocket | null = null;
   private userClosed = false;
   private shutdownSeen = false;
@@ -120,6 +153,9 @@ export class EventStreamClient {
     }
     this.userClosed = false;
     this.shutdownSeen = false;
+    // a fresh explicit attempt is never pre-labeled by the previous
+    // attempt's terminal cause (the operator asked to retry)
+    this._terminalReason = null;
     this.openSocket();
   }
 
@@ -151,6 +187,7 @@ export class EventStreamClient {
       lastSequence: this._lastSequence,
       attempts: this._attempts,
       hello: this._hello,
+      terminalReason: this._terminalReason,
     };
   }
 
@@ -197,11 +234,22 @@ export class EventStreamClient {
     socket.onerror = () => {
       // onclose follows; nothing to do here
     };
-    socket.onclose = () => {
+    socket.onclose = (event: CloseEvent) => {
       if (this.socket === socket) {
         this.socket = null;
       }
       if (this.userClosed || this.shutdownSeen) {
+        this.teardownTimers();
+        this.setState("closed");
+        return;
+      }
+      // the D-6 lane: a policy rejection is permanent — the browser's
+      // Origin and the same memory-only token cannot change between
+      // attempts, so a retry can only re-meet the refusal. Terminal
+      // with the named cause; never a reconnect storm.
+      const policyReason = POLICY_CLOSE_REASONS[event.code] ?? null;
+      if (policyReason !== null) {
+        this._terminalReason = policyReason;
         this.teardownTimers();
         this.setState("closed");
         return;

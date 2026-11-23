@@ -446,7 +446,30 @@ summarises them and wins any status disagreement.
   part15 A–H extension, WINDOWS_VALIDATION_GUIDE, RELEASE_BLOCKERS,
   IMPROVEMENT_ROADMAP — every status evidence-tied, the blocked legs
   named); the version unchanged at 1.2.240 (no-silent-bumps); counter
-  131 -> 132
+  131 -> 132 — and the part15 round 341 (the interactive "Continue
+  MASTER_PROMPT part15 / Push" directive; no rollback wave this
+  round — the history intact at the r340 evidence terminal, only the
+  reaper's node_modules wipe + daemon kill, carried per-call):
+  **D-8 found+fixed fail-first** (the roadmap's own #2 sandbox lane,
+  the D-6 frontend client half — the WS client treated every close as
+  transient, so the 4403/4401 pre-accept policy closes ran the full
+  reconnect ladder into a silent terminal; the minimal fix:
+  `onclose` reads the close code, `POLICY_CLOSE_REASONS` makes
+  4401/4403 terminal with the named cause surfaced on
+  `status.terminalReason`, `connect()` clears the stale reason; the
+  ConnectionBanner names the cause beside the REST-fallback notice);
+  6 red witnessed pre-fix, vitest **126/126** post (was 119); the
+  Python drift guard `test_ws_client_treats_policy_close_codes_as_terminal`
+  added (the 4401/4403 pair pinned on both sides of the wire); the
+  collection re-trued **8,602/0/472**; the SS13 QA surface trued
+  (the report, the audit matrix, the roadmap #2 DELIVERED, the
+  register D-8 row); the gates re-pinned (quick chunk 108/108, ruff +
+  mypy 296 clean, the consistency + supply-chain suites green, tsc
+  clean, console 200 + zip-size 23,489,390 exact, CI at HEAD
+  `8a14c06b` **19/19** closed on arrival, the browser pass with the
+  live walk 1,752/570,308/8,555 + the footer geometry exact + mobile
+  390×844 zero-overflow + the evidence pair); the version unchanged
+  at 1.2.240 (no-silent-bumps); counter 132 -> 133
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

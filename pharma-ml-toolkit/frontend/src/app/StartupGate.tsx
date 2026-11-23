@@ -184,7 +184,12 @@ function ConnectionBanner() {
       ? "connecting the live event stream"
       : ws.state === "reconnecting"
         ? `reconnecting the live event stream (attempt ${ws.attempts})`
-        : "live updates closed — job progress falls back to REST polling";
+        : ws.terminalReason !== null
+          // the D-6 lane: a policy rejection (untrusted Origin / refused
+          // token) is permanent — name the cause so the operator can act,
+          // instead of a mute "closed" the storm used to end on
+          ? `live updates closed — ${ws.terminalReason}; job progress falls back to REST polling`
+          : "live updates closed — job progress falls back to REST polling";
   return (
     <div
       role="status"

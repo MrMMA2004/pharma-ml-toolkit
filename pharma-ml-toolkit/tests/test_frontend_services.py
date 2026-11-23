@@ -159,6 +159,38 @@ def test_ws_client_implements_the_thirteen_guarantees() -> None:
     assert "authoritative" in client
 
 
+def test_ws_client_treats_policy_close_codes_as_terminal() -> None:
+    """part15 §4.2 (D-6), the frontend lane (r341).
+
+    The backend refuses untrusted Origins (close 4403, before accept,
+    valid token included) and refused tokens (close 4401); both are
+    PERMANENT — the browser's Origin and the same memory-only token
+    cannot change between attempts — so the client must go terminal
+    with a surfaced cause instead of a reconnect storm. This guard
+    pins the code pair on BOTH sides of the wire so either drifting
+    (a backend code change, a client policy-table change) trips it.
+    """
+    events_src = _route_module("events.py")
+    assert "code=4403" in events_src, "the D-6 origin-policy close moved"
+    assert "code=4401" in events_src, "the token-refusal close moved"
+
+    client = _read(SERVICES / "websocket" / "client.ts")
+    # the terminal-reason lane: the named cause surfaced on the status
+    assert "terminalReason" in client
+    # the policy close codes held in the client's own table
+    assert "4401: \"session token rejected (close 4401)\"" in client
+    assert "4403: \"origin policy rejection (close 4403)\"" in client
+    # terminal handling precedes the reconnect scheduler
+    terminal_block = client.split("POLICY_CLOSE_REASONS[event.code]", 1)[1]
+    assert "scheduleReconnect" in terminal_block.split("private scheduleReconnect", 1)[0], (
+        "the policy lane must reach its terminal return BEFORE the "
+        "reconnect scheduler (a 4401/4403 retry is a guaranteed storm)"
+    )
+    # the surfacing: the shell banner names the terminal cause
+    gate = _read(FRONTEND / "src" / "app" / "StartupGate.tsx")
+    assert "ws.terminalReason" in gate, "the banner must name the policy cause"
+
+
 def test_tracker_reconciles_through_rest() -> None:
     tracker = _read(SERVICES / "jobs" / "tracker.ts")
     # §13: recovery of job status after reconnection
