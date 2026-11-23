@@ -18566,3 +18566,106 @@ honestly carrying its own in-flight catch. The zip stays byte-frozen
 tag). The lane now stands: every future published release runs the
 smoke automatically (`release: published`), and the owner can
 dispatch it at will against any tag.
+
+---
+
+## Round 337 — the 129th recorded run (the part14 rollback-recovery + release-verification round: the fourth rollback wave recovered, the smoke-passed v1.2.240 release verified live, the un-pushed playground work preserved durably; the interactive "Continue / Release the version that has passed the smoke tests / Push" directive)
+
+**R337 — the 129th recorded run**
+
+**The directive**: the owner's interactive continuation — "Continue.
+Release the version that has passed the smoke tests. Push." The release
+leg was already standing (the r333 publish + the r336 smoke verdict);
+this round's job was to verify it LIVE at the API, recover the sandbox
+from the fourth rollback wave of the r333 window, and push the honest
+state.
+
+**The discovery — the fourth rollback wave of the r333 window**: the
+recycle landed after the r336 addendum had been pushed (`a43b0554`):
+history reset to the r186 checkpoint `2eb0ede`, the remote detached,
+the venv gutted (rdkit absent, matplotlib stale at 3.9.2), the offsite
+home wiped — while the working tree survived at the r336-addendum
+terminal (the counter at 128) PLUS an un-ledgered cut-off session's
+playground work (`pharma-ml-toolkit/playground.py` 30,047 lines +
+`pharma-ml-toolkit/tests/test_playground.py` 16,370 lines, mtimes
+03:49, no counter/commit/ledger trace — the r289 cut-off pattern).
+
+**The r322 playbook re-run in full**: the 93-char PAT re-spliced +
+API-validated via `scratch/pat_recover_r320.py` (600-mode storage at
+`.credentials/github_pat` + `~/.github_token`, masked output only);
+origin re-attached via the askpass credential lane
+(`.credentials/askpass.sh`, the token never in a URL, remote URL, or
+argv); fetched with tags (incl. `v1.2.240`); **the entire working tree
+captured as the `recovery-snap` commit BEFORE any destructive step**
+— then the tree-vs-tree delta vs `origin/main` enumerated exactly:
+41 files, all local-only (the un-pushed playground pair + local-only
+scratch evidence incl. `part14.txt` + retired-zip strays at
+105/106/229/230 + pyc junk + mode bits); every tracked ledger file
+(counter, worklog, PROJECT_STATUS, CHANGELOG) byte-identical to
+origin — then `git reset --hard origin/main` (1692 files) onto the
+durable r336-addendum terminal `a43b0554`. A live mid-flight mutation
+wave was observed and survived (files actively disappearing/appearing
+between tool calls — the `.github/` root workflows, the counter,
+`part14.txt` gone; the upload token/prompt-part files appearing) —
+the capture-then-reset discipline carried the round through it: the
+`recovery-snap` blobs + `/tmp/r337-backup/` copies preserved
+everything; `part14.txt`, the `.env`, and the dev.pid restored from
+the capture after the reset.
+
+**The homes + the venv**: the offsite home rebuilt from the tracked
+zip; five-home sha-256 parity `0fadb6e5...63e2cb3` at 23,489,390 B
+(download/, dist-archive/, toolkit download/, upload/ + offsite
+`~/pharma-ml-toolkit-zips/` — the r334 byte-frozen ruling honored, no
+re-ship); the venv FULLY repaired in one foreground window
+(`scratch/venv_repair.sh FOREGROUND`, exit 0): numpy 1.26.4, rdkit
+2026.9.1, torch 2.14.1+cpu, matplotlib 3.10.9, openpyxl 3.1.5,
+`pharmaml-1.2.240` installed, the PySide6 studio stack
+(STUDIO-REPAIR-DONE, pyqtgraph 0.13.7) + the fastapi sidecar stack
+both green.
+
+**THE RELEASE DIRECTIVE ANSWERED — v1.2.240 IS the released version
+that passed the smoke tests**, verified LIVE at the authenticated API
+this round: the GitHub release PUBLISHED (draft:false,
+2026-11-22T17:47:29Z) with all five assets —
+`PharmaML_Studio_Setup_v1.2.240.exe` 558,022,042 B
+(sha256:e95c01f09c8235c1...), `PharmaML_Studio_v1.2.240.msi`
+710,553,078 B (sha256:990b43575845e9e0...), `SHA256SUMS.txt`,
+`RELEASE_MANIFEST.json`, `sbom.cdx.json`; the smoke lane
+(`windows-install-smoke.yml`, the repository root): total 9
+dispatches, the ninth (run 45086526069) **completed/success —
+GREEN END-TO-END, all 16 steps against the published assets** (the
+SHA256SUMS + manifest cross-check with the build commit `661e3f65`
+== the tag checkout, Defender clean on both installers, both silent
+installs + installed-tree verification, the INSTALLED sidecar's live
+handshake/health/guard/shutdown contract, the app-host launch + the
+sidecar child spawn + the resource samples + the graceful closes with
+zero orphans on BOTH lanes, both uninstalls + removal, and the
+v1.2.231 → v1.2.240 cross-scope upgrade with the user-data marker
+retained); and CI at HEAD `a43b0554`: **19/19 check-runs success**
+(re-verified live this round; the 20/20 verdict at the r336 terminal
+`3d1d9e08` standing with the green smoke dispatch as the 20th). The
+lane stays always-on: every future published release auto-runs the
+smoke, the owner can dispatch at will.
+
+**The gates re-pinned over the round's final tree** (the r335 light
+set — the round's changes are ledger files + the r337-wip
+preservation, zero src/tests bytes touched; the tree is byte-identical
+to the CI-verified `a43b0554`): console `GET /` → 200; the zip-size
+API → `{"zipBytes":23489390,"version":"1.2.240","exact":true,
+"source":"release"}` (the golden download path serving the exact
+shipped artifact); the 108-test quick chunk over the repaired venv
+(`test_approvals` + `test_biology`) — all green, zero failures. The
+version unchanged at 1.2.240 (§5 no-silent-bumps).
+
+**The playground preservation**: the un-ledgered cut-off session's
+pair preserved durably at `scratch/r337-wip/` (the r315-wip
+precedent) + restored untracked at the tree paths
+(`pharma-ml-toolkit/playground.py` +
+`pharma-ml-toolkit/tests/test_playground.py`) for the next round's
+absorption — a 30k-line GUI module rides the full ten-chunk gate +
+GUI screenshots + its own ledger entry, never a blind push; the
+absorption deferred to the next round, documented here.
+
+**The ledger**: this entry; the counter 128 -> 129; the payload (the
+r337-wip preservation + the three ledger files) committed and pushed
+over `a43b0554`.

@@ -341,7 +341,29 @@ summarises them and wins any status disagreement.
   verdict at the round terminal `3d1d9e08` closed GREEN on arrival:
   **20/20 check-runs success** (the standard 19 + the green smoke
   dispatch), every intermediate commit honestly carrying its own
-  in-flight catch (19/19 standard + the dispatch's failure)
+  in-flight catch (19/19 standard + the dispatch's failure) — and the part14 rollback-recovery
+  + release-verification round 337 (the interactive "Continue /
+  Release the version that has passed the smoke tests / Push"
+  directive): the FOURTH rollback wave of the r333 window recovered
+  (history reset to the r186 checkpoint `2eb0ede`, remote detached,
+  venv gutted, offsite wiped — the working tree captured as the
+  `recovery-snap` commit BEFORE any destructive step, the tree delta
+  vs `origin/main` enumerated exactly, then `git reset --hard
+  origin/main` onto the durable r336-addendum terminal `a43b0554`;
+  five-home sha-256 parity `0fadb6e5...63e2cb3` at 23,489,390 B
+  (no re-ship, the r334 ruling); the venv fully repaired; the
+  un-ledgered cut-off session's playground pair (30,047 + 16,370
+  lines) preserved at `scratch/r337-wip/` for the next round's
+  absorption) — THE RELEASE DIRECTIVE ANSWERED LIVE: v1.2.240 IS the
+  released version that passed the smoke tests (the release PUBLISHED
+  with all five assets: EXE 558,022,042 B / MSI 710,553,078 B /
+  SHA256SUMS / RELEASE_MANIFEST / sbom; the smoke lane's ninth
+  dispatch run 45086526069 GREEN END-TO-END all 16 steps against the
+  published assets; CI at HEAD `a43b0554` 19/19 check-runs success —
+  both re-verified via the authenticated API this round); the gates
+  re-pinned (console 200 + the zip-size API 23,489,390 exact:true
+  source:release + the 108-test quick chunk green over the repaired
+  venv); the version unchanged at 1.2.240; counter 128 -> 129
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
