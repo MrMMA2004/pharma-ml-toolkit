@@ -845,10 +845,13 @@ jobs:
           )
           $prevApp = $null
           $deadline = (Get-Date).AddSeconds(120)
+          # (the loop variable is $prevHome, never $home — the
+          # eighth dispatch's catch: $HOME is a read-only automatic
+          # PowerShell variable and a foreach over it is a WriteError)
           while (-not $prevApp -and (Get-Date) -lt $deadline) {
-            foreach ($home in $prevHomes) {
-              if (-not (Test-Path $home)) { continue }
-              $found = Get-ChildItem $home -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
+            foreach ($prevHome in $prevHomes) {
+              if (-not (Test-Path $prevHome)) { continue }
+              $found = Get-ChildItem $prevHome -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
                 Where-Object { $_.Name -ne "pharmaml-backend.exe" -and
                   ($_.VersionInfo.ProductVersion -like "$prevVersion*") } |
                 Select-Object -First 1
@@ -857,8 +860,8 @@ jobs:
             if (-not $prevApp) { Start-Sleep -Seconds 3 }
           }
           if (-not $prevApp) {
-            foreach ($home in $prevHomes) {
-              "  prev-home $home exists=$(Test-Path $home)" | Write-Host
+            foreach ($prevHome in $prevHomes) {
+              "  prev-home $prevHome exists=$(Test-Path $prevHome)" | Write-Host
             }
             Write-Host "::error::the previous install's host exe (ProductVersion $prevVersion) was not discovered under any candidate home"
             exit 1
@@ -896,9 +899,9 @@ jobs:
           $curApp = $null
           $deadline = (Get-Date).AddSeconds(120)
           while (-not $curApp -and (Get-Date) -lt $deadline) {
-            foreach ($home in $curHomes) {
-              if (-not (Test-Path $home)) { continue }
-              $found = Get-ChildItem $home -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
+            foreach ($curHome in $curHomes) {
+              if (-not (Test-Path $curHome)) { continue }
+              $found = Get-ChildItem $curHome -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |
                 Where-Object { $_.Name -ne "pharmaml-backend.exe" -and
                   ($_.VersionInfo.ProductVersion -like "$($env:RELEASE_VERSION)*") } |
                 Select-Object -First 1
