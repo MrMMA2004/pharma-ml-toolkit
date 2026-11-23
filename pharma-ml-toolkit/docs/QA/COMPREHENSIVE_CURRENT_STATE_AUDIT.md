@@ -35,7 +35,7 @@ Status vocabulary (the directive's §3 classes): **IMPLEMENTED_AND_TESTED**
 | 2 — ML training worker termination (TerminatedWorkerError) | **OPENED THIS ROUND**: the conservative default `n_jobs=1` (`api/routes/ml.py` TrainRequest + the GUI form `MLPage.tsx`), the typed worker-death translation (`ml/training.py` — TerminatedWorkerError/BrokenProcessPool → actionable ModelError, original chained), the resource-aware clamp (`_resolve_parallelism`, concurrency-reduced never science, reported in the `parallelism` payload block) | `tests/api/test_ml_worker_termination.py` 8/8 (FAIL-FIRST: 6 red pre-fix), re-run green + the ML suite 83-dots exit 0 | IMPLEMENTED_AND_TESTED (the sandbox lanes) | the Windows multiprocessing + frozen-backend legs of §5.4 ride the Windows-box lane (BLOCKED_ENV, documented in the suite docstring); the memory-copy elimination lane (§5.2 "prevent unnecessary copying") is the continuation |
 | 3 — export + artifact integrity | the digest-verified download contract (`api/routes/artifacts.py`, ETag/sha256/Content-Length) | `test_datasets_ml_artifacts.py` download lanes (magic bytes, round-trips) | IMPLEMENTED_AND_TESTED | none found this audit |
 | 4 — dataset lifecycle + deletion | `api/routes/datasets.py` (register/preview/columns/split/delete) | `test_datasets_ml_artifacts.py` (delete-then-404, guards) | IMPLEMENTED_AND_TESTED | none found this audit |
-| 5 — demo data + sample workflows | none — no demo/sample-data service exists in the API surface (the "sample" matches are display bounds and the RNN sampler) | n/a | **MISSING** | the whole lane: per-workflow sample-data services + GUI entry points — the campaign's next candidate |
+| 5 — demo data + sample workflows | **DELIVERED r345** (the Phase-0 audit's MISSING row closed): `api/routes/samples.py` — the curated catalog over the 17 REAL shipped `examples/data` files (runtime available/size/sha256 guards), `GET /api/v1/samples` (+ `?workflow=` filter), the raw-head preview-before-load, the one-click load with four honest payload kinds (tabular through the REAL loader as a FRESH record; series → the times/conc arrays; library → the name+SMILES columns; text_file → the sha256-pinned content); the shared `frontend/src/components/demo/DemoDataSection.tsx` wired into all nine workspaces; the round's own NCA zero-row fix at source (`NcaRequest` mirrors the steady-state precedent — the shipped pk_profile.csv's pre-dose t=0 row was wrongly rejected by the blanket positive-only validation) | `tests/api/test_samples.py` **26/26** (the catalog-reality guard — every entry ↔ the real file, sha256 verified; the per-workspace usability: ML trains on the loaded tables, the chemistry descriptors + the docking ligand-prep + the DLG parse over the delivered payloads, the NCA end-to-end over the series) + the `DemoDataSection` vitest 5/5 + the drift guard 18/18 | IMPLEMENTED_AND_TESTED (the sandbox lanes) | the desktop-app deep-dive (the loaded demo dataset in the packaged WebView2 runtime) rides the Windows-box lane (BLOCKED_ENV) |
 | 6 — workflow-specific visualization architecture | the part11-era ownership lanes + `viz/` (backend figures) + the Plotly adoption (r291) | capability matrix §3.2 (the 11th-fact PARTIAL row) | PARTIAL | the residual PARTIAL rows (the Visualization workspace's general-purpose-only boundary) |
 | 7 — settings + application configuration | none in `frontend/src` (zero settings files, no persistence hooks) | n/a | **MISSING** | the settings lane (persisted config: theme, paths, defaults) — not started in the new app |
 | 8 — floating resource monitor | none in `frontend/src`; the PySide6 `ui/widgets/job_center.py` is the LEGACY GUI's lane | n/a | MISSING (the new app) / DEPRECATED (the PySide6 widget rides the Phase-15 retirement) | the React/Tauri resource monitor |
@@ -73,10 +73,12 @@ classes, not defects.
    reduces concurrency — never the science — and reports the
    decision in the payload. The OpenAPI contract re-exported
    (1-line diff, the default value).
-2. **The genuinely-missing lanes this directive adds** (Phase 5 demo
-   data, Phase 7 settings persistence, Phase 8 the new-app resource
-   monitor, the Phase 12 P0/P1 sub-lanes) — recorded here as MISSING,
-   each a concrete next-round candidate.
+2. **The genuinely-missing lanes this directive adds** (Phase 7
+   settings persistence, Phase 8 the new-app resource monitor, the
+   Phase 12 P0/P1 sub-lanes) — recorded here as MISSING, each a
+   concrete next-round candidate. **The Phase-5 demo-data lane was
+   this class's first row and is now DELIVERED (r345)** — this
+   audit's own MISSING row closed within the round that followed.
 3. **The Phase-15 retirement is the campaign's largest stone**: the
    parity verification gates on the Rust/Tauri compile lane which this
    sandbox cannot run (the D-4/D-5 class) — the honest sequencing is
@@ -102,7 +104,9 @@ BLOCKED ↔ BLOCKED_ENV · NOTAPPLICABLE ↔ BACKEND_ONLY_INTERNAL
 its §21 spec defined its own labels; this audit is the part16 layer
 over the same evidence.
 
-— audited round 344 (the 136th recorded run, the part16 opening);
-the companion docs: CAPABILITY_INTEGRATION_MATRIX (part11 §21),
-COMPREHENSIVE_REPOSITORY_AUDIT (part15 §13), TEST_EXECUTION_REPORT
-(the executed table), IMPROVEMENT_ROADMAP (the campaign queue).
+— audited round 344 (the 136th recorded run, the part16 opening;
+the Phase-5 row re-trued round 345 — the 137th recorded run, the
+lane delivered); the companion docs: CAPABILITY_INTEGRATION_MATRIX
+(part11 §21), COMPREHENSIVE_REPOSITORY_AUDIT (part15 §13),
+TEST_EXECUTION_REPORT (the executed table), IMPROVEMENT_ROADMAP
+(the campaign queue).

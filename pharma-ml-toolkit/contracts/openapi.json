@@ -1839,6 +1839,37 @@
         "title": "LigandPdbqtRequest",
         "type": "object"
       },
+      "LoadRequest": {
+        "description": "Optional knobs for the tabular import (mirroring the upload form).\n\nThe curated defaults (target/task hints per sample) are applied\nwhen the request omits them; ``None`` explicitly defers to the\nREAL loader's auto-detection, exactly like an upload that leaves\nthe fields blank.",
+        "properties": {
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Target column override; None = the curated hint (if any) then the loader's auto-detection.",
+            "title": "Target"
+          },
+          "task": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Task hint override ('classification' / 'regression'); None = the curated hint (if any) then auto-inference.",
+            "title": "Task"
+          }
+        },
+        "title": "LoadRequest",
+        "type": "object"
+      },
       "MDAnalyzeRequest": {
         "properties": {
           "coords": {
@@ -7956,6 +7987,177 @@
         "summary": "Screen",
         "tags": [
           "repurposing"
+        ]
+      }
+    },
+    "/api/v1/samples": {
+      "get": {
+        "description": "The catalog \u2014 optionally filtered to one workflow tag.\n\nEvery entry re-verifies its file on disk (``available``), so the\nGUI can never offer an invented dataset: the listing IS the\nshipped ``examples/data`` reality.",
+        "operationId": "list_samples_api_v1_samples_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "workflow",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workflow"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Samples Api V1 Samples Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Samples",
+        "tags": [
+          "samples"
+        ]
+      }
+    },
+    "/api/v1/samples/{sample_id}/load": {
+      "post": {
+        "description": "One-click load into the relevant workflow.\n\n``tabular``: the SAME import path as a manual upload \u2014 the REAL\n:func:`pharmaml.data.load_dataset` (target auto-detection, task\ninference, non-numeric policy) + ``DatasetStore.register``, always\na FRESH record (no overwrite of user data, structurally).\n\n``series``: the two numeric arrays (``times``/``conc``) the PK/PD\nforms take verbatim. ``library``: the name+SMILES columns the\nchemistry/generative/docking lanes take verbatim.\n\n``text_file``: the bounded file content itself (sha256-pinned) \u2014\nthe docking/MD/visualization inputs take it verbatim.",
+        "operationId": "load_sample_api_v1_samples__sample_id__load_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sample_id",
+            "required": true,
+            "schema": {
+              "title": "Sample Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/LoadRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Req"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Load Sample Api V1 Samples  Sample Id  Load Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Load Sample",
+        "tags": [
+          "samples"
+        ]
+      }
+    },
+    "/api/v1/samples/{sample_id}/preview": {
+      "get": {
+        "description": "Preview-before-load: the RAW file, never the imported view.\n\nTabular: the raw CSV head (columns, dtypes, full row count,\nbounded rows). Text files: the first ``limit`` lines with the true\nline count. A preview never registers anything.",
+        "operationId": "sample_preview_api_v1_samples__sample_id__preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sample_id",
+            "required": true,
+            "schema": {
+              "title": "Sample Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 8,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Sample Preview Api V1 Samples  Sample Id  Preview Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sample Preview",
+        "tags": [
+          "samples"
         ]
       }
     },

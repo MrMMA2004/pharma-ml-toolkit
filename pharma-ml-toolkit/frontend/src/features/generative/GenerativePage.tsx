@@ -12,6 +12,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DemoDataSection } from "@/components/demo/DemoDataSection";
 import {
   Card,
   CardContent,
@@ -1126,6 +1127,18 @@ export function GenerativePage() {
         scoring catalog, validated and profiled by the descriptor engine,
         ranked, visualized, and exported as artifacts.
       </p>
+
+      <div className="mt-6">
+        {/* part16 §8 (Phase 5): the workspace's demo-data entry point —
+            a library load fills the stage-two corpus textarea verbatim */}
+        <DemoDataSection
+          workflow="generative-ai"
+          onDatasetLoaded={() => void refreshRegistries()}
+          onLibraryLoaded={(payload) => {
+            setInlineSmiles(payload.smiles.join("\n"));
+          }}
+        />
+      </div>
 
       <StageHeader
         index={1}

@@ -4,25 +4,26 @@ The part15 Phase-One verification matrix and reconciliation record.
 Audited commit: **`0132d409`** (main == origin/main, the r339 evidence
 terminal), audited round **r340** (the 132nd recorded run); the state
 rows re-established live and the matrix evidence re-dated through
-**r344** (the 136th recorded run — the part16 opening round over the
-seventh-rollback-recovered `8940bd42` tree; the part16 layer is
+**r345** (the 137th recorded run — the part16 second round over the
+clean-arrival `969f7926` tree: the Phase-5 demo-data lane delivered,
+no rollback wave this round; the part16 layer is
 `docs/QA/COMPREHENSIVE_CURRENT_STATE_AUDIT.md`, this document stays
 the part15 §13 record). Statuses use
 the part15 §3.2 vocabulary; a source-only implementation is never marked
 VERIFIED COMPLETE without executed evidence.
 
-## 1. Repository state (§3.1, re-established live this round — r344)
+## 1. Repository state (§3.1, re-established live this round — r345)
 
 | Item | Value | Evidence |
 | --- | --- | --- |
 | Default branch | `main` (public repo) | live API poll, authenticated |
-| HEAD | `8940bd42` == origin/main (the r343 evidence terminal; the r344 payload rides this round) | fetch via the askpass credential lane |
-| Recent commits | r343 ledger `065976cd` → r343 evidence `8940bd42` | git log |
-| CI at HEAD | 19/19 check-runs all `completed/success` | authenticated API, check-runs endpoint (closed at r343; re-verified r344 pre-push) |
+| HEAD | `969f7926` == origin/main (the r344 evidence terminal; the r345 payload rides this round) | fetch via the askpass credential lane |
+| Recent commits | r344 ledger `d044e2ea` → r344 evidence `969f7926` | git log |
+| CI at HEAD | 19/19 check-runs all `completed/success` | authenticated API, check-runs endpoint (closed at r344; re-verified r345 pre-push) |
 | Release tag | `v1.2.240`, published (draft:false), five assets intact | r337 live verification + standing ruling |
-| Version declarations | 1.2.240 across all nine carriers | `test_documentation_consistency.py` 12/12 green (the r341 record correction: 12 test methods since r324; re-run 12/12 at r344) |
-| Uncommitted changes | none at the audited SHA, post-recovery post-sweep (the r344 payload = the ledger's own committed set) | `git status` post-recovery |
-| Rollback recovered | the SEVENTH wave of the recorded era (the r343 class again: history reset to the r186 checkpoint `2eb0ede` — a strict ancestor of origin/main; remote + PAT + venv + node_modules + ECC + both zip mirrors wiped, the working tree survived at the r343 terminal content); the r322 playbook re-run in full + the recovery-snap `fae6c1c2` + the 2,997-file mode-420 realignment (the round's own tooling incident, corrected in-round) | worklog R344 |
+| Version declarations | 1.2.240 across all nine carriers | `test_documentation_consistency.py` 12/12 green (the r341 record correction: 12 test methods since r324; re-run 12/12 at r345) |
+| Uncommitted changes | none at the audited SHA (the r345 payload = the ledger's own committed set) | `git status` clean on arrival |
+| Rollback recovered | **none this round** — the tree arrived clean (local == origin == `969f7926`); the reaper stayed busy on the tooling lane alone (node_modules wiped ≥3 times between commands, the daemon killed between windows — the one-window dance ridden each time) | worklog R345 |
 
 ## 2. Previous-work verification matrix (§3.2)
 

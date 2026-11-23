@@ -7,7 +7,32 @@ tree) vs carried-from-executed-rounds are stated separately; BLOCKED
 legs name their missing prerequisite (§7 rule: never a silent skip,
 never a blocked test marked passed).
 
-## 1. Executed this round (r344 — the part16 opening round: the seventh rollback recovered + the Phase-2 TerminatedWorkerError fix)
+## 1. Executed this round (r345 — the part16 second round: the Phase-5 demo-data lane delivered)
+
+| Lane | Command (class) | Result |
+| --- | --- | --- |
+| Canonical collection | `pytest tests src --collect-only -q` (per-file sum) | **8,637 tests / 474 files** (r344's 8,610/473 + the 26-test samples suite + the 1 new drift guard — the arithmetic verified programmatically; the shipped footer pin 8,555 = the frozen v1.2.240 release archive, the two-lane convention) |
+| Quick regression chunk | `pytest tests/test_approvals.py tests/test_biology.py -q` | **108 passed (72+36), exit 0** |
+| The Phase-5 suite | `pytest tests/api/test_samples.py -q` | **26/26 exit 0** — the catalog-reality guard (every entry ↔ the real shipped file, sha256 verified), preview-before-load never registering, load-twice-never-replaces, the four payload kinds, the per-workflow usability lanes (ML trains on the loaded tables; the chemistry descriptors + the docking ligand-prep + the DLG parse over the delivered payloads; the NCA end-to-end over the series), the token guard |
+| The NCA zero-row fix (fail-first) | the series lane + the regression check | **red pre-fix** (the route's blanket positive-only validation rejected the shipped pk_profile.csv's pre-dose t=0 row — the very file the demo lane ships) → **green post-fix** (`NcaRequest.require_positive_conc=False` mirroring the steady-state precedent + the library's own NCA core; **negatives still rejected** — the validator's non-negative floor stands; `auc_trapezoid_log: null` honestly over the zero row) + the whole pkpd surface regression-checked: `test_docking_pkpd_md_viz_ad.py` **66/66 exit 0** |
+| The affected lanes | `pytest tests/api/test_samples.py tests/api/test_contracts.py tests/test_frontend_services.py tests/api/test_docking_pkpd_md_viz_ad.py -q` | **exit 0, zero failures** (26 + 6 + 18 + 66) — the new drift guard `test_sample_rest_surface_covered` pins the samples route surface against the backend module AND the client's path literals (the round's own honest correction: the first cut's redundant single-entry GET route was born-then-removed when this guard exposed the coverage gap; the final surface 3 routes, all carried) |
+| Lint | `ruff check .` (FULL tree) | **clean, exit 0** (the round's own F401 on the first cut of the test file fixed in-round) |
+| Types | `mypy src/pharmaml` | **Success: no issues found in 297 source files** (+1: the route module `api/routes/samples.py`) |
+| Security supply chain | `pytest tests/test_security_supply_chain.py -q` | **8/8 exit 0** |
+| Frontend-services drift guards | `pytest tests/test_frontend_services.py -q` | **18/18 exit 0** (+1: the samples guard) |
+| Documentation consistency | `pytest tests/test_documentation_consistency.py -q` | **12/12 pre-ledger** (re-run post-ledger with R345 == counter 137) |
+| Frontend unit suite | `vitest run` | **131/131 over 17 files** (+5: the `DemoDataSection` suite — the catalog render, preview-first never-registers, the confirm gate, the series payload delivery, the unavailable row's honest disabled state; services mocked only at the module boundary) |
+| Frontend types | `tsc --noEmit` | **clean, exit 0** (the one TS2532 in the new test fixed in-round) |
+| Root console lint | `bun run lint` (the root project) | **clean, true exit 0** — rode the per-call one-window dance (the reaper wiped node_modules ≥3 times this round, once between an install and its own lint) |
+| Console | `GET /` | **200, title pin** (`PharmaML Toolkit — ML · Pharma · Docking`) |
+| Zip-size API | `GET /api/toolkit/zip-size` | `{"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}` — exact pin |
+| Census (live) | the console's own walk | **1,759 files / 572,461 LOC pre-ledger** (files +5 = the route + the API suite + the client + the component + the component suite — the arithmetic checks; the post-ledger walk re-trued in the evidence commit; the .tsx lanes never count per the census rule) |
+| OpenAPI contract | `python tools/export_openapi.py` | re-exported twice in-round (113 paths mid-round; **112 paths / 72 schemas at the final surface** — +3 sample routes, +1 `LoadRequest` schema, the redundant single-entry route removed within the round); `test_contracts.py` 6/6 green over it |
+| ECC standing check | `scratch/ecc_check.sh` | **GREEN** — clone `4adeee67`/2.2.3/328 skills; harness 14 modules/196 skills |
+| Browser verification | agent-browser desktop + 390×844 mobile | the evidence pair rides the follow-up evidence commit (the pins below) |
+| CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `969f7926` (the r344 evidence terminal — re-verified this round pre-push) |
+
+## 2. Executed round r344 (the part16 opening round: the seventh rollback recovered + the Phase-2 TerminatedWorkerError fix — carried)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -28,7 +53,7 @@ never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | the evidence pair rides the follow-up evidence commit (the pins below) |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `8940bd42` (closed GREEN at r343; re-verified this round pre-push) |
 
-## 2. Executed round r343 (the sixth-rollback recovery round — carried)
+## 3. Executed round r343 (the sixth-rollback recovery round — carried)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -49,7 +74,7 @@ never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | **zero page errors, zero console errors**, footer at page end both viewports (**3967 == 3967 desktop / 7882 == 7882 mobile**), mobile zero horizontal overflow (docW 390 == vw 390); evidence `scratch/r343-web-verify.png` + `scratch/r343-mobile-verify.png` — the blank mobile first frame (the daemon dead at the reload, caught by the geometry check) re-shot fresh |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `84b24f5c` (the r342 evidence terminal — closed GREEN on arrival) |
 
-## 3. Carried from executed rounds (latest full-run evidence)
+## 4. Carried from executed rounds (latest full-run evidence)
 
 - **r342** (the roadmap #3/#4 close-out round): the API suite
   **461+1 skip = 462 collected, exit 0, 117.495 s**; the

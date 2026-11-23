@@ -20,6 +20,7 @@ import {
   Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DemoDataSection } from "@/components/demo/DemoDataSection";
 import {
   Card,
   CardContent,
@@ -2438,6 +2439,14 @@ export function MLPage() {
           honestly. No feature on this page is a claim that was not
           executed.
         </p>
+      </div>
+
+      <div className="mt-6">
+        {/* part16 §8 (Phase 5): the workspace's demo-data entry point */}
+        <DemoDataSection
+          workflow="machine-learning"
+          onDatasetLoaded={() => void refreshRegistry()}
+        />
       </div>
 
       <StageHeader

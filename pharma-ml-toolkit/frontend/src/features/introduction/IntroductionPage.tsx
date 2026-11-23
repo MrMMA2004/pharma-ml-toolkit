@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DemoDataSection } from "@/components/demo/DemoDataSection";
 import { WORKSPACES } from "@/app/workspaces";
 import { ApiError } from "@/services/api/client";
 import { artifactsApi } from "@/services/artifacts/client";
@@ -129,6 +130,14 @@ export function IntroductionPage() {
             </li>
           ))}
         </ol>
+      </div>
+
+      {/* part16 §8 (Phase 5): the global demonstration entry point —
+          every shipped sample, loadable per its target workflow */}
+      <div className="mt-12">
+        <DemoDataSection
+          heading="Demo data — every workspace"
+        />
       </div>
 
       <StudioDatabaseSection />

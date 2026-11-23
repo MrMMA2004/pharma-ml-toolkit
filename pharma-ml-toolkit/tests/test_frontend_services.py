@@ -77,6 +77,7 @@ def _frontend_path_set(source: str) -> set[str]:
     normalized = normalized.replace("${encodeURIComponent(datasetId)}", "{dataset_id}")
     normalized = normalized.replace("${encodeURIComponent(artifactId)}", "{artifact_id}")
     normalized = normalized.replace("${encodeURIComponent(column)}", "{column}")
+    normalized = normalized.replace("${encodeURIComponent(sampleId)}", "{sample_id}")
     # quoted strings AND backtick template literals carry the paths
     hits = re.findall(r"/api/v1/[A-Za-z0-9_/{}\-]+", normalized)
     # strip query strings the client appends (?limit=…, ?workspace=…)
@@ -286,6 +287,29 @@ def test_dataset_rest_surface_covered() -> None:
     missing = expected.keys() - frontend_paths
     assert not missing, (
         f"the datasets client lost backend routes: {sorted(missing)} "
+        f"(has {sorted(frontend_paths)})"
+    )
+
+
+def test_sample_rest_surface_covered() -> None:
+    """part16 §8 (Phase 5): the demo-data lane's route surface is pinned.
+
+    The backend module is parsed for its real route table; the samples
+    client must carry every route (and nothing the backend lost).
+    """
+    backend = _backend_routes("samples.py")
+    expected = {
+        "/api/v1/samples": {"GET"},
+        "/api/v1/samples/{sample_id}/preview": {"GET"},
+        "/api/v1/samples/{sample_id}/load": {"POST"},
+    }
+    assert backend == expected, f"the backend sample routes moved: {backend}"
+
+    client = _read(SERVICES / "samples" / "client.ts")
+    frontend_paths = _frontend_path_set(client)
+    missing = expected.keys() - frontend_paths
+    assert not missing, (
+        f"the samples client lost backend routes: {sorted(missing)} "
         f"(has {sorted(frontend_paths)})"
     )
 

@@ -9,6 +9,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DemoDataSection } from "@/components/demo/DemoDataSection";
 import {
   Card,
   CardContent,
@@ -1205,6 +1206,13 @@ export function MDPage() {
           not run simulations — no MD engine is bundled or launched.
         </p>
       </header>
+
+      <div className="mt-6">
+        {/* part16 §8 (Phase 5): the workspace's demo-data entry point
+            (the lysozyme receptor structure + the ligand files the
+            analysis lanes inspect; content copies to the paste lanes) */}
+        <DemoDataSection workflow="molecular-dynamics" />
+      </div>
 
       {/* stage 1: Load Topology/Trajectory */}
       <StageHeader

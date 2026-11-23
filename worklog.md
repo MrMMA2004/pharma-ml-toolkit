@@ -19636,3 +19636,191 @@ the roadmap's #3–#7 (the demo-data lane, the settings lane, the
 resource monitor, the Phase-12 sub-lanes, the grid-box
 visualization deepening) + the Windows-box evidence-gated set
 (unchanged); the #1 upkeep rides every round.
+
+## Round 345 — the 137th recorded run (the part16 second round: the Phase-5 demo-data lane delivered — the campaign's #3 — with the per-workspace GUI wiring across all nine workspaces and the NCA zero-row fix at source; the interactive "Continue MASTER_PROMPT part16 / Push" directive)
+
+**R345 — the 137th recorded run**
+
+**The directive**: the interactive "Continue MASTER_PROMPT part16 /
+Push" — the part16 campaign's continuation from the r344 opening
+(the queue cut there: the #1 upkeep rides every round; #2 the
+Phase-2 fix already delivered; **#3 the Phase-5 demo-data lane**
+next). This round delivered #3 in full: the backend sample-data
+service + the per-workspace GUI entry points + the tests proving
+each sample loads and its target workflow consumes it — exactly the
+directive's §8 ask — plus the round's own honest finds recorded
+below.
+
+**No rollback wave this round** — the tree arrived clean (local
+main == origin/main == `969f7926`, git status clean, the R344
+ledger intact, the counter at 136). The reaper, however, stayed
+busy: the root node_modules wiped ≥5 times between commands (before
+the first daemon start, between the daemon's first GET and the
+zip-size probe, between an install and its own lint, before the
+browser window's open — the ERR_CONNECTION_RESET — and at the
+mobile reload — the blank-frame class the geometry check caught,
+re-shot fresh per the precedent) + the daemon killed between
+windows ≥3 times; the one-window dance ridden each time, the
+console lane green at every re-pin.
+
+**THE PHASE-5 DEMO-DATA LANE DELIVERED (§8, the roadmap's #3, the
+audit's MISSING row closed)**:
+
+* **The backend** — `src/pharmaml/api/routes/samples.py`: the
+  curated catalog over the **17 REAL shipped `examples/data`
+  files** (9 tabular CSVs, the PK series, 4 SMILES libraries
+  including the campaign roster, the lysozyme PDB, the demo
+  ligand PDBQT, the aspirin DLG — every entry naming its actual
+  on-disk file, runtime-verified `available` + size + sha256 per
+  request; the no-invention rule made mechanical). The surface:
+  `GET /api/v1/samples` (the catalog, `?workflow=` filtered to the
+  §10.1 workspace ids), `GET /api/v1/samples/{id}/preview` (the
+  RAW file head — a preview registers nothing), `POST
+  /api/v1/samples/{id}/load` with **four payload kinds**, each
+  honest about what its file IS: `tabular` rides the SAME import
+  path as a manual upload (the REAL `load_dataset` target/task
+  inference + `DatasetStore.register` — a loaded sample is an
+  ordinary dataset record every `dataset_id` consumer can use);
+  `series` (the PK profile) delivers the times/conc arrays the
+  PK/PD forms take — NOT a forced dataset import the real loader
+  rightly refuses (a time-series has no target column); `library`
+  (the SMILES lists) delivers the name+SMILES columns the
+  chemistry/generative/docking lanes consume (`smiles:
+  list[str]`) — the loader rightly refuses these as
+  features+target tables too; `text_file` delivers the bounded
+  sha256-pinned content the docking/MD/visualization paste lanes
+  take. **No-overwrite is structural**: `register` always
+  allocates a fresh `ds-<uuid>` — a demo load never replaces,
+  mutates or evicts user data; the cleanup hint states the
+  ordinary `DELETE /datasets/{id}` lane.
+
+* **The round's own find, fixed at source FAIL-FIRST — the NCA
+  zero-row lane**: the shipped `examples/data/pk_profile.csv`
+  starts with the pre-dose t=0 row; the route's blanket
+  positive-only validation (`TimesConcRequest._validated`)
+  rejected the very file the demo lane ships — while the
+  library's own NCA core (`nca_summary` / `fit_terminal_phase` /
+  the log trapezoid, all `require_positive_conc=False` inside
+  `nca_ext.py`) and the shipped `examples/run_pk_analysis.py`
+  consume it fine. `NcaRequest` now mirrors the steady-state
+  precedent already in that route file (the override), negatives
+  still rejected (the validator's non-negative floor stands),
+  and the route's own `auc_log` guard (`np.all(conc > 0)`)
+  correctly reports `auc_trapezoid_log: null` over the zero row.
+  The demo lane then runs NCA end-to-end over the delivered
+  series: 200, AUC-linear 17.96, t½ 1.632 h over 49 points.
+
+* **The frontend** — the shared
+  `components/demo/DemoDataSection.tsx` + `services/samples/
+  client.ts`: the compact catalog card (title, file, size, kind
+  label, target, description, scientific context), the
+  preview-before-load (the raw head table / first lines), and
+  the one-click load gated behind an explicit confirm that
+  states what will be imported and that nothing user-owned is
+  replaced. **Wired into all NINE workspaces**: Introduction
+  (the global "Demo data — every workspace" entry — §8's global
+  demonstration-project entry point), Datasets + Machine
+  Learning + Deep Learning (`onDatasetLoaded` → the page's own
+  `refreshRegistry`, so the loaded record appears in the
+  dataset selector immediately), Generative AI (a library load
+  fills the stage-two corpus textarea verbatim), Molecular
+  Docking (a library load fills the stage-one ligand list; a
+  DLG load fills the pasted-log parse textarea), PK/PD (a
+  series load fills stage-one's series textarea — the NCA
+  stage then runs over the real shipped profile), Visualization
+  (a series load fills the time/conc paste lane), and Molecular
+  Dynamics (the catalog + preview + copy for the receptor
+  structure). The five-lane vitest suite pins the component
+  flows: the catalog render, preview-first never-registers,
+  the confirm gate, the per-kind payload delivery, and the
+  unavailable row's honest disabled state.
+
+* **The honest design correction, in-round**: the first cut
+  shipped a redundant single-entry `GET /samples/{id}` route —
+  the drift guard (the new
+  `test_sample_rest_surface_covered`) exposed the client
+  coverage gap immediately, and the route was removed within
+  the round rather than papered over: the list already serves
+  every entry in full, the surface stays three routes, every
+  one carried by the client. The OpenAPI contract re-exported
+  twice (113 paths mid-round, **112 paths / 72 schemas** at
+  the final surface).
+
+* **The tests (each sample loads AND its target workflow
+  consumes it — §8's exact ask)**:
+  `tests/api/test_samples.py`, **26 tests**: the catalog
+  reality guard (every entry ↔ the real file, sha256 verified,
+  the no-invention rule enforced), the per-workspace coverage
+  guard (every §10.1 workspace the directive names has ≥1
+  sample), preview-before-load registering nothing, the
+  tabular load through the real loader (target/task inference,
+  the registry list, the preview lane), loading-twice-never-
+  replaces (two fresh ids, both alive), the series delivery +
+  the NCA end-to-end + negatives-still-rejected, the text
+  loads carrying the file reality (sha256, no truncation), the
+  DLG parse over the delivered log (5 clusters, negative
+  energies), the per-workflow usability lanes — ML trains on
+  the loaded walkthrough table (logistic + ridge, sync,
+  tune-off, n_jobs=1), the datasets lane profiles the
+  descriptor library, the DL lane serves the response table,
+  the generative lane delivers the seed SMILES, the chemistry
+  descriptors run over the loaded screening library, the
+  docking ligand-prep runs over the campaign roster, and the
+  token guard. Plus the `DemoDataSection` vitest suite (5
+  tests, the component/state/DOM real, services mocked only
+  at the module boundary) and the drift guard + the
+  `_frontend_path_set` normalizer extension
+  (`{sample_id}`).
+
+**The gates re-pinned**: the canonical collection **8,637 /
+474 files** (r344's 8,610/473 + the 26-test suite + the 1 new
+guard — the per-file sum verified programmatically; the
+shipped footer pin 8,555 = the frozen release, the two-lane
+convention); the quick chunk 108/108 (72+36, exit 0); the
+affected lanes exit 0 (samples 26/26 + contracts 6/6 +
+frontend-services 18/18 + docking_pkpd_md_viz_ad 66/66 — the
+NCA fix regression-checked over the whole pkpd surface); ruff
+full-tree clean; mypy **297** clean (+1 file, the route
+module); the supply-chain 8/8 + the frontend-services drift
+guards (now **18/18**, +1); the documentation consistency
+12/12; vitest **131/131 over 17 files** (+5) + tsc clean; the
+root lint true-exit-0; the console lane 200 + the title pin +
+the zip-size API `{"zipBytes":23489390,"version":"1.2.240",
+"exact":true,"source":"release"}`; the ECC check GREEN; the
+CI verdict at the pushed terminal `969f7926` 19/19 re-verified
+pre-push.
+
+**The browser pass** (after the ledger writes, over the
+reaper-danced console): zero page errors, zero console
+errors; the live walk **1,759 files / 572,521 LOC / 8,555
+tests** measured post-ledger (files +5 = the route + the API
+suite + the client + the component + the component suite; LOC
++1,435 over the r344 pin 571,086 — the payload + the QA-doc
+truthing; the .tsx lanes never count per the census rule);
+the footer geometry exact at page end (**3967 == 3967
+desktop, 7882 == 7882 mobile**); mobile 390×844 zero
+horizontal overflow (docW 390 == vw 390); the evidence pair
+`scratch/r345-web-verify.png` + `scratch/r345-mobile-verify.png`
+riding the follow-up evidence commit.
+
+**The SS13 QA surface trued (the #1 upkeep)**: TEST_EXECUTION_REPORT
+(the r345 executed table — the r344 table moved to carried),
+COMPREHENSIVE_REPOSITORY_AUDIT (the state rows re-dated r345 + the
+Phase-5-delivered pointer), IMPROVEMENT_ROADMAP (the #3 row marked
+DELIVERED r345 — the next lane: #4 the settings lane),
+COMPREHENSIVE_CURRENT_STATE_AUDIT (the Phase-5 row: MISSING →
+IMPLEMENTED_AND_TESTED, the Phase-0 audit's own find closed),
+the PROJECT_STATUS lineage extension (this clause), the counter
+136 -> 137.
+
+**The ledger**: the version unchanged at **1.2.240**
+(no-silent-bumps; the byte-frozen r334 ruling stands, NO
+re-ship); the payload (the samples route + the pkpd fix + the
+three test lanes + the frontend client/component/wiring + the
+contract re-export + the QA surface + the worklog + the
+counter) committed and pushed under the owner's standing "Push"
+approval, the evidence pair riding the follow-up evidence
+commit. The campaign's next lanes: the roadmap's #4–#7 (the
+settings lane, the resource monitor, the Phase-12 sub-lanes,
+the grid-box visualization deepening) + the Windows-box
+evidence-gated set (unchanged); the #1 upkeep rides every round.

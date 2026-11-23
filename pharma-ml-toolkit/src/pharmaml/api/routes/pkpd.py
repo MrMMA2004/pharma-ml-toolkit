@@ -67,7 +67,19 @@ class TimesConcRequest(BaseModel):
 
 
 class NcaRequest(TimesConcRequest):
-    pass
+    # part16 §8 (Phase 5, surfaced by the demo lane): the NCA lane's
+    # scientific core (nca_summary / fit_terminal_phase / the log
+    # trapezoid in nca_ext.py) deliberately accepts intentional zeros
+    # — a pre-dose t=0 row is standard PK practice, and the shipped
+    # examples/data/pk_profile.csv starts with one.  The blanket
+    # positive-only validation belongs to the lanes where a zero
+    # concentration is a real input error; NCA mirrors the
+    # steady-state precedent (require_positive_conc=False) instead,
+    # and the route keeps its own auc_log guard (np.all(conc > 0)).
+    def _validated(self) -> tuple[np.ndarray, np.ndarray]:
+        return validate_concentration_series(
+            self.times, self.conc, require_positive_conc=False
+        )
 
 
 class SteadyStateRequest(TimesConcRequest):

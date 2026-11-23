@@ -12,6 +12,7 @@ import {
   Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DemoDataSection } from "@/components/demo/DemoDataSection";
 import {
   Card,
   CardContent,
@@ -1394,6 +1395,23 @@ export function DockingPage() {
         job, pasted-log pose inspection, contacts + PLIF + RMSD +
         scoring analysis, and digest-verified figure/table exports.
       </p>
+
+      <div className="mt-6">
+        {/* part16 §8 (Phase 5): the workspace's demo-data entry point —
+            a library load fills stage one's ligand list; a DLG load
+            fills the pasted-log parse textarea verbatim */}
+        <DemoDataSection
+          workflow="molecular-docking"
+          onLibraryLoaded={(payload) => {
+            setLigandText(payload.smiles.join("\n"));
+          }}
+          onTextLoaded={(payload) => {
+            if (payload.file_type === "dlg") {
+              setDlgText(payload.content);
+            }
+          }}
+        />
+      </div>
 
       <StageHeader
         index={1}

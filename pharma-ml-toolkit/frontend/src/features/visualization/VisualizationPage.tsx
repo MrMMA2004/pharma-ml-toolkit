@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DemoDataSection } from "@/components/demo/DemoDataSection";
 import {
   Card,
   CardContent,
@@ -921,6 +922,21 @@ export function VisualizationPage() {
           outputs other workspaces created).
         </p>
       </header>
+
+      <div className="mt-6">
+        {/* part16 §8 (Phase 5): the workspace's demo-data entry point —
+            a series load fills the time/conc paste lane verbatim */}
+        <DemoDataSection
+          workflow="visualization"
+          onSeriesLoaded={(payload) => {
+            setPairText(
+              payload.times
+                .map((time, index) => `${time} ${payload.conc[index]}`)
+                .join("\n"),
+            );
+          }}
+        />
+      </div>
 
       {/* stage 1: Select Dataset/Analysis Result */}
       <StageHeader

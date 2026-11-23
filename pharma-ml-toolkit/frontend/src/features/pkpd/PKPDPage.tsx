@@ -10,6 +10,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DemoDataSection } from "@/components/demo/DemoDataSection";
 import {
   Card,
   CardContent,
@@ -1126,6 +1127,24 @@ export function PKPDPage() {
           Export — every lane the REAL pharmacometrics backend.
         </p>
       </header>
+
+      <div className="mt-6">
+        {/* part16 §8 (Phase 5): the workspace's demo-data entry point —
+            a series load fills stage one's series textarea verbatim */}
+        <DemoDataSection
+          workflow="pkpd"
+          onSeriesLoaded={(payload) => {
+            setSeriesText(
+              payload.times
+                .map((time, index) => `${time} ${payload.conc[index]}`)
+                .join("\n"),
+            );
+            setSeries(null);
+            setSeriesError(null);
+            setNcaResult(null);
+          }}
+        />
+      </div>
 
       {/* stage 1: Import Data */}
       <StageHeader

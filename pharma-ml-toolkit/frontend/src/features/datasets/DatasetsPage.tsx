@@ -10,6 +10,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DemoDataSection } from "@/components/demo/DemoDataSection";
 import {
   Card,
   CardContent,
@@ -629,6 +630,14 @@ export function DatasetsPage() {
           split with a leakage audit, visualize, and export — every step
           runs the real Python backend through the local API.
         </p>
+      </div>
+
+      <div className="mt-6">
+        {/* part16 §8 (Phase 5): the workspace's demo-data entry point */}
+        <DemoDataSection
+          workflow="datasets"
+          onDatasetLoaded={() => void refreshRegistry()}
+        />
       </div>
 
       <StageHeader

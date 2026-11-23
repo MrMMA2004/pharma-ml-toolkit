@@ -573,7 +573,37 @@ summarises them and wins any status disagreement.
   contract lanes exit 0, ruff full-tree clean, mypy 296 clean,
   vitest 126/126 + tsc clean, console 200 + the zip-size exact);
   the version unchanged at 1.2.240 (no-silent-bumps; the
-  byte-frozen r334 ruling stands, NO re-ship); counter 135 -> 136
+  byte-frozen r334 ruling stands, NO re-ship); counter 135 -> 136 —
+  and the part16 second round 345 (the interactive "Continue
+  MASTER_PROMPT part16 / Push" directive): the Phase-5
+  demo-data lane DELIVERED (the campaign queue's #3, the
+  Phase-0 audit's MISSING row closed) — the backend
+  `routes/samples.py` (the curated catalog over the 17 REAL
+  shipped examples/data files, runtime
+  available/size/sha256-guarded, preview-before-load, the
+  one-click load with four honest payload kinds: tabular
+  through the REAL loader + a FRESH store record, series →
+  the times/conc arrays, library → the name+SMILES columns,
+  text_file → the sha256-pinned content; no-overwrite
+  structural) + the round's own NCA zero-row fix at source
+  (fail-first: the shipped pk_profile.csv's pre-dose t=0 row
+  the route's blanket positive-only validation wrongly
+  rejected — NcaRequest now mirrors the steady-state
+  precedent, negatives still rejected) + the shared frontend
+  DemoDataSection wired into all NINE workspaces (the
+  Introduction global entry, the registry-refresh callbacks,
+  the series/library/text one-click fills into the
+  PK/PD/Generative/Docking/Visualization inputs) + the
+  three test lanes (test_samples.py 26/26 — the
+  catalog-reality guard and the per-workflow usability
+  proofs; the component suite 5/5; the drift guard 18/18);
+  the gates re-pinned (collection 8,637/474, quick chunk
+  108/108, the affected lanes exit 0, ruff full-tree clean,
+  mypy 297 clean, vitest 131/131 + tsc clean, console 200 +
+  the zip-size exact; the contract re-exported at 112
+  paths/72 schemas); the version unchanged at 1.2.240
+  (no-silent-bumps; the byte-frozen r334 ruling stands, NO
+  re-ship); counter 136 -> 137
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

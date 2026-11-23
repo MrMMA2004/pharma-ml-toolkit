@@ -34,6 +34,7 @@ from . import (
     pharmacogenomics,
     pkpd,
     repurposing,
+    samples,
     semi_supervised,
     system,
     visualization,
@@ -69,6 +70,9 @@ api_router.include_router(multiobjective.router)
 api_router.include_router(workflow.router)
 api_router.include_router(database.router)
 api_router.include_router(system.router)
+# part16 §8 (Phase 5) — the demo/sample-data lane over the REAL
+# shipped examples/data files (curated metadata, no invention).
+api_router.include_router(samples.router)
 
 ws_router = APIRouter(prefix="/api/v1")
 ws_router.include_router(events.router)
