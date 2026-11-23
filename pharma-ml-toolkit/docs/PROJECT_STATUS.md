@@ -656,7 +656,55 @@ summarises them and wins any status disagreement.
   a frontend-only lane, the r345 stale-types incident class
   avoided by construction); the version unchanged at 1.2.240
   (no-silent-bumps; the byte-frozen r334 ruling stands, NO
-  re-ship); counter 137 -> 138
+  re-ship); counter 137 -> 138 — and the part16 fourth round
+  348 (the interactive "Continue MASTER_PROMPT part16 / Push"
+  directive): the NINTH rollback wave recovered pre-work
+  (the same deepest class: history at the r186 checkpoint
+  `2eb0ede` + the stale Nov-3 UUID child, origin detached,
+  the PAT + the venv + the frontend node_modules + the ECC
+  clone-at-both-legs + the offsite + the root dist-archive
+  wiped, the counter surviving at 139 — the r322 playbook:
+  the /tmp recovery snap, the ghost playground pair swept
+  sha-256-verified against the r337-wip retention, the
+  reset --hard to the durable `580da84c`, the venv repaired
+  foreground at the exact pins, ECC reinstalled GREEN at the
+  r335 pins with the sql.js dependency satisfied, the
+  mirrors re-seeded at the six-home `0fadb6e5` parity, the
+  console raised on the supervisor daemon) — then THE
+  PHASE-8 FLOATING RESOURCE MONITOR DELIVERED (the campaign
+  queue's #5, the Phase-0 audit's third MISSING row closed):
+  `frontend/src/services/system/` (the typed
+  ResourceSnapshot DTOs mirroring the §15 route
+  field-for-field + the strict parser with the honest nulls
+  preserved; the one-operation client over the EXISTING
+  `GET /api/v1/system/resources` — the JobManager queue
+  depth consumed, no parallel monitoring architecture; the
+  geometry pocket `pharmaml.studio.resmon.v1` —
+  validate-on-read, clamp-on-write, the §10 schema
+  untouched) + `ResourceMonitor.tsx` (the compact floating
+  panel: compact summary + detailed view with the
+  System-host vs Application-process separation, drag +
+  keyboard move, clamped 280–480px resize by handle AND
+  arrows, the persisted visible-preference open/close,
+  position + preferred size remembered across remounts, GPU
+  degrading to its stated line, the absent numbers as the
+  honest dash — never simulated, the cadence = the §10
+  interval at the same 250ms floor, skipped while hidden,
+  stopped while closed, Escape scoped to the panel's focus)
+  + the header entry beside the gear (every workspace's
+  reach) + the tests (four vitest suites 20 green
+  fail-first — the client 4, the geometry pocket 4, the
+  panel 11, the App header integration 1; the Python drift
+  guard `tests/test_frontend_resource_monitor.py` 14/14);
+  the gates re-pinned (collection 8,664/476, quick chunk
+  108/108, the affected lanes exit 0, ruff full-tree clean
+  after the 101-file EXE002 residue realigned to the index
+  modes, mypy 297 clean, vitest 178/178 over 23 files + tsc
+  clean + the root workspace lint true-exit-0 — the first
+  cut's render-time ref mutation fixed at source; the
+  contract UNCHANGED — a frontend-only lane); the version
+  unchanged at 1.2.240 (no-silent-bumps; the byte-frozen
+  r334 ruling stands, NO re-ship); counter 139 -> 140
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

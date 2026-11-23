@@ -31,6 +31,11 @@ vi.mock("@/services/websocket/client", () => ({
   getEventStream: () => idleStream,
 }));
 
+const systemResourcesMock = vi.hoisted(() => vi.fn());
+vi.mock("@/services/system/client", () => ({
+  systemApi: { resources: () => systemResourcesMock() },
+}));
+
 vi.mock("@/features/introduction/IntroductionPage", () => ({
   IntroductionPage: () => <div data-testid="page-introduction" />,
 }));
@@ -66,6 +71,55 @@ const READY_INFO: StartupInfo = {
   scientificCore: true,
 };
 vi.mocked(initializeBackend).mockResolvedValue(READY_INFO);
+
+import type { ResourceSnapshot } from "@/services/system/types";
+
+systemResourcesMock.mockResolvedValue({
+  source: "psutil",
+  backend: { name: "pharmaml", version: "1.2.240" },
+  system: {
+    cpu_count: 8,
+    cpu_percent: 23.5,
+    loadavg: [1.1, 0.8, 0.6],
+    memory: {
+      total: 16_000_000_000,
+      available: 6_200_000_000,
+      used: 9_800_000_000,
+      percent: 61.2,
+    },
+    swap: {
+      total: 4_000_000_000,
+      used: 500_000_000,
+      free: 3_500_000_000,
+      percent: 12.5,
+    },
+    disk: {
+      path: "/app/pharma-ml-toolkit",
+      total: 50_000_000_000,
+      used: 28_000_000_000,
+      free: 22_000_000_000,
+    },
+    notes: [],
+  },
+  process: {
+    pid: 12345,
+    cpu_percent: 4.2,
+    memory_rss_bytes: 250_000_000,
+    num_threads: 18,
+  },
+  jobs: {
+    active: 2,
+    by_state: {
+      QUEUED: 1,
+      RUNNING: 1,
+      CANCELLATION_REQUESTED: 0,
+      CANCELLED: 0,
+      COMPLETED: 0,
+      FAILED: 0,
+    },
+  },
+  gpu: { available: false, note: "GPU monitoring is deliberately absent" },
+} satisfies ResourceSnapshot);
 
 describe("the application shell (§10)", () => {
   it("renders Introduction first with the nine-entry nav in §10.1 order", async () => {
@@ -138,5 +192,31 @@ describe("the application shell (§10)", () => {
 
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("carries the part16 §8 floating resource-monitor entry in the header (every workspace's reach)", async () => {
+    render(<App />);
+    await screen.findByTestId("page-introduction");
+
+    // the entry rides the header next to the settings gear, never the nav
+    const entry = screen.getByRole("button", { name: "Resource monitor" });
+    const nav = screen.getByRole("navigation", { name: "Workspaces" });
+    expect(nav).not.toContainElement(entry);
+    expect(entry).toHaveAttribute("aria-expanded", "true");
+
+    // visible by the §10 default preference -> the floating panel mounts
+    const panel = screen.getByRole("complementary", { name: "Resource monitor" });
+    expect(nav).not.toContainElement(panel);
+    // the compact summary carries the live snapshot values (the first
+    // poll resolves async — findBy waits for it, never a race)
+    await screen.findByText("CPU 23.5%");
+    await screen.findByText("Jobs 2");
+
+    // the entry closes it through the persisted preference
+    await userEvent.click(entry);
+    expect(
+      screen.queryByRole("complementary", { name: "Resource monitor" }),
+    ).not.toBeInTheDocument();
+    expect(entry).toHaveAttribute("aria-expanded", "false");
   });
 });

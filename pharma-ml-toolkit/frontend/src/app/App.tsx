@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { WorkspaceNav } from "@/components/layout/WorkspaceNav";
 import { WorkspaceShell } from "@/components/layout/WorkspaceShell";
+import { ResourceMonitorHost } from "@/components/system/ResourceMonitor";
 import { SettingsEntry } from "@/components/settings/SettingsEntry";
 import { JobCompletionToasts } from "@/components/settings/JobCompletionToasts";
 import { IntroductionPage } from "@/features/introduction/IntroductionPage";
@@ -29,7 +30,11 @@ import { INITIAL_WORKSPACE, WORKSPACES, type WorkspaceId } from "@/app/workspace
  * campaign ledger owns the queue). The part16 §10 settings entry
  * rides the header (present on every workspace) with the compact
  * popover panel, and the job-completion toast lane mounts once in
- * the shell (gated by the notifications preference).
+ * the shell (gated by the notifications preference). The part16 §8
+ * floating resource monitor rides the same header next to the gear
+ * — openable and closable through the persisted visible preference,
+ * polling the existing /api/v1/system/resources service at the
+ * interval the settings panel owns (never simulated values).
  */
 export function App() {
   const [active, setActive] = useState<WorkspaceId>(INITIAL_WORKSPACE);
@@ -68,6 +73,7 @@ export function App() {
               </div>
             </div>
             <div className="ml-auto">
+              <ResourceMonitorHost />
               <SettingsEntry />
             </div>
           </div>
