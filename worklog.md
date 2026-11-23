@@ -18964,5 +18964,12 @@ DEFECT_REGISTER D-7 row + footer; the counter 131 -> 132; the version
 unchanged at 1.2.240 (no-silent-bumps; the byte-frozen r334 ruling
 stands, NO re-ship); the payload (the 9 SS13 docs + the D-7 guard fix
 + the census replica + the gitignore hygiene + the ledger files)
-committed on the `part15-campaign` feature branch per SS17, ff-merged
-to main, and pushed under the owner's explicit "Push" approval.
+pushed as `1f1a54e0` on main under the owner's explicit "Push"
+approval. Mechanical truth: the environment switched HEAD off
+`part15-campaign` back to main BETWEEN the branch creation and the
+commit (the documented mid-flight mutation class — the same wave the
+r337 recovery survived), so the payload commit landed on main
+directly and the ff-merge became a no-op; the stale branch pointer
+was deleted rather than left masquerading as unmerged work. The
+owner-approval gate is satisfied either way: "Push" preceded the
+push, and no force-push / history rewrite occurred (§17 clean).
