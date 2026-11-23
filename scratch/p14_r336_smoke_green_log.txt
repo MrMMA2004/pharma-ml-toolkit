@@ -1,0 +1,1311 @@
+﻿2026-11-23T00:03:30.9396430Z Current runner version: '2.338.2'
+2026-11-23T00:03:30.9417876Z ##[group]Runner Image Provisioner
+2026-11-23T00:03:30.9418509Z Hosted Compute Agent
+2026-11-23T00:03:30.9418938Z Version: 20261111.635
+2026-11-23T00:03:30.9419416Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+2026-11-23T00:03:30.9419991Z Build Date: 2026-11-11T01:49:01Z
+2026-11-23T00:03:30.9420616Z Worker ID: {99155176-1009-468c-876a-dd0479b5ccbe}
+2026-11-23T00:03:30.9421115Z Region: westus3
+2026-11-23T00:03:30.9421485Z Cloud: Azure
+2026-11-23T00:03:30.9421883Z ##[endgroup]
+2026-11-23T00:03:30.9422972Z ##[group]Operating System
+2026-11-23T00:03:30.9423445Z Microsoft Windows Server 2022
+2026-11-23T00:03:30.9423890Z 10.0.20348
+2026-11-23T00:03:30.9424254Z Datacenter
+2026-11-23T00:03:30.9424674Z ##[endgroup]
+2026-11-23T00:03:30.9425105Z ##[group]Runner Image
+2026-11-23T00:03:30.9425517Z Image: windows-2022
+2026-11-23T00:03:30.9425958Z Version: 20261116.370.1
+2026-11-23T00:03:30.9427049Z Included Software: https://github.com/actions/runner-images/blob/win22/20261116.370/images/windows/Windows2022-Readme.md
+2026-11-23T00:03:30.9428171Z Image Release: https://github.com/actions/runner-images/releases/tag/win22%2F20261116.370
+2026-11-23T00:03:30.9428840Z ##[endgroup]
+2026-11-23T00:03:30.9429658Z ##[group]GITHUB_TOKEN Permissions
+2026-11-23T00:03:30.9431209Z Contents: read
+2026-11-23T00:03:30.9431680Z Metadata: read
+2026-11-23T00:03:30.9432055Z ##[endgroup]
+2026-11-23T00:03:30.9433723Z Secret source: Actions
+2026-11-23T00:03:30.9434386Z Cache mode: write
+2026-11-23T00:03:30.9434984Z Prepare workflow directory
+2026-11-23T00:03:30.9917560Z Prepare all required actions
+2026-11-23T00:03:30.9956192Z Getting action download info
+2026-11-23T00:03:31.3267151Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-23T00:03:31.4317446Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-11-23T00:03:31.5505212Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-23T00:03:31.8416173Z Complete job name: Clean-runner install smoke (the BLK-1 CI lane)
+2026-11-23T00:03:32.2457408Z ##[group]Run actions/checkout@v4
+2026-11-23T00:03:32.2458375Z with:
+2026-11-23T00:03:32.2458708Z   ref: v1.2.240
+2026-11-23T00:03:32.2459077Z   persist-credentials: false
+2026-11-23T00:03:32.2459517Z   repository: MrMMA2004/pharma-ml-toolkit
+2026-11-23T00:03:32.2462970Z   token: ***
+2026-11-23T00:03:32.2463304Z   ssh-strict: true
+2026-11-23T00:03:32.2463654Z   ssh-user: git
+2026-11-23T00:03:32.2463974Z   clean: true
+2026-11-23T00:03:32.2464316Z   sparse-checkout-cone-mode: true
+2026-11-23T00:03:32.2464723Z   fetch-depth: 1
+2026-11-23T00:03:32.2465065Z   fetch-tags: false
+2026-11-23T00:03:32.2465413Z   show-progress: true
+2026-11-23T00:03:32.2465768Z   lfs: false
+2026-11-23T00:03:32.2466093Z   submodules: false
+2026-11-23T00:03:32.2466437Z   set-safe-directory: true
+2026-11-23T00:03:32.2466861Z   allow-unsafe-pr-checkout: false
+2026-11-23T00:03:32.2467429Z env:
+2026-11-23T00:03:32.2467936Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:03:32.2468676Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:03:32.2469243Z ##[endgroup]
+2026-11-23T00:03:32.3619522Z Syncing repository: MrMMA2004/pharma-ml-toolkit
+2026-11-23T00:03:32.3621077Z ##[group]Getting Git version info
+2026-11-23T00:03:32.3621687Z Working directory is 'D:\a\pharma-ml-toolkit\pharma-ml-toolkit'
+2026-11-23T00:03:32.4312665Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-11-23T00:03:32.7801944Z git version 2.56.1.windows.1
+2026-11-23T00:03:32.7833635Z ##[endgroup]
+2026-11-23T00:03:32.7849152Z Temporarily overriding HOME='D:\a\_temp\c0778662-c3d2-4b68-a7d8-40e823bce630' before making global git config changes
+2026-11-23T00:03:32.7850566Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-23T00:03:32.7859001Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\pharma-ml-toolkit\pharma-ml-toolkit
+2026-11-23T00:03:32.8429482Z Deleting the contents of 'D:\a\pharma-ml-toolkit\pharma-ml-toolkit'
+2026-11-23T00:03:32.8434285Z ##[group]Initializing the repository
+2026-11-23T00:03:32.8442257Z [command]"C:\Program Files\Git\bin\git.exe" init D:\a\pharma-ml-toolkit\pharma-ml-toolkit
+2026-11-23T00:03:32.9149915Z Initialized empty Git repository in D:/a/pharma-ml-toolkit/pharma-ml-toolkit/.git/
+2026-11-23T00:03:32.9183479Z [command]"C:\Program Files\Git\bin\git.exe" remote add origin https://github.com/MrMMA2004/pharma-ml-toolkit
+2026-11-23T00:03:32.9746563Z ##[endgroup]
+2026-11-23T00:03:32.9747726Z ##[group]Disabling automatic garbage collection
+2026-11-23T00:03:32.9753182Z [command]"C:\Program Files\Git\bin\git.exe" config --local gc.auto 0
+2026-11-23T00:03:32.9992071Z ##[endgroup]
+2026-11-23T00:03:32.9993519Z ##[group]Setting up auth
+2026-11-23T00:03:33.0001568Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-23T00:03:33.0246020Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-23T00:03:34.8181727Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-23T00:03:34.8440906Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-23T00:03:35.2641731Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-23T00:03:35.2904689Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-23T00:03:35.7219936Z [command]"C:\Program Files\Git\bin\git.exe" config --local http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+2026-11-23T00:03:35.7473609Z ##[endgroup]
+2026-11-23T00:03:35.7474175Z ##[group]Fetching the repository
+2026-11-23T00:03:35.7488050Z [command]"C:\Program Files\Git\bin\git.exe" -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +refs/heads/v1.2.240*:refs/remotes/origin/v1.2.240* +refs/tags/v1.2.240*:refs/tags/v1.2.240*
+2026-11-23T00:04:07.7368920Z From https://github.com/MrMMA2004/pharma-ml-toolkit
+2026-11-23T00:04:07.7369767Z  * [new tag]         v1.2.240   -> v1.2.240
+2026-11-23T00:04:07.7394225Z ##[endgroup]
+2026-11-23T00:04:07.7394895Z ##[group]Determining the checkout info
+2026-11-23T00:04:07.7404449Z [command]"C:\Program Files\Git\bin\git.exe" branch --list --remote origin/v1.2.240
+2026-11-23T00:04:07.7768405Z [command]"C:\Program Files\Git\bin\git.exe" tag --list v1.2.240
+2026-11-23T00:04:07.8062004Z v1.2.240
+2026-11-23T00:04:07.8090575Z ##[endgroup]
+2026-11-23T00:04:07.8098098Z [command]"C:\Program Files\Git\bin\git.exe" sparse-checkout disable
+2026-11-23T00:04:07.8460079Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all extensions.worktreeConfig
+2026-11-23T00:04:07.8724286Z ##[group]Checking out the ref
+2026-11-23T00:04:07.8736657Z [command]"C:\Program Files\Git\bin\git.exe" checkout --progress --force refs/tags/v1.2.240
+2026-11-23T00:04:09.2560533Z Updating files:  26% (830/3163)
+2026-11-23T00:04:09.2673037Z Updating files:  27% (855/3163)
+2026-11-23T00:04:09.2766329Z Updating files:  28% (886/3163)
+2026-11-23T00:04:09.2836453Z Updating files:  29% (918/3163)
+2026-11-23T00:04:09.3369788Z Updating files:  30% (949/3163)
+2026-11-23T00:04:09.3435728Z Updating files:  31% (981/3163)
+2026-11-23T00:04:09.3491675Z Updating files:  32% (1013/3163)
+2026-11-23T00:04:09.3647187Z Updating files:  33% (1044/3163)
+2026-11-23T00:04:09.3709367Z Updating files:  34% (1076/3163)
+2026-11-23T00:04:09.3793484Z Updating files:  35% (1108/3163)
+2026-11-23T00:04:09.3891897Z Updating files:  36% (1139/3163)
+2026-11-23T00:04:09.3937996Z Updating files:  37% (1171/3163)
+2026-11-23T00:04:09.3980888Z Updating files:  38% (1202/3163)
+2026-11-23T00:04:09.4030014Z Updating files:  39% (1234/3163)
+2026-11-23T00:04:09.4183651Z Updating files:  40% (1266/3163)
+2026-11-23T00:04:09.4226482Z Updating files:  41% (1297/3163)
+2026-11-23T00:04:09.4268124Z Updating files:  42% (1329/3163)
+2026-11-23T00:04:09.4312961Z Updating files:  43% (1361/3163)
+2026-11-23T00:04:09.4358747Z Updating files:  44% (1392/3163)
+2026-11-23T00:04:09.4397845Z Updating files:  45% (1424/3163)
+2026-11-23T00:04:09.4440486Z Updating files:  46% (1455/3163)
+2026-11-23T00:04:09.4493302Z Updating files:  47% (1487/3163)
+2026-11-23T00:04:09.4570754Z Updating files:  48% (1519/3163)
+2026-11-23T00:04:09.4641802Z Updating files:  49% (1550/3163)
+2026-11-23T00:04:09.4710207Z Updating files:  50% (1582/3163)
+2026-11-23T00:04:09.4787057Z Updating files:  51% (1614/3163)
+2026-11-23T00:04:09.4859227Z Updating files:  52% (1645/3163)
+2026-11-23T00:04:09.4933450Z Updating files:  53% (1677/3163)
+2026-11-23T00:04:09.5002645Z Updating files:  54% (1709/3163)
+2026-11-23T00:04:09.5070512Z Updating files:  55% (1740/3163)
+2026-11-23T00:04:09.5137522Z Updating files:  56% (1772/3163)
+2026-11-23T00:04:09.5193231Z Updating files:  57% (1803/3163)
+2026-11-23T00:04:09.5253042Z Updating files:  58% (1835/3163)
+2026-11-23T00:04:09.5312898Z Updating files:  59% (1867/3163)
+2026-11-23T00:04:09.5375994Z Updating files:  60% (1898/3163)
+2026-11-23T00:04:09.5428714Z Updating files:  61% (1930/3163)
+2026-11-23T00:04:09.5487598Z Updating files:  62% (1962/3163)
+2026-11-23T00:04:09.5540434Z Updating files:  63% (1993/3163)
+2026-11-23T00:04:09.5590203Z Updating files:  64% (2025/3163)
+2026-11-23T00:04:09.5645395Z Updating files:  65% (2056/3163)
+2026-11-23T00:04:09.5726338Z Updating files:  66% (2088/3163)
+2026-11-23T00:04:09.5777571Z Updating files:  67% (2120/3163)
+2026-11-23T00:04:09.5842011Z Updating files:  68% (2151/3163)
+2026-11-23T00:04:09.5883606Z Updating files:  69% (2183/3163)
+2026-11-23T00:04:09.5978215Z Updating files:  70% (2215/3163)
+2026-11-23T00:04:09.6094324Z Updating files:  71% (2246/3163)
+2026-11-23T00:04:09.6195984Z Updating files:  72% (2278/3163)
+2026-11-23T00:04:09.6242538Z Updating files:  73% (2309/3163)
+2026-11-23T00:04:09.6288353Z Updating files:  74% (2341/3163)
+2026-11-23T00:04:09.6339512Z Updating files:  75% (2373/3163)
+2026-11-23T00:04:09.6505527Z Updating files:  76% (2404/3163)
+2026-11-23T00:04:09.6541650Z Updating files:  77% (2436/3163)
+2026-11-23T00:04:09.6598322Z Updating files:  78% (2468/3163)
+2026-11-23T00:04:09.6658414Z Updating files:  79% (2499/3163)
+2026-11-23T00:04:09.6700079Z Updating files:  80% (2531/3163)
+2026-11-23T00:04:09.6875261Z Updating files:  81% (2563/3163)
+2026-11-23T00:04:09.6955856Z Updating files:  82% (2594/3163)
+2026-11-23T00:04:09.7015006Z Updating files:  83% (2626/3163)
+2026-11-23T00:04:09.7184205Z Updating files:  84% (2657/3163)
+2026-11-23T00:04:09.7243548Z Updating files:  85% (2689/3163)
+2026-11-23T00:04:09.7352632Z Updating files:  86% (2721/3163)
+2026-11-23T00:04:09.7395383Z Updating files:  87% (2752/3163)
+2026-11-23T00:04:09.7456191Z Updating files:  88% (2784/3163)
+2026-11-23T00:04:09.7516070Z Updating files:  89% (2816/3163)
+2026-11-23T00:04:09.7591831Z Updating files:  90% (2847/3163)
+2026-11-23T00:04:09.7668701Z Updating files:  91% (2879/3163)
+2026-11-23T00:04:09.7727572Z Updating files:  92% (2910/3163)
+2026-11-23T00:04:09.7790222Z Updating files:  93% (2942/3163)
+2026-11-23T00:04:09.7866410Z Updating files:  94% (2974/3163)
+2026-11-23T00:04:09.7928393Z Updating files:  95% (3005/3163)
+2026-11-23T00:04:09.7969096Z Updating files:  96% (3037/3163)
+2026-11-23T00:04:09.8027502Z Updating files:  97% (3069/3163)
+2026-11-23T00:04:09.8278326Z Updating files:  98% (3100/3163)
+2026-11-23T00:04:09.9176019Z Updating files:  99% (3132/3163)
+2026-11-23T00:04:10.0164093Z Updating files:  99% (3153/3163)
+2026-11-23T00:04:10.0164506Z Updating files: 100% (3163/3163)
+2026-11-23T00:04:10.0164779Z Updating files: 100% (3163/3163), done.
+2026-11-23T00:04:10.0261618Z Note: switching to 'refs/tags/v1.2.240'.
+2026-11-23T00:04:10.0261991Z 
+2026-11-23T00:04:10.0262283Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-11-23T00:04:10.0262837Z changes and commit them, and you can discard any commits you make in this
+2026-11-23T00:04:10.0263418Z state without impacting any branches by switching back to a branch.
+2026-11-23T00:04:10.0263761Z 
+2026-11-23T00:04:10.0263978Z If you want to create a new branch to retain commits you create, you may
+2026-11-23T00:04:10.0264490Z do so (now or later) by using -c with the switch command. Example:
+2026-11-23T00:04:10.0264780Z 
+2026-11-23T00:04:10.0264910Z   git switch -c <new-branch-name>
+2026-11-23T00:04:10.0265096Z 
+2026-11-23T00:04:10.0265197Z Or undo this operation with:
+2026-11-23T00:04:10.0265322Z 
+2026-11-23T00:04:10.0265385Z   git switch -
+2026-11-23T00:04:10.0265481Z 
+2026-11-23T00:04:10.0265644Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-11-23T00:04:10.0265881Z 
+2026-11-23T00:04:10.0269168Z HEAD is now at 661e3f6 part14 r333 stage-1: the release round's fix set -- the owner-directed v1.2.240 EXE/MSI release; the first tag-build attempt (run 45042967882 at 8d4d88bd) failed the runner's own unit gate on two real defects, both now fixed at the source: (1) the worklog ledger drifted -- rounds 326-332 dropped the bold **Rn -- the Xth recorded run** marker format the agreement guard parses, leaving the guard blind to seven rounds (the counter said 332, the guard's last visible entry R325); the seven markers restored verbatim; (2) the r331/r332 recovery prose carried absolute home-directory prefixes into two shipped QA docs (PROJECT_STATUS + BLOCKED_TESTS BLK-6, the libEGL workaround path) -- scrubbed to the tilde convention; both re-verified green locally alongside the freeze-policy leg (repaired over the same runner pins: pyinstaller==6.22.3 + mordred==1.2.0) -- 3 passed, the full battery otherwise green per the r333 evidence; the r332 CI verdict closed GREEN (8d4d88bd 19/19 check-runs success); the round's gates re-pinned (trusted-origins 34 in 5.76s live, console 200 + zip-size API 23,489,390 exact:true, browser E2E zero errors + footer geometry exact 7882==7882 + pins pair p14r333); the tag v1.2.240 re-pinned at this commit for the rebuilt installer set
+2026-11-23T00:04:10.0516675Z ##[endgroup]
+2026-11-23T00:04:10.0877020Z [command]"C:\Program Files\Git\bin\git.exe" log -1 --format=%H
+2026-11-23T00:04:10.1098477Z 661e3f655379e584a933208c9f3046c6f5adddee
+2026-11-23T00:04:10.1126882Z ##[group]Removing auth
+2026-11-23T00:04:10.1133996Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-23T00:04:10.1375139Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-23T00:04:10.5568337Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-23T00:04:10.5794262Z http.https://github.com/.extraheader
+2026-11-23T00:04:10.5828967Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all http.https://github.com/.extraheader
+2026-11-23T00:04:10.6095427Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-23T00:04:11.0423876Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-23T00:04:11.0682234Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-23T00:04:11.5104476Z ##[endgroup]
+2026-11-23T00:04:11.5417155Z ##[group]Run actions/setup-python@v5
+2026-11-23T00:04:11.5417428Z with:
+2026-11-23T00:04:11.5417593Z   python-version: 3.12
+2026-11-23T00:04:11.5417764Z   check-latest: false
+2026-11-23T00:04:11.5419725Z   token: ***
+2026-11-23T00:04:11.5419900Z   update-environment: true
+2026-11-23T00:04:11.5420083Z   allow-prereleases: false
+2026-11-23T00:04:11.5420254Z   freethreaded: false
+2026-11-23T00:04:11.5420410Z env:
+2026-11-23T00:04:11.5420651Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:04:11.5421029Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:04:11.5421300Z ##[endgroup]
+2026-11-23T00:04:11.6693593Z ##[group]Installed versions
+2026-11-23T00:04:12.0681159Z (node:7896) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-23T00:04:12.0681727Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-23T00:04:12.0682763Z Successfully set up CPython (3.12.10)
+2026-11-23T00:04:12.0683346Z ##[endgroup]
+2026-11-23T00:04:12.0886133Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-23T00:04:12.0886527Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-23T00:04:12.0886754Z [36;1m$tag = "v1.2.240".Trim()[0m
+2026-11-23T00:04:12.0886995Z [36;1mif ([string]::IsNullOrWhiteSpace($tag)) {[0m
+2026-11-23T00:04:12.0887355Z [36;1m  Write-Host "::error::no release tag resolved (dispatch input or release event)"[0m
+2026-11-23T00:04:12.0887674Z [36;1m  exit 1[0m
+2026-11-23T00:04:12.0887821Z [36;1m}[0m
+2026-11-23T00:04:12.0887974Z [36;1m$version = $tag.TrimStart("v")[0m
+2026-11-23T00:04:12.0888259Z [36;1m$dest = Join-Path $env:RUNNER_TEMP "release-assets"[0m
+2026-11-23T00:04:12.0888573Z [36;1mNew-Item -ItemType Directory -Force $dest | Out-Null[0m
+2026-11-23T00:04:12.0888929Z [36;1mNew-Item -ItemType Directory -Force $env:EVIDENCE_DIR | Out-Null[0m
+2026-11-23T00:04:12.0889317Z [36;1mgh release download $tag --repo $env:GITHUB_REPOSITORY --dir $dest --clobber[0m
+2026-11-23T00:04:12.0889677Z [36;1mif ($LASTEXITCODE -ne 0) {[0m
+2026-11-23T00:04:12.0889933Z [36;1m  Write-Host "::error::gh release download failed for $tag"[0m
+2026-11-23T00:04:12.0890185Z [36;1m  exit 1[0m
+2026-11-23T00:04:12.0890331Z [36;1m}[0m
+2026-11-23T00:04:12.0890475Z [36;1m$expected = @([0m
+2026-11-23T00:04:12.0890669Z [36;1m  "PharmaML_Studio_Setup_v$version.exe",[0m
+2026-11-23T00:04:12.0890905Z [36;1m  "PharmaML_Studio_v$version.msi",[0m
+2026-11-23T00:04:12.0891122Z [36;1m  "RELEASE_MANIFEST.json",[0m
+2026-11-23T00:04:12.0891326Z [36;1m  "SHA256SUMS.txt",[0m
+2026-11-23T00:04:12.0891502Z [36;1m  "sbom.cdx.json"[0m
+2026-11-23T00:04:12.0891660Z [36;1m)[0m
+2026-11-23T00:04:12.0891813Z [36;1mforeach ($name in $expected) {[0m
+2026-11-23T00:04:12.0892057Z [36;1m  if (-not (Test-Path (Join-Path $dest $name))) {[0m
+2026-11-23T00:04:12.0892353Z [36;1m    Write-Host "::error::asset missing from the release: $name"[0m
+2026-11-23T00:04:12.0892608Z [36;1m    exit 1[0m
+2026-11-23T00:04:12.0892773Z [36;1m  }[0m
+2026-11-23T00:04:12.0892907Z [36;1m}[0m
+2026-11-23T00:04:12.0893095Z [36;1mAdd-Content $env:GITHUB_ENV "RELEASE_TAG=$tag"[0m
+2026-11-23T00:04:12.0893377Z [36;1mAdd-Content $env:GITHUB_ENV "RELEASE_VERSION=$version"[0m
+2026-11-23T00:04:12.0893658Z [36;1mAdd-Content $env:GITHUB_ENV "ASSET_DIR=$dest"[0m
+2026-11-23T00:04:12.0893884Z [36;1mGet-ChildItem $dest -File |[0m
+2026-11-23T00:04:12.0894087Z [36;1m  Select-Object Name, Length |[0m
+2026-11-23T00:04:12.0894294Z [36;1m  Format-Table | Out-String |[0m
+2026-11-23T00:04:12.0894554Z [36;1m  Tee-Object -FilePath "$env:EVIDENCE_DIR/asset-listing.txt"[0m
+2026-11-23T00:04:12.0894943Z [36;1mWrite-Host "ASSETS DOWNLOADED: tag $tag, version $version, $($expected.Count) files"[0m
+2026-11-23T00:04:12.1020646Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-23T00:04:12.1020945Z env:
+2026-11-23T00:04:12.1021203Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:04:12.1021584Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:04:12.1021913Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:12.1022300Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:04:12.1022642Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:12.1022954Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:12.1023251Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:12.1025351Z   GITHUB_TOKEN: ***
+2026-11-23T00:04:12.1025520Z ##[endgroup]
+2026-11-23T00:04:29.1789257Z 
+2026-11-23T00:04:29.1789738Z Name                                  Length
+2026-11-23T00:04:29.1790156Z ----                                  ------
+2026-11-23T00:04:29.1790518Z PharmaML_Studio_Setup_v1.2.240.exe 558022042
+2026-11-23T00:04:29.1790884Z PharmaML_Studio_v1.2.240.msi       710553078
+2026-11-23T00:04:29.1793212Z RELEASE_MANIFEST.json                    510
+2026-11-23T00:04:29.1793524Z sbom.cdx.json                          23634
+2026-11-23T00:04:29.1793759Z SHA256SUMS.txt                           368
+2026-11-23T00:04:29.1793902Z 
+2026-11-23T00:04:29.1793905Z 
+2026-11-23T00:04:29.1885280Z ASSETS DOWNLOADED: tag v1.2.240, version 1.2.240, 5 files
+2026-11-23T00:04:29.2335979Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-23T00:04:29.2336351Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-23T00:04:29.2336577Z [36;1m$dest = $env:ASSET_DIR[0m
+2026-11-23T00:04:29.2336833Z [36;1m$lines = @(Get-Content (Join-Path $dest "SHA256SUMS.txt") |[0m
+2026-11-23T00:04:29.2337121Z [36;1m  Where-Object { $_.Trim() })[0m
+2026-11-23T00:04:29.2337350Z [36;1mif ($lines.Count -lt 3) {[0m
+2026-11-23T00:04:29.2337737Z [36;1m  Write-Host "::error::SHA256SUMS.txt carries fewer than 3 entries — the release manifest is malformed"[0m
+2026-11-23T00:04:29.2338100Z [36;1m  exit 1[0m
+2026-11-23T00:04:29.2338250Z [36;1m}[0m
+2026-11-23T00:04:29.2338394Z [36;1m$listed = @{}[0m
+2026-11-23T00:04:29.2338572Z [36;1mforeach ($line in $lines) {[0m
+2026-11-23T00:04:29.2338793Z [36;1m  $parts = $line -split '\s+', 2[0m
+2026-11-23T00:04:29.2339058Z [36;1m  if ($parts.Count -ne 2 -or $parts[0].Length -ne 64) {[0m
+2026-11-23T00:04:29.2339406Z [36;1m    Write-Host "::error::malformed SHA256SUMS line: $line"[0m
+2026-11-23T00:04:29.2339647Z [36;1m    exit 1[0m
+2026-11-23T00:04:29.2339800Z [36;1m  }[0m
+2026-11-23T00:04:29.2339965Z [36;1m  $expectedHash = $parts[0].ToLower()[0m
+2026-11-23T00:04:29.2340180Z [36;1m  $name = $parts[1].Trim()[0m
+2026-11-23T00:04:29.2340372Z [36;1m  $file = Join-Path $dest $name[0m
+2026-11-23T00:04:29.2340577Z [36;1m  if (-not (Test-Path $file)) {[0m
+2026-11-23T00:04:29.2340883Z [36;1m    Write-Host "::error::SHA256SUMS lists $name but the asset was not downloaded"[0m
+2026-11-23T00:04:29.2341181Z [36;1m    exit 1[0m
+2026-11-23T00:04:29.2341323Z [36;1m  }[0m
+2026-11-23T00:04:29.2341549Z [36;1m  $actualHash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()[0m
+2026-11-23T00:04:29.2341846Z [36;1m  if ($actualHash -ne $expectedHash) {[0m
+2026-11-23T00:04:29.2342200Z [36;1m    Write-Host "::error::SHA256 MISMATCH for $name (expected $expectedHash, got $actualHash)"[0m
+2026-11-23T00:04:29.2342528Z [36;1m    exit 1[0m
+2026-11-23T00:04:29.2342679Z [36;1m  }[0m
+2026-11-23T00:04:29.2342857Z [36;1m  Write-Host "SHA256 OK: $name = $actualHash"[0m
+2026-11-23T00:04:29.2343093Z [36;1m  $listed[$name] = $true[0m
+2026-11-23T00:04:29.2343273Z [36;1m}[0m
+2026-11-23T00:04:29.2343497Z [36;1m# the coverage sweep: every downloaded asset must be listed —[0m
+2026-11-23T00:04:29.2343826Z [36;1m# EXCEPT the sumfile itself (a checksum file can never[0m
+2026-11-23T00:04:29.2344286Z [36;1m# contain its own hash; the release pipeline's step 22[0m
+2026-11-23T00:04:29.2344583Z [36;1m# excludes it at generation with the same rule). The first[0m
+2026-11-23T00:04:29.2344885Z [36;1m# dispatch (run 45078553767) failed exactly here: the[0m
+2026-11-23T00:04:29.2345187Z [36;1m# sweep flagged SHA256SUMS.txt as unlisted — fixed at the[0m
+2026-11-23T00:04:29.2345477Z [36;1m# source, never by weakening the check.[0m
+2026-11-23T00:04:29.2345732Z [36;1mforeach ($f in (Get-ChildItem $dest -File)) {[0m
+2026-11-23T00:04:29.2346001Z [36;1m  if ($f.Name -eq "SHA256SUMS.txt") { continue }[0m
+2026-11-23T00:04:29.2346255Z [36;1m  if (-not $listed.ContainsKey($f.Name)) {[0m
+2026-11-23T00:04:29.2346622Z [36;1m    Write-Host "::error::unlisted asset rides the release: $($f.Name) — SHA256SUMS.txt must cover it"[0m
+2026-11-23T00:04:29.2346964Z [36;1m    exit 1[0m
+2026-11-23T00:04:29.2347111Z [36;1m  }[0m
+2026-11-23T00:04:29.2347254Z [36;1m}[0m
+2026-11-23T00:04:29.2347528Z [36;1mWrite-Host "SHA256SUMS VERIFIED: $($lines.Count) assets, zero mismatch, zero unlisted"[0m
+2026-11-23T00:04:29.2377635Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-23T00:04:29.2377902Z env:
+2026-11-23T00:04:29.2378143Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:04:29.2378517Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:04:29.2378852Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:29.2380620Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:04:29.2381017Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:29.2381328Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:29.2381628Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:29.2381887Z   RELEASE_TAG: v1.2.240
+2026-11-23T00:04:29.2382063Z   RELEASE_VERSION: 1.2.240
+2026-11-23T00:04:29.2382251Z   ASSET_DIR: D:\a\_temp\release-assets
+2026-11-23T00:04:29.2382447Z ##[endgroup]
+2026-11-23T00:04:30.1007567Z SHA256 OK: PharmaML_Studio_Setup_v1.2.240.exe = e95c01f09c8235c19959c0de4262181ca7bd00639dc17df60e36c6b947dbc236
+2026-11-23T00:04:30.7932077Z SHA256 OK: PharmaML_Studio_v1.2.240.msi = 990b43575845e9e0af500fba862b4bd74692e5c41c1fd01c40c8a48ab96011cb
+2026-11-23T00:04:30.7959299Z SHA256 OK: RELEASE_MANIFEST.json = 98862f0317040ef55f1ab42d7c562c6a1e1007f9a15ef89e6979db4242bd4f83
+2026-11-23T00:04:30.7969730Z SHA256 OK: sbom.cdx.json = 0da63f932ea0880d21fae1e44685f03c921fa9803b6d658c90bd562bebdb6b1b
+2026-11-23T00:04:30.8085236Z SHA256SUMS VERIFIED: 4 assets, zero mismatch, zero unlisted
+2026-11-23T00:04:30.8545758Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-23T00:04:30.8546171Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-23T00:04:30.8546570Z [36;1m$manifest = Get-Content (Join-Path $env:ASSET_DIR "RELEASE_MANIFEST.json") -Raw |[0m
+2026-11-23T00:04:30.8546921Z [36;1m  ConvertFrom-Json[0m
+2026-11-23T00:04:30.8547173Z [36;1mif ($manifest.version -ne $env:RELEASE_VERSION) {[0m
+2026-11-23T00:04:30.8547626Z [36;1m  Write-Host "::error::manifest version '$($manifest.version)' != the tag's version '$($env:RELEASE_VERSION)'"[0m
+2026-11-23T00:04:30.8547994Z [36;1m  exit 1[0m
+2026-11-23T00:04:30.8548150Z [36;1m}[0m
+2026-11-23T00:04:30.8548353Z [36;1m# the manifest's build commit must equal the revision the[0m
+2026-11-23T00:04:30.8548673Z [36;1m# tag checkout ACTUALLY landed on — resolved from the[0m
+2026-11-23T00:04:30.8548978Z [36;1m# workspace, NOT $env:GITHUB_SHA (a workflow_dispatch on[0m
+2026-11-23T00:04:30.8549318Z [36;1m# main carries main's HEAD as GITHUB_SHA, while step 1[0m
+2026-11-23T00:04:30.8549643Z [36;1m# checked out the TAG; the first-dispatch audit caught this[0m
+2026-11-23T00:04:30.8549918Z [36;1m# class before it could misfire)[0m
+2026-11-23T00:04:30.8550334Z [36;1m$checkoutSha = (git rev-parse HEAD).Trim()[0m
+2026-11-23T00:04:30.8550618Z [36;1mif ($manifest.commit -ne $checkoutSha) {[0m
+2026-11-23T00:04:30.8551113Z [36;1m  Write-Host "::error::manifest commit $($manifest.commit) != the checked-out tag revision $checkoutSha — the tag moved after the build"[0m
+2026-11-23T00:04:30.8551551Z [36;1m  exit 1[0m
+2026-11-23T00:04:30.8551692Z [36;1m}[0m
+2026-11-23T00:04:30.8551886Z [36;1mforeach ($a in $manifest.artifacts) {[0m
+2026-11-23T00:04:30.8552130Z [36;1m  $file = Join-Path $env:ASSET_DIR $a.name[0m
+2026-11-23T00:04:30.8552367Z [36;1m  $actualBytes = (Get-Item $file).Length[0m
+2026-11-23T00:04:30.8552597Z [36;1m  if ($actualBytes -ne [long]$a.bytes) {[0m
+2026-11-23T00:04:30.8552978Z [36;1m    Write-Host "::error::manifest byte drift for $($a.name): $($a.bytes) recorded, $actualBytes downloaded"[0m
+2026-11-23T00:04:30.8553324Z [36;1m    exit 1[0m
+2026-11-23T00:04:30.8553477Z [36;1m  }[0m
+2026-11-23T00:04:30.8553683Z [36;1m  Write-Host "MANIFEST OK: $($a.name) = $actualBytes bytes"[0m
+2026-11-23T00:04:30.8553926Z [36;1m}[0m
+2026-11-23T00:04:30.8554298Z [36;1m"manifest: product=$($manifest.product) version=$($manifest.version) runner=$($manifest.runner) webview2=$($manifest.webview2)" |[0m
+2026-11-23T00:04:30.8554778Z [36;1m  Add-Content "$env:EVIDENCE_DIR/manifest-crosscheck.txt"[0m
+2026-11-23T00:04:30.8555187Z [36;1mWrite-Host "MANIFEST VERIFIED: version + commit ($($checkoutSha.Substring(0,8))) + artifact bytes"[0m
+2026-11-23T00:04:30.8585822Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-23T00:04:30.8586103Z env:
+2026-11-23T00:04:30.8586350Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:04:30.8586744Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:04:30.8587084Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:30.8587428Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:04:30.8587779Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:30.8588091Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:30.8588389Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:30.8588636Z   RELEASE_TAG: v1.2.240
+2026-11-23T00:04:30.8588806Z   RELEASE_VERSION: 1.2.240
+2026-11-23T00:04:30.8588987Z   ASSET_DIR: D:\a\_temp\release-assets
+2026-11-23T00:04:30.8589175Z ##[endgroup]
+2026-11-23T00:04:31.1651909Z MANIFEST OK: PharmaML_Studio_Setup_v1.2.240.exe = 558022042 bytes
+2026-11-23T00:04:31.1660685Z MANIFEST OK: PharmaML_Studio_v1.2.240.msi = 710553078 bytes
+2026-11-23T00:04:31.1733567Z MANIFEST VERIFIED: version + commit (661e3f65) + artifact bytes
+2026-11-23T00:04:31.2202932Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-23T00:04:31.2203320Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-23T00:04:31.2203657Z [36;1m$mp = Join-Path $env:ProgramFiles "Windows Defender\MpCmdRun.exe"[0m
+2026-11-23T00:04:31.2203952Z [36;1mif (-not (Test-Path $mp)) {[0m
+2026-11-23T00:04:31.2204373Z [36;1m  Write-Host "DEFENDER-SCAN: INCONCLUSIVE (MpCmdRun.exe absent on this image — recorded, never a silent pass)"[0m
+2026-11-23T00:04:31.2204813Z [36;1m  "DEFENDER-SCAN: INCONCLUSIVE (MpCmdRun absent)" |[0m
+2026-11-23T00:04:31.2205096Z [36;1m    Add-Content "$env:EVIDENCE_DIR/defender-scan.txt"[0m
+2026-11-23T00:04:31.2205323Z [36;1m  exit 0[0m
+2026-11-23T00:04:31.2205464Z [36;1m}[0m
+2026-11-23T00:04:31.2205606Z [36;1mforeach ($name in @([0m
+2026-11-23T00:04:31.2205838Z [36;1m  "PharmaML_Studio_Setup_v$($env:RELEASE_VERSION).exe",[0m
+2026-11-23T00:04:31.2206130Z [36;1m  "PharmaML_Studio_v$($env:RELEASE_VERSION).msi"[0m
+2026-11-23T00:04:31.2206378Z [36;1m)) {[0m
+2026-11-23T00:04:31.2206556Z [36;1m  $file = Join-Path $env:ASSET_DIR $name[0m
+2026-11-23T00:04:31.2206793Z [36;1m  Write-Host "Defender scanning $name ..."[0m
+2026-11-23T00:04:31.2207223Z [36;1m  $output = & $mp -Scan -ScanType 3 -File $file 2>&1[0m
+2026-11-23T00:04:31.2207469Z [36;1m  $code = $LASTEXITCODE[0m
+2026-11-23T00:04:31.2207668Z [36;1m  $text = ($output | Out-String).Trim()[0m
+2026-11-23T00:04:31.2207945Z [36;1m  "=== Defender scan: $name (MpCmdRun exit $code) ===`n$text" |[0m
+2026-11-23T00:04:31.2208263Z [36;1m    Add-Content "$env:EVIDENCE_DIR/defender-scan.txt"[0m
+2026-11-23T00:04:31.2208506Z [36;1m  if ($code -eq 0) {[0m
+2026-11-23T00:04:31.2208709Z [36;1m    Write-Host "DEFENDER OK: $name clean"[0m
+2026-11-23T00:04:31.2208923Z [36;1m  } elseif ($code -eq 2) {[0m
+2026-11-23T00:04:31.2209168Z [36;1m    # the subexpression form — the bare-variable-plus-colon[0m
+2026-11-23T00:04:31.2209479Z [36;1m    # parse hazard (the second dispatch's catch: PowerShell[0m
+2026-11-23T00:04:31.2209769Z [36;1m    # read the colon as a scope qualifier and the step died[0m
+2026-11-23T00:04:31.2210041Z [36;1m    # at PARSE time before Defender ever ran)[0m
+2026-11-23T00:04:31.2210353Z [36;1m    Write-Host "::error::DEFENDER DETECTED a threat in $($name):`n$($text)"[0m
+2026-11-23T00:04:31.2210628Z [36;1m    exit 1[0m
+2026-11-23T00:04:31.2210779Z [36;1m  } else {[0m
+2026-11-23T00:04:31.2211121Z [36;1m    Write-Host "DEFENDER-SCAN: INCONCLUSIVE for $name (MpCmdRun exit $code) — recorded, never a silent pass"[0m
+2026-11-23T00:04:31.2211507Z [36;1m  }[0m
+2026-11-23T00:04:31.2211642Z [36;1m}[0m
+2026-11-23T00:04:31.2241435Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-23T00:04:31.2241710Z env:
+2026-11-23T00:04:31.2241942Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:04:31.2242305Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:04:31.2242654Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:31.2242996Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:04:31.2243348Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:31.2243646Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:31.2243936Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:31.2244176Z   RELEASE_TAG: v1.2.240
+2026-11-23T00:04:31.2244355Z   RELEASE_VERSION: 1.2.240
+2026-11-23T00:04:31.2244534Z   ASSET_DIR: D:\a\_temp\release-assets
+2026-11-23T00:04:31.2244724Z ##[endgroup]
+2026-11-23T00:04:31.4802247Z Defender scanning PharmaML_Studio_Setup_v1.2.240.exe ...
+2026-11-23T00:04:31.9087715Z DEFENDER OK: PharmaML_Studio_Setup_v1.2.240.exe clean
+2026-11-23T00:04:31.9094091Z Defender scanning PharmaML_Studio_v1.2.240.msi ...
+2026-11-23T00:04:31.9328564Z DEFENDER OK: PharmaML_Studio_v1.2.240.msi clean
+2026-11-23T00:04:31.9789034Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-23T00:04:31.9789433Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-23T00:04:31.9789789Z [36;1m$msi = Join-Path $env:ASSET_DIR "PharmaML_Studio_v$($env:RELEASE_VERSION).msi"[0m
+2026-11-23T00:04:31.9790148Z [36;1m$log = "$env:EVIDENCE_DIR/msi-install.log"[0m
+2026-11-23T00:04:31.9790376Z [36;1m$p = Start-Process msiexec.exe `[0m
+2026-11-23T00:04:31.9790673Z [36;1m  -ArgumentList "/i", "`"$msi`"", "/qn", "/norestart", "/l*v", "`"$log`"" `[0m
+2026-11-23T00:04:31.9790980Z [36;1m  -Wait -PassThru[0m
+2026-11-23T00:04:31.9791168Z [36;1m$code = $p.ExitCode[0m
+2026-11-23T00:04:31.9791368Z [36;1mWrite-Host "msiexec install exit: $code"[0m
+2026-11-23T00:04:31.9791603Z [36;1mif ($code -ne 0 -and $code -ne 3010) {[0m
+2026-11-23T00:04:31.9792003Z [36;1m  Write-Host "::error::the MSI silent install failed (exit $code) — see msi-install.log in the evidence bundle"[0m
+2026-11-23T00:04:31.9792432Z [36;1m  exit 1[0m
+2026-11-23T00:04:31.9792575Z [36;1m}[0m
+2026-11-23T00:04:31.9792715Z [36;1mif ($code -eq 3010) {[0m
+2026-11-23T00:04:31.9793016Z [36;1m  Write-Host "MSI INSTALL OK with reboot-required (3010) — recorded, no reboot taken"[0m
+2026-11-23T00:04:31.9793949Z [36;1m}[0m
+2026-11-23T00:04:31.9794143Z [36;1m$root = Join-Path $env:ProgramFiles "PharmaML Studio"[0m
+2026-11-23T00:04:31.9794404Z [36;1m$deadline = (Get-Date).AddSeconds(120)[0m
+2026-11-23T00:04:31.9794695Z [36;1mwhile (-not (Test-Path $root) -and (Get-Date) -lt $deadline) {[0m
+2026-11-23T00:04:31.9794968Z [36;1m  Start-Sleep -Seconds 2[0m
+2026-11-23T00:04:31.9795142Z [36;1m}[0m
+2026-11-23T00:04:31.9795289Z [36;1mif (-not (Test-Path $root)) {[0m
+2026-11-23T00:04:31.9795548Z [36;1m  Write-Host "::error::the MSI install dir never appeared: $root"[0m
+2026-11-23T00:04:31.9795802Z [36;1m  exit 1[0m
+2026-11-23T00:04:31.9795938Z [36;1m}[0m
+2026-11-23T00:04:31.9796143Z [36;1m# the host binary keeps its CARGO name (pharmaml-studio.exe —[0m
+2026-11-23T00:04:31.9796454Z [36;1m# the Tauri 2 mainBinaryName default; the third dispatch[0m
+2026-11-23T00:04:31.9796767Z [36;1m# caught the wrong 'PharmaML Studio.exe' assumption: the MSI[0m
+2026-11-23T00:04:31.9797090Z [36;1m# installed exit 0 with the dir present but the exe under the[0m
+2026-11-23T00:04:31.9797395Z [36;1m# Cargo name) — probe the candidates, then discover by the[0m
+2026-11-23T00:04:31.9797685Z [36;1m# version resource as the honest fallback, and record[0m
+2026-11-23T00:04:31.9797920Z [36;1m# whichever landed[0m
+2026-11-23T00:04:31.9798090Z [36;1m$app = $null[0m
+2026-11-23T00:04:31.9798249Z [36;1mforeach ($cand in @([0m
+2026-11-23T00:04:31.9798448Z [36;1m  (Join-Path $root "pharmaml-studio.exe"),[0m
+2026-11-23T00:04:31.9798695Z [36;1m  (Join-Path $root "PharmaML Studio.exe")[0m
+2026-11-23T00:04:31.9798903Z [36;1m)) {[0m
+2026-11-23T00:04:31.9799080Z [36;1m  if (Test-Path $cand) { $app = $cand; break }[0m
+2026-11-23T00:04:31.9799296Z [36;1m}[0m
+2026-11-23T00:04:31.9799436Z [36;1mif (-not $app) {[0m
+2026-11-23T00:04:31.9799635Z [36;1m  $app = Get-ChildItem $root -Filter "*.exe" |[0m
+2026-11-23T00:04:31.9799911Z [36;1m    Where-Object { $_.Name -ne "pharmaml-backend.exe" -and[0m
+2026-11-23T00:04:31.9800252Z [36;1m      ($_.VersionInfo.ProductVersion -like "$($env:RELEASE_VERSION)*") } |[0m
+2026-11-23T00:04:31.9800600Z [36;1m    Select-Object -First 1 | ForEach-Object { $_.FullName }[0m
+2026-11-23T00:04:31.9800845Z [36;1m}[0m
+2026-11-23T00:04:31.9800979Z [36;1mif (-not $app) {[0m
+2026-11-23T00:04:31.9801186Z [36;1m  Get-ChildItem $root | Select-Object Name, Length |[0m
+2026-11-23T00:04:31.9801447Z [36;1m    Format-Table | Out-String | Write-Host[0m
+2026-11-23T00:04:31.9801936Z [36;1m  Write-Host "::error::no host exe discovered under $root (both the name candidates and the version-resource fallback came up empty)"[0m
+2026-11-23T00:04:31.9802349Z [36;1m  exit 1[0m
+2026-11-23T00:04:31.9802485Z [36;1m}[0m
+2026-11-23T00:04:31.9804381Z [36;1m$fv = (Get-Item $app).VersionInfo[0m
+2026-11-23T00:04:31.9804974Z [36;1mif (-not ($fv.ProductVersion -like "$($env:RELEASE_VERSION)*")) {[0m
+2026-11-23T00:04:31.9805443Z [36;1m  Write-Host "::error::installed ProductVersion '$($fv.ProductVersion)' != $($env:RELEASE_VERSION)"[0m
+2026-11-23T00:04:31.9805802Z [36;1m  exit 1[0m
+2026-11-23T00:04:31.9805944Z [36;1m}[0m
+2026-11-23T00:04:31.9806186Z [36;1m$sidecar = Get-ChildItem $root -Recurse -Filter "pharmaml-backend.exe" |[0m
+2026-11-23T00:04:31.9806631Z [36;1m  Select-Object -First 1[0m
+2026-11-23T00:04:31.9806830Z [36;1mif (-not $sidecar) {[0m
+2026-11-23T00:04:31.9807123Z [36;1m  Write-Host "::error::the frozen sidecar exe is missing from the installed tree"[0m
+2026-11-23T00:04:31.9807458Z [36;1m  exit 1[0m
+2026-11-23T00:04:31.9807711Z [36;1m}[0m
+2026-11-23T00:04:31.9807926Z [36;1mAdd-Content $env:GITHUB_ENV "MSI_INSTALL_ROOT=$root"[0m
+2026-11-23T00:04:31.9808230Z [36;1mAdd-Content $env:GITHUB_ENV "MSI_HOST_EXE=$app"[0m
+2026-11-23T00:04:31.9808567Z [36;1mAdd-Content $env:GITHUB_ENV "MSI_SIDECAR_DIR=$($sidecar.DirectoryName)"[0m
+2026-11-23T00:04:31.9809002Z [36;1m"MSI install: root=$root" |[0m
+2026-11-23T00:04:31.9809237Z [36;1m  Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"[0m
+2026-11-23T00:04:31.9809626Z [36;1m"MSI host exe: $app (ProductVersion $($fv.ProductVersion), FileVersion $($fv.FileVersion))" |[0m
+2026-11-23T00:04:31.9810014Z [36;1m  Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"[0m
+2026-11-23T00:04:31.9810275Z [36;1m"MSI sidecar exe: $($sidecar.FullName)" |[0m
+2026-11-23T00:04:31.9810522Z [36;1m  Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"[0m
+2026-11-23T00:04:31.9810753Z [36;1mGet-ChildItem $root |[0m
+2026-11-23T00:04:31.9810938Z [36;1m  Select-Object Name, Length |[0m
+2026-11-23T00:04:31.9811133Z [36;1m  Format-Table | Out-String |[0m
+2026-11-23T00:04:31.9811358Z [36;1m  Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"[0m
+2026-11-23T00:04:31.9811796Z [36;1mWrite-Host "MSI TREE VERIFIED: host exe + ProductVersion $($fv.ProductVersion) + sidecar at $($sidecar.DirectoryName)"[0m
+2026-11-23T00:04:31.9842197Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-23T00:04:31.9842457Z env:
+2026-11-23T00:04:31.9842687Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:04:31.9843045Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:04:31.9843375Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:31.9843716Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:04:31.9844051Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:31.9844353Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:31.9844645Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:31.9844891Z   RELEASE_TAG: v1.2.240
+2026-11-23T00:04:31.9845059Z   RELEASE_VERSION: 1.2.240
+2026-11-23T00:04:31.9845240Z   ASSET_DIR: D:\a\_temp\release-assets
+2026-11-23T00:04:31.9845436Z ##[endgroup]
+2026-11-23T00:04:58.2205893Z msiexec install exit: 0
+2026-11-23T00:04:58.3054413Z MSI TREE VERIFIED: host exe + ProductVersion 1.2.240 + sidecar at C:\Program Files\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:04:58.3327984Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-23T00:04:58.3328326Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-23T00:04:58.3328628Z [36;1mpython packaging/windows/verify_sidecar.py "$env:MSI_SIDECAR_DIR"[0m
+2026-11-23T00:04:58.3328934Z [36;1mif ($LASTEXITCODE -ne 0) {[0m
+2026-11-23T00:04:58.3329341Z [36;1m  Write-Host "::error::the INSTALLED sidecar failed its live verification — the shipped bundle is not healthy"[0m
+2026-11-23T00:04:58.3329728Z [36;1m  exit 1[0m
+2026-11-23T00:04:58.3329870Z [36;1m}[0m
+2026-11-23T00:04:58.3330442Z [36;1mWrite-Host "INSTALLED SIDECAR VERIFIED (the §10 launch leg's backend half)"[0m
+2026-11-23T00:04:58.3362440Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-23T00:04:58.3362736Z env:
+2026-11-23T00:04:58.3362981Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:04:58.3363355Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:04:58.3363737Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:58.3364084Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:04:58.3364424Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:58.3364723Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:58.3365019Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:04:58.3365255Z   RELEASE_TAG: v1.2.240
+2026-11-23T00:04:58.3365424Z   RELEASE_VERSION: 1.2.240
+2026-11-23T00:04:58.3365602Z   ASSET_DIR: D:\a\_temp\release-assets
+2026-11-23T00:04:58.3365833Z   MSI_INSTALL_ROOT: C:\Program Files\PharmaML Studio
+2026-11-23T00:04:58.3366115Z   MSI_HOST_EXE: C:\Program Files\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:04:58.3366609Z   MSI_SIDECAR_DIR: C:\Program Files\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:04:58.3366886Z ##[endgroup]
+2026-11-23T00:05:09.1152720Z OK handshake: port=63000 pid=1424 version=1.2.240 token=<redacted>
+2026-11-23T00:05:09.1153697Z OK health (authenticated): {"status": "ok", "backend": "pharmaml", "version": "1.2.240", "api": "v1", "loopback_only": true, "scientific_core": true, "event_bus_last_sequence": 0, "jobs_active": 0, "token_sha256": "795b38fd4331475371851d863bc606a1c89e304b122883ee038070a593292d4a"}
+2026-11-23T00:05:09.1154652Z OK guard: unauthenticated probe refused (401)
+2026-11-23T00:05:09.1154987Z OK shutdown: exit=0
+2026-11-23T00:05:09.1155233Z SIDECAR-VERIFIED
+2026-11-23T00:05:09.1844121Z INSTALLED SIDECAR VERIFIED (the §10 launch leg's backend half)
+2026-11-23T00:05:09.2409186Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-23T00:05:09.2409626Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-23T00:05:09.2409870Z [36;1m$root = $env:MSI_INSTALL_ROOT[0m
+2026-11-23T00:05:09.2410083Z [36;1m$app = $env:MSI_HOST_EXE[0m
+2026-11-23T00:05:09.2410385Z [36;1m$proc = Start-Process -FilePath $app -WorkingDirectory $root -PassThru[0m
+2026-11-23T00:05:09.2410774Z [36;1m# §10 leg 2: first launch is tens of seconds (the frozen[0m
+2026-11-23T00:05:09.2411087Z [36;1m# torch/rdkit imports) — poll for the sidecar child[0m
+2026-11-23T00:05:09.2411352Z [36;1m$deadline = (Get-Date).AddSeconds(150)[0m
+2026-11-23T00:05:09.2411578Z [36;1m$backendSeen = $false[0m
+2026-11-23T00:05:09.2411778Z [36;1mwhile ((Get-Date) -lt $deadline) {[0m
+2026-11-23T00:05:09.2411992Z [36;1m  if ($proc.HasExited) {[0m
+2026-11-23T00:05:09.2412303Z [36;1m    Write-Host "::error::the installed app host exited early (code $($proc.ExitCode))"[0m
+2026-11-23T00:05:09.2412650Z [36;1m    exit 1[0m
+2026-11-23T00:05:09.2412802Z [36;1m  }[0m
+2026-11-23T00:05:09.2413071Z [36;1m  if (Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue) {[0m
+2026-11-23T00:05:09.2413381Z [36;1m    $backendSeen = $true[0m
+2026-11-23T00:05:09.2413556Z [36;1m    break[0m
+2026-11-23T00:05:09.2413701Z [36;1m  }[0m
+2026-11-23T00:05:09.2413847Z [36;1m  Start-Sleep -Seconds 3[0m
+2026-11-23T00:05:09.2414015Z [36;1m}[0m
+2026-11-23T00:05:09.2414154Z [36;1mif (-not $backendSeen) {[0m
+2026-11-23T00:05:09.2414480Z [36;1m  Write-Host "::error::the sidecar process never appeared under the launched host within 150s"[0m
+2026-11-23T00:05:09.2414819Z [36;1m  exit 1[0m
+2026-11-23T00:05:09.2414970Z [36;1m}[0m
+2026-11-23T00:05:09.2415207Z [36;1mWrite-Host "APP ALIVE: host pid $($proc.Id), the sidecar child spawned"[0m
+2026-11-23T00:05:09.2415552Z [36;1m# a bounded CI soak + resource sample — NOT the 45-60-min[0m
+2026-11-23T00:05:09.2415884Z [36;1m# desktop-stability lane (the honest scope note above)[0m
+2026-11-23T00:05:09.2416151Z [36;1mStart-Sleep -Seconds 45[0m
+2026-11-23T00:05:09.2416416Z [36;1m$hostP = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue[0m
+2026-11-23T00:05:09.2416697Z [36;1mif (-not $hostP) {[0m
+2026-11-23T00:05:09.2416936Z [36;1m  Write-Host "::error::the host died during the sample window"[0m
+2026-11-23T00:05:09.2417198Z [36;1m  exit 1[0m
+2026-11-23T00:05:09.2417342Z [36;1m}[0m
+2026-11-23T00:05:09.2417604Z [36;1m$backends = @(Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue)[0m
+2026-11-23T00:05:09.2417920Z [36;1m$sample = [ordered]@{[0m
+2026-11-23T00:05:09.2418105Z [36;1m  lane = "msi-host-launch"[0m
+2026-11-23T00:05:09.2418312Z [36;1m  sampledAt = (Get-Date -Format o)[0m
+2026-11-23T00:05:09.2418518Z [36;1m  host = [ordered]@{[0m
+2026-11-23T00:05:09.2418689Z [36;1m    pid = $hostP.Id[0m
+2026-11-23T00:05:09.2418933Z [36;1m    workingSetMB = [math]::Round($hostP.WorkingSet64 / 1MB, 1)[0m
+2026-11-23T00:05:09.2419268Z [36;1m    privateMB = [math]::Round($hostP.PrivateMemorySize64 / 1MB, 1)[0m
+2026-11-23T00:05:09.2419550Z [36;1m    cpuS = [math]::Round($hostP.CPU, 2)[0m
+2026-11-23T00:05:09.2419947Z [36;1m    threads = $hostP.Threads.Count[0m
+2026-11-23T00:05:09.2420169Z [36;1m    handles = $hostP.HandleCount[0m
+2026-11-23T00:05:09.2420362Z [36;1m  }[0m
+2026-11-23T00:05:09.2420535Z [36;1m  sidecar = @($backends | ForEach-Object {[0m
+2026-11-23T00:05:09.2420756Z [36;1m    [ordered]@{[0m
+2026-11-23T00:05:09.2420919Z [36;1m      pid = $_.Id[0m
+2026-11-23T00:05:09.2421145Z [36;1m      workingSetMB = [math]::Round($_.WorkingSet64 / 1MB, 1)[0m
+2026-11-23T00:05:09.2421464Z [36;1m      privateMB = [math]::Round($_.PrivateMemorySize64 / 1MB, 1)[0m
+2026-11-23T00:05:09.2421736Z [36;1m      cpuS = [math]::Round($_.CPU, 2)[0m
+2026-11-23T00:05:09.2421932Z [36;1m    }[0m
+2026-11-23T00:05:09.2422065Z [36;1m  })[0m
+2026-11-23T00:05:09.2422197Z [36;1m}[0m
+2026-11-23T00:05:09.2423490Z [36;1m($sample | ConvertTo-Json -Depth 5) |[0m
+2026-11-23T00:05:09.2423816Z [36;1m  Add-Content "$env:EVIDENCE_DIR/resource-sample-msi.json"[0m
+2026-11-23T00:05:09.2424145Z [36;1m# hoisted, never nested: the fourth dispatch's catch — the[0m
+2026-11-23T00:05:09.2424468Z [36;1m# parser binds a bare '()' after a switch parameter as an[0m
+2026-11-23T00:05:09.2424780Z [36;1m# empty argument ('An expression was expected after (')[0m
+2026-11-23T00:05:09.2425161Z [36;1m$sampleJson = $sample | ConvertTo-Json -Depth 5 -Compress[0m
+2026-11-23T00:05:09.2425462Z [36;1mWrite-Host "RESOURCE SAMPLE (msi): $sampleJson"[0m
+2026-11-23T00:05:09.2425749Z [36;1m# §10 leg 5: the graceful close, then the no-orphan check[0m
+2026-11-23T00:05:09.2426009Z [36;1m$null = $proc.CloseMainWindow()[0m
+2026-11-23T00:05:09.2426242Z [36;1m$exitDeadline = (Get-Date).AddSeconds(45)[0m
+2026-11-23T00:05:09.2426557Z [36;1mwhile (-not $proc.HasExited -and (Get-Date) -lt $exitDeadline) {[0m
+2026-11-23T00:05:09.2426843Z [36;1m  Start-Sleep -Seconds 2[0m
+2026-11-23T00:05:09.2427021Z [36;1m}[0m
+2026-11-23T00:05:09.2427173Z [36;1m$forced = -not $proc.HasExited[0m
+2026-11-23T00:05:09.2427386Z [36;1mif ($forced) {[0m
+2026-11-23T00:05:09.2427793Z [36;1m  Write-Host "graceful close did not land in 45s — hard-stopping (the §10 leg-5 verdict records INCONCLUSIVE for the forced path)"[0m
+2026-11-23T00:05:09.2428294Z [36;1m  Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue[0m
+2026-11-23T00:05:09.2428572Z [36;1m  Start-Sleep -Seconds 5[0m
+2026-11-23T00:05:09.2428851Z [36;1m}[0m
+2026-11-23T00:05:09.2429023Z [36;1m$orphanDeadline = (Get-Date).AddSeconds(60)[0m
+2026-11-23T00:05:09.2429357Z [36;1m$orphans = @(Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue)[0m
+2026-11-23T00:05:09.2429753Z [36;1mwhile ($orphans.Count -gt 0 -and (Get-Date) -lt $orphanDeadline) {[0m
+2026-11-23T00:05:09.2430032Z [36;1m  Start-Sleep -Seconds 3[0m
+2026-11-23T00:05:09.2430335Z [36;1m  $orphans = @(Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue)[0m
+2026-11-23T00:05:09.2430641Z [36;1m}[0m
+2026-11-23T00:05:09.2430793Z [36;1mif ($orphans.Count -gt 0) {[0m
+2026-11-23T00:05:09.2430980Z [36;1m  if ($forced) {[0m
+2026-11-23T00:05:09.2431456Z [36;1m    Write-Host "ORPHAN CHECK: INCONCLUSIVE (forced-kill path) — $($orphans.Count) pharmaml-backend still alive: $($orphans.Id -join ', '); recorded, cleaned up"[0m
+2026-11-23T00:05:09.2432070Z [36;1m    "ORPHAN CHECK: INCONCLUSIVE after forced kill — pids $($orphans.Id -join ', ')" |[0m
+2026-11-23T00:05:09.2432432Z [36;1m      Add-Content "$env:EVIDENCE_DIR/lifecycle-msi.txt"[0m
+2026-11-23T00:05:09.2432781Z [36;1m    Stop-Process -Name "pharmaml-backend" -Force -ErrorAction SilentlyContinue[0m
+2026-11-23T00:05:09.2433091Z [36;1m    Start-Sleep -Seconds 3[0m
+2026-11-23T00:05:09.2433269Z [36;1m  } else {[0m
+2026-11-23T00:05:09.2433622Z [36;1m    Write-Host "::error::ORPHANED sidecar after the graceful close: $($orphans.Id -join ', ') — §10 leg 5 verdict FAIL"[0m
+2026-11-23T00:05:09.2433994Z [36;1m    exit 1[0m
+2026-11-23T00:05:09.2434139Z [36;1m  }[0m
+2026-11-23T00:05:09.2434361Z [36;1m} else {[0m
+2026-11-23T00:05:09.2434695Z [36;1m  Write-Host "LIFECYCLE OK: host closed, zero orphaned pharmaml-backend processes (graceful=$(-not $forced))"[0m
+2026-11-23T00:05:09.2435062Z [36;1m}[0m
+2026-11-23T00:05:09.2465096Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-23T00:05:09.2465359Z env:
+2026-11-23T00:05:09.2465594Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:05:09.2465956Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:05:09.2466281Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:05:09.2466622Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:05:09.2467546Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:05:09.2467859Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:05:09.2468154Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:05:09.2468403Z   RELEASE_TAG: v1.2.240
+2026-11-23T00:05:09.2468571Z   RELEASE_VERSION: 1.2.240
+2026-11-23T00:05:09.2468761Z   ASSET_DIR: D:\a\_temp\release-assets
+2026-11-23T00:05:09.2468984Z   MSI_INSTALL_ROOT: C:\Program Files\PharmaML Studio
+2026-11-23T00:05:09.2469272Z   MSI_HOST_EXE: C:\Program Files\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:05:09.2469609Z   MSI_SIDECAR_DIR: C:\Program Files\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:05:09.2469882Z ##[endgroup]
+2026-11-23T00:05:18.6005487Z APP ALIVE: host pid 4692, the sidecar child spawned
+2026-11-23T00:06:03.6648259Z RESOURCE SAMPLE (msi): {"lane":"msi-host-launch","sampledAt":"2026-11-23T00:06:03.6114881+00:00","host":{"pid":4692,"workingSetMB":21.0,"privateMB":4.2,"cpuS":0.09,"threads":14,"handles":320},"sidecar":[{"pid":6068,"workingSetMB":186.1,"privateMB":368.9,"cpuS":1.69}]}
+2026-11-23T00:06:15.6896552Z LIFECYCLE OK: host closed, zero orphaned pharmaml-backend processes (graceful=True)
+2026-11-23T00:06:15.7186115Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-23T00:06:15.7186484Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-23T00:06:15.7186810Z [36;1m$msi = Join-Path $env:ASSET_DIR "PharmaML_Studio_v$($env:RELEASE_VERSION).msi"[0m
+2026-11-23T00:06:15.7187136Z [36;1m$p = Start-Process msiexec.exe `[0m
+2026-11-23T00:06:15.7187423Z [36;1m  -ArgumentList "/x", "`"$msi`"", "/qn", "/norestart" `[0m
+2026-11-23T00:06:15.7187709Z [36;1m  -Wait -PassThru[0m
+2026-11-23T00:06:15.7187905Z [36;1m$code = $p.ExitCode[0m
+2026-11-23T00:06:15.7188117Z [36;1mWrite-Host "msiexec uninstall exit: $code"[0m
+2026-11-23T00:06:15.7188370Z [36;1mif ($code -ne 0 -and $code -ne 3010) {[0m
+2026-11-23T00:06:15.7188673Z [36;1m  Write-Host "::error::the MSI silent uninstall failed (exit $code)"[0m
+2026-11-23T00:06:15.7188950Z [36;1m  exit 1[0m
+2026-11-23T00:06:15.7189097Z [36;1m}[0m
+2026-11-23T00:06:15.7189296Z [36;1m$root = Join-Path $env:ProgramFiles "PharmaML Studio"[0m
+2026-11-23T00:06:15.7189618Z [36;1m$deadline = (Get-Date).AddSeconds(90)[0m
+2026-11-23T00:06:15.7189898Z [36;1mwhile ((Test-Path $root) -and (Get-Date) -lt $deadline) {[0m
+2026-11-23T00:06:15.7190164Z [36;1m  Start-Sleep -Seconds 2[0m
+2026-11-23T00:06:15.7190346Z [36;1m}[0m
+2026-11-23T00:06:15.7190493Z [36;1mif (Test-Path $root) {[0m
+2026-11-23T00:06:15.7190759Z [36;1m  Write-Host "::error::the install dir survived the uninstall: $root"[0m
+2026-11-23T00:06:15.7191038Z [36;1m  exit 1[0m
+2026-11-23T00:06:15.7191179Z [36;1m}[0m
+2026-11-23T00:06:15.7191402Z [36;1m# §10 leg 6: the user-data retention note (recorded)[0m
+2026-11-23T00:06:15.7191660Z [36;1mforeach ($d in @([0m
+2026-11-23T00:06:15.7191886Z [36;1m  (Join-Path $env:APPDATA "com.pharmaml.studio"),[0m
+2026-11-23T00:06:15.7192172Z [36;1m  (Join-Path $env:LOCALAPPDATA "com.pharmaml.studio")[0m
+2026-11-23T00:06:15.7192407Z [36;1m)) {[0m
+2026-11-23T00:06:15.7192637Z [36;1m  "MSI uninstall: user-data dir $d exists=$(Test-Path $d)" |[0m
+2026-11-23T00:06:15.7193116Z [36;1m    Add-Content "$env:EVIDENCE_DIR/uninstall-msi.txt"[0m
+2026-11-23T00:06:15.7193342Z [36;1m}[0m
+2026-11-23T00:06:15.7193679Z [36;1mWrite-Host "MSI UNINSTALL OK: install dir removed; the user-data retention state recorded in the evidence bundle"[0m
+2026-11-23T00:06:15.7224387Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-23T00:06:15.7224668Z env:
+2026-11-23T00:06:15.7224915Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:06:15.7225287Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:06:15.7225620Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:06:15.7225974Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:06:15.7226326Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:06:15.7226658Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:06:15.7226967Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:06:15.7227211Z   RELEASE_TAG: v1.2.240
+2026-11-23T00:06:15.7227381Z   RELEASE_VERSION: 1.2.240
+2026-11-23T00:06:15.7227571Z   ASSET_DIR: D:\a\_temp\release-assets
+2026-11-23T00:06:15.7227800Z   MSI_INSTALL_ROOT: C:\Program Files\PharmaML Studio
+2026-11-23T00:06:15.7228102Z   MSI_HOST_EXE: C:\Program Files\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:06:15.7228448Z   MSI_SIDECAR_DIR: C:\Program Files\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:06:15.7228726Z ##[endgroup]
+2026-11-23T00:06:34.3681595Z msiexec uninstall exit: 0
+2026-11-23T00:06:34.3889182Z MSI UNINSTALL OK: install dir removed; the user-data retention state recorded in the evidence bundle
+2026-11-23T00:06:34.4167546Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-23T00:06:34.4167965Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-23T00:06:34.4168356Z [36;1m$setup = Join-Path $env:ASSET_DIR "PharmaML_Studio_Setup_v$($env:RELEASE_VERSION).exe"[0m
+2026-11-23T00:06:34.4168801Z [36;1m$p = Start-Process -FilePath $setup -ArgumentList "/S" -Wait -PassThru[0m
+2026-11-23T00:06:34.4169130Z [36;1mif ($p.ExitCode -ne 0) {[0m
+2026-11-23T00:06:34.4169441Z [36;1m  Write-Host "::error::the NSIS silent install failed (exit $($p.ExitCode))"[0m
+2026-11-23T00:06:34.4169744Z [36;1m  exit 1[0m
+2026-11-23T00:06:34.4169891Z [36;1m}[0m
+2026-11-23T00:06:34.4170101Z [36;1m# currentUser mode: poll BOTH documented candidate homes —[0m
+2026-11-23T00:06:34.4170439Z [36;1m# %LOCALAPPDATA%\Programs\PharmaML Studio (the §10 claim)[0m
+2026-11-23T00:06:34.4170758Z [36;1m# and %LOCALAPPDATA%\PharmaML Studio (the Tauri NSIS[0m
+2026-11-23T00:06:34.4171109Z [36;1m# template's other per-user form) — whichever appears wins[0m
+2026-11-23T00:06:34.4171420Z [36;1m# and is recorded; a wrong guess here must never fail a[0m
+2026-11-23T00:06:34.4171668Z [36;1m# healthy install[0m
+2026-11-23T00:06:34.4171857Z [36;1m$rootCandidates = @([0m
+2026-11-23T00:06:34.4172101Z [36;1m  (Join-Path $env:LOCALAPPDATA "Programs\PharmaML Studio"),[0m
+2026-11-23T00:06:34.4172393Z [36;1m  (Join-Path $env:LOCALAPPDATA "PharmaML Studio")[0m
+2026-11-23T00:06:34.4172618Z [36;1m)[0m
+2026-11-23T00:06:34.4172772Z [36;1m$root = $null[0m
+2026-11-23T00:06:34.4172958Z [36;1m$deadline = (Get-Date).AddSeconds(120)[0m
+2026-11-23T00:06:34.4173222Z [36;1mwhile (-not $root -and (Get-Date) -lt $deadline) {[0m
+2026-11-23T00:06:34.4173477Z [36;1m  foreach ($r in $rootCandidates) {[0m
+2026-11-23T00:06:34.4173711Z [36;1m    if (Test-Path $r) { $root = $r; break }[0m
+2026-11-23T00:06:34.4173920Z [36;1m  }[0m
+2026-11-23T00:06:34.4174095Z [36;1m  if (-not $root) { Start-Sleep -Seconds 2 }[0m
+2026-11-23T00:06:34.4174309Z [36;1m}[0m
+2026-11-23T00:06:34.4174454Z [36;1mif (-not $root) {[0m
+2026-11-23T00:06:34.4174833Z [36;1m  Write-Host "::error::no NSIS install dir appeared under either candidate home: $($rootCandidates -join ' | ')"[0m
+2026-11-23T00:06:34.4175385Z [36;1m  exit 1[0m
+2026-11-23T00:06:34.4175533Z [36;1m}[0m
+2026-11-23T00:06:34.4175746Z [36;1m# the host exe keeps its CARGO name (pharmaml-studio.exe —[0m
+2026-11-23T00:06:34.4176065Z [36;1m# the Tauri 2 mainBinaryName default; the same discovery[0m
+2026-11-23T00:06:34.4176383Z [36;1m# pattern as step 6: probe, then the version-resource[0m
+2026-11-23T00:06:34.4176636Z [36;1m# fallback, then record)[0m
+2026-11-23T00:06:34.4176822Z [36;1m$app = $null[0m
+2026-11-23T00:06:34.4176989Z [36;1mforeach ($cand in @([0m
+2026-11-23T00:06:34.4177198Z [36;1m  (Join-Path $root "pharmaml-studio.exe"),[0m
+2026-11-23T00:06:34.4177449Z [36;1m  (Join-Path $root "PharmaML Studio.exe")[0m
+2026-11-23T00:06:34.4177671Z [36;1m)) {[0m
+2026-11-23T00:06:34.4177860Z [36;1m  if (Test-Path $cand) { $app = $cand; break }[0m
+2026-11-23T00:06:34.4178073Z [36;1m}[0m
+2026-11-23T00:06:34.4178218Z [36;1mif (-not $app) {[0m
+2026-11-23T00:06:34.4178423Z [36;1m  $app = Get-ChildItem $root -Filter "*.exe" |[0m
+2026-11-23T00:06:34.4178702Z [36;1m    Where-Object { $_.Name -ne "pharmaml-backend.exe" -and[0m
+2026-11-23T00:06:34.4179047Z [36;1m      ($_.VersionInfo.ProductVersion -like "$($env:RELEASE_VERSION)*") } |[0m
+2026-11-23T00:06:34.4179402Z [36;1m    Select-Object -First 1 | ForEach-Object { $_.FullName }[0m
+2026-11-23T00:06:34.4179646Z [36;1m}[0m
+2026-11-23T00:06:34.4179790Z [36;1mif (-not $app) {[0m
+2026-11-23T00:06:34.4180001Z [36;1m  Get-ChildItem $root | Select-Object Name, Length |[0m
+2026-11-23T00:06:34.4180260Z [36;1m    Format-Table | Out-String | Write-Host[0m
+2026-11-23T00:06:34.4180548Z [36;1m  Write-Host "::error::no host exe discovered under $root (NSIS lane)"[0m
+2026-11-23T00:06:34.4182105Z [36;1m  exit 1[0m
+2026-11-23T00:06:34.4182290Z [36;1m}[0m
+2026-11-23T00:06:34.4182451Z [36;1m$fv = (Get-Item $app).VersionInfo[0m
+2026-11-23T00:06:34.4182743Z [36;1mif (-not ($fv.ProductVersion -like "$($env:RELEASE_VERSION)*")) {[0m
+2026-11-23T00:06:34.4183183Z [36;1m  Write-Host "::error::installed ProductVersion '$($fv.ProductVersion)' != $($env:RELEASE_VERSION)"[0m
+2026-11-23T00:06:34.4183539Z [36;1m  exit 1[0m
+2026-11-23T00:06:34.4183681Z [36;1m}[0m
+2026-11-23T00:06:34.4183927Z [36;1m$sidecar = Get-ChildItem $root -Recurse -Filter "pharmaml-backend.exe" |[0m
+2026-11-23T00:06:34.4184250Z [36;1m  Select-Object -First 1[0m
+2026-11-23T00:06:34.4184444Z [36;1mif (-not $sidecar) {[0m
+2026-11-23T00:06:34.4184741Z [36;1m  Write-Host "::error::the frozen sidecar exe is missing from the installed tree"[0m
+2026-11-23T00:06:34.4185041Z [36;1m  exit 1[0m
+2026-11-23T00:06:34.4185189Z [36;1m}[0m
+2026-11-23T00:06:34.4185405Z [36;1m# §10 leg 1: the Start-Menu shortcut verification[0m
+2026-11-23T00:06:34.4185773Z [36;1m$startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"[0m
+2026-11-23T00:06:34.4186134Z [36;1m$lnks = @(Get-ChildItem $startMenu -Recurse -Filter "*.lnk" |[0m
+2026-11-23T00:06:34.4186486Z [36;1m  Where-Object { $_.Name -like "*PharmaML*" })[0m
+2026-11-23T00:06:34.4186723Z [36;1mif ($lnks.Count -eq 0) {[0m
+2026-11-23T00:06:34.4187131Z [36;1m  Write-Host "::error::no Start-Menu shortcut for PharmaML Studio under $startMenu — the §10 leg-1 shortcut check failed"[0m
+2026-11-23T00:06:34.4187539Z [36;1m  exit 1[0m
+2026-11-23T00:06:34.4187684Z [36;1m}[0m
+2026-11-23T00:06:34.4187883Z [36;1m$desktop = [Environment]::GetFolderPath("Desktop")[0m
+2026-11-23T00:06:34.4188216Z [36;1m$desktopLnk = Test-Path (Join-Path $desktop "PharmaML Studio.lnk")[0m
+2026-11-23T00:06:34.4188549Z [36;1mAdd-Content $env:GITHUB_ENV "NSIS_INSTALL_ROOT=$root"[0m
+2026-11-23T00:06:34.4188839Z [36;1mAdd-Content $env:GITHUB_ENV "NSIS_HOST_EXE=$app"[0m
+2026-11-23T00:06:34.4189176Z [36;1mAdd-Content $env:GITHUB_ENV "NSIS_SIDECAR_DIR=$($sidecar.DirectoryName)"[0m
+2026-11-23T00:06:34.4189547Z [36;1m"NSIS install: root=$root (ProductVersion $($fv.ProductVersion))" |[0m
+2026-11-23T00:06:34.4189990Z [36;1m  Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"[0m
+2026-11-23T00:06:34.4190257Z [36;1m"NSIS sidecar exe: $($sidecar.FullName)" |[0m
+2026-11-23T00:06:34.4190525Z [36;1m  Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"[0m
+2026-11-23T00:06:34.4190961Z [36;1m"NSIS shortcuts: start-menu $($lnks.Name -join ', '); desktop shortcut present=$desktopLnk (optional leg, recorded)" |[0m
+2026-11-23T00:06:34.4191387Z [36;1m  Add-Content "$env:EVIDENCE_DIR/installed-tree.txt"[0m
+2026-11-23T00:06:34.4191861Z [36;1mWrite-Host "NSIS TREE VERIFIED: host exe + version + sidecar + Start-Menu shortcut(s); desktop shortcut present=$desktopLnk (recorded)"[0m
+2026-11-23T00:06:34.4222673Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-23T00:06:34.4222946Z env:
+2026-11-23T00:06:34.4223188Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:06:34.4223549Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:06:34.4223888Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:06:34.4224233Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:06:34.4224575Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:06:34.4224881Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:06:34.4225186Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:06:34.4225429Z   RELEASE_TAG: v1.2.240
+2026-11-23T00:06:34.4225609Z   RELEASE_VERSION: 1.2.240
+2026-11-23T00:06:34.4225795Z   ASSET_DIR: D:\a\_temp\release-assets
+2026-11-23T00:06:34.4226028Z   MSI_INSTALL_ROOT: C:\Program Files\PharmaML Studio
+2026-11-23T00:06:34.4226976Z   MSI_HOST_EXE: C:\Program Files\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:06:34.4227332Z   MSI_SIDECAR_DIR: C:\Program Files\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:06:34.4227616Z ##[endgroup]
+2026-11-23T00:07:36.1976345Z NSIS TREE VERIFIED: host exe + version + sidecar + Start-Menu shortcut(s); desktop shortcut present=True (recorded)
+2026-11-23T00:07:36.2298486Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-23T00:07:36.2298939Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-23T00:07:36.2299164Z [36;1m$root = $env:NSIS_INSTALL_ROOT[0m
+2026-11-23T00:07:36.2299371Z [36;1m$app = $env:NSIS_HOST_EXE[0m
+2026-11-23T00:07:36.2299699Z [36;1m$proc = Start-Process -FilePath $app -WorkingDirectory $root -PassThru[0m
+2026-11-23T00:07:36.2300034Z [36;1m$deadline = (Get-Date).AddSeconds(150)[0m
+2026-11-23T00:07:36.2300261Z [36;1m$backendSeen = $false[0m
+2026-11-23T00:07:36.2300465Z [36;1mwhile ((Get-Date) -lt $deadline) {[0m
+2026-11-23T00:07:36.2300686Z [36;1m  if ($proc.HasExited) {[0m
+2026-11-23T00:07:36.2301025Z [36;1m    Write-Host "::error::the NSIS-installed app host exited early (code $($proc.ExitCode))"[0m
+2026-11-23T00:07:36.2301353Z [36;1m    exit 1[0m
+2026-11-23T00:07:36.2301524Z [36;1m  }[0m
+2026-11-23T00:07:36.2301812Z [36;1m  if (Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue) {[0m
+2026-11-23T00:07:36.2302136Z [36;1m    $backendSeen = $true[0m
+2026-11-23T00:07:36.2302324Z [36;1m    break[0m
+2026-11-23T00:07:36.2302480Z [36;1m  }[0m
+2026-11-23T00:07:36.2302639Z [36;1m  Start-Sleep -Seconds 3[0m
+2026-11-23T00:07:36.2302817Z [36;1m}[0m
+2026-11-23T00:07:36.2302960Z [36;1mif (-not $backendSeen) {[0m
+2026-11-23T00:07:36.2303337Z [36;1m  Write-Host "::error::the sidecar process never appeared under the launched NSIS-installed host within 150s"[0m
+2026-11-23T00:07:36.2303710Z [36;1m  exit 1[0m
+2026-11-23T00:07:36.2303849Z [36;1m}[0m
+2026-11-23T00:07:36.2304108Z [36;1mWrite-Host "APP ALIVE (NSIS lane): host pid $($proc.Id), the sidecar child spawned"[0m
+2026-11-23T00:07:36.2304435Z [36;1mStart-Sleep -Seconds 30[0m
+2026-11-23T00:07:36.2304703Z [36;1m$hostP = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue[0m
+2026-11-23T00:07:36.2305837Z [36;1mif (-not $hostP) {[0m
+2026-11-23T00:07:36.2306111Z [36;1m  Write-Host "::error::the host died during the sample window (NSIS lane)"[0m
+2026-11-23T00:07:36.2306395Z [36;1m  exit 1[0m
+2026-11-23T00:07:36.2306546Z [36;1m}[0m
+2026-11-23T00:07:36.2306806Z [36;1m$backends = @(Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue)[0m
+2026-11-23T00:07:36.2307124Z [36;1m$sample = [ordered]@{[0m
+2026-11-23T00:07:36.2307314Z [36;1m  lane = "nsis-host-launch"[0m
+2026-11-23T00:07:36.2307524Z [36;1m  sampledAt = (Get-Date -Format o)[0m
+2026-11-23T00:07:36.2307734Z [36;1m  host = [ordered]@{[0m
+2026-11-23T00:07:36.2307913Z [36;1m    pid = $hostP.Id[0m
+2026-11-23T00:07:36.2308155Z [36;1m    workingSetMB = [math]::Round($hostP.WorkingSet64 / 1MB, 1)[0m
+2026-11-23T00:07:36.2308494Z [36;1m    privateMB = [math]::Round($hostP.PrivateMemorySize64 / 1MB, 1)[0m
+2026-11-23T00:07:36.2308787Z [36;1m    cpuS = [math]::Round($hostP.CPU, 2)[0m
+2026-11-23T00:07:36.2309015Z [36;1m    threads = $hostP.Threads.Count[0m
+2026-11-23T00:07:36.2309229Z [36;1m    handles = $hostP.HandleCount[0m
+2026-11-23T00:07:36.2309419Z [36;1m  }[0m
+2026-11-23T00:07:36.2309589Z [36;1m  sidecar = @($backends | ForEach-Object {[0m
+2026-11-23T00:07:36.2309800Z [36;1m    [ordered]@{[0m
+2026-11-23T00:07:36.2309963Z [36;1m      pid = $_.Id[0m
+2026-11-23T00:07:36.2310188Z [36;1m      workingSetMB = [math]::Round($_.WorkingSet64 / 1MB, 1)[0m
+2026-11-23T00:07:36.2310505Z [36;1m      privateMB = [math]::Round($_.PrivateMemorySize64 / 1MB, 1)[0m
+2026-11-23T00:07:36.2310772Z [36;1m      cpuS = [math]::Round($_.CPU, 2)[0m
+2026-11-23T00:07:36.2310964Z [36;1m    }[0m
+2026-11-23T00:07:36.2311095Z [36;1m  })[0m
+2026-11-23T00:07:36.2311227Z [36;1m}[0m
+2026-11-23T00:07:36.2311383Z [36;1m($sample | ConvertTo-Json -Depth 5) |[0m
+2026-11-23T00:07:36.2311653Z [36;1m  Add-Content "$env:EVIDENCE_DIR/resource-sample-nsis.json"[0m
+2026-11-23T00:07:36.2311974Z [36;1m# hoisted, never nested (the same fourth-dispatch catch as[0m
+2026-11-23T00:07:36.2313697Z [36;1m# step 8 — a switch parameter followed by a bare paren pair[0m
+2026-11-23T00:07:36.2314065Z [36;1m# is a parse error, not an argument)[0m
+2026-11-23T00:07:36.2314352Z [36;1m$sampleJson = $sample | ConvertTo-Json -Depth 5 -Compress[0m
+2026-11-23T00:07:36.2314656Z [36;1mWrite-Host "RESOURCE SAMPLE (nsis): $sampleJson"[0m
+2026-11-23T00:07:36.2314910Z [36;1m$null = $proc.CloseMainWindow()[0m
+2026-11-23T00:07:36.2315145Z [36;1m$exitDeadline = (Get-Date).AddSeconds(45)[0m
+2026-11-23T00:07:36.2315452Z [36;1mwhile (-not $proc.HasExited -and (Get-Date) -lt $exitDeadline) {[0m
+2026-11-23T00:07:36.2315739Z [36;1m  Start-Sleep -Seconds 2[0m
+2026-11-23T00:07:36.2315919Z [36;1m}[0m
+2026-11-23T00:07:36.2316082Z [36;1m$forced = -not $proc.HasExited[0m
+2026-11-23T00:07:36.2316295Z [36;1mif ($forced) {[0m
+2026-11-23T00:07:36.2316738Z [36;1m  Write-Host "graceful close did not land in 45s — hard-stopping (NSIS lane; the leg-5 verdict records INCONCLUSIVE for the forced path)"[0m
+2026-11-23T00:07:36.2317294Z [36;1m  Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue[0m
+2026-11-23T00:07:36.2317576Z [36;1m  Start-Sleep -Seconds 5[0m
+2026-11-23T00:07:36.2317750Z [36;1m}[0m
+2026-11-23T00:07:36.2317924Z [36;1m$orphanDeadline = (Get-Date).AddSeconds(60)[0m
+2026-11-23T00:07:36.2318266Z [36;1m$orphans = @(Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue)[0m
+2026-11-23T00:07:36.2318664Z [36;1mwhile ($orphans.Count -gt 0 -and (Get-Date) -lt $orphanDeadline) {[0m
+2026-11-23T00:07:36.2318956Z [36;1m  Start-Sleep -Seconds 3[0m
+2026-11-23T00:07:36.2319255Z [36;1m  $orphans = @(Get-Process -Name "pharmaml-backend" -ErrorAction SilentlyContinue)[0m
+2026-11-23T00:07:36.2319549Z [36;1m}[0m
+2026-11-23T00:07:36.2319697Z [36;1mif ($orphans.Count -gt 0) {[0m
+2026-11-23T00:07:36.2319889Z [36;1m  if ($forced) {[0m
+2026-11-23T00:07:36.2320327Z [36;1m    Write-Host "ORPHAN CHECK: INCONCLUSIVE (forced-kill path, NSIS lane) — recorded, cleaned up"[0m
+2026-11-23T00:07:36.2320819Z [36;1m    "ORPHAN CHECK: INCONCLUSIVE after forced kill (NSIS) — pids $($orphans.Id -join ', ')" |[0m
+2026-11-23T00:07:36.2321213Z [36;1m      Add-Content "$env:EVIDENCE_DIR/lifecycle-nsis.txt"[0m
+2026-11-23T00:07:36.2321562Z [36;1m    Stop-Process -Name "pharmaml-backend" -Force -ErrorAction SilentlyContinue[0m
+2026-11-23T00:07:36.2321873Z [36;1m    Start-Sleep -Seconds 3[0m
+2026-11-23T00:07:36.2322055Z [36;1m  } else {[0m
+2026-11-23T00:07:36.2322432Z [36;1m    Write-Host "::error::ORPHANED sidecar after the graceful close (NSIS lane): $($orphans.Id -join ', ') — §10 leg 5 verdict FAIL"[0m
+2026-11-23T00:07:36.2322831Z [36;1m    exit 1[0m
+2026-11-23T00:07:36.2322975Z [36;1m  }[0m
+2026-11-23T00:07:36.2323112Z [36;1m} else {[0m
+2026-11-23T00:07:36.2323473Z [36;1m  Write-Host "LIFECYCLE OK (NSIS): host closed, zero orphaned pharmaml-backend processes (graceful=$(-not $forced))"[0m
+2026-11-23T00:07:36.2323858Z [36;1m}[0m
+2026-11-23T00:07:36.2354537Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-23T00:07:36.2354811Z env:
+2026-11-23T00:07:36.2355053Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:07:36.2355414Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:07:36.2355754Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:07:36.2356117Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:07:36.2356452Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:07:36.2356754Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:07:36.2357054Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:07:36.2357297Z   RELEASE_TAG: v1.2.240
+2026-11-23T00:07:36.2357472Z   RELEASE_VERSION: 1.2.240
+2026-11-23T00:07:36.2357669Z   ASSET_DIR: D:\a\_temp\release-assets
+2026-11-23T00:07:36.2357900Z   MSI_INSTALL_ROOT: C:\Program Files\PharmaML Studio
+2026-11-23T00:07:36.2358746Z   MSI_HOST_EXE: C:\Program Files\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:07:36.2359099Z   MSI_SIDECAR_DIR: C:\Program Files\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:07:36.2359451Z   NSIS_INSTALL_ROOT: C:\Users\runneradmin\AppData\Local\PharmaML Studio
+2026-11-23T00:07:36.2359835Z   NSIS_HOST_EXE: C:\Users\runneradmin\AppData\Local\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:07:36.2360275Z   NSIS_SIDECAR_DIR: C:\Users\runneradmin\AppData\Local\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:07:36.2360601Z ##[endgroup]
+2026-11-23T00:07:39.5883074Z APP ALIVE (NSIS lane): host pid 6920, the sidecar child spawned
+2026-11-23T00:08:09.6467350Z RESOURCE SAMPLE (nsis): {"lane":"nsis-host-launch","sampledAt":"2026-11-23T00:08:09.5920447+00:00","host":{"pid":6920,"workingSetMB":20.9,"privateMB":4.2,"cpuS":0.12,"threads":14,"handles":317},"sidecar":[{"pid":828,"workingSetMB":186.3,"privateMB":368.9,"cpuS":1.75}]}
+2026-11-23T00:08:21.7094424Z LIFECYCLE OK (NSIS): host closed, zero orphaned pharmaml-backend processes (graceful=True)
+2026-11-23T00:08:21.7382562Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-23T00:08:21.7383000Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-23T00:08:21.7383237Z [36;1m$root = $env:NSIS_INSTALL_ROOT[0m
+2026-11-23T00:08:21.7383466Z [36;1m$un = Join-Path $root "uninstall.exe"[0m
+2026-11-23T00:08:21.7383740Z [36;1m# the registry entry recorded upfront (form B needs it)[0m
+2026-11-23T00:08:21.7384001Z [36;1m$regUninstall = $null[0m
+2026-11-23T00:08:21.7384320Z [36;1m$reg = Get-ChildItem "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall" |[0m
+2026-11-23T00:08:21.7384741Z [36;1m  Where-Object { $_.GetValue("DisplayName") -like "*PharmaML*" } |[0m
+2026-11-23T00:08:21.7385029Z [36;1m  Select-Object -First 1[0m
+2026-11-23T00:08:21.7385388Z [36;1mif ($reg) {[0m
+2026-11-23T00:08:21.7385641Z [36;1m  $regUninstall = ($reg.GetValue("UninstallString") -replace '"', "")[0m
+2026-11-23T00:08:21.7386276Z [36;1m  "NSIS uninstall registry key: $($reg.PSChildName) — $($reg.GetValue('DisplayName')) $($reg.GetValue('DisplayVersion')); UninstallString=$regUninstall" |[0m
+2026-11-23T00:08:21.7386832Z [36;1m    Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"[0m
+2026-11-23T00:08:21.7387074Z [36;1m}[0m
+2026-11-23T00:08:21.7387229Z [36;1mif (-not (Test-Path $un)) {[0m
+2026-11-23T00:08:21.7387465Z [36;1m  if ($regUninstall) { $un = $regUninstall }[0m
+2026-11-23T00:08:21.7387703Z [36;1m}[0m
+2026-11-23T00:08:21.7387844Z [36;1mif (-not (Test-Path $un)) {[0m
+2026-11-23T00:08:21.7388260Z [36;1m  Write-Host "::error::no uninstaller found for the NSIS package (neither the install-dir uninstall.exe nor a registry entry)"[0m
+2026-11-23T00:08:21.7388668Z [36;1m  exit 1[0m
+2026-11-23T00:08:21.7388809Z [36;1m}[0m
+2026-11-23T00:08:21.7388959Z [36;1m"NSIS uninstaller: $un" |[0m
+2026-11-23T00:08:21.7389194Z [36;1m  Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"[0m
+2026-11-23T00:08:21.7389491Z [36;1m# FORM A: the canonical silent uninstall invoked as a CHILD[0m
+2026-11-23T00:08:21.7389799Z [36;1m# of this shell (the & call operator, NOT Start-Process) so[0m
+2026-11-23T00:08:21.7390084Z [36;1m# the uninstaller's console diagnostics (Tauri's[0m
+2026-11-23T00:08:21.7390361Z [36;1m# WriteErrorToConsole abort reasons — e.g. the[0m
+2026-11-23T00:08:21.7390645Z [36;1m# CheckIfAppIsRunning guard) land in the job log: the[0m
+2026-11-23T00:08:21.7390946Z [36;1m# fifth/sixth dispatches ran it detached and any abort[0m
+2026-11-23T00:08:21.7391196Z [36;1m# reason was invisible[0m
+2026-11-23T00:08:21.7391378Z [36;1m$null = & $un /S[0m
+2026-11-23T00:08:21.7391645Z [36;1mWrite-Host "uninstall.exe /S (form A, direct child) exit: $LASTEXITCODE"[0m
+2026-11-23T00:08:21.7391997Z [36;1m# the async self-copy may still be deleting — poll for the[0m
+2026-11-23T00:08:21.7392267Z [36;1m# APP FILES' removal, not the dir[0m
+2026-11-23T00:08:21.7392491Z [36;1m$appFiles = @([0m
+2026-11-23T00:08:21.7392689Z [36;1m  (Join-Path $root "pharmaml-studio.exe"),[0m
+2026-11-23T00:08:21.7392974Z [36;1m  (Join-Path $root "backend"),[0m
+2026-11-23T00:08:21.7393188Z [36;1m  (Join-Path $root "uninstall.exe")[0m
+2026-11-23T00:08:21.7393386Z [36;1m)[0m
+2026-11-23T00:08:21.7393544Z [36;1m$deadline = (Get-Date).AddSeconds(240)[0m
+2026-11-23T00:08:21.7393761Z [36;1m$appsGone = $false[0m
+2026-11-23T00:08:21.7393954Z [36;1mwhile ((Get-Date) -lt $deadline) {[0m
+2026-11-23T00:08:21.7394208Z [36;1m  $left = @($appFiles | Where-Object { Test-Path $_ })[0m
+2026-11-23T00:08:21.7394497Z [36;1m  if ($left.Count -eq 0) { $appsGone = $true; break }[0m
+2026-11-23T00:08:21.7394745Z [36;1m  Start-Sleep -Seconds 5[0m
+2026-11-23T00:08:21.7394922Z [36;1m}[0m
+2026-11-23T00:08:21.7395153Z [36;1mif (-not $appsGone -and $regUninstall -and ($regUninstall -ne $un)) {[0m
+2026-11-23T00:08:21.7395484Z [36;1m  # FORM B: the registry UninstallString verbatim + /S[0m
+2026-11-23T00:08:21.7396908Z [36;1m  Write-Host "form A left the app files — trying the registry UninstallString form"[0m
+2026-11-23T00:08:21.7397273Z [36;1m  $null = & $regUninstall /S[0m
+2026-11-23T00:08:21.7397561Z [36;1m  Write-Host "registry UninstallString /S (form B) exit: $LASTEXITCODE"[0m
+2026-11-23T00:08:21.7397894Z [36;1m  $deadline = (Get-Date).AddSeconds(240)[0m
+2026-11-23T00:08:21.7398134Z [36;1m  while ((Get-Date) -lt $deadline) {[0m
+2026-11-23T00:08:21.7398396Z [36;1m    $left = @($appFiles | Where-Object { Test-Path $_ })[0m
+2026-11-23T00:08:21.7398686Z [36;1m    if ($left.Count -eq 0) { $appsGone = $true; break }[0m
+2026-11-23T00:08:21.7398931Z [36;1m    Start-Sleep -Seconds 5[0m
+2026-11-23T00:08:21.7399115Z [36;1m  }[0m
+2026-11-23T00:08:21.7399250Z [36;1m}[0m
+2026-11-23T00:08:21.7399403Z [36;1mif (-not $appsGone) {[0m
+2026-11-23T00:08:21.7399738Z [36;1m  Get-ChildItem $root | Select-Object Name, Length |[0m
+2026-11-23T00:08:21.7400020Z [36;1m    Format-Table | Out-String | Write-Host[0m
+2026-11-23T00:08:21.7400590Z [36;1m  Write-Host "::error::the NSIS uninstall did not remove the app files within the window — the console diagnostics above carry the uninstaller's abort reason if any"[0m
+2026-11-23T00:08:21.7401107Z [36;1m  exit 1[0m
+2026-11-23T00:08:21.7401256Z [36;1m}[0m
+2026-11-23T00:08:21.7401467Z [36;1m# the honest residue: the user-data files legitimately remain[0m
+2026-11-23T00:08:21.7401819Z [36;1m# (the §10 leg-6 retention rule — studio.db / files/ under[0m
+2026-11-23T00:08:21.7402085Z [36;1m# the collided dir); record them[0m
+2026-11-23T00:08:21.7402415Z [36;1m$residue = @(Get-ChildItem $root -Recurse -Force -ErrorAction SilentlyContinue)[0m
+2026-11-23T00:08:21.7402848Z [36;1m"NSIS uninstall residue (the user-data retention rule): $($residue.Count) entries" |[0m
+2026-11-23T00:08:21.7403215Z [36;1m  Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"[0m
+2026-11-23T00:08:21.7403529Z [36;1mforeach ($l in ($residue | Select-Object -First 10)) {[0m
+2026-11-23T00:08:21.7403784Z [36;1m  "  residue: $($l.FullName)" |[0m
+2026-11-23T00:08:21.7404034Z [36;1m    Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"[0m
+2026-11-23T00:08:21.7404263Z [36;1m}[0m
+2026-11-23T00:08:21.7404466Z [36;1m# the LANE cleanup (never the app's behavior — the upgrade[0m
+2026-11-23T00:08:21.7404760Z [36;1m# leg needs a clean machine): remove the leftover dir[0m
+2026-11-23T00:08:21.7405016Z [36;1m$deadline = (Get-Date).AddSeconds(60)[0m
+2026-11-23T00:08:21.7405299Z [36;1mwhile ((Test-Path $root) -and (Get-Date) -lt $deadline) {[0m
+2026-11-23T00:08:21.7405628Z [36;1m  Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue[0m
+2026-11-23T00:08:21.7405912Z [36;1m  Start-Sleep -Seconds 3[0m
+2026-11-23T00:08:21.7406089Z [36;1m}[0m
+2026-11-23T00:08:21.7406236Z [36;1mif (Test-Path $root) {[0m
+2026-11-23T00:08:21.7406528Z [36;1m  Write-Host "::error::the lane cleanup could not remove the leftover dir: $root"[0m
+2026-11-23T00:08:21.7406820Z [36;1m  exit 1[0m
+2026-11-23T00:08:21.7406960Z [36;1m}[0m
+2026-11-23T00:08:21.7407103Z [36;1mforeach ($d in @([0m
+2026-11-23T00:08:21.7407323Z [36;1m  (Join-Path $env:APPDATA "com.pharmaml.studio"),[0m
+2026-11-23T00:08:21.7407595Z [36;1m  (Join-Path $env:LOCALAPPDATA "com.pharmaml.studio")[0m
+2026-11-23T00:08:21.7407822Z [36;1m)) {[0m
+2026-11-23T00:08:21.7408035Z [36;1m  "NSIS uninstall: user-data dir $d exists=$(Test-Path $d)" |[0m
+2026-11-23T00:08:21.7408333Z [36;1m    Add-Content "$env:EVIDENCE_DIR/uninstall-nsis.txt"[0m
+2026-11-23T00:08:21.7408554Z [36;1m}[0m
+2026-11-23T00:08:21.7409185Z [36;1mWrite-Host "NSIS UNINSTALL OK: the app files removed (the §10 leg-6 app-leaves rule); the user-data residue recorded (the retention rule); the lane cleanup removed the leftover dir"[0m
+2026-11-23T00:08:21.7440015Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-23T00:08:21.7440289Z env:
+2026-11-23T00:08:21.7440532Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:08:21.7441410Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:08:21.7441758Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:08:21.7442106Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:08:21.7442465Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:08:21.7442776Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:08:21.7443073Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:08:21.7443318Z   RELEASE_TAG: v1.2.240
+2026-11-23T00:08:21.7443494Z   RELEASE_VERSION: 1.2.240
+2026-11-23T00:08:21.7443679Z   ASSET_DIR: D:\a\_temp\release-assets
+2026-11-23T00:08:21.7443910Z   MSI_INSTALL_ROOT: C:\Program Files\PharmaML Studio
+2026-11-23T00:08:21.7444285Z   MSI_HOST_EXE: C:\Program Files\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:08:21.7444629Z   MSI_SIDECAR_DIR: C:\Program Files\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:08:21.7444998Z   NSIS_INSTALL_ROOT: C:\Users\runneradmin\AppData\Local\PharmaML Studio
+2026-11-23T00:08:21.7445370Z   NSIS_HOST_EXE: C:\Users\runneradmin\AppData\Local\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:08:21.7445812Z   NSIS_SIDECAR_DIR: C:\Users\runneradmin\AppData\Local\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:08:21.7446137Z ##[endgroup]
+2026-11-23T00:08:22.0442296Z uninstall.exe /S (form A, direct child) exit: 
+2026-11-23T00:08:30.0819303Z NSIS UNINSTALL OK: the app files removed (the §10 leg-6 app-leaves rule); the user-data residue recorded (the retention rule); the lane cleanup removed the leftover dir
+2026-11-23T00:08:30.1297124Z ##[group]Run $ErrorActionPreference = "Stop"
+2026-11-23T00:08:30.1298016Z [36;1m$ErrorActionPreference = "Stop"[0m
+2026-11-23T00:08:30.1298270Z [36;1m$prevTag = "v1.2.231".Trim()[0m
+2026-11-23T00:08:30.1298569Z [36;1mif ([string]::IsNullOrWhiteSpace($prevTag)) { $prevTag = "v1.2.231" }[0m
+2026-11-23T00:08:30.1298902Z [36;1m$prevVersion = $prevTag.TrimStart("v")[0m
+2026-11-23T00:08:30.1299187Z [36;1m$prevDest = Join-Path $env:RUNNER_TEMP "previous-release"[0m
+2026-11-23T00:08:30.1299515Z [36;1mNew-Item -ItemType Directory -Force $prevDest | Out-Null[0m
+2026-11-23T00:08:30.1299849Z [36;1mgh release download $prevTag --repo $env:GITHUB_REPOSITORY `[0m
+2026-11-23T00:08:30.1300175Z [36;1m  --pattern "*$prevVersion.msi" --dir $prevDest --clobber[0m
+2026-11-23T00:08:30.1300435Z [36;1mif ($LASTEXITCODE -ne 0) {[0m
+2026-11-23T00:08:30.1300752Z [36;1m  Write-Host "::error::the previous release's MSI could not be downloaded ($prevTag)"[0m
+2026-11-23T00:08:30.1301114Z [36;1m  exit 1[0m
+2026-11-23T00:08:30.1301264Z [36;1m}[0m
+2026-11-23T00:08:30.1301519Z [36;1m$prevMsi = Get-ChildItem $prevDest -Filter "*.msi" | Select-Object -First 1[0m
+2026-11-23T00:08:30.1301839Z [36;1mif (-not $prevMsi) {[0m
+2026-11-23T00:08:30.1302099Z [36;1m  Write-Host "::error::no MSI asset found on the $prevTag release"[0m
+2026-11-23T00:08:30.1302365Z [36;1m  exit 1[0m
+2026-11-23T00:08:30.1302507Z [36;1m}[0m
+2026-11-23T00:08:30.1302693Z [36;1m$log = "$env:EVIDENCE_DIR/upgrade-install.log"[0m
+2026-11-23T00:08:30.1302934Z [36;1m$p = Start-Process msiexec.exe `[0m
+2026-11-23T00:08:30.1303267Z [36;1m  -ArgumentList "/i", "`"$($prevMsi.FullName)`"", "/qn", "/norestart", "/l*v", "`"$log`"" `[0m
+2026-11-23T00:08:30.1303588Z [36;1m  -Wait -PassThru[0m
+2026-11-23T00:08:30.1303815Z [36;1mif ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {[0m
+2026-11-23T00:08:30.1304191Z [36;1m  Write-Host "::error::the previous MSI ($prevVersion) install failed (exit $($p.ExitCode))"[0m
+2026-11-23T00:08:30.1304511Z [36;1m  exit 1[0m
+2026-11-23T00:08:30.1304652Z [36;1m}[0m
+2026-11-23T00:08:30.1304866Z [36;1m# discover the previous install's ACTUAL root — both scopes'[0m
+2026-11-23T00:08:30.1305209Z [36;1m# candidate homes, then any exe carrying the previous version[0m
+2026-11-23T00:08:30.1305472Z [36;1m$prevHomes = @([0m
+2026-11-23T00:08:30.1305676Z [36;1m  (Join-Path $env:LOCALAPPDATA "PharmaML"),[0m
+2026-11-23T00:08:30.1305941Z [36;1m  (Join-Path $env:LOCALAPPDATA "PharmaML Studio"),[0m
+2026-11-23T00:08:30.1306206Z [36;1m  (Join-Path $env:ProgramFiles "PharmaML Studio"),[0m
+2026-11-23T00:08:30.1306457Z [36;1m  (Join-Path $env:ProgramFiles "PharmaML")[0m
+2026-11-23T00:08:30.1306664Z [36;1m)[0m
+2026-11-23T00:08:30.1306805Z [36;1m$prevApp = $null[0m
+2026-11-23T00:08:30.1307014Z [36;1m$deadline = (Get-Date).AddSeconds(120)[0m
+2026-11-23T00:08:30.1307283Z [36;1m# (the loop variable is $prevHome, never $home — the[0m
+2026-11-23T00:08:30.1307591Z [36;1m# eighth dispatch's catch: $HOME is a read-only automatic[0m
+2026-11-23T00:08:30.1307914Z [36;1m# PowerShell variable and a foreach over it is a WriteError)[0m
+2026-11-23T00:08:30.1308416Z [36;1mwhile (-not $prevApp -and (Get-Date) -lt $deadline) {[0m
+2026-11-23T00:08:30.1308688Z [36;1m  foreach ($prevHome in $prevHomes) {[0m
+2026-11-23T00:08:30.1308936Z [36;1m    if (-not (Test-Path $prevHome)) { continue }[0m
+2026-11-23T00:08:30.1309306Z [36;1m    $found = Get-ChildItem $prevHome -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |[0m
+2026-11-23T00:08:30.1309709Z [36;1m      Where-Object { $_.Name -ne "pharmaml-backend.exe" -and[0m
+2026-11-23T00:08:30.1310031Z [36;1m        ($_.VersionInfo.ProductVersion -like "$prevVersion*") } |[0m
+2026-11-23T00:08:30.1310307Z [36;1m      Select-Object -First 1[0m
+2026-11-23T00:08:30.1310535Z [36;1m    if ($found) { $prevApp = $found.FullName; break }[0m
+2026-11-23T00:08:30.1310759Z [36;1m  }[0m
+2026-11-23T00:08:30.1312795Z [36;1m  if (-not $prevApp) { Start-Sleep -Seconds 3 }[0m
+2026-11-23T00:08:30.1313077Z [36;1m}[0m
+2026-11-23T00:08:30.1313233Z [36;1mif (-not $prevApp) {[0m
+2026-11-23T00:08:30.1313446Z [36;1m  foreach ($prevHome in $prevHomes) {[0m
+2026-11-23T00:08:30.1313760Z [36;1m    "  prev-home $prevHome exists=$(Test-Path $prevHome)" | Write-Host[0m
+2026-11-23T00:08:30.1314034Z [36;1m  }[0m
+2026-11-23T00:08:30.1314422Z [36;1m  Write-Host "::error::the previous install's host exe (ProductVersion $prevVersion) was not discovered under any candidate home"[0m
+2026-11-23T00:08:30.1314840Z [36;1m  exit 1[0m
+2026-11-23T00:08:30.1315008Z [36;1m}[0m
+2026-11-23T00:08:30.1315215Z [36;1m$prevRoot = Split-Path $prevApp[0m
+2026-11-23T00:08:30.1315500Z [36;1m$prevInstalled = (Get-Item $prevApp).VersionInfo.ProductVersion[0m
+2026-11-23T00:08:30.1315831Z [36;1mif (-not ($prevInstalled -like "$prevVersion*")) {[0m
+2026-11-23T00:08:30.1316256Z [36;1m  Write-Host "::error::the fresh install reports ProductVersion '$prevInstalled', expected $prevVersion"[0m
+2026-11-23T00:08:30.1316615Z [36;1m  exit 1[0m
+2026-11-23T00:08:30.1316755Z [36;1m}[0m
+2026-11-23T00:08:30.1317083Z [36;1m"upgrade leg: the previous $prevVersion install discovered at $prevRoot (ProductVersion $prevInstalled)" |[0m
+2026-11-23T00:08:30.1317503Z [36;1m  Add-Content "$env:EVIDENCE_DIR/upgrade-leg.txt"[0m
+2026-11-23T00:08:30.1317887Z [36;1mWrite-Host "UPGRADE LEG: previous release $prevVersion installed (discovered at $prevRoot)"[0m
+2026-11-23T00:08:30.1318293Z [36;1m# plant the user-data marker in the identifier's roaming dir[0m
+2026-11-23T00:08:30.1318622Z [36;1m$userData = Join-Path $env:APPDATA "com.pharmaml.studio"[0m
+2026-11-23T00:08:30.1318930Z [36;1mNew-Item -ItemType Directory -Force $userData | Out-Null[0m
+2026-11-23T00:08:30.1319229Z [36;1m$marker = Join-Path $userData "smoke-upgrade-marker.txt"[0m
+2026-11-23T00:08:30.1319584Z [36;1mSet-Content $marker "pharmaml install-smoke upgrade marker (round 336 leg)"[0m
+2026-11-23T00:08:30.1319908Z [36;1m# the current release installed over it[0m
+2026-11-23T00:08:30.1320226Z [36;1m$msi = Join-Path $env:ASSET_DIR "PharmaML_Studio_v$($env:RELEASE_VERSION).msi"[0m
+2026-11-23T00:08:30.1320578Z [36;1m$log2 = "$env:EVIDENCE_DIR/upgrade-upgrade.log"[0m
+2026-11-23T00:08:30.1320838Z [36;1m$p2 = Start-Process msiexec.exe `[0m
+2026-11-23T00:08:30.1321129Z [36;1m  -ArgumentList "/i", "`"$msi`"", "/qn", "/norestart", "/l*v", "`"$log2`"" `[0m
+2026-11-23T00:08:30.1321424Z [36;1m  -Wait -PassThru[0m
+2026-11-23T00:08:30.1321664Z [36;1mif ($p2.ExitCode -ne 0 -and $p2.ExitCode -ne 3010) {[0m
+2026-11-23T00:08:30.1322112Z [36;1m  Write-Host "::error::the upgrade to $($env:RELEASE_VERSION) failed (exit $($p2.ExitCode)) — see upgrade-upgrade.log"[0m
+2026-11-23T00:08:30.1322494Z [36;1m  exit 1[0m
+2026-11-23T00:08:30.1322638Z [36;1m}[0m
+2026-11-23T00:08:30.1322838Z [36;1m# discover the CURRENT install's root (the step-6 pattern)[0m
+2026-11-23T00:08:30.1323108Z [36;1m$curHomes = @([0m
+2026-11-23T00:08:30.1323316Z [36;1m  (Join-Path $env:ProgramFiles "PharmaML Studio"),[0m
+2026-11-23T00:08:30.1323587Z [36;1m  (Join-Path $env:LOCALAPPDATA "PharmaML Studio"),[0m
+2026-11-23T00:08:30.1323946Z [36;1m  (Join-Path $env:LOCALAPPDATA "PharmaML")[0m
+2026-11-23T00:08:30.1324155Z [36;1m)[0m
+2026-11-23T00:08:30.1324294Z [36;1m$curApp = $null[0m
+2026-11-23T00:08:30.1324480Z [36;1m$deadline = (Get-Date).AddSeconds(120)[0m
+2026-11-23T00:08:30.1324748Z [36;1mwhile (-not $curApp -and (Get-Date) -lt $deadline) {[0m
+2026-11-23T00:08:30.1325011Z [36;1m  foreach ($curHome in $curHomes) {[0m
+2026-11-23T00:08:30.1325261Z [36;1m    if (-not (Test-Path $curHome)) { continue }[0m
+2026-11-23T00:08:30.1325626Z [36;1m    $found = Get-ChildItem $curHome -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue |[0m
+2026-11-23T00:08:30.1326018Z [36;1m      Where-Object { $_.Name -ne "pharmaml-backend.exe" -and[0m
+2026-11-23T00:08:30.1327117Z [36;1m        ($_.VersionInfo.ProductVersion -like "$($env:RELEASE_VERSION)*") } |[0m
+2026-11-23T00:08:30.1327434Z [36;1m      Select-Object -First 1[0m
+2026-11-23T00:08:30.1327673Z [36;1m    if ($found) { $curApp = $found.FullName; break }[0m
+2026-11-23T00:08:30.1327899Z [36;1m  }[0m
+2026-11-23T00:08:30.1328104Z [36;1m  if (-not $curApp) { Start-Sleep -Seconds 3 }[0m
+2026-11-23T00:08:30.1328329Z [36;1m}[0m
+2026-11-23T00:08:30.1328472Z [36;1mif (-not $curApp) {[0m
+2026-11-23T00:08:30.1328885Z [36;1m  Write-Host "::error::the current release's host exe (ProductVersion $($env:RELEASE_VERSION)) was not discovered after the upgrade"[0m
+2026-11-23T00:08:30.1329304Z [36;1m  exit 1[0m
+2026-11-23T00:08:30.1329444Z [36;1m}[0m
+2026-11-23T00:08:30.1329651Z [36;1m$upgradedTo = (Get-Item $curApp).VersionInfo.ProductVersion[0m
+2026-11-23T00:08:30.1329969Z [36;1mif (-not ($upgradedTo -like "$($env:RELEASE_VERSION)*")) {[0m
+2026-11-23T00:08:30.1330446Z [36;1m  Write-Host "::error::after the upgrade the install still reports ProductVersion '$upgradedTo', expected $($env:RELEASE_VERSION)"[0m
+2026-11-23T00:08:30.1330867Z [36;1m  exit 1[0m
+2026-11-23T00:08:30.1331006Z [36;1m}[0m
+2026-11-23T00:08:30.1331159Z [36;1mif (-not (Test-Path $marker)) {[0m
+2026-11-23T00:08:30.1331555Z [36;1m  Write-Host "::error::the upgrade WIPED the user-data marker ($marker) — the §10 leg-6 retention rule failed"[0m
+2026-11-23T00:08:30.1331923Z [36;1m  exit 1[0m
+2026-11-23T00:08:30.1332058Z [36;1m}[0m
+2026-11-23T00:08:30.1332239Z [36;1m# the honest cross-scope record: does the previous[0m
+2026-11-23T00:08:30.1332533Z [36;1m# per-user tree survive the current per-machine install?[0m
+2026-11-23T00:08:30.1332824Z [36;1m$prevTreeSurvived = Test-Path $prevRoot[0m
+2026-11-23T00:08:30.1333431Z [36;1m"upgrade: $prevVersion ($prevRoot) -> $($env:RELEASE_VERSION) ($curApp); the user-data marker retained; the previous tree survived=$prevTreeSurvived (the cross-scope side-by-side verdict)" |[0m
+2026-11-23T00:08:30.1334048Z [36;1m  Add-Content "$env:EVIDENCE_DIR/upgrade-leg.txt"[0m
+2026-11-23T00:08:30.1334599Z [36;1mWrite-Host "UPGRADE OK: $prevVersion -> $($env:RELEASE_VERSION) discovered at $curApp, the user-data marker RETAINED, the previous tree survived=$prevTreeSurvived"[0m
+2026-11-23T00:08:30.1335148Z [36;1m# cleanup: uninstall the current release, remove the[0m
+2026-11-23T00:08:30.1335455Z [36;1m# previous generation's leftover tree as the LANE's cleanup[0m
+2026-11-23T00:08:30.1335776Z [36;1m# (recorded — the cross-scope upgrade leaves it behind),[0m
+2026-11-23T00:08:30.1336044Z [36;1m# verify the final states[0m
+2026-11-23T00:08:30.1336251Z [36;1m$p3 = Start-Process msiexec.exe `[0m
+2026-11-23T00:08:30.1336512Z [36;1m  -ArgumentList "/x", "`"$msi`"", "/qn", "/norestart" `[0m
+2026-11-23T00:08:30.1336759Z [36;1m  -Wait -PassThru[0m
+2026-11-23T00:08:30.1336979Z [36;1mif ($p3.ExitCode -ne 0 -and $p3.ExitCode -ne 3010) {[0m
+2026-11-23T00:08:30.1337351Z [36;1m  Write-Host "::error::the post-upgrade cleanup uninstall failed (exit $($p3.ExitCode))"[0m
+2026-11-23T00:08:30.1337741Z [36;1m  exit 1[0m
+2026-11-23T00:08:30.1337888Z [36;1m}[0m
+2026-11-23T00:08:30.1338110Z [36;1m$curRoot = Split-Path $curApp[0m
+2026-11-23T00:08:30.1338330Z [36;1m$deadline = (Get-Date).AddSeconds(90)[0m
+2026-11-23T00:08:30.1338612Z [36;1mwhile ((Test-Path $curRoot) -and (Get-Date) -lt $deadline) {[0m
+2026-11-23T00:08:30.1338874Z [36;1m  Start-Sleep -Seconds 2[0m
+2026-11-23T00:08:30.1339055Z [36;1m}[0m
+2026-11-23T00:08:30.1339200Z [36;1mif (Test-Path $curRoot) {[0m
+2026-11-23T00:08:30.1339526Z [36;1m  Write-Host "::error::the current install dir survived the post-upgrade uninstall: $curRoot"[0m
+2026-11-23T00:08:30.1339853Z [36;1m  exit 1[0m
+2026-11-23T00:08:30.1339992Z [36;1m}[0m
+2026-11-23T00:08:30.1340134Z [36;1mif ($prevTreeSurvived) {[0m
+2026-11-23T00:08:30.1340406Z [36;1m  Remove-Item $prevRoot -Recurse -Force -ErrorAction SilentlyContinue[0m
+2026-11-23T00:08:30.1340686Z [36;1m}[0m
+2026-11-23T00:08:30.1340903Z [36;1m$markerSurvived = Test-Path $marker[0m
+2026-11-23T00:08:30.1341490Z [36;1m"upgrade-leg cleanup: the current install dir removed; the previous generation's leftover tree removed=$(-not (Test-Path $prevRoot)); the user-data marker retained=$markerSurvived" |[0m
+2026-11-23T00:08:30.1342078Z [36;1m  Add-Content "$env:EVIDENCE_DIR/upgrade-leg.txt"[0m
+2026-11-23T00:08:30.1342722Z [36;1mWrite-Host "UPGRADE-LEG CLEANUP OK: the current install removed, the previous leftover tree removed, the user-data marker retained=$markerSurvived (the §10 leg-6 retention rule, file-marker form)"[0m
+2026-11-23T00:08:30.1373959Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-23T00:08:30.1374245Z env:
+2026-11-23T00:08:30.1374492Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:08:30.1374861Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:08:30.1375218Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:08:30.1375573Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:08:30.1375924Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:08:30.1376232Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:08:30.1376529Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:08:30.1376795Z   RELEASE_TAG: v1.2.240
+2026-11-23T00:08:30.1376973Z   RELEASE_VERSION: 1.2.240
+2026-11-23T00:08:30.1377160Z   ASSET_DIR: D:\a\_temp\release-assets
+2026-11-23T00:08:30.1377394Z   MSI_INSTALL_ROOT: C:\Program Files\PharmaML Studio
+2026-11-23T00:08:30.1377691Z   MSI_HOST_EXE: C:\Program Files\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:08:30.1378043Z   MSI_SIDECAR_DIR: C:\Program Files\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:08:30.1378403Z   NSIS_INSTALL_ROOT: C:\Users\runneradmin\AppData\Local\PharmaML Studio
+2026-11-23T00:08:30.1378782Z   NSIS_HOST_EXE: C:\Users\runneradmin\AppData\Local\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:08:30.1379224Z   NSIS_SIDECAR_DIR: C:\Users\runneradmin\AppData\Local\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:08:30.1382207Z   GITHUB_TOKEN: ***
+2026-11-23T00:08:30.1382387Z ##[endgroup]
+2026-11-23T00:09:12.4867135Z UPGRADE LEG: previous release 1.2.231 installed (discovered at C:\Users\runneradmin\AppData\Local\PharmaML Studio)
+2026-11-23T00:09:59.4721025Z UPGRADE OK: 1.2.231 -> 1.2.240 discovered at C:\Users\runneradmin\AppData\Local\PharmaML Studio\pharmaml-studio.exe, the user-data marker RETAINED, the previous tree survived=True
+2026-11-23T00:10:19.2055245Z UPGRADE-LEG CLEANUP OK: the current install removed, the previous leftover tree removed, the user-data marker retained=True (the §10 leg-6 retention rule, file-marker form)
+2026-11-23T00:10:19.2384894Z ##[group]Run actions/upload-artifact@v4
+2026-11-23T00:10:19.2385168Z with:
+2026-11-23T00:10:19.2385341Z   name: windows-install-smoke-evidence
+2026-11-23T00:10:19.2385627Z   path: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:10:19.2386067Z   if-no-files-found: error
+2026-11-23T00:10:19.2386247Z   compression-level: 6
+2026-11-23T00:10:19.2386413Z   overwrite: false
+2026-11-23T00:10:19.2386573Z   include-hidden-files: false
+2026-11-23T00:10:19.2386748Z env:
+2026-11-23T00:10:19.2386972Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:10:19.2387350Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:10:19.2387689Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:10:19.2388036Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:10:19.2388412Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:10:19.2388730Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:10:19.2389039Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:10:19.2389286Z   RELEASE_TAG: v1.2.240
+2026-11-23T00:10:19.2389469Z   RELEASE_VERSION: 1.2.240
+2026-11-23T00:10:19.2389663Z   ASSET_DIR: D:\a\_temp\release-assets
+2026-11-23T00:10:19.2389898Z   MSI_INSTALL_ROOT: C:\Program Files\PharmaML Studio
+2026-11-23T00:10:19.2390208Z   MSI_HOST_EXE: C:\Program Files\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:10:19.2390557Z   MSI_SIDECAR_DIR: C:\Program Files\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:10:19.2390911Z   NSIS_INSTALL_ROOT: C:\Users\runneradmin\AppData\Local\PharmaML Studio
+2026-11-23T00:10:19.2391298Z   NSIS_HOST_EXE: C:\Users\runneradmin\AppData\Local\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:10:19.2391734Z   NSIS_SIDECAR_DIR: C:\Users\runneradmin\AppData\Local\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:10:19.2392064Z ##[endgroup]
+2026-11-23T00:10:19.3860616Z (node:2580) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-23T00:10:19.3861184Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-23T00:10:19.3935104Z With the provided path, there will be 12 files uploaded
+2026-11-23T00:10:19.3939030Z Artifact name is valid!
+2026-11-23T00:10:19.3940865Z Root directory input is valid!
+2026-11-23T00:10:19.7169305Z Beginning upload of artifact content to blob storage
+2026-11-23T00:10:20.2943049Z (node:2580) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-23T00:10:21.0100070Z Uploaded bytes 4139444
+2026-11-23T00:10:21.0667344Z Finished uploading artifact content to blob storage!
+2026-11-23T00:10:21.0668095Z SHA256 digest of uploaded artifact zip is d402818e156aed01c43f7b51e2fffe191a72821f505dd80afd8009fea115108f
+2026-11-23T00:10:21.0670065Z Finalizing artifact upload
+2026-11-23T00:10:21.4194385Z Artifact windows-install-smoke-evidence.zip successfully finalized. Artifact ID 14779801737
+2026-11-23T00:10:21.4195284Z Artifact windows-install-smoke-evidence has been successfully uploaded! Final size is 4139444 bytes. Artifact ID is 14779801737
+2026-11-23T00:10:21.4203418Z Artifact download URL: https://github.com/MrMMA2004/pharma-ml-toolkit/actions/runs/45086526069/artifacts/14779801737
+2026-11-23T00:10:21.4440549Z ##[group]Run Write-Host "INSTALL SMOKE DONE — every leg above ran against the PUBLISHED release assets on a fresh Windows x64 runner."
+2026-11-23T00:10:21.4441364Z [36;1mWrite-Host "INSTALL SMOKE DONE — every leg above ran against the PUBLISHED release assets on a fresh Windows x64 runner."[0m
+2026-11-23T00:10:21.4442493Z [36;1mWrite-Host "PROVEN THIS LANE: asset integrity (SHA256SUMS + manifest); Defender scan; both installers' silent install + tree + version; the INSTALLED sidecar's live contract; the host launch + sidecar spawn + lifecycle + no-orphans; both uninstalls + removal; the in-place upgrade + user-data retention."[0m
+2026-11-23T00:10:21.4443547Z [36;1mWrite-Host "STILL UNVERIFIED (the runner is a build/test env, NOT the owner's desktop):"[0m
+2026-11-23T00:10:21.4444258Z [36;1mWrite-Host "  BLOCKED: the GUI nine-workspace click-through (§10 leg 3 — the human-driven box)"[0m
+2026-11-23T00:10:21.4444853Z [36;1mWrite-Host "  BLOCKED: the offline-network WebView2 bootstrap leg (the runner is online + carries WebView2)"[0m
+2026-11-23T00:10:21.4445441Z [36;1mWrite-Host "  BLOCKED: sleep/resume, DPI/multi-monitor, GPU benchmarks, the 45-60-min desktop-stability lane"[0m
+2026-11-23T00:10:21.4445983Z [36;1mWrite-Host "  BLOCKED: consumer Windows 10/11 edition fidelity (this runner is Windows Server 2022)"[0m
+2026-11-23T00:10:21.4446512Z [36;1mWrite-Host "  BLOCKED: installer signing (BLK-3) + the Stage-5 PySide6 retirement (BLK-4 — owner decisions)"[0m
+2026-11-23T00:10:21.4447240Z [36;1mWrite-Host "Run packaging/windows/TAURI_RELEASE_PIPELINE.md section 'clean-machine smoke test' on the owner's real desktop for the remaining legs before any standalone claim."[0m
+2026-11-23T00:10:21.4477527Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-23T00:10:21.4477815Z env:
+2026-11-23T00:10:21.4478060Z   TOOLKIT_ROOT: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/pharma-ml-toolkit
+2026-11-23T00:10:21.4478439Z   EVIDENCE_DIR: D:\a\pharma-ml-toolkit\pharma-ml-toolkit/smoke-evidence
+2026-11-23T00:10:21.4478785Z   pythonLocation: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:10:21.4479160Z   PKG_CONFIG_PATH: C:\hostedtoolcache\windows\Python\3.12.10\x64/lib/pkgconfig
+2026-11-23T00:10:21.4479510Z   Python_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:10:21.4479819Z   Python2_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:10:21.4480136Z   Python3_ROOT_DIR: C:\hostedtoolcache\windows\Python\3.12.10\x64
+2026-11-23T00:10:21.4480384Z   RELEASE_TAG: v1.2.240
+2026-11-23T00:10:21.4480568Z   RELEASE_VERSION: 1.2.240
+2026-11-23T00:10:21.4480756Z   ASSET_DIR: D:\a\_temp\release-assets
+2026-11-23T00:10:21.4480999Z   MSI_INSTALL_ROOT: C:\Program Files\PharmaML Studio
+2026-11-23T00:10:21.4481305Z   MSI_HOST_EXE: C:\Program Files\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:10:21.4481654Z   MSI_SIDECAR_DIR: C:\Program Files\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:10:21.4482016Z   NSIS_INSTALL_ROOT: C:\Users\runneradmin\AppData\Local\PharmaML Studio
+2026-11-23T00:10:21.4482402Z   NSIS_HOST_EXE: C:\Users\runneradmin\AppData\Local\PharmaML Studio\pharmaml-studio.exe
+2026-11-23T00:10:21.4482843Z   NSIS_SIDECAR_DIR: C:\Users\runneradmin\AppData\Local\PharmaML Studio\backend\pharmaml-backend
+2026-11-23T00:10:21.4483174Z ##[endgroup]
+2026-11-23T00:10:21.6873782Z INSTALL SMOKE DONE — every leg above ran against the PUBLISHED release assets on a fresh Windows x64 runner.
+2026-11-23T00:10:21.6878449Z PROVEN THIS LANE: asset integrity (SHA256SUMS + manifest); Defender scan; both installers' silent install + tree + version; the INSTALLED sidecar's live contract; the host launch + sidecar spawn + lifecycle + no-orphans; both uninstalls + removal; the in-place upgrade + user-data retention.
+2026-11-23T00:10:21.6881966Z STILL UNVERIFIED (the runner is a build/test env, NOT the owner's desktop):
+2026-11-23T00:10:21.6888339Z   BLOCKED: the GUI nine-workspace click-through (§10 leg 3 — the human-driven box)
+2026-11-23T00:10:21.6890619Z   BLOCKED: the offline-network WebView2 bootstrap leg (the runner is online + carries WebView2)
+2026-11-23T00:10:21.6894426Z   BLOCKED: sleep/resume, DPI/multi-monitor, GPU benchmarks, the 45-60-min desktop-stability lane
+2026-11-23T00:10:21.6898001Z   BLOCKED: consumer Windows 10/11 edition fidelity (this runner is Windows Server 2022)
+2026-11-23T00:10:21.6902230Z   BLOCKED: installer signing (BLK-3) + the Stage-5 PySide6 retirement (BLK-4 — owner decisions)
+2026-11-23T00:10:21.6906178Z Run packaging/windows/TAURI_RELEASE_PIPELINE.md section 'clean-machine smoke test' on the owner's real desktop for the remaining legs before any standalone claim.
+2026-11-23T00:10:21.7488783Z Post job cleanup.
+2026-11-23T00:10:21.8641855Z (node:5636) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-23T00:10:21.8642439Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-23T00:10:21.8856662Z Post job cleanup.
+2026-11-23T00:10:22.0191171Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-11-23T00:10:22.0422661Z git version 2.56.1.windows.1
+2026-11-23T00:10:22.0471752Z Temporarily overriding HOME='D:\a\_temp\3033d8fa-2c41-4f8a-997e-2635c70ec1f6' before making global git config changes
+2026-11-23T00:10:22.0472405Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-23T00:10:22.0481536Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\pharma-ml-toolkit\pharma-ml-toolkit
+2026-11-23T00:10:22.0747288Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-23T00:10:22.1019783Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-23T00:10:22.5558973Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-23T00:10:22.5816929Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-23T00:10:23.0290386Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-23T00:10:23.0540150Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-23T00:10:23.4884333Z Cleaning up orphan processes
+2026-11-23T00:10:23.5097403Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

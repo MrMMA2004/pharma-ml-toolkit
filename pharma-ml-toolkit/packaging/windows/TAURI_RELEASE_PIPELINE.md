@@ -109,8 +109,18 @@ installed; the network disconnected after downloading the installer.
 1. **Install** — run `PharmaML_Studio_Setup_vX.Y.Z.exe` (the
    WebView2 offline installer rides the bundle; the machine must
    never hit the network for it). Verify the Start-Menu and optional
-   Desktop shortcuts, and the installed tree under
-   `%LOCALAPPDATA%\Programs\PharmaML Studio` (currentUser mode).
+   Desktop shortcuts, and the installed tree. The ACTUAL per-user
+   home (empirically verified by the r336 CI install-smoke lane,
+   run 45086526069) is `%LOCALAPPDATA%\PharmaML Studio` — the
+   earlier `Programs\` phrasing in this doc was wrong. **The
+   collision caveat (the r336 finding)**: that home is ALSO the
+   backend's default data dir (`APP_DIR_NAME`), so the app's
+   runtime data (`studio.db` + `files/`) legitimately lands IN the
+   install tree on this lane — the "user-data dir is never the
+   install dir" claim below does NOT hold for the NSIS per-user
+   install as shipped; the per-machine MSI lane (Program Files) has
+   no collision. A future release should separate them (the data dir
+   or the install home renamed).
 2. **Launch offline** — from the Start Menu, then from the shortcut,
    then by double-clicking the installed exe: the window opens with
    the Introduction workspace; the backend sidecar handshake completes
@@ -124,14 +134,22 @@ installed; the network disconnected after downloading the installer.
    split, generate a histogram stat, and export the CSV artifact
    (the digest-verified download prints `digest verified: …`).
 4. **Persistence** — close and relaunch: the SQLite database and the
-   artifact vault survive (the user-data dir is never the install
-   dir).
+   artifact vault survive. CAVEAT (the r336 CI finding): on the NSIS
+   per-user lane the data home and the install dir collide (above),
+   so "the user-data dir is never the install dir" holds only for
+   the per-machine MSI lane as shipped; the per-user lane's
+   uninstaller leaves `studio.db`/`files/` behind (the retention
+   rule accidentally honored — the data files are not in the
+   uninstaller's delete list).
 5. **Graceful shutdown** — close the app while a job runs: the
    shutdown envelope reaches the WebSocket before close; no orphaned
    `pharmaml-backend.exe` remains (check the Task Manager).
 6. **Uninstall** — through Windows Settings: the app leaves, the
    user data (datasets/SQLite) stays unless the user opts in to its
-   removal (the documented retention rule).
+   removal (the documented retention rule). The r336 CI lane's
+   empirical form: the APP FILES (the host exe + the backend
+   subtree + the uninstaller shell) must be removed; the user-data
+   residue is recorded, never counted as app behavior.
 
 Record every result with the PASS/PARTIAL/FAIL label and the exact
 artifact SHA-256 from `SHA256SUMS.txt`; a stage that cannot run gets

@@ -20,8 +20,17 @@
   WebView2 bootstrap, sleep/resume, DPI/multi-monitor, GPU, the
   45–60-min desktop-stability lane, consumer-edition fidelity — the
   lane's own closing note labels them; BLK-3 signing + BLK-4
-  untouched). The first dispatch's verdict rides the round's
-  addendum (the r334 convention).
+  untouched). The verdict landed on arrival: nine dispatches, each
+  early failure a real catch fixed at the source — the ninth (run
+  45086526069) **GREEN END-TO-END, all 16 steps**, and the lane
+  surfaced two REAL installer findings: the NSIS per-user install
+  home is ALSO the backend's default data dir (the install dir and
+  the data dir collide — `studio.db`/`files/` land in the install
+  tree; the pipeline doc trued), and the v1.2.231-era MSI installs
+  per-user while the v1.2.240 MSI installs per-machine (the upgrade
+  is a cross-scope major upgrade landing in the previous per-user
+  location). The CI verdict at the round terminal: 20/20 check-runs
+  success.
 
 - **The Windows installer set PUBLISHED (round 333, the owner-directed
   release)**: `PharmaML_Studio_Setup_v1.2.240.exe` (558,022,042 B, the

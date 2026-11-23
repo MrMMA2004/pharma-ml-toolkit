@@ -319,9 +319,29 @@ summarises them and wins any status disagreement.
   click-through, the offline WebView2 bootstrap, sleep/resume, DPI/
   multi-monitor, GPU, the 45–60-min desktop lane, consumer-edition
   fidelity — all recorded in the lane's own closing note); BLK-3/
-  BLK-4 untouched; the first dispatch's verdict rides the round's
+  BLK-4 untouched; the first dispatch's verdict rode the round's
   addendum; the version unchanged at 1.2.240 (§5 no-silent-bumps);
-  counter 127 -> 128
+  counter 127 -> 128 — and the verdict LANDED on arrival: nine
+  dispatches total (each early failure a REAL catch fixed at the
+  source — the sumfile-coverage sweep, the GITHUB_SHA-vs-checkout
+  comparison, two pwsh parse hazards, the read-only `$HOME` loop
+  variable, the Cargo-name host-binary discovery, the NSIS
+  async-uninstaller mechanics), the ninth (run 45086526069) **GREEN
+  END-TO-END — all 16 steps** on the published v1.2.240 assets; the
+  round's REAL INSTALLER FINDINGS from the lane: (1) the
+  v1.2.231-era MSI installs PER-USER (the `%LOCALAPPDATA%\PharmaML
+  Studio` home) while the v1.2.240 MSI installs PER-MACHINE (`Program
+  Files\PharmaML Studio`) — the upgrade is a cross-scope major
+  upgrade landing in the previous per-user location (the empirical
+  verdict); (2) the NSIS currentUser install home is ALSO the
+  backend's default data dir (`APP_DIR_NAME`) — the data dir and
+  the install dir COLLIDE on the per-user lane (the launched app
+  writes `studio.db` + `files/` into the install tree, falsifying
+  the §10 leg-4 claim — the pipeline doc trued this round); the CI
+  verdict at the round terminal `3d1d9e08` closed GREEN on arrival:
+  **20/20 check-runs success** (the standard 19 + the green smoke
+  dispatch), every intermediate commit honestly carrying its own
+  in-flight catch (19/19 standard + the dispatch's failure)
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

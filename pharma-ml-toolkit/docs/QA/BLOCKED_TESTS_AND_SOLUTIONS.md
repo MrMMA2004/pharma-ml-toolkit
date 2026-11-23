@@ -67,9 +67,39 @@ privilege; runs on every published release + manual dispatch):
 * the v1.2.231 → v1.2.240 in-place upgrade with a user-data
   retention marker (the §10 leg-6 rule, file-marker form).
 
-The first dispatch's verdict rides the round's addendum (the r334
-convention — a CI verdict closes on arrival at the next
-checkpoint). Still honestly BLOCKED even with the lane (recorded
+The first dispatch's verdict RODE the round's addendum and landed
+there (the r334 convention — nine dispatches total, each early
+failure a REAL catch fixed at the source, never a weakened gate):
+**run 45086526069 (the ninth dispatch) GREEN END-TO-END — all 16
+steps against the published v1.2.240 release assets on a fresh
+windows-2022 runner**: SHA256SUMS verified (4 assets, zero mismatch,
+zero unlisted) + the manifest cross-check (the build commit
+`661e3f65` proven == the tag checkout) + Defender clean on BOTH
+installers + the MSI silent install/tree/version + the INSTALLED
+sidecar's live contract (handshake + authenticated health + the
+refused guard + the graceful shutdown, `SIDECAR-VERIFIED`) + the
+app host launch with the sidecar child spawn + the resource samples
++ the graceful closes + the zero-orphan checks on BOTH lanes + both
+uninstalls + the v1.2.231 → v1.2.240 upgrade with the user-data
+marker retained. The lane's own catches along the way (all real,
+all fixed at source): the sumfile-coverage sweep, the GITHUB_SHA-
+vs-checkout comparison, the pwsh parse hazards, the Cargo-name host
+binary discovery, the NSIS async-uninstaller mechanics, and — the
+REAL INSTALLER FINDINGS: (1) the v1.2.231-era MSI installs PER-USER
+(`%LOCALAPPDATA%\PharmaML Studio`) while the v1.2.240 MSI installs
+PER-MACHINE (`Program Files\PharmaML Studio`), so the upgrade is a
+CROSS-SCOPE major upgrade that lands in the PREVIOUS per-user
+location (the empirical verdict from the green run's evidence); (2)
+the NSIS currentUser install home `%LOCALAPPDATA%\PharmaML Studio`
+is ALSO the backend's default data dir (`APP_DIR_NAME`) — the two
+COLLIDE, so the launched app legitimately writes `studio.db` +
+`files/` into the install tree (falsifying the §10 leg-4
+"user-data dir is never the install dir" claim for the NSIS lane —
+the doc trued this round) and the §10 leg-6 retention accidentally
+holds precisely because the data files are not in the uninstaller's
+delete list (the honest re-derived semantics: the verdict checks the
+APP FILES' removal; the user-data residue recorded, never counted as
+app behavior). Still honestly BLOCKED even with the lane (recorded
 in the lane's own closing note, so nothing converts to a pass by
 omission): the GUI nine-workspace click-through (§10 leg 3 — no
 human on the runner); the offline-network WebView2 bootstrap (the

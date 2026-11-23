@@ -18499,3 +18499,70 @@ fix). The version unchanged at 1.2.240 (§5 no-silent-bumps).
 `9b05aa69` — then the FIRST DISPATCH of the lane (tag v1.2.240)
 fires; its verdict rides the round's addendum (the r334 convention:
 a CI verdict closes on arrival at the next checkpoint).
+
+**The verdict closed on arrival — NINE dispatches, the lane GREEN
+END-TO-END**: the owner's directive asked whether the blocked items
+could be done through GitHub Actions; the answer shipped as an
+always-on lane and was proven by iteration — each early failure a
+REAL catch fixed at the source, never a weakened gate (the r333
+first-tag-build pattern, verbatim): (1) run 45078553767 — the
+SHA256SUMS coverage sweep forgot the sumfile can never hash itself
+(the release pipeline's own step-22 rule); (2) run 45079411464 — the
+pwsh colon-after-variable parse hazard (`$name:` read as a scope
+qualifier; the whole-file same-class audit swept to zero); (3) run
+45080260287 — Defender GENUINELY GREEN on both installers, then the
+REAL installer-layout discovery: the Tauri 2 host binary keeps its
+CARGO name `pharmaml-studio.exe` (the mainBinaryName default,
+confirmed by the project's own DEPENDENCY_INVENTORY) — the lane now
+DISCOVERS the host exe (name candidates + the version-resource
+fallback) instead of assuming it; (4) run 45081225761 — the
+installed sidecar's live contract GREEN ON THE PUBLISHED BUNDLE
+(handshake + authenticated health + the refused guard + the
+graceful shutdown, `SIDECAR-VERIFIED`), then the nested-subexpression
+parse hazard (`-Compress()` — the switch parameter followed by a
+bare paren pair); (5) run 45082138494 — the deepest green to that
+point: the app host launches on BOTH lanes with the sidecar child
+spawning, the resource samples recorded, the graceful closes with
+ZERO orphans (§10 legs 2+5 proven), the MSI uninstall verified, the
+NSIS Start-Menu + desktop shortcuts verified, the NSIS home
+discovered at `%LOCALAPPDATA%\PharmaML Studio` — then the NSIS
+async-uninstaller race; (6) run 45083007895 — the residue evidence
+(the artifact's `if: always()` upload) exposed TWO findings: the
+`_?=` form misfired (NSIS's raw scan swallowed my embedded quotes
+into `$INSTDIR`) AND **the round's headline REAL APP DEFECT: the
+NSIS currentUser install home IS the backend's default data dir**
+(both name `%LOCALAPPDATA%\PharmaML Studio` — the Tauri template's
+`$LOCALAPPDATA\${PRODUCTNAME}` and `APP_DIR_NAME` collide), so the
+launched app legitimately wrote `studio.db` + `files/` into the
+install tree — the §10 leg-4 "user-data dir is never the install
+dir" claim is FALSE for the per-user lane as shipped (the doc trued
+this round; the per-machine MSI lane has no collision; a future
+release should separate them); (7) run 45084143328 — the NSIS
+uninstall GREEN via the direct-child invocation (the console-capture
+fix: Tauri's `CheckIfAppIsRunning` aborts via `WriteErrorToConsole`
+which lands nowhere when Start-Process detaches the uninstaller),
+then **the second REAL installer finding: the v1.2.231-era MSI
+installs PER-USER** (`%LOCALAPPDATA%\PharmaML Studio`, 21,312 path
+references in the verbose log) **while the v1.2.240 MSI installs
+PER-MACHINE** (`Program Files\PharmaML Studio`) — the upgrade leg
+rebuilt as the honest cross-scope verdict (discover each root
+empirically, record whether the previous tree survives); (8) run
+45085712117 — the read-only `$HOME` automatic variable collision
+(renamed `$prevHome`/`$curHome`, the same-class loop-variable sweep
+clean); (9) **run 45086526069 — GREEN END-TO-END, all 16 steps**:
+SHA256SUMS verified + the manifest cross-check (the build commit
+`661e3f65` == the tag checkout) + Defender clean on both installers +
+the MSI install/tree/version + the INSTALLED sidecar's live contract
++ the app host launch with the sidecar spawn + the resource sample +
+the graceful close + zero orphans + the MSI uninstall + the NSIS
+install/shortcuts/launch/lifecycle/uninstall + the cross-scope
+upgrade (1.2.231 → 1.2.240 in the previous per-user location, the
+user-data marker RETAINED) + the evidence bundle uploaded + the
+honest closing note (the five BLOCKED legs labeled). **The CI verdict
+at the round terminal `3d1d9e08`: 20/20 check-runs success** (the
+standard 19 + the green smoke dispatch), every intermediate commit
+honestly carrying its own in-flight catch. The zip stays byte-frozen
+(the r334 ruling — no re-ship; the lane + the docs ride main past the
+tag). The lane now stands: every future published release runs the
+smoke automatically (`release: published`), and the owner can
+dispatch it at will against any tag.
