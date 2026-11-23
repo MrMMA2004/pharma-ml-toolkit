@@ -18669,3 +18669,84 @@ absorption deferred to the next round, documented here.
 **The ledger**: this entry; the counter 128 -> 129; the payload (the
 r337-wip preservation + the three ledger files) committed and pushed
 over `a43b0554`.
+
+## Round 338 — the 130th recorded run (the part14 retirement-confirmation round: the owner's playground retirement directive confirmed against the worklog lineage, the un-ledgered UUID-commit sweep of the tracked playground pair executed, the standing release verdict re-pinned; the interactive "Continue / Playground.py is retired (check the worklog) / Push" directive)
+
+**R338 — the 130th recorded run**
+
+**The directive**: the owner's interactive continuation — "Continue.
+Playground.py is retired (check the worklog). Push."
+
+**The discovery — the un-ledgered UUID terminal**: the round opened
+at HEAD `96796a93`, a UUID-subject commit
+("6320c19f-45db-4dd3-9888-d3358690597e", Nov 23 04:04:04 +0000)
+sitting exactly ONE commit ahead of `origin/main` = `bceb959d` (the
+pushed r337 evidence terminal) — the r289 cut-off pattern again: no
+worklog entry, no counter trace, no conventional subject. Its
+payload: the playground pair TRACKED into the tree
+(`pharma-ml-toolkit/playground.py` + `pharma-ml-toolkit/tests/
+test_playground.py`) plus `scratch/part14.txt` tracked — 50,173
+insertions, zero deletions. The fetch via the askpass credential
+lane (`.credentials/askpass.sh`, the token never in a URL, remote
+URL, or argv) confirmed the commit never reached the remote
+(`git branch -r --contains 96796a93` → empty; `origin/main` standing
+at `bceb959d`).
+
+**The worklog check (the directive's own instruction)**: the
+retirement lineage CONFIRMED at three anchors — (1) the v1.2.141
+DECLARATION (the README/COVERAGE/studio docstrings had said
+"retired" since r141/r228 while the dead weight still shipped);
+(2) the TRUE retirement EXECUTED at r304 (B-6/A-7: the pair left
+the tree — playground.py + test_playground.py, 753 collected — the
+collection dropped exactly 8,643 → 7,890; no live imports existed,
+verified pre-rm; the final version preserved in git history);
+(3) the r328 ghost sweep (the rollback-resurrected pair — "retired
+at r304, terminal-absent, rollback-resurrected" — deleted again,
+the census re-trued to the terminal arithmetic 8,589/471 → the
+terminal 8,555/470 + the 34 new tests + 1 file). r337 had preserved
+the fourth-wave pair at `scratch/r337-wip/` pending "the next
+round's absorption" — the owner's directive now SUPERSEDES that
+absorption plan: RETIRED, not absorbed. (Count truing: the r337
+ledger quoted 30,047/16,370; the exact `wc -l` over every surviving
+copy this round — the tree-path pair, `scratch/r337-wip/`, the
+/tmp backup, the UUID-commit blobs — is **30,026 / 16,317**, all
+byte-identical at sha256 `b81faf62...` / `c743ff6d...`; zero bytes
+lost anywhere, the durable preservation IS the swept pair.)
+
+**The sweep (the r312/r318 precedent for un-pushed UUID commits)**:
+the sha-256 parity verified FIRST (tree-path pair ==
+`scratch/r337-wip/` pair, byte-exact), the `/tmp/r338-backup/`
+safety copies laid down (part14.txt 55,468 B + playground.py
+1,345,918 B + test_playground.py 691,549 B), THEN
+`git reset --hard bceb959d` — the un-ledgered commit reset away
+(never pushed, zero remote exposure), the tree-path pair DELETED
+(the retirement enforced at the tree paths; the durable preservation
+standing at `scratch/r337-wip/`, tracked + pushed since r337), and
+`scratch/part14.txt` restored to disk-only per the upload-ignore
+convention (the r328-documented class: PAT-pattern-scanned 0
+matches, deliberately disk-only — the UUID commit had wrongly
+tracked it into the push lane).
+
+**The gates re-pinned (the r335/r337 light set — zero src/tests
+bytes touched; the tree is the git checkout of the pushed r337
+terminal `bceb959d`, byte-identical by construction)**: console
+`GET /` → **200**; the zip-size API →
+`{"zipBytes":23489390,"version":"1.2.240","exact":true,
+"source":"release"}`; the 108-test quick chunk (`test_approvals` +
+`test_biology`) over the healthy venv (rdkit 2026.9.1 / numpy
+1.26.4 / torch 2.14.1+cpu / pharmaml 1.2.240 — the venv SURVIVED
+this round's window intact, zero repair needed) — **exit 0, zero
+failures**; CI at HEAD `bceb959d` re-verified live via the
+authenticated API this round (the curl config-file lane, the token
+never in a URL/argv/logs): **19/19 check-runs success**. The
+standing release verdict re-confirmed, NO re-ship (the r334
+byte-frozen ruling): v1.2.240 remains the published smoke-passed
+release with all five assets (EXE 558,022,042 B / MSI 710,553,078 B
+/ SHA256SUMS / RELEASE_MANIFEST / sbom.cdx.json), the ninth smoke
+dispatch run 45086526069 green end-to-end all 16 steps.
+
+**The ledger**: this entry; the PROJECT_STATUS lineage extension;
+the counter 129 -> 130; the version unchanged at 1.2.240 (§5
+no-silent-bumps); the payload committed + pushed over `bceb959d`
+(ff-only — the local branch reset onto the pushed terminal first,
+the new ledger commit lands on top cleanly).

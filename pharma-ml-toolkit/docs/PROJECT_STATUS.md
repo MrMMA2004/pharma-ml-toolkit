@@ -363,7 +363,33 @@ summarises them and wins any status disagreement.
   both re-verified via the authenticated API this round); the gates
   re-pinned (console 200 + the zip-size API 23,489,390 exact:true
   source:release + the 108-test quick chunk green over the repaired
-  venv); the version unchanged at 1.2.240; counter 128 -> 129
+  venv); the version unchanged at 1.2.240; counter 128 -> 129 — and
+  the part14 retirement-confirmation round 338 (the interactive
+  "Continue / Playground.py is retired (check the worklog) / Push"
+  directive): the worklog retirement lineage CONFIRMED at its three
+  anchors (declared v1.2.141, the TRUE retirement EXECUTED at r304
+  with the collection dropping 8,643 → 7,890, the r328 ghost sweep
+  of the rollback-resurrected pair) — the owner's directive
+  superseding the r337 absorption plan: the playground pair is
+  RETIRED, not absorbed; the un-ledgered UUID commit `96796a93`
+  (exactly one commit ahead of `origin/main` = `bceb959d`, never
+  pushed — the r289 cut-off pattern; it had tracked the playground
+  pair + `scratch/part14.txt` into the push lane) swept per the
+  r312/r318 precedent: sha-256 parity verified first (tree-path pair
+  == `scratch/r337-wip/` preservation, byte-exact at
+  `b81faf62...`/`c743ff6d...`, exact counts 30,026/16,317 trued),
+  the `/tmp/r338-backup/` safety copies laid down, then
+  `git reset --hard bceb959d` — the tree-path pair deleted with
+  ZERO byte loss (the durable preservation standing at
+  `scratch/r337-wip/`, tracked + pushed since r337) and
+  `scratch/part14.txt` restored disk-only per the upload-ignore
+  convention; the gates re-pinned (console 200 + the zip-size API
+  23,489,390 exact:true source:release + the 108-test quick chunk
+  exit 0 over the surviving venv + CI at HEAD `bceb959d` 19/19
+  check-runs success re-verified via the authenticated API); the
+  standing release verdict re-confirmed with NO re-ship (the r334
+  byte-frozen ruling — v1.2.240 remains the published smoke-passed
+  release); the version unchanged at 1.2.240; counter 129 -> 130
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
