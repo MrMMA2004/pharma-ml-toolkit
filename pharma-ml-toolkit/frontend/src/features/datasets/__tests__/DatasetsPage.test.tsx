@@ -60,6 +60,7 @@ const datasetsMocks = vi.hoisted(() => ({
   profile: vi.fn(),
   split: vi.fn(),
   column: vi.fn(),
+  remove: vi.fn(),
 }));
 
 vi.mock("@/services/datasets/client", () => ({
@@ -71,6 +72,7 @@ vi.mock("@/services/datasets/client", () => ({
     profile: datasetsMocks.profile,
     split: datasetsMocks.split,
     column: datasetsMocks.column,
+    remove: datasetsMocks.remove,
   },
 }));
 
@@ -136,6 +138,7 @@ beforeEach(() => {
   datasetsMocks.upload.mockReset();
   datasetsMocks.view.mockReset();
   datasetsMocks.preview.mockReset();
+  datasetsMocks.remove.mockReset();
   jobsMocks.result.mockReset();
 });
 
@@ -338,6 +341,147 @@ describe("the Inspect stage — the registry table and the row-limit control", (
     expect(await screen.findByText(/API 500: database locked/)).toBeInTheDocument();
     expect(
       screen.getByText("No datasets registered yet — import one above."),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("the §3.1 deletion lane — the two-step gate over the typed evict", () => {
+  it("arms the confirmation with the dataset's name and metadata — no request yet", async () => {
+    datasetsMocks.list.mockResolvedValue({ datasets: [DATASET] });
+    render(<DatasetsPage />);
+
+    const deleteAction = await screen.findByRole("button", {
+      name: "Delete dataset solubility.csv",
+    });
+    await userEvent.click(deleteAction);
+
+    expect(
+      screen.getByText(/Delete dataset .solubility\.csv.\?/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/128 rows × 6 columns/),
+    ).toBeInTheDocument();
+    // the confirmation's scope note carries the dataset id too
+    expect(
+      screen.getAllByText(/ds-1/).length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(datasetsMocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("the row's Delete action never selects the row (the propagation guard)", async () => {
+    datasetsMocks.list.mockResolvedValue({ datasets: [DATASET] });
+    render(<DatasetsPage />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete dataset solubility.csv" }),
+    );
+
+    expect(datasetsMocks.view).not.toHaveBeenCalled();
+    expect(datasetsMocks.preview).not.toHaveBeenCalled();
+  });
+
+  it("Cancel disarms the gate without any request", async () => {
+    datasetsMocks.list.mockResolvedValue({ datasets: [DATASET] });
+    render(<DatasetsPage />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete dataset solubility.csv" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByText(/Delete dataset .solubility\.csv.\?/)).toBeNull();
+    expect(datasetsMocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("confirm evicts through the typed client, refreshes the registry, and reports it", async () => {
+    datasetsMocks.list.mockResolvedValueOnce({ datasets: [DATASET] });
+    datasetsMocks.list.mockResolvedValue({ datasets: [] });
+    datasetsMocks.remove.mockResolvedValue(undefined);
+    render(<DatasetsPage />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete dataset solubility.csv" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Delete dataset" }));
+
+    await waitFor(() => {
+      expect(datasetsMocks.remove).toHaveBeenCalledTimes(1);
+    });
+    expect(datasetsMocks.remove).toHaveBeenCalledWith("ds-1");
+    await waitFor(() => {
+      // the registry refresh re-lists after the evict
+      expect(datasetsMocks.list.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+    expect(
+      await screen.findByText(/Deleted .solubility\.csv. from the registry\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Delete dataset .solubility\.csv.\?/)).toBeNull();
+  });
+
+  it("deleting the selected dataset clears the selection — never a dangling record", async () => {
+    datasetsMocks.list.mockResolvedValueOnce({ datasets: [DATASET] });
+    datasetsMocks.list.mockResolvedValue({ datasets: [] });
+    datasetsMocks.view.mockResolvedValue(DATASET);
+    datasetsMocks.preview.mockResolvedValue(FRAME);
+    datasetsMocks.remove.mockResolvedValue(undefined);
+    render(<DatasetsPage />);
+
+    // select the dataset first (the selection card renders)
+    await userEvent.click(await screen.findByText("solubility.csv"));
+    await waitFor(() => {
+      expect(datasetsMocks.view).toHaveBeenCalledWith("ds-1");
+    });
+    // then delete that same dataset through the gate
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete dataset solubility.csv" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Delete dataset" }));
+
+    await waitFor(() => {
+      expect(datasetsMocks.remove).toHaveBeenCalledWith("ds-1");
+    });
+    await waitFor(() => {
+      // the selection card is gone — the deleted record cannot stay selected
+      expect(screen.queryByText("solubility.csv")).toBeNull();
+    });
+  });
+
+  it("the honest 404 lane — already-gone reconciles the registry instead of erroring", async () => {
+    datasetsMocks.list.mockResolvedValueOnce({ datasets: [DATASET] });
+    datasetsMocks.list.mockResolvedValue({ datasets: [] });
+    datasetsMocks.remove.mockRejectedValueOnce(
+      new ApiError(404, { detail: "Unknown dataset_id." }),
+    );
+    render(<DatasetsPage />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete dataset solubility.csv" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Delete dataset" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/was already gone \(404\) — registry refreshed\./),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Request failed:/)).toBeNull();
+    expect(screen.queryByText(/Delete dataset .solubility\.csv.\?/)).toBeNull();
+  });
+
+  it("a hard failure stays on the confirmation card, surfaced verbatim", async () => {
+    datasetsMocks.list.mockResolvedValue({ datasets: [DATASET] });
+    datasetsMocks.remove.mockRejectedValueOnce(new ApiError(500, "locked"));
+    render(<DatasetsPage />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete dataset solubility.csv" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Delete dataset" }));
+
+    expect(await screen.findByText(/API 500: locked/)).toBeInTheDocument();
+    // the gate stays armed for a retry or an explicit cancel
+    expect(
+      screen.getByText(/Delete dataset .solubility\.csv.\?/),
     ).toBeInTheDocument();
   });
 });

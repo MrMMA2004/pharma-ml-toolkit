@@ -7,6 +7,7 @@ import {
   FileSearch,
   FlaskConical,
   Fingerprint,
+  Trash2,
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -301,6 +302,13 @@ export function DatasetsPage() {
   const [exportBusy, setExportBusy] = useState(false);
   const [digestStatus, setDigestStatus] = useState<string | null>(null);
 
+  // stage 2: the §3.1 deletion lane — the typed evict behind the
+  // two-step confirmation gate (never a bare destructive click)
+  const [deletePending, setDeletePending] = useState<DatasetView | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
+
   const refreshRegistry = useCallback(async () => {
     try {
       const response = await datasetsApi.list();
@@ -346,6 +354,70 @@ export function DatasetsPage() {
   useEffect(() => {
     void refreshRegistry();
   }, [refreshRegistry]);
+
+  // the §3.1 deletion handlers — the existing typed client only
+  // (`datasetsApi.remove`, the API-tested DELETE lane; no duplicate
+  // client, no inline fetch). The two-step gate: the row action arms
+  // the confirmation; only the confirm button fires the request.
+  const requestDelete = useCallback((entry: DatasetView) => {
+    setDeletePending(entry);
+    setDeleteError(null);
+    setDeleteNotice(null);
+  }, []);
+
+  const cancelDelete = useCallback(() => {
+    setDeletePending(null);
+    setDeleteError(null);
+  }, []);
+
+  const confirmDelete = useCallback(
+    async (entry: DatasetView) => {
+      setDeleteBusy(true);
+      setDeleteError(null);
+      setDeleteNotice(null);
+      try {
+        await datasetsApi.remove(entry.dataset_id);
+        setDeletePending(null);
+        if (entry.dataset_id === selectedId) {
+          // the deleted record was the selection — clear it and every
+          // stage-local derivative with it (never a dangling selection
+          // pointing at an evicted record)
+          setSelectedId(null);
+          setSelected(null);
+          setPreview(null);
+          setSelectionError(null);
+          setProfile(null);
+          setColumn(null);
+          setChemJobId(null);
+          setDescriptorFrame(null);
+          setFpMatrix(null);
+          setSplitReport(null);
+          setStatResult(null);
+          setExportArtifact(null);
+          setDigestStatus(null);
+        }
+        await refreshRegistry();
+        setDeleteNotice(`Deleted "${entry.name}" from the registry.`);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          // the honest already-gone lane: reconcile the registry and
+          // say so — a 404 on delete is not a failure to hide
+          setDeletePending(null);
+          await refreshRegistry();
+          setDeleteNotice(
+            `"${entry.name}" was already gone (404) — registry refreshed.`,
+          );
+          return;
+        }
+        // every other failure stays on the confirmation card — the
+        // typed ApiError surfaces verbatim, the gate stays armed
+        setDeleteError(describeError(error));
+      } finally {
+        setDeleteBusy(false);
+      }
+    },
+    [refreshRegistry, selectedId],
+  );
 
   // stage 1: upload (job mode — the backend's default lane)
   const handleUpload = useCallback(async () => {
@@ -712,7 +784,7 @@ export function DatasetsPage() {
             <table className="w-full border-collapse text-xs">
               <thead className="sticky top-0 bg-[var(--color-muted)]">
                 <tr>
-                  {["Name", "Rows", "Columns", "Target", "Task", "Created"].map((header) => (
+                  {["Name", "Rows", "Columns", "Target", "Task", "Created", "Actions"].map((header) => (
                     <th key={header} scope="col" className="whitespace-nowrap px-3 py-2 text-left font-semibold text-[var(--color-foreground)]">
                       {header}
                     </th>
@@ -736,11 +808,29 @@ export function DatasetsPage() {
                     <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{entry.target ?? "—"}</td>
                     <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{entry.task ?? "—"}</td>
                     <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{entry.created_at}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-right">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`Delete dataset ${entry.name}`}
+                        title={`Delete dataset ${entry.name}`}
+                        disabled={deleteBusy && deletePending?.dataset_id === entry.dataset_id}
+                        onClick={(event) => {
+                          // the row click selects; the trash arms the
+                          // deletion gate — the two must never collide
+                          event.stopPropagation();
+                          requestDelete(entry);
+                        }}
+                      >
+                        <Trash2 aria-hidden className="h-3.5 w-3.5" />
+                        Delete
+                      </Button>
+                    </td>
                   </tr>
                 ))}
                 {datasets.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-4 text-center text-[var(--color-muted-foreground)]">
+                    <td colSpan={7} className="px-3 py-4 text-center text-[var(--color-muted-foreground)]">
                       No datasets registered yet — import one above.
                     </td>
                   </tr>
@@ -749,6 +839,54 @@ export function DatasetsPage() {
             </table>
           </div>
         </div>
+        {deleteNotice !== null ? (
+          <p role="status" className="mt-3 text-sm text-[var(--color-muted-foreground)]">
+            {deleteNotice}
+          </p>
+        ) : null}
+        {deletePending !== null ? (
+          <Card className="mt-4 border-[var(--color-destructive)]/40">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Trash2 aria-hidden className="h-4 w-4" />
+                Delete dataset “{deletePending.name}”?
+              </CardTitle>
+              <CardDescription>
+                {deletePending.shape[0]} rows × {deletePending.shape[1]} columns ·
+                target {deletePending.target ?? "none"} · task{" "}
+                {deletePending.task ?? "inferred"} · created{" "}
+                {deletePending.created_at} · id {deletePending.dataset_id}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                This evicts the session record and its persisted copy
+                (dataset_id {deletePending.dataset_id}). Exports and artifacts
+                already generated from it stay in the artifact registry —
+                this action never touches another record. A running job that
+                already captured the frame is unaffected.
+              </p>
+              {deleteError !== null ? (
+                <div className="mt-3">
+                  <ErrorBanner message={deleteError} />
+                </div>
+              ) : null}
+              <div className="mt-4 flex gap-2">
+                <Button variant="outline" onClick={cancelDelete} disabled={deleteBusy}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => void confirmDelete(deletePending)}
+                  disabled={deleteBusy}
+                >
+                  <Trash2 aria-hidden className="h-4 w-4" />
+                  {deleteBusy ? "Deleting…" : "Delete dataset"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
         {selectionError !== null ? <div className="mt-3"><ErrorBanner message={selectionError} /></div> : null}
         {selected !== null ? (
           <Card className="mt-4">

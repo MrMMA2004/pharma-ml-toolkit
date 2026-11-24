@@ -14,6 +14,13 @@ heatmap, the §24.2.B/C AD scatters, the mean-|SHAP| bar, the DL
 learning curve, the PK/PD + MD curves); the row below gains the
 chart column's live evidence (r291 browser run, 7 evidence shots:
 `docs/gui/screenshots/r291-*.png`).
+· **r356 addendum (part17 §3.1):** the dataset-deletion lane CLOSED —
+the Datasets · Inspect stage now carries the row-level Delete action
+behind the two-step confirmation (name + metadata + scope note) →
+the existing typed `datasetsApi.remove` → `DELETE /api/v1/datasets/{id}`
+with the honest 404 lane, the registry refresh, and the deleted-selection
+clear (the vitest §3.1 flows + the `tests/test_frontend_datasets_delete.py`
+drift guard; no duplicate client, no new endpoint).
 **Spec:** MASTER_PROMPT part11_1 §21 —
 "Complete Backend–GUI Integration Audit" — with part11_2 §12's status labels.
 **Method:** every row below was derived live from the working tree — the 88
@@ -89,7 +96,7 @@ REST surface) · **GUI workspace / UI control** (the React consumer) ·
 | `stores.frame_payload` (bounded preview) | GET `/datasets/{id}/preview`, `/column/{col}` (≤500) | Datasets · Inspect: `PreviewTable`, `ColumnChips` | S | paginated preview + column chips | — | — | preview/NaN-as-null pins | PASS |
 | `data_profiling.profile_frame` | POST `/datasets/{id}/profile` | Datasets · Inspect profile button | S/J | profile summary card | — | — | profile tests | PASS |
 | `data.split_table` | POST `/datasets/{id}/split` | Datasets · Split/Leakage stage: ratio/stratify/seed | S/J | split side tables + target balance | — | — | split tests | PASS |
-| `DatasetStore.evict` | DELETE `/datasets/{id}` | **no UI consumer** (service `datasetsApi.remove` exists) | S | — | — | — | route + evict tests (API-only) | PARTIAL — §3.4 |
+| `DatasetStore.evict` | DELETE `/datasets/{id}` | Datasets · Inspect: per-row Delete action behind the two-step confirmation (name + metadata + scope note; `§3.1` r356) | S | registry refresh + the deleted-selection clear + the honest 404 note | — | — | route + evict tests; vitest §3.1 flows (15 over the page suite); `test_frontend_datasets_delete.py` 14 | PASS — r356 |
 | `chem.descriptors.compute_descriptors` | POST `/chemistry/descriptors` | Datasets · Chemistry stage: descriptor-set select; Generative · properties | J/S | descriptor frame table (+ failed-set honesty) | — | — | `test_backend_service.py` chemistry (sync+job+config preservation) | PASS |
 | `chem.descriptors.compute_fingerprints` | POST `/chemistry/fingerprints` | Datasets · fingerprint kind/radius/n-bits/counts form (≤500) | J/S | fingerprint matrix table | — | — | same suite | PASS |
 | `viz.statplots.plot_*` (stat) | POST `/visualization/stat` | Datasets · Visualize stage (column select); Visualization lane | S | stat histogram artifact → digest-verified download | artifact figure | PNG (+Visualization: PNG/SVG) | `test_docking_pkpd_md_viz_ad.py` viz group | PASS |
@@ -219,6 +226,16 @@ gate reports `backend 1.2.228 ready via dev-same-origin`, the stream is
 
 ### 3.2 PARTIAL — Plotly.js is declared, chunked, and pinned — but not yet imported
 
+> **r356 truing (part17 §3.3):** this section is the part11-era r289
+> snapshot and its "zero `src/` files import it" claim was superseded
+> by the r291 addendum above — `PlotlyFigure.tsx` is now imported by
+> its owning workflows (the ML page's lanes, PK/PD, and their 12 test
+> suites; 16 files reference it), the workflow-specific charts live in
+> their owning workflows, and the Visualization workspace stays the
+> genuinely general-purpose backend-figure lane. The paragraph below
+> stands as the historical record; the live truth is the r291 addendum.
+> Status: the Plotly adoption is VERIFIED_COMPLETE since r291.
+
 `plotly.js-dist-min@3.1.1` is a runtime dependency with its own manual
 chunk; the drift guards pin it as part of the mandated stack. **Zero
 `src/` files import it today** — every 2D chart (loss curves,
@@ -245,10 +262,12 @@ absent; the frontend side is drift-guarded against
 §21's rule cuts both ways: these are NOT counted as GUI integrations,
 and they are not silently omitted either:
 
-* `DELETE /datasets/{id}`, `GET/DELETE /artifacts/{id}` (view/delete),
-  `GET /jobs` (ledger) — service functions exist (`datasetsApi.remove`,
-  `artifactsApi.view/delete`, `jobsApi.list`), API-tested, **no UI
-  control**. Disposition: housekeeping-lane campaign row.
+* `GET/DELETE /artifacts/{id}` (view/delete), `GET /jobs` (ledger)
+  — service functions exist (`artifactsApi.view/delete`,
+  `jobsApi.list`), API-tested, **no UI control**. Disposition:
+  housekeeping-lane campaign row (the r356 part17 §3.2 queue).
+  [`DELETE /datasets/{id}` left this list in r356 — see the §3.1
+  addendum above.]
 * `POST /semi-supervised/evaluate` — the leakage-safe evaluation
   protocol; the ML page renders the honest queue note instead of a
   fake button. Disposition: campaign row (the workflow's §20.3
@@ -288,7 +307,7 @@ JS tests remain a documented campaign row, not a silent gap.
 
 | Domain | Operations | PASS | PARTIAL | FAIL | BLOCKED | N/A |
 |---|---|---|---|---|---|---|
-| Datasets + Chemistry | 12 | 11 | 1 (evict) | 0 | 0 | 0 |
+| Datasets + Chemistry | 12 | 12 | 0 | 0 | 0 | 0 |
 | ML + Semi-supervised + AD | 10 | 7 | 1 (evaluate) | 0 | 0 | 2 (internal) |
 | Deep Learning | 3 | 3 | 0 | 0 | 0 | 0 |
 | Generative AI | 5 | 5 | 0 | 0 | 0 | 0 |
@@ -297,12 +316,12 @@ JS tests remain a documented campaign row, not a silent gap.
 | MD Analysis | 7 | 7 | 0 | 0 | 0 | 0 |
 | Visualization + artifacts | 8 | 7 | 1 (view/delete) | 0 | 0 | 0 |
 | Control plane (health/jobs/WS) | 7 | 4 | 3 (db surface, jobs list, capabilities) | 0 | 0 | 1 (codegen) |
-| **Total** | **73 capability rows** | **65** | **6** | **0** | **0** | **3** |
+| **Total** | **73 capability rows** | **66** | **5** | **0** | **0** | **3** |
 
 Every user-facing workflow chain (UI control → service client → REST →
 job/worker → real scientific function → result handler → visualization →
-export → persistence) is **PASS** with live test evidence. The six
-PARTIAL rows are housekeeping/protocol/config surfaces with no UI
+export → persistence) is **PASS** with live test evidence. The five
+remaining PARTIAL rows are housekeeping/protocol/config surfaces with no UI
 consumer — each classified, dispositioned to a campaign row, and never
 counted as integration. The audit's original FAIL (the unwired startup
 bridge) is closed and browser-verified this round.

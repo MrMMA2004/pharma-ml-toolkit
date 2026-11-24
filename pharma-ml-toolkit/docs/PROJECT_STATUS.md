@@ -947,6 +947,43 @@ summarises them and wins any status disagreement.
   workspace lint true-exit-0); the version unchanged at 1.2.240
   (no-silent-bumps; the byte-frozen r334 ruling stands, NO
   re-ship); counter 144 -> 145
+  — and the part17 opening round 356 (the interactive
+  "MASTER_PROMPT part17 / Push" directive): the SIXTEENTH rollback
+  recovered pre-work (HEAD back at the r186 checkpoint `2eb0ede`,
+  the remote + `.credentials/` wiped, the venv gutted, both ECC legs
+  wiped, the root dist-archive + the offsite wiped — the PAT
+  re-spliced + API-validated via the r352-class drill, the origin
+  re-attached [origin/main = the r355 terminal `97551e76`, exactly
+  the part17 mandate's stated inspection SHA], the /tmp/r356-backup
+  tree snapshot with its sha-256 manifest [158 modified tracked
+  files] BEFORE the reset, the `git reset --hard 97551e76` clean
+  with zero ghosts, the six-home zip parity re-seeded ALL SIX
+  `0fadb6e5` x 23,489,390 B, the venv repaired foreground at the
+  exact pins [VENV-REPAIR-DONE + STUDIO-REPAIR-DONE], the frontend
+  npm ci [210], ECC REINSTALLED GREEN at the r335 pins, the mode
+  residue realigned) — then the part17 §2 re-audit delivered
+  (`docs/QA/ROUND356_COMPREHENSIVE_AUDIT.md`: the live repository
+  state re-inspected [CI 19/19 at `97551e76`, the v1.2.240 release
+  assets], the previous-phase verification table, the honest gap
+  table [the penetration-testing program, the generic Multi-Response
+  ML, and the RSM engine all genuinely NOT_IMPLEMENTED — the
+  worklog's zero-mention proof], and the four-lane campaign queue
+  recorded) + the §3.3 Plotly contradiction TRUED with the dated
+  addendum (the part11-era "zero imports" prose stands as the
+  historical record, the r291 adoption is the live truth) + THE
+  §3.1 DATASET-DELETION LANE CLOSED (the campaign's first lane):
+  the Datasets · Inspect per-row Delete action behind the two-step
+  confirmation (name + metadata + the scope note) over the EXISTING
+  typed `datasetsApi.remove` (no duplicate client, no new endpoint)
+  with the honest 404 lane, the registry refresh, the
+  deleted-selection clear, and the propagation guard; the vitest
+  §3.1 flows (15 over the page suite) + the drift guard
+  `tests/test_frontend_datasets_delete.py` 14/14; the
+  capability-matrix row trued PARTIAL -> PASS (the census 66/5).
+  The version unchanged at 1.2.240 (no-silent-bumps; NO re-ship);
+  counter 147 -> 148. The campaign's next lanes: P1 the
+  penetration-testing program, M1 the Multi-Response ML, R1 the
+  RSM engine, G1 the remaining §3.2 UI consumers.
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands
