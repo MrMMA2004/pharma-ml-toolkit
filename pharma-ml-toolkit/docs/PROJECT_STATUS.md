@@ -898,6 +898,55 @@ summarises them and wins any status disagreement.
   (no-silent-bumps; the byte-frozen r334 ruling stands, NO
   re-ship — the backend tree changes ride the next owner-approved
   ship lane); counter 143 -> 144
+  — and the part16 ninth round 353 (the 02:30 cron firing): the
+  THIRTEENTH rollback wave recovered pre-work (HEAD back at the
+  r186 checkpoint `2eb0ede`, the remote + `.credentials/` gone, the
+  venv gutted [rdkit/torch/shap/PySide6 MISSING, numpy drifted to
+  2.1.3] — the PAT re-spliced + API-validated via the r352-class
+  short-circuit drill, the askpass channel rebuilt, the origin
+  re-attached [origin/main = the r352 terminal `57ffa9c9`], the /tmp
+  tree backup captured with its sha-256 manifest BEFORE the reset
+  [157 modified tracked files], the `git reset --hard 57ffa9c9`
+  clean with ZERO untracked ghosts [no arena refs, no stashes], the
+  108-flag EXE001/EXE002 file-mode residue realigned to the
+  git-index modes, the venv repaired foreground at the exact pins
+  [numpy 1.26.4 / torch 2.14.1+cpu / rdkit 2026.9.1 / PySide6 6.8.3
+  / pharmaml 1.2.240, the Studio EGL leg green], the rolled-back
+  root `dist-archive/` home + the offsite mirror re-seeded
+  byte-identical) — then THE PHASE-9 GRID-BOX VISUALIZATION LANE
+  DELIVERED (the roadmap's #7, the LAST numbered item — the
+  campaign queue now FULLY EMPTY): `components/docking/
+  GridBoxViewer.tsx` — the synchronized protein + box + ligand 3D
+  view in ONE Three.js scene in the receptor's own coordinate frame
+  (the receptor CPK point cloud with the round-sprite shader, the
+  unit-edge box wireframe + translucent faces re-positioned/
+  re-scaled from the SAME six state variables the stage-6 dock
+  request serializes — the numeric inputs the ONE mutation surface
+  so the view can never drift from the submitted request, the
+  binding-site census cloud rebuilt per config, the reference
+  ligand ball-and-stick over the page's own parsed bonds, the XYZ
+  reference-frame triad, orbit/zoom/pan, the camera fitted to the
+  combined protein ∪ box ∪ ligand sphere; the readouts — center/
+  size in Å, volume, the in-box censuses; the four visibility
+  toggles; the six-code validation vocabulary over
+  `services/docking/gridBox.ts`'s pure lane [describe-never-gate]
+  with the pinned reference-frame + spacing notes rendered verbatim
+  [the backend DockRequest carries NO spacing field — stated, not
+  an imagined control]; the honest no-receptor/WebGL fallbacks; the
+  full disposal + resource-aware rendering discipline; Three.js =
+  the house's own Phase-Eighteen dependency, zero new packages) +
+  the stage-4 mount; the tests (the vitest pair 33 [12 component +
+  21 logic — 287/287 over 33 files], the drift guard
+  `tests/test_frontend_gridbox.py` 13/13 — the synchronization
+  pin, the never-shift rule verbatim, the three-way spacing honesty
+  [the lane note + the rendered note + the schema really carries no
+  spacing field], the props-only never-fabricate scan, the
+  one-mutation-surface scan); the gates re-pinned (collection
+  8,789/0/486 exact [+13 the guard], ruff full-tree clean, mypy 300
+  clean, tsc clean, the frontend production build green, the root
+  workspace lint true-exit-0); the version unchanged at 1.2.240
+  (no-silent-bumps; the byte-frozen r334 ruling stands, NO
+  re-ship); counter 144 -> 145
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

@@ -52,6 +52,7 @@ import {
   Molecule3D,
   type Molecule3DAtom,
 } from "@/components/molecular3d/Molecule3D";
+import { GridBoxViewer } from "@/components/docking/GridBoxViewer";
 import {
   BOND_INFERENCE_ATOM_LIMIT,
   inferDisplayBonds,
@@ -1889,6 +1890,46 @@ export function DockingPage() {
             </CardContent>
           </Card>
         </div>
+        {/* part16 §12 (Phase 9): the synchronized protein + box + ligand
+            3D view. The config prop carries the SAME six state variables
+            the stage-6 dock request serializes (center [centerX, centerY,
+            centerZ] / size [sizeX, sizeY, sizeZ]), so editing the manual
+            inputs above updates the view and the submitted request can
+            never drift from what the viewer drew (the §12 coordinate-
+            consistency rule). The scenes are the page's own PDBQT parses
+            — the viewer renders only records that actually arrived. */}
+        <GridBoxViewer
+          receptorAtoms={
+            receptor3dScene !== null && !("error" in receptor3dScene)
+              ? receptor3dScene.atoms
+              : []
+          }
+          receptorDiagnostics={
+            receptor3dScene !== null && !("error" in receptor3dScene)
+              ? receptor3dScene.diagnostics
+              : null
+          }
+          ligand={
+            ligand3dScene !== null && !("error" in ligand3dScene)
+              ? {
+                  atoms: ligand3dScene.atoms,
+                  bonds: ligand3dScene.bonds,
+                  diagnostics:
+                    ligand3dScene.diagnostics.trim() === ""
+                      ? null
+                      : ligand3dScene.diagnostics,
+                }
+              : null
+          }
+          config={{
+            centerX,
+            centerY,
+            centerZ,
+            sizeX,
+            sizeY,
+            sizeZ,
+          }}
+        />
       </StageHeader>
 
       <StageHeader

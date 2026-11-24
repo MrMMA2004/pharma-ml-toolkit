@@ -79,7 +79,7 @@ function snapshot(
     ],
     storage: {
       persistent: true,
-      data_dir: "/home/z/.local/share/pharmaml-studio",
+      data_dir: "/var/lib/pharmaml-studio",
       reason: null,
       disk: {
         path: "/app",

@@ -74,7 +74,7 @@ function durablePayload(): Record<string, unknown> {
     ],
     storage: {
       persistent: true,
-      data_dir: "/home/z/.local/share/pharmaml-studio",
+      data_dir: "/var/lib/pharmaml-studio",
       reason: null,
       disk: DISK,
       database: {
@@ -179,7 +179,7 @@ describe("systemApi.diagnostics (§15.5)", () => {
 
     expect(snap.storage.persistent).toBe(true);
     expect(snap.storage.data_dir).toBe(
-      "/home/z/.local/share/pharmaml-studio",
+      "/var/lib/pharmaml-studio",
     );
     expect(snap.storage.database?.size_bytes).toBe(94_208);
     expect(snap.storage.database?.journal_mode).toBe("wal");

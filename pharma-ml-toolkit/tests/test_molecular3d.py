@@ -344,7 +344,11 @@ class TestMdPageWiring:
 
 
 class TestGenuine3dOnly:
-    def test_three_imported_by_exactly_one_source_file(self) -> None:
+    def test_three_imported_by_exactly_the_two_3d_viewers(self) -> None:
+        """Phase Eighteen's genuine-3D-only rule, trued to the Phase-9
+        lane-split truth (r353): three stays imported by exactly the
+        shared molecular viewer + the Phase-9 grid-box viewer — any
+        third importer is drift."""
         importers: list[Path] = []
         for path in SRC.rglob("*.*"):
             if path.suffix not in {".ts", ".tsx"}:
@@ -352,8 +356,13 @@ class TestGenuine3dOnly:
             text = _read(path)
             if 'from "three"' in text or 'from "three/addons' in text:
                 importers.append(path)
-        assert importers == [COMPONENTS / "Molecule3D.tsx"], (
-            "three must stay imported by exactly the shared viewer — "
+        assert sorted(importers) == sorted(
+            [
+                COMPONENTS / "Molecule3D.tsx",
+                COMPONENTS.parent / "docking" / "GridBoxViewer.tsx",
+            ]
+        ), (
+            "three must stay imported by exactly the two 3D viewers — "
             f"drifted to: {[str(p) for p in importers]}"
         )
 
