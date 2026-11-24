@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""r349 browser verification pass — the experiment-tracking round's web
+evidence pair: desktop 1440 + mobile 390, zero page/console errors,
+the footer carrying the LIVE walk (the live post-ledger walk == the
+page render), the footer geometry exact at page end, zero horizontal
+overflow at 390px, the zip-size API pin exact.
+
+Usage: /home/z/.venv/bin/python scratch/r349_verify.py
+"""
+from __future__ import annotations
+
+import json
+import sys
+import urllib.request
+from pathlib import Path
+
+from playwright.sync_api import sync_playwright
+
+SHOTS = Path("/home/z/my-project/scratch")
+WEB = "http://localhost:3000"
+FILES = 1787
+LINES = 574_728
+FMT_FILES = f"{FILES:,}"
+FMT_LINES = f"{LINES:,}"
+
+
+def main() -> int:
+    console_errors: list[str] = []
+    page_errors: list[str] = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        page.on(
+            "console",
+            lambda msg: console_errors.append(msg.text)
+            if msg.type == "error"
+            else None,
+        )
+        page.on("pageerror", lambda err: page_errors.append(str(err)))
+        page.goto(WEB, wait_until="domcontentloaded")
+        page.wait_for_selector(f"text={FMT_FILES}", timeout=60_000)
+        page.wait_for_selector(f"text={FMT_LINES}", timeout=30_000)
+        page.wait_for_timeout(900)
+
+        # the footer geometry exact at page end (the sticky-footer rule)
+        geo = page.evaluate(
+            "() => ({ docH: document.documentElement.scrollHeight,"
+            " footBottom: document.querySelector('footer')"
+            " ? document.querySelector('footer').getBoundingClientRect().bottom"
+            " : null })"
+        )
+        # mobile: no horizontal overflow at 390px
+        mobile = browser.new_page(viewport={"width": 390, "height": 844})
+        mobile.on(
+            "console",
+            lambda msg: console_errors.append(msg.text)
+            if msg.type == "error"
+            else None,
+        )
+        mobile.on("pageerror", lambda err: page_errors.append(str(err)))
+        mobile.goto(WEB, wait_until="domcontentloaded")
+        mobile.wait_for_selector(f"text={FMT_FILES}", timeout=60_000)
+        mobile.wait_for_timeout(700)
+        mob = mobile.evaluate(
+            "() => ({ docW: document.documentElement.scrollWidth,"
+            " vw: window.innerWidth })"
+        )
+        page.screenshot(path=str(SHOTS / "r349-web-verify.png"), full_page=True)
+        mobile.screenshot(path=str(SHOTS / "r349-mobile-verify.png"), full_page=True)
+        browser.close()
+
+    print(f"desktop geometry: docH={geo['docH']} footBottom={geo['footBottom']}")
+    print(f"mobile overflow: docW={mob['docW']} vw={mob['vw']}")
+    zip_req = urllib.request.urlopen(
+        "http://localhost:3000/api/toolkit/zip-size", timeout=15
+    )
+    zip_body = json.loads(zip_req.read().decode())
+    print(f"zip-size API: {zip_body}")
+    ok = True
+    if geo["docH"] is None or geo["footBottom"] is None or geo["docH"] != geo["footBottom"]:
+        print("! footer geometry NOT exact")
+        ok = False
+    if mob["docW"] != mob["vw"]:
+        print("! horizontal overflow at 390px")
+        ok = False
+    if zip_body != {
+        "zipBytes": 23_489_390,
+        "version": "1.2.240",
+        "exact": True,
+        "source": "release",
+    }:
+        print("! zip-size API pin drifted")
+        ok = False
+    if page_errors or console_errors:
+        for line in page_errors + console_errors:
+            print("  !", line[:200])
+        ok = False
+    if ok:
+        print(
+            "R349 VERIFY PASS: zero page errors, zero console errors, "
+            f"footer {FMT_FILES}/{FMT_LINES} rendered, geometry exact, "
+            "mobile 390 clean, zip-size exact"
+        )
+        return 0
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

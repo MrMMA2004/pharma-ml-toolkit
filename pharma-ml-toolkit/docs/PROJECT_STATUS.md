@@ -704,7 +704,60 @@ summarises them and wins any status disagreement.
   cut's render-time ref mutation fixed at source; the
   contract UNCHANGED — a frontend-only lane); the version
   unchanged at 1.2.240 (no-silent-bumps; the byte-frozen
-  r334 ruling stands, NO re-ship); counter 139 -> 140
+  r334 ruling stands, NO re-ship); counter 139 -> 140 — and the
+  part16 fifth round 349 (the interactive "Continue MASTER_PROMPT
+  part16 / Push" directive; the session split across a context
+  handoff — the tenth-rollback recovery + the runs-lane code + the
+  gate scripts landed pre-handoff, the full gate verification +
+  the evidence pair + this ledger closed in the continuation):
+  the tenth rollback found already-recovered at open (HEAD ==
+  origin/main == `1ea3cc9a` — the r348 addendum terminal, pushed,
+  0/0 divergence, the counter intact at 140; the PAT channel
+  intact — the 93-B 600-mode credential + the askpass script 700,
+  the token never in argv/URL/log; the venv zero-drift 13/13 at
+  the exact pins, no repair) — then THE PHASE-12
+  EXPERIMENT-TRACKING LANE DELIVERED (the campaign queue's #6
+  first sub-lane, the audit's experiment-tracking MISSING row
+  closed): `api/runs.py` (the `ExperimentRunRecord` joining the
+  full §15.2 checklist in one queryable view — the dataset
+  identifiers + version fields, the feature configuration, the
+  preprocessing pipeline, the algorithm + toolkit version, the
+  hyperparameters requested AND tuned, the random seed, the CV
+  configuration with the parallelism advisory, the evaluation
+  metrics, the environment snapshot, the model-artifact
+  reference, the execution timestamps, the job-reference log
+  pointer — recorded at BOTH training exits in `routes/ml.py`
+  (completed + failed/cancelled) from the very objects the route
+  already holds, never re-derived; the bounded `RunStore` (64,
+  oldest-first evict) + the MIGRATIONS-v3 SQLite durability + the
+  JSON-only rehydration on startup) + `routes/runs.py` (the
+  `GET /api/v1/runs` lineage table, filterable, + `GET
+  /api/v1/runs/{run_id}` the full record; 422 on bad
+  status/limit, 404 on unknown run_id) + the contract
+  re-exported at 114 paths/72 schemas + the generated `api.d.ts`
+  re-grown + the frontend projection (`services/runs/` — the
+  typed DTOs + the one-operation client; `components/runs/
+  RunLineage.tsx` — the Experiment log card mounted in the ML
+  Compare stage: the lineage table, the on-demand cached detail,
+  the honest dash, the honest error banner) + the tests (the API
+  suite 15/15, the vitest pair 20 — 198/198 over 25 files, the
+  drift guard 14/14); the gates re-pinned (collection
+  8,693/478 — +29 the runs lane; quick chunk 108/108; the
+  affected lanes exit 0 — 73 + 26 dots, the contracts suite
+  green over the changed pair; ruff full-tree clean; mypy 299
+  clean — +2 the runs modules; tsc clean; the root workspace
+  lint true-exit-0; the ten-chunk gate green with the one
+  standing deviation decoded — chunk-5's whole-file
+  nine_card_first rc=-9/137, the six-class split ALL SIX
+  exit=0 23/23, the sixth verdict; console 200 + the title pin
+  on the supervisor daemon — the 202,047-B body, the first
+  boot's 500s recovered by the targeted subtree reinstall of the
+  reaper-damaged nested-package class; the zip-size API exact;
+  the six-home zip parity re-verified byte-identical
+  `0fadb6e5`/23,489,390 B); the version unchanged at 1.2.240
+  (no-silent-bumps; the byte-frozen r334 ruling stands, NO
+  re-ship — the backend tree changes ride the next
+  owner-approved ship lane); counter 140 -> 141
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

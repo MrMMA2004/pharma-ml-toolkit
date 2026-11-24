@@ -65,6 +65,7 @@ from .events import EventBus
 from .jobs import JobManager
 from .persistence import Persistence, default_data_dir, recover_registry
 from .routes import api_router, ws_router
+from .runs import RunStore
 from .security import SessionSecurity, reset_session_security
 from .stores import (
     ArtifactStore,
@@ -126,6 +127,9 @@ def create_app(
     app.state.model_store = ModelStore(persistence=persistence)
     app.state.artifact_store = ArtifactStore(persistence=persistence)
     app.state.prior_store = PriorStore(persistence=persistence)
+    # part16 §15.2 (Phase 12) — the experiment-run registry (run
+    # lineage recorded at the ml.train completion/failure points).
+    app.state.run_store = RunStore(persistence=persistence)
 
     recovery_report: dict | None = None
     if persistence is not None:
@@ -135,6 +139,7 @@ def create_app(
             app.state.model_store,
             app.state.prior_store,
             app.state.artifact_store,
+            app.state.run_store,
         )
     app.state.recovery_report = recovery_report
 

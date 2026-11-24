@@ -49,6 +49,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from pharmaml import __version__ as _toolkit_version
 from pharmaml.chem import detect_smiles_column
 from pharmaml.exceptions import (
     DataValidationError,
@@ -58,12 +59,14 @@ from pharmaml.exceptions import (
 from pharmaml.ml.explain import shap_summary
 from pharmaml.ml.gnn import GraphClassifier
 from pharmaml.ml.models import list_models, resolve_model_name
+from pharmaml.ml.provenance import environment_snapshot
 from pharmaml.ml.training import train_model
 from pharmaml.viz._compat import close_figure
 from pharmaml.viz.export import export_figure
 from pharmaml.viz.ml_plots import plot_shap_beeswarm, plot_shap_importance
 
 from ..jobs import CancelledJob
+from ..runs import build_ml_train_failed_run, build_ml_train_run
 from ..stores import TrainedModelRecord, json_safe
 
 router = APIRouter(prefix="/ml", tags=["ml"])
@@ -225,6 +228,53 @@ def _resolve_parallelism(
     return clamped, advisory
 
 
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _record_run(
+    run_store,
+    status: str,
+    error: str,
+    mode: str,
+    job_id,
+    dataset_view,
+    model_name: str,
+    task: str,
+    tune: bool,
+    cv: int,
+    n_jobs: int,
+    preprocess: bool,
+    random_state: int,
+    model_params,
+    started_at: str,
+) -> None:
+    """The failure/cancellation exit's run record (§15.2's honest lane)."""
+    if run_store is None:
+        return
+    run_store.register(build_ml_train_failed_run(
+        mode=mode,
+        job_id=job_id,
+        dataset_view=dataset_view or {},
+        model_name=model_name,
+        task=task,
+        tune=tune,
+        cv=cv,
+        n_jobs_requested=n_jobs,
+        preprocess=preprocess,
+        random_state=random_state,
+        model_params=model_params,
+        environment=environment_snapshot(),
+        toolkit_version=_toolkit_version,
+        started_at=started_at,
+        completed_at=_now_iso(),
+        error=error,
+        status=status,
+    ))
+
+
 def _train_body(
     dataset_id: str,
     dataset_X: pd.DataFrame,
@@ -239,12 +289,30 @@ def _train_body(
     random_state: int,
     model_params: dict | None,
     model_store,
+    dataset_view: dict | None = None,
+    run_store=None,
+    mode: str = "job",
     cancel_event=None,
     manager=None,
     job_id: str | None = None,
 ) -> dict:
-    """Job/sync body: the REAL train_model call + store registration."""
+    """Job/sync body: the REAL train_model call + store registration.
+
+    part16 §15.2: the body records the experiment run at both exits —
+    the completed run (the full §15.2 lineage view) and the
+    failed/cancelled run (the config that did not land, traceable so
+    it is not re-run blind).  The records are built from the very
+    objects this body already holds — no second source, no
+    re-derivation.
+    """
+    started_at = _now_iso()
     if cancel_event is not None and cancel_event.is_set():
+        _record_run(
+            run_store, "cancelled", "Cancelled before the fit stage.",
+            mode, job_id, dataset_view, model_name, task, tune, cv,
+            n_jobs, preprocess, random_state, model_params,
+            started_at,
+        )
         raise CancelledJob("Cancelled before the fit stage.")
     if manager is not None and job_id is not None:
         manager.report_progress(job_id, 10, "preparing features")
@@ -254,18 +322,35 @@ def _train_body(
     effective_n_jobs, parallelism_advisory = _resolve_parallelism(
         n_jobs, dataset_X
     )
-    result = train_model(
-        model_name,
-        task=task,
-        X_train=dataset_X,
-        y_train=dataset_y,
-        tune=tune,
-        cv=cv,
-        n_jobs=effective_n_jobs,
-        preprocess=preprocess,
-        random_state=random_state,
-        model_params=model_params,
-    )
+    try:
+        result = train_model(
+            model_name,
+            task=task,
+            X_train=dataset_X,
+            y_train=dataset_y,
+            tune=tune,
+            cv=cv,
+            n_jobs=effective_n_jobs,
+            preprocess=preprocess,
+            random_state=random_state,
+            model_params=model_params,
+        )
+    except CancelledJob:
+        _record_run(
+            run_store, "cancelled", "Cancelled during the fit stage.",
+            mode, job_id, dataset_view, model_name, task, tune, cv,
+            n_jobs, preprocess, random_state, model_params,
+            started_at,
+        )
+        raise
+    except Exception as exc:
+        _record_run(
+            run_store, "failed", f"{type(exc).__name__}: {exc}",
+            mode, job_id, dataset_view, model_name, task, tune, cv,
+            n_jobs, preprocess, random_state, model_params,
+            started_at,
+        )
+        raise
     record = TrainedModelRecord(
         model_id=f"mdl-{uuid.uuid4().hex[:12]}",
         model=result.model,
@@ -285,6 +370,28 @@ def _train_body(
         fit_seconds=float(result.fit_seconds),
     )
     model_store.register(record)
+    if run_store is not None:
+        run_store.register(build_ml_train_run(
+            mode=mode,
+            job_id=job_id,
+            dataset_view=dataset_view or {},
+            model_name=model_name,
+            task=task,
+            tune=tune,
+            cv=cv,
+            n_jobs_requested=n_jobs,
+            n_jobs_effective=effective_n_jobs,
+            parallelism_advisory=parallelism_advisory,
+            preprocess=preprocess,
+            random_state=random_state,
+            model_params=model_params,
+            training_result=result,
+            model_view=record.view(),
+            environment=environment_snapshot(),
+            toolkit_version=_toolkit_version,
+            started_at=started_at,
+            completed_at=_now_iso(),
+        ))
     return {"model": record.view(), "parallelism": parallelism_advisory}
 
 
@@ -308,6 +415,9 @@ def train_model_route(req: TrainRequest, request: Request) -> dict:
                 req.model, task, req.tune, req.cv, req.n_jobs,
                 req.preprocess, req.random_state, req.model_params,
                 model_store,
+                dataset_view=dataset.view(),
+                run_store=request.app.state.run_store,
+                mode="sync",
             ),
         }
     record = manager.submit(
@@ -337,6 +447,9 @@ def train_model_route(req: TrainRequest, request: Request) -> dict:
         random_state=req.random_state,
         model_params=req.model_params,
         model_store=model_store,
+        dataset_view=dataset.view(),
+        run_store=request.app.state.run_store,
+        mode="job",
         manager=manager,
     )
     return {"mode": "job", "job": record.public()}

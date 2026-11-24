@@ -34,6 +34,7 @@ from . import (
     pharmacogenomics,
     pkpd,
     repurposing,
+    runs,
     samples,
     semi_supervised,
     system,
@@ -73,6 +74,9 @@ api_router.include_router(system.router)
 # part16 §8 (Phase 5) — the demo/sample-data lane over the REAL
 # shipped examples/data files (curated metadata, no invention).
 api_router.include_router(samples.router)
+# part16 §15.2 (Phase 12) — the experiment-tracking / run-lineage lane:
+# the query projection over the RunStore recorded at the training points.
+api_router.include_router(runs.router)
 
 ws_router = APIRouter(prefix="/api/v1")
 ws_router.include_router(events.router)

@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DemoDataSection } from "@/components/demo/DemoDataSection";
+import { RunLineage } from "@/components/runs/RunLineage";
 import {
   Card,
   CardContent,
@@ -3068,6 +3069,7 @@ export function MLPage() {
             </p>
           </CardContent>
         </Card>
+        <RunLineage className="mt-4" />
       </StageHeader>
 
       <StageHeader

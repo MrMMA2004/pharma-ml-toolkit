@@ -156,10 +156,33 @@ _V2_SCHEMA = [
     """,
 ]
 
+#: Migration 3 — part16 §15.2 (Phase 12): the experiment-run lineage
+#: table.  ``payload_json`` holds the full §15.2 record; the indexed
+#: columns mirror the list-view projection for SQL-side filtering.
+_V3_SCHEMA = [
+    """
+    CREATE TABLE experiment_runs (
+        run_id         TEXT PRIMARY KEY,
+        family         TEXT NOT NULL,
+        status         TEXT NOT NULL,
+        job_id         TEXT,
+        mode           TEXT,
+        dataset_id     TEXT,
+        model_id       TEXT,
+        model_name     TEXT,
+        created_at     TEXT NOT NULL,
+        completed_at   TEXT,
+        payload_json   TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX idx_experiment_runs_created ON experiment_runs (created_at)",
+]
+
 #: The ordered, versioned migration ledger (§16.4).
 MIGRATIONS: list[tuple[int, list[str]]] = [
     (1, _V1_SCHEMA),
     (2, _V2_SCHEMA),
+    (3, _V3_SCHEMA),
 ]
 
 #: The highest migration version known to this build.
@@ -633,6 +656,78 @@ class Persistence:
         rows = self._execute(sql, params)
         return [dict(r) for r in rows]
 
+    # -- experiment runs (part16 §15.2) ------------------------------------
+
+    def record_run(self, view: dict) -> None:
+        """Upsert one experiment-run row (payload = the full record)."""
+        model_artifact = view.get("model_artifact") or {}
+        self._execute_write(
+            """
+            INSERT OR REPLACE INTO experiment_runs (
+                run_id, family, status, job_id, mode, dataset_id,
+                model_id, model_name, created_at, completed_at,
+                payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                view["run_id"],
+                view["family"],
+                view["status"],
+                view.get("job_id"),
+                view.get("mode"),
+                view.get("dataset", {}).get("dataset_id"),
+                model_artifact.get("model_id"),
+                view.get("algorithm", {}).get("name"),
+                view["created_at"],
+                view.get("completed_at"),
+                json.dumps(json_safe(view)),
+            ),
+        )
+
+    def list_runs(
+        self,
+        family: str | None = None,
+        dataset_id: str | None = None,
+        model_name: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """The durable lineage query (the summary columns, newest first)."""
+        sql = (
+            "SELECT run_id, family, status, job_id, mode, dataset_id,"
+            " model_id, model_name, created_at, completed_at"
+            " FROM experiment_runs"
+        )
+        clauses: list[str] = []
+        params: list[Any] = []
+        if family is not None:
+            clauses.append("family = ?")
+            params.append(family)
+        if dataset_id is not None:
+            clauses.append("dataset_id = ?")
+            params.append(dataset_id)
+        if model_name is not None:
+            clauses.append("model_name = ?")
+            params.append(model_name)
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(status)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY created_at DESC, run_id DESC LIMIT ?"
+        params.append(int(limit))
+        return [dict(r) for r in self._execute(sql, params)]
+
+    def load_run(self, run_id: str) -> dict | None:
+        """The full §15.2 payload for one run."""
+        rows = self._execute(
+            "SELECT payload_json FROM experiment_runs WHERE run_id = ?",
+            (run_id,),
+        )
+        if not rows:
+            return None
+        return json.loads(rows[0]["payload_json"])
+
     # -- preferences -----------------------------------------------------
 
     def set_preference(self, key: str, value: Any) -> None:
@@ -953,6 +1048,7 @@ def recover_registry(
     model_store: Any,
     prior_store: Any,
     artifact_store: Any,
+    run_store: Any | None = None,
 ) -> dict:
     """Rebuild the live stores from the persisted registry.
 
@@ -962,7 +1058,10 @@ def recover_registry(
     bytes through the REAL loader; models/priors are unpickled;
     artifact bytes are read back.  Rows whose payloads fail to load
     (version drift, corruption) are dropped from both the DB and the
-    live registry and *reported* — never silently skipped.
+    live registry and *reported* — never silently skipped.  The
+    part16 §15.2 lane adds the experiment-run recovery: the full
+    §15.2 records rehydrate from ``payload_json`` (JSON only — no
+    pickles, no estimators to rebuild).
     """
     import pickle
     import tempfile
@@ -970,6 +1069,7 @@ def recover_registry(
 
     from pharmaml.data import load_dataset
 
+    from .runs import ExperimentRunRecord
     from .stores import (
         ArtifactRecord,
         DatasetRecord,
@@ -982,6 +1082,7 @@ def recover_registry(
         "models": 0,
         "priors": 0,
         "artifacts": 0,
+        "runs": 0,
         "dropped": [],
     }
 
@@ -1108,5 +1209,26 @@ def recover_registry(
                 {"table": "artifacts", "id": row["artifact_id"],
                  "reason": f"{type(exc).__name__}: {exc}"}
             )
+
+    # -- experiment runs (part16 §15.2): JSON rehydration, newest-first --
+    if run_store is not None:
+        rows = persistence._execute(
+            "SELECT * FROM experiment_runs ORDER BY created_at, run_id"
+        )
+        for row in rows:
+            try:
+                payload = json.loads(row["payload_json"])
+                run_record = ExperimentRunRecord.from_payload(payload)
+                run_store._items[row["run_id"]] = run_record
+                report["runs"] += 1
+            except Exception as exc:  # noqa: BLE001 - honest degradation
+                persistence._execute_write(
+                    "DELETE FROM experiment_runs WHERE run_id = ?",
+                    (row["run_id"],),
+                )
+                report["dropped"].append(
+                    {"table": "experiment_runs", "id": row["run_id"],
+                     "reason": f"{type(exc).__name__}: {exc}"}
+                )
 
     return report
