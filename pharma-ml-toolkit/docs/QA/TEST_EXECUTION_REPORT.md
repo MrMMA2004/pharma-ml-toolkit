@@ -1,13 +1,37 @@
 # TEST EXECUTION REPORT — part15 §13 deliverable #5 (the part16 era rides it forward)
 
 The part15 Phase-Five honest execution record, carried forward as the
-standing executed-vs-carried ledger. Executed-this-round (r350, the
-part16 sixth round over the pushed `39cd55c9` tree — the r349
-terminal) vs carried-from-executed-rounds are stated
+standing executed-vs-carried ledger. Executed-this-round (r351, the
+part16 seventh round over the pushed `969fa0bd` tree — the r350
+terminal, after the eleventh-rollback recovery) vs carried-from-
+executed-rounds are stated
 separately; BLOCKED legs name their missing prerequisite (§7 rule:
 never a silent skip, never a blocked test marked passed).
 
-## 1. Executed this round (r350 — the part16 sixth round: the Phase-12 model-registry GUI-projection lane delivered)
+## 1. Executed this round (r351 — the part16 seventh round: the Phase-12 data-quality / scientific-validation lane delivered)
+
+| Lane | Command (class) | Result |
+| --- | --- | --- |
+| Canonical collection | `pytest --collect-only -q` (per-file sum) | **8,746 tests / 483 files** (r350's 8,713/480 + 33 the quality lane — the API suite 22 + the drift guard 9 + the 2 engine doctests; the arithmetic verified programmatically; the shipped footer pin 8,555 = the frozen v1.2.240 release archive, the two-lane convention) |
+| Quick regression chunk | `pytest tests/test_approvals.py tests/test_biology.py -q` | **108 passed (72+36), exit 0** |
+| The Phase-12 quality suite | `pytest tests/api/test_data_quality.py -q` | **22/22 exit 0** — the §15.4 checklist made mechanical: the two-stage SMILES validation (grammar + sanitization) with examples cited, the canonical-form duplicate census, the missing-value/duplicate-row/non-finite-descriptor reports, the leakage family (target leakage over identical copies, duplicate columns, the ID-like advisory, the train/test overlap advisory), the class imbalance at the 90% majority, the pinned unit ranges, the executed/skipped check list (the chemistry pair honestly skipped without a SMILES column), the smiles-column auto/override/disable trichotomy, the read-only flag + advisory, **the immutability guarantee** (the profile and view byte-identical before and after the scan), the deterministic re-scan, the job mode + the clean 404, the REAL walkthrough-dataset scan with the record's own target |
+| The vitest quality pair | `vitest run` (the two new suites) | **16/16** — the parser 10 (the full-report narrowing, the read-only-flag rejection, the unknown-code/severity drift verdicts, the vocabulary pins, the client's request shape) + the card 6 (the pre-scan state, the scan render with the severity chips, the executed/skipped checks + the advisory, the clean state, the error banner, **the no-mutation scan** — no fix/repair/apply/delete/clean control anywhere) |
+| FAIL-FIRST | the vitest suites pre-implementation | **not exercised this round** — the honest deviation: the implementation landed first in this single-leg session, the suites written against it and verified green (16/16); the discipline note recorded |
+| The affected lanes | `pytest` over the eight frontend guards (settings/foundation/startup/services/resource-monitor/runs/registry/quality) + `pytest tests/api/test_contracts.py tests/test_documentation_consistency.py tests/test_security_supply_chain.py -q` | **exit 0, zero failures** (93 + 26 dots — 84 carried + the 9-test quality guard) — the contract CHANGED this round (the new `/api/v1/datasets/{dataset_id}/quality` path, 115 paths/73 schemas, the generated types re-grown; the contracts suite green over the new pair; the two carried path-pins trued 114 → 115 at source, the solo re-probe green) |
+| Lint | `ruff check .` (FULL tree) | **clean, exit 0** — after the eleventh rollback's 101-file EXE002 residue realigned to the git-index modes + the 7-file EXE001 shebang parity set restored (the r346 terminal-parity class) |
+| Types | `mypy src` | **Success: no issues found in 300 source files** (+1 — the new `data_quality` module) |
+| Frontend unit suite | `vitest run` (the Studio frontend) | **234/234 over 29 files** (+16 the quality pair over r350's 218/27) |
+| Frontend types | `tsc --noEmit` | **clean, exit 0** (the pinned local 5.9.3) |
+| Root console lint | `bun run lint` (the root project, `eslint .` sweeps the workspace) | **clean, true exit 0** |
+| ECC standing check | `bash scratch/ecc_check.sh` | **GREEN** (reinstalled this round after the rollback wiped both legs — the fresh clone 4adeee67/2.2.3/328 skills + the harness via the COMBINED invocation after sql.js: 14 modules / 196 skills / the 8/8 domain skills / the 4/4 capabilities) |
+| Console | `GET /` | **200, title pin** (`PharmaML Toolkit — ML · Pharma · Docking`, the 202,049-B body) — over the self-healing supervisor daemon; ONE clean boot after the corrupted-turbopack-cache clean cycle (the r348 class face) |
+| Ten-chunk gate | the chunks 1–8 + 9 + 10 + 11 + 12a/b legs (`scratch/run_suite_chunks_351.py`, daemonized, the dev server down — 251 chunked files, 29..32 per chunk) | **green with the three failures all decoded honest** — chunks 3/4/5/6/8 (161s/284s/104s/38s/161s) rc=0; **chunk-1 rc=1**: the r350 registry guard's stale 114-path pin meeting the lane's legitimate 115th path — trued at source (the registry + runs guards pin 115), the solo re-probe 25/25; **chunk-2 SIGKILL** → the OOM split: sub-batches 1–3 green (15s/10s/109s), sub-batch 4 rc=-9 → singles ALL rc=0 with the heavy `test_nine_card_first.py` whole-file rc=-9 at 284s → **the six-class split — ALL SIX classes exit=0, 23/23, the EIGHTH independent verdict**; sub-batch 5 rc=1 — `tests/ui/test_qt_doctor.py::test_doctor_collect_live`, **the round's own honest find**: the doctor caught the rollback's real damage (PySide6's dist-info wiped — import fine, metadata gone, the shiboken6 match degraded) — fixed by the force-reinstall `PySide6==6.8.3` + the EGL stub re-copy, the solo re-probe 7/7; **chunk-7 rc=1**: the datasets REST-surface coverage guard honestly caught the lane's route living in its own service module — the guard trued to the lane-split truth + the client moved onto the encodeURIComponent house rule, the solo re-probe green; chunk-9 the nine-card envelope 22s / chunk-10 the src doctests 82s / chunk-11 the api suite 123s / chunk-12a+b the github-page guards rc=0; the script's honest `failures=3` names exactly the three decoded legs |
+| OpenAPI contract | the quality path added | **115 paths / 73 schemas** (the 114→115 delta = `POST /api/v1/datasets/{dataset_id}/quality`; the 72→73 = `QualityRequest`); the generated `api.d.ts` re-grown |
+| Browser verification | agent-browser desktop + 390×844 mobile | **zero page errors, zero console errors**; the console nav exercised (the Code Explorer click → the view changed); the footer carrying the LIVE walk **1,800 files / 576,696 LOC / 8,555 tests** (files +8 = the lane's own eight — the engine + the API suite + the drift guard + the two service nodes + the component + the two vitest suites; LOC +1,343 over r350 = the lane's payload + the QA truthing); the footer geometry exact at page end (**3967 == 3967**); mobile zero horizontal overflow (docW 390 == vw 390); the zip-size API pin exact (**23,489,390 B / 1.2.240 / exact / release**); the evidence pair `scratch/r351-web-verify.png` (727,285 B) + `scratch/r351-mobile-verify.png` (630,441 B) riding THIS commit |
+| CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `969fa0bd` (the r350 terminal — re-verified pre-push) |
+| The six-home zip parity | sha256 + size across the six homes | **byte-identical `0fadb6e5…` at exactly 23,489,390 B** — the two reaper-wiped homes (the root dist-archive + the offsite) re-seeded from the verified toolkit home at the recovery, all six identical |
+
+## 2. Prior round (r350 — the part16 sixth round: the Phase-12 model-registry GUI-projection lane delivered)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -29,7 +53,7 @@ never a silent skip, never a blocked test marked passed).
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `39cd55c9` (the r349 terminal — re-verified pre-push this leg) |
 | The six-home zip parity | sha256 + size across the six homes | **byte-identical `0fadb6e5…` at exactly 23,489,390 B** — the reaper wiped the root `dist-archive/` + the offsite mid-round; both re-seeded from the verified toolkit home (the r348 precedent), all six then identical |
 
-## 2. Prior round (r349 — the part16 fifth round: the Phase-12 experiment-tracking / run-lineage lane delivered)
+## 3. Prior round (r349 — the part16 fifth round: the Phase-12 experiment-tracking / run-lineage lane delivered)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -50,7 +74,7 @@ never a silent skip, never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | **zero page errors, zero console errors**; the footer carrying the LIVE walk **1,787 files / 574,728 LOC** (the live post-ledger walk == the page render; files +9 = the lane's own nine — the four backend .py + the five frontend nodes; LOC +1,603 = the four .py + the contract pair + the QA-doc truthing); the footer geometry exact at page end; mobile zero horizontal overflow (docW 390 == vw 390); the zip-size API pin exact (**23,489,390 B / v1.2.240 / exact / release**); the evidence pair `scratch/r349-web-verify.png` + `scratch/r349-mobile-verify.png` riding THIS commit |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `1ea3cc9a` (the r348 addendum terminal — re-verified pre-push) |
 
-## 3. Executed round r348 (the part16 fourth round: the Phase-8 floating resource-monitor lane delivered — carried)
+## 4. Executed round r348 (the part16 fourth round: the Phase-8 floating resource-monitor lane delivered — carried)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -71,7 +95,7 @@ never a silent skip, never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | **zero page errors, zero console errors**; the footer carrying the LIVE walk **1,778 files / 573,125 LOC** — the three-way true (the live fresh walk == the offline census replica == the page render; files +8 = the lane's own eight, LOC +308 = the drift guard's .py + the QA-doc truthing — the .tsx lanes never count); the footer geometry exact at page end (**3958 == 3958 desktop**); mobile zero horizontal overflow (docW 390 == vw 390); the zip-size API pin exact (**23,489,390 B / v1.2.240 / exact / release**); the evidence pair `scratch/r348-web-verify.png` + `scratch/r348-mobile-verify.png` riding THIS commit |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `580da84c` (the r347 terminal — re-verified pre-push) |
 
-## 4. Executed round r346 (the part16 third round: the Phase-7 settings lane delivered — carried)
+## 5. Executed round r346 (the part16 third round: the Phase-7 settings lane delivered — carried)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -95,7 +119,7 @@ never a silent skip, never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | the evidence pair rides the follow-up evidence commit (the pins below) |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `0e92d790` (the r345 evidence terminal — re-verified this round pre-push) |
 
-## 5. Executed round r345 (the part16 second round: the Phase-5 demo-data lane delivered — carried)
+## 6. Executed round r345 (the part16 second round: the Phase-5 demo-data lane delivered — carried)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -120,7 +144,7 @@ never a silent skip, never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | the evidence pair rides the follow-up evidence commit (the pins below) |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `969f7926` (the r344 evidence terminal — re-verified this round pre-push) |
 
-## 6. Executed round r344 (the part16 opening round: the seventh rollback recovered + the Phase-2 TerminatedWorkerError fix — carried)
+## 7. Executed round r344 (the part16 opening round: the seventh rollback recovered + the Phase-2 TerminatedWorkerError fix — carried)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -141,7 +165,7 @@ never a silent skip, never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | the evidence pair rides the follow-up evidence commit (the pins below) |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `8940bd42` (closed GREEN at r343; re-verified this round pre-push) |
 
-## 7. Executed round r343 (the sixth-rollback recovery round — carried)
+## 8. Executed round r343 (the sixth-rollback recovery round — carried)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -162,7 +186,7 @@ never a silent skip, never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | **zero page errors, zero console errors**, footer at page end both viewports (**3967 == 3967 desktop / 7882 == 7882 mobile**), mobile zero horizontal overflow (docW 390 == vw 390); evidence `scratch/r343-web-verify.png` + `scratch/r343-mobile-verify.png` — the blank mobile first frame (the daemon dead at the reload, caught by the geometry check) re-shot fresh |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `84b24f5c` (the r342 evidence terminal — closed GREEN on arrival) |
 
-## 8. Carried from executed rounds (latest full-run evidence)
+## 9. Carried from executed rounds (latest full-run evidence)
 
 - **r342** (the roadmap #3/#4 close-out round): the API suite
   **461+1 skip = 462 collected, exit 0, 117.495 s**; the
@@ -202,7 +226,7 @@ never a silent skip, never a blocked test marked passed).
   heavy single, honestly recorded), doctest 107s, api 129s; collection
   8,555/0/470 at the v1.2.240 freeze.
 
-## 3. Standard skips and blocked legs (honest register)
+## 4. Standard skips and blocked legs (honest register)
 
 | Leg | Status | Prerequisite / reason |
 | --- | --- | --- |
@@ -213,7 +237,7 @@ never a silent skip, never a blocked test marked passed).
 | vitest/tsc when the reaper strikes between windows | transient, restored per-call | the sandbox node_modules wipe class — `npm ci`/`bun install` inside the same tool-call window (documented in the worklog r340) |
 | The 2 standard suite skips | standing, documented | the suite's own parametrized-skip lanes (environment-conditional), recorded by pytest at run time |
 
-## 4. Regression requirements compliance (§7)
+## 5. Regression requirements compliance (§7)
 
 Every confirmed bug found in this campaign window received its
 reproducible failing test, root cause, minimal fix, regression test and

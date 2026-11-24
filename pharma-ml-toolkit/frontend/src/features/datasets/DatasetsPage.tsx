@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DemoDataSection } from "@/components/demo/DemoDataSection";
+import { DataQualityCard } from "@/components/quality/DataQualityCard";
 import {
   Card,
   CardContent,
@@ -839,6 +840,12 @@ export function DatasetsPage() {
             )}
           </CardContent>
         </Card>
+        <div className="mt-4">
+          <DataQualityCard
+            datasetId={selectedId}
+            target={selected?.target ?? null}
+          />
+        </div>
       </StageHeader>
 
       <StageHeader

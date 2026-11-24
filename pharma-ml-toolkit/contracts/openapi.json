@@ -2815,6 +2815,44 @@
         "title": "ProfileRequest",
         "type": "object"
       },
+      "QualityRequest": {
+        "description": "The \u00a715.4 scan's knobs: column overrides + execution mode.\n\n``smiles_column`` left null = the honest auto-detection; an\nexplicit name overrides it (an empty string disables the\nchemistry pair). ``target`` left null = the record's own target.",
+        "properties": {
+          "mode": {
+            "default": "sync",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "smiles_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smiles Column"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          }
+        },
+        "title": "QualityRequest",
+        "type": "object"
+      },
       "ReceptorPrepareRequest": {
         "properties": {
           "chain": {
@@ -5442,6 +5480,61 @@
           }
         },
         "summary": "Profile Dataset",
+        "tags": [
+          "datasets"
+        ]
+      }
+    },
+    "/api/v1/datasets/{dataset_id}/quality": {
+      "post": {
+        "description": "``POST /api/v1/datasets/{id}/quality`` -- the \u00a715.4 scan.\n\nThe part16 \u00a715.4 report (SMILES/structure validation, duplicate\ndetection, the leakage family, class imbalance, the pinned unit\nranges) over one registered dataset -- read-only by\nconstruction: the report describes the frame, it never edits a\nuser-provided cell (the ``read_only`` flag rides the payload).",
+        "operationId": "quality_dataset_api_v1_datasets__dataset_id__quality_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "title": "Dataset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QualityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Quality Dataset Api V1 Datasets  Dataset Id  Quality Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Quality Dataset",
         "tags": [
           "datasets"
         ]

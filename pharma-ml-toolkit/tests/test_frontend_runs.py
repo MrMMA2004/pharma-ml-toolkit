@@ -233,6 +233,7 @@ def test_the_contract_carries_the_two_new_paths() -> None:
     paths = contract["paths"]
     assert "/api/v1/runs" in paths
     assert "/api/v1/runs/{run_id}" in paths
-    assert len(paths) == 114, (
-        "the contract must pin 114 paths (112 + the runs pair)"
+    assert len(paths) == 115, (
+        "the contract must pin 115 paths (112 + the runs pair + the r351 "
+        "quality path)"
     )

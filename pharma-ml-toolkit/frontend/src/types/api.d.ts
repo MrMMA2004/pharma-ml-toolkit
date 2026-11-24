@@ -495,6 +495,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/datasets/{dataset_id}/quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quality Dataset
+         * @description ``POST /api/v1/datasets/{id}/quality`` -- the §15.4 scan.
+         *
+         *     The part16 §15.4 report (SMILES/structure validation, duplicate
+         *     detection, the leakage family, class imbalance, the pinned unit
+         *     ranges) over one registered dataset -- read-only by
+         *     construction: the report describes the frame, it never edits a
+         *     user-provided cell (the ``read_only`` flag rides the payload).
+         */
+        post: operations["quality_dataset_api_v1_datasets__dataset_id__quality_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/datasets/{dataset_id}/split": {
         parameters: {
             query?: never;
@@ -3264,6 +3290,26 @@ export interface components {
              */
             mode: "job" | "sync";
         };
+        /**
+         * QualityRequest
+         * @description The §15.4 scan's knobs: column overrides + execution mode.
+         *
+         *     ``smiles_column`` left null = the honest auto-detection; an
+         *     explicit name overrides it (an empty string disables the
+         *     chemistry pair). ``target`` left null = the record's own target.
+         */
+        QualityRequest: {
+            /**
+             * Mode
+             * @default sync
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /** Smiles Column */
+            smiles_column?: string | null;
+            /** Target */
+            target?: string | null;
+        };
         /** ReceptorPrepareRequest */
         ReceptorPrepareRequest: {
             /** Chain */
@@ -4939,6 +4985,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quality_dataset_api_v1_datasets__dataset_id__quality_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QualityRequest"];
             };
         };
         responses: {

@@ -796,6 +796,51 @@ summarises them and wins any status disagreement.
   the version unchanged at 1.2.240 (no-silent-bumps; the
   byte-frozen r334 ruling stands, NO re-ship — the backend tree
   changes ride the next owner-approved ship lane); counter 141 -> 142
+  — and the part16 seventh round 351 (the interactive "Continue
+  MASTER_PROMPT part16 / Push" directive): the ELEVENTH rollback
+  wave recovered pre-work (HEAD at the r186 checkpoint `2eb0ede` +
+  the remote + the credential gone, the venv gutted, ECC RED at
+  both legs, two zip homes wiped — the PAT re-spliced + validated,
+  the askpass channel rebuilt, the reset --hard to the durable
+  r350 terminal `969fa0bd`, the venv repaired foreground at the
+  exact pins, the disk-full cleared, the corrupted turbopack cache
+  cleaned to ONE supervisor boot, ECC reinstalled GREEN at the r335
+  pins via the COMBINED invocation) — then THE PHASE-12
+  DATA-QUALITY LANE DELIVERED (the campaign queue's #6 third
+  sub-lane, the audit's data-quality PARTIAL row closed):
+  `pharmaml/data_quality.py` (the §15.4 engine: the two-stage
+  SMILES validation — grammar parse, then sanitization — + the
+  canonical-form duplicate census + the missing-value /
+  duplicate-row / non-finite-descriptor reports + the leakage
+  family [target leakage, duplicate columns, the ID-like advisory,
+  the train/test overlap advisory] + the class-imbalance warning +
+  the pinned unit-range vocabulary, every check read-only — the
+  report describes, it never edits a user-provided cell) +
+  `POST /api/v1/datasets/{id}/quality` (sync + job modes, the
+  honest 404) at contract 115 paths/73 schemas + the generated
+  api.d.ts re-grown + the frontend projection `services/quality/`
+  + `components/quality/DataQualityCard.tsx` in the Datasets
+  Validate stage (the severity chips, the pinned-code findings,
+  the executed/skipped §15.4 check list, the advisory line, NO
+  mutation control by design) + the tests (the API suite 22/22,
+  the vitest pair 16 — 234/234 over 29 files, the drift guard
+  9/9); the gates re-pinned (collection 8,746/483 — +33 the lane;
+  quick chunk 108/108; the affected lanes exit 0 — 93 + 26 dots;
+  ruff full-tree clean after the 101-file EXE002 residue realigned
+  + the 7-file EXE001 parity set; mypy 300 clean; tsc clean; the
+  root workspace lint true-exit-0; the ten-chunk gate failures=3
+  all decoded honest — the stale 114-path pin trued to 115, the
+  qt-doctor's real find [the PySide6 dist-info wipe] force-
+  reinstalled 7/7 solo-green, the datasets REST-coverage guard
+  trued to the lane-split truth — plus the six-class split ALL SIX
+  exit=0 23/23, the eighth verdict; console 200 + the title pin —
+  the 202,049-B body; the browser pass zero errors with the footer
+  LIVE walk 1,800/576,696 + geometry exact + mobile 390 clean +
+  the zip-size API exact; the six-home zip parity byte-identical
+  `0fadb6e5`/23,489,390 B; CI at `969fa0bd` 19/19 pre-push); the
+  version unchanged at 1.2.240 (no-silent-bumps; the byte-frozen
+  r334 ruling stands, NO re-ship — the backend tree changes ride
+  the next owner-approved ship lane); counter 142 -> 143
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

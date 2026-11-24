@@ -270,6 +270,11 @@ def test_job_view_fields_mirror_the_backend_public() -> None:
 
 def test_dataset_rest_surface_covered() -> None:
     backend = _backend_routes("datasets.py")
+    # the §15.4 quality lane's route (r351) lives in its own service
+    # module — services/quality/client.ts — not the datasets client;
+    # the expected set keeps it separated so each client's coverage
+    # stays pinned against the routes it owns.
+    quality_lane = {"/api/v1/datasets/{dataset_id}/quality": {"POST"}}
     expected = {
         "/api/v1/datasets": {"POST", "GET"},
         "/api/v1/datasets/{dataset_id}": {"GET", "DELETE"},
@@ -280,7 +285,9 @@ def test_dataset_rest_surface_covered() -> None:
         # engine's own request cap — see routes/datasets.py)
         "/api/v1/datasets/{dataset_id}/column/{column}": {"GET"},
     }
-    assert backend == expected, f"the backend dataset routes moved: {backend}"
+    assert backend == expected | quality_lane, (
+        f"the backend dataset routes moved: {backend}"
+    )
 
     client = _read(SERVICES / "datasets" / "client.ts")
     frontend_paths = _frontend_path_set(client)
@@ -288,6 +295,14 @@ def test_dataset_rest_surface_covered() -> None:
     assert not missing, (
         f"the datasets client lost backend routes: {sorted(missing)} "
         f"(has {sorted(frontend_paths)})"
+    )
+    # the quality lane's own client covers its route
+    quality_paths = _frontend_path_set(
+        _read(SERVICES / "quality" / "client.ts")
+    )
+    assert quality_lane.keys() <= quality_paths, (
+        f"the quality client lost its route: {sorted(quality_lane.keys())} "
+        f"not in {sorted(quality_paths)}"
     )
 
 

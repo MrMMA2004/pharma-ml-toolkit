@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 
 from pharmaml.data import load_dataset, split_table
 from pharmaml.data_profiling import profile_frame
+from pharmaml.data_quality import data_quality_report
 from pharmaml.exceptions import DataValidationError
 from pharmaml.utils.io import safe_filename
 
@@ -43,6 +44,19 @@ MAX_PREVIEW_ROWS = 500
 
 
 class ProfileRequest(BaseModel):
+    mode: Literal["job", "sync"] = "sync"
+
+
+class QualityRequest(BaseModel):
+    """The §15.4 scan's knobs: column overrides + execution mode.
+
+    ``smiles_column`` left null = the honest auto-detection; an
+    explicit name overrides it (an empty string disables the
+    chemistry pair). ``target`` left null = the record's own target.
+    """
+
+    smiles_column: str | None = None
+    target: str | None = None
     mode: Literal["job", "sync"] = "sync"
 
 
@@ -84,6 +98,29 @@ def _profile_body(frame: pd.DataFrame, cancel_event=None) -> dict:
     if cancel_event is not None and cancel_event.is_set():
         raise CancelledJob("Cancelled before the profile stage.")
     return {"profile": json_safe(profile_frame(frame))}
+
+
+def _quality_body(
+    frame: pd.DataFrame,
+    target: str | None,
+    smiles_column: str | None,
+    cancel_event=None,
+) -> dict:
+    """Job body/sync body: the read-only §15.4 report.
+
+    ``smiles_column`` passes through raw: ``None`` = auto-detection,
+    ``""`` = the explicit disable, any other string = the override
+    (the engine's own documented contract).
+    """
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledJob("Cancelled before the quality stage.")
+    return {
+        "quality": json_safe(
+            data_quality_report(
+                frame, target=target, smiles_column=smiles_column
+            )
+        )
+    }
 
 
 def _side_view(frame: pd.DataFrame, target: str | None) -> dict:
@@ -298,6 +335,45 @@ def profile_dataset(
         _profile_body,
         configuration={"dataset_id": dataset_id, "columns": len(record.frame.columns)},
         frame=record.frame,
+    )
+    return {"mode": "job", "job": job.public()}
+
+
+@router.post("/{dataset_id}/quality")
+def quality_dataset(
+    dataset_id: str, req: QualityRequest, request: Request
+) -> dict:
+    """``POST /api/v1/datasets/{id}/quality`` -- the §15.4 scan.
+
+    The part16 §15.4 report (SMILES/structure validation, duplicate
+    detection, the leakage family, class imbalance, the pinned unit
+    ranges) over one registered dataset -- read-only by
+    construction: the report describes the frame, it never edits a
+    user-provided cell (the ``read_only`` flag rides the payload).
+    """
+    store: DatasetStore = request.app.state.dataset_store
+    record = store.get(dataset_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Unknown dataset_id.")
+    target = req.target if req.target is not None else record.target
+    if req.mode == "sync":
+        return {
+            "mode": "sync",
+            **_quality_body(record.frame, target, req.smiles_column),
+        }
+    manager = request.app.state.job_manager
+    job = manager.submit(
+        "datasets.quality",
+        "datasets",
+        _quality_body,
+        configuration={
+            "dataset_id": dataset_id,
+            "smiles_column": req.smiles_column,
+            "target": target,
+        },
+        frame=record.frame,
+        target=target,
+        smiles_column=req.smiles_column,
     )
     return {"mode": "job", "job": job.public()}
 
