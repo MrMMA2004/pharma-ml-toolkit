@@ -106,3 +106,12 @@ upload/GitHub_token.txt
 # owner-directive hygiene (r335): upload/skill.txt is the standing ECC directive,
 # disk-only like the token uploads (owner files are never auto-committed)
 upload/skill.txt
+
+# owner-document hygiene (r355, the پروژه فناوری.zip bundle restoration):
+# the owner's commissioning documents stay DISK-ONLY in the upload/ document
+# home (the R34 Design System pair, the R293 part11 Blocker Register, and the
+# bundle zip itself) — never auto-committed, like the part-prompt PDFs above.
+upload/Design System.pdf
+upload/Design System.svg
+upload/PharmaML_Studio_part11_Blocker_Register.pdf
+upload/پروژه فناوری.zip
