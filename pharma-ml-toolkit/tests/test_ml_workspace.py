@@ -125,7 +125,10 @@ def test_ml_rest_surface_covered() -> None:
     carried = _frontend_api_paths(client)
     assert carried, "the ml client lost every path literal"
     real: dict[str, set[str]] = {}
-    for module in ("ml.py", "applicability_domain.py", "semi_supervised.py", "admet.py", "dta.py", "repurposing.py", "drugresponse.py", "pharmacogenomics.py", "multiobjective.py", "workflow.py"):
+    # artifacts.py joined the family at r350: the ml client's registry
+    # export lane rides POST /api/v1/artifacts/model (§15.3 export —
+    # the one-DTO rule honored, no bespoke export path client-side).
+    for module in ("ml.py", "applicability_domain.py", "semi_supervised.py", "admet.py", "dta.py", "repurposing.py", "drugresponse.py", "pharmacogenomics.py", "multiobjective.py", "workflow.py", "artifacts.py"):
         real.update(_backend_routes(module))
     unknown = carried - set(real)
     assert not unknown, f"ml client calls undeclared routes: {sorted(unknown)}"

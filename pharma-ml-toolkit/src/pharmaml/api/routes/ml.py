@@ -7,6 +7,15 @@ training backend (part10's queued row).
   :func:`pharmaml.ml.training.train_model` on a registered dataset
   (sync or managed job), the fitted estimator kept in the session
   model store for prediction and artifact export.
+* ``DELETE /api/v1/ml/trained/{model_id}`` — the registry's deletion
+  lane (part16 §15.3): one session-trained model evicted from the
+  bounded store (the in-memory record, the persisted row and its
+  vault payload when the durability lane is on).  The eviction is
+  honest about scope: experiment-run records keep their
+  model-artifact references (the lineage outlives the model — the
+  record's fetch pointer degrades to the honest 404), exported
+  artifacts are independent copies and survive, datasets are never
+  touched, and an unknown id is a 404, never a silent no-op.
 * ``POST /api/v1/ml/predict`` — predictions (and optional
   probabilities) from a session-trained model on inline rows or on a
   registered dataset's feature matrix. Dataset mode additionally
@@ -145,6 +154,34 @@ def trained_model_view(model_id: str, request: Request) -> dict:
     if record is None:
         raise HTTPException(status_code=404, detail="Unknown model_id.")
     return record.view()
+
+
+@router.delete("/trained/{model_id}")
+def evict_trained_model(model_id: str, request: Request) -> dict:
+    """part16 §15.3 (Phase 12) — the model registry's deletion lane.
+
+    Evicts one session-trained model from the bounded registry (the
+    in-memory record plus, through ``ModelStore._forget``, the
+    persisted ``trained_models`` row and its vault payload when the
+    durability lane is on — the same channel the artifacts' evict
+    lane rides, never a bespoke second deletion path).  The response
+    carries the evicted id and the remaining count so the GUI can
+    refresh honestly without a second listing call.
+
+    Scope, per the directive's own rails: the experiment-run records
+    keep their ``model_artifact`` references (the §15.2 lineage
+    outlives the model — the record's ``fetch`` pointer degrades to
+    the honest 404, never rewritten), exported joblib artifacts are
+    independent copies that survive, and the dataset the model was
+    trained on is untouched.  An unknown id is a 404, never a silent
+    no-op.
+    """
+    if not request.app.state.model_store.evict(model_id):
+        raise HTTPException(status_code=404, detail="Unknown model_id.")
+    return {
+        "evicted": model_id,
+        "remaining": len(request.app.state.model_store.list()),
+    }
 
 
 def _resolve_parallelism(

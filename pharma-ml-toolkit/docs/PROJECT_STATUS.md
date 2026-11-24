@@ -757,7 +757,45 @@ summarises them and wins any status disagreement.
   `0fadb6e5`/23,489,390 B); the version unchanged at 1.2.240
   (no-silent-bumps; the byte-frozen r334 ruling stands, NO
   re-ship — the backend tree changes ride the next
-  owner-approved ship lane); counter 140 -> 141
+  owner-approved ship lane); counter 140 -> 141 — and the part16 sixth
+  round 350 (the interactive "Continue MASTER_PROMPT part16 / Push"
+  directive; the session split across a context handoff — the
+  registry-lane code + the QA truthing landed pre-handoff, the full
+  gate verification + the evidence pair + this ledger closed in the
+  continuation): the round opened at the pushed `39cd55c9` (0/0
+  divergence, the channels intact — the PAT 93-B credential + the
+  askpass script, the venv zero-drift 13/13 at the exact pins, no
+  repair) — then THE PHASE-12 MODEL-REGISTRY GUI PROJECTION DELIVERED
+  (the campaign queue's #6 second sub-lane, the audit's
+  model-registry BACKEND row closed): `DELETE /api/v1/ml/trained/
+  {model_id}` (the deletion lane riding the bounded store's own
+  evict — the persisted row + vault payload gone, the honest 404 on
+  an unknown id, the scope rails pinned: the §15.2 run lineage and
+  the exported joblib artifacts outlive the row) + the ml client's
+  `catalog(undefined)` full listing + `evictTrained` +
+  `exportTrained` (the POST /api/v1/artifacts/model export — the
+  one-DTO rule honored, no duplicate registry DTOs) +
+  `components/registry/ModelRegistry.tsx` (the joined registry card
+  in the ML Compare stage: the catalog with the per-row availability
+  + the honest `requires` line, the trained registry newest-first
+  with the derived version column, the on-demand cached record, the
+  digest-verified joblib export, the two-click evict confirm) + the
+  tests (the API suite 9/9, the vitest pair 20 — 218/218 over 27
+  files, the drift guard 11/11); the gates re-pinned (collection
+  8,713/480 — +20 the registry lane; quick chunk 108/108; the
+  affected lanes exit 0 — 84 + 26 dots, the contracts suite green
+  over the changed pair; ruff full-tree clean; mypy 299 clean; tsc
+  clean; the root workspace lint true-exit-0; the ten-chunk gate
+  green with the one standing deviation decoded — chunk-2's
+  whole-file nine_card_first rc=-9 (the envelope leg moved from
+  chunk-5), the six-class split ALL SIX exit=0 23/23, the seventh
+  verdict; console 200 + the title pin on the supervisor daemon —
+  the 202,052-B body, one clean boot; the zip-size API exact; the
+  six-home zip parity re-verified byte-identical
+  `0fadb6e5`/23,489,390 B — the two reaper-wiped homes re-seeded);
+  the version unchanged at 1.2.240 (no-silent-bumps; the
+  byte-frozen r334 ruling stands, NO re-ship — the backend tree
+  changes ride the next owner-approved ship lane); counter 141 -> 142
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

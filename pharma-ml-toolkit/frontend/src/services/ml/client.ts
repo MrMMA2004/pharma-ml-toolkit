@@ -13,9 +13,18 @@
  * * `GET /api/v1/ml/models?task=…&only_available=…` — the registry
  *   catalog projection (`list_models`: name, task, available,
  *   requires, notes — one source of truth, no estimator field to
- *   invent).
+ *   invent). `task` omitted lists the whole catalog (the §15.3
+ *   registry view).
  * * `GET /api/v1/ml/trained` / `GET /api/v1/ml/trained/{model_id}` —
  *   the session's trained-model registry (`TrainedModelRecord.view()`).
+ * * `DELETE /api/v1/ml/trained/{model_id}` — the registry's deletion
+ *   lane (part16 §15.3): the bounded store's evict (the in-memory
+ *   record, the persisted row + vault payload when durable), the
+ *   §15.2 run lineage and exported artifacts untouched.
+ * * `POST /api/v1/artifacts/model` — the registry's export lane
+ *   (§15.3: the trained estimator persisted through the REAL
+ *   `save_model` as a digest-verified joblib artifact — the
+ *   export is an independent copy that outlives the model).
  * * `POST /api/v1/ml/train` — `TrainRequest` → `{mode: "job",
  *   job: JobView}` (the default lane here); the COMPLETED job's REST
  *   result payload is `{model: TrainedModelView}` — the page relays
@@ -230,6 +239,12 @@ export interface TrainedModelView {
 
 export interface TrainedModelListResponse {
   readonly models: readonly TrainedModelView[];
+}
+
+/** `DELETE /api/v1/ml/trained/{model_id}` — the registry's evict answer. */
+export interface TrainedModelEvicted {
+  readonly evicted: string;
+  readonly remaining: number;
 }
 
 /** The job-mode submission answer (train / analyze / semi-supervised). */
@@ -1448,19 +1463,29 @@ export const WORKFLOW_MAX_SYNTHETIC = 30;
 /** The route's own seed ceiling (`_MAX_SEED`, a signed 32-bit int). */
 export const WORKFLOW_MAX_SEED = 2147483647;
 
+export type CatalogTaskFilter = "classification" | "regression" | "both";
+
 export const mlApi = {
   /**
    * `GET /api/v1/ml/models?task=…&only_available=…` — the registry
    * catalog projection. `task` must stay synced with the selected
    * dataset's own task (the backend filters classification /
-   * regression / both).
+   * regression / both); `undefined` lists the WHOLE catalog — the
+   * §15.3 registry view over every entry, both tasks, the
+   * availability stated per row.
    */
   async catalog(
-    task: "classification" | "regression",
+    task?: CatalogTaskFilter,
     onlyAvailable: boolean = true,
   ): Promise<ModelCatalogResponse> {
+    const query =
+      task === undefined
+        ? `only_available=${onlyAvailable ? "true" : "false"}`
+        : `task=${encodeURIComponent(task)}&only_available=${
+            onlyAvailable ? "true" : "false"
+          }`;
     const raw = await api.get<Record<string, unknown>>(
-      `/api/v1/ml/models?task=${encodeURIComponent(task)}&only_available=${onlyAvailable ? "true" : "false"}`,
+      `/api/v1/ml/models?${query}`,
     );
     const items = raw["models"];
     if (!Array.isArray(items)) {
@@ -1493,6 +1518,53 @@ export const mlApi = {
       `/api/v1/ml/trained/${encodeURIComponent(modelId)}`,
     );
     return parseTrainedModelView(raw, `trained ${modelId}`);
+  },
+
+  /**
+   * `DELETE /api/v1/ml/trained/{model_id}` — the registry's deletion
+   * lane (part16 §15.3): the bounded store's own evict (the in-memory
+   * record, the persisted row + vault payload when the durability
+   * lane is on). The answer carries the remaining count so the GUI
+   * refreshes honestly without a second listing call; the §15.2 run
+   * lineage and exported artifacts are untouched by scope.
+   */
+  async evictTrained(modelId: string): Promise<TrainedModelEvicted> {
+    const raw = await api.delete<Record<string, unknown>>(
+      `/api/v1/ml/trained/${encodeURIComponent(modelId)}`,
+    );
+    if (typeof raw["evicted"] !== "string") {
+      throw new Error("the evict answer's evicted field is not a string");
+    }
+    if (typeof raw["remaining"] !== "number") {
+      throw new Error("the evict answer's remaining field is not a number");
+    }
+    return {
+      evicted: raw["evicted"] as string,
+      remaining: raw["remaining"] as number,
+    };
+  },
+
+  /**
+   * `POST /api/v1/artifacts/model` — the registry's export lane
+   * (§15.3: export): the session-trained estimator persisted through
+   * the REAL `save_model` (the backward-compatible joblib format) as
+   * a registered artifact — the digest-verified download then rides
+   * the artifacts client's own lane, and the exported copy outlives
+   * the model row itself.
+   */
+  async exportTrained(
+    modelId: string,
+    filename?: string,
+  ): Promise<ArtifactView> {
+    const body: Record<string, unknown> = { model_id: modelId };
+    if (filename !== undefined) {
+      body["filename"] = filename;
+    }
+    const raw = await api.post<Record<string, unknown>>(
+      "/api/v1/artifacts/model",
+      body,
+    );
+    return parseArtifactView(raw["artifact"], `export of ${modelId}`);
   },
 
   /**

@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { DemoDataSection } from "@/components/demo/DemoDataSection";
 import { RunLineage } from "@/components/runs/RunLineage";
+import { ModelRegistry } from "@/components/registry/ModelRegistry";
 import {
   Card,
   CardContent,
@@ -3070,6 +3071,7 @@ export function MLPage() {
           </CardContent>
         </Card>
         <RunLineage className="mt-4" />
+        <ModelRegistry className="mt-4" />
       </StageHeader>
 
       <StageHeader

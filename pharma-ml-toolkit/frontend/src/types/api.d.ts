@@ -1271,7 +1271,27 @@ export interface paths {
         get: operations["trained_model_view_api_v1_ml_trained__model_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Evict Trained Model
+         * @description part16 §15.3 (Phase 12) — the model registry's deletion lane.
+         *
+         *     Evicts one session-trained model from the bounded registry (the
+         *     in-memory record plus, through ``ModelStore._forget``, the
+         *     persisted ``trained_models`` row and its vault payload when the
+         *     durability lane is on — the same channel the artifacts' evict
+         *     lane rides, never a bespoke second deletion path).  The response
+         *     carries the evicted id and the remaining count so the GUI can
+         *     refresh honestly without a second listing call.
+         *
+         *     Scope, per the directive's own rails: the experiment-run records
+         *     keep their ``model_artifact`` references (the §15.2 lineage
+         *     outlives the model — the record's ``fetch`` pointer degrades to
+         *     the honest 404, never rewritten), exported joblib artifacts are
+         *     independent copies that survive, and the dataset the model was
+         *     trained on is untouched.  An unknown id is a 404, never a silent
+         *     no-op.
+         */
+        delete: operations["evict_trained_model_api_v1_ml_trained__model_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6379,6 +6399,39 @@ export interface operations {
         };
     };
     trained_model_view_api_v1_ml_trained__model_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evict_trained_model_api_v1_ml_trained__model_id__delete: {
         parameters: {
             query?: never;
             header?: never;
