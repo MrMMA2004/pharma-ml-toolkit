@@ -99,7 +99,22 @@ class TestPersistenceTabButton:
         (ds,) = m["datasets"]
         assert ds["name"] == "ds.csv"
         assert ds["content_version"] == 1
-        assert page._persist_status.text().startswith("Manifest written to")
+        # r352 find (the round's own honest decode of the chunk-6 rc=1):
+        # the runner's documented emission order is finished -> job_ended
+        # -> the page's result slot, so releasing on ``job_ended`` does
+        # NOT guarantee the page's ``done`` label update has landed yet —
+        # the immediate assert raced it ~50/50 under this container's
+        # scheduling (the stash probe proved the failure at the clean
+        # pushed HEAD, byte-identical to the r351 green gate; the pytest
+        # and PySide6 stacks are exactly pinned). The waitUntil keeps the
+        # assertion's meaning — the label eventually reads the written
+        # path — and removes the race instead of suppressing anything.
+        qtbot.waitUntil(
+            lambda: page._persist_status.text().startswith(
+                "Manifest written to"
+            ),
+            timeout=10_000,
+        )
 
 
 class _null:

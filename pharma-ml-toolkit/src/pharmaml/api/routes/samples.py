@@ -456,6 +456,20 @@ def _file_stats(path: Path, key: str) -> dict[str, Any]:
     return payload
 
 
+def clear_stats_cache() -> int:
+    """Drop every cached sample-file stat (part16 §15.5 cleanup lane).
+
+    The ONLY derived cache this backend holds: the catalog's
+    size/sha256 enrichment entries, keyed by the shipped sample
+    files' (mtime_ns, size) stamps — re-derived on the next catalog
+    read, never user data. Returns the number of entries dropped.
+    """
+    with _stats_lock:
+        dropped = len(_stats_cache)
+        _stats_cache.clear()
+    return dropped
+
+
 def _resolve(entry: dict[str, Any]) -> Path:
     return SAMPLES_DIR / str(entry["filename"])
 

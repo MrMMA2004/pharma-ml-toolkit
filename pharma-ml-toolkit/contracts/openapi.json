@@ -8538,6 +8538,54 @@
         ]
       }
     },
+    "/api/v1/system/cache/cleanup": {
+      "post": {
+        "description": "\u00a715.5's safe cache cleanup \u2014 the enumerated derived cache only.\n\nThe samples stats cache (this backend's only derived cache \u2014 see\n``routes/samples.clear_stats_cache``) is dropped; it re-derives on\nthe next catalog read. EVERY user-data surface is named preserved\nand is untouched: the route holds no reference to the stores, the\npersistence, or the vault, and the tests pin the guarantee.",
+        "operationId": "cache_cleanup_api_v1_system_cache_cleanup_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cache Cleanup Api V1 System Cache Cleanup Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Cache Cleanup",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/system/diagnostics": {
+      "get": {
+        "description": "The \u00a715.5 read-only diagnostics answer (see the section notes).",
+        "operationId": "diagnostics_api_v1_system_diagnostics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Diagnostics Api V1 System Diagnostics Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Diagnostics",
+        "tags": [
+          "system"
+        ]
+      }
+    },
     "/api/v1/system/resources": {
       "get": {
         "description": "The \u00a715 resource snapshot (see the module docstring for scope).",

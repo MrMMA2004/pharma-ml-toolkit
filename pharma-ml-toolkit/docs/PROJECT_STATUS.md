@@ -841,6 +841,63 @@ summarises them and wins any status disagreement.
   version unchanged at 1.2.240 (no-silent-bumps; the byte-frozen
   r334 ruling stands, NO re-ship — the backend tree changes ride
   the next owner-approved ship lane); counter 142 -> 143
+  — and the part16 eighth round 352 (the interactive "Continue
+  MASTER_PROMPT part16 / Push" directive): the TWELFTH rollback
+  wave recovered pre-work (HEAD at the r186 checkpoint `2eb0ede` +
+  the remote + the credential gone, the venv gutted — the PAT
+  re-spliced + validated via the r349-class drill, the askpass
+  channel rebuilt, the origin re-attached [origin/main = the r351
+  terminal `4f73c907`], the /tmp tree backup captured with its
+  sha-256 manifest BEFORE the reset, the `git reset --hard 4f73c907`
+  clean; the venv repaired foreground — with the round's own NEW
+  find: the mirror's `PySide6` wheel is a bindings-only shim whose
+  RECORD carries zero plugin entries, so the studio leg needed the
+  `PySide6_Essentials==6.8.3` payload wheel re-fetched — the 95-MB
+  wheel that actually ships `Qt/plugins/platforms/libqoffscreen.so`;
+  the qt-doctor solo re-probe 7/7 green; the frontend npm ci + the
+  root bun install re-run; the disk pressure [the 2.4-G raw backup
+  gzipped to 1.6 G] cleared) — then THE PHASE-12
+  DIAGNOSTICS/RECOVERY LANE DELIVERED (the campaign queue's #6
+  fourth and final sub-lane, the audit's diagnostics PARTIAL row
+  closed — the #6 queue now EMPTY): `GET /api/v1/system/diagnostics`
+  in routes/system.py (the §15.5 checklist: the dependency
+  availability block — the 21-probe requirements.txt vocabulary
+  with import + version + the required/optional tier, a broken
+  probe a REPORTED state never a 500 — + the scientific-tool
+  functional probes [rdkit's §15.4 grammar parse reused, torch's
+  tiny tensor op, the selfies round-trip; absent tools the honest
+  null] + the storage health [the persistence status + the data-dir
+  disk block + the database/vault sizes, or the honest ephemeral
+  note] + the crash diagnostics [the ten most recent FAILED jobs
+  with their errors, from the SQLite history when persistent] + the
+  log configuration report [read-only] + the recoverable job state
+  [the persisted history vs the in-session manager, honestly split
+  — QUEUED/RUNNING rows from a dead process are NOT resumed,
+  checkpointing stays queued scope]) + `POST /api/v1/system/cache/cleanup`
+  (the safe cleanup over the enumerated derived cache only — the
+  samples stats cache via its own new public `clear_stats_cache()`,
+  every user-data surface named preserved, §15.5's verbatim rule
+  riding both sources; the tests pin the guarantee by seeding user
+  data, priming the cache, cleaning, and asserting every surface
+  survives byte-for-byte) at contract 117 paths/73 schemas + the
+  generated api.d.ts re-grown + the frontend projection
+  `services/system/diagnostics.ts` (the typed DTOs + the strict
+  parser + the two operations on the EXISTING systemApi — no
+  parallel system service) + `components/system/DiagnosticsCard.tsx`
+  mounted in the Introduction workspace beside the studio-database
+  section it completes (the ONE mutation control is the safe
+  cleanup — the diagnostics read-only by design); the tests (the
+  API suite 19/19 incl. the user-data-survives-the-cleanup
+  fail-first proof, the vitest pair 20 — 254/254 over 31 files, the
+  drift guard 11/11); the gates re-pinned (collection
+  8,776/0/485 — +30 the lane; the affected lanes exit 0; ruff
+  full-tree clean after the 108-file EXE001/EXE002 mode residue
+  realigned to the git-index modes + the 7-file EXE001 shebang
+  parity set restored; mypy 300 clean; tsc clean; the root
+  workspace lint true-exit-0); the version unchanged at 1.2.240
+  (no-silent-bumps; the byte-frozen r334 ruling stands, NO
+  re-ship — the backend tree changes ride the next owner-approved
+  ship lane); counter 143 -> 144
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

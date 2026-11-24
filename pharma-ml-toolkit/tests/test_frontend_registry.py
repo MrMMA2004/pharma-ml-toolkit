@@ -217,8 +217,9 @@ def test_the_contract_carries_the_registry_deletion_path() -> None:
         "the trained-model path must carry the DELETE operation"
     )
     # the DELETE rides the EXISTING path — no registry path added (the
-    # count moved 114 -> 115 by the r351 quality lane's new path, not this one)
-    assert len(paths) == 115, (
-        "the contract must pin 115 paths (the registry's DELETE rides the "
+    # count moved 114 -> 115 by the r351 quality lane's new path, then
+    # 115 -> 117 by the r352 diagnostics pair — neither this lane's)
+    assert len(paths) == 117, (
+        "the contract must pin 117 paths (the registry's DELETE rides the "
         "existing trained-model path — no new path this lane)"
     )

@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DemoDataSection } from "@/components/demo/DemoDataSection";
+import { DiagnosticsCard } from "@/components/system/DiagnosticsCard";
 import { WORKSPACES } from "@/app/workspaces";
 import { ApiError } from "@/services/api/client";
 import { artifactsApi } from "@/services/artifacts/client";
@@ -141,6 +142,14 @@ export function IntroductionPage() {
       </div>
 
       <StudioDatabaseSection />
+
+      {/* part16 §15.5 (Phase 12): the diagnostics/recovery surface —
+          dependency + scientific-tool availability, storage health,
+          crash diagnostics, logs, recoverable job state, and the safe
+          cache cleanup, beside the database/backup half it completes */}
+      <div className="mt-12">
+        <DiagnosticsCard />
+      </div>
     </div>
   );
 }

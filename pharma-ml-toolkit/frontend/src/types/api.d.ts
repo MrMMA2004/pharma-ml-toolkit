@@ -1803,6 +1803,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system/cache/cleanup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cache Cleanup
+         * @description §15.5's safe cache cleanup — the enumerated derived cache only.
+         *
+         *     The samples stats cache (this backend's only derived cache — see
+         *     ``routes/samples.clear_stats_cache``) is dropped; it re-derives on
+         *     the next catalog read. EVERY user-data surface is named preserved
+         *     and is untouched: the route holds no reference to the stores, the
+         *     persistence, or the vault, and the tests pin the guarantee.
+         */
+        post: operations["cache_cleanup_api_v1_system_cache_cleanup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Diagnostics
+         * @description The §15.5 read-only diagnostics answer (see the section notes).
+         */
+        get: operations["diagnostics_api_v1_system_diagnostics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system/resources": {
         parameters: {
             query?: never;
@@ -7388,6 +7434,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cache_cleanup_api_v1_system_cache_cleanup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    diagnostics_api_v1_system_diagnostics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
