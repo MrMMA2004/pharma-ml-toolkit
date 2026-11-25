@@ -616,7 +616,14 @@ class TestInjectionLanes:
                     "text/csv",
                 )
             },
-            data={"target": "logp"},
+            # mode=sync (the sibling upload tests' convention, lines above):
+            # the route's default lane is the ASYNC JobManager queue, and
+            # the immediate GET below raced the worker thread -- the test
+            # passed at the r356/r357 gates and lost the race at r361 (the
+            # rows list came back empty). The name round-trip under test
+            # happens before the mode dispatch, so the sync lane pins the
+            # same sanitisation contract deterministically.
+            data={"target": "logp", "mode": "sync"},
         )
         assert r.status_code == 200
         rows = client.get(

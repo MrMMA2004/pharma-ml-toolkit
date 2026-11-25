@@ -18,7 +18,16 @@
  *  guard (tests/test_architecture_hygiene.py: the duplicate-symbol map
  *  pins, the library-surface import-graph census, the mabel/noael
  *  parity grid, the SBOM artifact pins). */
-export const SHIPPED_TEST_COUNT = 8555;
+export const SHIPPED_TEST_COUNT = 9017;
+
+/*  r361 (the 2h-sync housekeeping firing, the thirteenth-rollback
+    recovery class): the canonical collection re-verified live on the
+    repaired venv at the durable r360 terminal 4c86969d -- 9,017
+    collected / 0 errors / 495 files (the r360 pin, now measured not
+    inherited). The r325-era pin 8,555 had silently drifted 462 tests
+    behind over the r326..r360 lanes -- the carriers were last trued
+    at the r325 census moment and every lane since pinned only the
+    PROJECT_STATUS narrative. */
 
 /** r315 note: the canonical collection re-verified at 8,428 / 0
  *  errors / 461 files (+10 the DTA route family, − 1 re-trued A-6
@@ -41,7 +50,11 @@ export const SHIPPED_TEST_COUNT = 8555;
  *  files" was off by one, the on-disk truth at 315fdddf was 9).
  *  This pin moves independently of the Python suite above —
  *  the CI's studio-frontend job runs both lanes. */
-export const SHIPPED_COMPONENT_TEST_COUNT = 110;
+export const SHIPPED_COMPONENT_TEST_COUNT = 337;
+
+/*  r361 re-true: the vitest suite re-verified live post-recovery --
+    337/337 over 38 files (the r360 pin, measured). The r314-era pin
+    110 had drifted 227 tests behind over the r315..r360 GUI lanes. */
 
 /*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
     +39 the workflow engine + route suites (22 engine + 17 route —
@@ -83,7 +96,7 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 110;
  *  toolkit .github path — resurrected by the same rollback, never
  *  registered at GitHub and never shipped in any archive — nets to
  *  zero (caught, removed); verified pin = live walk = page render. */
-export const SHIPPED_FILE_COUNT = 1706;
+export const SHIPPED_FILE_COUNT = 1842;
 
 /*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
     +13 tree files (the pharmaml.workflow package x4, the route
@@ -191,7 +204,7 @@ export const SHIPPED_FILE_COUNT = 1706;
  *  file pin stayed 1,672 (the hydration-restored stray zips + the
  *  orphan WIP route removed, the ritual's seven home-zips kept);
  *  verified pin = live walk = page render. */
-export const SHIPPED_SOURCE_LINES = 567800;
+export const SHIPPED_SOURCE_LINES = 589728;
 
 /*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
     +3,422 the counted delta (the workflow package + the route family
@@ -220,6 +233,15 @@ export const SHIPPED_SOURCE_LINES = 567800;
     files as 1 line each — the r309-documented JS bias, the pin
     equals the live walk); zero src/tests change this round;
     verified pin = live walk = page render. */
+
+/*  r361 re-true (both census carriers, the fixed-point discipline):
+    the live /api/toolkit/tree?fresh=1 walk at the recovered terminal
+    measured 1,842 files / 589,728 lines -- the +136 files / +21,928
+    lines over the r325 pin 1,706/567,800 are the r326..r360 rounds'
+    accumulated tree growth (the ML workspace lanes, the part16
+    diagnostics lane, the part17 RSM/G1 lanes and their QA doc set),
+    never re-trued since the r325 census moment. Verified pin = live
+    walk = page render three-way. */
 
 /** r315 (the v1.2.237 ship, the DTA lane): +2 the route family
  *  (routes/dta.py + tests/api/test_dta.py), +1 the DtaLane

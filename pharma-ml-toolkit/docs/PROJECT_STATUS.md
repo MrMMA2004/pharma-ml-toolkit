@@ -1579,3 +1579,65 @@ NO duplicate clients (pinned by the guards).
   round's fix back to green. The version unchanged at 1.2.240
   (no-silent-bumps; NO re-ship). Counter 151 -> 152. The campaign
   queue: **EMPTY** — the next lane is upkeep alone.
+
+## 11. The r361 clause (the upkeep lane — the fourteenth-class rollback recovery + the ten-chunk gate's three finds fixed at source + the carrier-truing debt settled; the 00:30 2h-sync firing)
+
+The firing opened on the recovery class: the sandbox recycle had
+regressed the local `.git` to the round-186-era machinery checkpoint
+`2eb0ede` (**588 commits behind** the durable tip), wiped the origin
+remote, the credential store and the root `node_modules`, gutted the
+venv (rdkit MISSING entirely), and left the working tree a
+121-modified / 1,006-untracked stale residue. The playbook (the
+r324/r343/r351/r352/r353 precedent) executed end-to-end: the PAT
+re-spliced from upload/MASTER_PROMPT.pdf (the two-line splice, 93
+chars, stored 600-mode, never printed), the origin re-attached on the
+clean HTTPS URL + fetched (`origin/main` = the durable r360 terminal
+`4c86969d`; only `main` exists — no `arena/*` refs to absorb), the
+untracked set analyzed (1,005 tracked-at-origin blockers swept, 1 own
+tooling ghost kept), the ff-only `reset --hard` onto `4c86969d` clean
+(the 2 deleted zips restored), the venv rebuilt FOREGROUND at the
+exact pins (numpy 1.26.4 / rdkit 2026.9.1 / torch 2.14.1+cpu / the
+Studio + FastAPI + freeze stacks / the rdkit-stub patch, the
+`VENV-REPAIR-DONE` + `STUDIO-REPAIR-DONE` surfaces green), the root
+`bun install` (828 packages) + the frontend `npm ci`, the corrupted
+Turbopack cache cleaned to ONE supervisor boot (the r351 drill — the
+`.sst`-missing panic decoded), the five-home zip ritual re-seeded
+byte-identical (`0fadb6e5…` at exactly 23,489,390 B; the zip-size API
+`exact:true source:release`).
+
+The ten-chunk gate over the recovered tree (the r353 layout,
+daemonized, the dev server DOWN per the OOM ritual): **failures=3,
+all three decoded and fixed at source, all re-verified green**. (1)
+chunk-3's leakage guard caught **r353 residue riding the durable tree
+since that round**: the QA execution report's own r353 row quoted the
+raw `/home/<user>/` prefix pattern it narrates — a report ABOUT the
+scrub carrying the pattern (CI's narrower pytest selection never runs
+test_leakage, so the leak survived five CI-green pushes); scrubbed to
+the pattern-safe shape, the file 5/5 solo + the chunk-3-equivalent
+group 32 files rc=0. (2) chunk-11's
+`test_sql_payload_round_trips_as_data` — a **REAL r356-lane race**:
+the test posts the route-default `mode=job` (the async JobManager
+ThreadPool queue) and GETs the registry immediately, while its
+sibling upload tests all pass `mode="sync"` — green at the r356/r357
+gates, lost at r361 (the rows list came back empty); fixed to the
+sibling convention (the name round-trip under test happens before the
+mode dispatch), the class 3/3 solo + the FULL tests/api leg rc=0
+(143s). (3) chunk-2's nine-card-first whole-file SIGKILL under the
+gate's memory pressure — the r353 class-split drill: **5/5 classes
+green solo**. Chunks 4-10 + 12 green first-pass. The collection
+re-verified **9,017 / 0 errors / 495 files exact** (measured, not
+inherited); vitest **337/337 over 38 files** post-`npm ci`.
+
+The carrier-truing debt settled: `toolkit-stats.ts` had stood at the
+r325 census moment (8,555 / 110 / 1,706 / 567,800) while the
+r326..r360 lanes grew the tree with no re-true — re-trued to the
+measured fixed point **9,017 / 337 / 1,842 / 589,728**, verified pin
+= live walk = page render three-way (the `/api/toolkit/tree?fresh=1`
+walk measured 1,842 files / 589,728 lines at the recovered terminal;
+the SSR HTML paints the new four, the stale three absent); the
+registry pins re-probed 33 / 24 unchanged; root lint exit-0. The
+version unchanged at 1.2.240 (no-silent-bumps; NO re-ship — the
+deltas are doc/test/carrier-only, the shipped archive untouched).
+Counter 151 -> 153 (the r360 round was the 152nd per its own clause;
+the counter file never rode that commit — reconciled here). The
+queue: **upkeep alone** — and the upkeep found real work.

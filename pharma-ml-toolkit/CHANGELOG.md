@@ -1,5 +1,36 @@
 ## [1.2.240] — 2026-11-21 — round 318 (the 109th recorded run: the interactive part13 continuation, trace 1a1fed8994f477c1 — the Phase-5 pharmacogenomics lane, API + GUI; a NEW version ship)
 
+- **The r361 upkeep firing (the fourteenth-class rollback recovery +
+  the ten-chunk gate's three finds fixed at source + the
+  carrier-truing debt settled)**: the sandbox recycle regressed the
+  local `.git` to the round-186 machinery checkpoint (588 commits
+  behind the durable tip) and wiped the remote, the credentials, the
+  root `node_modules` and most of the venv — the full playbook
+  re-executed (the PAT re-spliced and stored 600-mode, the origin
+  re-attached, the ff-only reset onto the durable r360 terminal
+  `4c86969d`, the venv rebuilt FOREGROUND at the exact pins, the root
+  + frontend installs, the corrupted Turbopack cache cleaned to one
+  boot, the five zip homes re-seeded — v1.2.240 byte-identical
+  `0fadb6e5…` at exactly 23,489,390 B). The gate over the recovered
+  tree: **failures=3, all decoded and fixed at source** — (1) the QA
+  execution report's own r353 row quoted the raw `/home/<user>/`
+  pattern it narrates (a leak riding the durable tree since r353 —
+  CI's narrower selection never runs the leakage guard), scrubbed
+  pattern-safe, 5/5 + the group rc=0; (2) the r356-lane
+  `test_sql_payload_round_trips_as_data` raced the route-default
+  async JobManager queue its siblings avoid by the `mode="sync"`
+  convention — fixed to the convention, the class 3/3 + the FULL
+  tests/api leg rc=0; (3) the nine-card-first whole-file OOM decoded
+  by the class-split drill, 5/5 classes green. The collection
+  re-verified **9,017 / 0 errors / 495 files** (measured on the
+  repaired venv); vitest **337/337 over 38 files**; the census
+  carriers re-trued to the measured fixed point **9,017 / 337 / 1,842
+  / 589,728** (the r325-era pins had drifted 462 tests / 227
+  component tests / 136 files / 21,928 lines behind over the
+  r326..r360 lanes), verified pin = live walk = page render
+  three-way; the registry pins 33 / 24 re-probed unchanged. Version
+  unchanged 1.2.240, NO re-ship (doc/test/carrier-only deltas).
+
 - **The BLK-1 installer-mechanics lane CI-executed (round 336, the
   owner's "do the blocked items through GitHub Actions" directive)**:
   `windows-install-smoke.yml` at the repository root — on every

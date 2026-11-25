@@ -136,3 +136,27 @@ session; full detail in `docs/part12_audit/`):
   re-trued after the ship (the −2 files / −46,417 lines of the
   retirement plus the round's additions); pins synced in
   `toolkit-stats.ts`.
+
+## part17 upkeep addendum — the r361 firing (2026-11-26, the fourteenth-class rollback recovery + the gate's three finds fixed at source)
+
+- **Recovery**: the durable `origin/main` (`4c86969d`, the r360
+  terminal) re-synced ff-only after the sandbox recycle regressed the
+  local `.git` to the round-186 checkpoint; the venv rebuilt at the
+  exact pins; the five zip homes re-seeded byte-identical
+  (`0fadb6e5…`, exactly 23,489,390 B); the release-archive
+  verification status above is unchanged (still not gathered for a
+  NEW version — v1.2.240 remains the shipped archive).
+- **Gate finds fixed at source**: the QA report's own r353 row
+  carried the raw `/home/<user>/` pattern (the leakage guard's
+  blind-spot find — scrubbed pattern-safe); the r356-lane
+  SQL-payload test's async-queue race fixed to the siblings'
+  `mode="sync"` convention; the nine-card-first whole-file OOM
+  decoded 5/5 classes green. The FULL tests/api leg re-run rc=0.
+- **Pins (r361 re-true)**: collection 9,017 / 0 errors / 495 files
+  (measured); vitest 337/337 over 38 files; the census carriers
+  9,017 / 337 / 1,842 / 589,728 (pin = live walk = page render
+  three-way); registry 33 / 24 unchanged.
+- **Version**: unchanged at 1.2.240 — the deltas are
+  doc/test/carrier-only; NO re-ship, NO silent bump. The standing
+  BLOCKED lanes (clean-machine smoke, Stage-5 PySide6 retirement,
+  installer signing) carry unchanged.
