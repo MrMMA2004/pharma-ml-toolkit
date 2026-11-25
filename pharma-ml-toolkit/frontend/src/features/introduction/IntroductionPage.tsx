@@ -13,7 +13,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DemoDataSection } from "@/components/demo/DemoDataSection";
+import { DatabasePreferences } from "@/components/system/DatabasePreferences";
 import { DiagnosticsCard } from "@/components/system/DiagnosticsCard";
+import { JobCenterCard } from "@/components/system/JobCenterCard";
 import { WORKSPACES } from "@/app/workspaces";
 import { ApiError } from "@/services/api/client";
 import { artifactsApi } from "@/services/artifacts/client";
@@ -142,6 +144,17 @@ export function IntroductionPage() {
       </div>
 
       <StudioDatabaseSection />
+
+      {/* part17 §3.2 (the G1 lane): the durable user-preference
+          manager — the /database/preferences quartet's first consumer
+          (the backend surface that had no client lane at all) */}
+      <DatabasePreferences />
+
+      {/* part17 §3.2 (the G1 lane): the global Job Center — the live
+          cross-workspace session ledger over GET /api/v1/jobs with the
+          authoritative result + cancellation routes (the JobRunCard
+          per-workflow lane was never this surface) */}
+      <JobCenterCard />
 
       {/* part16 §15.5 (Phase 12): the diagnostics/recovery surface —
           dependency + scientific-tool availability, storage health,

@@ -77,6 +77,38 @@ export interface RestoreResult {
   readonly recovered: Readonly<Record<string, unknown>>;
 }
 
+/** One row of `GET /database/preferences` (the durable store). */
+export interface PreferenceRow {
+  readonly key: string;
+  readonly value: unknown;
+  readonly updated_at: string;
+}
+
+/** `PUT /database/preferences/{key}` — the saved answer. */
+export interface PreferenceSaved {
+  readonly key: string;
+  readonly value: unknown;
+  readonly saved: true;
+}
+
+/** `DELETE /database/preferences/{key}` — the delete verdict. */
+export interface PreferenceDeleted {
+  readonly key: string;
+  readonly deleted: true;
+}
+
+/** Narrow one preference row (§8.1 — the key must be a string, the
+ *  value is any strict-JSON payload, the timestamp a string). */
+export function parsePreferenceRow(
+  raw: unknown,
+  label: string,
+): PreferenceRow {
+  const key = _string(raw, "key", label);
+  const updated_at = _string(raw, "updated_at", label);
+  const value = _field(raw, "value", label);
+  return { key, value, updated_at };
+}
+
 function _field(raw: unknown, key: string, label: string): unknown {
   if (typeof raw !== "object" || raw === null) {
     throw new Error(`${label} is not an object`);
@@ -210,6 +242,55 @@ export const databaseApi = {
     return {
       restore: _record(raw, "restore", "the restore answer"),
       recovered: _record(raw, "recovered", "the restore answer"),
+    };
+  },
+
+  /** `GET /api/v1/database/preferences` — the durable key/value
+   *  store, ordered by key (part17 §3.2, the G1 lane: the route had
+   *  no consumer at all before this). */
+  async preferences(): Promise<readonly PreferenceRow[]> {
+    const raw = await api.get<unknown>("/api/v1/database/preferences");
+    const rows = _field(raw, "preferences", "the preference list") as unknown[];
+    return rows.map((row, index) =>
+      parsePreferenceRow(row, `the preference row ${index}`),
+    );
+  },
+
+  /** `PUT /api/v1/database/preferences/{key}` — set or replace one
+   *  value (any strict-JSON payload; the backend stores it as JSON). */
+  async setPreference(key: string, value: unknown): Promise<PreferenceSaved> {
+    const raw = await api.put<unknown>(
+      `/api/v1/database/preferences/${encodeURIComponent(key)}`,
+      { value },
+    );
+    const saved = _field(raw, "saved", `the preference write for ${key}`);
+    if (saved !== true) {
+      throw new Error(
+        `setPreference ${key}: the backend did not confirm the save`,
+      );
+    }
+    return {
+      key: _string(raw, "key", `the preference write for ${key}`),
+      value: _field(raw, "value", `the preference write for ${key}`),
+      saved: true,
+    };
+  },
+
+  /** `DELETE /api/v1/database/preferences/{key}` — remove one row
+   *  (404 when unknown — the honest lane the caller surfaces). */
+  async deletePreference(key: string): Promise<PreferenceDeleted> {
+    const raw = await api.delete<unknown>(
+      `/api/v1/database/preferences/${encodeURIComponent(key)}`,
+    );
+    const deleted = _field(raw, "deleted", `the preference delete for ${key}`);
+    if (deleted !== true) {
+      throw new Error(
+        `deletePreference ${key}: the backend did not confirm the delete`,
+      );
+    }
+    return {
+      key: _string(raw, "key", `the preference delete for ${key}`),
+      deleted: true,
     };
   },
 };

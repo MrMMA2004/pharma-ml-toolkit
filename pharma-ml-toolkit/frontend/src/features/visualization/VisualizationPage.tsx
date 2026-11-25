@@ -5,8 +5,10 @@ import {
   ClipboardList,
   Columns2,
   Database,
+  Eye,
   Play,
   SlidersHorizontal,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DemoDataSection } from "@/components/demo/DemoDataSection";
@@ -363,12 +365,16 @@ function ArtifactRow({
   digest,
   selected,
   onSelect,
+  onView,
+  onDelete,
 }: {
   artifact: ArtifactView;
   onDownload: (artifact: ArtifactView) => void;
   digest: string | null;
   selected?: boolean;
   onSelect?: (artifact: ArtifactView) => void;
+  onView?: (artifact: ArtifactView) => void;
+  onDelete?: (artifact: ArtifactView) => void;
 }) {
   return (
     <div
@@ -398,6 +404,28 @@ function ArtifactRow({
         <Button size="sm" variant="outline" onClick={() => onDownload(artifact)}>
           Download
         </Button>
+        {onView !== undefined ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onView(artifact)}
+            aria-label={`View artifact ${artifact.filename}`}
+          >
+            <Eye aria-hidden className="h-4 w-4" />
+            View
+          </Button>
+        ) : null}
+        {onDelete !== undefined ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onDelete(artifact)}
+            aria-label={`Delete artifact ${artifact.filename}`}
+          >
+            <Trash2 aria-hidden className="h-4 w-4" />
+            Delete
+          </Button>
+        ) : null}
         {digest !== null ? (
           <span className="text-[11px] text-[var(--color-muted-foreground)]">
             {digest}
@@ -414,6 +442,17 @@ export function VisualizationPage() {
   const [registryError, setRegistryError] = useState<string | null>(null);
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactView | null>(null);
   const [selectedDigest, setSelectedDigest] = useState<string | null>(null);
+  // part17 §3.2 (the G1 lane) — the view/delete consumers the
+  // consumption hub always owed: the one-row View fetch (the full
+  // ArtifactView with its meta) and the two-step Delete over the
+  // EXISTING typed artifactsApi.delete (no duplicate client)
+  const [viewedArtifact, setViewedArtifact] = useState<ArtifactView | null>(null);
+  const [viewBusy, setViewBusy] = useState(false);
+  const [viewError, setViewError] = useState<string | null>(null);
+  const [deletePending, setDeletePending] = useState<ArtifactView | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
   const [valuesText, setValuesText] = useState(SAMPLE_VALUES);
   const [xText, setXText] = useState("");
   const [yText, setYText] = useState("");
@@ -588,6 +627,94 @@ export function VisualizationPage() {
       }
     },
     [verifiedDownload],
+  );
+
+  // part17 §3.2 (G1) — the View lane: the one-row fetch through the
+  // EXISTING typed artifactsApi.view (GET /api/v1/artifacts/{id}),
+  // rendered as the full registry record below the list. A 404 is
+  // shown honestly (the row can be evicted server-side between the
+  // list and the click).
+  const handleArtifactView = useCallback(async (artifact: ArtifactView) => {
+    setViewBusy(true);
+    setViewError(null);
+    try {
+      const view = await artifactsApi.view(artifact.artifact_id);
+      setViewedArtifact(view);
+    } catch (error) {
+      setViewedArtifact(null);
+      setViewError(describeError(error));
+    } finally {
+      setViewBusy(false);
+    }
+  }, []);
+
+  // part17 §3.2 (G1) — the Delete lane, the r356 dataset-deletion
+  // discipline applied to the artifact registry: the row action only
+  // ARMS the confirmation; only the confirm button fires the typed
+  // artifactsApi.delete (no second client, no inline fetch); the
+  // honest 404 already-gone lane reconciles; and every stage-local
+  // derivative that referenced the evicted row is cleared (the
+  // selection, the compare memory, the digest cache, the viewed
+  // record — never a dangling reference to an evicted id).
+  const requestArtifactDelete = useCallback((artifact: ArtifactView) => {
+    setDeletePending(artifact);
+    setDeleteError(null);
+    setDeleteNotice(null);
+  }, []);
+
+  const cancelArtifactDelete = useCallback(() => {
+    setDeletePending(null);
+    setDeleteError(null);
+  }, []);
+
+  const confirmArtifactDelete = useCallback(
+    async (artifact: ArtifactView) => {
+      setDeleteBusy(true);
+      setDeleteError(null);
+      setDeleteNotice(null);
+      try {
+        await artifactsApi.delete(artifact.artifact_id);
+        setDeletePending(null);
+        if (selectedArtifact?.artifact_id === artifact.artifact_id) {
+          setSelectedArtifact(null);
+          setSelectedDigest(null);
+        }
+        if (viewedArtifact?.artifact_id === artifact.artifact_id) {
+          setViewedArtifact(null);
+        }
+        setGenerated((prev) =>
+          prev.filter((row) => row.artifact_id !== artifact.artifact_id),
+        );
+        setDigests((prev) => {
+          const next = { ...prev };
+          delete next[artifact.artifact_id];
+          return next;
+        });
+        await refreshRegistry();
+        setDeleteNotice(
+          `Deleted "${artifact.filename}" from the artifact registry.`,
+        );
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          // the honest already-gone lane: the row was evicted
+          // server-side (or by another surface) — reconcile and say so
+          setDeletePending(null);
+          if (selectedArtifact?.artifact_id === artifact.artifact_id) {
+            setSelectedArtifact(null);
+            setSelectedDigest(null);
+          }
+          await refreshRegistry();
+          setDeleteNotice(
+            `"${artifact.filename}" was already gone (404) — registry refreshed.`,
+          );
+          return;
+        }
+        setDeleteError(describeError(error));
+      } finally {
+        setDeleteBusy(false);
+      }
+    },
+    [refreshRegistry, selectedArtifact, viewedArtifact],
   );
 
   // stage 4: the report job's authoritative REST relay (§13)
@@ -973,6 +1100,8 @@ export function VisualizationPage() {
                       digest={digests[artifact.artifact_id] ?? null}
                       selected={selectedArtifact?.artifact_id === artifact.artifact_id}
                       onSelect={handleSelect}
+                      onView={handleArtifactView}
+                      onDelete={requestArtifactDelete}
                     />
                   ))
                 )}
@@ -982,6 +1111,117 @@ export function VisualizationPage() {
                 loading the registry…
               </p>
             )}
+            {deleteNotice !== null ? (
+              <p
+                role="status"
+                className="mt-3 text-sm text-[var(--color-muted-foreground)]"
+              >
+                {deleteNotice}
+              </p>
+            ) : null}
+            {viewError !== null ? (
+              <div className="mt-3">
+                <ErrorBanner message={viewError} />
+              </div>
+            ) : null}
+            {viewBusy ? (
+              <p className="mt-3 text-xs text-[var(--color-muted-foreground)]">
+                fetching the full registry record…
+              </p>
+            ) : null}
+            {viewedArtifact !== null ? (
+              <div className="mt-4 rounded-md border border-[var(--color-border)] p-3">
+                <p className="text-xs font-semibold text-[var(--color-foreground)]">
+                  The registry record — {viewedArtifact.filename}
+                </p>
+                <table className="mt-2 w-full text-[11px]">
+                  <tbody>
+                    <tr>
+                      <td className="py-0.5 pr-2 align-top text-[var(--color-muted-foreground)]">artifact_id</td>
+                      <td className="py-0.5 text-right font-mono">{viewedArtifact.artifact_id}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 pr-2 align-top text-[var(--color-muted-foreground)]">kind</td>
+                      <td className="py-0.5 text-right">{viewedArtifact.kind}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 pr-2 align-top text-[var(--color-muted-foreground)]">content_type</td>
+                      <td className="py-0.5 text-right">{viewedArtifact.content_type}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 pr-2 align-top text-[var(--color-muted-foreground)]">size</td>
+                      <td className="py-0.5 text-right">
+                        {(viewedArtifact.size_bytes / 1024).toFixed(1)} KiB ({viewedArtifact.size_bytes.toLocaleString()} B)
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 pr-2 align-top text-[var(--color-muted-foreground)]">sha256</td>
+                      <td className="py-0.5 text-right font-mono break-all">{viewedArtifact.sha256}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 pr-2 align-top text-[var(--color-muted-foreground)]">created</td>
+                      <td className="py-0.5 text-right">
+                        {viewedArtifact.created_at.slice(0, 19).replace("T", " ")}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 pr-2 align-top text-[var(--color-muted-foreground)]">meta</td>
+                      <td className="py-0.5 text-right font-mono break-all">
+                        {JSON.stringify(viewedArtifact.meta)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 pr-2 align-top text-[var(--color-muted-foreground)]">download route</td>
+                      <td className="py-0.5 text-right font-mono break-all">{viewedArtifact.download_url}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+            {deletePending !== null ? (
+              <Card className="mt-4 border-[var(--color-destructive)]/40">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Trash2 aria-hidden className="h-4 w-4" />
+                    Delete artifact “{deletePending.filename}”?
+                  </CardTitle>
+                  <CardDescription>
+                    {deletePending.kind} · {deletePending.content_type} ·{" "}
+                    {(deletePending.size_bytes / 1024).toFixed(1)} KiB · id{" "}
+                    {deletePending.artifact_id}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-[var(--color-muted-foreground)]">
+                    This evicts the session registry row together with its
+                    persisted copy (the SQLite row and the vault payload —
+                    artifact_id {deletePending.artifact_id}). Datasets, trained
+                    models, priors and the persisted job history stay
+                    untouched — this action never deletes another record.
+                    A workspace that already captured the figure stays
+                    unaffected.
+                  </p>
+                  {deleteError !== null ? (
+                    <div className="mt-3">
+                      <ErrorBanner message={deleteError} />
+                    </div>
+                  ) : null}
+                  <div className="mt-4 flex gap-2">
+                    <Button variant="outline" onClick={cancelArtifactDelete} disabled={deleteBusy}>
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => void confirmArtifactDelete(deletePending)}
+                      disabled={deleteBusy}
+                    >
+                      <Trash2 aria-hidden className="h-4 w-4" />
+                      {deleteBusy ? "Deleting…" : "Delete artifact"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
             <div className="mt-3">
               <p className="text-xs font-semibold text-[var(--color-foreground)]">
                 The paste lanes
