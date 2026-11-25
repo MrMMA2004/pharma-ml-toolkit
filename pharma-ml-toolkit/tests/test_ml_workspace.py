@@ -128,7 +128,10 @@ def test_ml_rest_surface_covered() -> None:
     # artifacts.py joined the family at r350: the ml client's registry
     # export lane rides POST /api/v1/artifacts/model (§15.3 export —
     # the one-DTO rule honored, no bespoke export path client-side).
-    for module in ("ml.py", "applicability_domain.py", "semi_supervised.py", "admet.py", "dta.py", "repurposing.py", "drugresponse.py", "pharmacogenomics.py", "multiobjective.py", "workflow.py", "artifacts.py"):
+    # multiresponse.py joined at r358 (the part17 §5 M1 quartet) and
+    # rsm.py at r359 (the part17 §6 R1 septet) — the two new families
+    # the ml client carries, the same one-DTO rule.
+    for module in ("ml.py", "applicability_domain.py", "semi_supervised.py", "admet.py", "dta.py", "repurposing.py", "drugresponse.py", "pharmacogenomics.py", "multiobjective.py", "workflow.py", "artifacts.py", "multiresponse.py", "rsm.py"):
         real.update(_backend_routes(module))
     unknown = carried - set(real)
     assert not unknown, f"ml client calls undeclared routes: {sorted(unknown)}"
@@ -301,6 +304,12 @@ def test_stage_order_matches_the_spec_chain() -> None:
         "Workflow Builder",
         "Semi-supervised Learning",
         "Explainability & Uncertainty",
+        # r358 (part17 §5): the Multi-Response Regression lane; r359
+        # (part17 §6): the Experimental Design & Response Surface lane
+        # — both inside the EXISTING Machine Learning workspace, the
+        # Export stage renumbered with them
+        "Multi-Response Regression",
+        "Experimental Design & Response Surface",
         "Export",
     ]
     assert titles == expected, (
