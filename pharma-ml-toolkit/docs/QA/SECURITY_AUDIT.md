@@ -28,6 +28,30 @@ misclassified startup errors) is closed with regression evidence at
 D-1/D-2/D-3; the defense-in-depth core (a leaked token must not open the
 WS stream) is pinned at the D-6 refusal lanes.
 
+## r357 dated addendum (part17 §4 — the penetration-testing program)
+
+This audit (r340) stands as the historical record it is; the part17
+round-357 lane supersedes-and-extends it with a full application
+penetration-testing program: the focused automated security suite
+`tests/api/test_penetration_security.py` (67 OWASP-mapped tests over
+the real `create_app()` stack — the token battery, the
+Origin/Referer bypass complements, the CORS complement, the
+IDOR/BOLA/BFLA 404 lanes, the vault traversal/symlink class, the
+restore-bundle ZIP-slip class, the upload attack shapes, the unsafe
+export names, the resource caps, the injection/XSS lanes, the log
+hygiene, the desktop CSP + capability static pins, the handshake
+shape, and the ZAP tooling pins), the four program documents
+(`THREAT_MODEL.md`, `PENETRATION_TEST_PLAN.md`,
+`PENETRATION_TEST_REPORT.md`, `SECURITY_REMEDIATION_REGISTER.md`),
+and the isolated ZAP workflow lane (`.github/workflows/
+penetration-test.yml` + `tools/zap_target.py` + `tools/zap_gate.py`
++ `packaging/security/`). The round's real find F-356-01 (the
+artifact-filename Content-Disposition injection) is FIXED+PINNED;
+F-356-02 (the root ci.yml `branches: ain]` cosmetic trigger defect
+— pushes to main still fire CI, verified via the Actions API) is
+recorded OPEN in the register. The ZAP workflow stays
+NOT_EXECUTED until its first runner firing.
+
 ## 2. Supply-chain review (§12)
 
 - **Python dependencies**: `requirements.txt` exact-pinned (the

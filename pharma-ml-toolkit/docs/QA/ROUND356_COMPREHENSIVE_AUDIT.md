@@ -124,3 +124,24 @@ The §3.1 dataset-deletion closure above — delivered, tested, and
 drift-guarded this round; the capability-matrix row trued from
 PARTIAL to PASS; the campaign queue's remaining lanes (P1, M1, R1,
 G1) stand open and honestly **NOT_IMPLEMENTED** as of this terminal.
+
+## 7. r357 dated addendum (the P1 lane's delivery — status truing, not history rewriting)
+
+The §4 row above and the queue's P1 entry describe the round-356
+truth and stand as the record. One round later (2026-11-25, the
+interactive "Continue MASTER_PROMPT part17 / Push" round): **P1 the
+penetration-testing program is DELIVERED** — the automated security
+suite `tests/api/test_penetration_security.py` (67 tests over the
+real `create_app()` stack, the §4.3 list, OWASP-mapped, complementing
+the standing origin/WS/supply-chain suites), the four program
+documents (`docs/QA/THREAT_MODEL.md`, `PENETRATION_TEST_PLAN.md`,
+`PENETRATION_TEST_REPORT.md`, `SECURITY_REMEDIATION_REGISTER.md`),
+the isolated ZAP lane (`.github/workflows/penetration-test.yml`
+scheduled + dispatch, `tools/zap_target.py` the disposable seeded
+loopback target, the Automation-Framework config, the
+`tools/zap_gate.py` severity gate + the documented suppression
+channel), and the round's real find F-356-01 (the
+Content-Disposition injection via artifact filenames) FIXED at source
+with the 3/3 retest. The ZAP workflow itself honestly remains
+**NOT_EXECUTED** until its first runner firing. The remaining queue:
+M1, R1, G1.

@@ -1,0 +1,88 @@
+# The ZAP Automation Framework configuration (part17 \u00a74.4, Round 356 P1).
+#
+# This config drives zap-stable's Automation Framework against the
+# DISPOSABLE, project-owned target launched by
+# `.github/workflows/penetration-test.yml` (tools/zap_target.py): the
+# real create_app() backend on 127.0.0.1:8737 with a fixed SYNTHETIC
+# session token, a seeded synthetic dataset + artifact, and the exact
+# OpenAPI contract dumped beside this run's working directory.
+#
+# Standing boundaries (part17 \u00a74.4's own rules, enforced by the
+# workflow's invocation):
+#   * the target is the isolated ephemeral instance ONLY -- never the
+#     public production service, never arbitrary hosts;
+#   * ZAP runs in -cmd mode (no API port is ever exposed);
+#   * the active scan is the controlled API scan against the seeded
+#     ephemeral service only;
+#   * ZAP Baseline (passive) is understood as PASSIVE scanning -- this
+#     program never labels it a complete penetration test.
+#
+# The session token travels via ZAP's documented Replacer rule, which
+# the workflow injects as -config options (replacer.add.rule(0)) so
+# every request carries X-Session-Token and the authenticated surface
+# is what actually gets scanned (the unauthenticated lanes are covered
+# by the focused pytest suite instead).
+#
+# This config is exercised on the workflow's first runner firing
+# (NOT_EXECUTED until then, per part17 \u00a74.5's honesty rule); any
+# schema mismatch surfaces as a finding in the remediation register.
+
+env:
+  contexts:
+    - name: pharmaml-ephemeral
+      urls: ["http://127.0.0.1:8737"]
+      includePaths: ["^/api/.*"]
+      excludePaths: []
+  parameters:
+    failOnError: true
+    failOnWarnings: false
+    timeToWait: 0
+    probe: true
+
+jobs:
+  # the OpenAPI contract dumped by tools/zap_target.py from the LIVE
+  # app -- the exact API surface, imported as the scan's target tree
+  - type: addOns
+    parameters:
+      install: ["openapi"]
+      update: []
+
+  - type: openapi
+    parameters:
+      apiFile: "/zap/wrk/openapi.json"
+      context: "pharmaml-ephemeral"
+
+  - type: passiveScan-wait
+    parameters:
+      time:
+        minutes: 2
+
+  - type: activeScan
+    parameters:
+      context: "pharmaml-ephemeral"
+      maxRuleTime: 20
+      maxAlertsPerRule: 20
+
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: "/zap/wrk"
+      reportFile: zap-report.json
+      reportTitle: PharmaML Studio ephemeral target -- ZAP JSON report
+      displayReport: false
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: "/zap/wrk"
+      reportFile: zap-report.html
+      reportTitle: PharmaML Studio ephemeral target -- ZAP HTML report
+      displayReport: false
+
+  - type: report
+    parameters:
+      template: traditional-md
+      reportDir: "/zap/wrk"
+      reportFile: zap-report.md
+      reportTitle: PharmaML Studio ephemeral target -- ZAP Markdown report
+      displayReport: false

@@ -984,6 +984,51 @@ summarises them and wins any status disagreement.
   counter 147 -> 148. The campaign's next lanes: P1 the
   penetration-testing program, M1 the Multi-Response ML, R1 the
   RSM engine, G1 the remaining §3.2 UI consumers.
+  — and round 357 (the interactive "Continue MASTER_PROMPT part17 /
+  Push" directive, the first P1 lane): the SEVENTEENTH rollback
+  recovered pre-work (the remote + `.credentials/` gone again over
+  the r186-checkpoint HEAD while the working tree carried the pushed
+  r356 terminal — the PAT re-spliced + API-validated via the
+  r352-class drill, the origin re-attached [origin/main = the pushed
+  r356 terminal `dce99b1b`, the session's own push verified LANDED],
+  the ghost sweep over the checkpoint residue [playground.py +
+  test_playground.py + the nested ci.yml + the three retired
+  v103/105/106 zips — the parity delta EXACTLY zero after the
+  sweep, census 1,813 == 1,813], the venv repaired at the exact
+  pins [rdkit 2026.9.1 / shap / the PySide6 stack / mordred /
+  meeko / gemmi / selfies / torch 2.14.1+cpu / numpy 1.26.4 /
+  matplotlib 3.10.9 / ruff 0.17.1 + mypy 2.4.0, the 101-file EXE002
+  mode residue realigned, the two bundled rdkit-stub `None`-member
+  annotations patched locally]) — then **THE P1 PENETRATION-TESTING
+  PROGRAM DELIVERED** (the campaign's first queued lane, part17 §4):
+  the focused automated security suite
+  `tests/api/test_penetration_security.py` (**67 tests**, the §4.3
+  list against the real stack, OWASP-mapped, complementing the
+  standing 34-leg origin matrix + the 12/12 WS lanes + the 8/8
+  supply-chain guard) + the four program documents
+  (`THREAT_MODEL.md`, `PENETRATION_TEST_PLAN.md`,
+  `PENETRATION_TEST_REPORT.md`, `SECURITY_REMEDIATION_REGISTER.md`)
+  + the isolated ZAP lane (`.github/workflows/penetration-test.yml`
+  scheduled Monday 04:30 UTC + dispatch, `tools/zap_target.py` the
+  disposable seeded loopback target, the Automation-Framework config
+  + the Replacer-rule token injection, the severity gate
+  `tools/zap_gate.py` + the documented suppression channel with
+  justification + expiry) + **the F-356-01 find FIXED** (the
+  Content-Disposition injection via artifact filenames —
+  `safe_filename` at the three registration sites + the
+  defense-in-depth header strip, retested 3/3) + the F-356-02
+  hygiene observation recorded OPEN (the root ci.yml `branches:
+  ain]` cosmetic defect — pushes to main still fire CI, verified via
+  the Actions API; the register documents why the fix is left to the
+  owner) + the remote evidence re-verified (CI **19/19 at `dce99b1b`**
+  via the authenticated poll, the v1.2.240 release assets intact).
+  The gates re-pinned: the collection **8,870/0/488 exact** [= the
+  r356 pin 8,803/0/487 + 67 + 1 file], ruff full-tree clean, mypy
+  src 300 clean, the neighbors green, CI 19/19 at the terminal
+  pre-push. The version unchanged at 1.2.240 (no-silent-bumps; NO
+  re-ship); counter 148 -> 149. The campaign's next lanes: M1 the
+  Multi-Response ML, R1 the RSM engine, G1 the remaining §3.2 UI
+  consumers.
 - **Audited base**: `origin/main` = `5446e89b` (the r306 close-out);
   Phase-2 addendum on `19effec8` (the r308 close-out); the Phase-3
   addendum verifies `ca1accc9` (the r309 close-out) clean and lands

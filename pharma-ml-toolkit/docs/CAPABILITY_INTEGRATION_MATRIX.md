@@ -21,6 +21,18 @@ the existing typed `datasetsApi.remove` → `DELETE /api/v1/datasets/{id}`
 with the honest 404 lane, the registry refresh, and the deleted-selection
 clear (the vitest §3.1 flows + the `tests/test_frontend_datasets_delete.py`
 drift guard; no duplicate client, no new endpoint).
+· **r357 addendum (part17 §4, the P1 lane):** the application
+penetration-testing program BORN — not a capability row (no new API
+surface; the contract stays 117/73) but the QA program this matrix's
+evidence culture feeds: `tests/api/test_penetration_security.py` (67
+OWASP-mapped security tests over the existing surface), the four
+program documents under `docs/QA/` (THREAT_MODEL,
+PENETRATION_TEST_PLAN, PENETRATION_TEST_REPORT,
+SECURITY_REMEDIATION_REGISTER), and the isolated ZAP lane
+(`.github/workflows/penetration-test.yml` + `tools/zap_target.py` +
+`tools/zap_gate.py` + the suppression channel). The round's own find
+F-356-01 (the artifact-filename Content-Disposition injection) is
+FIXED+PINNED in the register.
 **Spec:** MASTER_PROMPT part11_1 §21 —
 "Complete Backend–GUI Integration Audit" — with part11_2 §12's status labels.
 **Method:** every row below was derived live from the working tree — the 88

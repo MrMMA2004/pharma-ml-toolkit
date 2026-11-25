@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from pharmaml.exceptions import DataValidationError
 from pharmaml.ml.persistence import save_model
-from pharmaml.utils.io import write_table
+from pharmaml.utils.io import safe_filename, write_table
 from pharmaml.viz.export import export_figure
 from pharmaml.viz.figures import (
     Figure,
@@ -123,6 +123,21 @@ class ModelArtifactRequest(BaseModel):
     filename: str | None = None
 
 
+def _safe_stem(base: str, fallback: str) -> str:
+    """The user-supplied filename reduced to a portable stem.
+
+    The penetration-test lane's finding F-356-01 (part17 §4.3
+    "unsafe export names"): the raw ``Path(base).stem`` preserved
+    CR/LF, quotes and other control characters, which flowed into
+    the ``Content-Disposition`` header at download time — a header
+    injection surface on every artifact kind. The stem is now passed
+    through :func:`pharmaml.utils.io.safe_filename` (the datasets
+    route's own lane), so the stored filename is a portable token
+    and the download header stays a single well-formed line.
+    """
+    return safe_filename(Path(base).stem) or fallback
+
+
 def _register_figure(req: FigureRequest, store: ArtifactStore) -> dict:
     """Build + export + register a figure artifact (real viz stack)."""
     if req.kind in ("scatter",) and req.y is None:
@@ -159,7 +174,7 @@ def _register_figure(req: FigureRequest, store: ArtifactStore) -> dict:
     base = req.filename or "figure"
     record = store.register(
         kind="figure",
-        filename=f"{Path(base).stem or 'figure'}{extension}",
+        filename=f"{_safe_stem(base, 'figure')}{extension}",
         content_type=_CONTENT_TYPES[extension],
         data=data,
         meta={
@@ -187,7 +202,7 @@ def _register_table(
     base = req.filename or "table"
     record = store.register(
         kind="table",
-        filename=f"{Path(base).stem or 'table'}{extension}",
+        filename=f"{_safe_stem(base, 'table')}{extension}",
         content_type=_CONTENT_TYPES[extension],
         data=data,
         meta={
@@ -224,7 +239,7 @@ def _register_model(req: ModelArtifactRequest, store, model_record) -> dict:
     base = req.filename or f"{model_record.name}-model"
     record = store.register(
         kind="model",
-        filename=f"{Path(base).stem or 'model'}.joblib",
+        filename=f"{_safe_stem(base, 'model')}.joblib",
         content_type=_CONTENT_TYPES[".joblib"],
         data=data,
         meta={
@@ -283,8 +298,15 @@ def artifact_view(artifact_id: str, request: Request) -> dict:
 
 
 def _download_headers(record) -> dict[str, str]:
+    # defense-in-depth for the F-356-01 lane: the stored filename is
+    # sanitised at registration, and the header builder additionally
+    # strips CR/LF and quote characters, so no legacy record can ever
+    # break the Content-Disposition into a second header line
+    clean = "".join(
+        ch for ch in record.filename if ch not in '\"\r\n\x00'
+    ) or "artifact"
     return {
-        "Content-Disposition": f'attachment; filename="{record.filename}"',
+        "Content-Disposition": f'attachment; filename="{clean}"',
         "ETag": f'"{record.sha256}"',
         "X-Artifact-SHA256": record.sha256,
         "X-Artifact-Kind": record.kind,

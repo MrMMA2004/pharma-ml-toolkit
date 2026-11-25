@@ -1,0 +1,154 @@
+name: penetration-test
+
+# part17 \u00a74.4 (Round 356 P1) -- the application penetration-testing
+# program's CI lane: OWASP ZAP (Automation Framework) against an
+# ISOLATED, project-owned, ephemeral instance of the real backend.
+#
+# The standing rules this workflow is built to honor, verbatim from
+# the mandate:
+#   * the target is a disposable backend with seeded synthetic data,
+#     launched by tools/zap_target.py on 127.0.0.1 -- never the
+#     public production service, never arbitrary user-provided hosts;
+#   * ZAP runs -cmd (no daemon, no ZAP API port exposed to any
+#     network; the docker container is --network host so it can reach
+#     the loopback-bound target, and it lives only for the scan);
+#   * the active API scan targets ONLY the isolated test service;
+#   * nothing here ever disables application authentication, Origin
+#     validation, CSP, Host validation, or loopback-only binding --
+#     the scan authenticates with the ephemeral synthetic token
+#     exactly like a real client;
+#   * the frontend/web-console surface is not scanned here (the
+#     console is not servable on the runner) -- that lane stays with
+#     the build gate + the local browser E2E walks, honestly recorded
+#     in docs/QA/PENETRATION_TEST_PLAN.md;
+#   * ZAP Baseline (passive) is NOT a complete penetration test and is
+#     never reported as one.
+#
+# Severity policy (docs/QA/PENETRATION_TEST_PLAN.md \u00a75): the gate
+# fails on any non-suppressed Critical or High finding; suppressions
+# are documented with a justification and an expiry date in
+# pharma-ml-toolkit/packaging/security/zap-suppressions.json and an
+# expired entry is silently ignored (the finding comes back).
+#
+# PR-execution (the mandate's optional lane) is deliberately not
+# enabled: this repository works by direct pushes to main with no PR
+# lane, and the root CI's own push-trigger filter is the subject of
+# remediation-register finding F-356-02 -- adding a pull_request
+# trigger here would be the same billing-adjacent surface the register
+# records honestly instead.
+
+on:
+  schedule:
+    # weekly, Monday 04:30 UTC -- a day after security-scan's Sunday
+    # 03:30 slot, so the two CI security lanes never collide
+    - cron: "30 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: penetration-test-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  zap-api-scan:
+    name: ZAP API scan (isolated ephemeral target)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: pharma-ml-toolkit
+    env:
+      # the disposable target's fixed synthetic session token (part17
+      # \u00a74.4 "ephemeral test credentials" -- a literal that never
+      # existed as a real session on any machine)
+      ZAP_TOKEN: zap-synthetic-session-token-fixed
+      ZAP_PORT: "8737"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pharma-ml-toolkit/pyproject.toml
+            pharma-ml-toolkit/requirements.txt
+
+      - name: Install the target stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install --no-deps -e .
+          # the API lane's pins (the runner never installs these via
+          # requirements.txt -- the focused CI jobs never needed them)
+          python -m pip install -c requirements.txt \
+            fastapi==0.128.0 uvicorn==0.44.0 httpx==0.28.1 \
+            pydantic==2.12.5 pytest==9.0.2
+
+      - name: Start the disposable seeded target
+        run: |
+          mkdir -p "$RUNNER_TEMP/zap-data"
+          python tools/zap_target.py \
+            --data-dir "$RUNNER_TEMP/zap-data" \
+            --openapi-out "$RUNNER_TEMP/openapi.json" \
+            --seed-report-out "$RUNNER_TEMP/zap-seed.json" \
+            --port "$ZAP_PORT" > "$RUNNER_TEMP/zap-target.json" &
+          TARGET_PID=$!
+          echo "TARGET_PID=$TARGET_PID" >> "$GITHUB_ENV"
+          for _ in $(seq 1 60); do
+            if [ -s "$RUNNER_TEMP/zap-target.json" ] && \
+               grep -q '"ready": true' "$RUNNER_TEMP/zap-target.json"; then
+              break
+            fi
+            sleep 1
+          done
+          if ! grep -q '"ready": true' "$RUNNER_TEMP/zap-target.json" 2>/dev/null; then
+            echo "the disposable target never became ready" >&2
+            exit 1
+          fi
+          echo "target ready:"
+          cat "$RUNNER_TEMP/zap-target.json"
+
+      - name: "ZAP scan (Automation Framework: openapi import, passive + controlled active)"
+        run: |
+          docker run --rm --network host \
+            -v "$RUNNER_TEMP:/zap/wrk:rw" \
+            -v "$PWD/packaging/security:/zap/cfg:ro" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap.sh -cmd -dir /zap/wrk \
+            -autofile /zap/cfg/zap-automation.yaml \
+            -config "replacer.add.rule(0).description=session-token" \
+            -config "replacer.add.rule(0).enabled=true" \
+            -config "replacer.add.rule(0).matchtype=REQ_HEADER" \
+            -config "replacer.add.rule(0).matchregex=false" \
+            -config "replacer.add.rule(0).matchstr=X-Session-Token" \
+            -config "replacer.add.rule(0).replacement=$ZAP_TOKEN"
+
+      - name: Severity gate (fail on non-suppressed Critical/High)
+        run: |
+          python tools/zap_gate.py \
+            --report "$RUNNER_TEMP/zap-report.json" \
+            --suppress packaging/security/zap-suppressions.json
+
+      - name: Archive the ZAP reports and the target provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-reports
+          path: |
+            ${{ runner.temp }}/zap-report.json
+            ${{ runner.temp }}/zap-report.html
+            ${{ runner.temp }}/zap-report.md
+            ${{ runner.temp }}/openapi.json
+            ${{ runner.temp }}/zap-seed.json
+            ${{ runner.temp }}/zap-target.json
+          if-no-files-found: warn
+
+      - name: Stop the disposable target
+        if: always()
+        run: |
+          [ -n "$TARGET_PID" ] && kill "$TARGET_PID" 2>/dev/null || true
+          exit 0
