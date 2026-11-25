@@ -160,3 +160,29 @@ session; full detail in `docs/part12_audit/`):
   doc/test/carrier-only; NO re-ship, NO silent bump. The standing
   BLOCKED lanes (clean-machine smoke, Stage-5 PySide6 retirement,
   installer signing) carry unchanged.
+
+## part17 upkeep addendum — the r362 firing (2026-11-26, the fifteenth-class rollback recovery — the partial-restore signature)
+
+- **Recovery**: the durable `origin/main` (`af15580c`, the r361
+  terminal) re-synced ff-only after the sandbox recycle regressed the
+  local `.git` to the round-186 checkpoint; the residue signature
+  changed to a PARTIAL disk restore (1,405 tracked files missing,
+  zero untracked residue, the survivors hash-identical to the durable
+  blobs — the lossless-reset proof preceded the reset); the venv
+  rebuilt at the exact pins; the six zip homes re-seeded byte-identical
+  (`0fadb6e5…`, exactly 23,489,390 B — the root dist-archive + the
+  offsite mirror wiped again); the release-archive verification status
+  above is unchanged (still not gathered for a NEW version — v1.2.240
+  remains the shipped archive).
+- **The census-carrier debt settled**: the walk's +132-line drift over
+  the r361-committed pin decoded (r361's own ledger close-out landed
+  after its walk measurement); re-trued to the post-ledger measured
+  fixed point, pin = live walk = page render three-way re-verified.
+- **Pins (r362 re-true)**: collection 9,017 / 0 errors / 495 files
+  (measured); vitest 337/337 over 38 files; registry 33 / 24
+  unchanged; the census carriers re-measured at the close-out (the
+  exact line count lives in the carrier + the worklog R362 entry).
+- **Version**: unchanged at 1.2.240 — the deltas are doc/carrier-only;
+  NO re-ship, NO silent bump. The standing BLOCKED lanes (clean-machine
+  smoke, Stage-5 PySide6 retirement, installer signing) carry
+  unchanged.

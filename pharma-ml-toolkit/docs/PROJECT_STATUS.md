@@ -1641,3 +1641,38 @@ deltas are doc/test/carrier-only, the shipped archive untouched).
 Counter 151 -> 153 (the r360 round was the 152nd per its own clause;
 the counter file never rode that commit — reconciled here). The
 queue: **upkeep alone** — and the upkeep found real work.
+
+## 12. The r362 clause (the upkeep lane — the fifteenth-class rollback recovered with a partial-restore signature + the census-carrier debt settled; the 02:30 2h-sync firing)
+
+- **The recovery**: the fourteenth-class playbook re-executed against a
+  NEW residue signature — the recycle regressed the local `.git` to the
+  round-186 checkpoint `2eb0ede` (589 commits behind the durable r361
+  terminal `af15580c`), wiped the origin remote + the credentials +
+  the venv (rdkit + torch) + the frontend `node_modules`, but this
+  time restored a PARTIAL disk: 1,405 tracked files missing from the
+  working tree (625,273 lines) with ZERO untracked residue, and every
+  surviving file hash-matched the durable blobs byte-for-byte. The
+  hash-object parity proof (worklog.md / CHANGELOG.md / the v1.2.240
+  zip vs `origin/main`) preceded the ff-only `reset --hard origin/main`
+  — 1,900 files restored, the tree 0/0 clean, the untracked sweep
+  EMPTY (no blockers this round; the r361 "1,005 blockers + 1 ghost"
+  set had no successor). The PAT re-spliced from
+  `upload/MASTER_PROMPT.pdf` (the two-line splice, 93 chars, 600-mode,
+  never printed, `scripts/recover_pat.py`), the venv repaired
+  FOREGROUND at the exact pins, the frontend `npm ci`.
+- **The round's find — the census-carrier debt settled**: the live
+  walk measured +132 lines / +12,042 B over the committed carrier pin.
+  Decode: the tree was byte-identical to `af15580c` (`git status` 0/0),
+  so the drift was r361's own final ledger edits landing after its
+  walk measurement — the committed pin rode stale by exactly those
+  edits. Re-trued to the post-ledger measured fixed point with the
+  measurement-last discipline (walk AFTER the round's own edits)
+  recorded; pin = live walk = page render three-way re-verified.
+- **The pins re-measured, all reproducing**: collection 9,017 / 0
+  errors / 495 files; vitest 337/337 over 38 files; registry 33 / 24;
+  walk 1,842 files / version 1.2.240; the six zip homes byte-identical
+  `0fadb6e5…` at exactly 23,489,390 B (root dist-archive + offsite
+  re-seeded); the zip-size API `exact:true source:release`.
+- **Version**: unchanged at 1.2.240 — doc/carrier-only deltas, NO
+  re-ship, NO silent bump. The counter 153 → 154 and RIDES the commit
+  (the r360 lesson held).

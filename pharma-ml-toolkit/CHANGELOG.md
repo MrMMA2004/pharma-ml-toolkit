@@ -1,5 +1,31 @@
 ## [1.2.240] — 2026-11-21 — round 318 (the 109th recorded run: the interactive part13 continuation, trace 1a1fed8994f477c1 — the Phase-5 pharmacogenomics lane, API + GUI; a NEW version ship)
 
+- **The r362 upkeep firing (the fifteenth-class rollback recovery —
+  the partial-restore signature — + the census-carrier debt
+  settled)**: the sandbox recycle regressed the local `.git` to the
+  round-186 machinery checkpoint `2eb0ede` again and wiped the origin
+  remote, the credentials, the venv (rdkit + torch) and the frontend
+  `node_modules` — but this time the disk came back PARTIAL: 1,405
+  tracked files missing from the working tree (625,273 lines) with
+  ZERO untracked residue and every surviving file hash-matched the
+  durable blobs byte-for-byte; the lossless-reset proof (hash-object
+  parity for the survivors vs `origin/main`; the only disk-only deltas
+  a transient pid file + a corrupted nested `ci.yml` ghost) preceded
+  the ff-only reset onto the durable r361 terminal `af15580c` (1,900
+  files restored, the tree 0/0 clean, the sweep EMPTY). The PAT
+  re-spliced (93 chars, 600-mode, never printed), the venv rebuilt
+  FOREGROUND at the exact pins, the frontend `npm ci`, the six zip
+  homes re-seeded byte-identical `0fadb6e5…` at 23,489,390 B (the root
+  dist-archive + the offsite mirror wiped again), the zip-size API
+  `exact:true source:release`. The pins re-measured, all reproducing:
+  collection 9,017 / 0 errors / 495 files; vitest 337/337 over 38
+  files; registry 33 / 24; walk 1,842 files. THE ROUND'S OWN FIND: the
+  live walk measured +132 lines / +12,042 B over the committed carrier
+  pin — r361's final ledger edits landed after its walk measurement,
+  the committed pin rode stale; re-trued to the post-ledger measured
+  fixed point, the measurement-last discipline recorded. Version
+  unchanged 1.2.240 (no-silent-bumps; NO re-ship — doc/carrier-only
+  deltas); the counter 153 → 154 and RIDES the commit this time.
 - **The r361 upkeep firing (the fourteenth-class rollback recovery +
   the ten-chunk gate's three finds fixed at source + the
   carrier-truing debt settled)**: the sandbox recycle regressed the

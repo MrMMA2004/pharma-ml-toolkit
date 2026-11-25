@@ -204,7 +204,15 @@ export const SHIPPED_FILE_COUNT = 1842;
  *  file pin stayed 1,672 (the hydration-restored stray zips + the
  *  orphan WIP route removed, the ritual's seven home-zips kept);
  *  verified pin = live walk = page render. */
-export const SHIPPED_SOURCE_LINES = 589728;
+/*  r362 (the 2h-sync housekeeping firing, the fifteenth-rollback
+    recovery): the walk re-measured AFTER the round's own ledger
+    close-out -- the r361 lesson: its final ledger edits (the QA
+    section + the cascade renumber + the clause + the addendum +
+    the bullet, all inside the walked root) landed after its walk
+    measurement and the committed pin rode +132 lines stale;
+    measurement-last discipline: pin = live walk = page render,
+    re-verified over the rewritten ledger. */
+export const SHIPPED_SOURCE_LINES = 589961;
 
 /*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
     +3,422 the counted delta (the workflow package + the route family
