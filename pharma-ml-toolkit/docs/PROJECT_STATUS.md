@@ -1461,7 +1461,45 @@ summarises them and wins any status disagreement.
   opens the day the owner-side gates clear; the lane re-rides
   each continuation until then.
 
-## 7. Known limitations of this document
+## 7. The r358 clause (the M1 lane — the generic Multi-Response ML)
+
+- **Delivered (part17 §5, the campaign queue's M1 lane):**
+  `src/pharmaml/ml/multiresponse.py` — the generic multi-output
+  regression module (the strategy registry with each mechanism
+  STATED: the native 2-D families — PLS2, MultiTaskElasticNet/Lasso,
+  Ridge, OLS, KNN, the trees, MLP — the MultiOutputRegressor wrapper
+  and RegressorChain over a chosen base; the §5.4 input contract: ≥2
+  numeric targets, features, target weights, per-target scaling,
+  preprocessing, split/CV/group-aware split, sample-weight capability
+  stated per strategy; the complete_case and per_target missing lanes
+  with the `PerTargetMultiOutput` masked multi-task wrapper and the
+  usable-rows census; the §5.5 evaluation surface: per-target
+  R2/RMSE/MAE/MSE/explained variance with the test-row counts, the
+  uniform + user-weighted aggregates reported alongside, the bounded
+  residual samples, the target correlation matrix, the k-fold CV
+  over the same full leakage-safe procedure; the §5.6 persistence
+  contract — target names/order/units, the scaler metadata, the
+  feature names, the preprocessing, the estimator strategy +
+  hyperparameters, the split strategy, the seed, the per-target
+  metrics, the environment metadata) + `/api/v1/multiresponse`
+  (registry/train/predict/models — sync-only light compute, the
+  bundle registered in the session model store, the run recorded in
+  the §15.2 lineage) + the §5.7 frontend section (stage 20 inside the
+  EXISTING Machine Learning workspace — no tenth workspace) + the
+  §5.8 mandated test families.
+- **The gates this round:** the lane suites 38/38 (API) + 12/12 (the
+  drift guard) + the vitest lane 6/6 (the full frontend suite
+  300/300 over 34 files = the r357 pin 294/294 over 33 files +6/+1);
+  the collection **8,920/0/490 exact** [= the r357 pin 8,870/0/488 +
+  50 the lane / +2 files]; the OpenAPI contract **121 paths / 75
+  schemas** (117/73 + the M1 quartet) with `api.d.ts` re-grown and
+  the two path-count drift pins trued at source; ruff full-tree
+  clean, mypy src 302 clean, tsc clean, the production build green.
+  The version unchanged at 1.2.240 (no-silent-bumps; NO re-ship).
+  Counter 149 -> 150. The campaign's remaining lanes: **R1 the RSM
+  engine, G1 the remaining §3.2 UI consumers.**
+
+## 8. Known limitations of this document
 
 - Census/test numbers are as-of this round's runs; each round's ledger
   entries re-true them (the pins live in the web carrier

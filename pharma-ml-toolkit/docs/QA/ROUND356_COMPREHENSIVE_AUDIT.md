@@ -145,3 +145,36 @@ Content-Disposition injection via artifact filenames) FIXED at source
 with the 3/3 retest. The ZAP workflow itself honestly remains
 **NOT_EXECUTED** until its first runner firing. The remaining queue:
 M1, R1, G1.
+
+## 8. r358 dated addendum (the M1 lane's delivery — status truing, not history rewriting)
+
+The §5 row above and the queue's M1 entry describe the round-356
+truth and stand as the record. Two rounds later (2026-11-25, the
+interactive "Continue MASTER_PROMPT part17 / Then push" round): **M1
+the generic Multi-Response / Multi-Output ML is DELIVERED** —
+`src/pharmaml/ml/multiresponse.py` (the §5.3 strategy registry with
+each mechanism STATED — the native 2-D families, the
+MultiOutputRegressor wrapper with its per-target clones, the
+RegressorChain feed; the §5.4 input contract with the
+complete_case/per_target missing lanes, the per-target-rows
+`PerTargetMultiOutput` masked multi-task wrapper, group-aware split,
+sample-weight capability stated per strategy; the §5.5 evaluation
+surface — per-target R2/RMSE/MAE/MSE/explained variance with the
+uniform/weighted aggregates reported alongside, the bounded residual
+samples, the target correlation matrix, the k-fold CV over the same
+full procedure; the §5.6 persistence contract riding every bundle),
+`/api/v1/multiresponse` (registry/train/predict/models — the
+contract 117→121 paths / 73→75 schemas, `api.d.ts` re-grown), the §5.7
+frontend section (stage 20 inside the EXISTING Machine Learning
+workspace — no tenth workspace; the five typed service methods, the
+per-target metric cards, the correlation matrix, the
+predicted-vs-actual Plotly lane, the prediction table, the models
+comparison surface, the joblib export), and the §5.8 test families
+(`tests/api/test_multiresponse.py` 38/38 — PLS2, MultiOutputRegressor,
+RegressorChain, MultiTaskElasticNet, per-target missing, the
+target-scaler leakage discipline at the contract level, group-aware
+split, CV, aggregates, serialization/reload, prediction ordering,
+artifact export, contract, e2e; the vitest `MultiresponseLane` 6/6;
+the `tests/test_frontend_multiresponse.py` drift guard 12/12). The
+remaining queue: R1 (the RSM engine), G1 (the remaining §3.2 UI
+consumers).

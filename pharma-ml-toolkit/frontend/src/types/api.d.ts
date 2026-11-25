@@ -1425,6 +1425,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/multiresponse/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Models
+         * @description The session's multi-response models — the comparison surface.
+         */
+        get: operations["models_api_v1_multiresponse_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/multiresponse/predict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Predict */
+        post: operations["predict_api_v1_multiresponse_predict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/multiresponse/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registry */
+        get: operations["registry_api_v1_multiresponse_registry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/multiresponse/train": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Train */
+        post: operations["train_api_v1_multiresponse_train_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/pharmacogenomics/analyze": {
         parameters: {
             query?: never;
@@ -3237,6 +3308,18 @@ export interface components {
             /** Smiles */
             smiles: string;
         };
+        /**
+         * PredictMultiResponseRequest
+         * @description Inline rows -> multi-column predictions in the contract order.
+         */
+        PredictMultiResponseRequest: {
+            /** Model Id */
+            model_id: string;
+            /** Rows */
+            rows: {
+                [key: string]: unknown;
+            }[];
+        };
         /** PredictRequest */
         PredictRequest: {
             /** Dataset Id */
@@ -3817,6 +3900,76 @@ export interface components {
              * @default 0
              */
             seed: number;
+        };
+        /**
+         * TrainMultiResponseRequest
+         * @description The §5.4 input contract over a real frame.
+         *
+         *     ``dataset_id`` selects a registered typed dataset; leaving it None
+         *     rides the seeded SYNTHETIC demo frame (labelled).  Features and
+         *     >=2 numeric targets are the request's own column selections.  The
+         *     missing-value strategy, the split/CV configuration, per-target
+         *     scaling, preprocessing, the strategy key + its hyperparameters,
+         *     the sample-weight column, and the target-weight vector all ride
+         *     this one body -- each validated by the backend's own typed errors.
+         */
+        TrainMultiResponseRequest: {
+            /**
+             * Cv Folds
+             * @default 5
+             */
+            cv_folds: number;
+            /** Dataset Id */
+            dataset_id?: string | null;
+            /** Feature Columns */
+            feature_columns?: string[];
+            /** Group Column */
+            group_column?: string | null;
+            /**
+             * Missing
+             * @default complete_case
+             * @enum {string}
+             */
+            missing: "complete_case" | "per_target";
+            /** Params */
+            params?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Preprocess
+             * @default true
+             */
+            preprocess: boolean;
+            /**
+             * Random State
+             * @default 42
+             */
+            random_state: number;
+            /** Sample Weight Column */
+            sample_weight_column?: string | null;
+            /**
+             * Strategy
+             * @default ridge
+             */
+            strategy: string;
+            /** Target Columns */
+            target_columns?: string[];
+            /**
+             * Target Scaling
+             * @default false
+             */
+            target_scaling: boolean;
+            /** Target Units */
+            target_units?: {
+                [key: string]: string;
+            } | null;
+            /** Target Weights */
+            target_weights?: number[] | null;
+            /**
+             * Test Size
+             * @default 0.25
+             */
+            test_size: number;
         };
         /** TrainRequest */
         TrainRequest: {
@@ -6773,6 +6926,120 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    models_api_v1_multiresponse_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    predict_api_v1_multiresponse_predict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PredictMultiResponseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registry_api_v1_multiresponse_registry_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    train_api_v1_multiresponse_train_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrainMultiResponseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

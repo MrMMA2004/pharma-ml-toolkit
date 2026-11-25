@@ -31,6 +31,7 @@ from . import (
     ml,
     model_evaluation,
     multiobjective,
+    multiresponse,
     pharmacogenomics,
     pkpd,
     repurposing,
@@ -68,6 +69,9 @@ api_router.include_router(repurposing.router)
 api_router.include_router(drugresponse.router)
 api_router.include_router(pharmacogenomics.router)
 api_router.include_router(multiobjective.router)
+# part17 §5 (the campaign queue's M1 lane) — the generic
+# multi-response ML over pharmaml.ml.multiresponse.
+api_router.include_router(multiresponse.router)
 api_router.include_router(workflow.router)
 api_router.include_router(database.router)
 api_router.include_router(system.router)

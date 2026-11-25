@@ -17,6 +17,7 @@ import {
   Radar,
   Scale,
   SlidersHorizontal,
+  Sparkles,
   Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,10 @@ import {
   type MultiobjectiveOptimizeResponse,
   type MultiobjectiveRegistryResponse,
   type MultiobjectiveTrialRow,
+  type MultiresponseModelView,
+  type MultiresponsePredictResponse,
+  type MultiresponseRegistryResponse,
+  type MultiresponseTrainResponse,
   type PredictResponse,
   type PharmacogenomicsAnalyzeResponse,
   type PharmacogenomicsRegistryResponse,
@@ -899,6 +904,37 @@ export function MLPage() {
   const [moBusy, setMoBusy] = useState(false);
   const [moRegistry, setMoRegistry] = useState<MultiobjectiveRegistryResponse | null>(null);
 
+  // stage 20: the Multi-Response ML lane (part17 §5, the M1 lane —
+  // the generic multi-output regression over the REAL in-tree
+  // backend: the strategy registry with stated mechanisms, the
+  // split-first leakage-safe trainer, the per-target evaluation
+  // surface, the §5.6 persistence contract, predictions, export)
+  const [mrRegistry, setMrRegistry] = useState<MultiresponseRegistryResponse | null>(null);
+  const [mrStrategy, setMrStrategy] = useState("ridge");
+  const [mrBase, setMrBase] = useState("ridge");
+  const [mrMissing, setMrMissing] = useState<"complete_case" | "per_target">("complete_case");
+  const [mrFeatureColumns, setMrFeatureColumns] = useState<string[]>([]);
+  const [mrTargetColumns, setMrTargetColumns] = useState<string[]>([]);
+  const [mrDatasetId, setMrDatasetId] = useState<string | null>(null);
+  const [mrPreprocess, setMrPreprocess] = useState(true);
+  const [mrTargetScaling, setMrTargetScaling] = useState(false);
+  const [mrCvFolds, setMrCvFolds] = useState(3);
+  const [mrTestSize, setMrTestSize] = useState(0.25);
+  const [mrRandomState, setMrRandomState] = useState(42);
+  const [mrGroupColumn, setMrGroupColumn] = useState("");
+  const [mrWeightsText, setMrWeightsText] = useState("");
+  const [mrResult, setMrResult] = useState<MultiresponseTrainResponse | null>(null);
+  const [mrModels, setMrModels] = useState<readonly MultiresponseModelView[]>([]);
+  const [mrError, setMrError] = useState<string | null>(null);
+  const [mrBusy, setMrBusy] = useState(false);
+  const [mrPredictRowsText, setMrPredictRowsText] = useState("");
+  const [mrPredictModelId, setMrPredictModelId] = useState<string>("");
+  const [mrPredictResult, setMrPredictResult] = useState<MultiresponsePredictResponse | null>(null);
+  const [mrPredictError, setMrPredictError] = useState<string | null>(null);
+  const [mrPredictBusy, setMrPredictBusy] = useState(false);
+  const [mrExportArtifact, setMrExportArtifact] = useState<ArtifactView | null>(null);
+  const [mrResidualTarget, setMrResidualTarget] = useState<string | null>(null);
+
   // stage 17: the Workflow Builder lane (part13 Phase 6, §8 — the
   // construct/save/reproduce surface over the r322 in-tree engine:
   // templates, the editable spec, validation, sync + job runs, the
@@ -1103,6 +1139,37 @@ export function MLPage() {
       })
       .catch(() => {
         // the registry line stays absent — never a fabricated summary
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // the multiresponse registry loads once on mount (the §5 M1 lane's
+  // own vocabulary line + the session's trained multiresponse models —
+  // the comparison surface's initial fill)
+  useEffect(() => {
+    let cancelled = false;
+    mlApi
+      .multiresponseRegistry()
+      .then((response) => {
+        if (!cancelled) {
+          setMrRegistry(response);
+        }
+      })
+      .catch(() => {
+        // the registry line stays absent — never a fabricated summary
+      });
+    mlApi
+      .multiresponseModels()
+      .then((response) => {
+        if (!cancelled) {
+          setMrModels(response.models);
+        }
+      })
+      .catch(() => {
+        // the models list stays empty — the comparison surface fills
+        // after the first train
       });
     return () => {
       cancelled = true;
@@ -2019,6 +2086,160 @@ export function MLPage() {
       setMoBusy(false);
     }
   }, [moParams]);
+
+  // the Multi-Response lane handlers (part17 §5 — the M1 lane: every
+  // gate fires client-side BEFORE any request; the backend's own
+  // typed errors ride the banner verbatim after)
+  const mrSelectedStrategy = mrRegistry?.strategies.find((s) => s.key === mrStrategy) ?? null;
+
+  const handleMrTrain = useCallback(async () => {
+    if (mrFeatureColumns.length < 1) {
+      setMrResult(null);
+      setMrError("select at least one feature column (the route's own bound)");
+      return;
+    }
+    if (mrTargetColumns.length < 2) {
+      setMrResult(null);
+      setMrError("multi-response training needs at least 2 target columns (the route's own bound)");
+      return;
+    }
+    const overlap = mrFeatureColumns.filter((c) => mrTargetColumns.includes(c));
+    if (overlap.length > 0) {
+      setMrResult(null);
+      setMrError(`columns cannot be both feature and target: ${overlap.join(", ")}`);
+      return;
+    }
+    let targetWeights: number[] | null = null;
+    const weightsText = mrWeightsText.trim();
+    if (weightsText.length > 0) {
+      const parts = weightsText.split(",").map((piece) => piece.trim());
+      const parsed = parts.map((piece) => Number(piece));
+      if (parsed.some((v) => !Number.isFinite(v) || v < 0)) {
+        setMrResult(null);
+        setMrError("target weights must be non-negative numbers, comma-separated (the route's own rule)");
+        return;
+      }
+      if (parsed.length !== mrTargetColumns.length) {
+        setMrResult(null);
+        setMrError(
+          `target weights need one entry per selected target (${mrTargetColumns.length} selected, ${parsed.length} given)`,
+        );
+        return;
+      }
+      if (parsed.reduce((a, b) => a + b, 0) <= 0) {
+        setMrResult(null);
+        setMrError("target weights must not all be zero (the route's own rule)");
+        return;
+      }
+      targetWeights = parsed;
+    }
+    if (mrMissing === "per_target" && mrSelectedStrategy !== null && mrSelectedStrategy.mechanism !== "wrapper") {
+      setMrResult(null);
+      setMrError(
+        "per_target missing handling rides the multi_output wrapper mechanism only — a native/chain estimator needs the complete Y block (the registry's own rule)",
+      );
+      return;
+    }
+    setMrBusy(true);
+    setMrError(null);
+    try {
+      const params: Record<string, unknown> = {};
+      const spec = mrSelectedStrategy;
+      if (spec && (spec.mechanism === "wrapper" || spec.mechanism === "chain")) {
+        params.base = mrBase;
+      }
+      const response = await mlApi.multiresponseTrain({
+        dataset_id: mrDatasetId,
+        feature_columns: mrFeatureColumns,
+        target_columns: mrTargetColumns,
+        strategy: mrStrategy,
+        params: Object.keys(params).length > 0 ? params : null,
+        preprocess: mrPreprocess,
+        target_scaling: mrTargetScaling,
+        test_size: mrTestSize,
+        cv_folds: mrCvFolds,
+        missing: mrMissing,
+        group_column: mrGroupColumn.trim().length > 0 ? mrGroupColumn.trim() : null,
+        sample_weight_column: null,
+        target_weights: targetWeights,
+        random_state: mrRandomState,
+      });
+      setMrResult(response);
+      setMrResidualTarget(response.model.multiresponse.target_names[0] ?? null);
+      setMrPredictModelId(response.model.model_id);
+      const modelsResponse = await mlApi.multiresponseModels();
+      setMrModels(modelsResponse.models);
+    } catch (error) {
+      setMrResult(null);
+      setMrError(describeError(error));
+    } finally {
+      setMrBusy(false);
+    }
+  }, [
+    mrFeatureColumns,
+    mrTargetColumns,
+    mrMissing,
+    mrSelectedStrategy,
+    mrDatasetId,
+    mrStrategy,
+    mrBase,
+    mrPreprocess,
+    mrTargetScaling,
+    mrTestSize,
+    mrCvFolds,
+    mrGroupColumn,
+    mrWeightsText,
+    mrRandomState,
+  ]);
+
+  const handleMrPredict = useCallback(async () => {
+    const text = mrPredictRowsText.trim();
+    if (text.length === 0 || mrPredictModelId.length === 0) {
+      setMrPredictResult(null);
+      setMrPredictError("give a model id (a train above fills it) and rows as a JSON array");
+      return;
+    }
+    let rows: unknown;
+    try {
+      rows = JSON.parse(text);
+    } catch {
+      setMrPredictResult(null);
+      setMrPredictError("the rows must parse as JSON (an array of row objects)");
+      return;
+    }
+    if (!Array.isArray(rows) || rows.length === 0) {
+      setMrPredictResult(null);
+      setMrPredictError("the rows must be a non-empty JSON array of row objects");
+      return;
+    }
+    setMrPredictBusy(true);
+    setMrPredictError(null);
+    try {
+      const response = await mlApi.multiresponsePredict({
+        model_id: mrPredictModelId,
+        rows,
+      });
+      setMrPredictResult(response);
+    } catch (error) {
+      setMrPredictResult(null);
+      setMrPredictError(describeError(error));
+    } finally {
+      setMrPredictBusy(false);
+    }
+  }, [mrPredictRowsText, mrPredictModelId]);
+
+  const handleMrExport = useCallback(async () => {
+    const modelId = mrResult?.model.model_id;
+    if (modelId === undefined) {
+      return;
+    }
+    try {
+      const artifact = await mlApi.multiresponseExport(modelId);
+      setMrExportArtifact(artifact);
+    } catch (error) {
+      setMrError(describeError(error));
+    }
+  }, [mrResult]);
 
   // stage 17: the Workflow Builder handlers (§8's construct/save/
   // reproduce surface — every gate fires client-side BEFORE any
@@ -4845,6 +5066,620 @@ export function MLPage() {
 
       <StageHeader
         index={20}
+        title="Multi-Response Regression"
+        hint="the generic multi-output ML lane (part17 §5) — per-target metrics, the masked multi-task missing lane, ordered predictions"
+        icon={<Sparkles aria-hidden className="h-4 w-4" />}
+      >
+        <Card>
+          <CardContent>
+            <p className="text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              The part17 §5 (M1) lane over the REAL in-tree backend
+              (ml/multiresponse.py): the generic multi-target supervised
+              pipeline the domain lanes (drug-response, response models,
+              multi-objective HPO) never were — the strategy registry
+              with each mechanism STATED (native 2-D Y: PLS2 /
+              MultiTaskElasticNet / Ridge / KNN / trees / MLP; wrapper:
+              MultiOutputRegressor per-target clones — the only honest
+              route for SVR/GBR; chain: RegressorChain&apos;s
+              predicted-target feed), the split-first leakage-safe
+              trainer (feature preprocessing and per-target scalars fit
+              on the train partition only), the per-target evaluation
+              surface (R2 / RMSE / MAE / MSE / explained variance per
+              target — never hidden behind the uniform/weighted
+              aggregates reported alongside), the bounded residual
+              samples, the target correlation matrix, k-fold CV over the
+              same full procedure, the §5.6 persistence contract
+              riding every model, ordered multi-column predictions with
+              per-target inverse scaling, and the joblib export through
+              the REAL save_model lane. The per_target missing lane
+              rides the wrapper mechanism only — the masked multi-task
+              approach, implemented and tested; the seeded demo frame is
+              SYNTHETIC and labelled so wherever it travels.
+            </p>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                strategy
+                <select
+                  value={mrStrategy}
+                  onChange={(event) => setMrStrategy(event.target.value)}
+                  aria-label="multiresponse strategy"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  {(mrRegistry?.strategies ?? []).map((s) => (
+                    <option key={s.key} value={s.key}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {mrSelectedStrategy !== null &&
+              (mrSelectedStrategy.mechanism === "wrapper" ||
+                mrSelectedStrategy.mechanism === "chain") ? (
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  base estimator (per-target clone source)
+                  <select
+                    value={mrBase}
+                    onChange={(event) => setMrBase(event.target.value)}
+                    aria-label="multiresponse base estimator"
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                  >
+                    {mrSelectedStrategy.base_keys.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                missing-value strategy
+                <select
+                  value={mrMissing}
+                  onChange={(event) =>
+                    setMrMissing(
+                      event.target.value as
+                        | "complete_case"
+                        | "per_target",
+                    )
+                  }
+                  aria-label="multiresponse missing strategy"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  <option value="complete_case">
+                    complete_case (drop rows missing any target)
+                  </option>
+                  <option value="per_target">
+                    per_target (masked multi-task, wrapper only)
+                  </option>
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                dataset (empty = the seeded SYNTHETIC demo frame)
+                <select
+                  value={mrDatasetId ?? ""}
+                  onChange={(event) => {
+                    setMrDatasetId(event.target.value.length > 0 ? event.target.value : null);
+                    setMrFeatureColumns([]);
+                    setMrTargetColumns([]);
+                    setMrGroupColumn("");
+                  }}
+                  aria-label="multiresponse dataset"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  <option value="">demo (synthetic, 240x5+3)</option>
+                  {datasets.map((d) => (
+                    <option key={d.dataset_id} value={d.dataset_id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                cv folds
+                <input
+                  type="number"
+                  min={2}
+                  max={10}
+                  value={mrCvFolds}
+                  onChange={(event) => setMrCvFolds(Number(event.target.value))}
+                  aria-label="multiresponse cv folds"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                test size
+                <input
+                  type="number"
+                  min={0.05}
+                  max={0.9}
+                  step={0.05}
+                  value={mrTestSize}
+                  onChange={(event) => setMrTestSize(Number(event.target.value))}
+                  aria-label="multiresponse test size"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                random seed
+                <input
+                  type="number"
+                  min={0}
+                  max={2147483647}
+                  value={mrRandomState}
+                  onChange={(event) => setMrRandomState(Number(event.target.value))}
+                  aria-label="multiresponse random seed"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                group column (optional — group-aware split)
+                <input
+                  type="text"
+                  value={mrGroupColumn}
+                  onChange={(event) => setMrGroupColumn(event.target.value)}
+                  placeholder="e.g. batch"
+                  aria-label="multiresponse group column"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 font-mono text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                target weights (optional, comma-separated, one per target)
+                <input
+                  type="text"
+                  value={mrWeightsText}
+                  onChange={(event) => setMrWeightsText(event.target.value)}
+                  placeholder="e.g. 3, 1, 1"
+                  aria-label="multiresponse target weights"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 font-mono text-xs"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                <input
+                  type="checkbox"
+                  checked={mrPreprocess}
+                  onChange={(event) => setMrPreprocess(event.target.checked)}
+                  className="h-4 w-4"
+                  aria-label="multiresponse preprocess"
+                />
+                feature preprocessing (impute + scale)
+              </label>
+              <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                <input
+                  type="checkbox"
+                  checked={mrTargetScaling}
+                  onChange={(event) => setMrTargetScaling(event.target.checked)}
+                  className="h-4 w-4"
+                  aria-label="multiresponse target scaling"
+                />
+                per-target scaling (train-fit, inverse on predict)
+              </label>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div>
+                <p className="text-xs font-medium text-[var(--color-muted-foreground)]">
+                  feature columns (
+                  {mrFeatureColumns.length} selected)
+                </p>
+                <div className="mt-2 max-h-40 overflow-y-auto rounded-md border border-[var(--color-border)] p-2">
+                  {(mrDatasetId === null
+                    ? mrRegistry?.demo_dataset.features ?? []
+                    : datasets.find((d) => d.dataset_id === mrDatasetId)?.columns ?? []
+                  ).map((col) => (
+                    <label
+                      key={col}
+                      className="flex items-center gap-2 py-0.5 text-xs"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={mrFeatureColumns.includes(col)}
+                        onChange={(event) => {
+                          setMrFeatureColumns((prev) =>
+                            event.target.checked
+                              ? [...prev, col]
+                              : prev.filter((c) => c !== col),
+                          );
+                        }}
+                        aria-label={`feature column ${col}`}
+                      />
+                      {col}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-[var(--color-muted-foreground)]">
+                  target columns (
+                  {mrTargetColumns.length} selected, ≥ 2 required — the
+                  stable order is the selection order)
+                </p>
+                <div className="mt-2 max-h-40 overflow-y-auto rounded-md border border-[var(--color-border)] p-2">
+                  {(mrDatasetId === null
+                    ? mrRegistry?.demo_dataset.targets ?? []
+                    : datasets.find((d) => d.dataset_id === mrDatasetId)?.columns ?? []
+                  ).map((col) => (
+                    <label
+                      key={col}
+                      className="flex items-center gap-2 py-0.5 text-xs"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={mrTargetColumns.includes(col)}
+                        onChange={(event) => {
+                          setMrTargetColumns((prev) =>
+                            event.target.checked
+                              ? [...prev, col]
+                              : prev.filter((c) => c !== col),
+                          );
+                        }}
+                        aria-label={`target column ${col}`}
+                      />
+                      {col}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button
+                size="sm"
+                disabled={mrBusy || mrFeatureColumns.length < 1 || mrTargetColumns.length < 2}
+                onClick={() => void handleMrTrain()}
+              >
+                <Sparkles aria-hidden className="h-4 w-4" />
+                {mrBusy ? "Training…" : "Train the multi-response model"}
+              </Button>
+              <span className="text-xs text-[var(--color-muted-foreground)]">
+                {mrSelectedStrategy !== null
+                  ? `mechanism ${mrSelectedStrategy.mechanism} · ${
+                      mrSelectedStrategy.sample_weight_support
+                        ? "sample weights supported"
+                        : "no sample weights in its fit"
+                    }`
+                  : "the registry loads on mount"}
+              </span>
+            </div>
+            {mrError !== null ? (
+              <div className="mt-3">
+                <ErrorBanner message={mrError} />
+              </div>
+            ) : null}
+            {mrResult !== null ? (
+              <div className="mt-4 space-y-4">
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  {mrResult.provenance.source === "demo"
+                    ? "the seeded SYNTHETIC demo frame — every number is a model estimate over generated data, never an experimental fact"
+                    : `dataset ${mrResult.provenance.dataset_name}`}{" "}
+                  · split {mrResult.data.split.strategy} (
+                  {mrResult.data.split.train_rows} train /{" "}
+                  {mrResult.data.split.test_rows} test) · usable rows per
+                  target{" "}
+                  {Object.entries(mrResult.data.usable_rows_per_target)
+                    .map(([t, n]) => `${t}: ${n}`)
+                    .join(" · ")}{" "}
+                  · fit {mrResult.fit_seconds.toFixed(2)}s · model{" "}
+                  {mrResult.model.model_id} · run {mrResult.run_id}
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {Object.entries(mrResult.per_target_metrics).map(
+                    ([target, m]) => (
+                      <div
+                        key={target}
+                        className="rounded-md border border-[var(--color-border)] p-3"
+                      >
+                        <p className="font-mono text-xs font-semibold">
+                          {target}
+                        </p>
+                        <p className="mt-1 text-xs">
+                          R2{" "}
+                          <span className="font-mono">
+                            {m.r2.toFixed(3)}
+                          </span>{" "}
+                          · RMSE{" "}
+                          <span className="font-mono">
+                            {m.rmse.toFixed(3)}
+                          </span>{" "}
+                          · MAE{" "}
+                          <span className="font-mono">
+                            {m.mae.toFixed(3)}
+                          </span>
+                        </p>
+                        <p className="text-xs">
+                          MSE{" "}
+                          <span className="font-mono">
+                            {m.mse.toFixed(3)}
+                          </span>{" "}
+                          · explained var{" "}
+                          <span className="font-mono">
+                            {m.explained_variance.toFixed(3)}
+                          </span>{" "}
+                          · {m.n_test_rows} test rows
+                        </p>
+                      </div>
+                    ),
+                  )}
+                </div>
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  aggregates — uniform: R2{" "}
+                  <span className="font-mono">
+                    {mrResult.aggregate_metrics.uniform.r2?.toFixed(3)}
+                  </span>{" "}
+                  RMSE{" "}
+                  <span className="font-mono">
+                    {mrResult.aggregate_metrics.uniform.rmse?.toFixed(3)}
+                  </span>{" "}
+                  · weighted: R2{" "}
+                  <span className="font-mono">
+                    {mrResult.aggregate_metrics.weighted.r2?.toFixed(3)}
+                  </span>{" "}
+                  RMSE{" "}
+                  <span className="font-mono">
+                    {mrResult.aggregate_metrics.weighted.rmse?.toFixed(3)}
+                  </span>{" "}
+                  · CV{" "}
+                  {Object.entries(mrResult.cv.per_target)
+                    .map(
+                      ([t, c]) =>
+                        `${t}: ${c.r2_mean.toFixed(3)}±${c.r2_std.toFixed(3)}`,
+                    )
+                    .join(" · ")}{" "}
+                  (the aggregate rides alongside, never instead — a weak
+                  target cannot hide)
+                </p>
+                <div>
+                  <p className="text-xs font-medium text-[var(--color-muted-foreground)]">
+                    target correlation matrix (complete-case Pearson)
+                  </p>
+                  <table className="mt-1 w-full text-xs">
+                    <thead>
+                      <tr>
+                        <th className="text-left font-medium"> </th>
+                        {Object.keys(mrResult.target_correlation_matrix).map(
+                          (t) => (
+                            <th key={t} className="text-left font-medium">
+                              {t}
+                            </th>
+                          ),
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(mrResult.target_correlation_matrix).map(
+                        ([row, cells]) => (
+                          <tr key={row}>
+                            <td className="font-mono">{row}</td>
+                            {Object.entries(cells).map(([col, v]) => (
+                              <td key={col} className="font-mono">
+                                {v === null ? "null" : v.toFixed(2)}
+                              </td>
+                            ))}
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs font-medium text-[var(--color-muted-foreground)]">
+                      predicted vs actual (residual analysis, per target)
+                    </p>
+                    <select
+                      value={mrResidualTarget ?? ""}
+                      onChange={(event) =>
+                        setMrResidualTarget(event.target.value)
+                      }
+                      aria-label="multiresponse residual target"
+                      className="rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                    >
+                      {Object.keys(mrResult.residuals.per_target).map(
+                        (t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </div>
+                  {mrResidualTarget !== null &&
+                  mrResult.residuals.per_target[mrResidualTarget] !==
+                    undefined ? (
+                    <PlotlyFigure
+                      ariaLabel={`predicted versus actual scatter for ${mrResidualTarget}`}
+                      height={260}
+                      data={[
+                        {
+                          type: "scattergl",
+                          mode: "markers",
+                          name: mrResidualTarget,
+                          x: mrResult.residuals.per_target[
+                            mrResidualTarget
+                          ].actual,
+                          y: mrResult.residuals.per_target[
+                            mrResidualTarget
+                          ].predicted,
+                          marker: { size: 5 },
+                        },
+                        {
+                          type: "scattergl",
+                          mode: "lines",
+                          name: "y = x",
+                          x: mrResult.residuals.per_target[
+                            mrResidualTarget
+                          ].actual,
+                          y: mrResult.residuals.per_target[
+                            mrResidualTarget
+                          ].actual,
+                          line: { dash: "dot" },
+                        },
+                      ]}
+                    />
+                  ) : null}
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                    {mrResidualTarget !== null &&
+                    mrResult.residuals.per_target[mrResidualTarget] !==
+                      undefined
+                      ? `${mrResidualTarget}: ${mrResult.residuals.per_target[mrResidualTarget].n_sampled} of ${mrResult.residuals.per_target[mrResidualTarget].n_rows} test rows sampled (the bound is ${mrResult.residuals.max_rows}, reported — never silent)`
+                      : null}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button size="sm" variant="outline" onClick={() => void handleMrExport()}>
+                    <ArrowDownToLine aria-hidden className="h-4 w-4" />
+                    Export the model (joblib artifact)
+                  </Button>
+                  {mrExportArtifact !== null ? (
+                    <span className="text-xs text-[var(--color-muted-foreground)]">
+                      artifact {mrExportArtifact.artifact_id} ·{" "}
+                      {mrExportArtifact.filename} ·{" "}
+                      {mrExportArtifact.size_bytes.toLocaleString()} bytes
+                      (digest-verified download below)
+                    </span>
+                  ) : null}
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-[var(--color-muted-foreground)]">
+                    predictions (the STABLE contract target order, raw
+                    units) — rows as a JSON array
+                  </p>
+                  <textarea
+                    value={mrPredictRowsText}
+                    onChange={(event) =>
+                      setMrPredictRowsText(event.target.value)
+                    }
+                    aria-label="multiresponse predict rows"
+                    placeholder={JSON.stringify(
+                      [
+                        {
+                          x1: 0.5,
+                          x2: -0.3,
+                          x3: 1.0,
+                          x4: 0.0,
+                          x5: -1.2,
+                        },
+                      ],
+                    )}
+                    rows={3}
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-2 font-mono text-xs"
+                  />
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      value={mrPredictModelId}
+                      onChange={(event) =>
+                        setMrPredictModelId(event.target.value)
+                      }
+                      aria-label="multiresponse predict model id"
+                      placeholder="model id (a train above fills it)"
+                      className="w-56 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 font-mono text-xs"
+                    />
+                    <Button
+                      size="sm"
+                      disabled={mrPredictBusy}
+                      onClick={() => void handleMrPredict()}
+                    >
+                      {mrPredictBusy ? "Predicting…" : "Predict"}
+                    </Button>
+                  </div>
+                  {mrPredictError !== null ? (
+                    <div className="mt-2">
+                      <ErrorBanner message={mrPredictError} />
+                    </div>
+                  ) : null}
+                  {mrPredictResult !== null ? (
+                    <div className="mt-2 max-h-48 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr>
+                            <th className="text-left font-medium">#</th>
+                            {mrPredictResult.target_names.map((t) => (
+                              <th key={t} className="text-left font-medium">
+                                {t}
+                                {mrPredictResult.target_units[t] !==
+                                undefined
+                                  ? ` (${mrPredictResult.target_units[t]})`
+                                  : ""}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {mrPredictResult.predictions.map((row, i) => (
+                            <tr key={i}>
+                              <td className="font-mono">{i}</td>
+                              {mrPredictResult.target_names.map((t) => (
+                                <td key={t} className="font-mono">
+                                  {(row[t] ?? 0).toFixed(3)}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+            {mrModels.length > 0 ? (
+              <div className="mt-4">
+                <p className="text-xs font-medium text-[var(--color-muted-foreground)]">
+                  the session&apos;s multi-response models — the
+                  comparison surface (per-target R2 side by side)
+                </p>
+                <div className="mt-1 max-h-48 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr>
+                        <th className="text-left font-medium">model</th>
+                        <th className="text-left font-medium">strategy</th>
+                        <th className="text-left font-medium">targets</th>
+                        <th className="text-left font-medium">
+                          per-target R2
+                        </th>
+                        <th className="text-left font-medium">uniform R2</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mrModels.map((m) => (
+                        <tr key={m.model_id}>
+                          <td className="font-mono">{m.model_id}</td>
+                          <td>
+                            {m.multiresponse.mechanism} ·{" "}
+                            {m.multiresponse.missing_strategy}
+                          </td>
+                          <td className="font-mono">
+                            {m.multiresponse.target_names.join(" | ")}
+                          </td>
+                          <td className="font-mono">
+                            {m.multiresponse.per_target_metrics !== null
+                              ? Object.entries(
+                                  m.multiresponse.per_target_metrics,
+                                )
+                                  .map(([t, v]) => `${t}: ${v.r2.toFixed(3)}`)
+                                  .join(" · ")
+                              : "null"}
+                          </td>
+                          <td className="font-mono">
+                            {m.multiresponse.aggregate_metrics?.uniform.r2 !==
+                            undefined
+                              ? m.multiresponse.aggregate_metrics.uniform.r2.toFixed(
+                                  3,
+                                )
+                              : "null"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      </StageHeader>
+
+      <StageHeader
+        index={21}
         title="Export"
         hint="a registered table artifact + a digest-verified download"
         icon={<ArrowDownToLine aria-hidden className="h-4 w-4" />}

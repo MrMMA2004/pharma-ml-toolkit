@@ -1290,6 +1290,182 @@ export interface MultiobjectiveOptimizeResponse {
   readonly note: string;
 }
 
+// -- the generic multi-response ML lane (part17 §5 — the M1 lane) ------
+
+/** One strategy row of the multiresponse registry (the mechanism is
+ * stated per strategy, never implied). */
+export interface MultiresponseStrategy {
+  readonly key: string;
+  readonly label: string;
+  readonly mechanism: "native" | "wrapper" | "chain";
+  readonly native_multi_output: boolean;
+  readonly sample_weight_support: boolean;
+  readonly notes: string;
+  readonly base_keys: readonly string[];
+  readonly default_base: string | null;
+}
+
+/** `GET /api/v1/multiresponse/registry` — the vocabulary answer. */
+export interface MultiresponseRegistryResponse {
+  readonly strategies: readonly MultiresponseStrategy[];
+  readonly missing_strategies: Readonly<
+    Record<string, {
+      readonly label: string;
+      readonly description: string;
+      readonly mechanisms: readonly string[];
+    }>
+  >;
+  readonly metrics: readonly string[];
+  readonly max_sample_rows: number;
+  readonly demo_dataset: {
+    readonly features: readonly string[];
+    readonly targets: readonly string[];
+    readonly n_rows: number;
+    readonly synthetic: boolean;
+    readonly seed: number;
+    readonly note: string;
+  };
+  readonly bounds: Readonly<Record<string, number | readonly number[]>>;
+  readonly scope_statement: string;
+}
+
+/** One per-target metric block (R2/RMSE/MAE/MSE/explained variance,
+ * each with its own test-row count — never hidden behind the
+ * aggregate). */
+export interface MultiresponsePerTargetMetrics {
+  readonly r2: number;
+  readonly rmse: number;
+  readonly mae: number;
+  readonly mse: number;
+  readonly explained_variance: number;
+  readonly n_test_rows: number;
+}
+
+/** One target's residual sample (bounded, the bound reported). */
+export interface MultiresponseResidualBlock {
+  readonly actual: readonly number[];
+  readonly predicted: readonly number[];
+  readonly residual: readonly number[];
+  readonly n_rows: number;
+  readonly n_sampled: number;
+}
+
+/** `POST /api/v1/multiresponse/train` — the round-trip answer. */
+export interface MultiresponseTrainResponse {
+  readonly model: MultiresponseModelView;
+  readonly run_id: string;
+  readonly provenance: {
+    readonly source: string;
+    readonly dataset_id: string | null;
+    readonly dataset_name: string;
+    readonly synthetic: boolean;
+    readonly note?: string;
+  };
+  readonly configuration: {
+    readonly strategy: string;
+    readonly mechanism: string;
+    readonly params: Readonly<Record<string, unknown>>;
+    readonly preprocess: boolean;
+    readonly target_scaling: boolean;
+    readonly test_size: number;
+    readonly cv_folds: number;
+    readonly missing: string;
+    readonly group_column: string | null;
+    readonly sample_weight_column: string | null;
+    readonly target_weights: readonly number[] | null;
+    readonly random_state: number;
+  };
+  readonly data: {
+    readonly n_rows: number;
+    readonly usable_rows_per_target: Readonly<Record<string, number>>;
+    readonly missing_counts_per_target: Readonly<Record<string, number>>;
+    readonly dropped_train_rows: number;
+    readonly split: {
+      readonly strategy: string;
+      readonly train_rows: number;
+      readonly test_rows: number;
+      readonly n_train_groups: number | null;
+      readonly n_test_groups: number | null;
+      readonly group_overlap: readonly string[];
+      readonly test_size: number;
+      readonly random_state: number;
+    };
+  };
+  readonly per_target_metrics: Readonly<
+    Record<string, MultiresponsePerTargetMetrics>
+  >;
+  readonly aggregate_metrics: {
+    readonly uniform: Readonly<Record<string, number>>;
+    readonly weighted: Readonly<Record<string, number>>;
+  };
+  readonly residuals: {
+    readonly per_target: Readonly<
+      Record<string, MultiresponseResidualBlock>
+    >;
+    readonly max_rows: number;
+  };
+  readonly target_correlation_matrix: Readonly<
+    Record<string, Readonly<Record<string, number | null>>>
+  >;
+  readonly cv: {
+    readonly folds: number;
+    readonly per_target: Readonly<
+      Record<string, {
+        readonly r2_mean: number;
+        readonly r2_std: number;
+        readonly r2_folds: readonly number[];
+      }>
+    >;
+    readonly aggregate: {
+      readonly r2_uniform: number;
+      readonly r2_weighted: number;
+    };
+    readonly folds_table: readonly Record<string, number>[];
+  };
+  readonly contract: Readonly<Record<string, unknown>>;
+  readonly fit_seconds: number;
+  readonly max_sample_rows: number;
+}
+
+/** One trained multiresponse model's view (the comparison surface). */
+export interface MultiresponseModelView {
+  readonly model_id: string;
+  readonly name: string;
+  readonly task: string;
+  readonly dataset_id: string | null;
+  readonly target: string;
+  readonly features: readonly string[];
+  readonly n_train_rows: number;
+  readonly cv_mean: number | null;
+  readonly fit_seconds: number;
+  readonly created_at: string;
+  readonly multiresponse: {
+    readonly target_names: readonly string[];
+    readonly target_order: readonly string[];
+    readonly mechanism: string;
+    readonly missing_strategy: string;
+    readonly per_target_metrics:
+      | Readonly<Record<string, MultiresponsePerTargetMetrics>>
+      | null;
+    readonly aggregate_metrics: {
+      readonly uniform: Readonly<Record<string, number>>;
+      readonly weighted: Readonly<Record<string, number>>;
+    } | null;
+    readonly n_test_rows: number | null;
+  };
+}
+
+/** `POST /api/v1/multiresponse/predict` — the ordered prediction
+ * answer (the STABLE contract target order). */
+export interface MultiresponsePredictResponse {
+  readonly model_id: string;
+  readonly target_names: readonly string[];
+  readonly target_units: Readonly<Record<string, string>>;
+  readonly predictions: readonly Readonly<Record<string, number>>[];
+  readonly n_rows: number;
+  readonly note: string;
+}
+
 // -- the workflow engine lane (part13 Phase 6, §8 — the round-323 GUI
 // leg over the r322 /api/v1/workflow family) --------------------------
 
@@ -2033,6 +2209,105 @@ export const mlApi = {
       raw,
       "multiobjective optimize",
     );
+  },
+
+  /**
+   * `GET /api/v1/multiresponse/registry` — the generic multi-response
+   * lane's own vocabulary (part17 §5, the M1 lane): the strategy
+   * registry with each mechanism STATED (native 2-D Y / wrapper
+   * per-target clones / chain's predicted-target feed), the
+   * missing-value strategy lanes (complete_case always; per_target
+   * the wrapper's masked multi-task), the metric names, the seeded
+   * SYNTHETIC demo dataset descriptor, the bounds, and the honest
+   * scope statement.
+   */
+  async multiresponseRegistry(): Promise<MultiresponseRegistryResponse> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/multiresponse/registry",
+    );
+    return parseMultiresponseRegistryResponse(
+      raw,
+      "multiresponse registry",
+    );
+  },
+
+  /**
+   * `POST /api/v1/multiresponse/train` — the full round trip over the
+   * real backend (sync-only light compute): a registered typed
+   * dataset or the seeded SYNTHETIC demo frame, the request's own
+   * feature and >=2 target column selections, the split-first
+   * leakage-safe trainer, the per-target metrics (never hidden
+   * behind the uniform/weighted aggregates reported alongside), the
+   * bounded residual samples, the target correlation matrix, the
+   * k-fold CV summary, and the complete §5.6 training contract; the
+   * fitted bundle registers in the session model store and the run
+   * records in the §15.2 lineage.
+   */
+  async multiresponseTrain(
+    params: Record<string, unknown>,
+  ): Promise<MultiresponseTrainResponse> {
+    const raw = (await api.post(
+      "/api/v1/multiresponse/train",
+      params,
+    )) as Record<string, unknown>;
+    return parseMultiresponseTrainResponse(
+      raw,
+      "multiresponse train",
+    );
+  },
+
+  /**
+   * `POST /api/v1/multiresponse/predict` — multi-column predictions
+   * in the STABLE contract target order with per-target inverse
+   * scaling (raw units), from inline rows.
+   */
+  async multiresponsePredict(
+    params: Record<string, unknown>,
+  ): Promise<MultiresponsePredictResponse> {
+    const raw = (await api.post(
+      "/api/v1/multiresponse/predict",
+      params,
+    )) as Record<string, unknown>;
+    return parseMultiresponsePredictResponse(
+      raw,
+      "multiresponse predict",
+    );
+  },
+
+  /**
+   * `GET /api/v1/multiresponse/models` — the session's multi-response
+   * models (the comparison surface: per-target metric blocks side
+   * by side).
+   */
+  async multiresponseModels(): Promise<{
+    models: readonly MultiresponseModelView[];
+    metrics: readonly string[];
+  }> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/multiresponse/models",
+    );
+    return parseMultiresponseModelsResponse(raw, "multiresponse models");
+  },
+
+  /**
+   * `POST /api/v1/artifacts/model` — the multiresponse lane's export:
+   * the trained MultiResponseBundle persisted through the REAL
+   * `save_model` as a digest-verified joblib artifact (an independent
+   * copy that outlives the model; the reload path is the house
+   * `load_model`).
+   */
+  async multiresponseExport(
+    modelId: string,
+  ): Promise<ArtifactView> {
+    const raw = (await api.post(
+      "/api/v1/artifacts/model",
+      { model_id: modelId, filename: `multiresponse-${modelId}` },
+    )) as Record<string, unknown>;
+    const artifact = raw["artifact"];
+    if (typeof artifact !== "object" || artifact === null) {
+      throw new Error("the model lane answered without an artifact");
+    }
+    return parseArtifactView(artifact, "multiresponse model artifact");
   },
 
   /**
@@ -4094,6 +4369,488 @@ function parseMultiobjectiveOptimizeResponse(
     provenance: parseMultiobjectiveProvenance(r["provenance"], what),
     timings_note: asString(r["timings_note"]) ?? "",
     note: asString(r["note"]) ?? "",
+  };
+}
+
+// -- the multiresponse lane parsers (part17 §5 — the M1 lane;
+// row-validated, never trusted) ------------------------------------------
+
+/** Narrow one strategy row of the multiresponse registry. */
+function parseMultiresponseStrategy(
+  raw: unknown,
+  what: string,
+): MultiresponseStrategy {
+  const r = expectObject(raw, what);
+  const key = r["key"];
+  const label = r["label"];
+  const mechanism = r["mechanism"];
+  if (
+    typeof key !== "string" ||
+    typeof label !== "string" ||
+    typeof mechanism !== "string" ||
+    !["native", "wrapper", "chain"].includes(mechanism)
+  ) {
+    throw new Error(`${what}: key/label/mechanism are not the registry shape`);
+  }
+  return {
+    key,
+    label,
+    mechanism: mechanism as MultiresponseStrategy["mechanism"],
+    native_multi_output: r["native_multi_output"] === true,
+    sample_weight_support: r["sample_weight_support"] === true,
+    notes: asString(r["notes"]) ?? "",
+    base_keys: Array.isArray(r["base_keys"])
+      ? (r["base_keys"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
+    default_base: asString(r["default_base"]),
+  };
+}
+
+/** Narrow one per-target metric block. */
+function parseMultiresponsePerTargetMetrics(
+  raw: unknown,
+  what: string,
+): MultiresponsePerTargetMetrics {
+  const r = expectObject(raw, what);
+  return {
+    r2: asNumber(r["r2"]) ?? 0,
+    rmse: asNumber(r["rmse"]) ?? 0,
+    mae: asNumber(r["mae"]) ?? 0,
+    mse: asNumber(r["mse"]) ?? 0,
+    explained_variance: asNumber(r["explained_variance"]) ?? 0,
+    n_test_rows: asNumber(r["n_test_rows"]) ?? 0,
+  };
+}
+
+/** Narrow the multiresponse model view (the comparison surface row). */
+function parseMultiresponseModelView(
+  raw: unknown,
+  what: string,
+): MultiresponseModelView {
+  const r = expectObject(raw, what);
+  const mrRaw = expectObject(r["multiresponse"], `${what} multiresponse`);
+  const perTargetRaw = mrRaw["per_target_metrics"];
+  const aggRaw = mrRaw["aggregate_metrics"];
+  const perTarget: MultiresponseModelView["multiresponse"]["per_target_metrics"] =
+    perTargetRaw && typeof perTargetRaw === "object"
+      ? Object.fromEntries(
+          Object.entries(
+            perTargetRaw as Record<string, unknown>,
+          ).map(([name, row]) => [
+            name,
+            parseMultiresponsePerTargetMetrics(
+              row,
+              `${what} per_target_metrics ${name}`,
+            ),
+          ]),
+        )
+      : null;
+  const aggUniform: Record<string, number> = {};
+  const aggWeighted: Record<string, number> = {};
+  if (aggRaw && typeof aggRaw === "object") {
+    for (const [k, v] of Object.entries(aggRaw as Record<string, unknown>)) {
+      if (k === "uniform" && v && typeof v === "object") {
+        for (const [mk, mv] of Object.entries(v as Record<string, unknown>)) {
+          if (typeof mv === "number") aggUniform[mk] = mv;
+        }
+      }
+      if (k === "weighted" && v && typeof v === "object") {
+        for (const [mk, mv] of Object.entries(v as Record<string, unknown>)) {
+          if (typeof mv === "number") aggWeighted[mk] = mv;
+        }
+      }
+    }
+  }
+  const modelId = r["model_id"];
+  if (typeof modelId !== "string") {
+    throw new Error(`${what}: model_id is not a string`);
+  }
+  return {
+    model_id: modelId,
+    name: asString(r["name"]) ?? "",
+    task: asString(r["task"]) ?? "",
+    dataset_id: asString(r["dataset_id"]),
+    target: asString(r["target"]) ?? "",
+    features: Array.isArray(r["features"])
+      ? (r["features"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
+    n_train_rows: asNumber(r["n_train_rows"]) ?? 0,
+    cv_mean: asNumber(r["cv_mean"]),
+    fit_seconds: asNumber(r["fit_seconds"]) ?? 0,
+    created_at: asString(r["created_at"]) ?? "",
+    multiresponse: {
+      target_names: Array.isArray(mrRaw["target_names"])
+        ? (mrRaw["target_names"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      target_order: Array.isArray(mrRaw["target_order"])
+        ? (mrRaw["target_order"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      mechanism: asString(mrRaw["mechanism"]) ?? "",
+      missing_strategy: asString(mrRaw["missing_strategy"]) ?? "",
+      per_target_metrics: perTarget,
+      aggregate_metrics:
+        Object.keys(aggUniform).length > 0
+          ? { uniform: aggUniform, weighted: aggWeighted }
+          : null,
+      n_test_rows: asNumber(mrRaw["n_test_rows"]),
+    },
+  };
+}
+
+/** Narrow the registry answer. */
+function parseMultiresponseRegistryResponse(
+  raw: unknown,
+  what: string,
+): MultiresponseRegistryResponse {
+  const r = expectObject(raw, what);
+  const demoRaw = expectObject(r["demo_dataset"], `${what} demo_dataset`);
+  const strategiesRaw = Array.isArray(r["strategies"])
+    ? (r["strategies"] as unknown[])
+    : [];
+  const missingRaw =
+    r["missing_strategies"] && typeof r["missing_strategies"] === "object"
+      ? (r["missing_strategies"] as Record<string, unknown>)
+      : {};
+  const missing: MultiresponseRegistryResponse["missing_strategies"] =
+    Object.fromEntries(
+      Object.entries(missingRaw).map(([name, block]) => {
+        const b = expectObject(block, `${what} missing_strategies ${name}`);
+        return [
+          name,
+          {
+            label: asString(b["label"]) ?? "",
+            description: asString(b["description"]) ?? "",
+            mechanisms: Array.isArray(b["mechanisms"])
+              ? (b["mechanisms"] as unknown[]).filter(
+                  (v): v is string => typeof v === "string",
+                )
+              : [],
+          },
+        ];
+      }),
+    );
+  const bounds: Record<string, number | readonly number[]> = {};
+  if (r["bounds"] && typeof r["bounds"] === "object") {
+    for (const [k, v] of Object.entries(
+      r["bounds"] as Record<string, unknown>,
+    )) {
+      if (typeof v === "number") bounds[k] = v;
+      else if (Array.isArray(v)) bounds[k] = v.filter((n): n is number => typeof n === "number");
+    }
+  }
+  return {
+    strategies: strategiesRaw.map((row, i) =>
+      parseMultiresponseStrategy(row, `${what} strategies[${i}]`),
+    ),
+    missing_strategies: missing,
+    metrics: Array.isArray(r["metrics"])
+      ? (r["metrics"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
+    max_sample_rows: asNumber(r["max_sample_rows"]) ?? 0,
+    demo_dataset: {
+      features: Array.isArray(demoRaw["features"])
+        ? (demoRaw["features"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      targets: Array.isArray(demoRaw["targets"])
+        ? (demoRaw["targets"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      n_rows: asNumber(demoRaw["n_rows"]) ?? 0,
+      synthetic: demoRaw["synthetic"] === true,
+      seed: asNumber(demoRaw["seed"]) ?? 0,
+      note: asString(demoRaw["note"]) ?? "",
+    },
+    bounds,
+    scope_statement: asString(r["scope_statement"]) ?? "",
+  };
+}
+
+/** Narrow the train answer (the full §5.4/§5.5/§5.6 round trip). */
+function parseMultiresponseTrainResponse(
+  raw: unknown,
+  what: string,
+): MultiresponseTrainResponse {
+  const r = expectObject(raw, what);
+  const model = parseMultiresponseModelView(r["model"], `${what} model`);
+  const provRaw = expectObject(r["provenance"], `${what} provenance`);
+  const cfgRaw = expectObject(r["configuration"], `${what} configuration`);
+  const dataRaw = expectObject(r["data"], `${what} data`);
+  const splitRaw = expectObject(dataRaw["split"], `${what} data.split`);
+  const perTargetRaw = expectObject(
+    r["per_target_metrics"],
+    `${what} per_target_metrics`,
+  );
+  const aggRaw = expectObject(
+    r["aggregate_metrics"],
+    `${what} aggregate_metrics`,
+  );
+  const resRaw = expectObject(r["residuals"], `${what} residuals`);
+  const resPerRaw =
+    resRaw["per_target"] && typeof resRaw["per_target"] === "object"
+      ? (resRaw["per_target"] as Record<string, unknown>)
+      : {};
+  const corrRaw =
+    r["target_correlation_matrix"] &&
+    typeof r["target_correlation_matrix"] === "object"
+      ? (r["target_correlation_matrix"] as Record<string, unknown>)
+      : {};
+  const corr: MultiresponseTrainResponse["target_correlation_matrix"] =
+    Object.fromEntries(
+      Object.entries(corrRaw).map(([col, row]) => {
+        const rowObj =
+          row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+        return [
+          col,
+          Object.fromEntries(
+            Object.entries(rowObj).map(([k, v]) => [
+              k,
+              typeof v === "number" ? v : null,
+            ]),
+          ),
+        ];
+      }),
+    );
+  const cvRaw = expectObject(r["cv"], `${what} cv`);
+  const cvPerRaw =
+    cvRaw["per_target"] && typeof cvRaw["per_target"] === "object"
+      ? (cvRaw["per_target"] as Record<string, unknown>)
+      : {};
+  const aggUniform: Record<string, number> = {};
+  const aggWeighted: Record<string, number> = {};
+  for (const [k, v] of Object.entries(aggRaw)) {
+    if (k === "uniform" && v && typeof v === "object") {
+      for (const [mk, mv] of Object.entries(v as Record<string, unknown>)) {
+        if (typeof mv === "number") aggUniform[mk] = mv;
+      }
+    }
+    if (k === "weighted" && v && typeof v === "object") {
+      for (const [mk, mv] of Object.entries(v as Record<string, unknown>)) {
+        if (typeof mv === "number") aggWeighted[mk] = mv;
+      }
+    }
+  }
+  const usable: Record<string, number> = {};
+  const missingCounts: Record<string, number> = {};
+  for (const [k, v] of Object.entries(
+    expectObject(dataRaw["usable_rows_per_target"], `${what} usable`),
+  )) {
+    if (typeof v === "number") usable[k] = v;
+  }
+  for (const [k, v] of Object.entries(
+    expectObject(
+      dataRaw["missing_counts_per_target"],
+      `${what} missing_counts`,
+    ),
+  )) {
+    if (typeof v === "number") missingCounts[k] = v;
+  }
+  return {
+    model,
+    run_id: asString(r["run_id"]) ?? "",
+    provenance: {
+      source: asString(provRaw["source"]) ?? "",
+      dataset_id: asString(provRaw["dataset_id"]),
+      dataset_name: asString(provRaw["dataset_name"]) ?? "",
+      synthetic: provRaw["synthetic"] === true,
+      note: asString(provRaw["note"]) ?? undefined,
+    },
+    configuration: {
+      strategy: asString(cfgRaw["strategy"]) ?? "",
+      mechanism: asString(cfgRaw["mechanism"]) ?? "",
+      params: (cfgRaw["params"] && typeof cfgRaw["params"] === "object"
+        ? cfgRaw["params"]
+        : {}) as Record<string, unknown>,
+      preprocess: cfgRaw["preprocess"] === true,
+      target_scaling: cfgRaw["target_scaling"] === true,
+      test_size: asNumber(cfgRaw["test_size"]) ?? 0.25,
+      cv_folds: asNumber(cfgRaw["cv_folds"]) ?? 5,
+      missing: asString(cfgRaw["missing"]) ?? "complete_case",
+      group_column: asString(cfgRaw["group_column"]),
+      sample_weight_column: asString(cfgRaw["sample_weight_column"]),
+      target_weights: Array.isArray(cfgRaw["target_weights"])
+        ? (cfgRaw["target_weights"] as unknown[]).filter(
+            (v): v is number => typeof v === "number",
+          )
+        : null,
+      random_state: asNumber(cfgRaw["random_state"]) ?? 42,
+    },
+    data: {
+      n_rows: asNumber(dataRaw["n_rows"]) ?? 0,
+      usable_rows_per_target: usable,
+      missing_counts_per_target: missingCounts,
+      dropped_train_rows: asNumber(dataRaw["dropped_train_rows"]) ?? 0,
+      split: {
+        strategy: asString(splitRaw["strategy"]) ?? "",
+        train_rows: asNumber(splitRaw["train_rows"]) ?? 0,
+        test_rows: asNumber(splitRaw["test_rows"]) ?? 0,
+        n_train_groups: asNumber(splitRaw["n_train_groups"]),
+        n_test_groups: asNumber(splitRaw["n_test_groups"]),
+        group_overlap: Array.isArray(splitRaw["group_overlap"])
+          ? (splitRaw["group_overlap"] as unknown[]).filter(
+              (v): v is string => typeof v === "string",
+            )
+          : [],
+        test_size: asNumber(splitRaw["test_size"]) ?? 0,
+        random_state: asNumber(splitRaw["random_state"]) ?? 0,
+      },
+    },
+    per_target_metrics: Object.fromEntries(
+      Object.entries(perTargetRaw).map(([name, row]) => [
+        name,
+        parseMultiresponsePerTargetMetrics(
+          row,
+          `${what} per_target_metrics ${name}`,
+        ),
+      ]),
+    ),
+    aggregate_metrics: { uniform: aggUniform, weighted: aggWeighted },
+    residuals: {
+      per_target: Object.fromEntries(
+        Object.entries(resPerRaw).map(([name, row]) => {
+          const b = expectObject(row, `${what} residuals ${name}`);
+          const nums = (key: string): number[] =>
+            Array.isArray(b[key])
+              ? (b[key] as unknown[]).filter(
+                  (v): v is number => typeof v === "number",
+                )
+              : [];
+          return [
+            name,
+            {
+              actual: nums("actual"),
+              predicted: nums("predicted"),
+              residual: nums("residual"),
+              n_rows: asNumber(b["n_rows"]) ?? 0,
+              n_sampled: asNumber(b["n_sampled"]) ?? 0,
+            },
+          ];
+        }),
+      ),
+      max_rows: asNumber(resRaw["max_rows"]) ?? 0,
+    },
+    target_correlation_matrix: corr,
+    cv: {
+      folds: asNumber(cvRaw["folds"]) ?? 0,
+      per_target: Object.fromEntries(
+        Object.entries(cvPerRaw).map(([name, row]) => {
+          const b = expectObject(row, `${what} cv ${name}`);
+          return [
+            name,
+            {
+              r2_mean: asNumber(b["r2_mean"]) ?? 0,
+              r2_std: asNumber(b["r2_std"]) ?? 0,
+              r2_folds: Array.isArray(b["r2_folds"])
+                ? (b["r2_folds"] as unknown[]).filter(
+                    (v): v is number => typeof v === "number",
+                  )
+                : [],
+            },
+          ];
+        }),
+      ),
+      aggregate: {
+        r2_uniform: asNumber(
+          (cvRaw["aggregate"] && typeof cvRaw["aggregate"] === "object"
+            ? (cvRaw["aggregate"] as Record<string, unknown>)["r2_uniform"]
+            : null),
+        ) ?? 0,
+        r2_weighted: asNumber(
+          (cvRaw["aggregate"] && typeof cvRaw["aggregate"] === "object"
+            ? (cvRaw["aggregate"] as Record<string, unknown>)["r2_weighted"]
+            : null),
+        ) ?? 0,
+      },
+      folds_table: Array.isArray(cvRaw["folds_table"])
+        ? (cvRaw["folds_table"] as unknown[]).filter(
+            (v): v is Record<string, number> =>
+              typeof v === "object" && v !== null,
+          )
+        : [],
+    },
+    contract: (r["contract"] && typeof r["contract"] === "object"
+      ? r["contract"]
+      : {}) as Record<string, unknown>,
+    fit_seconds: asNumber(r["fit_seconds"]) ?? 0,
+    max_sample_rows: asNumber(r["max_sample_rows"]) ?? 0,
+  };
+}
+
+/** Narrow the predict answer. */
+function parseMultiresponsePredictResponse(
+  raw: unknown,
+  what: string,
+): MultiresponsePredictResponse {
+  const r = expectObject(raw, what);
+  const predictionsRaw = Array.isArray(r["predictions"])
+    ? (r["predictions"] as unknown[])
+    : [];
+  const units: Record<string, string> = {};
+  if (r["target_units"] && typeof r["target_units"] === "object") {
+    for (const [k, v] of Object.entries(
+      r["target_units"] as Record<string, unknown>,
+    )) {
+      if (typeof v === "string") units[k] = v;
+    }
+  }
+  return {
+    model_id: asString(r["model_id"]) ?? "",
+    target_names: Array.isArray(r["target_names"])
+      ? (r["target_names"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
+    target_units: units,
+    predictions: predictionsRaw.map((row, i) => {
+      const obj =
+        row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+      const out: Record<string, number> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (typeof v === "number") out[k] = v;
+      }
+      if (Object.keys(out).length === 0) {
+        throw new Error(`${what}: predictions[${i}] is not a numeric row`);
+      }
+      return out;
+    }),
+    n_rows: asNumber(r["n_rows"]) ?? 0,
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+/** Narrow the models listing answer. */
+function parseMultiresponseModelsResponse(
+  raw: unknown,
+  what: string,
+): {
+  models: readonly MultiresponseModelView[];
+  metrics: readonly string[];
+} {
+  const r = expectObject(raw, what);
+  const modelsRaw = Array.isArray(r["models"])
+    ? (r["models"] as unknown[])
+    : [];
+  return {
+    models: modelsRaw.map((row, i) =>
+      parseMultiresponseModelView(row, `${what} models[${i}]`),
+    ),
+    metrics: Array.isArray(r["metrics"])
+      ? (r["metrics"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
   };
 }
 

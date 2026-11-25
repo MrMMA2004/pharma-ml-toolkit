@@ -33,6 +33,24 @@ SECURITY_REMEDIATION_REGISTER), and the isolated ZAP lane
 `tools/zap_gate.py` + the suppression channel). The round's own find
 F-356-01 (the artifact-filename Content-Disposition injection) is
 FIXED+PINNED in the register.
+· **r358 addendum (part17 §5, the M1 lane):** the generic
+Multi-Response / Multi-Output ML capability row is BORN —
+`src/pharmaml/ml/multiresponse.py` (the strategy registry with each
+mechanism STATED — native 2-D Y / MultiOutputRegressor wrapper /
+RegressorChain feed, the split-first leakage-safe trainer, the
+per-target evaluation surface, the §5.6 persistence contract, the
+`PerTargetMultiOutput` masked multi-task wrapper) +
+`src/pharmaml/api/routes/multiresponse.py` (the four-path quartet:
+registry / train / predict / models — the contract 117→121 paths,
+73→75 schemas, `api.d.ts` re-grown) + the ML-workspace section
+(stage 20 inside the EXISTING Machine Learning workspace — no tenth
+workspace) + the five typed service methods + the vitest lane (6
+tests) + `tests/api/test_multiresponse.py` (38 tests: the mandated
+families — PLS2 / MultiOutputRegressor / RegressorChain /
+MultiTaskElasticNet / per-target missing / target-scaling leakage /
+group-aware split / CV / aggregates / serialization-reload /
+prediction ordering / artifact export / contract / e2e) + the
+`tests/test_frontend_multiresponse.py` drift guard (12 pins).
 **Spec:** MASTER_PROMPT part11_1 §21 —
 "Complete Backend–GUI Integration Audit" — with part11_2 §12's status labels.
 **Method:** every row below was derived live from the working tree — the 88

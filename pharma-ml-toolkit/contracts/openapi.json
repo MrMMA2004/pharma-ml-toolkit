@@ -2623,6 +2623,31 @@
         "title": "PoseRmsdRequest",
         "type": "object"
       },
+      "PredictMultiResponseRequest": {
+        "description": "Inline rows -> multi-column predictions in the contract order.",
+        "properties": {
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_id",
+          "rows"
+        ],
+        "title": "PredictMultiResponseRequest",
+        "type": "object"
+      },
       "PredictRequest": {
         "properties": {
           "dataset_id": {
@@ -3767,6 +3792,152 @@
           }
         },
         "title": "SyntheticRequest",
+        "type": "object"
+      },
+      "TrainMultiResponseRequest": {
+        "description": "The \u00a75.4 input contract over a real frame.\n\n``dataset_id`` selects a registered typed dataset; leaving it None\nrides the seeded SYNTHETIC demo frame (labelled).  Features and\n>=2 numeric targets are the request's own column selections.  The\nmissing-value strategy, the split/CV configuration, per-target\nscaling, preprocessing, the strategy key + its hyperparameters,\nthe sample-weight column, and the target-weight vector all ride\nthis one body -- each validated by the backend's own typed errors.",
+        "properties": {
+          "cv_folds": {
+            "default": 5,
+            "maximum": 10.0,
+            "minimum": 2.0,
+            "title": "Cv Folds",
+            "type": "integer"
+          },
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          },
+          "feature_columns": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Feature Columns",
+            "type": "array"
+          },
+          "group_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Column"
+          },
+          "missing": {
+            "default": "complete_case",
+            "enum": [
+              "complete_case",
+              "per_target"
+            ],
+            "title": "Missing",
+            "type": "string"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "maxProperties": 12,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
+          },
+          "preprocess": {
+            "default": true,
+            "title": "Preprocess",
+            "type": "boolean"
+          },
+          "random_state": {
+            "default": 42,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Random State",
+            "type": "integer"
+          },
+          "sample_weight_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Weight Column"
+          },
+          "strategy": {
+            "default": "ridge",
+            "title": "Strategy",
+            "type": "string"
+          },
+          "target_columns": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 2,
+            "title": "Target Columns",
+            "type": "array"
+          },
+          "target_scaling": {
+            "default": false,
+            "title": "Target Scaling",
+            "type": "boolean"
+          },
+          "target_units": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Units"
+          },
+          "target_weights": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 32,
+                "minItems": 2,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Weights"
+          },
+          "test_size": {
+            "default": 0.25,
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Test Size",
+            "type": "number"
+          }
+        },
+        "title": "TrainMultiResponseRequest",
         "type": "object"
       },
       "TrainRequest": {
@@ -7624,6 +7795,139 @@
         "summary": "Registry",
         "tags": [
           "multiobjective"
+        ]
+      }
+    },
+    "/api/v1/multiresponse/models": {
+      "get": {
+        "description": "The session's multi-response models \u2014 the comparison surface.",
+        "operationId": "models_api_v1_multiresponse_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Models Api V1 Multiresponse Models Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Models",
+        "tags": [
+          "multiresponse"
+        ]
+      }
+    },
+    "/api/v1/multiresponse/predict": {
+      "post": {
+        "operationId": "predict_api_v1_multiresponse_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictMultiResponseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Predict Api V1 Multiresponse Predict Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Predict",
+        "tags": [
+          "multiresponse"
+        ]
+      }
+    },
+    "/api/v1/multiresponse/registry": {
+      "get": {
+        "operationId": "registry_api_v1_multiresponse_registry_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Registry Api V1 Multiresponse Registry Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Registry",
+        "tags": [
+          "multiresponse"
+        ]
+      }
+    },
+    "/api/v1/multiresponse/train": {
+      "post": {
+        "operationId": "train_api_v1_multiresponse_train_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrainMultiResponseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Train Api V1 Multiresponse Train Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Train",
+        "tags": [
+          "multiresponse"
         ]
       }
     },
