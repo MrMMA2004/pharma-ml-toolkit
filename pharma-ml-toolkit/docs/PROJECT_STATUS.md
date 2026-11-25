@@ -1676,3 +1676,51 @@ queue: **upkeep alone** — and the upkeep found real work.
 - **Version**: unchanged at 1.2.240 — doc/carrier-only deltas, NO
   re-ship, NO silent bump. The counter 153 → 154 and RIDES the commit
   (the r360 lesson held).
+
+## 13. The r363 clause (the upkeep lane — the sixteenth-class rollback recovered with the partial-restore signature + the r362 undecoded gate failure decoded and fixed at source + the nine-card-first whole-file fragility made structural; the 04:30 2h-sync firing)
+
+- **The recovery**: the sixteenth-class playbook execution against the
+  SAME partial-restore signature — the recycle regressed the local
+  `.git` to the round-186 checkpoint `2eb0ede` (590 commits behind the
+  durable tip, which had advanced to the r362 terminal `d8308db9`),
+  wiped the origin remote + the credentials + the venv (rdkit) + the
+  frontend `node_modules`, and restored a PARTIAL disk: 1,723 tracked
+  files missing from the working tree (625,356 lines) + 2 survivor
+  content mismatches (the transient pid + the corrupted nested
+  `ci.yml` ghost — the same pair as r362) + 10 mode-only rows, every
+  other surviving file hash-matched the durable blobs byte-for-byte.
+  The PAT re-spliced (93 chars, 600-mode, never printed), the ff-only
+  reset restored 1,900 files — the tree 0/0 clean, the untracked sweep
+  emptied (the stale r362 one-shot ledger scripts + a duplicate PAT
+  tooling removed), the venv rebuilt FOREGROUND at the exact pins, the
+  frontend `npm ci`.
+- **The round's find — the r362 `failures=1` decoded and fixed at
+  source**: the chunk-2 stall reproduced; the 90s-per-file bisect
+  isolated `tests/ui/test_nine_card_first.py`; solo-vs-sequence proved
+  a cross-test deadlock; the faulthandler stack named the exact line —
+  the `studio_app` fixture's per-test `qapp.setStyleSheet("")`
+  (tests/ui/conftest.py:33), whose no-op reset re-polishes every live
+  widget on every call and deadlocks Qt's style machinery after ~13
+  MainWindow instantiate/teardown cycles. Fixed at source: the base
+  style reset applies ONCE per process. With the deadlock bypassed the
+  whole file OOM'd at test ~22 (exit 137) — the known r352 whole-file
+  fragility — so the r352 six-class split was made STRUCTURAL in the
+  new `scratch/run_suite_chunks_363.py` runner (the file excluded from
+  the size-balanced chunks; its six classes run as chunk-9f1..f6 legs).
+- **The gate**: `failures=0` — all 17 legs rc=0 (chunks 1–8; chunk-9;
+  chunk-9f1..f6; chunk-10 doctests; chunk-11 api suite; chunk-12a/b
+  github-page guards), the first full-clean gate verdict since the
+  r353 lineage; the documentation-consistency guard green over the
+  r362 ledger.
+- **The pins re-measured, all reproducing**: collection 9,017 / 0
+  errors / 495 files; vitest 337/337 over 38 files; registry 33 / 24;
+  the census walk 1,842 files / 166 dirs / 589,961 lines /
+  528,220,486 B / v1.2.240 via the canonical egg-info-aware replica
+  (the older r302 variant's +4 egg-info counting decoded as a
+  probe-semantics artifact — the carrier stood); the six zip homes
+  byte-identical `0fadb6e5…` at exactly 23,489,390 B (root
+  dist-archive + offsite re-seeded); the zip-size API
+  `exact:true source:release`.
+- **Version**: unchanged at 1.2.240 — doc/carrier/test-infra-only
+  deltas, NO re-ship, NO silent bump. The counter 154 → 155 and RIDES
+  the commit (the r360 lesson held).

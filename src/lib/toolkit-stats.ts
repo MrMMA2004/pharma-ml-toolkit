@@ -212,7 +212,20 @@ export const SHIPPED_FILE_COUNT = 1842;
     measurement and the committed pin rode +132 lines stale;
     measurement-last discipline: pin = live walk = page render,
     re-verified over the rewritten ledger. */
-export const SHIPPED_SOURCE_LINES = 589961;
+/*  r363 (the 2h-sync housekeeping firing, the sixteenth-rollback
+    recovery + the r362 gate debt decoded): the walk re-measured AFTER
+    the round's own ledger close-out (the measurement-last discipline
+    held) -- 590,114 lines / 528,234,787 B at 1,842 files / v1.2.240:
+    +153 lines exactly = the round's five inside-tree ledger deltas
+    (the QA r363 section + the cascade renumber + the PROJECT_STATUS
+    clause 13 + the RELEASE_READINESS addendum + the CHANGELOG bullet
+    + the studio_app conftest fix, 170 insertions - 17 deletions
+    verified by git numstat); the file pin stayed 1,842; the +1 dir
+    (166 -> 167) decoded as the gitignored `build/` theme-shot
+    artifact the gate's theme tests create -- a test residue the
+    served walk never sees, not a carrier. Verified pin = live walk =
+    page render. */
+export const SHIPPED_SOURCE_LINES = 590114;
 
 /*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
     +3,422 the counted delta (the workflow package + the route family

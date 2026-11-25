@@ -186,3 +186,36 @@ session; full detail in `docs/part12_audit/`):
   NO re-ship, NO silent bump. The standing BLOCKED lanes (clean-machine
   smoke, Stage-5 PySide6 retirement, installer signing) carry
   unchanged.
+
+### r363 addendum (the 04:30 2h-sync upkeep firing — the sixteenth-class rollback recovered; the r362 gate debt decoded and fixed at source)
+
+- **The rollback recovery (sixteenth-class)**: the recycle regressed the
+  local `.git` to the round-186 machinery checkpoint `2eb0ede` (590
+  commits behind) and restored a PARTIAL disk again (1,723 tracked
+  files missing, 625,356 lines; the survivors hash-identical to the
+  durable blobs; the only content deltas the same transient pid +
+  corrupted nested `ci.yml` ghost pair as r362); the PAT re-spliced
+  (93 chars, 600-mode, never printed), the ff-only reset onto the
+  durable r362 terminal `d8308db9` restored 1,900 files, the venv
+  rebuilt at the exact pins, the six zip homes re-seeded byte-identical
+  (`0fadb6e5…`, exactly 23,489,390 B — the root dist-archive + the
+  offsite mirror wiped again); the release-archive verification status
+  above is unchanged (still not gathered for a NEW version — v1.2.240
+  remains the shipped archive).
+- **The r362 `failures=1` decoded and fixed at source**: the
+  `studio_app` fixture's per-test no-op `setStyleSheet("")` re-polish
+  deadlock (faulthandler-stacked to tests/ui/conftest.py:33) — the
+  reset now applies once per process; the known r352 whole-file
+  nine-card-first OOM fragility made structural in the r363 runner
+  (the six-class chunk-9f1..f6 legs).
+- **The gate**: `scratch/run_suite_chunks_363.py` — `failures=0`, all
+  17 legs rc=0 (the first full-clean gate verdict since the r353
+  lineage).
+- **Pins (r363 re-true)**: collection 9,017 / 0 errors / 495 files
+  (measured); vitest 337/337 over 38 files; registry 33 / 24
+  unchanged; the census walk 1,842 files / 166 dirs / 589,961 lines /
+  528,220,486 B (the canonical replica; the carrier stood).
+- **Version**: unchanged at 1.2.240 — doc/carrier/test-infra-only
+  deltas; NO re-ship, NO silent bump. The standing BLOCKED lanes
+  (clean-machine smoke, Stage-5 PySide6 retirement, installer signing)
+  carry unchanged.

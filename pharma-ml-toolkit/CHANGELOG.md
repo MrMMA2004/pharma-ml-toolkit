@@ -1,5 +1,42 @@
 ## [1.2.240] — 2026-11-21 — round 318 (the 109th recorded run: the interactive part13 continuation, trace 1a1fed8994f477c1 — the Phase-5 pharmacogenomics lane, API + GUI; a NEW version ship)
 
+- **The r363 upkeep firing (the sixteenth-class rollback recovery —
+  the partial-restore signature again — + the r362 undecoded gate
+  failure decoded and fixed at source + the nine-card-first
+  whole-file fragility made structural)**: the recycle regressed the
+  local `.git` to the round-186 checkpoint `2eb0ede` (590 commits
+  behind the durable r362 terminal `d8308db9`) and wiped the origin,
+  the credentials, the venv (rdkit) and the frontend `node_modules`,
+  restoring a PARTIAL disk: 1,723 tracked files missing (625,356
+  lines) with every surviving file hash-matched to the durable blobs
+  (the only content deltas the same transient pid + corrupted nested
+  `ci.yml` ghost pair as r362). The PAT re-spliced (93 chars,
+  600-mode, never printed), the ff-only reset restored 1,900 files
+  (tree 0/0 clean, the sweep emptied), the venv rebuilt FOREGROUND at
+  the exact pins, the frontend `npm ci`, the six zip homes
+  re-seeded byte-identical `0fadb6e5…` at exactly 23,489,390 B (the
+  root dist-archive + the offsite mirror wiped again), the zip-size
+  API `exact:true source:release`. The pins re-measured, all
+  reproducing: collection 9,017 / 0 errors / 495 files; vitest
+  337/337 over 38 files; registry 33 / 24; the census walk 1,842
+  files / 166 dirs / 589,961 lines / 528,220,486 B via the canonical
+  egg-info-aware replica (the older r302 variant's +4 egg-info
+  counting decoded as a probe-semantics artifact — the carrier
+  stood). THE ROUND'S OWN FIND: the r362 `failures=1` DECODED — the
+  `studio_app` fixture's per-test no-op `setStyleSheet("")` re-polish
+  deadlock after ~13 MainWindow cycles (faulthandler-stacked to
+  tests/ui/conftest.py:33; solo the 14th test passes, after its 13
+  predecessors it hangs deterministically) — **fixed at source** (the
+  base style reset applies once per process); with the deadlock
+  bypassed the whole file OOM'd at test ~22 (the known r352
+  whole-file fragility) — **made structural** in the new
+  `scratch/run_suite_chunks_363.py` runner (the file excluded from
+  the size-balanced chunks, its six classes as the chunk-9f1..f6
+  legs). THE TEN-CHUNK GATE `failures=0` — ALL 17 LEGS rc=0 (the
+  first full-clean gate verdict since the r353 lineage). Version
+  unchanged 1.2.240 (no-silent-bumps; NO re-ship —
+  doc/carrier/test-infra-only deltas); the counter 154 → 155 and
+  RIDES the commit.
 - **The r362 upkeep firing (the fifteenth-class rollback recovery —
   the partial-restore signature — + the census-carrier debt
   settled)**: the sandbox recycle regressed the local `.git` to the

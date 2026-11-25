@@ -22,6 +22,9 @@ ensure_headless()
 import pytest
 
 
+_STUDIO_BASE_STYLED = False
+
+
 @pytest.fixture()
 def studio_app(qapp):
     """The shared QApplication with a clean native (unstyled) base."""
@@ -29,8 +32,24 @@ def studio_app(qapp):
     # not QGuiApplication — a bare QGuiApplication left behind by an
     # earlier suite (e.g. the qt-doctor subprocess checks) would
     # raise here under 6.12 while working under 6.8.
-    if hasattr(qapp, "setStyleSheet"):
+    #
+    # (r363 gate-find, fixed at the source) the reset runs ONCE per
+    # process, not once per test: QApplication::setStyleSheet always
+    # re-polishes every live widget even when the string is unchanged,
+    # and after ~13 MainWindow instantiate/teardown cycles (close +
+    # deleteLater trees still pending destruction) the Nth re-polish
+    # deadlocks inside Qt's style machinery — the r362 chunk-2 hang
+    # (failures=1, undecoded) reproduced, faulthandler-stacked to this
+    # exact line (tests/ui/conftest.py:33, inside setStyleSheet) and
+    # bisected: solo the test passes, after the 13 predecessors it
+    # hangs deterministically. One application is semantically
+    # identical (the intent is a clean base, and nothing in a UI test
+    # mutates the app-level style sheet) and removes the accumulation
+    # trigger entirely.
+    global _STUDIO_BASE_STYLED
+    if not _STUDIO_BASE_STYLED and hasattr(qapp, "setStyleSheet"):
         qapp.setStyleSheet("")
+        _STUDIO_BASE_STYLED = True
     yield qapp
 
 
