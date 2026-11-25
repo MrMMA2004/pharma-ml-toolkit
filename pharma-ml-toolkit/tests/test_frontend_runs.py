@@ -233,8 +233,10 @@ def test_the_contract_carries_the_two_new_paths() -> None:
     paths = contract["paths"]
     assert "/api/v1/runs" in paths
     assert "/api/v1/runs/{run_id}" in paths
-    assert len(paths) == 121, (
-        "the contract must pin 121 paths (112 + the runs pair + the r351 "
+    # 121 -> 128 by the r359 part17 §6 R1 rsm septet (the seven rsm
+    # paths), trued with the dated comment
+    assert len(paths) == 128, (
+        "the contract must pin 128 paths (112 + the runs pair + the r351 "
         "quality path + the r352 diagnostics pair + the r358 part17 §5 "
-        "multiresponse quartet)"
+        "multiresponse quartet + the r359 part17 §6 rsm septet)"
     )

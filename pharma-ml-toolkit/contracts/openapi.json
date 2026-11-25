@@ -573,6 +573,39 @@
         "title": "ConsensusRequest",
         "type": "object"
       },
+      "ConstraintSpec": {
+        "description": "One linear coded-factor constraint: a . x <= / >= b.",
+        "properties": {
+          "bound": {
+            "title": "Bound",
+            "type": "number"
+          },
+          "coefficients": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Coefficients",
+            "type": "array"
+          },
+          "sense": {
+            "default": "<=",
+            "enum": [
+              "<=",
+              ">="
+            ],
+            "title": "Sense",
+            "type": "string"
+          }
+        },
+        "required": [
+          "coefficients",
+          "bound"
+        ],
+        "title": "ConstraintSpec",
+        "type": "object"
+      },
       "ContactAtomSpec": {
         "properties": {
           "autodock_type": {
@@ -679,6 +712,92 @@
           "receptor"
         ],
         "title": "ContactsRequest",
+        "type": "object"
+      },
+      "ContourRsmRequest": {
+        "description": "The \u00a76.5 grid contract: one factor pair + fixed values.",
+        "properties": {
+          "factor_x": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Factor X",
+            "type": "string"
+          },
+          "factor_y": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Factor Y",
+            "type": "string"
+          },
+          "fixed": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "maxProperties": 10,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fixed"
+          },
+          "goals": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/GoalSpec"
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals"
+          },
+          "grid_points": {
+            "default": 25,
+            "maximum": 60.0,
+            "minimum": 5.0,
+            "title": "Grid Points",
+            "type": "integer"
+          },
+          "mode": {
+            "default": "response",
+            "enum": [
+              "response",
+              "desirability"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response"
+          }
+        },
+        "required": [
+          "model_id",
+          "factor_x",
+          "factor_y"
+        ],
+        "title": "ContourRsmRequest",
         "type": "object"
       },
       "CoverageDiagnosticsRequest": {
@@ -841,6 +960,89 @@
           "smiles"
         ],
         "title": "DescriptorsRequest",
+        "type": "object"
+      },
+      "DesignRsmRequest": {
+        "description": "The \u00a76.3 design-generation contract.",
+        "properties": {
+          "alpha": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.5,
+                "maximum": 4.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha"
+          },
+          "alpha_type": {
+            "default": "rotatable",
+            "enum": [
+              "rotatable",
+              "faced",
+              "custom"
+            ],
+            "title": "Alpha Type",
+            "type": "string"
+          },
+          "blocks": {
+            "default": false,
+            "title": "Blocks",
+            "type": "boolean"
+          },
+          "center_points": {
+            "default": 3,
+            "maximum": 50.0,
+            "minimum": 0.0,
+            "title": "Center Points",
+            "type": "integer"
+          },
+          "design": {
+            "default": "ccd",
+            "enum": [
+              "ccd",
+              "box_behnken",
+              "full_factorial"
+            ],
+            "title": "Design",
+            "type": "string"
+          },
+          "factors": {
+            "items": {
+              "$ref": "#/components/schemas/FactorSpecModel"
+            },
+            "maxItems": 10,
+            "minItems": 2,
+            "title": "Factors",
+            "type": "array"
+          },
+          "randomize": {
+            "default": true,
+            "title": "Randomize",
+            "type": "boolean"
+          },
+          "replicates": {
+            "default": 1,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Replicates",
+            "type": "integer"
+          },
+          "seed": {
+            "default": 42,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "factors"
+        ],
+        "title": "DesignRsmRequest",
         "type": "object"
       },
       "DockRequest": {
@@ -1298,6 +1500,44 @@
         "title": "ExplainRequest",
         "type": "object"
       },
+      "FactorSpecModel": {
+        "description": "One declared factor: name, range, optional unit.",
+        "properties": {
+          "high": {
+            "title": "High",
+            "type": "number"
+          },
+          "low": {
+            "title": "Low",
+            "type": "number"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "name",
+          "low",
+          "high"
+        ],
+        "title": "FactorSpecModel",
+        "type": "object"
+      },
       "FigureRequest": {
         "properties": {
           "color": {
@@ -1461,6 +1701,98 @@
           "smiles"
         ],
         "title": "FingerprintsRequest",
+        "type": "object"
+      },
+      "FitRsmRequest": {
+        "description": "The \u00a76.4 fit contract over an observed frame.\n\n``dataset_id`` selects a registered typed dataset whose factor\ncolumns carry the OBSERVED actual levels and whose response\ncolumns carry the measured results; leaving it None rides the\nseeded SYNTHETIC demo experiment (labelled).  The factor ranges\nare the request's own declared ranges (the coding transform rides\nthem); the optional design block records which design produced\nthe rows (the zone vocabulary's axial region needs the CCD's\nalpha).",
+        "properties": {
+          "alpha": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.5,
+                "maximum": 4.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha"
+          },
+          "alpha_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "rotatable",
+                  "faced"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha Type"
+          },
+          "confidence": {
+            "default": 0.95,
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.5,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          },
+          "design": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ccd",
+                  "box_behnken",
+                  "full_factorial"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Design"
+          },
+          "factors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FactorSpecModel"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Factors"
+          },
+          "response_columns": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Response Columns",
+            "type": "array"
+          }
+        },
+        "title": "FitRsmRequest",
         "type": "object"
       },
       "GnnGraphSpec": {
@@ -1668,6 +2000,80 @@
           }
         },
         "title": "GnnTrainRequest",
+        "type": "object"
+      },
+      "GoalSpec": {
+        "description": "One response's desirability goal (the \u00a76.6 contract).",
+        "properties": {
+          "exponent": {
+            "default": 1.0,
+            "maximum": 10.0,
+            "minimum": 0.1,
+            "title": "Exponent",
+            "type": "number"
+          },
+          "goal": {
+            "enum": [
+              "maximize",
+              "minimize",
+              "target",
+              "range"
+            ],
+            "title": "Goal",
+            "type": "string"
+          },
+          "high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low"
+          },
+          "response": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Response",
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "weight": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 10.0,
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "response",
+          "goal"
+        ],
+        "title": "GoalSpec",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -2281,6 +2687,73 @@
         "title": "OptimizeRequest",
         "type": "object"
       },
+      "OptimizeRsmRequest": {
+        "description": "The \u00a76.6 optimisation contract.",
+        "properties": {
+          "constraints": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConstraintSpec"
+                },
+                "maxItems": 16,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Constraints"
+          },
+          "goals": {
+            "items": {
+              "$ref": "#/components/schemas/GoalSpec"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Goals",
+            "type": "array"
+          },
+          "grid_points": {
+            "default": 25,
+            "maximum": 60.0,
+            "minimum": 5.0,
+            "title": "Grid Points",
+            "type": "integer"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "pair": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pair"
+          }
+        },
+        "required": [
+          "model_id",
+          "goals"
+        ],
+        "title": "OptimizeRsmRequest",
+        "type": "object"
+      },
       "ParseTextRequest": {
         "properties": {
           "text": {
@@ -2700,6 +3173,46 @@
           "model_id"
         ],
         "title": "PredictRequest",
+        "type": "object"
+      },
+      "PredictRsmRequest": {
+        "description": "Point rows (actual units) -> per-response predictions + CI/PI.",
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 1.0,
+                "exclusiveMinimum": 0.5,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_id",
+          "points"
+        ],
+        "title": "PredictRsmRequest",
         "type": "object"
       },
       "PreferenceValue": {
@@ -8427,6 +8940,268 @@
         "summary": "Screen",
         "tags": [
           "repurposing"
+        ]
+      }
+    },
+    "/api/v1/rsm/contour": {
+      "post": {
+        "operationId": "contour_api_v1_rsm_contour_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContourRsmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Contour Api V1 Rsm Contour Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Contour",
+        "tags": [
+          "rsm"
+        ]
+      }
+    },
+    "/api/v1/rsm/design": {
+      "post": {
+        "operationId": "design_api_v1_rsm_design_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesignRsmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Design Api V1 Rsm Design Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Design",
+        "tags": [
+          "rsm"
+        ]
+      }
+    },
+    "/api/v1/rsm/fit": {
+      "post": {
+        "operationId": "fit_api_v1_rsm_fit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FitRsmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Fit Api V1 Rsm Fit Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fit",
+        "tags": [
+          "rsm"
+        ]
+      }
+    },
+    "/api/v1/rsm/models": {
+      "get": {
+        "description": "The session's RSM models \u2014 the comparison surface.",
+        "operationId": "models_api_v1_rsm_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Models Api V1 Rsm Models Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Models",
+        "tags": [
+          "rsm"
+        ]
+      }
+    },
+    "/api/v1/rsm/optimize": {
+      "post": {
+        "operationId": "optimize_api_v1_rsm_optimize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OptimizeRsmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Optimize Api V1 Rsm Optimize Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Optimize",
+        "tags": [
+          "rsm"
+        ]
+      }
+    },
+    "/api/v1/rsm/predict": {
+      "post": {
+        "operationId": "predict_api_v1_rsm_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictRsmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Predict Api V1 Rsm Predict Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Predict",
+        "tags": [
+          "rsm"
+        ]
+      }
+    },
+    "/api/v1/rsm/registry": {
+      "get": {
+        "operationId": "registry_api_v1_rsm_registry_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Registry Api V1 Rsm Registry Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Registry",
+        "tags": [
+          "rsm"
         ]
       }
     },

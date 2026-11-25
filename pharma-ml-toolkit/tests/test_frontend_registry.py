@@ -222,8 +222,12 @@ def test_the_contract_carries_the_registry_deletion_path() -> None:
     # 117 -> 121 by the r358 part17 §5 M1 multiresponse quartet — the
     # generic multi-response lane's OWN four paths, none of them a
     # registry path)
-    assert len(paths) == 121, (
-        "the contract must pin 121 paths (the registry's DELETE rides the "
+    # 121 -> 128 by the r359 part17 §6 R1 rsm septet -- the Response
+    # Surface Methodology lane's OWN seven paths, none of them a
+    # registry path (trued with the dated comment)
+    assert len(paths) == 128, (
+        "the contract must pin 128 paths (the registry's DELETE rides the "
         "existing trained-model path — no new path this lane; the r358 "
-        "multiresponse quartet is the M1 lane's own, not a registry path)"
+        "multiresponse quartet and the r359 rsm septet are their own "
+        "lanes', not registry paths)"
     )

@@ -1466,6 +1466,319 @@ export interface MultiresponsePredictResponse {
   readonly note: string;
 }
 
+// -- the Response Surface Methodology lane (part17 §6 — the R1 lane) --
+
+/** One design generator row of the RSM registry (the honest notes stated
+ * per design — the rotatable CCD's axial runs sit OUTSIDE the declared
+ * ranges, disclosed). */
+export interface RsmDesignInfo {
+  readonly key: "ccd" | "box_behnken" | "full_factorial";
+  readonly label: string;
+  readonly alpha_types: readonly string[] | null;
+  readonly min_factors: number;
+  readonly max_factors: number;
+  readonly runs_formula: string;
+  readonly blocking: boolean;
+  readonly note: string;
+}
+
+/** One declared factor's view (center + half-range ride the coding). */
+export interface RsmFactorView {
+  readonly name: string;
+  readonly low: number;
+  readonly high: number;
+  readonly unit: string | null;
+  readonly center: number;
+  readonly half_range: number;
+}
+
+/** `GET /api/v1/rsm/registry` — the vocabulary answer. */
+export interface RsmRegistryResponse {
+  readonly designs: readonly RsmDesignInfo[];
+  readonly goals: readonly string[];
+  readonly model: {
+    readonly order: string;
+    readonly terms: string;
+    readonly term_count_formula: string;
+  };
+  readonly bounds: Readonly<Record<string, unknown>>;
+  readonly demo_dataset: {
+    readonly name: string;
+    readonly synthetic: boolean;
+    readonly factors: readonly RsmFactorView[];
+    readonly responses: readonly string[];
+    readonly runs: number;
+    readonly design: string;
+    readonly noise: boolean;
+    readonly note: string;
+  };
+  readonly scope_statement: string;
+}
+
+/** One run row of a generated design (coded AND actual levels). */
+export interface RsmDesignRunRow {
+  readonly run_id: string;
+  readonly run_order: number;
+  readonly block: number;
+  readonly run_type: string;
+  readonly coded: Readonly<Record<string, number>>;
+  readonly actual: Readonly<Record<string, number>>;
+}
+
+/** `POST /api/v1/rsm/design` — the generated experiment sheet. */
+export interface RsmDesignResponse {
+  readonly factors: readonly RsmFactorView[];
+  readonly design: {
+    readonly type: string;
+    readonly alpha: number | null;
+    readonly alpha_type: string | null;
+    readonly n_factors: number;
+    readonly runs: number;
+    readonly center_points: number;
+    readonly replicates: number;
+    readonly randomized: boolean;
+    readonly seed: number;
+    readonly blocks: boolean;
+  };
+  readonly runs: readonly RsmDesignRunRow[];
+  readonly run_type_counts: Readonly<Record<string, number>>;
+  readonly assumptions: readonly string[];
+  readonly export_note: string;
+}
+
+/** One coefficient row of the second-order fit. */
+export interface RsmCoefficientRow {
+  readonly term: string;
+  readonly label: string;
+  readonly kind: string;
+  readonly estimate: number;
+  readonly std_error: number | null;
+  readonly t: number | null;
+  readonly p: number | null;
+  readonly ci_low: number | null;
+  readonly ci_high: number | null;
+}
+
+/** One fitted-vs-observed diagnostics row (leverage, studentised
+ * residual, Cook's distance — flags reported, never removals). */
+export interface RsmDiagnosticsRow {
+  readonly run: number;
+  readonly observed: number;
+  readonly fitted: number;
+  readonly residual: number;
+  readonly studentized: number;
+  readonly leverage: number;
+  readonly cooks_distance: number;
+  readonly outlier_flag: boolean;
+  readonly influential_flag: boolean;
+}
+
+/** The per-response fit statistics block. */
+export interface RsmFitStatistics {
+  readonly n_runs: number;
+  readonly df_residual: number;
+  readonly rank: number;
+  readonly r2: number;
+  readonly adj_r2: number;
+  readonly pred_r2: number;
+  readonly rmse: number;
+  readonly press: number;
+  readonly confidence: number;
+  readonly outliers_flagged: number;
+  readonly influential_flagged: number;
+  readonly cooks_threshold: number;
+  readonly machine_precision_fit: boolean;
+  readonly diagnostics_note: string | null;
+  readonly thresholds_note: string;
+}
+
+/** One trained RSM model's view (the comparison surface). */
+export interface RsmModelView {
+  readonly model_id: string;
+  readonly name: string;
+  readonly task: string;
+  readonly dataset_id: string | null;
+  readonly target: string;
+  readonly features: readonly string[];
+  readonly n_train_rows: number;
+  readonly cv_mean: number | null;
+  readonly fit_seconds: number;
+  readonly created_at: string;
+  readonly rsm: {
+    readonly kind: string;
+    readonly factors: readonly string[];
+    readonly responses: readonly string[];
+    readonly n_terms: number;
+    readonly design_meta: Readonly<Record<string, unknown>>;
+    readonly df_residual: number;
+    readonly rank: number;
+  };
+}
+
+/** `POST /api/v1/rsm/fit` — the full second-order fit answer. */
+export interface RsmFitResponse {
+  readonly model: RsmModelView;
+  readonly run_id: string;
+  readonly provenance: {
+    readonly source: string;
+    readonly dataset_id: string | null;
+    readonly dataset_name: string;
+    readonly synthetic: boolean;
+    readonly note?: string;
+  };
+  readonly configuration: {
+    readonly factors: readonly RsmFactorView[];
+    readonly response_columns: readonly string[];
+    readonly design_meta: Readonly<Record<string, unknown>>;
+    readonly confidence: number;
+  };
+  readonly data: {
+    readonly n_runs: number;
+    readonly dropped_rows: number;
+    readonly terms: readonly { key: string; kind: string; label: string }[];
+    readonly hierarchy_notes: readonly string[];
+    readonly aliasing: {
+      readonly rank: number;
+      readonly columns: number;
+      readonly aliased: readonly string[] | null;
+      readonly note: string;
+    } | null;
+  };
+  readonly coefficients: Readonly<Record<string, readonly RsmCoefficientRow[]>>;
+  readonly anova: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
+  readonly diagnostics: Readonly<
+    Record<string, readonly RsmDiagnosticsRow[]>
+  >;
+  readonly fit_statistics: Readonly<Record<string, RsmFitStatistics>>;
+  readonly fit_seconds: number;
+}
+
+/** `POST /api/v1/rsm/predict` — the per-response predictions with the
+ * CI/PI and the honest zone vocabulary per point. */
+export interface RsmPredictResponse {
+  readonly model_id: string;
+  readonly rows: readonly {
+    readonly run: number;
+    readonly zone: "inside_ranges" | "axial_region" | "outside_design";
+    readonly coded: Readonly<Record<string, number>>;
+    readonly actual: Readonly<Record<string, number>>;
+    readonly [response: string]:
+      | number
+      | string
+      | Readonly<Record<string, number>>;
+  }[];
+  readonly responses: readonly string[];
+  readonly confidence: number;
+  readonly df_residual: number;
+  readonly extrapolation: {
+    readonly count: number;
+    readonly runs: readonly number[];
+    readonly vocabulary: Readonly<Record<string, string>> | null;
+  };
+  readonly note: string;
+}
+
+/** `POST /api/v1/rsm/contour` — the two-factor grid payload (the
+ * Plotly contour / 3-D surface data; the rows index factor_x). */
+export interface RsmContourResponse {
+  readonly model_id: string;
+  readonly factor_x: {
+    readonly name: string;
+    readonly unit: string | null;
+    readonly coded: readonly number[];
+    readonly actual: readonly number[];
+  };
+  readonly factor_y: {
+    readonly name: string;
+    readonly unit: string | null;
+    readonly coded: readonly number[];
+    readonly actual: readonly number[];
+  };
+  readonly fixed: Readonly<
+    Record<string, { actual: number; coded: number }>
+  >;
+  readonly grid_points: number;
+  readonly z_name: string;
+  readonly z: readonly (readonly number[])[];
+  readonly note: string;
+  readonly units_note: string;
+}
+
+/** One desirability goal (the §6.6 contract). */
+export interface RsmGoalSpec {
+  readonly response: string;
+  readonly goal: "maximize" | "minimize" | "target" | "range";
+  readonly low: number | null;
+  readonly high: number | null;
+  readonly target: number | null;
+  readonly weight: number;
+  readonly exponent: number;
+}
+
+/** One per-response block of the optimisation answer. */
+export interface RsmOptimumResponseBlock {
+  readonly goal: string;
+  readonly prediction: number;
+  readonly individual_desirability: number;
+  readonly weight: number;
+  readonly exponent: number;
+  readonly bounds: Readonly<Record<string, number>>;
+  readonly bounds_source: string;
+}
+
+/** One Pareto alternative (the curated deterministic sample —
+ * honestly NOT the exhaustive front). */
+export interface RsmParetoAlternative {
+  readonly kind: "individual" | "weight_tilted";
+  readonly response: string;
+  readonly goal: string;
+  readonly combined_desirability: number | null;
+  readonly note: string;
+  readonly x_coded: Readonly<Record<string, number>>;
+  readonly x_actual: Readonly<Record<string, number>>;
+  readonly predictions: Readonly<Record<string, number>>;
+}
+
+/** `POST /api/v1/rsm/optimize` — the desirability optimisation answer. */
+export interface RsmOptimizeResponse {
+  readonly model_id: string;
+  readonly candidate: {
+    readonly x_coded: Readonly<Record<string, number>>;
+    readonly x_actual: Readonly<Record<string, number>>;
+    readonly combined_desirability: number;
+    readonly responses: Readonly<Record<string, RsmOptimumResponseBlock>>;
+  };
+  readonly weights: Readonly<Record<string, number>>;
+  readonly total_weight: number;
+  readonly constraints: readonly {
+    readonly coefficients: readonly number[];
+    readonly sense: string;
+    readonly bound: number;
+  }[];
+  readonly sensitivity: readonly {
+    readonly factor: string;
+    readonly step_coded: number;
+    readonly low: { coded: number; combined_desirability: number; delta: number };
+    readonly high: { coded: number; combined_desirability: number; delta: number };
+  }[];
+  readonly sensitivity_note: string;
+  readonly pareto_alternatives: readonly RsmParetoAlternative[];
+  readonly pareto_note: string;
+  readonly feasible_grid: {
+    readonly factor_x: string;
+    readonly factor_y: string;
+    readonly grid_points: number;
+    readonly other_factors_at: Readonly<Record<string, number>>;
+    readonly feasible: readonly (readonly boolean[])[];
+    readonly note: string;
+  } | null;
+  readonly region_note: string;
+  readonly bounds_source_note: string;
+  readonly goals_vocabulary: readonly string[];
+}
+
 // -- the workflow engine lane (part13 Phase 6, §8 — the round-323 GUI
 // leg over the r322 /api/v1/workflow family) --------------------------
 
@@ -2308,6 +2621,148 @@ export const mlApi = {
       throw new Error("the model lane answered without an artifact");
     }
     return parseArtifactView(artifact, "multiresponse model artifact");
+  },
+
+  /**
+   * `GET /api/v1/rsm/registry` — the Response Surface Methodology
+   * lane's own vocabulary (part17 §6, the R1 lane): the three design
+   * generators (each with its honest notes — the rotatable CCD's
+   * axial runs sit OUTSIDE the declared ranges, disclosed), the
+   * desirability goals, the second-order term formula, the bounds,
+   * the seeded SYNTHETIC demo experiment descriptor (KNOWN noise-free
+   * surfaces), and the scope statement (the mandate's own distinction
+   * table).
+   */
+  async rsmRegistry(): Promise<RsmRegistryResponse> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/rsm/registry",
+    );
+    return parseRsmRegistryResponse(raw, "rsm registry");
+  },
+
+  /**
+   * `POST /api/v1/rsm/design` — generate a design of experiments over
+   * the real backend: the CCD (rotatable / faced / custom alpha),
+   * Box-Behnken, or the full 2^k factorial, with coded AND actual
+   * run tables, the two-block CCD split, seeded within-block
+   * randomisation, the run-type census, and the honest assumptions.
+   */
+  async rsmDesign(
+    params: Record<string, unknown>,
+  ): Promise<RsmDesignResponse> {
+    const raw = (await api.post(
+      "/api/v1/rsm/design",
+      params,
+    )) as Record<string, unknown>;
+    return parseRsmDesignResponse(raw, "rsm design");
+  },
+
+  /**
+   * `POST /api/v1/rsm/fit` — import the observed results and fit the
+   * full second-order model for every response column: a registered
+   * typed dataset (the request's own declared factor ranges) or the
+   * seeded SYNTHETIC demo experiment (labelled).  The answer carries
+   * the coefficient tables, the ANOVA partition (pure error /
+   * lack-of-fit only where replicated design points exist — nulls
+   * elsewhere), the diagnostics block, the hierarchy notes (flagged,
+   * never auto-removed), and the aliasing disclosure.  The fitted
+   * bundle registers in the session model store and the run records
+   * in the §15.2 lineage as family ml.rsm.
+   */
+  async rsmFit(
+    params: Record<string, unknown>,
+  ): Promise<RsmFitResponse> {
+    const raw = (await api.post(
+      "/api/v1/rsm/fit",
+      params,
+    )) as Record<string, unknown>;
+    return parseRsmFitResponse(raw, "rsm fit");
+  },
+
+  /**
+   * `POST /api/v1/rsm/predict` — point predictions in ACTUAL units
+   * with the mean CI and the new-observation PI, and the honest zone
+   * vocabulary per point (extrapolation flagged, never silent).
+   */
+  async rsmPredict(
+    params: Record<string, unknown>,
+  ): Promise<RsmPredictResponse> {
+    const raw = (await api.post(
+      "/api/v1/rsm/predict",
+      params,
+    )) as Record<string, unknown>;
+    return parseRsmPredictResponse(raw, "rsm predict");
+  },
+
+  /**
+   * `POST /api/v1/rsm/contour` — the two-factor grid payload for the
+   * Plotly lanes: a chosen response's prediction OR the combined
+   * desirability under the request's goals, with every other factor
+   * held at explicitly displayed fixed values.
+   */
+  async rsmContour(
+    params: Record<string, unknown>,
+  ): Promise<RsmContourResponse> {
+    const raw = (await api.post(
+      "/api/v1/rsm/contour",
+      params,
+    )) as Record<string, unknown>;
+    return parseRsmContourResponse(raw, "rsm contour");
+  },
+
+  /**
+   * `POST /api/v1/rsm/optimize` — the Derringer-Suich multi-response
+   * optimisation over the fitted surface: the goals (maximize /
+   * minimize / target / range) with weights and exponents, optional
+   * linear coded-factor constraints, the deterministic multi-start
+   * candidate confined to the declared ranges, the per-factor
+   * sensitivity sweep, and the curated Pareto alternatives.
+   */
+  async rsmOptimize(
+    params: Record<string, unknown>,
+  ): Promise<RsmOptimizeResponse> {
+    const raw = (await api.post(
+      "/api/v1/rsm/optimize",
+      params,
+    )) as Record<string, unknown>;
+    return parseRsmOptimizeResponse(raw, "rsm optimize");
+  },
+
+  /**
+   * `GET /api/v1/rsm/models` — the session's RSM models (the
+   * comparison surface: every fitted surface side by side).
+   */
+  async rsmModels(): Promise<{ models: readonly RsmModelView[] }> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/rsm/models",
+    );
+    const r = expectObject(raw, "rsm models");
+    const modelsRaw = Array.isArray(r["models"])
+      ? (r["models"] as unknown[])
+      : [];
+    return {
+      models: modelsRaw.map((row, i) =>
+        parseRsmModelView(row, `rsm models[${i}]`),
+      ),
+    };
+  },
+
+  /**
+   * `POST /api/v1/artifacts/model` — the RSM lane's export: the
+   * fitted ResponseSurfaceBundle persisted through the REAL
+   * `save_model` as a digest-verified joblib artifact (the reload
+   * path is the house `load_model`).
+   */
+  async rsmExport(modelId: string): Promise<ArtifactView> {
+    const raw = (await api.post(
+      "/api/v1/artifacts/model",
+      { model_id: modelId, filename: `rsm-${modelId}` },
+    )) as Record<string, unknown>;
+    const artifact = raw["artifact"];
+    if (typeof artifact !== "object" || artifact === null) {
+      throw new Error("the model lane answered without an artifact");
+    }
+    return parseArtifactView(artifact, "rsm model artifact");
   },
 
   /**
@@ -4848,6 +5303,657 @@ function parseMultiresponseModelsResponse(
     ),
     metrics: Array.isArray(r["metrics"])
       ? (r["metrics"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
+  };
+}
+
+// -- RSM lane parsers (part17 §6 — the R1 lane; row-validated, never
+// trusted) -----------------------------------------------------------
+
+/** Narrow one factor view of the RSM answers. */
+function parseRsmFactorView(raw: unknown, what: string): RsmFactorView {
+  const r = expectObject(raw, what);
+  const name = r["name"];
+  if (typeof name !== "string") {
+    throw new Error(`${what}: name is not a string`);
+  }
+  const low = asNumber(r["low"]);
+  const high = asNumber(r["high"]);
+  if (low === null || high === null) {
+    throw new Error(`${what}: low/high are not numbers`);
+  }
+  return {
+    name,
+    low,
+    high,
+    unit: asString(r["unit"]),
+    center: asNumber(r["center"]) ?? (low + high) / 2,
+    half_range: asNumber(r["half_range"]) ?? (high - low) / 2,
+  };
+}
+
+/** Narrow the RSM registry answer. */
+function parseRsmRegistryResponse(
+  raw: unknown,
+  what: string,
+): RsmRegistryResponse {
+  const r = expectObject(raw, what);
+  const modelRaw = expectObject(r["model"], `${what} model`);
+  const demoRaw = expectObject(r["demo_dataset"], `${what} demo_dataset`);
+  const designsRaw = Array.isArray(r["designs"])
+    ? (r["designs"] as unknown[])
+    : [];
+  return {
+    designs: designsRaw.map((row, i) => {
+      const d = expectObject(row, `${what} designs[${i}]`);
+      return {
+        key: (asString(d["key"]) ?? "ccd") as RsmDesignInfo["key"],
+        label: asString(d["label"]) ?? "",
+        alpha_types: Array.isArray(d["alpha_types"])
+          ? (d["alpha_types"] as unknown[]).filter(
+              (v): v is string => typeof v === "string",
+            )
+          : null,
+        min_factors: asNumber(d["min_factors"]) ?? 2,
+        max_factors: asNumber(d["max_factors"]) ?? 10,
+        runs_formula: asString(d["runs_formula"]) ?? "",
+        blocking: d["blocking"] === true,
+        note: asString(d["note"]) ?? "",
+      };
+    }),
+    goals: Array.isArray(r["goals"])
+      ? (r["goals"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
+    model: {
+      order: asString(modelRaw["order"]) ?? "",
+      terms: asString(modelRaw["terms"]) ?? "",
+      term_count_formula: asString(modelRaw["term_count_formula"]) ?? "",
+    },
+    bounds:
+      r["bounds"] && typeof r["bounds"] === "object"
+        ? (r["bounds"] as Record<string, unknown>)
+        : {},
+    demo_dataset: {
+      name: asString(demoRaw["name"]) ?? "",
+      synthetic: demoRaw["synthetic"] === true,
+      factors: Array.isArray(demoRaw["factors"])
+        ? (demoRaw["factors"] as unknown[]).map((f, i) =>
+            parseRsmFactorView(f, `${what} demo factors[${i}]`),
+          )
+        : [],
+      responses: Array.isArray(demoRaw["responses"])
+        ? (demoRaw["responses"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      runs: asNumber(demoRaw["runs"]) ?? 0,
+      design: asString(demoRaw["design"]) ?? "",
+      noise: demoRaw["noise"] === true,
+      note: asString(demoRaw["note"]) ?? "",
+    },
+    scope_statement: asString(r["scope_statement"]) ?? "",
+  };
+}
+
+/** Narrow the design-generation answer. */
+function parseRsmDesignResponse(
+  raw: unknown,
+  what: string,
+): RsmDesignResponse {
+  const r = expectObject(raw, what);
+  const designRaw = expectObject(r["design"], `${what} design`);
+  const runsRaw = Array.isArray(r["runs"]) ? (r["runs"] as unknown[]) : [];
+  const counts: Record<string, number> = {};
+  if (r["run_type_counts"] && typeof r["run_type_counts"] === "object") {
+    for (const [k, v] of Object.entries(
+      r["run_type_counts"] as Record<string, unknown>,
+    )) {
+      if (typeof v === "number") counts[k] = v;
+    }
+  }
+  return {
+    factors: Array.isArray(r["factors"])
+      ? (r["factors"] as unknown[]).map((f, i) =>
+          parseRsmFactorView(f, `${what} factors[${i}]`),
+        )
+      : [],
+    design: {
+      type: asString(designRaw["type"]) ?? "ccd",
+      alpha: asNumber(designRaw["alpha"]),
+      alpha_type: asString(designRaw["alpha_type"]),
+      n_factors: asNumber(designRaw["n_factors"]) ?? 0,
+      runs: asNumber(designRaw["runs"]) ?? 0,
+      center_points: asNumber(designRaw["center_points"]) ?? 0,
+      replicates: asNumber(designRaw["replicates"]) ?? 1,
+      randomized: designRaw["randomized"] === true,
+      seed: asNumber(designRaw["seed"]) ?? 42,
+      blocks: designRaw["blocks"] === true,
+    },
+    runs: runsRaw.map((row, i) => {
+      const run = expectObject(row, `${what} runs[${i}]`);
+      return {
+        run_id: asString(run["run_id"]) ?? `r${i + 1}`,
+        run_order: asNumber(run["run_order"]) ?? i + 1,
+        block: asNumber(run["block"]) ?? 1,
+        run_type: asString(run["run_type"]) ?? "",
+        coded: numberRecord(run["coded"], `${what} runs[${i}] coded`),
+        actual: numberRecord(run["actual"], `${what} runs[${i}] actual`),
+      };
+    }),
+    run_type_counts: counts,
+    assumptions: Array.isArray(r["assumptions"])
+      ? (r["assumptions"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
+    export_note: asString(r["export_note"]) ?? "",
+  };
+}
+
+/** Narrow one record of string -> number (a coded/actual level row). */
+function numberRecord(
+  raw: unknown,
+  what: string,
+): Readonly<Record<string, number>> {
+  const r = expectObject(raw, what);
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(r)) {
+    if (typeof v === "number" && Number.isFinite(v)) {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+/** Narrow one coefficient row of the fit answer. */
+function parseRsmCoefficientRow(
+  raw: unknown,
+  what: string,
+): RsmCoefficientRow {
+  const r = expectObject(raw, what);
+  const term = asString(r["term"]);
+  if (term === null) {
+    throw new Error(`${what}: term is not a string`);
+  }
+  return {
+    term,
+    label: asString(r["label"]) ?? term,
+    kind: asString(r["kind"]) ?? "",
+    estimate: asNumber(r["estimate"]) ?? 0,
+    std_error: asNumber(r["std_error"]),
+    t: asNumber(r["t"]),
+    p: asNumber(r["p"]),
+    ci_low: asNumber(r["ci_low"]),
+    ci_high: asNumber(r["ci_high"]),
+  };
+}
+
+/** Narrow one fitted-vs-observed diagnostics row. */
+function parseRsmDiagnosticsRow(
+  raw: unknown,
+  what: string,
+): RsmDiagnosticsRow {
+  const r = expectObject(raw, what);
+  return {
+    run: asNumber(r["run"]) ?? 0,
+    observed: asNumber(r["observed"]) ?? 0,
+    fitted: asNumber(r["fitted"]) ?? 0,
+    residual: asNumber(r["residual"]) ?? 0,
+    studentized: asNumber(r["studentized"]) ?? 0,
+    leverage: asNumber(r["leverage"]) ?? 0,
+    cooks_distance: asNumber(r["cooks_distance"]) ?? 0,
+    outlier_flag: r["outlier_flag"] === true,
+    influential_flag: r["influential_flag"] === true,
+  };
+}
+
+/** Narrow one RSM model view (the comparison surface row). */
+function parseRsmModelView(raw: unknown, what: string): RsmModelView {
+  const r = expectObject(raw, what);
+  const rsmRaw = expectObject(r["rsm"], `${what} rsm`);
+  return {
+    model_id: asString(r["model_id"]) ?? "",
+    name: asString(r["name"]) ?? "",
+    task: asString(r["task"]) ?? "",
+    dataset_id: asString(r["dataset_id"]),
+    target: asString(r["target"]) ?? "",
+    features: Array.isArray(r["features"])
+      ? (r["features"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
+    n_train_rows: asNumber(r["n_train_rows"]) ?? 0,
+    cv_mean: asNumber(r["cv_mean"]),
+    fit_seconds: asNumber(r["fit_seconds"]) ?? 0,
+    created_at: asString(r["created_at"]) ?? "",
+    rsm: {
+      kind: asString(rsmRaw["kind"]) ?? "rsm",
+      factors: Array.isArray(rsmRaw["factors"])
+        ? (rsmRaw["factors"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      responses: Array.isArray(rsmRaw["responses"])
+        ? (rsmRaw["responses"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      n_terms: asNumber(rsmRaw["n_terms"]) ?? 0,
+      design_meta:
+        rsmRaw["design_meta"] && typeof rsmRaw["design_meta"] === "object"
+          ? (rsmRaw["design_meta"] as Record<string, unknown>)
+          : {},
+      df_residual: asNumber(rsmRaw["df_residual"]) ?? 0,
+      rank: asNumber(rsmRaw["rank"]) ?? 0,
+    },
+  };
+}
+
+/** Narrow the fit answer (the full second-order surface). */
+function parseRsmFitResponse(raw: unknown, what: string): RsmFitResponse {
+  const r = expectObject(raw, what);
+  const dataRaw = expectObject(r["data"], `${what} data`);
+  const configRaw = expectObject(r["configuration"], `${what} configuration`);
+  const coefficients: Record<string, readonly RsmCoefficientRow[]> = {};
+  if (r["coefficients"] && typeof r["coefficients"] === "object") {
+    for (const [response, rows] of Object.entries(
+      r["coefficients"] as Record<string, unknown>,
+    )) {
+      coefficients[response] = Array.isArray(rows)
+        ? (rows as unknown[]).map((row, i) =>
+            parseRsmCoefficientRow(row, `${what} coefficients[${i}]`),
+          )
+        : [];
+    }
+  }
+  const diagnostics: Record<string, readonly RsmDiagnosticsRow[]> = {};
+  if (r["diagnostics"] && typeof r["diagnostics"] === "object") {
+    for (const [response, rows] of Object.entries(
+      r["diagnostics"] as Record<string, unknown>,
+    )) {
+      diagnostics[response] = Array.isArray(rows)
+        ? (rows as unknown[]).map((row, i) =>
+            parseRsmDiagnosticsRow(row, `${what} diagnostics[${i}]`),
+          )
+        : [];
+    }
+  }
+  const fitStats: Record<string, RsmFitStatistics> = {};
+  if (r["fit_statistics"] && typeof r["fit_statistics"] === "object") {
+    for (const [response, blockRaw] of Object.entries(
+      r["fit_statistics"] as Record<string, unknown>,
+    )) {
+      const s = expectObject(blockRaw, `${what} fit_statistics ${response}`);
+      fitStats[response] = {
+        n_runs: asNumber(s["n_runs"]) ?? 0,
+        df_residual: asNumber(s["df_residual"]) ?? 0,
+        rank: asNumber(s["rank"]) ?? 0,
+        r2: asNumber(s["r2"]) ?? 0,
+        adj_r2: asNumber(s["adj_r2"]) ?? 0,
+        pred_r2: asNumber(s["pred_r2"]) ?? 0,
+        rmse: asNumber(s["rmse"]) ?? 0,
+        press: asNumber(s["press"]) ?? 0,
+        confidence: asNumber(s["confidence"]) ?? 0.95,
+        outliers_flagged: asNumber(s["outliers_flagged"]) ?? 0,
+        influential_flagged: asNumber(s["influential_flagged"]) ?? 0,
+        cooks_threshold: asNumber(s["cooks_threshold"]) ?? 1,
+        machine_precision_fit: s["machine_precision_fit"] === true,
+        diagnostics_note: asString(s["diagnostics_note"]),
+        thresholds_note: asString(s["thresholds_note"]) ?? "",
+      };
+    }
+  }
+  const anova: Record<string, Readonly<Record<string, unknown>>> = {};
+  if (r["anova"] && typeof r["anova"] === "object") {
+    for (const [response, block] of Object.entries(
+      r["anova"] as Record<string, unknown>,
+    )) {
+      anova[response] =
+        block && typeof block === "object"
+          ? (block as Record<string, unknown>)
+          : {};
+    }
+  }
+  const aliasingRaw = dataRaw["aliasing"];
+  return {
+    model: parseRsmModelView(r["model"], `${what} model`),
+    run_id: asString(r["run_id"]) ?? "",
+    provenance: {
+      source: asString((r["provenance"] as Record<string, unknown>)?.["source"]) ?? "",
+      dataset_id: asString((r["provenance"] as Record<string, unknown>)?.["dataset_id"]),
+      dataset_name:
+        asString((r["provenance"] as Record<string, unknown>)?.["dataset_name"]) ?? "",
+      synthetic:
+        (r["provenance"] as Record<string, unknown>)?.["synthetic"] === true,
+      note: asString((r["provenance"] as Record<string, unknown>)?.["note"]) ?? undefined,
+    },
+    configuration: {
+      factors: Array.isArray(configRaw["factors"])
+        ? (configRaw["factors"] as unknown[]).map((f, i) =>
+            parseRsmFactorView(f, `${what} factors[${i}]`),
+          )
+        : [],
+      response_columns: Array.isArray(configRaw["response_columns"])
+        ? (configRaw["response_columns"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      design_meta:
+        configRaw["design_meta"] &&
+        typeof configRaw["design_meta"] === "object"
+          ? (configRaw["design_meta"] as Record<string, unknown>)
+          : {},
+      confidence: asNumber(configRaw["confidence"]) ?? 0.95,
+    },
+    data: {
+      n_runs: asNumber(dataRaw["n_runs"]) ?? 0,
+      dropped_rows: asNumber(dataRaw["dropped_rows"]) ?? 0,
+      terms: Array.isArray(dataRaw["terms"])
+        ? (dataRaw["terms"] as unknown[]).map((t) => {
+            const tr = expectObject(t, `${what} term`);
+            return {
+              key: asString(tr["key"]) ?? "",
+              kind: asString(tr["kind"]) ?? "",
+              label: asString(tr["label"]) ?? "",
+            };
+          })
+        : [],
+      hierarchy_notes: Array.isArray(dataRaw["hierarchy_notes"])
+        ? (dataRaw["hierarchy_notes"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+      aliasing:
+        aliasingRaw && typeof aliasingRaw === "object"
+          ? {
+              rank:
+                asNumber((aliasingRaw as Record<string, unknown>)["rank"]) ?? 0,
+              columns:
+                asNumber((aliasingRaw as Record<string, unknown>)["columns"]) ?? 0,
+              aliased: Array.isArray(
+                (aliasingRaw as Record<string, unknown>)["aliased"],
+              )
+                ? ((aliasingRaw as Record<string, unknown>)["aliased"] as unknown[]).filter(
+                    (v): v is string => typeof v === "string",
+                  )
+                : null,
+              note:
+                asString((aliasingRaw as Record<string, unknown>)["note"]) ?? "",
+            }
+          : null,
+    },
+    coefficients,
+    anova,
+    diagnostics,
+    fit_statistics: fitStats,
+    fit_seconds: asNumber(r["fit_seconds"]) ?? 0,
+  };
+}
+
+/** Narrow the prediction answer (the zone vocabulary rides each row). */
+function parseRsmPredictResponse(
+  raw: unknown,
+  what: string,
+): RsmPredictResponse {
+  const r = expectObject(raw, what);
+  const rowsRaw = Array.isArray(r["rows"]) ? (r["rows"] as unknown[]) : [];
+  const extrapolationRaw = expectObject(
+    r["extrapolation"],
+    `${what} extrapolation`,
+  );
+  return {
+    model_id: asString(r["model_id"]) ?? "",
+    rows: rowsRaw.map((row, i) => {
+      const o = expectObject(row, `${what} rows[${i}]`);
+      const zone = asString(o["zone"]) ?? "inside_ranges";
+      return {
+        run: asNumber(o["run"]) ?? i + 1,
+        zone: (["inside_ranges", "axial_region", "outside_design"].includes(zone)
+          ? zone
+          : "inside_ranges") as "inside_ranges" | "axial_region" | "outside_design",
+        coded: numberRecord(o["coded"], `${what} rows[${i}] coded`),
+        actual: numberRecord(o["actual"], `${what} rows[${i}] actual`),
+        ...Object.fromEntries(
+          Object.entries(o).filter(
+            ([k]) => !["run", "zone", "coded", "actual"].includes(k),
+          ),
+        ),
+      };
+    }) as RsmPredictResponse["rows"],
+    responses: Array.isArray(r["responses"])
+      ? (r["responses"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
+    confidence: asNumber(r["confidence"]) ?? 0.95,
+    df_residual: asNumber(r["df_residual"]) ?? 0,
+    extrapolation: {
+      count: asNumber(extrapolationRaw["count"]) ?? 0,
+      runs: Array.isArray(extrapolationRaw["runs"])
+        ? (extrapolationRaw["runs"] as unknown[]).filter(
+            (v): v is number => typeof v === "number",
+          )
+        : [],
+      vocabulary:
+        extrapolationRaw["vocabulary"] &&
+        typeof extrapolationRaw["vocabulary"] === "object"
+          ? (extrapolationRaw["vocabulary"] as Record<string, string>)
+          : null,
+    },
+    note: asString(r["note"]) ?? "",
+  };
+}
+
+/** Narrow the contour answer (the two-factor grid payload). */
+function parseRsmContourResponse(
+  raw: unknown,
+  what: string,
+): RsmContourResponse {
+  const r = expectObject(raw, what);
+  const fxRaw = expectObject(r["factor_x"], `${what} factor_x`);
+  const fyRaw = expectObject(r["factor_y"], `${what} factor_y`);
+  const axis = (
+    a: Record<string, unknown>,
+    label: string,
+  ): RsmContourResponse["factor_x"] => ({
+    name: asString(a["name"]) ?? label,
+    unit: asString(a["unit"]),
+    coded: Array.isArray(a["coded"])
+      ? (a["coded"] as unknown[]).filter(
+          (v): v is number => typeof v === "number",
+        )
+      : [],
+    actual: Array.isArray(a["actual"])
+      ? (a["actual"] as unknown[]).filter(
+          (v): v is number => typeof v === "number",
+        )
+      : [],
+  });
+  const zRaw = Array.isArray(r["z"]) ? (r["z"] as unknown[]) : [];
+  const fixed: Record<string, { actual: number; coded: number }> = {};
+  if (r["fixed"] && typeof r["fixed"] === "object") {
+    for (const [name, blockRaw] of Object.entries(
+      r["fixed"] as Record<string, unknown>,
+    )) {
+      const b = expectObject(blockRaw, `${what} fixed ${name}`);
+      fixed[name] = {
+        actual: asNumber(b["actual"]) ?? 0,
+        coded: asNumber(b["coded"]) ?? 0,
+      };
+    }
+  }
+  return {
+    model_id: asString(r["model_id"]) ?? "",
+    factor_x: axis(fxRaw, "x"),
+    factor_y: axis(fyRaw, "y"),
+    fixed,
+    grid_points: asNumber(r["grid_points"]) ?? 0,
+    z_name: asString(r["z_name"]) ?? "",
+    z: zRaw.map((row, i) =>
+      Array.isArray(row)
+        ? (row as unknown[]).filter(
+            (v): v is number => typeof v === "number",
+          )
+        : (console.warn(`${what}: z[${i}] is not an array`), []),
+    ),
+    note: asString(r["note"]) ?? "",
+    units_note: asString(r["units_note"]) ?? "",
+  };
+}
+
+/** Narrow the optimisation answer (the desirability optimum). */
+function parseRsmOptimizeResponse(
+  raw: unknown,
+  what: string,
+): RsmOptimizeResponse {
+  const r = expectObject(raw, what);
+  const candidateRaw = expectObject(r["candidate"], `${what} candidate`);
+  const responsesRaw = expectObject(
+    candidateRaw["responses"],
+    `${what} candidate responses`,
+  );
+  const responses: Record<string, RsmOptimumResponseBlock> = {};
+  for (const [response, blockRaw] of Object.entries(responsesRaw)) {
+    const b = expectObject(blockRaw, `${what} responses ${response}`);
+    const bounds: Record<string, number> = {};
+    if (b["bounds"] && typeof b["bounds"] === "object") {
+      for (const [k, v] of Object.entries(b["bounds"] as Record<string, unknown>)) {
+        if (typeof v === "number") bounds[k] = v;
+      }
+    }
+    responses[response] = {
+      goal: asString(b["goal"]) ?? "",
+      prediction: asNumber(b["prediction"]) ?? 0,
+      individual_desirability: asNumber(b["individual_desirability"]) ?? 0,
+      weight: asNumber(b["weight"]) ?? 1,
+      exponent: asNumber(b["exponent"]) ?? 1,
+      bounds,
+      bounds_source: asString(b["bounds_source"]) ?? "request",
+    };
+  }
+  const sensitivity: RsmOptimizeResponse["sensitivity"] = Array.isArray(
+    r["sensitivity"],
+  )
+    ? (r["sensitivity"] as unknown[]).map((row, i) => {
+        const s = expectObject(row, `${what} sensitivity[${i}]`);
+        const lowRaw = expectObject(s["low"], `${what} sensitivity low`);
+        const highRaw = expectObject(s["high"], `${what} sensitivity high`);
+        return {
+          factor: asString(s["factor"]) ?? "",
+          step_coded: asNumber(s["step_coded"]) ?? 0,
+          low: {
+            coded: asNumber(lowRaw["coded"]) ?? 0,
+            combined_desirability:
+              asNumber(lowRaw["combined_desirability"]) ?? 0,
+            delta: asNumber(lowRaw["delta"]) ?? 0,
+          },
+          high: {
+            coded: asNumber(highRaw["coded"]) ?? 0,
+            combined_desirability:
+              asNumber(highRaw["combined_desirability"]) ?? 0,
+            delta: asNumber(highRaw["delta"]) ?? 0,
+          },
+        };
+      })
+    : [];
+  const alternatives: RsmParetoAlternative[] = Array.isArray(
+    r["pareto_alternatives"],
+  )
+    ? (r["pareto_alternatives"] as unknown[]).map((row, i) => {
+        const a = expectObject(row, `${what} pareto[${i}]`);
+        const predictions: Record<string, number> = {};
+        if (a["predictions"] && typeof a["predictions"] === "object") {
+          for (const [k, v] of Object.entries(
+            a["predictions"] as Record<string, unknown>,
+          )) {
+            if (typeof v === "number") predictions[k] = v;
+          }
+        }
+        return {
+          kind:
+            asString(a["kind"]) === "weight_tilted"
+              ? "weight_tilted"
+              : "individual",
+          response: asString(a["response"]) ?? "",
+          goal: asString(a["goal"]) ?? "",
+          combined_desirability: asNumber(a["combined_desirability"]),
+          note: asString(a["note"]) ?? "",
+          x_coded: numberRecord(a["x_coded"], `${what} pareto[${i}] x_coded`),
+          x_actual: numberRecord(
+            a["x_actual"],
+            `${what} pareto[${i}] x_actual`,
+          ),
+          predictions,
+        };
+      })
+    : [];
+  const feasibleRaw = r["feasible_grid"];
+  const weights: Record<string, number> = {};
+  if (r["weights"] && typeof r["weights"] === "object") {
+    for (const [k, v] of Object.entries(r["weights"] as Record<string, unknown>)) {
+      if (typeof v === "number") weights[k] = v;
+    }
+  }
+  return {
+    model_id: asString(r["model_id"]) ?? "",
+    candidate: {
+      x_coded: numberRecord(candidateRaw["x_coded"], `${what} x_coded`),
+      x_actual: numberRecord(candidateRaw["x_actual"], `${what} x_actual`),
+      combined_desirability:
+        asNumber(candidateRaw["combined_desirability"]) ?? 0,
+      responses,
+    },
+    weights,
+    total_weight: asNumber(r["total_weight"]) ?? 0,
+    constraints: Array.isArray(r["constraints"])
+      ? (r["constraints"] as unknown[]).map((row) => {
+          const c = expectObject(row, `${what} constraint`);
+          return {
+            coefficients: Array.isArray(c["coefficients"])
+              ? (c["coefficients"] as unknown[]).filter(
+                  (v): v is number => typeof v === "number",
+                )
+              : [],
+            sense: asString(c["sense"]) ?? "<=",
+            bound: asNumber(c["bound"]) ?? 0,
+          };
+        })
+      : [],
+    sensitivity,
+    sensitivity_note: asString(r["sensitivity_note"]) ?? "",
+    pareto_alternatives: alternatives,
+    pareto_note: asString(r["pareto_note"]) ?? "",
+    feasible_grid:
+      feasibleRaw && typeof feasibleRaw === "object"
+        ? (() => {
+            const f = expectObject(feasibleRaw, `${what} feasible_grid`);
+            return {
+              factor_x: asString(f["factor_x"]) ?? "",
+              factor_y: asString(f["factor_y"]) ?? "",
+              grid_points: asNumber(f["grid_points"]) ?? 0,
+              other_factors_at: numberRecord(
+                f["other_factors_at"],
+                `${what} other_factors_at`,
+              ),
+              feasible: Array.isArray(f["feasible"])
+                ? (f["feasible"] as unknown[]).map((row) =>
+                    Array.isArray(row)
+                      ? (row as unknown[]).map((v): boolean => v === true)
+                      : [],
+                  )
+                : [],
+              note: asString(f["note"]) ?? "",
+            };
+          })()
+        : null,
+    region_note: asString(r["region_note"]) ?? "",
+    bounds_source_note: asString(r["bounds_source_note"]) ?? "",
+    goals_vocabulary: Array.isArray(r["goals_vocabulary"])
+      ? (r["goals_vocabulary"] as unknown[]).filter(
           (v): v is string => typeof v === "string",
         )
       : [],

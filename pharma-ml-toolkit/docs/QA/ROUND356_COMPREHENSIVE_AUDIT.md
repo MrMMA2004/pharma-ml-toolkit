@@ -178,3 +178,52 @@ artifact export, contract, e2e; the vitest `MultiresponseLane` 6/6;
 the `tests/test_frontend_multiresponse.py` drift guard 12/12). The
 remaining queue: R1 (the RSM engine), G1 (the remaining §3.2 UI
 consumers).
+
+## 9. r359 dated addendum (the R1 lane's delivery — status truing, not history rewriting)
+
+The queue's R1 entry above describes the round-356 truth and stands as
+the record. Three rounds later (2026-11-25, the interactive "Continue
+MASTER_PROMPT part17 / Then push" round): **R1 the Response Surface
+Methodology engine is DELIVERED** — `src/pharmaml/ml/rsm.py` (the §6.3
+design generators — CCD with the rotatable alpha DISCLOSED as outside
+the declared ranges, Box-Behnken, the capped full factorial, the
+two-block CCD split, seeded within-block randomisation, the coded AND
+actual run tables, the typed 512-run bound; the §6.4 second-order fit —
+the coefficient tables, the ANOVA partition with pure error /
+lack-of-fit ONLY where replicated design points exist (nulls
+elsewhere, never invented; the noise-free F reported as an UNDEFINED
+null), the hierarchy notes flag-never-remove, the aliasing
+disclosure, the machine-precision diagnostics guard; the §6.5
+prediction lane with the zone vocabulary (inside_ranges /
+axial_region / outside_design — extrapolation flagged, never silent);
+the §6.5 contour / desirability grids with the displayed fixed
+factors; the §6.6 Derringer-Suich optimiser — the four goals with
+weights and exponents, the observed-min/max bounds fallback stated,
+the deterministic multi-start search confined to the declared ranges
+so it CANNOT extrapolate by construction, the sensitivity sweep, the
+curated Pareto alternatives, the feasible-region mask),
+`/api/v1/rsm` (the seven-path septet: registry / design / fit /
+predict / contour / optimize / models — the contract 121→128 paths /
+75→83 schemas, `api.d.ts` re-grown, the three path-count drift pins
+trued at source with the dated comments), the §6.7 frontend section
+(stage 21 inside the EXISTING Machine Learning workspace — NO tenth
+workspace; the factor editor, the design table, the fit's coefficient
+tables + diagnostics, the prediction zone table, the Plotly contour
+lane, the goal editor, the optimisation candidate + alternatives, the
+joblib export; the visualisations stay in the ML workspace per the
+§6.7 rule — pinned by the drift guard), and the §6.8 test families
+(`tests/api/test_rsm.py` 38/38 — the CCD/BBD/FFD generation counts
+and levels, the coded↔actual conversion, the seeded randomisation
+determinism, the exact coefficient recovery over the KNOWN surfaces,
+the ANOVA nulls, the significant lack-of-fit for a cubic surface,
+the complete-case dropped-row report, the rank-deficiency
+disclosure, the hierarchy flag, the run lineage, the joblib export +
+reload, the prediction CI/PI + zones, the contour modes, the
+desirability arithmetic (all four goals, exact), the fine-grid
+optimality check, the constrained optimisation with the feasible
+mask, the infeasible refusal, determinism, the e2e workflow; the
+vitest `RsmLane` 9/9; the `tests/test_frontend_rsm.py` drift guard
+16/16). The documentation debt closed the same round:
+`docs/ML/RESPONSE_SURFACE_METHODOLOGY.md` + `docs/ML/MULTI_RESPONSE_ML.md`
+(the part17 §8 pair, the M1 doc owed since r358). The remaining
+queue: **G1 (the remaining §3.2 UI consumers)** alone.

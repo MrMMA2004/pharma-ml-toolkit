@@ -1717,6 +1717,128 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/rsm/contour": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Contour */
+        post: operations["contour_api_v1_rsm_contour_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rsm/design": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Design */
+        post: operations["design_api_v1_rsm_design_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rsm/fit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Fit */
+        post: operations["fit_api_v1_rsm_fit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rsm/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Models
+         * @description The session's RSM models — the comparison surface.
+         */
+        get: operations["models_api_v1_rsm_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rsm/optimize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Optimize */
+        post: operations["optimize_api_v1_rsm_optimize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rsm/predict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Predict */
+        post: operations["predict_api_v1_rsm_predict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rsm/registry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registry */
+        get: operations["registry_api_v1_rsm_registry_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/runs": {
         parameters: {
             query?: never;
@@ -2368,6 +2490,22 @@ export interface components {
             /** Weights */
             weights?: number[] | null;
         };
+        /**
+         * ConstraintSpec
+         * @description One linear coded-factor constraint: a . x <= / >= b.
+         */
+        ConstraintSpec: {
+            /** Bound */
+            bound: number;
+            /** Coefficients */
+            coefficients: number[];
+            /**
+             * Sense
+             * @default <=
+             * @enum {string}
+             */
+            sense: "<=" | ">=";
+        };
         /** ContactAtomSpec */
         ContactAtomSpec: {
             /** Autodock Type */
@@ -2402,6 +2540,37 @@ export interface components {
             ligand: components["schemas"]["ContactAtomSpec"][];
             /** Receptor */
             receptor: components["schemas"]["ContactAtomSpec"][];
+        };
+        /**
+         * ContourRsmRequest
+         * @description The §6.5 grid contract: one factor pair + fixed values.
+         */
+        ContourRsmRequest: {
+            /** Factor X */
+            factor_x: string;
+            /** Factor Y */
+            factor_y: string;
+            /** Fixed */
+            fixed?: {
+                [key: string]: number;
+            } | null;
+            /** Goals */
+            goals?: components["schemas"]["GoalSpec"][] | null;
+            /**
+             * Grid Points
+             * @default 25
+             */
+            grid_points: number;
+            /**
+             * Mode
+             * @default response
+             * @enum {string}
+             */
+            mode: "response" | "desirability";
+            /** Model Id */
+            model_id: string;
+            /** Response */
+            response?: string | null;
         };
         /** CoverageDiagnosticsRequest */
         CoverageDiagnosticsRequest: {
@@ -2455,6 +2624,53 @@ export interface components {
             mode: "job" | "sync";
             /** Smiles */
             smiles: string[];
+        };
+        /**
+         * DesignRsmRequest
+         * @description The §6.3 design-generation contract.
+         */
+        DesignRsmRequest: {
+            /** Alpha */
+            alpha?: number | null;
+            /**
+             * Alpha Type
+             * @default rotatable
+             * @enum {string}
+             */
+            alpha_type: "rotatable" | "faced" | "custom";
+            /**
+             * Blocks
+             * @default false
+             */
+            blocks: boolean;
+            /**
+             * Center Points
+             * @default 3
+             */
+            center_points: number;
+            /**
+             * Design
+             * @default ccd
+             * @enum {string}
+             */
+            design: "ccd" | "box_behnken" | "full_factorial";
+            /** Factors */
+            factors: components["schemas"]["FactorSpecModel"][];
+            /**
+             * Randomize
+             * @default true
+             */
+            randomize: boolean;
+            /**
+             * Replicates
+             * @default 1
+             */
+            replicates: number;
+            /**
+             * Seed
+             * @default 42
+             */
+            seed: number;
         };
         /** DockRequest */
         DockRequest: {
@@ -2710,6 +2926,20 @@ export interface components {
             /** Model Id */
             model_id: string;
         };
+        /**
+         * FactorSpecModel
+         * @description One declared factor: name, range, optional unit.
+         */
+        FactorSpecModel: {
+            /** High */
+            high: number;
+            /** Low */
+            low: number;
+            /** Name */
+            name: string;
+            /** Unit */
+            unit?: string | null;
+        };
         /** FigureRequest */
         FigureRequest: {
             /** Color */
@@ -2776,6 +3006,38 @@ export interface components {
             radius: number;
             /** Smiles */
             smiles: string[];
+        };
+        /**
+         * FitRsmRequest
+         * @description The §6.4 fit contract over an observed frame.
+         *
+         *     ``dataset_id`` selects a registered typed dataset whose factor
+         *     columns carry the OBSERVED actual levels and whose response
+         *     columns carry the measured results; leaving it None rides the
+         *     seeded SYNTHETIC demo experiment (labelled).  The factor ranges
+         *     are the request's own declared ranges (the coding transform rides
+         *     them); the optional design block records which design produced
+         *     the rows (the zone vocabulary's axial region needs the CCD's
+         *     alpha).
+         */
+        FitRsmRequest: {
+            /** Alpha */
+            alpha?: number | null;
+            /** Alpha Type */
+            alpha_type?: ("rotatable" | "faced") | null;
+            /**
+             * Confidence
+             * @default 0.95
+             */
+            confidence: number;
+            /** Dataset Id */
+            dataset_id?: string | null;
+            /** Design */
+            design?: ("ccd" | "box_behnken" | "full_factorial") | null;
+            /** Factors */
+            factors?: components["schemas"]["FactorSpecModel"][] | null;
+            /** Response Columns */
+            response_columns?: string[];
         };
         /**
          * GnnGraphSpec
@@ -2862,6 +3124,35 @@ export interface components {
              * @default 0
              */
             weight_decay: number;
+        };
+        /**
+         * GoalSpec
+         * @description One response's desirability goal (the §6.6 contract).
+         */
+        GoalSpec: {
+            /**
+             * Exponent
+             * @default 1
+             */
+            exponent: number;
+            /**
+             * Goal
+             * @enum {string}
+             */
+            goal: "maximize" | "minimize" | "target" | "range";
+            /** High */
+            high?: number | null;
+            /** Low */
+            low?: number | null;
+            /** Response */
+            response: string;
+            /** Target */
+            target?: number | null;
+            /**
+             * Weight
+             * @default 1
+             */
+            weight: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3135,6 +3426,28 @@ export interface components {
              */
             tournament_k: number;
         };
+        /**
+         * OptimizeRsmRequest
+         * @description The §6.6 optimisation contract.
+         */
+        OptimizeRsmRequest: {
+            /** Constraints */
+            constraints?: components["schemas"]["ConstraintSpec"][] | null;
+            /** Goals */
+            goals: components["schemas"]["GoalSpec"][];
+            /**
+             * Grid Points
+             * @default 25
+             */
+            grid_points: number;
+            /** Model Id */
+            model_id: string;
+            /** Pair */
+            pair?: [
+                string,
+                string
+            ] | null;
+        };
         /** ParseTextRequest */
         ParseTextRequest: {
             /** Text */
@@ -3341,6 +3654,20 @@ export interface components {
             rows?: {
                 [key: string]: unknown;
             }[] | null;
+        };
+        /**
+         * PredictRsmRequest
+         * @description Point rows (actual units) -> per-response predictions + CI/PI.
+         */
+        PredictRsmRequest: {
+            /** Confidence */
+            confidence?: number | null;
+            /** Model Id */
+            model_id: string;
+            /** Points */
+            points: {
+                [key: string]: number;
+            }[];
         };
         /**
          * PreferenceValue
@@ -7456,6 +7783,225 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    contour_api_v1_rsm_contour_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContourRsmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    design_api_v1_rsm_design_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DesignRsmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fit_api_v1_rsm_fit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FitRsmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    models_api_v1_rsm_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    optimize_api_v1_rsm_optimize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptimizeRsmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    predict_api_v1_rsm_predict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PredictRsmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registry_api_v1_rsm_registry_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

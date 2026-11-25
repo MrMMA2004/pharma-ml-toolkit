@@ -35,6 +35,7 @@ from . import (
     pharmacogenomics,
     pkpd,
     repurposing,
+    rsm,
     runs,
     samples,
     semi_supervised,
@@ -72,6 +73,9 @@ api_router.include_router(multiobjective.router)
 # part17 §5 (the campaign queue's M1 lane) — the generic
 # multi-response ML over pharmaml.ml.multiresponse.
 api_router.include_router(multiresponse.router)
+# part17 §6 (the campaign queue's R1 lane) — the Response Surface
+# Methodology engine over pharmaml.ml.rsm.
+api_router.include_router(rsm.router)
 api_router.include_router(workflow.router)
 api_router.include_router(database.router)
 api_router.include_router(system.router)

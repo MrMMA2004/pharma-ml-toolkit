@@ -360,3 +360,29 @@ bridge) is closed and browser-verified this round.
 (§29 dependency & packaging readiness — see
 `packaging/windows/DEPENDENCY_INVENTORY.md`) and the §46 final
 acceptance sweep (see `docs/ACCEPTANCE_SWEEP.md`).*
+
+· **r359 addendum (part17 §6, the R1 lane):** the Response Surface
+Methodology capability row is BORN —
+`src/pharmaml/ml/rsm.py` (the design generators: CCD rotatable/faced/
+custom alpha with the OUTSIDE-the-ranges axial disclosure, Box-Behnken,
+the capped full factorial, the two-block CCD split; the second-order fit
+with the coefficient tables, the ANOVA pure-error/lack-of-fit nulls,
+the hierarchy flag-never-remove, the aliasing disclosure, the
+machine-precision diagnostics guard; the zone-vocabulary prediction
+lane; the contour / desirability grids; the Derringer-Suich optimiser
+confined to the declared ranges) +
+`src/pharmaml/api/routes/rsm.py` (the seven-path septet: registry /
+design / fit / predict / contour / optimize / models — the contract
+121→128 paths, 75→83 schemas, `api.d.ts` re-grown) + the ML-workspace
+section (stage 21 inside the EXISTING Machine Learning workspace — no
+tenth workspace; the visualisations stay in the ML workspace per the
+§6.7 rule) + the eight typed service methods + the vitest lane (9
+tests) + `tests/api/test_rsm.py` (38 tests: the mandated families —
+CCD/BBD/FFD generation, the coded↔actual conversion, the exact
+coefficient recovery over the KNOWN surfaces, the ANOVA nulls, the
+significant lack-of-fit, the rank-deficiency disclosure, the hierarchy
+flag, the desirability arithmetic, the fine-grid optimality, the
+constrained optimisation, the feasible mask, the e2e workflow) + the
+`tests/test_frontend_rsm.py` drift guard (16 pins) + the §8 docs pair
+(`docs/ML/RESPONSE_SURFACE_METHODOLOGY.md` and the r358-owed
+`docs/ML/MULTI_RESPONSE_ML.md`).

@@ -1507,3 +1507,27 @@ summarises them and wins any status disagreement.
 - The r307 same-version re-ship's sha/bytes are recorded in the
   CHANGELOG + worklog, not here — those move with each re-ship; this
   file records lanes and their statuses, not per-round bytes.
+
+## 9. The r359 clause (the R1 lane — the Response Surface Methodology engine)
+
+The campaign queue's R1 delivered over the r358 terminal: the backend
+`src/pharmaml/ml/rsm.py` (the §6.3 design generators with the honest
+rotatable-alpha disclosure; the §6.4 second-order fit with the ANOVA
+nulls where no replicated design points exist, the hierarchy notes
+flag-never-remove, the aliasing disclosure; the §6.5 zone-vocabulary
+prediction + the contour / desirability grids; the §6.6 Derringer-Suich
+optimiser confined to the declared ranges) + `/api/v1/rsm` (the
+seven-path septet — the contract 121→128 paths / 75→83 schemas, the three
+path-count drift pins trued at source) + the §6.7 frontend section
+(stage 21 inside the EXISTING Machine Learning workspace — no tenth
+workspace) + the §6.8 mandated test families.
+- **The gates this round:** the lane suites 38/38 (API) + 16/16 (the
+  drift guard) + the vitest lane 9/9 (the full frontend suite
+  309/309 over 35 files = the r358 pin 300/300 over 34 files +9/+1);
+  the collection **8,974/0/492 exact** [= the r358 pin 8,920/0/490 +
+  54 the lane (38 API + 16 drift guard) / +2 files]; the OpenAPI contract **128 paths / 83
+  schemas** (121/75 + the RSM septet) with `api.d.ts` re-grown; ruff
+  full-tree clean, mypy src clean, tsc clean, the production build
+  green. The version unchanged at 1.2.240 (no-silent-bumps; NO
+  re-ship). Counter 150 -> 151. The campaign's remaining lane:
+  **G1 the remaining §3.2 UI consumers** alone.

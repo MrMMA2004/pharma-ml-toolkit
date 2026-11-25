@@ -75,6 +75,14 @@ import {
   type MultiresponsePredictResponse,
   type MultiresponseRegistryResponse,
   type MultiresponseTrainResponse,
+  type RsmContourResponse,
+  type RsmDesignResponse,
+  type RsmFitResponse,
+  type RsmGoalSpec,
+  type RsmModelView,
+  type RsmOptimizeResponse,
+  type RsmPredictResponse,
+  type RsmRegistryResponse,
   type PredictResponse,
   type PharmacogenomicsAnalyzeResponse,
   type PharmacogenomicsRegistryResponse,
@@ -935,6 +943,51 @@ export function MLPage() {
   const [mrExportArtifact, setMrExportArtifact] = useState<ArtifactView | null>(null);
   const [mrResidualTarget, setMrResidualTarget] = useState<string | null>(null);
 
+  // stage 21: the Experimental Design & Response Surface lane (part17
+  // §6, the R1 lane — the RSM engine over the REAL in-tree backend:
+  // the design generators, the second-order fit with its ANOVA /
+  // diagnostics, the contour / desirability grids, and the
+  // Derringer-Suich optimiser; NO tenth workspace, the section lives
+  // in THIS Machine Learning workspace)
+  const [rsmRegistry, setRsmRegistry] = useState<RsmRegistryResponse | null>(null);
+  const [rsmDesignKey, setRsmDesignKey] = useState<"ccd" | "box_behnken" | "full_factorial">("ccd");
+  const [rsmAlphaType, setRsmAlphaType] = useState<"rotatable" | "faced" | "custom">("rotatable");
+  const [rsmCenterPoints, setRsmCenterPoints] = useState(3);
+  const [rsmRandomize, setRsmRandomize] = useState(true);
+  const [rsmSeed, setRsmSeed] = useState(42);
+  const [rsmBlocks, setRsmBlocks] = useState(false);
+  const [rsmDesignResult, setRsmDesignResult] = useState<RsmDesignResponse | null>(null);
+  const [rsmDesignError, setRsmDesignError] = useState<string | null>(null);
+  const [rsmDesignBusy, setRsmDesignBusy] = useState(false);
+  const [rsmDatasetId, setRsmDatasetId] = useState<string | null>(null);
+  const [rsmResponseColumns, setRsmResponseColumns] = useState<string[]>([]);
+  const [rsmConfidence, setRsmConfidence] = useState(0.95);
+  const [rsmFitResult, setRsmFitResult] = useState<RsmFitResponse | null>(null);
+  const [rsmModels, setRsmModels] = useState<readonly RsmModelView[]>([]);
+  const [rsmFitError, setRsmFitError] = useState<string | null>(null);
+  const [rsmFitBusy, setRsmFitBusy] = useState(false);
+  const [rsmPredictModelId, setRsmPredictModelId] = useState<string>("");
+  const [rsmPredictText, setRsmPredictText] = useState("");
+  const [rsmPredictResult, setRsmPredictResult] = useState<RsmPredictResponse | null>(null);
+  const [rsmPredictError, setRsmPredictError] = useState<string | null>(null);
+  const [rsmPredictBusy, setRsmPredictBusy] = useState(false);
+  const [rsmContourPairX, setRsmContourPairX] = useState<string | null>(null);
+  const [rsmContourPairY, setRsmContourPairY] = useState<string | null>(null);
+  const [rsmContourResponse, setRsmContourResponse] = useState<string | null>(null);
+  const [rsmContourMode, setRsmContourMode] = useState<"response" | "desirability">("response");
+  const [rsmContourGrid, setRsmContourGrid] = useState(21);
+  const [rsmContourResult, setRsmContourResult] = useState<RsmContourResponse | null>(null);
+  const [rsmContourError, setRsmContourError] = useState<string | null>(null);
+  const [rsmContourBusy, setRsmContourBusy] = useState(false);
+  const [rsmGoalChoices, setRsmGoalChoices] = useState<Record<string, { goal: RsmGoalSpec["goal"]; low: string; high: string; target: string; weight: string }>>({});
+  const [rsmFactorRows, setRsmFactorRows] = useState<
+    { name: string; low: string; high: string; unit: string }[]
+  >([]);
+  const [rsmOptimizeResult, setRsmOptimizeResult] = useState<RsmOptimizeResponse | null>(null);
+  const [rsmOptimizeError, setRsmOptimizeError] = useState<string | null>(null);
+  const [rsmOptimizeBusy, setRsmOptimizeBusy] = useState(false);
+  const [rsmExportArtifact, setRsmExportArtifact] = useState<ArtifactView | null>(null);
+
   // stage 17: the Workflow Builder lane (part13 Phase 6, §8 — the
   // construct/save/reproduce surface over the r322 in-tree engine:
   // templates, the editable spec, validation, sync + job runs, the
@@ -1170,6 +1223,73 @@ export function MLPage() {
       .catch(() => {
         // the models list stays empty — the comparison surface fills
         // after the first train
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // the RSM registry loads once on mount (the §6 R1 lane's own
+  // vocabulary line + the session's fitted surfaces — the comparison
+  // surface's initial fill)
+  useEffect(() => {
+    let cancelled = false;
+    mlApi
+      .rsmRegistry()
+      .then((response) => {
+        if (!cancelled) {
+          setRsmRegistry(response);
+          const demoFactors = response.demo_dataset.factors;
+          if (demoFactors.length >= 2) {
+            setRsmContourPairX(demoFactors[0]?.name ?? null);
+            setRsmContourPairY(demoFactors[1]?.name ?? null);
+          }
+          const responses = response.demo_dataset.responses;
+          if (responses.length > 0) {
+            setRsmContourResponse(responses[0] ?? null);
+          }
+          // the factor editor starts from the demo's declared factors
+          // (the user edits names/ranges/units per their own experiment)
+          setRsmFactorRows(
+            response.demo_dataset.factors.map((f) => ({
+              name: f.name,
+              low: String(f.low),
+              high: String(f.high),
+              unit: f.unit ?? "",
+            })),
+          );
+          // the goal editor's default state: one row per demo response,
+          // maximize for the first, minimize for the second (the demo's
+          // two responses -- the user re-picks per their own experiment)
+          const initial: Record<
+            string,
+            { goal: RsmGoalSpec["goal"]; low: string; high: string; target: string; weight: string }
+          > = {};
+          responses.forEach((r, i) => {
+            initial[r] = {
+              goal: i === 0 ? "maximize" : "minimize",
+              low: "",
+              high: "",
+              target: "",
+              weight: "1",
+            };
+          });
+          setRsmGoalChoices(initial);
+        }
+      })
+      .catch(() => {
+        // the registry line stays absent — never a fabricated summary
+      });
+    mlApi
+      .rsmModels()
+      .then((response) => {
+        if (!cancelled) {
+          setRsmModels(response.models);
+        }
+      })
+      .catch(() => {
+        // the models list stays empty — the comparison surface fills
+        // after the first fit
       });
     return () => {
       cancelled = true;
@@ -2240,6 +2360,308 @@ export function MLPage() {
       setMrError(describeError(error));
     }
   }, [mrResult]);
+
+  // stage 21: the Experimental Design & Response Surface handlers
+  // (part17 §6 — the R1 lane: every gate fires client-side BEFORE any
+  // request; the backend's own typed errors ride the banner verbatim)
+  const rsmParsedFactors = useMemo(() => {
+    const rows: { name: string; low: number; high: number; unit: string | null }[] = [];
+    for (const row of rsmFactorRows) {
+      const low = Number(row.low);
+      const high = Number(row.high);
+      if (
+        row.name.trim().length === 0 ||
+        !Number.isFinite(low) ||
+        !Number.isFinite(high)
+      ) {
+        return null;
+      }
+      rows.push({
+        name: row.name.trim(),
+        low,
+        high,
+        unit: row.unit.trim().length > 0 ? row.unit.trim() : null,
+      });
+    }
+    const names = rows.map((r) => r.name);
+    if (new Set(names).size !== names.length) {
+      return null;
+    }
+    return rows;
+  }, [rsmFactorRows]);
+
+  const handleRsmDesign = useCallback(async () => {
+    const factors = rsmParsedFactors;
+    if (factors === null || factors.length < 2) {
+      setRsmDesignResult(null);
+      setRsmDesignError(
+        "the design needs at least 2 valid factors (unique names, finite low < high)",
+      );
+      return;
+    }
+    if (factors.some((f) => f.low >= f.high)) {
+      setRsmDesignResult(null);
+      setRsmDesignError("every factor needs low < high (the route's own rule)");
+      return;
+    }
+    setRsmDesignBusy(true);
+    setRsmDesignError(null);
+    try {
+      const response = await mlApi.rsmDesign({
+        factors,
+        design: rsmDesignKey,
+        alpha_type: rsmAlphaType,
+        center_points: rsmCenterPoints,
+        randomize: rsmRandomize,
+        seed: rsmSeed,
+        blocks: rsmBlocks,
+      });
+      setRsmDesignResult(response);
+    } catch (error) {
+      setRsmDesignResult(null);
+      setRsmDesignError(describeError(error));
+    } finally {
+      setRsmDesignBusy(false);
+    }
+  }, [
+    rsmParsedFactors,
+    rsmDesignKey,
+    rsmAlphaType,
+    rsmCenterPoints,
+    rsmRandomize,
+    rsmSeed,
+    rsmBlocks,
+  ]);
+
+  const handleRsmFit = useCallback(async () => {
+    const factors = rsmParsedFactors;
+    if (factors === null || factors.length < 2) {
+      setRsmFitResult(null);
+      setRsmFitError(
+        "the fit needs at least 2 valid declared factors (the coding rides them)",
+      );
+      return;
+    }
+    if (rsmDatasetId !== null && rsmResponseColumns.length < 1) {
+      setRsmFitResult(null);
+      setRsmFitError(
+        "a dataset fit needs at least one response column selected",
+      );
+      return;
+    }
+    setRsmFitBusy(true);
+    setRsmFitError(null);
+    try {
+      const params: Record<string, unknown> =
+        rsmDatasetId !== null
+          ? {
+              dataset_id: rsmDatasetId,
+              factors,
+              response_columns: rsmResponseColumns,
+            }
+          : {
+              response_columns:
+                rsmRegistry?.demo_dataset.responses ?? ["yield_pct", "purity_pct"],
+            };
+      const response = await mlApi.rsmFit(params);
+      setRsmFitResult(response);
+      setRsmPredictModelId(response.model.model_id);
+      const modelsResponse = await mlApi.rsmModels();
+      setRsmModels(modelsResponse.models);
+    } catch (error) {
+      setRsmFitResult(null);
+      setRsmFitError(describeError(error));
+    } finally {
+      setRsmFitBusy(false);
+    }
+  }, [rsmParsedFactors, rsmDatasetId, rsmResponseColumns, rsmRegistry]);
+
+  const handleRsmPredict = useCallback(async () => {
+    const text = rsmPredictText.trim();
+    if (text.length === 0 || rsmPredictModelId.length === 0) {
+      setRsmPredictResult(null);
+      setRsmPredictError(
+        "give a model id (a fit above fills it) and points as a JSON array of factor rows",
+      );
+      return;
+    }
+    let points: unknown;
+    try {
+      points = JSON.parse(text);
+    } catch {
+      setRsmPredictResult(null);
+      setRsmPredictError("the points must parse as JSON (an array of row objects)");
+      return;
+    }
+    if (!Array.isArray(points) || points.length === 0) {
+      setRsmPredictResult(null);
+      setRsmPredictError("the points must be a non-empty JSON array of row objects");
+      return;
+    }
+    setRsmPredictBusy(true);
+    setRsmPredictError(null);
+    try {
+      const response = await mlApi.rsmPredict({
+        model_id: rsmPredictModelId,
+        points,
+      });
+      setRsmPredictResult(response);
+    } catch (error) {
+      setRsmPredictResult(null);
+      setRsmPredictError(describeError(error));
+    } finally {
+      setRsmPredictBusy(false);
+    }
+  }, [rsmPredictText, rsmPredictModelId]);
+
+  const handleRsmContour = useCallback(async () => {
+    const modelId = rsmFitResult?.model.model_id;
+    if (modelId === undefined) {
+      setRsmContourResult(null);
+      setRsmContourError("fit a surface first (the contour lane rides a fitted model)");
+      return;
+    }
+    if (
+      rsmContourPairX === null ||
+      rsmContourPairY === null ||
+      rsmContourPairX === rsmContourPairY
+    ) {
+      setRsmContourResult(null);
+      setRsmContourError("the pair needs two DIFFERENT factors (the route's own rule)");
+      return;
+    }
+    if (rsmContourMode === "response" && rsmContourResponse === null) {
+      setRsmContourResult(null);
+      setRsmContourError("the response mode needs the response name");
+      return;
+    }
+    if (rsmContourMode === "desirability") {
+      const modelResponses = rsmFitResult?.model.rsm.responses ?? [];
+      const missingGoals = modelResponses.filter((r) => !(r in rsmGoalChoices));
+      if (missingGoals.length > 0) {
+        setRsmContourResult(null);
+        setRsmContourError(
+          `the desirability overlay needs a goal per response (missing: ${missingGoals.join(", ")})`,
+        );
+        return;
+      }
+    }
+    setRsmContourBusy(true);
+    setRsmContourError(null);
+    try {
+      const goals =
+        rsmContourMode === "desirability"
+          ? (rsmFitResult?.model.rsm.responses ?? []).map((r) => {
+              const choice = rsmGoalChoices[r] ?? {
+                goal: "maximize" as const,
+                low: "",
+                high: "",
+                target: "",
+                weight: "1",
+              };
+              return {
+                response: r,
+                goal: choice.goal,
+                low: choice.low.trim().length > 0 ? Number(choice.low) : null,
+                high: choice.high.trim().length > 0 ? Number(choice.high) : null,
+                target:
+                  choice.goal === "target" && choice.target.trim().length > 0
+                    ? Number(choice.target)
+                    : null,
+                weight: Number(choice.weight) || 1,
+              };
+            })
+          : null;
+      const response = await mlApi.rsmContour({
+        model_id: modelId,
+        factor_x: rsmContourPairX,
+        factor_y: rsmContourPairY,
+        grid_points: rsmContourGrid,
+        mode: rsmContourMode,
+        response: rsmContourMode === "response" ? rsmContourResponse : null,
+        goals,
+      });
+      setRsmContourResult(response);
+    } catch (error) {
+      setRsmContourResult(null);
+      setRsmContourError(describeError(error));
+    } finally {
+      setRsmContourBusy(false);
+    }
+  }, [
+    rsmFitResult,
+    rsmContourPairX,
+    rsmContourPairY,
+    rsmContourMode,
+    rsmContourResponse,
+    rsmContourGrid,
+    rsmGoalChoices,
+  ]);
+
+  const handleRsmOptimize = useCallback(async () => {
+    const modelId = rsmFitResult?.model.model_id;
+    if (modelId === undefined) {
+      setRsmOptimizeResult(null);
+      setRsmOptimizeError("fit a surface first (the optimiser rides a fitted model)");
+      return;
+    }
+    const modelResponses = rsmFitResult?.model.rsm.responses ?? [];
+    const goals: Record<string, unknown>[] = [];
+    for (const r of modelResponses) {
+      const choice = rsmGoalChoices[r];
+      if (choice === undefined) {
+        setRsmOptimizeResult(null);
+        setRsmOptimizeError(
+          `every model response needs a goal (missing: ${r})`,
+        );
+        return;
+      }
+      const weight = Number(choice.weight);
+      if (!Number.isFinite(weight) || weight <= 0) {
+        setRsmOptimizeResult(null);
+        setRsmOptimizeError(`the weight for ${r} must be a positive number`);
+        return;
+      }
+      goals.push({
+        response: r,
+        goal: choice.goal,
+        low: choice.low.trim().length > 0 ? Number(choice.low) : null,
+        high: choice.high.trim().length > 0 ? Number(choice.high) : null,
+        target:
+          choice.goal === "target" && choice.target.trim().length > 0
+            ? Number(choice.target)
+            : null,
+        weight,
+      });
+    }
+    setRsmOptimizeBusy(true);
+    setRsmOptimizeError(null);
+    try {
+      const response = await mlApi.rsmOptimize({
+        model_id: modelId,
+        goals,
+      });
+      setRsmOptimizeResult(response);
+    } catch (error) {
+      setRsmOptimizeResult(null);
+      setRsmOptimizeError(describeError(error));
+    } finally {
+      setRsmOptimizeBusy(false);
+    }
+  }, [rsmFitResult, rsmGoalChoices]);
+
+  const handleRsmExport = useCallback(async () => {
+    const modelId = rsmFitResult?.model.model_id;
+    if (modelId === undefined) {
+      return;
+    }
+    try {
+      const artifact = await mlApi.rsmExport(modelId);
+      setRsmExportArtifact(artifact);
+    } catch (error) {
+      setRsmFitError(describeError(error));
+    }
+  }, [rsmFitResult]);
 
   // stage 17: the Workflow Builder handlers (§8's construct/save/
   // reproduce surface — every gate fires client-side BEFORE any
@@ -5680,6 +6102,1133 @@ export function MLPage() {
 
       <StageHeader
         index={21}
+        title="Experimental Design & Response Surface"
+        hint="the RSM engine (part17 §6) — design generators, the second-order fit, contours, desirability optimisation"
+        icon={<FlaskConical aria-hidden className="h-4 w-4" />}
+      >
+        <Card>
+          <CardContent>
+            <p className="text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              The part17 §6 (R1) lane over the REAL in-tree backend
+              (ml/rsm.py): the design generators (the CCD with its
+              rotatable alpha disclosed — the axial runs sit OUTSIDE the
+              declared ranges, stated never hidden; Box-Behnken; the
+              full 2^k factorial), the coded/actual run tables with
+              blocks and seeded randomisation, the second-order fit with
+              its ANOVA partition (pure error / lack-of-fit only where
+              replicated design points exist — nulls elsewhere, never
+              invented), the diagnostics (R2 / adj R2 / pred R2 / PRESS
+              / leverage / studentised residuals / Cook&apos;s distance
+              with STATED thresholds), hierarchy notes (flagged, never
+              auto-removed), the aliasing disclosure, the contour and
+              desirability grids, the Derringer-Suich multi-response
+              optimiser (confined to the declared ranges — it cannot
+              extrapolate by construction), and the joblib export
+              through the REAL save_model lane. The seeded demo
+              experiment is SYNTHETIC with KNOWN noise-free surfaces —
+              labelled so wherever it travels.
+            </p>
+            {rsmRegistry !== null ? (
+              <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                registry: {rsmRegistry.designs.map((d) => d.label).join(" · ")}
+                {" — "}
+                goals: {rsmRegistry.goals.join(" / ")} · the demo frame:{" "}
+                {rsmRegistry.demo_dataset.name} (
+                {rsmRegistry.demo_dataset.runs} runs,{" "}
+                {rsmRegistry.demo_dataset.responses.join(" + ")}, synthetic)
+              </p>
+            ) : null}
+
+            {/* the factor editor (§6.7's Select Factors / Define Factor
+                Ranges — the declared ranges drive the coding) */}
+            <div className="mt-4">
+              <p className="text-xs font-medium text-[var(--color-muted-foreground)]">
+                factors (the declared ranges drive the coded transform)
+              </p>
+              <div className="mt-2 overflow-hidden rounded-md border border-[var(--color-border)]">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-[var(--color-muted)] text-left">
+                      <th className="px-2 py-1 font-medium">name</th>
+                      <th className="px-2 py-1 font-medium">low</th>
+                      <th className="px-2 py-1 font-medium">high</th>
+                      <th className="px-2 py-1 font-medium">unit</th>
+                      <th className="px-2 py-1" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rsmFactorRows.map((row, i) => (
+                      <tr key={i} className="border-t border-[var(--color-border)]">
+                        <td className="px-2 py-1">
+                          <input
+                            type="text"
+                            value={row.name}
+                            onChange={(event) => {
+                              setRsmFactorRows((prev) => {
+                                const next = [...prev];
+                                next[i] = { ...(next[i] ?? { name: "", low: "", high: "", unit: "" }), name: event.target.value };
+                                return next;
+                              });
+                            }}
+                            aria-label={`rsm factor ${i + 1} name`}
+                            className="w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 font-mono text-xs"
+                          />
+                        </td>
+                        <td className="px-2 py-1">
+                          <input
+                            type="number"
+                            value={row.low}
+                            onChange={(event) => {
+                              setRsmFactorRows((prev) => {
+                                const next = [...prev];
+                                next[i] = { ...(next[i] ?? { name: "", low: "", high: "", unit: "" }), low: event.target.value };
+                                return next;
+                              });
+                            }}
+                            aria-label={`rsm factor ${i + 1} low`}
+                            className="w-24 rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 font-mono text-xs"
+                          />
+                        </td>
+                        <td className="px-2 py-1">
+                          <input
+                            type="number"
+                            value={row.high}
+                            onChange={(event) => {
+                              setRsmFactorRows((prev) => {
+                                const next = [...prev];
+                                next[i] = { ...(next[i] ?? { name: "", low: "", high: "", unit: "" }), high: event.target.value };
+                                return next;
+                              });
+                            }}
+                            aria-label={`rsm factor ${i + 1} high`}
+                            className="w-24 rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 font-mono text-xs"
+                          />
+                        </td>
+                        <td className="px-2 py-1">
+                          <input
+                            type="text"
+                            value={row.unit}
+                            onChange={(event) => {
+                              setRsmFactorRows((prev) => {
+                                const next = [...prev];
+                                next[i] = { ...(next[i] ?? { name: "", low: "", high: "", unit: "" }), unit: event.target.value };
+                                return next;
+                              });
+                            }}
+                            aria-label={`rsm factor ${i + 1} unit`}
+                            className="w-20 rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 font-mono text-xs"
+                          />
+                        </td>
+                        <td className="px-2 py-1 text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            aria-label={`rsm remove factor ${i + 1}`}
+                            disabled={rsmFactorRows.length <= 2}
+                            onClick={() => {
+                              setRsmFactorRows((prev) => prev.filter((_, j) => j !== i));
+                            }}
+                          >
+                            remove
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                disabled={rsmFactorRows.length >= 10}
+                onClick={() => {
+                  setRsmFactorRows((prev) => [
+                    ...prev,
+                    { name: "", low: "0", high: "1", unit: "" },
+                  ]);
+                }}
+              >
+                add factor
+              </Button>
+            </div>
+
+            {/* the design configuration (§6.7's Choose DOE Design /
+                Generate Design) */}
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                design
+                <select
+                  value={rsmDesignKey}
+                  onChange={(event) =>
+                    setRsmDesignKey(
+                      event.target.value as
+                        | "ccd"
+                        | "box_behnken"
+                        | "full_factorial",
+                    )
+                  }
+                  aria-label="rsm design"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  {(rsmRegistry?.designs ?? []).map((d) => (
+                    <option key={d.key} value={d.key}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                alpha type (CCD)
+                <select
+                  value={rsmAlphaType}
+                  onChange={(event) =>
+                    setRsmAlphaType(
+                      event.target.value as "rotatable" | "faced" | "custom",
+                    )
+                  }
+                  aria-label="rsm alpha type"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  <option value="rotatable">rotatable — (2k)^(1/4)</option>
+                  <option value="faced">faced — alpha = 1</option>
+                  <option value="custom">custom</option>
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                center points
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  value={rsmCenterPoints}
+                  onChange={(event) => setRsmCenterPoints(Number(event.target.value))}
+                  aria-label="rsm center points"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                seed
+                <input
+                  type="number"
+                  min={0}
+                  max={2147483647}
+                  value={rsmSeed}
+                  onChange={(event) => setRsmSeed(Number(event.target.value))}
+                  aria-label="rsm seed"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                <input
+                  type="checkbox"
+                  checked={rsmRandomize}
+                  onChange={(event) => setRsmRandomize(event.target.checked)}
+                  className="h-4 w-4"
+                  aria-label="rsm randomize"
+                />
+                randomize within blocks
+              </label>
+              <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                <input
+                  type="checkbox"
+                  checked={rsmBlocks}
+                  onChange={(event) => setRsmBlocks(event.target.checked)}
+                  className="h-4 w-4"
+                  aria-label="rsm blocks"
+                />
+                two-block CCD split
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button size="sm" disabled={rsmDesignBusy} onClick={() => void handleRsmDesign()}>
+                {rsmDesignBusy ? "Generating…" : "Generate design"}
+              </Button>
+              {rsmDesignError !== null ? (
+                <p className="text-xs text-[var(--color-destructive-foreground)]">
+                  {rsmDesignError}
+                </p>
+              ) : null}
+            </div>
+
+            {rsmDesignResult !== null ? (
+              <div className="mt-4">
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  {rsmDesignResult.design.type} ·{" "}
+                  {rsmDesignResult.design.runs} runs · centers{" "}
+                  {rsmDesignResult.design.center_points} · replicates{" "}
+                  {rsmDesignResult.design.replicates} · blocks{" "}
+                  {rsmDesignResult.design.blocks ? "yes (2)" : "no"}
+                  {rsmDesignResult.design.alpha !== null
+                    ? ` · alpha ${rsmDesignResult.design.alpha.toFixed(3)}`
+                    : ""}{" "}
+                  · census{" "}
+                  {Object.entries(rsmDesignResult.run_type_counts)
+                    .map(([k, v]) => `${k}: ${v}`)
+                    .join(" · ")}
+                </p>
+                <div className="mt-2 max-h-56 overflow-y-auto rounded-md border border-[var(--color-border)]">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-[var(--color-muted)] text-left">
+                      <tr>
+                        <th className="px-2 py-1 font-medium">order</th>
+                        <th className="px-2 py-1 font-medium">run</th>
+                        <th className="px-2 py-1 font-medium">type</th>
+                        <th className="px-2 py-1 font-medium">block</th>
+                        {rsmDesignResult.factors.map((f) => (
+                          <th key={f.name} className="px-2 py-1 font-medium">
+                            {f.name}
+                            {f.unit !== null ? ` (${f.unit})` : ""}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rsmDesignResult.runs.map((run) => (
+                        <tr
+                          key={run.run_id}
+                          className="border-t border-[var(--color-border)]"
+                        >
+                          <td className="px-2 py-1 font-mono">{run.run_order}</td>
+                          <td className="px-2 py-1 font-mono">{run.run_id}</td>
+                          <td className="px-2 py-1">{run.run_type}</td>
+                          <td className="px-2 py-1 font-mono">{run.block}</td>
+                          {rsmDesignResult.factors.map((f) => (
+                            <td key={f.name} className="px-2 py-1 font-mono">
+                              {run.actual[f.name] !== undefined
+                                ? run.actual[f.name]?.toFixed(2) ?? "—"
+                                : "—"}
+                              <span className="text-[var(--color-muted-foreground)]">
+                                {" "}
+                                ({run.coded[f.name] !== undefined ? run.coded[f.name]?.toFixed(2) ?? "—" : "—"})
+                              </span>
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <ul className="mt-2 list-disc pl-4 text-xs text-[var(--color-muted-foreground)]">
+                  {rsmDesignResult.assumptions.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                  {rsmDesignResult.export_note}
+                </p>
+              </div>
+            ) : null}
+
+            {/* the fit configuration (§6.7's Select Dataset / Import
+                Experimental Results / Fit Response Surface) */}
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                observed results (empty = the seeded SYNTHETIC demo experiment)
+                <select
+                  value={rsmDatasetId ?? ""}
+                  onChange={(event) => {
+                    setRsmDatasetId(
+                      event.target.value.length > 0 ? event.target.value : null,
+                    );
+                    setRsmResponseColumns([]);
+                  }}
+                  aria-label="rsm dataset"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  <option value="">
+                    demo (synthetic, 17 runs, KNOWN surfaces)
+                  </option>
+                  {datasets.map((d) => (
+                    <option key={d.dataset_id} value={d.dataset_id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                confidence
+                <input
+                  type="number"
+                  min={0.5}
+                  max={0.999}
+                  step={0.01}
+                  value={rsmConfidence}
+                  onChange={(event) => setRsmConfidence(Number(event.target.value))}
+                  aria-label="rsm confidence"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                />
+              </label>
+            </div>
+            {rsmDatasetId !== null ? (
+              <div className="mt-2 max-h-32 overflow-y-auto rounded-md border border-[var(--color-border)] p-2">
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  response columns ({rsmResponseColumns.length} selected —
+                  the factor columns must ALSO be present in the dataset)
+                </p>
+                {(datasets.find((d) => d.dataset_id === rsmDatasetId)?.columns ?? [])
+                  .filter((col) => !rsmFactorRows.some((f) => f.name === col))
+                  .map((col) => (
+                    <label
+                      key={col}
+                      className="flex items-center gap-2 py-0.5 text-xs"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={rsmResponseColumns.includes(col)}
+                        onChange={(event) => {
+                          setRsmResponseColumns((prev) =>
+                            event.target.checked
+                              ? [...prev, col]
+                              : prev.filter((c) => c !== col),
+                          );
+                        }}
+                        aria-label={`rsm response column ${col}`}
+                        className="h-4 w-4"
+                      />
+                      {col}
+                    </label>
+                  ))}
+              </div>
+            ) : null}
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button size="sm" disabled={rsmFitBusy} onClick={() => void handleRsmFit()}>
+                {rsmFitBusy ? "Fitting…" : "Fit response surface"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={rsmFitResult === null}
+                onClick={() => void handleRsmExport()}
+              >
+                Export the bundle (joblib)
+              </Button>
+              {rsmFitError !== null ? (
+                <p className="text-xs text-[var(--color-destructive-foreground)]">
+                  {rsmFitError}
+                </p>
+              ) : null}
+            </div>
+            {rsmExportArtifact !== null ? (
+              <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                artifact {rsmExportArtifact.filename} ·{" "}
+                {rsmExportArtifact.size_bytes} B · digest{" "}
+                {rsmExportArtifact.sha256.slice(0, 16)}…
+              </p>
+            ) : null}
+
+            {rsmFitResult !== null ? (
+              <div className="mt-4 space-y-4">
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  {rsmFitResult.model.rsm.factors.join(" · ")} →{" "}
+                  {rsmFitResult.model.rsm.responses.join(" · ")} ·{" "}
+                  {rsmFitResult.data.n_runs} runs
+                  {rsmFitResult.data.dropped_rows > 0
+                    ? ` · ${rsmFitResult.data.dropped_rows} dropped (complete-case, reported)`
+                    : ""}{" "}
+                  · {rsmFitResult.model.rsm.n_terms} terms · df{" "}
+                  {rsmFitResult.model.rsm.df_residual} ·{" "}
+                  {rsmFitResult.provenance.synthetic
+                    ? "SYNTHETIC demo (labelled)"
+                    : `dataset ${rsmFitResult.provenance.dataset_name}`}
+                </p>
+                {rsmFitResult.data.aliasing !== null ? (
+                  <p className="rounded-md border border-[var(--color-border)] bg-[var(--color-muted)] p-2 text-xs text-[var(--color-muted-foreground)]">
+                    aliasing disclosure: {rsmFitResult.data.aliasing.note}
+                  </p>
+                ) : null}
+                {rsmFitResult.data.hierarchy_notes.length > 0 ? (
+                  <ul className="list-disc pl-4 text-xs text-[var(--color-muted-foreground)]">
+                    {rsmFitResult.data.hierarchy_notes.map((note) => (
+                      <li key={note}>{note}</li>
+                    ))}
+                  </ul>
+                ) : null}
+
+                {/* the per-response statistics + coefficient tables */}
+                {rsmFitResult.model.rsm.responses.map((response) => {
+                  const stats = rsmFitResult.fit_statistics[response] ?? {
+                    n_runs: 0,
+                    df_residual: 0,
+                    rank: 0,
+                    r2: 0,
+                    adj_r2: 0,
+                    pred_r2: 0,
+                    rmse: 0,
+                    press: 0,
+                    confidence: 0.95,
+                    outliers_flagged: 0,
+                    influential_flagged: 0,
+                    cooks_threshold: 1,
+                    machine_precision_fit: false,
+                    diagnostics_note: null,
+                    thresholds_note: "",
+                  };
+                  const coefficients =
+                    rsmFitResult.coefficients[response] ?? [];
+                  const anova = rsmFitResult.anova[response] ?? {};
+                  const diagnostics =
+                    rsmFitResult.diagnostics[response] ?? [];
+                  return (
+                    <div
+                      key={response}
+                      className="rounded-md border border-[var(--color-border)] p-3"
+                    >
+                      <p className="text-sm font-medium">
+                        {response}{" "}
+                        <span className="text-xs text-[var(--color-muted-foreground)]">
+                          (R2 {stats.r2.toFixed(4)} · adj{" "}
+                          {stats.adj_r2.toFixed(4)} · pred{" "}
+                          {stats.pred_r2.toFixed(4)} · RMSE{" "}
+                          {stats.rmse.toPrecision(3)} · outliers{" "}
+                          {stats.outliers_flagged} · influential{" "}
+                          {stats.influential_flagged})
+                        </span>
+                      </p>
+                      {stats.diagnostics_note !== null ? (
+                        <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                          {stats.diagnostics_note}
+                        </p>
+                      ) : null}
+                      <div className="mt-2 max-h-48 overflow-y-auto rounded-md border border-[var(--color-border)]">
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0 bg-[var(--color-muted)] text-left">
+                            <tr>
+                              <th className="px-2 py-1 font-medium">term</th>
+                              <th className="px-2 py-1 font-medium">estimate</th>
+                              <th className="px-2 py-1 font-medium">std error</th>
+                              <th className="px-2 py-1 font-medium">t</th>
+                              <th className="px-2 py-1 font-medium">p</th>
+                              <th className="px-2 py-1 font-medium">CI (95%)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {coefficients.map((row) => (
+                              <tr
+                                key={row.term}
+                                className="border-t border-[var(--color-border)]"
+                              >
+                                <td className="px-2 py-1">{row.label}</td>
+                                <td className="px-2 py-1 font-mono">
+                                  {row.estimate.toFixed(4)}
+                                </td>
+                                <td className="px-2 py-1 font-mono">
+                                  {row.std_error !== null
+                                    ? row.std_error.toFixed(4)
+                                    : "—"}
+                                </td>
+                                <td className="px-2 py-1 font-mono">
+                                  {row.t !== null ? row.t.toFixed(2) : "—"}
+                                </td>
+                                <td className="px-2 py-1 font-mono">
+                                  {row.p !== null && row.p < 1e-4
+                                    ? "<1e-4"
+                                    : row.p !== null
+                                      ? row.p.toFixed(4)
+                                      : "—"}
+                                </td>
+                                <td className="px-2 py-1 font-mono">
+                                  {row.ci_low !== null && row.ci_high !== null
+                                    ? `[${row.ci_low.toFixed(3)}, ${row.ci_high.toFixed(3)}]`
+                                    : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                        ANOVA — regression F{" "}
+                        {anova["regression"] !== undefined &&
+                        (anova["regression"] as Record<string, unknown>)["f"] !==
+                          null
+                          ? String(
+                              (anova["regression"] as Record<string, unknown>)["f"],
+                            ).slice(0, 8)
+                          : "—"}{" "}
+                        · pure error{" "}
+                        {anova["pure_error"] === null ? "null (no replicates)" : "present"}{" "}
+                        · lack-of-fit{" "}
+                        {anova["lack_of_fit"] === null
+                          ? "null (no replicated design points)"
+                          : "present"}{" "}
+                        (nulls where the data cannot support the test —
+                        never invented)
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                        fitted-vs-observed: {diagnostics.length} rows — the
+                        first residual{" "}
+                        {diagnostics.length > 0
+                          ? diagnostics[0]?.residual.toPrecision(3) ?? "—"
+                          : "—"}{" "}
+                        · leverage{" "}
+                        {diagnostics.length > 0
+                          ? diagnostics[0]?.leverage.toFixed(3) ?? "—"
+                          : "—"}{" "}
+                        · Cook&apos;s{" "}
+                        {diagnostics.length > 0
+                          ? diagnostics[0]?.cooks_distance.toPrecision(3) ?? "—"
+                          : "—"}
+                      </p>
+                    </div>
+                  );
+                })}
+
+                {/* the models comparison surface */}
+                {rsmModels.length > 0 ? (
+                  <div className="max-h-40 overflow-y-auto rounded-md border border-[var(--color-border)]">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-[var(--color-muted)] text-left">
+                        <tr>
+                          <th className="px-2 py-1 font-medium">model</th>
+                          <th className="px-2 py-1 font-medium">factors</th>
+                          <th className="px-2 py-1 font-medium">responses</th>
+                          <th className="px-2 py-1 font-medium">runs</th>
+                          <th className="px-2 py-1 font-medium">rank</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rsmModels.map((m) => (
+                          <tr
+                            key={m.model_id}
+                            className="border-t border-[var(--color-border)]"
+                          >
+                            <td className="px-2 py-1 font-mono">
+                              {m.model_id}
+                            </td>
+                            <td className="px-2 py-1">
+                              {m.rsm.factors.join(", ")}
+                            </td>
+                            <td className="px-2 py-1">
+                              {m.rsm.responses.join(", ")}
+                            </td>
+                            <td className="px-2 py-1 font-mono">
+                              {m.n_train_rows}
+                            </td>
+                            <td className="px-2 py-1 font-mono">
+                              {m.rsm.rank}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* the prediction lane (§6.5 with the zone vocabulary) */}
+            <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <div>
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  model id (a fit above fills it)
+                  <input
+                    type="text"
+                    value={rsmPredictModelId}
+                    onChange={(event) => setRsmPredictModelId(event.target.value)}
+                    aria-label="rsm predict model id"
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 font-mono text-xs"
+                  />
+                </label>
+                <label className="mt-2 block text-xs text-[var(--color-muted-foreground)]">
+                  points (JSON array of factor rows, ACTUAL units)
+                  <textarea
+                    value={rsmPredictText}
+                    onChange={(event) => setRsmPredictText(event.target.value)}
+                    aria-label="rsm predict points"
+                    rows={3}
+                    placeholder='[{"temperature_c": 70, "ph": 7, "substrate_mM": 30}]'
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 font-mono text-xs"
+                  />
+                </label>
+                <Button
+                  size="sm"
+                  className="mt-2"
+                  disabled={rsmPredictBusy}
+                  onClick={() => void handleRsmPredict()}
+                >
+                  {rsmPredictBusy ? "Predicting the surface…" : "Predict the surface"}
+                </Button>
+                {rsmPredictError !== null ? (
+                  <p className="mt-1 text-xs text-[var(--color-destructive-foreground)]">
+                    {rsmPredictError}
+                  </p>
+                ) : null}
+              </div>
+              {rsmPredictResult !== null ? (
+                <div className="max-h-64 overflow-y-auto rounded-md border border-[var(--color-border)]">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-[var(--color-muted)] text-left">
+                      <tr>
+                        <th className="px-2 py-1 font-medium">#</th>
+                        <th className="px-2 py-1 font-medium">zone</th>
+                        {rsmPredictResult.responses.map((r) => (
+                          <th key={r} className="px-2 py-1 font-medium">
+                            {r} (PI {Math.round(rsmPredictResult.confidence * 100)}%)
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rsmPredictResult.rows.map((row) => (
+                        <tr
+                          key={row.run}
+                          className="border-t border-[var(--color-border)]"
+                        >
+                          <td className="px-2 py-1 font-mono">{row.run}</td>
+                          <td
+                            className={`px-2 py-1 ${
+                              row.zone === "outside_design"
+                                ? "text-[var(--color-destructive-foreground)]"
+                                : "text-[var(--color-muted-foreground)]"
+                            }`}
+                          >
+                            {row.zone}
+                          </td>
+                          {rsmPredictResult.responses.map((r) => {
+                            const block = row[r];
+                            return (
+                              <td key={r} className="px-2 py-1 font-mono">
+                                {typeof block === "object" && block !== null
+                                  ? `${(block as { fitted: number }).fitted.toFixed(2)} [${(block as { pi_low: number }).pi_low.toFixed(2)}, ${(block as { pi_high: number }).pi_high.toFixed(2)}]`
+                                  : "—"}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {rsmPredictResult.extrapolation.count > 0 ? (
+                    <p className="border-t border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-destructive-foreground)]">
+                      extrapolation flagged on{" "}
+                      {rsmPredictResult.extrapolation.count} point(s) —{" "}
+                      {rsmPredictResult.extrapolation.runs.join(", ")}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            {/* the contour / surface lane (§6.7's Explore Contours and
+                3D Surfaces — the Plotly lane) */}
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                factor x
+                <select
+                  value={rsmContourPairX ?? ""}
+                  onChange={(event) => setRsmContourPairX(event.target.value)}
+                  aria-label="rsm contour factor x"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  {(rsmFitResult?.configuration.factors ?? rsmRegistry?.demo_dataset.factors ?? []).map(
+                    (f) => (
+                      <option key={f.name} value={f.name}>
+                        {f.name}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                factor y
+                <select
+                  value={rsmContourPairY ?? ""}
+                  onChange={(event) => setRsmContourPairY(event.target.value)}
+                  aria-label="rsm contour factor y"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  {(rsmFitResult?.configuration.factors ?? rsmRegistry?.demo_dataset.factors ?? []).map(
+                    (f) => (
+                      <option key={f.name} value={f.name}>
+                        {f.name}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                mode
+                <select
+                  value={rsmContourMode}
+                  onChange={(event) =>
+                    setRsmContourMode(
+                      event.target.value as "response" | "desirability",
+                    )
+                  }
+                  aria-label="rsm contour mode"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                >
+                  <option value="response">one response&apos;s surface</option>
+                  <option value="desirability">
+                    combined desirability overlay
+                  </option>
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                grid points
+                <input
+                  type="number"
+                  min={5}
+                  max={60}
+                  value={rsmContourGrid}
+                  onChange={(event) =>
+                    setRsmContourGrid(Number(event.target.value))
+                  }
+                  aria-label="rsm contour grid"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                />
+              </label>
+              {rsmContourMode === "response" ? (
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  response
+                  <select
+                    value={rsmContourResponse ?? ""}
+                    onChange={(event) =>
+                      setRsmContourResponse(event.target.value)
+                    }
+                    aria-label="rsm contour response"
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                  >
+                    {(rsmFitResult?.model.rsm.responses ?? rsmRegistry?.demo_dataset.responses ?? []).map(
+                      (r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+            <Button
+              size="sm"
+              className="mt-2"
+              disabled={rsmContourBusy}
+              onClick={() => void handleRsmContour()}
+            >
+              {rsmContourBusy ? "Gridding…" : "Explore the surface"}
+            </Button>
+            {rsmContourError !== null ? (
+              <p className="mt-1 text-xs text-[var(--color-destructive-foreground)]">
+                {rsmContourError}
+              </p>
+            ) : null}
+            {rsmContourResult !== null ? (
+              <div className="mt-3">
+                <PlotlyFigure
+                  ariaLabel={`the ${rsmContourResult.z_name} contour over ${rsmContourResult.factor_x.name} x ${rsmContourResult.factor_y.name}`}
+                  height={320}
+                  data={[
+                    {
+                      type: "contour",
+                      x: rsmContourResult.factor_y.actual,
+                      y: rsmContourResult.factor_x.actual,
+                      z: rsmContourResult.z,
+                      colorscale: "Viridis",
+                      colorbar: {
+                        title: {
+                          text: rsmContourResult.z_name,
+                          side: "right",
+                        },
+                      },
+                    },
+                  ]}
+                  layout={{
+                    title: {
+                      text: `${rsmContourResult.z_name} over ${rsmContourResult.factor_x.name} x ${rsmContourResult.factor_y.name}${Object.keys(rsmContourResult.fixed).length > 0 ? ` (fixed: ${Object.entries(rsmContourResult.fixed).map(([n, v]) => `${n}=${v.actual}`).join(", ")})` : ""}`,
+                    },
+                    xaxis: {
+                      title: {
+                        text: `${rsmContourResult.factor_y.name}${rsmContourResult.factor_y.unit !== null ? ` (${rsmContourResult.factor_y.unit})` : ""}`,
+                      },
+                    },
+                    yaxis: {
+                      title: {
+                        text: `${rsmContourResult.factor_x.name}${rsmContourResult.factor_x.unit !== null ? ` (${rsmContourResult.factor_x.unit})` : ""}`,
+                      },
+                    },
+                    margin: { t: 40, r: 0, b: 40, l: 40 },
+                  }}
+                />
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                  {rsmContourResult.note}
+                </p>
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                  {rsmContourResult.units_note}
+                </p>
+                {Object.keys(rsmContourResult.fixed).length > 0 ? (
+                  <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                    other factors held fixed:{" "}
+                    {Object.entries(rsmContourResult.fixed)
+                      .map(
+                        ([name, v]) =>
+                          `${name}=${v.actual} (coded ${v.coded})`,
+                      )
+                      .join(" · ")}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* the desirability optimisation (§6.7's Optimize Multiple
+                Responses — the goal editor per response) */}
+            {(rsmFitResult?.model.rsm.responses ?? rsmRegistry?.demo_dataset.responses ?? []).length >
+            0 ? (
+              <div className="mt-4">
+                <p className="text-xs font-medium text-[var(--color-muted-foreground)]">
+                  desirability goals (one per response — the bounds fall
+                  back to the OBSERVED design min/max when left empty,
+                  stated per goal)
+                </p>
+                <div className="mt-2 overflow-hidden rounded-md border border-[var(--color-border)]">
+                  <table className="w-full text-xs">
+                    <thead className="bg-[var(--color-muted)] text-left">
+                      <tr>
+                        <th className="px-2 py-1 font-medium">response</th>
+                        <th className="px-2 py-1 font-medium">goal</th>
+                        <th className="px-2 py-1 font-medium">low</th>
+                        <th className="px-2 py-1 font-medium">high</th>
+                        <th className="px-2 py-1 font-medium">target</th>
+                        <th className="px-2 py-1 font-medium">weight</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(rsmFitResult?.model.rsm.responses ??
+                        rsmRegistry?.demo_dataset.responses ??
+                        []).map((r) => {
+                        const choice = rsmGoalChoices[r] ?? {
+                          goal: "maximize" as const,
+                          low: "",
+                          high: "",
+                          target: "",
+                          weight: "1",
+                        };
+                        return (
+                          <tr
+                            key={r}
+                            className="border-t border-[var(--color-border)]"
+                          >
+                            <td className="px-2 py-1">{r}</td>
+                            <td className="px-2 py-1">
+                              <select
+                                value={choice.goal}
+                                onChange={(event) => {
+                                  const goal = event.target.value as RsmGoalSpec["goal"];
+                                  setRsmGoalChoices((prev) => ({
+                                    ...prev,
+                                    [r]: { ...choice, goal },
+                                  }));
+                                }}
+                                aria-label={`rsm goal for ${r}`}
+                                className="rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 text-xs"
+                              >
+                                <option value="maximize">maximize</option>
+                                <option value="minimize">minimize</option>
+                                <option value="target">target</option>
+                                <option value="range">in range</option>
+                              </select>
+                            </td>
+                            <td className="px-2 py-1">
+                              <input
+                                type="number"
+                                value={choice.low}
+                                onChange={(event) => {
+                                  setRsmGoalChoices((prev) => ({
+                                    ...prev,
+                                    [r]: { ...choice, low: event.target.value },
+                                  }));
+                                }}
+                                aria-label={`rsm low for ${r}`}
+                                className="w-20 rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 font-mono text-xs"
+                              />
+                            </td>
+                            <td className="px-2 py-1">
+                              <input
+                                type="number"
+                                value={choice.high}
+                                onChange={(event) => {
+                                  setRsmGoalChoices((prev) => ({
+                                    ...prev,
+                                    [r]: { ...choice, high: event.target.value },
+                                  }));
+                                }}
+                                aria-label={`rsm high for ${r}`}
+                                className="w-20 rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 font-mono text-xs"
+                              />
+                            </td>
+                            <td className="px-2 py-1">
+                              <input
+                                type="number"
+                                value={choice.target}
+                                disabled={choice.goal !== "target"}
+                                onChange={(event) => {
+                                  setRsmGoalChoices((prev) => ({
+                                    ...prev,
+                                    [r]: {
+                                      ...choice,
+                                      target: event.target.value,
+                                    },
+                                  }));
+                                }}
+                                aria-label={`rsm target for ${r}`}
+                                className="w-20 rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 font-mono text-xs disabled:opacity-50"
+                              />
+                            </td>
+                            <td className="px-2 py-1">
+                              <input
+                                type="number"
+                                min={0.1}
+                                step={0.5}
+                                value={choice.weight}
+                                onChange={(event) => {
+                                  setRsmGoalChoices((prev) => ({
+                                    ...prev,
+                                    [r]: {
+                                      ...choice,
+                                      weight: event.target.value,
+                                    },
+                                  }));
+                                }}
+                                aria-label={`rsm weight for ${r}`}
+                                className="w-16 rounded border border-[var(--color-border)] bg-[var(--color-background)] px-1 py-0.5 font-mono text-xs"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <Button
+                  size="sm"
+                  className="mt-2"
+                  disabled={rsmOptimizeBusy}
+                  onClick={() => void handleRsmOptimize()}
+                >
+                  {rsmOptimizeBusy ? "Optimising…" : "Optimise the responses"}
+                </Button>
+                {rsmOptimizeError !== null ? (
+                  <p className="mt-1 text-xs text-[var(--color-destructive-foreground)]">
+                    {rsmOptimizeError}
+                  </p>
+                ) : null}
+                {rsmOptimizeResult !== null ? (
+                  <div className="mt-3 space-y-3">
+                    <div className="rounded-md border border-[var(--color-border)] p-3">
+                      <p className="text-sm font-medium">
+                        combined desirability{" "}
+                        {rsmOptimizeResult.candidate.combined_desirability.toFixed(
+                          6,
+                        )}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                        {Object.entries(rsmOptimizeResult.candidate.x_actual)
+                          .map(([n, v]) => `${n}=${v.toFixed(2)}`)
+                          .join(" · ")}
+                      </p>
+                      <div className="mt-2 max-h-32 overflow-y-auto rounded-md border border-[var(--color-border)]">
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0 bg-[var(--color-muted)] text-left">
+                            <tr>
+                              <th className="px-2 py-1 font-medium">response</th>
+                              <th className="px-2 py-1 font-medium">goal</th>
+                              <th className="px-2 py-1 font-medium">prediction</th>
+                              <th className="px-2 py-1 font-medium">d</th>
+                              <th className="px-2 py-1 font-medium">bounds</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(
+                              rsmOptimizeResult.candidate.responses,
+                            ).map(([r, block]) => (
+                              <tr
+                                key={r}
+                                className="border-t border-[var(--color-border)]"
+                              >
+                                <td className="px-2 py-1">{r}</td>
+                                <td className="px-2 py-1">{block.goal}</td>
+                                <td className="px-2 py-1 font-mono">
+                                  {block.prediction.toFixed(3)}
+                                </td>
+                                <td className="px-2 py-1 font-mono">
+                                  {block.individual_desirability.toFixed(4)}
+                                </td>
+                                <td className="px-2 py-1 text-xs text-[var(--color-muted-foreground)]">
+                                  {Object.entries(block.bounds)
+                                    .map(([k, v]) => `${k}=${v}`)
+                                    .join(", ")}{" "}
+                                  ({block.bounds_source})
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                        sensitivity:{" "}
+                        {rsmOptimizeResult.sensitivity
+                          .map(
+                            (s) =>
+                              `${s.factor}: ΔD ${s.low.delta.toFixed(4)} / ${s.high.delta.toFixed(4)}`,
+                          )
+                          .join(" · ")}
+                      </p>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto rounded-md border border-[var(--color-border)]">
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-[var(--color-muted)] text-left">
+                          <tr>
+                            <th className="px-2 py-1 font-medium">alternative</th>
+                            <th className="px-2 py-1 font-medium">D</th>
+                            <th className="px-2 py-1 font-medium">settings</th>
+                            <th className="px-2 py-1 font-medium">predictions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rsmOptimizeResult.pareto_alternatives.map((a, i) => (
+                            <tr
+                              key={`${a.kind}-${a.response}-${i}`}
+                              className="border-t border-[var(--color-border)]"
+                            >
+                              <td className="px-2 py-1">
+                                {a.kind} · {a.response}
+                              </td>
+                              <td className="px-2 py-1 font-mono">
+                                {a.combined_desirability !== null
+                                  ? a.combined_desirability.toFixed(4)
+                                  : "—"}
+                              </td>
+                              <td className="px-2 py-1 font-mono">
+                                {Object.values(a.x_actual)
+                                  .map((v) => v.toFixed(2))
+                                  .join(" / ")}
+                              </td>
+                              <td className="px-2 py-1 font-mono">
+                                {Object.entries(a.predictions)
+                                  .map(([r, v]) => `${r}: ${v.toFixed(2)}`)
+                                  .join(" · ")}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <ul className="list-disc pl-4 text-xs text-[var(--color-muted-foreground)]">
+                      <li>{rsmOptimizeResult.pareto_note}</li>
+                      <li>{rsmOptimizeResult.region_note}</li>
+                      <li>{rsmOptimizeResult.bounds_source_note}</li>
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      </StageHeader>
+
+      <StageHeader
+        index={22}
         title="Export"
         hint="a registered table artifact + a digest-verified download"
         icon={<ArrowDownToLine aria-hidden className="h-4 w-4" />}

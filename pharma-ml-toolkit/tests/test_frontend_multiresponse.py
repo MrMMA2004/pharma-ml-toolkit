@@ -85,8 +85,11 @@ def test_the_route_is_registered_exactly_once() -> None:
 def test_the_contract_carries_the_four_new_paths() -> None:
     schema = json.loads(CONTRACT.read_text())
     paths = schema["paths"]
-    assert len(paths) == 121, f"the contract drifted: {len(paths)} paths"
-    assert len(schema["components"]["schemas"]) == 75
+    # 121 -> 128 / 75 -> 83 by the r359 part17 §6 R1 rsm septet (the
+    # seven rsm paths + the eight request schemas) -- the RSM lane's
+    # own growth, trued here with the dated comment
+    assert len(paths) == 128, f"the contract drifted: {len(paths)} paths"
+    assert len(schema["components"]["schemas"]) == 83
     for path in (
         "/api/v1/multiresponse/registry",
         "/api/v1/multiresponse/train",
@@ -205,8 +208,10 @@ def test_the_section_rides_the_existing_ml_workspace() -> None:
     # stage 20 inside the SAME workspace, Export renumbered 21
     m = re.search(r'index=\{20\}\s*\n\s*title="Multi-Response Regression"', page)
     assert m is not None, "the section must hold stage index 20"
-    m = re.search(r'index=\{21\}\s*\n\s*title="Export"', page)
-    assert m is not None, "the Export stage must renumber to 21"
+    # the r359 RSM lane inserted stage 21 (Experimental Design &
+    # Response Surface) -- the Export stage renumbered 21 -> 22
+    m = re.search(r'index=\{22\}\s*\n\s*title="Export"', page)
+    assert m is not None, "the Export stage must renumber to 22"
     # the mandate's own vocabulary rides the section prose
     assert "no tenth workspace" not in page  # never re-stated as a claim
     assert "part17 §5 (M1) lane" in page or "part17 §5, the M1 lane" in page
