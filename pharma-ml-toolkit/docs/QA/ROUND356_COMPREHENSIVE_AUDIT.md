@@ -227,3 +227,66 @@ vitest `RsmLane` 9/9; the `tests/test_frontend_rsm.py` drift guard
 `docs/ML/RESPONSE_SURFACE_METHODOLOGY.md` + `docs/ML/MULTI_RESPONSE_ML.md`
 (the part17 §8 pair, the M1 doc owed since r358). The remaining
 queue: **G1 (the remaining §3.2 UI consumers)** alone.
+
+## 10. r360 dated addendum (the G1 lane's delivery — the campaign queue EMPTIED — status truing, not history rewriting)
+
+The queue's G1 entry above describes the round-356 truth and stands as
+the record. Four rounds later (2026-11-25, the interactive "Continue
+MASTER_PROMPT part17 / Then push" round): **G1 the remaining §3.2 UI
+consumers is DELIVERED — and with it the part17 campaign queue is
+FULLY EMPTY** (P1 r357, M1 r358, R1 r359, G1 r360):
+
+* **the global Job Center** — `frontend/src/components/system/
+  JobCenterCard.tsx` mounted in the Introduction workspace: the live
+  cross-workspace session ledger over the EXISTING typed
+  `jobsApi.list` (the list lane that had a typed, API-tested client
+  and no consumer), with the authoritative per-row actions — the
+  result lane (`jobsApi.result`, offered only for COMPLETED rows;
+  the backend's own 409/404 answers surfaced verbatim, never
+  swallowed), the cancellation lane (`jobsApi.cancel`, offered only
+  for the live states QUEUED / RUNNING / CANCELLATION_REQUESTED,
+  behind the two-step confirmation whose armed gate can never
+  outlive its row), and the honest split stated in the card (the
+  live in-session ledger vs the studio database card's persisted
+  history — the two views never pretend to be one);
+* **the durable preference manager** — `frontend/src/components/
+  system/DatabasePreferences.tsx` + the client quartet in
+  `services/database/client.ts` (`preferences` / `setPreference` /
+  `deletePreference` with `parsePreferenceRow` narrowing): the
+  `/database/preferences` quartet's FIRST consumer (the backend
+  surface that had no client lane at all), with the client-side
+  gates firing BEFORE any request (the 1–128 key bound = the
+  backend's own rule; the strict-JSON value validation — an
+  invalid payload never leaves the browser), the two-step delete,
+  the honest 404 already-gone lane, the 409 non-durable note (the
+  shipped host always runs durable), and the durable-SQLite-store-
+  vs-localStorage-settings split stated;
+* **the artifacts view/delete consumers** — the Visualization
+  consumption hub: the per-row View over the EXISTING typed
+  `artifactsApi.view` (the full-record panel, a 404 rendered
+  verbatim — a row can be evicted server-side between the list and
+  the click) and the two-step Delete over the EXISTING typed
+  `artifactsApi.delete` (the r356 dataset-deletion discipline
+  applied to the artifact registry: the row action only arms, the
+  confirm button fires, the honest 404 reconciles, and every
+  stage-local derivative that referenced the evicted row is
+  cleared — the selection, the viewed record, the compare memory,
+  the digest cache — never a dangling reference).
+
+No new API surface (the OpenAPI contract stays 128 paths / 83
+schemas); NO duplicate clients anywhere in the frontend tree (each
+lane rides the EXISTING typed client — pinned by the guards). The
+mandated test families: the vitest trio
+(`JobCenterCard.test.tsx` 9 + `DatabasePreferences.test.tsx` 11 +
+`VisualizationPage.test.tsx` 8 — the full frontend battery
+337/337 over 38 files) and the drift-guard trio
+(`tests/test_frontend_job_center.py` 14 +
+`tests/test_frontend_database_preferences.py` 16 +
+`tests/test_frontend_artifacts_view_delete.py` 13 = 43 new Python
+pins). The QA surface trued the same round: the
+CAPABILITY_INTEGRATION_MATRIX r360 addendum (the three §3.4
+PARTIAL rows closed to PASS, the stale semi-supervised evaluate
+count trued, the §4 verdict table 70 PASS / 1 PARTIAL, the §3.6
+pre-r310 record trued) + the PROJECT_STATUS r360 clause +
+TEST_EXECUTION_REPORT r360 table + the worklog R360 entry. The
+campaign queue: **EMPTY** — the next lane is upkeep alone.

@@ -51,19 +51,11 @@ import {
 
 function describeError(error: unknown): string {
   if (error instanceof ApiError) {
-    const detail = error.detail;
-    if (
-      typeof detail === "object" &&
-      detail !== null &&
-      "detail" in detail &&
-      typeof (detail as Record<string, unknown>)["detail"] === "string"
-    ) {
-      return (detail as Record<string, string>)["detail"] ?? `HTTP ${error.status}`;
-    }
-    if (typeof detail === "string") {
-      return detail;
-    }
-    return `HTTP ${error.status}`;
+    const detail =
+      typeof error.detail === "object" && error.detail !== null
+        ? JSON.stringify(error.detail)
+        : String(error.detail);
+    return `API ${error.status}: ${detail}`;
   }
   return error instanceof Error ? error.message : String(error);
 }

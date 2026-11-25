@@ -90,8 +90,10 @@ describe("DatabasePreferences", () => {
     expect(screen.getByText("report.theme")).toBeInTheDocument();
     expect(screen.getByText(/2 preferences in the durable store/)).toBeInTheDocument();
     // the honest split: the backend store vs the app's localStorage
+    // (the rendered apostrophe is the typographic one — the entity
+    // and the ASCII form are both accepted by the pin)
     expect(
-      screen.getByText(/settings panel&rsquo;s localStorage store|settings panel's localStorage store/i),
+      screen.getByText(/settings panel[’']s localStorage store/i),
     ).toBeInTheDocument();
   });
 
@@ -123,7 +125,7 @@ describe("DatabasePreferences", () => {
     await userEvent.type(screen.getByLabelText("The preference key"), "analysis.default_units");
     await userEvent.type(
       screen.getByLabelText("The preference value (strict JSON)"),
-      '{"concentration":"mg/L"}',
+      '{{"concentration":"mg/L"}',
     );
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -147,7 +149,7 @@ describe("DatabasePreferences", () => {
     await userEvent.type(screen.getByLabelText("The preference key"), "bad.value");
     await userEvent.type(
       screen.getByLabelText("The preference value (strict JSON)"),
-      "{not json}",
+      "{{not json}",
     );
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 

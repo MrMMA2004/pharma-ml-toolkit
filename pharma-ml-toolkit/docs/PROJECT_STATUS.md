@@ -1531,3 +1531,51 @@ workspace) + the §6.8 mandated test families.
   green. The version unchanged at 1.2.240 (no-silent-bumps; NO
   re-ship). Counter 150 -> 151. The campaign's remaining lane:
   **G1 the remaining §3.2 UI consumers** alone.
+
+## 10. The r360 clause (the G1 lane — the remaining §3.2 UI consumers; the part17 campaign queue EMPTIED)
+
+The campaign queue's fourth and FINAL lane delivered over the pushed
+r359 terminal: **the global Job Center** (the Introduction workspace:
+the `jobsApi.list` cross-workspace session ledger — the list lane
+that had a typed, API-tested client and NO consumer — with the
+authoritative per-row actions over the EXISTING typed
+`jobsApi.result`/`jobsApi.cancel`: the COMPLETED-only result lane
+with the 409/404 surfaced verbatim, the two-step cancellation for
+the live states only, the armed-gate disarm, the
+live-vs-persisted split stated) + **the durable preference manager**
+(the `/database/preferences` quartet's FIRST consumer: the
+`DatabasePreferences` card + the client quartet in
+`services/database/client.ts`, with the client-side gates firing
+BEFORE any request — the 1–128 key bound, the strict-JSON value —
+the two-step delete, the honest 404 already-gone and 409
+non-durable lanes) + **the artifacts view/delete consumers** (the
+Visualization consumption hub: the per-row View over the EXISTING
+`artifactsApi.view`, the two-step Delete over the EXISTING
+`artifactsApi.delete` with the never-dangling derivative cleanup).
+No new API surface (the contract stays 128 paths / 83 schemas);
+NO duplicate clients (pinned by the guards).
+- **The gates this round:** the vitest trio 9 + 11 + 8 (the full
+  frontend suite **337/337 over 38 files** = the r359 pin 309/309
+  over 35 + 28/+3) + the drift-guard trio
+  `tests/test_frontend_job_center.py` 14 +
+  `tests/test_frontend_database_preferences.py` 16 +
+  `tests/test_frontend_artifacts_view_delete.py` 13 = **43 pins**;
+  the collection **9,017/0/495 exact** [= the r359 pin 8,974/0/492 +
+  43 the lane / +3 files]; the quick chunk 108/108; the neighbors
+  120 (= the r359 pin 107 six-file set + 13 `test_ml_workspace`);
+  the CI's own Studio-frontend pytest selection 133/133; ruff
+  full-tree clean (the 2-file EXE001 mode residue realigned to the
+  executable bit); mypy src clean (304); tsc clean; the production
+  build green (25.61s); root lint true-exit-0. **The round's own
+  find, decoded and FIXED at source:** the pre-gate commit's four
+  latent vitest failures — the G1 cards' `describeError` dropped the
+  status (trued to the house `API {status}: {detail}` convention of
+  DatasetsPage), the two brace-typed JSON inputs tripped user-event's
+  keyboard descriptor parser (the opening brace escaped `{{`, the
+  closing brace is literal), and one matcher expected the entity
+  form of an apostrophe the DOM renders typographically — the local
+  suite 333/337 → **337/337**, and the pushed terminal's RED Studio
+  frontend CI job (18/19 at `301fa42c`, the same four) rides THIS
+  round's fix back to green. The version unchanged at 1.2.240
+  (no-silent-bumps; NO re-ship). Counter 151 -> 152. The campaign
+  queue: **EMPTY** — the next lane is upkeep alone.

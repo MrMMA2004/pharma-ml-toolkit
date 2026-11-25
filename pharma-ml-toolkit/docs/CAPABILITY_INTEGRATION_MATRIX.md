@@ -224,10 +224,10 @@ REST surface) · **GUI workspace / UI control** (the React consumer) ·
 |---|---|---|---|---|---|---|
 | health probe | GET `/api/v1/health` | consumed by the **StartupGate** (this round: the app's own boot verifies it) | S | gate + banner | `test_backend_service.py` handshake group; r289 browser | PASS |
 | capability discovery | GET `/capabilities[/{id}]` | **no React consumer** — the React side's source of truth is the generated `api.d.ts` (§12.2: generated, not duplicated) | S | — | capability pins | NOTAPPLICABLE — code-gen-time surface |
-| job control plane | GET `/jobs`, `/jobs/{id}`, `/jobs/{id}/result`; POST `/jobs/{id}/cancel` | `JobRunCard` (status/progress/cancel/result) + `useJob` on every workflow page; `jobsApi.list` **no UI ledger panel** | S | JobTracker overlays WS + REST authority | the full §13 group (43 tests) | PASS (`list` PARTIAL — §3.4) |
+| job control plane | GET `/jobs`, `/jobs/{id}`, `/jobs/{id}/result`; POST `/jobs/{id}/cancel` | `JobRunCard` (status/progress/cancel/result) + `useJob` on every workflow page; the global **Job Center** (r360, the G1 lane: the `jobsApi.list` cross-workspace ledger + the authoritative result/cancel routes, in the Introduction workspace) | S | JobTracker overlays WS + REST authority | the full §13 group (43 tests) + the JobCenter vitest 9 + `test_frontend_job_center.py` 14 | PASS — the `list` consumer landed r360 (the Job Center) |
 | the typed event stream | WS `/api/v1/events` | the app's own boot path opens it (StartupGate → `stream.connect()`); the banner consumes `useEventStreamState`; per-page raw subscriptions (DL metrics, generative iterations, docking per-ligand, PKPD batches, MD stages, report sections) | — | tracker + telemetry lists | WS hello/replay/since/live-stream pins; r289 browser `open` | PASS |
-| SQLite persistence surface | GET `/database{,/jobs,/preferences[/{key}]}`; PUT/DELETE preferences; POST `/database/{backup,restore}` | **no React consumer** (§16/§35 surfaces; the ship's data lives in `%LOCALAPPDATA%`) | S | — | `test_persistence.py` 30 + `test_persistence_database.py` 37 | PARTIAL — §3.4 |
-| artifacts view/delete | GET/DELETE `/artifacts/{id}` | **no UI consumer** (list+download are the used lanes) | S | — | evict pins | PARTIAL — §3.4 |
+| SQLite persistence surface | GET `/database{,/jobs,/preferences[/{key}]}`; PUT/DELETE preferences; POST `/database/{backup,restore}` | the **studio database card** (part12: status, job history, backup, restore) + the **DatabasePreferences** card (r360, the G1 lane: the `/preferences` quartet — list, the validated write, the two-step delete) in the Introduction workspace | S | — | `test_persistence.py` 30 + `test_persistence_database.py` 37 + the vitest 11 + `test_frontend_database_preferences.py` 16 | PASS — the preferences consumer landed r360 (§3.4 addendum) |
+| artifacts view/delete | GET/DELETE `/artifacts/{id}` | the Visualization consumption hub's per-row **View** (the full-record panel over `artifactsApi.view`) + **Delete** (the two-step confirmation over `artifactsApi.delete`) — landed r360, the G1 lane | S | — | evict pins + the vitest 8 + `test_frontend_artifacts_view_delete.py` 13 | PASS — the view/delete consumers landed r360 (§3.4 addendum) |
 
 ---
 
@@ -287,29 +287,36 @@ carries no AsyncAPI companion. Recorded here rather than silently
 absent; the frontend side is drift-guarded against
 `pharmaml.api.events.EventType` by `test_frontend_services.py`.
 
-### 3.4 PARTIAL — backend surfaces with no React consumer (the honest classification)
+### 3.4 PARTIAL — backend surfaces with no React consumer (the honest classification; the r360 G1 lane emptied the list)
 
 §21's rule cuts both ways: these are NOT counted as GUI integrations,
 and they are not silently omitted either:
 
 * `GET/DELETE /artifacts/{id}` (view/delete), `GET /jobs` (ledger)
-  — service functions exist (`artifactsApi.view/delete`,
-  `jobsApi.list`), API-tested, **no UI control**. Disposition:
-  housekeeping-lane campaign row (the r356 part17 §3.2 queue).
-  [`DELETE /datasets/{id}` left this list in r356 — see the §3.1
-  addendum above.]
-* `POST /semi-supervised/evaluate` — the leakage-safe evaluation
-  protocol; the ML page renders the honest queue note instead of a
-  fake button. Disposition: campaign row (the workflow's §20.3
-  evaluation-protocol display).
+  — **LEFT THIS LIST in r360 (the G1 lane)**: the Visualization
+  consumption hub now carries the per-row View (the full-record
+  panel) + the two-step Delete, and the Introduction workspace the
+  global Job Center over `jobsApi.list` — each with the mandated
+  vitest + drift-guard pairs. [`DELETE /datasets/{id}` left this
+  list in r356 — see the §3.1 addendum above.]
+* `POST /semi-supervised/evaluate` — **LEFT THIS LIST in r303**
+  (the row's own record; this bullet was the stale residue): the
+  ML stage's `/evaluate` GUI consumer landed with the job-mode
+  COMPLETION pin — the matrix row already reads PASS since.
 * The `/database` surface (job history, preferences CRUD, backup,
-  restore) — §16/§35 surfaces exercised by 67 tests; the ship's data
-  directory is the backend's `%LOCALAPPDATA%` contract. Disposition:
-  campaign row (a Settings panel).
+  restore) — **LEFT THIS LIST across part12 + r360**: the studio
+  database card (status, job history, backup, restore) landed in
+  part12; the DatabasePreferences card (r360, the G1 lane) is the
+  `/preferences` quartet's first consumer. The ship's data
+  directory stays the backend's `%LOCALAPPDATA%` contract.
 * `GET /capabilities`, `/applicability-domain/{catalog,knn,
   domain-box}` standalone routes — code-gen/config/internal-utility
   surfaces: **NOTAPPLICABLE** as standalone GUI features (§21's
   internal-utility classification), each still API-tested.
+
+After r360 the list carries NO unconsumed backend surface — the
+only remaining entry is the NOTAPPLICABLE classification itself,
+not a gap; the part17 campaign queue's G1 lane is what closed it.
 
 ### 3.5 The legacy PySide6 registry is not this matrix
 
@@ -331,6 +338,17 @@ modules and generated `api.d.ts`) plus the scratch browser drivers
 criterion is met by this battery at the contract level; component-level
 JS tests remain a documented campaign row, not a silent gap.
 
+**[r310 truing, restated at r360: this section's opening sentence is
+the pre-r310 record, kept as history]** — the vitest suite landed in
+r310 (part13 Phase 3) and now carries **337 tests over 38 files**
+(`npm --prefix frontend test`, wired into the CI's Studio frontend
+job); the Python drift-guard battery grew to 126+ files including the
+r360 G1 trio (`test_frontend_job_center.py`,
+`test_frontend_database_preferences.py`,
+`test_frontend_artifacts_view_delete.py`). The "zero *.test.tsx"
+claim above is the honest history of the pre-r310 baseline, not the
+current truth.
+
 ---
 
 ## 4. Verdict
@@ -338,23 +356,26 @@ JS tests remain a documented campaign row, not a silent gap.
 | Domain | Operations | PASS | PARTIAL | FAIL | BLOCKED | N/A |
 |---|---|---|---|---|---|---|
 | Datasets + Chemistry | 12 | 12 | 0 | 0 | 0 | 0 |
-| ML + Semi-supervised + AD | 10 | 7 | 1 (evaluate) | 0 | 0 | 2 (internal) |
+| ML + Semi-supervised + AD | 10 | 8 | 0 | 0 | 0 | 2 (internal) |
 | Deep Learning | 3 | 3 | 0 | 0 | 0 | 0 |
 | Generative AI | 5 | 5 | 0 | 0 | 0 | 0 |
 | Molecular Docking | 11 | 11 | 0 | 0 | 0 | 0 |
 | PK/PD | 10 | 10 | 0 | 0 | 0 | 0 |
 | MD Analysis | 7 | 7 | 0 | 0 | 0 | 0 |
-| Visualization + artifacts | 8 | 7 | 1 (view/delete) | 0 | 0 | 0 |
-| Control plane (health/jobs/WS) | 7 | 4 | 3 (db surface, jobs list, capabilities) | 0 | 0 | 1 (codegen) |
-| **Total** | **73 capability rows** | **66** | **5** | **0** | **0** | **3** |
+| Visualization + artifacts | 8 | 8 | 0 | 0 | 0 | 0 |
+| Control plane (health/jobs/WS) | 7 | 6 | 1 (capabilities) | 0 | 0 | 1 (codegen) |
+| **Total** | **73 capability rows** | **70** | **1** | **0** | **0** | **3** |
 
 Every user-facing workflow chain (UI control → service client → REST →
 job/worker → real scientific function → result handler → visualization →
-export → persistence) is **PASS** with live test evidence. The five
-remaining PARTIAL rows are housekeeping/protocol/config surfaces with no UI
-consumer — each classified, dispositioned to a campaign row, and never
-counted as integration. The audit's original FAIL (the unwired startup
-bridge) is closed and browser-verified this round.
+export → persistence) is **PASS** with live test evidence. After the
+r360 G1 lane closed the last three unconsumed backend surfaces (the
+jobs ledger, the `/database` preferences quartet, the artifacts
+view/delete pair) and trued the stale semi-supervised evaluate count
+(consumer landed r303), the one remaining PARTIAL classification is the
+capabilities/codegen internal-utility row — a classification, not a gap.
+The audit's original FAIL (the unwired startup bridge) is closed and
+browser-verified this round.
 
 *Next queue (the remaining part11_1 audit phases): Phase Twenty-Four
 (§29 dependency & packaging readiness — see
@@ -386,3 +407,38 @@ constrained optimisation, the feasible mask, the e2e workflow) + the
 `tests/test_frontend_rsm.py` drift guard (16 pins) + the §8 docs pair
 (`docs/ML/RESPONSE_SURFACE_METHODOLOGY.md` and the r358-owed
 `docs/ML/MULTI_RESPONSE_ML.md`).
+
+· **r360 addendum (part17 §3.2, the G1 lane — the campaign queue's
+fourth and FINAL lane):** the remaining §3.2 UI consumers are
+consumed — **the global Job Center**
+(`frontend/src/components/system/JobCenterCard.tsx` in the
+Introduction workspace: the `jobsApi.list` cross-workspace session
+ledger with the authoritative per-row actions — the
+COMPLETED-only result lane over `jobsApi.result` with the 409/404
+surfaced verbatim, the two-step cancellation over `jobsApi.cancel`
+with the honest 404 reconciliation and the armed-gate disarm on
+refresh, and the live-session-vs-persisted-history split stated);
+**the durable preference manager**
+(`frontend/src/components/system/DatabasePreferences.tsx` + the
+client quartet in `services/database/client.ts`: the
+`/database/preferences` GET list / PUT one / DELETE one surface with
+the client-side gates — the 1–128 key bound and the strict-JSON
+validation BEFORE any request leaves the browser — the two-step
+delete, the honest 404 already-gone and 409 non-durable lanes, and
+the durable-store-vs-localStorage split stated); and **the artifacts
+view/delete consumers** (the Visualization consumption hub: the
+per-row View over the EXISTING `artifactsApi.view` — the
+full-record panel with the honest 404 — and the two-step Delete over
+the EXISTING `artifactsApi.delete` with the never-dangling
+derivative cleanup, the honest 404, and the registry refresh). No
+new API surface (the contract stays 128 paths / 83 schemas); the
+vitest trio (9 + 11 + 8 — the full frontend battery 337/337 over 38
+files) + the drift-guard trio (`tests/test_frontend_job_center.py`
+14 + `tests/test_frontend_database_preferences.py` 16 +
+`tests/test_frontend_artifacts_view_delete.py` 13). The three §3.4
+PARTIAL rows trued to PASS (the job-control-plane `list` sub-row,
+the SQLite persistence row, the artifacts view/delete row); the
+stale semi-supervised evaluate count trued (the consumer landed
+r303); the §4 verdict table now carries 70 PASS / 1 PARTIAL (the
+codegen internal-utility classification) — and the §3.4 list of
+unconsumed backend surfaces is EMPTY.
