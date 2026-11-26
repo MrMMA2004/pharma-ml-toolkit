@@ -68,7 +68,14 @@ jobs:
           python-version: "3.12"
 
       - name: Install the runner
-        run: python -m pip install pytest==9.0.2
+        # r365 maiden-run fix: the guard job (run 45872185792, its
+        # first-ever firing after this workflow's creation) died at
+        # collection -- the toolkit tests/conftest.py imports the
+        # scientific stack at module level, so pytest needs numpy +
+        # pandas + scikit-learn alongside it to even collect the
+        # stdlib-only guard suite (exit 4, ModuleNotFoundError: No
+        # module named 'numpy'). The pins mirror requirements.txt.
+        run: python -m pip install pytest==9.0.2 numpy==1.26.4 pandas==2.2.3 scikit-learn==1.5.2
 
       - name: Run the local supply-chain guard (part13 §17)
         working-directory: pharma-ml-toolkit
