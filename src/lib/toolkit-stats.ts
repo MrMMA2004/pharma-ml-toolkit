@@ -284,9 +284,9 @@ export const SHIPPED_FILE_COUNT = 1873;
     notebooks re-executed at 1.2.243 + this round's own ledger edits
     (the QA r367 section + the FEATURES stamp + the ship pins) + the
     two in-tree v1.2.243 zip homes -- re-walked fixed-point AFTER the
-    pin edits themselves (the r362 lesson): 601,763 lines at 1,873
-    files. */
-export const SHIPPED_SOURCE_LINES = 601763;
+    pin edits themselves (the r362 lesson): 601,766 lines at 1,873
+    files (the re-walk after the CI-catch row + the fix deltas). */
+export const SHIPPED_SOURCE_LINES = 601766;
 
 /*  r366-continuation re-true (measurement-last): the firing's
     close-out correction (the drift-guard figure 202 -> 130 and the

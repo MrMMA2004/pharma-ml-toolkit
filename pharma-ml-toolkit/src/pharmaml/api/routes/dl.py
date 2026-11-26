@@ -737,15 +737,15 @@ def cnn_train(req: CnnTrainRequest, request: Request) -> dict:
     bus = request.app.state.bus
     if req.mode == "sync":
         try:
-            params = dict(hyperparams)
-            params["_task"] = req.task
+            sync_params: dict[str, Any] = dict(hyperparams)
+            sync_params["_task"] = req.task
             return {
                 "mode": "sync",
-                **_cnn_train_body(x, y, params, model_store, bus=bus),
+                **_cnn_train_body(x, y, sync_params, model_store, bus=bus),
             }
         except (DataValidationError, ModelError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-    params = dict(hyperparams)
+    params: dict[str, Any] = dict(hyperparams)
     params["_task"] = req.task
     record = manager.submit(
         "dl.cnn-train",

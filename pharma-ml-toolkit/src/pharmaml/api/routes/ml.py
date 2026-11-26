@@ -65,10 +65,10 @@ from pharmaml.exceptions import (
     DependencyError,
     ModelError,
 )
+from pharmaml.ml.autoencoder import TabularAutoencoder
+from pharmaml.ml.cnn import SequenceCNNClassifier, SequenceCNNRegressor
 from pharmaml.ml.explain import shap_summary
 from pharmaml.ml.gnn import GraphClassifier
-from pharmaml.ml.cnn import SequenceCNNClassifier, SequenceCNNRegressor
-from pharmaml.ml.autoencoder import TabularAutoencoder
 from pharmaml.ml.models import list_models, resolve_model_name
 from pharmaml.ml.provenance import environment_snapshot
 from pharmaml.ml.training import train_model

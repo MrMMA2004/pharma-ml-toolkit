@@ -399,7 +399,7 @@ class TestNoUnseededRandomness:
             Path("src/pharmaml/studio/__init__.py"),
             Path("src/pharmaml/studio/runs.py"),
             Path("src/pharmaml/studio/evidence.py"),
-            Path("ui/nine_cards.py"),
+            Path("legacy/ui/nine_cards.py"),
         ],
     )
     def test_preview_surface_has_no_unseeded_randomness(self, path) -> None:

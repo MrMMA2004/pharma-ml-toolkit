@@ -73,7 +73,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -81,9 +81,6 @@ from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 
 from pharmaml.exceptions import DataValidationError, DependencyError, ModelError
 from pharmaml.logger import get_logger
-
-if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime
-    import torch
 
 __all__ = [
     "TabularTransformerClassifier",
@@ -172,12 +169,12 @@ def _build_transformer(
             import torch  # local: method bodies see module globals only
 
             n = x.shape[0]
-            tokens = [
+            token_list = [
                 proj(x[:, j : j + 1]).unsqueeze(1)  # (n, 1, d_model)
                 for j, proj in enumerate(self.value_proj)
             ]
             positions = self.feature_embed.weight.unsqueeze(0)  # (1, F, d)
-            tokens = torch.cat(tokens, dim=1) + positions
+            tokens = torch.cat(token_list, dim=1) + positions
             cls = self.cls.expand(1, n, d_model).transpose(0, 1)  # (n, 1, d)
             tokens = torch.cat([cls, tokens], dim=1)
             encoded = self.encoder(tokens)
@@ -749,5 +746,12 @@ class TabularTransformerRegressor(RegressorMixin, _BaseTabularTransformer):
 
     def predict(self, X: Any) -> np.ndarray:
         """Predict numeric targets for ``X`` (de-standardised)."""
+        self._check_fitted()
+        y_mean, y_std = self._y_mean_, self._y_std_
+        if y_mean is None or y_std is None:
+            raise ModelError(
+                f"{type(self).__name__} is missing its target scaling -- "
+                "was it fitted as a regressor?"
+            )
         raw = self._forward(X).reshape(-1)
-        return raw * self._y_std_ + self._y_mean_
+        return raw * y_std + y_mean

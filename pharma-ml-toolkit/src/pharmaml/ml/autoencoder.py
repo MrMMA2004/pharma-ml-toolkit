@@ -80,7 +80,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -88,9 +88,6 @@ from sklearn.base import BaseEstimator
 
 from pharmaml.exceptions import DataValidationError, DependencyError, ModelError
 from pharmaml.logger import get_logger
-
-if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime
-    import torch
 
 __all__ = ["TabularAutoencoder"]
 

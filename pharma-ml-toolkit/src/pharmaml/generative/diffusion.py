@@ -87,16 +87,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 from sklearn.base import BaseEstimator
 
 from pharmaml.exceptions import DataValidationError, DependencyError, ModelError
 from pharmaml.logger import get_logger
-
-if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime
-    import torch
 
 __all__ = ["FeatureSpaceDiffusion"]
 
@@ -513,9 +510,10 @@ class FeatureSpaceDiffusion(BaseEstimator):
 
         denoiser = self._ensure_network()
         denoiser.eval()
-        if seed is not None:
-            if isinstance(seed, bool) or not isinstance(seed, (int, np.integer)):
-                raise ModelError(f"seed must be an integer, got {seed!r}")
+        if seed is not None and (
+            isinstance(seed, bool) or not isinstance(seed, (int, np.integer))
+        ):
+            raise ModelError(f"seed must be an integer, got {seed!r}")
 
         gen_state = torch.get_rng_state()
         try:

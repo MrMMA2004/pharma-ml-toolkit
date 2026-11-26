@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { SettingsEntry } from "@/components/settings/SettingsEntry";
 import { getSettingsStore } from "@/services/settings/store";
+import { APP_VERSION } from "@/lib/version";
 import { SETTINGS_STORAGE_KEY } from "@/services/settings/store";
 
 /**
@@ -132,7 +133,9 @@ describe("the §10 compact settings popover", () => {
     render(<SettingsEntry />);
     await user.click(screen.getByRole("button", { name: "Settings" }));
 
-    expect(screen.getByText("1.2.242")).toBeInTheDocument();
+    // the version rides the APP_VERSION carrier — never a hardcoded
+    // literal that goes stale at every ship (the r367 CI lesson)
+    expect(screen.getByText(APP_VERSION)).toBeInTheDocument();
     expect(screen.getByText(/not connected/i)).toBeInTheDocument();
     expect(screen.getByText(/offline/i)).toBeInTheDocument();
   });

@@ -19,8 +19,8 @@ from pathlib import Path
 TOOLKIT_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = TOOLKIT_ROOT.parent
 DOC = TOOLKIT_ROOT / "docs" / "FEATURES.md"
-MAIN_WINDOW = TOOLKIT_ROOT / "ui" / "main_window.py"
-NINE_CARDS_SRC = TOOLKIT_ROOT / "ui" / "nine_cards.py"
+MAIN_WINDOW = TOOLKIT_ROOT / "legacy" / "ui" / "main_window.py"
+NINE_CARDS_SRC = TOOLKIT_ROOT / "legacy" / "ui" / "nine_cards.py"
 CARD_DIRECTORY = REPO_ROOT / "src" / "components" / "explorer" / "playground" / "card-directory.ts"
 API_ROOT = REPO_ROOT / "src" / "app" / "api"
 
@@ -154,7 +154,7 @@ class TestBackendOnlyHonesty:
         api-reference.tsx) is excluded — the §4.5 rule is that a *GUI
         button/card/route* is the integration evidence, not a mention in
         the narrative tab."""
-        pages = list((TOOLKIT_ROOT / "ui" / "pages").glob("*.py"))
+        pages = list((TOOLKIT_ROOT / "legacy" / "ui" / "pages").glob("*.py"))
         prose = {"overview.tsx", "api-reference.tsx"}
         web_files = [
             p for p in [
@@ -212,7 +212,7 @@ class TestStatusSummary:
 class TestNineCardMapping:
     """The §5 nine-card dashboard pins (v1.2.169, FEATURES.md §10).
 
-    The mapping is re-derived from the live `ui/nine_cards.py` source,
+    The mapping is re-derived from the live `legacy/ui/nine_cards.py` source,
     exactly like the nav keys — the doc may not drift from the registry.
     """
 

@@ -54,7 +54,7 @@ def test_suite_inventory_covers_every_test_file() -> None:
     on_disk = {str(p.relative_to(_TK)) for p in
                (_TK / "tests").glob("test_*.py")}
     on_disk |= {str(p.relative_to(_TK)) for p in
-                (_TK / "tests" / "ui").glob("test_*.py")}
+                (_TK / "legacy" / "tests_ui").glob("test_*.py")}
     assert on_disk == set(counts), (on_disk ^ set(counts))
     assert sum(counts.values()) > 5000  # the real inventory, not a stub
 

@@ -47,8 +47,10 @@ from pydantic import BaseModel, Field
 
 from pharmaml.exceptions import (
     DataValidationError,
-    JobCancelled as BackendJobCancelled,
     ModelError,
+)
+from pharmaml.exceptions import (
+    JobCancelled as BackendJobCancelled,
 )
 from pharmaml.generative.diffusion import FeatureSpaceDiffusion
 from pharmaml.generative.gan import FeatureSpaceGAN

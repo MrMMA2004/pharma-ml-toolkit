@@ -89,16 +89,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 
 from pharmaml.exceptions import DataValidationError, DependencyError, ModelError
 from pharmaml.logger import get_logger
-
-if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime
-    import torch
 
 __all__ = [
     "SequenceCNNClassifier",
@@ -780,5 +777,12 @@ class SequenceCNNRegressor(RegressorMixin, _BaseSequenceCNN):
 
     def predict(self, X: Any) -> np.ndarray:
         """Predict numeric targets for 3-D sequence batches ``X``."""
+        self._check_fitted()
+        y_mean, y_std = self._y_mean_, self._y_std_
+        if y_mean is None or y_std is None:
+            raise ModelError(
+                f"{type(self).__name__} is missing its target scaling -- "
+                "was it fitted as a regressor?"
+            )
         raw = self._forward(X).reshape(-1)
-        return raw * self._y_std_ + self._y_mean_
+        return raw * y_std + y_mean

@@ -224,7 +224,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           python -m pytest tests -q `
             --ignore=tests/api `
-            --ignore=tests/ui `
+            --ignore=legacy/tests_ui `
             --ignore=tests/test_web_parity.py `
             -k "not gui and not nine_card" -x --maxfail=5
           if ($LASTEXITCODE -ne 0) {
