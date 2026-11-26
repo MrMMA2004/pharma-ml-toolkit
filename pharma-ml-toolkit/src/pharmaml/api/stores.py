@@ -46,6 +46,7 @@ __all__ = [
     "ArtifactStore",
     "DatasetRecord",
     "DatasetStore",
+    "FeaturePriorRecord",
     "ModelStore",
     "PriorRecord",
     "PriorStore",
@@ -354,6 +355,63 @@ class PriorRecord:
             "corpus_source": self.corpus_source,
             "created_at": self.created_at,
             "sample_url": "/api/v1/generative/rnn/sample",
+        }
+
+
+class FeaturePriorRecord:
+    """One trained FEATURE-space generative model (part18 §5.6).
+
+    The tabular analogue of the SmilesRnn prior: a fitted
+    :class:`~pharmaml.generative.gan.FeatureSpaceGAN` or
+    :class:`~pharmaml.generative.diffusion.FeatureSpaceDiffusion`
+    trained on a registered dataset's numeric feature matrix.  The
+    model object stays in memory only (never JSON'd); the view
+    carries the per-epoch training telemetry so the workspace can
+    plot the loss curves without the weights.  FEATURE-space, never
+    molecular: the record's kind says so, and the SMILES lanes own
+    molecule generation.
+    """
+
+    def __init__(
+        self,
+        prior_id: str,
+        model: Any,
+        name: str,
+        kind: str,
+        params: dict,
+        n_train_rows: int,
+        losses: list[float],
+        dataset_source: str,
+    ) -> None:
+        self.prior_id = prior_id
+        self.model = model  # the fitted generator/denoiser (never JSON'd)
+        self.name = name
+        self.kind = kind  # "feature_gan" | "feature_diffusion"
+        self.params = dict(params or {})
+        self.n_train_rows = int(n_train_rows)
+        self.losses = [float(x) for x in (losses or [])]
+        self.dataset_source = dataset_source
+        self.created_at = _now_iso()
+
+    def view(self) -> dict:
+        sample_urls = {
+            "feature_gan": "/api/v1/generative/gan/sample",
+            "feature_diffusion": "/api/v1/generative/diffusion/sample",
+        }
+        return {
+            "prior_id": self.prior_id,
+            "name": self.name,
+            "kind": self.kind,
+            "params": json_safe(self.params),
+            "n_train_rows": self.n_train_rows,
+            "n_epochs": len(self.losses),
+            "final_loss": self.losses[-1] if self.losses else None,
+            "losses": json_safe(self.losses),
+            "dataset_source": self.dataset_source,
+            "created_at": self.created_at,
+            "sample_url": sample_urls.get(self.kind),
+            # feature-space, not molecules — the honest scope line
+            "molecular": False,
         }
 
 

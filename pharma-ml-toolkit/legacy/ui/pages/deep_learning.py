@@ -71,7 +71,7 @@ from ..widgets.progress_panel import ProgressPanel
 from ..widgets.responsive import configure_splitter, wrap_in_scroll
 from ..workers.job_worker import JobRunner
 
-_TK = Path(__file__).resolve().parents[2]
+_TK = Path(__file__).resolve().parents[3]
 
 #: The page's datasets: the QSAR regression table (260 rows x 21 cols,
 #: target pIC50 over 20 descriptor features) and the QSAR classification

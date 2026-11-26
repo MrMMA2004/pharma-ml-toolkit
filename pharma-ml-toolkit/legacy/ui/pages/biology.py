@@ -60,7 +60,7 @@ from ..widgets.progress_panel import ProgressPanel
 from ..widgets.responsive import configure_splitter
 from ..workers.job_worker import JobRunner
 
-_TK = Path(__file__).resolve().parents[2]
+_TK = Path(__file__).resolve().parents[3]
 
 #: The bundled GDSC-style response screen (185 rows, 23 lines, 8 compounds).
 _SCREEN_PATH = _TK / "examples" / "data" / "cellline_screen.csv"

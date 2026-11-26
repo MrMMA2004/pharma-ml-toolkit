@@ -44,7 +44,7 @@ from ..widgets.progress_panel import ProgressPanel
 from ..widgets.responsive import configure_splitter
 from ..workers.job_worker import JobRunner
 
-_TK = Path(__file__).resolve().parents[2]
+_TK = Path(__file__).resolve().parents[3]
 
 #: Bundled datasets that actually carry a SMILES column (probed on disk).
 _BUILTIN = [

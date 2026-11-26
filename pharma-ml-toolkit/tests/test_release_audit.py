@@ -115,7 +115,7 @@ def _valid_profile_results() -> dict:
         "profiles": [
             {
                 "name": "gui-offscreen",
-                "command": "pytest tests/ui -k offscreen",
+                "command": "pytest legacy/tests_ui -k offscreen",
                 "outcome_counts": {"passed": 10, "failed": 1, "skipped": 2,
                                    "blocked": 0, "not_executed": 3},
                 "collected": 16,

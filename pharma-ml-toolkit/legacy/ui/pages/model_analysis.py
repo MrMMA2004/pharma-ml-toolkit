@@ -155,7 +155,7 @@ def _fold_meta(scores: Any, mean: float) -> Any:
 
     return meta
 
-_TK = Path(__file__).resolve().parents[2]
+_TK = Path(__file__).resolve().parents[3]
 _DATASETS = {
     "qsar_regression.csv": "pIC50",
     "qsar_classification.csv": "activity",

@@ -50,6 +50,10 @@ import {
   type SampleResponse,
   type TrainingMetricsPayload,
   type IterationUpdatePayload,
+
+  parseFeaturePriorTrainResult,
+  type FeaturePriorView,
+  type FeatureSampleResponse,
 } from "@/services/generative/client";
 
 /**
@@ -293,6 +297,27 @@ export function GenerativePage() {
   const [maxSmilesLength, setMaxSmilesLength] = useState(120);
   const [gaSeed, setGaSeed] = useState(42);
   const [topN, setTopN] = useState(10);
+
+  // the feature-space GAN / Diffusion lanes (part18 §5.6 — generative
+  // models over the SELECTED dataset's feature matrix; FEATURE-space,
+  // not molecules — the cards say so and the notes ride every response)
+  const [fsmLatentDim, setFsmLatentDim] = useState(8);
+  const [fsmTimesteps, setFsmTimesteps] = useState(50);
+  const [fsmEpochs, setFsmEpochs] = useState(40);
+  const [fsmSampleN, setFsmSampleN] = useState(24);
+  const [fsmSampleSeed, setFsmSampleSeed] = useState(0);
+  const [ganJobId, setGanJobId] = useState<string | null>(null);
+  const [ganError, setGanError] = useState<string | null>(null);
+  const [ganBusy, setGanBusy] = useState(false);
+  const [ganPrior, setGanPrior] = useState<FeaturePriorView | null>(null);
+  const [ganSampleResult, setGanSampleResult] = useState<FeatureSampleResponse | null>(null);
+  const [ganSampleBusy, setGanSampleBusy] = useState(false);
+  const [diffusionJobId, setDiffusionJobId] = useState<string | null>(null);
+  const [diffusionError, setDiffusionError] = useState<string | null>(null);
+  const [diffusionBusy, setDiffusionBusy] = useState(false);
+  const [diffusionPrior, setDiffusionPrior] = useState<FeaturePriorView | null>(null);
+  const [diffusionSampleResult, setDiffusionSampleResult] = useState<FeatureSampleResponse | null>(null);
+  const [diffusionSampleBusy, setDiffusionSampleBusy] = useState(false);
 
   // the prior registry (a trained prior can be selected directly)
   const [priors, setPriors] = useState<readonly PriorView[]>([]);
@@ -572,6 +597,134 @@ export function GenerativePage() {
 
   // stage 4: the optimize lane (job mode — the evolution's own
   // iteration.update telemetry + the REST relay)
+  // the feature-space GAN lane (part18 §5.6): train on the SELECTED
+  // dataset's feature matrix, then sample with the parity report
+  const handleGanTrain = useCallback(async () => {
+    if (selectedDatasetId === null) {
+      return;
+    }
+    setGanBusy(true);
+    setGanError(null);
+    setGanJobId(null);
+    setGanPrior(null);
+    setGanSampleResult(null);
+    try {
+      const response = await generativeApi.ganTrain({
+        datasetId: selectedDatasetId,
+        name: "feature-gan",
+        latentDim: fsmLatentDim,
+        hiddenLayers: [32],
+        dSteps: 1,
+        epochs: fsmEpochs,
+        batchSize: 32,
+        learningRate: 2e-4,
+        weightDecay: 0,
+        randomState: 42,
+      });
+      if (response.mode === "job") {
+        setGanJobId(response.job.job_id);
+      } else {
+        setGanPrior(response.prior);
+      }
+    } catch (error) {
+      setGanError(describeError(error));
+    } finally {
+      setGanBusy(false);
+    }
+  }, [selectedDatasetId, fsmLatentDim, fsmEpochs]);
+
+  const handleGanTrainResult = useCallback((result: unknown) => {
+    try {
+      setGanPrior(parseFeaturePriorTrainResult(result, "gan train result"));
+    } catch (error) {
+      setGanError(describeError(error));
+    }
+  }, []);
+
+  const handleGanSample = useCallback(async () => {
+    if (ganPrior === null) {
+      return;
+    }
+    setGanSampleBusy(true);
+    try {
+      setGanSampleResult(
+        await generativeApi.ganSample({
+          priorId: ganPrior.priorId,
+          n: fsmSampleN,
+          seed: fsmSampleSeed,
+        }),
+      );
+    } catch (error) {
+      setGanError(describeError(error));
+    } finally {
+      setGanSampleBusy(false);
+    }
+  }, [ganPrior, fsmSampleN, fsmSampleSeed]);
+
+  // the feature-space Diffusion lane: the DDPM train + reverse-chain
+  const handleDiffusionTrain = useCallback(async () => {
+    if (selectedDatasetId === null) {
+      return;
+    }
+    setDiffusionBusy(true);
+    setDiffusionError(null);
+    setDiffusionJobId(null);
+    setDiffusionPrior(null);
+    setDiffusionSampleResult(null);
+    try {
+      const response = await generativeApi.diffusionTrain({
+        datasetId: selectedDatasetId,
+        name: "feature-diffusion",
+        timesteps: fsmTimesteps,
+        hiddenLayers: [32],
+        epochs: fsmEpochs,
+        batchSize: 32,
+        learningRate: 1e-3,
+        weightDecay: 1e-4,
+        randomState: 42,
+      });
+      if (response.mode === "job") {
+        setDiffusionJobId(response.job.job_id);
+      } else {
+        setDiffusionPrior(response.prior);
+      }
+    } catch (error) {
+      setDiffusionError(describeError(error));
+    } finally {
+      setDiffusionBusy(false);
+    }
+  }, [selectedDatasetId, fsmTimesteps, fsmEpochs]);
+
+  const handleDiffusionTrainResult = useCallback((result: unknown) => {
+    try {
+      setDiffusionPrior(
+        parseFeaturePriorTrainResult(result, "diffusion train result"),
+      );
+    } catch (error) {
+      setDiffusionError(describeError(error));
+    }
+  }, []);
+
+  const handleDiffusionSample = useCallback(async () => {
+    if (diffusionPrior === null) {
+      return;
+    }
+    setDiffusionSampleBusy(true);
+    try {
+      setDiffusionSampleResult(
+        await generativeApi.diffusionSample({
+          priorId: diffusionPrior.priorId,
+          n: fsmSampleN,
+          seed: fsmSampleSeed,
+        }),
+      );
+    } catch (error) {
+      setDiffusionError(describeError(error));
+    } finally {
+      setDiffusionSampleBusy(false);
+    }
+  }, [diffusionPrior, fsmSampleN, fsmSampleSeed]);
+
   const handleOptimize = useCallback(async () => {
     setOptimizeBusy(true);
     setOptimizeError(null);
@@ -2463,6 +2616,281 @@ export function GenerativePage() {
           </p>
         )}
       </StageHeader>
+      {/*
+       * The feature-space generative lanes — part18 §5.6's GAN and
+       * diffusion cards, integrated HERE in Generative AI per the spec
+       * (never the supervised model registry).  FEATURE-space, not
+       * molecules: the cards say so, the responses say so, and the
+       * SMILES lanes above own molecular generation.
+       */}
+      <section className="mt-12" aria-labelledby="feature-generative-title">
+        <div className="flex flex-wrap items-baseline gap-2 border-t border-[var(--color-border)] pt-6">
+          <h2
+            id="feature-generative-title"
+            className="text-lg font-semibold text-[var(--color-foreground)]"
+          >
+            Feature-space GAN &amp; diffusion — the generative model lanes
+          </h2>
+          <span className="text-xs text-[var(--color-muted-foreground)]">
+            part18 §5.6 · FEATURE-space generative models over the SELECTED
+            dataset&apos;s feature matrix — synthetic feature ROWS, never
+            molecules (the SMILES lanes own those)
+          </span>
+        </div>
+
+        <Card className="mt-3">
+          <CardHeader>
+            <CardTitle className="text-base">Feature-space GAN</CardTitle>
+            <CardDescription>
+              the adversarial pair (generator vs discriminator, alternating
+              BCE updates) trained on the SELECTED dataset — then sample
+              synthetic feature rows with the honest parity report
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                latent dim
+                <input
+                  type="number"
+                  min={1}
+                  max={128}
+                  value={fsmLatentDim}
+                  onChange={(event) => setFsmLatentDim(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  aria-label="gan latent dim"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                epochs
+                <input
+                  type="number"
+                  min={1}
+                  max={2000}
+                  step={10}
+                  value={fsmEpochs}
+                  onChange={(event) => setFsmEpochs(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  aria-label="gan epochs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                sample n
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={fsmSampleN}
+                  onChange={(event) => setFsmSampleN(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  aria-label="gan sample n"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                sample seed
+                <input
+                  type="number"
+                  min={0}
+                  value={fsmSampleSeed}
+                  onChange={(event) => setFsmSampleSeed(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  aria-label="gan sample seed"
+                />
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button
+                size="sm"
+                disabled={ganBusy || selectedDatasetId === null}
+                onClick={() => void handleGanTrain()}
+              >
+                {ganBusy ? "Training…" : "Train the feature GAN"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={ganPrior === null || ganSampleBusy}
+                onClick={() => void handleGanSample()}
+              >
+                {ganSampleBusy ? "Sampling…" : "Sample rows"}
+              </Button>
+              <span className="text-xs text-[var(--color-muted-foreground)]">
+                {selectedDatasetId !== null
+                  ? `dataset ${selectedDatasetId}`
+                  : "select a dataset in the prior lane above"}
+              </span>
+            </div>
+            {ganError !== null ? (
+              <div className="mt-3"><ErrorBanner message={ganError} /></div>
+            ) : null}
+            {ganJobId !== null ? (
+              <div className="mt-3">
+                <JobRunCard
+                  jobId={ganJobId}
+                  resultLabel="the trained feature GAN view"
+                  onResult={handleGanTrainResult}
+                />
+              </div>
+            ) : null}
+            {ganPrior !== null ? (
+              <div className="mt-3 rounded-lg border border-[var(--color-border)] p-3">
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  prior {ganPrior.priorId} · {ganPrior.nEpochs} epochs · final
+                  g_loss {ganPrior.finalLoss?.toFixed(4) ?? "—"} · trained on{" "}
+                  {ganPrior.nTrainRows} rows · molecular:{" "}
+                  {ganPrior.molecular ? "yes" : "no — feature-space"}
+                </p>
+              </div>
+            ) : null}
+            {ganSampleResult !== null ? <FeatureSampleCard result={ganSampleResult} /> : null}
+          </CardContent>
+        </Card>
+
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="text-base">Feature-space diffusion (DDPM)</CardTitle>
+            <CardDescription>
+              the denoising diffusion: a linear beta schedule, the
+              noise-prediction objective, and the full reverse chain from
+              pure Gaussian noise to synthetic feature rows
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                timesteps
+                <input
+                  type="number"
+                  min={2}
+                  max={1000}
+                  step={10}
+                  value={fsmTimesteps}
+                  onChange={(event) => setFsmTimesteps(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  aria-label="diffusion timesteps"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                epochs
+                <input
+                  type="number"
+                  min={1}
+                  max={2000}
+                  step={10}
+                  value={fsmEpochs}
+                  onChange={(event) => setFsmEpochs(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  aria-label="diffusion epochs"
+                />
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button
+                size="sm"
+                disabled={diffusionBusy || selectedDatasetId === null}
+                onClick={() => void handleDiffusionTrain()}
+              >
+                {diffusionBusy ? "Training…" : "Train the diffusion model"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={diffusionPrior === null || diffusionSampleBusy}
+                onClick={() => void handleDiffusionSample()}
+              >
+                {diffusionSampleBusy ? "Sampling…" : "Run the reverse chain"}
+              </Button>
+            </div>
+            {diffusionError !== null ? (
+              <div className="mt-3"><ErrorBanner message={diffusionError} /></div>
+            ) : null}
+            {diffusionJobId !== null ? (
+              <div className="mt-3">
+                <JobRunCard
+                  jobId={diffusionJobId}
+                  resultLabel="the trained feature diffusion view"
+                  onResult={handleDiffusionTrainResult}
+                />
+              </div>
+            ) : null}
+            {diffusionPrior !== null ? (
+              <div className="mt-3 rounded-lg border border-[var(--color-border)] p-3">
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  prior {diffusionPrior.priorId} · {diffusionPrior.nEpochs}{" "}
+                  epochs · final noise-MSE{" "}
+                  {diffusionPrior.finalLoss?.toFixed(4) ?? "—"} · trained on{" "}
+                  {diffusionPrior.nTrainRows} rows · molecular:{" "}
+                  {diffusionPrior.molecular ? "yes" : "no — feature-space"}
+                </p>
+              </div>
+            ) : null}
+            {diffusionSampleResult !== null ? (
+              <FeatureSampleCard result={diffusionSampleResult} />
+            ) : null}
+            <p className="mt-3 text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              Both lanes ride `POST /api/v1/generative/gan/*` and
+              `POST /api/v1/generative/diffusion/*` — the priors register
+              in the session prior store like the SMILES RNN prior.
+              FEATURE-space, stated everywhere: these models generate
+              synthetic feature ROWS with a distributional parity report
+              — never molecules (the RNN prior / genetic optimiser / MCTS
+              lanes above own molecular generation), and never
+              experimentally validated data.
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+    </div>
+  );
+}
+
+
+/** The feature-sample card: rows count + the honest parity report. */
+function FeatureSampleCard({ result }: { result: FeatureSampleResponse }) {
+  const meanMax = result.quality.meanDelta.length
+    ? Math.max(...result.quality.meanDelta.map((v) => Math.abs(v)))
+    : Number.NaN;
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--color-border)] p-3">
+      <p className="text-xs text-[var(--color-muted-foreground)]">
+        {result.nSampled} synthetic rows · {result.quality.nRef} reference
+        rows · max |mean delta|{" "}
+        {Number.isFinite(meanMax) ? meanMax.toFixed(3) : "—"} · corr L1{" "}
+        {Number.isFinite(result.quality.corrL1)
+          ? result.quality.corrL1.toFixed(3)
+          : "—"}
+      </p>
+      <div className="mt-2 overflow-hidden rounded-lg border border-[var(--color-border)]">
+        <div className="max-h-48 overflow-auto">
+          <table className="w-full border-collapse text-[11px]">
+            <thead className="sticky top-0 bg-[var(--color-muted)]">
+              <tr>
+                <th scope="col" className="whitespace-nowrap px-3 py-1.5 text-left font-semibold text-[var(--color-foreground)]">row</th>
+                {(result.rows[0] ?? []).map((_, j) => (
+                  <th key={j} scope="col" className="whitespace-nowrap px-3 py-1.5 text-left font-semibold text-[var(--color-foreground)]">
+                    f{j + 1}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {result.rows.slice(0, 10).map((row, i) => (
+                <tr key={i} className="border-t border-[var(--color-border)] bg-[var(--color-card)]">
+                  <td className="whitespace-nowrap px-3 py-1 text-[var(--color-muted-foreground)]">{i}</td>
+                  {row.map((v, j) => (
+                    <td key={j} className="whitespace-nowrap px-3 py-1 text-[var(--color-muted-foreground)]">
+                      {v.toFixed(3)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+        {result.note}
+      </p>
     </div>
   );
 }

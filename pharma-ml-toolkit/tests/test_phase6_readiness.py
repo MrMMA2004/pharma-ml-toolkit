@@ -75,7 +75,7 @@ def test_report_renders_every_section_with_honest_numbers() -> None:
     r = rr.Readiness()
     r.dependency_rows = rr.probe_dependencies()
     r.capability_counts = rr.probe_capabilities()
-    r.suite_counts = {"tests/test_pk.py": 49, "tests/ui/test_phase5.py": 7}
+    r.suite_counts = {"tests/test_pk.py": 49, "legacy/tests_ui/test_phase5.py": 7}
     r.version_agreement = rr.probe_versions()
     r.recorded_runs = {"chunk-a": "10 passed"}
     r.archive_audit = {"status": "passed", "checks": "8",

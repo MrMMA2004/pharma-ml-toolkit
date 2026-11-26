@@ -28,36 +28,36 @@ capability assignments live in the pure-Python registry
 
 | Page | pharmaml modules imported (live grep) | card assignment (Phase 2 target) |
 | --- | --- | --- |
-| `dashboard` | studio | 01 Introduction (current host of the §5 grid) |
+| `dashboard` | studio, studio.workspace | 01 Introduction (current host of the §5 grid) |
 | `data_explorer` | ml.research_audit, ml.sar, ml.split_audit, studio, utils.io | 02 Datasets |
 | `chemistry` | chem, chem.csv_standardize, chem.features, utils.io | 02 Datasets (chemical preparation) |
 | `pkpd` | pharma.pk, pkpd.compartments, pkpd.events, pkpd.nca_ext, pkpd.ode, studio | 07 PK/PD |
 | `biology` | biology | 07 PK/PD (biology sub-workspace) |
 | `docking` | docking, exceptions, studio | 06 Molecular Docking |
-| `model_analysis` | ml, ml.cv_results, ml.models, ml.training, utils.io | 03 Machine Learning |
-| `ml_workbench` | ml, ml.calibration, ml.comparison, ml.conformal, ml.conformal_classification, ml.coverage_diagnostics, ml.cv_results, ml.decision, ml.drift, ml.evaluation, ml.model_card, ml.models, ml.multiplicity, ml.persistence, ml.power, ml.subgroups, ml.tuner, studio, utils.checkpoints, utils.io | 03 Machine Learning |
+| `model_analysis` | ml, ml.cv_results, ml.models, ml.training, studio, utils.io | 03 Machine Learning |
+| `ml_workbench` | exceptions, ml, ml.active_learning, ml.calibration, ml.comparison, ml.conformal, ml.conformal_classification, ml.coverage_diagnostics, ml.cv_results, ml.decision, ml.drift, ml.evaluation, ml.heldout_partition, ml.model_card, ml.models, ml.multiplicity, ml.persistence, ml.power, ml.semi_supervised, ml.subgroups, ml.tuner, studio, utils.checkpoints, utils.io | 03 Machine Learning |
 | `unsupervised` | ml.manifold, ml.unsupervised, utils.io | 03 Machine Learning (exploration) |
 | `deep_learning` | exceptions, ml, ml.autograd, ml.curation, ml.geometric, ml.harness, ml.neural, ml.numpy_neural, ml.pruning, ml.quantization, ml.runboard, ml.splits, ml.umap, ml.xai, studio, utils.io | 04 Deep Learning |
-| `generative` | chem.oracles, chem.sa_scoring, generative, studio | 05 Generative AI |
+| `generative` | chem.oracles, chem.sa_scoring, generative, generative.result, studio | 05 Generative AI |
 | `foundations` | ml.inferential, ml.stats, profiling | 03 Machine Learning (walkthroughs) |
 | `bestofml` | ml.adversarial, ml.annsearch, ml.apriori, ml.catalog, ml.privacy, ml.recommend, ml.sequences, ml.timeseries | 03 Machine Learning (sweeps) |
 | `responseai` | ml.drugresponse | 07 PK/PD (response AI) |
 | `image_lab` | biology, chem.descriptors, chem.similarity, studio, viz.export | 09 Visualization |
 | `molecular_dynamics` | md, studio, viz, viz.export | 08 Molecular Dynamics Analysis |
-| `utilities` | chem, chem.converters, docking, pharma, utils.io, viz | 02 Datasets + cross-card utilities |
+| `utilities` | chem, chem.converters, docking, pharma, studio.workspace, utils.io, viz | 02 Datasets + cross-card utilities |
 | `settings_page` | utils.resources | 01 Introduction (global menu) |
 
-Tests: 636 UI test functions across
-46 UI suites; page smoke
-coverage via `tests/ui/test_pages_smoke.py`.
+Tests: 874 UI test functions across
+72 UI suites; page smoke
+coverage via `legacy/tests_ui/test_pages_smoke.py`.
 
 ## 3. Backend census
 
-- `src/pharmaml/ml/`: **92 modules**,
-74,074 lines.
+- `src/pharmaml/ml/`: **105 modules**,
+83,107 lines.
 - CLI: **62** `add_parser` sites (16 command groups).
-- Library tests: 4552 test functions across
-139 suites.
+- Library tests: 5407 test functions across
+196 suites.
 - `src/pharmaml/studio/` (runs + evidence): the §11 real-evidence
   backend already exists — Phase 4 extends, not replaces, it.
 
@@ -94,7 +94,7 @@ preserves metadata/provenance.  Import presence, a button, or a
 synthetic demo is NOT integration.  Phase 6's coverage tests enforce
 this against the registry, not against prose.
 
-Registry coverage (live): **64 capabilities**, 64 integrated; orphans 0; test gaps 0; Other card absent. Round 24 (part6 §17A/B) added `utilities.templates` (the seven workflow-template chains, every stage calling an existing backend implementation) and `utilities.pipelines` (the §17B sequential pipeline engine); round 25 (part6 §17C/D) added `utilities.compare` (experiment comparison with compatibility grouping — cross-condition pairs refused, never merged) and `utilities.reports` (eight-section scientific run reports; units and significant figures preserved; no automatic conclusions). Round 26 closed the §17 checklist: the §17E live resource monitor (Job Center), card-integrated forms for all seven §17A templates, and the §17G workspace extensions (favorites, per-template export-folder recall, layout preferences — additive keys in studio-workspace/1). Round 27: §17D reports embed exported PNG figures inline (base64; missing files listed with the reason), the template forms auto-list compound values and auto-detect SMILES columns from the picked CSV's header, and the utilities page restores its last-opened tab from the layout preference. Round 28 (part7): the studio theme provider renders the visual identity — Deep Navy + Warm Ivory + Electric Lime in light and dark — from a centralized token module (ui/design_tokens.py, WCAG-verified), with bundled Inter/JetBrains Mono fonts (SIL OFL, fallback chains) and the Okabe-Ito scientific chart palette flowing through the existing ChartPalette path. Round 29: mono fonts pinned on technical widgets, marker discipline enforced in PlotPanel, pixel-level screenshot regression of both themes, and the biology expression matrix is a user-selectable path (shared row, live preview) instead of a hardcoded bundle. Round 30: the web session report gained the ligand-set reconciliation group (bridge bar figures), the studio theme carries visible keyboard focus on all nine workspaces, and per-page chart export ships on every plot.
+Registry coverage (live): **62 capabilities**, 62 integrated; orphans 0; test gaps 0; Other card absent.
 
 ## 6. Migration plan (Phases 1-6)
 

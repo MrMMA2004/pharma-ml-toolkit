@@ -184,6 +184,143 @@
         "title": "ArtifactTableRequest",
         "type": "object"
       },
+      "AutoencoderEncodeRequest": {
+        "properties": {
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows"
+          },
+          "top_k": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_id"
+        ],
+        "title": "AutoencoderEncodeRequest",
+        "type": "object"
+      },
+      "AutoencoderTrainRequest": {
+        "properties": {
+          "batch_size": {
+            "default": 32,
+            "maximum": 512.0,
+            "minimum": 1.0,
+            "title": "Batch Size",
+            "type": "integer"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "epochs": {
+            "default": 120,
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Epochs",
+            "type": "integer"
+          },
+          "hidden_layers": {
+            "default": [
+              64
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 8,
+            "minItems": 0,
+            "title": "Hidden Layers",
+            "type": "array"
+          },
+          "latent_dim": {
+            "default": 8,
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Latent Dim",
+            "type": "integer"
+          },
+          "learning_rate": {
+            "default": 0.001,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Learning Rate",
+            "type": "number"
+          },
+          "mode": {
+            "default": "job",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "patience": {
+            "default": 15,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Patience",
+            "type": "integer"
+          },
+          "random_state": {
+            "default": 42,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Random State",
+            "type": "integer"
+          },
+          "val_split": {
+            "default": 0.15,
+            "exclusiveMaximum": 1.0,
+            "minimum": 0.0,
+            "title": "Val Split",
+            "type": "number"
+          },
+          "weight_decay": {
+            "default": 0.0001,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Weight Decay",
+            "type": "number"
+          }
+        },
+        "required": [
+          "dataset_id"
+        ],
+        "title": "AutoencoderTrainRequest",
+        "type": "object"
+      },
       "BackupRequest": {
         "properties": {
           "filename": {
@@ -394,6 +531,208 @@
           "dataset_id"
         ],
         "title": "ClusterRequest",
+        "type": "object"
+      },
+      "CnnPredictRequest": {
+        "properties": {
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "probabilities": {
+            "default": false,
+            "title": "Probabilities",
+            "type": "boolean"
+          },
+          "sequences": {
+            "items": {
+              "$ref": "#/components/schemas/CnnSequenceSpec"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Sequences",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_id",
+          "sequences"
+        ],
+        "title": "CnnPredictRequest",
+        "type": "object"
+      },
+      "CnnSequenceSpec": {
+        "description": "One sequence: a list of feature-vector time steps.",
+        "properties": {
+          "steps": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "maxItems": 512,
+            "minItems": 1,
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "title": "CnnSequenceSpec",
+        "type": "object"
+      },
+      "CnnTrainRequest": {
+        "properties": {
+          "batch_size": {
+            "default": 32,
+            "maximum": 512.0,
+            "minimum": 1.0,
+            "title": "Batch Size",
+            "type": "integer"
+          },
+          "channels": {
+            "default": 16,
+            "maximum": 128.0,
+            "minimum": 1.0,
+            "title": "Channels",
+            "type": "integer"
+          },
+          "epochs": {
+            "default": 120,
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Epochs",
+            "type": "integer"
+          },
+          "kernel": {
+            "default": 3,
+            "maximum": 31.0,
+            "minimum": 1.0,
+            "title": "Kernel",
+            "type": "integer"
+          },
+          "labels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 500,
+                "minItems": 2,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labels"
+          },
+          "learning_rate": {
+            "default": 0.001,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Learning Rate",
+            "type": "number"
+          },
+          "mode": {
+            "default": "job",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "n_layers": {
+            "default": 2,
+            "maximum": 6.0,
+            "minimum": 1.0,
+            "title": "N Layers",
+            "type": "integer"
+          },
+          "patience": {
+            "default": 15,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Patience",
+            "type": "integer"
+          },
+          "random_state": {
+            "default": 42,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Random State",
+            "type": "integer"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "sequences": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CnnSequenceSpec"
+                },
+                "maxItems": 500,
+                "minItems": 2,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequences"
+          },
+          "synthetic_n": {
+            "anyOf": [
+              {
+                "maximum": 500.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synthetic N"
+          },
+          "task": {
+            "default": "classification",
+            "enum": [
+              "classification",
+              "regression"
+            ],
+            "title": "Task",
+            "type": "string"
+          },
+          "val_split": {
+            "default": 0.15,
+            "exclusiveMaximum": 1.0,
+            "minimum": 0.0,
+            "title": "Val Split",
+            "type": "number"
+          },
+          "weight_decay": {
+            "default": 0.0001,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Weight Decay",
+            "type": "number"
+          }
+        },
+        "title": "CnnTrainRequest",
         "type": "object"
       },
       "ConcentrationProfileRequest": {
@@ -1074,7 +1413,9 @@
               "deep_mlp_classifier",
               "deep_mlp_regressor",
               "residual_mlp_classifier",
-              "residual_mlp_regressor"
+              "residual_mlp_regressor",
+              "tabular_transformer_classifier",
+              "tabular_transformer_regressor"
             ],
             "title": "Network",
             "type": "string"
@@ -1205,6 +1546,120 @@
           "factors"
         ],
         "title": "DesignRsmRequest",
+        "type": "object"
+      },
+      "DiffusionSampleRequest": {
+        "properties": {
+          "n": {
+            "default": 32,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "N",
+            "type": "integer"
+          },
+          "prior_id": {
+            "title": "Prior Id",
+            "type": "string"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          }
+        },
+        "required": [
+          "prior_id"
+        ],
+        "title": "DiffusionSampleRequest",
+        "type": "object"
+      },
+      "DiffusionTrainRequest": {
+        "properties": {
+          "batch_size": {
+            "default": 32,
+            "maximum": 512.0,
+            "minimum": 1.0,
+            "title": "Batch Size",
+            "type": "integer"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "epochs": {
+            "default": 120,
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Epochs",
+            "type": "integer"
+          },
+          "hidden_layers": {
+            "default": [
+              64
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 8,
+            "minItems": 0,
+            "title": "Hidden Layers",
+            "type": "array"
+          },
+          "learning_rate": {
+            "default": 0.001,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Learning Rate",
+            "type": "number"
+          },
+          "mode": {
+            "default": "job",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "default": "feature-diffusion",
+            "title": "Name",
+            "type": "string"
+          },
+          "random_state": {
+            "default": 42,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Random State",
+            "type": "integer"
+          },
+          "timesteps": {
+            "default": 100,
+            "maximum": 1000.0,
+            "minimum": 2.0,
+            "title": "Timesteps",
+            "type": "integer"
+          },
+          "weight_decay": {
+            "default": 0.0001,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Weight Decay",
+            "type": "number"
+          }
+        },
+        "required": [
+          "dataset_id"
+        ],
+        "title": "DiffusionTrainRequest",
         "type": "object"
       },
       "DockRequest": {
@@ -1955,6 +2410,127 @@
           }
         },
         "title": "FitRsmRequest",
+        "type": "object"
+      },
+      "GanSampleRequest": {
+        "properties": {
+          "n": {
+            "default": 32,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "N",
+            "type": "integer"
+          },
+          "prior_id": {
+            "title": "Prior Id",
+            "type": "string"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          }
+        },
+        "required": [
+          "prior_id"
+        ],
+        "title": "GanSampleRequest",
+        "type": "object"
+      },
+      "GanTrainRequest": {
+        "properties": {
+          "batch_size": {
+            "default": 32,
+            "maximum": 512.0,
+            "minimum": 1.0,
+            "title": "Batch Size",
+            "type": "integer"
+          },
+          "d_steps": {
+            "default": 1,
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "D Steps",
+            "type": "integer"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "epochs": {
+            "default": 100,
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Epochs",
+            "type": "integer"
+          },
+          "hidden_layers": {
+            "default": [
+              64
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 8,
+            "minItems": 0,
+            "title": "Hidden Layers",
+            "type": "array"
+          },
+          "latent_dim": {
+            "default": 16,
+            "maximum": 128.0,
+            "minimum": 1.0,
+            "title": "Latent Dim",
+            "type": "integer"
+          },
+          "learning_rate": {
+            "default": 0.0002,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Learning Rate",
+            "type": "number"
+          },
+          "mode": {
+            "default": "job",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "default": "feature-gan",
+            "title": "Name",
+            "type": "string"
+          },
+          "random_state": {
+            "default": 42,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Random State",
+            "type": "integer"
+          },
+          "weight_decay": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Weight Decay",
+            "type": "number"
+          }
+        },
+        "required": [
+          "dataset_id"
+        ],
+        "title": "GanTrainRequest",
         "type": "object"
       },
       "GnnGraphSpec": {
@@ -6618,6 +7194,178 @@
         ]
       }
     },
+    "/api/v1/dl/autoencoder-encode": {
+      "post": {
+        "operationId": "autoencoder_encode_api_v1_dl_autoencoder_encode_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoencoderEncodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Autoencoder Encode Api V1 Dl Autoencoder Encode Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Autoencoder Encode",
+        "tags": [
+          "dl"
+        ]
+      }
+    },
+    "/api/v1/dl/autoencoder-train": {
+      "post": {
+        "operationId": "autoencoder_train_api_v1_dl_autoencoder_train_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoencoderTrainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Autoencoder Train Api V1 Dl Autoencoder Train Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Autoencoder Train",
+        "tags": [
+          "dl"
+        ]
+      }
+    },
+    "/api/v1/dl/cnn-predict": {
+      "post": {
+        "operationId": "cnn_predict_api_v1_dl_cnn_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CnnPredictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cnn Predict Api V1 Dl Cnn Predict Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cnn Predict",
+        "tags": [
+          "dl"
+        ]
+      }
+    },
+    "/api/v1/dl/cnn-train": {
+      "post": {
+        "operationId": "cnn_train_api_v1_dl_cnn_train_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CnnTrainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cnn Train Api V1 Dl Cnn Train Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cnn Train",
+        "tags": [
+          "dl"
+        ]
+      }
+    },
     "/api/v1/dl/gnn-predict": {
       "post": {
         "operationId": "gnn_predict_api_v1_dl_gnn_predict_post",
@@ -7419,6 +8167,178 @@
         "summary": "Registry",
         "tags": [
           "dta"
+        ]
+      }
+    },
+    "/api/v1/generative/diffusion/sample": {
+      "post": {
+        "operationId": "diffusion_sample_api_v1_generative_diffusion_sample_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiffusionSampleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Diffusion Sample Api V1 Generative Diffusion Sample Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Diffusion Sample",
+        "tags": [
+          "generative"
+        ]
+      }
+    },
+    "/api/v1/generative/diffusion/train": {
+      "post": {
+        "operationId": "diffusion_train_api_v1_generative_diffusion_train_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiffusionTrainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Diffusion Train Api V1 Generative Diffusion Train Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Diffusion Train",
+        "tags": [
+          "generative"
+        ]
+      }
+    },
+    "/api/v1/generative/gan/sample": {
+      "post": {
+        "operationId": "gan_sample_api_v1_generative_gan_sample_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GanSampleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Gan Sample Api V1 Generative Gan Sample Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Gan Sample",
+        "tags": [
+          "generative"
+        ]
+      }
+    },
+    "/api/v1/generative/gan/train": {
+      "post": {
+        "operationId": "gan_train_api_v1_generative_gan_train_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GanTrainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Gan Train Api V1 Generative Gan Train Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Gan Train",
+        "tags": [
+          "generative"
         ]
       }
     },

@@ -47,7 +47,9 @@ $P install pytest-xdist 2>&1 | tail -1
 #     redesign). pyqtgraph MUST stay 0.13.7: 0.14 requires numpy>=2.2
 #     and this stack pins 1.26.4 (mordred). PySide6 6.8.3 = the Qt 6.8
 #     LTS wheel verified under Python 3.12. The EGL stub under
-#     pharma-ml-toolkit/ui/native/ carries the headless fallback: this
+#     pharma-ml-toolkit/legacy/ui/native/ carries the headless fallback
+#     (part18 §10 quarantine completion: the legacy GUI tree lives under
+#     legacy/): this
 #     box has no system libEGL, so the stub is ALSO copied into the
 #     wheel's Qt/lib dir (libQt6Gui.so.6 carries RUNPATH $ORIGIN, so
 #     the dependency resolves with zero env vars — plain pytest runs
@@ -55,7 +57,7 @@ $P install pytest-xdist 2>&1 | tail -1
 $P install PySide6==6.8.3 pyqtgraph==0.13.7 qt-material==2.17 \
     qdarkstyle==3.2.3 pytest-qt==4.5.0 \
     -c /tmp/constraint.txt 2>&1 | tail -1
-cp /home/z/my-project/pharma-ml-toolkit/ui/native/libEGL.so.1 \
+cp /home/z/my-project/pharma-ml-toolkit/legacy/ui/native/libEGL.so.1 \
    /home/z/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libEGL.so.1
 
 # 6c. the part10 FastAPI service stack (r275: src/pharmaml/api needs
@@ -110,7 +112,7 @@ cd /home/z/my-project/pharma-ml-toolkit && $P install --no-deps -e . 2>&1 | tail
 # 8b. verify the Studio GUI stack offscreen (the EGL stub + offscreen
 #     platform ride inside ui.headless — real EGL, when present, wins)
 cd /home/z/my-project/pharma-ml-toolkit && /home/z/.venv/bin/python -c "
-import sys; sys.path.insert(0, '.')
+import sys; sys.path.insert(0, '.'); sys.path.insert(0, 'legacy')
 from ui.headless import ensure_headless
 ensure_headless()
 from PySide6.QtWidgets import QApplication

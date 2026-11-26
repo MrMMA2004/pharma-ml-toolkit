@@ -54,22 +54,22 @@ CHUNKS: list[tuple[str, list[str]]] = [
     # sandbox, next-server down, nothing else running: the ui pages'
     # PySide6 footprints simply exceed one process's share).  Split into
     # two processes, a-m / n-z, so each holds half the Qt pages.
-    ("4a (ui bestof..docking)", ["tests/ui/test_bestofml_page.py", "tests/ui/test_biology_page.py",
-                     "tests/ui/test_chemistry_page.py", "tests/ui/test_data_table.py",
-                     "tests/ui/test_deep_learning_page.py", "tests/ui/test_docking_page.py"]),
+    ("4a (ui bestof..docking)", ["legacy/tests_ui/test_bestofml_page.py", "legacy/tests_ui/test_biology_page.py",
+                     "legacy/tests_ui/test_chemistry_page.py", "legacy/tests_ui/test_data_table.py",
+                     "legacy/tests_ui/test_deep_learning_page.py", "legacy/tests_ui/test_docking_page.py"]),
     # (round 232) chunk 4b split AGAIN (the round-225 OOM lesson, second
     # verse): six page-suites in one pytest process crossed 1.66 GB rss at
     # teardown and the kernel OOM-killed it AFTER the last test passed --
     # three suites per process now (4b + the new 4d).
-    ("4b (ui export..generative)", ["tests/ui/test_export_gui.py", "tests/ui/test_foundations_page.py",
-                     "tests/ui/test_generative_page.py"]),
+    ("4b (ui export..generative)", ["legacy/tests_ui/test_export_gui.py", "legacy/tests_ui/test_foundations_page.py",
+                     "legacy/tests_ui/test_generative_page.py"]),
     # (round 235) 4d carries the SS23 responsive-policy suite at 16
     # tests (the scroll-policy section added three): two MainWindow
     # constructions in the process and the chunk still fits -- 50/50
     # green in the round-235 pre-gate.
-    ("4d (ui imagelab..responsive)", ["tests/ui/test_image_lab_page.py",
-                     "tests/ui/test_job_worker.py", "tests/ui/test_main_window.py",
-                     "tests/ui/test_responsive_policy.py"]),
+    ("4d (ui imagelab..responsive)", ["legacy/tests_ui/test_image_lab_page.py",
+                     "legacy/tests_ui/test_job_worker.py", "legacy/tests_ui/test_main_window.py",
+                     "legacy/tests_ui/test_responsive_policy.py"]),
     # (round 240) 4c gains the SS21.4 image-hover suite (20 tests, pure
     # ImagePanel + three Image Lab page constructions -- the same page
     # suite 4d already runs, so the memory envelope is known).
@@ -79,31 +79,31 @@ CHUNKS: list[tuple[str, list[str]]] = [
     # teardown edge -- SIGSEGV (-11) at 74% AFTER the same content
     # passed in two halves (124 + 165, both green, both measured).
     # 4c keeps the widget suites; the page suites move to 4e.
-    ("4c (ui chart..legend)", ["tests/ui/test_chart_inspector.py",
-                     "tests/ui/test_headless_platform.py",
-                     "tests/ui/test_image_hover_probe.py",
-                    "tests/ui/test_image_subpixel_245.py",
-                    "tests/ui/test_image_1to1_246.py",
-                     "tests/ui/test_legend_policy.py",
-                     "tests/ui/test_plot_tick_density.py",
-                     "tests/ui/test_plot_title_budget_242.py",
-                     "tests/ui/test_plot_legend_placement_243.py"]),
-    ("4e (ui mlworkbench..utilities)", ["tests/ui/test_ml_workbench_page.py",
-                     "tests/ui/test_molecular_dynamics_page.py",
-                     "tests/ui/test_model_analysis_page.py",
-                     "tests/ui/test_pages_smoke.py", "tests/ui/test_pkpd_page.py",
-                     "tests/ui/test_qt_doctor.py",
-                     "tests/ui/test_qt_noise_filter.py",
-                     "tests/ui/test_responseai_page.py",
-                     "tests/ui/test_scatter_meta_241.py",
-                     "tests/ui/test_smiles_preview.py",
-                     "tests/ui/test_theme_manager.py",
-                     "tests/ui/test_unsupervised_page.py",
-                     "tests/ui/test_utilities_page.py"]),
+    ("4c (ui chart..legend)", ["legacy/tests_ui/test_chart_inspector.py",
+                     "legacy/tests_ui/test_headless_platform.py",
+                     "legacy/tests_ui/test_image_hover_probe.py",
+                    "legacy/tests_ui/test_image_subpixel_245.py",
+                    "legacy/tests_ui/test_image_1to1_246.py",
+                     "legacy/tests_ui/test_legend_policy.py",
+                     "legacy/tests_ui/test_plot_tick_density.py",
+                     "legacy/tests_ui/test_plot_title_budget_242.py",
+                     "legacy/tests_ui/test_plot_legend_placement_243.py"]),
+    ("4e (ui mlworkbench..utilities)", ["legacy/tests_ui/test_ml_workbench_page.py",
+                     "legacy/tests_ui/test_molecular_dynamics_page.py",
+                     "legacy/tests_ui/test_model_analysis_page.py",
+                     "legacy/tests_ui/test_pages_smoke.py", "legacy/tests_ui/test_pkpd_page.py",
+                     "legacy/tests_ui/test_qt_doctor.py",
+                     "legacy/tests_ui/test_qt_noise_filter.py",
+                     "legacy/tests_ui/test_responseai_page.py",
+                     "legacy/tests_ui/test_scatter_meta_241.py",
+                     "legacy/tests_ui/test_smiles_preview.py",
+                     "legacy/tests_ui/test_theme_manager.py",
+                     "legacy/tests_ui/test_unsupervised_page.py",
+                     "legacy/tests_ui/test_utilities_page.py"]),
     # (round 262) the §5 nine-card suite: every test builds the card grid
     # (and two of them a full MainWindow) -- its own process, like the
     # other Qt-heavy page suites.
-    ("4f (ui nine-cards)", ["tests/ui/test_nine_cards.py"]),
+    ("4f (ui nine-cards)", ["legacy/tests_ui/test_nine_cards.py"]),
     # (round 228) chunk 5 ("playground Tk", tests/test_playground.py) is
     # GONE -- playground.py retired; the Studio pages are chunks 4a-4c.
     ("6 (src doctests)", ["src/pharmaml", "--doctest-modules"]),

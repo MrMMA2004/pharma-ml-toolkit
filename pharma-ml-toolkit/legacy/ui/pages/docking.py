@@ -79,7 +79,7 @@ from ..widgets.progress_panel import ProgressPanel
 from ..widgets.responsive import configure_splitter, wrap_in_scroll
 from ..workers.job_worker import JobRunner
 
-_TK = Path(__file__).resolve().parents[2]
+_TK = Path(__file__).resolve().parents[3]
 
 #: The bundled synthetic AutoDock4 campaign: 14 ligand folders, each a
 #: complete run holding ``r.dlg`` + ``r.glg`` except the audit cases

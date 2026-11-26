@@ -1,3 +1,97 @@
+## [1.2.243] — 2026-11-26 — round 367 (the 159th recorded run: the part18 campaign, trace 1a219777c8a0fde9 — the DL ARCHITECTURE EXPANSION with the full §9 chain, and the ui/-pages quarantine COMPLETION)
+
+
+- **The DL architecture expansion (part18 §5 — the increment the r365
+  addendum recorded as NOT_IMPLEMENTED with evidence)**: five new
+  backend modules, every one with the complete §9 integration chain
+  (Python + pydantic DTOs + FastAPI routes + the regenerated OpenAPI
+  contract 134→142 paths + the regenerated api.d.ts + the typed
+  service clients + the React lanes + the vitest pins): **(1) the
+  tabular Transformer** — `src/pharmaml/ml/transformer.py`
+  (FT-Transformer-style tokenised attention over the feature columns:
+  per-value projections + learned feature embeddings + a CLS token,
+  `n_blocks` pre-LN self-attention blocks, GELU) riding the SAME
+  `/api/v1/dl/train` lane as DeepMLP/ResidualMLP (the catalog grew
+  4→6 tabular families; the per-network hyperparameter validation
+  422s an unknown key honestly); **(2) the sequence CNN** —
+  `src/pharmaml/ml/cnn.py` (1-D temporal conv stack + the concat
+  avg+max time-pool) over 3-D `(n, seq_len, channels)` inputs ONLY —
+  a 2-D tabular matrix is REFUSED with the pointer to the
+  DeepMLP/Transformer families (§5.2's no-fake-images rule, enforced
+  on the wire), with the deterministic `synthetic_motif_sequences`
+  fixture (a local motif only a receptive field detects) and its OWN
+  predict path `/api/v1/dl/cnn-predict` (the tabular predict refuses
+  sequence models up front — one path per model class); **(3) the
+  tabular autoencoder** — `src/pharmaml/ml/autoencoder.py`
+  (encoder/decoder pair, unsupervised, the honest task badge) with
+  `/api/v1/dl/autoencoder-train` + `-encode` (latent coordinates +
+  per-row reconstruction errors + the top-k outlier ranking with the
+  heuristic-not-ground-truth note); **(4) the feature-space GAN** —
+  `src/pharmaml/generative/gan.py` and **(5) the feature-space
+  diffusion (DDPM)** — `src/pharmaml/generative/diffusion.py`, both
+  in the Generative AI family per §5.6 (never the supervised
+  registry): adversarial BCE training with the g/d-loss telemetry,
+  the DDPM linear schedule + noise prediction + the full reverse
+  chain, `sample(n, seed)` reproducibility, and the honest
+  distributional parity report (mean/std deltas + the correlation
+  L1 distance) — FEATURE-space, stated everywhere: synthetic feature
+  ROWS, not molecules (the SMILES lanes own molecular generation),
+  never experimentally validated data.  The prior store carries them
+  as `FeaturePriorRecord` (kind feature_gan/feature_diffusion,
+  `molecular: false` pinned).  Tests: 83 backend
+  (test_transformer/test_cnn/test_autoencoder/test_generative_gan_diffusion)
+  + 27 API pins (tests/api/test_dl_architectures.py) + 11 vitest
+  (the CNN/AE lane + the feature-generative lane over 41 files,
+  357/357).  The docstring doctests ride the collection lane.
+- **The ui/-pages + workspace.py quarantine COMPLETION (part18 §10 —
+  the r365 addendum's honest OPEN increment, closed)**: the legacy
+  PySide6 GUI tree moved out of the product surface — `ui/` →
+  `legacy/ui/` and `tests/ui/` → `legacy/tests_ui/` (git-renamed,
+  152 paths), the root conftest + the legacy conftest carrying the
+  `legacy/` path insert (the EGL stub + offscreen bootstrap keep
+  working for every invocation), the capability registry strings +
+  the CAPABILITY_MAP/FEATURES/NINE_CARD_EVIDENCE/TEST_PROFILES docs +
+  the freeze tooling (pharmaml.spec pathex, freeze_equivalent's EGL
+  datas row, the smoke driver's path inserts) + release_readiness +
+  the venv repair scripts all re-aimed at the quarantined home, the
+  legacy README rewritten (UNSUPPORTED, the three supported
+  surfaces, the run-your-own-lane note).  The Qt-free
+  `pharmaml.studio` persistence modules (runs/evidence/comparison/
+  reports/workspace/capability_registry) STAYED in `src/` where they
+  legitimately serve the FastAPI backend — pinned by a new guard.
+  `tests/test_legacy_retirement.py` grew 13→21 guards (no ui/ at the
+  root, no tests/ui under tests/, the legacy tree + EGL stub
+  present, the conftest path, NO product source importing the Qt
+  tree, the persistence modules still serving the backend, the venv
+  repair pointing at the quarantined stub).  The default gate's
+  testpaths (`tests, src`) no longer collect the 972-test legacy
+  family — it runs explicitly as `pytest legacy/tests_ui` when the
+  optional PySide6 stack is installed (the collection pins
+  re-trued measurement-last: 8,274/441 default + 972/74 legacy).
+- **The nineteenth-class rollback recovered before any work** (the
+  same signature as the r362-r366 recycle): the `.git` regressed to
+  the round-186 checkpoint with the origin remote, the credentials,
+  the venv pins and the frontend node_modules wiped.  The recovery:
+  the PAT silently restored off `upload/MASTER_PROMPT.pdf` (the
+  600-mode file, never printed), the remote re-added + fetched, the
+  worktree verified IDENTICAL to `origin/main` (10b4fc8c) via a
+  temp-index three-way walk before the reset, the venv re-pinned
+  (numpy 1.26.4 + rdkit + torch 2.14.1+cpu + PySide6 + fastapi +
+  pyinstaller, the rdkit-stub patch, the editable install), the dev
+  daemon re-verified, two rollback strays swept (the resurrected
+  root `studio.py` deleted — the retirement guards' own rule).
+- **The release**: version 1.2.242 → **1.2.243** across all ten
+  carriers (VERSION, pyproject, the package dunder, the web
+  `SHIPPED_TOOLKIT_VERSION`, frontend package.json + the lockfile's
+  two root fields, tauri.conf, the Windows version metadata, the
+  SBOM root component); the zip re-shipped through the four disk
+  homes + the offsite mirror; the Windows Release ladder dispatched
+  off the `v1.2.243` tag (the freeze+Tauri+NSIS+MSI chain + the
+  install-smoke lane); the ZAP deep scan stays on the standing
+  360-minute Monday slot (the r364 close-out's lane — the API-side
+  penetration suite 67 re-run green locally this round).
+
+
 ## [1.2.242] — 2026-11-26 — round 365 (the 157th recorded run: the part18 campaign, trace 1a218363342face5 — MASTER_PROMPT part18's first executed increment: the unsupervised clustering families + Isolation Forest anomaly detection + the experimental RL lane with FULL backend→API→frontend integration, and the MANDATORY studio.py retirement)
 
 

@@ -354,3 +354,29 @@ with the two staleness defects the pass caught fixed at source:
   and the Rust-toolchain lanes stay honestly blocked as before.
 - **Version**: unchanged 1.2.242 — no re-ship (doc + root-web-console
   deltas only); the counter 157 → 158 rides the commit.
+
+## r367 addendum — the DL architecture expansion + the ui-quarantine completion ship (round 367, v1.2.243)
+
+The part18 campaign's second executed increment ships as v1.2.243:
+
+* **The five new DL families** (§5 with the full §9 chain): the
+  tabular Transformer (the same /dl/train lane, catalog 4→6), the
+  sequence CNN (3-D-only inputs, its own cnn-train/cnn-predict path),
+  the tabular autoencoder (autoencoder-train/-encode, unsupervised),
+  the feature-space GAN + DDPM diffusion (the generative prior store,
+  the parity reports).  Contract 134→142 paths; api.d.ts
+  regenerated; 83 backend + 27 API + 11 vitest tests riding the
+  gates; the honest scope lines pinned (no fake images, no
+  pretrained claim, feature-space never molecules).
+* **The quarantine completion**: ui/ → legacy/ui, tests/ui/ →
+  legacy/tests_ui (152 git renames); the conftest/freeze/
+  release-readiness/venv-repair/registry/doc references re-aimed;
+  the retirement guards 13→21; the default gate's collection
+  re-trued to 8,274/441 (the 972-test legacy lane explicit).
+* **The ship**: ten version carriers trued (VERSION, pyproject,
+  dunder, web pin, package.json + lockfile, tauri.conf, Windows
+  metadata, the SBOM root); the zip re-shipped across the four disk
+  homes + the offsite mirror; the v1.2.243 Windows Release ladder
+  dispatched off the tag (the r365 four-build precedent's fix list
+  already in); the penetration API suite 67 re-run green locally;
+  the ZAP deep scan stays on the standing Monday slot.

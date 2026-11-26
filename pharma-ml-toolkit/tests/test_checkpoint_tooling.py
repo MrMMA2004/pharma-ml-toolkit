@@ -205,7 +205,7 @@ class TestShipGates:
         # every path argument the gates name must exist on the tree
         for label, command in cmds:
             for arg in command:
-                if arg.startswith("-") or "/" not in arg and arg not in {"src", "tests", "tools", "ui"}:
+                if arg.startswith("-") or "/" not in arg and arg not in {"src", "tests", "tools"}:
                     continue
                 if arg in {sys.executable, "pytest", "ruff", "mypy", "run"}:
                     continue
@@ -215,7 +215,7 @@ class TestShipGates:
         flat = {label: command for label, command in cp._ship_gate_commands()}
         gui = [command for label, command in flat.items() if "gui" in label]
         assert gui, "a GUI gate must exist"
-        assert any("tests/ui" in arg for command in gui for arg in command)
+        assert any("legacy/tests_ui" in arg for command in gui for arg in command)
 
     def test_notebook_freshness_green_on_the_live_tree(self) -> None:
         # the release checklist item: notebook version consistency

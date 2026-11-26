@@ -95,13 +95,16 @@ def _bus_events(client) -> list[dict]:
 
 
 class TestDLNetworks:
-    def test_catalog_lists_four_tabular_torch_families(self, client):
+    def test_catalog_lists_six_tabular_torch_families(self, client):
         r = client.get("/api/v1/dl/networks", headers=auth_headers())
         assert r.status_code == 200
         nets = r.json()["networks"]
         assert [n["network"] for n in nets] == [
             "deep_mlp_classifier", "deep_mlp_regressor",
             "residual_mlp_classifier", "residual_mlp_regressor",
+            # part18 §5.4 — the tabular Transformer lane (from scratch;
+            # no pretrained molecular transformer is claimed anywhere)
+            "tabular_transformer_classifier", "tabular_transformer_regressor",
         ]
         by_name = {n["network"]: n for n in nets}
         # live defaults read off the class signatures — one source of truth
@@ -111,6 +114,10 @@ class TestDLNetworks:
             "ResidualMLPRegressor"
         )
         assert by_name["deep_mlp_classifier"]["task"] == "classification"
+        # the transformer families ride the same lane + defaults surface
+        assert by_name["tabular_transformer_classifier"]["engine"] == "torch"
+        assert by_name["tabular_transformer_classifier"]["defaults"]["d_model"] == 32
+        assert by_name["tabular_transformer_regressor"]["task"] == "regression"
 
     def test_catalog_documents_the_single_prediction_path(self, client):
         r = client.get("/api/v1/dl/networks", headers=auth_headers())

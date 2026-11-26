@@ -90,7 +90,7 @@ def _cluster_meta(labels: Any, cluster: int) -> Any:
     return meta
 
 
-_TK = Path(__file__).resolve().parents[2]
+_TK = Path(__file__).resolve().parents[3]
 
 #: The page's datasets: the descriptor library (77 rows x 8 descriptor
 #: columns -- the handbook's own "descriptor table" story) and the QSAR

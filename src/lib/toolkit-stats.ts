@@ -18,7 +18,15 @@
  *  guard (tests/test_architecture_hygiene.py: the duplicate-symbol map
  *  pins, the library-surface import-graph census, the mabel/noael
  *  parity grid, the SBOM artifact pins). */
-export const SHIPPED_TEST_COUNT = 9123;
+/*  r367 re-true (measurement-last, the part18 second increment): the
+    ui/-pages quarantine completion MOVED the 972-test legacy GUI
+    family out of the default gate (tests/ui -> legacy/tests_ui,
+    run explicitly when PySide6 is installed), and the DL
+    architecture expansion added 110 (83 backend + 27 API) -- the
+    default-suite collection re-measured live: 8,274 over 441
+    files, 0 errors (the legacy lane: 972 over 74 files, explicit).
+    Verified pin = live collection. */
+export const SHIPPED_TEST_COUNT = 8274;
 
 /*  r366 (the part18 all-phases verification pass, the owner-directed
     firing): the collection re-measured LIVE at the r365 terminal
@@ -54,7 +62,10 @@ export const SHIPPED_TEST_COUNT = 9123;
  *  files" was off by one, the on-disk truth at 315fdddf was 9).
  *  This pin moves independently of the Python suite above —
  *  the CI's studio-frontend job runs both lanes. */
-export const SHIPPED_COMPONENT_TEST_COUNT = 346;
+/*  r367 re-true: the vitest suite re-measured live at the r367
+    tree -- 357/357 over 41 files (the two new lanes: the CNN +
+    autoencoder lane and the feature-generative lane, +11). */
+export const SHIPPED_COMPONENT_TEST_COUNT = 357;
 
 /*  r366 re-true: the vitest suite re-measured live at the r365
     terminal -- 346/346 over 39 files (54.36s). The r361-era pin 337
@@ -105,7 +116,12 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 346;
  *  toolkit .github path — resurrected by the same rollback, never
  *  registered at GitHub and never shipped in any archive — nets to
  *  zero (caught, removed); verified pin = live walk = page render. */
-export const SHIPPED_FILE_COUNT = 1860;
+/*  r367 re-true (measurement-last): the walk re-measured after the
+    quarantine completion (152 paths MOVED under legacy/, not added)
+    + the twelve r367 files (the five DL modules, the five backend
+    suites, the two vitest lanes) + the two in-tree v1.2.243 zip homes
+    -- 1,873 files. */
+export const SHIPPED_FILE_COUNT = 1873;
 
 /*  r366 re-true (measurement-last): the offline census replica
     re-walked the toolkit tree at the r365 terminal AFTER this
@@ -263,7 +279,14 @@ export const SHIPPED_FILE_COUNT = 1860;
     movement + the psutil importorskip comment (+4) + the zap-automation tuning comment (+7) + the close-out verdict truing (+21: the QA verdict rows split + the RR/PS bullet trues), re-measured at the close-out walk. The
     collection + vitest + registry pins re-measured reproducing:
     9,017 / 337 / 33. Verified pin = live walk = page render. */
-export const SHIPPED_SOURCE_LINES = 594843;
+/*  r367 re-true (measurement-last): the walk re-measured after the
+    DL expansion + the quarantine doc/tool re-aims + the eight
+    notebooks re-executed at 1.2.243 + this round's own ledger edits
+    (the QA r367 section + the FEATURES stamp + the ship pins) + the
+    two in-tree v1.2.243 zip homes -- re-walked fixed-point AFTER the
+    pin edits themselves (the r362 lesson): 601,763 lines at 1,873
+    files. */
+export const SHIPPED_SOURCE_LINES = 601763;
 
 /*  r366-continuation re-true (measurement-last): the firing's
     close-out correction (the drift-guard figure 202 -> 130 and the

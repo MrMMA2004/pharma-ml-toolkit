@@ -321,7 +321,7 @@ not a gap; the part17 campaign queue's G1 lane is what closed it.
 ### 3.5 The legacy PySide6 registry is not this matrix
 
 `pharmaml.studio.capability_registry` (62 rows, all `integrated`) and
-`tests/ui/` (873 tests) cover the **legacy studio GUI** — §28 Stage 1's
+`legacy/tests_ui/` (873 tests) cover the **legacy studio GUI** — §28 Stage 1's
 preserved reference frontend, still functional for parity comparison.
 The React integration status lives in this document and in
 `frontend/src/app/workspaces.ts` (`state: "workflow"` ×9). PySide6
@@ -488,3 +488,40 @@ continued importability.  The ui/-pages and workspace.py quarantine
 completion is the honest OPEN next increment.  The DL architecture
 expansion (CNN/Transformer/Autoencoder/GAN/Diffusion) remains
 NOT_IMPLEMENTED with evidence — not silently claimed.
+
+· **r367 addendum (part18 — the campaign's second executed increment,
+trace 1a219777c8a0fde9): BOTH recorded OPEN items CLOSE with the full
+§9 chain.  (1) The DL ARCHITECTURE EXPANSION — five new capability
+families, every one VERIFIED_COMPLETE on the live surface: the
+tabular Transformer (`src/pharmaml/ml/transformer.py` +
+`tabular_transformer_classifier/regressor` in the live
+`/api/v1/dl/networks` catalog + the same `/api/v1/dl/train` lane +
+the architecture-catalog row in the DL workspace + the
+network-aware hyperparameter composer — from scratch, no pretrained
+molecular transformer claimed); the sequence CNN
+(`src/pharmaml/ml/cnn.py` + `POST /api/v1/dl/cnn-train`/`cnn-predict`
+over 3-D sequences ONLY + the synthetic motif fixture + its own
+predict path — the tabular matrix refused with the §5.2 pointer, on
+the wire); the tabular autoencoder (`src/pharmaml/ml/autoencoder.py`
++ `POST /api/v1/dl/autoencoder-train`/`-encode` — the latent
+coordinates, the reconstruction errors, the honest outlier ranking);
+the feature-space GAN (`src/pharmaml/generative/gan.py` +
+`POST /api/v1/generative/gan/train`/`/sample` — adversarial
+telemetry + the distributional parity report, FEATURE-space, never
+molecules) and the feature-space diffusion
+(`src/pharmaml/generative/diffusion.py` +
+`POST /api/v1/generative/diffusion/train`/`/sample` — the DDPM
+reverse chain, same parity contract).  Tests: 83 backend + 27 API +
+11 vitest; the contract grew 134→142 paths; api.d.ts regenerated.
+The penetration lane's deep scan stays on the standing Monday slot.
+(2) The ui/-pages + workspace.py quarantine COMPLETION — the legacy
+PySide6 tree (ui/ → legacy/ui/, tests/ui/ → legacy/tests_ui/,
+152 git-renamed paths) is OUT of the product surface and OUT of the
+default gate (testpaths tests,src): the Qt-free pharmaml.studio
+persistence modules stayed in src/ where the FastAPI backend
+consumes them (a new guard pins it); the retirement guards grew
+13→21; the freeze tooling, release_readiness, the venv repair and
+the capability registry strings all re-aimed at the quarantined home;
+the legacy lane runs explicitly (`pytest legacy/tests_ui`, 972
+tests) — archival reproducibility, unsupported status, the three
+supported surfaces unchanged.

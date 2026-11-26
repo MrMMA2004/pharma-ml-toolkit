@@ -6,19 +6,29 @@ This directory is the explicit quarantine area required by part18 §10
 * `legacy/studio.py` — the retired application launcher.  It is NOT an
   active supported entry point: the banner at its head says so, and
   no product path starts it.
-* `ui/` and `src/pharmaml/studio/workspace.py` remain at their
-  historical in-tree locations this round (their import graph is wide:
-  the FastAPI backend legitimately uses the Qt-free
-  `pharmaml.studio` persistence/evidence/registry modules, and the
-  74-test `tests/ui` regression suite keeps the archived GUI
-  reproducible); they are on the migration path to this quarantine in
-  a later part18 increment.
+* `legacy/ui/` — the complete legacy PySide6 GUI package (pages,
+  widgets, the design tokens, the headless EGL bootstrap), moved here
+  from the toolkit root as the part18 §10 quarantine completion.  Its
+  import graph is fully contained: the FastAPI backend uses only the
+  Qt-free `pharmaml.studio` persistence/evidence/registry modules,
+  which stayed in `src/` where they legitimately serve the backend.
+* `legacy/tests_ui/` — the 74-file archival regression suite of the
+  quarantined GUI (moved from `tests/ui/`).  It is NOT part of the
+  default pytest gate (`testpaths = ["tests", "src"]`); run it
+  explicitly when the optional PySide6 stack is installed::
+
+      pytest legacy/tests_ui
+
+  The root `conftest.py` still preloads the EGL stub for every
+  invocation, so the offscreen runs work in bare containers too.
 
 Status: **UNSUPPORTED** — not part of the supported product, not part
 of production packaging (the Windows sidecar spec excludes the whole
-Qt stack: PySide6, shiboken6, pyqtgraph, qt_material, qdarkstyle), and
-not covered by any release gate that matters for the product.  The
-files exist for archival and reproducibility reasons only.
+Qt stack: PySide6, shiboken6, pyqtgraph, qt_material, qdarkstyle; the
+legacy GUI freeze spec resolves the package through `legacy/` on its
+pathex), and not covered by any release gate that matters for the
+product.  The files exist for archival and reproducibility reasons
+only.
 
 The supported application surfaces are:
 

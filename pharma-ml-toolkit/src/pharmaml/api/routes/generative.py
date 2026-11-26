@@ -22,6 +22,19 @@ over the REAL backend (part10's queued row).
   cancel flag is set triggers the backend's native
   ``JobCancelled`` — the evolution itself stops at the checkpoint,
   and the job lands in CANCELLED (never FAILED).
+* ``POST /api/v1/generative/gan/train`` + ``/gan/sample`` —
+  :class:`pharmaml.generative.gan.FeatureSpaceGAN` over a
+  registered dataset's numeric feature matrix (part18 §5.6's
+  adversarial lane, integrated HERE in Generative AI per the spec,
+  never the supervised registry).  FEATURE-space, not molecules:
+  the responses say so, and sampling carries the honest
+  distributional parity report.
+* ``POST /api/v1/generative/diffusion/train`` +
+  ``/diffusion/sample`` —
+  :class:`pharmaml.generative.diffusion.FeatureSpaceDiffusion`, the
+  same contract over the DDPM machinery (linear schedule, noise
+  prediction, the full reverse chain).  Same honest scope: feature
+  rows, not molecules.
 """
 
 from __future__ import annotations
@@ -32,7 +45,13 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from pharmaml.exceptions import JobCancelled as BackendJobCancelled
+from pharmaml.exceptions import (
+    DataValidationError,
+    JobCancelled as BackendJobCancelled,
+    ModelError,
+)
+from pharmaml.generative.diffusion import FeatureSpaceDiffusion
+from pharmaml.generative.gan import FeatureSpaceGAN
 from pharmaml.generative.genetic import GeneticOptimizer
 from pharmaml.generative.rnn import SmilesRnn
 from pharmaml.generative.scoring import (
@@ -49,7 +68,7 @@ from pharmaml.generative.scoring import (
 
 from ..events import EventType
 from ..jobs import CancelledJob
-from ..stores import PriorRecord, json_safe
+from ..stores import FeaturePriorRecord, PriorRecord, json_safe
 
 router = APIRouter(prefix="/generative", tags=["generative"])
 
@@ -562,3 +581,321 @@ def optimize(req: OptimizeRequest, request: Request) -> dict:
         manager=manager,
     )
     return {"mode": "job", "job": record.public()}
+
+
+# -- the feature-space GAN / Diffusion lanes (part18 §5.6, the API leg) ------
+#
+# FEATURE-space generative models over a registered dataset's numeric
+# feature matrix — the honest scope line rides every response: these
+# are synthetic FEATURE ROWS, not molecules (the SMILES lanes above own
+# molecular generation), and nothing sampled is experimentally
+# validated data.  They register in the session prior store like the
+# RNN prior (the tabular analogue of the same registry).
+
+class GanTrainRequest(BaseModel):
+    dataset_id: str
+    name: str = "feature-gan"
+    latent_dim: int = Field(default=16, ge=1, le=128)
+    hidden_layers: list[int] = Field(default=[64], min_length=0, max_length=8)
+    d_steps: int = Field(default=1, ge=1, le=8)
+    epochs: int = Field(default=100, ge=1, le=2000)
+    batch_size: int = Field(default=32, ge=1, le=512)
+    learning_rate: float = Field(default=2e-4, gt=0.0, le=1.0)
+    weight_decay: float = Field(default=0.0, ge=0.0, le=1.0)
+    random_state: int = Field(default=42, ge=0, le=2**31 - 1)
+    mode: Literal["job", "sync"] = "job"
+
+
+class GanSampleRequest(BaseModel):
+    prior_id: str
+    n: int = Field(default=32, ge=1, le=500)
+    seed: int | None = Field(default=None, ge=0, le=2**31 - 1)
+
+
+def _gan_train_body(
+    name: str,
+    X,
+    build_params: dict[str, Any],
+    dataset_source: str,
+    prior_store,
+    bus=None,
+    manager=None,
+    job_id: str | None = None,
+    cancel_event=None,
+) -> dict:
+    """Job/sync body: the REAL FeatureSpaceGAN adversarial fit."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledJob("Cancelled before the GAN build stage.")
+    if manager is not None and job_id is not None:
+        manager.report_progress(job_id, 5, "building the adversarial pair")
+    gan = FeatureSpaceGAN(**build_params)
+    if manager is not None and job_id is not None:
+        manager.report_progress(job_id, 10, "training the adversarial pair")
+    gan.fit(X.to_numpy())
+    record = FeaturePriorRecord(
+        prior_id=f"prior-{uuid.uuid4().hex[:12]}",
+        model=gan,
+        name=name,
+        kind="feature_gan",
+        params=build_params,
+        n_train_rows=len(X),
+        losses=[h["g_loss"] for h in gan.history_],
+        dataset_source=dataset_source,
+    )
+    prior_store.register(record)
+    if bus is not None:
+        bus.publish(
+            EventType.TRAINING_METRICS,
+            {
+                "stage": "feature GAN trained",
+                "epochs": len(gan.history_),
+                "final_g_loss": gan.history_[-1]["g_loss"] if gan.history_ else None,
+                "final_d_loss": gan.history_[-1]["d_loss"] if gan.history_ else None,
+            },
+            job_id=job_id,
+        )
+    view = record.view()
+    view["final_d_loss"] = (
+        gan.history_[-1]["d_loss"] if gan.history_ else None
+    )
+    view["note"] = (
+        "feature-space generative model — synthetic feature rows, NOT "
+        "molecules (the SMILES lanes own molecular generation)"
+    )
+    return {"prior": view}
+
+
+@router.post("/gan/train")
+def gan_train(req: GanTrainRequest, request: Request) -> dict:
+    store = request.app.state.dataset_store
+    dataset = store.get(req.dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Unknown dataset_id.")
+    X = dataset.X
+    build_params = {
+        "latent_dim": req.latent_dim,
+        "hidden_layers": tuple(req.hidden_layers),
+        "d_steps": req.d_steps,
+        "epochs": req.epochs,
+        "batch_size": req.batch_size,
+        "learning_rate": req.learning_rate,
+        "weight_decay": req.weight_decay,
+        "random_state": req.random_state,
+    }
+    dataset_source = f"dataset:{req.dataset_id}"
+    if req.mode == "sync":
+        try:
+            return {
+                "mode": "sync",
+                **_gan_train_body(
+                    req.name, X, build_params, dataset_source,
+                    request.app.state.prior_store,
+                    bus=request.app.state.bus,
+                ),
+            }
+        except (DataValidationError, ModelError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    manager = request.app.state.job_manager
+    record = manager.submit(
+        "generative.gan_train",
+        "generative-ai",
+        _gan_train_body,
+        configuration={
+            "name": req.name,
+            "dataset_id": req.dataset_id,
+            **build_params,
+        },
+        name=req.name,
+        X=X,
+        build_params=build_params,
+        dataset_source=dataset_source,
+        prior_store=request.app.state.prior_store,
+        bus=request.app.state.bus,
+        manager=manager,
+    )
+    return {"mode": "job", "job": record.public()}
+
+
+@router.post("/gan/sample")
+def gan_sample(req: GanSampleRequest, request: Request) -> dict:
+    record = request.app.state.prior_store.get(req.prior_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Unknown prior_id.")
+    if not isinstance(record.model, FeatureSpaceGAN):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"prior {req.prior_id} is not a feature GAN; the GAN sampler "
+                "needs one trained through POST /api/v1/generative/gan/train"
+            ),
+        )
+    try:
+        rows = record.model.sample(req.n, seed=req.seed)
+    except ModelError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    report = record.model.quality_report()
+    return {
+        "prior_id": req.prior_id,
+        "n_requested": req.n,
+        "n_sampled": int(rows.shape[0]),
+        "rows": json_safe(rows.tolist()),
+        "quality": report,
+        "params": {"seed": req.seed},
+        "note": (
+            "synthetic feature rows — a distributional parity report, not "
+            "real data; feature-space generation, not molecules"
+        ),
+    }
+
+
+class DiffusionTrainRequest(BaseModel):
+    dataset_id: str
+    name: str = "feature-diffusion"
+    timesteps: int = Field(default=100, ge=2, le=1000)
+    hidden_layers: list[int] = Field(default=[64], min_length=0, max_length=8)
+    epochs: int = Field(default=120, ge=1, le=2000)
+    batch_size: int = Field(default=32, ge=1, le=512)
+    learning_rate: float = Field(default=1e-3, gt=0.0, le=1.0)
+    weight_decay: float = Field(default=1e-4, ge=0.0, le=1.0)
+    random_state: int = Field(default=42, ge=0, le=2**31 - 1)
+    mode: Literal["job", "sync"] = "job"
+
+
+class DiffusionSampleRequest(BaseModel):
+    prior_id: str
+    n: int = Field(default=32, ge=1, le=500)
+    seed: int | None = Field(default=None, ge=0, le=2**31 - 1)
+
+
+def _diffusion_train_body(
+    name: str,
+    X,
+    build_params: dict[str, Any],
+    dataset_source: str,
+    prior_store,
+    bus=None,
+    manager=None,
+    job_id: str | None = None,
+    cancel_event=None,
+) -> dict:
+    """Job/sync body: the REAL FeatureSpaceDiffusion DDPM fit."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledJob("Cancelled before the denoiser build stage.")
+    if manager is not None and job_id is not None:
+        manager.report_progress(job_id, 5, "building the denoiser")
+    dpm = FeatureSpaceDiffusion(**build_params)
+    if manager is not None and job_id is not None:
+        manager.report_progress(job_id, 10, "training the noise predictor")
+    dpm.fit(X.to_numpy())
+    record = FeaturePriorRecord(
+        prior_id=f"prior-{uuid.uuid4().hex[:12]}",
+        model=dpm,
+        name=name,
+        kind="feature_diffusion",
+        params=build_params,
+        n_train_rows=len(X),
+        losses=[h["train_loss"] for h in dpm.history_],
+        dataset_source=dataset_source,
+    )
+    prior_store.register(record)
+    if bus is not None:
+        bus.publish(
+            EventType.TRAINING_METRICS,
+            {
+                "stage": "feature diffusion trained",
+                "epochs": len(dpm.history_),
+                "final_train_loss": (
+                    dpm.history_[-1]["train_loss"] if dpm.history_ else None
+                ),
+            },
+            job_id=job_id,
+        )
+    view = record.view()
+    view["note"] = (
+        "feature-space generative model — synthetic feature rows, NOT "
+        "molecules (the SMILES lanes own molecular generation)"
+    )
+    return {"prior": view}
+
+
+@router.post("/diffusion/train")
+def diffusion_train(req: DiffusionTrainRequest, request: Request) -> dict:
+    store = request.app.state.dataset_store
+    dataset = store.get(req.dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Unknown dataset_id.")
+    X = dataset.X
+    build_params = {
+        "timesteps": req.timesteps,
+        "hidden_layers": tuple(req.hidden_layers),
+        "epochs": req.epochs,
+        "batch_size": req.batch_size,
+        "learning_rate": req.learning_rate,
+        "weight_decay": req.weight_decay,
+        "random_state": req.random_state,
+    }
+    dataset_source = f"dataset:{req.dataset_id}"
+    if req.mode == "sync":
+        try:
+            return {
+                "mode": "sync",
+                **_diffusion_train_body(
+                    req.name, X, build_params, dataset_source,
+                    request.app.state.prior_store,
+                    bus=request.app.state.bus,
+                ),
+            }
+        except (DataValidationError, ModelError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    manager = request.app.state.job_manager
+    record = manager.submit(
+        "generative.diffusion_train",
+        "generative-ai",
+        _diffusion_train_body,
+        configuration={
+            "name": req.name,
+            "dataset_id": req.dataset_id,
+            **build_params,
+        },
+        name=req.name,
+        X=X,
+        build_params=build_params,
+        dataset_source=dataset_source,
+        prior_store=request.app.state.prior_store,
+        bus=request.app.state.bus,
+        manager=manager,
+    )
+    return {"mode": "job", "job": record.public()}
+
+
+@router.post("/diffusion/sample")
+def diffusion_sample(req: DiffusionSampleRequest, request: Request) -> dict:
+    record = request.app.state.prior_store.get(req.prior_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Unknown prior_id.")
+    if not isinstance(record.model, FeatureSpaceDiffusion):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"prior {req.prior_id} is not a feature diffusion model; the "
+                "diffusion sampler needs one trained through POST "
+                "/api/v1/generative/diffusion/train"
+            ),
+        )
+    try:
+        rows = record.model.sample(req.n, seed=req.seed)
+    except ModelError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    report = record.model.quality_report()
+    return {
+        "prior_id": req.prior_id,
+        "n_requested": req.n,
+        "n_sampled": int(rows.shape[0]),
+        "rows": json_safe(rows.tolist()),
+        "quality": report,
+        "params": {"seed": req.seed},
+        "note": (
+            "synthetic feature rows — a distributional parity report, not "
+            "real data; feature-space generation, not molecules"
+        ),
+    }

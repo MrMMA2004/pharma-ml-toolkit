@@ -80,11 +80,16 @@ def probe_dependencies() -> list[tuple[str, str, str]]:
     """(pip name, honest status, consumer) for every matrix row.
 
     Qt-side imports are probed AFTER ``ui.headless.ensure_headless``
-    (the committed EGL stub + offscreen platform): without it, Qt
-    imports fail for a missing SYSTEM library, which would misreport
-    an installed, working package as broken.
+    (the committed EGL stub + offscreen platform, now quarantined at
+    ``legacy/ui/`` per part18 §10's completion — the probe path adds
+    ``legacy/`` first): without it, Qt imports fail for a missing
+    SYSTEM library, which would misreport an installed, working
+    package as broken.
     """
     try:
+        _legacy = TK / "legacy"
+        if _legacy.is_dir() and str(_legacy) not in sys.path:
+            sys.path.insert(0, str(_legacy))
         from ui.headless import ensure_headless
 
         ensure_headless()
@@ -133,7 +138,7 @@ def count_suites() -> dict[str, int]:
     counts: dict[str, int] = {}
     groups = [
         sorted(str(p) for p in (TK / "tests").glob("test_*.py")),
-        sorted(str(p) for p in (TK / "tests" / "ui").glob("test_*.py")),
+        sorted(str(p) for p in (TK / "legacy" / "tests_ui").glob("test_*.py")),
     ]
     for paths in groups:
         if not paths:
@@ -311,7 +316,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--record", action="append", default=[],
                     metavar="CHUNK=RESULT",
                     help="record a suite-chunk result, e.g. "
-                         "'tests/ui/...=48 passed' (repeatable)")
+                         "'legacy/tests_ui/...=48 passed' (repeatable)")
     ap.add_argument("--audit-report", type=Path, default=None,
                     help="path to an audit_release report.json")
     args = ap.parse_args(argv)

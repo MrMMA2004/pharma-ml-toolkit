@@ -155,7 +155,7 @@ class TestRule8SpecializedPagesReachable:
         # subprocess bootstraps the same EGL-stub the root conftest uses
         # (ui.headless.ensure_headless) so Qt imports in a bare sandbox.
         code = (
-            "import sys; sys.path.insert(0, 'src'); sys.path.insert(0, '.')\n"
+            "import sys; sys.path.insert(0, 'src'); sys.path.insert(0, 'legacy')\n"
             "from ui.headless import ensure_headless\n"
             "ensure_headless()\n"
             "from ui import nine_cards\n"

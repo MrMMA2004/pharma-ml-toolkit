@@ -92,7 +92,7 @@ from ..widgets.progress_panel import ProgressPanel
 from ..widgets.responsive import LEGIBILITY_FLOOR, configure_splitter
 from ..workers.job_worker import JobRunner
 
-_TK = Path(__file__).resolve().parents[2]
+_TK = Path(__file__).resolve().parents[3]
 
 #: The bundled named-drug roster (12 molecules, all RDKit-valid).
 _SEEDS_PATH = _TK / "examples" / "data" / "seed_molecules.csv"

@@ -1864,3 +1864,42 @@ queue: **upkeep alone** — and the upkeep found real work.
 - **Version**: unchanged 1.2.242 (doc + root-web-console-only
   deltas — the r361–r363 no-re-ship precedent). The counter 157 →
   158 and RIDES the commit.
+
+## 17. The r367 clause (the part18 second executed increment — the DL ARCHITECTURE EXPANSION shipped + the ui/-pages quarantine COMPLETED; the nineteenth-class rollback recovered; the v1.2.243 ship)
+
+- **The DL architecture expansion (part18 §5 — the r365 addendum's
+  recorded OPEN item, closed with evidence)**: five new families
+  with the full §9 chain (module → DTOs → routes → the regenerated
+  142-path contract → api.d.ts → typed clients → the React lanes →
+  the tests): the tabular Transformer (the same /dl/train lane,
+  catalog 4→6, from scratch — no pretrained molecular claim), the
+  sequence CNN (3-D-only inputs — the §5.2 no-fake-images rule
+  enforced by the estimator's own 422 — the motif fixture, its own
+  cnn-predict path), the tabular autoencoder (the unsupervised
+  train/encode pair: latent, reconstruction errors, the honest
+  outlier ranking), and the feature-space GAN + DDPM diffusion in
+  the Generative family (adversarial/DDPM telemetry, the seeded
+  reverse chain, the distributional parity report — FEATURE-space
+  rows, never molecules, stated in every docstring, every route
+  note and the registry pin).
+- **The quarantine completion (the other recorded OPEN item,
+  closed)**: the legacy PySide6 tree moved to legacy/ (ui/ +
+  tests/ui/, 152 git-renamed paths, the conftest/freeze/
+  release-readiness/venv/registry/doc surfaces re-aimed, the
+  retirement guards 13→21) while the Qt-free pharmaml.studio
+  persistence modules stayed in src/ serving the FastAPI backend
+  (pinned by a guard).  The default gate's collection re-trued
+  8,274/441 with the 972-test legacy lane explicit.
+- **The nineteenth-class rollback** recovered before any work (the
+  .git recycle to the round-186 checkpoint, the remote/PAT/venv/
+  node_modules wipes): the PAT silently restored, the worktree
+  verified identical to origin/main via the temp-index walk before
+  the reset, the venv re-pinned, the strays swept.
+- **The ship**: v1.2.243 across the eleven carriers (VERSION,
+  pyproject, the dunder, the web pin, package.json + lockfile +
+  version.ts, tauri.conf, the Windows metadata, the SBOM root);
+  the eight notebooks re-executed; the zip re-shipped across the
+  four disk homes + the offsite mirror; the v1.2.243 tag pushed and
+  the Windows Release ladder dispatched (the EXE/MSI build +
+  install-smoke); the penetration API suite 67 green locally, the
+  ZAP deep scan stays on the Monday slot.

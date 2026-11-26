@@ -91,7 +91,7 @@ def _meta(dist: str) -> str | None:
 
 
 def _toolkit_version() -> str:
-    version_file = Path(__file__).resolve().parents[1] / "VERSION"
+    version_file = Path(__file__).resolve().parents[2] / "VERSION"
     try:
         return version_file.read_text().strip()
     except OSError:  # pragma: no cover - VERSION always ships

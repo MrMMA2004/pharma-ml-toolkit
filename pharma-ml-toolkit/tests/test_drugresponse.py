@@ -2,7 +2,7 @@
 
 FEATURES.md's Response AI row carried a long-standing B note — the
 module's only pins were the GUI page tests
-(``tests/ui/test_responseai_page.py``, which exercise the module
+(``legacy/tests_ui/test_responseai_page.py``, which exercise the module
 through Qt workers). This suite is the headless twin: every public
 surface of the module pinned directly, no Qt import, no page in the
 loop. The seeded recipes are the page's own (seed 42, the 21-point 4PL

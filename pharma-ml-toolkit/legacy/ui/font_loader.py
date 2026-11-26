@@ -18,7 +18,24 @@ from PySide6.QtGui import QFont, QFontDatabase
 
 from .design_tokens import SCALE, TYPEFACES
 
-_FONT_DIR = Path(__file__).resolve().parent.parent / "fonts"
+def _font_dir() -> Path:
+    """Locate the bundled fonts directory.
+
+    Frozen bundles keep the part9 §4 layout (``ui/`` beside ``fonts/``
+    inside ``_internal``), so the parent-of-package math still holds
+    there.  In source checkouts the quarantine move (part18 §10) put
+    this package at ``legacy/ui/``, so the walk continues upward to the
+    toolkit root's ``fonts/`` — bounded, and still the same single
+    bundle either way.
+    """
+    here = Path(__file__).resolve().parent
+    for candidate in (here.parent, *here.parents[1:4]):
+        if (candidate / "fonts" / "IBMPlexSans-Regular.ttf").is_file():
+            return candidate / "fonts"
+    return here.parent / "fonts"
+
+
+_FONT_DIR = _font_dir()
 
 # bundled, license-clean files (SIL OFL 1.1 — see fonts/*-OFL.txt)
 _BUNDLED = (

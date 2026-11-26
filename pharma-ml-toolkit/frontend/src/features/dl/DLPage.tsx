@@ -35,6 +35,12 @@ import {
   parseTrainingMetricsPayload,
   parseGnnInlineGraphs,
   parseGnnTrainResult,
+  parseCnnTrainResult,
+  parseAutoencoderTrainResult,
+  type AutoencoderEncodeResponse,
+  type AutoencoderTrainResult,
+  type CnnPredictResponse,
+  type CnnTrainResult,
   type DLModelView,
   type DLNetworkName,
   type GnnConv,
@@ -532,6 +538,52 @@ export function DLPage() {
   const [gnnPredictBusy, setGnnPredictBusy] = useState(false);
   const [gnnPredictResult, setGnnPredictResult] = useState<GnnPredictResponse | null>(null);
 
+  // the sequence-CNN lane (part18 §5.2 — the convolutional lane over
+  // 3-D sequences or the backend's motif fixture, its OWN predict path)
+  const [cnnSource, setCnnSource] = useState<"synthetic" | "inline">("synthetic");
+  const [cnnSyntheticN, setCnnSyntheticN] = useState(40);
+  const [cnnSeed, setCnnSeed] = useState(0);
+  const [cnnTask, setCnnTask] = useState<"classification" | "regression">("classification");
+  const [cnnChannels, setCnnChannels] = useState(8);
+  const [cnnKernel, setCnnKernel] = useState(3);
+  const [cnnLayers, setCnnLayers] = useState(2);
+  const [cnnEpochs, setCnnEpochs] = useState(25);
+  const [cnnLr, setCnnLr] = useState(3e-3);
+  const [cnnInlineText, setCnnInlineText] = useState("");
+  const [cnnInlineError, setCnnInlineError] = useState<string | null>(null);
+  const [cnnTrainJobId, setCnnTrainJobId] = useState<string | null>(null);
+  const [cnnTrainError, setCnnTrainError] = useState<string | null>(null);
+  const [cnnTrainBusy, setCnnTrainBusy] = useState(false);
+  const [cnnTrainResult, setCnnTrainResult] = useState<CnnTrainResult | null>(null);
+  const [cnnPredictText, setCnnPredictText] = useState("");
+  const [cnnPredictError, setCnnPredictError] = useState<string | null>(null);
+  const [cnnPredictProba, setCnnPredictProba] = useState(true);
+  const [cnnPredictBusy, setCnnPredictBusy] = useState(false);
+  const [cnnPredictResult, setCnnPredictResult] = useState<CnnPredictResponse | null>(null);
+
+  // the tabular-autoencoder lane (part18 §5.5 — the representation /
+  // reconstruction / anomaly lane over the selected dataset)
+  const [aeLatentDim, setAeLatentDim] = useState(2);
+  const [aeHiddenText, setAeHiddenText] = useState("[16]");
+  const [aeEpochs, setAeEpochs] = useState(40);
+  const [aeTrainJobId, setAeTrainJobId] = useState<string | null>(null);
+  const [aeTrainError, setAeTrainError] = useState<string | null>(null);
+  const [aeTrainBusy, setAeTrainBusy] = useState(false);
+  const [aeTrainResult, setAeTrainResult] = useState<AutoencoderTrainResult | null>(null);
+  const [aeEncodeBusy, setAeEncodeBusy] = useState(false);
+  const [aeEncodeError, setAeEncodeError] = useState<string | null>(null);
+  const [aeEncodeResult, setAeEncodeResult] = useState<AutoencoderEncodeResponse | null>(null);
+
+  // the tabular Transformer's architecture controls (part18 §5.4 — the
+  // family rides the SAME tabular train lane, its own keys compose here)
+  const [ttrDModel, setTtrDModel] = useState(32);
+  const [ttrHeads, setTtrHeads] = useState(4);
+  const [ttrBlocks, setTtrBlocks] = useState(2);
+  const [ttrFeedforward, setTtrFeedforward] = useState(64);
+  // the tabular Transformer rides the same lane with its OWN architecture
+  // keys — the Configure Model stage swaps its controls on this flag
+  const isTransformerNetwork = selectedNetwork.startsWith("tabular_transformer");
+
   const datasetTask = selected?.task;
   const selectedTask: "classification" | "regression" | null =
     datasetTask === "classification" || datasetTask === "regression"
@@ -632,6 +684,17 @@ export function DLPage() {
       random_state: randomState,
       device,
     };
+    // part18 §5.4 — the tabular Transformer family rides the same lane
+    // with its OWN architecture keys (d_model/heads/n_blocks/
+    // dim_feedforward); the MLP-only keys never ride its requests (the
+    // backend validates per-network and 422s an unknown key honestly)
+    if (selectedNetwork.startsWith("tabular_transformer")) {
+      params["d_model"] = ttrDModel;
+      params["heads"] = ttrHeads;
+      params["n_blocks"] = ttrBlocks;
+      params["dim_feedforward"] = ttrFeedforward;
+      return params;
+    }
     if (hiddenLayers !== null) {
       params["hidden_layers"] = hiddenLayers;
     }
@@ -655,6 +718,11 @@ export function DLPage() {
     dropout,
     activation,
     batchnorm,
+    selectedNetwork,
+    ttrDModel,
+    ttrHeads,
+    ttrBlocks,
+    ttrFeedforward,
   ]);
 
   // stage 7: train (job mode — the backend's default lane)
@@ -1014,6 +1082,177 @@ export function DLPage() {
     }
   }, [gnnTrainResult, gnnPredictText, gnnPredictProba]);
 
+  // the sequence-CNN lane's train (job mode — the estimator's own
+  // on_epoch drives the per-epoch training.metrics stream)
+  const handleCnnTrain = useCallback(async () => {
+    setCnnTrainBusy(true);
+    setCnnTrainError(null);
+    setCnnTrainJobId(null);
+    setCnnTrainResult(null);
+    setCnnInlineError(null);
+    try {
+      let inline: { sequences: (number[][])[]; labels: number[] } | undefined;
+      if (cnnSource === "inline") {
+        inline = parseCnnInlineSequences(cnnInlineText, "train");
+        if (inline === undefined) {
+          throw new Error(
+            "the inline lane needs a sequences block — " +
+              '{"sequences": [[[…steps…], …], …], "labels": [...]}',
+          );
+        }
+      }
+      const response = await dlApi.cnnTrain({
+        syntheticN: cnnSource === "synthetic" ? cnnSyntheticN : undefined,
+        seed: cnnSeed,
+        inline,
+        task: cnnTask,
+        channels: cnnChannels,
+        kernel: cnnKernel,
+        nLayers: cnnLayers,
+        epochs: cnnEpochs,
+        batchSize: 32,
+        learningRate: cnnLr,
+        weightDecay: 1e-4,
+        patience: 15,
+        valSplit: 0.15,
+        randomState: cnnSeed,
+      });
+      if (response.mode === "job") {
+        setCnnTrainJobId(response.job.job_id);
+      } else {
+        setCnnTrainResult(response.result);
+      }
+    } catch (error) {
+      setCnnTrainError(describeError(error));
+      if (error instanceof Error && error.message.includes("inline")) {
+        setCnnInlineError(error.message);
+      }
+    } finally {
+      setCnnTrainBusy(false);
+    }
+  }, [
+    cnnSource, cnnSyntheticN, cnnSeed, cnnTask, cnnChannels, cnnKernel,
+    cnnLayers, cnnEpochs, cnnLr, cnnInlineText,
+  ]);
+
+  // the cnn-train job's COMPLETED result relays into the sequence
+  // model card (the same one-DTO parser as the sync lane)
+  const handleCnnTrainResult = useCallback((result: unknown) => {
+    try {
+      setCnnTrainResult(parseCnnTrainResult(result, "dl cnn-train result"));
+    } catch (error) {
+      setCnnTrainError(describeError(error));
+    }
+  }, []);
+
+  // the CNN lane's predict — the sequence models' OWN prediction path
+  // (never the tabular /ml/predict, which refuses sequence models)
+  const handleCnnPredict = useCallback(async () => {
+    if (cnnTrainResult === null) {
+      return;
+    }
+    setCnnPredictBusy(true);
+    setCnnPredictError(null);
+    setCnnPredictResult(null);
+    try {
+      const sequences = parseCnnInlineSequences(cnnPredictText, "predict");
+      if (sequences === undefined) {
+        throw new Error(
+          "the predict lane needs a sequences block — " +
+            '{"sequences": [[[…steps…], …], …]}',
+        );
+      }
+      setCnnPredictResult(
+        await dlApi.cnnPredict({
+          modelId: cnnTrainResult.model.model_id,
+          sequences: sequences.sequences,
+          probabilities: cnnPredictProba,
+        }),
+      );
+    } catch (error) {
+      setCnnPredictError(describeError(error));
+    } finally {
+      setCnnPredictBusy(false);
+    }
+  }, [cnnTrainResult, cnnPredictText, cnnPredictProba]);
+
+  // the autoencoder lane's train (job mode over the SELECTED dataset)
+  const handleAeTrain = useCallback(async () => {
+    if (selectedId === null) {
+      return;
+    }
+    let hidden: number[];
+    try {
+      hidden = parseAeHidden(aeHiddenText);
+    } catch (error) {
+      setAeTrainError(
+        error instanceof Error ? error.message : String(error),
+      );
+      return;
+    }
+    setAeTrainBusy(true);
+    setAeTrainError(null);
+    setAeTrainJobId(null);
+    setAeTrainResult(null);
+    setAeEncodeResult(null);
+    try {
+      const response = await dlApi.autoencoderTrain({
+        datasetId: selectedId,
+        hiddenLayers: hidden,
+        latentDim: aeLatentDim,
+        epochs: aeEpochs,
+        batchSize: 32,
+        learningRate: 1e-3,
+        weightDecay: 1e-4,
+        patience: 15,
+        valSplit: 0.15,
+        randomState: 42,
+      });
+      if (response.mode === "job") {
+        setAeTrainJobId(response.job.job_id);
+      } else {
+        setAeTrainResult(response.result);
+      }
+    } catch (error) {
+      setAeTrainError(describeError(error));
+    } finally {
+      setAeTrainBusy(false);
+    }
+  }, [selectedId, aeHiddenText, aeLatentDim, aeEpochs]);
+
+  // the autoencoder-train job's COMPLETED result relay
+  const handleAeTrainResult = useCallback((result: unknown) => {
+    try {
+      setAeTrainResult(
+        parseAutoencoderTrainResult(result, "dl autoencoder-train result"),
+      );
+    } catch (error) {
+      setAeTrainError(describeError(error));
+    }
+  }, []);
+
+  // the autoencoder's encode lane over the SAME selected dataset
+  const handleAeEncode = useCallback(async () => {
+    if (aeTrainResult === null || selectedId === null) {
+      return;
+    }
+    setAeEncodeBusy(true);
+    setAeEncodeError(null);
+    try {
+      setAeEncodeResult(
+        await dlApi.autoencoderEncode({
+          modelId: aeTrainResult.model.model_id,
+          datasetId: selectedId,
+          topK: 10,
+        }),
+      );
+    } catch (error) {
+      setAeEncodeError(describeError(error));
+    } finally {
+      setAeEncodeBusy(false);
+    }
+  }, [aeTrainResult, selectedId]);
+
   // the task gate: a network of the other task is disabled with the
   // backend's own reason (the honest 422 becomes a visible row)
   const networkRows = useMemo(
@@ -1334,16 +1573,94 @@ export function DLPage() {
         <Card>
           <CardContent>
             <div className="flex flex-wrap items-end gap-3">
-              <label className="text-xs text-[var(--color-muted-foreground)]">
-                hidden layers (JSON list)
-                <input
-                  type="text"
-                  value={hiddenLayersText}
-                  onChange={(event) => setHiddenLayersText(event.target.value)}
-                  placeholder="[64, 32] — empty = the signature default"
-                  className="mt-1 w-64 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
-                />
-              </label>
+              {isTransformerNetwork ? (
+                <>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    d_model (divisible by heads)
+                    <input
+                      type="number"
+                      min={8}
+                      max={256}
+                      step={8}
+                      value={ttrDModel}
+                      onChange={(event) => setTtrDModel(Number(event.target.value))}
+                      className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                      aria-label="transformer d_model"
+                    />
+                  </label>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    heads
+                    <input
+                      type="number"
+                      min={1}
+                      max={16}
+                      value={ttrHeads}
+                      onChange={(event) => setTtrHeads(Number(event.target.value))}
+                      className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                      aria-label="transformer heads"
+                    />
+                  </label>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    blocks
+                    <input
+                      type="number"
+                      min={1}
+                      max={6}
+                      value={ttrBlocks}
+                      onChange={(event) => setTtrBlocks(Number(event.target.value))}
+                      className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                      aria-label="transformer blocks"
+                    />
+                  </label>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    feedforward
+                    <input
+                      type="number"
+                      min={8}
+                      max={512}
+                      step={8}
+                      value={ttrFeedforward}
+                      onChange={(event) => setTtrFeedforward(Number(event.target.value))}
+                      className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                      aria-label="transformer feedforward"
+                    />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    hidden layers (JSON list)
+                    <input
+                      type="text"
+                      value={hiddenLayersText}
+                      onChange={(event) => setHiddenLayersText(event.target.value)}
+                      placeholder="[64, 32] — empty = the signature default"
+                      className="mt-1 w-64 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    />
+                  </label>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    activation
+                    <select
+                      value={activation}
+                      onChange={(event) => setActivation(event.target.value)}
+                      className="mt-1 w-28 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    >
+                      {DL_ACTIVATIONS.map((token) => (
+                        <option key={token} value={token}>{token}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                    <input
+                      type="checkbox"
+                      checked={batchnorm}
+                      onChange={(event) => setBatchnorm(event.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    batch normalisation
+                  </label>
+                </>
+              )}
               <label className="text-xs text-[var(--color-muted-foreground)]">
                 dropout
                 <input
@@ -1356,38 +1673,14 @@ export function DLPage() {
                   className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
                 />
               </label>
-              <label className="text-xs text-[var(--color-muted-foreground)]">
-                activation
-                <select
-                  value={activation}
-                  onChange={(event) => setActivation(event.target.value)}
-                  className="mt-1 w-28 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
-                >
-                  {DL_ACTIVATIONS.map((token) => (
-                    <option key={token} value={token}>{token}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
-                <input
-                  type="checkbox"
-                  checked={batchnorm}
-                  onChange={(event) => setBatchnorm(event.target.checked)}
-                  className="h-4 w-4"
-                />
-                batch normalisation
-              </label>
             </div>
             {hiddenLayersError !== null ? (
               <p className="mt-2 text-xs text-[var(--color-destructive)]">{hiddenLayersError}</p>
             ) : null}
             <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
-              The overrides validate BEFORE any request fires — an
-              invalid body never leaves the page. The activation
-              tokens are the backend&apos;s own accepted vocabulary
-              (`relu`, `tanh`, `gelu`, `sigmoid`); the estimator
-              validates `dropout` in [0, 1) with its own actionable
-              error — surfaced verbatim, never pre-faked.
+              {isTransformerNetwork
+                ? "The tabular Transformer (part18 §5.4) rides the same tabular train lane with its OWN architecture keys — d_model/heads/n_blocks/dim_feedforward compose the request; the MLP-only keys never ride it (the backend validates per-network and 422s an unknown key honestly). From scratch, every time: no pretrained molecular transformer is claimed anywhere."
+                : "The overrides validate BEFORE any request fires — an invalid body never leaves the page. The activation tokens are the backend's own accepted vocabulary (`relu`, `tanh`, `gelu`, `sigmoid`); the estimator validates `dropout` in [0, 1) with its own actionable error — surfaced verbatim, never pre-faked."}
             </p>
           </CardContent>
         </Card>
@@ -2216,6 +2509,468 @@ export function DLPage() {
             )}
           </CardContent>
         </Card>
+
+      </section>
+
+      {/*
+       * The sequence-CNN lane — part18 §5.2's convolutional card: the
+       * 3-D-only temporal conv over inline sequences or the backend's
+       * deterministic motif fixture, with the sequence models' OWN
+       * predict path (never the tabular /ml/predict).
+       */}
+      <section className="mt-12" aria-labelledby="cnn-lane-title">
+        <div className="flex flex-wrap items-baseline gap-2 border-t border-[var(--color-border)] pt-6">
+          <h2
+            id="cnn-lane-title"
+            className="text-lg font-semibold text-[var(--color-foreground)]"
+          >
+            Sequence CNN — the convolutional lane
+          </h2>
+          <span className="text-xs text-[var(--color-muted-foreground)]">
+            part18 §5.2 · the REAL 1-D temporal conv (kernel → batch-norm →
+            ReLU, avg+max pool) over 3-D sequences or the motif fixture
+          </span>
+        </div>
+        <Card className="mt-3">
+          <CardHeader>
+            <CardTitle className="text-base">Train a sequence model</CardTitle>
+            <CardDescription>
+              the source (the motif fixture or inline sequences) + the
+              architecture (channels · kernel · layers) + the trainer’s
+              own controls — job mode, the estimator’s real per-epoch
+              telemetry
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                source
+                <select
+                  value={cnnSource}
+                  onChange={(event) =>
+                    setCnnSource(event.target.value as typeof cnnSource)
+                  }
+                  className="mt-1 w-32 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  aria-label="cnn source"
+                >
+                  <option value="synthetic">synthetic motifs</option>
+                  <option value="inline">inline sequences</option>
+                </select>
+              </label>
+              {cnnSource === "synthetic" ? (
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  motif count (10–500)
+                  <input
+                    type="number"
+                    min={10}
+                    max={500}
+                    value={cnnSyntheticN}
+                    onChange={(event) => setCnnSyntheticN(Number(event.target.value))}
+                    className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  />
+                </label>
+              ) : (
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  task
+                  <select
+                    value={cnnTask}
+                    onChange={(event) =>
+                      setCnnTask(event.target.value as typeof cnnTask)
+                    }
+                    className="mt-1 w-32 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    aria-label="cnn task"
+                  >
+                    <option value="classification">classification</option>
+                    <option value="regression">regression</option>
+                  </select>
+                </label>
+              )}
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                seed
+                <input
+                  type="number"
+                  min={0}
+                  value={cnnSeed}
+                  onChange={(event) => setCnnSeed(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                channels
+                <input
+                  type="number"
+                  min={1}
+                  max={128}
+                  value={cnnChannels}
+                  onChange={(event) => setCnnChannels(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                kernel (odd)
+                <input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={cnnKernel}
+                  onChange={(event) => setCnnKernel(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                layers
+                <input
+                  type="number"
+                  min={1}
+                  max={6}
+                  value={cnnLayers}
+                  onChange={(event) => setCnnLayers(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                epochs
+                <input
+                  type="number"
+                  min={1}
+                  max={2000}
+                  step={5}
+                  value={cnnEpochs}
+                  onChange={(event) => setCnnEpochs(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                lr
+                <input
+                  type="number"
+                  min={0.0001}
+                  max={1}
+                  step={0.001}
+                  value={cnnLr}
+                  onChange={(event) => setCnnLr(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+            </div>
+            {cnnSource === "inline" ? (
+              <div className="mt-3">
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  inline sequences + labels (JSON)
+                  <textarea
+                    value={cnnInlineText}
+                    onChange={(event) => setCnnInlineText(event.target.value)}
+                    rows={6}
+                    placeholder='{"sequences": [[[0.1, 0.2], [0.3, 0.4], …], …], "labels": [0, 1, …]}'
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 font-mono text-xs"
+                  />
+                </label>
+                {cnnInlineError !== null ? (
+                  <p className="mt-1 text-xs text-[var(--color-destructive)]">{cnnInlineError}</p>
+                ) : null}
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                  Every row validates BEFORE any request fires — rectangular
+                  step lists (one width per sequence), one numeric label
+                  per sequence; a malformed block never leaves the page.
+                  A plain tabular matrix is refused by the backend&apos;s
+                  own 422 with the pointer to the DeepMLP / Tabular
+                  Transformer families — never a fake image reshape.
+                </p>
+              </div>
+            ) : null}
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button
+                size="sm"
+                disabled={cnnTrainBusy || (cnnSource === "inline" && cnnInlineText.trim() === "")}
+                onClick={() => void handleCnnTrain()}
+              >
+                {cnnTrainBusy ? "Submitting…" : "Train the sequence model"}
+              </Button>
+              <span className="text-xs text-[var(--color-muted-foreground)]">
+                {cnnSource === "synthetic"
+                  ? `synthetic motif fixture · ${cnnSyntheticN} sequences · seed ${cnnSeed}`
+                  : "inline sequences · job mode"}
+              </span>
+            </div>
+            {cnnTrainError !== null ? (
+              <div className="mt-3"><ErrorBanner message={cnnTrainError} /></div>
+            ) : null}
+            {cnnTrainJobId !== null ? (
+              <div className="mt-3">
+                <JobRunCard
+                  jobId={cnnTrainJobId}
+                  resultLabel="the trained sequence model view"
+                  onResult={handleCnnTrainResult}
+                />
+              </div>
+            ) : null}
+            {cnnTrainResult !== null ? <CnnModelCard result={cnnTrainResult} /> : null}
+            <p className="mt-3 text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              The lane rides `POST /api/v1/dl/cnn-train` in job mode — the
+              REAL `SequenceCNN` fit with the estimator&apos;s own
+              per-epoch `training.metrics` telemetry (the same
+              `on_epoch` contract as the tabular lane). The convolution
+              is scientifically meaningful ONLY over real sequence
+              representations: a tabular matrix is refused up front
+              (part18 §5.2&apos;s no-fake-images rule, on the wire).
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="text-base">Predict on sequences</CardTitle>
+            <CardDescription>
+              the sequence models&apos; OWN prediction path —
+              `/api/v1/dl/cnn-predict`, never the tabular
+              `/api/v1/ml/predict` (which refuses sequence models up front)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                <input
+                  type="checkbox"
+                  checked={cnnPredictProba}
+                  onChange={(event) => setCnnPredictProba(event.target.checked)}
+                  className="h-4 w-4"
+                />
+                class probabilities
+              </label>
+              <Button
+                size="sm"
+                disabled={cnnTrainResult === null || cnnPredictBusy || cnnPredictText.trim() === ""}
+                onClick={() => void handleCnnPredict()}
+              >
+                {cnnPredictBusy ? "Predicting…" : "Predict on the sequences"}
+              </Button>
+            </div>
+            <label className="mt-3 block text-xs text-[var(--color-muted-foreground)]">
+              sequences to predict (JSON — same shape as the train block, no labels)
+              <textarea
+                value={cnnPredictText}
+                onChange={(event) => setCnnPredictText(event.target.value)}
+                rows={5}
+                placeholder='{"sequences": [[[…steps…], …], …]}'
+                className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 font-mono text-xs"
+              />
+            </label>
+            {cnnPredictError !== null ? (
+              <div className="mt-3"><ErrorBanner message={cnnPredictError} /></div>
+            ) : null}
+            {cnnPredictResult !== null ? (
+              <div className="mt-3">
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  model {cnnPredictResult.modelId} · {cnnPredictResult.nSequences} sequences
+                  {cnnPredictResult.classes !== null
+                    ? ` · classes ${cnnPredictResult.classes.map((c) => formatValue(c)).join(" / ")}`
+                    : ""}
+                </p>
+                <div className="mt-2 overflow-hidden rounded-lg border border-[var(--color-border)]">
+                  <div className="max-h-64 overflow-auto">
+                    <table className="w-full border-collapse text-[11px]">
+                      <thead className="sticky top-0 bg-[var(--color-muted)]">
+                        <tr>
+                          <th scope="col" className="whitespace-nowrap px-3 py-1.5 text-left font-semibold text-[var(--color-foreground)]">sequence</th>
+                          <th scope="col" className="whitespace-nowrap px-3 py-1.5 text-left font-semibold text-[var(--color-foreground)]">prediction</th>
+                          {cnnPredictResult.probabilities !== null && cnnPredictResult.classes !== null
+                            ? cnnPredictResult.classes.map((cls, i) => (
+                                <th key={`${String(cls)}-${i}`} scope="col" className="whitespace-nowrap px-3 py-1.5 text-left font-semibold text-[var(--color-foreground)]">
+                                  p({formatValue(cls)})
+                                </th>
+                              ))
+                            : null}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cnnPredictResult.predictions.map((prediction, i) => (
+                          <tr key={i} className="border-t border-[var(--color-border)] bg-[var(--color-card)]">
+                            <td className="whitespace-nowrap px-3 py-1 text-[var(--color-muted-foreground)]">{i}</td>
+                            <td className="whitespace-nowrap px-3 py-1 font-medium text-[var(--color-foreground)]">{formatValue(prediction)}</td>
+                            {cnnPredictResult.probabilities !== null
+                              ? (cnnPredictResult.probabilities[i] ?? []).map((p, j) => (
+                                  <td key={j} className="whitespace-nowrap px-3 py-1 text-[var(--color-muted-foreground)]">
+                                    {typeof p === "number" ? p.toFixed(4) : "—"}
+                                  </td>
+                                ))
+                              : null}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-[var(--color-muted-foreground)]">
+                Train above first — a mismatched channel width surfaces the
+                backend&apos;s own 422 verbatim, never a silent failure.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      {/*
+       * The tabular-autoencoder lane — part18 §5.5's representation
+       * card: latent coordinates, reconstruction errors and the honest
+       * outlier ranking over the SELECTED dataset (unsupervised — its
+       * own encode lane, never the supervised predict path).
+       */}
+      <section className="mt-12" aria-labelledby="ae-lane-title">
+        <div className="flex flex-wrap items-baseline gap-2 border-t border-[var(--color-border)] pt-6">
+          <h2
+            id="ae-lane-title"
+            className="text-lg font-semibold text-[var(--color-foreground)]"
+          >
+            Tabular autoencoder — the representation lane
+          </h2>
+          <span className="text-xs text-[var(--color-muted-foreground)]">
+            part18 §5.5 · the REAL encoder/decoder pair — latent
+            representation, reconstruction, dimensionality reduction,
+            anomaly ranking by reconstruction error
+          </span>
+        </div>
+        <Card className="mt-3">
+          <CardHeader>
+            <CardTitle className="text-base">Train an autoencoder</CardTitle>
+            <CardDescription>
+              the SELECTED dataset&apos;s feature matrix · the bottleneck
+              width (2–3 gives the scatter-plotable projection) · job
+              mode with the real per-epoch reconstruction telemetry
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                latent dim
+                <input
+                  type="number"
+                  min={1}
+                  max={64}
+                  value={aeLatentDim}
+                  onChange={(event) => setAeLatentDim(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  aria-label="autoencoder latent dim"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                hidden (JSON list)
+                <input
+                  type="text"
+                  value={aeHiddenText}
+                  onChange={(event) => setAeHiddenText(event.target.value)}
+                  placeholder="[16] — the encoder stack, the decoder mirrors"
+                  className="mt-1 w-48 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                epochs
+                <input
+                  type="number"
+                  min={1}
+                  max={2000}
+                  step={10}
+                  value={aeEpochs}
+                  onChange={(event) => setAeEpochs(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button
+                size="sm"
+                disabled={aeTrainBusy || selectedId === null}
+                onClick={() => void handleAeTrain()}
+              >
+                {aeTrainBusy ? "Submitting…" : "Train the autoencoder"}
+              </Button>
+              <span className="text-xs text-[var(--color-muted-foreground)]">
+                {selectedId !== null
+                  ? `dataset ${selectedId} · ${selected?.n_features ?? "?"} features`
+                  : "select a dataset above"}
+              </span>
+            </div>
+            {aeTrainError !== null ? (
+              <div className="mt-3"><ErrorBanner message={aeTrainError} /></div>
+            ) : null}
+            {aeTrainJobId !== null ? (
+              <div className="mt-3">
+                <JobRunCard
+                  jobId={aeTrainJobId}
+                  resultLabel="the trained autoencoder view"
+                  onResult={handleAeTrainResult}
+                />
+              </div>
+            ) : null}
+            {aeTrainResult !== null ? (
+              <div className="mt-3">
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  model {aeTrainResult.model.model_id} · task{" "}
+                  {aeTrainResult.model.task} · latent dim{" "}
+                  {aeTrainResult.latentDim} · {aeTrainResult.nIter} epochs ·
+                  mean reconstruction error{" "}
+                  {typeof aeTrainResult.meanReconstructionError === "number"
+                    ? aeTrainResult.meanReconstructionError.toFixed(4)
+                    : "—"}
+                </p>
+              </div>
+            ) : null}
+            {aeTrainResult !== null ? (
+              <div className="mt-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={aeEncodeBusy || selectedId === null}
+                  onClick={() => void handleAeEncode()}
+                >
+                  {aeEncodeBusy ? "Encoding…" : "Encode the dataset"}
+                </Button>
+                <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">
+                  latent coordinates + per-row reconstruction errors + the
+                  honest outlier ranking
+                </span>
+              </div>
+            ) : null}
+            {aeEncodeError !== null ? (
+              <div className="mt-3"><ErrorBanner message={aeEncodeError} /></div>
+            ) : null}
+            {aeEncodeResult !== null ? (
+              <div className="mt-3">
+                {aeEncodeResult.latentDim === 2 ? (
+                  <PlotlyFigure
+                    data={buildLatentTraces(aeEncodeResult)}
+                    ariaLabel="the autoencoder's 2-D latent projection"
+                  />
+                ) : null}
+                <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                  {aeEncodeResult.nRows} rows · mean reconstruction error{" "}
+                  {typeof aeEncodeResult.meanReconstructionError === "number"
+                    ? aeEncodeResult.meanReconstructionError.toFixed(4)
+                    : "—"}
+                  {" · top-"}{aeEncodeResult.topOutliers.length}{" outliers: "}
+                  {aeEncodeResult.topOutliers
+                    .map((o) =>
+                      `#${o.index} (${typeof o.error === "number" ? o.error.toFixed(3) : "—"})`,
+                    )
+                    .join(", ")}
+                </p>
+                <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                  {aeEncodeResult.note} — the reconstruction error is a
+                  heuristic ranking, never ground truth (the dedicated
+                  anomaly lane owns Isolation Forest).
+                </p>
+              </div>
+            ) : null}
+            <p className="mt-3 text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              The lane rides `POST /api/v1/dl/autoencoder-train` +
+              `POST /api/v1/dl/autoencoder-encode` — unsupervised, the
+              model registers with task `unsupervised` and its own encode
+              URL; the supervised `/api/v1/ml/predict` refuses it up
+              front (one path per model class, never two).
+            </p>
+          </CardContent>
+        </Card>
       </section>
     </div>
   );
@@ -2253,4 +3008,171 @@ function buildExportRows(
     rows.push(row);
   }
   return { rows, columns };
+}
+/** The sequence-CNN lane's inline JSON gate (validated client-side). */
+function parseCnnInlineSequences(
+  text: string,
+  mode: "train" | "predict",
+): { sequences: number[][][]; labels: number[] } | undefined {
+  const trimmed = text.trim();
+  if (trimmed === "") {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(
+      "the inline sequences block is not valid JSON — expected " +
+        '{"sequences": [[[…steps…], …], …], "labels": […]}',
+    );
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error("the inline sequences block must be an object");
+  }
+  const r = parsed as Record<string, unknown>;
+  const rows = r["sequences"];
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new Error('the block needs a non-empty "sequences" array');
+  }
+  const sequences: number[][][] = [];
+  for (const row of rows) {
+    if (!Array.isArray(row) || row.length === 0) {
+      throw new Error("each sequence must be a non-empty array of steps");
+    }
+    const steps: number[][] = [];
+    for (const step of row) {
+      if (!Array.isArray(step) || step.some((v) => typeof v !== "number")) {
+        throw new Error("each step must be an array of numbers (the channels)");
+      }
+      steps.push(step as number[]);
+    }
+    sequences.push(steps);
+  }
+  const widths = new Set(sequences.map((s) => s.length));
+  const channelWidths = new Set(
+    sequences.flatMap((s) => s.map((step) => step.length)),
+  );
+  if (widths.size > 1) {
+    throw new Error(
+      `all sequences must share one seq_len — got lengths ${[...widths].slice(0, 5)}`,
+    );
+  }
+  if (channelWidths.size > 1) {
+    throw new Error(
+      `all steps must share one channel width — got ${[...channelWidths].slice(0, 5)}`,
+    );
+  }
+  if (mode === "train") {
+    const labels = r["labels"];
+    if (!Array.isArray(labels)) {
+      throw new Error('the inline training block needs its "labels" array');
+    }
+    if (labels.length !== sequences.length) {
+      throw new Error(
+        `sequences has ${sequences.length} rows; labels has ${labels.length}`,
+      );
+    }
+    return {
+      sequences,
+      labels: labels.map((v) => {
+        if (typeof v !== "number" || !Number.isFinite(v)) {
+          throw new Error("labels must be numeric (one per sequence)");
+        }
+        return v;
+      }),
+    };
+  }
+  return { sequences, labels: [] };
+}
+
+/** The autoencoder lane's hidden-stack gate. */
+function parseAeHidden(text: string): number[] {
+  const trimmed = text.trim();
+  if (trimmed === "") {
+    return [];
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error("the hidden layers block is not valid JSON — expected [16]");
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error("the hidden layers must be a JSON list of widths");
+  }
+  return parsed.map((v) => {
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 1) {
+      throw new Error("hidden layer widths must be positive integers");
+    }
+    return v;
+  });
+}
+
+/** The latent scatter's traces (the 2-D projection only). */
+function buildLatentTraces(
+  result: AutoencoderEncodeResponse,
+): PlotTrace[] {
+  const xs = result.latent.map((row) => row[0] ?? 0);
+  const ys = result.latent.map((row) => row[1] ?? 0);
+  const top = new Set(result.topOutliers.map((o) => o.index));
+  const normalXs: number[] = [];
+  const normalYs: number[] = [];
+  const outlierXs: number[] = [];
+  const outlierYs: number[] = [];
+  for (const [i, x] of xs.entries()) {
+    if (top.has(i)) {
+      outlierXs.push(x);
+      outlierYs.push(ys[i] ?? 0);
+    } else {
+      normalXs.push(x);
+      normalYs.push(ys[i] ?? 0);
+    }
+  }
+  const traces: PlotTrace[] = [
+    {
+      name: "rows",
+      x: normalXs,
+      y: normalYs,
+      mode: "markers",
+      type: "scatter",
+      marker: { size: 5, opacity: 0.7 },
+    },
+  ];
+  if (outlierXs.length > 0) {
+    traces.push({
+      name: "top reconstruction errors",
+      x: outlierXs,
+      y: outlierYs,
+      mode: "markers",
+      type: "scatter",
+      marker: { size: 8, symbol: "x", opacity: 0.95 },
+    });
+  }
+  return traces;
+}
+
+/** The sequence model's own honest card (the train result view). */
+function CnnModelCard({ result }: { result: CnnTrainResult }) {
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--color-border)] p-3">
+      <p className="text-xs text-[var(--color-muted-foreground)]">
+        model {result.model.model_id} · task {result.model.task} ·{" "}
+        {result.model.n_train_rows} sequences · {result.seqLen} steps ×{" "}
+        {result.nChannels} channels · {result.nIter} epochs run
+        {result.model.sequenceModel ? " · sequence model (own predict path)" : ""}
+      </p>
+      <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+        {typeof result.trainAccuracy === "number"
+          ? `train accuracy ${result.trainAccuracy.toFixed(3)}`
+          : ""}
+        {typeof result.trainMae === "number"
+          ? `train MAE ${result.trainMae.toFixed(3)}`
+          : ""}
+        {result.classes !== null
+          ? ` · classes ${result.classes.map((c) => formatValue(c)).join(" / ")}`
+          : ""}
+      </p>
+    </div>
+  );
 }

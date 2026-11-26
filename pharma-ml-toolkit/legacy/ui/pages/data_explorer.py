@@ -35,7 +35,7 @@ from ..widgets.plot_widget import PlotPanel
 from ..widgets.responsive import configure_splitter
 from ..workers.job_worker import JobRunner
 
-_TK = Path(__file__).resolve().parents[2]
+_TK = Path(__file__).resolve().parents[3]
 
 
 class DataExplorerPage(QWidget):

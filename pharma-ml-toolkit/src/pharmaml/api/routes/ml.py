@@ -67,6 +67,8 @@ from pharmaml.exceptions import (
 )
 from pharmaml.ml.explain import shap_summary
 from pharmaml.ml.gnn import GraphClassifier
+from pharmaml.ml.cnn import SequenceCNNClassifier, SequenceCNNRegressor
+from pharmaml.ml.autoencoder import TabularAutoencoder
 from pharmaml.ml.models import list_models, resolve_model_name
 from pharmaml.ml.provenance import environment_snapshot
 from pharmaml.ml.training import train_model
@@ -610,6 +612,27 @@ def predict(req: PredictRequest, request: Request) -> dict:
                 "through POST /api/v1/dl/gnn-predict with graph rows"
             ),
         )
+    if isinstance(model_record.model, (SequenceCNNClassifier, SequenceCNNRegressor)):
+        # sequence CNN models predict through their own lane — never a
+        # tabular predict over time-step matrices (one path per class)
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"model {req.model_id} is a sequence model; predict it "
+                "through POST /api/v1/dl/cnn-predict with sequence rows"
+            ),
+        )
+    if isinstance(model_record.model, TabularAutoencoder):
+        # the autoencoder is unsupervised — its encode lane, never a
+        # supervised predict (one path per model class)
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"model {req.model_id} is an unsupervised autoencoder; its "
+                "lane is POST /api/v1/dl/autoencoder-encode (latent + "
+                "reconstruction errors)"
+            ),
+        )
     if req.rows is not None:
         X = pd.DataFrame(req.rows)
         evaluation_dataset = None  # inline rows carry no aligned actuals
@@ -778,6 +801,29 @@ def explain(req: ExplainRequest, request: Request) -> dict:
                 f"model {req.model_id} is a graph model; the SHAP summary "
                 "covers tabular models — graph explainability rides "
                 "pharmaml.ml.gnnxai in the backend library"
+            ),
+        )
+    if isinstance(
+        model_record.model, (SequenceCNNClassifier, SequenceCNNRegressor)
+    ):
+        # the SHAP surface is tabular; sequence models have their own lane
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"model {req.model_id} is a sequence model; the SHAP summary "
+                "covers tabular models — sequence models predict through "
+                "POST /api/v1/dl/cnn-predict"
+            ),
+        )
+    if isinstance(model_record.model, TabularAutoencoder):
+        # the SHAP surface is supervised-tabular; an unsupervised
+        # autoencoder has no SHAP path at all
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"model {req.model_id} is an unsupervised autoencoder; the "
+                "SHAP summary covers supervised tabular models — the AE "
+                "lane is POST /api/v1/dl/autoencoder-encode"
             ),
         )
     dataset_store = request.app.state.dataset_store

@@ -44,10 +44,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-# part18 §10 quarantine fix: the launcher now lives in legacy/, so the
-# toolkit root (the parent of legacy/) is what must land on sys.path for
-# ``from ui import run`` and the package imports to resolve
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# part18 §10 quarantine completion: the whole legacy GUI tree moved in
+# here with the launcher (legacy/ui/ beside this file), so THIS
+# directory on sys.path is what makes ``from ui import run`` and the
+# package imports resolve — nothing outside legacy/ is touched.
 
 from ui import run
 

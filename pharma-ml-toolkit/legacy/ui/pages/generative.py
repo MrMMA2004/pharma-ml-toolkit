@@ -73,7 +73,7 @@ from ..widgets.responsive import configure_splitter
 from ..widgets.smiles_preview import SmilesDetailDialog, attach_smiles_previews
 from ..workers.job_worker import JobRunner
 
-_TK = Path(__file__).resolve().parents[2]
+_TK = Path(__file__).resolve().parents[3]
 
 #: The page's corpora: the bundled 12-molecule seed table or the
 #: library's built-in 244-molecule drug-like corpus.

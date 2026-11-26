@@ -147,3 +147,102 @@ class TestSupportedSurfacesRemain:
         )
         assert "RETIRED" in text
         assert "React/Tauri 2" in text
+
+
+class TestGuiTreeQuarantined:
+    """part18 §10's quarantine COMPLETION (the ui/-pages + workspace.py
+    increment the r365 addendum recorded as open): the legacy PySide6
+    GUI tree itself — ``ui/`` and its ``tests/ui/`` family — moved to
+    ``legacy/ui/`` and ``legacy/tests_ui/``, while the Qt-free
+    ``pharmaml.studio`` persistence modules stay in ``src/`` where they
+    legitimately serve the FastAPI backend.  These guards pin the move
+    so a rollback or a careless restore cannot resurrect the Qt pages
+    as in-tree product source."""
+
+    def test_no_ui_package_at_the_toolkit_root(self) -> None:
+        assert not (TOOLKIT / "ui").exists(), (
+            "the legacy PySide6 package must not live at the toolkit root "
+            "(part18 §10 quarantine completion) -- it belongs in legacy/"
+        )
+        assert not (TOOLKIT / "ui" / "__init__.py").exists()
+
+    def test_no_ui_test_family_under_tests(self) -> None:
+        assert not (TOOLKIT / "tests" / "ui").exists(), (
+            "the archival GUI tests live at legacy/tests_ui (out of the "
+            "default testpaths gate), never under tests/"
+        )
+
+    def test_legacy_ui_tree_present_with_the_egl_stub(self) -> None:
+        pkg = TOOLKIT / "legacy" / "ui"
+        assert (pkg / "__init__.py").is_file()
+        assert (pkg / "pages").is_dir()
+        assert (pkg / "native" / "libEGL.so.1").is_file(), (
+            "the committed EGL stub rides the quarantined tree (the "
+            "headless fallback every pytest invocation preloads)"
+        )
+
+    def test_legacy_tests_ui_present_with_their_own_conftest(self) -> None:
+        family = TOOLKIT / "legacy" / "tests_ui"
+        assert (family / "conftest.py").is_file()
+        assert (family / "__init__.py").is_file()
+        assert len(list(family.glob("test_*.py"))) > 40, (
+            "the archival GUI suite (74 files at the move) must be whole"
+        )
+
+    def test_root_conftest_carries_the_legacy_path(self) -> None:
+        text = (TOOLKIT / "conftest.py").read_text(encoding="utf-8")
+        assert 'str(_LEGACY)' in text or '"legacy"' in text, (
+            "the root conftest must put legacy/ on sys.path so the "
+            "quarantined ui.* imports (the stress lane + the archival "
+            "suite) resolve without resurrecting the root package"
+        )
+
+    def test_no_product_source_imports_the_qt_tree(self) -> None:
+        """src/pharmaml (the toolkit + the FastAPI backend) never imports
+        the quarantined ``ui.*`` package: the Qt-free
+        ``pharmaml.studio`` persistence modules are the only studio
+        surface the backend touches."""
+        violations: list[str] = []
+        for path in sorted((TOOLKIT / "src" / "pharmaml").rglob("*.py")):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for line in text.splitlines():
+                stripped = line.strip()
+                if stripped.startswith(("#", '"', "'")):
+                    continue
+                if re.search(r"^\s*(from|import)\s+ui\b", line):
+                    violations.append(f"{path.relative_to(TOOLKIT)}: {line.strip()}")
+        assert violations == [], (
+            "product source must not import the quarantined Qt tree: "
+            f"{violations[:5]}"
+        )
+
+    def test_qt_free_studio_persistence_still_serves_the_backend(self) -> None:
+        """The FastAPI backend's own consumption of the persistence
+        modules survives the move: the capability route imports the
+        registry; the workflow contracts import the workspace."""
+        from pharmaml.api import create_app  # noqa: F401 - importability IS the test
+        from pharmaml.studio import (  # noqa: F401
+            capability_registry,
+            comparison,
+            evidence,
+            reports,
+            runs,
+            workspace,
+        )
+        registry_text = (
+            TOOLKIT / "src" / "pharmaml" / "studio" / "capability_registry.py"
+        ).read_text(encoding="utf-8")
+        assert "legacy/ui/" in registry_text or "legacy" in registry_text, (
+            "the capability registry's module strings must point at the "
+            "quarantined tree, never a root ui/ that no longer exists"
+        )
+
+    def test_venv_repair_points_at_the_quarantined_stub(self) -> None:
+        """The rollback-repair script must copy the EGL stub from its
+        quarantined home (a stale root path would break the next
+        rollback repair)."""
+        script = (
+            TOOLKIT.parent / "scratch" / "venv_repair.sh"
+        ).read_text(encoding="utf-8")
+        assert "pharma-ml-toolkit/legacy/ui/native/libEGL.so.1" in script
+        assert "pharma-ml-toolkit/ui/native" not in script

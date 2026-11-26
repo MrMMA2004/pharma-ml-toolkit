@@ -52,7 +52,13 @@ import numpy as np
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from pharmaml.exceptions import DataValidationError
+from pharmaml.exceptions import DataValidationError, ModelError
+from pharmaml.ml.autoencoder import TabularAutoencoder
+from pharmaml.ml.cnn import (
+    SequenceCNNClassifier,
+    SequenceCNNRegressor,
+    synthetic_motif_sequences,
+)
 from pharmaml.ml.gnn import (
     CONV_NAMES,
     POOL_NAMES,
@@ -66,6 +72,10 @@ from pharmaml.ml.neural import (
     ResidualMLPClassifier,
     ResidualMLPRegressor,
 )
+from pharmaml.ml.transformer import (
+    TabularTransformerClassifier,
+    TabularTransformerRegressor,
+)
 
 from ..events import EventType
 from ..jobs import CancelledJob
@@ -78,6 +88,14 @@ _NETWORKS: dict[str, tuple[type, str]] = {
     "deep_mlp_regressor": (DeepMLPRegressor, "regression"),
     "residual_mlp_classifier": (ResidualMLPClassifier, "classification"),
     "residual_mlp_regressor": (ResidualMLPRegressor, "regression"),
+    # part18 §5.4 — the tabular Transformer lane (from scratch; no
+    # pretrained molecular transformer is claimed anywhere)
+    "tabular_transformer_classifier": (
+        TabularTransformerClassifier, "classification",
+    ),
+    "tabular_transformer_regressor": (
+        TabularTransformerRegressor, "regression",
+    ),
 }
 
 
@@ -115,11 +133,15 @@ class DLTrainRequest(BaseModel):
         "deep_mlp_regressor",
         "residual_mlp_classifier",
         "residual_mlp_regressor",
+        "tabular_transformer_classifier",
+        "tabular_transformer_regressor",
     ]
     hyperparams: dict[str, Any] | None = None
     mode: Literal["job", "sync"] = "job"
 
 
+# the tabular families' constructor-key vocabulary, one source: the
+# union of the live class signatures (validated per-network below)
 _HYPERPARAM_SPEC = {
     "hidden_layers": list[int],
     "dropout": float,
@@ -133,19 +155,39 @@ _HYPERPARAM_SPEC = {
     "val_split": float,
     "random_state": int,
     "device": str,
+    # the tabular Transformer family (part18 §5.4)
+    "d_model": int,
+    "heads": int,
+    "n_blocks": int,
+    "dim_feedforward": int,
 }
 
 
-def _resolve_hyperparams(raw: dict[str, Any] | None) -> dict[str, Any]:
-    """Validate the client hyperparameters against the network signature."""
+def _resolve_hyperparams(
+    raw: dict[str, Any] | None, network_name: str | None = None
+) -> dict[str, Any]:
+    """Validate the client hyperparameters against the network signature.
+
+    With ``network_name`` the accepted keys are the live constructor
+    parameters of THAT network (unknown key -> 422, never an
+    asynchronous TypeError); without it the union vocabulary above
+    gates the up-front check only.
+    """
+    accepted = set(_HYPERPARAM_SPEC)
+    if network_name is not None:
+        cls, _task = _NETWORKS[network_name]
+        accepted = {
+            name for name, param in inspect.signature(cls).parameters.items()
+            if name != "self"
+        }
     params: dict[str, Any] = {}
     for key, value in (raw or {}).items():
-        if key not in _HYPERPARAM_SPEC:
+        if key not in accepted:
             raise HTTPException(
                 status_code=422,
                 detail=(
-                    f"unknown hyperparameter {key!r}; the network accepts "
-                    f"{sorted(_HYPERPARAM_SPEC)}"
+                    f"unknown hyperparameter {key!r}; network {network_name!r} "
+                    f"accepts {sorted(accepted)}"
                 ),
             )
         params[key] = value
@@ -227,7 +269,7 @@ def _train_body(
     if cancel_event is not None and cancel_event.is_set():
         raise CancelledJob("Cancelled before the network build stage.")
     cls, task = _NETWORKS[network_name]
-    params = _resolve_hyperparams(hyperparams)
+    params = _resolve_hyperparams(hyperparams, network_name)
     if manager is not None and job_id is not None:
         manager.report_progress(
             job_id, 5, "building the torch network"
@@ -276,7 +318,7 @@ def train(req: DLTrainRequest, request: Request) -> dict:
         )
     # validate hyperparameters up front (both modes): a bad key is a
     # client error, not an asynchronous job failure
-    _resolve_hyperparams(req.hyperparams)
+    _resolve_hyperparams(req.hyperparams, req.network)
     manager = request.app.state.job_manager
     model_store = request.app.state.model_store
     bus = request.app.state.bus
@@ -541,3 +583,400 @@ def gnn_predict(req: GnnPredictRequest, request: Request) -> dict:
             [list(row) for row in probabilities]
         )
     return payload
+
+
+# -- the sequence-CNN lane (part18 §5.2, the API leg) -----------------------
+
+class CnnSequenceSpec(BaseModel):
+    """One sequence: a list of feature-vector time steps."""
+
+    steps: list[list[float]] = Field(min_length=1, max_length=512)
+
+
+class CnnTrainRequest(BaseModel):
+    # unique OpenAPI component names (the family's anti-collision rule)
+    sequences: list[CnnSequenceSpec] | None = Field(
+        default=None, min_length=2, max_length=500
+    )
+    labels: list[float] | None = Field(default=None, min_length=2, max_length=500)
+    synthetic_n: int | None = Field(default=None, ge=10, le=500)
+    seed: int | None = Field(default=None, ge=0, le=2**31 - 1)
+    task: Literal["classification", "regression"] = "classification"
+    channels: int = Field(default=16, ge=1, le=128)
+    kernel: int = Field(default=3, ge=1, le=31)
+    n_layers: int = Field(default=2, ge=1, le=6)
+    epochs: int = Field(default=120, ge=1, le=2000)
+    batch_size: int = Field(default=32, ge=1, le=512)
+    learning_rate: float = Field(default=1e-3, gt=0.0, le=1.0)
+    weight_decay: float = Field(default=1e-4, ge=0.0, le=1.0)
+    patience: int = Field(default=15, ge=1, le=100)
+    val_split: float = Field(default=0.15, ge=0.0, lt=1.0)
+    random_state: int = Field(default=42, ge=0, le=2**31 - 1)
+    mode: Literal["job", "sync"] = "job"
+
+
+class CnnPredictRequest(BaseModel):
+    model_id: str
+    sequences: list[CnnSequenceSpec] = Field(min_length=1, max_length=500)
+    probabilities: bool = False
+
+
+def _cnn_train_body(
+    x: np.ndarray,
+    y: np.ndarray,
+    hyperparams: dict[str, Any],
+    model_store,
+    bus=None,
+    manager=None,
+    job_id: str | None = None,
+    cancel_event=None,
+) -> dict:
+    """Job/sync body: the REAL SequenceCNN fit + store registration."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledJob("Cancelled before the sequence assembly stage.")
+    task = hyperparams.pop("_task", "classification")
+    cls = SequenceCNNClassifier if task == "classification" else SequenceCNNRegressor
+    estimator = cls(**hyperparams)
+    on_epoch = _training_progress_hook(bus, manager, job_id)
+    started = time.monotonic()
+    estimator.fit(x, y, on_epoch=on_epoch)
+    fit_seconds = time.monotonic() - started
+    record = TrainedModelRecord(
+        model_id=f"mdl-{uuid.uuid4().hex[:12]}",
+        model=estimator,
+        name=f"sequence_cnn_{task}",
+        task=task,
+        dataset_id=None,  # no tabular dataset behind a sequence model — honest
+        target=None,
+        features=[],  # time-step channels are per-sequence matrices, not columns
+        n_train_rows=len(x),
+        best_params={"network": "sequence_cnn", **hyperparams},
+        cv_scores=None,  # no CV in this path — honest, not faked
+        cv_mean=None,
+        cv_std=None,
+        fit_seconds=fit_seconds,
+    )
+    model_store.register(record)
+    view = record.view()
+    view["engine"] = "torch"
+    view["sequence_model"] = True
+    view["predict_url"] = "/api/v1/dl/cnn-predict"
+    out = {
+        "model": view,
+        "seq_len": int(x.shape[1]),
+        "n_channels": int(x.shape[2]),
+        "n_iter": int(estimator.n_iter_),
+    }
+    if task == "classification":
+        out["classes"] = [json_safe(c) for c in estimator.classes_]
+        out["train_accuracy"] = float(
+            np.mean(estimator.predict(x) == y)
+        )
+    else:
+        out["train_mae"] = float(np.mean(np.abs(estimator.predict(x) - y)))
+    return out
+
+
+@router.post("/cnn-train")
+def cnn_train(req: CnnTrainRequest, request: Request) -> dict:
+    if req.sequences is None and req.synthetic_n is None:
+        raise HTTPException(
+            status_code=422,
+            detail="the trainer needs inline sequences+labels or synthetic_n",
+        )
+    if req.sequences is not None and req.synthetic_n is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="pass either inline sequences or synthetic_n, not both",
+        )
+    if req.synthetic_n is not None:
+        # the deterministic motif fixture (classification only)
+        if req.task != "classification":
+            raise HTTPException(
+                status_code=422,
+                detail="synthetic_n trains the binary motif fixture (classification)",
+            )
+        seed = int(req.seed) if req.seed is not None else 42
+        x, y = synthetic_motif_sequences(
+            int(req.synthetic_n), seed=seed
+        )
+    else:
+        assert req.sequences is not None and req.labels is not None  # narrow types
+        if len(req.sequences) != len(req.labels):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"sequences has {len(req.sequences)} rows; labels has "
+                    f"{len(req.labels)} (one label per sequence)"
+                ),
+            )
+        try:
+            x = np.asarray(
+                [s.steps for s in req.sequences], dtype=np.float64
+            )
+            y = np.asarray(req.labels, dtype=np.float64)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"sequences must be rectangular numeric steps: {exc}",
+            ) from exc
+    hyperparams = {
+        "channels": req.channels,
+        "kernel": req.kernel,
+        "n_layers": req.n_layers,
+        "epochs": req.epochs,
+        "batch_size": req.batch_size,
+        "learning_rate": req.learning_rate,
+        "weight_decay": req.weight_decay,
+        "patience": req.patience,
+        "val_split": req.val_split,
+        "random_state": req.seed if req.seed is not None else req.random_state,
+    }
+    manager = request.app.state.job_manager
+    model_store = request.app.state.model_store
+    bus = request.app.state.bus
+    if req.mode == "sync":
+        try:
+            params = dict(hyperparams)
+            params["_task"] = req.task
+            return {
+                "mode": "sync",
+                **_cnn_train_body(x, y, params, model_store, bus=bus),
+            }
+        except (DataValidationError, ModelError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    params = dict(hyperparams)
+    params["_task"] = req.task
+    record = manager.submit(
+        "dl.cnn-train",
+        "deep-learning",
+        _cnn_train_body,
+        configuration={
+            "n_sequences": int(x.shape[0]),
+            "task": req.task,
+            "epochs": req.epochs,
+            "synthetic": req.synthetic_n is not None,
+        },
+        x=x,
+        y=y,
+        hyperparams=params,
+        model_store=model_store,
+        bus=bus,
+        manager=manager,
+    )
+    return {"mode": "job", "job": record.public()}
+
+
+@router.post("/cnn-predict")
+def cnn_predict(req: CnnPredictRequest, request: Request) -> dict:
+    model_record = request.app.state.model_store.get(req.model_id)
+    if model_record is None:
+        raise HTTPException(status_code=404, detail="Unknown model_id.")
+    model = model_record.model
+    if not isinstance(model, (SequenceCNNClassifier, SequenceCNNRegressor)):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"model {req.model_id} is not a sequence model; sequence "
+                "prediction needs a CNN trained through /api/v1/dl/cnn-train"
+            ),
+        )
+    try:
+        x = np.asarray([s.steps for s in req.sequences], dtype=np.float64)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"sequences must be rectangular numeric steps: {exc}",
+        ) from exc
+    try:
+        predictions = model.predict(x)
+    except DataValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    payload: dict[str, Any] = {
+        "model_id": req.model_id,
+        "n_sequences": len(req.sequences),
+        "predictions": [json_safe(p) for p in predictions],
+    }
+    if req.probabilities and isinstance(model, SequenceCNNClassifier):
+        probabilities = model.predict_proba(x)
+        payload["probabilities"] = json_safe([list(row) for row in probabilities])
+        payload["classes"] = [json_safe(c) for c in model.classes_]
+    return payload
+
+
+# -- the tabular-autoencoder lane (part18 §5.5, the API leg) ------------------
+
+class AutoencoderTrainRequest(BaseModel):
+    dataset_id: str
+    hidden_layers: list[int] = Field(default=[64], min_length=0, max_length=8)
+    latent_dim: int = Field(default=8, ge=1, le=64)
+    epochs: int = Field(default=120, ge=1, le=2000)
+    batch_size: int = Field(default=32, ge=1, le=512)
+    learning_rate: float = Field(default=1e-3, gt=0.0, le=1.0)
+    weight_decay: float = Field(default=1e-4, ge=0.0, le=1.0)
+    patience: int = Field(default=15, ge=1, le=100)
+    val_split: float = Field(default=0.15, ge=0.0, lt=1.0)
+    random_state: int = Field(default=42, ge=0, le=2**31 - 1)
+    mode: Literal["job", "sync"] = "job"
+
+
+class AutoencoderEncodeRequest(BaseModel):
+    model_id: str
+    dataset_id: str | None = None
+    rows: list[dict[str, Any]] | None = Field(default=None, min_length=1)
+    top_k: int = Field(default=10, ge=1, le=100)
+
+
+def _autoencoder_train_body(
+    dataset_id: str,
+    dataset_X,
+    hyperparams: dict[str, Any],
+    model_store,
+    bus=None,
+    manager=None,
+    job_id: str | None = None,
+    cancel_event=None,
+) -> dict:
+    """Job/sync body: the REAL TabularAutoencoder fit + registration."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledJob("Cancelled before the autoencoder build stage.")
+    estimator = TabularAutoencoder(**hyperparams)
+    on_epoch = _training_progress_hook(bus, manager, job_id)
+    started = time.monotonic()
+    estimator.fit(dataset_X, on_epoch=on_epoch)
+    fit_seconds = time.monotonic() - started
+    record = TrainedModelRecord(
+        model_id=f"mdl-{uuid.uuid4().hex[:12]}",
+        model=estimator,
+        name="tabular_autoencoder",
+        task="unsupervised",  # honest: representation/reconstruction lane
+        dataset_id=dataset_id,
+        target=None,
+        features=[str(c) for c in dataset_X.columns],
+        n_train_rows=len(dataset_X),
+        best_params={"network": "autoencoder", **hyperparams},
+        cv_scores=None,  # unsupervised — no CV metric exists, not faked
+        cv_mean=None,
+        cv_std=None,
+        fit_seconds=fit_seconds,
+    )
+    model_store.register(record)
+    view = record.view()
+    view["engine"] = "torch"
+    view["encode_url"] = "/api/v1/dl/autoencoder-encode"
+    return {
+        "model": view,
+        "latent_dim": int(estimator.latent_dim),
+        "n_iter": int(estimator.n_iter_),
+        "mean_reconstruction_error": float(
+            estimator.reconstruction_errors(dataset_X.to_numpy()).mean()
+        ),
+    }
+
+
+@router.post("/autoencoder-train")
+def autoencoder_train(req: AutoencoderTrainRequest, request: Request) -> dict:
+    store = request.app.state.dataset_store
+    dataset = store.get(req.dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Unknown dataset_id.")
+    ae_params = {
+        "hidden_layers": tuple(req.hidden_layers),
+        "latent_dim": req.latent_dim,
+        "epochs": req.epochs,
+        "batch_size": req.batch_size,
+        "learning_rate": req.learning_rate,
+        "weight_decay": req.weight_decay,
+        "patience": req.patience,
+        "val_split": req.val_split,
+        "random_state": req.random_state,
+    }
+    manager = request.app.state.job_manager
+    model_store = request.app.state.model_store
+    bus = request.app.state.bus
+    if req.mode == "sync":
+        try:
+            return {
+                "mode": "sync",
+                **_autoencoder_train_body(
+                    req.dataset_id, dataset.X, ae_params, model_store, bus=bus
+                ),
+            }
+        except (DataValidationError, ModelError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    record = manager.submit(
+        "dl.autoencoder-train",
+        "deep-learning",
+        _autoencoder_train_body,
+        configuration={
+            "dataset_id": req.dataset_id,
+            "latent_dim": req.latent_dim,
+            "epochs": req.epochs,
+        },
+        dataset_id=req.dataset_id,
+        dataset_X=dataset.X,
+        hyperparams=ae_params,
+        model_store=model_store,
+        bus=bus,
+        manager=manager,
+    )
+    return {"mode": "job", "job": record.public()}
+
+
+@router.post("/autoencoder-encode")
+def autoencoder_encode(req: AutoencoderEncodeRequest, request: Request) -> dict:
+    model_record = request.app.state.model_store.get(req.model_id)
+    if model_record is None:
+        raise HTTPException(status_code=404, detail="Unknown model_id.")
+    model = model_record.model
+    if not isinstance(model, TabularAutoencoder):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"model {req.model_id} is not a tabular autoencoder; the "
+                "encode lane needs one trained through /api/v1/dl/autoencoder-train"
+            ),
+        )
+    if (req.dataset_id is None) == (req.rows is None):
+        raise HTTPException(
+            status_code=422,
+            detail="pass either dataset_id or inline rows, not both",
+        )
+    if req.dataset_id is not None:
+        dataset = request.app.state.dataset_store.get(req.dataset_id)
+        if dataset is None:
+            raise HTTPException(status_code=404, detail="Unknown dataset_id.")
+        X = dataset.X
+        X_arr = X.to_numpy() if hasattr(X, "to_numpy") else np.asarray(X)
+    else:
+        try:
+            X_arr = np.asarray(
+                [[float(v) for v in row.values()] for row in (req.rows or [])],
+                dtype=np.float64,
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"rows must be numeric feature vectors: {exc}",
+            ) from exc
+    try:
+        latent = model.encode(X_arr)
+        errors = model.reconstruction_errors(X_arr)
+    except DataValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    top = np.argsort(errors)[::-1][: req.top_k].tolist()
+    return {
+        "model_id": req.model_id,
+        "n_rows": int(X_arr.shape[0]),
+        "latent_dim": int(latent.shape[1]),
+        "latent": json_safe(latent.tolist()),
+        "reconstruction_errors": json_safe(errors.tolist()),
+        "mean_reconstruction_error": float(np.mean(errors)),
+        "top_outliers": [
+            {"index": int(i), "error": float(errors[i])} for i in top
+        ],
+        "note": (
+            "reconstruction error is a heuristic outlier ranking — not "
+            "ground truth (the dedicated anomaly lane owns Isolation Forest)"
+        ),
+    }

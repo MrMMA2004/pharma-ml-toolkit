@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 
 from ..workers.job_worker import JobRunner
 
-_TOOLKIT = Path(__file__).resolve().parents[2]
+_TOOLKIT = Path(__file__).resolve().parents[3]
 
 
 class ReproducibilityDialog(QDialog):

@@ -9,8 +9,8 @@ no suitable data exist, show a precise empty state."
 **Implementation:** `src/pharmaml/studio/` (runs + evidence) with writers
 in seven Studio pages and the render path in `ui/nine_cards.py`
 **Tests:** `tests/test_studio_evidence.py` (32) +
-`tests/ui/test_nine_cards_evidence.py` (12) + the part-4 pins in
-`tests/ui/test_nine_cards.py` (26, unchanged and green)
+`legacy/tests_ui/test_nine_cards_evidence.py` (12) + the part-4 pins in
+`legacy/tests_ui/test_nine_cards.py` (26, unchanged and green)
 
 ## What changed on the cards
 

@@ -77,7 +77,7 @@ const INSTALL_STEPS: InstallStep[] = [
   {
     title: "The desktop app (the supported GUI)",
     description:
-      "The supported desktop application is the React/Tauri 2 app — PharmaML_Studio_Setup_v1.2.242.exe / PharmaML_Studio_v1.2.242.msi on the GitHub release, bundling the frozen FastAPI sidecar. The legacy PySide6 studio.py is retired (part18 §10): quarantined at legacy/studio.py, marked unsupported, and excluded from production packaging — no supported launch path starts it. For headless work the CLI (pharmaml …) covers every domain.",
+      `The supported desktop application is the React/Tauri 2 app — PharmaML_Studio_Setup_v${SHIPPED_VERSION}.exe / PharmaML_Studio_v${SHIPPED_VERSION}.msi on the GitHub release, bundling the frozen FastAPI sidecar. The legacy PySide6 studio.py is retired (part18 §10): quarantined at legacy/studio.py, marked unsupported, and excluded from production packaging — no supported launch path starts it. For headless work the CLI (pharmaml …) covers every domain.`,
     commands: ["# grab the EXE/MSI installers from the GitHub release page"],
   },
   {

@@ -4,7 +4,7 @@ Each of the seven documented stretch operations gets contract tests:
 validation errors name the exact problem, numerical outputs are
 checked against independently-computed expectations, and edge cases
 (missing values, duplicate keys, empty results) are pinned.  The GUI
-suite (tests/ui/test_table_tools.py) pins the wiring; this suite pins
+suite (legacy/tests_ui/test_table_tools.py) pins the wiring; this suite pins
 the science.
 """
 

@@ -357,7 +357,7 @@ def live_preview(card_id: str, context: Mapping[str, Any] | None = None) -> str:
 def _toolkit_root():
     from pathlib import Path
 
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def datasets_preview_smiles() -> tuple[str, str] | None:

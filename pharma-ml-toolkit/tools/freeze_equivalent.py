@@ -214,12 +214,12 @@ coll = COLLECT(
 def write_equivalent_spec(policy: dict) -> Path:
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
     datas = list(policy["datas"])
-    datas.append((str(TOOLKIT / "ui" / "native"), "ui/native"))
+    datas.append((str(TOOLKIT / "legacy" / "ui" / "native"), "ui/native"))
     spec_path = BUILD_DIR / "pharmaml_linux.spec"
     spec_path.write_text(
         SPEC_TEMPLATE.format(
             TOOLKIT=str(TOOLKIT),
-            pathex=[str(TOOLKIT), str(TOOLKIT / "src")],
+            pathex=[str(TOOLKIT), str(TOOLKIT / "src"), str(TOOLKIT / "legacy")],
             binaries=policy["binaries"],
             datas=datas,
             hiddenimports=policy["hiddenimports"],

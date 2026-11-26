@@ -64,7 +64,7 @@ from ..widgets.responsive import configure_splitter
 from ..widgets.workflow_templates import WorkflowTemplatesTab
 from ..workers.job_worker import JobRunner
 
-_TK = Path(__file__).resolve().parents[2]
+_TK = Path(__file__).resolve().parents[3]
 
 #: The merge & split card's modes (the rar's CSV_merger / filemerger /
 #: Split CSV file trio) -- mirrored verbatim from the playground card.

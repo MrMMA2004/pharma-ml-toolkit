@@ -502,6 +502,116 @@ export const generativeApi = {
     }
     return parseArtifactView(artifact, "table export");
   },
+  /**
+   * `POST /api/v1/generative/gan/train` — the REAL
+   * `FeatureSpaceGAN` (part18 §5.6) over a registered dataset's
+   * numeric feature matrix. FEATURE-space, not molecules — the view
+   * says so and the sample lane carries the honest distributional
+   * parity report. Job mode (the default) answers
+   * `{mode: "job", job: JobView}`; the sync answer is
+   * `{mode: "sync", prior: FeaturePriorView}`.
+   */
+  async ganTrain(options: GanTrainOptions): Promise<GanTrainResponse> {
+    const request: GanTrainRequest = {
+      dataset_id: options.datasetId,
+      name: options.name,
+      latent_dim: options.latentDim,
+      hidden_layers: [...options.hiddenLayers],
+      d_steps: options.dSteps,
+      epochs: options.epochs,
+      batch_size: options.batchSize,
+      learning_rate: options.learningRate,
+      weight_decay: options.weightDecay,
+      random_state: options.randomState,
+      mode: options.mode ?? "job",
+    };
+    const raw = (await api.post(
+      "/api/v1/generative/gan/train",
+      request,
+    )) as Record<string, unknown>;
+    if (raw["mode"] === "sync") {
+      return { mode: "sync", prior: parseFeaturePriorView(raw, "gan train") };
+    }
+    return {
+      mode: "job",
+      job: parseJobView(raw["job"], "gan train"),
+    };
+  },
+
+  /**
+   * `POST /api/v1/generative/gan/sample` — synthetic feature rows off
+   * a session feature GAN, with the parity report against the
+   * training distribution (a REPORT, never a real-data claim).
+   */
+  async ganSample(options: FeatureSampleOptions): Promise<FeatureSampleResponse> {
+    const request: GanSampleRequest = {
+      prior_id: options.priorId,
+      n: options.n,
+      seed: options.seed ?? undefined,
+    };
+    const raw = (await api.post(
+      "/api/v1/generative/gan/sample",
+      request,
+    )) as Record<string, unknown>;
+    return parseFeatureSampleResult(raw, "gan sample");
+  },
+
+  /**
+   * `POST /api/v1/generative/diffusion/train` — the REAL
+   * `FeatureSpaceDiffusion` (part18 §5.6): the DDPM machinery (linear
+   * schedule, noise prediction, the full reverse chain) over a
+   * registered dataset's feature matrix. Same honest scope as the GAN
+   * lane — feature rows, not molecules.
+   */
+  async diffusionTrain(
+    options: DiffusionTrainOptions,
+  ): Promise<DiffusionTrainResponse> {
+    const request: DiffusionTrainRequest = {
+      dataset_id: options.datasetId,
+      name: options.name,
+      timesteps: options.timesteps,
+      hidden_layers: [...options.hiddenLayers],
+      epochs: options.epochs,
+      batch_size: options.batchSize,
+      learning_rate: options.learningRate,
+      weight_decay: options.weightDecay,
+      random_state: options.randomState,
+      mode: options.mode ?? "job",
+    };
+    const raw = (await api.post(
+      "/api/v1/generative/diffusion/train",
+      request,
+    )) as Record<string, unknown>;
+    if (raw["mode"] === "sync") {
+      return {
+        mode: "sync",
+        prior: parseFeaturePriorView(raw, "diffusion train"),
+      };
+    }
+    return {
+      mode: "job",
+      job: parseJobView(raw["job"], "diffusion train"),
+    };
+  },
+
+  /**
+   * `POST /api/v1/generative/diffusion/sample` — the reverse chain
+   * run for `n` synthetic feature rows, with the parity report.
+   */
+  async diffusionSample(
+    options: FeatureSampleOptions,
+  ): Promise<FeatureSampleResponse> {
+    const request: DiffusionSampleRequest = {
+      prior_id: options.priorId,
+      n: options.n,
+      seed: options.seed ?? undefined,
+    };
+    const raw = (await api.post(
+      "/api/v1/generative/diffusion/sample",
+      request,
+    )) as Record<string, unknown>;
+    return parseFeatureSampleResult(raw, "diffusion sample");
+  },
 };
 
 // -- validation helpers (§8.1) ------------------------------------------
@@ -712,4 +822,214 @@ export function parsePriorTrainResult(
 ): PriorView {
   const r = expectObject(raw, what);
   return parsePriorView(r["prior"], `${what} prior`);
+}
+
+
+// -- the feature-space GAN / Diffusion lanes (part18 §5.6) -------------------
+
+type GanTrainRequest = components["schemas"]["GanTrainRequest"];
+type GanSampleRequest = components["schemas"]["GanSampleRequest"];
+type DiffusionTrainRequest = components["schemas"]["DiffusionTrainRequest"];
+type DiffusionSampleRequest =
+  components["schemas"]["DiffusionSampleRequest"];
+
+/**
+ * A trained FEATURE-space generative prior (the tabular analogue of
+ * the SMILES RNN prior): a fitted FeatureSpaceGAN or
+ * FeatureSpaceDiffusion with its per-epoch loss telemetry. The
+ * `molecular: false` field pins the honest scope — these models
+ * generate synthetic feature ROWS, never molecules.
+ */
+export interface FeaturePriorView {
+  priorId: string;
+  name: string;
+  kind: "feature_gan" | "feature_diffusion" | string;
+  params: Record<string, unknown>;
+  nTrainRows: number;
+  nEpochs: number;
+  finalLoss: number | null;
+  finalDLoss: number | null;
+  losses: readonly (number | null)[];
+  datasetSource: string;
+  createdAt: string;
+  sampleUrl: string | null;
+  molecular: boolean;
+  note: string | null;
+}
+
+/** The feature GAN's train options. */
+export interface GanTrainOptions {
+  datasetId: string;
+  name: string;
+  latentDim: number;
+  hiddenLayers: readonly number[];
+  dSteps: number;
+  epochs: number;
+  batchSize: number;
+  learningRate: number;
+  weightDecay: number;
+  randomState: number;
+  mode?: "job" | "sync";
+}
+
+export interface GanJobResponse {
+  mode: "job";
+  job: JobView;
+}
+
+export interface GanTrainSyncResponse {
+  mode: "sync";
+  prior: FeaturePriorView;
+}
+
+export type GanTrainResponse = GanJobResponse | GanTrainSyncResponse;
+
+/** The DDPM's train options. */
+export interface DiffusionTrainOptions {
+  datasetId: string;
+  name: string;
+  timesteps: number;
+  hiddenLayers: readonly number[];
+  epochs: number;
+  batchSize: number;
+  learningRate: number;
+  weightDecay: number;
+  randomState: number;
+  mode?: "job" | "sync";
+}
+
+export interface DiffusionJobResponse {
+  mode: "job";
+  job: JobView;
+}
+
+export interface DiffusionTrainSyncResponse {
+  mode: "sync";
+  prior: FeaturePriorView;
+}
+
+export type DiffusionTrainResponse =
+  | DiffusionJobResponse
+  | DiffusionTrainSyncResponse;
+
+/** The shared sampler options (one path per model kind). */
+export interface FeatureSampleOptions {
+  priorId: string;
+  n: number;
+  seed?: number;
+}
+
+/** The honest distributional parity report (a REPORT, not real data). */
+export interface FeatureQualityReport {
+  nRef: number;
+  meanDelta: readonly number[];
+  stdDelta: readonly number[];
+  corrL1: number;
+}
+
+/** The shared sample result body. */
+export interface FeatureSampleResponse {
+  priorId: string;
+  nRequested: number;
+  nSampled: number;
+  rows: readonly (readonly number[])[];
+  quality: FeatureQualityReport;
+  seed: number | null;
+  note: string;
+}
+
+/** Parse + validate a feature-space prior view (§8.1). */
+export function parseFeaturePriorView(
+  raw: unknown,
+  what: string,
+): FeaturePriorView {
+  const r = expectObject(raw, what);
+  const priorId = r["prior_id"];
+  const name = r["name"];
+  if (typeof priorId !== "string" || typeof name !== "string") {
+    throw new Error(`${what}: prior_id/name are not strings`);
+  }
+  const params = r["params"];
+  const losses = r["losses"];
+  return {
+    priorId,
+    name,
+    kind: typeof r["kind"] === "string" ? r["kind"] : "",
+    params:
+      typeof params === "object" && params !== null
+        ? (params as Record<string, unknown>)
+        : {},
+    nTrainRows: asNumber(r["n_train_rows"]) ?? 0,
+    nEpochs: asNumber(r["n_epochs"]) ?? 0,
+    finalLoss: asNumber(r["final_loss"]),
+    finalDLoss: asNumber(r["final_d_loss"]),
+    losses: Array.isArray(losses)
+      ? losses.map((v) => asNumber(v))
+      : [],
+    datasetSource:
+      typeof r["dataset_source"] === "string" ? r["dataset_source"] : "",
+    createdAt: typeof r["created_at"] === "string" ? r["created_at"] : "",
+    sampleUrl: typeof r["sample_url"] === "string" ? r["sample_url"] : null,
+    molecular: r["molecular"] === true,
+    note: typeof r["note"] === "string" ? r["note"] : null,
+  };
+}
+
+/** Parse + validate the shared feature-sample result body. */
+export function parseFeatureSampleResult(
+  raw: unknown,
+  what: string,
+): FeatureSampleResponse {
+  const r = expectObject(raw, what);
+  const rowsRaw = r["rows"];
+  const rows = Array.isArray(rowsRaw)
+    ? rowsRaw.map((row: unknown) =>
+        Array.isArray(row)
+          ? row.filter((v): v is number => typeof v === "number")
+          : [],
+      )
+    : [];
+  const qualityRaw = r["quality"];
+  const quality: FeatureQualityReport = {
+    nRef: 0,
+    meanDelta: [],
+    stdDelta: [],
+    corrL1: Number.NaN,
+  };
+  if (typeof qualityRaw === "object" && qualityRaw !== null) {
+    const q = qualityRaw as Record<string, unknown>;
+    quality.nRef = asNumber(q["n_ref"]) ?? 0;
+    quality.meanDelta = Array.isArray(q["mean_delta"])
+      ? q["mean_delta"].filter(
+          (v): v is number => typeof v === "number",
+        )
+      : [];
+    quality.stdDelta = Array.isArray(q["std_delta"])
+      ? q["std_delta"].filter(
+          (v): v is number => typeof v === "number",
+        )
+      : [];
+    quality.corrL1 = asNumber(q["corr_l1"]) ?? Number.NaN;
+  }
+  return {
+    priorId: typeof r["prior_id"] === "string" ? r["prior_id"] : "",
+    nRequested: asNumber(r["n_requested"]) ?? 0,
+    nSampled: asNumber(r["n_sampled"]) ?? 0,
+    rows,
+    quality,
+    seed: asNumber(r["params"] === undefined ? null : (r["params"] as Record<string, unknown>)["seed"]),
+    note: typeof r["note"] === "string" ? r["note"] : "",
+  };
+}
+/**
+ * Narrow the feature-prior train job's result payload:
+ * `{prior: FeaturePriorView}` (the authoritative REST relay — the
+ * envelope-extracting sibling of `parsePriorTrainResult`).
+ */
+export function parseFeaturePriorTrainResult(
+  raw: unknown,
+  what: string,
+): FeaturePriorView {
+  const r = expectObject(raw, what);
+  return parseFeaturePriorView(r["prior"], `${what} prior`);
 }

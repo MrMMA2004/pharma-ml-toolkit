@@ -73,6 +73,12 @@ type ModelArtifactRequest = components["schemas"]["ModelArtifactRequest"];
 type GnnTrainRequest = components["schemas"]["GnnTrainRequest"];
 type GnnPredictRequest = components["schemas"]["GnnPredictRequest"];
 type GnnGraphSpec = components["schemas"]["GnnGraphSpec"];
+type CnnTrainRequest = components["schemas"]["CnnTrainRequest"];
+type CnnPredictRequest = components["schemas"]["CnnPredictRequest"];
+type AutoencoderTrainRequest =
+  components["schemas"]["AutoencoderTrainRequest"];
+type AutoencoderEncodeRequest =
+  components["schemas"]["AutoencoderEncodeRequest"];
 
 /**
  * The conv tokens the GNN trainer actually accepts — the backend's
@@ -114,6 +120,11 @@ export const DL_HYPERPARAM_KEYS: readonly string[] = [
   "val_split",
   "random_state",
   "device",
+  // the tabular Transformer family (part18 §5.4 — the route's own spec)
+  "d_model",
+  "heads",
+  "n_blocks",
+  "dim_feedforward",
 ] as const;
 
 /**
@@ -521,6 +532,148 @@ export const dlApi = {
     }
     return parseArtifactView(artifact, "checkpoint artifact");
   },
+
+  /**
+   * `POST /api/v1/dl/cnn-train` — the REAL SequenceCNN (part18 §5.2)
+   * over inline 3-D sequences + labels or the backend's own
+   * deterministic motif fixture. Job mode (the default) answers
+   * `{mode: "job", job: JobView}`; the COMPLETED result payload is
+   * the `CnnTrainResult`. The trainer's `on_epoch` drives the same
+   * per-epoch `training.metrics` stream as the tabular lane (real
+   * telemetry — the estimator's own callback, never fabricated).
+   */
+  async cnnTrain(options: CnnTrainOptions): Promise<CnnTrainResponse> {
+    const sequences: CnnTrainRequest["sequences"] = options.inline
+      ? options.inline.sequences.map((steps) => ({
+          steps: steps.map((step) => [...step]),
+        }))
+      : null;
+    const labels: CnnTrainRequest["labels"] =
+      sequences !== null && options.inline?.labels
+        ? [...options.inline.labels]
+        : null;
+    const request: CnnTrainRequest = {
+      sequences,
+      labels,
+      synthetic_n:
+        sequences === null ? (options.syntheticN ?? undefined) : undefined,
+      seed: options.seed ?? undefined,
+      task: options.task,
+      channels: options.channels,
+      kernel: options.kernel,
+      n_layers: options.nLayers,
+      epochs: options.epochs,
+      batch_size: options.batchSize,
+      learning_rate: options.learningRate,
+      weight_decay: options.weightDecay,
+      patience: options.patience,
+      val_split: options.valSplit,
+      random_state: options.randomState,
+      mode: options.mode ?? "job",
+    };
+    const raw = (await api.post(
+      "/api/v1/dl/cnn-train",
+      request,
+    )) as Record<string, unknown>;
+    if (raw["mode"] === "sync") {
+      return {
+        mode: "sync",
+        result: parseCnnTrainResult(raw, "dl.cnn-train(sync)"),
+      };
+    }
+    return {
+      mode: "job",
+      job: parseJobView(raw["job"], "dl.cnn-train(job)"),
+    };
+  },
+
+  /**
+   * `POST /api/v1/dl/cnn-predict` — the sequence models' OWN
+   * prediction path: label sets (and optional class probabilities)
+   * for inline sequence rows from a session-trained CNN. The
+   * tabular `POST /api/v1/ml/predict` route refuses sequence models
+   * up front — one path per model class, never two.
+   */
+  async cnnPredict(
+    options: CnnPredictOptions,
+  ): Promise<CnnPredictResponse> {
+    const request: CnnPredictRequest = {
+      model_id: options.modelId,
+      sequences: options.sequences.map((steps) => ({
+        steps: steps.map((step) => [...step]),
+      })),
+      probabilities: options.probabilities ?? false,
+    };
+    const raw = (await api.post(
+      "/api/v1/dl/cnn-predict",
+      request,
+    )) as Record<string, unknown>;
+    return parseCnnPredictResult(raw, "dl.cnn-predict");
+  },
+
+  /**
+   * `POST /api/v1/dl/autoencoder-train` — the REAL
+   * `TabularAutoencoder` (part18 §5.5) over a registered dataset's
+   * feature matrix: representation/reconstruction/anomaly lane,
+   * unsupervised (the model registers with task `unsupervised` and
+   * its own encode URL — never the supervised predict path).
+   */
+  async autoencoderTrain(
+    options: AutoencoderTrainOptions,
+  ): Promise<AutoencoderTrainResponse> {
+    const request: AutoencoderTrainRequest = {
+      dataset_id: options.datasetId,
+      hidden_layers: [...options.hiddenLayers],
+      latent_dim: options.latentDim,
+      epochs: options.epochs,
+      batch_size: options.batchSize,
+      learning_rate: options.learningRate,
+      weight_decay: options.weightDecay,
+      patience: options.patience,
+      val_split: options.valSplit,
+      random_state: options.randomState,
+      mode: options.mode ?? "job",
+    };
+    const raw = (await api.post(
+      "/api/v1/dl/autoencoder-train",
+      request,
+    )) as Record<string, unknown>;
+    if (raw["mode"] === "sync") {
+      return {
+        mode: "sync",
+        result: parseAutoencoderTrainResult(
+          raw,
+          "dl.autoencoder-train(sync)",
+        ),
+      };
+    }
+    return {
+      mode: "job",
+      job: parseJobView(raw["job"], "dl.autoencoder-train(job)"),
+    };
+  },
+
+  /**
+   * `POST /api/v1/dl/autoencoder-encode` — the fitted encoder's
+   * lane: the latent coordinates, the per-row reconstruction errors
+   * and the honest outlier ranking (a heuristic, never ground
+   * truth — the note rides every response).
+   */
+  async autoencoderEncode(
+    options: AutoencoderEncodeOptions,
+  ): Promise<AutoencoderEncodeResponse> {
+    const request: AutoencoderEncodeRequest = {
+      model_id: options.modelId,
+      dataset_id: options.datasetId ?? undefined,
+      rows: options.rows ? [...options.rows] : undefined,
+      top_k: options.topK,
+    };
+    const raw = (await api.post(
+      "/api/v1/dl/autoencoder-encode",
+      request,
+    )) as Record<string, unknown>;
+    return parseAutoencoderEncodeResult(raw, "dl.autoencoder-encode");
+  },
 };
 
 // -- validation helpers (§8.1) ------------------------------------------
@@ -878,4 +1031,271 @@ export function parseGnnInlineGraphs(
     throw new Error("the block carries no graphs");
   }
   return { graphs: rows, labels: labelNumbers };
+}
+
+// -- the sequence-CNN + autoencoder lanes (part18 §5.2 / §5.5) ------------
+
+/**
+ * The sequence-CNN train options — the inline source carries the
+ * rectangular 3-D sequences (`(seq_len, channels)` step lists) plus
+ * one label per sequence; the synthetic source rides the backend's
+ * own deterministic motif fixture.
+ */
+export interface CnnTrainOptions {
+  syntheticN?: number;
+  seed?: number;
+  inline?: {
+    sequences: readonly (readonly (readonly number[])[])[];
+    labels: readonly number[];
+  };
+  task: "classification" | "regression";
+  channels: number;
+  kernel: number;
+  nLayers: number;
+  epochs: number;
+  batchSize: number;
+  learningRate: number;
+  weightDecay: number;
+  patience: number;
+  valSplit: number;
+  randomState: number;
+  mode?: "job" | "sync";
+}
+
+/** The sequence model's own view fields (its predict path is its own). */
+export interface CnnModelView extends DLModelView {
+  sequenceModel: boolean;
+}
+
+/** The `POST /api/v1/dl/cnn-train` result body. */
+export interface CnnTrainResult {
+  model: CnnModelView;
+  seqLen: number;
+  nChannels: number;
+  nIter: number;
+  classes: readonly (number | string)[] | null;
+  trainAccuracy: number | null;
+  trainMae: number | null;
+}
+
+export interface CnnJobResponse {
+  mode: "job";
+  job: JobView;
+}
+
+export interface CnnTrainSyncResponse {
+  mode: "sync";
+  result: CnnTrainResult;
+}
+
+export type CnnTrainResponse = CnnJobResponse | CnnTrainSyncResponse;
+
+/** The sequence models' own prediction options. */
+export interface CnnPredictOptions {
+  modelId: string;
+  sequences: readonly (readonly (readonly number[])[])[];
+  probabilities?: boolean;
+}
+
+/** The `POST /api/v1/dl/cnn-predict` result body. */
+export interface CnnPredictResponse {
+  modelId: string;
+  nSequences: number;
+  predictions: readonly (number | string)[];
+  probabilities: readonly (readonly number[])[] | null;
+  classes: readonly (number | string)[] | null;
+}
+
+/** The autoencoder train options (unsupervised over a dataset). */
+export interface AutoencoderTrainOptions {
+  datasetId: string;
+  hiddenLayers: readonly number[];
+  latentDim: number;
+  epochs: number;
+  batchSize: number;
+  learningRate: number;
+  weightDecay: number;
+  patience: number;
+  valSplit: number;
+  randomState: number;
+  mode?: "job" | "sync";
+}
+
+/** The autoencoder model view (task `unsupervised`, its own encode URL). */
+export interface AutoencoderModelView extends DLModelView {
+  encodeUrl: string;
+}
+
+/** The `POST /api/v1/dl/autoencoder-train` result body. */
+export interface AutoencoderTrainResult {
+  model: AutoencoderModelView;
+  latentDim: number;
+  nIter: number;
+  meanReconstructionError: number;
+}
+
+export interface AutoencoderJobResponse {
+  mode: "job";
+  job: JobView;
+}
+
+export interface AutoencoderTrainSyncResponse {
+  mode: "sync";
+  result: AutoencoderTrainResult;
+}
+
+export type AutoencoderTrainResponse =
+  | AutoencoderJobResponse
+  | AutoencoderTrainSyncResponse;
+
+/** The encode lane's options (a dataset or inline rows, never both). */
+export interface AutoencoderEncodeOptions {
+  modelId: string;
+  datasetId?: string;
+  rows?: readonly Record<string, number>[];
+  topK: number;
+}
+
+/** One honest outlier ranking row (index + reconstruction error). */
+export interface AutoencoderOutlier {
+  index: number;
+  error: number;
+}
+
+/** The `POST /api/v1/dl/autoencoder-encode` result body. */
+export interface AutoencoderEncodeResponse {
+  modelId: string;
+  nRows: number;
+  latentDim: number;
+  latent: readonly (readonly number[])[];
+  reconstructionErrors: readonly number[];
+  meanReconstructionError: number;
+  topOutliers: readonly AutoencoderOutlier[];
+  note: string;
+}
+
+/**
+ * Parse + validate the cnn-train result (the sync body and the job
+ * result relay share one shape — §8.1 runtime validation).
+ */
+export function parseCnnTrainResult(
+  raw: unknown,
+  what: string,
+): CnnTrainResult {
+  const r = expectObject(raw, what);
+  const model = parseDLModelView(r["model"], `${what} model`);
+  const modelRaw = expectObject(r["model"], `${what} model`);
+  const classes = Array.isArray(r["classes"])
+    ? r["classes"].map(asLabel)
+    : null;
+  const trainAccuracy = asNumber(r["train_accuracy"]);
+  const trainMae = asNumber(r["train_mae"]);
+  return {
+    model: {
+      ...model,
+      sequenceModel: modelRaw["sequence_model"] === true,
+    },
+    seqLen: asNumber(r["seq_len"]) ?? 0,
+    nChannels: asNumber(r["n_channels"]) ?? 0,
+    nIter: asNumber(r["n_iter"]) ?? 0,
+    classes,
+    trainAccuracy,
+    trainMae,
+  };
+}
+
+/** Parse + validate the cnn-predict result. */
+export function parseCnnPredictResult(
+  raw: unknown,
+  what: string,
+): CnnPredictResponse {
+  const r = expectObject(raw, what);
+  const predictions = Array.isArray(r["predictions"])
+    ? r["predictions"].map(asLabel)
+    : [];
+  const classes = Array.isArray(r["classes"])
+    ? r["classes"].map(asLabel)
+    : null;
+  const probabilities = Array.isArray(r["probabilities"])
+    ? r["probabilities"].map((row: unknown) =>
+        Array.isArray(row)
+          ? row.filter((v): v is number => typeof v === "number")
+          : [],
+      )
+    : null;
+  return {
+    modelId: typeof r["model_id"] === "string" ? r["model_id"] : "",
+    nSequences: asNumber(r["n_sequences"]) ?? 0,
+    predictions,
+    probabilities,
+    classes,
+  };
+}
+
+/** Parse + validate the autoencoder-train result. */
+export function parseAutoencoderTrainResult(
+  raw: unknown,
+  what: string,
+): AutoencoderTrainResult {
+  const r = expectObject(raw, what);
+  const model = parseDLModelView(r["model"], `${what} model`);
+  const modelRaw = expectObject(r["model"], `${what} model`);
+  return {
+    model: {
+      ...model,
+      encodeUrl:
+        typeof modelRaw["encode_url"] === "string"
+          ? modelRaw["encode_url"]
+          : "/api/v1/dl/autoencoder-encode",
+    },
+    latentDim: asNumber(r["latent_dim"]) ?? 0,
+    nIter: asNumber(r["n_iter"]) ?? 0,
+    meanReconstructionError:
+      asNumber(r["mean_reconstruction_error"]) ?? Number.NaN,
+  };
+}
+
+/** Parse + validate the autoencoder-encode result. */
+export function parseAutoencoderEncodeResult(
+  raw: unknown,
+  what: string,
+): AutoencoderEncodeResponse {
+  const r = expectObject(raw, what);
+  const latent = Array.isArray(r["latent"])
+    ? r["latent"].map((row: unknown) =>
+        Array.isArray(row)
+          ? row.filter((v): v is number => typeof v === "number")
+          : [],
+      )
+    : [];
+  const reconstructionErrors = Array.isArray(r["reconstruction_errors"])
+    ? r["reconstruction_errors"].filter(
+        (v: unknown): v is number => typeof v === "number",
+      )
+    : [];
+  const topOutliers = Array.isArray(r["top_outliers"])
+    ? r["top_outliers"].flatMap((entry: unknown) => {
+        if (typeof entry !== "object" || entry === null) {
+          return [];
+        }
+        const record = entry as Record<string, unknown>;
+        const index = asNumber(record["index"]);
+        const error = asNumber(record["error"]);
+        if (index === null || error === null) {
+          return [];
+        }
+        return [{ index, error }];
+      })
+    : [];
+  return {
+    modelId: typeof r["model_id"] === "string" ? r["model_id"] : "",
+    nRows: asNumber(r["n_rows"]) ?? 0,
+    latentDim: asNumber(r["latent_dim"]) ?? 0,
+    latent,
+    reconstructionErrors,
+    meanReconstructionError:
+      asNumber(r["mean_reconstruction_error"]) ?? Number.NaN,
+    topOutliers,
+    note: typeof r["note"] === "string" ? r["note"] : "",
+  };
 }

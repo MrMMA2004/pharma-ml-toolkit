@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 
 from ui.nine_cards import build_nine_card_grid
 
-_TK = Path(__file__).resolve().parents[2]  # pharma-ml-toolkit/
+_TK = Path(__file__).resolve().parents[3]  # pharma-ml-toolkit/
 
 
 def _module_census() -> tuple[int, int]:

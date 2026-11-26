@@ -91,9 +91,12 @@ def test_the_route_is_registered_exactly_once() -> None:
 def test_the_contract_carries_the_seven_new_paths() -> None:
     schema = json.loads(CONTRACT.read_text())
     paths = schema["paths"]
-    assert len(paths) == 134, f"the contract drifted: {len(paths)} paths"
-    # 87 by the r365 part18 lanes (the unsupervised + RL request models)
-    assert len(schema["components"]["schemas"]) == 87
+    # 134 -> 142 by the r367 part18 §5 DL architecture expansion (the
+    # CNN pair, the autoencoder pair, the GAN pair, the diffusion pair)
+    assert len(paths) == 142, f"the contract drifted: {len(paths)} paths"
+    # 87 by the r365 part18 lanes; 87 -> 96 by the r367 part18 §5
+    # DL architecture expansion (the four pairs' request DTOs)
+    assert len(schema["components"]["schemas"]) == 96
     for path in (
         "/api/v1/rsm/registry",
         "/api/v1/rsm/design",

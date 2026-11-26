@@ -18,7 +18,7 @@ TK = ROOT
 
 def page_backends(page: str) -> list[str]:
     """pharmaml modules a page actually imports (the §4.5 evidence rule)."""
-    src = (TK / "ui" / "pages" / f"{page}.py").read_text(encoding="utf-8")
+    src = (TK / "legacy" / "ui" / "pages" / f"{page}.py").read_text(encoding="utf-8")
     mods = set(re.findall(r"from pharmaml\.([a-z_]+(?:\.[a-z_]+)?) import", src))
     mods |= set(re.findall(r"import pharmaml\.([a-z_]+(?:\.[a-z_]+)?)", src))
     return sorted(mods)
@@ -30,7 +30,9 @@ def module_loc(module: Path) -> int:
 
 def test_count(pattern: str) -> int:
     n = 0
-    for t in (TK / "tests").glob(pattern):
+    base = TK / "legacy" / "tests_ui" if pattern.startswith("legacy/") else TK / "tests"
+    rel = pattern[len("legacy/tests_ui/"):] if pattern.startswith("legacy/tests_ui/") else pattern
+    for t in base.glob(rel):
         n += len(re.findall(r"^\s*def test_", t.read_text(encoding="utf-8"), re.MULTILINE))
     return n
 
@@ -46,7 +48,7 @@ PAGES = [
 page_rows = []
 for p in PAGES:
     mods = page_backends(p)
-    n = test_count(f"ui/test_*{p.replace('_page','')}*.py")
+    n = test_count(f"legacy/tests_ui/test_*{p.replace('_page','')}*.py")
     page_rows.append((p, ", ".join(mods) if mods else "—", n))
 
 ml_modules = sorted(
@@ -146,9 +148,9 @@ w("| --- | --- | --- |")
 for p, mods, _n in page_rows:
     w(f"| `{p}` | {mods} | {CARD_OF_PAGE[p]} |")
 w("")
-w(f"Tests: {test_count('ui/test_*.py')} UI test functions across")
-w(f"{len(list((TK/'tests'/'ui').glob('test_*.py')))} UI suites; page smoke")
-w("coverage via `tests/ui/test_pages_smoke.py`.")
+w(f"Tests: {test_count('legacy/tests_ui/test_*.py')} UI test functions across")
+w(f"{len(list((TK/'legacy'/'tests_ui').glob('test_*.py')))} UI suites; page smoke")
+w("coverage via `legacy/tests_ui/test_pages_smoke.py`.")
 w("")
 w("## 3. Backend census")
 w("")
@@ -243,4 +245,4 @@ outpath = TK / "docs" / "CAPABILITY_MAP.md"
 outpath.write_text("\n".join(out), encoding="utf-8")
 print(f"wrote {outpath} ({len(out)} lines)")
 print(f"ml modules: {len(ml_modules)}; cli parsers: {cli_parsers}; "
-      f"ui tests: {test_count('ui/test_*.py')}; lib tests: {test_count('test_*.py')}")
+      f"ui tests: {test_count('legacy/tests_ui/test_*.py')}; lib tests: {test_count('test_*.py')}")

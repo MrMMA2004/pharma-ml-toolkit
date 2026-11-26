@@ -66,10 +66,16 @@ from typing import Any
 
 # Unfrozen runs (source checkout / the focused test suite) need the toolkit
 # root on sys.path for the ``ui`` package (only ``pharmaml`` is pip-installed,
-# editable).  studio.py does the same insert; frozen, the bootloader's
-# _internal layout already has everything importable and this is a no-op.
+# editable).  The part18 §10 quarantine completion moved the legacy GUI tree
+# to ``legacy/`` — so BOTH the root and ``legacy/`` join the path; frozen, the
+# bootloader's _internal layout already has everything importable and this
+# is a no-op.
 if not getattr(sys, "frozen", False):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    _tk = Path(__file__).resolve().parents[1]
+    _legacy = _tk / "legacy"
+    if _legacy.is_dir():
+        sys.path.insert(0, str(_legacy))
+    sys.path.insert(0, str(_tk))
 
 # The 12-molecule real-chemistry set (examples/data/ligand_library.csv's
 # head — real drugs, not toy SMILES, so descriptors/fingerprints exercise

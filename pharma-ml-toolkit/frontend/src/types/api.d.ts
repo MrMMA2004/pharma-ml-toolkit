@@ -538,6 +538,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dl/autoencoder-encode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Autoencoder Encode */
+        post: operations["autoencoder_encode_api_v1_dl_autoencoder_encode_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dl/autoencoder-train": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Autoencoder Train */
+        post: operations["autoencoder_train_api_v1_dl_autoencoder_train_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dl/cnn-predict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cnn Predict */
+        post: operations["cnn_predict_api_v1_dl_cnn_predict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dl/cnn-train": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cnn Train */
+        post: operations["cnn_train_api_v1_dl_cnn_train_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dl/gnn-predict": {
         parameters: {
             query?: never;
@@ -889,6 +957,74 @@ export interface paths {
         get: operations["registry_api_v1_dta_registry_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/generative/diffusion/sample": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Diffusion Sample */
+        post: operations["diffusion_sample_api_v1_generative_diffusion_sample_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/generative/diffusion/train": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Diffusion Train */
+        post: operations["diffusion_train_api_v1_generative_diffusion_train_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/generative/gan/sample": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Gan Sample */
+        post: operations["gan_sample_api_v1_generative_gan_sample_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/generative/gan/train": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Gan Train */
+        post: operations["gan_train_api_v1_generative_gan_train_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2510,6 +2646,80 @@ export interface components {
              */
             format: "csv" | "tsv" | "xlsx";
         };
+        /** AutoencoderEncodeRequest */
+        AutoencoderEncodeRequest: {
+            /** Dataset Id */
+            dataset_id?: string | null;
+            /** Model Id */
+            model_id: string;
+            /** Rows */
+            rows?: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Top K
+             * @default 10
+             */
+            top_k: number;
+        };
+        /** AutoencoderTrainRequest */
+        AutoencoderTrainRequest: {
+            /**
+             * Batch Size
+             * @default 32
+             */
+            batch_size: number;
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * Epochs
+             * @default 120
+             */
+            epochs: number;
+            /**
+             * Hidden Layers
+             * @default [
+             *       64
+             *     ]
+             */
+            hidden_layers: number[];
+            /**
+             * Latent Dim
+             * @default 8
+             */
+            latent_dim: number;
+            /**
+             * Learning Rate
+             * @default 0.001
+             */
+            learning_rate: number;
+            /**
+             * Mode
+             * @default job
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /**
+             * Patience
+             * @default 15
+             */
+            patience: number;
+            /**
+             * Random State
+             * @default 42
+             */
+            random_state: number;
+            /**
+             * Val Split
+             * @default 0.15
+             */
+            val_split: number;
+            /**
+             * Weight Decay
+             * @default 0.0001
+             */
+            weight_decay: number;
+        };
         /** BackupRequest */
         BackupRequest: {
             /** Filename */
@@ -2610,6 +2820,99 @@ export interface components {
              * @default 10
              */
             n_neighbors: number;
+        };
+        /** CnnPredictRequest */
+        CnnPredictRequest: {
+            /** Model Id */
+            model_id: string;
+            /**
+             * Probabilities
+             * @default false
+             */
+            probabilities: boolean;
+            /** Sequences */
+            sequences: components["schemas"]["CnnSequenceSpec"][];
+        };
+        /**
+         * CnnSequenceSpec
+         * @description One sequence: a list of feature-vector time steps.
+         */
+        CnnSequenceSpec: {
+            /** Steps */
+            steps: number[][];
+        };
+        /** CnnTrainRequest */
+        CnnTrainRequest: {
+            /**
+             * Batch Size
+             * @default 32
+             */
+            batch_size: number;
+            /**
+             * Channels
+             * @default 16
+             */
+            channels: number;
+            /**
+             * Epochs
+             * @default 120
+             */
+            epochs: number;
+            /**
+             * Kernel
+             * @default 3
+             */
+            kernel: number;
+            /** Labels */
+            labels?: number[] | null;
+            /**
+             * Learning Rate
+             * @default 0.001
+             */
+            learning_rate: number;
+            /**
+             * Mode
+             * @default job
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /**
+             * N Layers
+             * @default 2
+             */
+            n_layers: number;
+            /**
+             * Patience
+             * @default 15
+             */
+            patience: number;
+            /**
+             * Random State
+             * @default 42
+             */
+            random_state: number;
+            /** Seed */
+            seed?: number | null;
+            /** Sequences */
+            sequences?: components["schemas"]["CnnSequenceSpec"][] | null;
+            /** Synthetic N */
+            synthetic_n?: number | null;
+            /**
+             * Task
+             * @default classification
+             * @enum {string}
+             */
+            task: "classification" | "regression";
+            /**
+             * Val Split
+             * @default 0.15
+             */
+            val_split: number;
+            /**
+             * Weight Decay
+             * @default 0.0001
+             */
+            weight_decay: number;
         };
         /** ConcentrationProfileRequest */
         ConcentrationProfileRequest: {
@@ -2813,7 +3116,7 @@ export interface components {
              * Network
              * @enum {string}
              */
-            network: "deep_mlp_classifier" | "deep_mlp_regressor" | "residual_mlp_classifier" | "residual_mlp_regressor";
+            network: "deep_mlp_classifier" | "deep_mlp_regressor" | "residual_mlp_classifier" | "residual_mlp_regressor" | "tabular_transformer_classifier" | "tabular_transformer_regressor";
         };
         /** DescriptorsRequest */
         DescriptorsRequest: {
@@ -2878,6 +3181,71 @@ export interface components {
              * @default 42
              */
             seed: number;
+        };
+        /** DiffusionSampleRequest */
+        DiffusionSampleRequest: {
+            /**
+             * N
+             * @default 32
+             */
+            n: number;
+            /** Prior Id */
+            prior_id: string;
+            /** Seed */
+            seed?: number | null;
+        };
+        /** DiffusionTrainRequest */
+        DiffusionTrainRequest: {
+            /**
+             * Batch Size
+             * @default 32
+             */
+            batch_size: number;
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * Epochs
+             * @default 120
+             */
+            epochs: number;
+            /**
+             * Hidden Layers
+             * @default [
+             *       64
+             *     ]
+             */
+            hidden_layers: number[];
+            /**
+             * Learning Rate
+             * @default 0.001
+             */
+            learning_rate: number;
+            /**
+             * Mode
+             * @default job
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /**
+             * Name
+             * @default feature-diffusion
+             */
+            name: string;
+            /**
+             * Random State
+             * @default 42
+             */
+            random_state: number;
+            /**
+             * Timesteps
+             * @default 100
+             */
+            timesteps: number;
+            /**
+             * Weight Decay
+             * @default 0.0001
+             */
+            weight_decay: number;
         };
         /** DockRequest */
         DockRequest: {
@@ -3245,6 +3613,76 @@ export interface components {
             factors?: components["schemas"]["FactorSpecModel"][] | null;
             /** Response Columns */
             response_columns?: string[];
+        };
+        /** GanSampleRequest */
+        GanSampleRequest: {
+            /**
+             * N
+             * @default 32
+             */
+            n: number;
+            /** Prior Id */
+            prior_id: string;
+            /** Seed */
+            seed?: number | null;
+        };
+        /** GanTrainRequest */
+        GanTrainRequest: {
+            /**
+             * Batch Size
+             * @default 32
+             */
+            batch_size: number;
+            /**
+             * D Steps
+             * @default 1
+             */
+            d_steps: number;
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * Epochs
+             * @default 100
+             */
+            epochs: number;
+            /**
+             * Hidden Layers
+             * @default [
+             *       64
+             *     ]
+             */
+            hidden_layers: number[];
+            /**
+             * Latent Dim
+             * @default 16
+             */
+            latent_dim: number;
+            /**
+             * Learning Rate
+             * @default 0.0002
+             */
+            learning_rate: number;
+            /**
+             * Mode
+             * @default job
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /**
+             * Name
+             * @default feature-gan
+             */
+            name: string;
+            /**
+             * Random State
+             * @default 42
+             */
+            random_state: number;
+            /**
+             * Weight Decay
+             * @default 0
+             */
+            weight_decay: number;
         };
         /**
          * GnnGraphSpec
@@ -5944,6 +6382,146 @@ export interface operations {
             };
         };
     };
+    autoencoder_encode_api_v1_dl_autoencoder_encode_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoencoderEncodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    autoencoder_train_api_v1_dl_autoencoder_train_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoencoderTrainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cnn_predict_api_v1_dl_cnn_predict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CnnPredictRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cnn_train_api_v1_dl_cnn_train_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CnnTrainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     gnn_predict_api_v1_dl_gnn_predict_post: {
         parameters: {
             query?: never;
@@ -6608,6 +7186,146 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    diffusion_sample_api_v1_generative_diffusion_sample_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiffusionSampleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    diffusion_train_api_v1_generative_diffusion_train_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiffusionTrainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gan_sample_api_v1_generative_gan_sample_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GanSampleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gan_train_api_v1_generative_gan_train_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GanTrainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

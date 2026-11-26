@@ -129,7 +129,11 @@ excludes = [
 
 a = Analysis(
     [str(TOOLKIT / "legacy" / "studio.py")],  # part18 §10: quarantined legacy entry
-    pathex=[str(TOOLKIT), str(TOOLKIT / "src")],
+    # part18 §10 quarantine completion: the legacy GUI package itself now
+    # lives at legacy/ui/ beside the launcher, so legacy/ joins pathex
+    # for the `from ui import run` resolution (the toolkit root stays
+    # for the fonts/engines datas and the root-level resources).
+    pathex=[str(TOOLKIT), str(TOOLKIT / "legacy"), str(TOOLKIT / "src")],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
