@@ -228,10 +228,13 @@ export const SHIPPED_FILE_COUNT = 1844;
 /*  r364 (the owner-directed release round, the v1.2.241 NEW-version
     ship): the walk re-measured AFTER the round's ledger close-out +
     the zip ship (the measurement-last discipline held) -- 590,269
-    lines / 584,023,791 B at 1,844 files / v1.2.241: the file pin
+    lines / 584,023,793 B at 1,844 files / v1.2.241 (re-walked
+    after the SBOM-carrier fix + the re-ship; the first walk measured
+    584,023,791 B at the pre-fix archive): the file pin
     +2 = exactly the two new zip homes (the toolkit download/ + the
     toolkit dist-archive/ carrying v1.2.241.zip), the bytes +55.8 MB
-    = exactly the two zip copies (27,887,293 B x 2), the lines +155
+    = exactly the two zip copies (27,887,294 B x 2 post-fix), the
+    lines +155
     = the round's inside-tree ledger deltas (the CHANGELOG 1.2.241
     entry + the QA r364 section + the cascade renumber + the
     PROJECT_STATUS clause 14 + the RELEASE_READINESS addendum + the

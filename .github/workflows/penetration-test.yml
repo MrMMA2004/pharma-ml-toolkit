@@ -125,7 +125,17 @@ jobs:
 
       - name: "ZAP scan (Automation Framework: openapi import, passive + controlled active)"
         run: |
+          # --user host-uid:gid (r364, the maiden dispatch's third-layer
+          # find): the RUNNER_TEMP mount is owned by the runner's uid, but
+          # the zaproxy image runs as its own zapuser -- the mount came up
+          # read-only to ZAP and it died at startup with "The home path is
+          # not writable: /zap/wrk/". Running the container as the host
+          # uid:gid (ZAP's own documented CI pattern) makes the mounted
+          # workdir writable; -dir /zap/wrk keeps ZAP's home inside the
+          # same writable mount so nothing ever needs the image's own
+          # /zap home.
           docker run --rm --network host \
+            --user "$(id -u):$(id -g)" \
             -v "$RUNNER_TEMP:/zap/wrk:rw" \
             -v "$PWD/packaging/security:/zap/cfg:ro" \
             ghcr.io/zaproxy/zaproxy:stable \
