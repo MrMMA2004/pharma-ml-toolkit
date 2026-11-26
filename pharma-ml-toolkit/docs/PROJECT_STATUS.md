@@ -1724,3 +1724,48 @@ queue: **upkeep alone** — and the upkeep found real work.
 - **Version**: unchanged at 1.2.240 — doc/carrier/test-infra-only
   deltas, NO re-ship, NO silent bump. The counter 154 → 155 and RIDES
   the commit (the r360 lesson held).
+
+## 14. The r364 clause (the owner-directed release round — the seventeenth-class rollback recovered + the v1.2.241 NEW-version ship: the nine-point carrier lockstep, the eight-notebook re-execution, the new zip across the six homes, and the tag-triggered EXE/MSI release)
+
+- **The recovery**: the seventeenth-class playbook execution against the
+  same partial-restore signature — the recycle regressed the local
+  `.git` to the round-186 checkpoint `2eb0ede` (behind the durable
+  r363 terminal `81e36045`), wiped the origin remote + the
+  credentials + the venv (rdkit/torch) + the frontend
+  `node_modules`; the `git diff origin/main` proof before any reset
+  showed only the known transient pair (the pid + the corrupted
+  nested `ci.yml` ghost, 52 insertions). The PAT re-spliced (93
+  chars, 600-mode, never printed), the origin re-attached + fetched
+  (no `arena/*` refs), the ff-only reset restored the tree 0/0
+  clean, the venv rebuilt FOREGROUND at the exact pins, the frontend
+  `npm ci`, the dev daemon restarted.
+- **The version bump**: 1.2.240 → 1.2.241 across the full carrier
+  set in one lockstep commit — `VERSION`, `pyproject.toml`,
+  `src/pharmaml/__init__.py`, `frontend/package.json`,
+  `src-tauri/tauri.conf.json`, the `version_info.txt` quadruple,
+  `frontend/src/lib/version.ts`, the web
+  `src/lib/toolkit-version.ts`, the `docs/FEATURES.md` freeze stamp,
+  the SettingsPanel vitest pin, and the CHANGELOG lead — every
+  carrier guard green at close-out.
+- **The eight-notebook re-execution**: `scratch/reexec_notebooks_257.py`
+  — 8/8 in 235s, home-path-survivors 0, every executed workflow
+  printing `pharmaml 1.2.241`; the freshness + portability + twins
+  guards re-run rc=0.
+- **The gate**: the ten-chunk runner re-run on the recovered tree —
+  `failures=4`, all four decoded as the new-version-ship legs the
+  gate caught by design while the ship legs were in flight (two
+  mid-bump carrier transients + two notebook-freshness legs + the
+  github-page zip-missing leg), each re-run green at close-out;
+  every other leg rc=0 (see the QA report's r364 section for the
+  full leg table).
+- **The ship**: the v1.2.241 zip built by `scratch/build_zip_364.py`
+  and seeded byte-identical across the six homes + the offsite
+  mirror; the lightweight tag `v1.2.241` pushed at the ship commit
+  triggering the Windows release workflow (the EXE/MSI + manifest +
+  checksums attached to the published GitHub release, the run
+  verdict + asset sizes recorded in the worklog R364 entry); the
+  penetration + install-smoke lanes dispatched and verified green.
+  The clean-machine owner-side stages stay honestly BLOCKED (a
+  hosted runner is a build env, not a clean machine).
+- **Version**: NEW — 1.2.241 (the owner-directed release round). The
+  counter 155 → 156 and RIDES the commit.

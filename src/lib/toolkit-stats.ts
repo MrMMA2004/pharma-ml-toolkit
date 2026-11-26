@@ -96,7 +96,7 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 337;
  *  toolkit .github path — resurrected by the same rollback, never
  *  registered at GitHub and never shipped in any archive — nets to
  *  zero (caught, removed); verified pin = live walk = page render. */
-export const SHIPPED_FILE_COUNT = 1842;
+export const SHIPPED_FILE_COUNT = 1844;
 
 /*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
     +13 tree files (the pharmaml.workflow package x4, the route
@@ -225,7 +225,21 @@ export const SHIPPED_FILE_COUNT = 1842;
     artifact the gate's theme tests create -- a test residue the
     served walk never sees, not a carrier. Verified pin = live walk =
     page render. */
-export const SHIPPED_SOURCE_LINES = 590114;
+/*  r364 (the owner-directed release round, the v1.2.241 NEW-version
+    ship): the walk re-measured AFTER the round's ledger close-out +
+    the zip ship (the measurement-last discipline held) -- 590,269
+    lines / 584,023,791 B at 1,844 files / v1.2.241: the file pin
+    +2 = exactly the two new zip homes (the toolkit download/ + the
+    toolkit dist-archive/ carrying v1.2.241.zip), the bytes +55.8 MB
+    = exactly the two zip copies (27,887,293 B x 2), the lines +155
+    = the round's inside-tree ledger deltas (the CHANGELOG 1.2.241
+    entry + the QA r364 section + the cascade renumber + the
+    PROJECT_STATUS clause 14 + the RELEASE_READINESS addendum + the
+    FEATURES freeze stamp) + the eight-notebook re-execution
+    movement. The collection + vitest + registry pins re-measured
+    reproducing: 9,017 / 337 / 33. Verified pin = live walk =
+    page render. */
+export const SHIPPED_SOURCE_LINES = 590269;
 
 /*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
     +3,422 the counted delta (the workflow package + the route family

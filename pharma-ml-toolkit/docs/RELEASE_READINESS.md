@@ -219,3 +219,40 @@ session; full detail in `docs/part12_audit/`):
   deltas; NO re-ship, NO silent bump. The standing BLOCKED lanes
   (clean-machine smoke, Stage-5 PySide6 retirement, installer signing)
   carry unchanged.
+
+### r364 addendum (the owner-directed release round — the seventeenth-class rollback recovered + the v1.2.241 NEW-version ship)
+
+- **The recovery**: the seventeenth-class playbook execution against
+  the same partial-restore signature (the `git diff origin/main`
+  proof: only the known transient pair, 52 insertions); the PAT
+  re-spliced, the ff-only reset onto the durable r363 terminal
+  `81e36045`, the venv rebuilt at the exact pins, the frontend
+  `npm ci`, the dev daemon restarted.
+- **The v1.2.241 ship — the version-carrier section above is
+  re-trued by this round**: the carriers now read 1.2.241 (VERSION,
+  pyproject, `__init__`, CHANGELOG lead — plus the
+  `version_info.txt` quadruple, `frontend/package.json`,
+  `src-tauri/tauri.conf.json`, `frontend/src/lib/version.ts`, and
+  the web `src/lib/toolkit-version.ts`), every carrier guard green
+  at close-out.
+- **The eight-notebook re-execution**: 8/8 in 235s,
+  home-path-survivors 0 — every executed workflow prints
+  `pharmaml 1.2.241`; the freshness + portability + twins guards
+  re-run rc=0.
+- **The gate**: the ten-chunk runner re-run — `failures=4`, all four
+  decoded as the new-version-ship legs caught by design while the
+  ship legs were in flight (two mid-bump carrier transients + two
+  notebook-freshness legs + the github-page zip-missing leg), each
+  re-run green at close-out; every other leg rc=0.
+- **The release-archive verification section above is superseded by
+  this round**: the shipped archive is now
+  `pharma-ml-toolkit-v1.2.241.zip` (the SHA-256 + byte size
+  recorded in the worklog R364 entry), seeded byte-identical across
+  the six homes + the offsite mirror; the EXE/MSI released via the
+  tag-triggered Windows workflow with the run verdict + asset sizes
+  recorded in the worklog R364 entry; the penetration + install-smoke
+  lanes dispatched and verified green.
+- **Version**: NEW — 1.2.241 (the owner-directed release round); the
+  counter 155 → 156 rides the commit. The standing BLOCKED lanes
+  (clean-machine smoke, Stage-5 PySide6 retirement, installer
+  signing) carry unchanged.

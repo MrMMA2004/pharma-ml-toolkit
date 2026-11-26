@@ -132,7 +132,7 @@ describe("the §10 compact settings popover", () => {
     render(<SettingsEntry />);
     await user.click(screen.getByRole("button", { name: "Settings" }));
 
-    expect(screen.getByText("1.2.240")).toBeInTheDocument();
+    expect(screen.getByText("1.2.241")).toBeInTheDocument();
     expect(screen.getByText(/not connected/i)).toBeInTheDocument();
     expect(screen.getByText(/offline/i)).toBeInTheDocument();
   });

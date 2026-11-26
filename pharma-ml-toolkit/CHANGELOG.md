@@ -1,3 +1,56 @@
+## [1.2.241] — 2026-11-26 — round 364 (the 156th recorded run: the owner-directed release round, trace 1a216bcc19052aa9 — the v1.2.241 NEW-version ship: the version carriers bumped in nine-point lockstep, the new zip across the six homes, and the new EXE/MSI released via the tag-triggered Windows workflow)
+
+- **The seventeenth-class rollback recovered (the partial-restore
+  signature, the same pair as r362/r363)**: the recycle regressed the
+  local `.git` to the round-186 checkpoint `2eb0ede` (behind the
+  durable r363 terminal `81e36045`), wiped the origin remote + the
+  credentials + the venv (rdkit/torch MISSING) + the frontend
+  `node_modules`, and restored a partial disk whose survivors
+  hash-matched the durable blobs — the `git diff origin/main` proof
+  before any reset showed only the known transient pair (52
+  insertions = the pid 1 + the corrupted nested `ci.yml` ghost 51).
+  The PAT re-spliced (93 chars, 600-mode, never printed), the origin
+  re-attached + fetched (no `arena/*` refs), the ff-only reset
+  restored the tree 0/0 clean, the venv rebuilt FOREGROUND at the
+  exact pins, the frontend `npm ci` (147 pkgs), the dev server
+  daemon restarted (GET / 200).
+- **The v1.2.241 version bump — the full carrier set, one lockstep
+  commit**: `VERSION`, `pyproject.toml`, `src/pharmaml/__init__.py`,
+  `frontend/package.json`, `src-tauri/tauri.conf.json`, the
+  `version_info.txt` quadruple (filevers/prodvers/FileVersion/
+  ProductVersion), `frontend/src/lib/version.ts` (`APP_VERSION`),
+  the web `src/lib/toolkit-version.ts` (`SHIPPED_TOOLKIT_VERSION`),
+  the `docs/FEATURES.md` freeze stamp, the SettingsPanel vitest
+  version pin, and this CHANGELOG lead — every carrier guard green at
+  close-out (`test_version_carriers.py` re-run rc=0; the vitest
+  337/337 with the bumped pin; the windows-pipeline lockstep guard
+  rc=0).
+- **The v1.2.241 zip — the new archive across the six homes**: built
+  by `scratch/build_zip_364.py` (the canonical r303..r329 recipe:
+  the exclusion list, the composition guard, the leak scan, the
+  must-carry gate, the version_info quadruple check, the fresh
+  VERSION stamp), seeded byte-identical to the root `download/`, the
+  toolkit `download/`, the toolkit `dist-archive/`, `upload/`, the
+  root `dist-archive/`, and the offsite `~/pharma-ml-toolkit-zips/`
+  mirror (each home testzip-verified; the SHA-256 recorded in the
+  worklog R364 entry).
+- **The v1.2.241 EXE/MSI release — the tag-triggered Windows
+  workflow**: the lightweight tag `v1.2.241` pushed at the ship
+  commit; `.github/workflows/windows-release.yml` builds the NSIS
+  EXE + the WiX MSI on the hosted Windows runner with its own test
+  ladder (the version-carrier validation, the frontend typecheck +
+  drift guards, the backend unit + api/database gates, the frozen
+  sidecar's live handshake/health/auth-guard/shutdown probe) and
+  attaches `PharmaML_Studio_Setup_v1.2.241.exe`,
+  `PharmaML_Studio_v1.2.241.msi`, `RELEASE_MANIFEST.json`,
+  `SHA256SUMS.txt` (+ the SBOM) to the published GitHub release. The
+  penetration lane (`penetration-test.yml`, the isolated ZAP API
+  scan) and the install-smoke lane (`windows-install-smoke.yml`,
+  the published-EXE install/launch/persistence/uninstall ritual)
+  were dispatched and verified green for this release. The
+  clean-machine owner-side stages stay honestly BLOCKED (a hosted
+  runner is a build env, not a clean machine).
+
 ## [1.2.240] — 2026-11-21 — round 318 (the 109th recorded run: the interactive part13 continuation, trace 1a1fed8994f477c1 — the Phase-5 pharmacogenomics lane, API + GUI; a NEW version ship)
 
 - **The r363 upkeep firing (the sixteenth-class rollback recovery —
