@@ -76,26 +76,28 @@ jobs:
           cache-dependency-path: |
             pharma-ml-toolkit/pyproject.toml
             pharma-ml-toolkit/requirements.txt
+            pharma-ml-toolkit/packaging/windows/installer-requirements.txt
 
       - name: Install the target stack
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          # The target is the REAL backend application (the same
+          # create_app() the Tauri host ships) -- its import-time
+          # runtime stack is exactly the Windows freeze stack
+          # (packaging/windows/installer-requirements.txt), which
+          # already carries the api-lane pins (fastapi/uvicorn/
+          # python-multipart/websockets/httpx). The r364 maiden
+          # dispatch proved the previous core-plus-pins set
+          # under-specified in two layers: the form-data routes
+          # (datasets + repurposing) require python-multipart at
+          # route-definition time, and the chem routes require rdkit
+          # at import time -- the freeze stack carries both (the
+          # frozen sidecar's spec excludes the Qt stack and torch,
+          # and the API chain imports neither, which is why the
+          # Windows release runner's api/database gate runs green on
+          # exactly this stack).
+          python -m pip install -r packaging/windows/installer-requirements.txt
           python -m pip install --no-deps -e .
-          # the API lane's pins (the runner never installs these via
-          # requirements.txt -- the focused CI jobs never needed them).
-          # python-multipart (r364, the maiden dispatch's find): the API
-          # surface's form-data routes (datasets + repurposing) import
-          # FastAPI routes that require it at route-definition time --
-          # without it the disposable target dies before readiness and
-          # the lane fails with "Form data requires python-multipart".
-          # The pin matches the Windows lane's installer-requirements
-          # (packaging/windows/installer-requirements.txt: python-multipart
-          # ==0.0.24); the local venv carries it transitively (gradio/mcp),
-          # which is why only the runner ever hit the gap.
-          python -m pip install -c requirements.txt \
-            fastapi==0.128.0 uvicorn==0.44.0 httpx==0.28.1 \
-            pydantic==2.12.5 pytest==9.0.2 python-multipart==0.0.24
 
       - name: Start the disposable seeded target
         run: |
