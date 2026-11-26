@@ -266,3 +266,50 @@ session; full detail in `docs/part12_audit/`):
   counter 155 → 156 rides the commit. The standing BLOCKED lanes
   (clean-machine smoke, Stage-5 PySide6 retirement, installer
   signing) carry unchanged.
+
+### r365 addendum (the part18 release-completion firing — the third build's stale-must-carry step-20 failure decoded + fixed at source, the tag re-pinned to the green fourth build, the v1.2.242 EXE/MSI published + smoke-tested, the fixed-tree zip re-shipped)
+
+- **The release the part18 campaign shipped**: the published release
+  `v1.2.242` (draft:false, 2026-11-26T17:37:32Z, commit `3237c983`)
+  carries `PharmaML_Studio_Setup_v1.2.242.exe` **558,491,978 B** +
+  `PharmaML_Studio_v1.2.242.msi` **711,020,022 B** + RELEASE_MANIFEST.json
+  + the generated CycloneDX SBOM (23,634 B) + SHA256SUMS.txt — the
+  fourth build of the ladder, run 45864554708 **SUCCESS**, the whole
+  runner ladder green end-to-end (the version-carrier validation, the
+  frontend typecheck + drift guards, the backend unit gate [the new
+  regression guard included], the api/database gate, the PyInstaller
+  freeze + the frozen sidecar's live probe, the Tauri/NSIS/WiX builds,
+  the artifact validation, the manifest + checksums + SBOM). The three
+  failed builds and their at-source fixes are recorded honestly:
+  45851748667 step-11 (the tsc optional-chains, `e4810afd`),
+  45853171677 step-13 (the SBOM carrier + the lockfile, `a92b51b6` +
+  the re-ship), 45856387513 step-20 (the packaging validator's
+  `--static` must-carry tuple still demanding the retired root
+  `studio.py` — the gate demanding what part18 §10 forbids; fixed at
+  source `3237c983`: the tuple now carries
+  `packaging/windows/backend_entry.py` + `legacy/studio.py` + the
+  metadata quartet, and the regression guard
+  `test_packaging_validator_carries_the_quarantine_not_the_root` pins
+  the shape; the validator re-run 27 PASS / exit 0).
+- **The functional lane (the EXE/MSI smoke)**: run 45869621772
+  **SUCCESS (17/17 steps)** — asset integrity via SHA256SUMS, the
+  manifest cross-check (version, commit, bytes), the Defender scans
+  over both installers, the MSI silent install + the installed-tree
+  verification + the INSTALLED sidecar's live handshake/health/
+  auth-guard/shutdown probe + the lifecycle legs + the uninstall, the
+  NSIS silent install + tree + lifecycle + uninstall, and the UPGRADE
+  1.2.241 -> 1.2.242 with the user-data marker retained; the evidence
+  bundle uploaded.
+- **The penetration lane**: the API-side penetration suite 67 passed
+  locally and green in the runner's api gate of both the third and
+  fourth builds; the ZAP full-breadth deep scan rides the standing
+  360-minute weekly Monday 04:30 UTC slot (the honest pending).
+- **The fixed-tree zip re-ship**: `pharma-ml-toolkit-v1.2.242.zip`
+  re-shipped by `scratch/build_zip_365.py` so the archive carries the
+  at-source fix the release builds on — **1,332 entries / 1,178 files
+  / 27,950,886 B, sha-256 `9522afdf…`**, all gates green, seeded
+  byte-identical across the five disk homes + the offsite mirror.
+- **Version**: 1.2.242 (the part18 campaign's release, completed by
+  this firing); the counter 156 → 157 rides the ledger commit. The
+  standing BLOCKED lanes (clean-machine smoke, installer signing) are
+  unchanged — the hosted-runner lanes cover the CI-side evidence.

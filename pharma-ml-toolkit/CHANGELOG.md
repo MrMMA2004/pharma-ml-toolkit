@@ -113,6 +113,25 @@
   claimed), the ui/ + workspace.py quarantine completion, the
   capability-matrix addendum row updates, and the penetration lane's
   deep-scan Monday slot (the r364 standing budget).
+- **The release ladder (completed by the continuation firing)**: four
+  tag builds — 45851748667 died at step 11 on four TS2532 sites in
+  the campaign's own lane test (fixed at source `e4810afd`, the
+  optional-chain idiom), 45853171677 died at step 13 on the SBOM
+  carrier + the lockfile still reading 1.2.241 (fixed at source
+  `a92b51b6`, the SBOM regenerated + the zip re-shipped),
+  45856387513 died at step 20 on the packaging validator's stale
+  must-carry tuple still demanding the retired root `studio.py` that
+  part18 §10 forbids (fixed at source `3237c983` — the tuple now
+  carries `backend_entry.py` + `legacy/studio.py`, plus the
+  regression guard), and 45864554708 **SUCCESS** — the published
+  release v1.2.242 carries the EXE 558,491,978 B + the MSI
+  711,020,022 B + the manifest + the checksums + the SBOM; the
+  install-smoke 17/17 SUCCESS (both installers, the live
+  installed-sidecar probe, the lifecycle + uninstall legs, the
+  1.2.241 -> 1.2.242 upgrade with the user-data marker retained); the
+  fixed-tree zip re-shipped (1,332 entries / 1,178 files /
+  27,950,886 B, sha-256 `9522afdf…`) across the five homes + the
+  offsite mirror.
 
 ## [1.2.241] — 2026-11-26 — round 364 (the 156th recorded run: the owner-directed release round, trace 1a216bcc19052aa9 — the v1.2.241 NEW-version ship: the version carriers bumped in nine-point lockstep, the new zip across the six homes, and the new EXE/MSI released via the tag-triggered Windows workflow)
 

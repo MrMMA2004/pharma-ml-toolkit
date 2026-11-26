@@ -1795,3 +1795,27 @@ queue: **upkeep alone** — and the upkeep found real work.
   (a hosted runner is a build env, not a clean machine).
 - **Version**: NEW — 1.2.241 (the owner-directed release round). The
   counter 155 → 156 and RIDES the commit.
+
+## 15. The r365 clause (the part18 release-completion firing — the stale-must-carry step-20 fix, the green fourth build, the published + smoke-tested v1.2.242 EXE/MSI, the fixed-tree zip re-ship)
+
+- **The release completed**: the v1.2.242 Windows Release ladder closed
+  on its fourth build (run 45864554708 SUCCESS at `3237c983`) — the
+  published release carries the EXE 558,491,978 B + the MSI
+  711,020,022 B + the manifest + the checksums + the generated SBOM.
+  The third build died at step 20 on the packaging validator's stale
+  must-carry tuple (it still demanded the retired root `studio.py`,
+  the exact file part18 §10 forbids and the retirement guards pin
+  against); the fix at source swapped the tuple to the real spec
+  entries (`backend_entry.py` + `legacy/studio.py`) and added the
+  regression guard, and the r364 re-ship precedent was applied to the
+  zip (the fixed-tree archive re-shipped at 27,950,886 B, sha-256
+  `9522afdf…`, byte-identical across the five homes + the offsite).
+- **The functional + penetration lanes**: the install-smoke 17/17
+  SUCCESS (both installers, the live installed-sidecar probe, the
+  lifecycle + uninstall legs, the 1.2.241 -> 1.2.242 upgrade with the
+  user-data marker retained); the API-side penetration suite 67
+  passed locally + green in both builds' api gates; the ZAP deep scan
+  rides the standing Monday slot.
+- **Version**: 1.2.242 (the part18 campaign's release, completed). The
+  counter 156 → 157 and RIDES the ledger commit. The standing BLOCKED
+  lanes carry unchanged.
