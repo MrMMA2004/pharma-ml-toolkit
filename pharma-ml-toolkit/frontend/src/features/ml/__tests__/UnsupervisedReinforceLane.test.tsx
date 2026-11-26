@@ -186,7 +186,7 @@ describe("the Unsupervised Learning lane (part18 §4.3 + §4.5)", () => {
     });
     expect(screen.getByText(/noise 3 \(1\.8%\)/)).toBeInTheDocument();
     expect(screen.getByText(/silhouette 0\.951/)).toBeInTheDocument();
-    const request = unsupervisedMocks.cluster.mock.calls[0][0] as Record<string, unknown>;
+    const request = unsupervisedMocks.cluster.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(request).toMatchObject({
       dataset_id: "ds-test",
       method: "dbscan",
@@ -203,7 +203,7 @@ describe("the Unsupervised Learning lane (part18 §4.3 + §4.5)", () => {
     await waitFor(() => {
       expect(unsupervisedMocks.cluster).toHaveBeenCalled();
     });
-    expect((unsupervisedMocks.cluster.mock.calls[0][0] as Record<string, unknown>)["eps"]).toBeNull();
+    expect((unsupervisedMocks.cluster.mock.calls[0]?.[0] as Record<string, unknown>)["eps"]).toBeNull();
   });
 
   it("refuses to fire without a dataset (client-side gating)", async () => {
@@ -225,7 +225,7 @@ describe("the Unsupervised Learning lane (part18 §4.3 + §4.5)", () => {
     expect(screen.getByText(/flagged rows \(most anomalous first\): 1, 2, 0, 82/)).toBeInTheDocument();
     expect(screen.getByText(/not ground truth/)).toBeInTheDocument();
     expect(screen.getByRole("table")).toHaveTextContent("shift (σ)");
-    const request = unsupervisedMocks.anomaly.mock.calls[0][0] as Record<string, unknown>;
+    const request = unsupervisedMocks.anomaly.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(request).toMatchObject({
       dataset_id: "ds-test",
       contamination: 0.03,
@@ -269,7 +269,7 @@ describe("the EXPERIMENTAL Reinforcement Learning lane (part18 §6)", () => {
     expect(screen.getByText(/convergence episode 95/)).toBeInTheDocument();
     expect(screen.getByText(/first-20 mean -1\.200/)).toBeInTheDocument();
     expect(screen.getByText(/last-20 mean 0\.690/)).toBeInTheDocument();
-    const request = reinforceMocks.train.mock.calls[0][0] as Record<string, unknown>;
+    const request = reinforceMocks.train.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(request).toMatchObject({
       method: "q_learning",
       episodes: 150,
