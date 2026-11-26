@@ -233,8 +233,7 @@ export function BiologyPlayground() {
   const [seed, setSeed] = useState(DEFAULTS.seed);
   const [nCellLines, setNCellLines] = useState(DEFAULTS.nCellLines);
   const [result, setResult] = useState<BiomarkersResponse | null>(null);
-  /* (100x-124) the MAD variability ranking toggle — the desktop's
-   * "Rank variable genes (MAD)" button mirrored as a disclosure. */
+  /* Optional MAD variability ranking disclosure in this web-console demo. */
   const [showMad, setShowMad] = useState(false);
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);

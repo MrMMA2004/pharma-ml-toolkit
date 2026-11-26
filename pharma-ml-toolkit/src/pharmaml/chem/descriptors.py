@@ -137,8 +137,7 @@ def require_rdkit():
     except ImportError as exc:
         raise DependencyError(
             "RDKit is required for descriptor/fingerprint computation. "
-            "Install it with:  pip install 'pharmaml[chem]'  "
-            "(or pip install rdkit)"
+            "From the toolkit package root, run:  python -m pip install -e '.[chem]'"
         ) from exc
     return Chem
 
@@ -198,7 +197,7 @@ def compute_descriptors(
     descriptor_set:
         ``'rdkit_all'`` for all 2D RDKit descriptors, ``'morgan'`` for a
         fixed-radius Morgan count fingerprint, ``'mordred'`` for the
-        Mordred descriptor suite (needs ``pip install mordred``).
+        Mordred descriptor suite (included in the local ``.[chem]`` extra).
         Any other value raises instead of silently falling back.
         For ``'mordred'``, failed descriptor cells are part of the
         answer, not exceptions: mordred reports them as ``Missing``
@@ -274,7 +273,8 @@ def compute_descriptors(
             from mordred.error import Error, Missing
         except ImportError as exc:
             raise DependencyError(
-                "Mordred is not installed. Install with: pip install mordred"
+                "Mordred is not installed. From the toolkit package root run: "
+                "python -m pip install -e '.[chem]'"
             ) from exc
         calc = Calculator(descriptors, ignore_3D=True)
         # mordred's Result object is NOT a dict: keys() yields Descriptor

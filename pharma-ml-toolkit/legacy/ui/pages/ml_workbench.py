@@ -635,7 +635,7 @@ class MLWorkbenchPage(QWidget):
             extra = "deep" if estimator == "dnn" else "boosting"
             self._tune_summary.setText(
                 f"The {estimator} family needs the optional {required} backend "
-                f"-- pip install 'pharmaml[{extra}]' and re-run the search."
+                f"-- from the toolkit package root, run python -m pip install -e '.[{extra}]' and re-run the search."
             )
             return
         searcher = self._tune_searcher.currentText()

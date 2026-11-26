@@ -1019,10 +1019,9 @@ interface ToolkitStore {
   playgroundTab: string;
   setPlaygroundTab: (tab: string) => void;
 
-  /** (100x-129) Card-finder dialog over the Playground's cards — the
-   * web twin of the desktop Ctrl+F finder. Ephemeral UI state (never
-   * persisted), opened by the trigger button or the Ctrl/Cmd+Shift+F
-   * hotkey from anywhere in the app. */
+  /** Card-finder dialog over this Next.js Playground. Ephemeral UI
+   * state (never persisted), opened by the trigger or Ctrl/Cmd+Shift+F
+   * from anywhere in the web console. */
   cardFinderOpen: boolean;
   setCardFinderOpen: (open: boolean) => void;
 

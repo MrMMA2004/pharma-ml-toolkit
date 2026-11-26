@@ -87,7 +87,7 @@ class TestCanonicalizeTautomer:
 
         monkeypatch.setitem(sys.modules, "rdkit", None)
         monkeypatch.setitem(sys.modules, "rdkit.Chem", None)
-        with pytest.raises(DependencyError, match="pip install rdkit"):
+        with pytest.raises(DependencyError, match=r"python -m pip install -e '\.\[chem\]'"):
             canonicalize_tautomer("CCO")
 
 
@@ -173,7 +173,7 @@ class TestSmilesToPdb:
 
         monkeypatch.setitem(sys.modules, "rdkit", None)
         monkeypatch.setitem(sys.modules, "rdkit.Chem", None)
-        with pytest.raises(DependencyError, match="pip install rdkit"):
+        with pytest.raises(DependencyError, match=r"python -m pip install -e '\.\[chem\]'"):
             smiles_to_pdb("CCO", tmp_path / "x.pdb")
 
 

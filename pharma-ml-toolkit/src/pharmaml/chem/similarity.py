@@ -182,7 +182,7 @@ def _require_rdkit_similarity() -> None:
     except ImportError as exc:
         raise DependencyError(
             "RDKit is required for the SMILES-based similarity scan. "
-            "Install it with:  pip install 'pharmaml[chem]'"
+            "From the toolkit package root, run:  python -m pip install -e '.[chem]'"
         ) from exc
 
 

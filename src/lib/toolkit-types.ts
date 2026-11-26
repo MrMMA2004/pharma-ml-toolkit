@@ -242,8 +242,7 @@ export interface FeatureImportance {
   measure: "variance" | "gini";
 }
 
-/** One signed feature-target correlation (the web twin of the desktop
- *  interpretability bundle's signed_feature_correlations). */
+/** One signed feature-target correlation returned by a web-console run. */
 export interface SignedCorrelation {
   /** Raw column name. */
   name: string;
@@ -251,16 +250,13 @@ export interface SignedCorrelation {
   r: number;
 }
 
-/** The interpretability bundle a regression train response carries
- *  (100x-153): signed feature-target correlations plus the compact
- *  top-N correlation matrix, BOTH computed over the run's OWN held-out
- *  split in the same request — inherently swap-proof (a re-loaded
- *  dataset can never re-pair its target with an old run's features,
- *  the desktop round-36 audit's red finding). Undefined correlations
- *  (a constant column, or fewer than two held-out rows) are dropped,
- *  never zeroed; matrix cells that are undefined serialize as null. */
+/** Web-console interpretability bundle: signed feature-target
+ * correlations and a compact top-N matrix computed on this run's own
+ * held-out split and returned with its training response. Undefined
+ * correlations (for example, constant columns) are dropped, never
+ * zeroed; undefined matrix cells serialize as null. */
 export interface CorrelationBundle {
-  /** Always "pearson" (the honest single method this twin ships). */
+  /** Correlation method used by this response. */
   method: "pearson";
   /** The target column name. */
   target: string;
@@ -293,9 +289,8 @@ export interface MLTrainResponse {
   };
   /** Trees & ensembles: normalized impurity-reduction importances. */
   featureImportance?: FeatureImportance;
-  /** Regression only: the interpretability bundle (signed
-   *  feature-target correlations + the top-N matrix over the run's
-   *  own held-out rows — the desktop bundle's web twin, 100x-153). */
+  /** Regression only: the web-console bundle of signed feature-target
+   * correlations and the top-N matrix over this run's held-out rows. */
   correlations?: CorrelationBundle;
   /** kNN / MLP / Naive Bayes / SVM: echoed hyperparameters (the honest
    *  "learned parameters" card content for hyperparameter-driven models). */
@@ -556,8 +551,8 @@ export interface MLTuneResponse {
 }
 
 /* ------------------------------------------------------------------ */
-/* ML model comparison (the web mirror of pharmaml.ml.training.       */
-/* compare_models — the rar's signature workflow)                      */
+/* Next.js web-console model comparison request/response               */
+/* (uses shared folds; separate from Python compare_models metrics)     */
 /* ------------------------------------------------------------------ */
 
 export interface MLCompareRequest {
@@ -913,10 +908,9 @@ export interface FeatureFactoryResponse {
 /* Molecule surgery (generative topology moves + scaffold-hop breed)   */
 /* ------------------------------------------------------------------ */
 
-/** Response of /api/gen/surgery mode "topology": the one-step
- * ring-size mutant set of one molecule, plus the captioned 2D
- * structure grid as a base64 PNG data URI (the desktop "Ring
- * topology moves" card's twin — pharmaml.generative.ring_topology_moves). */
+/** Response of the Next.js `/api/gen/surgery` demo's topology mode:
+ * one-step ring-size mutants and a captioned 2D structure grid as a
+ * base64 PNG data URI, computed with `pharmaml.generative.ring_topology_moves`. */
 export interface SurgeryTopologyResponse {
   mode: "topology";
   source: string;
@@ -928,10 +922,10 @@ export interface SurgeryTopologyResponse {
   rdkitVersion: string;
 }
 
-/** Response of /api/gen/surgery mode "breed": the seeded
- * scaffold-hop-crossover litter (a failed draw is an honest null),
- * plus the parents-and-children structure grid (the desktop "Breed
- * two molecules" card's twin — pharmaml.generative.scaffold_hop_crossover). */
+/** Response of the Next.js `/api/gen/surgery` demo's breed mode:
+ * a seeded scaffold-hop-crossover litter (failed draws are null) plus
+ * the parents-and-children structure grid, computed with
+ * `pharmaml.generative.scaffold_hop_crossover`. */
 export interface SurgeryBreedResponse {
   mode: "breed";
   parentA: string;
@@ -951,7 +945,7 @@ export interface SurgeryBreedResponse {
 export type SurgeryResponse = SurgeryTopologyResponse | SurgeryBreedResponse;
 
 /* ------------------------------------------------------------------ */
-/* MCTS molecule search (the Studio Generative method's web twin)     */
+/* MCTS molecule search (separate Next.js web-console endpoint)        */
 /* ------------------------------------------------------------------ */
 
 /** One leaderboard row of an MCTS run: rank 1 = best. The breakdown
@@ -993,11 +987,9 @@ export interface MctsTreeStats {
   maxLen: number;
 }
 
-/** Response of /api/gen/mcts: the ranked leaderboard of one
- * MctsOptimizer run (ChemTSv2-style MCTS over an on-the-fly SMILES RNN
- * prior — the desktop Studio Generative page's MCTS method), with the
- * per-cycle history, the tree accounting and the top-molecule
- * structure grid as a base64 PNG data URI. */
+/** Response of /api/gen/mcts: one web-console MctsOptimizer run, with
+ * the ranked leaderboard, per-cycle history, tree accounting, and
+ * top-molecule structure grid as a base64 PNG data URI. */
 export interface MctsResponse {
   objective: string;
   objectiveLabel: string;
@@ -1019,13 +1011,12 @@ export interface MctsResponse {
 }
 
 /* ------------------------------------------------------------------ */
-/* Response AI — drug-response learning (the Studio page's web twin)  */
+/* Response AI — drug-response analysis (separate web-console demo)     */
 /* ------------------------------------------------------------------ */
 
-/** Which analysis the Response AI card runs — the four headline tabs
- * of the desktop Studio's Response AI page (hill / metrics / model /
- * cv). The page's deeper diagnostics (informative regression, the
- * response VAE, multi-omics fusion) stay desktop-side. */
+/** Which analysis the separate Next.js web-console demonstration runs.
+ * This list describes that card's endpoints only; it does not assert
+ * parity with the React/Tauri Studio or the complete Python API. */
 export type DrugResponseAnalysis = "hill" | "metrics" | "model" | "cv";
 
 /** Response of /api/ml/drugresponse analysis "hill": the four-parameter
@@ -1138,10 +1129,9 @@ export interface ResponseCvFold {
 }
 
 /** Response of /api/ml/drugresponse analysis "cv":
- * cross_validate_response over the seeded screen — folds split CELL
- * LINES (no cell line straddles a fold), each fold training a fresh
- * model with the Studio page's exact factory, the honest across-fold
- * mean pearson even when the toy screen barely carries signal. */
+ * `cross_validate_response` over the seeded screen. Folds split cell
+ * lines so none straddles a fold; each fold trains a fresh model through
+ * the Python package's drug-response factory. */
 export interface ResponseCvResponse {
   analysis: "cv";
   nFolds: number;
@@ -1274,14 +1264,13 @@ export interface MLAdResponse {
 }
 
 /* ------------------------------------------------------------------ */
-/* Learning curve (ml learning-curve — the desktop card's 100x-125     */
-/* web mirror: train-set size vs CV score, "should we assay more?")    */
+/* Learning-curve response types for the Next.js web-console demo       */
 /* ------------------------------------------------------------------ */
 
 /** One schedule point of POST /api/ml/learning-curve — both curves
  *  reduced across folds at one training-set size. */
 export interface MLLearningCurvePoint {
-  /** Absolute training-subset row count this point fit on. */
+  /** Largest per-fold training-subset row count at this fraction. */
   size: number;
   /** Mean score on the very rows each fit saw (training curve). */
   trainMean: number;
@@ -1293,11 +1282,11 @@ export interface MLLearningCurvePoint {
   valStd: number;
 }
 
-/** Response of POST /api/ml/learning-curve — the web twin of the
- *  desktop ML card's "Learning curve" figure (pharmaml.viz.
- *  plot_learning_curve's data semantics: the library's default
- *  10 % … 100 % 8-step schedule, mean ± std across folds at every
- *  size, and the gap verdict with the same 0.15 threshold). */
+/** Response returned by the Next.js `/api/ml/learning-curve` route.
+ * It borrows chart conventions from `pharmaml.viz.plot_learning_curve`
+ * (the 10 % … 100 % eight-step schedule, fold summaries, and 0.15 gap
+ * verdict). Its TypeScript fitters and per-fold rounded sample sizes are
+ * separate; this is not sklearn score or absolute-size parity. */
 export interface MLLearningCurveResponse {
   task: "regression" | "classification";
   model: string;
@@ -1319,17 +1308,18 @@ export interface MLLearningCurveResponse {
     kind: "synthetic" | "csv";
     fileName?: string;
   };
-  /** Regression GP only: the kernel the curve cloned — learned ONCE on
-   *  the full data by the LML grid search when the request left all
-   *  three slots unset (the sklearn clone semantics), then fixed for
-   *  every refit. */
+  /** Regression GP only: the web grid-search kernel selected once on
+   *  the full request data when all slots are unset, then fixed for each
+   *  size refit. Full-data selection includes validation-fold rows, so
+   *  these GP CV values are not an independent tuning evaluation. */
   gpKernel?: {
     lengthScale: number;
     signalStd: number;
     noiseStd: number;
   };
-  /** Classification GP only: (ℓ, σf) learned once on the full data by
-   *  the Laplace-lml grid search, then cloned by every refit. */
+  /** Classification GP only: (ℓ, σf) selected once by the web
+   *  Laplace-LML grid search on all request rows, then fixed for each
+   *  size refit; validation folds participate in that selection. */
   gpClsKernel?: {
     lengthScale: number;
     signalStd: number;
@@ -1337,31 +1327,25 @@ export interface MLLearningCurveResponse {
 }
 
 /* ------------------------------------------------------------------ */
-/* SHAP attribution (ml shap — the desktop GUI's fourth button row,   */
-/* compact web read: mean-|SHAP| over the run's own held-out rows,     */
-/* computed by the toolkit's Python tree twin via the bridge route)    */
+/* SHAP attribution response types for the Next.js web-console demo    */
 /* ------------------------------------------------------------------ */
 
 /** One ranked feature of POST /api/ml/shap's compact read. */
 export interface ShapRankRow {
   rank: number;
   feature: string;
-  /** Mean |SHAP| across the explained held-out rows (magnitude only —
-   *  the signed story is the beeswarm the desktop twin draws). */
+  /** Mean |SHAP| across explained held-out rows (magnitude only). */
   meanAbs: number;
 }
 
-/** Response of POST /api/ml/shap — the web twin of the desktop GUI's
- *  SHAP button row (round 37's pharmaml.ml.explain surface) in the
- *  compact form: the ranking needs no canvas, so the card renders in
- *  pure TypeScript while only the computation crosses into Python
- *  (build_model -> fit -> shap_summary over the run's re-derived rows
- *  and split — the frozen-train-request discipline). */
+/** Compact response returned by the Next.js `/api/ml/shap` route.
+ * The web card renders the ranking in TypeScript; the Python bridge
+ * computes attribution over the run's re-derived held-out rows. */
 export interface MLShapResponse {
   task: "regression" | "classification";
   /** The web playground's model id (the run's own). */
   model: string;
-  /** The Python twin's estimator class name (provenance for the caption). */
+  /** Python backend estimator class name, for result provenance. */
   pythonTwin: string;
   /** Mean-|SHAP| ranking over the run's held-out rows, descending. */
   top: ShapRankRow[];
@@ -1370,7 +1354,7 @@ export interface MLShapResponse {
   /** Held-out rows explained. */
   nSamples: number;
   nFeatures: number;
-  /** Training rows the twin was fitted on. */
+  /** Number of training rows used by the backend estimator. */
   nTrain: number;
   /** Feature names in frame order. */
   featureNames: string[];

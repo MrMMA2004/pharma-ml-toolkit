@@ -23,7 +23,10 @@ def _dependencies(protein_suffix: str) -> dict[str, str]:
     result = {}
     for package in packages:
         if importlib.util.find_spec(package) is None:
-            raise DependencyError(f"preparation requires {package}; install pharmaml[docking]")
+            raise DependencyError(
+                f"preparation requires {package}; from the toolkit package root run "
+                "python -m pip install -e '.[docking]'"
+            )
         try:
             result[package] = importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError as exc:

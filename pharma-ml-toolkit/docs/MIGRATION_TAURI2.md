@@ -1,4 +1,11 @@
-# MIGRATION_TAURI2 — the part11 campaign ledger
+# MIGRATION_TAURI2 — historical part11 campaign ledger
+
+**Status:** This is a versioned planning/evidence ledger, not the current
+install guide or release-status page. Its tables describe their recorded
+baselines and may predate the shipped desktop app. The supported desktop is
+React + TypeScript hosted by Tauri 2; the separate Next.js console is a
+separate application, and the older PySide6 UI is retired. See
+[`frontend/README.md`](../frontend/README.md) for current desktop scope.
 
 **Master prompt part11**: "Complete Migration to an Offline React +
 TypeScript Desktop Application Using Tauri 2, Python + FastAPI +

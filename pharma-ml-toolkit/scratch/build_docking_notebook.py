@@ -321,8 +321,9 @@ would actually run it:
 **and** protein preparation additionally need RDKit + Meeko:
 
 ```bash
-pip install -e ".[reports]"        # core + plotting
-pip install rdkit meeko gemmi       # §1–§3 preparation
+# Run from pharma-ml-toolkit/ (the toolkit package root).
+python -m pip install -e '.[reports]'        # plotting and report export
+python -m pip install -e '.[docking]'        # RDKit, Meeko and gemmi for preparation
 ```
 
 The demo campaign below is *synthetic but structurally identical* to real

@@ -42,21 +42,16 @@ import type {
 import { toast } from "sonner";
 
 /* ------------------------------------------------------------------ */
-/* Response AI — the Studio Response AI page's web twin               */
+/* Response AI — separate Next.js web-console demo                     */
 /* ------------------------------------------------------------------ */
 /**
- * The desktop Studio's Response AI page drives
- * `pharmaml.ml.drugresponse` (drug-response learning absorbed from
- * CaDRReS / Precily / DeepResponse) through eight tabs; the web twin
- * carried the other ML surfaces but never this module. This card
- * wires the four headline tabs: the four-parameter Hill fit (the
- * toolkit's own Levenberg–Marquardt engine), the response metrics +
- * rank correlations (Pearson / Spearman / RMSE / MAE + Kendall
- * tau-b), the CaDRReS bilinear factorisation on the seeded 12×4
- * screen, and the cell-line-grouped cross-validation — one POST runs
- * the REAL module on the server. The page's deeper diagnostics
- * (informative regression, the response VAE, multi-omics fusion)
- * stay desktop-side.
+ * This web-console card demonstrates four analyses over
+ * `pharmaml.ml.drugresponse`: a four-parameter Hill fit, response
+ * metrics and rank correlations, CaDRReS bilinear factorisation on a
+ * seeded 12×4 screen, and cell-line-grouped cross-validation. A POST
+ * runs the module on the server. The demo exposes only these operations;
+ * it is separate from the React/Tauri desktop app and does not imply
+ * feature parity with Studio or the Python package.
  */
 
 const ANALYSIS_OPTIONS: ReadonlyArray<{
@@ -80,9 +75,7 @@ type Status = "idle" | "running" | "done" | "error";
 
 /* ------------------------------ charts ------------------------------ */
 
-/** The fitted Hill curve: measured points + the fitted curve on the
- * log10-dose axis (the desktop plot's exact recipe — line over a
- * padded grid, scatter over the measured points). */
+/** The fitted Hill curve: measured points plus the fitted curve on a log10-dose axis. */
 function HillChart({ result }: { result: HillFitResponse }) {
   const W = 560;
   const H = 220;
@@ -153,9 +146,7 @@ function HillChart({ result }: { result: HillFitResponse }) {
   );
 }
 
-/** Observed-vs-predicted scatter with the identity reference — the
- * desktop metrics plot's twin (shared by the metrics and model
- * results). */
+/** Observed-vs-predicted scatter with an identity reference, shared by this demo's metrics and model results. */
 function PairScatter({
   x,
   y,
@@ -265,8 +256,7 @@ function LossChart({ losses }: { losses: number[] }) {
   );
 }
 
-/** The per-fold pearson bars — the desktop CV plot's twin (mean line
- * dashed). */
+/** Per-fold Pearson bars with a dashed mean line. */
 function CvBars({ result }: { result: ResponseCvResponse }) {
   const W = 560;
   const H = 200;
@@ -456,10 +446,9 @@ export function ResponseAICard() {
           <div>
             <CardTitle className="text-base">Response AI — drug-response learning</CardTitle>
             <CardDescription className="text-xs">
-              The four headline analyses of the Studio&apos;s Response AI page — the Hill 4PL
-              fit, the response metrics + rank correlations, the CaDRReS bilinear
-              factorisation, and cell-line-grouped cross-validation — mirroring{" "}
-              <code className="font-mono">pharmaml.ml.drugresponse</code> on the server
+              A separate Next.js web-console demo calling{" "}
+              <code className="font-mono">pharmaml.ml.drugresponse</code>. Its four analyses are
+              not the React/Tauri Studio and do not imply feature parity.
             </CardDescription>
           </div>
         </div>
@@ -661,8 +650,8 @@ export function ResponseAICard() {
             </Button>
           ) : null}
           <span className="ml-auto text-[11px] text-muted-foreground">
-            the deeper diagnostics (informative regression · response VAE · multi-omics
-            fusion) stay desktop-side
+            This web-console demo omits other analyses available through the Python API; see
+            package documentation for the separate workflow scope.
           </span>
         </div>
 

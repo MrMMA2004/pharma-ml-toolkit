@@ -29,7 +29,7 @@ import type { SAScoreResponse, SAScoreRow } from "@/lib/toolkit-types";
 import { toast } from "sonner";
 
 /* ------------------------------------------------------------------ */
-/* Synthetic Accessibility score — part3 §24, the web twin             */
+/* Synthetic Accessibility score — web-console card                   */
 /* ------------------------------------------------------------------ */
 /**
  * MASTER_PROMPT part3 section 24: SA scoring over the generative

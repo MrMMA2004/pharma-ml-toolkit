@@ -46,9 +46,8 @@ export function Playground() {
       onValueChange={setPlaygroundTab}
       className="w-full"
     >
-      {/* The sub-tab strip with the card finder beside it (100x-129): the
-          web twin of the desktop Ctrl+F — the dialog itself is mounted at
-          the page level so the hotkey works from any top tab. */}
+      {/* The Next.js console's sub-tab strip and card finder. The dialog
+          is mounted at page level so its shortcut works from any top tab. */}
       <div className="flex flex-wrap items-center justify-center gap-2">
       <TabsList className="thin-scrollbar mx-auto grid h-auto w-full max-w-3xl grid-cols-2 gap-1 overflow-x-auto p-1 sm:grid-cols-4 lg:max-w-fit lg:grid-cols-10">
         <TabsTrigger
@@ -107,8 +106,7 @@ export function Playground() {
           <GitCompare className="size-4 shrink-0" aria-hidden />
           Ligand Sets
         </TabsTrigger>
-        {/* (100x-130) the Surgery sub-tab — the web twin of the desktop
-            Generative tab's two molecule-surgery cards. */}
+        {/* Surgery is a separate Next.js web-console demonstration tab. */}
         <TabsTrigger
           value="generative"
           className="min-h-11 gap-1.5 px-2 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm sm:px-3 sm:text-sm"
@@ -129,10 +127,8 @@ export function Playground() {
       </TabsList>
         <CardFinderTrigger />
       </div>
-      {/* (100x-127) the session report strip — the web twin of the
-          desktop File ▸ Save session report (HTML): the collector walks
-          the persisted playground state on every sub-tab, so the card
-          rides above the tab content, not inside any one of them. */}
+      {/* This web-console session report walks persisted browser state on
+          every sub-tab, so it sits above the tab content. */}
       <div className="mt-4 sm:mt-6">
         <SessionReport />
       </div>

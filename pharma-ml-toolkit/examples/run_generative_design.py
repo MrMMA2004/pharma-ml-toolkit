@@ -23,9 +23,10 @@ Usage::
 
     python examples/run_generative_design.py
 
-Requires RDKit (``pip install "pharmaml[chem]"``) and, for the RL half,
-torch (``pip install "pharmaml[deep]"``); the trajectory figure needs
-matplotlib (``pip install "pharmaml[reports]"``).  Runtime: ~17 s on one
+From the `pharma-ml-toolkit/` package root, install RDKit with
+``python -m pip install -e '.[chem]'`` and, for the RL half, torch with
+``python -m pip install -e '.[deep]'``; the trajectory figure needs matplotlib
+(``python -m pip install -e '.[reports]'``). Runtime: ~17 s on one
 CPU core (the structural GA arm is the slowest of the four).
 """
 

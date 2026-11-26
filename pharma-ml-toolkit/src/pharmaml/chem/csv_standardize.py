@@ -557,8 +557,8 @@ def _require_rdkit() -> Any:
         from rdkit import Chem
     except ImportError as exc:  # pragma: no cover - env guard
         raise DependencyError(
-            "RDKit is required for CSV SMILES standardization "
-            "(pip install rdkit)"
+            "RDKit is required for CSV SMILES standardization. From the toolkit package root run: "
+            "python -m pip install -e '.[chem]'"
         ) from exc
     from rdkit import Chem
 

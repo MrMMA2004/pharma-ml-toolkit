@@ -1,14 +1,8 @@
-/**
- * The TS twin of pharmaml.biology.most_variable_genes (the 100x-124
- * web mirror of the desktop's "Rank variable genes (MAD)" button).
- *
- * Variability is the median absolute deviation (MAD) of each gene's
- * values across the panel — the robust workhorse for RNA-seq feature
- * selection. The ranking is deterministic: genes sort by MAD
- * descending, ties broken by gene name ascending, exactly the library
- * contract, so the parity guard (scratch/probe_mad_parity_124.{ts,py})
- * can compare the two implementations row-by-row.
- */
+/** Web-console TypeScript implementation aligned with
+ * `pharmaml.biology.most_variable_genes`. It ranks gene variability by
+ * median absolute deviation (MAD): descending by MAD, with gene name as
+ * an ascending tie-break. Parity probes compare the calculation with
+ * the Python package contract; they do not imply UI or feature parity. */
 
 export interface VariableGeneRow {
   /** 1-based rank by MAD descending. */

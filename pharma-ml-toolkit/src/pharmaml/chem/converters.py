@@ -823,8 +823,7 @@ def _require_rdkit():
     except ImportError as exc:
         raise DependencyError(
             "RDKit is required for molecular file-format conversion. "
-            "Install it with:  pip install 'pharmaml[chem]'  "
-            "(or pip install rdkit)"
+            "From the toolkit package root, run:  python -m pip install -e '.[chem]'"
         ) from exc
     return Chem, AllChem
 

@@ -26,7 +26,7 @@ The suite pins:
   active, the restore on clean exit AND on exception, the preset list;
 * the guard when the ``selfies`` package is missing (import-blocker
   monkeypatch): the ``DependencyError`` carries the exact
-  ``pip install 'pharmaml[selfies]'`` command.
+  ``python -m pip install -e '.[selfies]'`` command.
 
 The real-path tests skip when ``selfies`` (or RDKit, for the audit
 halves) is absent; the blocker test runs everywhere.
@@ -371,7 +371,7 @@ def test_missing_selfies_raises_actionable_dependency_error(
         return real_import(name, *args, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(builtins, "__import__", blocked)
-    with pytest.raises(DependencyError, match=r"pip install 'pharmaml\[selfies\]'"):
+    with pytest.raises(DependencyError, match=r"python -m pip install -e '\.\[selfies\]'"):
         codec.smiles_to_selfies("CCO")
-    with pytest.raises(DependencyError, match=r"pip install 'pharmaml\[selfies\]'"):
+    with pytest.raises(DependencyError, match=r"python -m pip install -e '\.\[selfies\]'"):
         codec.selfies_to_smiles("[C][C][O]")

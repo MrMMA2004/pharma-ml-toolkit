@@ -26,7 +26,7 @@ The suite pins:
   ``permutation_feature_importance`` sibling or the exact misuse;
 * the guard when shap is missing (simulated by import-blocker
   monkeypatch): the ``DependencyError`` carries the exact
-  ``pip install 'pharmaml[explain]'`` command;
+  ``python -m pip install -e '.[explain]'`` command;
 * the two figures: the bar chart's top-N ordering, labels, and the
   DataFrame-input twin; the beeswarm's row ordering, the seeded
   jitter's determinism (two calls -> identical offsets), the
@@ -387,7 +387,7 @@ class TestShapInteractions:
             return real_import(name, *args, **kwargs)  # type: ignore[arg-type]
 
         monkeypatch.setattr(builtins, "__import__", blocked)
-        with pytest.raises(DependencyError, match=r"pip install 'pharmaml\[explain\]'"):
+        with pytest.raises(DependencyError, match=r"python -m pip install -e '\.\[explain\]'"):
             shap_interactions(object(), np.zeros((3, 2)))
 
     def test_stub_success_path_shapes_the_record(
@@ -970,7 +970,7 @@ class TestShapSummaryRealPath:
 
         monkeypatch.setattr(builtins, "__import__", blocked)
         model, frame = self._gbr()
-        with pytest.raises(DependencyError, match=r"pip install 'pharmaml\[explain\]'"):
+        with pytest.raises(DependencyError, match=r"python -m pip install -e '\.\[explain\]'"):
             shap_summary(model, frame)
 
     def test_end_to_end_both_figures_render(self) -> None:

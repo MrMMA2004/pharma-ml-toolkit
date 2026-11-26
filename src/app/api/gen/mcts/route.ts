@@ -5,13 +5,12 @@ import { bridgeErrorResponse, runPythonBridge } from "@/lib/python-bridge";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** The web twin of the desktop Studio Generative page's MCTS method
- * ("monte carlo tree search (MCTS)" — the ChemTSv2-style
- * MctsOptimizer over an on-the-fly SMILES RNN prior): one POST runs
- * the REAL pharmaml.generative search with real RDKit + torch on the
- * server and returns the ranked leaderboard, the per-cycle history and
- * the top-molecule structure grid. Mirrors the bridge caps in
- * scripts/mcts_bridge.py. */
+/** Next.js web-console endpoint for its MCTS molecule-search demo.
+ * One POST invokes the real pharmaml.generative MctsOptimizer with
+ * RDKit and PyTorch on the server and returns a leaderboard, per-cycle
+ * history, and molecule-structure grid. This endpoint is a separate
+ * interface surface and does not establish feature parity with the
+ * React/Tauri desktop app. Request caps match scripts/mcts_bridge.py. */
 
 const MAX_ITERATIONS = 24;
 const MIN_ITERATIONS = 4;

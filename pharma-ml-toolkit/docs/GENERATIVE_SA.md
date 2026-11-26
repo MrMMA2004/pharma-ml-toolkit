@@ -66,5 +66,6 @@ print("accepted:", len(filtered.kept), "rejected:", len(filtered.rejected))
 SA is a computational estimate based on molecular complexity and fragment
 familiarity; it does not plan or verify a synthesis, starting materials, or
 reaction conditions. A favorable score is not evidence that a compound can
-actually be synthesized. Install RDKit and its Contrib SA_Score database with
-`pip install 'pharmaml[chem]'`; some alternative RDKit builds omit that data.
+actually be synthesized. From the inner `pharma-ml-toolkit/` package root,
+install RDKit and its Contrib SA_Score database with
+`python -m pip install -e '.[chem]'`; some alternative RDKit builds omit that data.

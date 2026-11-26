@@ -929,7 +929,8 @@ def _generate_one_structure(
                 row["mol2"] = str(mol2_path)
             except ImportError:
                 row["error"] = (
-                    "MOL2 skipped: OpenBabel not installed (pip install openbabel)"
+                    "MOL2 skipped: Open Babel Python bindings are unavailable; "
+                    "this optional external dependency is not included in a toolkit extra."
                 )
             except Exception as exc:  # noqa: BLE001 — OpenBabel error zoo
                 row["error"] = f"MOL2 generation failed: {exc}"

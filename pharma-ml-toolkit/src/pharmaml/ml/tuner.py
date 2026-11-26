@@ -2239,7 +2239,7 @@ def build_deep_regressor(hp: HyperParameters) -> Any:
     ``dropout`` (0-0.4 step 0.1), ``learning_rate``, ``activation``
     (relu/tanh/gelu) and ``batchnorm`` (Boolean) — plus the ``epochs``
     resource (30-150, step 10).  Requires the optional torch dependency
-    (``pip install 'pharmaml[deep]'``).
+    (``python -m pip install -e '.[deep]'``).
     """
     from pharmaml.ml.neural import DeepMLPRegressor
 

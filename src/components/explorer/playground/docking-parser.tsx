@@ -95,9 +95,11 @@ function loadDockingInput(): DockingPersisted | null {
 }
 
 /* ------------------------------------------------------------------ *
- * Torsion QA mini-widget — a client-side mirror of the Python API
- * pharmaml.docking.check_torsion_consistency: identical counting
- * rules (per trimmed line) and identical convention resolution.
+ * Torsion QA mini-widget — a browser-side checker for pasted PDBQT
+ * text. It applies the same TORSDOF / active-REMARK / BRANCH count
+ * invariants and auto-convention choice as the Python API for ordinary
+ * decimal PDBQT records; it is not the file-reading or directory-scan
+ * API itself.
  * ------------------------------------------------------------------ */
 
 type TorsionConvention = "auto" | "mgltools" | "meeko";
@@ -194,11 +196,12 @@ interface TorsionAudit {
   explanation: string;
 }
 
-/** Mirror of pharmaml.docking.check_torsion_consistency, line by line:
- * per trimmed line the last well-formed `TORSDOF <int>` wins (malformed
- * values are ignored), `REMARK … A …` lines mark active torsions and
- * `BRANCH` lines grow the torsion tree; the convention then applies the
- * MGLTools three-way invariant or the Meeko two-way one. */
+/** Apply the same count invariants and auto-convention choice as
+ * pharmaml.docking.check_torsion_consistency to pasted text. For ordinary
+ * ASCII PDBQT records, a signed-decimal second field on a `TORSDOF` line
+ * updates the count (later valid values win), active `REMARK … A …` lines
+ * and `BRANCH` lines are counted, then the MGLTools or Meeko invariant is
+ * applied. Unlike Python, this helper does not read files or scan folders. */
 function auditTorsionTree(content: string, convention: TorsionConvention): TorsionAudit {
   let torsdof = 0;
   let activeRemarks = 0;
@@ -769,7 +772,7 @@ export function DockingParser() {
             <div>
               <CardTitle className="text-base">Torsion QA</CardTitle>
               <CardDescription className="text-xs">
-                Ligand PDBQT torsion-tree audit — mirroring{" "}
+                Pasted-text torsion audit — same count rules as{" "}
                 <code className="font-mono">pharmaml.docking.check_torsion_consistency</code>
               </CardDescription>
             </div>
@@ -919,7 +922,7 @@ export function DockingParser() {
           )}
 
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Parity:{" "}
+            Python file/API equivalents (they accept paths; this card checks pasted text):{" "}
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
               pharmaml.docking.check_torsion_consistency(path, convention={JSON.stringify(convention)})
             </code>{" "}

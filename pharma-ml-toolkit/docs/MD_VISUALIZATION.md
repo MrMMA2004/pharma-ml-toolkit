@@ -50,4 +50,5 @@ values; mismatches raise an error instead of silently pairing unrelated
 samples. Constant-series correlations are undefined and shown as `N/A`.
 Pearson correlation is descriptive and does not establish causation.
 
-Install plotting dependencies with `pip install 'pharmaml[reports]'`.
+From the inner `pharma-ml-toolkit/` package root, install plotting dependencies
+with `python -m pip install -e '.[reports]'`.

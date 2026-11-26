@@ -1,28 +1,11 @@
 /* ------------------------------------------------------------------ */
-/* The pinned-trace store (100x-136) — the web twin of the desktop      */
-/* playground's report_page_order session-file key.                     */
-/*                                                                      */
-/* A pin deliberately held by the reader (Enter on a focused trace      */
-/* group in the report-preview sketch) survives the dialog closing      */
-/* and the page reloading, remembered per browser.  The map is keyed    */
-/* by the figure section's title (the collector's stable identity       */
-/* for it) and rides localStorage — exactly the way the desktop's       */
-/* order memory rides the auto-saved session file.                      */
-/*                                                                      */
-/* The store is wrapped as a React external store (the TSX side         */
-/* subscribes through useSyncExternalStore, so the component needs NO   */
-/* restore effect at all): reads ride an in-memory mirror hydrated      */
-/* once from the key (getSnapshot must stay cheap and stable between    */
-/* writes), writes update the mirror AND the key and then notify       */
-/* every subscriber.  SSR hydrates against the server snapshot (null —  */
-/* the honest nothing), and the client's stored pin lands in the        */
-/* follow-up render React runs after subscribing, so there is never a   */
-/* hydration mismatch.                                                  */
-/*                                                                      */
-/* Every read is failure-tolerant (a corrupt payload is treated as      */
-/* empty — never a broken report) and every write is best-effort (a     */
-/* blocked localStorage still updates the mirror: the pin lives for     */
-/* this page even when the browser refuses to remember it).             */
+/* Pinned-trace persistence for the separate Next.js report preview.    */
+/* A pin survives closing the preview and reloading the page; the map   */
+/* is keyed by figure title and stored in localStorage. This React      */
+/* external store keeps a hydrated in-memory snapshot for stable reads, */
+/* notifies subscribers on changes, and supports server rendering with */
+/* a null initial snapshot. Reads and writes tolerate unavailable or    */
+/* corrupt localStorage; a pin still lasts for the current page.        */
 /* ------------------------------------------------------------------ */
 
 /** localStorage key for the per-figure pinned trace map. */

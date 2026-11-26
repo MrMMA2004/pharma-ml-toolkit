@@ -18,10 +18,11 @@ absorbed here:
 * the informative error message pattern (the PySide6 wheel names the
   missing sub-package and prints guidance instead of a stack trace).
 
-The playground's GUI stays tkinter; this module is how the toolkit
-*knows* whether a Qt stack (PySide6 or PyQt6 wheels, if a user
-installs them) is available for an optional richer backend — the same
-"essentials vs addons" split the PySide6 wheels make.
+The historical Tk playground and the PySide6 interface are both retired.
+This module remains as a lightweight compatibility probe for consumers that
+still need to detect Qt; it is not used by the supported React/Tauri desktop
+application or the separate Next.js console. The ``.[studio]`` extra is kept
+only for reproducing the archived PySide6 source.
 
 Examples
 --------
@@ -137,8 +138,8 @@ def probe_qt_backend() -> QtBackendInfo:
         module=None,
         available=False,
         version=None,
-        note="no Qt binding installed (PySide6/PyQt6) — the toolkit's "
-        "tkinter GUI stands on its own, as designed.",
+        note="no Qt binding installed (PySide6/PyQt6); the archived PySide6 "
+        "interface is unsupported and is not the current PharmaML Studio.",
     )
 
 
@@ -155,9 +156,10 @@ def import_qt_backend() -> object:
     info = probe_qt_backend()
     if info.module is None or not info.available:
         raise ImportError(
-            "no usable Qt binding found — install one with "
-            "'pip install PySide6' (or PyQt6) to enable the optional "
-            "Qt-rich backend. " + info.note
+            "no usable Qt binding found. Qt is used only by the retired PySide6 "
+            "interface, not the supported React/Tauri desktop app. To reproduce "
+            "the archived UI, from the toolkit package root run "
+            "python -m pip install -e '.[studio]'. " + info.note
         )
     return importlib.import_module(_WIDGET_SUBMODULES[info.module])
 
@@ -167,4 +169,4 @@ def describe_qt_backend() -> str:
     info = probe_qt_backend()
     if info.available:
         return f"Qt backend: {info.module} {info.version or ''} (optional)".rstrip()
-    return "Qt backend: not installed — tkinter remains the GUI engine"
+    return "Qt backend: not installed — archived PySide6 UI is unsupported"

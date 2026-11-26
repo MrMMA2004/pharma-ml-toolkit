@@ -558,7 +558,8 @@ def compare_models(
             if not spec.available:
                 raise ModelError(
                     f"Model {name!r} requires optional package {spec.requires!r}; "
-                    "install pharmaml[boosting] or drop it from the list"
+                    "from the toolkit package root, run python -m pip install -e '.[boosting]'"
+                    "or drop it from the list"
                 )
             if spec.task not in {task, "both"}:
                 raise ModelError(f"Model {name!r} does not support {task}")

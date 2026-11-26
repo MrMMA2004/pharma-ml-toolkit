@@ -522,7 +522,7 @@ def save_pdf_report(
     A report with no tables and no figures stays a pure title page --
     a contents list of nothing is noise, so it is skipped entirely.
 
-    Requires fpdf (``pip install 'pharmaml[reports]'``); non-latin-1
+    Requires fpdf (``python -m pip install -e '.[reports]'``); non-latin-1
     punctuation is transliterated (``em dash`` -> ``-``) because the
     built-in Helvetica only encodes latin-1 -- the report never crashes
     on a unicode metric name.
@@ -579,8 +579,8 @@ def save_pdf_report(
         from fpdf import FPDF
     except ImportError as exc:  # pragma: no cover - environment guard
         raise DependencyError(
-            "fpdf is not installed. Install with: pip install fpdf "
-            "(or 'pharmaml[reports]')"
+            "fpdf is not installed. From the toolkit package root run: "
+            "python -m pip install -e '.[reports]'"
         ) from exc
 
     dest = Path(out_path)
@@ -707,7 +707,7 @@ def export_docx(
     PharmaML export (compact floats, ``NaN``/``inf`` never leak as raw
     ``nan``).
 
-    Requires python-docx (``pip install 'pharmaml[reports]'``).
+    Requires python-docx (``python -m pip install -e '.[reports]'``).
 
     Parameters
     ----------
@@ -732,8 +732,8 @@ def export_docx(
         from docx import Document
     except ImportError as exc:  # pragma: no cover - environment guard
         raise DependencyError(
-            "python-docx is not installed. Install with: pip install python-docx "
-            "(or 'pharmaml[reports]')"
+            "python-docx is not installed. From the toolkit package root run: "
+            "python -m pip install -e '.[reports]'"
         ) from exc
 
     dest = Path(path)

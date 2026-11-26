@@ -412,7 +412,7 @@ def _require_rdkit() -> Any:
 
     Same lazy-import guard as :func:`pharmaml.chem.descriptors.require_rdkit`
     (kept local so this module stands alone): RDKit is an optional
-    ``pip install 'pharmaml[chem]'`` extra, so importing it at module top
+    ``python -m pip install -e '.[chem]'`` extra, so importing it at module top
     would break rdkit-less installs of the rest of the package.
     """
     try:
@@ -420,8 +420,7 @@ def _require_rdkit() -> Any:
     except ImportError as exc:
         raise DependencyError(
             "RDKit is required for drug-likeness scoring. "
-            "Install it with:  pip install 'pharmaml[chem]'  "
-            "(or pip install rdkit)"
+            "From the toolkit package root, run:  python -m pip install -e '.[chem]'"
         ) from exc
     return Chem
 

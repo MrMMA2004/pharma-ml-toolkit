@@ -151,8 +151,8 @@ def _fragment_scores() -> dict[int, float]:
         import rdkit
     except ImportError as exc:
         raise DependencyError(
-            "RDKit is required for SA scoring. Install it with: "
-            "pip install 'pharmaml[chem]'  (or pip install rdkit)"
+            "RDKit is required for SA scoring. From the toolkit package root, run: "
+            "python -m pip install -e '.[chem]'"
         ) from exc
     data_path = Path(rdkit.__file__).parent / "Contrib" / "SA_Score" / "fpscores.pkl.gz"
     if not data_path.exists():
@@ -297,8 +297,8 @@ def sa_score(source: str | Any) -> SAScoreResult:
         from rdkit import Chem
     except ImportError as exc:
         raise DependencyError(
-            "RDKit is required for SA scoring. Install it with: "
-            "pip install 'pharmaml[chem]'  (or pip install rdkit)"
+            "RDKit is required for SA scoring. From the toolkit package root, run: "
+            "python -m pip install -e '.[chem]'"
         ) from exc
 
     if not isinstance(source, str):

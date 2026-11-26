@@ -24,12 +24,15 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * POST /api/ml/compare — train 2–6 models side by side at their default
- * hyperparameters and rank them on the SAME CV folds (the web mirror of
- * `pharmaml.ml.training.compare_models`, the signature workflow of the
- * original rar's per-script comparisons). Every model gets:
- * - the mean ± std CV score over folds shared with every other model,
- * - an honest held-out metric from a refit on the train split,
+ * POST /api/ml/compare — the Next.js console's own 2–6-model comparison.
+ * It borrows the shared-fold leaderboard idea from
+ * `pharmaml.ml.training.compare_models` and the original archive's
+ * comparison workflow, but uses the browser model fitters and its own
+ * metric contract (R² for regression, accuracy for classification); it
+ * is not a numerically equivalent port of the Python function. Each
+ * model gets:
+ * - mean ± population std over the same web-route CV folds,
+ * - a held-out metric from a refit on the route's train split,
  * - the wall-clock fit time of that refit.
  */
 const bodySchema = z

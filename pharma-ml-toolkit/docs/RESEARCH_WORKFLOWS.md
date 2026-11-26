@@ -3,10 +3,23 @@
 These are narrow tools, not a complete validation platform. CLI commands below
 print JSON; the CLI does not write reports unless you choose to redirect output. Hash and checkpoint inspections assume files are stable while read.
 
-## Data quality in Studio
+**Interface status:** The supported desktop is the React + TypeScript/Tauri 2
+application in `frontend/`; the separate Next.js console is another product.
+Any UI walkthroughs in this guide describe only the retired PySide6 implementation
+(`legacy/studio.py` and `ui/`). They are archival and unsupported, are not part
+of either current app, and do not imply feature parity. The Python API and CLI
+workflows are documented independently; see [`frontend/README.md`](../frontend/README.md)
+for current desktop scope.
 
-In **Data Explorer**, load a table, optionally select a class, an exact ID key,
-and a split column, then choose **Run data audit**. The result reports missing
+## Data quality audit
+
+The CLI command `pharmaml data audit-splits` is the current documented route for
+auditing exact-key overlap across separate files. The UI walkthrough below is
+archival and describes only the retired PySide6 implementation, not the current
+React/Tauri Studio.
+
+In the retired PySide6 interface's **Data Explorer**, load a table, optionally
+select a class, an exact ID key, and a split column, then choose **Run data audit**. The result reports missing
 cells, duplicate rows, extra duplicate keys, class counts and, if both key and
 split are selected, cross-split exact-key overlap. Audits run in the shared
 background job runner; they are not cancellable or resumable. A new load
@@ -55,47 +68,46 @@ Exact disjointness is not independence. Marginal conformal coverage relies on
 exchangeability; subgroup coverage is empirical, **not** a conditional coverage
 guarantee. Wilson intervals assume independent evaluation observations and
 common coverage within groups; small groups, correlations, subgroup selection
-and shift can invalidate comparisons. This regression workflow uses one fixed model. In Studio, open
-**Model Analysis → Uncertainty…** and select the same three separate files;
-list one numeric feature name per line. The Studio dialog runs in the shared
-background runner and does not reuse the current trained model. This operation
-is not cancellable or resumable. Editing any input clears the previous report.
-Use **Save report…** to create a new JSON file (existing files are never
-replaced), and **Compare saved reports…** to inspect input-hash, parameter,
-environment and summary differences. A failed save can leave a partial new
-file; inspect it before reuse. Reports can contain sensitive subgroup labels.
+and shift can invalidate comparisons. This regression workflow uses one fixed
+model. The retired PySide6 interface had a **Model Analysis → Uncertainty…**
+dialog for these three files; that screen and its background-job controls are
+archival only and are not part of current React/Tauri Studio. Its historical
+workflow did not reuse the current trained model and did not support cancelling
+or resuming the operation. Input edits cleared the report; saving created a new
+JSON file, and comparison inspected input-hash, parameter, environment and
+summary differences. A failed save could leave a partial file. Reports may
+contain sensitive subgroup labels.
 
-## Statistics-tab conformal and subgroup tools
+## Retired PySide6 Statistics-tab conformal and subgroup tools
 
-The older **ML Workbench → Statistical tools** conformal buttons reuse the
-selected fitted model and its scored rows. They now split those rows by
-position, with a fixed random seed: approximately half calibrate and the rest
-are evaluated. Regression coverage and classification set summaries therefore
-no longer evaluate the very same rows used for calibration. Too few calibration
-rows may prevent a finite regression radius; classification can fall back to
-full sets. The split is not stratified, and rare classes can have little or no
-calibration data. The tools cannot verify that the source model was fitted and
-selected independently of these rows, particularly for a loaded bundle or a
-previously explored run. Exchangeability, independence and prospective
-validity are not established; for an explicitly separate train/calibration/test
-workflow use **Model Analysis → Uncertainty…** above.
+The retired PySide6 **ML Workbench → Statistical tools** conformal buttons
+reused the selected fitted model and its scored rows. They split those rows by
+position, with a fixed random seed: approximately half calibrated and the rest
+were evaluated. Regression coverage and classification set summaries therefore
+did not evaluate the same rows used for calibration. Too few calibration rows
+could prevent a finite regression radius; classification could fall back to
+full sets. The split was not stratified, and rare classes could have little or
+no calibration data. These historical tools could not verify that the source
+model was fitted and selected independently of those rows, particularly for a
+loaded bundle or a previously explored run. Exchangeability, independence and
+prospective validity were not established. This retired PySide6 workflow is not
+available in current React/Tauri Studio; use the separate-file CLI workflow above.
 
-Coverage-by-group uses the evaluation rows and alpha saved with the last
-regression conformal run, including mean interval width in its CSV output.
-Subgroup metrics use the actual indexed scored rows, not a reconstructed 25%
-split. Both refuse if indexed features and targets do not match the current
-dataset, or if row identity is unavailable or ambiguous. Group labels come from
-the current dataset and are **not authenticated**: identical features and targets
-cannot prove their original metadata or independence, especially for duplicate
-rows. Keep the dataset stable and verify labels, avoid test-set selection, and
-interpret group-level Wilson intervals under their independence and common-rate
-assumptions. These tools cannot establish conditional coverage or eliminate
+In that retired implementation, coverage-by-group used the evaluation rows
+and alpha saved with the last regression conformal run, including mean interval
+width in its CSV output. Subgroup metrics used indexed scored rows rather than a
+reconstructed 25% split. The tools refused mismatched indexed features/targets
+and unavailable or ambiguous row identity. Group labels came from the selected
+dataset and were **not authenticated**: identical features and targets could
+not prove original metadata or independence, especially for duplicate rows.
+These historical tools could not establish conditional coverage or eliminate
 leakage.
 
 ## Held-out classification uncertainty
 
-Choose **Classification — logistic prediction sets** in the same Studio
-dialog, or run:
+The retired PySide6 uncertainty dialog offered **Classification — logistic
+prediction sets**; that control is not part of current React/Tauri Studio. For
+the independently documented CLI workflow, run:
 
 ```sh
 pharmaml ml conformal-classification --train train.csv --calibration cal.csv \
@@ -124,12 +136,12 @@ classification nested CV, or scientific validation of the model.
 
 ## Optional held-out model diagnostics
 
-Select **Include kNN distance and classification probability diagnostics**
-in the uncertainty dialog, or add `--diagnostics` to either uncertainty CLI
-command. These checks use the same previously held-out test set and do not
-change the fitted model, conformal thresholds or prediction sets. They can be
-expensive on large descriptor tables; they are off by default and the job is
-not cancellable or resumable.
+The retired PySide6 uncertainty dialog had an **Include kNN distance and
+classification probability diagnostics** checkbox; it is not a current
+React/Tauri Studio control. In the current CLI workflow, add `--diagnostics` to
+either uncertainty command. These checks use the same previously held-out test
+set and do not change the fitted model, conformal thresholds or prediction
+sets. They can be expensive on large descriptor tables and are off by default.
 
 For classification, the report includes a multiclass Brier score defined as
 mean **sum** of squared errors over classes per observation (range 0–2, including
@@ -150,11 +162,13 @@ do not choose models or thresholds using the evaluation set. Dependence,
 missing descriptors, feature scaling and high-dimensional distance effects can
 change interpretation. Full individual predictions are not included.
 
-## Prepare docking inputs in Studio
+## Prepare docking inputs: archived PySide6 interface
 
-Under **Docking Workbench → Campaign summary → Prepare docking inputs…**,
-select a receptor (PDB, PDBQT or mmCIF), a CSV/TSV/Excel ligand table with a
-SMILES column, and a **new** output directory whose parent already exists.
+The retired PySide6 UI exposed **Docking Workbench → Campaign summary →
+Prepare docking inputs…**. Its historical procedure was to select a receptor
+(PDB, PDBQT or mmCIF), a CSV/TSV/Excel ligand table with a SMILES column, and a
+**new** output directory whose parent already exists. This screen is not part of
+the current React/Tauri Studio.
 SMILES and name columns can be specified or auto-detected. Choose the optional
 single-character PDB chain, water removal, non-water HETATM retention and
 ligand embedding seed. Review lists source hashes, chosen columns, counts of
@@ -183,7 +197,8 @@ and chemistry. Bad residues are not automatically deleted. The ligand path
 performs one seeded 3D embedding/optimization, not protonation, tautomer
 selection, or exhaustive conformer sampling. Check structures and biological
 context independently; reproducibility across versions or hardware is not
-certified. Install `pharmaml[docking]` for preparation.
+certified. From the toolkit package root, install the local extra with
+`python -m pip install -e '.[docking]'` for preparation.
 
 Preparation does not write a Vina config, choose a box, validate engine output,
 or launch docking. After inspecting the prepared files, create a separate
@@ -192,11 +207,13 @@ the review/launch workflow below with the prepared `ligands/` folder. Never
 point the launch output at the preparation folder; launch requires a different
 new directory.
 
-## Vina campaign review and launch in Studio
+## Vina campaign review and launch: archived PySide6 interface
 
-Under **Docking Workbench → Campaign summary → Review / launch Vina campaign…**,
-select an existing Vina config, prepared PDBQT ligand directory, and a **new,
+The retired PySide6 UI exposed **Docking Workbench → Campaign summary →
+Review / launch Vina campaign…**. Its historical procedure was to select an
+existing Vina config, prepared PDBQT ligand directory, and a **new,
 non-existing** output directory (type the new path; its parent must exist).
+This screen is not part of the current React/Tauri Studio.
 Review displays the receptor, explicit Vina box in Å, engine launch prefix,
 input fingerprints and output census. Review itself is read-only and does not
 prove the engine works or the files are chemically valid. Unsupported config
@@ -235,11 +252,13 @@ pharmaml docking campaign-status --dir /path/to/campaign
 pharmaml docking campaign-status --dir /path/to/campaign --check-originals
 ```
 
-Studio offers the same read-only inspection at **Docking Workbench → Campaign
-summary → Inspect Vina campaign progress…**. It applies only to the
-review-first Vina launcher described above. It reports the manifest's recorded
-status, counts of recorded successful/failed and unrecorded ligands, and
-whether recorded successful pose/log pairs still match their fingerprints. It
+The retired PySide6 UI offered a read-only inspection at **Docking Workbench →
+Campaign summary → Inspect Vina campaign progress…**. That screen applied only
+to its review-first launcher and is not part of current React/Tauri Studio. The
+CLI command above remains the current documented inspection path. The historical
+screen reported the manifest's recorded status, counts of recorded
+successful/failed and unrecorded ligands, and whether recorded successful
+pose/log pairs still matched their fingerprints. It
 also checks the copied source config, receptor and ligand snapshots, verifies
 the generated config against the recorded plan (line endings normalized), and
 lists unrecorded files/directories under `results/`. A recorded `running` status
@@ -255,7 +274,7 @@ paths; engine resolution itself is not re-run. With the option off, originals
 are not read. Symlinks inside campaign outputs are refused. The CLI returns
 zero for a readable inspection even when it reports missing, changed, failed,
 unfinished or unrecorded items; inspect the JSON rather than treating exit zero
-as successful docking. Both UI and CLI may disclose names and paths.
+as successful docking. The CLI and the retired UI could disclose names and paths.
 
 Inspection and fingerprints assume a trusted, quiescent filesystem. Manifests
 are unsigned and can be edited; a matching record does not prove the engine
@@ -273,15 +292,17 @@ pharmaml ml calibrate-binary --train training.csv --calibration probability_cal.
   --key compound_id --positive-label active
 ```
 
-Studio offers the same workflow under **Model Analysis → Probability
-recalibration…**. Specify the exact text of the positive class; the input reader
-preserves literal label and identifier text. The new base model is a binary
-logistic regression fitted with median imputation and scaling **only on train**.
-A second L2-regularized logistic sigmoid (C=1) is fitted to the base model's
-decision score **only on the separate probability-calibration file**. Both
-training and probability-calibration data must contain both classes; test must
-contain only those classes. A convergence warning aborts rather than silently
-reporting an unconverged fit. This is a fixed procedure, not automatic model or
+The retired PySide6 UI offered this workflow under **Model Analysis →
+Probability recalibration…**; it is not a current React/Tauri Studio control.
+The CLI/API procedure is independent of that interface. Specify the exact text
+of the positive class; the input reader preserves literal label and identifier
+text. The new base model is a binary logistic regression fitted with median
+imputation and scaling **only on train**. A second L2-regularized logistic
+sigmoid (C=1) is fitted to the base model's decision score **only on the
+separate probability-calibration file**. Both training and
+probability-calibration data must contain both classes; test must contain only
+those classes. A convergence warning aborts rather than silently reporting an
+unconverged fit. This is a fixed procedure, not automatic model or
 calibration-method selection.
 
 The report compares uncalibrated and recalibrated test-set binary Brier score
@@ -289,8 +310,9 @@ The report compares uncalibrated and recalibrated test-set binary Brier score
 existing multiclass Brier sum shown in the reliability section is twice the
 binary Brier score. Class counts, ID-duplicate counts, settings, input hashes
 and environment are recorded. Test labels are never used for fitting or
-selection. No model or per-row predictions are saved. The Studio report can be
-saved to a **new** JSON file; a failed save may leave a partial file.
+selection. No model or per-row predictions are saved. The retired PySide6
+dialog could save a report to a **new** JSON file; a failed save could leave a
+partial file. Its historical job could not be stopped or resumed.
 
 This is **probability** calibration, not conformal calibration. For a
 subsequent conformal procedure, use an additional independent conformal
@@ -335,10 +357,11 @@ make them unstable, and the unweighted fold mean does not weight by fold size.
 Neither workflow produces a final fitted model, calibrates probabilities, or
 substitutes for an untouched external evaluation.
 
-In Studio, **Model Analysis → Nested validation…** offers both tasks in the
-shared background runner. Progress counts completed outer folds. **Stop at next
-fold boundary** is cooperative: it cannot interrupt an active fold, and
-cancelled partial results are not saved or resumable. The file-based report
+The retired PySide6 UI offered both tasks under **Model Analysis → Nested
+validation…** in its shared background runner. Progress counted completed outer
+folds. **Stop at next fold boundary** was cooperative: it could not interrupt
+an active fold, and cancelled partial results were not saved or resumable. This
+screen is not part of the current React/Tauri Studio. The file-based report
 records a hash checked around parsing and the environment; the hash is not a
 race-free snapshot and does not prove independence or reproducibility.
 
@@ -379,11 +402,12 @@ even for equivalent fitted models. Records may expose sensitive settings,
 column names and environment details. Untrusted joblib models must never be
 loaded; the comparison command reads JSON only.
 
-Studio **Utilities Workbench → Reproducibility diagnostics → Compare training
-records…** compares two such JSON files in the background; it does not train a
-model or require loading its artifact. Matching records do not establish
-scientific validity or reproducibility. This integration covers the CLI `ml
-train` path only, not the Studio training path or other model workflows.
+The retired PySide6 UI exposed **Utilities Workbench → Reproducibility
+diagnostics → Compare training records…** to compare two such JSON files in
+the background; it did not train a model or require loading its artifact. This
+screen is not part of current React/Tauri Studio. Matching records do not
+establish scientific validity or reproducibility. The integration covers the
+CLI `ml train` path only, not other model workflows.
 
 ## Provenance and reproducibility diagnostics
 
@@ -414,26 +438,26 @@ Existing `tools/diagnose_data_drift.py` performs a separate, read-only generated
 CSV comparison; environment inspection does not modify any results or strict
 byte comparison policy.
 
-In Studio, **Utilities Workbench → Reproducibility & checkpoint diagnostics… →
-Create declared manifest…** fingerprints one selected file and records a
-user-entered split strategy and optional `NAME=VALUE` parameters. This does not
-run or observe training. The fingerprint assumes a stable file while reading;
-the background job cannot be stopped or resumed, and closing the dialog does
-not stop it. Saving creates a new JSON file exclusively (a failed save may
-leave a partial file). The manifest can contain sensitive names, parameters and
-environment information. **Compare declared manifests…** compares two such
-manifests, whether created by Studio or the CLI, and reports dataset-hash,
-parameter, split-strategy and environment differences. Neither tool verifies
-what was trained or establishes reproducibility. The same dialog provides
-environment details, checkpoint inspection and the checkout's
-`tools/diagnose_data_drift.py` strict generated-data check. The latter runs in
-an isolated child process and requires the diagnostic script, example data and
-its dependencies; installations without them report failure rather than a
-fictitious clean result. Exit 1 is reported as **strict byte drift**, even when
-numeric differences are tiny; no rounding, tolerance or data rewrite is applied.
-The job cannot be stopped or resumed. The checks assume the files are not
-concurrently modified and do not establish numerical or scientific equivalence.
-Reports can contain sensitive paths and environment information.
+The retired PySide6 UI exposed **Utilities Workbench → Reproducibility &
+checkpoint diagnostics… → Create declared manifest…**. That historical screen
+fingerprinted one selected file and recorded user-entered split strategy and
+optional `NAME=VALUE` parameters; it did not run or observe training. The
+fingerprint assumed a stable file while reading. Its background job could not
+be stopped or resumed, and closing the dialog did not stop it. Saving created a
+new JSON file exclusively, though a failed save could leave a partial file.
+**Compare declared manifests…** compared manifests created by the retired UI or
+the CLI and reported dataset-hash, parameter, split-strategy and environment
+differences. Neither tool verified what was trained or established
+reproducibility. The same archived dialog provided environment details,
+checkpoint inspection and the checkout's `tools/diagnose_data_drift.py` strict
+generated-data check. The latter ran in an isolated child process and required
+the diagnostic script, example data and its dependencies; installations
+without them reported failure rather than a fictitious clean result. Exit 1 was
+reported as **strict byte drift**, even when numeric differences were tiny; no
+rounding, tolerance or data rewrite was applied. This UI is not part of the
+current React/Tauri Studio. The checks assume files are not concurrently
+modified and do not establish numerical or scientific equivalence. Reports may
+contain sensitive paths and environment information.
 
 ## Checkpoint inspection
 
@@ -452,20 +476,22 @@ extend resumability to additional operations. Existing proof-backed checkpoint
 support and the separate release recovery tooling retain their documented
 limitations.
 
-## Genetic search in Studio
+## Genetic search: archived PySide6 interface
 
-In **Generative Workbench → Evolve**, the genetic algorithm reports progress
-at generation boundaries. **Stop** requests cooperative cancellation at the
-next boundary; it cannot interrupt a generation in progress. A Stop requested
-too late, including during the final generation, may finish normally rather
-than cancel. When the backend returns a partial result, Studio labels it partial and displays its leaderboard
-and completed history. The partial is in memory only: Studio does not save a
-GA checkpoint, offer resume, or extract a Pareto front from a partial run.
-Closing the page does not stop a running job. RL, MCTS and the other generative
-operations remain single-shot and do not gain this Stop behavior.
+The retired PySide6 UI's **Generative Workbench → Evolve** workflow reported
+progress at generation boundaries. **Stop** requested cooperative cancellation
+at the next boundary and could not interrupt a generation in progress. A Stop
+requested too late, including during the final generation, could finish normally
+rather than cancel. When the backend returned a partial result, that interface
+labelled it partial and displayed its leaderboard and completed history. The
+partial was in memory only: the retired UI did not save a GA checkpoint, offer
+resume, or extract a Pareto front from a partial run. Closing the page did not
+stop a running job. RL, MCTS and the other generative operations remained
+single-shot and did not gain this Stop behavior. This history does not describe
+controls in the current React/Tauri Studio or separate Next.js console.
 
-The lower-level genetic checkpoint mechanism is not exposed as a Studio resume
-feature. Its revised identity covers GA settings, the ordered canonical corpus
+The lower-level genetic checkpoint mechanism is not documented as a React/Tauri
+Studio resume feature. Its revised identity covers GA settings, the ordered canonical corpus
 and seeds, supported objective parameters, package Python source, Python, RDKit
 and platform metadata. Unsupported or modified objectives, older identities,
 mismatches and malformed files fail rather than silently restarting. Use a new
@@ -477,8 +503,8 @@ never share a checkpoint directory between concurrent writers. See the
 
 ## Still to build
 
-Provenance integration across other model and Studio training runs, generalized
-safe resume, broader docking preparation/chemistry review,
+Provenance integration across other model-training workflows, generalized safe
+resume, broader docking preparation/chemistry review,
 broader classification validation, multiclass recalibration and applicability methods, and a
 full reproducibility certification system are not delivered here. Existing docking engines and
 campaign APIs, label-conditional conformal APIs, and proof-backed checkpoints

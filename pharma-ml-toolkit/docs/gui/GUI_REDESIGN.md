@@ -1,6 +1,12 @@
-# PharmaML Studio — the PySide6 GUI (directive #16, increment 1)
+# PharmaML Studio — retired PySide6 GUI redesign (historical)
 
-Round 206 delivers the first increment of the complete GUI redesign
+> **Archived design record:** launch commands below refer to the retired,
+> unsupported PySide6 implementation; they are not instructions for the current
+> desktop app. The supported desktop is React + TypeScript hosted by Tauri 2.
+> The separate Next.js console is not the desktop app. See
+> [`../../frontend/README.md`](../../frontend/README.md) for current desktop guidance.
+
+Round 206 delivered the first increment of the complete GUI redesign
 mandated by `upload/MASTER_PROMPT part2.pdf` (the expanded 44-page
 four-technology edition: **PySide6** application framework,
 **PyQtGraph** scientific visualization, **Qt-Material** primary

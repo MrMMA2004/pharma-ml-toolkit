@@ -684,7 +684,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         },
         notes=(
             "deep feed-forward network (PyTorch, batchnorm=True available) — "
-            "needs `pip install 'pharmaml[deep]'`"
+            "needs `python -m pip install -e '.[deep]'`"
         ),
     ),
     "dnn_residual": ModelSpec(
@@ -699,7 +699,7 @@ MODEL_REGISTRY: dict[str, ModelSpec] = {
         },
         notes=(
             "residual deep network (PyTorch, batchnorm=True available) — "
-            "needs `pip install 'pharmaml[deep]'`"
+            "needs `python -m pip install -e '.[deep]'`"
         ),
     ),
     "dnn_numpy": ModelSpec(
@@ -1052,7 +1052,7 @@ def build_model(
         extra = _REQUIREMENT_EXTRAS.get(requires, requires)
         raise DependencyError(
             f"Model {key!r} requires the optional package '{requires}'. "
-            f"Install with:  pip install 'pharmaml[{extra}]'"
+            f"From the toolkit package root, run:  python -m pip install -e '.[{extra}]'"
         )
 
     if spec.name in _TASK_FACTORIES:

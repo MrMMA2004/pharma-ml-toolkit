@@ -76,9 +76,10 @@ one bundled corpus.
 | 10 | **Publish** — leaderboard CSV + one-click visual bundle | `pharmaml.viz` |
 | 11 | **Recap** | — |
 
-Requires RDKit (`pip install 'pharmaml[chem]'`) for the scoring / GA half and
-PyTorch (`pip install 'pharmaml[deep]'`) for the RNN / RL half — both are
-imported lazily, so importing the subpackage itself needs neither.
+From the `pharma-ml-toolkit/` package root, install the local extras
+with `python -m pip install -e '.[chem,deep]'` for RDKit-based scoring/GA
+and PyTorch RNN/RL workflows. Both dependencies are imported lazily, so
+importing the subpackage itself needs neither.
 """
 
 SETUP_MD = """\

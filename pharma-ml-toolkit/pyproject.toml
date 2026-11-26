@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pharmaml"
 version = "1.2.243"
-description = "A production-ready toolkit for QSAR machine learning, pharmaceutical calculations (PK/PD/dosage), and molecular-docking workflows."
+description = "Research-oriented Python toolkit for QSAR, pharmaceutical calculations, cheminformatics, and molecular-docking workflows."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -88,8 +88,9 @@ reports = [
     # only exporting needs it (same contract as matplotlib).
     "Pillow>=10.0",
 ]
-# Offscreen Studio testing; install alongside the pinned core stack when
-# reproducing CI. This does not install optional chemistry or docking packages.
+# Offscreen tests for the retired PySide6 UI; install only when reproducing
+# its legacy test suite. This does not test the React/Tauri frontend or install
+# optional chemistry or docking packages.
 gui-test = [
     "PySide6>=6.8,<7",
     "pyqtgraph>=0.13.7,<0.14",
@@ -98,9 +99,9 @@ gui-test = [
     "pytest>=7.4",
     "pytest-qt>=4.5,<5",
 ]
-# The desktop Studio GUI itself (r33 review C-3.2): `python studio.py`
-# needs the Qt stack, which is NOT part of the core library dependencies.
-# Install with: pip install ".[studio]"
+# Legacy compatibility extra for the retired PySide6 GUI source.
+# It does not install the supported React/Tauri desktop application and
+# is not intended for new Studio users.
 studio = [
     "PySide6>=6.8,<7",
     "pyqtgraph>=0.13.7,<0.14",

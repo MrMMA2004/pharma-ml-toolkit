@@ -1,4 +1,10 @@
-# Release readiness — the Phase-6 evidence report (part6 §16)
+# Release readiness — historical Phase-6 evidence report (part6 §16)
+
+**Status:** Historical snapshot for the version recorded below; it is not current
+release evidence. The PySide6 dependency rows refer to the retired interface,
+not the supported React/Tauri desktop app. The Next.js console is separate.
+Use the [frontend guide](../frontend/README.md) and current GitHub release
+artifacts for present-day scope/evidence.
 
 Generated 2026-11-19 by `tools/release_readiness.py`.
 Every number below comes from a live probe or a recorded test

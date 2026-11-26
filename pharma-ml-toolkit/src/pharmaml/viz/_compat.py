@@ -120,8 +120,7 @@ def require_matplotlib():
     except ImportError as exc:  # pragma: no cover - depends on env
         raise DependencyError(
             "matplotlib is required for plotting and HTML reports. "
-            "Install it with:  pip install 'pharmaml[reports]'  "
-            "(or pip install matplotlib)"
+            "From the toolkit package root, run:  python -m pip install -e '.[reports]'"
         ) from exc
     # Headless-safe: never open a GUI window, never require $DISPLAY —
     # but don't hijack the inline backend of a running notebook.

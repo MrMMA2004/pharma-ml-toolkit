@@ -1,4 +1,10 @@
-# MIGRATION_WINUI3 — the part10 campaign ledger
+# MIGRATION_WINUI3 — historical part10 campaign ledger
+
+**Status:** This Windows/WinUI planning ledger is superseded by the React +
+TypeScript/Tauri 2 desktop implementation. Its statements that PySide6 is still
+production or retirement is blocked are historical; PySide6 is now retired.
+The separate Next.js console is not the desktop application. See
+[`frontend/README.md`](../frontend/README.md) for current desktop scope.
 
 **Master prompt**: "Complete Migration to C# WinUI 3 + XAML + MVVM,
 Full Python Backend Integration via FastAPI and WebSocket,

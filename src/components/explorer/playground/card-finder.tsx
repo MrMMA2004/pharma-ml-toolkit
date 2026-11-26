@@ -14,30 +14,23 @@ import {
 } from "@/components/explorer/playground/card-directory";
 
 /* ------------------------------------------------------------------ */
-/* Card finder — the web twin of the desktop Ctrl+F (100x-129)          */
+/* Card finder — Next.js Playground navigation                         */
 /* ------------------------------------------------------------------ */
 /**
- * Filter every Playground card by title / blurb / keywords, jump to the
- * one you pick: the finder switches the top tab (if you were elsewhere),
- * the Playground sub-tab and — for the PK / PD Explorer — the inner tab,
- * then scrolls the card into view and flashes it (the desktop finder's
- * own flash-and-jump semantics).
- *
- * The desktop binds Ctrl+F; the browser owns Ctrl+F (page find), so the
- * web twin takes Ctrl/Cmd+Shift+F — the honest shortcut note is pinned
- * in the dialog footer. Jumping resolves the catalog's `match` string
- * against the live `[data-slot="card"]` elements' textContent; a
- * renamed card surfaces as an explicit "could not find" toast rather
- * than a silent wrong jump.
+ * Filters this web Playground's cards by title, blurb, or keywords and
+ * navigates to a match across the top tab, Playground sub-tab, and—when
+ * needed—the PK / PD inner tab. It then scrolls to the live card and
+ * flashes it. The browser owns Ctrl+F, so this dialog uses
+ * Ctrl/Cmd+Shift+F. Catalog drift surfaces as an explicit "could not
+ * find" message instead of a silent jump to the wrong card.
  */
 
 const HOTKEY_LABEL = "Ctrl+Shift+F";
 const JUMP_TIMEOUT_MS = 2_500;
 
-/** (100x-130) the recency row's localStorage key + cap — the same
- * honest memory the desktop Ctrl+F finder gained this round: the ids
- * of the cards you actually LANDED on, most recent first,
- * de-duplicated, capped. A failed resolve is never remembered. */
+/** Recency row's localStorage key + cap: record cards reached through
+ * this web-console finder, newest first, de-duplicated, and capped. A
+ * failed resolve is never remembered. */
 const RECENT_STORAGE_KEY = "pharmaml.cardFinder.recent";
 const RECENT_CAP = 6;
 
@@ -389,11 +382,9 @@ function CardFinderDialog({ onClose }: { onClose: () => void }) {
                 esc
               </kbd>
             </div>
-            {/* (100x-130) the recency row — one chip per card you
-                actually landed on, newest first (the desktop Ctrl+F
-                finder's "Recently jumped" row, localStorage-backed so
-                it survives reloads; entries whose id left the catalog
-                are honestly dropped, never dead chips). */}
+            {/* Recent cards reached through this web-console finder.
+                The row survives reloads; entries no longer in the catalog
+                are dropped rather than shown as dead chips. */}
             {recentEntries.length > 0 && !recentCleared ? (
               <div className="flex flex-wrap items-center gap-1.5 border-b bg-muted/20 px-3.5 py-2">
                 <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-muted-foreground">

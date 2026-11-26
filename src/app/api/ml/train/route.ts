@@ -379,14 +379,11 @@ function ensembleSummaryCls(
 }
 
 /* ------------------------------------------------------------------ */
-/* The interpretability bundle (100x-153) — the desktop bundle's web   */
-/* twin: signed correlations + the top-N matrix over the run's OWN     */
-/* held-out rows, computed in the SAME request that trained the model, */
-/* so the pairing is inherently swap-proof (the desktop round-36      */
-/* audit's red finding: a re-loaded dataset must never re-pair its    */
-/* target with an old run's features). Undefined correlations (a      */
-/* constant column, fewer than two held-out rows) are dropped, never  */
-/* zeroed.                                                             */
+/* Web-console interpretability bundle: signed correlations plus a    */
+/* top-N matrix over the training run's own held-out rows. Keeping     */
+/* this with the training response prevents later CSV uploads from   */
+/* re-pairing a target with features from an older run. Undefined     */
+/* correlations are dropped, never represented as zero.              */
 /* ------------------------------------------------------------------ */
 
 function buildCorrelationBundle(
@@ -403,8 +400,7 @@ function buildCorrelationBundle(
     const r = pearsonCorrelation(rowIndices.map((i) => columnValue(j, i)), y);
     if (Number.isFinite(r)) defined.push({ name, r, j });
   });
-  /* |r| descending; Array.prototype.sort is stable (ES2019+), so ties
-   * keep column order — the desktop bundle's first-declared-wins. */
+  /* |r| descending; stable sort keeps the input column order for ties. */
   defined.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
   const top = defined.slice(0, 7);
   let matrix: CorrelationBundle["matrix"] = null;
@@ -477,8 +473,10 @@ function runRegression(
 
   const hp = resolveHyper(req);
   /* GP: when the request leaves all three kernel hyperparameters unset,
-   *  the fit LEARNS them by the deterministic LML grid search (the web
-   *  mirror of the library's marginal-likelihood-tuned kernel). */
+   *  this browser-side fitter selects them by a deterministic LML grid
+   *  search. That differs from the Python package's sklearn optimizer;
+   *  do not treat the selected values or predictions as numerically
+   *  interchangeable with its GaussianProcessRegressor. */
   const directives =
     req.lengthScale === undefined && req.signalStd === undefined && req.noiseStd === undefined
       ? { learnGpKernel: true }
@@ -521,8 +519,8 @@ function runRegression(
   const yTrue = test.map((i) => ys[i] ?? 0);
   const yPred = test.map((i) => fit.predict([xs[i] ?? 0]));
   const metrics = regressionMetrics(yTrue, yPred);
-  /* (100x-153) the interpretability bundle over the run's OWN held-out
-   * rows — the desktop bundle's web twin (single-feature here). */
+  /* The web-console interpretability bundle over this run's own held-out
+   * rows (single-feature path). */
   const correlations = buildCorrelationBundle(
     featureNames,
     (j, i) => (j === 0 ? (xs[i] ?? 0) : 0),
@@ -659,9 +657,8 @@ function runMultiRegression(
   const yTrue = test.map((i) => csv.y[i] ?? 0);
   const yPred = test.map((i) => fit.predict(csv.X[i] ?? []));
   const metrics = regressionMetrics(yTrue, yPred);
-  /* (100x-153) the interpretability bundle over the run's OWN held-out
-   * rows — the desktop bundle's web twin (the multi-feature path is
-   * where the top-N matrix earns its keep). */
+  /* The web-console interpretability bundle over this run's own held-out
+   * rows (the multi-feature path uses the top-N matrix). */
   const correlations = buildCorrelationBundle(
     csv.features,
     (j, i) => csv.X[i]?.[j] ?? 0,
@@ -866,13 +863,10 @@ function runClassification(
     for (const p of boundary) p.proba = fit.predictProba(p.x, p.y);
   }
 
-  /* (100x-154) the interpretability bundle for classification too —
-   * the desktop twin serves these runs (no task guard there: a 0/1
-   * label is a numeric target and the feature–label Pearson r is the
-   * point-biserial correlation, the standard "which feature separates
-   * the classes" read).  Same swap-proof construction as the
-   * regression paths: the run's OWN held-out rows, in the same
-   * request that trained the model. */
+  /* Classification uses the same web-console bundle: correlating each
+   * feature with a binary 0/1 label gives the point-biserial coefficient.
+   * As in regression, compute it on this run's held-out rows and return
+   * it with the training response. */
   const correlations = buildCorrelationBundle(
     featureNames,
     (j, i) => (j === 0 ? (pts[i]?.x ?? 0) : (pts[i]?.y ?? 0)),

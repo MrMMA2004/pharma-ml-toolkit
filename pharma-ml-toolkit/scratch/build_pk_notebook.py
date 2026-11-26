@@ -76,7 +76,8 @@ brings them into the codebase.
 **Setup** — install the package with the plotting extra first:
 
 ```bash
-pip install -e ".[reports]"
+# Run from pharma-ml-toolkit/ (the toolkit package root).
+python -m pip install -e '.[reports]'
 ```
 
 Every number below comes from a fixed-seed simulation, so the notebook is

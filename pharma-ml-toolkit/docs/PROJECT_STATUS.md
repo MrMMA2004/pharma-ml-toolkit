@@ -1,8 +1,11 @@
-# PROJECT_STATUS — the single authoritative status document
+# PROJECT_STATUS — historical status snapshot
 
-Part13 §2 deliverable ("Create a single authoritative project-status
-document with the actual current state"). Replaces no audit; it
-summarises them and wins any status disagreement.
+This report records the project state at its dated Part13 audit baseline; it is
+not the current product or release-status source. Its older UI, PySide6 and
+blocked-migration statements must be read as historical. The supported desktop
+is React + TypeScript hosted by Tauri 2, the Next.js console is separate, and
+the PySide6 interface is retired. Use the [repository README](../../README.md)
+and [frontend guide](../frontend/README.md) for current user-facing scope.
 
 - **Audit date**: 2026-11-21 (round 307, the 98th recorded run;
   Phase-2 addendum round 309; Phase-3 addendum round 310 — the

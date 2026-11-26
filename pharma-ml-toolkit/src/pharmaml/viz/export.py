@@ -134,8 +134,7 @@ def require_pillow():
     except ImportError as exc:  # pragma: no cover - depends on env
         raise DependencyError(
             "Pillow is required for TIFF/JPEG image export. "
-            "Install it with:  pip install 'pharmaml[reports]'  "
-            "(or pip install Pillow)"
+            "From the toolkit package root, run:  python -m pip install -e '.[reports]'"
         ) from exc
     return Image
 

@@ -117,10 +117,27 @@ def test_non_dict_stage_return_is_a_loud_error() -> None:
         run_pipeline("badreturn", [Stage(name="a", fn=lambda a: [1, 2])])
 
 
-def test_missing_dependency_fails_with_the_pip_command() -> None:
-    stage = Stage(name="needs_nothing_real", fn=lambda a: {},
-                  requires=("definitely_not_a_module_xyz",))
-    with pytest.raises(DependencyError, match="pip install"):
+def test_missing_known_dependency_uses_a_source_local_extra(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import importlib.util
+
+    monkeypatch.setattr(importlib.util, "find_spec", lambda _name: None)
+    stage = Stage(name="needs_chemistry", fn=lambda a: {}, requires=("rdkit",))
+    with pytest.raises(
+        DependencyError,
+        match=r"python -m pip install -e '\.\[chem\]'",
+    ):
+        run_pipeline("deps", [stage])
+
+
+def test_missing_unknown_dependency_does_not_guess_a_package_command() -> None:
+    stage = Stage(
+        name="needs_nothing_real",
+        fn=lambda a: {},
+        requires=("definitely_not_a_module_xyz",),
+    )
+    with pytest.raises(DependencyError, match="supported package manager"):
         run_pipeline("deps", [stage])
 
 

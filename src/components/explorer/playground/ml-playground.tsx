@@ -617,9 +617,9 @@ const MODEL_NOTES: Record<string, string> = {
   svm_rbf:
     "Gaussian-kernel machine solved in one closed form: (K + λI)⁻¹ (regression) or the bias-augmented LS-SVM system (classification, λ = 1/(2C)).",
   gaussian_process:
-    "Kriging with an RBF + white kernel: with Learn kernel on, a deterministic marginal-likelihood grid search picks ℓ / σf / σn (the web mirror of sklearn's LML-tuned kernel) and the σ you see is the prediction interval — latent posterior σ plus the learned σn. Untick it to pin the kernel at the sliders' values.",
+    "Kriging with an RBF + white kernel: with Learn kernel on, this browser demo uses a deterministic marginal-likelihood grid search to pick ℓ / σf / σn. The Python package uses sklearn's optimizer instead, so selected values and predictions need not match. The displayed σ is the prediction interval — latent posterior σ plus learned σn. Untick to pin the sliders' values.",
   gaussian_process_cls:
-    "Laplace GP classification (the library's gaussian_process_classifier): a latent σf²·RBF(ℓ) GP squashed through the logistic likelihood; Newton iteration finds the posterior mode and the Williams–Barber 5-erf integral turns the latent mean/variance into a calibrated probability. With Learn kernel on, a Laplace-lml grid search picks (ℓ, σf); boundary-dot opacity tracks |p − 0.5| — the classifier's own uncertainty surface.",
+    "Browser Laplace GP classification: a latent σf²·RBF(ℓ) GP squashed through the logistic likelihood; Newton iteration finds the posterior mode and the Williams–Barber 5-erf integral turns the latent mean/variance into a probability. Fixed-kernel inference is checked against sklearn; with Learn kernel on, this demo uses its own Laplace-LML grid search, so kernel selection can differ. Boundary-dot opacity tracks |p − 0.5| — the classifier's own uncertainty surface.",
   gaussian_nb: "Class-conditional Gaussians (μ, σ per feature) feed the log-posterior; no tunable hyperparameters.",
   mlp: "One tanh hidden layer, full-batch gradient descent, seeded init — a demo-scale network, not production deep learning.",
   hsvr:
@@ -948,9 +948,9 @@ function lcRows(result: MLLearningCurveResponse): LcRow[] {
   }));
 }
 
-/** Custom tooltip for the learning curve: the size plus both scores
- *  with their fold spread in one compact card (the default tooltip
- *  would list the stacked band internals). */
+/** Custom tooltip for the learning curve: the largest fold-specific
+ *  subset size plus both scores and their fold spread in one compact
+ *  card (the default tooltip would list the stacked band internals). */
 function LcTooltip({
   active,
   payload,
@@ -965,7 +965,7 @@ function LcTooltip({
   if (!p) return null;
   return (
     <div className="rounded-md border bg-background/95 px-2.5 py-1.5 text-xs shadow-sm">
-      <p className="font-mono tabular-nums">train size = {p.size}</p>
+      <p className="font-mono tabular-nums">largest fold train size = {p.size}</p>
       <p className="font-mono tabular-nums" style={{ color: CHART.teal }}>
         training {metricName} = {fmtNum(p.trainMean, 4)}
       </p>
@@ -985,9 +985,8 @@ function corrStrength(r: number): string {
   return "weak";
 }
 
-/** Diverging cell colour for the correlation heatmap (100x-153):
- * rose → white → teal over r ∈ [-1, 1] — the CHART house palette's
- * twins of the desktop plot's red→white→teal. */
+/** Diverging colour for this web-console correlation heatmap: rose →
+ * white → teal over r ∈ [-1, 1], using the CHART palette. */
 function corrCellColor(r: number): string {
   const teal = [20, 184, 166]; // CHART.teal #14b8a6
   const rose = [244, 63, 94]; // CHART.rose #f43f5e
@@ -999,11 +998,11 @@ function corrCellColor(r: number): string {
   return `rgb(${rgb[0] ?? 255}, ${rgb[1] ?? 255}, ${rgb[2] ?? 255})`;
 }
 
-/** The interpretability card (100x-153) — the desktop bundle's web
- *  twin: signed feature-target correlation bars plus the compact
- *  top-N matrix, over the run's OWN held-out rows (computed in the
- *  same request that trained the model, so the pairing is inherently
- *  swap-proof). Undefined correlations are dropped, never zeroed. */
+/** Web-console interpretability card: signed feature-target correlation
+ * bars and a compact top-N matrix over this run's held-out rows. The
+ * training response carries the bundle, so a later dataset upload cannot
+ * re-pair its target with features from an older run. Undefined values
+ * are dropped, never represented as zero. */
 function CorrelationCard({
   bundle,
   task,
@@ -1125,9 +1124,8 @@ function CorrelationCard({
               <span className="font-mono text-[10px] text-muted-foreground">+1</span>
             </div>
             <p className="text-[11px] leading-snug text-muted-foreground">
-              Computed in the same request that trained the model, on the held-out split only — a
-              re-loaded dataset can never re-pair its target with an old run's features (the
-              desktop round-36 audit's swap hazard, designed out here from the start).
+              Computed with the training response on the held-out split, so a re-loaded dataset
+              cannot re-pair its target with features from an older run.
             </p>
           </div>
         ) : null}
@@ -1140,13 +1138,11 @@ function CorrelationCard({
  *  the pharmaml registry's always-available sklearn tree estimators). */
 const SHAP_TREE_MODELS = new Set(["decision_tree", "random_forest", "extra_trees", "gradient_boosting"]);
 
-/** The SHAP web twin (100x-156): the desktop GUI's fourth button row in
- *  the compact form — mean-|SHAP| bars over the run's own held-out rows,
- *  computed by the toolkit's Python tree twin via the bridge route. The
- *  ranking is pure numbers, so the card renders entirely in TypeScript;
- *  only the computation crosses into Python. Non-tree runs get the
- *  honest pointer (TreeExplainer explains trees — the model-agnostic
- *  read is the desktop twin's permutation importance). */
+/** Compact SHAP view in the Next.js console: mean-|SHAP| bars for the
+ * run's held-out rows, computed by the Python tree explainer via the
+ * bridge route and rendered in TypeScript. Non-tree runs receive an
+ * explicit scope note; the Python package exposes permutation importance
+ * as a model-agnostic alternative. */
 function ShapCard({
   model,
   task,
@@ -1174,8 +1170,8 @@ function ShapCard({
           SHAP feature attribution
         </CardTitle>
         <CardDescription className="text-xs">
-          mean |SHAP| over the run&rsquo;s own held-out rows — the desktop GUI&rsquo;s fourth
-          button row, compact web read (the Python twin computes, the card renders)
+          mean |SHAP| over the run&rsquo;s held-out rows — a compact web-console view computed by
+          the Python tree explainer and rendered here
         </CardDescription>
       </CardHeader>
       <CardContent className="pb-4">
@@ -1196,7 +1192,7 @@ function ShapCard({
               <span className="text-[11px] text-muted-foreground">
                 {status === "done" && result
                   ? `${result.pythonTwin} · ${result.nSamples} held-out rows · shap ${result.shapVersion}`
-                  : "re-runs this run's rows and split in the toolkit's Python twin"}
+                  : "recomputes this run's rows and split through the Python bridge"}
               </span>
             </div>
             {error ? (
@@ -1244,9 +1240,9 @@ function ShapCard({
           </>
         ) : (
           <p className="rounded-md border border-dashed px-3 py-2 text-[11px] leading-snug text-muted-foreground">
-            SHAP explains tree models — switch to decision_tree, random_forest, extra_trees, or
-            (regression) gradient_boosting for the attribution read. The model-agnostic story is the
-            desktop twin&rsquo;s permutation importance.
+            This web-console SHAP view supports tree models: switch to decision_tree,
+            random_forest, extra_trees, or (regression) gradient_boosting. For a model-agnostic
+            alternative, use pharmaml.ml.permutation_feature_importance in the Python package.
           </p>
         )}
       </CardContent>
@@ -2615,8 +2611,9 @@ export function MlPlayground() {
   const [tuneStatus, setTuneStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [tuneResult, setTuneResult] = useState<MLTuneResponse | null>(null);
   const [tuneError, setTuneError] = useState<string | null>(null);
-  /* Model comparison (the web mirror of pharmaml's compare_models):
-   *  2–6 registry keys trained side by side on the SAME folds. */
+  /* The web console's own model comparison: 2–6 browser model keys
+   *  trained on the same route-generated folds. Metrics and fitters are
+   *  not numerically equivalent to Python compare_models. */
   const [compareSel, setCompareSel] = useState<string[]>(() =>
     defaultCompareSel(task, modelSel)
   );
@@ -2642,11 +2639,9 @@ export function MlPlayground() {
   const setLcResult = useToolkitStore((s) => s.setLcResult);
   const [lcError, setLcError] = useState<string | null>(null);
   const [lcFolds, setLcFolds] = useState("5");
-  /* SHAP attribution (100x-156): the desktop GUI's fourth button row,
-   * compact web read — the frozen train request is re-sent, the route
-   * re-derives the run's own rows and split, and the toolkit's Python
-   * tree twin explains the held-out rows (mean-|SHAP| ranking, pure-TS
-   * card; only the computation crosses the bridge). */
+  /* SHAP attribution for this web console: resend the frozen train
+   * request, re-derive the same rows and split, and compute a compact
+   * mean-|SHAP| ranking through the Python bridge. */
   const [shapStatus, setShapStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [shapResult, setShapResult] = useState<MLShapResponse | null>(null);
   const [shapError, setShapError] = useState<string | null>(null);
@@ -3146,12 +3141,10 @@ export function MlPlayground() {
     }
   }
 
-  /** Plot the learning curve of the last trained configuration —
-   *  the web mirror of the desktop ML card's "Learning curve" button
-   *  (pharmaml.viz.plot_learning_curve): the parked train request is
-   *  re-sent, the server refits it at the library's default 8-step
-   *  size schedule with k-fold CV at every size, and both curves land
-   *  here with mean ± std bands and the gap verdict. */
+  /** Plot a learning curve for the last trained configuration in this
+   * web console. The parked train request is re-sent; the server refits
+   * it at the package's default eight-step size schedule with k-fold CV,
+   * then returns both curves, mean ± std bands, and the gap verdict. */
   async function runLearningCurve() {
     const last = lastTrainBodyRef.current;
     if (!last) {
@@ -3191,13 +3184,9 @@ export function MlPlayground() {
     }
   }
 
-  /** Explain the LAST trained configuration with SHAP — the web twin of
-   *  the desktop ML card's fourth button row (round 37's SHAP surface),
-   *  compact read: the frozen train request is re-sent, the route
-   *  re-derives the run's own rows and split (the AD/learning-curve
-   *  discipline), and the toolkit's Python tree twin (build_model ->
-   *  fit -> shap_summary) attributes the held-out rows. Only the
-   *  computation crosses into Python; the ranking renders here. */
+  /** Explain the last trained configuration in this web console: resend
+   * the frozen request, re-derive its train/test split, and ask the Python
+   * bridge for a compact mean-|SHAP| ranking over held-out rows. */
   async function runShap() {
     const last = lastTrainBodyRef.current;
     if (!last) {
@@ -3234,10 +3223,10 @@ export function MlPlayground() {
     }
   }
 
-  /** Run the hyperparameter search over the selected model's discrete
-   *  grid — the web mirror of `ml tune --searcher random|hyperband`. Each
-   *  trial is scored with the same k-fold CV the server uses, so the
-   *  leaderboard is directly comparable to the Train metrics. */
+  /** Run the web console's own hyperparameter search over its discrete
+   *  model grid. It borrows RandomSearch/Hyperband workflows from the
+   *  Python CLI, but uses separate grids and TypeScript fitters. Each
+   *  trial uses the same route-generated folds as the web Train metrics. */
   async function runTune() {
     if (source === "synthetic" && !seedValid) {
       setTuneError("Seed must be a non-negative integer (0 – 2147483647).");
@@ -3367,10 +3356,11 @@ export function MlPlayground() {
     });
   }
 
-  /** Train the selected 2–6 models side by side at their default
-   *  hyperparameters — the web mirror of `ml compare` /
-   *  `train_model(..., compare_models)`. Same folds for every model, so
-   *  the ranking is a fair comparison; same seed → same leaderboard. */
+  /** Train the selected 2–6 browser models side by side at their
+   *  default web hyperparameters. This provides a shared-fold
+   *  comparison workflow like `ml compare` / `compare_models`, but its
+   *  metrics and fitters are not a Python parity run. Same route folds
+   *  for every model; same seed → same web leaderboard. */
   async function runCompare() {
     if (source === "synthetic" && !seedValid) {
       setCompareError("Seed must be a non-negative integer (0 – 2147483647).");
@@ -4401,9 +4391,10 @@ export function MlPlayground() {
                   Compare models
                 </p>
                 <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                  2–6 families, default hyperparameters, the same folds — the honest
-                  leaderboard (the web mirror of{" "}
-                  <code className="font-mono text-[10px]">compare_models</code>).
+                  2–6 browser model families, default web hyperparameters, shared folds —
+                  a web-console comparison inspired by{" "}
+                  <code className="font-mono text-[10px]">compare_models</code>. Metrics and
+                  fitters are not numerically equivalent to the Python function.
                 </p>
               </div>
               <span
@@ -5892,21 +5883,14 @@ export function MlPlayground() {
                 </CardContent>
               </Card>
 
-              {/* Feature–target correlations (100x-153, classification
-               *  too since 100x-154): the desktop interpretability
-               *  bundle's web twin — signed bars over the run's OWN
-               *  held-out rows + the top-N matrix; classification runs
-               *  correlate against the 0/1 label (point-biserial r,
-               *  the desktop twin's own no-task-guard read). */}
+              {/* Feature-target correlations for this web-console run:
+               * signed bars and a top-N matrix over held-out rows. */}
               {result.correlations ? (
                 <CorrelationCard bundle={result.correlations} task={result.task} />
               ) : null}
 
-              {/* SHAP feature attribution (100x-156): the desktop GUI's
-               *  fourth button row, compact web read — the frozen train
-               *  request re-sent, the run's own rows and split
-               *  re-derived, the toolkit's Python tree twin explaining
-               *  the held-out rows (mean-|SHAP| ranking, pure-TS card). */}
+              {/* Compact SHAP attribution for this web-console run;
+               * the Python bridge computes the held-out-row ranking. */}
               <ShapCard
                 model={result.model}
                 task={result.task}
@@ -5999,11 +5983,11 @@ export function MlPlayground() {
                 Learning curve — is more data still buying accuracy?
               </CardTitle>
               <CardDescription className="text-xs">
-                The last trained configuration refit at growing train sizes (the web twin of
-                the desktop card&rsquo;s plot_learning_curve figure, 10 % … 100 % in 8 steps,
-                k-fold CV at every size). Converging plateau → more rows will not help; CV
-                curve still climbing at the right edge → assay more compounds; a persistent
-                gap → overfitting, not a data problem.
+                The last configuration refit at growing per-fold sizes (10 % … 100 % in eight
+                steps). This web demo rounds sizes within each fold and plots the largest fold
+                subset; counts and scores are not sklearn learning_curve parity. A converging
+                plateau suggests more rows may not help; a rising CV curve may benefit from
+                more data; a persistent gap can indicate overfitting.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 pb-4">
@@ -6061,7 +6045,7 @@ export function MlPlayground() {
                   {/* Verdict strip */}
                   <div className="grid gap-2 sm:grid-cols-3">
                     <div className="rounded-lg border bg-card px-3 py-2.5 shadow-sm">
-                      <p className="text-xs text-muted-foreground">Train/CV gap (full size)</p>
+                      <p className="text-xs text-muted-foreground">Train/CV gap (all rows per fold)</p>
                       <p
                         className={`font-mono text-xl font-semibold tabular-nums ${
                           lcResult.gap > 0.15
@@ -6080,27 +6064,29 @@ export function MlPlayground() {
 
                   {lcResult.gpKernel ? (
                     <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
-                      GP kernel cloned from the run&rsquo;s learned values (ℓ ={" "}
+                      Web GP kernel selected on the full request data (ℓ ={" "}
                       {fmtNum(lcResult.gpKernel.lengthScale, 3)}, σf ={" "}
                       {fmtNum(lcResult.gpKernel.signalStd, 3)}, σn ={" "}
-                      {fmtNum(lcResult.gpKernel.noiseStd, 3)}) — resolved once on the full data,
-                      then fixed for every refit.
+                      {fmtNum(lcResult.gpKernel.noiseStd, 3)}) and fixed for each size refit.
+                      Because selection sees all rows, including validation folds, these GP CV
+                      scores are not an independent tuning estimate or sklearn parity.
                     </p>
                   ) : null}
                   {lcResult.gpClsKernel ? (
                     <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-[11px] leading-snug text-muted-foreground">
-                      GP kernel cloned from the run&rsquo;s learned values (ℓ ={" "}
+                      Web GP classification kernel selected on the full request data (ℓ ={" "}
                       {fmtNum(lcResult.gpClsKernel.lengthScale, 3)}, σf ={" "}
-                      {fmtNum(lcResult.gpClsKernel.signalStd, 3)}) — resolved once on the full
-                      data, then fixed for every refit.
+                      {fmtNum(lcResult.gpClsKernel.signalStd, 3)}) and fixed for each size
+                      refit. Because selection sees all rows, including validation folds, these
+                      CV scores are not an independent tuning estimate or sklearn parity.
                     </p>
                   ) : null}
 
                   {/* Both curves with ±1σ fold-spread bands */}
                   <div>
                     <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-                      {lcResult.metricName} vs training samples — {lcResult.folds}-fold CV, mean ±
-                      1 std across folds
+                      {lcResult.metricName} vs largest per-fold training subset — {lcResult.folds}-fold
+                      CV, mean ± 1 std across folds
                     </p>
                     <div className="h-56">
                       <ResponsiveContainer width="100%" height="100%">
@@ -6121,7 +6107,7 @@ export function MlPlayground() {
                             tickLine={false}
                             axisLine={false}
                             label={{
-                              value: "training samples",
+                              value: "largest fold train size",
                               position: "insideBottomRight",
                               offset: -2,
                               fontSize: 10,
@@ -6205,11 +6191,10 @@ export function MlPlayground() {
                       </ResponsiveContainer>
                     </div>
                     <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-                      Read it like the desktop figure: both curves flattening together means the
-                      next 500 assays buy almost nothing; the amber CV curve still rising at the
-                      right edge means they are worth running; a teal band sitting far above the
-                      amber one means the model memorises — regularise or simplify instead of
-                      collecting more rows.
+                      If both curves flatten together, additional rows may add little; if the
+                      amber CV curve is still rising at the right edge, more compounds may help.
+                      A teal training band well above the amber curve suggests overfitting —
+                      consider regularising or simplifying the model before collecting more rows.
                     </p>
                   </div>
                 </>

@@ -86,8 +86,9 @@ export async function POST(request: NextRequest) {
   }
   const req = parsed.data;
 
-  /* The search space — models without tunable hyperparameters are rejected
-   * up front with an actionable message (mirrors the library's ml tune). */
+  /* The web route's own discrete search space — reject models with no
+   * configured slots up front. This follows the same general rule as the
+   * Python tuning API, but does not share its search-space implementation. */
   const space: TuneChoice[] =
     req.task === "regression"
       ? (REG_TUNE_SPACES[req.model] ?? [])
@@ -230,8 +231,10 @@ export async function POST(request: NextRequest) {
 
     if (req.searcher === "hyperband") {
       /* -------------------------------------------------------------- */
-      /* Hyperband successive halving (Li et al., 2013) — the web mirror */
-      /* of pharmaml.ml.tuner.Hyperband over the grid's resource slot.   */
+      /* Hyperband-style successive halving (Li et al., 2013), adapted */
+      /* for this route's finite grid and TypeScript model fitters. It   */
+      /* borrows the Python tuner workflow, not its search registry or  */
+      /* numerical results.                                            */
       /* -------------------------------------------------------------- */
       const resourceSpec = TUNE_RESOURCES[req.model];
       const resourceChoice = resourceSpec

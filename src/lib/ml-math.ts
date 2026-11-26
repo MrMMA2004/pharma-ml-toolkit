@@ -67,39 +67,20 @@ export function kFoldSplit(n: number, k: number, rand: () => number): number[][]
   return folds;
 }
 
-/** Pearson correlation of two equal-length arrays (100x-153, hardened 100x-154).
+/** Pearson correlation used by the Next.js web-console training demo.
  *
- * The pure core of the web interpretability twin (the desktop
- * bundle's signed_feature_correlations): returns NaN — never a fake
- * 0 — when the correlation is undefined (a length mismatch — scipy
- * raises here, the desktop twin raises a typed error; silently
- * truncating to the common prefix would be a partial truth — fewer
- * than 2 points, a constant column, or non-finite inputs); callers
- * DROP such results rather than zeroing them. Parity:
- * scratch/verify_corr_parity_153 + the 100x-154 adversarial pair
- * (verify_corr_parity_154) pin this against scipy.stats.pearsonr.
+ * Returns NaN — never a fabricated zero — when a correlation is undefined
+ * (length mismatch, fewer than two points, constant column, or non-finite
+ * input). The caller drops undefined results. Parity probes compare this
+ * helper with `scipy.stats.pearsonr` and include adversarial extreme-scale
+ * inputs.
  *
- * (100x-154) The two-pass runs on OFFSET-THEN-SCALED copies: the
- * inputs are re-centred on their first element (a - a[0] is exact
- * under Sterbenz for same-magnitude values, so a constant column
- * collapses to EXACT zeros at any scale) and divided by the max
- * deviation (r is invariant under positive affine rescaling, and
- * every product stays finite at any input scale). The naive two-pass
- * the round-36 version shipped lost defined correlations at extreme
- * scales (1e300-scale deviation products overflow to Infinity → NaN;
- * 1e-300-scale squares underflow to 0 → NaN — both features silently
- * dropped where scipy reports them) and — worse — reported a FAKE
- * r = 0 for a 1e300-scale constant column (the mean's ULP-scale
- * rounding error makes the "zero" deviations ~1e284, their squares
- * overflow to Infinity, num/Infinity = 0 — the exact fake zero this
- * docstring promises never happens). The recipe matches scipy
- * bit-for-bit on the well-conditioned and extreme-scale grids, and
- * stays closer to the analytic truth than scipy itself on
- * huge-offset inputs (no float64 path recovers those exactly — the
- * input is already quantized at construction; the parity contract
- * widens its tolerance honestly for that case class). The desktop
- * twin's _robust_pearson uses the SAME recipe, so the two twins
- * agree with each other everywhere either of them is honest.
+ * The calculation re-centres both arrays on their first values, then
+ * scales by the maximum deviation. Pearson r is invariant under positive
+ * affine rescaling; this avoids overflow and underflow in product sums,
+ * while Sterbenz subtraction makes constant columns exact at supported
+ * scales. Probes cover well-conditioned and extreme-scale inputs, with
+ * a wider tolerance for huge-offset values already quantized in float64.
  */
 export function pearsonCorrelation(a: number[], b: number[]): number {
   if (a.length !== b.length) return Number.NaN; // mismatched: no honest r
@@ -1655,12 +1636,12 @@ export function fitKernelRidgeRbf(
 /* Gaussian process regression — mean + predictive sigma               */
 /* ------------------------------------------------------------------ */
 
-/** What a GP fit surfaces: the kernel hyperparameters in force (learned
- *  by the deterministic marginal-likelihood grid search when the caller
- *  left them unspecified — the web mirror of the library's LML-tuned
- *  kernel — or the caller's fixed values), the log marginal likelihood
- *  of the train targets under them, and the train-row count the GP
- *  memorised (every one of them). */
+/** What a web-console GP fit surfaces: the kernel hyperparameters in
+ *  force (chosen by its deterministic marginal-likelihood grid search
+ *  when unspecified, or fixed by the caller), the log marginal
+ *  likelihood under them, and the number of retained training rows.
+ *  The grid-search procedure is separate from the Python package's
+ *  sklearn optimizer. */
 export interface GpFit {
   /** RBF length scale ℓ (standardized-feature-space units). */
   lengthScale: number;
@@ -1734,22 +1715,20 @@ function strideSubsample(n: number, cap: number): number[] {
 }
 
 /**
- * Gaussian process regression (kriging) — the web mirror of the library's
- * `gaussian_process` family. Kernel: σf²·exp(−‖z−z′‖²/(2ℓ²)) + σn²·δ over
- * train-standardized features (the leak-free rule: the standardizer sees
- * TRAIN rows only), target centred and scaled. The posterior mean comes
- * from the Cholesky solve, the predictive sigma from the
- * σf² − k*ᵀ(K+σn²I)⁻¹k* quadratic form plus the σn² observation floor —
- * the PREDICTION interval for a new observation, the uncertainty a QSAR
- * readout actually wants — and it GROWS away from the training data, the
- * extrapolation warning no point estimator gives.
+ * Gaussian process regression (kriging) in the Next.js browser demo.
+ * Kernel: σf²·exp(−‖z−z′‖²/(2ℓ²)) + σn²·δ over train-standardized
+ * features (the standardizer sees TRAIN rows only), target centred and
+ * scaled. The posterior mean comes from the Cholesky solve; predictive
+ * sigma uses the σf² − k*ᵀ(K+σn²I)⁻¹k* quadratic form plus the σn²
+ * observation floor. This is a separate implementation of a GP model,
+ * not a numerical port of the Python package's sklearn estimator.
  *
- * Hyperparameters: when `opts` leaves all three unspecified, the kernel is
- * LEARNED by the deterministic marginal-likelihood grid search above
- * (evaluated on a ≤ GP_TUNE_CAP-row stride subsample, winner refit on
- * every train row) — the web mirror of the library's LML-tuned kernel,
- * one deterministic pass, no random restarts. Any explicit value fixes
- * the kernel at the caller's settings.
+ * Hyperparameters: when `opts` leaves all three unspecified, this web
+ * fitter selects a kernel with its deterministic marginal-likelihood
+ * grid search (on a ≤ GP_TUNE_CAP-row stride subsample, then refits on
+ * every train row). This is not sklearn's gradient-based optimizer and
+ * may select different values from the Python package. Any explicit
+ * value fixes the kernel at the caller's settings.
  */
 export function fitGaussianProcess(
   X: number[][],
@@ -2023,18 +2002,19 @@ function gpcNewton(
   return { pi, Wsr, L, q, lml, iterations };
 }
 
-/** Binary Laplace GP classification over raw (unstandardized) rows —
- *  the web mirror of the library's gaussian_process_classifier family
- *  (sklearn's GaussianProcessClassifier, verified bit-exact by
- *  scratch/verify_gpc_parity.{py,ts}: proba Δ 0.0 in numpy, ≤ ~5e-7 in
- *  TypeScript where the only extra approximation is erf itself).
+/** Binary Laplace GP classification over raw (unstandardized) rows.
+ *  For a fixed kernel, the Newton posterior and predictive-probability
+ *  calculation is checked against sklearn's GaussianProcessClassifier
+ *  with `optimizer=None` by scratch/verify_gpc_parity.{py,ts} (the TS
+ *  probe allows the erf approximation tolerance). That guard does not
+ *  establish parity for kernel selection: when the learn directive is
+ *  set, this web demo uses its own Laplace-LML grid search on a capped
+ *  stride subsample, then refits on every train row.
  *
  *  Latent GP prior: σf²·RBF(ℓ) on standardized features; logistic
  *  likelihood; posterior mode by Newton (the B = I + W^(1/2)KW^(1/2)
  *  Cholesky); predictive probability by the Williams-Barber 5-erf
- *  sigmoid integral. With the learn directive (both hyperparameters
- *  unset) a deterministic Laplace-lml grid search picks (ℓ, σf) on a
- *  capped stride subsample, then refits on every train row. */
+ *  sigmoid integral. */
 export function fitGaussianProcessClassification(
   X: number[][],
   y: number[],

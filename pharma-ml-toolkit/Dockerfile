@@ -19,7 +19,13 @@ WORKDIR /app
 COPY pyproject.toml README.md requirements.txt ./
 COPY src ./src
 
-RUN pip install --no-cache-dir .${EXTRAS:+[${EXTRAS}]}
+# Pin the tested core from requirements.txt. Optional extras remain
+# range-resolved from pyproject.toml, constrained against that core.
+RUN python -m pip install --no-cache-dir -r requirements.txt \
+    && python -m pip install --no-cache-dir --no-deps . \
+    && if [ -n "${EXTRAS}" ]; then \
+         python -m pip install --no-cache-dir -c requirements.txt ".[${EXTRAS}]"; \
+       fi
 
 # Examples and tests are mounted or copied on demand.
 COPY examples ./examples

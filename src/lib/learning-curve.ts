@@ -1,18 +1,12 @@
 /**
- * The TS twin of pharmaml.viz.plot_learning_curve's data semantics
- * (the 100x-125 web mirror of the desktop ML card's "Learning curve"
- * button — train-set size vs CV score, "should we assay more
- * compounds?").
- *
- * The MODULE boundary is the curve's own bookkeeping: the library's
- * default size schedule (10 % … 100 % in 8 steps), the gap verdict
- * thresholds and strings (byte-mirrored from ml_plots.py), and the
- * fold-reduction engine (mean ± population std across folds at every
- * size). The route wires this to the web's own model fitters, so the
- * per-point numbers come from the TS engine — the parity guard
- * (scratch/probe_lc_parity_125.{ts,py}) pins the shared CONTRACT:
- * identical fractions, identical gap threshold, identical verdict
- * strings, identical reduction semantics.
+ * Web-console learning-curve bookkeeping that borrows chart conventions
+ * from `pharmaml.viz.plot_learning_curve`: the default fraction schedule
+ * (10 % … 100 % in eight steps), gap-verdict threshold and wording, and
+ * mean ± population-std fold summaries. The route uses independent
+ * TypeScript fitters and rounds sizes separately within each fold; it does
+ * not reproduce sklearn's absolute training-size schedule or scores. The
+ * parity probe pins only the stated shared conventions, not full numeric
+ * parity or a shared UI/feature set.
  */
 
 /**
@@ -49,7 +43,7 @@ export function lcVerdict(gap: number): string {
 
 /** One schedule point, already reduced across folds. */
 export interface LcPoint {
-  /** Absolute training-subset row count this point fit on. */
+  /** Largest fold-specific training-subset size at this point. */
   size: number;
   trainMean: number;
   trainStd: number;
@@ -84,16 +78,17 @@ export interface LcEngineInput {
 }
 
 /**
- * The learning-curve reduction: for every fraction, every fold's
- * training complement is cut to the fraction's leading rows (the
- * sklearn ``learning_curve`` subsampling semantics — a prefix of the
- * fold's own train part, never a re-shuffle), the model refits, and
- * both scores reduce to mean ± population std across folds.
+ * The learning-curve reduction: for every fraction, each fold's
+ * training complement is cut to a leading-row prefix (no re-shuffle),
+ * then both scores reduce to mean ± population std across folds. This
+ * prefix convention resembles sklearn's, but sizing differs: this web
+ * helper independently uses ``max(1, round(fraction × fold-train rows))``
+ * per fold, whereas sklearn converts fractions against the smallest
+ * training split and uses the resulting common absolute size.
  *
- * Deterministic: no RNG of its own; sizes are
- * ``max(1, round(fraction × fold-train rows))`` per fold, and the
- * reported ``size`` is the schedule's modal (max) value so the x axis
- * reads "training samples" like the library's.
+ * Deterministic: no RNG of its own. The reported ``size`` is the
+ * largest fold-specific subset for that fraction, so the x axis shows
+ * an upper bound on the rows used at that point, not a common size.
  */
 export function learningCurvePoints(input: LcEngineInput): LcPoint[] {
   const fractions = input.fractions ?? LC_FRACTIONS;

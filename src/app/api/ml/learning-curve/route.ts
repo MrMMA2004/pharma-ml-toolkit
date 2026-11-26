@@ -40,9 +40,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /* ------------------------------------------------------------------ */
-/* Request schema — the FULL train body (the client re-sends the       */
-/* parked request of the last trained run) plus the curve's own fold   */
-/* count, mirroring the desktop card's CV control.                     */
+/* Request schema — the full parked train body plus this web-console  */
+/* curve's own fold count. This control is local to the Next.js demo.  */
 /* ------------------------------------------------------------------ */
 
 const hyperSchema = {
@@ -250,11 +249,13 @@ function learningCurveRegression(
   const degree = req.model === "polynomial" ? 2 : 1;
   const effAlpha = req.model === "ridge" ? hp.alpha : 0;
 
-  /* GP with all kernel slots unset: the TRAINED run learned (ℓ, σf, σn)
-   * by its LML grid search — the curve must clone THAT model, so one
-   * full-data fit resolves the kernel once and every size refit uses
-   * the fixed values (the sklearn clone semantics: the fitted
-   * estimator's hyperparameters are what get cloned). */
+  /* Web-console GP convention: when kernel slots are unset, this route
+   * runs its deterministic LML grid search once on the full request data,
+   * then freezes those values for every size refit. This is not sklearn
+   * learning_curve's clone-and-fit behavior (and the full-data selection
+   * can include rows later used as validation folds), so do not describe
+   * these GP points as sklearn-equivalent or as an independent tuning
+   * evaluation. */
   let gpKernel: MLLearningCurveResponse["gpKernel"];
   if (
     req.model === "gaussian_process" &&

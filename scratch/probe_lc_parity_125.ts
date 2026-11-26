@@ -9,9 +9,10 @@
  * reduction engine's output over a deterministic hand-computed
  * fixture (prefix subsampling, 1-based fold slots, population std).
  *
- * The suite's TestLearningCurveContract compares the twins: same
- * fractions, same threshold, byte-identical verdict strings for the
- * same gaps, and the engine fixture pinned to hand-computed numbers.
+ * The suite's TestLearningCurveContract compares the fraction schedule
+ * within 1e-12, the same threshold, byte-identical verdict strings for
+ * identical gaps, and the engine fixture against hand-computed numbers.
+ * It does not compare sklearn's absolute training sizes or scores.
  *
  * Run: bun run scratch/probe_lc_parity_125.ts [gap...]
  */

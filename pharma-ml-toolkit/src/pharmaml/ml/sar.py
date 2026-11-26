@@ -76,8 +76,8 @@ __all__ = [
 ]
 
 _RDKIT_HINT = (
-    "R-group decomposition requires RDKit — pip install 'pharmaml[chem]' "
-    "(or pip install rdkit)"
+    "R-group decomposition requires RDKit — from the toolkit package root run python -m pip install -e '.[chem]'"
+    ""
 )
 
 #: Column order of the :func:`matched_pairs` frame (also the empty-frame schema).

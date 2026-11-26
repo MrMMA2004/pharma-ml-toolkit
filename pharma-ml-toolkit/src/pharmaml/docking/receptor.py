@@ -22,7 +22,7 @@ This module closes that gap:
 * :class:`ProteinReport` audits every atom that went in, came out, or
   was dropped along the way.
 
-The Meeko step is a lazy optional dependency (``pharmaml[docking]``):
+The Meeko step is in the source-local ``.[docking]`` extra:
 importing this module needs nothing beyond the standard library, and
 the PDBQT passthrough mode works without Meeko entirely.
 
@@ -400,7 +400,7 @@ def prepare_protein(
     ----------
     source:
         Protein file (``.pdb``, ``.pdbqt`` or mmCIF ``.cif``/``.mmcif``;
-        mmCIF is converted with gemmi, ``pip install gemmi``).
+        mmCIF conversion uses gemmi (included in the source-local ``.[docking]`` extra).
     output_pdbqt:
         Receptor destination.  Defaults to ``<source stem>.pdbqt``
         next to the input (``r.pdbqt`` in the docking folder is the
@@ -439,7 +439,7 @@ def prepare_protein(
     DataValidationError
         Missing file, empty file or unparseable input.
     DependencyError
-        PDB input requires Meeko (``pip install 'pharmaml[docking]'``).
+        PDB input requires Meeko (``python -m pip install -e '.[docking]'``).
     DockingError
         Meeko could not build the polymer (broken residues, unknown
         chemistry, ...).  The message carries Meeko's diagnosis.
@@ -557,8 +557,8 @@ def _cif_to_pdb_text(src: Path, text: str) -> str:
         import gemmi
     except ImportError as exc:
         raise DependencyError(
-            f"mmCIF input ({src.name}) requires gemmi:  pip install gemmi  "
-            "-- or convert the file to PDB format first"
+            f"mmCIF input ({src.name}) requires gemmi. From the toolkit package root run: "
+            "python -m pip install -e '.[docking]', or convert the file to PDB format first."
         ) from exc
     try:
         document = gemmi.cif.read_string(text)
@@ -648,7 +648,7 @@ def _meeko_receptor_pdbqt(
     except ImportError as exc:
         raise DependencyError(
             "prepare_protein requires Meeko and RDKit for PDB input. "
-            "Install with:  pip install 'pharmaml[docking]'  (or: meeko rdkit)"
+            "From the toolkit package root, run: python -m pip install -e '.[docking]'"
         ) from exc
 
     removed_ids: list[str] = []

@@ -139,8 +139,15 @@ class PipelineResult:
         )
 
 
+_OPTIONAL_EXTRA_BY_MODULE = {
+    "rdkit": "chem",
+    "meeko": "docking",
+    "gemmi": "docking",
+}
+
+
 def _check_dependencies(stage: Stage) -> None:
-    """Fail with the actionable message when a stage's import is absent."""
+    """Fail with the right source-local extra when a stage import is absent."""
     import importlib.util
 
     for name in stage.requires:
@@ -149,10 +156,20 @@ def _check_dependencies(stage: Stage) -> None:
         except (ImportError, ValueError):
             found = False
         if not found:
+            extra = _OPTIONAL_EXTRA_BY_MODULE.get(name)
+            if extra:
+                guidance = (
+                    f"From the toolkit package root, run: "
+                    f"python -m pip install -e '.[{extra}]'"
+                )
+            else:
+                guidance = (
+                    "Install the dependency into the active Python environment "
+                    "using its supported package manager."
+                )
             raise DependencyError(
-                f"stage '{stage.name}' requires the optional dependency "
-                f"'{name}' — pip install {name} "
-                f"(or the matching pharmaml extra)"
+                f"stage '{stage.name}' requires the optional dependency '{name}'. "
+                f"{guidance}"
             )
 
 

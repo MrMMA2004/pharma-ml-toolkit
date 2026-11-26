@@ -506,7 +506,7 @@ def generation_metrics(
     Raises
     ------
     DependencyError
-        If RDKit is not installed (``pip install 'pharmaml[chem]'``).
+        If RDKit is not installed (``python -m pip install -e '.[chem]'``).
     DataValidationError
         If ``generated`` or ``reference`` is a bare string.
 
