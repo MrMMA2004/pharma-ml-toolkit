@@ -263,7 +263,19 @@ export const SHIPPED_FILE_COUNT = 1860;
     movement + the psutil importorskip comment (+4) + the zap-automation tuning comment (+7) + the close-out verdict truing (+21: the QA verdict rows split + the RR/PS bullet trues), re-measured at the close-out walk. The
     collection + vitest + registry pins re-measured reproducing:
     9,017 / 337 / 33. Verified pin = live walk = page render. */
-export const SHIPPED_SOURCE_LINES = 594836;
+export const SHIPPED_SOURCE_LINES = 594843;
+
+/*  r366-continuation re-true (measurement-last): the firing's
+    close-out correction (the drift-guard figure 202 -> 130 and the
+    contracts figure 28 -> 6 corrected at source in the five ledger
+    carriers, both failed independent reproduction at this
+    continuation) added a net +7 counted lines inside the walked
+    toolkit tree (git diff: 13 insertions / 6 deletions over the
+    CHANGELOG + the PROJECT_STATUS clause + the QA report + the
+    RELEASE_READINESS addendum) -- 594,843 lines at 1,860 files
+    (the file pin unchanged: no in-tree file added or removed).
+    Verified pin = live walk = page render, re-flown over the
+    production build in the same commit. */
 
 /*  r366 re-true (measurement-last, the fixed-point discipline
     held): the walk re-measured AFTER this round's own ledger

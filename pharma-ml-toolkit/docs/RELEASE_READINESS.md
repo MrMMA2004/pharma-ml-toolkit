@@ -325,8 +325,10 @@ with the two staleness defects the pass caught fixed at source:
   verified present and every gate re-run — the collection 9,123/503
   (double-measured; the +1 over the r365 narrative decoded as the
   `3237c983` regression guard post-dating that census tree), the
-  drift guards 202, the penetration suite 67, supply-chain +
-  architecture-hygiene 479, the API contracts 28, the retirement +
+  drift guards 130 (corrected at the firing's continuation from the
+  draft's unreproducible 202), the penetration suite 67, supply-chain +
+  architecture-hygiene 479, the API contracts 6 (corrected from the
+  draft's stale 28), the retirement +
   version-carrier pair 20, the github-page guard 11/11 + validation,
   the packaging validator `--static` 27/27, the frontend vitest
   346/346 over 39, lint clean.

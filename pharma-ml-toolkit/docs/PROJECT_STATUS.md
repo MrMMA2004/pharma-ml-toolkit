@@ -1825,7 +1825,9 @@ queue: **upkeep alone** — and the upkeep found real work.
 - **The all-phases verdict**: every part18 phase (0–10) verified
   green over the closed r365 terminal `762f60a5` — the baseline
   (ECC engines, collection exit 0), the defect register, the
-  backend/frontend traceability (drift guards 202), the supervised /
+  backend/frontend traceability (drift guards 130 — corrected at the
+  firing's continuation from the draft's unreproducible 202; the live
+  set is the 16-file `tests/test_frontend_*.py` family), the supervised /
   unsupervised lanes (clustering + Isolation Forest + PCA/manifold),
   the Deep Learning lane (GNN + the DL workspace), the RL subsystem
   (the §6 separation enforced by test), the Multi-Response/RSM pair,

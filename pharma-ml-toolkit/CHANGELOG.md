@@ -4,7 +4,8 @@
 - **The r366 verification-pass firing (the owner-directed "check all
   phases from the beginning" pass over the closed part18 campaign)**:
   every part18 phase (0-10) verified green — the baseline, the defect
-  register, the traceability guards (202), the supervised/unsupervised
+  register, the traceability guards (130 — corrected at the firing's
+  continuation from the draft's unreproducible 202), the supervised/unsupervised
   lanes, the Deep Learning lane, the RL subsystem with the §6
   separation enforced by test, the Multi-Response/RSM pair, the
   penetration lane (67 + the security-scan CI green), the mandatory
