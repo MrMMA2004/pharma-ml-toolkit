@@ -1044,6 +1044,24 @@ summarises them and wins any status disagreement.
 - **Status labels** (part13 §22): PASS / PARTIAL / FAIL / BLOCKED /
   NOT APPLICABLE. Nothing here converts absence of evidence into a
   pass; every row names its evidence.
+- **r365 addendum (2026-11-26, the part18 campaign, trace
+  1a218363342face5):** the first executed part18 increment -- the
+  unsupervised clustering lane (DBSCAN / Mean Shift / Spectral with
+  the shared honest diagnostics), the Isolation Forest anomaly lane,
+  and the EXPERIMENTAL RL lane (Q-Learning / SARSA / compact DQN /
+  REINFORCE / Actor-Critic over GridWorldEnv+MDPSpec, the §6
+  separation rule enforced by test) all VERIFIED_COMPLETE with the
+  full Python->API->contract->frontend->test chain (the contract
+  128->134 paths; the generated types re-grown; the drift gates
+  trued); the MANDATORY studio.py retirement EXECUTED (the launcher
+  quarantined at legacy/studio.py with the banner, the README launch
+  commands replaced, the tools' paths updated, 12 retirement guards
+  in tests/test_legacy_retirement.py; the ui/-pages quarantine
+  completion honestly OPEN); docs/DESIGN.md created (§12.4); the
+  eighteenth-class rollback recovered pre-work per the r306-r364
+  playbook; the v1.2.242 ship (notebooks re-executed, the six-home
+  zip + the offsite mirror).
+
 
 ## 1. Where to look for what
 

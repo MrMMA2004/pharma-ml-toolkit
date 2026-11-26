@@ -22,6 +22,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DemoDataSection } from "@/components/demo/DemoDataSection";
+import {
+  ReinforceLane,
+  UnsupervisedLearningLane,
+} from "@/features/ml/UnsupervisedLearningLane";
 import { RunLineage } from "@/components/runs/RunLineage";
 import { ModelRegistry } from "@/components/registry/ModelRegistry";
 import {
@@ -7281,6 +7285,13 @@ export function MLPage() {
           </CardContent>
         </Card>
       </StageHeader>
+
+      {/* part18 §4.3 + §4.5 — the Unsupervised Learning section (the
+        clustering families + Isolation Forest) and part18 §6 — the
+        EXPERIMENTAL reinforcement-learning section, both over the REAL
+        backend through the generated-contract clients. */}
+      <UnsupervisedLearningLane selected={selected} />
+      <ReinforceLane />
     </div>
   );
 }

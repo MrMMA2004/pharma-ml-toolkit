@@ -88,8 +88,9 @@ def test_the_contract_carries_the_four_new_paths() -> None:
     # 121 -> 128 / 75 -> 83 by the r359 part17 §6 R1 rsm septet (the
     # seven rsm paths + the eight request schemas) -- the RSM lane's
     # own growth, trued here with the dated comment
-    assert len(paths) == 128, f"the contract drifted: {len(paths)} paths"
-    assert len(schema["components"]["schemas"]) == 83
+    assert len(paths) == 134, f"the contract drifted: {len(paths)} paths"
+    # 87 by the r365 part18 lanes
+    assert len(schema["components"]["schemas"]) == 87
     for path in (
         "/api/v1/multiresponse/registry",
         "/api/v1/multiresponse/train",

@@ -13,14 +13,14 @@ import sys
 from pathlib import Path
 
 _TK = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(_TK))  # ui/ + studio.py live at the toolkit root
+sys.path.insert(0, str(_TK))  # ui/ lives at the toolkit root; the legacy
+sys.path.insert(0, str(_TK / "legacy"))  # launcher is quarantined (part18 §10)
 
 from ui.headless import ensure_headless
 
 ensure_headless()
 
 import pytest
-
 
 _STUDIO_BASE_STYLED = False
 

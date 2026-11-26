@@ -157,12 +157,13 @@ class TestFreezeEquivalentBuilder:
         excludes = set(policy["excludes"])
         assert {"pytest", "mypy", "ruff", "tkinter"} <= excludes
         # the entry is the real application, not a surrogate
-        assert policy["scripts"] == [str(TOOLKIT / "studio.py")]
+        # part18 §10: the legacy GUI entry is quarantined at legacy/studio.py
+        assert policy["scripts"] == [str(TOOLKIT / "legacy" / "studio.py")]
 
     def test_generated_spec_two_entries_one_collect(self, tmp_path: Path) -> None:
         spec = fe.write_equivalent_spec(
             {
-                "scripts": [str(TOOLKIT / "studio.py")],
+                "scripts": [str(TOOLKIT / "legacy" / "studio.py")],
                 "pathex": [str(TOOLKIT), str(TOOLKIT / "src")],
                 "binaries": [],
                 "datas": [(str(TOOLKIT / "fonts"), "fonts")],

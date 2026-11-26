@@ -442,3 +442,49 @@ stale semi-supervised evaluate count trued (the consumer landed
 r303); the §4 verdict table now carries 70 PASS / 1 PARTIAL (the
 codegen internal-utility classification) — and the §3.4 list of
 unconsumed backend surfaces is EMPTY.
+
+· **r365 addendum (part18 — the campaign's first executed increment,
+trace 1a218363342face5):** three NEW capability rows are BORN with
+the full §21 chain, and one MANDATORY retirement lands.  **(1) The
+unsupervised clustering lane** — `src/pharmaml/ml/clustering.py`
+(DBSCAN with eps/min_samples + the k-distance estimate labelled,
+noise-point reporting first class; Mean Shift with bandwidth
+estimation; Spectral with rbf/nearest-neighbours affinity, distinct
+from the manifold embedding) + `POST /api/v1/unsupervised/cluster` +
+`GET /api/v1/unsupervised/methods` (`routes/unsupervised.py`, sync +
+job modes, the shared diagnostics block: silhouette / Davies-Bouldin
+/ Calinski-Harabasz / cluster sizes / noise ratio, honest nulls on
+degenerates) + the ML workspace's Unsupervised Learning section
+(`features/ml/UnsupervisedLearningLane.tsx`) + the typed client in
+`services/ml/unsupervised.ts` — VERIFIED_COMPLETE (tests:
+`tests/test_clustering.py` 26, the API pins in
+`tests/api/test_unsupervised_reinforce.py`, the vitest lane 9).  **(2)
+The Isolation Forest anomaly lane** — `src/pharmaml/ml/anomaly.py`
+(contamination/n_estimators/seed, the decision-function convention,
+the between-classes threshold, the outlier-rank export, the
+descriptive feature contrast + the not-ground-truth honesty note) +
+`POST /api/v1/unsupervised/anomaly` + the same frontend section +
+the same client — VERIFIED_COMPLETE (16 tests + the API/vitest pins).
+**(3) The EXPERIMENTAL reinforcement-learning lane** —
+`src/pharmaml/ml/reinforce.py` (GridWorldEnv + MDPSpec, Q-Learning,
+SARSA, compact DQN, REINFORCE with the true softmax gradient,
+Actor-Critic; the uniform RLRunResult with convergence-or-honest-
+never-settled, JSON persistence, bounded episodes) +
+`POST /api/v1/reinforce/train` + `/evaluate` + `GET /methods`
+(`routes/reinforce.py`, experimental-labelled) + the clearly-labelled
+frontend section + the client — VERIFIED_COMPLETE **as an
+experimental subsystem** (26 + API + vitest tests; the §6 separation
+rule enforced by `TestSeparationRule`: no RL method may ever appear
+in the supervised MODEL_REGISTRY).  The contract grew 128→134 paths;
+`api.d.ts` regenerated; the drift gate green.  **(4) The studio.py
+retirement (part18 §10, the owner's mandatory directive)** — the
+legacy PySide6 launcher quarantined at `legacy/studio.py` with the
+RETIRED banner; `legacy/README.md` declares the unsupported status;
+the README launch commands replaced by the React/Tauri app; the
+tools' path references updated; `tests/test_legacy_retirement.py`
+(12 guards) pins the quarantine, the sidecar's Qt-stack exclusion,
+the no-active-PySide6-pin rule, and the supported surfaces'
+continued importability.  The ui/-pages and workspace.py quarantine
+completion is the honest OPEN next increment.  The DL architecture
+expansion (CNN/Transformer/Autoencoder/GAN/Diffusion) remains
+NOT_IMPLEMENTED with evidence — not silently claimed.

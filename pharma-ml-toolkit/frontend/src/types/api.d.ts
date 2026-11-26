@@ -1683,6 +1683,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/reinforce/evaluate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Evaluate
+         * @description Deterministic greedy rollouts of a trained policy (no learning).
+         */
+        post: operations["evaluate_api_v1_reinforce_evaluate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reinforce/methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Methods
+         * @description The capability listing with the experimental label front and centre.
+         */
+        get: operations["methods_api_v1_reinforce_methods_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reinforce/train": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Train */
+        post: operations["train_api_v1_reinforce_train_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repurposing/registry": {
         parameters: {
             query?: never;
@@ -2062,6 +2119,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/unsupervised/anomaly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Anomaly */
+        post: operations["anomaly_api_v1_unsupervised_anomaly_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/unsupervised/cluster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cluster */
+        post: operations["cluster_api_v1_unsupervised_cluster_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/unsupervised/methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Methods
+         * @description The capability listing (the §9 "complete integration path" door).
+         */
+        get: operations["methods_api_v1_unsupervised_methods_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/visualization/catalog": {
         parameters: {
             query?: never;
@@ -2357,6 +2468,35 @@ export interface components {
             /** Smiles */
             smiles: string[];
         };
+        /**
+         * AnomalyRequest
+         * @description POST /api/v1/unsupervised/anomaly — Isolation Forest.
+         */
+        AnomalyRequest: {
+            /**
+             * Contamination
+             * @default auto
+             */
+            contamination: number | string;
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * Mode
+             * @default job
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /**
+             * N Estimators
+             * @default 200
+             */
+            n_estimators: number;
+            /**
+             * Seed
+             * @default 42
+             */
+            seed: number;
+        };
         /** ArtifactTableRequest */
         ArtifactTableRequest: {
             /** Dataset Id */
@@ -2403,6 +2543,73 @@ export interface components {
             target?: string | null;
             /** Task */
             task?: string | null;
+        };
+        /**
+         * ClusterRequest
+         * @description POST /api/v1/unsupervised/cluster — the shared request body.
+         */
+        ClusterRequest: {
+            /**
+             * Affinity
+             * @default rbf
+             * @enum {string}
+             */
+            affinity: "rbf" | "nearest_neighbors";
+            /**
+             * Bandwidth
+             * @description Mean Shift kernel bandwidth; omit to estimate
+             */
+            bandwidth?: number | null;
+            /**
+             * Bin Seeding
+             * @default false
+             */
+            bin_seeding: boolean;
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * Eps
+             * @description DBSCAN neighbourhood radius; omit to use the k-distance estimate (reported as eps_source)
+             */
+            eps?: number | null;
+            /**
+             * Gamma
+             * @default 1
+             */
+            gamma: number;
+            /**
+             * Method
+             * @default dbscan
+             * @enum {string}
+             */
+            method: "dbscan" | "meanshift" | "spectral";
+            /**
+             * Metric
+             * @default euclidean
+             * @enum {string}
+             */
+            metric: "euclidean" | "manhattan" | "cosine";
+            /**
+             * Min Samples
+             * @default 5
+             */
+            min_samples: number;
+            /**
+             * Mode
+             * @default job
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /**
+             * N Clusters
+             * @description Spectral Clustering cluster count (required for the spectral method)
+             */
+            n_clusters?: number | null;
+            /**
+             * N Neighbors
+             * @default 10
+             */
+            n_neighbors: number;
         };
         /** ConcentrationProfileRequest */
         ConcentrationProfileRequest: {
@@ -3792,6 +3999,133 @@ export interface components {
              * @default true
              */
             strip_hydrogens: boolean;
+        };
+        /**
+         * ReinforceEvaluateRequest
+         * @description POST /api/v1/reinforce/evaluate — the greedy-policy rollout.
+         */
+        ReinforceEvaluateRequest: {
+            /**
+             * Cols
+             * @default 5
+             */
+            cols: number;
+            /**
+             * Episodes
+             * @default 50
+             */
+            episodes: number;
+            /**
+             * Method
+             * @default q_learning
+             * @enum {string}
+             */
+            method: "q_learning" | "sarsa" | "dqn" | "reinforce" | "actor_critic";
+            /**
+             * Policy
+             * @description the trained run's policy table (state id -> action id)
+             */
+            policy: {
+                [key: string]: number;
+            };
+            /**
+             * Rows
+             * @default 4
+             */
+            rows: number;
+            /**
+             * Seed
+             * @default 42
+             */
+            seed: number;
+        };
+        /**
+         * ReinforceTrainRequest
+         * @description POST /api/v1/reinforce/train — the experimental lane body.
+         */
+        ReinforceTrainRequest: {
+            /**
+             * Alpha
+             * @default 0.1
+             */
+            alpha: number;
+            /**
+             * Alpha Actor
+             * @default 0.05
+             */
+            alpha_actor: number;
+            /**
+             * Alpha Critic
+             * @default 0.1
+             */
+            alpha_critic: number;
+            /**
+             * Baseline
+             * @default true
+             */
+            baseline: boolean;
+            /**
+             * Batch
+             * @default 32
+             */
+            batch: number;
+            /**
+             * Cols
+             * @default 5
+             */
+            cols: number;
+            /**
+             * Episodes
+             * @default 200
+             */
+            episodes: number;
+            /**
+             * Epsilon
+             * @default 0.1
+             */
+            epsilon: number;
+            /**
+             * Gamma
+             * @default 0.99
+             */
+            gamma: number;
+            /**
+             * Hidden
+             * @default 32
+             */
+            hidden: number;
+            /**
+             * Lr
+             * @default 0.01
+             */
+            lr: number;
+            /**
+             * Method
+             * @default q_learning
+             * @enum {string}
+             */
+            method: "q_learning" | "sarsa" | "dqn" | "reinforce" | "actor_critic";
+            /**
+             * Mode
+             * @default job
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /**
+             * Replay Size
+             * @default 512
+             */
+            replay_size: number;
+            /**
+             * Rows
+             * @default 4
+             */
+            rows: number;
+            /**
+             * Seed
+             * @default 42
+             */
+            seed: number;
         };
         /** ReportRequest */
         ReportRequest: {
@@ -7730,6 +8064,98 @@ export interface operations {
             };
         };
     };
+    evaluate_api_v1_reinforce_evaluate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReinforceEvaluateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    methods_api_v1_reinforce_methods_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    train_api_v1_reinforce_train_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReinforceTrainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     registry_api_v1_repurposing_registry_get: {
         parameters: {
             query?: never;
@@ -8296,6 +8722,98 @@ export interface operations {
         };
     };
     resources_api_v1_system_resources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    anomaly_api_v1_unsupervised_anomaly_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnomalyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cluster_api_v1_unsupervised_cluster_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClusterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    methods_api_v1_unsupervised_methods_get: {
         parameters: {
             query?: never;
             header?: never;

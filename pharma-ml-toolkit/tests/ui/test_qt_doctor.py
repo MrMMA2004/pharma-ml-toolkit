@@ -47,8 +47,9 @@ def _run_studio(args: list[str], extra_env: dict[str, str] | None = None):
     env = dict(os.environ)
     if extra_env:
         env.update(extra_env)
+    # part18 §10: the launcher lives in the quarantined legacy/ area now
     return subprocess.run(
-        [sys.executable, "studio.py", *args],
+        [sys.executable, str(TK / "legacy" / "studio.py"), *args],
         cwd=TK,
         env=env,
         capture_output=True,

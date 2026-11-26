@@ -34,12 +34,14 @@ from . import (
     multiresponse,
     pharmacogenomics,
     pkpd,
+    reinforce,
     repurposing,
     rsm,
     runs,
     samples,
     semi_supervised,
     system,
+    unsupervised,
     visualization,
     workflow,
 )
@@ -76,6 +78,14 @@ api_router.include_router(multiresponse.router)
 # part17 §6 (the campaign queue's R1 lane) — the Response Surface
 # Methodology engine over pharmaml.ml.rsm.
 api_router.include_router(rsm.router)
+# part18 §4.3/§4.5 — the unsupervised clustering families (DBSCAN /
+# mean shift / spectral) + Isolation Forest anomaly detection over
+# pharmaml.ml.clustering / pharmaml.ml.anomaly.
+api_router.include_router(unsupervised.router)
+# part18 §6 — the EXPERIMENTAL reinforcement-learning lane (Q-learning,
+# SARSA, compact DQN, REINFORCE, actor-critic), separated from the
+# supervised registry by test.
+api_router.include_router(reinforce.router)
 api_router.include_router(workflow.router)
 api_router.include_router(database.router)
 api_router.include_router(system.router)

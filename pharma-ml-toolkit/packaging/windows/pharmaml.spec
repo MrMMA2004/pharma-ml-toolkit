@@ -128,7 +128,7 @@ excludes = [
 ]
 
 a = Analysis(
-    [str(TOOLKIT / "studio.py")],
+    [str(TOOLKIT / "legacy" / "studio.py")],  # part18 §10: quarantined legacy entry
     pathex=[str(TOOLKIT), str(TOOLKIT / "src")],
     binaries=binaries,
     datas=datas,

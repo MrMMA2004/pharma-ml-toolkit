@@ -1,5 +1,22 @@
 #!/usr/bin/env python
-"""PharmaML Studio -- application entry point (directive #16, increment 1).
+"""RETIRED (part18 §10, the owner's mandatory directive) -- this file
+is NO LONGER an active supported application entry point.
+
+The supported application surfaces are:
+  * the React/Tauri 2 desktop app (frontend/ + src-tauri/) with the
+    frozen FastAPI sidecar (packaging/windows/backend_entry.py);
+  * the Python scientific toolkit + CLI (src/pharmaml/, __main__.py);
+  * the FastAPI backend (src/pharmaml/api/).
+
+This launcher lives on ONLY as quarantined archival source for
+reproducibility (the legacy PySide6 GUI: ui/ pages + workspace.py)
+and is NOT part of production packaging (the sidecar excludes the
+whole Qt stack) and NOT covered by the product's support.  See
+legacy/README.md.
+
+Original header follows:
+
+PharmaML Studio -- application entry point (directive #16, increment 1).
 
 Launch with::
 
@@ -27,6 +44,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# part18 §10 quarantine fix: the launcher now lives in legacy/, so the
+# toolkit root (the parent of legacy/) is what must land on sys.path for
+# ``from ui import run`` and the package imports to resolve
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ui import run
 

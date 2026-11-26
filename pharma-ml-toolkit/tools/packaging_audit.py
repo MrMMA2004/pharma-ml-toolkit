@@ -49,7 +49,8 @@ from pathlib import Path
 TOOLKIT = Path(__file__).resolve().parents[1]
 PACKAGING = TOOLKIT / "packaging" / "windows"
 
-SCAN_ROOTS = [TOOLKIT / "studio.py", TOOLKIT / "ui", TOOLKIT / "src", TOOLKIT / "scripts"]
+SCAN_ROOTS = [TOOLKIT / "legacy" / "studio.py", TOOLKIT / "ui",
+               TOOLKIT / "src", TOOLKIT / "scripts"]
 
 # import-name -> (pip distribution, purpose-for-the-inventory)
 DISTRIBUTION_MAP = {

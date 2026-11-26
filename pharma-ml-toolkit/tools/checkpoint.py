@@ -380,7 +380,7 @@ def _ship_gate_commands() -> list[tuple[str, list[str]]]:
         ("doctests", [sys.executable, "-m", "pytest", "--doctest-modules",
                       "-q", "-x", "src/pharmaml", "--no-header"]),
         ("ruff", [sys.executable, "-m", "ruff", "check",
-                  "src", "tests", "tools", "ui", "studio.py"]),
+                  "src", "tests", "tools", "ui", "legacy", "legacy/studio.py"]),
         ("mypy", [sys.executable, "-m", "mypy", "src"]),
         ("backend tooling smoke", [sys.executable, "-m", "pytest",
                                    "tests/test_checkpoint_tooling.py", *quiet]),

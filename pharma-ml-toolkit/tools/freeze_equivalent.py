@@ -151,7 +151,7 @@ from pathlib import Path
 TOOLKIT = Path(r"{TOOLKIT}")
 
 a = Analysis(
-    [str(TOOLKIT / "studio.py"), str(TOOLKIT / "tools" / "freeze_smoke_driver.py")],
+    [str(TOOLKIT / "legacy" / "studio.py"), str(TOOLKIT / "tools" / "freeze_smoke_driver.py")],
     pathex={pathex!r},
     binaries={binaries!r},
     datas={datas!r},

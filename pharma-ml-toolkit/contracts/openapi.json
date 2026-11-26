@@ -103,6 +103,53 @@
         "title": "AdmetScoreRequest",
         "type": "object"
       },
+      "AnomalyRequest": {
+        "description": "POST /api/v1/unsupervised/anomaly \u2014 Isolation Forest.",
+        "properties": {
+          "contamination": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "auto",
+            "title": "Contamination"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "mode": {
+            "default": "job",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "n_estimators": {
+            "default": 200,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "N Estimators",
+            "type": "integer"
+          },
+          "seed": {
+            "default": 42,
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dataset_id"
+        ],
+        "title": "AnomalyRequest",
+        "type": "object"
+      },
       "ArtifactTableRequest": {
         "properties": {
           "dataset_id": {
@@ -232,6 +279,121 @@
           "file"
         ],
         "title": "Body_upload_dataset_api_v1_datasets_post",
+        "type": "object"
+      },
+      "ClusterRequest": {
+        "description": "POST /api/v1/unsupervised/cluster \u2014 the shared request body.",
+        "properties": {
+          "affinity": {
+            "default": "rbf",
+            "enum": [
+              "rbf",
+              "nearest_neighbors"
+            ],
+            "title": "Affinity",
+            "type": "string"
+          },
+          "bandwidth": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mean Shift kernel bandwidth; omit to estimate",
+            "title": "Bandwidth"
+          },
+          "bin_seeding": {
+            "default": false,
+            "title": "Bin Seeding",
+            "type": "boolean"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "eps": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "DBSCAN neighbourhood radius; omit to use the k-distance estimate (reported as eps_source)",
+            "title": "Eps"
+          },
+          "gamma": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Gamma",
+            "type": "number"
+          },
+          "method": {
+            "default": "dbscan",
+            "enum": [
+              "dbscan",
+              "meanshift",
+              "spectral"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "metric": {
+            "default": "euclidean",
+            "enum": [
+              "euclidean",
+              "manhattan",
+              "cosine"
+            ],
+            "title": "Metric",
+            "type": "string"
+          },
+          "min_samples": {
+            "default": 5,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Min Samples",
+            "type": "integer"
+          },
+          "mode": {
+            "default": "job",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "n_clusters": {
+            "anyOf": [
+              {
+                "minimum": 2.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Spectral Clustering cluster count (required for the spectral method)",
+            "title": "N Clusters"
+          },
+          "n_neighbors": {
+            "default": 10,
+            "minimum": 1.0,
+            "title": "N Neighbors",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dataset_id"
+        ],
+        "title": "ClusterRequest",
         "type": "object"
       },
       "ConcentrationProfileRequest": {
@@ -3435,6 +3597,184 @@
           "pdbqt_text"
         ],
         "title": "ReceptorPrepareRequest",
+        "type": "object"
+      },
+      "ReinforceEvaluateRequest": {
+        "description": "POST /api/v1/reinforce/evaluate \u2014 the greedy-policy rollout.",
+        "properties": {
+          "cols": {
+            "default": 5,
+            "maximum": 20.0,
+            "minimum": 2.0,
+            "title": "Cols",
+            "type": "integer"
+          },
+          "episodes": {
+            "default": 50,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Episodes",
+            "type": "integer"
+          },
+          "method": {
+            "default": "q_learning",
+            "enum": [
+              "q_learning",
+              "sarsa",
+              "dqn",
+              "reinforce",
+              "actor_critic"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "policy": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "the trained run's policy table (state id -> action id)",
+            "title": "Policy",
+            "type": "object"
+          },
+          "rows": {
+            "default": 4,
+            "maximum": 20.0,
+            "minimum": 2.0,
+            "title": "Rows",
+            "type": "integer"
+          },
+          "seed": {
+            "default": 42,
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "policy"
+        ],
+        "title": "ReinforceEvaluateRequest",
+        "type": "object"
+      },
+      "ReinforceTrainRequest": {
+        "description": "POST /api/v1/reinforce/train \u2014 the experimental lane body.",
+        "properties": {
+          "alpha": {
+            "default": 0.1,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Alpha",
+            "type": "number"
+          },
+          "alpha_actor": {
+            "default": 0.05,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Alpha Actor",
+            "type": "number"
+          },
+          "alpha_critic": {
+            "default": 0.1,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Alpha Critic",
+            "type": "number"
+          },
+          "baseline": {
+            "default": true,
+            "title": "Baseline",
+            "type": "boolean"
+          },
+          "batch": {
+            "default": 32,
+            "maximum": 128.0,
+            "minimum": 4.0,
+            "title": "Batch",
+            "type": "integer"
+          },
+          "cols": {
+            "default": 5,
+            "maximum": 20.0,
+            "minimum": 2.0,
+            "title": "Cols",
+            "type": "integer"
+          },
+          "episodes": {
+            "default": 200,
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Episodes",
+            "type": "integer"
+          },
+          "epsilon": {
+            "default": 0.1,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Epsilon",
+            "type": "number"
+          },
+          "gamma": {
+            "default": 0.99,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Gamma",
+            "type": "number"
+          },
+          "hidden": {
+            "default": 32,
+            "maximum": 128.0,
+            "minimum": 4.0,
+            "title": "Hidden",
+            "type": "integer"
+          },
+          "lr": {
+            "default": 0.01,
+            "exclusiveMinimum": 0.0,
+            "maximum": 1.0,
+            "title": "Lr",
+            "type": "number"
+          },
+          "method": {
+            "default": "q_learning",
+            "enum": [
+              "q_learning",
+              "sarsa",
+              "dqn",
+              "reinforce",
+              "actor_critic"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "mode": {
+            "default": "job",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "replay_size": {
+            "default": 512,
+            "maximum": 4096.0,
+            "minimum": 32.0,
+            "title": "Replay Size",
+            "type": "integer"
+          },
+          "rows": {
+            "default": 4,
+            "maximum": 20.0,
+            "minimum": 2.0,
+            "title": "Rows",
+            "type": "integer"
+          },
+          "seed": {
+            "default": 42,
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "title": "ReinforceTrainRequest",
         "type": "object"
       },
       "ReportRequest": {
@@ -8877,6 +9217,117 @@
         ]
       }
     },
+    "/api/v1/reinforce/evaluate": {
+      "post": {
+        "description": "Deterministic greedy rollouts of a trained policy (no learning).",
+        "operationId": "evaluate_api_v1_reinforce_evaluate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReinforceEvaluateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Evaluate Api V1 Reinforce Evaluate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate",
+        "tags": [
+          "reinforcement-learning"
+        ]
+      }
+    },
+    "/api/v1/reinforce/methods": {
+      "get": {
+        "description": "The capability listing with the experimental label front and centre.",
+        "operationId": "methods_api_v1_reinforce_methods_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Methods Api V1 Reinforce Methods Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Methods",
+        "tags": [
+          "reinforcement-learning"
+        ]
+      }
+    },
+    "/api/v1/reinforce/train": {
+      "post": {
+        "operationId": "train_api_v1_reinforce_train_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReinforceTrainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Train Api V1 Reinforce Train Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Train",
+        "tags": [
+          "reinforcement-learning"
+        ]
+      }
+    },
     "/api/v1/repurposing/registry": {
       "get": {
         "operationId": "registry_api_v1_repurposing_registry_get",
@@ -9686,6 +10137,116 @@
         "summary": "Resources",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/v1/unsupervised/anomaly": {
+      "post": {
+        "operationId": "anomaly_api_v1_unsupervised_anomaly_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnomalyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Anomaly Api V1 Unsupervised Anomaly Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Anomaly",
+        "tags": [
+          "unsupervised"
+        ]
+      }
+    },
+    "/api/v1/unsupervised/cluster": {
+      "post": {
+        "operationId": "cluster_api_v1_unsupervised_cluster_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClusterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cluster Api V1 Unsupervised Cluster Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cluster",
+        "tags": [
+          "unsupervised"
+        ]
+      }
+    },
+    "/api/v1/unsupervised/methods": {
+      "get": {
+        "description": "The capability listing (the \u00a79 \"complete integration path\" door).",
+        "operationId": "methods_api_v1_unsupervised_methods_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Methods Api V1 Unsupervised Methods Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Methods",
+        "tags": [
+          "unsupervised"
         ]
       }
     },

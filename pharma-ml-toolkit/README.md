@@ -110,18 +110,29 @@ python -m pytest
 
 ## Graphical interface — PharmaML Studio
 
-The toolkit ships a graphical front end — open it instead of a terminal
-whenever you prefer pointing and clicking. The GUI runs on the Qt stack,
-which the core install does not include, so install the `studio` extra
-first (or `pip install PySide6 pyqtgraph qt-material qdarkstyle`):
+The supported graphical front end is the **React/Tauri 2 desktop
+application** (`frontend/` + `src-tauri/`): the nine workspaces
+(Introduction, Datasets, Machine Learning, Deep Learning, Generative AI,
+Molecular Docking, PK/PD, Molecular Dynamics Analysis, Visualization)
+rendered by React 19 + TypeScript over the FastAPI sidecar backend.  It
+is what the Windows installer (NSIS EXE / WiX MSI) ships.
 
 ```bash
-pip install -e ".[studio]"
-python studio.py
+# the desktop app (development mode)
+cd frontend && npm install && npm run dev      # Vite dev server
+cd ../src-tauri && cargo tauri dev             # the native shell
 ```
 
-A PySide6 **Studio** window opens with every calculation domain on its
-sidebar — 18 pages (Dashboard, Data Explorer, the Chemistry / PK/PD /
+> **The legacy PySide6 GUI is RETIRED** (part18 §10, the owner's
+> mandatory directive): `studio.py` is no longer an active supported
+> application entry point.  The quarantined launcher lives at
+> `legacy/studio.py`, marked unsupported and excluded from production
+> packaging (the sidecar spec refuses the whole Qt stack).  It remains
+> readable for archival/reproducibility only.
+
+The historical description below documents the retired GUI's
+capabilities (which the Tauri app's nine-workspace architecture now
+carries forward): 18 pages (Dashboard, Data Explorer, the Chemistry / PK/PD /
 Biology / Docking / Model Analysis / ML / Unsupervised / Deep Learning /
 Generative / Foundations / Best-of ML / Response AI / Utilities
 workbenches, Molecular Dynamics, the Image Lab, Settings) with scientific plots,
@@ -252,7 +263,7 @@ Engineering notes:
   training, evolution) run in a QThreadPool worker with a live progress
   bar and a cooperative Stop channel; every plot is PyQtGraph-native
   (no matplotlib backend roulette on exotic stacks).
-* **Environment doctor** — `python studio.py --doctor` (round 237) reports
+* **Environment doctor** (legacy, quarantined) — `python legacy/studio.py --doctor` reports
   the whole launch environment — interpreter, the
   PySide6/shiboken6 wheel family (versions matched, import probed),
   the GUI providers and the science stack — with a copy-pasteable fix
@@ -261,7 +272,7 @@ Engineering notes:
   broken (the classic Windows `DLL load failed while importing
   Shiboken`), Studio exits with code 2 and the diagnosis + reinstall
   recipe on stderr instead of a traceback wall.
-* **Headless / CI** — `QT_QPA_PLATFORM=offscreen python studio.py` runs
+* **Headless / CI** (legacy, quarantined) — `QT_QPA_PLATFORM=offscreen python legacy/studio.py` runs
   without a display (`ui/headless.py` preloads the committed EGL stub on
   boxes that have none); the offscreen page tests ride the same path.
   The offscreen fallback is Linux-displayless-ONLY (round 232, the
@@ -341,8 +352,8 @@ pharma-ml-toolkit/
 │   ├── docking/             # ligands + receptor (CSV/PDB/mmCIF in), grids + GPF/DPF, workflow, parsing, scoring, campaign
 │   ├── viz/                # figures for every domain + HTML reports + multi-format table export
 │   └── utils/               # io: read_table, write_table, safe_filename · validation: validate_smiles_syntax, require_columns, coerce_frame, looks_continuous
-├── studio.py               # THE graphical front end — `python studio.py` opens PharmaML
-│                            # Studio (directive #16 redesign, increments 1–14, all eighteen
+├── legacy/studio.py        # RETIRED legacy GUI launcher (part18 §10): quarantined,
+│                            # unsupported, archival only. The retired GUI (directive #16
 │                            # pages): sidebar navigation, PyQtGraph scientific plots,
 │                            # studio-token theming (Qt-Material/QDarkStyle optional), QThreadPool workers with
 │                            # the cooperative Stop; runs offscreen for CI (`ui/headless.py`

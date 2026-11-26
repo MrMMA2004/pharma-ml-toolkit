@@ -1,3 +1,119 @@
+## [1.2.242] — 2026-11-26 — round 365 (the 157th recorded run: the part18 campaign, trace 1a218363342face5 — MASTER_PROMPT part18's first executed increment: the unsupervised clustering families + Isolation Forest anomaly detection + the experimental RL lane with FULL backend→API→frontend integration, and the MANDATORY studio.py retirement)
+
+- **The eighteenth-class rollback recovered (the same partial-restore
+  signature as r362-r364)**: the recycle regressed the local `.git`
+  to the round-186 checkpoint `2eb0ede`, wiped the origin remote +
+  the credentials + the venv (rdkit/torch MISSING) + the frontend
+  `node_modules`, and left a working tree carrying the r364 terminal
+  content.  The recovery rode the r306–r364 playbook BEFORE any lane
+  work: the PAT re-spliced from `upload/MASTER_PROMPT.pdf` (93 chars,
+  600-mode, API-validated, never printed; `scratch/pat_recover_r365.py`),
+  the origin re-attached + fetched (no `arena/*` refs), the mixed-reset
+  `git diff origin/main` proof showed the tree matching the durable
+  `c39ae5f3` terminal with only 11 untracked stragglers (the retired
+  zip leftovers + the r228-retired playground.py disk orphans +
+  the r362 scripts), the reset restored HEAD on `origin/main`, the
+  venv rebuilt FOREGROUND at the exact pins (pharmaml 1.2.242,
+  torch 2.14.1+cpu, numpy 1.26.4), the frontend `npm ci` (147 pkgs),
+  the dev server daemon up (GET / 200).
+- **part18 §4.3 (the clustering lane) — three new production families
+  with the full integration path**: `ml/clustering.py` — DBSCAN
+  (eps/min_samples controls, the k-distance eps estimate labelled by
+  `eps_source`, first-class noise-point reporting), Mean Shift
+  (bandwidth supplied or estimated, no k, mode table), and Spectral
+  Clustering (affinity rbf/nearest-neighbours with gamma/n-neighbours,
+  explicitly distinct from the manifold's spectral EMBEDDING) — plus
+  the shared diagnostics block (silhouette, Davies-Bouldin,
+  Calinski-Harabasz, cluster sizes, noise ratio) over non-noise
+  samples with honest None on degenerates (0/1 cluster, all-noise).
+  API: `routes/unsupervised.py` (POST /api/v1/unsupervised/cluster +
+  GET /methods, sync+job modes).  Frontend: the Unsupervised Learning
+  section in the ML workspace (`features/ml/UnsupervisedLearningLane.tsx`
+  — method/eps/min-samples/bandwidth/n_clusters/affinity controls wired
+  to the real route; the parsed answer renders the summary, the honest
+  diagnostics and the noise census).
+- **part18 §4.5 (the anomaly lane) — Isolation Forest end to end**:
+  `ml/anomaly.py` — `isolation_forest_anomaly` with
+  contamination/n_estimators/seed controls, the decision-function
+  score convention, the between-classes threshold, the outlier rank
+  export, and the descriptive (never causal) per-feature contrast
+  table; the honesty note ("contamination-threshold verdicts, not
+  ground truth") travels in the API answer and renders in the UI.
+  API: POST /api/v1/unsupervised/anomaly.  The lane rides the same
+  Unsupervised Learning section with the feature table + the flagged
+  rows list.
+- **part18 §6 (the RL lane) — the separated experimental subsystem**:
+  `ml/reinforce.py` — GridWorldEnv + MDPSpec (Gymnasium-shaped, no
+  dependency), Q-Learning, SARSA, a compact DQN (NumPy MLP +
+  replay + frozen target), REINFORCE (the TRUE softmax gradient with
+  the moving-average baseline — the first draft's missing
+  log-derivative term was caught by the learning-curve gate and fixed
+  before ship), and tabular Actor-Critic; every trainer returns the
+  uniform RLRunResult (episode rewards, success rate, convergence
+  episode or honest never-settled, the greedy policy, checkpoints)
+  with JSON round-trip persistence (`save_policy`/`load_policy`),
+  bounded episodes/steps, and the separation rule ENFORCED BY TEST
+  (no RL method may ever appear in the supervised MODEL_REGISTRY).
+  API: `routes/reinforce.py` (POST /train, /evaluate, GET /methods —
+  status "experimental" front and centre, the no-pharmaceutical-
+  environment honesty note included).  Frontend: the clearly-labelled
+  "Reinforcement Learning — experimental" section with the agent /
+  episodes / seed controls and the curve evidence rendering.
+- **The integration contract discipline held**: the OpenAPI contract
+  re-exported (134 paths; `tools/export_openapi.py`), the generated
+  TypeScript types regenerated (`npm run generate:types`), the drift
+  gate green (`tests/api/test_contracts.py`), the routers registered
+  in the routes aggregation with dated part18 comments.
+- **part18 §10 (the MANDATORY studio.py retirement) — the first
+  executed increment**: `studio.py` moved to the quarantined
+  `legacy/studio.py` with the RETIRED banner (no longer an active
+  supported entry point; the supported surfaces are the React/Tauri
+  app + the frozen FastAPI sidecar, the Python toolkit/CLI, and the
+  FastAPI backend); `legacy/README.md` declares the quarantine
+  (UNSUPPORTED, not in production packaging — the sidecar spec's
+  excludes carry PySide6/shiboken6/pyqtgraph/qt_material/qdarkstyle,
+  the entry is backend_entry.py); the README launch commands replaced
+  (the desktop app section now leads with the Tauri app; the doctor/
+  headless references point at the quarantined path; the tree-map
+  entry marked RETIRED); the tools' path references updated
+  (checkpoint.py's ruff lane, packaging_audit.py's SCAN_ROOTS,
+  freeze_equivalent.py's spec template + the Windows legacy-app spec
+  pointing at the quarantined entry); the ui tests' exec path updated
+  (the qt-doctor lane runs the quarantined launcher; the conftest
+  path insert); the r228-retired playground.py disk orphans deleted;
+  and `tests/test_legacy_retirement.py` — 12 guards asserting the
+  launcher stays quarantined, the sidecar refuses the Qt stack, the
+  requirements carry no active PySide6 pin, the supported surfaces
+  remain importable, and the README never re-presents a root-level
+  launch.  The deeper migration (the ui/ pages + workspace.py into
+  the quarantine, the tests/ui suite's full retirement) is honestly
+  OPEN as the next part18 increment — recorded in
+  `legacy/README.md`'s migration note.
+- **part18 §12.4 — `docs/DESIGN.md` created**: the design system's
+  single reference — the oklch token table (light/dark), the status
+  colour twin, typography, spacing, radii, the surface hierarchy,
+  the chart palette + the Okabe-Ito colorblind override, the motion
+  principles (reduced-motion is a hard contract), the responsive
+  breakpoints, the accessibility gates, and the scientific-data
+  visualization rules (data dominates; honest axes; one chart engine;
+  never fabricated; degenerate answers render as their own states).
+- **The test evidence (this round's new lanes)**:
+  `tests/test_clustering.py` (26 tests), `tests/test_anomaly.py`
+  (16), `tests/test_reinforce.py` (26), `tests/api/test_unsupervised_reinforce.py`
+  (28), `tests/test_legacy_retirement.py` (12), the lanes' vitest
+  `src/features/ml/__tests__/UnsupervisedReinforceLane.test.tsx` (9) —
+  all green; the studio-adjacent regression suites re-run green
+  after the quarantine (513 passed across qt-doctor/pages-smoke/
+  architecture-hygiene/capability-registry; freeze-equivalent +
+  windows-pipeline 16 passed).
+- **The honest open items recorded for the next part18 increments**:
+  the DL architecture expansion (CNN/Transformer/Autoencoder/GAN/
+  Diffusion — the existing MLP/Residual/GNN/Recurrent surface is
+  verified; the rest is NOT_IMPLEMENTED, evidenced, not silently
+  claimed), the ui/ + workspace.py quarantine completion, the
+  capability-matrix addendum row updates, and the penetration lane's
+  deep-scan Monday slot (the r364 standing budget).
+
 ## [1.2.241] — 2026-11-26 — round 364 (the 156th recorded run: the owner-directed release round, trace 1a216bcc19052aa9 — the v1.2.241 NEW-version ship: the version carriers bumped in nine-point lockstep, the new zip across the six homes, and the new EXE/MSI released via the tag-triggered Windows workflow)
 
 - **The seventeenth-class rollback recovered (the partial-restore
