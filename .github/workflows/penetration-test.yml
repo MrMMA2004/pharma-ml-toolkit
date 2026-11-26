@@ -55,7 +55,13 @@ jobs:
   zap-api-scan:
     name: ZAP API scan (isolated ephemeral target)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # r364 (the maiden decode, layer 4): the 30-minute budget died
+    # mid-scan -- the freeze-stack install (~10-13 min) + the target
+    # boot left ~17 min for a scan that needs 25-40 (the passive
+    # 2-minute wait + the active scan over the full OpenAPI tree at
+    # maxRuleTime 20). The scan IS the deliverable -- a rushed scan
+    # is a worse penetration test, so the budget widens to 60.
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: pharma-ml-toolkit
