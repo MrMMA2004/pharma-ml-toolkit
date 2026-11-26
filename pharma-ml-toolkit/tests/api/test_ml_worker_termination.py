@@ -185,7 +185,11 @@ class TestResourceAwareParallelism:
     def test_clamps_and_reports_when_memory_tight(
         self, client, monkeypatch
     ):
-        import psutil
+        # the route's own contract (system.py): psutil is used when
+        # importable and NEVER required -- the clamp lane only exists
+        # where psutil exists, so these tests mirror the optionality
+        # (an environment without psutil skips instead of failing).
+        psutil = pytest.importorskip("psutil")
 
         class _TightVM:
             available = 16 * 1024  # 16 KiB free -- the real ~900 B frame's 8-worker estimate (32.4 KiB) cannot fit
@@ -208,7 +212,7 @@ class TestResourceAwareParallelism:
         assert advisory["available_bytes"] == 16 * 1024
 
     def test_no_clamp_when_memory_plenty(self, client, monkeypatch):
-        import psutil
+        psutil = pytest.importorskip("psutil")
 
         class _PlentyVM:
             available = 64 * 1024 ** 3
