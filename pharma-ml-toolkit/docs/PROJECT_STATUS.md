@@ -1760,12 +1760,20 @@ queue: **upkeep alone** — and the upkeep found real work.
   full leg table).
 - **The ship**: the v1.2.241 zip built by `scratch/build_zip_364.py`
   and seeded byte-identical across the six homes + the offsite
-  mirror; the lightweight tag `v1.2.241` pushed at the ship commit
-  triggering the Windows release workflow (the EXE/MSI + manifest +
-  checksums attached to the published GitHub release, the run
-  verdict + asset sizes recorded in the worklog R364 entry); the
-  penetration + install-smoke lanes dispatched and verified green.
-  The clean-machine owner-side stages stay honestly BLOCKED (a
-  hosted runner is a build env, not a clean machine).
+  mirror; the lightweight tag `v1.2.241` re-pinned at the third
+  build triggering the Windows release workflow — run 45789513105
+  SUCCESS, the published release v1.2.241 carrying the EXE
+  558,438,104 B + the MSI 710,970,870 B + the manifest + the
+  checksums + the generated SBOM (the two failed builds + their
+  at-source fixes recorded in the worklog R364 entry); the
+  install-smoke lane GREEN (run 45797853957 — asset integrity,
+  Defender, both installers, the lifecycle + uninstall + the
+  1.2.240 -> 1.2.241 upgrade with the user-data marker retained);
+  the penetration lane PARTIAL — the seven-layer maiden campaign all
+  fixed at source + verified end-to-end (the target boots on the
+  freeze stack, the OpenAPI imports, the scans run), the
+  full-breadth deep scan honestly pending the 360-minute weekly
+  slot. The clean-machine owner-side stages stay honestly BLOCKED
+  (a hosted runner is a build env, not a clean machine).
 - **Version**: NEW — 1.2.241 (the owner-directed release round). The
   counter 155 → 156 and RIDES the commit.

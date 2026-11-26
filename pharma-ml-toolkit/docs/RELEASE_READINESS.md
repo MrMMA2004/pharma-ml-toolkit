@@ -246,12 +246,22 @@ session; full detail in `docs/part12_audit/`):
   re-run green at close-out; every other leg rc=0.
 - **The release-archive verification section above is superseded by
   this round**: the shipped archive is now
-  `pharma-ml-toolkit-v1.2.241.zip` (the SHA-256 + byte size
-  recorded in the worklog R364 entry), seeded byte-identical across
-  the six homes + the offsite mirror; the EXE/MSI released via the
-  tag-triggered Windows workflow with the run verdict + asset sizes
-  recorded in the worklog R364 entry; the penetration + install-smoke
-  lanes dispatched and verified green.
+  `pharma-ml-toolkit-v1.2.241.zip` (27,887,437 B, sha-256
+  `8c42abb7…`), seeded byte-identical across the six homes + the
+  offsite mirror; the EXE/MSI released via the tag-triggered
+  Windows workflow — run 45789513105 SUCCESS, the published release
+  v1.2.241 carrying the EXE 558,438,104 B + the MSI 710,970,870 B
+  + the manifest + the checksums + the generated SBOM (the two
+  failed builds and their fixes recorded in the worklog R364 entry);
+  the install-smoke lane GREEN (run 45797853957 — asset integrity,
+  Defender, both installers' silent install + lifecycle + uninstall
+  + the 1.2.240 -> 1.2.241 upgrade with the user-data marker
+  retained); the penetration lane PARTIAL — the seven-layer maiden
+  campaign all fixed at source and verified end-to-end (the target
+  boots on the freeze stack, the OpenAPI imports, the scans run),
+  the full-breadth deep scan honestly pending the 360-minute weekly
+  slot (the three-budget probe 30/75/120 each cancelled mid-scan);
+  the API-side penetration suite green in the runner's api gate.
 - **Version**: NEW — 1.2.241 (the owner-directed release round); the
   counter 155 → 156 rides the commit. The standing BLOCKED lanes
   (clean-machine smoke, Stage-5 PySide6 retirement, installer
