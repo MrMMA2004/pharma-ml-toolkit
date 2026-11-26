@@ -61,7 +61,7 @@ jobs:
     # 2-minute wait + the active scan over the full OpenAPI tree at
     # maxRuleTime 20). The scan IS the deliverable -- a rushed scan
     # is a worse penetration test, so the budget widens to 60.
-    timeout-minutes: 75
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: pharma-ml-toolkit
