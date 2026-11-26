@@ -101,6 +101,29 @@ class TestPackagingRefusesTheLegacyGui:
         ]
         assert active == [], f"production requirements must not pin Qt GUI deps: {active}"
 
+    def test_packaging_validator_carries_the_quarantine_not_the_root(
+        self,
+    ) -> None:
+        """Round 365, run 45856387513 step-20 fix: the --static gate's
+        must-carry list still demanded the retired root ``studio.py``
+        and the Windows Release build died at the artifact validation
+        AFTER a fully green freeze+Tauri+NSIS+MSI ladder.  The gate
+        itself must never demand what part18 §10 forbids."""
+        validator = (
+            TOOLKIT / "packaging" / "windows" / "packaging_validation.py"
+        ).read_text(encoding="utf-8")
+        must_carry = re.search(
+            r"for rel in \(\s*(.*?)\):", validator, re.DOTALL
+        )
+        assert must_carry, "the validator's must-carry tuple not found"
+        block = must_carry.group(1)
+        assert '"studio.py"' not in block, (
+            "the packaging validator must not demand the retired root "
+            "studio.py (part18 §10); the quarantine path is the contract"
+        )
+        assert '"legacy/studio.py"' in block
+        assert '"packaging/windows/backend_entry.py"' in block
+
 
 class TestSupportedSurfacesRemain:
     def test_tauri_app_config_present(self) -> None:

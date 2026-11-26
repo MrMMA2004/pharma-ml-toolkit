@@ -99,8 +99,20 @@ def validate_static() -> int:
     print("== packaging validation -- static (source + config) ==")
     r = Report()
 
-    # 1. the entry point and the app resources the spec references:
-    for rel in ("studio.py", "LICENSE", "VERSION", "pyproject.toml"):
+    # 1. the entry points and the app resources the spec references:
+    #    (round 365, run 45856387513 step-20 fix) the retired root
+    #    ``studio.py`` left the list -- part18 §10 quarantines it at
+    #    ``legacy/`` and forbids the root copy; the sidecar spec's
+    #    entry is ``backend_entry.py`` and the legacy freeze spec's
+    #    entry is the quarantined path, so both are the must-carry
+    #    entry points now, alongside the metadata quartet.
+    for rel in (
+        "packaging/windows/backend_entry.py",
+        "legacy/studio.py",
+        "LICENSE",
+        "VERSION",
+        "pyproject.toml",
+    ):
         p = TOOLKIT / rel
         if p.is_file():
             r.ok(f"source file {rel}")
