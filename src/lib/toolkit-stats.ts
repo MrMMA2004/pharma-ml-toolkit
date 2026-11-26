@@ -18,16 +18,20 @@
  *  guard (tests/test_architecture_hygiene.py: the duplicate-symbol map
  *  pins, the library-surface import-graph census, the mabel/noael
  *  parity grid, the SBOM artifact pins). */
-export const SHIPPED_TEST_COUNT = 9017;
+export const SHIPPED_TEST_COUNT = 9123;
 
-/*  r361 (the 2h-sync housekeeping firing, the thirteenth-rollback
-    recovery class): the canonical collection re-verified live on the
-    repaired venv at the durable r360 terminal 4c86969d -- 9,017
-    collected / 0 errors / 495 files (the r360 pin, now measured not
-    inherited). The r325-era pin 8,555 had silently drifted 462 tests
-    behind over the r326..r360 lanes -- the carriers were last trued
-    at the r325 census moment and every lane since pinned only the
-    PROJECT_STATUS narrative. */
+/*  r366 (the part18 all-phases verification pass, the owner-directed
+    firing): the collection re-measured LIVE at the r365 terminal
+    762f60a5 -- 9,123 / 0 errors / 503 files, double-measured
+    identical (the +1 over the r365 narrative's 9,122 decoded: the
+    3237c983 regression guard post-dates that census tree a92b51b6
+    -- the claim was honest for that tree, this is the current
+    truth). The r361-era pin 9,017 had drifted 106 tests behind the
+    part18 lanes (the clustering families + Isolation Forest + the
+    RL lane + the retirement guards) and the v1.2.242 release never
+    re-trued the carriers -- the same silent-drift class this file's
+    own history warns about. Measurement-last: re-taken after this
+    round's ledger edits. */
 
 /** r315 note: the canonical collection re-verified at 8,428 / 0
  *  errors / 461 files (+10 the DTA route family, − 1 re-trued A-6
@@ -50,11 +54,16 @@ export const SHIPPED_TEST_COUNT = 9017;
  *  files" was off by one, the on-disk truth at 315fdddf was 9).
  *  This pin moves independently of the Python suite above —
  *  the CI's studio-frontend job runs both lanes. */
-export const SHIPPED_COMPONENT_TEST_COUNT = 337;
+export const SHIPPED_COMPONENT_TEST_COUNT = 346;
 
-/*  r361 re-true: the vitest suite re-verified live post-recovery --
-    337/337 over 38 files (the r360 pin, measured). The r314-era pin
-    110 had drifted 227 tests behind over the r315..r360 GUI lanes. */
+/*  r366 re-true: the vitest suite re-measured live at the r365
+    terminal -- 346/346 over 39 files (54.36s). The r361-era pin 337
+    (38 files) had drifted +9 tests behind the part18 GUI lanes
+    (the Unsupervised + Reinforcement Learning workspace sections
+    + their service/tests). The pin now EQUALS the live run. */
+
+/*  r361 re-true (superseded by the r366 pin above): 337/337 over 38
+    files was the r360 pin, measured on the repaired venv. */
 
 /*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
     +39 the workflow engine + route suites (22 engine + 17 route —
@@ -96,7 +105,17 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 337;
  *  toolkit .github path — resurrected by the same rollback, never
  *  registered at GitHub and never shipped in any archive — nets to
  *  zero (caught, removed); verified pin = live walk = page render. */
-export const SHIPPED_FILE_COUNT = 1844;
+export const SHIPPED_FILE_COUNT = 1860;
+
+/*  r366 re-true (measurement-last): the offline census replica
+    re-walked the toolkit tree at the r365 terminal AFTER this
+    round's own ledger edits -- 1,860 files / 167 dirs (the +16
+    files over the r361-era pin 1,844 are the part18 campaign's
+    tree growth: the clustering/anomaly/reinforce module family +
+    their two route families + the unsupervised.ts service client
+    + the retirement guards + docs/DESIGN.md + the r365 ledger
+    deltas). The pin now EQUALS the live walk (the exact
+    toolkit-fs.ts walk semantics, the canonical replica). */
 
 /*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
     +13 tree files (the pharmaml.workflow package x4, the route
@@ -244,7 +263,16 @@ export const SHIPPED_FILE_COUNT = 1844;
     movement + the psutil importorskip comment (+4) + the zap-automation tuning comment (+7) + the close-out verdict truing (+21: the QA verdict rows split + the RR/PS bullet trues), re-measured at the close-out walk. The
     collection + vitest + registry pins re-measured reproducing:
     9,017 / 337 / 33. Verified pin = live walk = page render. */
-export const SHIPPED_SOURCE_LINES = 590301;
+export const SHIPPED_SOURCE_LINES = 594836;
+
+/*  r366 re-true (measurement-last, the fixed-point discipline
+    held): the walk re-measured AFTER this round's own ledger
+    close-out edits -- 594,836 lines at 1,860 files / v1.2.242
+    (the +4,535 lines over the r361-era pin 590,301 are the part18
+    campaign's growth: the three production module families with
+    their full integration path + the retirement work + the r365
+    ledger set + this round's own QA/clause/addendum/bullet deltas,
+    +128 of which are this round's own). Verified pin = live walk. */
 
 /*  r322 (the 1.2.240 same-version re-ship, the §8 workflow lane):
     +3,422 the counted delta (the workflow package + the route family

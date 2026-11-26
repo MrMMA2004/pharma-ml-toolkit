@@ -313,3 +313,42 @@ session; full detail in `docs/part12_audit/`):
   this firing); the counter 156 → 157 rides the ledger commit. The
   standing BLOCKED lanes (clean-machine smoke, installer signing) are
   unchanged — the hosted-runner lanes cover the CI-side evidence.
+
+---
+
+## r366 addendum — the part18 all-phases verification pass (the owner-directed firing)
+
+The from-the-beginning phase check over the closed part18 campaign,
+with the two staleness defects the pass caught fixed at source:
+
+- **The all-phases verdict green** (phases 0–10): every deliverable
+  verified present and every gate re-run — the collection 9,123/503
+  (double-measured; the +1 over the r365 narrative decoded as the
+  `3237c983` regression guard post-dating that census tree), the
+  drift guards 202, the penetration suite 67, supply-chain +
+  architecture-hygiene 479, the API contracts 28, the retirement +
+  version-carrier pair 20, the github-page guard 11/11 + validation,
+  the packaging validator `--static` 27/27, the frontend vitest
+  346/346 over 39, lint clean.
+- **The release state re-verified live**: the v1.2.242 assets intact
+  (EXE 558,491,978 B / MSI 711,020,022 B / RELEASE_MANIFEST + the
+  generated SBOM + SHA256SUMS, all `state=uploaded`, `draft:false`),
+  CI green at HEAD, the six-home zip parity `9522afdf…` at
+  27,950,886 B, the install-smoke and security-scan evidence standing
+  from r365.
+- **The first find — the web census pins silently stale**: the four
+  `src/lib/toolkit-stats.ts` carriers drifted behind the release
+  (9,017/337/1,844/590,301 vs the live 9,123/346/1,860/594,708);
+  re-trued measurement-last (the walk re-taken after this round's
+  ledger edits; the registry pins 33/24 re-verified unchanged).
+- **The second find — ten stale `studio.py` references in the web
+  console** (the §10 Phase-8 acceptance residual): the download
+  step, the Interface row, six limit messages and the zip-content
+  note all re-aimed at the supported surfaces (the React/Tauri 2 app
+  + the CLI equivalents) with the quarantine wording.
+- **The BLOCKED lanes unchanged** (the standing register): the ZAP
+  full-breadth deep scan rides the 360-minute weekly Monday 04:30
+  UTC slot; the clean-machine owner-side stages, installer signing,
+  and the Rust-toolchain lanes stay honestly blocked as before.
+- **Version**: unchanged 1.2.242 — no re-ship (doc + root-web-console
+  deltas only); the counter 157 → 158 rides the commit.

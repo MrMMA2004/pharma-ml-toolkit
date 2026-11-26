@@ -311,7 +311,7 @@ const UPGRADE_ROWS: Array<{ aspect: string; before: string; after: string }> = [
   {
     aspect: "Interface",
     before: "Command-line only",
-    after: "CLI + notebooks + studio.py — the PySide6 Studio: eighteen verified pages over every domain (the legacy Tkinter playground retired in v1.2.141; the eighteen-page SECTIONS registry is pinned live by the UI tests and the §4.5 drift-guards)",
+    after: "CLI + notebooks + the React/Tauri desktop app — the supported installers (EXE/MSI) bundling the frozen FastAPI sidecar (the PySide6 studio.py retired to the legacy/ quarantine at part18 §10 / v1.2.242, marked unsupported; the legacy Tkinter playground retired in v1.2.141; the eighteen-page SECTIONS registry remains pinned live by the UI tests and the §4.5 drift-guards)",
   },
   {
     aspect: "Distribution",

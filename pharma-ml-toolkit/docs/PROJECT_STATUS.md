@@ -1819,3 +1819,46 @@ queue: **upkeep alone** — and the upkeep found real work.
 - **Version**: 1.2.242 (the part18 campaign's release, completed). The
   counter 156 → 157 and RIDES the ledger commit. The standing BLOCKED
   lanes carry unchanged.
+
+## 16. The r366 clause (the part18 all-phases verification pass — the owner-directed "check all phases from the beginning" firing: two staleness defects found + fixed at source)
+
+- **The all-phases verdict**: every part18 phase (0–10) verified
+  green over the closed r365 terminal `762f60a5` — the baseline
+  (ECC engines, collection exit 0), the defect register, the
+  backend/frontend traceability (drift guards 202), the supervised /
+  unsupervised lanes (clustering + Isolation Forest + PCA/manifold),
+  the Deep Learning lane (GNN + the DL workspace), the RL subsystem
+  (the §6 separation enforced by test), the Multi-Response/RSM pair,
+  the penetration lane (67 local + the security-scan CI green), the
+  mandatory retirement (root `studio.py` absent, the quarantine
+  guards 13/13, the packaging validator `--static` 27/27), the design
+  lane (`docs/DESIGN.md`), and the final verification slice (the full
+  gate set re-run this firing — see the QA r366 section).
+- **The first find — the web census pins silently stale**: the four
+  web carriers in `src/lib/toolkit-stats.ts` had drifted behind the
+  v1.2.242 release (9,017 vs the live 9,123 collected; 337 vs 346
+  vitest; 1,844 vs 1,860 files; 590,301 vs 594,708 lines) — the
+  part18 lanes added ~106 pytest cases and the release never re-trued
+  them (the r361 lesson recurring). Fixed at source, measurement-last:
+  all four re-trued to the double-measured values after this round's
+  own ledger edits; the registry pins 33/24 re-verified live.
+- **The second find — the web console's ten stale `studio.py`
+  references** (the part18 §10 acceptance residual): the download
+  panel still instructed `python studio.py`, the overview Interface
+  row presented the retired launcher as the toolkit interface, and
+  six web-lane limit messages pointed at it. Fixed at source: the
+  supported-GUI step now names the React/Tauri 2 app (the shipped
+  EXE/MSI installers bundling the frozen FastAPI sidecar), the limit
+  messages point at the real CLI equivalents
+  (`pharmaml docking prep-ligands / prep-protein / campaign /
+  vina-scan`, `pharmaml chem descriptors`), and the zip-content note
+  carries `legacy/studio.py`.
+- **The release evidence re-verified live**: the v1.2.242 assets
+  (EXE 558,491,978 B / MSI 711,020,022 B / the SBOM + manifest +
+  checksums) all `state=uploaded`; CI at HEAD green; the six-home zip
+  parity `9522afdf…` at 27,950,886 B; the browser E2E re-run over
+  both viewports with zero errors and the evidence screenshots
+  committed.
+- **Version**: unchanged 1.2.242 (doc + root-web-console-only
+  deltas — the r361–r363 no-re-ship precedent). The counter 157 →
+  158 and RIDES the commit.

@@ -1,5 +1,36 @@
 ## [1.2.242] — 2026-11-26 — round 365 (the 157th recorded run: the part18 campaign, trace 1a218363342face5 — MASTER_PROMPT part18's first executed increment: the unsupervised clustering families + Isolation Forest anomaly detection + the experimental RL lane with FULL backend→API→frontend integration, and the MANDATORY studio.py retirement)
 
+
+- **The r366 verification-pass firing (the owner-directed "check all
+  phases from the beginning" pass over the closed part18 campaign)**:
+  every part18 phase (0-10) verified green — the baseline, the defect
+  register, the traceability guards (202), the supervised/unsupervised
+  lanes, the Deep Learning lane, the RL subsystem with the §6
+  separation enforced by test, the Multi-Response/RSM pair, the
+  penetration lane (67 + the security-scan CI green), the mandatory
+  retirement (the guards 13/13 + the packaging validator --static
+  27/27), the design lane, and the full verification slice re-run
+  (collection 9,123/503 double-measured — the +1 over the r365 claim
+  decoded as the 3237c983 regression guard post-dating that census
+  tree; vitest 346/346 over 39; supply-chain + hygiene 479;
+  github-page 11/11; lint clean). The release evidence re-verified
+  live: the v1.2.242 assets intact, CI green at HEAD, the six-home
+  zip parity 9522afdf at 27,950,886 B. THE ROUND'S TWO FINDS, both
+  fixed at source: (1) the web census pins silently stale
+  (9,017/337/1,844/590,301 vs the live 9,123/346/1,860/594,708 —
+  the part18 lanes added ~106 cases and the release never re-trued
+  the carriers; all four re-trued measurement-last); (2) TEN stale
+  studio.py references in the web console (the part18 §10 Phase-8
+  acceptance residual: the download step instructing `python
+  studio.py`, the Interface row presenting the retired launcher, six
+  limit messages pointing at it, the zip-content note) — all re-aimed
+  at the supported surfaces: the React/Tauri 2 app (the shipped
+  installers) + the CLI equivalents (pharmaml docking prep-ligands /
+  prep-protein / campaign / vina-scan, chem descriptors). The
+  browser E2E re-run over both viewports, zero errors, the evidence
+  screenshots committed. Version unchanged 1.2.242 (doc +
+  root-web-console-only deltas — no re-ship, the r361-r363
+  precedent); the counter 157 -> 158 and RIDES the commit.
 - **The eighteenth-class rollback recovered (the same partial-restore
   signature as r362-r364)**: the recycle regressed the local `.git`
   to the round-186 checkpoint `2eb0ede`, wiped the origin remote +

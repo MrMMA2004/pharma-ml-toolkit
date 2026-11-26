@@ -68,17 +68,17 @@ const INSTALL_STEPS: InstallStep[] = [
       "requirements.txt pins the exact stack the QA chain runs green under (numpy 1.26.4, pandas 2.2.3, scikit-learn 1.5.2, …) — the reproducible route. The editable package install then maps pharmaml onto your Python.",
     commands: ["pip install -r requirements.txt", "pip install -e ."],
     extras: [
-      { name: ".[studio]", note: "the desktop Studio GUI (PySide6 + pyqtgraph)" },
+      { name: ".[studio]", note: "the legacy quarantined GUI stack (PySide6 — legacy/studio.py, unsupported, archival only)" },
       { name: ".[chem]", note: "cheminformatics (RDKit)" },
       { name: ".[docking]", note: "docking prep (RDKit + Meeko)" },
       { name: ".[boosting]", note: "gradient-boosting model families" },
     ],
   },
   {
-    title: "Open the Studio (desktop GUI)",
+    title: "The desktop app (the supported GUI)",
     description:
-      "python studio.py launches PharmaML Studio, the PySide6 desktop application: the nine-card home opens eighteen workspaces — chemistry featurization, PK/PD dosing, docking campaigns, model training, the generative workbench and more. The GUI needs the Qt stack, which the core install does not include — run pip install \".[studio]\" first (or pip install PySide6 pyqtgraph qt-material qdarkstyle). Long jobs run in a background worker with progress, and trained models export as report bundles.",
-    commands: ["pip install \".[studio]\"", "python studio.py"],
+      "The supported desktop application is the React/Tauri 2 app — PharmaML_Studio_Setup_v1.2.242.exe / PharmaML_Studio_v1.2.242.msi on the GitHub release, bundling the frozen FastAPI sidecar. The legacy PySide6 studio.py is retired (part18 §10): quarantined at legacy/studio.py, marked unsupported, and excluded from production packaging — no supported launch path starts it. For headless work the CLI (pharmaml …) covers every domain.",
+    commands: ["# grab the EXE/MSI installers from the GitHub release page"],
   },
   {
     title: "Verify the install",
@@ -338,7 +338,7 @@ function collectDirSummary(
       name: "(root)",
       files: rootFiles,
       size: rootBytes,
-      note: "README, CHANGELOG, VERSION, studio.py + ui/, pyproject.toml, Dockerfile, requirements.txt",
+      note: "README, CHANGELOG, VERSION, LICENSE, pyproject.toml, Dockerfile, requirements.txt, conftest.py",
     });
   }
   return out;
