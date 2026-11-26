@@ -367,19 +367,15 @@ class TestLearningCurveContract:
     """learning-curve.ts vs pharmaml.viz.plot_learning_curve (the
     100x-125 pair).
 
-    The web ML Training tab's "Learning curve" card mirrors the desktop
-    ML card's button.  The per-point numbers are engine-specific by
-    design (sklearn vs the TS twin), so this guard pins the CONTRACT
-    the two cards share: the default size schedule (numpy
-    ``linspace(0.1, 1.0, 8)`` — the TS linspace must reproduce numpy's
-    arithmetic bit-for-bit), the gap threshold (0.15, read from the
-    shipped Python source), and the two verdict strings — the Python
-    side reads them off REAL figures the shipped library produced (one
-    overfitting tree, one converging OLS), the TS side formats the SAME
-    parsed gaps, and the strings compare byte-for-byte.  The reduction
-    engine itself is pinned on the TS side against a hand-computed
-    fixture (prefix subsampling of each fold's train part, 1-based fold
-    slots, population std).
+    The web ML Training tab's curve shares chart conventions with the
+    Python function, but its per-point sizes and scores are engine-specific.
+    This guard pins only the default eight fractions (within 1e-12, not
+    absolute row counts), the 0.15 gap threshold, and verdict wording for
+    identical gaps. Python verdicts are read from real figures; TypeScript
+    formats those parsed gaps. The independent TS reduction is checked
+    against a hand-computed fixture (fold-prefix subsampling, 1-based fold
+    slots, population std). This does not establish sklearn size or score
+    parity.
     """
 
     LC_TS = REPO_ROOT / "src" / "lib" / "learning-curve.ts"
@@ -404,8 +400,8 @@ class TestLearningCurveContract:
         )
         ts = json.loads(Path("/tmp/lc_ts_125.json").read_text())
 
-        # 1. the default schedule: same 8 fractions, bit-for-bit (both
-        #    compute start + step*i with the last element pinned to 1)
+        # 1. the default schedule: same 8 fractions within 1e-12
+        #    (this assertion does not compare the absolute row counts)
         assert len(ts["fractions"]) == len(ref["fractions"]) == 8
         for ts_fraction, ref_fraction in zip(ts["fractions"], ref["fractions"]):
             assert abs(ts_fraction - ref_fraction) <= 1e-12, (ts_fraction, ref_fraction)

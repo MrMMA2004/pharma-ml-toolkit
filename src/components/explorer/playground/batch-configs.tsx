@@ -49,7 +49,7 @@ const MAX_PDBQT = 200;
 const MAX_TOTAL_CHARS = 4_000_000; // ~4 MB of PDBQT text
 
 /* ------------------------------------------------------------------ */
-/* Example campaign — one folder per ligand, as the desktop walk sees   */
+/* Example campaign — one folder per ligand                            */
 /* ------------------------------------------------------------------ */
 
 const ASPIRIN_PDBQT = `REMARK  Name = 01_aspirin
@@ -75,8 +75,8 @@ const RECEPTOR_PDBQT = `ATOM      1  CA  REC A   1      10.000  10.000  10.000  
 ATOM      2  N   REC A   1      12.300  10.500   9.800  1.00  0.00    -0.34 N
 `;
 
-/** 03_naproxen's ligand lives next to the receptor file — the batch must
- *  exclude r.pdbqt from the ligand search, exactly like the desktop. */
+/** 03_naproxen's ligand lives next to the receptor file; the batch must
+ *  exclude r.pdbqt from the ligand search. */
 const EXAMPLE_CAMPAIGN: CampaignFolder[] = [
   {
     folder: "01_aspirin",
@@ -131,7 +131,7 @@ export function BatchConfigs() {
     setParams((p) => ({ ...p, [key]: value }));
   }
 
-  /* ---- validation: the desktop's parse_float / parse_int_triple ---- */
+  /* ---- Local input validation for numeric settings ----------------- */
   const paddingNum = Number.parseFloat(params.padding);
   const spacingNum = Number.parseFloat(params.spacing);
   const gaRunNum = Number.parseInt(params.gaRun, 10);
@@ -211,7 +211,7 @@ export function BatchConfigs() {
     }
     if (candidates.length > MAX_PDBQT) {
       toast.error("Too many PDBQT files for the browser batch", {
-        description: `Pick at most ${MAX_PDBQT} files (you chose ${candidates.length}). Use the desktop Studio (python studio.py) for full campaigns.`,
+        description: `Pick at most ${MAX_PDBQT} files (you chose ${candidates.length}). Use the Python docking API/CLI to inspect larger campaigns; this browser demo has its own limits.`,
       });
       return;
     }
@@ -374,7 +374,7 @@ export function BatchConfigs() {
           {...({ webkitdirectory: "true", directory: "true" } as Record<string, string>)}
         />
 
-        {/* ---- parameters: the desktop grid card's fields ------------- */}
+        {/* ---- Parameters for the browser-side batch ------------------ */}
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <NumberField
             id="batch-padding"
@@ -468,8 +468,7 @@ export function BatchConfigs() {
             <TriangleAlert className="size-4" aria-hidden />
             <AlertTitle>Parameters need fixing</AlertTitle>
             <AlertDescription>
-              The batch waits until every field is valid — same rules the desktop&apos;s
-              parse_float / parse_int_triple apply.
+              The batch waits until every field is valid. Check the numeric ranges and formats.
             </AlertDescription>
           </Alert>
         ) : null}
@@ -480,8 +479,9 @@ export function BatchConfigs() {
             <code className="font-mono">.pdbqt</code> (the receptor file is excluded from the
             ligand search). The grid box, <code className="font-mono">r.gpf</code> and{" "}
             <code className="font-mono">r.dpf</code> texts are computed right here in your
-            browser and recompute live as you tune the parameters — the desktop writes the
-            pair to disk, the web hands you the same bytes to download. Set receptor types for
+            browser and recompute live as you tune the parameters — the Python workflow writes
+            config files to disk, while this web console offers the generated text as downloads.
+            Set receptor types for
             Ni-bearing receptors (the <code className="font-mono">gpferreceptorni.py</code>{" "}
             case).
           </p>

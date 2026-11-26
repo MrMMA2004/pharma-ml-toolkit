@@ -116,7 +116,7 @@ export function LigandPrep() {
     }
     if (smilesList.length > MAX_LIGANDS) {
       setError(
-        `The web calculator handles up to ${MAX_LIGANDS} ligands per run (you pasted ${smilesList.length}). Use the desktop Studio (python studio.py) for full libraries.`
+        `This web-console calculator handles up to ${MAX_LIGANDS} ligands per run (you pasted ${smilesList.length}). Use the Python docking API/CLI for larger libraries.`
       );
       toast.error("Too many ligands");
       return;
@@ -266,8 +266,9 @@ export function LigandPrep() {
               Clear
             </Button>
             <p className="text-[11px] text-muted-foreground">
-              The box + GPF/DPF are computed from the first successfully prepared ligand — the
-              campaign runner lives in the desktop Studio (<code className="font-mono">python studio.py</code> — the Docking Workbench)
+              This browser demo computes a box and GPF/DPF from the first successfully
+              prepared ligand; it does not run a docking engine or claim parity with the
+              separate React/Tauri Studio. Use the Python API/CLI for documented campaign workflows.
             </p>
           </div>
         </CardContent>

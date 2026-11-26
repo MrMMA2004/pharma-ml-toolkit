@@ -74,13 +74,13 @@ meet them in a project:
 | 6 | **Batch normalization**, the controlled A/B — same split, same seed | `pharmaml.ml.neural` |
 | 7 | Recap | — |
 
-§5 and §6 need PyTorch (`pip install 'pharmaml[deep]'`); §2 needs RDKit
-(`pip install 'pharmaml[chem]'`); everything else runs on the core
-dependencies.  Every number below is produced by the cells themselves
-(seeded, CPU, deterministic) — nothing is hand-written.  The CLI twins
-of §2/§4-§5 are `pharmaml chem rism` and `pharmaml ml tune`; the web
-playground exposes §3-§4 point-and-click (the *Machine Learning* tab's
-Hierarchical group + hyperparameter search).
+From the `pharma-ml-toolkit/` package root, install `.[deep]` for §5–§6
+and `.[chem]` for §2 with `python -m pip install -e '.[deep,chem]'`;
+everything else runs on the core dependencies. Every number below is
+produced by the cells themselves (seeded, CPU, deterministic) — nothing
+is hand-written. The CLI twins of §2/§4–§5 are `pharmaml chem rism` and
+`pharmaml ml tune`; PharmaML Studio and the separate Next.js console expose
+selected workflows, with coverage distinct from this notebook.
 """
     ),
     code(
@@ -105,7 +105,7 @@ warnings.filterwarnings("ignore", message=".*Stochastic Optimizer.*")
 try:
     import torch  # noqa: F401  (the deep extra, §5-§6)
 except ImportError:
-    sys.exit("PyTorch is required for §5-§6:  pip install 'pharmaml[deep]'")
+    sys.exit("PyTorch is required for §5-§6:  python -m pip install -e '.[deep]'")
 
 # Scratch directory for this run's artifacts (use any path you like).
 WORK = Path(tempfile.mkdtemp(prefix="tuning_workflow_"))
@@ -450,12 +450,12 @@ estimators top the table, `hsvr` tops the SVR family with its regimes
 on display, and the tuner paid for itself at every family it touched
 (§4's +0.2 R2 over the defaults is the cheapest win in the file).
 
-Next steps: the *Machine Learning* tab of `python playground.py`
-(or the web explorer's ML playground) trains and tunes `hsvr`
-point-and-click with the same diagnostics rendered; the deep learning
-notebook walks the estimator internals (residual blocks, history
-export, the registry path); `examples/run_regression.py` puts the
-whole registry — `hsvr` included — on one cross-validated leaderboard.
+Next steps: the supported Studio and separate Next.js console expose
+selected ML workflows; their feature coverage is distinct from this
+notebook. The deep-learning notebook walks the estimator internals
+(residual blocks, history export, the registry path);
+`examples/run_regression.py` puts the registry — `hsvr` included — on
+one cross-validated leaderboard.
 """
     ),
 ]

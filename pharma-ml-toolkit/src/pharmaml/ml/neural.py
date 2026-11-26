@@ -24,7 +24,7 @@ this module (or ``pharmaml`` itself) never requires torch; the import
 happens at :meth:`fit` time and raises an actionable
 :class:`~pharmaml.exceptions.DependencyError` when missing::
 
-    pip install 'pharmaml[deep]'
+    python -m pip install -e '.[deep]'
 
 Determinism: ``fit`` seeds both the PyTorch and NumPy random number
 generators from ``random_state``, so two estimators constructed with
@@ -104,7 +104,7 @@ __all__ = [
 _LOG = get_logger(__name__)
 
 #: pip command embedded in the DependencyError raised when torch is missing.
-_TORCH_HINT = "deep learning models require torch — pip install 'pharmaml[deep]'"
+_TORCH_HINT = "deep learning models require torch — from the toolkit package root run: python -m pip install -e '.[deep]'"
 
 #: Activation tokens accepted by the ``activation`` constructor parameter.
 _ACTIVATIONS: tuple[str, ...] = ("relu", "tanh", "gelu", "sigmoid")
@@ -127,8 +127,8 @@ def _require_torch() -> ModuleType:
     Raises
     ------
     DependencyError
-        When torch is not installed (message names the ``pharmaml[deep]``
-        extra that installs it).
+        When torch is not installed (the error includes the source-local
+        ``.[deep]`` install command).
     """
     try:
         import torch
@@ -470,8 +470,7 @@ class _BaseDeepEstimator(BaseEstimator):
         Raises
         ------
         DependencyError
-            When torch is not installed (see ``pip install
-            'pharmaml[deep]'``).
+            When torch is not installed (see ``python -m pip install -e '.[deep]'``).
         ModelError
             For invalid hyperparameters (validated before any work),
             when predicting before fitting, or when the training
@@ -1006,7 +1005,7 @@ class DeepMLPClassifier(ClassifierMixin, _BaseDeepEstimator):
     Notes
     -----
     Registry alias: ``build_model('dnn', 'classification')``.  Requires
-    the optional torch dependency — ``pip install 'pharmaml[deep]'``.
+    the optional torch dependency — ``python -m pip install -e '.[deep]'``.
     """
 
     _is_classifier = True
@@ -1085,7 +1084,7 @@ class DeepMLPRegressor(RegressorMixin, _BaseDeepEstimator):
     mean-squared-error loss; ``score`` returns R².
 
     Registry alias: ``build_model('dnn', 'regression')``.  Requires
-    the optional torch dependency — ``pip install 'pharmaml[deep]'``.
+    the optional torch dependency — ``python -m pip install -e '.[deep]'``.
     """
 
     _is_classifier = False
@@ -1169,8 +1168,7 @@ class ResidualMLPClassifier(ClassifierMixin, _BaseDeepEstimator):
     (see its docstring) — only the block architecture differs.
 
     Registry alias: ``build_model('dnn_residual', 'classification')``.
-    Requires the optional torch dependency — ``pip install
-    'pharmaml[deep]'``.
+    Requires the optional torch dependency — ``python -m pip install -e '.[deep]'``.
     """
 
     _is_classifier = True
@@ -1238,8 +1236,7 @@ class ResidualMLPRegressor(RegressorMixin, _BaseDeepEstimator):
     architecture.  ``score`` returns R².
 
     Registry alias: ``build_model('dnn_residual', 'regression')``.
-    Requires the optional torch dependency — ``pip install
-    'pharmaml[deep]'``.
+    Requires the optional torch dependency — ``python -m pip install -e '.[deep]'``.
     """
 
     _is_classifier = False

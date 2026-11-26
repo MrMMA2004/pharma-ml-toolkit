@@ -737,7 +737,7 @@ def smiles_to_pdbqt(
     except ImportError as exc:
         raise DependencyError(
             "smiles_to_pdbqt requires RDKit and Meeko. "
-            "Install with:  pip install rdkit meeko"
+            "From the toolkit package root, run: python -m pip install -e '.[docking]'"
         ) from exc
 
     if charge not in (None, 0):

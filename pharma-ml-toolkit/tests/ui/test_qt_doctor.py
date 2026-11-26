@@ -71,23 +71,24 @@ def _shadow_dir(tmp_path: Path) -> Path:
 
 
 def test_guidance_dll_failure_family() -> None:
-    """The Shiboken DLL report gets the family-reinstall recipe."""
+    """A broken Qt stack is identified as retired, not current Studio."""
     text = qt_import_guidance(ImportError(_USER_ERROR))
-    assert "could not load PySide6" in text
-    assert "uninstall -y PySide6 PySide6-Addons PySide6-Essentials shiboken6" in text
-    assert "install --upgrade PySide6" in text
-    assert sys.executable in text  # copy-pasteable, targets THIS interpreter
-    assert "--doctor" in text  # points at the full diagnosis path
-    assert "Visual C++" in text  # the runtime-dependency cause listed
-    assert "not a Studio bug" in text  # the diagnosis line
+    assert "retired PySide6 interface" in text
+    assert "archived and unsupported" in text
+    assert "React + TypeScript hosted by Tauri 2" in text
+    assert "Next.js console is a separate" in text
+    assert "No PySide6 reinstall recipe" in text
+    assert "--doctor" not in text
 
 
 def test_guidance_missing_module_family() -> None:
-    """A plain absent PySide6 asks for an install, not the reinstall dance."""
+    """Only archival reproduction is offered a local-extra install command."""
     text = qt_import_guidance(ModuleNotFoundError("No module named 'PySide6'"))
-    assert "not installed" in text
-    assert "-m pip install PySide6" in text
-    assert "uninstall" not in text  # nothing to uninstall yet
+    assert "For archival reproduction only" in text
+    assert "-m pip install -e \".[studio]\"" in text
+    assert sys.executable in text  # command targets the launching interpreter
+    assert "supported React/Tauri application" in text
+    assert "uninstall" not in text
 
 
 # -- doctor formatting / exit code (pure) ---------------------------------

@@ -33,8 +33,9 @@ close_figure(fig)
 The plot shows completed trials and the front calculated across **all**
 objectives. With three or more objectives, a non-dominated trial can look
 dominated in the displayed two-dimensional projection. No line is drawn
-between points to avoid implying a two-dimensional front. Plotting requires
-`pip install 'pharmaml[reports]'`.
+between points to avoid implying a two-dimensional front. From the inner
+`pharma-ml-toolkit/` package root, install plotting dependencies with
+`python -m pip install -e '.[reports]'`.
 
 `prune(k)` ranks the original full front by its NSGA-II crowding distance,
 keeping at most `k` trials, returned in original study order. The selection

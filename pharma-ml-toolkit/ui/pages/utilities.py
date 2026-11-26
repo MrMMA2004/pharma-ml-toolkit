@@ -969,7 +969,7 @@ class UtilitiesWorkbenchPage(QWidget):
             has_docx = False
         if not has_docx:
             self._report.setText(
-                "The Word export needs python-docx — pip install 'pharmaml[reports]' "
+                "The Word export needs python-docx — from the toolkit package root run python -m pip install -e '.[reports]' "
                 "(the CSV export works without it)."
             )
             return

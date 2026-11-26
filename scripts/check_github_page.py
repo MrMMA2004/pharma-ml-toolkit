@@ -42,11 +42,35 @@ def version_from(path: Path, pattern: str) -> str:
     return match.group(1)
 
 
+def _without_markdown_code(text: str) -> str:
+    """Remove fenced and inline code so examples cannot masquerade as links."""
+    visible: list[str] = []
+    fence_char: str | None = None
+    fence_length = 0
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        if fence_char is None:
+            opening = re.match(r"(`{3,}|~{3,})", stripped)
+            if opening:
+                fence_char = opening.group(1)[0]
+                fence_length = len(opening.group(1))
+                continue
+            visible.append(line)
+            continue
+        closing = re.match(rf"{re.escape(fence_char)}{{{fence_length},}}\s*$", stripped)
+        if closing:
+            fence_char = None
+            fence_length = 0
+    outside_fences = "\n".join(visible)
+    return re.sub(r"(?<!`)`+[^`\n]*`+(?!`)", "", outside_fences)
+
+
 def check_local_links(path: Path) -> int:
     """Check relative Markdown and inline-HTML links, including image sources."""
     text = path.read_text(encoding="utf-8")
-    refs = re.findall(r"!?\[[^]]*\]\(([^)]+)\)", text)
-    refs += re.findall(r'(?:src|href)="([^"]+)"', text)
+    link_text = _without_markdown_code(text)
+    refs = re.findall(r"!?\[[^]]*\]\(([^)]+)\)", link_text)
+    refs += re.findall(r'(?:src|href)="([^"]+)"', link_text)
     checked = 0
     for ref in refs:
         if ref.startswith(("http://", "https://", "mailto:")):
@@ -123,24 +147,40 @@ def main() -> None:
 
     readme = ROOT / "README.md"
     text = readme.read_text(encoding="utf-8")
+    required_claims = {
+        "research/clinical limitation": r"not clinical decision support",
+        "source-install status": r"not currently published on PyPI",
+        "supported desktop interface": r"React \+ Tauri 2",
+        "separate Next.js console": r"separate Next\.js",
+        "clean-machine release caveat": r"not recorded",
+    }
+    for label, pattern in required_claims.items():
+        if not re.search(pattern, text, re.IGNORECASE):
+            fail(f"README must state the {label}")
+    if re.search(r"(?m)^\s*python\s+(?:legacy/)?studio\.py\b", text):
+        fail("README must not present the retired PySide6 launcher as a command")
     if "](pharma-ml-toolkit/CHANGELOG.md)" not in text:
         fail("README must link the source changelog")
-    capture = re.search(
-        r'<img\s+[^>]*src="(pharma-ml-toolkit/docs/assets/web-console-v(\d+\.\d+\.\d+)\.png)"',
-        text,
+    source_version = re.search(
+        r"\*\*Source version in this checkout:\*\*\s+`v?(\d+\.\d+\.\d+)`", text
     )
-    if not capture:
-        fail("README must embed a versioned application capture")
-    screenshot = ROOT / capture.group(1)
-    captured_version = capture.group(2)
+    if not source_version or source_version.group(1) != version:
+        reported = source_version.group(1) if source_version else "missing"
+        fail(f"README source version is {reported}, expected {version}")
+    if f"source%20version-{version}-" not in text:
+        fail("README source-version badge does not match the checkout")
+
+    capture_path = "pharma-ml-toolkit/docs/gui/screenshots/r311-boot-introduction-desktop.png"
+    if capture_path not in text:
+        fail("README must include the labeled PharmaML Studio interface capture")
+    if not re.search(r"round 311 browser capture", text, re.IGNORECASE):
+        fail("README must label the Studio screenshot as a round 311 browser capture")
+    if not re.search(r"not evidence of a packaged Windows launch", text, re.IGNORECASE):
+        fail("README must distinguish the browser capture from packaged-install evidence")
+    screenshot = ROOT / capture_path
     if not screenshot.is_file():
-        fail(f"application capture is missing: {screenshot.relative_to(ROOT)}")
-    if tuple(map(int, captured_version.split("."))) > tuple(map(int, version.split("."))):
-        fail("application capture is newer than the checkout")
-    if captured_version != version and not re.search(
-        rf"historical\s+v{re.escape(captured_version)}\s+capture", text, re.IGNORECASE
-    ):
-        fail(f"older capture v{captured_version} must be labeled historical")
+        fail(f"Studio capture is missing: {screenshot.relative_to(ROOT)}")
+
     archive = ROOT / f"download/pharma-ml-toolkit-v{version}.zip"
     if not archive.is_file():
         fail(f"current release archive is missing: {archive.relative_to(ROOT)}")
@@ -161,17 +201,69 @@ def main() -> None:
         fail("GitHub social preview must be exactly 1280x640")
     capture_size = png_size(screenshot)
     if capture_size[0] < 1000 or capture_size[1] < 600:
-        fail(f"application capture is too small for the README: {capture_size}")
-    print(f"images: application v{captured_version} {capture_size[0]}x{capture_size[1]}, social 1280x640")
+        fail(f"Studio capture is too small for the README: {capture_size}")
+    print(f"images: Studio browser capture {capture_size[0]}x{capture_size[1]}, social 1280x640")
 
-    documents = [readme, ROOT / "CONTRIBUTING.md", ROOT / "SECURITY.md", ROOT / "CODE_OF_CONDUCT.md"]
+    manual_path = ROOT / "pharma-ml-toolkit/README.md"
+    frontend_readme = ROOT / "pharma-ml-toolkit/frontend/README.md"
+    workflow_guide = ROOT / "pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md"
+    documents = [
+        readme,
+        ROOT / "CONTRIBUTING.md",
+        ROOT / "SECURITY.md",
+        ROOT / "CODE_OF_CONDUCT.md",
+        manual_path,
+        frontend_readme,
+        workflow_guide,
+    ]
     total = sum(check_local_links(path) for path in documents)
-    print(f"local links: {total} across {len(documents)} community documents")
+    print(f"local links: {total} across {len(documents)} community and user documents")
 
-    manual = (ROOT / "pharma-ml-toolkit/README.md").read_text(encoding="utf-8")
+    manual = manual_path.read_text(encoding="utf-8")
     for section in ("Installation", "Testing"):
         if not re.search(rf"^#+\s+{section}\b", manual, re.IGNORECASE | re.MULTILINE):
             fail(f"nested user guide is missing its {section} section")
+    if not re.search(r"not\s+currently\s+published\s+on\s+PyPI", manual, re.IGNORECASE):
+        fail("package guide must disclose that PharmaML is not currently published on PyPI")
+    for extra in ("chem", "deep", "reports"):
+        if f"python -m pip install -c requirements.txt -e '.[{extra}]'" not in manual:
+            fail(f"package guide must include a constrained source-local .[{extra}] installation example")
+    if re.search(r"pip install\s+['\"]?pharmaml\[", manual):
+        fail("package guide must not present pharmaml extras as PyPI install targets")
+
+    web_install_path = ROOT / "src/components/explorer/download-panel.tsx"
+    web_install = web_install_path.read_text(encoding="utf-8")
+    if "python -m pip install -c requirements.txt -e '${name}'" not in web_install:
+        fail("web-console extra chips must constrain source-local installs to the pinned core")
+    for extra in ("chem", "docking", "boosting", "deep", "reports", "selfies", "explain"):
+        if f'name: ".[{extra}]"' not in web_install:
+            fail(f"web-console install guide must list the local .[{extra}] extra")
+    if not re.search(r"React \+ TypeScript application hosted by Tauri 2", web_install):
+        fail("web-console install guide must identify the React/Tauri desktop app")
+    if "Next.js site is a separate web console" not in web_install:
+        fail("web-console install guide must identify the separate Next.js console")
+    if "retired PySide6 launcher" not in web_install or "do not install or launch the current desktop app" not in web_install:
+        fail("web-console install guide must mark the PySide6 launcher as retired")
+    playground_sources = ROOT / "src/components/explorer/playground"
+    for source in playground_sources.rglob("*.tsx"):
+        if re.search(
+            r"(?m)\bpython\s+(?:legacy/)?studio\.py\b",
+            source.read_text(encoding="utf-8"),
+        ):
+            fail(
+                "web-console card must not present the retired launcher as current: "
+                f"{source.relative_to(ROOT)}"
+            )
+
+    workflow_text = workflow_guide.read_text(encoding="utf-8")
+    if not re.search(r"supported desktop is the React\s*\+\s*TypeScript/Tauri 2", workflow_text, re.IGNORECASE):
+        fail("workflow guide must identify the supported React/Tauri desktop")
+    if not re.search(r"retired PySide6 implementation", workflow_text, re.IGNORECASE):
+        fail("workflow guide must label historical PySide6 interface instructions")
+    if not re.search(r"do not imply feature parity", workflow_text, re.IGNORECASE):
+        fail("workflow guide must distinguish Python/CLI coverage from current app scope")
+    if re.search(r"(?m)^## .*\bin Studio\b", workflow_text, re.IGNORECASE):
+        fail("workflow guide must not label retired PySide6 procedures as current Studio sections")
     print("GitHub page validation passed")
 
 

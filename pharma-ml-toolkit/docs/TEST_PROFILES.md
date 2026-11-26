@@ -14,23 +14,26 @@ are the versions exercised in this phase, not claims about every supported versi
 | scikit-learn compatibility | pytest; core pins with a deliberate `--no-deps` replacement of scikit-learn to 1.3.0, 1.5.2 or 1.8.0 in separate environments | `python -m pytest tests/test_estimator_compatibility.py tests/test_conformal.py tests/test_conformal_classification.py tests/test_label_conditional_conformal.py tests/test_coverage_diagnostics.py -o addopts="-q --tb=short"` |
 | Cheminformatics | pytest; `rdkit==2026.9.1`, `mordred==1.2.0` | `python -m pytest tests/test_descriptors.py -o addopts="-q --tb=short"` |
 | Docking preparation | pytest; `rdkit==2026.9.1`, `meeko==0.8.0`, `gemmi==0.7.5` | `python -m pytest tests/test_docking_prep.py -o addopts="-q --tb=short"` |
-| Desktop Studio | install `.[gui-test]`; pinned CI versions in workflow; `matplotlib==3.10.9`; OS Qt/GL libraries | `QT_QPA_PLATFORM=offscreen PYQTGRAPH_QT_LIB=PySide6 python -m pytest tests/ui/test_molecular_dynamics_page.py tests/ui/test_main_window.py -o addopts="-q --tb=short"` |
+| Retired PySide6 UI (archival tests) | From the toolkit root, install `python -m pip install -e '.[gui-test]'`; pinned CI versions in workflow; `matplotlib==3.10.9`; OS Qt/GL libraries. This does not test the supported React/Tauri Studio. | `QT_QPA_PLATFORM=offscreen PYQTGRAPH_QT_LIB=PySide6 python -m pytest tests/ui/test_molecular_dynamics_page.py tests/ui/test_main_window.py -o addopts="-q --tb=short"` |
 | Notebook and provenance | pytest; pinned RDKit; `nbformat` | `python -m pytest tests/test_data_provenance.py tests/test_notebook_variants.py tests/test_docs_index.py -o addopts="-q --tb=short"`; `python tools/build_example_data.py --check` |
 | Web integration/parity | Full monorepo, Bun, Python core and pytest; RDKit and matplotlib plus system Xrender libraries for bridge rendering; some probes also depend on local scratch scripts and may write temporary probe output | `python -m pytest tests/test_web_parity.py tests/test_version_carriers.py -o addopts="-q --tb=short"`; web build/lint separately from repository root using the commands in CI |
 | Standalone release ZIP | Isolated extraction, pytest, pinned RDKit and `nbformat`; no Git or web tree | See [standalone testing](STANDALONE_TESTING.md) for the explicit `--standalone-release` selection. |
 | Full source/release | All required optional stacks, platform/system libraries, Bun, real release inputs, and engine runtimes | `python -m pytest` is a starting point, **not** a complete release validation by itself. Run the other profiles, archive verification and engine checks separately; see the audit for remaining blockers. |
 
 Use `python -m pip install -c requirements.txt ...` for optional package pins to
-avoid silently changing the core stack. GUI wheel installation alone does not
-supply system GL libraries; offscreen mode still loads Qt's native libraries.
+avoid silently changing the core stack. Installing the retired Qt test wheels
+alone does not supply system GL libraries; offscreen mode still loads Qt's
+native libraries.
 The docking preparation profile exercises Meeko-backed preparation, not docking
 engine execution. Running engine mocks or checking binary hashes is not a real
 engine invocation.
 
-The root CI workflow currently includes a focused core matrix, a chemistry and
-docking preparation selection, a focused Studio selection, and a web build.
-The broader notebook, web parity, full GUI and full source/release profiles are
-not implied by those jobs. For observed results and unexecuted work, see
+The root CI workflow currently includes a focused core matrix, chemistry and
+docking-preparation selections, React/Tauri frontend tests and build, a separate
+focused selection for the retired PySide6 source, and a web-console build. The
+archived Qt job does not validate the current desktop app. The broader notebook,
+web-parity, full legacy-Qt and full source/release profiles are not implied by
+those jobs. For observed results and unexecuted work, see
 [Part 5 audit](PART5_PHASE0_AUDIT.md).
 
 ## Windows bundled-engine smoke

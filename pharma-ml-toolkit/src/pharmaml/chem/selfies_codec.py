@@ -11,7 +11,7 @@ decodes to a chemically valid structure.  Random corruption never breaks
 the molecule; it only changes it.
 
 This module is the toolkit's typed surface over the ``selfies`` package
-(optional dependency -- ``pip install 'pharmaml[selfies]'``; the package
+(optional dependency -- ``python -m pip install -e '.[selfies]'``; the package
 itself is pure-Python stdlib, zero transitive dependencies):
 
 1. **Codec** -- :func:`smiles_to_selfies` / :func:`selfies_to_smiles`
@@ -114,14 +114,14 @@ _LOG = get_logger(__name__)
 #: ``selfies`` package is missing (the package is pure-Python, so the
 #: install is always fast and dependency-free).
 _SELFIES_HINT = (
-    "SELFIES support requires the selfies package — "
-    "pip install 'pharmaml[selfies]' (or pip install selfies)"
+    "SELFIES support requires the selfies package — from the toolkit package root run: "
+    "python -m pip install -e '.[selfies]'"
 )
 
 #: RDKit import hint for the audit / robustness halves.
 _RDKIT_HINT = (
-    "this surface requires RDKit — pip install 'pharmaml[chem]' "
-    "(or pip install rdkit)"
+    "this surface requires RDKit — from the toolkit package root run: "
+    "python -m pip install -e '.[chem]'"
 )
 
 #: Maximum number of error / mismatch examples kept in the typed reports

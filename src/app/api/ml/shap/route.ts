@@ -20,40 +20,27 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /* ------------------------------------------------------------------ */
-/* The SHAP web twin — the desktop GUI's fourth button row, compact   */
+/* SHAP feature attribution — separate Next.js web-console endpoint    */
 /* ------------------------------------------------------------------ */
 
 /**
- * Mean-|SHAP| feature attribution for the LAST trained configuration —
- * the web twin of the desktop GUI's SHAP button row (round 37's
- * pharmaml.ml.explain surface), in the compact form the round-38
- * close-out named as the standing candidate: the ranking needs no
- * canvas, so the card renders in pure TypeScript and only the
- * computation crosses into Python.
+ * Mean-|SHAP| attribution for the last training run represented by the
+ * web console. The route re-derives the same seeded train/test split from
+ * the frozen request and sends held-out rows to the Python tree explainer
+ * (`scripts/shap_bridge.py`: build_model -> fit -> shap_summary). The
+ * card renders the returned ranking in TypeScript. This interface is
+ * separate from the React/Tauri Studio and does not imply feature parity.
  *
- * The client re-sends the FROZEN train request (the same payload it
- * POSTed to /api/ml/train, parked at run time — the applicability-domain
- * and learning-curve routes' discipline). This route re-derives the rows
- * and the split with the SAME seeded generators and the SAME content-
- * hashed CSV convention the train route uses, so the explained held-out
- * rows are the very rows the run's parity chart drew — then hands them
- * to the toolkit's Python tree twin (scripts/shap_bridge.py: build_model
- * -> fit -> shap_summary, random_state=42 threaded in by the registry
- * factory). The estimator is a twin, honestly labelled as such: the web
- * playground's own models are TypeScript implementations, and
- * TreeExplainer explains trees.
- *
- * Tree families only (the desktop twin's own scope): decision_tree,
- * random_forest, extra_trees, gradient_boosting. Non-tree models are
- * refused with the pointer instead of a silent fallback.
+ * Supported tree families are decision_tree, random_forest, extra_trees,
+ * and gradient_boosting. Non-tree models are refused with an explanatory
+ * pointer rather than a silent fallback.
  */
 
 /** The tree families with a pharmaml MODEL_REGISTRY twin (all four ship
  *  as always-available sklearn estimators — no optional dependency). */
 const TREE_TWINS = new Set(["decision_tree", "random_forest", "extra_trees", "gradient_boosting"]);
 
-/** How many ranked features the compact read carries (the desktop twin's
- *  own top-20 bar, trimmed for the card). */
+/** Number of ranked features returned for this compact web-console card. */
 const DEFAULT_TOP_N = 8;
 
 const hyperSchema = {
@@ -110,7 +97,7 @@ const bodySchema = z
         message:
           "SHAP explains tree models — pick decision_tree, random_forest, extra_trees, or " +
           "(regression) gradient_boosting. The model-agnostic read is the permutation-importance " +
-          "card the desktop twin ships.",
+          "alternative in the Python package is pharmaml.ml.permutation_feature_importance.",
       });
     }
   });

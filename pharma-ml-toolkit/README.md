@@ -1,21 +1,21 @@
 # PharmaML Toolkit
 
-A **production-ready, typed, tested** Python toolkit for computational pharmacy, consolidating
-data, ML, biology, pharma, docking, PK/PD and cheminformatics into one coherent package:
+A **research-oriented Python toolkit** for computational pharmacy, with typed APIs for data handling, machine learning, biology, molecular docking, PK/PD and cheminformatics. It is designed to support exploration and reproducible workflows; its presence or test coverage does not establish scientific or clinical validity.
 
-| Domain | What it does |
+| Area | Scope |
 |---|---|
-| **`pharmaml.data`** | **Bring your own data** — load user CSV/TSV/Excel files, auto-detect the target column, infer classification (2+ classes) vs regression, audit data quality |
-| **`pharmaml.ml`** | QSAR machine learning — preprocessing, model registry (**33 families**: 24 classical + 3 boosting + **3 deep-learning families** + **hierarchical SVR** + voting/stackging), cross-validated training (binary **and multiclass**), evaluation, persistence, hyperparameter search (`RandomSearch` / **`TPESearch`** (Optuna's Parzen sampler) / `Hyperband` over `HyperParameters` spaces — with **`PercentilePruner`/`MedianPruner` fold-loop pruning**, Optuna-style trial states + durations + intermediates, **`param_importances`** (the MDI forest) — plus the tuners' own fold protocol `make_cv_splitter` public for apples-to-apples baselines and `resource_bounds` sizing Hyperband ladders from the family's own declared grid) — plus **the offline attribution engine (`ml.xai`: `input_x_gradient` / `integrated_gradients` with the convergence Δ / `smoothgrad` / `occlusion`, layer-activation traces, the bertviz-style attention grid — captum · tf-keras-vis · PAIR-code/saliency · bertviz absorbed with zero engine dependencies)**, **the run-trace board (`ml.runboard`: scalar/histogram/hparams/embedding event records over Vitter reservoirs with `always_keep_last`, the bias-corrected EMA smoothing, the projector's cosine nearest-neighbours — tensorflow/tensorboard absorbed), `ml.umap` (the fuzzy-simplicial-set pipeline: `smooth_knn_dist`'s binary search, the union symmetrisation, `find_ab_params`' curve fit, the negative-sampling SGD layout with gradient-for-gradient ports, `transform`, sklearn-pinned trustworthiness — lmcinnes/umap absorbed) and `ml.curation` (fiftyone's immutable view-stage algebra over any CSV — filter/match/sort/limit/skip/shuffle/take/select/exists/tags, plus the brain audits: duplicates, z-score/IQR outliers, uniqueness, similarity, evaluation — voxel51/fiftyone absorbed) — and, since 1.2.110, the reunited fork families: `ml.explainers`/`ml.ebm`/`ml.lime`/`ml.daley`/`ml.benchmark` (the XAI suite), `ml.mpnn`, `ml.admet`, `ml.pharmacogenomics`, the `pkpd` package (ODE/PBPK/population PK) and the `viz` palette/scale system**, plus **`ml.dta` paired drug–target encodings/features and DeepDTA rm2** |
-| **`pharmaml.biology`** | **Cell line data analysis** — GDSC/CCLE-style drug-response screens (load, audit, replicate collapse, LN_IC50↔pIC50), response matrices, sensitive/resistant calling, expression normalization, **biomarker discovery with BH-FDR** |
-| **`pharmaml.pharma`** | Pharmaceutical calculations — unit conversion, pharmacokinetics (PK), pharmacodynamics (PD), dosage design, regulatory-approval filtering (DGIdb TSV) |
-| **`pharmaml.docking`** | Molecular docking — ligand CSV import + protein/receptor preparation (PDB & mmCIF), grids **and DPF generation**, AutoDock4 & Vina batch workflows (incl. config-driven batches), result parsing, scoring, torsion QA, campaign file management, plus the **58-target DOCKSTRING box registry and original F2/promiscuous-PPAR/selective-JAK2 objectives**, and **pose-level contact geometry + PLIF interaction fingerprints** (`compute_contacts`, `contact_matrix`, `plif_matrix`/`plif_bits`) |
-| **`pharmaml.pkpd`** | Exact compartment/event simulation, extended NCA, population/PBPK/OSP registries and DDI qualification, plus a disclosed **two-compartment maternal–fetal model** with separate unbound fractions and a 16-project pregnancy index |
-| **`pharmaml.chem`** | Cheminformatics helpers — IC50/Ki ↔ pIC50/pKi conversion, RDKit descriptors, fingerprints, Tanimoto similarity, the eight-family **feature factory** (`compute_feature_frame` → 10,000+ columns per molecule, `rank_features`, `select_top_features` two-layer top-K selection; the 8th family is the **3D-RISM-KH solvation descriptor** set `compute_rism_descriptors`), SMI/CSV/SDF format conversion, tautomer standardization + 3D ligand generation (SMILES→PDB), ligand-table reconciliation & merging, **the SELFIES surface** (`chem/selfies_codec.py`: the robust molecular string codec, the round-trip fidelity audit, the corruption experiment — SELFIES vs SMILES validity — the vocabulary helpers, the label/one-hot feature matrix, the random-SELFIES generator, STONED-style symbol mutants and the save-and-restore constraint context manager) and **the CSV → canonical SMILES standardization lab** (`chem/csv_standardize.py`: six chains behind one call — the RDKit MolStandardize order, MolVS's standardize, the ChEMBL structure pipeline with its 163-salt + 9-solvent strip lists, datamol's standardize_mol, the REINVENT4 default and the plain baseline; the dimorphite_dl protonation enumerator with its 41 substructure pKa rules; the InChI round-trip standing in OpenBabel's cross-toolkit slot; the batch driver with SMILES-column auto-detection, no-silent-drop invalid rows, the duplicate register and the report exports — rdkit/MolStandardize · MolVS · ChEMBL_Structure_Pipeline · datamol · dimorphite_dl absorbed) |
+| **`pharmaml.data`** | Load CSV/TSV/Excel tables, inspect columns and targets, prepare splits, and check exact-key overlap. |
+| **`pharmaml.ml`** | QSAR and tabular-model workflows: preprocessing, training, evaluation, comparison, tuning, and selected uncertainty or interpretation tools. |
+| **`pharmaml.chem`** | Optional RDKit/Mordred-backed descriptors, fingerprints, similarity, standardization, and molecular-file conversion. |
+| **`pharmaml.docking`** | Ligand/receptor preparation, campaign-file handling, result parsing, and scoring; engine execution requires compatible external tools. |
+| **`pharmaml.pharma` / `pharmaml.pkpd`** | Pharmaceutical calculations, PK/PD analysis, and simulation; verify units, model assumptions, and intended use. |
+| **`pharmaml.biology`** | Drug-response table and biomarker workflows, including cell-line data; these are not patient-response evidence. |
+| **`pharmaml.generative`** | Research workflows for molecular generation and objective-based exploration; outputs need chemical and experimental validation. |
+| **`pharmaml.viz`** | Scientific plots and report/export helpers; optional dependencies apply. |
 
-This package is the upgraded, re-engineered version of a flat collection of research scripts:
-every module now has **type hints, Google-style docstrings, structured logging, custom
-exceptions, input validation, and pytest coverage** (**extensive pytest and doctest coverage**).
+Optional packages and workflow coverage vary by task. See [`docs/RESEARCH_WORKFLOWS.md`](docs/RESEARCH_WORKFLOWS.md), the [API index](docs/INDEX.md), and the relevant tests for detailed assumptions and evidence.
+
+The package is a structured alternative to a collection of one-off research scripts. Public modules use type annotations, validation and consistent error handling where implemented; test coverage varies by workflow. Tests check software behavior, not the validity of a scientific method or result.
 
 ---
 
@@ -25,7 +25,7 @@ exceptions, input validation, and pytest coverage** (**extensive pytest and doct
 * **Core deps only**: `numpy`, `pandas`, `scikit-learn`, `scipy`, `joblib` — everything else
   (RDKit, Mordred, XGBoost/LightGBM/CatBoost, Meeko, gemmi) is **optional and lazily imported**;
   missing packages raise an informative `DependencyError` instead of crashing at import time.
-* **Runs anywhere**: local, Docker (`Dockerfile` included), or CI (GitHub Actions workflow included).
+* **Local-first**: the package is designed for local use and has Docker/CI support; optional dependencies and native engines vary by platform and workflow.
 * **Deterministic examples**: the executed notebooks run entirely on the shipped
   `examples/data/` inventory (45 files recursively — every input table, the demo receptor and
   the demo docking campaign; see the tree below), regenerated deterministically by
@@ -35,72 +35,93 @@ exceptions, input validation, and pytest coverage** (**extensive pytest and doct
   `pharmaml <version>`), so the committed evidence can never silently predate the
   tree that ships it — after a version bump, `tools/reexec_notebooks.py`
   re-runs all eight notebooks (runtime depends on the environment); then run
-  `python tools/strip_notebook_outputs.py` to regenerate the no-output twins.
-* **Safety**: pharmaceutical functions validate every input (positive doses, ordered time series,
-  bounded fractions) and raise `DataValidationError` on bad values rather than returning nonsense.
-* **Research-catalog provenance**: `docs/GITHUB_RESEARCH_CATALOG_AUDIT.md` records the live, one-by-one disposition of all 140 catalog repositories, including absorbed features, playground surfaces and explicit non-parity boundaries.
+  `python tools/strip_notebook_outputs.py` to regenerate the output-free variants.
+* **Input checks**: many public functions validate units, ranges and required columns and raise domain-specific errors for invalid inputs. Review each function's documented assumptions; validation does not make a calculation patient-specific or clinically suitable.
+* **Research-catalog provenance**: `docs/GITHUB_RESEARCH_CATALOG_AUDIT.md` records the live, one-by-one disposition of all 140 catalog repositories, including absorbed library/API work, interface surfaces and explicit non-parity boundaries.
 * **Docs stay in sync with code**: `docs/INDEX.md` is auto-generated from each module's `__all__`
   and docstrings (`python tools/build_docs_index.py` from the toolkit root); a drift-guard test
   (`tests/test_docs_index.py`) fails whenever the index and the live package diverge, so the
   documented symbol list can never silently rot.
-* **Explorer dataset parity**: the companion web app's dataset preview route (`/api/ml/dataset`)
-  uses the *exact* same seeded generators as its training route (`/api/ml/train`) — identical
+* **Separate Next.js console — dataset parity**: its dataset-preview route (`/api/ml/dataset`)
+  uses the same seeded generators as its training route (`/api/ml/train`) — identical
   `mulberry32` PRNG, `make_regression_data`, and `makeMoons` implementations — so previewed rows,
-  statistics, and scatter plots are guaranteed to match the data a model is actually trained on.
-* **Shareable line references**: the web app's code explorer copies `path#LNN` references on any
-  line click and accepts them back in its search box (validated against the file tree, then
-  jumped to with a highlight), so a doc review, PR comment, or chat message can point peers at
-  an exact line of the package.
-* **Interpretability with a web twin**: the desktop's signed feature–target correlations
-  (drop-undefined-never-zero, swap-proof — the target always rides from the run's OWN held-out
-  split) are mirrored in the web ML playground's results card, its pure `pearsonCorrelation`
-  core pinned against `scipy.stats.pearsonr` by a paired parity guard
-  (`tests/test_web_parity.py`, worst |Δr| = 8.3e-17 over an 11-case seeded grid) — the two
-  languages cannot drift apart silently.
+  statistics, and scatter plots match the data used by that console's training route.
+* **Separate Next.js console — shareable line references**: its code explorer copies `path#LNN`
+  references on line clicks and accepts them in its search box (validated against the file tree,
+  then highlighted), so a doc review, PR comment, or chat message can point peers at an exact
+  line of the package.
+* **Separate Next.js console demonstration**: the root project includes its own ML Playground.
+  A parity test compares its Pearson-correlation helper with `scipy.stats.pearsonr`
+  (`tests/test_web_parity.py`, worst |Δr| = 8.3e-17 over an 11-case seeded grid). These facts
+  do not imply feature parity with the Python package or React/Tauri Studio.
 
 ---
 
 ## Installation
 
-**Reproducible route (recommended):** `requirements.txt` pins the exact
-stack the QA chain runs green under — install it first, then the package.
+PharmaML is distributed through its source repository and GitHub releases; it is not
+currently published on PyPI. Run the commands below from this directory, the inner
+`pharma-ml-toolkit/` package root.
+
+**Pinned-core route (recommended):** `requirements.txt` pins the tested
+core stack — install it first, then install the checked-out package without
+re-resolving its dependencies.
 
 ```bash
 # 1. every core library at the verified version
 #    (numpy 1.26.4, pandas 2.2.3, scikit-learn 1.5.2, scipy 1.14.1, ...)
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 # 2. the toolkit itself (editable — `import pharmaml` works immediately)
-pip install -e .
+python -m pip install --no-deps -e .
 ```
 
-Optional feature sets come as commented pinned blocks inside
-`requirements.txt` (cheminformatics, docking prep, boosting, deep
-learning with the torch CPU-wheel index line, reports, dev/QA) —
-uncomment what you need, or use the loose-range extras instead:
+`requirements.txt` contains the pinned Python 3.12 core snapshot; optional
+extras in `pyproject.toml` remain range-resolved. Commented pins for selected
+optional stacks are provided as a reference, but are not automatically
+activated. You can uncomment the pins you need and install with `-r` for a
+pinned stack, or use the source-local extras below with `requirements.txt` as a
+constraints file to preserve the core pins while resolving the extra within its
+declared compatibility range:
 
 ```bash
 # with cheminformatics extras (RDKit descriptors/fingerprints/similarity)
-pip install -e ".[chem]"
+python -m pip install -c requirements.txt -e '.[chem]'
 
 # with docking preparation extras (RDKit + Meeko: SMILES -> 3D PDBQT)
-pip install -e ".[docking]"
+python -m pip install -c requirements.txt -e '.[docking]'
 
 # with gradient-boosting model families
-pip install -e ".[boosting]"
+python -m pip install -c requirements.txt -e '.[boosting]'
 
-# with the desktop Studio GUI (PySide6 + pyqtgraph + theme providers)
-pip install -e ".[studio]"
+# with PyTorch estimators and molecular-generation models
+python -m pip install -c requirements.txt -e '.[deep]'
+
+# with plotting, HTML/PDF/Word reports, and image export
+python -m pip install -c requirements.txt -e '.[reports]'
+
+# with the SELFIES codec
+python -m pip install -c requirements.txt -e '.[selfies]'
+
+# with SHAP-based tree explanations
+python -m pip install -c requirements.txt -e '.[explain]'
 
 # development (pytest, mypy, ruff)
-pip install -e ".[dev]"
+python -m pip install -c requirements.txt -e '.[dev]'
 ```
 
-Pick one philosophy per environment — the pinned file or the loose
-extras — and don't mix them. `pyproject.toml` stays the compatibility
-contract; `requirements.txt` is the verified snapshot (Python 3.12).
+Extras in `pyproject.toml` use compatibility ranges; `-c requirements.txt`
+preserves the tested Python 3.12 core pins while resolving them. Optional
+versions themselves remain range-resolved. For a fully pinned feature stack,
+uncomment its optional pins in `requirements.txt` and install with `-r`.
 
-Quick test run (no install needed — `pyproject.toml` maps `src/` onto the import path):
+> The `studio` extra in `pyproject.toml` is retained for the retired
+> PySide6 source only. It does not install the supported desktop app;
+> use the React/Tauri development instructions below instead.
+
+A quick test run after installing the development dependencies is a starting
+point, not full release validation. Use the [named test profiles](docs/TEST_PROFILES.md)
+and record their results separately.
 
 ```bash
 python -m pytest
@@ -110,208 +131,28 @@ python -m pytest
 
 ## Graphical interface — PharmaML Studio
 
-The supported graphical front end is the **React/Tauri 2 desktop
-application** (`frontend/` + `src-tauri/`): the nine workspaces
-(Introduction, Datasets, Machine Learning, Deep Learning, Generative AI,
-Molecular Docking, PK/PD, Molecular Dynamics Analysis, Visualization)
-rendered by React 19 + TypeScript over the FastAPI sidecar backend.  It
-is what the Windows installer (NSIS EXE / WiX MSI) ships.
+The supported desktop application is the **React + TypeScript frontend** in `frontend/`, hosted by **Tauri 2** in `src-tauri/`. It provides nine workspace areas and calls the local FastAPI sidecar for scientific operations. The workspaces expose documented workflows; algorithm coverage and optional-dependency requirements vary by task. The Python package and CLI can also be used without the desktop app.
+
+For frontend development and tests, start from this toolkit directory:
 
 ```bash
-# the desktop app (development mode)
-cd frontend && npm install && npm run dev      # Vite dev server
-cd ../src-tauri && cargo tauri dev             # the native shell
+cd frontend
+npm ci
+npm test
+npm run typecheck
+npm run build
 ```
 
-> **The legacy PySide6 GUI is RETIRED** (part18 §10, the owner's
-> mandatory directive): `studio.py` is no longer an active supported
-> application entry point.  The quarantined launcher lives at
-> `legacy/studio.py`, marked unsupported and excluded from production
-> packaging (the sidecar spec refuses the whole Qt stack).  It remains
-> readable for archival/reproducibility only.
+A browser session with live scientific workflows also needs a local backend and the development-only Vite proxy settings; see [`frontend/README.md`](frontend/README.md). The native Tauri shell requires a compatible frozen Python sidecar staged under `src-tauri/resources/backend/`; that generated Windows resource is not included in a fresh source checkout, so `cargo tauri dev` is not a turnkey launch command. The [Windows release workflow](../.github/workflows/windows-release.yml) stages the sidecar before packaging.
 
-The historical description below documents the retired GUI's
-capabilities (which the Tauri app's nine-workspace architecture now
-carries forward): 18 pages (Dashboard, Data Explorer, the Chemistry / PK/PD /
-Biology / Docking / Model Analysis / ML / Unsupervised / Deep Learning /
-Generative / Foundations / Best-of ML / Response AI / Utilities
-workbenches, Molecular Dynamics, the Image Lab, Settings) with scientific plots,
-the studio theme (Deep Navy / Warm Ivory / Electric Lime, light and dark,
-WCAG-verified tokens; optional Qt-Material / QDarkStyleSheet providers) and QThreadPool workers behind a
-cooperative Stop button (directive #16's complete redesign; see
-`docs/gui/GUI_REDESIGN.md` and the tab-by-tab `docs/gui/GUI_AUDIT.md`).
-
-*(History: the original single-file Tkinter `playground.py` was declared
-retired in v1.2.141 — round 228 — after every one of its tabs landed a
-verified Studio page; round 304 completed the true retirement — the file
-itself (30,047 lines) and its 753-test suite left the shipped tree, the
-final version staying in the git history. The card-level descriptions
-below describe the capabilities, which live in the Studio's pages and
-the CLI.)*
-
-The capability map, in brief (every item wired to the same public
-backend APIs, grouped as named workflows — 11 pipelines, 57 steps):
-
-**Chemistry** (IC50/Ki →
-pIC50/pKi, molar mass, the ~200-descriptor table for any SMILES, Tanimoto
-similarity, and the **feature factory** — compute the full 10,000+-column
-seven-family feature matrix for a CSV or pasted SMILES set, rank every
-column and keep the top K you choose, exporting the selected-features CSV
-and its metadata JSON), **PK/PD** (half-life/accumulation, plotted IV bolus decay and Emax
-curves, oral Cmax, Cockcroft–Gault with renal adjustment, loading/maintenance
-and pediatric dosing), **Cell Lines** (GDSC/CCLE-style drug-response screens:
-load and audit a (cell line, compound, metric) table, collapse replicates,
-pivot the sensitivity matrix, call sensitive/resistant lines, and run the full
-biomarker-discovery pipeline with Benjamini-Hochberg FDR control — the bundled
-example recovers the planted EGFR biomarker for erlotinib in two clicks, plus
-the LN_IC50 ↔ pIC50 converter), **Docking** (prepare a whole ligand library
-as PDBQT with a per-ligand audit, turn a PDB/CIF receptor into a clean
-receptor PDBQT and distribute it into every campaign folder, compute the
-grid box and write the matching GPF/DPF pair for a reference ligand, parse
-DLG/Vina results — or scan an entire campaign — with ligand-efficiency
-columns, run AutoDock4/Vina when the binaries are on your PATH, and
-**rescore any loaded table — or an external summary CSV — into the
-explainable consensus**: one 0–1 `<column>_norm` unit per evidence column
-plus the consensus, with the evidence recipe and the driving-evidence
-verdict — then write the whole ranking as the one-click report bundle
-(`report.html` + the consensus-ranking figure + the breakdown table,
-`report.pdf` when the checkbox is ticked; the `docking rescore
---plots`/`--pdf-report` story, mouse edition)),
-**Data & ML** (open any CSV or a bundled example, train a
-registry model, read the metrics, browse a cross-validated leaderboard,
-and write the whole run as a one-click report bundle — `report.html` +
-figures + tables, with the multi-page `report.pdf` when the checkbox is
-ticked; the CLI `--plots`/`--pdf-report` story, mouse edition — run a
-**hyperparameter search**: `ml tune --searcher random`'s RandomSearch
-over the ann / hsvr / dnn hypermodel families, every trial scored on the
-same shuffled folds, the family's defaults scored too (the number the
-search has to beat), the winner refit and scored on the held-out 20 %,
-an apply-best bridge (ann/hsvr point the model combobox; dnn prefills
-the whole Deep Learning tab) and a trials CSV export — or `--searcher
-hyperband`'s successive halving over the family's resource budget
-(ann's max_iter, dnn's epochs; the ladder is the family's own declared
-grid via `resource_bounds`, the leaderboard gains a resource column and
-the status line carries the honest budget economics) — and audit any
-new CSV against the last trained model with **Check CSV…**:
-missing features, extra columns, reordering and version drift, every
-difference named, the training label dropped automatically; the `ml
-check` story, mouse edition),
-**Deep Learning** (the PyTorch estimators behind one card of inputs —
-pick the architecture (feed-forward or residual MLP), hidden widths,
-dropout, activation, Adam's learning rate and weight decay, the
-early-stopping patience and validation fraction, a **batch-normalisation
-checkbox** (`batchnorm=True`, a `BatchNorm1d` between every hidden
-linear map and its activation), then read the held-out
-metrics, the parity/confusion figure and the epoch-by-epoch loss curves
-with the early-stopping verdict, exportable per-epoch as CSV — and the
-same **Check CSV…** audit runs against the last trained network: the
-estimators carry the sklearn feature contract, so missing features,
-extra columns, reordering and version drift are named identically) and
-an **Attribution & attention** card (round 185: explain the LAST trained
-network on one held-out row — the method combobox over the four-method
-offline registry `input×gradient / integrated gradients (convergence Δ) /
-smoothgrad / occlusion`, a row selector and IG step count, the ranked
-per-feature table with the push sign and |attribution| share, a
-colorized heat map (blue = pushes down, red = up); **Layer activations**
-traces the hidden units (units, min/mean/max, dead-unit share, a
-grayscale unit heat map); **Attention grid** renders the bertviz-style
-layer × head grid over typed tokens with the strongest query→key pairs);
-a **Run board** card (round 186: the last run as a TensorBoard-style
-event log — per-epoch loss curves with the dashboard's EMA smoothing
-slider, the first layer's weight histogram over 30 fixed-width buckets
-with the per-layer stats strip, and the hparams trial table; every
-event list reservoir-sampled so long runs stay bounded); a **UMAP map**
-card (the run's test rows or the loaded CSV through UMAP's own
-pipeline — neighbours/min_dist/metric knobs, the map coloured by the
-target column, the Venna-Kaski trustworthiness in the title, nearest
-rows by original-space cosine, the embedding exportable as CSV); a
-**Data curation** card (fiftyone's view algebra over the loaded CSV —
-filter chains with stage provenance, duplicates, z-score outliers, class
-counts, most-similar rows); and an **Interactive figure** card
-(plotly.express over the figure-as-data model — kind/x/y/colour/template
-selectors, hover columns riding the points, the ASCII preview, and a
-self-contained hover-HTML export whose SVG carries native `<title>`
-tooltips) — and **Generative** (evolve molecules against QED/LogP objectives with the
-genetic algorithm, or fine-tune a SMILES RNN prior with reinforcement
-learning — the optimiser combo swaps the parameter block, and RL runs
-render the four-panel prior-drift introspection plus a first→last
-history table; adaptive GA runs render the operator-mix learning curve;
-multi-objective runs fill the Pareto front card — audit line,
-non-dominated table with the crowding-distance column and the deepest
-hidden trade-off rank, an objective-pair scatter and a CSV export of
-the front).
-
-The research-catalog fold-in also adds a **paired protein–ligand DTA** card
-(exact DeepDTA encodings, aligned ECFP/AAC/dipeptide features, a held-out
-ridge baseline and feature export), an **advanced PK/PD notebook** (exact
-repeated two-compartment regimens, extended NCA, maternal–fetal simulation,
-OSP/pregnancy project browsing and DDI qualification), and a **DOCKSTRING
-lab** (all 58 target boxes, QED-aware objectives and transfer into the
-Campaign runner). The DTA card is a data/metric baseline, not a bundled neural
-checkpoint; the pregnancy simulator is explicitly not a 27-compartment OSP fit;
-DOCKSTRING objective evaluation does not imply that docking was executed.
-
-Engineering notes:
-
-* **No installation required** — like `pytest` above, the Studio falls back
-  to the bundled `src/` tree, so it runs straight after unzipping the
-  archive.
-* **Nothing is mandatory** — heavy dependencies are probed and each
-  feature names the exact `pip install` line it wants when missing; missing
-  pieces never crash the window.
-* **Responsive by design** — long calculations (descriptor batches, model
-  training, evolution) run in a QThreadPool worker with a live progress
-  bar and a cooperative Stop channel; every plot is PyQtGraph-native
-  (no matplotlib backend roulette on exotic stacks).
-* **Environment doctor** (legacy, quarantined) — `python legacy/studio.py --doctor` reports
-  the whole launch environment — interpreter, the
-  PySide6/shiboken6 wheel family (versions matched, import probed),
-  the GUI providers and the science stack — with a copy-pasteable fix
-  printed under every failing check, and exits 0/1.  It never starts
-  the GUI and never mutates anything.  When the Qt binding itself is
-  broken (the classic Windows `DLL load failed while importing
-  Shiboken`), Studio exits with code 2 and the diagnosis + reinstall
-  recipe on stderr instead of a traceback wall.
-* **Headless / CI** (legacy, quarantined) — `QT_QPA_PLATFORM=offscreen python legacy/studio.py` runs
-  without a display (`ui/headless.py` preloads the committed EGL stub on
-  boxes that have none); the offscreen page tests ride the same path.
-  The offscreen fallback is Linux-displayless-ONLY (round 232, the
-  Windows black-window fix): Windows, macOS and Wayland desktops keep
-  their native platform plugin, because a displayless probe that tests
-  only X11's `DISPLAY` would silently force every Windows launch
-  offscreen — the app running with an invisible window and no GUI.
-* **Hover data inspection (§21)** — every PyQtGraph plot ships with a
-  crosshair cursor, nearest-data-point snapping and a live readout line
-  of the REAL values (series, exact x/y, per-point metadata when the
-  page attaches it — bin boundaries on histograms, categories on bar
-  charts); right-click a chart for per-series visibility toggles, the
-  inspection switch and reset-to-default-view; click a point to pin
-  its readout and emit the drill-down signal pages can wire.
-* **Sessions persist** — QSettings remember the window geometry, the
-  navigation state and the theme across launches.
-* **Light and dark** — the Settings page's theme switcher recolours the
-  whole window (the studio design tokens by default; Qt-Material
-  densities and the QDarkStyleSheet alternative remain selectable) and
-  re-tints every PyQtGraph plot through the
-  ChartPalette, live; the choice rides QSettings.
-* **Keyboard-first** — Ctrl+1..9 jump straight to the workbench pages;
-  every long job's cooperative Stop is one click away, and the offscreen
-  page suite pins the navigation map.
-
-*(The retired Tk playground's own affordances — the session-JSON
-export/import, the Ctrl+F card finder, the Tk widget census, the
-matplotlib TkAgg toolbars — declared retired with it in v1.2.141 and the
-file truly removed in round 304; their capabilities live on through the
-Studio pages above and the CLI.)*
-
----
+The former PySide6 launcher is **retired and unsupported**; `legacy/studio.py` is kept for archival and reproducibility only and is excluded from production packaging. Do not use `python studio.py` or the `.[studio]` extra as a route to the supported desktop app. The repository's Next.js console is a separate web application, not Studio.
 
 ## Versioned downloads & updating
 
 The downloadable archive is version-stamped: it downloads as
 `pharma-ml-toolkit-v<version>.zip`, carries its version in the `VERSION` file
-(and in `pyproject.toml` → `[project] version`), and the web explorer's
-Download tab shows the live version next to the size. `CHANGELOG.md` at the
+(and in `pyproject.toml` → `[project] version`), and the separate Next.js
+console's Download tab shows the live version next to the size. `CHANGELOG.md` at the
 archive root documents every release; versions follow semver — minor bumps
 add features, patch bumps ship fixes.
 
@@ -319,13 +160,11 @@ add features, patch bumps ship fixes.
 your current folder — `-o` overwrites without prompting:
 
 ```bash
-unzip -o pharma-ml-toolkit-v1.2.201.zip -d pharmaml   # your existing folder
+unzip -o pharma-ml-toolkit-v1.2.242.zip -d pharmaml   # your existing folder
 cat VERSION                                         # what you have now
 ```
 
-Because the install is editable (`pip install -e .`), Python picks up the
-replaced files on the next run — nothing to uninstall or reinstall, unless
-`pyproject.toml` gained new dependencies (then re-run `pip install -e .`).
+Because the install is editable (`python -m pip install --no-deps -e .`), Python picks up replaced files on the next run. If core dependencies changed, install the updated `requirements.txt` first and reinstall the package with `--no-deps`; for an added optional extra, use `python -m pip install -c requirements.txt -e '.[extra]'` from this directory.
 `cat VERSION` prints the toolkit version in one place. Files removed
 between versions are simply left behind (harmless — v1.2.141's retirement
 of `playground.py` is the example: delete it if you unzip over an older
@@ -360,10 +199,8 @@ pharma-ml-toolkit/
 │                            # preloads the committed EGL stub when the box has none); the
 │                            # legacy Tkinter playground.py (declared retired v1.2.141) left the
 │                            # shipped tree in round 304 — 30,047 lines, git history keeps it
-├── ui/                      # the Studio package: main_window · theme_manager · app_settings · pages/
-│                            # (dashboard · data_explorer · chemistry · pkpd · biology · docking · model_analysis ·
-│                            # ml_workbench · unsupervised · deep_learning · generative · foundations · bestofml ·
-│                            # responseai · imagelab · molecular_dynamics · utilities · settings) · widgets/ · workers/ · native/ — see docs/gui/
+├── ui/                      # retired PySide6 UI implementation used by legacy/studio.py; archival only
+│                            # do not confuse this source with the supported React/Tauri Studio in frontend/.
 ├── VERSION                 # the release version — `cat VERSION` after extracting (kept in
 │                            # sync with pyproject + src/pharmaml/__init__ by the ship ritual)
 ├── CHANGELOG.md            # what changed in each versioned release
@@ -372,7 +209,7 @@ pharma-ml-toolkit/
 ├── docs/LEAKAGE_AUDIT.md   # the data-leakage audit: the rar's 28 leaky files, the toolkit's guards, the web mirror's fix
 ├── docs/DATA_AUDIT.md     # the database audit: every shipped data file checked for gaps and errors (2 real ones fixed)
 ├── docs/RELEASE_READINESS.md # the Phase-6 evidence report (part6 §16): dependency matrix, capability coverage, §14.2-chunkened suite results, carrier agreement, archive audit — regenerate via tools/release_readiness.py
-├── tests/                   # Extensive pytest coverage across all domains (incl. test_database_audit.py — the shipped-data inventory guards, test_docking_prep.py, test_campaign.py, test_biology.py, test_neural.py, test_cellline_examples.py, test_descriptors.py, test_rism.py, test_hierarchical.py, test_tuner.py, test_format_converters.py, test_features.py, test_data_provenance.py — the notebook→builder round-trip guards, test_web_parity.py — the TS-mirror parity guards, tests/ui/ — the eighteen Studio pages' offscreen suites + data/ fixtures; the retired Tk playground's 753-test suite — 980 before the v1.2.141 trim — left the tree with the file's true retirement in round 304)
+├── tests/                   # Python/library tests, API tests, and notebook→builder guards; tests/ui/ are for the retired PySide6 implementation, while frontend tests live under frontend/.
 ├── examples/                # runnable demos + eight executed notebooks (complete ML · complete docking · complete PK/PD · complete cell line · complete molecule generation · complete deep learning · complete tuning & hierarchical · walkthrough) + seven no-output twins
 │   └── data/                # the shipped demo inventory — 43 files, ~720 KB (audited 526-check clean, docs/DATA_AUDIT.md), every executed notebook
 │                            #   loads its inputs from here (never fabricates sample data);
@@ -431,7 +268,7 @@ outputs committed (numbers *and* inline figures):
 
 Open it, replace the demo file with your own CSV (and the §2 library with your
 own SMILES column), and re-run all cells. §2 needs RDKit —
-`pip install 'pharmaml[chem]'`.
+`python -m pip install -e '.[chem]'`.
 
 ### The complete docking process in one notebook
 
@@ -459,7 +296,7 @@ data-entry stages (CSV and PDB in), executed end-to-end without a docking engine
 
 Point `DOCKING_DIR` at your real campaign folder and re-run — parsers, rescoring
 and plots work unchanged on real `.dlg` trees. §1–§3 need
-`pip install 'pharmaml[docking]'`; a ready-to-use demo receptor ships at
+`python -m pip install -e '.[docking]'`; a ready-to-use demo receptor ships at
 `examples/data/lysozyme_1aki.pdb`.
 
 ### The complete PK/PD process in one notebook
@@ -484,11 +321,11 @@ re-run; the CLI equivalent is `pharmaml pharma pk --data profile.csv`.
 (`examples/pharmaml_walkthrough.ipynb` remains the every-domain tour including
 PK, docking and chem conversions.)
 
-Each of the seven workflow notebooks also ships a **no-output twin**
-(`*_no_output.ipynb`) — identical cells with every output stripped, 4–30 % of
-the executed size (the ML twin is 46 KB vs 1.1 MB), for slow connections; run
-it top-to-bottom to produce the results yourself. A pytest drift-guard pins
-the twins' cell sources to the executed originals.
+Each workflow notebook also has an **output-free variant**
+(`*_no_output.ipynb`) with the same cell sources and saved outputs removed,
+for smaller downloads. Run it top-to-bottom to produce the results yourself.
+A pytest drift guard checks that each variant's cell sources match its
+executed notebook.
 
 ### The complete cell line process in one notebook
 
@@ -559,17 +396,18 @@ laptop CPU:
 
 The 12-drug seed table ships as `examples/data/seed_molecules.csv` — point
 `SEEDS_CSV` at your own CSV and every cell below it runs unchanged. §1–§6 need
-RDKit (`pip install 'pharmaml[chem]'`); §7 additionally needs PyTorch
-(`pip install 'pharmaml[deep]'`).
+RDKit (`python -m pip install -e '.[chem]'`); §7 additionally needs PyTorch
+(`python -m pip install -e '.[deep]'`).
 
 ### The complete deep learning process in one notebook
 
 `examples/complete_deep_learning_workflow.ipynb` is the sixth workflow
-notebook — the executed-notebook face of the PyTorch estimators behind the
-playground's *Deep Learning* tab (100x-61), executed with all outputs and
-six inline figures committed in ~15 s on a laptop CPU. Where the cell line
-notebook only meets `dnn` through the `compare_models` leaderboard, this one
-walks the **direct estimator API** of `pharmaml.ml.neural`:
+notebook — a Python API walkthrough of the PyTorch estimators in
+`pharmaml.ml.neural`, executed with all outputs and six inline figures
+committed in ~15 s on a laptop CPU. Where the cell-line notebook only meets
+`dnn` through the `compare_models` leaderboard, this one walks the **direct
+estimator API**. It does not claim feature parity with PharmaML Studio or
+the separate Next.js console:
 
 > §1 data entry (the shipped `qsar_regression.csv`, audited on the way in) →
 > §2 the seed-reproducible train/test split → §3 **`DeepMLPRegressor`** (the
@@ -584,11 +422,11 @@ walks the **direct estimator API** of `pharmaml.ml.neural`:
 > (`train_model("dnn", ...)` — impute + scale wrapped; why its R² differs
 > from the direct path, explained) → §8 **`DeepMLPClassifier`** (3-level
 > activity, 91 % accuracy, confusion matrix) → §9 the history record
-> exported as CSV → §10 recap with the playground cross-reference.
+> exported as CSV → §10 recap with a Python/CLI cross-reference.
 
 Point §1 at your own descriptor table and every cell below runs unchanged
 (same story as the other notebooks). PyTorch is the only extra:
-`pip install 'pharmaml[deep]'`.
+`python -m pip install -e '.[deep]'`.
 
 ### The complete tuning & hierarchical workflow in one notebook
 
@@ -609,9 +447,9 @@ trial, the defaults-vs-best gain line, the leaderboard figure → §5
 **`Hyperband`** successive halving over the deep hypermodel — the resource
 ladder (mean CV R² climbing rung by rung) and the epoch economics → §6
 **batchnorm A/B** — same split, same seed, only the flag differs; the
-honest verdict on a small standardised table → §7 recap with the CLI/web
-cross-references (`pharmaml chem rism`, `pharmaml ml tune`, the playground's
-Hierarchical group).
+honest verdict on a small standardised table → §7 recap with the CLI
+commands (`pharmaml chem rism`, `pharmaml ml tune`). Interface coverage is
+documented separately; this notebook does not claim desktop feature parity.
 
 A pytest guard pins the committed verdicts (the hsvr/global R² pair, the
 tuner's gain line, Hyperband's savings, the A/B lines) so the demo can
@@ -734,8 +572,9 @@ distribute_receptor(receptor, "ligand_folders")        # upgrades adder.py: r.pd
 ```
 
 Modern `.cif`/`.mmcif` entries work too — `prepare_protein("protein.cif",
-"r.pdbqt")` converts them via gemmi (`pip install gemmi`) before the same
-cleaning pipeline; the receptor's AutoDock atom-type census is one command away
+"r.pdbqt")` converts them via gemmi (included in the source-local `.[docking]`
+extra, installed with `python -m pip install -e '.[docking]'` from the toolkit
+package root) before the same cleaning pipeline; the receptor's AutoDock atom-type census is one command away
 with `pharmaml.viz.plot_receptor_atom_types(receptor)`. The pose-level reading is
 one command further: pair a pose with the receptor and `compute_contacts`
 classifies every atom pair in the 5 Å shell (salt bridge / H-bond /
@@ -822,7 +661,7 @@ specialists blended with a global SVR, regression only), plus `xgboost` / `light
 `catboost` when the optional packages are installed — and two **deep-learning families**:
 `dnn` (deep feed-forward MLP) and `dnn_residual` (residual net with learned skip
 projections), both classification **and** regression, powered by PyTorch
-(`pip install 'pharmaml[deep]'`).
+(`python -m pip install -e '.[deep]'`).
 They are full sklearn-API citizens — `train_model("dnn", …)`, `compare_models(models=[…,
 "dnn"])` and grid search work unchanged; without torch installed they simply report
 unavailable instead of breaking anything.
@@ -898,8 +737,7 @@ stack.best_meta, stack.best_test_r2, stack.residual_test_r2
 TRANSFORMED scale — the notebook's own convention, stated honestly in the
 docstring. Deterministic end to end (seeded KFold, seeded MI, seeded
 transformer); a failing meta-learner keeps a NaN row and sinks instead of
-killing the leaderboard. The GUI twin is the ML tab's
-"Stacking leaderboard (OOF + residual)" card. Upgrades `look.ipynb` — whose
+killing the leaderboard. Upgrades `look.ipynb` — whose
 uploaded cell carried three syntax slips and six duplicate descriptor
 columns (MolWt et al. are already inside `Descriptors.descList`), fixed
 here, not ported.
@@ -924,9 +762,7 @@ result.as_frame(y_test)  # actual / pred_median / pred_lower / pred_upper / inte
 
 The companion figure is `pharmaml.viz.plot_prediction_intervals`
 (a parity scatter with the sorted-by-actual band and the coverage box —
-the GP ±σ plot's twin for bracket-shaped uncertainty), and the GUI twin
-is the ML tab Results card's **Prediction intervals** button (α entry,
-"Save intervals…" table export, retires on the next train).
+the GP ±σ plot's twin for bracket-shaped uncertainty).
 Deterministic by default (`subsample=1.0` has no stochastic element; a
 stochastic configuration is seeded through `random_state`).
 The ensemble-std sibling `bootstrap_uncertainty` answers a different
@@ -977,11 +813,7 @@ twin `cross_model_importances` + `plot_permutation_heatmap`
 the upload drew over its base models and meta-learner — same seed per
 model so differences reflect the *models*, not the shuffle luck, and
 a feature a model never saw renders grey ("no vote"), not a fake
-zero. The GUI twins ride the ML tab: the Results card's
-**Correlations… / Correlation heatmap / Decode ECFP bit…** row, the
-leaderboard's **Cross-model importance…**, and the feature factory's
-**Filter low variance…** (threshold entry, kept/dropped ledger, frame
-adoption).
+zero.
 
 #### Unsupervised analysis (`ml.unsupervised` + `ml.manifold`) — the PDSH handbook's chapters 05.09–05.13
 
@@ -1012,11 +844,7 @@ O(n²) sample ceilings for MDS/t-SNE) is refused with the typed
 family from the same handbook (`gaussian_nb` / `multinomial_nb` /
 `bernoulli_nb`) joins `MODEL_REGISTRY` — with `multinomial_nb` trained
 WITHOUT the StandardScaler (counts must stay counts), enforced by the
-`NO_SCALE_MODELS` set. The GUI twin is the new **Unsupervised tab**:
-the Data & ML tab's dataset, a ten-method roster (PCA / K-Means / GMM
-/ KDE / Isomap / LLE / MDS / Spectral / t-SNE / hexbin), per-method
-parameters, the record's own summary, its canonical figure, the 2-D
-scatter twin coloured by any column, and the CSV export.
+`NO_SCALE_MODELS` set.
 
 #### SHAP (`ml.explain`) — the TreeExplainer surface, five figures deep
 
@@ -1033,7 +861,7 @@ from pharmaml.viz import (plot_shap_beeswarm, plot_shap_dependence,
                           plot_shap_heatmap, plot_shap_importance,
                           plot_shap_waterfall)
 
-summary = shap_summary(fitted_gbr, x_test)   # needs: pip install 'pharmaml[explain]'
+summary = shap_summary(fitted_gbr, x_test)   # needs: python -m pip install -e '.[explain]'
 summary.ranking(top_n=3)                     # mean |SHAP| per feature, descending
 plot_shap_beeswarm(summary)                  # every (sample, feature) point,
                                             # coloured by the feature's own value
@@ -1063,11 +891,8 @@ interactions.ranking(top_n=3)   # (feature_a, feature_b, mean |interaction|)
 the upload's own choice); anything else gets the typed error naming
 the model-agnostic `permutation_feature_importance` sibling instead
 of a slow `KernelExplainer` approximation, and multiclass is refused
-with the same honesty. The beeswarm is PURE matplotlib — only the
-computation needs shap, the drawing never does. The GUI twins are the
-Results card's four SHAP rows (**beeswarm / top-20 bar / waterfall… /
-force… / dependence… / heatmap / group difference…**), drawn over the
-run's own held-out rows.
+with the same honesty. The beeswarm is pure matplotlib — only the
+computation needs shap, the drawing never does.
 
 #### Offline attribution & attention (`ml.xai`) — captum · tf-keras-vis · PAIR-code/saliency · bertviz, no engines
 
@@ -1094,7 +919,7 @@ from pharmaml.ml.xai import (
     demo_attention_layers, token_pairs,                 # bertviz
 )
 
-attribution_methods()          # the registry, GUI combobox order
+attribution_methods()          # the registered attribution methods
 ig = integrated_gradients(numpy_net, row, steps=50)
 ig.attributions                 # per-feature attribution values
 ig.convergence_delta            # f(x) - f(baseline) - sum(attributions):
@@ -1117,7 +942,7 @@ pairs = token_pairs(layers[0].weights[0],
                                 # bertviz's digest of one head
 diverging_hex(ig.attributions[0], np.abs(ig.attributions).max())
 grayscale_hex(ig.attributions[0], ig.attributions)
-                                # the two Tkinter-ready palettes
+                                # scalar colour helpers for attribution values
 ```
 
 The gradient trio is exact analytic backprop through the numpy
@@ -1126,8 +951,8 @@ engine's layer stack (`numpy_layer_stack` reads
 differences in the test suite, so the numbers never depend on torch);
 occlusion needs only `predict`/`predict_proba`. No torch, no
 tensorflow, no network — and each registry entry credits its origin
-repo (`ATTRIBUTION_METHODS`). The GUI twin is the Deep Learning tab's
-**Attribution & attention** card.
+repo (`ATTRIBUTION_METHODS`). These are Python APIs and do not imply
+that either graphical application exposes every method.
 
 The registry's three deferred fold-ins are compact offline surfaces in
 the same module and card:
@@ -1311,7 +1136,7 @@ results = Hyperband(build_deep_regressor, objective="r2",
                     resource="epochs", max_resource=81).search(X, y)
 
 # Size the ladder from the family's OWN declared grid -- the shipped
-# hypermodels' resource slots (the playground's Tune card does exactly this):
+# hypermodels' explicitly declared resource slots:
 from pharmaml.ml import resource_bounds
 r_min, r_max = resource_bounds(build_ann_regressor, "max_iter")   # (200, 1000)
 results = Hyperband(build_ann_regressor, resource="max_iter",
@@ -1327,23 +1152,19 @@ baseline = cross_val_score(build_ann_regressor(HyperParameters()), X, y,
 
 Ready-made hypermodels: `build_ann_regressor` / `build_ann_classifier` (sklearn
 MLP), `build_deep_regressor` / `build_deep_classifier` (PyTorch, with
-`batchnorm` a `hp.Boolean` slot) and `build_hsvr`. The CLI twin is
-`pharmaml ml tune` (random, **tpe** or hyperband, leaderboard + trials
-table + `--save-best` bundle) and the desktop playground's
-**Hyperparameter search** card runs the same search in all three
-flavours — RandomSearch, **TPESearch (Optuna's Parzen sampler)**, or
-Hyperband with the rung ladder sized from the family's own declared grid
-via `resource_bounds` (a resource column in the leaderboard, the honest
-budget line: “budget 3998 of a naive 6000 max_iter (33% saved)”) — with
-the **median pruner choice** (pruned trials get their own leaderboard
-rows, the partial fold score marked so it never reads as a full CV
-score), the defaults baseline, an apply-best bridge into the Deep
-Learning tab (the winner's rung resource rides along), a trials CSV
-export (mouse edition) and the **seven study figures** over the last
-search (optimization history / slice / parallel coordinates / param
+`batchnorm` a `hp.Boolean` slot) and `build_hsvr`. The Python API supports
+RandomSearch, **TPESearch (Optuna's Parzen sampler)** and Hyperband; the CLI
+command `pharmaml ml tune` provides a leaderboard, trials table and optional
+`--save-best` bundle. Hyperband sizes its rung ladder from the family's own
+declared grid via `resource_bounds`, records resource usage and budget
+comparisons, and supports median pruning. Trial states and partial scores
+are retained explicitly; the API also provides seven study figures
+(optimization history / slice / parallel coordinates / parameter
 importances / EDF / timeline / intermediates). Failed and pruned trials
 are recorded, not fatal; sampling is seeded, so the same seed + data
-always reproduce the same search.
+reproduce the same search. The React/Tauri Studio and separate Next.js
+console have independently documented workflows; this Python guide does
+not imply feature parity.
 
 #### 3D-RISM-KH solvation descriptors (`chem.rism`)
 
@@ -1681,15 +1502,15 @@ de_novo.to_dataframe().head(10)   # ranked leaderboard: rank, smiles, score, bre
   — e.g. `pharmaml generative run --recipe druglike --pareto
   --pareto-keep 8 --pareto-plot front.png`) and
   `pharmaml generative corpus`.
-* Requires `pip install "pharmaml[chem]"`; the RNN/RL half additionally needs
-  `pip install "pharmaml[deep]"` (PyTorch is imported lazily — the package works without it).
+* Requires `python -m pip install -e '.[chem]'`; the RNN/RL half additionally needs
+  `python -m pip install -e '.[deep]'` (PyTorch is imported lazily — the package works without it).
 
 ### SELFIES: the robust molecular string (from 0 to 100)
 
 SMILES has one structural flaw a generative pipeline keeps paying for: an arbitrary
 string of SMILES characters is *usually not a molecule*. SELFIES (SELF-referencIng
 Embedded Strings, Krenn et al. 2020; `the-matter-lab/selfies`, Apache-2.0 — an optional
-`pip install 'pharmaml[selfies]'`, pure-Python with zero transitive dependencies)
+`python -m pip install -e '.[selfies]'`, pure-Python with zero transitive dependencies)
 fixes that by construction: its grammar clamps every bond, branch and ring to the
 remaining bonding capacity, so **any sequence of SELFIES symbols decodes to a valid
 molecule**. The `chem.selfies_codec` module is the toolkit's typed surface over it:
@@ -1736,13 +1557,10 @@ with semantic_constraints({"C": 1, "O": 1, "N": 1, "?": 1}):
 selfies_to_smiles("[C][#C]")                 # 'C#C' — restored, nothing leaked
 ```
 
-* The playground's Chemistry tab carries the GUI twins: a **SELFIES codec** card
-  (both directions + the symbol/token view) and a **SELFIES audit & robustness**
-  card (round-trip funnel, the corruption-experiment figure, the random generator).
 * Honest scope: the decoder writes aromatic rings in kekulé form (`C1=CC=CC=C1`) —
   chemically identical, and canonical-equal under RDKit, which is exactly the
   round-trip audit's criterion.
-* Requires `pip install "pharmaml[selfies]"`; the audit / robustness / feature
+* Requires `python -m pip install -e '.[selfies]'`; the audit / robustness / feature
   halves additionally need RDKit. The package is imported lazily everywhere.
 
 ### REINVENT4's scoring DSL & diversity filters (from 0 to 100)
@@ -1791,14 +1609,6 @@ result = GeneticOptimizer(objective, population_size=24, seed=42).optimize()
 objective.scaffold_stats()   # scaffolds, full buckets, zeroed scores, ...
 ```
 
-* The playground's Chemistry tab carries the **score transform lab (REINVENT4)**
-  card (component + transform + window over any pasted list) and the **custom
-  alerts & standardization (REINVENT4)** card (the blocklist verdict table and
-  the default standardization chain: largest fragment, salt removal, the nine
-  neutralisation SMARTS, the (2, 70) heavy-atom / prior-vocabulary window).
-* The Generative tab gained the **diversity filter** block and the
-  **custom-alerts blocklist** — wired into every optimiser with the
-  scaffold-memory statistics in the run report.
 * Honest scope: the components that shell out to external CLIs or licensed SDKs
   (SynthSense, ROCS/OpenEye, ChemProp, Qptuna, Maize, DockStream) did not land.
   The Ertl SA score DID land (Part-3 §24, round 230) — see
@@ -1853,11 +1663,6 @@ pocket = extract_pocket(protein_pdb_text, ligand_coords, residue_cutoff=10.0)
 pocket.residues, pocket.pdb_text, pocket.summary()
 ```
 
-* The playground's Docking tab carries the GUI twins: the **pose RMSD & analysis
-  (DiffDock)** card (per-pose symmetry-corrected RMSD / centroid / clash table,
-  the full evaluation report, the randomize_position demo) and the **pocket
-  extraction (DiffDock)** card (residue table with per-residue closest contacts,
-  the lysozyme example, the save-pocket-PDB export).
 * Honest scope: no diffusion model, no confidence model, no ESM embeddings —
   the campaign docking stays AutoDock4/Vina, now with DiffDock-grade pose QA.
 
@@ -2055,11 +1860,11 @@ honest about being lossy (explicit `downcast_16bit=True` required for
 exported file is reopened, magic-byte-sniffed and dimension-checked
 before success is reported — an extension never lies about content
 (§17.4). Pillow is optional exactly like matplotlib
-(`pip install 'pharmaml[reports]'`); the Studio's Image Lab and every
-plot panel export through this same engine (format + JPEG quality +
-TIFF compression controls in the export row).
+(`python -m pip install -e '.[reports]'`). This export engine is part of
+the Python package; front-end export controls are documented separately
+and are not assumed to expose identical options.
 
-matplotlib is optional (``pip install 'pharmaml[reports]'``); the Agg backend is
+matplotlib is optional (``python -m pip install -e '.[reports]'``); the Agg backend is
 forced automatically outside notebooks, so plotting works on headless servers
 and CI — and renders inline inside Jupyter.
 
@@ -2080,11 +1885,9 @@ family list — all hashed together) resumes from the first unscored
 family instead of recomputing, and any mismatch starts fresh — a
 resumed board is only ever assembled from rows computed on exactly
 that request.  Checkpoint write failures degrade to log warnings; they
-never destroy a 40-minute sweep.  The Studio's ML Workbench
-Leaderboards tab checkpoints into `~/.pharmaml/checkpoints/` by
-default, so its Stop button keeps the finished families and the next
-Start resumes — the status line says so ("checkpoint found: 7/16
-families already scored — resuming there").
+never destroy a 40-minute sweep. These guarantees apply to the Python
+family-benchmark API; they do not establish that the current desktop app
+or separate Next.js console can resume arbitrary jobs.
 
 #### Synthetic accessibility scoring in the generative loop (Part-3 §24)
 
@@ -2104,7 +1907,7 @@ invalid SMILES never crash the batch.  The optional max-SA bound only
 candidates); the summary reports mean ± std, range and the honest
 caveat (a computational estimate, not a route plan).
 
-The score is wired in four places: the **oracle book**
+The score is available in three Python surfaces: the **oracle book**
 (`chem.oracles.sa_score` — the fragment table is loaded lazily and a
 Contrib-less RDKit build degrades honestly to the complexity-only
 ranking, and `penalized_logp` now uses the real SA too), the
@@ -2119,118 +1922,7 @@ as a distinct `sa_score_reward` column — while
 reasons (`kept + rejected == total`, always), `sa_summary()` reports
 the valid-subset statistics with the drug-like-band count, and
 `plot_sa_distribution()` draws the exact-edge histogram with the
-conventional 1–4 band shaded), and the Studio **Generative tab's
-"SA score" engine tab** — paste molecules,
-set the max-SA bound, get the ranked table (rank / SMILES / canonical
-/ score / band / status) with rejects kept in place.
-
-#### Structure previews on every SMILES table (Part-3 §22)
-
-Hover a SMILES cell in the Studio's Generative tab and its 2-D
-structure appears after a short dwell (350 ms default — §22.2's
-"configurable short interval"); click the cell for the full detail
-dialog.  The renderer draws with RDKit's ``MolDraw2DCairo`` at 2×
-device pixels (crisp on high-DPI screens), caches the last 128
-(molecule, size) renders — §22.3: identical molecules are never
-redrawn, and nothing renders until a preview is actually requested —
-and refuses invalid input honestly: an unparseable SMILES shows the
-"no structure drawn" notice with the original value preserved in the
-caption, never a made-up molecule (§22.4).  The detail dialog (§22.5)
-adds the large structure plus the properties calculated right there —
-original and canonical SMILES, molecular formula, molecular weight,
-the Ertl SA score with its method attribution — each either computed
-or shown as an explicit "not calculated" line, with a one-click copy
-of the canonical SMILES.  The preview controller matches columns *by
-name*, so every frame the shared table binds (the SA board, the
-evolution mutants, the topo/front children) gains the behaviour
-wherever a SMILES / canonical / mutant / child column appears.
-
-#### Hover data inspection on every chart (Part-3 §21)
-
-Every chart in the Studio (all fourteen pages plot through the same
-`PlotPanel`) carries a hover inspector (round 232, §21 slice 1):
-
-* a **crosshair** follows the mouse inside the plot;
-* the **nearest real data point** snaps with a highlight ring — the
-  whole bar body is the target on bar charts and histograms, so
-  hovering anywhere on a bar reads it out; the snap tolerance is
-  8 % of the visible axis range per axis (resolution-independent);
-* the **readout line** under the plot shows the exact values — series
-  name, x, y and any metadata the page attached (histograms: exact bin
-  boundaries and count; labelled bars: the category; scatter pages can
-  attach per-point records through `meta=` / `attach_metadata()`) —
-  §21.3: tooltips display the data that is actually plotted, never
-  estimated or fabricated values;
-* **metadata is cached** per point (§21.6: an expensive provider runs
-  once per point, never per mouse-move; the readout text itself only
-  rebuilds when the snapped point changes); a failing provider
-  degrades to the plain values;
-* the **context menu** (right-click) offers per-series visibility
-  toggles, the hover-inspection on/off switch and reset-to-default-view;
-* **clicking a point** pins its readout and emits `pointSelected` — the
-  wiring point for pages to open deeper drill-downs (the §21.5
-  molecule-detail hook).
-
-The inspector is theme-aware (the crosshair, marker and readout
-recolour with the ChartPalette) and every piece runs under the
-offscreen page tests.
-
-Round 236 completes §21.5 — **molecule readouts on the charts**:
-`PlotPanel` re-emits the inspector's click as its own
-`point_selected(label, index)` signal, and the Generative page's
-molecule scatters carry per-point metadata — the SA tab plots rank vs
-score (one point per scored molecule) whose hover reads the SMILES,
-the molecular formula and the molecular weight next to the SA value
-(calculated from the molecule with RDKit, never invented; unparseable
-SMILES answer with the SMILES alone), and **clicking a point opens
-the §22.5 molecule-detail dialog** (large 2-D structure + canonical
-SMILES + formula + weight + SA). The multi-objective Pareto front
-carries the same hover readout for every non-dominated member. The
-metadata providers are lazy and cached (§21.6): plotting 500
-candidates costs nothing until one is actually hovered.
-
-#### The responsive pass: splitters, export legibility, aspect (Part-3 §23)
-
-Round 233 (§23 slice 1) makes the layout discipline wired, not
-aspirational — `ui/widgets/responsive.py` is the policy module
-(round 235's slice 2 adds `wrap_in_scroll()`: every ML Workbench tab
-body rides the scroll policy — the round-235 probe measured the
-tuner form at 479 px and Leaderboards at 775 px minimum against the
-~450 px the 860×560 minimum window leaves — widget-resizable,
-sideways overflow made impossible rather than scrollable, frameless
-while the content fits, a hard 240 px region minimum):
-
-* **No splitter child is collapsible** — the studio's 20 splitters
-  (every page, the Image Lab's four tabs, the ML Workbench's two, and
-  the main window's nav/content splitter) are configured through
-  `configure_splitter()`: a careless drag can no longer hide the
-  control column, the chart, or the entire navigation (§23.2
-  "important controls becoming inaccessible");
-* **hard minimum extents** per child (320 px default; the nav column
-  200 px) — a squeeze stops at readable: forms, table headers and
-  axis labels stay unclipped, and the window itself refuses to shrink
-  below the sum of the minimums;
-* **growth flows to the chart side** — stretch factors route extra
-  window space to plots, not form columns (§23.3's resizing
-  discipline);
-* **exports stay legible** (§23.3): the Image Lab's export button
-  renders at **at least 640×480** — a matrix squeezed into a corner
-  of the window re-renders from its *vector scene* at floor scale
-  (text and curves drawn crisp at the larger size, never
-  bitmap-stretched, aspect preserved — §23.4), while the panels'
-  `export_image(min_size=…)` keeps the widget-owns-its-size contract
-  when no floor is asked for;
-* **matrix pixels stay square** — the ImagePanel locks aspect: a
-  100×50 correlation matrix renders 2:1 exactly as the data is
-  shaped, fit-to-view, never stretched to fill the panel (§23.4
-  "preserve image aspect ratios / avoid stretching");
-* **§23.5 is pinned by test** — the floor re-render and the aspect
-  lock change *display geometry only*: the plotted data arrays and
-  view ranges are byte-identical before and after an export.
-
-The remaining §23 depth (the QScrollArea pass for the tallest forms,
-adaptive tick density, legend-collision handling) is tracked in
-`docs/gui/GUI_AUDIT.md`'s Part-3 progress.
+conventional 1–4 band shaded).
 
 ---
 
@@ -2302,7 +1994,7 @@ saves the adaptive GA's operator-trajectory figure, and
 `generative run --recipe druglike|novel|similar --pareto` prints the
 multi-objective Pareto front after the leaderboard (with
 `--pareto-plot <path>` saving the trade-off scatter). All plotting flags
-require the `reports` extra (`pip install 'pharmaml[reports]'`).
+require the `reports` extra (`python -m pip install -e '.[reports]'`).
 
 ---
 

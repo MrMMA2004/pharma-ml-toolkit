@@ -112,8 +112,8 @@ _LOG = get_logger(__name__)
 
 #: RDKit import hint for the randomisation surfaces (tokenisation needs none).
 _RDKIT_HINT = (
-    "this surface requires RDKit — pip install 'pharmaml[chem]' "
-    "(or pip install rdkit)"
+    "This surface requires RDKit. From the toolkit package root run: "
+    "python -m pip install -e '.[chem]'"
 )
 
 #: The canonical character-level SMILES tokenisation regex of the

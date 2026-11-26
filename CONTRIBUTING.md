@@ -12,12 +12,13 @@ Thank you for helping improve PharmaML. Contributions should make pharmaceutical
 
 ## Repository layout
 
-- `pharma-ml-toolkit/src/pharmaml/`: typed Python package.
-- `pharma-ml-toolkit/ui/` and `pharma-ml-toolkit/studio.py`: PySide6 Studio.
-- `pharma-ml-toolkit/tests/`: Python tests, including Studio tests.
-- `pharma-ml-toolkit/examples/`: executed notebooks, clean twins and runnable examples.
-- `src/` and `tests/` at repository root: Next.js console and web integration checks.
-- `pharma-ml-toolkit/docs/`: detailed package and methodology documentation.
+- `pharma-ml-toolkit/src/pharmaml/`: Python package and command-line interface.
+- `pharma-ml-toolkit/frontend/` and `pharma-ml-toolkit/src-tauri/`: supported React/TypeScript + Tauri 2 desktop application.
+- `pharma-ml-toolkit/legacy/`: retired PySide6 launcher and archival source; not a supported application entry point.
+- `pharma-ml-toolkit/tests/`: Python and desktop-backend tests.
+- `pharma-ml-toolkit/examples/`: executed notebooks, output-free variants and runnable examples.
+- `src/` and root `tests/`: separate Next.js project console and web integration checks.
+- `pharma-ml-toolkit/docs/`: package, workflow and methodology documentation.
 
 ## Python development
 
@@ -42,19 +43,19 @@ Run the broader suite when your change affects shared behavior. Tests involving 
 
 ## Studio development
 
-Enable the pinned **Studio GUI** block in `requirements.txt`, reinstall the requirements and launch:
+The supported desktop application is the React + TypeScript frontend hosted by Tauri 2, with the Python backend as a local sidecar. The retired PySide6 launcher is archived and is not a supported contribution target. See [`pharma-ml-toolkit/frontend/README.md`](pharma-ml-toolkit/frontend/README.md) for architecture details.
+
+From the repository root, install the locked frontend dependencies and run the frontend checks:
 
 ```bash
-python studio.py
+cd pharma-ml-toolkit/frontend
+npm ci
+npm test
+npm run typecheck
+npm run build
 ```
 
-For displayless Linux CI:
-
-```bash
-QT_QPA_PLATFORM=offscreen python studio.py
-```
-
-Do not force the offscreen backend on Windows, macOS or Wayland desktops. Interface changes should include focused behavior tests and keep expensive work off the GUI thread.
+A browser session with live workflows needs a local backend plus the dev-only Vite proxy variables; see the [frontend development notes](pharma-ml-toolkit/frontend/README.md). The native Tauri host also requires a compatible frozen sidecar staged under `pharma-ml-toolkit/src-tauri/resources/backend/`; a fresh checkout does not include that generated Windows resource. The [Windows release workflow](.github/workflows/windows-release.yml) performs this staging before packaging. Desktop changes should include focused frontend/backend contract tests and keep scientific computation in the Python backend.
 
 ## Web console development
 
@@ -76,7 +77,7 @@ Use `bun run dev` for local development. Browser-facing code must use relative a
 - Avoid committing generated output larger than necessary. Use GitHub Releases for downloadable release archives.
 - Preserve reproducibility: document random seeds, units, input assumptions and environment-specific limitations.
 - Never claim clinical validation or present research software as clinical decision support.
-- Run `python scripts/check_github_page.py` and `python -m unittest discover -s tests -p 'test_github_page.py'` for landing-page changes. Keep screenshots labeled with their actual captured version; if `CITATION.cff` names a version, keep it aligned with the checkout. Update links and evidence rather than relabeling old screenshots as current.
+- Run `python scripts/check_github_page.py` and `python -m unittest discover -s tests -p 'test_github_page.py'` for landing-page changes. Label screenshots with their actual version or capture round and environment; distinguish browser previews from packaged-install or clean-machine evidence. If `CITATION.cff` names a version, keep it aligned with the checkout. Update links and evidence rather than relabeling old screenshots as current.
 - Regenerate the decorative social card with `python scripts/build_social_preview.py` (requires Pillow). GitHub does not pick it up from a commit: upload `pharma-ml-toolkit/docs/assets/github-social-preview.png` under **Settings → General → Social preview** if you have repository admin access.
 
 ## Pull request checklist

@@ -42,8 +42,10 @@ interface InstallStep {
   title: string;
   description: string;
   commands: string[];
-  /** Optional pip extras — each chip copies its own install command. */
+  /** Optional source-local pip extras — each chip copies its own command. */
   extras?: Array<{ name: string; note: string }>;
+  /** Optional links for instructions that are not shell commands. */
+  links?: Array<{ label: string; href: string }>;
 }
 
 /** Placeholder inside INSTALL_STEPS commands for the versioned archive name —
@@ -63,27 +65,50 @@ const INSTALL_STEPS: InstallStep[] = [
     commands: ["unzip {ZIP_NAME} -d pharmaml && cd pharmaml"],
   },
   {
-    title: "Install the dependencies at the verified versions",
+    title: "Install the Python package",
     description:
-      "requirements.txt pins the exact stack the QA chain runs green under (numpy 1.26.4, pandas 2.2.3, scikit-learn 1.5.2, …) — the reproducible route. The editable package install then maps pharmaml onto your Python.",
-    commands: ["pip install -r requirements.txt", "pip install -e ."],
+      "Run these commands from the toolkit package root. requirements.txt pins the tested core; the editable install maps this source onto the environment. Extra chips use requirements.txt as a constraints file to keep those core versions.",
+    commands: [
+      "python -m pip install -r requirements.txt",
+      "python -m pip install --no-deps -e .",
+    ],
     extras: [
-      { name: ".[studio]", note: "the desktop Studio GUI (PySide6 + pyqtgraph)" },
-      { name: ".[chem]", note: "cheminformatics (RDKit)" },
-      { name: ".[docking]", note: "docking prep (RDKit + Meeko)" },
+      { name: ".[chem]", note: "cheminformatics (RDKit and Mordred)" },
+      { name: ".[docking]", note: "docking preparation (RDKit, Meeko and gemmi)" },
       { name: ".[boosting]", note: "gradient-boosting model families" },
+      { name: ".[deep]", note: "PyTorch and deep-learning models" },
+      { name: ".[reports]", note: "plots and report exports" },
+      { name: ".[selfies]", note: "SELFIES molecular-string support" },
+      { name: ".[explain]", note: "SHAP-based tree explanations" },
     ],
   },
   {
-    title: "Open the Studio (desktop GUI)",
+    title: "Supported desktop app (separate from this console)",
     description:
-      "python studio.py launches PharmaML Studio, the PySide6 desktop application: the nine-card home opens eighteen workspaces — chemistry featurization, PK/PD dosing, docking campaigns, model training, the generative workbench and more. The GUI needs the Qt stack, which the core install does not include — run pip install \".[studio]\" first (or pip install PySide6 pyqtgraph qt-material qdarkstyle). Long jobs run in a background worker with progress, and trained models export as report bundles.",
-    commands: ["pip install \".[studio]\"", "python studio.py"],
+      "PharmaML Studio is a React + TypeScript application hosted by Tauri 2. This Next.js site is a separate web console. The retired PySide6 launcher and the .[studio] compatibility extra do not install or launch the current desktop app.",
+    commands: [],
+    links: [
+      {
+        label: "Check GitHub Releases for desktop installers",
+        href: "https://github.com/MrMMA2004/pharma-ml-toolkit/releases",
+      },
+      {
+        label: "Read the Studio frontend development guide",
+        href: "https://github.com/MrMMA2004/pharma-ml-toolkit/blob/main/pharma-ml-toolkit/frontend/README.md",
+      },
+    ],
   },
   {
     title: "Verify the install",
-    description: "The full test suite should pass and the CLI answers with its version.",
-    commands: ["python -m pytest", "pharmaml --version", "cat VERSION"],
+    description:
+      "Confirm the CLI and archive version. Tests depend on optional packages and platform libraries; choose a named profile for the features installed rather than treating one pytest run as full release validation.",
+    commands: ["pharmaml --version", "cat VERSION"],
+    links: [
+      {
+        label: "Choose a named test profile",
+        href: "https://github.com/MrMMA2004/pharma-ml-toolkit/blob/main/pharma-ml-toolkit/docs/TEST_PROFILES.md",
+      },
+    ],
   },
 ];
 
@@ -160,12 +185,12 @@ function CommandStrip({
 }
 
 /**
- * A pip extra rendered as a copy-to-clipboard chip (e.g. `.[chem]`) — the
- * full `pip install -e "…"` command is copied, the chip label stays compact.
+ * A source-local pip extra rendered as a copy-to-clipboard chip (e.g.
+ * `.[chem]`) — the full `python -m pip install -c requirements.txt -e '…'` command is copied.
  */
 function ExtraChip({ name, note }: { name: string; note: string }) {
   const [copied, setCopied] = useState(false);
-  const command = `pip install -e "${name}"`;
+  const command = `python -m pip install -c requirements.txt -e '${name}'`;
 
   async function copy() {
     const ok = await copyToClipboard(command);
@@ -244,7 +269,7 @@ const FEATURED_FILES: Array<{
     path: "examples/complete_pk_workflow.ipynb",
     title: "Complete PK/PD workflow (zero → one hundred)",
     description:
-      "Executed Jupyter notebook — the pharma walkthrough the legacy archive never had: import your concentration–time file, NCA (AUC/t½/Cmax), derived CL & Vd, IV routes, accumulation to steady state, Emax PD, dosage design, renal & TDM adjustments, one-click HTML report. 3 figures committed inline.",
+      "Executed Jupyter notebook — a PK/PD workflow: import a concentration–time file, run NCA (AUC/t½/Cmax), derive CL & Vd, compare IV routes, model steady-state accumulation and Emax PD, explore dosage design, renal and TDM adjustments, and export an HTML report. Three figures are committed inline.",
     icon: NotebookText,
     badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   },
@@ -311,7 +336,7 @@ function collectDirSummary(
 ): Array<{ name: string; files: number; size: number; note: string }> {
   const notes: Record<string, string> = {
     src: "the pharmaml package (data, chem, ml, pharma, docking, viz, utils + CLI)",
-    tests: `${SHIPPED_TEST_COUNT} pytest cases across all domains`,
+    tests: `${SHIPPED_TEST_COUNT} recorded pytest cases across all domains`,
     examples: "eight executed notebooks + seven no-output twins + runnable demos",
     ".github": "GitHub Actions CI matrix (Python 3.10–3.12)",
     docs: "module index — auto-generated API reference",
@@ -338,7 +363,7 @@ function collectDirSummary(
       name: "(root)",
       files: rootFiles,
       size: rootBytes,
-      note: "README, CHANGELOG, VERSION, studio.py + ui/, pyproject.toml, Dockerfile, requirements.txt",
+      note: "README, CHANGELOG, VERSION, frontend/ + src-tauri/, legacy/, pyproject.toml, Dockerfile, requirements.txt",
     });
   }
   return out;
@@ -603,7 +628,7 @@ export function DownloadPanel() {
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 py-4 lg:grid-cols-4">
           <StatChip icon={FileCode2} value={treeStatus === "ready" && stats ? fmtInt(stats.files) : "…"} label="files" />
-          <StatChip icon={CircleCheck} value={String(SHIPPED_TEST_COUNT)} countTo={SHIPPED_TEST_COUNT} label="passing tests" />
+          <StatChip icon={CircleCheck} value={String(SHIPPED_TEST_COUNT)} countTo={SHIPPED_TEST_COUNT} label="recorded cases" />
           <StatChip icon={Scale} value="MIT" label="license" />
           <StatChip
             icon={FileArchive}
@@ -850,21 +875,38 @@ export function DownloadPanel() {
                       <p className="text-sm font-medium leading-6">{step.title}</p>
                       <p className="text-xs leading-snug text-muted-foreground">{step.description}</p>
                     </div>
-                    <div
-                      className={cn("grid gap-2", step.commands.length > 1 && "sm:grid-cols-2")}
-                    >
-                      {step.commands.map((command) => (
-                        <CommandStrip
-                          key={command}
-                          command={command.replaceAll(ZIP_NAME_TOKEN, zipName)}
-                          hint={
-                            command.includes(ZIP_NAME_TOKEN)
-                              ? `the file downloads as ${zipName}`
-                              : undefined
-                          }
-                        />
-                      ))}
-                    </div>
+                    {step.commands.length > 0 ? (
+                      <div
+                        className={cn("grid gap-2", step.commands.length > 1 && "sm:grid-cols-2")}
+                      >
+                        {step.commands.map((command) => (
+                          <CommandStrip
+                            key={command}
+                            command={command.replaceAll(ZIP_NAME_TOKEN, zipName)}
+                            hint={
+                              command.includes(ZIP_NAME_TOKEN)
+                                ? `the file downloads as ${zipName}`
+                                : undefined
+                            }
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                    {step.links?.length ? (
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                        {step.links.map((link) => (
+                          <a
+                            key={link.href}
+                            href={link.href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium text-primary underline-offset-4 hover:underline"
+                          >
+                            {link.label}
+                          </a>
+                        ))}
+                      </div>
+                    ) : null}
                     {step.extras ? (
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
@@ -887,15 +929,15 @@ export function DownloadPanel() {
       <section aria-labelledby="pinstack-title" className="space-y-3">
         <h2 id="pinstack-title" className="flex items-center gap-2 text-lg font-semibold">
           <Package className="size-5 text-primary" aria-hidden />
-          Every library at the verified version
+          Dependency profiles and optional extras
         </h2>
         <Card className="overflow-hidden py-0 shadow-sm">
           <CardHeader className="border-b bg-muted/30 py-3">
-            <CardTitle className="text-base">The pinned stack, layer by layer</CardTitle>
+            <CardTitle className="text-base">Pinned core and optional dependency groups</CardTitle>
             <CardDescription className="text-xs">
-              requirements.txt in the archive pins the exact environment the QA chain runs green
-              under (Python 3.12) — pyproject.toml keeps the loose ranges, this is the reproducible
-              snapshot. Copy any layer you need; the core block is the only required one.
+              requirements.txt in the archive pins the tested Python 3.12 core. Extras in
+              pyproject.toml use compatibility ranges; the commands below constrain them to keep
+              the tested core versions. The core block is the only required dependency layer.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3.5 py-4">
@@ -906,8 +948,8 @@ export function DownloadPanel() {
               </div>
               <CommandStrip
                 context="terminal · core (verified under Python 3.12)"
-                command="pip install numpy==1.26.4 pandas==2.2.3 scikit-learn==1.5.2 scipy==1.14.1 joblib==1.5.3 openpyxl==3.1.5 tqdm==4.67.1"
-                hint="or simply: pip install -r requirements.txt (the same pins, pre-written)"
+                command="python -m pip install -r requirements.txt"
+                hint="Run from the toolkit package root; this is the tested pinned core snapshot."
               />
             </div>
             <div className="grid gap-2.5 lg:grid-cols-2">
@@ -918,7 +960,7 @@ export function DownloadPanel() {
                 </div>
                 <CommandStrip
                   context="terminal · extras"
-                  command="pip install rdkit==2026.09.1 mordred==1.2.0"
+                  command="python -m pip install -c requirements.txt -e '.[chem]'"
                 />
               </div>
               <div className="space-y-2">
@@ -928,7 +970,7 @@ export function DownloadPanel() {
                 </div>
                 <CommandStrip
                   context="terminal · extras"
-                  command="pip install rdkit==2026.09.1 meeko==0.8.0 gemmi==0.7.5"
+                  command="python -m pip install -c requirements.txt -e '.[docking]'"
                 />
               </div>
               <div className="space-y-2">
@@ -938,18 +980,18 @@ export function DownloadPanel() {
                 </div>
                 <CommandStrip
                   context="terminal · extras"
-                  command="pip install xgboost==2.1.3 lightgbm==4.5.0 catboost==1.2.8"
+                  command="python -m pip install -c requirements.txt -e '.[boosting]'"
                 />
               </div>
               <div className="space-y-2">
                 <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-sm font-medium">Deep learning (CPU)</p>
+                  <p className="text-sm font-medium">Deep learning (PyTorch)</p>
                   <p className="text-[11px] text-muted-foreground">dnn estimators · generative RNN/RL</p>
                 </div>
                 <CommandStrip
                   context="terminal · torch CPU wheel"
-                  command="pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu"
-                  hint="drop the --index-url for the CUDA build of the same version"
+                  command="python -m pip install -c requirements.txt -e '.[deep]'"
+                  hint="This extra uses the pyproject compatibility range. For a pinned CPU build or CUDA wheel, follow the optional PyTorch instructions in requirements.txt."
                 />
               </div>
               <div className="space-y-2">
@@ -959,33 +1001,26 @@ export function DownloadPanel() {
                 </div>
                 <CommandStrip
                   context="terminal · extras"
-                  command="pip install matplotlib==3.9.2 seaborn==0.13.2 fpdf2==2.8.5 python-docx==1.2.0"
+                  command="python -m pip install -c requirements.txt -e '.[reports]'"
                 />
               </div>
               <div className="space-y-2">
                 <div className="flex items-baseline justify-between gap-2">
                   <p className="text-sm font-medium">Development / QA</p>
-                  <p className="text-[11px] text-muted-foreground">the stack the test suite runs under</p>
+                  <p className="text-[11px] text-muted-foreground">pytest · mypy · ruff</p>
                 </div>
                 <CommandStrip
                   context="terminal · dev"
-                  command="pip install pytest==9.0.2 pytest-cov==7.0.0 mypy==2.4.0 ruff==0.17.1"
+                  command="python -m pip install -c requirements.txt -e '.[dev]'"
                 />
               </div>
             </div>
             <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">
               <p className="text-[11px] leading-snug text-muted-foreground">
-                <span className="font-medium text-foreground">Why exact versions?</span> Every pin above is
-                the environment the full pytest suite (see the passing-tests chip), ruff, mypy and the executed notebooks
-                actually run green under — installing the same numbers removes an entire class of
-                &quot;works on my machine&quot; before it starts (the numpy 1.26.4 pin in particular: mordred
-                resolves against it).
+                <span className="font-medium text-foreground">Why use the pinned file?</span> <code className="font-mono">requirements.txt</code> records the tested Python 3.12 core. The extra commands above pass it with <code className="font-mono">-c</code>, keeping those core versions fixed while adding a feature group.
               </p>
               <p className="text-[11px] leading-snug text-muted-foreground">
-                The loose ranges in <code className="font-mono">pyproject.toml</code> remain the
-                compatibility contract; the extras chips above (<code className="font-mono">.[chem]</code>,{" "}
-                <code className="font-mono">.[docking]</code>, …) install the newest versions inside
-                those ranges instead — pick one philosophy per environment, don&apos;t mix.
+                Optional versions still resolve within the compatibility ranges in <code className="font-mono">pyproject.toml</code>; they are not all pinned by the core file. For a fully pinned optional stack, uncomment that feature&apos;s pins in <code className="font-mono">requirements.txt</code> and install with <code className="font-mono">-r</code>.
               </p>
             </div>
           </CardContent>
@@ -1016,7 +1051,7 @@ export function DownloadPanel() {
           />
           <div className="space-y-1.5">
             <p className="text-[11px] leading-snug text-muted-foreground">
-              Because the install is editable (<code className="font-mono">pip install -e .</code>),
+              Because the install is editable (<code className="font-mono">python -m pip install -e .</code>),
               Python picks up the replaced files on the next run — reinstall only if{" "}
               <code className="font-mono">pyproject.toml</code> gained dependencies.
             </p>

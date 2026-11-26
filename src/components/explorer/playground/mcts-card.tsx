@@ -37,20 +37,16 @@ import type { MctsResponse } from "@/lib/toolkit-types";
 import { toast } from "sonner";
 
 /* ------------------------------------------------------------------ */
-/* MCTS molecule search — the Studio Generative method's web twin      */
+/* MCTS molecule search — separate Next.js web-console demo             */
 /* ------------------------------------------------------------------ */
 /**
- * The desktop Studio's Generative page runs three optimisation
- * methods (GA / RL / MCTS); the web twin carried the surgery cards
- * and the SA score but never the search itself. This card wires the
- * third leg: ChemTSv2-style Monte Carlo tree search over an on-the-fly
- * SMILES RNN prior — the objective registry (QED, LogP/MW/TPSA
- * windows, the QED+LogP blend, the druglike triple, similarity to a
- * reference, the SA ease-of-synthesis anchors) is verbatim the
- * Studio's, the corpus semantics (built-in / seeded / custom) mirror
- * the desktop's, and one POST runs the REAL `MctsOptimizer` with real
- * RDKit + torch on the server. The tree policy knob (UCT / PUCT) is
- * the card's honest extra over the Studio surface.
+ * This web-console card demonstrates ChemTSv2-style Monte Carlo tree
+ * search over an on-the-fly SMILES RNN prior. Its form offers QED,
+ * LogP/MW/TPSA windows, blended and multi-objective scores, similarity
+ * to a reference, and SA ease-of-synthesis anchors. One POST invokes the
+ * real `MctsOptimizer` with RDKit and PyTorch on the server; UCT/PUCT is
+ * configurable here. This is a distinct web-console surface and does not
+ * imply feature parity with the Python/CLI workflow or React/Tauri Studio.
  */
 
 const OBJECTIVE_OPTIONS: ReadonlyArray<{
@@ -74,12 +70,11 @@ const DEFAULT_ITERATIONS = 12;
 const DEFAULT_SEED = 42;
 const DEFAULT_LO = "1.0";
 const DEFAULT_HI = "3.0";
-const DEFAULT_REFERENCE = "CC(=O)Oc1ccccc1C(=O)O"; // aspirin — the Studio default
+const DEFAULT_REFERENCE = "CC(=O)Oc1ccccc1C(=O)O"; // aspirin — this demo's default reference
 
 type Status = "idle" | "running" | "done" | "error";
 
-/** Save a data-URI figure through a throwaway anchor (the web twin of
- * the desktop cards' per-card "Save figure…"). */
+/** Save a data-URI figure through a throwaway anchor in this web-console card. */
 function downloadFigure(dataUri: string, filename: string) {
   const link = document.createElement("a");
   link.href = dataUri;

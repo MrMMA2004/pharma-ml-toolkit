@@ -17,7 +17,7 @@ _LOG = get_logger(__name__)
 #: pip hint embedded in the DependencyError raised when RDKit is missing.
 _RDKIT_HINT = (
     "RDKit is required for molecule generation and scoring. "
-    "Install it with:  pip install 'pharmaml[chem]'  (or pip install rdkit)"
+    "From the toolkit package root, run:  python -m pip install -e '.[chem]'"
 )
 
 

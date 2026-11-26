@@ -18,7 +18,7 @@ never requires torch; the import happens at :meth:`SmilesRnn.train_prior`
 / :meth:`SmilesRnn.sample` time and raises an actionable
 :class:`~pharmaml.exceptions.DependencyError` when missing::
 
-    pip install 'pharmaml[deep]'
+    python -m pip install -e '.[deep]'
 
 Determinism: ``train_prior`` seeds ``torch.manual_seed`` from the
 constructor ``seed`` and uses dedicated ``torch.Generator`` objects for
@@ -52,8 +52,8 @@ _LOG = get_logger(__name__)
 
 #: pip command embedded in the DependencyError raised when torch is missing.
 _TORCH_HINT = (
-    "generative RNN models require torch — "
-    "pip install 'pharmaml[deep]' (or pip install torch)"
+    "generative RNN models require torch — from the toolkit package root run: "
+    "python -m pip install -e '.[deep]'"
 )
 
 #: Special vocabulary tokens (never emitted by the sampler).

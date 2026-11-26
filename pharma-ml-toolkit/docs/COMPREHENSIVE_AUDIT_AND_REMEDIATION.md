@@ -1,4 +1,9 @@
-# Comprehensive Audit and Remediation — v1.2.203 (partX3 round)
+# Comprehensive Audit and Remediation — v1.2.203 (historical partX3 round)
+
+**Status:** Archived audit at the v1.2.203 baseline. References to PySide6,
+`python studio.py`, and current desktop status describe that historical state,
+not the supported React/Tauri desktop app. The Next.js console is a separate
+application. For current desktop scope, see [`frontend/README.md`](../frontend/README.md).
 
 Scope: the MASTER_PROMPT partX3 mandatory audit (nine-card compliance,
 backend-to-GUI integration, capability registry, docs-vs-source

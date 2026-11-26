@@ -1,24 +1,19 @@
 /**
- * Session report collector (100x-127) — the web twin of the desktop
- * playground's `File ▸ Save session report (HTML)…`.
+ * Collector for the separate Next.js web-console session report.
+ * It reads persisted Playground state (the last ML training result,
+ * learning curve, PK/PD regimen, NCA rows, run history, and other
+ * browser-console results) and creates the payload sent to
+ * `/api/report/session`. The Python bridge renders report figures with
+ * matplotlib and composes the self-contained HTMLReport. This collector
+ * describes only the web console's persisted state; it does not imply
+ * feature parity with the React/Tauri Studio.
  *
- * The desktop report walks its live session (every figure on screen +
- * every filled table) into pharmaml.viz.HTMLReport.  The web twin's
- * "session" is the persisted playground state: the last ML training
- * result (metrics + chart series), the last learning-curve run, the
- * PK/PD regimen (always live — the regimen card always renders), the
- * NCA observed-data rows and the ML run history.  This module is the
- * PURE collector: it turns that state into the section payload the
- * `/api/report/session` route forwards to the Python bridge, which
- * composes real matplotlib figures and the SAME self-contained themed
- * HTMLReport the desktop saves (theme toggle included).
- *
- * Trace contract (mirrors what the web charts draw):
+ * Trace contract for the web charts and bridge:
  *  - `line`   → solid polyline (model curve / PK profile)
  *  - `band`   → mean line + ±1 std fill (learning curve, GP band)
  *  - `scatter` with `classes` → class-coloured dots (classification
  *    test points / boundary grid), `probas` fades opacity by
- *    |p − 0.5| exactly the way the web boundary dots do
+ *    |p − 0.5| as in the web boundary chart
  */
 
 import { concentrationAt, derivePk, pdEffect } from "@/lib/pk-pd";
@@ -49,7 +44,7 @@ export interface ReportFigureTrace {
   /**
    * `[x, y]` pairs; `band` traces carry `[x, y, lo, hi]` (mean ± band
    * edges).  Numbers stay raw — the bridge's matplotlib does the
-   * formatting, exactly like the desktop figures.
+   *  formatting, exactly as required by the Python report renderer.
    */
   points: Array<[number, number] | [number, number, number, number]>;
   /** (R30-a) `bar` traces carry `[y, value]` pairs — one horizontal
@@ -201,7 +196,7 @@ export function sessionGroupsAvailable(
   return {
     ml: snapshot.mlResult !== null,
     learningCurve: snapshot.lcResult !== null,
-    pkpd: true, // the regimen card is always live in the web twin
+    pkpd: true, // the regimen card is always live in this console
     nca: rows.length > 0,
     history: snapshot.mlHistory.length > 0,
     surgery: snapshot.surgery !== null,
@@ -379,7 +374,7 @@ function learningCurveSections(snapshot: SessionSnapshot): ReportSection[] {
 }
 
 function pkpdSections(snapshot: SessionSnapshot): ReportSection[] {
-  // the regimen card is always live in the web twin — no guard
+  // The web console always shows the regimen card, so this report section is always present.
   const conc = pkSeries(snapshot.pkParams);
   const effect = conc.map(
     ([t, c]) =>
@@ -567,12 +562,11 @@ function ligandsSections(snapshot: SessionSnapshot): ReportSection[] {
       name,
     ]);
     if (count > capped.length) {
-      /* r268 (review P-4): the report is generated from BOTH the desktop
-       * studio and the web Explorer — name the places, not the desktop
-       * UI's reconciler panel. */
+      /* This report is assembled from the separate Next.js console's
+       * saved state; direct readers back to that surface's controls. */
       rows.push([
         "",
-        `+ ${count - capped.length} more (see Ligand Sets in the Studio or the Explorer report settings)`,
+        `+ ${count - capped.length} more (see the web console's Ligand Sets tab or report settings)`,
       ]);
     }
     return { kind: "table", title, columns: ["#", "ligand name"], rows };
@@ -892,15 +886,9 @@ export function contentsCensusLegs(
   return legs;
 }
 
-/** (100x-139) The Contents strip's ORDER confession — the web twin of
- *  the desktop picklist's memory label: when the browser's persisted
- *  walking order was applied (the reader dragged a chip on a past
- *  visit and the order survived — "your last saved order"), the
- *  strip says so and names the way out (the card's dashed Reset
- *  chip, which deletes the stored key, not just the drift).  The
- *  canonical order confesses NOTHING — the desktop's own noise rule
- *  ("nothing remembered: stay quiet"): there is no memory to name
- *  when none was applied.  Pure: the probe pins both verdicts. */
+/** Describe whether this browser's saved walking order is active.
+ * When no custom order is applied, return null so the UI stays quiet.
+ * Pure helper: tests pin both states. */
 export function orderConfessionText(orderDrifted: boolean): string | null {
   if (!orderDrifted) return null;
   return "Your last saved walking order was applied — Reset walking order forgets it.";

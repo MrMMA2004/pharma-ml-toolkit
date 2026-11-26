@@ -112,7 +112,8 @@ def _require_rdkit() -> Any:
         return Chem
     except ImportError as exc:  # pragma: no cover - environment-dependent
         raise DependencyError(
-            "This oracle needs RDKit: pip install rdkit"
+            "This oracle needs RDKit. From the toolkit package root run: "
+            "python -m pip install -e '.[chem]'"
         ) from exc
 
 

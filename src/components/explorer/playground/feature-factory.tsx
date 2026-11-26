@@ -199,7 +199,7 @@ export function FeatureFactory() {
       return;
     }
     if (smilesList.length > MAX_MOLECULES) {
-      setError(`The web calculator handles up to ${MAX_MOLECULES} molecules per run (you pasted ${smilesList.length}). Use the desktop Studio (python studio.py) for larger libraries.`);
+      setError(`This web-console calculator handles up to ${MAX_MOLECULES} molecules per run (you pasted ${smilesList.length}). Use the Python package API/CLI for larger libraries.`);
       toast.error("Too many molecules");
       return;
     }
@@ -402,8 +402,8 @@ export function FeatureFactory() {
               Clear
             </Button>
             <p className="text-[11px] text-muted-foreground">
-              Unsupervised variance ranking · supervised RF / LightGBM ranking lives in the
-              desktop Studio (<code className="font-mono">python studio.py</code>)
+              This web-console demo performs unsupervised variance ranking. For other
+              feature-selection workflows, use the Python package API/CLI.
             </p>
           </div>
         </CardContent>

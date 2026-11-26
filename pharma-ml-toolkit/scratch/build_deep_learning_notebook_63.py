@@ -1,8 +1,9 @@
 """Build examples/complete_deep_learning_workflow.ipynb from scratch.
 
-Round 100x-63: the executed-notebook surface still predates the
-playground's Deep Learning tab (100x-61/62) — this driver closes that
-gap.  The notebook walks the *direct* estimator API of
+Round 100x-63: this driver records the *direct* estimator API of
+:mod:`pharmaml.ml.neural` in an executed workflow notebook. The old Tk
+playground referenced in the original round is retired; this notebook
+documents the Python estimator workflow, not desktop feature parity.
 :mod:`pharmaml.ml.neural` (the cellline notebook only touches ``dnn``
 through the ``compare_models`` leaderboard):
 
@@ -77,14 +78,15 @@ proper regression/classification evaluation:
 | 9 | Export — the per-epoch history record as CSV | pandas |
 | 10 | Recap | — |
 
-The estimators need PyTorch (`pip install 'pharmaml[deep]'`); without
-it they raise an actionable `DependencyError` at `fit` time — nothing
-else in the toolkit requires torch.  Every number in this notebook is
+From the `pharma-ml-toolkit/` package root, install the local PyTorch
+extra with `python -m pip install -e '.[deep]'`. Without torch, these
+estimators raise an actionable `DependencyError` at `fit` time; no
+other toolkit features require it. Every number in this notebook is
 produced by the cells below (seeded, CPU); nothing is hand-written.
 
-The desktop GUI (`python playground.py` → *Deep Learning* tab) wraps
-exactly this API — this notebook is the same workflow for readers who
-prefer the terminal.
+PharmaML Studio is a separate React/Tauri desktop application. This
+notebook documents the Python estimator workflow and does not claim
+complete desktop feature parity.
 """
     ),
     code(
@@ -103,7 +105,7 @@ pd.set_option("display.width", 110)
 try:
     import torch  # noqa: F401  (the deep extra)
 except ImportError:
-    sys.exit("PyTorch is required for this notebook:  pip install 'pharmaml[deep]'")
+    sys.exit("PyTorch is required for this notebook:  python -m pip install -e '.[deep]'")
 
 # Scratch directory for this run's artifacts (use any path you like).
 WORK = Path(tempfile.mkdtemp(prefix="dl_workflow_"))
@@ -433,8 +435,9 @@ round_trip.tail(3)
 | Classify | `DeepMLPClassifier(...)` + `plot_confusion_matrix(report.confusion, ...)` |
 | Export | `history_frame.to_csv("training_history.csv", index=False)` |
 
-Next steps: the *Data & ML* and *Deep Learning* tabs of
-`python playground.py` expose this exact API point-and-click; the
+Next steps: PharmaML Studio has Machine Learning and Deep Learning
+workspaces, but this notebook is not a feature-parity checklist. See
+the current research-workflow documentation for its feature scope. The
 cellline notebook puts `dnn`/`dnn_residual` on a cross-validated
 leaderboard against the classical models.
 """

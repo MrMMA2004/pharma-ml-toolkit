@@ -88,9 +88,8 @@ Example
 >>> rl.best, round(rl.best_score, 3)
 ('CCCNc1ccccc1', 0.728)
 
-Dependencies: RDKit (``pip install 'pharmaml[chem]'``) is required for
-scoring and the genetic algorithm; PyTorch (``pip install
-'pharmaml[deep]'``) additionally for the RNN / RL half.  Both are
+Dependencies: RDKit (``python -m pip install -e '.[chem]'``) is required for
+scoring and the genetic algorithm; PyTorch (``python -m pip install -e '.[deep]'``) additionally for the RNN / RL half.  Both are
 imported lazily -- importing this subpackage needs neither.
 """
 

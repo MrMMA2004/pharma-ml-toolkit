@@ -304,7 +304,7 @@ class TestTableToSdf:
 
         monkeypatch.setitem(sys.modules, "rdkit", None)
         monkeypatch.setitem(sys.modules, "rdkit.Chem", None)
-        with pytest.raises(DependencyError, match="pip install rdkit"):
+        with pytest.raises(DependencyError, match=r"python -m pip install -e '\.\[chem\]'"):
             table_to_sdf(pd.DataFrame({"SMILES": [ETHANOL]}), tmp_path / "l.sdf")
 
 
@@ -351,7 +351,7 @@ class TestSdfToTable:
         table_to_sdf(ligand_frame, sdf, embed3d=False)
         monkeypatch.setitem(sys.modules, "rdkit", None)
         monkeypatch.setitem(sys.modules, "rdkit.Chem", None)
-        with pytest.raises(DependencyError, match="pip install rdkit"):
+        with pytest.raises(DependencyError, match=r"python -m pip install -e '\.\[chem\]'"):
             sdf_to_table(sdf)
 
 

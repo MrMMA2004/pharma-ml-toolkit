@@ -5,11 +5,11 @@ import { bridgeErrorResponse, runPythonBridge } from "@/lib/python-bridge";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** The web twin of the desktop playground's two molecule-surgery
- * cards (100x-130): one-step ring-size mutant enumeration and the
- * seeded scaffold-hop crossover, both computed with real RDKit
- * through the pharmaml.generative API on the server, structure
- * grids included. Mirrors the bridge caps in
+/** Next.js web-console endpoint for two molecule-surgery demonstrations:
+ * one-step ring-size mutants and seeded scaffold-hop crossover. Both call
+ * the real pharmaml.generative API with RDKit on the server and return
+ * structure grids. This endpoint is a separate interface surface, not a
+ * feature-parity claim for the React/Tauri desktop app. Request caps match
  * scripts/surgery_bridge.py. */
 
 const MAX_SMILES_CHARS = 300;

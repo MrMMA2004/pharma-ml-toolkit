@@ -80,65 +80,20 @@ import {
 import { toast } from "sonner";
 
 /* ------------------------------------------------------------------ */
-/* Session report (100x-127) — the web twin of the desktop playground's */
-/* File ▸ Save session report (HTML)…                                   */
+/* Session report for the separate Next.js web console. The collector  */
+/* reads persisted Playground state (ML results, learning curve, PK/PD */
+/* regimen, NCA rows, run history, and molecule-surgery results) and    */
+/* sends a section payload to /api/report/session. The Python bridge    */
+/* renders report figures with matplotlib and composes a self-contained*/
+/* themed HTMLReport. The browser preview uses approximate SVG sketches*/
+/* and labels them as such; the downloaded report contains the rendered */
+/* figures. This web workflow is distinct from the React/Tauri Studio.  */
 /*                                                                      */
-/* The session is the persisted playground state (last ML result, the   */
-/* learning-curve run, the always-live PK/PD regimen, NCA rows, run     */
-/* history — and, since 100x-131, the last molecule-surgery run); the   */
-/* collector turns it into a section payload, the                      */
-/* /api/report/session bridge re-composes REAL matplotlib figures      */
-/* server-side and assembles them through the SAME self-contained      */
-/* themed HTMLReport the desktop saves — theme toggle included.        */
-/*                                                                      */
-/* (100x-131) Per-section control: every group the session actually    */
-/* has content for gets a toggle chip — skip the PK figures when only   */
-/* the ML run matters, ship only the surgery grid, whatever the         */
-/* session needs.  The census line and the download both walk the       */
-/* SAME filtered collector, so "what will ship" is always the truth.    */
-/* The toggle set persists in localStorage (tolerant restore).          */
-/*                                                                      */
-/* (100x-132) The chips REORDER: drag one (or ride its arrows) and the  */
-/* report walks its groups in that order — the reader's narrative, not  */
-/* the code's.  The order persists per browser (tolerant restore), a    */
-/* dashed "Reset walking order" chip appears whenever it drifted from   */
-/* the canonical one, and the collector sanitizes whatever it is        */
-/* handed (unknown/duplicate ids dropped, missing groups still ship).   */
-/*                                                                      */
-/* (100x-133) The PREVIEW: a dialog renders the ordered sections before */
-/* the download — the actual walking order made visible, section by     */
-/* section (metric cards, table heads, figure SKETCHES drawn from the   */
-/* same trace data, the surgery grids' real PNGs).  The sketches are    */
-/* approximations and say so; the downloaded report renders every       */
-/* figure through matplotlib on the bridge.                             */
-/*                                                                      */
-/* (100x-137) The preview gained the file's CONTENTS twin: a sticky     */
-/* strip above the section list listing exactly what the downloaded     */
-/* file's header Contents block lists (every table/figure/image page    */
-/* in walking order — metrics are title-page material and never         */
-/* listed), each line a button that JUMPS the dialog to its section      */
-/* (smooth scroll + a brief accent ring on the arrival, the HTML        */
-/* twin's :target ring mirrored inside the dialog).                     */
-/*                                                                      */
-/* (100x-139) The strip grew two honest affordances: the census line     */
-/* became CLICKABLE LEGS (each kind's count is a button that            */
-/* SPOTLIGHTS that kind's lines — the others dim, never hide, they       */
-/* stay fully clickable; clicking the active leg again clears it;        */
-/* the spotlight resets when the dialog closes so a fresh open starts   */
-/* fresh), and the strip's confession names the ORDER's provenance      */
-/* (the web twin of the desktop picklist's memory label — "your last     */
-/* saved walking order was applied" when the browser's persisted         */
-/* order was applied, and the canonical order confesses nothing, the     */
-/* desktop's "nothing remembered: stay quiet" rule).                     */
-/*                                                                      */
-/* (100x-140) Both affordances gained their missing limbs: the census   */
-/* grew a KEYBOARD path (digits 1/2/3 toggle the census line's legs —    */
-/* the same toggle a click makes, through the same pure map so the two  */
-/* paths can never disagree; 0 clears, Escape stays the pin-then-close  */
-/* layering's own), and the confession's way out moved INTO the dialog  */
-/* (a "Reset now" link beside the sentence — the canonical order        */
-/* without closing the preview, the strip and the download both take    */
-/* it immediately). */
+/* Per-section toggles and walking order persist in localStorage. The   */
+/* collector sanitizes saved order (dropping unknown/duplicate ids)     */
+/* while retaining groups with current content. The preview shows the  */
+/* ordered sections, contents links, a live census, keyboard controls, */
+/* and an explicit reset when a custom order is active.                 */
 /* ------------------------------------------------------------------ */
 
 /** localStorage key for the per-group toggle set (100x-131). */
@@ -284,10 +239,8 @@ function saveSectionOrder(order: GroupId[]): void {
   }
 }
 
-/** (100x-136) The hook a sketch reads its pin through — subscribe to
- * the external store (src/lib/pinned-trace-store.ts, the probe-pinned
- * twin of the desktop's session-file key), snapshot THIS figure's
- * entry, and hydrate against null. */
+/** Subscribe to the web preview's pinned-trace store, read this figure's
+ * entry, and use null as the server-rendered snapshot. */
 function usePinnedTrace(title: string): number | null {
   return useSyncExternalStore(
     subscribeToPinnedTraces,
@@ -327,11 +280,10 @@ const SKETCH_PAD = { left: 6, right: 6, top: 6, bottom: 18 };
  *  the pin is a toggle, and only one trace is pinned at a time).
  *  (100x-136) The pin PERSISTS per browser: the pin lives in a small
  *  external store over localStorage (useSyncExternalStore — no restore
- *  effect anywhere), every pin/unpin writes through, a stored pin is
- *  validated against the live trace count at READ time (a stale index
- *  pins nothing), and a restored pin confesses its provenance in the
- *  readout — the desktop's report_page_order memory, mirrored exactly
- *  (its session-file key traded for this browser's storage). */
+ *  effect anywhere), every pin/unpin writes through, and a stored pin is
+ *  validated against the live trace count at read time (a stale index
+ *  pins nothing). A restored pin's provenance is identified in the
+ *  readout as coming from this browser's prior visit. */
 function FigureSketch({ section }: { section: ReportFigureSection }) {
   const [focusedTrace, setFocusedTrace] = useState<number | null>(null);
   // (100x-136) the pin rides the external store — the stored value,
@@ -748,10 +700,8 @@ export function SessionReport() {
     () => contentsCensusLegs(sessionContentsCensus(contents)),
     [contents],
   );
-  // (100x-139) the strip's ORDER confession — the web twin of the
-  // desktop picklist's memory label: the browser's persisted walking
-  // order applied ("your last saved order") vs the canonical order's
-  // honest silence (the pure derivation, probe-pinned)
+  // Disclose when a saved browser walking order is active; stay silent
+  // when the canonical order is in use.
   const orderConfession = useMemo(
     () => orderConfessionText(customOrder),
     [customOrder],
@@ -888,9 +838,8 @@ export function SessionReport() {
   async function download() {
     setBusy(true);
     try {
-      // the desktop twin bakes the APP's theme radios; the web twin
-      // bakes the app's resolved palette (light/dark — "auto" stays a
-      // reader-side choice via the report's own toggle).
+      // Embed the current browser palette in the downloaded report; its
+      // own theme control keeps an "auto" reader-side option.
       const body = {
         ...payload,
         theme: resolvedTheme === "dark" ? "dark" : "light",
@@ -1299,17 +1248,8 @@ export function SessionReport() {
                 <p className="mt-1 text-[10px] text-muted-foreground">
                   The same block the downloaded file&apos;s header carries — click
                   a line to jump to it.
-                  {/* (100x-139) the ORDER confession — the web twin of the
-                      desktop picklist's memory label: the persisted order
-                      applied says so and names the way out; the canonical
-                      order stays quiet (nothing was remembered).
-                      (100x-140) the way out moved INTO the dialog — a
-                      "Reset now" link beside the sentence restores the
-                      canonical order without closing the preview (the
-                      strip, the section list and the download all take it
-                      immediately; the card&apos;s dashed chip behind the dialog
-                      stays the other way out, for when the dialog is
-                      closed). */}
+                  {/* Explain an active saved browser order and offer a
+                      reset that works without closing the preview. */}
                   {orderConfession ? ` ${orderConfession}` : ""}
                   {orderConfession ? (
                     <button

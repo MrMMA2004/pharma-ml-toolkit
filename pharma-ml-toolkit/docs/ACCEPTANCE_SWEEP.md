@@ -1,4 +1,10 @@
-# ACCEPTANCE_SWEEP — part11_1 §46 (Phase Thirty-Nine's final gate)
+# ACCEPTANCE_SWEEP — part11_1 §46 (historical Phase Thirty-Nine gate)
+
+**Status:** Archived acceptance record at the v1.2.228 / round-289 baseline;
+its `pending`/`blocked` rows are historical and do not describe current UI
+status. The supported desktop is React + TypeScript/Tauri 2. The older PySide6
+interface is retired, and the separate Next.js console is not the desktop app.
+See [`frontend/README.md`](../frontend/README.md) for current desktop scope.
 
 **Baseline:** v1.2.228 (round 289) · **r290 addendum:** the ML
 Explainability/Uncertainty queue lane CLOSED (POST /api/v1/ml/explain

@@ -31,21 +31,18 @@ ProgressReport = Callable[[Any, str], None]
 ProgressCallback = Callable[[Any, str], bool]
 BackendJob = Callable[[ProgressCallback], Any]
 
-#: module names that map to the pip extra that installs them (the
-#: README's extras table).  An ImportError naming one of these is a
-#: setup problem, so the UI can say how to fix it (v1.2.204 C-2).
+#: Module names mapped to optional extras actually declared in pyproject.toml.
+#: Unknown or direct-only dependencies keep the historical traceback instead
+#: of receiving an install command that cannot satisfy them.
 _PIP_EXTRAS: tuple[tuple[str, str], ...] = (
     ("rdkit", "chem"),
-    ("meeko", "chem"),
+    ("mordred", "chem"),
+    ("meeko", "docking"),
     ("gemmi", "docking"),
-    ("vina", "docking"),
-    ("torch", "deep-learning"),
+    ("torch", "deep"),
     ("lightgbm", "boosting"),
     ("xgboost", "boosting"),
     ("catboost", "boosting"),
-    ("fiftyone", "data-curation"),
-    ("mdanalysis", "md"),
-    ("optuna", "tuning"),
 )
 
 
@@ -62,8 +59,8 @@ def _dependency_hint(exc: BaseException) -> str | None:
 
     if isinstance(exc, DependencyError):
         return (f"Missing optional dependency — {exc}\n"
-                "Install it (see README → Installation), then retry. "
-                "Run 'python studio.py --doctor' to verify the environment.")
+                "Install the required extra from the toolkit package root "
+                "(see README → Installation), then retry.")
     if isinstance(exc, ImportError):
         # ``exc.name`` is only populated by the interpreter's own raise
         # path; backends often raise ``ModuleNotFoundError(msg)`` with
@@ -79,8 +76,8 @@ def _dependency_hint(exc: BaseException) -> str | None:
                         f"Job needs the '{module}' package, which is not installed "
                         f"in this environment.\nInstall it with the '{extra}' extra "
                         "(see README → Installation), then retry — e.g.\n"
-                        f"    pip install 'pharmaml[{extra}]'\n"
-                        "Run 'python studio.py --doctor' to verify the environment."
+                        f"    python -m pip install -e '.[{extra}]'  # from the toolkit package root\n"
+                        "Retry the operation with the same Python environment."
                     )
     return None
 
@@ -173,8 +170,8 @@ class JobWorker(QRunnable):
                 if friendly is not None:
                     # v1.2.204 C-2: a missing optional dependency is a setup
                     # problem, not a bug -- the user gets the install command
-                    # instead of a raw traceback (the doctor deep-links from
-                    # the install page of the README).
+                    # instead of a raw traceback; the local extra command
+                    # and package-root requirement are included above.
                     self.signals.failed.emit(friendly)
                     return
                 self.signals.failed.emit(f"{type(exc).__name__}: {exc}\n{traceback.format_exc(limit=3)}")

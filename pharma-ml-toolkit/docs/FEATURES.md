@@ -6,10 +6,15 @@ traceability matrix.** All evidence on this page was collected live against the
 working tree (imports grepped, pages/cards/routes enumerated, tests collected
 with `pytest --collect-only`), not copied from prose. This is a historical
 inventory, not a current certification: counts and grades have not been
-revalidated against every current UI and dependency profile. See
-[Part 5 audit](PART5_PHASE0_AUDIT.md) and [test profiles](TEST_PROFILES.md)
-for scoped evidence and engine limitations. Matrix inputs were frozen
-at v1.2.167 (`9130c6b`); the inventory itself ships with v1.2.242 (the
+revalidated against every current UI and dependency profile. **Current
+interface boundary:** the supported desktop application is React + TypeScript
+hosted by Tauri 2; the separate Next.js console is another application. The
+PySide6 page matrix below describes only the retired, archival UI and does not
+state current Studio capabilities or feature parity. See
+[frontend development notes](../frontend/README.md), [Part 5 audit](PART5_PHASE0_AUDIT.md),
+and [test profiles](TEST_PROFILES.md) for current scope and bounded evidence.
+Matrix inputs were frozen at v1.2.167 (`9130c6b`); the inventory itself ships
+with v1.2.242 (the
 r315 Phase-4 search/job-center/workspace rows and the Phase-5 glossary/
 presets/doctor rows are registry-level additions, not matrix changes;
 r312 added the `/api/v1/model-evaluation` conformal + coverage family and
@@ -90,13 +95,14 @@ The three honesty rules are applied literally:
    data support** — features whose shipped demos are synthetic say so
    explicitly (§ "Synthetic-demo register").
 
-## 1. The desktop Studio — 18 pages
+## 1. Retired PySide6 interface — historical 18-page inventory
 
-Backend column = modules the page imports/calls (verified by import grep).
-Tests column = dedicated page test + the backend suites that pin the
-underlying calls. All pages additionally ride `tests/ui/test_pages_smoke.py`
-(8 smoke tests) and the offscreen platform checks
-(`test_headless_platform.py`, `test_qt_doctor.py`).
+Backend column = modules the archived page imported/called at the inventory
+baseline. Tests column = the historical page test + backend suites recorded
+then; it is not a current UI-coverage claim. All pages additionally rode
+`tests/ui/test_pages_smoke.py` and offscreen platform checks in that retired
+implementation. Current React/Tauri Studio coverage is documented separately
+in [`frontend/README.md`](../frontend/README.md) and [`TEST_PROFILES.md`](TEST_PROFILES.md).
 
 | Page (nav key) | Backend | UI tests | Backend tests | Status | Notes |
 | --- | --- | --- | --- | --- | --- |

@@ -253,13 +253,13 @@ def _build_parser() -> argparse.ArgumentParser:
     train.add_argument(
         "--plots", action="store_true",
         help="emit the full visual bundle (report.html + figures + "
-        "tables) into <out>/report/ — requires pharmaml[reports]",
+        "tables) into <out>/report/ — requires local .[reports] extra (install from the toolkit package root)",
     )
     train.add_argument(
         "--pdf-report", action="store_true",
         help="with the visual bundle, also write report.pdf — the "
         "multi-page document (one page per table/figure); implies "
-        "--plots — requires pharmaml[reports]",
+        "--plots — requires local .[reports] extra (install from the toolkit package root)",
     )
     train.add_argument(
         "--out", default="artifacts",
@@ -286,12 +286,12 @@ def _build_parser() -> argparse.ArgumentParser:
     compare.add_argument(
         "--plot", action="store_true",
         help="save the leaderboard bar chart + report bundle into <out-dir>/ "
-        "— requires pharmaml[reports]",
+        "— requires local .[reports] extra (install from the toolkit package root)",
     )
     compare.add_argument(
         "--pdf-report", action="store_true",
         help="with the report bundle, also write report.pdf — the "
-        "multi-page document; implies --plot — requires pharmaml[reports]",
+        "multi-page document; implies --plot — requires local .[reports] extra (install from the toolkit package root)",
     )
     compare.add_argument(
         "--out-dir", default="reports", help="directory for --plot artifacts"
@@ -729,7 +729,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--plot", action="store_true",
         help="save the combined two-panel AD figure into the current "
         "directory (ad_applicability_domain.png) — requires "
-        "pharmaml[reports]",
+        "local .[reports] extra (install from the toolkit package root)",
     )
 
     # ---- chem --------------------------------------------------------
@@ -961,13 +961,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--plots", action="store_true",
         help="emit the visual bundle (report.html + consensus ranking "
         "figure + the breakdown table) into --out-dir — requires "
-        "pharmaml[reports]",
+        "local .[reports] extra (install from the toolkit package root)",
     )
     rescore.add_argument(
         "--pdf-report", action="store_true",
         help="with the visual bundle, also write report.pdf — the "
         "multi-page document (one page per table/figure); implies "
-        "--plots — requires pharmaml[reports]",
+        "--plots — requires local .[reports] extra (install from the toolkit package root)",
     )
     rescore.add_argument(
         "--out-dir", default="reports",

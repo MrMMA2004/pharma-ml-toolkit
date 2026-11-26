@@ -499,8 +499,7 @@ def compute_rism_descriptors(
     except ImportError as exc:
         raise DependencyError(
             "RDKit is required for 3D-RISM-KH descriptor computation. "
-            "Install it with:  pip install 'pharmaml[chem]'  "
-            "(or pip install rdkit)"
+            "From the toolkit package root, run:  python -m pip install -e '.[chem]'"
         ) from exc
 
     kbt = _GAS_CONSTANT_KCAL * float(temperature)

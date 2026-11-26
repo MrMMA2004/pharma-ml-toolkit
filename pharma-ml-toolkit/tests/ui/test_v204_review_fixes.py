@@ -43,8 +43,9 @@ class TestDependencyHint:
         hint = _dependency_hint(exc)
         assert hint is not None
         assert "rdkit" in hint
-        assert "pip install" in hint
-        assert "doctor" in hint
+        assert "python -m pip install -e '.[chem]'" in hint
+        assert "toolkit package root" in hint
+        assert "doctor" not in hint
         # no traceback fragment leaks into the friendly message
         assert "Traceback" not in hint
         assert "ModuleNotFoundError" not in hint
@@ -54,12 +55,12 @@ class TestDependencyHint:
         from ui.workers.job_worker import _dependency_hint
 
         exc = DependencyError(
-            "the docking engine needs 'vina'; pip install 'pharmaml[docking]'"
+            "preparation needs 'meeko'; python -m pip install -e '.[docking]'"
         )
         hint = _dependency_hint(exc)
         assert hint is not None
-        assert "pip install" in hint
-        assert "doctor" in hint
+        assert "python -m pip install -e '.[docking]'" in hint
+        assert "toolkit package root" in hint
 
     def test_ordinary_exceptions_stay_tracebacks(self) -> None:
         from ui.workers.job_worker import _dependency_hint
@@ -88,8 +89,9 @@ class TestDependencyHint:
         QThreadPool.globalInstance().start(worker)
         qtbot.waitUntil(lambda: bool(captured), timeout=5_000)
         assert "torch" in captured[0]
-        assert "pip install" in captured[0]
+        assert "python -m pip install -e '.[deep]'" in captured[0]
         assert "ModuleNotFoundError" not in captured[0]
+        assert "studio.py --doctor" not in captured[0]
 
 
 # -- m-4: the toast contract ------------------------------------------------

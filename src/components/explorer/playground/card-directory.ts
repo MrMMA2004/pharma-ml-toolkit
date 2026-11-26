@@ -2,25 +2,17 @@
 /* Playground card directory (100x-129)                                */
 /* ------------------------------------------------------------------ */
 /**
- * The web twin of the desktop Ctrl+F card finder: every ALWAYS-RENDERED
- * card of the Playground, one row each, with the sub-tab (and PK inner
- * tab) it lives on and the exact `match` string its rendered card
- * carries. The finder filters this directory, switches the tabs, then
- * scrolls to the card and flashes it — `match` is resolved against the
- * live `[data-slot="card"]` elements' textContent, so a rename drift
- * surfaces honestly as a "not found" toast instead of a silent jump to
- * the wrong card.
+ * Static directory of the cards rendered by this separate Next.js
+ * Playground. Each entry carries its sub-tab (and PK inner tab) and the
+ * exact `match` string rendered by that card. The finder filters this
+ * directory, switches tabs, then scrolls to the live card and flashes it;
+ * a catalog drift surfaces as a "not found" toast rather than a silent
+ * jump to the wrong control.
  *
- * (Historically the desktop registry was the retired Tk playground's
- * `_CARD_INDEX`, built at UI construction time so it could never drift; the
- * Studio pages carry those cards now.) The web catalog is static,
- * so the E2E probe walks EVERY entry and asserts the jump resolves —
- * drift is caught the round it happens, not by the user.
- *
- * Cards that only render AFTER a run (the ML results / leaderboard /
- * comparison / tuning readouts, the biology matrix cards) are
- * deliberately absent: the finder lists what is on screen NOW, the
- * same honesty rule as the desktop finder listing the cards it built.
+ * This catalog describes only the browser console. It does not map to or
+ * imply feature parity with the React/Tauri desktop application. Cards
+ * that render only after a run are absent because the finder lists content
+ * currently on screen.
  */
 
 /** Sub-tab values of the Playground tab strip. */
@@ -259,7 +251,7 @@ export const PLAYGROUND_CARDS: readonly PlaygroundCardEntry[] = [
     match: "Ligand-set reconciliation",
     keywords: "reconciliation compare ligand sets intersection",
   },
-  /* -- Surgery (100x-130 — the desktop Generative tab's twin) ---------- */
+  /* -- Surgery (separate Next.js web-console demo tab) ----------------- */
   {
     id: "gen-topology",
     tab: "generative",
@@ -286,7 +278,7 @@ export const PLAYGROUND_CARDS: readonly PlaygroundCardEntry[] = [
     keywords:
       "sa score sascore ertl schuffenhauer synthetic accessibility ease of synthesis complexity",
   },
-  /* -- MCTS search (the Studio Generative method's web twin) ---------- */
+  /* -- MCTS search (separate Next.js web-console demo) --------------- */
   {
     id: "gen-mcts",
     tab: "generative",

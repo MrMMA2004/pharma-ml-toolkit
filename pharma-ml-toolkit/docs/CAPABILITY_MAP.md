@@ -7,7 +7,14 @@ never copied from prose.  This is the Phase-0 deliverable of the
 nine-card-first enhancement architecture: the auditable
 capability→card mapping and the migration plan for Phases 1-6.
 
-## 1. What the launch architecture actually is (verified)
+> **Historical interface map:** this document's `studio.py`, `ui/`, 18-page,
+> and nine-card references describe the retired PySide6 implementation at its
+> v1.2.183 baseline. They are not current React/Tauri Studio instructions or
+> feature-parity evidence. The supported desktop is React + TypeScript hosted
+> by Tauri 2; the root Next.js console is separate. See
+> [`frontend/README.md`](../frontend/README.md) for current desktop scope.
+
+## 1. Retired PySide6 launch architecture (historical)
 
 ```
 studio.py → ui.run() → MainWindow

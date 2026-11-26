@@ -32,21 +32,16 @@ import type {
 import { toast } from "sonner";
 
 /* ------------------------------------------------------------------ */
-/* Molecule surgery — the web twin of the desktop's two surgery cards   */
+/* Molecule-surgery demonstrations for the Next.js web console          */
 /* ------------------------------------------------------------------ */
 /**
- * (100x-130) The desktop playground's Generative tab carries two
- * standalone what-if tools the GA absorbed until now: "Ring topology
- * moves" (every distinct one-step ring-size mutant of one molecule)
- * and "Breed two molecules" (the seeded scaffold-hop crossover). The
- * web twin mirrors both over the same bridge pattern as the feature
- * factory: one POST runs the REAL pharmaml.generative operators with
- * real RDKit on the server and returns the SMILES list PLUS the
- * captioned 2D structure grid as a base64 PNG — the same panels the
- * desktop's "Draw mutants" / "Draw litter" buttons compose. A failed
- * crossover draw is an honest null row, not a silent omission, and a
- * molecule without qualifying saturated rings says so instead of
- * returning an empty grid without explanation.
+ * These separate web-console cards expose ring-topology moves and
+ * seeded scaffold-hop crossover through the `pharmaml.generative` API.
+ * A server request runs the real operators with RDKit and returns SMILES
+ * plus a captioned 2D structure grid. This describes only the web demo;
+ * it is not a feature-parity claim for the React/Tauri Studio. Failed
+ * crossover draws are returned as null rows, and molecules without
+ * qualifying saturated rings receive an explanatory result.
  */
 
 const DEFAULT_TOPOLOGY_SMILES = "C1CCNCC1"; // piperidine: 3 mutants
@@ -57,9 +52,8 @@ const DEFAULT_SEED = 42;
 
 type Status = "idle" | "running" | "done" | "error";
 
-/** Save a data-URI figure through a throwaway anchor (the web twin of
- * the desktop cards' per-card "Save figure…" — the figure leaves the
- * app from the card that shows it). */
+/** Save a data-URI figure from this web-console card via a temporary
+ * download link. */
 function downloadFigure(dataUri: string, filename: string) {
   const link = document.createElement("a");
   link.href = dataUri;
@@ -607,8 +601,7 @@ export function BreedMoleculesCard() {
   );
 }
 
-/** The Surgery sub-tab: the two cards side by side (the desktop's
- * row-3 layout — moves left, breed right). */
+/** The Next.js web-console Surgery sub-tab's two side-by-side cards. */
 export function SurgeryCards() {
   return (
     <div className="grid gap-4 lg:grid-cols-2">

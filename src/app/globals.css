@@ -257,7 +257,7 @@
 }
 
 /* ---- (100x-129) Playground card finder: jump flash ----
- * The web twin of the desktop finder's flash-and-jump: the target card
+ * The Next.js console card finder's flash-and-jump: the target card
  * pulses a primary ring + soft wash that settles out, drawing the eye
  * to where the jump landed. */
 .pg-card-flash {

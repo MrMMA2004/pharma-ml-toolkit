@@ -1,4 +1,10 @@
-# GUI Audit — the Tkinter playground mapped for the Studio redesign
+# GUI Audit — historical Tkinter/PySide6 redesign map
+
+> **Archived audit:** this document records historical Tkinter and PySide6
+> interfaces. Its old `python studio.py` references do not launch the supported
+> desktop app. Current desktop is React + TypeScript hosted by Tauri 2; the
+> separate Next.js console is a distinct app. See
+> [`../../frontend/README.md`](../../frontend/README.md) for current guidance.
 
 Directive #16 (GUI redesign, `upload/MASTER_PROMPT part2.pdf`, 16.2/16.4):
 before redesigning the interface, inventory every existing screen and map

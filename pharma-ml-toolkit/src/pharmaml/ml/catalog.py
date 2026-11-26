@@ -7835,7 +7835,7 @@ CATALOG_PROJECTS: tuple[tuple[str, str, int, int, str, str, str], ...] = (
         22,
         "CC BY-NC-SA 4.0",
         "https://github.com/adobe/antialiased-cnns",
-        "pip install antialiased-cnns to improve stability and accuracy.",
+        "python -m pip install antialiased-cnns to improve stability and accuracy.",
     ),
     (
         "pytorch-utils",

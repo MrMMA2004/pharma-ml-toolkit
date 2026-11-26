@@ -34,9 +34,11 @@ import { fmtNum, fmtTick } from "@/lib/format";
 import { toast } from "sonner";
 
 /* ------------------------------------------------------------------ *
- * Probability Calibration mini-widget — a client-side mirror of the
- * Python API pharmaml.viz.plot_calibration_curve (binary one-vs-rest
- * case): sklearn's uniform-strategy reliability diagram + Brier score.
+ * Probability Calibration mini-widget — a browser-side calculator for
+ * pasted binary predictions. It uses the same equal-width reliability
+ * bins and Brier-score definition as the binary one-vs-rest case in
+ * pharmaml.viz.plot_calibration_curve; it does not fit a model or cover
+ * the Python API's multiclass mode.
  * ------------------------------------------------------------------ */
 
 /** Selectable equal-width bin counts (the classic diagram uses 10). */
@@ -147,15 +149,15 @@ function parseCalibrationRows(text: string): {
   return { rows, error };
 }
 
-/** Uniform-strategy reliability bins + Brier score — a line-by-line mirror
- *  of sklearn.calibration.calibration_curve(strategy="uniform") and
- *  sklearn.metrics.brier_score_loss as called by plot_calibration_curve.
+/** Equal-width reliability bins + Brier score for valid binary rows.
+ *  The definitions match the binary, uniform-strategy calculation used by
+ *  sklearn.calibration.calibration_curve and brier_score_loss; this helper
+ *  also handles paste parsing and the empty state for the browser UI.
  *
- *  Bin assignment mirrors sklearn's `np.searchsorted(bin_edges[1:-1], prob)`
- *  with its default side="left": the index counts interior edges STRICTLY
- *  below the probability, so a value exactly on an edge lands in the lower
- *  bin (bin i covers (i/n, (i+1)/n]; bin 0 covers [0, 1/n]). Empty bins are
- *  dropped from the diagram, exactly like sklearn. */
+ *  Interior-edge equality is assigned to the lower bin (left-insertion
+ *  convention: bin i is displayed as (i/n, (i+1)/n], with bin 0 including
+ *  zero). Empty bins are omitted from the plotted points. This is a
+ *  browser calculator, not a drop-in replacement for the Python API. */
 function computeCalibration(rows: CalibrationRow[], nBins: number) {
   const sums = Array.from({ length: nBins }, () => ({ n: 0, p: 0, y: 0 }));
   let brierSum = 0;
@@ -336,7 +338,8 @@ export function ProbabilityCalibration() {
           <div>
             <CardTitle className="text-base">Probability Calibration</CardTitle>
             <CardDescription className="text-xs">
-              Reliability diagram (binary, one-vs-rest) — mirroring{" "}
+              Browser-side binary reliability diagram from pasted predictions — using the same
+              equal-width bins and Brier-score definition as{" "}
               <code className="font-mono">pharmaml.viz.plot_calibration_curve</code>
             </CardDescription>
           </div>
@@ -538,7 +541,7 @@ export function ProbabilityCalibration() {
                     probability,label
                   </code>{" "}
                   pairs to draw a reliability diagram — does a predicted 0.8 really mean
-                  80 % positives? Parity:{" "}
+                  80 % positives? Python counterpart:{" "}
                   <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
                     pharmaml.viz.plot_calibration_curve(model, X_test, y_test)
                   </code>
@@ -583,7 +586,7 @@ export function ProbabilityCalibration() {
         ) : null}
 
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          Parity:{" "}
+          Python counterpart (for a fitted binary model):{" "}
           <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">
             pharmaml.viz.plot_calibration_curve(model, X_test, y_test, n_bins={nBins})
           </code>{" "}

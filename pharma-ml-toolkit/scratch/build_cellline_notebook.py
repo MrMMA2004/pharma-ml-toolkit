@@ -311,8 +311,9 @@ fig_parity""",
 The registry's two PyTorch families (deep feed-forward nets with
 early stopping, and residual nets with learned skip projections) plug
 into the *same* `compare_models` call as every classical model —
-cross-validated, tuned and scored identically. They need
-`pip install 'pharmaml[deep]'`; without torch they simply show as
+cross-validated, tuned and scored identically. From the
+`pharma-ml-toolkit/` package root, install the local extra with
+`python -m pip install -e '.[deep]'`; without torch they show as
 unavailable instead of breaking anything."""),
     ("code", """\
 from pharmaml.ml import compare_models, list_models

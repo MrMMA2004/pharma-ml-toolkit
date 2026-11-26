@@ -793,7 +793,7 @@ function PdCard() {
 }
 
 /* ------------------------------------------------------------------ */
-/* 8. Dimension-aware unit converter (the desktop card's web twin)    */
+/* 8. Dimension-aware unit converter for this web-console demo        */
 /* ------------------------------------------------------------------ */
 
 const UNIT_DIMENSIONS: Array<{ value: Dimension; label: string; preset: [string, string] }> = [
@@ -926,7 +926,8 @@ function UnitConverterCard() {
         Units in this dimension: {units.join(", ")}. The conversion runs through
         the same single front-door as{" "}
         <code className="rounded bg-muted px-1 font-mono text-xs">pharmaml.pharma.UnitConverter</code>{" "}
-        — pinned to the library by a byte-level parity guard.
+        — the same-dimension conversion matrix is exact-tested against the library in
+        <code className="rounded bg-muted px-1 font-mono text-xs">TestUnitConverterParity</code>.
       </p>
     </CalcCard>
   );

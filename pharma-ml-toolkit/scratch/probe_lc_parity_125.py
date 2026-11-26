@@ -7,7 +7,8 @@ The per-point numbers are engine-specific by design (sklearn vs the TS
 twin), so this guard pins the SHARED CONTRACT — the pieces that must
 never drift between the two cards:
 
-* the default size schedule: ``linspace(0.1, 1.0, 8)`` (fractions),
+* the default fraction schedule: ``linspace(0.1, 1.0, 8)`` (the suite
+  compares values within 1e-12; it does not compare absolute row counts),
 * the gap threshold ``0.15``,
 * the two verdict strings, byte-mirrored (``f"gap ≈ {gap:.2f} …"`` on
   the Python side, ``toFixed(2)`` on the TS side).

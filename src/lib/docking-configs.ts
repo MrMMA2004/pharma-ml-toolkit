@@ -1,7 +1,7 @@
 /**
- * Campaign-side docking helpers — pure client-side TypeScript mirrors of
- * the pharmaml.docking library surfaces the desktop playground grew in
- * v1.2.51:
+ * Browser-side docking helpers used by the separate Next.js web console.
+ * Their file formats and algorithms correspond to functions in
+ * `pharmaml.docking`:
  *
  * - `scan_vina_directory`  (parsing.py)  → {@link scanVinaLogs}
  * - `compute_grid_box`     (preparation.py) → {@link computeGridBox}
@@ -9,11 +9,10 @@
  * - `write_gpf` / `write_dpf` (preparation.py) → {@link buildGpfText} / {@link buildDpfText}
  * - `write_config_batch`   (campaign.py) → {@link writeConfigBatch}
  *
- * Everything runs in the browser on pasted or locally-picked files — no
- * server round-trip, so the cards keep working even when the Python venv
- * is unavailable. Line formats are kept byte-faithful to the Python
- * writers (including Python's float str()) so generated configs are
- * drop-in replacements for the desktop ones.
+ * These helpers run in the browser on pasted or locally picked files,
+ * without a server round-trip. Their output formatting follows the
+ * Python writers (including Python-style float strings) for compatible
+ * configuration text. This module does not define a desktop UI surface.
  */
 
 import { parseVinaOutput } from "@/lib/docking-parse";
@@ -212,7 +211,7 @@ export const DEFAULT_RECEPTOR_TYPES = "A C HD N NA OA SA";
 
 /**
  * Python str(float): keeps a trailing ".0" on integral values so the
- * generated lines match the desktop writers byte-for-byte.
+ * generated lines match the Python writers byte-for-byte.
  */
 function pyFloat(value: number): string {
   return Number.isInteger(value) ? `${value}.0` : String(value);
@@ -363,11 +362,10 @@ export interface BatchConfigRow {
  * Build the r.gpf + r.dpf pair for every campaign sub-folder: the first
  * `*.pdbqt` that is not the receptor file becomes the reference ligand,
  * the grid box is computed from it, and both config texts are generated
- * — the gpfer/dpfer batch loop (and gpferreceptorni.py's custom
- * receptor types) as a pure client-side mirror. Folders without a
- * candidate ligand are reported honestly instead of aborting the batch.
- * The desktop writes the pair to disk; the web hands the same bytes to
- * the download buttons.
+ * using the package's campaign-preparation conventions. Folders without
+ * a candidate ligand are reported instead of aborting the batch. The
+ * web console presents generated text through download buttons; this
+ * browser helper is separate from the React/Tauri Studio.
  */
 export function writeConfigBatch(
   folders: CampaignFolder[],
@@ -447,7 +445,7 @@ export function writeConfigBatch(
  * Group a `webkitdirectory` pick into campaign folders: every immediate
  * sub-directory of the picked root becomes one ligand folder holding
  * its PDBQT files. Files sitting directly in the root are not ligand
- * folders — same rule the desktop's `iterdir()` walk applies.
+ * folders, matching the package's one-directory-per-ligand convention.
  */
 export function groupCampaignFiles(
   files: Array<{ path: string; content: string }>

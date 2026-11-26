@@ -5,15 +5,12 @@ import { bridgeErrorResponse, runPythonBridge } from "@/lib/python-bridge";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** The web twin of the desktop Studio Response AI page (the
- * `pharmaml.ml.drugresponse` module — CaDRReS-derived drug-response
- * learning): one POST runs the REAL module on the server through the
- * repo-root bridge. The card's four analyses map to the page's
- * headline tabs — hill (the 4PL fit), metrics (Pearson/Spearman/
- * RMSE/MAE + the Kendall trio), model (the seeded 12x4 screen CaDRReS
- * factorisation), cv (cell-line-grouped cross-validation). The page's
- * deeper diagnostics (informative regression, the response VAE,
- * multi-omics fusion) stay desktop-side. Mirrors the caps in
+/** Next.js web-console endpoint for its drug-response demonstration.
+ * One POST calls `pharmaml.ml.drugresponse` through the repository-root
+ * bridge. The route exposes Hill fitting, response metrics, CaDRReS
+ * factorisation, and cell-line-grouped cross-validation. It is a
+ * separate interface surface and does not establish feature parity
+ * with the React/Tauri desktop app. Request caps match
  * scripts/drugresponse_bridge.py. */
 
 const MAX_SERIES_CHARS = 4_000;

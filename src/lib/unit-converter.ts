@@ -2,16 +2,17 @@
  * Unit conversions — the browser twin of `pharmaml.pharma.units`
  * (the 100x-123 pair).
  *
- * The Python module's design choice carried over verbatim: every
- * conversion goes through ONE `convertUnits` front-door with dimension
- * checking, instead of ad-hoc multiplication factors scattered
- * through formulas — a classic source of 1000-fold medication
- * errors. The scale tables, the dimension rule and the error
- * messages are byte-parity with the library (pinned by
- * tests/test_web_parity.py::TestUnitConverterParity, which runs both
- * sides on the same matrix); `molarMass` stays Python-side (the
- * calculators tab has no formula input — it is one API route away
- * if a card ever needs it).
+ * The Python module's design choice is carried over: conversions go
+ * through one `convertUnits` front door with dimension checking rather
+ * than ad-hoc factors. `TestUnitConverterParity` pins exact conversion
+ * values and the listed dimension/error cases: every same-dimension
+ * pair at 7.5, selected direct dimension lookups, sorted unit lists,
+ * and cross-/unknown-unit errors. This is a bounded probe, not a claim
+ * that every call behaves identically: both conversion front doors trim
+ * their unit arguments, but this exported `dimensionOf` trims a direct
+ * argument while Python's `UnitConverter.dimension_of` does not.
+ * `molarMass` stays Python-side (the calculators tab has no formula
+ * input — it is one API route away if a card ever needs it).
  */
 
 export type Dimension = "mass" | "volume" | "amount" | "concentration" | "time";

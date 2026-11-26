@@ -1,17 +1,17 @@
 # PharmaML toolkit — pinned dependency stack.
 #
-# Every version below is the EXACT stack the toolkit's QA chain runs
-# green under (the full pytest suite and the executed notebooks — see
-# CHANGELOG). `pip install -r requirements.txt` gives you that same
-# environment; the loose ranges in pyproject.toml stay the
-# compatibility contract, this file is the verified snapshot.
+# The active versions below are the pinned core snapshot tested under
+# Python 3.12. `python -m pip install -r requirements.txt` installs that
+# core environment; the ranges in pyproject.toml remain the broader
+# compatibility declarations. Optional extras are range-resolved unless
+# their commented pins are enabled and installed separately.
 #
-# Lint baseline (trued in round 237): ui/ + studio.py are ruff- AND
-# mypy-clean; src/ (90) and tests/ (57) still carry older ruff debt
-# (tracked as backlog) — the historical "zero-finding" claim was
-# scoped to the files under active QA at the time it was written.
+# Historical lint baseline: the retired PySide6 UI and launcher were
+# checked in round 237. Those results do not describe the supported
+# React/Tauri frontend; current frontend checks are documented separately.
 #
-# Python: 3.10+ (verified under 3.12).
+# Python: this pinned core snapshot is tested on 3.12; pyproject.toml
+# declares the broader package compatibility floor (Python >=3.10).
 
 # ---- Core (required) -------------------------------------------------
 numpy==1.26.4
@@ -57,18 +57,17 @@ tqdm==4.67.1
 
 # Deep learning (torch 'dnn' / 'dnn_residual' estimators + generative
 # RNN/RL). CPU wheel — install with:
-#   pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
+#   python -m pip install -c requirements.txt torch==2.14.1 \
+#       --index-url https://download.pytorch.org/whl/cpu
 # (or drop the --index-url for the CUDA build of the same version)
 # torch==2.14.1
 
 # Plotting / PDF+DOCX report generation:
 # matplotlib==3.10.9
-#                     # (r304) the Tk-Agg note retired WITH the Tk
-#                     # playground's true retirement: no shipped GUI
-#                     # embeds matplotlib canvases any more (the PySide6
-#                     # studio renders figures to PNG buffers, the React
-#                     # app renders Plotly) -- the historical 3.10+
-#                     # Tcl/Tk 9 live-canvas caveat applied only to it
+#                     # (r304) the Tk-Agg caveat retired with the deleted
+#                     # Tk playground. The retired PySide6 UI used PNG
+#                     # buffers; the current React/Tauri app uses Plotly.
+#                     # Tcl/Tk 9's live-canvas caveat applied only to Tk.
 # seaborn==0.13.2
 # fpdf2==2.8.5
 # python-docx==1.2.0
@@ -83,11 +82,13 @@ tqdm==4.67.1
 # mypy==2.4.0
 # ruff==0.17.1
 
-# ---- Studio GUI (directive #16, PySide6 redesign — increment 1) ------
-# Install under the numpy constraint so the resolver cannot drift the
-# pinned scientific stack:
-#   pip install PySide6==6.8.3 pyqtgraph==0.13.7 qt-material==2.17 \
-#               qdarkstyle==3.2.3 pytest-qt==4.5.0 -c <(echo numpy==1.26.4)
+# ---- Retired PySide6 GUI (archival source only) ----------------------
+# This optional block supports legacy GUI tests/reproduction. It is not
+# the supported PharmaML Studio application (React + Tauri 2); do not
+# install it to obtain the current desktop app. If reproducing archived
+# Qt tests, install with the core requirements as constraints:
+#   python -m pip install -c requirements.txt PySide6==6.8.3 \
+#       pyqtgraph==0.13.7 qt-material==2.17 qdarkstyle==3.2.3 pytest-qt==4.5.0
 # PySide6==6.8.3
 #                         # Qt 6.8 LTS; PySide6 6.9+ wheels still OK but
 #                         # 6.8.3 is the verified pin (Python 3.12)

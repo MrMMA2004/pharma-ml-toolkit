@@ -45,7 +45,7 @@ the model-agnostic question today).
 
 Install with::
 
-    pip install 'pharmaml[explain]'
+    python -m pip install -e '.[explain]'
 
 Examples
 --------
@@ -193,7 +193,7 @@ def shap_summary(
     ------
     DependencyError
         When shap is not installed -- the message carries the exact
-        ``pip install 'pharmaml[explain]'`` command.
+        ``python -m pip install -e '.[explain]'`` command.
     ModelError
         When ``model`` is not fitted, not a tree model the explainer
         supports, a width-changing pipeline, or a multiclass
@@ -233,7 +233,7 @@ def shap_summary(
 
         raise DependencyError(
             "shap_summary requires the optional package 'shap'. "
-            "Install with:  pip install 'pharmaml[explain]'"
+            "From the toolkit package root, run:  python -m pip install -e '.[explain]'"
         ) from exc
 
     # (100x-169) the GUI hands its TrainingResult over whole (and the
@@ -506,7 +506,7 @@ def shap_interactions(
     ------
     DependencyError
         When shap is not installed -- the message carries the exact
-        ``pip install 'pharmaml[explain]'`` command.
+        ``python -m pip install -e '.[explain]'`` command.
     ModelError
         When ``model`` is not fitted, not a tree model the explainer
         supports, a pipeline, a multiclass classifier, or the returned
@@ -539,7 +539,7 @@ def shap_interactions(
 
         raise DependencyError(
             "shap_interactions requires the optional package 'shap'. "
-            "Install with:  pip install 'pharmaml[explain]'"
+            "From the toolkit package root, run:  python -m pip install -e '.[explain]'"
         ) from exc
 
     if isinstance(model, __import__("sklearn").pipeline.Pipeline):

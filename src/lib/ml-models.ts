@@ -310,10 +310,10 @@ export interface RegFit {
  *  CV folds (the tune/compare routes keep the default fixed-kernel
  *  behaviour — their trials always carry explicit hyperparameters). */
 export interface FitDirectives {
-  /** GP: learn the kernel (lengthScale/signalStd/noiseStd) by the
-   *  deterministic marginal-likelihood grid search instead of using
-   *  the request's (default-filled) values — the web mirror of the
-   *  library's LML-tuned kernel. */
+  /** GP: choose the kernel (lengthScale/signalStd/noiseStd) with the
+   *  browser fitter's deterministic marginal-likelihood grid search
+   *  instead of the request defaults. This is not the Python package's
+   *  sklearn optimizer. */
   learnGpKernel?: boolean;
   /** GP classification: learn (lengthScale/signalStd) by the Laplace-
    *  lml grid search (the classification twin of learnGpKernel — no
@@ -409,11 +409,11 @@ export function fitRegressionModel(
       };
     }
     case "gaussian_process": {
-      /* Kriging — the library's `gaussian_process` family. With the learn
-       * directive (the request left the kernel hyperparameters unset) the
-       * deterministic LML grid search picks them — the web mirror of
-       * sklearn's marginal-likelihood-tuned kernel; explicit values fix
-       * the kernel. Predictive mean + per-point σ via the Cholesky solve. */
+      /* Browser-side kriging fit. With the learn directive (the request
+       * left kernel values unset), a deterministic LML grid search picks
+       * them; this differs from the Python package's sklearn optimizer.
+       * Explicit values fix the kernel. Predictive mean + per-point σ
+       * come from the Cholesky solve. */
       const m = fitGaussianProcess(
         XTrain,
         yTrain,
@@ -831,12 +831,11 @@ export function fitClassificationModel(
       };
     }
     case "gaussian_process": {
-      /* The classification half of the GP family — the web mirror of
-       *  the library's gaussian_process_classifier (Laplace posterior:
-       *  Newton mode + 5-erf predictive probabilities, verified against
-       *  sklearn by scratch/verify_gpc_parity.{py,ts}). With the learn
-       *  directive (request left ℓ / σf unset) the Laplace-lml grid
-       *  search picks the kernel. */
+      /* Browser Laplace GP classification. The fixed-kernel posterior
+       *  and predictive calculation is checked against sklearn with its
+       *  optimizer disabled (`verify_gpc_parity`); kernel selection is
+       *  separate. With the learn directive, this route uses its own
+       *  Laplace-LML grid search to pick (ℓ, σf). */
       const m = fitGaussianProcessClassification(
         XTrain,
         labelsTrain,
@@ -1048,10 +1047,11 @@ export interface TuneChoice {
 }
 
 /**
- * Per-model discrete search grids — the web mirror of the library's
- * `pharmaml.ml.tuner` RandomSearch spaces (Choice slots sampled by a seeded
- * stream). Models with no tunable hyperparameters (linear, polynomial,
- * gaussian_nb) are absent / empty and are rejected by the tune route.
+ * Per-model discrete search grids owned by the Next.js web console.
+ * They power its seeded RandomSearch and Hyperband demos; model overlap
+ * with `pharmaml.ml.tuner` does not guarantee matching ranges, slots,
+ * estimators, or scores. Models with no configured web-search slots are
+ * rejected by the route.
  */
 export const REG_TUNE_SPACES: Record<string, TuneChoice[]> = {
   ridge: [{ key: "alpha", values: [0.01, 0.1, 0.5, 1, 2, 5, 10] }],
@@ -1138,11 +1138,11 @@ export const CLS_TUNE_SPACES: Record<string, TuneChoice[]> = {
 /* ------------------------------------------------------------------ */
 
 /**
- * Models whose search space contains a resource hyperparameter — a slot
- * whose value scales compute monotonically, which successive halving can
- * promote rung by rung (the web mirror of `pharmaml.ml.tuner.Hyperband`'s
- * resource contract). Other models have no resource and are rejected by
- * the tune route's Hyperband mode with an actionable message.
+ * Models whose web-console search space has a resource hyperparameter — a
+ * slot whose value scales compute and can be promoted rung by rung. This
+ * roster belongs to the browser demo; it borrows successive-halving from
+ * `pharmaml.ml.tuner.Hyperband` but is not a mirror of its model/search
+ * registry. Other models are rejected by the route's Hyperband mode.
  */
 export const TUNE_RESOURCES: Record<string, { key: string; label: string }> = {
   mlp: { key: "epochs", label: "epochs" },

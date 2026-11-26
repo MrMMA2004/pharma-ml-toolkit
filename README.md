@@ -1,19 +1,19 @@
 <p align="center">
-  <img src="pharma-ml-toolkit/docs/assets/github-hero.svg" width="100%" alt="PharmaML Toolkit: science from data to insight, illustrated with a molecular network and a research curve.">
+  <img src="pharma-ml-toolkit/docs/assets/github-hero.svg" width="100%" alt="Illustrative molecular structure and model-evaluation curve for the PharmaML Toolkit; the plotted curve is not experimental data.">
 </p>
 
 <div align="center">
 
 # PharmaML Toolkit
 
-**An open-source toolkit for molecular data, pharmaceutical modeling and research workflows.**
+**Open-source Python tools for molecular data, pharmaceutical modeling, and research workflows.**
 
 [![CI on main](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/workflows/ci.yml)
-[![Latest GitHub release](https://img.shields.io/github/v/release/MrMMA2004/pharma-ml-toolkit?display_name=tag&color=087f6a)](https://github.com/MrMMA2004/pharma-ml-toolkit/releases/latest)
+[![Source version](https://img.shields.io/badge/source%20version-1.2.242-087f6a)](pharma-ml-toolkit/VERSION)
 [![Python 3.10–3.12](https://img.shields.io/badge/tested%20Python-3.10%E2%80%933.12-3776ab?logo=python&logoColor=white)](pharma-ml-toolkit/pyproject.toml)
 [![MIT License](https://img.shields.io/badge/license-MIT-526b66)](LICENSE)
 
-[Start here](#start-here) · [Research workflows](#research-workflows) · [Scientific practice](#scientific-practice) · [Interfaces](#choose-an-interface) · [Documentation](#documentation)
+[Start here](#start-here) · [Research workflows](#research-workflows) · [Scientific use and limits](#scientific-use-and-limits) · [Interfaces](#choose-an-interface) · [Documentation](#documentation)
 
 </div>
 
@@ -21,17 +21,15 @@
 
 ## About
 
-PharmaML brings **cheminformatics, QSAR machine learning, molecular docking, PK/PD and visualization** together in a Python toolkit. Explore a dataset, prepare features, fit and evaluate a model, or investigate a molecular workflow using the API, command line, notebooks or desktop Studio.
+PharmaML is a local-first Python toolkit for **cheminformatics, QSAR and machine learning, molecular docking, PK/PD calculations, biological-response analysis, and scientific visualization**. Use the Python API or CLI in scripts and notebooks; the React/Tauri Studio and Next.js console are separate applications with their own documented scope, not alternate interfaces with assumed feature parity.
 
-Core workflows run locally without a cloud account or API key. Some workflows require optional packages or external engines. The separate web console is a project explorer; its capabilities are not interchangeable with the Python toolkit.
-
-> **Research and education only.** This software is not clinical decision support. Independently validate data, calculations and outputs for your intended use.
+The core toolkit does not require a cloud account or API key. Individual workflows may need optional Python packages, external engines, or suitable input data. The software is for research and education—not clinical decision support, a validated medical device, or a substitute for domain review.
 
 ## Start here
 
-The installable Python package lives in the **inner** `pharma-ml-toolkit/` directory. This example installs the pinned core stack and inspects a bundled synthetic dataset; no chemistry or GUI extras are needed.
+The installable Python package is in the **inner** `pharma-ml-toolkit/` directory. This quickstart uses the pinned core dependencies and a bundled example CSV; it does not require RDKit, a GUI, or an external dataset.
 
-**1. Clone and enter the package directory**
+**1. Clone the repository and enter the package directory**
 
 ```bash
 git clone https://github.com/MrMMA2004/pharma-ml-toolkit.git
@@ -39,7 +37,7 @@ cd pharma-ml-toolkit/pharma-ml-toolkit
 python -m venv .venv
 ```
 
-**2. Activate the environment and install**
+**2. Activate the environment and install the core toolkit**
 
 ```bash
 # macOS / Linux
@@ -48,15 +46,15 @@ python -m pip install -r requirements.txt
 python -m pip install --no-deps -e .
 ```
 
-On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` instead, then run the same two `python -m pip install` commands. See the [installation guide](pharma-ml-toolkit/README.md#installation) for alternatives and optional dependencies.
+In Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`, then run the same two installation commands. The pinned `requirements.txt` is the project's tested snapshot; optional extras and other installation routes are described in the [installation guide](pharma-ml-toolkit/README.md#installation).
 
-**3. Inspect an example dataset**
+**3. Inspect a bundled dataset**
 
 ```bash
 pharmaml data inspect --data examples/data/qsar_classification.csv --target activity --head 3
 ```
 
-The command prints a summary, target-class counts and three example rows without modifying the file. Replace the path and target to inspect your own CSV, TSV or Excel table. Run `pharmaml --help` to explore the CLI.
+This reports basic file and target information and prints three rows; it does not change the input file. Substitute your own CSV, TSV, or Excel path and target column. Run `pharmaml --help` to see the available command groups.
 
 <details>
 <summary><strong>Try a small Python API example</strong></summary>
@@ -68,106 +66,95 @@ from pharmaml.pharma.pk import half_life
 print(f"Half-life: {half_life(0.35):.2f} hours")
 ```
 
-This is a first-order illustration, not a patient-specific calculation. See the [PK workflow notebook](pharma-ml-toolkit/examples/complete_pk_workflow.ipynb) for a fuller example.
+This illustrates the equation `t½ = ln(2) / kₑ`; it is not a patient-specific estimate or dosing recommendation. See the [PK workflow notebook](pharma-ml-toolkit/examples/complete_pk_workflow.ipynb) for a broader example.
 
 </details>
 
 ## Research workflows
 
-Choose an entry point below. Features differ in their inputs and optional dependencies; the linked guides describe their scope.
+Use the guides to review each workflow's inputs, assumptions, optional dependencies, and limits. Example notebooks use bundled data unless stated otherwise.
 
-- **Data & splitting** — inspect tables, audit quality and check exact identifier overlap across splits. [Data quality in Studio](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#data-quality-in-studio) · [Data splitting](pharma-ml-toolkit/docs/DATA_SPLITTING.md)
-- **QSAR modeling** — prepare features, train models and examine nested validation and uncertainty. [ML notebook](pharma-ml-toolkit/examples/complete_ml_workflow.ipynb) · [Nested validation](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#nested-validation)
-- **Molecular science** — compute descriptors and fingerprints, compare structures and explore generation. [Module index](pharma-ml-toolkit/docs/INDEX.md) · [Generative notebook](pharma-ml-toolkit/examples/complete_generative_workflow.ipynb)
-- **Docking** — prepare inputs, review Vina campaigns and inspect recorded results. [Docking notebook](pharma-ml-toolkit/examples/complete_docking_workflow.ipynb) · [Reviewed Vina workflow](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#vina-campaign-review-and-launch-in-studio)
-- **PK/PD** — explore pharmaceutical calculations and concentration–time workflows. [PK notebook](pharma-ml-toolkit/examples/complete_pk_workflow.ipynb) · [PK analysis script](pharma-ml-toolkit/examples/run_pk_analysis.py)
-- **Biological response** — analyze cell-line drug-response tables, expression and biomarkers. [Cell-line notebook](pharma-ml-toolkit/examples/complete_cellline_workflow.ipynb)
-- **Visualization & reports** — plot, export and inspect results; compare selected run records. [Research workflows](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md) · [MD visualization](pharma-ml-toolkit/docs/MD_VISUALIZATION.md)
+- **Data review and split design** — inspect tables, review data quality, and check exact identifier overlap across named splits. [Data-quality audit notes](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#data-quality-audit) · [Data splitting guide](pharma-ml-toolkit/docs/DATA_SPLITTING.md)
+- **QSAR and machine learning** — prepare features, train models, and examine validation and uncertainty workflows. [ML notebook](pharma-ml-toolkit/examples/complete_ml_workflow.ipynb) · [Nested validation](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#nested-validation)
+- **Cheminformatics** — molecular descriptors, fingerprints, similarity, and molecular-format workflows. [API and module index](pharma-ml-toolkit/docs/INDEX.md) · [Generative workflow notebook](pharma-ml-toolkit/examples/complete_generative_workflow.ipynb)
+- **Molecular docking** — prepare inputs and inspect docking campaigns; engine-dependent execution is optional. [Docking notebook](pharma-ml-toolkit/examples/complete_docking_workflow.ipynb) · [Read-only Vina campaign inspection](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#inspecting-an-interrupted-vina-campaign)
+- **PK/PD** — inspect calculations, concentration–time data, and model assumptions. [PK notebook](pharma-ml-toolkit/examples/complete_pk_workflow.ipynb) · [PK analysis script](pharma-ml-toolkit/examples/run_pk_analysis.py)
+- **Biological response** — analyze cell-line drug-response tables and related expression or biomarker data. [Cell-line workflow notebook](pharma-ml-toolkit/examples/complete_cellline_workflow.ipynb)
+- **Visualization and reporting** — plot and export analysis artifacts. [Research workflow guide](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md) · [Molecular-dynamics visualization notes](pharma-ml-toolkit/docs/MD_VISUALIZATION.md)
 
-The [examples directory](pharma-ml-toolkit/examples/) contains notebooks and scripts; `_no_output` notebook versions provide a smaller starting point.
+Browse the [examples directory](pharma-ml-toolkit/examples/) for notebooks and scripts. Files ending in `_no_output` are compact notebook variants without saved cell outputs.
 
-## Scientific practice
+## Scientific use and limits
 
-A typical project moves from **data review → split design → training → independent evaluation → reporting**. The tools support that process; they do not replace domain judgment or independent validation.
+A sound analysis usually moves from **data review → split design → training → held-out evaluation → reporting**. Software can make these steps easier to inspect; it cannot establish that a study design, dataset, model, or result is scientifically valid.
 
-- **Prevent leakage.** Select an appropriate unit of separation—such as compound, patient or batch—before splitting. Exact-key overlap checks do not detect all related samples or prove independence.
-- **Keep evaluation separate.** Fit preprocessing and models on training data; reserve calibration and test data for their intended roles. The separate-file workflows provide [regression intervals](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#held-out-regression-uncertainty) and [classification sets](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#held-out-classification-uncertainty). The older [Statistics-tab tools](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#statistics-tab-conformal-and-subgroup-tools) cannot verify independence from model fitting or selection.
-- **Interpret uncertainty carefully.** Conformal marginal coverage depends on exchangeability; subgroup estimates are empirical, not conditional guarantees. Small or dependent groups can make comparisons misleading.
-- **Record and review.** [CLI training records](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#observed-ml-train-run-records-opt-in), declared manifests and [checkpoint diagnostics](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#checkpoint-inspection) help document a run. Declarations are not observed training records; matching hashes do not prove reproducibility or validity. Review metadata for sensitive information before sharing.
-- **Know operational limits.** Docking depends on appropriate inputs and a trusted engine; the [campaign inspector](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#inspecting-an-interrupted-vina-campaign) is read-only and does not resume a reviewed campaign. Studio's [genetic search](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#genetic-search-in-studio) supports cooperative Stop with in-memory partial results, not GA resume.
+- **Plan splits before model selection.** Choose a separation unit appropriate to the question—such as scaffold, compound, patient, or batch. Exact-key overlap checks catch only the identifiers supplied; they do not prove independence or rule out all leakage.
+- **Keep held-out data held out.** Fit preprocessing and models on training data. Reserve validation, calibration, and test sets for their stated roles. See the separate-file workflows for [regression intervals](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#held-out-regression-uncertainty) and [classification sets](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#held-out-classification-uncertainty). In-memory summaries alone cannot verify independence from model fitting or selection; the archived PySide6 Statistics-tab procedures in the workflow guide are not features of current Studio.
+- **Treat uncertainty as conditional on assumptions.** Conformal marginal coverage depends on exchangeability; subgroup estimates are empirical, not conditional guarantees. Small, shifted, or dependent groups can make comparisons unstable.
+- **Interpret scores in context.** A docking score is not a measured binding affinity; a predicted activity or generated-molecule objective is not experimental confirmation. PK/PD outputs depend on model structure, units, inputs, and parameter assumptions.
+- **Keep provenance honest.** Run records, declared manifests, and [checkpoint diagnostics](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#checkpoint-inspection) document different kinds of evidence. A declaration is not an observed training record; matching hashes do not prove reproducibility, correctness, or validity. Review metadata for sensitive information before sharing.
+- **Check operational boundaries.** Docking execution requires a compatible engine and appropriate inputs. The [campaign inspector](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md#inspecting-an-interrupted-vina-campaign) is read-only; it does not resume a campaign. Python API capabilities and checkpoint limits do not imply matching controls in either desktop or web-console interface.
 
-For supported checkpoint objectives and refusal behavior, see the [genetic checkpoint limits](pharma-ml-toolkit/docs/CHECKPOINT_SCHEMA.md#genetic-checkpoint-compatibility-and-limits).
+For supported checkpoint objectives and refusal behavior, see the [genetic checkpoint limits](pharma-ml-toolkit/docs/CHECKPOINT_SCHEMA.md#genetic-checkpoint-compatibility-and-limits). Verify units, data rights, licenses, and intended-use requirements independently.
 
 ## Choose an interface
 
-| Interface | Use it for | Start |
+| Interface | What it is | How to begin |
 | :--- | :--- | :--- |
-| **Python API & CLI** | Scripts, notebooks and local analysis | Follow [Start here](#start-here); run `pharmaml --help`. |
-| **PharmaML Studio** | Desktop access to selected toolkit workflows | Install the optional Studio dependencies, then run `python studio.py` from the inner package directory. See the [Studio guide](pharma-ml-toolkit/README.md#graphical-interface--pharmaml-studio). |
-| **Web console** | Browse project information and selected interactive tools | From the repository root, run `bun install` and `bun run dev`; open `http://localhost:3000`. See [web development](CONTRIBUTING.md#web-console-development). |
+| **Python package and CLI** | The core toolkit for scripts, notebooks, and local analysis. | Follow [Start here](#start-here), then run `pharmaml --help`. |
+| **PharmaML Studio** | A separate React + Tauri 2 desktop application with nine workspaces and a local FastAPI sidecar. It is not the retired PySide6 application. | Check [GitHub Releases](https://github.com/MrMMA2004/pharma-ml-toolkit/releases) for available installers. For development, see [`frontend/README.md`](pharma-ml-toolkit/frontend/README.md). The legacy launcher is archived in [`legacy/`](pharma-ml-toolkit/legacy/README.md) and is unsupported. |
+| **Web console** | A separate Next.js project site for code browsing, API reference, downloads, and a demonstration Playground. It is not the Python package or the desktop application. | Follow [web console development](CONTRIBUTING.md#web-console-development); the app runs separately from the toolkit. |
 
 <details>
-<summary><strong>See example interfaces</strong></summary>
-
-**PySide6 Studio — historical Data Explorer capture.** The image illustrates a table and descriptor histogram; navigation and controls have changed since this capture. It uses bundled example data.
+<summary><strong>Preview the Studio interface</strong></summary>
 
 <p align="center">
-  <img src="pharma-ml-toolkit/docs/gui/screenshots/data_explorer_dark_teal.png" width="960" alt="Earlier PySide6 Studio Data Explorer displaying an example dataset and a descriptor histogram.">
+  <img src="pharma-ml-toolkit/docs/gui/screenshots/r311-boot-introduction-desktop.png" width="960" alt="Round 311 browser capture of the PharmaML Studio React interface, showing the nine-workspace navigation and Introduction page.">
 </p>
 
-**Next.js web console — historical v1.2.161 capture.** This is not a representation of the current interface or test count.
-
-<p align="center">
-  <img src="pharma-ml-toolkit/docs/assets/web-console-v1.2.161.png" width="960" alt="Historical v1.2.161 web console overview showing package navigation and an example workflow.">
-</p>
-
-**React migration frontend — round 289 browser capture.** This shows an in-progress Datasets workflow, not the existing PySide6 interface or a verified Windows installer.
-
-<p align="center">
-  <img src="pharma-ml-toolkit/docs/gui/screenshots/r289-startup-gate-datasets.png" width="960" alt="Round 289 browser capture of the in-progress React Datasets workflow, showing the upload form and completed job.">
-</p>
+<p><em>This is a browser-rendered interface snapshot from round 311, not evidence of a packaged Windows launch or clean-machine installation. See the current <a href="pharma-ml-toolkit/frontend/README.md">frontend development notes</a> for the desktop app structure.</em></p>
 </details>
 
-### Desktop migration status
+## Version and release evidence
 
-The established desktop Studio still uses **PySide6**. The React/TypeScript, Tauri 2 and local Python API migration is in progress alongside it; the [migration ledger](pharma-ml-toolkit/docs/MIGRATION_TAURI2.md) tracks what is implemented and what remains. The v1.2.231 Windows release is **published** (not a draft — run `44693818307` on a `windows-2022` runner, 2026-11-20) with the NSIS `PharmaML_Studio_Setup_v1.2.231.exe` (557,655,583 B), the WiX `PharmaML_Studio_v1.2.231.msi` (710,122,853 B, offline WebView2), `RELEASE_MANIFEST.json` and `SHA256SUMS.txt` attached. It took three tag fires: the first (`44681637758`) died at the runner's step-20 packaging validation — `version_info.txt`, the eighth version carrier, still carried the 1.2.230 quadruple; the second (`44689315323`) at step 10 — the round-301 CHANGELOG header's `-r301` suffix disagreed with `VERSION`; the third completed all 26 steps. **A clean-machine offline-install/upgrade check has not been completed, and full parity with every legacy Studio workflow is not established; PySide6 remains available.** The separate Next.js web console and source archives are not the desktop installer.
+**Source version in this checkout:** `v1.2.242` ([`VERSION`](pharma-ml-toolkit/VERSION)). Use [GitHub Releases](https://github.com/MrMMA2004/pharma-ml-toolkit/releases) for the published release record, installer availability, checksums, and software bill of materials. This project is distributed from its source repository and GitHub releases; it is not currently published on PyPI.
+
+The Windows build and hosted-runner installer-smoke workflows provide useful CI evidence, but they are **not** a substitute for a separate clean-machine offline install and upgrade check; that owner-side check is still not recorded. Installer signing also remains certificate-gated. Read the [changelog](pharma-ml-toolkit/CHANGELOG.md) and the [Windows release workflow](.github/workflows/windows-release.yml) for recorded changes and build scope.
 
 ## Documentation
 
-| Resource | For |
+| Resource | Use it for |
 | :--- | :--- |
-| [Full user guide](pharma-ml-toolkit/README.md) | Installation, interfaces, workflows and troubleshooting |
-| [API and module index](pharma-ml-toolkit/docs/INDEX.md) | Package reference and module map |
-| [Research workflow guide](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md) | Inputs, assumptions, Studio entry points and limitations |
-| [Example notebooks and scripts](pharma-ml-toolkit/examples/) | Starting points for ML, PK, docking, cell lines and generation |
-| [Scientific guides](pharma-ml-toolkit/docs/) | Data splitting, conformal methods, coverage and visualization |
-| [Changelog](pharma-ml-toolkit/CHANGELOG.md) | Source history and recorded verification evidence |
+| [Installation guide](pharma-ml-toolkit/README.md#installation) | Source install, core dependencies, optional extras, and testing |
+| [Research workflow guide](pharma-ml-toolkit/docs/RESEARCH_WORKFLOWS.md) | Inputs, assumptions, workflow behavior, and limitations |
+| [API and module index](pharma-ml-toolkit/docs/INDEX.md) | Public Python modules and symbols |
+| [Example notebooks and scripts](pharma-ml-toolkit/examples/) | Reproducible starting points using bundled data |
+| [Frontend development notes](pharma-ml-toolkit/frontend/README.md) | React/Tauri Studio frontend architecture and commands |
+| [Contribution guide](CONTRIBUTING.md) | Development, tests, accessibility, and pull requests |
+| [Changelog](pharma-ml-toolkit/CHANGELOG.md) | Version history and recorded verification evidence |
 
-## Releases and development
-
-A repository checkout and the latest GitHub release may differ. Visit [Releases](https://github.com/MrMMA2004/pharma-ml-toolkit/releases/latest) for published artifacts and [`download/`](download/) for versioned source archives; install a source archive from its inner package directory. The project is distributed through GitHub and source archives, not a PyPI release.
-
-The CI badge above reports **main**, not this checkout. See the [workflow](.github/workflows/ci.yml) for its current test scope and the [testing guide](pharma-ml-toolkit/README.md#testing) for local checks. Optional dependencies and platform-specific tools affect what can run.
+## Repository map
 
 <details>
-<summary><strong>Repository map</strong></summary>
+<summary><strong>Where things live</strong></summary>
 
 ```text
-pharma-ml-toolkit/          Python package, Studio, examples and detailed docs
-pharma-ml-toolkit/frontend/ React desktop-migration frontend (in progress)
-pharma-ml-toolkit/src-tauri/ Desktop host (in progress)
-src/                        Separate Next.js web console
-scripts/                    Repository and web integration tools
-tests/                      Web/toolkit integration checks
-download/                   Versioned archives and reference assets
+pharma-ml-toolkit/           Python package, CLI, examples, and scientific docs
+pharma-ml-toolkit/frontend/  React + TypeScript Studio frontend
+pharma-ml-toolkit/src-tauri/ Tauri 2 desktop host
+pharma-ml-toolkit/legacy/    Retired PySide6 launcher and archival code
+src/                         Separate Next.js web console
+scripts/                     Repository and web integration tools
+tests/                       Web, packaging, and landing-page checks
+download/                    Versioned source archives
 ```
 
 </details>
 
 ## Contributing and citation
 
-Bug reports and focused pull requests are welcome. Read the [contribution guide](CONTRIBUTING.md), [code of conduct](CODE_OF_CONDUCT.md) and [security policy](SECURITY.md). Report security concerns through the policy rather than a public issue; do not submit credentials, patient information or private datasets.
+Focused bug reports and pull requests are welcome. Read the [contribution guide](CONTRIBUTING.md), [code of conduct](CODE_OF_CONDUCT.md), and [security policy](SECURITY.md). Report security concerns through the policy, not a public issue; do not submit credentials, patient information, or private datasets.
 
-For research, record the exact version or commit and cite the software using [CITATION.cff](CITATION.cff) or GitHub's **Cite this repository** feature. See the [release history](https://github.com/MrMMA2004/pharma-ml-toolkit/releases).
+For research, record the exact package version or commit and cite the software using [`CITATION.cff`](CITATION.cff) or GitHub's **Cite this repository** feature. See [GitHub Releases](https://github.com/MrMMA2004/pharma-ml-toolkit/releases) for versioned artifacts.
 
 Distributed under the [MIT License](LICENSE).

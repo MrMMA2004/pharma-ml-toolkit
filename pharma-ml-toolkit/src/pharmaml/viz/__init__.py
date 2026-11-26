@@ -73,7 +73,7 @@ layer for **all** toolkit codes:
 matplotlib stays optional: importing this package never needs it —
 only *calling* a plotting function does (clear
 :class:`~pharmaml.exceptions.DependencyError` with the
-``pip install 'pharmaml[reports]'`` hint).  Figures render through the
+``python -m pip install -e '.[reports]'`` hint).  Figures render through the
 headless ``Agg`` backend, so servers and CI containers are safe.
 
 Example

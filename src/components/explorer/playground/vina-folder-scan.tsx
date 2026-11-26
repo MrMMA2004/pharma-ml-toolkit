@@ -72,8 +72,8 @@ Performing docking (random seed: 7) ...
 
 # process killed before the pose table was written — no modes scored`;
 
-/** The example scan mirrors the desktop probe scenario: lig02 is the
- * strongest binder at -8.35 kcal/mol and the crashed log keeps its row. */
+/** Example scan fixture: lig02 is the strongest binder at -8.35 kcal/mol
+ * and the crashed log keeps its row. */
 const EXAMPLE_SCAN: VinaScanFile[] = [
   {
     path: "lig01.log",
@@ -153,7 +153,7 @@ export function VinaFolderScan({ onOpenLog }: VinaFolderScanProps) {
     }
     if (candidates.length > MAX_LOGS) {
       toast.error("Too many logs for the browser scan", {
-        description: `Pick at most ${MAX_LOGS} logs (you chose ${candidates.length}). Use the desktop Studio (python studio.py) for full result trees.`,
+        description: `Pick at most ${MAX_LOGS} logs (you chose ${candidates.length}). Use the Python package's campaign-inspection workflow for larger result trees; this browser demo has its own limits.`,
       });
       return;
     }
@@ -166,7 +166,7 @@ export function VinaFolderScan({ onOpenLog }: VinaFolderScanProps) {
         total += content.length;
         if (total > MAX_TOTAL_CHARS) {
           toast.error("Scan payload too large", {
-            description: `The browser scan reads at most ~2 MB of log text (exceeded at ${file.name}). Split the folder or use the desktop.`,
+            description: `The browser scan reads at most ~2 MB of log text (exceeded at ${file.name}). Split the folder or use the Python campaign-inspection workflow.`,
           });
           return;
         }

@@ -1,11 +1,17 @@
 # RAR → PharmaML Coverage Matrix
 
+**Historical coverage record.** This matrix captures the RAR-to-toolkit
+coverage audit and its contemporaneous interfaces; its counts and UI statements
+are not a current capability certification. The PySide6 UI referenced by older
+rows is retired. Current supported surfaces are the Python package/CLI, the
+React + TypeScript/Tauri 2 desktop app, and a separate Next.js web console, each
+with its own scope. See [`frontend/README.md`](../frontend/README.md) and
+[`TEST_PROFILES.md`](TEST_PROFILES.md) for current desktop and test guidance.
+
 *(Round-304 addendum: the Tk `playground.py` file and its
-`tests/test_playground.py` suite left the shipped tree in this round —
-the declared-v1.2.141 retirement completed. The historical rows below
-reference them as the surfaces of their day; those records stand
-unchanged. The current surfaces are the PySide6 Studio pages, the
-library/CLI, and the React frontend.)*
+`tests/test_playground.py` suite left the shipped tree in that round —
+the declared-v1.2.141 retirement completed. Historical rows below are retained
+as written.)*
 
 Every file inside the original `کدهای ماشین لرنینگ.rar` (118 recovered
 files), audited **one by one** and mapped to the PharmaML surface that
@@ -768,7 +774,7 @@ content surfaces and the web twin:
 | Surface | The 1.2.64 fix |
 | --- | --- |
 | Generative ▸ Pareto front card | **Draw front** — the front's members as a colour-coded 2D structure grid (`molecule_grid_figure(colors=…)`): boundary corners (crowding +inf) accented teal, interior trade-offs muted neutral, objective values as every panel's score row. `Plot front` restores the scatter |
-| Web ▸ ML Training tab | **Learning curve** — `POST /api/ml/learning-curve` + `src/lib/learning-curve.ts` + the verdict-strip/band-chart card: the desktop figure's data semantics (10 % … 100 % in 8 steps, k-fold CV per size, mean ± std bands, the 0.15 gap verdict), parity-guarded by `probe_lc_parity_125.{py,ts}` + `TestLearningCurveContract` (fractions bit-identical, verdict strings byte-identical) |
+| Web ▸ ML Training tab | **Learning curve** — `POST /api/ml/learning-curve` + `src/lib/learning-curve.ts` + the verdict-strip/band-chart card: it shares chart conventions with the Python figure (10 % … 100 % in 8 steps, k-fold summaries, mean ± std bands, the 0.15 gap verdict), but uses separate TypeScript fitters and per-fold rounded sizes rather than sklearn's common absolute sample counts; the guard pins the fraction schedule and verdict wording, not numeric score/size parity (`probe_lc_parity_125.{py,ts}` + `TestLearningCurveContract`) |
 
 The 43 zero-hit are unchanged: containers, constants, and verified
 absorptions — the classification that has held for three consecutive
@@ -1417,7 +1423,7 @@ The version chain moved to 1.2.85 across all five carriers.
 | The honest tolerance story + the NEW parity pair | scratch/verify_corr_parity_154.py + .ts: a 14-case adversarial grid (huge_magnitude/huge_offset/near_constant/tiny_values/alternating/two_points/big_n/neg_zero + the constant fake-zero pins + mismatch/one_point/nan_pair), both sides running the SHIPPED code, wired as TestCorrelationParityAdversarial in tests/test_web_parity.py. huge_offset: the irreducible input-quantization floor gets 5e-3 vs scipy PLUS the analytic-truth pin |recipe−1.0| ≤ 2e-3 (the recipe is STRICTLY closer to truth than scipy: 0.9990 vs 0.9968); near_constant: scipy's own NearConstantInputWarning territory at 1e-7 vs scipy PLUS the analytic-truth pin at 1e-12. Worst |dr| on the default cases: 2.78e-17. The 153 pair's mirror updated to the shipped recipe (its docstring claims line-by-line mirroring) — still green at 2.2e-16. |
 | The classification bundle (the parity gap) | The web route's runClassification now builds the correlation bundle over the run's OWN held-out rows (the point-biserial r against the 0/1 label — the desktop twin's own no-task-guard read); the CorrelationCard gains the task prop + the point-biserial note. LIVE-VERIFIED: the synthetic moons bundle (x2 −0.7626 / x1 +0.5429), the 2-feature CSV path, the 1e300-constant column now DROPPED, the 1e300-VARYING column now reported. |
 | The GUI ndarray fallback + its pin | The heatmap join's fallback requires exact length (the old values[:len(frame)] silently truncated a LONGER y_test); pinned end-to-end — the library's typed length guard fires first at the handler level (defense in depth), 1 new GUI test. |
-| SHAP — the LAST unabsorbed D2.py gap (its lines 472-528) | pharmaml.ml.explain (shap_summary → the typed ShapSummary record: names, mean|SHAP|, the full values matrix, the feature values, the base value; TreeExplainer for LightGBM/XGBoost/CatBoost/sklearn trees; the DependencyError carries the exact pip install 'pharmaml[explain]' command; non-tree estimators and multiclass get the typed error naming the permutation_feature_importance sibling — never a silent KernelExplainer fallback) + viz plot_shap_importance (the upload's own top-20 bar) + plot_shap_beeswarm (PURE matplotlib: jittered (sample, feature) points coloured by the feature's own value on the house amber→teal ramp, seeded jitter, base-value caption — the plotting layer never needs shap). The pharmaml[explain] extra (shap>=0.45,<0.60, runtime-verified on numpy 1.26.4; requirements.txt documents the resolver-warning story). 25 new tests (tests/test_explain.py: the record, both figures, the seeded-jitter determinism, the guard simulation, the real TreeExplainer path incl. the binary positive-class read and every typed refusal) + 4 GUI tests (both buttons end-to-end, the no-run guard, the non-tree sibling pointer). The D2.py upload is now FULLY absorbed. |
+| SHAP — the LAST unabsorbed D2.py gap (its lines 472-528) | pharmaml.ml.explain (shap_summary → the typed ShapSummary record: names, mean|SHAP|, the full values matrix, the feature values, the base value; TreeExplainer for LightGBM/XGBoost/CatBoost/sklearn trees; the DependencyError carries the source-local `python -m pip install -e '.[explain]'` command; non-tree estimators and multiclass get the typed error naming the permutation_feature_importance sibling — never a silent KernelExplainer fallback) + viz plot_shap_importance (the upload's own top-20 bar) + plot_shap_beeswarm (PURE matplotlib: jittered (sample, feature) points coloured by the feature's own value on the house amber→teal ramp, seeded jitter, base-value caption — the plotting layer never needs shap). The local `explain` extra (shap>=0.45,<0.60, runtime-verified on numpy 1.26.4; requirements.txt documents the resolver-warning story). 25 new tests (tests/test_explain.py: the record, both figures, the seeded-jitter determinism, the guard simulation, the real TreeExplainer path incl. the binary positive-class read and every typed refusal) + 4 GUI tests (both buttons end-to-end, the no-run guard, the non-tree sibling pointer). The D2.py upload is now FULLY absorbed. |
 | The close-out | 1.2.92 across the five carriers; CHANGELOG [1.2.92] with the verification paragraph; README pins 3157 → 3196 (×2) + the SHAP section; suite 3201 collected = 3196 passed + 5 skipped / 0 failures (+39: 25 explain + 4 GUI-SHAP + 1 GUI-ndarray + 3 interpret + 2 parity + 4 explain doctests) after the notebook freshness guard fired and the eight notebooks were re-executed against the bumped tree (200 s); ruff clean (the 14th venv reset's +x corruption de-exec'd: 595 tracked files restored from the git index — the tab-delimited ls-files recipe, no double-prefix); mypy src/ clean (70 files); web pins 3157 → 3196 (page.tsx ×1, overview.tsx ×3, download-panel.tsx ×3) + tsc(src) clean after the dying session's uncompilable data-file-preview.tsx duplicate was folded into data-file-view.tsx (row-index column, empty-cell em-dash, cell max-width truncation) and deleted; the two SHAP screenshots VLM-reviewed 5/5; zip v1.2.92 (635 entries, 12.95 MB, testzip clean, leak-scan clean, no nested zips); the D2.py upload fully absorbed. |
 
 ## The Python Data Science Handbook review (round 40, 100x-157)

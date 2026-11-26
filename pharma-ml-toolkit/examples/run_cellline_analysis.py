@@ -76,7 +76,7 @@ def main() -> None:
     parser.add_argument(
         "--deep", action="store_true",
         help="add the dnn / dnn_residual deep-learning models to the leaderboard "
-        "(requires torch: pip install 'pharmaml[deep]')",
+        "(requires torch; from the toolkit package root run python -m pip install -e '.[deep]')",
     )
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
@@ -207,8 +207,8 @@ def main() -> None:
         }
         for name, available in deep_available.items():
             if not available:
-                print(f"{name:<15} unavailable (install torch, or "
-                      "'pip install pharmaml[deep]')")
+                print(f"{name:<15} unavailable (install torch; from the toolkit package root run "
+                      "python -m pip install -e '.[deep]')")
                 continue
             # Single-combination "grid" pins demo-sized hyperparameters
             # (train_model has no model_kwargs; one combo = one fit path).
