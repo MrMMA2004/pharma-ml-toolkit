@@ -51,7 +51,9 @@ import { toast } from "sonner";
  * seeded 12×4 screen, and cell-line-grouped cross-validation. A POST
  * runs the module on the server. The demo exposes only these operations;
  * it is separate from the React/Tauri desktop app and does not imply
- * feature parity with Studio or the Python package.
+ * feature parity with Studio or the Python package. The page's deeper
+ * diagnostics (informative regression, the response VAE, multi-omics
+ * fusion) stay desktop-side.
  */
 
 const ANALYSIS_OPTIONS: ReadonlyArray<{

@@ -886,9 +886,14 @@ export function contentsCensusLegs(
   return legs;
 }
 
-/** Describe whether this browser's saved walking order is active.
- * When no custom order is applied, return null so the UI stays quiet.
- * Pure helper: tests pin both states. */
+/** (100x-139) The Contents strip's ORDER confession: when the browser's
+ *  persisted walking order was applied (the reader dragged a chip on a
+ *  past visit and the order survived — "your last saved order"), the
+ *  strip says so and names the way out (the card's dashed Reset chip,
+ *  which deletes the stored key, not just the drift).  The canonical
+ *  order confesses NOTHING — the noise rule itself
+ *  ("nothing remembered: stay quiet"): there is no memory to name
+ *  when none was applied.  Pure: the probe pins both verdicts. */
 export function orderConfessionText(orderDrifted: boolean): string | null {
   if (!orderDrifted) return null;
   return "Your last saved walking order was applied — Reset walking order forgets it.";
