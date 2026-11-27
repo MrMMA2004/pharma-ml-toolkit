@@ -411,3 +411,30 @@ The part18 campaign's second executed increment ships as v1.2.243:
   generation preserved and verified at v1.2.243). Part19 Phase 9 requires
   exactly this honest state until a certificate arrives through an
   authorized channel.
+
+## Round 370 (part20 §15-F — 2026-11-27) — the release gate re-verified with the corrected gate vocabulary
+
+PASS = verified with sufficient evidence; FAIL = a confirmed defect or
+failed requirement exists; BLOCKED = verification impossible for an
+external/environmental reason. Per part20: no PASS on code inspection
+alone where runtime verification is required; no P0/P1 open is a
+release-gate pass precondition.
+
+| Gate | State | Evidence |
+| --- | --- | --- |
+| Backend correctness | **PASS** | gates green this round (mypy 314 clean, ruff canonical clean, chemistry-docking lane 499 green post-D-9); the r368 phase5 scientific validation carried |
+| Frontend integration | **PASS** | vitest 357/357 (41 files), tsc 0, production build green 24.13s; zero placeholder controls |
+| Nine-workspace coverage | **PASS** | BACKEND_FRONTEND_TRACEABILITY.md §3 (r368 phase4 + this round's re-checks) |
+| API contract integrity | **PASS** | 142 paths / 149 ops (incl. the HEAD leg, D-14 corrected); runtime==contract (r368 byte-level, carried); api.d.ts regenerates identically |
+| Tauri lifecycle | **PASS** | full-read this round + the r367 install-smoke runtime evidence (handshake/health/guard/shutdown over the INSTALLED sidecar); D-11/D-12 registered (P2, compile-blocked) |
+| Persistence compatibility | **PASS** | persistence family 66+1 skipped green this round; no destructive migrations; user data untouched |
+| EXE validation | **PASS** (v1.2.243 as shipped) | r367 build (run 45907478532) + install-smoke (45912713199) + r369 asset re-poll; **staleness registered (D-15): the installers predate the 16-commit post-tag delta** |
+| MSI validation | **PASS** (v1.2.243 as shipped) | same evidence lane |
+| Windows 10 validation | **BLOCKED** (physical) / PASS (runner) | runner evidence only; the clean-machine lane NOT_RUN (owner) |
+| Windows 11 validation | **BLOCKED** (physical) / PASS (runner) | same |
+| Offline functionality | **PASS** | WebView2 offline embedded; loopback-only CSP; no remote origins in startup |
+| Security | **PASS** | penetration lane 67 green this round; the deep ZAP scan on the standing Monday 2026-11-30 slot |
+| CI status | **PASS (post-fix)** | 18/19 green at HEAD with the chemistry lane failing (D-9) — fixed this round, the lane re-run 499 locally; the r370 push turns it green |
+| Installer signing | **BLOCKED** — certificate-gated | unchanged honest state; SHA256SUMS/manifest/SBOM preserved |
+| Remaining blockers | D-11, D-12 (compile-blocked), D-15 (release-gated: the next cycle carries the post-tag fixes), clean-machine lane (owner), signing (certificate) | none P0/P1 |
+| Overall | **PASS for v1.2.243 as shipped; the next release cycle is REQUIRED to carry the post-tag delta (D-15)** | FULL_REPOSITORY_AUDIT.md §10 |

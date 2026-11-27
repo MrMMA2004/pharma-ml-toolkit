@@ -1,12 +1,29 @@
 # TEST EXECUTION REPORT — part15 §13 deliverable #5 (the part16 era rides it forward)
 
 The part15 Phase-Five honest execution record, carried forward as the
-standing executed-vs-carried ledger. Executed-this-round (r369, the
-part19 recovery-absorption firing over the merged `09678f50` tree — the
-absorbed r368 terminal, after the nineteenth-class rollback recovery) vs
+standing executed-vs-carried ledger. Executed-this-round (r370, the
+MASTER_PROMPT part20 full-repository-audit firing over the audit branch
+cut from main `bd53f7b3`) vs
 carried-from-executed-rounds are stated
 separately; BLOCKED legs name their missing prerequisite (§7 rule:
 never a silent skip, never a blocked test marked passed).
+
+## 0. Executed this round (r370 — the part20 repository-audit round, trace 1a21d768aa7ca3f1: the exhaustive audit + the D-9 CI-lane fix + the D-10 version-carrier alignment + the five part20 QA deliverables — no version bump, no re-ship, docs+test+metadata tree change on the dedicated audit branch)
+
+| Lane | Evidence | Result |
+|---|---|---|
+| Repository state inspection (part20 §1) | main HEAD bd53f7b3 clean == origin/main; branches main+origin/main only (the r369 absorption left nothing to absorb); tags to v1.2.243; **19 check-runs polled live at HEAD: 18 green + "Chemistry and docking preparation" FAILED** (run 46016289515/job 140564287542: the mol2 OpenBabel assertion — 1 failed, 498 passed; the job log fetched and root-caused) | the failing lane root-caused + fixed (D-9) |
+| D-9 fix + the full CI-lane re-run | `tests/test_docking_prep.py` line-1109 assertion re-aimed per part20 Known-Finding A (accepts both "Open Babel" spellings; the backend message untouched); the whole CI job's test set re-run locally: tests/test_descriptors + docking_prep + engine_discovery_part5 + campaign x5 + docking + docking_contacts + pose_rmsd | **499 passed, exit 0** (was 1 failed/498 remote) |
+| D-10 fix | src-tauri/Cargo.toml 1.2.229 → 1.2.243 (the fourth carrier aligned; metadata-only; no committed Cargo.lock) | all four version carriers = 1.2.243 |
+| The standing gates re-run on the audit branch | frontend vitest **357/357 over 41 files** (51.79s); `tsc --noEmit` exit 0; the 16-file drift-guard family **202/202 exit 0** (202 collected exact); the retirement+quarantine guards **26/26**; the penetration lane **67 collected exit 0**; root eslint exit 0; mypy **Success: no issues found in 314 source files**; ruff canonical (src/pharmaml — the CI lane, ci.yml:116) **All checks passed** (the 89 full-tree findings are the quarantined legacy/tests_ui lane + 2 import-order in the legacy-Qt stress test, outside the canonical scope per the r354/r368 pinned convention) | all green |
+| Frontend production build (part20 §10) | `bun run build` (tsc && vite) — the dev daemon stopped first via the standing drill (the next-server held 1.5 GB and the build OOM-SIGKILLed twice: memory-bounded evidence, honestly recorded), daemon restarted after | **built in 24.13s**, exit 0 (chunk-size warning = the pre-existing advisory) |
+| Persistence family (part20 §8) | tests/api/test_persistence.py + test_persistence_database.py | **66 passed, 1 skipped** (the documented ephemeral-mode skip), exit 0 |
+| Integration re-verification (part20 §4) | the 9-workspace wiring re-checked via the service-grep sweep (mlApi 42/dlApi 10/dockingApi 15/pkpdApi 12/datasetsApi 8 all consumed); zero placeholder/TODO/alert in production frontend; the 149-op census re-derived from contracts/openapi.json; the 10 API-only routes revalidated; the 4 dead service methods registered (D-13) | BACKEND_FRONTEND_TRACEABILITY.md |
+| Tauri lifecycle full-read (part20 §6) | backend_manager.rs/commands.rs/lib.rs/security.rs + tauri.conf.json + capabilities + client.ts/startup.ts/StartupGate.tsx read completely; two findings registered (D-11 orphan-on-host-crash, D-12 retry-no-respawn — both compile-blocked: no cargo in this sandbox) | FULL_REPOSITORY_AUDIT.md §5 |
+| EXE/MSI audit (part20 §7) | windows-release.yml + windows-install-smoke.yml + the packaging scripts read line-level; the release-source delta re-measured (902dd89b..bd53f7b3 = 16 commits / 172 files); the r367 install-smoke evidence (run 45912713199, 20 steps) carried; asset integrity carried | WINDOWS_EXE_MSI_AUDIT.md; D-15 registered |
+| Zip parity (the standing flow) | the six homes (toolkit dist-archive + download + root dist-archive + upload + the offsite mirror + download_archive) sha-256-verified; the download/ zip testzip-verified | **all byte-identical dcaf51fa…f9317e; testzip OK; 1,346 entries; VERSION carrier 1.2.243** — no rebuild (the r369 no-re-ship precedent: the r370 tree change is test+metadata+docs, the shipped zip stays the r367 re-ship) |
+| Web-console render verification | the dev daemon restarted after the build drill; GET / 200 (18.6s fresh compile, then warm); the zip-size API probe exact **28,052,601 B @1.2.243 exact:true source:release**; dev.log clean (Ready, GET / 200) | render lane green |
+| BLOCKED legs (honestly named) | fresh EXE/MSI build + local install tests + cargo-verify of the D-11/D-12 fixes: **no Windows infrastructure and no Rust toolchain in this sandbox** (part20 §1: report the exact limitation, never fabricate); clean-machine lane NOT_RUN (owner); signing BLOCKED certificate-gated | named, never skipped silently |
 
 ## 1. Executed this round (r369 — the part19 recovery-absorption round, trace 1a21d53d85058ea9: the nineteenth-class sandbox rollback recovered + the owner-directed branch absorption (round368 + arena/3eb4a9a6 real-merged into main) + the six-home zip parity rebuilt — no version bump, no re-ship, the merged tree byte-identical to the absorbed r368 terminal)
 
