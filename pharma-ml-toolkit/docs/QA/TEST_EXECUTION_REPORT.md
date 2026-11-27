@@ -1,14 +1,26 @@
 # TEST EXECUTION REPORT — part15 §13 deliverable #5 (the part16 era rides it forward)
 
 The part15 Phase-Five honest execution record, carried forward as the
-standing executed-vs-carried ledger. Executed-this-round (r366, the
-part17 upkeep firing over the pushed `d8308db9` tree — the r362
-terminal, after the sixteenth-class rollback recovery) vs
+standing executed-vs-carried ledger. Executed-this-round (r369, the
+part19 recovery-absorption firing over the merged `09678f50` tree — the
+absorbed r368 terminal, after the nineteenth-class rollback recovery) vs
 carried-from-executed-rounds are stated
 separately; BLOCKED legs name their missing prerequisite (§7 rule:
 never a silent skip, never a blocked test marked passed).
 
-## 1. Executed this round (r368 — the part19 campaign, Round 368 / trace 1a21c2ab0c283019: the comprehensive repository audit over the closed r367 terminal — the full 13-phase execution on the round368 branch, no ship, no version bump)
+## 1. Executed this round (r369 — the part19 recovery-absorption round, trace 1a21d53d85058ea9: the nineteenth-class sandbox rollback recovered + the owner-directed branch absorption (round368 + arena/3eb4a9a6 real-merged into main) + the six-home zip parity rebuilt — no version bump, no re-ship, the merged tree byte-identical to the absorbed r368 terminal)
+
+| Lane | Evidence | Result |
+|---|---|---|
+| Rollback recovery | the local git rolled back to the round-186-era UUID commit 2eb0ede with the full v1.2.243 worktree uncommitted + the origin remote absent; the PAT re-spliced silently from upload/MASTER_PROMPT.pdf (93 chars, 600-mode, never printed, API-validated); origin re-added + full fetch (main + arena + round368 + tags v1.2.145..243); the worktree-vs-remote parity scan (1,796 overlapping files, ZERO content mismatches) → reset --hard to the durable 53f2c92d; ghosts swept (the stale toolkit .github/workflows/ci.yml ghost carried by the old index, studio.py, the pre-quarantine ui/ + tests/ui/ dirs, the retired v1.2.238 zip) | worktree 0 entries post-sweep |
+| Branch absorption | round368 fast-forwarded (the seven-commit phase2..phase13 chain) + arena/3eb4a9a6-pharma-ml-toolkit REAL-MERGED (the docs-clarification line, arena-agent co-authored): 14 content conflicts resolved toward the r368 supersets, the 2 DU ui/ files stay deleted per the part18 §10 quarantine; **the merged tree is byte-identical to the a993cda0 terminal** (git diff a993cda0 HEAD = empty) — the r368 full-gate evidence carries over exactly; both refs deleted after the push | merge commit 09678f50 |
+| Six-home zip parity | the four tracked homes restored by the reset + the root dist-archive/ + the offsite mirror rebuilt from the download/ zip; all six testzip-verified (1,346 entries each), sha-256 dcaf51fa…f9317e = the r367 re-ship ledger exact | byte-exact parity |
+| Gates re-run green | vitest 357/357 over 41 files (after the node_modules janitor wipe → bun install); the 16-file drift-guard family 202/202 exit 0; retirement+quarantine guards 26/26; the penetration lane 67 collected exit 0; root eslint exit 0; tsc --noEmit exit 0; mypy Success 314 files; ruff canonical (src/pharmaml) All checks passed (after the r354 exec-bit realignment: +236/-1,119) | all green |
+| Render verification | the dev daemon up (GET / 200, ~180 ms warm); the zip-size API exact 28,052,601 B @1.2.243 exact:true source:release; the browser E2E leg green: the title pin "PharmaML Toolkit — ML · Pharma · Docking", zero console errors, desktop + 390×844 mobile screenshots committed | scratch/r369-web-verify.png + scratch/r369-mobile-verify.png |
+| Release evidence | the v1.2.243 release re-polled live via the authenticated API: EXE 558,600,414 B + MSI 711,110,134 B + RELEASE_MANIFEST 510 B + SBOM 23,634 B + SHA256SUMS 368 B all intact, published (not draft) — the functional install-smoke evidence (run 45912713199, all 20 steps) rides the r367 ledger | assets intact |
+| part19 open items | (1) the DL architecture expansion verified live in-tree (transformer.py 29,721 B / cnn.py 30,667 B / autoencoder.py 21,920 B / gan.py 23,203 B / diffusion.py 23,324 B); (2) the ui/-pages quarantine verified (legacy/ + the 26 guards green + the ghosts swept); (3) the penetration deep scan stays on the standing Monday 04:30 UTC slot (next 2026-11-30 per the r368 §7 register) — the 67-test local lane re-run green this round | verified/standing |
+
+## 2. Executed this round (r368 — the part19 campaign, Round 368 / trace 1a21c2ab0c283019: the comprehensive repository audit over the closed r367 terminal — the full 13-phase execution on the round368 branch, no ship, no version bump)
 
 | Lane | Evidence | Result |
 |---|---|---|
@@ -24,7 +36,7 @@ never a silent skip, never a blocked test marked passed).
 | Phase 10-11 hygiene+docs | the 1.19 GiB duplicated-zip census + the owner-authorization recommendations (release-asset migration, branch-protection rules); the doc set reconciled by the port + phase-2 fixes; the status vocabulary honest (the shipped-revision pins stay 8,274; the working collection 8,286/443 after +12 tests) | the final report §§10-11 |
 | Phase 12 the gate | chunks 1/2/3/6 + tests/api 753 + q/x 61 + the legacy sample 62 all green; SIX stale port-coupled test pins re-aimed; the five new DL modules' broken PyPI-style hints converted; the ten-shard runner's coverage holes fixed (tests/api + q + x); vitest 357/357; mypy/tsc/ruff/lint/checker green; **the browser E2E leg GREEN** (the r366 harness wedge healed — the ported panel's seven constrained chips render live, zero console errors, desktop+mobile screenshots) | **the defect register D-368-01..17 in ROUND368_FINAL_REPORT.md** |
 
-## 2. Executed this round (r367 — the part18 campaign, trace 1a219777c8a0fde9: the DL ARCHITECTURE EXPANSION shipped with the full §9 chain + the ui/-pages quarantine COMPLETION + the v1.2.243 NEW-version ship)
+## 3. Executed this round (r367 — the part18 campaign, trace 1a219777c8a0fde9: the DL ARCHITECTURE EXPANSION shipped with the full §9 chain + the ui/-pages quarantine COMPLETION + the v1.2.243 NEW-version ship)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -42,7 +54,7 @@ never a silent skip, never a blocked test marked passed).
 | The counter | `scratch/100runs-counter.json` | runs_completed **158 → 159** (this firing), the note rides the ship commit |
 | **The CI's own catch — the push CI run 45905664214 + the first tag build 45905675582** (the r365 build-fix precedent) | the failed legs decoded + fixed at source | **four defect classes, all fixed at source and re-verified locally**: (1) the CI lint leg `ruff check src/pharmaml` found **8 errors in the five new modules** (5×F401 the unused TYPE_CHECKING `import torch` stubs + 1×SIM102 the nested seed guard + 2×I001 the unsorted import blocks — the local lint lane was janitor-blocked this firing, the CI carried the gate exactly as designed) — all autofixed + the SIM102 refactored, the full target back to EXE002-only local residue; (2) the CI type-check would fail next: **7 mypy errors** (the transformer's `tokens` list→Tensor re-assignment, the cnn/transformer regressor `predict` de-standardisation narrowing, the dl.py `_task` str-into-float dict assignment) — fixed with the neural.py's established `_check_fitted` + narrow idiom, **mypy: Success, no issues in 314 files**; (3) the Studio-frontend leg: `SettingsPanel.test.tsx` pinned the literal `1.2.242` — stale at every ship — now asserts the `APP_VERSION` carrier (7/7 green); (4) the Studio MD + windows-release legs: the workflow yaml still aimed at the moved `tests/ui` paths (15 ci.yml pytest paths + 1 windows-release --ignore) — re-aimed at `legacy/tests_ui` + the four backend tests reading `TOOLKIT_ROOT / "ui"` by path (test_feature_inventory ×3, test_studio_evidence, test_phase6_readiness) re-aimed at `legacy/` — the first tag build 45905675582 died at step 10 on exactly these (the `ui/main_window.py` + `ui/nine_cards.py` FileNotFoundError pair on the runner); the tag is re-pinned at the fix so the EXE/MSI ladder carries the fixes (the r365 fixed-tree precedent) |
 
-## 3. Executed this round (r366 — the part18 all-phases verification pass: the owner-directed "check all phases from the beginning" firing over the closed r365 terminal, two staleness defects found + fixed at source, no re-ship)
+## 4. Executed this round (r366 — the part18 all-phases verification pass: the owner-directed "check all phases from the beginning" firing over the closed r365 terminal, two staleness defects found + fixed at source, no re-ship)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -59,7 +71,7 @@ never a silent skip, never a blocked test marked passed).
 | The continuation's phase-slice executions (the same firing's close-out correction, the no-unsupported-claims rule) | the pytest slices re-run fresh at this continuation | Phase 3 slice (clustering + anomaly + unsupervised + manifold: `tests/test_clustering.py tests/test_anomaly.py tests/test_unsupervised.py tests/test_manifold.py`) **108 passed**; Phase 4+5 slice (`tests/test_gnn.py tests/test_neural.py tests/test_reinforce.py`) **165 passed**; Phase 6 slice (`tests/api/test_multiresponse.py tests/api/test_rsm.py tests/test_frontend_multiresponse.py tests/test_frontend_rsm.py`) **104 passed** — all exit 0 |
 | The continuation's render verification (the production build — the dev-mode Turbopack cache wedged six times this firing, worked around by building once and serving the standalone output via `scratch/standalone_daemon.py` + the one-shot `scratch/oneshot_prod_verify_r366.sh`) | `bun run build` (exit 0) + the standalone serve + `scratch/render_verify_r366.py` | **16/16 PASS** (the final re-flown chain, exit 0): the title pin "PharmaML Toolkit — ML · Pharma · Docking"; the four re-trued census pins painted (9,123 / 346 / 1,860 / **594,843** — the SHIPPED_SOURCE_LINES re-trued +7 for this continuation's own counted ledger delta, measurement-last); the stale paints absent (9,017 / 9017 / 590,301 / 1,844); the trued Interface row ("React/Tauri desktop app"); the stale `python studio.py` instruction ABSENT from the render; the quarantine wording verified (render-level where painted, shipped-source-level `legacy/studio.py` in `download-panel.tsx` for the interaction-gated note); the download lane streaming exactly **27,950,886 B** (http 200); the three-way **pin = tracked tree = disk census** (git `ls-files` 1,860 tracked files; the census replica 594,843 lines exact / 1,859 files with its documented ±1 walker bias). DISCOVERED AND DISCLOSED: the standalone server's own `/api/toolkit/tree` walks its file-TRACED subset (`.next/standalone/pharma-ml-toolkit/`, 1,816 files / 594,775 lines), not the real tree — the three-way is defined over the dev server / the disk census, never the traced subset. The interactive-browser harness wedged at this continuation (five open attempts dead — the sandbox's per-call subtree reaping), so the screenshot leg rides the pre-compaction captures already committed (`web-r366-desktop/-mobile/-download.png`, verified genuine: the desktop capture paints v1.2.242 + 1,860 / 594,836 / 9,123 / 346 / 33 at its moment) |
 
-## 4. Executed this round (r365 continuation — the part18 release-completion firing: the third build's stale-must-carry step-20 failure decoded + fixed at source, the tag re-pinned to the green fourth build, the v1.2.242 EXE/MSI published + functionally smoke-tested, and the fixed-tree zip re-shipped)
+## 5. Executed this round (r365 continuation — the part18 release-completion firing: the third build's stale-must-carry step-20 failure decoded + fixed at source, the tag re-pinned to the green fourth build, the v1.2.242 EXE/MSI published + functionally smoke-tested, and the fixed-tree zip re-shipped)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -74,7 +86,7 @@ never a silent skip, never a blocked test marked passed).
 | The penetration lane | the API-side suite + the runner's api gate + the ZAP standing slot | the penetration suite **67 passed locally** and green in the runner's api gate of BOTH the third and fourth builds (steps 14); the ZAP full-breadth deep scan rides the standing 360-minute weekly Monday 04:30 UTC slot (the r364 honest pending — this firing is Thursday, the slot is scheduled, not silently claimed) |
 | The fixed-tree zip re-ship | `scratch/build_zip_365.py` (the r364 re-ship precedent — the shipped archive must carry the at-source fix the release builds on) | **1,332 entries / 1,178 files / 27,950,886 B, sha-256 `9522afdf1ff1b0bb3ab3514b69c649b5e84020a6de3eb909312395414a1dd7c5`** (+555 B over the `c68d790a` re-ship = the validator fix + the guard test), the retired-pair gate empty, the composition gate 0 violations, the leak scan 0 real leaks, the VERSION stamp 1.2.242, seeded byte-identical across the five disk homes + the offsite mirror (each testzip-verified); the github-page guard re-run green |
 
-## 5. Executed this round (r364 — the owner-directed release round: the seventeenth-class rollback recovered + the v1.2.241 NEW-version ship — the nine-point carrier lockstep, the eight-notebook re-execution, the new zip across the six homes, and the tag-triggered EXE/MSI release)
+## 6. Executed this round (r364 — the owner-directed release round: the seventeenth-class rollback recovered + the v1.2.241 NEW-version ship — the nine-point carrier lockstep, the eight-notebook re-execution, the new zip across the six homes, and the tag-triggered EXE/MSI release)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -90,7 +102,7 @@ never a silent skip, never a blocked test marked passed).
 | The penetration lane (the ZAP deep scan) | `penetration-test.yml` dispatched (the maiden campaign) | **PARTIAL — the infra verified end-to-end, the full-breadth deep scan honestly pending**: seven layers decoded + fixed at source (python-multipart at route-definition time; the target stack = the exact Windows freeze stack; the docker `--user` host-uid:gid volume fix; the 30-min budget; maxRuleTime 20 -> 1 disclosed in the automation yaml; the budgets 60 -> 75 -> 120) — each dispatch verified the next layer green (the target BOOTS on the freeze stack, the OpenAPI imports, the passive + active scans RUN), but the three-budget probe proved the full-breadth active scan (~200 OpenAPI endpoints x the rule set) needs more wall-time than a bounded interactive job offers (every dispatch cancelled MID-SCAN); the standing budget now 360 min so the weekly Monday 04:30 UTC slot runs the deep scan unattended at full breadth; the API-side penetration suite (tests/api/test_penetration_security.py) ran GREEN in the runner's api gate + locally in chunk-11; the supply-chain suite green locally |
 | Console | the dev daemon (`scratch/dev_daemon.py`) | restarted post-gate (the probe load wedged the dev cache twice, cleared each time): GET / 200; the tree API 1,844 files / 590,273 lines / 584,024,404 B at v1.2.241 three-way pin = live walk = SSR page render; the zip-size API `exact:true source:release` at 27,887,437 B; the agent-browser pass: the release panel serves the v1.2.241 archive, the Download ZIP button streams the release route, zero page/console errors |
 | Console | the dev daemon (`scratch/dev_daemon.py`) | restarted post-gate: GET / 200; the zip-size API exact at the new archive (recorded in the worklog R364 entry) |
-## 6. Executed this round (r363 — the part17 upkeep firing: the sixteenth-class rollback recovered — the partial-restore signature again — + the r362 undecoded gate failure decoded and fixed at source + the nine-card-first whole-file fragility made structural)
+## 7. Executed this round (r363 — the part17 upkeep firing: the sixteenth-class rollback recovered — the partial-restore signature again — + the r362 undecoded gate failure decoded and fixed at source + the nine-card-first whole-file fragility made structural)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -106,7 +118,7 @@ never a silent skip, never a blocked test marked passed).
 | The ten-chunk gate | `scratch/run_suite_chunks_363.py` (the r353 layout + the 9f split, daemonized, 258 chunked files 29..34 per chunk, the dev server DOWN per the OOM ritual) | **failures=0 — ALL 17 LEGS rc=0** — chunk-1 95s / chunk-2 203s / chunk-3 231s / chunk-4 266s / chunk-5 160s / chunk-6 143s / chunk-7 82s / chunk-8 36s / chunk-9 (the nine-card suite) 29s / chunk-9f1..f6 (TestWorkspaceDefaults 98s / TestWorkspaceSubpages 29s / TestHistoryAndNavigation 62s / TestAdvancedNavigation 27s / TestKeyboardAccess 20s / TestRestoreBehaviour 42s) / chunk-10 (src doctests) 82s / chunk-11 (the api suite) 148s / chunk-12a+b (the github-page guards) 0s+0s; the documentation-consistency guard GREEN over the r362 ledger (chunk-1) |
 | Console | `GET /` + the zip-size API | **200** (one clean daemon boot) + `{"zipBytes":23489390,"version":"1.2.240","exact":true,"source":"release"}` |
 
-## 7. Executed this round (r362 — the part17 upkeep firing: the fifteenth-class rollback recovered — the partial-restore signature — + the census-carrier debt settled)
+## 8. Executed this round (r362 — the part17 upkeep firing: the fifteenth-class rollback recovered — the partial-restore signature — + the census-carrier debt settled)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -120,7 +132,7 @@ never a silent skip, never a blocked test marked passed).
 | The census-carrier debt settled | the live walk vs `src/lib/toolkit-stats.ts` | **the round's own find**: the walk measured +132 lines / +12,042 B over the committed carrier pin — r361's final ledger edits (this report's r361 section + the cascade renumber + the PROJECT_STATUS clause + the RELEASE_READINESS addendum + the CHANGELOG bullet) landed AFTER its walk measurement, so the committed pin rode stale (its three-way was verified at the carrier moment, before the ledger close-out); re-trued to the post-ledger measured fixed point, the measurement-last discipline recorded in the carrier |
 | Console | `GET /` | **200, one clean boot** (the daemon found the server already up — no Turbopack panic this round; stopped for the gate, restarted for the walk) |
 
-## 8. Prior round (r361 — the part17 upkeep firing: the fourteenth-class rollback recovered + the ten-chunk gate's three finds decoded and fixed at source + the carrier-truing debt settled)
+## 9. Prior round (r361 — the part17 upkeep firing: the fourteenth-class rollback recovered + the ten-chunk gate's three finds decoded and fixed at source + the carrier-truing debt settled)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -135,7 +147,7 @@ never a silent skip, never a blocked test marked passed).
 | The carrier truing | `src/lib/toolkit-stats.ts` (root carrier, outside the walked tree) | **re-trued to the measured fixed point 9,017 / 337 / 1,842 / 589,728** — the r325-era pins (8,555 / 110 / 1,706 / 567,800) had drifted 462 tests / 227 component tests / 136 files / 21,928 lines behind over the r326..r360 lanes; the registry pins re-probed **33 / 24 unchanged**; **verified pin = live walk = page render three-way** (the `/api/toolkit/tree?fresh=1` walk measured 1,842 files / 589,728 lines; the SSR HTML paints the new four and the stale three are absent); root lint exit-0 |
 | Console | `GET /` | **200, the 202,051-B body** — ONE clean supervisor boot after the Turbopack cache clean (the corrupted-cache panic decoded per the r351 drill) |
 
-## 9. Prior round (r353 — the part16 ninth round: the thirteenth rollback recovered + the Phase-9 grid-box visualization lane delivered — the campaign queue emptied)
+## 10. Prior round (r353 — the part16 ninth round: the thirteenth rollback recovered + the Phase-9 grid-box visualization lane delivered — the campaign queue emptied)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -154,7 +166,7 @@ never a silent skip, never a blocked test marked passed).
 | Browser verification | Playwright desktop 1440 + 390×844 mobile (`scratch/r353_verify.py`) | **R353 VERIFY PASS: zero page errors, zero console errors**; the console nav exercised (the Code Explorer click → `#/explorer`); the footer carrying the LIVE walk **1,811 files / 578,239 LOC** (files +5 = the lane's five inside-tree files; LOC +283 over r352's pinned walk = the lane's counted payload + the QA truthing); the footer geometry exact at page end (**1349 == 1349**); mobile zero horizontal overflow (docW 390 == vw 390); the zip-size API pin exact (**23,489,390 B / 1.2.240 / exact / release**); the evidence pair `scratch/r353-web-verify.png` (130,093 B) + `scratch/r353-mobile-verify.png` (597,439 B) riding THIS commit |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `57ffa9c9` (the r352 terminal — re-verified pre-push) |
 
-## 10. Prior round (r352 — the part16 eighth round: the Phase-12 diagnostics/recovery lane delivered — the #6 queue emptied)
+## 11. Prior round (r352 — the part16 eighth round: the Phase-12 diagnostics/recovery lane delivered — the #6 queue emptied)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -177,7 +189,7 @@ never a silent skip, never a blocked test marked passed).
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `4f73c907` (the r351 terminal — re-verified pre-push) |
 | The six-home zip parity | sha256 + size across the six homes | **byte-identical `0fadb6e5…` at exactly 23,489,390 B** — the reaper wiped the whole root `dist-archive/` DIRECTORY in this recycle; the directory re-created + the zip re-seeded from the verified toolkit home, all six identical, no re-ship |
 
-## 11. Prior round (r351 — the part16 seventh round: the Phase-12 data-quality / scientific-validation lane delivered)
+## 12. Prior round (r351 — the part16 seventh round: the Phase-12 data-quality / scientific-validation lane delivered)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -200,7 +212,7 @@ never a silent skip, never a blocked test marked passed).
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `969fa0bd` (the r350 terminal — re-verified pre-push) |
 | The six-home zip parity | sha256 + size across the six homes | **byte-identical `0fadb6e5…` at exactly 23,489,390 B** — the two reaper-wiped homes (the root dist-archive + the offsite) re-seeded from the verified toolkit home at the recovery, all six identical |
 
-## 12. Prior round (r350 — the part16 sixth round: the Phase-12 model-registry GUI-projection lane delivered)
+## 13. Prior round (r350 — the part16 sixth round: the Phase-12 model-registry GUI-projection lane delivered)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -222,7 +234,7 @@ never a silent skip, never a blocked test marked passed).
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `39cd55c9` (the r349 terminal — re-verified pre-push this leg) |
 | The six-home zip parity | sha256 + size across the six homes | **byte-identical `0fadb6e5…` at exactly 23,489,390 B** — the reaper wiped the root `dist-archive/` + the offsite mid-round; both re-seeded from the verified toolkit home (the r348 precedent), all six then identical |
 
-## 13. Prior round (r349 — the part16 fifth round: the Phase-12 experiment-tracking / run-lineage lane delivered)
+## 14. Prior round (r349 — the part16 fifth round: the Phase-12 experiment-tracking / run-lineage lane delivered)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -243,7 +255,7 @@ never a silent skip, never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | **zero page errors, zero console errors**; the footer carrying the LIVE walk **1,787 files / 574,728 LOC** (the live post-ledger walk == the page render; files +9 = the lane's own nine — the four backend .py + the five frontend nodes; LOC +1,603 = the four .py + the contract pair + the QA-doc truthing); the footer geometry exact at page end; mobile zero horizontal overflow (docW 390 == vw 390); the zip-size API pin exact (**23,489,390 B / v1.2.240 / exact / release**); the evidence pair `scratch/r349-web-verify.png` + `scratch/r349-mobile-verify.png` riding THIS commit |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `1ea3cc9a` (the r348 addendum terminal — re-verified pre-push) |
 
-## 14. Executed round r348 (the part16 fourth round: the Phase-8 floating resource-monitor lane delivered — carried)
+## 15. Executed round r348 (the part16 fourth round: the Phase-8 floating resource-monitor lane delivered — carried)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -264,7 +276,7 @@ never a silent skip, never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | **zero page errors, zero console errors**; the footer carrying the LIVE walk **1,778 files / 573,125 LOC** — the three-way true (the live fresh walk == the offline census replica == the page render; files +8 = the lane's own eight, LOC +308 = the drift guard's .py + the QA-doc truthing — the .tsx lanes never count); the footer geometry exact at page end (**3958 == 3958 desktop**); mobile zero horizontal overflow (docW 390 == vw 390); the zip-size API pin exact (**23,489,390 B / v1.2.240 / exact / release**); the evidence pair `scratch/r348-web-verify.png` + `scratch/r348-mobile-verify.png` riding THIS commit |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `580da84c` (the r347 terminal — re-verified pre-push) |
 
-## 15. Executed round r346 (the part16 third round: the Phase-7 settings lane delivered — carried)
+## 16. Executed round r346 (the part16 third round: the Phase-7 settings lane delivered — carried)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -288,7 +300,7 @@ never a silent skip, never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | the evidence pair rides the follow-up evidence commit (the pins below) |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `0e92d790` (the r345 evidence terminal — re-verified this round pre-push) |
 
-## 16. Executed round r345 (the part16 second round: the Phase-5 demo-data lane delivered — carried)
+## 17. Executed round r345 (the part16 second round: the Phase-5 demo-data lane delivered — carried)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -313,7 +325,7 @@ never a silent skip, never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | the evidence pair rides the follow-up evidence commit (the pins below) |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `969f7926` (the r344 evidence terminal — re-verified this round pre-push) |
 
-## 17. Executed round r344 (the part16 opening round: the seventh rollback recovered + the Phase-2 TerminatedWorkerError fix — carried)
+## 18. Executed round r344 (the part16 opening round: the seventh rollback recovered + the Phase-2 TerminatedWorkerError fix — carried)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -334,7 +346,7 @@ never a silent skip, never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | the evidence pair rides the follow-up evidence commit (the pins below) |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `8940bd42` (closed GREEN at r343; re-verified this round pre-push) |
 
-## 18. Executed round r343 (the sixth-rollback recovery round — carried)
+## 19. Executed round r343 (the sixth-rollback recovery round — carried)
 
 | Lane | Command (class) | Result |
 | --- | --- | --- |
@@ -355,7 +367,7 @@ never a silent skip, never a blocked test marked passed).
 | Browser verification | agent-browser desktop + 390×844 mobile | **zero page errors, zero console errors**, footer at page end both viewports (**3967 == 3967 desktop / 7882 == 7882 mobile**), mobile zero horizontal overflow (docW 390 == vw 390); evidence `scratch/r343-web-verify.png` + `scratch/r343-mobile-verify.png` — the blank mobile first frame (the daemon dead at the reload, caught by the geometry check) re-shot fresh |
 | CI verdict at HEAD | authenticated check-runs poll | **19/19 success** at `84b24f5c` (the r342 evidence terminal — closed GREEN on arrival) |
 
-## 19. Carried from executed rounds (latest full-run evidence)
+## 20. Carried from executed rounds (latest full-run evidence)
 
 - **r342** (the roadmap #3/#4 close-out round): the API suite
   **461+1 skip = 462 collected, exit 0, 117.495 s**; the
