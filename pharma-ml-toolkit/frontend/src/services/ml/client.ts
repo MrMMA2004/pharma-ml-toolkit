@@ -295,6 +295,93 @@ export interface EvaluationBlock {
   readonly n_rows_available: number;
   readonly n_rows_evaluated: number;
   readonly rows: readonly EvaluationRow[];
+  /** part21 §3 — the sample's own residual diagnostics (regression). */
+  readonly residual_diagnostics: ResidualDiagnostics | null;
+  /** part21 §3 — per-class metrics over the sample (classification). */
+  readonly class_metrics: ClassMetrics | null;
+  /** part21 §3 — per-class OvR ROC curves (when proba was carried). */
+  readonly roc_curves: readonly RocCurveSeries[] | null;
+  /** part21 §3 — per-class OvR PR curves (when proba was carried). */
+  readonly pr_curves: readonly PrCurveSeries[] | null;
+  /** part21 §3 — the binary reliability diagram (when proba + 2 classes). */
+  readonly calibration: CalibrationDiagram | null;
+}
+
+/** The regression sample's own residual diagnostics (part21 §3.1). */
+export interface ResidualDiagnostics {
+  readonly histogram: ResidualHistogram;
+  readonly stats: ResidualStats;
+  readonly qq: QQPoints | null;
+}
+
+export interface ResidualHistogram {
+  readonly bin_edges: readonly number[];
+  readonly counts: readonly number[];
+}
+
+export interface ResidualStats {
+  readonly mean: number;
+  readonly median: number;
+  readonly std: number;
+  readonly min: number;
+  readonly max: number;
+  readonly n: number;
+}
+
+/** Normal Q–Q points over the ordered residuals (Blom positions). */
+export interface QQPoints {
+  readonly theoretical: readonly number[];
+  readonly empirical: readonly number[];
+}
+
+export interface ClassMetrics {
+  readonly rows: readonly ClassMetricRow[];
+  readonly macro: Readonly<Record<"precision" | "recall" | "f1", number>>;
+  readonly accuracy: number;
+  readonly n: number;
+}
+
+export interface ClassMetricRow {
+  readonly label: string;
+  readonly precision: number;
+  readonly recall: number;
+  readonly f1: number;
+  readonly support: number;
+}
+
+/** One OvR ROC curve for a class over the evaluation sample. */
+export interface RocCurveSeries {
+  readonly label: string;
+  readonly fpr: readonly number[];
+  readonly tpr: readonly number[];
+  readonly thresholds: readonly number[];
+  readonly auc: number;
+  readonly n_pos: number;
+  readonly n_neg: number;
+}
+
+/** One OvR PR curve for a class over the evaluation sample. */
+export interface PrCurveSeries {
+  readonly label: string;
+  readonly recall: readonly number[];
+  readonly precision: readonly number[];
+  readonly thresholds: readonly number[];
+  readonly average_precision: number;
+  readonly prevalence: number;
+  readonly n_pos: number;
+}
+
+/** The binary reliability diagram over the positive-class score. */
+export interface CalibrationDiagram {
+  readonly bins: readonly CalibrationBin[];
+  readonly n: number;
+  readonly positive_class: string;
+}
+
+export interface CalibrationBin {
+  readonly mean_predicted: number;
+  readonly observed: number;
+  readonly count: number;
 }
 
 /** One row of the AD reliability frame (`to_frame`, JSON-safe). */
@@ -2998,7 +3085,177 @@ function parseEvaluationBlock(
     n_rows_available: asNumber(r["n_rows_available"]) ?? 0,
     n_rows_evaluated: asNumber(r["n_rows_evaluated"]) ?? 0,
     rows,
+    residual_diagnostics: parseResidualDiagnostics(
+      r["residual_diagnostics"],
+      `${what}: residual_diagnostics`,
+    ),
+    class_metrics: parseClassMetrics(
+      r["class_metrics"],
+      `${what}: class_metrics`,
+    ),
+    roc_curves: parseCurveList(
+      r["roc_curves"],
+      `${what}: roc_curves`,
+      (series, what2) => parseRocSeries(series, what2),
+    ),
+    pr_curves: parseCurveList(
+      r["pr_curves"],
+      `${what}: pr_curves`,
+      (series, what2) => parsePrSeries(series, what2),
+    ),
+    calibration: parseCalibration(
+      r["calibration"],
+      `${what}: calibration`,
+    ),
   };
+}
+
+/** A strictly-optional field: absent stays null (never fabricated). */
+function optional<T>(raw: unknown, parse: (raw: unknown, what: string) => T, what: string): T | null {
+  return raw === undefined || raw === null ? null : parse(raw, what);
+}
+
+function numberArray(raw: unknown, what: string): readonly number[] {
+  if (!Array.isArray(raw) || raw.some((v) => typeof v !== "number")) {
+    throw new Error(`${what}: expected a number array`);
+  }
+  return raw as readonly number[];
+}
+
+function parseResidualDiagnostics(
+  raw: unknown,
+  what: string,
+): ResidualDiagnostics | null {
+  return optional(raw, (r, w) => {
+    const o = expectObject(r, w);
+    const histogramRaw = o["histogram"];
+    const statsRaw = o["stats"];
+    if (histogramRaw === undefined || statsRaw === undefined) {
+      throw new Error(`${w}: histogram/stats are required`);
+    }
+    const h = expectObject(histogramRaw, `${w}: histogram`);
+    const s = expectObject(statsRaw, `${w}: stats`);
+    const qq = optional(o["qq"], (q, wq) => {
+      const oq = expectObject(q, wq);
+      return {
+        theoretical: numberArray(oq["theoretical"], `${wq}: theoretical`),
+        empirical: numberArray(oq["empirical"], `${wq}: empirical`),
+      };
+    }, `${w}: qq`);
+    return {
+      histogram: {
+        bin_edges: numberArray(h["bin_edges"], `${w}: bin_edges`),
+        counts: numberArray(h["counts"], `${w}: counts`),
+      },
+      stats: {
+        mean: asNumber(s["mean"]) ?? 0,
+        median: asNumber(s["median"]) ?? 0,
+        std: asNumber(s["std"]) ?? 0,
+        min: asNumber(s["min"]) ?? 0,
+        max: asNumber(s["max"]) ?? 0,
+        n: asNumber(s["n"]) ?? 0,
+      },
+      qq,
+    };
+  }, what);
+}
+
+function parseClassMetrics(raw: unknown, what: string): ClassMetrics | null {
+  return optional(raw, (r, w) => {
+    const o = expectObject(r, w);
+    const rowsRaw = o["rows"];
+    if (!Array.isArray(rowsRaw)) {
+      throw new Error(`${w}: rows must be an array`);
+    }
+    const rows: ClassMetricRow[] = [];
+    for (const rowRaw of rowsRaw) {
+      const row = expectObject(rowRaw, `${w}: a metrics row`);
+      rows.push({
+        label: String(row["label"]),
+        precision: asNumber(row["precision"]) ?? 0,
+        recall: asNumber(row["recall"]) ?? 0,
+        f1: asNumber(row["f1"]) ?? 0,
+        support: asNumber(row["support"]) ?? 0,
+      });
+    }
+    const macroRaw = expectObject(o["macro"], `${w}: macro`);
+    return {
+      rows,
+      macro: {
+        precision: asNumber(macroRaw["precision"]) ?? 0,
+        recall: asNumber(macroRaw["recall"]) ?? 0,
+        f1: asNumber(macroRaw["f1"]) ?? 0,
+      },
+      accuracy: asNumber(o["accuracy"]) ?? 0,
+      n: asNumber(o["n"]) ?? 0,
+    };
+  }, what);
+}
+
+function parseCurveList<T>(
+  raw: unknown,
+  what: string,
+  parseSeries: (raw: unknown, what: string) => T,
+): readonly T[] | null {
+  if (raw === undefined || raw === null) {
+    return null;
+  }
+  if (!Array.isArray(raw)) {
+    throw new Error(`${what}: expected an array of curves`);
+  }
+  return raw.map((series, i) =>
+    parseSeries(series, `${what}[${i}]`),
+  );
+}
+
+function parseRocSeries(raw: unknown, what: string): RocCurveSeries {
+  const o = expectObject(raw, what);
+  return {
+    label: String(o["label"]),
+    fpr: numberArray(o["fpr"], `${what}: fpr`),
+    tpr: numberArray(o["tpr"], `${what}: tpr`),
+    thresholds: numberArray(o["thresholds"], `${what}: thresholds`),
+    auc: asNumber(o["auc"]) ?? 0,
+    n_pos: asNumber(o["n_pos"]) ?? 0,
+    n_neg: asNumber(o["n_neg"]) ?? 0,
+  };
+}
+
+function parsePrSeries(raw: unknown, what: string): PrCurveSeries {
+  const o = expectObject(raw, what);
+  return {
+    label: String(o["label"]),
+    recall: numberArray(o["recall"], `${what}: recall`),
+    precision: numberArray(o["precision"], `${what}: precision`),
+    thresholds: numberArray(o["thresholds"], `${what}: thresholds`),
+    average_precision: asNumber(o["average_precision"]) ?? 0,
+    prevalence: asNumber(o["prevalence"]) ?? 0,
+    n_pos: asNumber(o["n_pos"]) ?? 0,
+  };
+}
+
+function parseCalibration(raw: unknown, what: string): CalibrationDiagram | null {
+  return optional(raw, (r, w) => {
+    const o = expectObject(r, w);
+    const binsRaw = o["bins"];
+    if (!Array.isArray(binsRaw)) {
+      throw new Error(`${w}: bins must be an array`);
+    }
+    const bins: CalibrationBin[] = [];
+    for (const binRaw of binsRaw) {
+      const bin = expectObject(binRaw, `${w}: a bin`);
+      bins.push({
+        mean_predicted: asNumber(bin["mean_predicted"]) ?? 0,
+        observed: asNumber(bin["observed"]) ?? 0,
+        count: asNumber(bin["count"]) ?? 0,
+      });
+    }
+    return {
+      bins,
+      n: asNumber(o["n"]) ?? 0,
+      positive_class: String(o["positive_class"]),
+    };
+  }, what);
 }
 
 /**
