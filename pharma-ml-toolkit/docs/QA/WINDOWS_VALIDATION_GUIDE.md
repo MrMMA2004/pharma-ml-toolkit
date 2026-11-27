@@ -25,6 +25,7 @@ or a secret; none performs destructive actions.
 | `test-persistence.ps1` | the isolated-temp-DB persistence suites | never touches user data |
 | `test-installers.ps1` | published-digest verification of downloaded installers against SHA256SUMS + RELEASE_MANIFEST cross-check — verifies, NEVER installs | no admin needed |
 | `collect-diagnostics.ps1` | consolidated PASS/FAIL/BLOCKED report over all lanes | the §13 "consolidated diagnostic report" |
+| `validate-clean-machine.ps1` | **the part19 Phase 8 clean-machine suite** (r368): system census (Windows/CPU/RAM/GPU/WebView2/Python-Node-Rust presence), installer SHA-256 + Authenticode status (BLOCKED honestly while signing is certificate-gated), the live sidecar handshake/health/guard/shutdown leg, the nine-workspace API execution matrix over synthetic data, artifact export + backup/restore, and the upgrade/uninstall leg (requires the prior installer present) | run on a GENUINELY clean box; JSON + Markdown reports land in `logs/windows-tests/clean-machine/`; BLOCKED legs are honest, never silent |
 
 ## 2. The recommended order
 

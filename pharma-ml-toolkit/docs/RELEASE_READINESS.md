@@ -386,3 +386,28 @@ The part18 campaign's second executed increment ships as v1.2.243:
   dispatched off the tag (the r365 four-build precedent's fix list
   already in); the penetration API suite 67 re-run green locally;
   the ZAP deep scan stays on the standing Monday slot.
+
+## Round 368 (part19 Phase 8-9 — 2026-11-27) — clean-machine path delivered, signing unchanged
+
+* **The clean-machine lane now has a reproducible suite**: `scripts/windows/
+  validate-clean-machine.ps1` (PS 5.1-compatible; census / installer-integrity
+  with honest Authenticode BLOCKED-until-certificate / the live sidecar
+  handshake-health-guard-shutdown leg / the nine-workspace API matrix over
+  synthetic data / artifacts + backup-restore / the upgrade-uninstall leg).
+  JSON + Markdown reports per run under `logs/windows-tests/clean-machine/`.
+  The lane's STATUS stays **NOT_RUN** until the owner executes it on a clean
+  box — the runner-verified install-smoke (45912713199) is runner evidence,
+  not clean-machine evidence, and is never conflated here. Current home of
+  the ladder: `docs/QA/WINDOWS_CLEAN_INSTALL_REPORT.md`.
+* **Installer sizes (EXE 558,600,414 B / MSI 711,110,134 B at v1.2.243)
+  investigated and justified**: the payload = the Qt-free frozen sidecar
+  (torch-CPU the largest contributor + RDKit + the full offline scientific
+  stack — the part9 no-silent-omission rule) + the Tauri host + WebView2
+  offline; PySide6/Qt is EXCLUDED from the shipped payload (spec-excluded +
+  guard-pinned); no further reduction exists without breaking the offline
+  guarantee (the size analysis lives in the clean-install report §3).
+* **Signing: unchanged BLOCKED — certificate-gated** (no certificate
+  fabricated, none committed; SHA256SUMS / RELEASE_MANIFEST / SBOM
+  generation preserved and verified at v1.2.243). Part19 Phase 9 requires
+  exactly this honest state until a certificate arrives through an
+  authorized channel.
