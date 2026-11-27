@@ -80,6 +80,23 @@
   re-aimed to the exact new hint, the 29-test file green locally
   (exit 0), the tag deleted and re-pointed at the assertion-fix
   commit, and the build attempt 2 fired on the corrected tree**;
+  **build attempt 2 (run 46038529441) then FAILED at step 11 (the
+  API/database gate) —
+  `tests/api/test_dl_semi_generative.py::TestDLTrain::
+  test_sync_train_registers_a_torch_model_that_predicts - assert
+  0.0 > 0.0`: the tiny 3-epoch torch fit completed inside one
+  `time.monotonic()` tick on the fast windows-2022 runner (the
+  ~15 ms GetTickCount64 resolution quantized the elapsed time to a
+  bogus exact 0.0 — the v1.2.243 build had merely drawn a slower
+  runner); the honest instrumentation fix (NOT a fabricated floor):
+  the four `fit_seconds = time.monotonic() - started` sites in
+  `api/routes/dl.py` switched to `time.perf_counter()` — the QPC
+  high-resolution clock and the in-tree precedent
+  (`ml/applicability.py:627` already measures fits with
+  perf_counter), so sub-tick fits report their real sub-millisecond
+  elapsed time; the DL API test files re-run green locally;
+  the tag deleted and re-pointed at the instrumentation-fix commit,
+  and the build attempt 3 fired on the corrected tree**;
   the functional install-smoke lane
   (`windows-install-smoke.yml`) re-fires on the published release
   (the SHA256SUMS/manifest cross-check, the Defender scans over both

@@ -278,7 +278,7 @@ def _train_body(
     on_epoch = _training_progress_hook(bus, manager, job_id)
     started = time.monotonic()
     estimator.fit(dataset_X, dataset_y, on_epoch=on_epoch)
-    fit_seconds = time.monotonic() - started
+    fit_seconds = time.perf_counter() - started
     record = TrainedModelRecord(
         model_id=f"mdl-{uuid.uuid4().hex[:12]}",
         model=estimator,
@@ -423,7 +423,7 @@ def _gnn_train_body(
         )
     started = time.monotonic()
     estimator.fit(graphs, labels)
-    fit_seconds = time.monotonic() - started
+    fit_seconds = time.perf_counter() - started
     train_accuracy = float(estimator.score(graphs, labels))
     record = TrainedModelRecord(
         model_id=f"mdl-{uuid.uuid4().hex[:12]}",
@@ -640,7 +640,7 @@ def _cnn_train_body(
     on_epoch = _training_progress_hook(bus, manager, job_id)
     started = time.monotonic()
     estimator.fit(x, y, on_epoch=on_epoch)
-    fit_seconds = time.monotonic() - started
+    fit_seconds = time.perf_counter() - started
     record = TrainedModelRecord(
         model_id=f"mdl-{uuid.uuid4().hex[:12]}",
         model=estimator,
@@ -844,7 +844,7 @@ def _autoencoder_train_body(
     on_epoch = _training_progress_hook(bus, manager, job_id)
     started = time.monotonic()
     estimator.fit(dataset_X, on_epoch=on_epoch)
-    fit_seconds = time.monotonic() - started
+    fit_seconds = time.perf_counter() - started
     record = TrainedModelRecord(
         model_id=f"mdl-{uuid.uuid4().hex[:12]}",
         model=estimator,
