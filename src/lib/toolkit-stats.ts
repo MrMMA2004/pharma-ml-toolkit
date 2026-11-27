@@ -37,7 +37,13 @@
     collected / 0 errors over 443 files (the +7/+1 over the r371
     pin: tests/api/test_ml_predict_evaluation_curves.py, part21's
     shared ML/DL evaluation-contract suite). */
-export const SHIPPED_TEST_COUNT = 8293;
+/*  r374 re-true (the v1.2.246 DS-1 ship, measurement-last): the
+    collection re-measured live on the shipped tree -- 8,313
+    collected / 0 errors over 444 files (the +20/+1 over the r373
+    pin: the DS-1 strategy lane -- 13 split-strategy API tests in
+    tests/api/test_datasets_ml_artifacts.py + the 7-test drift guard
+    tests/test_frontend_split_strategy.py). */
+export const SHIPPED_TEST_COUNT = 8313;
 
 /*  r366 (the part18 all-phases verification pass, the owner-directed
     firing): the collection re-measured LIVE at the r365 terminal
@@ -78,7 +84,12 @@ export const SHIPPED_TEST_COUNT = 8293;
     part21 shared-evaluation suite (10) + the DL Evaluate-stage
     integration pair); 357/357 over 41 files was the r371 pin (the two new lanes: the CNN +
     autoencoder lane and the feature-generative lane, +11). */
-export const SHIPPED_COMPONENT_TEST_COUNT = 369;
+/*  r374 re-true (the v1.2.246 DS-1 ship, measurement-last): the
+    suite re-measured live on the shipped tree -- 376/376 over 44
+    files (the +7/+1 over the r373 pin 369/43: the DS-1 lane -- the
+    4-test split-parser suite + the 3-test Split-stage strategy
+    suite). */
+export const SHIPPED_COMPONENT_TEST_COUNT = 376;
 
 /*  r366 re-true: the vitest suite re-measured live at the r365
     terminal -- 346/346 over 39 files (54.36s). The r361-era pin 337
@@ -154,7 +165,16 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 369;
     backend evaluation_curves module + the two new test files + the
     four part21 QA deliverables + the two in-tree v1.2.245 zip
     homes). */
-export const SHIPPED_FILE_COUNT = 1914;
+/*  r374 re-true (the v1.2.246 DS-1 ship, measurement-last): the
+    offline census replica re-walked the toolkit tree at the
+    close-out fixed point -- 1,916 files / 172 dirs / 790,904,603 B
+    (the +2 files / +1 dir over the r373 pin: the new drift guard
+    tests/test_frontend_split_strategy.py + the new
+    services/datasets/__tests__/client.test.ts + its directory; the
+    byte total reflects the v1.2.245 → v1.2.246 zip-home swap —
+    both in-tree homes swept by the ship tool — plus the notebook
+    re-execution outputs). */
+export const SHIPPED_FILE_COUNT = 1916;
 
 /*  r366 re-true (measurement-last): the offline census replica
     re-walked the toolkit tree at the r365 terminal AFTER this
@@ -333,7 +353,14 @@ export const SHIPPED_FILE_COUNT = 1914;
     evaluation layer + its tests + the four part21 QA deliverables +
     the CHANGELOG 1.2.245 entry + the re-executed 1.2.245 notebook
     outputs + the FEATURES api row). */
-export const SHIPPED_SOURCE_LINES = 606292;
+/*  r374 re-true (the v1.2.246 DS-1 ship, measurement-last): the
+    replica walk re-measured at the close-out fixed point --
+    606,978 lines (the +686 over the r373 pin: the DS-1 strategy
+    lane (the route extension + the client parser + the Split-stage
+    selector) + the 20 new tests + the CHANGELOG 1.2.246 entry +
+    the RELEASE_READINESS r373 section + the re-executed 1.2.246
+    notebook outputs). */
+export const SHIPPED_SOURCE_LINES = 606978;
 
 /*  r366-continuation re-true (measurement-last): the firing's
     close-out correction (the drift-guard figure 202 -> 130 and the

@@ -89,11 +89,36 @@ export interface SplitSideView {
   readonly preview: FramePreview;
 }
 
+/** The split strategy vocabulary the backend's DS-1 lane serves. */
+export type SplitStrategy =
+  | "random"
+  | "stratified"
+  | "scaffold"
+  | "group"
+  | "kennard_stone"
+  | "temporal";
+
+/** One side's cohort census for the group-carrying strategies (DS-1). */
+export interface SplitGroupCensusSide {
+  readonly n_groups: number;
+  readonly top_groups: ReadonlyArray<readonly [string, number]>;
+}
+
+/** The DS-1 group census — per-side cohort counts + the leakage verdict. */
+export interface SplitGroupCensus {
+  readonly sides: Readonly<Record<string, SplitGroupCensusSide>>;
+  readonly shared_groups: readonly string[];
+}
+
 /** `POST /api/v1/datasets/{id}/split` — the split report. */
 export interface DatasetSplitResponse {
   readonly target: string | null;
   readonly stratified: boolean;
   readonly random_state: number;
+  readonly strategy: SplitStrategy | null;
+  readonly smiles_column: string | null;
+  readonly group_column: string | null;
+  readonly group_census: SplitGroupCensus | null;
   readonly sides: Readonly<Record<string, SplitSideView>>;
   readonly n_rows: number;
 }
@@ -360,7 +385,61 @@ function parseSplitResponse(raw: unknown): DatasetSplitResponse {
     target: (r["target"] as string | null) ?? null,
     stratified: r["stratified"] === true,
     random_state: typeof r["random_state"] === "number" ? r["random_state"] : 0,
+    strategy: (STRATEGY_LITERALS as readonly string[]).includes(r["strategy"] as string)
+      ? (r["strategy"] as SplitStrategy)
+      : null,
+    smiles_column: typeof r["smiles_column"] === "string" ? r["smiles_column"] : null,
+    group_column: typeof r["group_column"] === "string" ? r["group_column"] : null,
+    group_census: parseGroupCensus(r["group_census"]),
     sides,
     n_rows: typeof r["n_rows"] === "number" ? r["n_rows"] : 0,
+  };
+}
+
+const STRATEGY_LITERALS: readonly string[] = [
+  "random",
+  "stratified",
+  "scaffold",
+  "group",
+  "kennard_stone",
+  "temporal",
+];
+
+/** Narrow the DS-1 census payload (absent on the legacy lane). */
+function parseGroupCensus(raw: unknown): SplitGroupCensus | null {
+  if (typeof raw !== "object" || raw === null) {
+    return null;
+  }
+  const r = raw as Record<string, unknown>;
+  const sides: Record<string, SplitGroupCensusSide> = {};
+  for (const [name, sideRaw] of Object.entries(r)) {
+    if (name === "shared_groups") {
+      continue;
+    }
+    if (typeof sideRaw !== "object" || sideRaw === null) {
+      continue;
+    }
+    const side = sideRaw as Record<string, unknown>;
+    const top = Array.isArray(side["top_groups"])
+      ? (side["top_groups"] as unknown[]).map((entry) =>
+          Array.isArray(entry) &&
+          typeof entry[0] === "string" &&
+          typeof entry[1] === "number"
+            ? ([entry[0], entry[1]] as const)
+            : (["", 0] as const),
+        )
+      : [];
+    sides[name] = {
+      n_groups: typeof side["n_groups"] === "number" ? side["n_groups"] : 0,
+      top_groups: top,
+    };
+  }
+  return {
+    sides,
+    shared_groups: Array.isArray(r["shared_groups"])
+      ? (r["shared_groups"] as unknown[]).filter(
+          (v): v is string => typeof v === "string",
+        )
+      : [],
   };
 }

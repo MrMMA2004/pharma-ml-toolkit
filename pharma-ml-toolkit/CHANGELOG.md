@@ -1,3 +1,52 @@
+## [1.2.246] — 2026-11-28 — round 373 (the 167th recorded run: WORKFLOW_ENHANCEMENT_ROADMAP execution begins — DS-1, the P0 row, the scaffold/group-aware split lane at the Datasets stage; trace 1a21f4a5974c6959)
+
+- **DS-1 (the roadmap's P0 — evaluation correctness, first in the
+  P0-first implementation sequence)**: the `ml/splits.py` engine
+  vocabulary — `random` / `stratified` / `scaffold` / `group` /
+  `kennard_stone` / `temporal` — is now reachable from
+  `POST /api/v1/datasets/{id}/split`. `SplitRequest` gains the
+  optional `strategy` literal (the engine's own set — pinned by the
+  new drift guard) plus `smiles_column` (scaffold; the §15.4
+  auto-pick when omitted) and `group_column` (group; explicitly
+  required — never guessed). The strategy path carves through
+  `split_indices` (the same engine the CLI and the workflow templates
+  use) with the optional val side carved by a SECOND pass of the same
+  strategy over the train remainder — each pass only moves whole
+  scaffold/group cohorts, so families stay intact across all three
+  sides. The response keeps the legacy sides-view shape and adds
+  `strategy` / `smiles_column` / `group_column` / `group_census`
+  (per-side cohort counts, the eight largest cohorts, and the
+  `shared_groups` leakage verdict — empty is the honest holdout, a
+  non-empty entry is a verdict, never a warning). `strategy=null`
+  keeps the legacy `split_table` boolean lane byte-identical (explicit
+  nulls added for shape consistency). The Datasets page's Split stage
+  gains the strategy selector, the conditional SMILES/group column
+  picks, the group-column gate (the run button stays disabled until
+  picked), the per-side group counts, and the leakage-verdict line.
+- **The honest 422 lanes** (fail-first, all pinned by API tests): the
+  stratified strategy without a target; the group strategy without a
+  `group_column`; unknown strategy literals; unknown columns; and the
+  engine's own degenerate guard — a val carve whose train remainder
+  is a single scaffold group is REFUSED, never silently degraded.
+- **The evidence**: 13 new API tests (the fail-first fixture: 8
+  ring-family + 4 acyclic SMILES — the ring family lands wholly on
+  ONE side; `shared_groups == []` asserted for the two- and
+  three-family fixtures and the job mode), 4 new client-parser
+  vitests (unknown literal → null, malformed census degrades
+  per-side), 3 new page vitests (the selector, the group gate, the
+  legacy lane unchanged), and the new drift guard
+  `tests/test_frontend_split_strategy.py` (7 tests — the engine
+  vocabulary pinned across the route Literal, the OpenAPI contract,
+  the client parser, and the page selector).
+- **Gates**: vitest **376/376 over 44 files** (369 → 376), the drift
+  -guard family green, `tsc` 0, the vite production build 23.15s
+  green, ruff clean, mypy clean, the contract battery green
+  (`tools/export_openapi.py` re-run — 142 paths / 96 schemas), the
+  version-carrier battery green at 1.2.246 lockstep.
+- **No release this round** (the standing rule: no tag, no installer —
+  v1.2.244 stands published; the next owner-gated cycle carries this
+  delta). The zip ships per the standing tree-changed ritual.
+
 ## [1.2.245] — 2026-11-28 — round 372 (the 166th recorded run: MASTER_PROMPT part21 — the previous audit revalidated, the unified ML/DL evaluation visualization implemented as ONE shared component layer over ONE backend contract, and the nine-workspace enhancement roadmap; trace 1a21eced073a8cc9)
 
 - **The previous audit revalidated (part21 §1 — evidence-first, never trust-the-report)**:

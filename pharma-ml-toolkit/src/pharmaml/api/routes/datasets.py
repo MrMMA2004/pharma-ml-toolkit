@@ -19,6 +19,7 @@ Upload contract (the Phase-Eight preview delivered with this row):
 from __future__ import annotations
 
 import tempfile
+from math import ceil
 from pathlib import Path
 from typing import Literal
 
@@ -26,10 +27,12 @@ import pandas as pd
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
+from pharmaml.chem.csv_standardize import detect_smiles_column
 from pharmaml.data import load_dataset, split_table
 from pharmaml.data_profiling import profile_frame
 from pharmaml.data_quality import data_quality_report
 from pharmaml.exceptions import DataValidationError
+from pharmaml.ml.splits import SPLIT_STRATEGIES, scaffold_groups, split_indices
 from pharmaml.utils.io import safe_filename
 
 from ..jobs import CancelledJob
@@ -61,11 +64,28 @@ class QualityRequest(BaseModel):
 
 
 class SplitRequest(BaseModel):
+    """The split lane's knobs (DS-1: the engine's strategy vocabulary).
+
+    ``strategy=None`` keeps the legacy ``split_table`` path exactly as
+    it has always answered (the ``stratify`` boolean decides random vs
+    stratified, with target auto-detection). Setting ``strategy``
+    routes the split through :func:`pharmaml.ml.splits.split_indices`
+    -- the same engine the CLI and the ML templates already use --
+    adding the scaffold (Bemis-Murcko groups held out whole), group
+    (explicit labels), kennard_stone and temporal strategies the
+    legacy lane cannot express. ``smiles_column`` is the scaffold
+    lane's input (auto-detected when omitted); ``group_column`` is the
+    group lane's input (required there, never guessed).
+    """
+
     target: str | None = None
     test_size: float = Field(default=0.2, gt=0.0, lt=1.0)
     val_size: float | None = Field(default=None, gt=0.0, lt=1.0)
     stratify: bool = True
     random_state: int = 42
+    strategy: Literal["random", "stratified", "scaffold", "group", "kennard_stone", "temporal"] | None = None
+    smiles_column: str | None = None
+    group_column: str | None = None
     mode: Literal["job", "sync"] = "sync"
 
 
@@ -142,10 +162,24 @@ def _split_body(
     val_size: float | None,
     stratify: bool,
     random_state: int,
+    strategy: str | None = None,
+    smiles_column: str | None = None,
+    group_column: str | None = None,
     cancel_event=None,
 ) -> dict:
     if cancel_event is not None and cancel_event.is_set():
         raise CancelledJob("Cancelled before the split stage.")
+    if strategy is not None:
+        return _strategy_split(
+            frame,
+            target=target,
+            strategy=strategy,
+            test_size=test_size,
+            val_size=val_size,
+            random_state=random_state,
+            smiles_column=smiles_column,
+            group_column=group_column,
+        )
     result = split_table(
         frame=frame,
         target=target,
@@ -160,9 +194,185 @@ def _split_body(
         "target": result.target,
         "stratified": result.stratified,
         "random_state": result.random_state,
+        "strategy": None,
         "sides": sides,
         "n_rows": len(frame),
+        "group_census": None,
     }
+
+
+def _strategy_split(
+    frame: pd.DataFrame,
+    *,
+    target: str | None,
+    strategy: str,
+    test_size: float,
+    val_size: float | None,
+    random_state: int,
+    smiles_column: str | None,
+    group_column: str | None,
+) -> dict:
+    """The DS-1 strategy lane: one frame, one honest strategy split.
+
+    Splits the frame through :func:`pharmaml.ml.splits.split_indices`
+    -- the same engine the CLI and the in-backend workflow templates
+    use -- instead of the legacy ``split_table`` boolean. The response
+    keeps the legacy sides-view shape and adds ``strategy`` /
+    ``smiles_column`` / ``group_column`` / ``group_census`` fields. The
+    optional val side is carved by a SECOND pass of the same strategy
+    over the train remainder: each pass only ever moves whole
+    scaffold/group cohorts, so groups stay intact across all three
+    sides. The census reports each side's group count, its eight
+    largest cohorts, and the ``shared_groups`` list -- which must be
+    empty for scaffold/group (a shared entry is a leakage verdict, not
+    a warning).
+    """
+    if strategy not in SPLIT_STRATEGIES:
+        raise DataValidationError(
+            f"unknown split strategy {strategy!r} -- valid strategies: "
+            + ", ".join(SPLIT_STRATEGIES)
+        )
+    n = len(frame)
+
+    # -- prerequisites: honest 422s, never guesses --------------------
+    if target is not None and target not in frame.columns:
+        raise DataValidationError(
+            f"target column {target!r} not found; available: "
+            f"{[str(c) for c in frame.columns][:20]}"
+        )
+    if strategy == "stratified" and target is None:
+        raise DataValidationError(
+            "the 'stratified' strategy needs a target column "
+            "(the legacy stratify lane auto-detects; pick the target "
+            "explicitly here)"
+        )
+    smiles_col: str | None = None
+    if strategy == "scaffold":
+        smiles_col = smiles_column
+        if smiles_col is None:
+            # the same auto-pick the §15.4 quality card uses; raises
+            # DataValidationError naming every column it tried
+            smiles_col = detect_smiles_column(frame)
+        elif smiles_col not in frame.columns:
+            raise DataValidationError(
+                f"smiles column {smiles_col!r} not found; available: "
+                f"{[str(c) for c in frame.columns][:20]}"
+            )
+    group_col: str | None = None
+    if strategy == "group":
+        group_col = group_column
+        if group_col is None:
+            raise DataValidationError(
+                "the 'group' strategy needs an explicit group_column "
+                "(group labels are never guessed)"
+            )
+        if group_col not in frame.columns:
+            raise DataValidationError(
+                f"group column {group_col!r} not found; available: "
+                f"{[str(c) for c in frame.columns][:20]}"
+            )
+    feature_cols: list[str] = []
+    if strategy == "kennard_stone":
+        feature_cols = [
+            str(c)
+            for c in frame.columns
+            if str(c) != target and pd.api.types.is_numeric_dtype(frame[c])
+        ]
+        if not feature_cols:
+            raise DataValidationError(
+                "kennard_stone needs at least one numeric feature column "
+                "(distances are computed on the numeric matrix)"
+            )
+
+    def _engine(sub: pd.DataFrame, frac: float):
+        """One engine call over a sub-frame (positional, never index)."""
+        if strategy == "kennard_stone":
+            X: object = sub[feature_cols].to_numpy(dtype=float)
+        else:
+            X = sub
+        y: object = sub[target].to_numpy() if strategy == "stratified" else None
+        smiles = (
+            [str(v) for v in sub[smiles_col].tolist()]
+            if strategy == "scaffold"
+            else None
+        )
+        groups = sub[group_col].tolist() if strategy == "group" else None
+        return split_indices(
+            X=X,
+            y=y,
+            strategy=strategy,
+            test_size=frac,
+            random_state=random_state,
+            smiles=smiles,
+            groups=groups,
+        )
+
+    train_idx, test_idx = _engine(frame, test_size)
+    train_frame = frame.iloc[train_idx]
+    test_frame = frame.iloc[test_idx]
+    val_frame = None
+    if val_size is not None:
+        n_val_target = ceil(val_size * n)
+        frac_val = n_val_target / max(len(train_frame), 1)
+        if not 0.0 < frac_val < 1.0:
+            raise DataValidationError(
+                f"val_size={val_size} leaves no rows to train after the "
+                f"test carve (train remainder is {len(train_frame)} rows)"
+            )
+        tr2_idx, val_idx = _engine(train_frame, frac_val)
+        val_frame = train_frame.iloc[val_idx]
+        train_frame = train_frame.iloc[tr2_idx]
+
+    sides: dict[str, pd.DataFrame] = {"train": train_frame}
+    if val_frame is not None:
+        sides["val"] = val_frame
+    sides["test"] = test_frame
+
+    response: dict = {
+        "target": target,
+        "stratified": strategy == "stratified",
+        "random_state": random_state,
+        "strategy": strategy,
+        "smiles_column": smiles_col,
+        "group_column": group_col,
+        "sides": {name: _side_view(fr, target) for name, fr in sides.items()},
+        "n_rows": n,
+        "group_census": None,
+    }
+
+    if strategy in ("scaffold", "group"):
+        per_side: dict[str, dict[str, int]] = {}
+        for name, fr in sides.items():
+            if strategy == "scaffold":
+                keys = scaffold_groups(
+                    [str(v) for v in fr[smiles_col].tolist()]
+                )
+            else:
+                keys = [str(v) for v in fr[group_col].tolist()]
+            counts: dict[str, int] = {}
+            for key in keys:
+                counts[key] = counts.get(key, 0) + 1
+            per_side[name] = counts
+        shared: set[str] = set()
+        names = list(per_side)
+        for i, a in enumerate(names):
+            for b in names[i + 1:]:
+                shared |= set(per_side[a]) & set(per_side[b])
+        census: dict[str, object] = {
+            name: {
+                "n_groups": len(counts),
+                "top_groups": [
+                    [key, count]
+                    for key, count in sorted(
+                        counts.items(), key=lambda kv: (-kv[1], kv[0])
+                    )[:8]
+                ],
+            }
+            for name, counts in per_side.items()
+        }
+        census["shared_groups"] = sorted(shared)
+        response["group_census"] = census
+    return response
 
 
 @router.post("")
@@ -386,13 +596,22 @@ def split_dataset(
     record = store.get(dataset_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Unknown dataset_id.")
+    # DS-1: the strategy lane falls back to the registration-resolved
+    # target when the request leaves it null (the legacy lane keeps its
+    # own auto-detection inside split_table -- untouched).
+    target = req.target
+    if req.strategy is not None and target is None:
+        target = record.target
     if req.mode == "sync":
         try:
             return {
                 "mode": "sync",
                 **_split_body(
-                    record.frame, req.target, req.test_size, req.val_size,
+                    record.frame, target, req.test_size, req.val_size,
                     req.stratify, req.random_state,
+                    strategy=req.strategy,
+                    smiles_column=req.smiles_column,
+                    group_column=req.group_column,
                 ),
             }
         except DataValidationError as exc:
@@ -413,12 +632,18 @@ def split_dataset(
             "val_size": req.val_size,
             "stratify": req.stratify,
             "random_state": req.random_state,
+            "strategy": req.strategy,
+            "smiles_column": req.smiles_column,
+            "group_column": req.group_column,
         },
         frame=record.frame,
-        target=req.target,
+        target=target,
         test_size=req.test_size,
         val_size=req.val_size,
         stratify=req.stratify,
         random_state=req.random_state,
+        strategy=req.strategy,
+        smiles_column=req.smiles_column,
+        group_column=req.group_column,
     )
     return {"mode": "job", "job": job.public()}

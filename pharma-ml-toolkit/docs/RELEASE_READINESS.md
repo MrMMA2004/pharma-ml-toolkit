@@ -494,3 +494,30 @@ vocabulary carries.
 | The ship itself (the zip ritual) | **PASS** | the v1.2.245 zip per the standing housekeeping ritual (the tree changed — see the round's close-out for the zip's six homes + the offsite mirror) |
 | Remaining blockers | D-11, D-12 (compile-blocked), signing (certificate), clean-machine (owner), the Monday ZAP slot, the in-limbo ZAP re-run | none P0/P1 |
 | Overall | **PASS for the part21 scope — implemented, gate-green, honestly scoped; NO release published this round per the authorization rule** | ML_DL_VISUALIZATION_TEST_REPORT.md + this section |
+
+## Round 373 (2026-11-28) — WORKFLOW_ENHANCEMENT_ROADMAP execution begins: DS-1 (the P0 row) implemented; NO release this round
+
+The roadmap's P0-first implementation sequence opened: DS-1 — the
+scaffold/group-aware split lane at the Datasets stage — implemented
+end-to-end (route → contract → client parser → Split-stage UI), with
+13 new API tests, 4 client-parser tests, 3 page tests, and the new
+`tests/test_frontend_split_strategy.py` drift guard (7 tests) all
+green; v1.2.246 carrier-bumped and the zip shipped per the standing
+tree-changed ritual. The ZAP lane run 46038496882 has since resolved
+as **cancelled** (2026-11-27T23:02:08Z) — the in-limbo question from
+r372 is closed: the lane was never green, and the Monday 2026-11-30
+deep-scan slot stands.
+
+| Gate | State | Evidence |
+| --- | --- | --- |
+| Backend correctness | **PASS** | the split-strategy API tests 18/18 (5 legacy + 13 new, incl. the fail-first scaffold-wholeness fixture and the honest 422 lanes); ruff + mypy clean on the touched route; the carrier battery green at 1.2.246 |
+| Frontend integration | **PASS** | vitest 376/376 over 44 files; tsc 0; the vite production build 23.15s green |
+| API contract integrity | **PASS** | the SplitRequest schema extended (strategy enum + the column fields) via `tools/export_openapi.py` re-export; the contract battery green |
+| Tauri lifecycle | **PASS** (carried) | carriers bumped in lockstep; D-11/D-12 OPEN (compile-blocked) unchanged |
+| EXE / MSI validation | **BLOCKED (by design this round)** | no release authorized; v1.2.244 stands published; the next owner-gated cycle carries the delta |
+| Security | **PASS with the ZAP lane resolved-cancelled** | the local 67-test penetration suite green; the remote ZAP run 46038496882 concluded **cancelled** (the ephemeral target expired — never counted green); the Monday 2026-11-30 deep-scan slot stands |
+| CI status | **PASS at the pre-work HEAD (931e6887, both runs success)** | the round's push rides the post-merge CI |
+| Installer signing | **BLOCKED** — certificate-gated | unchanged honest state |
+| The ship itself (the zip ritual) | **PASS** | the v1.2.246 zip per the standing tree-changed ritual (six homes + the offsite mirror — see the round's close-out) |
+| Remaining blockers | D-11, D-12 (compile-blocked), signing (certificate), clean-machine (owner), the Monday ZAP slot | none P0/P1 |
+| Overall | **PASS for the DS-1 scope — the roadmap's P0 executed, gate-green, honestly scoped; NO release this round** | CHANGELOG 1.2.246 + WORKFLOW_ENHANCEMENT_ROADMAP.md row 1 |

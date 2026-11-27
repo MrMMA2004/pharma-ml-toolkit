@@ -4825,8 +4825,24 @@ export interface components {
             /** Name */
             name: string;
         };
-        /** SplitRequest */
+        /**
+         * SplitRequest
+         * @description The split lane's knobs (DS-1: the engine's strategy vocabulary).
+         *
+         *     ``strategy=None`` keeps the legacy ``split_table`` path exactly as
+         *     it has always answered (the ``stratify`` boolean decides random vs
+         *     stratified, with target auto-detection). Setting ``strategy``
+         *     routes the split through :func:`pharmaml.ml.splits.split_indices`
+         *     -- the same engine the CLI and the ML templates already use --
+         *     adding the scaffold (Bemis-Murcko groups held out whole), group
+         *     (explicit labels), kennard_stone and temporal strategies the
+         *     legacy lane cannot express. ``smiles_column`` is the scaffold
+         *     lane's input (auto-detected when omitted); ``group_column`` is the
+         *     group lane's input (required there, never guessed).
+         */
         SplitRequest: {
+            /** Group Column */
+            group_column?: string | null;
             /**
              * Mode
              * @default sync
@@ -4838,6 +4854,10 @@ export interface components {
              * @default 42
              */
             random_state: number;
+            /** Smiles Column */
+            smiles_column?: string | null;
+            /** Strategy */
+            strategy?: ("random" | "stratified" | "scaffold" | "group" | "kennard_stone" | "temporal") | null;
             /**
              * Stratify
              * @default true

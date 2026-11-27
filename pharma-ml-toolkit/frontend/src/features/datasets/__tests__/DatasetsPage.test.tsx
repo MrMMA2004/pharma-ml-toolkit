@@ -485,3 +485,131 @@ describe("the §3.1 deletion lane — the two-step gate over the typed evict", (
     ).toBeInTheDocument();
   });
 });
+
+// ------------------------------------------------- DS-1: the strategy lane
+
+describe("the Split stage's DS-1 strategy lane — scaffold/group-honest splits", () => {
+  const SCAFFOLD_REPORT = {
+    target: "solubility",
+    stratified: false,
+    random_state: 42,
+    strategy: "scaffold" as const,
+    smiles_column: "smiles",
+    group_column: null,
+    group_census: {
+      sides: {
+        train: { n_groups: 5, top_groups: [["c1ccccc1", 40]] },
+        test: { n_groups: 2, top_groups: [["", 10]] },
+      },
+      shared_groups: [],
+    },
+    sides: {
+      train: { rows: 96, columns: ["smiles", "solubility"], preview: FRAME },
+      test: { rows: 32, columns: ["smiles", "solubility"], preview: FRAME },
+    },
+    n_rows: 128,
+  };
+
+  it("sends the scaffold strategy through and renders the group census + leakage verdict", async () => {
+    datasetsMocks.list.mockResolvedValue({ datasets: [DATASET] });
+    datasetsMocks.view.mockResolvedValue(DATASET);
+    datasetsMocks.preview.mockResolvedValue(FRAME);
+    datasetsMocks.split.mockReset().mockResolvedValueOnce(SCAFFOLD_REPORT);
+    render(<DatasetsPage />);
+
+    await userEvent.click(await screen.findByText("solubility.csv"));
+    await waitFor(() => {
+      expect(datasetsMocks.view).toHaveBeenCalledWith("ds-1");
+    });
+
+    // the strategy selector: auto → scaffold
+    await userEvent.selectOptions(screen.getByLabelText("strategy"), "scaffold");
+    // the SMILES column select appears beside the chemistry stage's own
+    // (same label there — assert the pair, then drive the split one)
+    const smilesSelects = screen.getAllByLabelText("SMILES column");
+    expect(smilesSelects).toHaveLength(2);
+    expect(smilesSelects[1] ?? null).toHaveValue(""); // the auto-detect default
+
+    await userEvent.click(screen.getByRole("button", { name: "Run the split" }));
+
+    await waitFor(() => {
+      expect(datasetsMocks.split).toHaveBeenCalledWith(
+        "ds-1",
+        expect.objectContaining({
+          strategy: "scaffold",
+          test_size: 0.2,
+          random_state: 42,
+          mode: "sync",
+        }),
+      );
+    });
+    // the auto-detect lane sends no explicit smiles_column
+    expect(
+      (datasetsMocks.split.mock.calls[0]![1] as Record<string, unknown>)
+        .smiles_column,
+    ).toBeUndefined();
+
+    // per-side group counts + the leakage verdict line
+    expect(await screen.findByText(/5 groups/)).toBeInTheDocument();
+    expect(screen.getByText(/2 groups/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/0 shared groups across sides/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Bemis–Murcko families kept whole/),
+    ).toBeInTheDocument();
+  });
+
+  it("the group strategy keeps the run gated until a group column is picked", async () => {
+    datasetsMocks.list.mockResolvedValue({ datasets: [DATASET] });
+    datasetsMocks.view.mockResolvedValue(DATASET);
+    datasetsMocks.preview.mockResolvedValue(FRAME);
+    render(<DatasetsPage />);
+
+    await userEvent.click(await screen.findByText("solubility.csv"));
+    await waitFor(() => {
+      expect(datasetsMocks.view).toHaveBeenCalledWith("ds-1");
+    });
+
+    await userEvent.selectOptions(screen.getByLabelText("strategy"), "group");
+    const run = screen.getByRole("button", { name: "Run the split" });
+    expect(run).toBeDisabled();
+    expect(screen.getByText(/group labels are never guessed/)).toBeInTheDocument();
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("group column"),
+      "smiles",
+    );
+    expect(screen.getByRole("button", { name: "Run the split" })).toBeEnabled();
+  });
+
+  it("the legacy auto lane sends no strategy — the boolean behavior unchanged", async () => {
+    datasetsMocks.list.mockResolvedValue({ datasets: [DATASET] });
+    datasetsMocks.view.mockResolvedValue(DATASET);
+    datasetsMocks.preview.mockResolvedValue(FRAME);
+    datasetsMocks.split.mockReset().mockResolvedValueOnce({
+      ...SCAFFOLD_REPORT,
+      strategy: null,
+      smiles_column: null,
+      group_census: null,
+    });
+    render(<DatasetsPage />);
+
+    await userEvent.click(await screen.findByText("solubility.csv"));
+    await waitFor(() => {
+      expect(datasetsMocks.view).toHaveBeenCalledWith("ds-1");
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Run the split" }));
+    await waitFor(() => {
+      expect(datasetsMocks.split).toHaveBeenCalledWith(
+        "ds-1",
+        expect.objectContaining({ test_size: 0.2, mode: "sync" }),
+      );
+    });
+    const body = datasetsMocks.split.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.strategy).toBeUndefined();
+    // the legacy answer renders without any census line
+    expect(screen.queryByText(/shared groups/)).toBeNull();
+  });
+});

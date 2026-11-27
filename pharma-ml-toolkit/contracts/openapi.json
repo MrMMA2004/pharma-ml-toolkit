@@ -4820,7 +4820,19 @@
         "type": "object"
       },
       "SplitRequest": {
+        "description": "The split lane's knobs (DS-1: the engine's strategy vocabulary).\n\n``strategy=None`` keeps the legacy ``split_table`` path exactly as\nit has always answered (the ``stratify`` boolean decides random vs\nstratified, with target auto-detection). Setting ``strategy``\nroutes the split through :func:`pharmaml.ml.splits.split_indices`\n-- the same engine the CLI and the ML templates already use --\nadding the scaffold (Bemis-Murcko groups held out whole), group\n(explicit labels), kennard_stone and temporal strategies the\nlegacy lane cannot express. ``smiles_column`` is the scaffold\nlane's input (auto-detected when omitted); ``group_column`` is the\ngroup lane's input (required there, never guessed).",
         "properties": {
+          "group_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Column"
+          },
           "mode": {
             "default": "sync",
             "enum": [
@@ -4834,6 +4846,36 @@
             "default": 42,
             "title": "Random State",
             "type": "integer"
+          },
+          "smiles_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smiles Column"
+          },
+          "strategy": {
+            "anyOf": [
+              {
+                "enum": [
+                  "random",
+                  "stratified",
+                  "scaffold",
+                  "group",
+                  "kennard_stone",
+                  "temporal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy"
           },
           "stratify": {
             "default": true,

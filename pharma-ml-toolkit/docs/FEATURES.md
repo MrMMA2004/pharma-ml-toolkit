@@ -14,7 +14,7 @@ state current Studio capabilities or feature parity. See
 [frontend development notes](../frontend/README.md), [Part 5 audit](PART5_PHASE0_AUDIT.md),
 and [test profiles](TEST_PROFILES.md) for current scope and bounded evidence.
 Matrix inputs were frozen at v1.2.167 (`9130c6b`); the inventory itself ships
-with v1.2.245 (the
+with v1.2.246 (the
 r315 Phase-4 search/job-center/workspace rows and the Phase-5 glossary/
 presets/doctor rows are registry-level additions, not matrix changes;
 r312 added the `/api/v1/model-evaluation` conformal + coverage family and

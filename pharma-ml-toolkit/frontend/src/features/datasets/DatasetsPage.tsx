@@ -34,6 +34,7 @@ import {
   type DatasetSplitResponse,
   type DatasetView,
   type FramePreview,
+  type SplitStrategy,
 } from "@/services/datasets/client";
 import {
   artifactsApi,
@@ -285,6 +286,10 @@ export function DatasetsPage() {
   const [valSize, setValSize] = useState<number | null>(null);
   const [stratify, setStratify] = useState(true);
   const [randomState, setRandomState] = useState(42);
+  // DS-1: the strategy lane ("auto" = the legacy stratify-toggle lane)
+  const [splitStrategy, setSplitStrategy] = useState<"auto" | SplitStrategy>("auto");
+  const [splitSmilesColumn, setSplitSmilesColumn] = useState("");
+  const [splitGroupColumn, setSplitGroupColumn] = useState("");
   const [splitReport, setSplitReport] = useState<DatasetSplitResponse | null>(null);
   const [splitError, setSplitError] = useState<string | null>(null);
   const [splitBusy, setSplitBusy] = useState(false);
@@ -329,6 +334,8 @@ export function DatasetsPage() {
     setDescriptorFrame(null);
     setFpMatrix(null);
     setSplitReport(null);
+    setSplitSmilesColumn("");
+    setSplitGroupColumn("");
     setStatResult(null);
     setExportArtifact(null);
     setDigestStatus(null);
@@ -392,6 +399,8 @@ export function DatasetsPage() {
           setDescriptorFrame(null);
           setFpMatrix(null);
           setSplitReport(null);
+          setSplitSmilesColumn("");
+          setSplitGroupColumn("");
           setStatResult(null);
           setExportArtifact(null);
           setDigestStatus(null);
@@ -564,7 +573,7 @@ export function DatasetsPage() {
     }
   }, []);
 
-  // stage 6: the leakage-safe split
+  // stage 6: the leakage-safe split (DS-1: strategy-aware when set)
   const handleSplit = useCallback(async () => {
     if (selectedId === null) {
       return;
@@ -572,23 +581,31 @@ export function DatasetsPage() {
     setSplitBusy(true);
     setSplitError(null);
     try {
-      setSplitReport(
-        await datasetsApi.split(selectedId, {
-          target: null,
-          test_size: testSize,
-          val_size: valSize,
-          stratify,
-          random_state: randomState,
-          mode: "sync",
-        }),
-      );
+      const request: components["schemas"]["SplitRequest"] = {
+        target: null,
+        test_size: testSize,
+        val_size: valSize,
+        stratify,
+        random_state: randomState,
+        mode: "sync",
+      };
+      if (splitStrategy !== "auto") {
+        request.strategy = splitStrategy;
+        if (splitStrategy === "scaffold" && splitSmilesColumn !== "") {
+          request.smiles_column = splitSmilesColumn;
+        }
+        if (splitStrategy === "group") {
+          request.group_column = splitGroupColumn;
+        }
+      }
+      setSplitReport(await datasetsApi.split(selectedId, request));
     } catch (error) {
       setSplitReport(null);
       setSplitError(describeError(error));
     } finally {
       setSplitBusy(false);
     }
-  }, [selectedId, testSize, valSize, stratify, randomState]);
+  }, [selectedId, testSize, valSize, stratify, randomState, splitStrategy, splitSmilesColumn, splitGroupColumn]);
 
   // stage 7: the backend's own statplots engine
   const handleStat = useCallback(async () => {
@@ -1249,12 +1266,58 @@ export function DatasetsPage() {
       <StageHeader
         index={6}
         title="Split / Leakage Audit"
-        hint="stratified, seeded, target-balanced"
+        hint="stratified or scaffold/group-honest — seeded"
         icon={<Columns3 aria-hidden className="h-4 w-4" />}
       >
         <Card>
           <CardContent>
             <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                strategy
+                <select
+                  value={splitStrategy}
+                  onChange={(event) => setSplitStrategy(event.target.value as "auto" | SplitStrategy)}
+                  className="mt-1 w-40 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                >
+                  <option value="auto">auto (stratify toggle)</option>
+                  <option value="random">random</option>
+                  <option value="stratified">stratified</option>
+                  <option value="scaffold">scaffold</option>
+                  <option value="group">group</option>
+                  <option value="kennard_stone">kennard_stone</option>
+                  <option value="temporal">temporal</option>
+                </select>
+              </label>
+              {splitStrategy === "scaffold" ? (
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  SMILES column
+                  <select
+                    value={splitSmilesColumn}
+                    onChange={(event) => setSplitSmilesColumn(event.target.value)}
+                    className="mt-1 w-40 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  >
+                    <option value="">auto-detect</option>
+                    {selectedColumns.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              {splitStrategy === "group" ? (
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  group column
+                  <select
+                    value={splitGroupColumn}
+                    onChange={(event) => setSplitGroupColumn(event.target.value)}
+                    className="mt-1 w-40 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  >
+                    <option value="">select…</option>
+                    {selectedColumns.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <label className="text-xs text-[var(--color-muted-foreground)]">
                 test size
                 <input
@@ -1287,10 +1350,11 @@ export function DatasetsPage() {
                 <input
                   type="checkbox"
                   checked={stratify}
+                  disabled={splitStrategy !== "auto"}
                   onChange={(event) => setStratify(event.target.checked)}
                   className="h-4 w-4"
                 />
-                stratify
+                stratify{splitStrategy !== "auto" ? " (legacy lane only)" : ""}
               </label>
               <label className="text-xs text-[var(--color-muted-foreground)]">
                 random state
@@ -1301,10 +1365,23 @@ export function DatasetsPage() {
                   className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
                 />
               </label>
-              <Button size="sm" disabled={selectedId === null || splitBusy} onClick={() => void handleSplit()}>
+              <Button
+                size="sm"
+                disabled={
+                  selectedId === null ||
+                  splitBusy ||
+                  (splitStrategy === "group" && splitGroupColumn === "")
+                }
+                onClick={() => void handleSplit()}
+              >
                 {splitBusy ? "Splitting…" : "Run the split"}
               </Button>
             </div>
+            {splitStrategy === "group" && splitGroupColumn === "" ? (
+              <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                The group strategy needs an explicit group column — group labels are never guessed.
+              </p>
+            ) : null}
             {splitError !== null ? <div className="mt-3"><ErrorBanner message={splitError} /></div> : null}
             {splitReport !== null ? (
               <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -1312,7 +1389,13 @@ export function DatasetsPage() {
                   <div key={name} className="rounded-lg border border-[var(--color-border)] p-3">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-[var(--color-foreground)]">{name}</span>
-                      <span className="text-xs text-[var(--color-muted-foreground)]">{side.rows} rows</span>
+                      <span className="text-xs text-[var(--color-muted-foreground)]">
+                        {side.rows} rows
+                        {splitReport.group_census !== null &&
+                        splitReport.group_census.sides[name] !== undefined
+                          ? ` · ${splitReport.group_census.sides[name].n_groups} groups`
+                          : ""}
+                      </span>
                     </div>
                     {side.target_balance !== undefined ? (
                       <div className="mt-2 flex flex-wrap gap-1">
@@ -1324,19 +1407,45 @@ export function DatasetsPage() {
                       </div>
                     ) : null}
                     <p className="mt-2 text-[11px] text-[var(--color-muted-foreground)]">
-                      stratified={String(splitReport.stratified)} · seed={splitReport.random_state}
+                      {splitReport.strategy !== null
+                        ? `strategy=${splitReport.strategy}`
+                        : `stratified=${String(splitReport.stratified)}`}{" · "}
+                      seed={splitReport.random_state}
                     </p>
                   </div>
                 ))}
               </div>
             ) : (
               <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
-                The backend&apos;s split_table reports each side&apos;s
-                row count and target balance — the leakage-safe
-                structure (a seeded, stratified holdout the ML
-                workspace will train against).
+                The backend&apos;s split engine reports each side&apos;s row
+                count and target balance — the leakage-safe structure (a
+                seeded holdout the ML workspace will train against).
+                Pick a strategy for scaffold/group-honest sides: the
+                scaffold lane holds Bemis–Murcko families whole, the
+                group lane holds labeled cohorts whole, kennard_stone
+                spreads the feature space, and temporal cuts in given
+                order.
               </p>
             )}
+            {splitReport !== null && splitReport.group_census !== null ? (
+              <div className="mt-2">
+                {splitReport.group_census.shared_groups.length === 0 ? (
+                  <p className="text-xs font-medium text-[var(--color-foreground)]">
+                    0 shared groups across sides — the honest holdout
+                    {splitReport.strategy === "scaffold" && splitReport.smiles_column !== null
+                      ? ` (Bemis–Murcko families kept whole over “${splitReport.smiles_column}”)`
+                      : splitReport.strategy === "group" && splitReport.group_column !== null
+                        ? ` (cohorts kept whole over “${splitReport.group_column}”)`
+                      : ""}
+                    .
+                  </p>
+                ) : (
+                  <p className="text-xs font-medium text-destructive">
+                    {splitReport.group_census.shared_groups.length} shared groups across sides — a leakage verdict, not a warning.
+                  </p>
+                )}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </StageHeader>

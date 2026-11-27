@@ -155,7 +155,7 @@ split) + `services/quality/client.ts` (the §15.4 data-quality report) +
 | Field | Entry |
 | --- | --- |
 | ID / Feature | DS-1 — Expose the `split_indices` strategy vocabulary through `POST /datasets/{id}/split` |
-| Current status | Partial (engine Implemented and tested; route + UI expose random/stratified only) |
+| Current status | **Implemented (r373 / v1.2.246)** — the strategy lane + the group census + the Split-stage selector shipped; the engine, the route, the contract, the parser, and the page selector now carry ONE vocabulary (pinned by `tests/test_frontend_split_strategy.py`) |
 | Problem | `src/pharmaml/ml/splits.py:368` `split_indices` implements `random` / `stratified` / `scaffold` (Murcko groups via `scaffold_groups`) / `group` (explicit labels) / `kennard_stone`, with `SPLIT_STRATEGIES` validation — but `routes/datasets.py:381` `POST /{id}/split` passes only `stratify: bool` into `data.py:596 split_table`, and the Split stage UI (`DatasetsPage.tsx` stage 6, "stratified, seeded, target-balanced") offers no strategy control. A QSAR split that ignores scaffold structure silently overstates generalization (near-duplicate scaffolds land on both sides). |
 | Proposed solution | Add `strategy: Literal["random","stratified","scaffold","group","kennard_stone"]` (+ optional `smiles_column` for scaffold, `group_column` for group) to the split request; the route maps the frame to the existing engine and returns the same sides-view plus per-side scaffold-group counts (reuse `scaffold_groups` for the census). Datasets page stage 6 gains a strategy selector and a scaffold-census readout. |
 | Scientific value | Scaffold splits are the accepted honest evaluation for QSAR (Bemis–Murcko groups held out whole); group splits serve the PK/PD and cell-line panels the toolkit already models. |
@@ -931,6 +931,12 @@ bridge and no `PlotlyFigure` usage.
 | 40 | PK-5 | P3 | NLME estimation — the long pharmacometrics arc, recovery-test gated. |
 | 41 | MD-5 | P3 | Real trajectory file loading behind an optional MDAnalysis wheel, honestly degraded. |
 | 42 | VIZ-5 | P3 | Figure-as-data / offline interactive HTML export — determinism-pinned. |
+
+— execution log: **row 1 (DS-1) executed in round 373 at v1.2.246** — the
+strategy lane through `split_indices`, the two-pass group-honest val carve,
+the `group_census` leakage verdict, the Split-stage selector + the group
+column gate, 13 API tests + 7 drift-guard tests + 7 vitests; the next row is
+ML-3 (the Train lane's `split` section over the same engine wiring).
 
 — trued round 372 (part21 / task 2-c): written read-only against the v1.2.244
 tree; every "zero frontend consumer" claim above was verified by diffing all

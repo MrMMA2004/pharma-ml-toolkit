@@ -470,6 +470,249 @@ class TestDatasetSplit:
         assert r.status_code == 422
 
 
+# ------------------------------------------------- DS-1: the strategy lane
+
+
+def _scaffold_csv() -> bytes:
+    """12 rows in two scaffold families (the DS-1 fail-first fixture).
+
+    8 ring-family SMILES (aspirin/phenol → Murcko ``c1ccccc1``) and 4
+    acyclic SMILES (ethanol → the empty scaffold key): a random split
+    would happily scatter the ring family across both sides — the
+    scaffold strategy must keep each family wholly on one side.
+    """
+    buf = io.StringIO()
+    buf.write("smiles,grp,x,y\n")
+    for i in range(8):
+        smi = "CC(=O)Oc1ccccc1C(=O)O" if i % 2 == 0 else "c1ccccc1O"
+        buf.write(f"{smi},{'A' if i < 4 else 'B'},{i},{i % 2}\n")
+    for i in range(4):
+        buf.write(f"CCO,C,{8 + i},{i % 2}\n")
+    return buf.getvalue().encode()
+
+
+def _scaffold_csv_val() -> bytes:
+    """16 rows in THREE scaffold families (the val-carve fixture).
+
+    The two-family fixture above cannot answer a val request: the
+    first carve leaves a single-group train remainder and the engine
+    honestly refuses the second carve. Three families (benzene,
+    pyridine, acyclic) give the val stage a two-group remainder to
+    carve honestly.
+    """
+    buf = io.StringIO()
+    buf.write("smiles,grp,x,y\n")
+    families = [
+        ("CC(=O)Oc1ccccc1C(=O)O", 6, "A"),
+        ("c1ccncc1O", 5, "B"),
+        ("CCO", 5, "C"),
+    ]
+    i = 0
+    for smi, count, grp in families:
+        for _ in range(count):
+            buf.write(f"{smi},{grp},{i},{i % 2}\n")
+            i += 1
+    return buf.getvalue().encode()
+
+
+class TestDatasetSplitStrategy:
+    """DS-1 — the ml/splits engine vocabulary behind the split route."""
+
+    def _scaffold_ds(self, client) -> dict:
+        return _upload(client, data=_scaffold_csv(),
+                       name="scaffold-fixture.csv", target="y")
+
+    def test_scaffold_split_keeps_family_whole(self, client):
+        ds = self._scaffold_ds(client)
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.25, "strategy": "scaffold", "mode": "sync"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["strategy"] == "scaffold"
+        assert body["smiles_column"] == "smiles"  # the auto-pick
+        assert body["target"] == "y"  # the record-fallback (no explicit target)
+        sides = body["sides"]
+        assert sum(s["rows"] for s in sides.values()) == 12
+        census = body["group_census"]
+        assert census is not None
+        # the leakage verdict: no scaffold key on two sides
+        assert census["shared_groups"] == []
+        # the ring family ('c1ccccc1', 8 rows) lands wholly on ONE side
+        ring_counts = {
+            name: dict(c.get("top_groups", [])).get("c1ccccc1", 0)
+            for name, c in census.items()
+            if isinstance(c, dict)
+        }
+        nonzero = [n for n, c in ring_counts.items() if c > 0]
+        assert nonzero and len(nonzero) == 1
+        assert ring_counts[nonzero[0]] == 8
+
+    def test_scaffold_split_with_val_stays_whole(self, client):
+        ds = _upload(client, data=_scaffold_csv_val(),
+                     name="scaffold-val-fixture.csv", target="y")
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.25, "val_size": 0.25,
+                  "strategy": "scaffold", "mode": "sync"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert set(body["sides"]) == {"train", "val", "test"}
+        assert body["group_census"]["shared_groups"] == []
+        assert sum(s["rows"] for s in body["sides"].values()) == 16
+
+    def test_val_carve_on_single_group_remainder_is_422(self, client):
+        # two families only: the first carve leaves a single-group
+        # remainder and the engine REFUSES the group-honest val carve —
+        # the honest answer, never a silently degraded val side
+        ds = self._scaffold_ds(client)
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.25, "val_size": 0.25,
+                  "strategy": "scaffold", "mode": "sync"},
+        )
+        assert r.status_code == 422, r.text
+        assert "one group/scaffold" in r.json()["detail"]
+
+    def test_group_split_census(self, client):
+        ds = self._scaffold_ds(client)
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.25, "strategy": "group",
+                  "group_column": "grp", "mode": "sync"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["strategy"] == "group"
+        assert body["group_column"] == "grp"
+        assert body["group_census"]["shared_groups"] == []
+        assert sum(s["rows"] for s in body["sides"].values()) == 12
+
+    def test_temporal_split_is_positional(self, client):
+        ds = self._scaffold_ds(client)
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.25, "strategy": "temporal", "mode": "sync"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["strategy"] == "temporal"
+        assert body["sides"]["train"]["rows"] == 9
+        assert body["sides"]["test"]["rows"] == 3
+        # order-as-given: the test side IS the last three rows (x = 9, 10, 11)
+        test_x = [row[2] for row in body["sides"]["test"]["preview"]["rows"]]
+        assert test_x == [9, 10, 11]
+
+    def test_kennard_stone_split(self, client):
+        ds = self._scaffold_ds(client)
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.25, "strategy": "kennard_stone",
+                  "mode": "sync"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["strategy"] == "kennard_stone"
+        assert sum(s["rows"] for s in body["sides"].values()) == 12
+
+    def test_scaffold_split_job_mode(self, client):
+        ds = self._scaffold_ds(client)
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.25, "strategy": "scaffold", "mode": "job"},
+        )
+        assert r.status_code == 200, r.text
+        job = r.json()["job"]
+        final = _wait_job(client, job["job_id"])
+        assert final["state"] == "COMPLETED", final
+        result = client.get(
+            f"/api/v1/jobs/{job['job_id']}/result", headers=auth_headers()
+        ).json()["result"]
+        assert result["strategy"] == "scaffold"
+        assert result["group_census"]["shared_groups"] == []
+
+    def test_unknown_strategy_is_422(self, client):
+        ds = self._scaffold_ds(client)
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.25, "strategy": "nope", "mode": "sync"},
+        )
+        assert r.status_code == 422, r.text
+
+    def test_group_strategy_requires_group_column_422(self, client):
+        ds = self._scaffold_ds(client)
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.25, "strategy": "group", "mode": "sync"},
+        )
+        assert r.status_code == 422, r.text
+        assert "explicit group_column" in r.json()["detail"]
+
+    def test_group_column_not_found_is_422(self, client):
+        ds = self._scaffold_ds(client)
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.25, "strategy": "group",
+                  "group_column": "nope", "mode": "sync"},
+        )
+        assert r.status_code == 422, r.text
+        assert "not found" in r.json()["detail"]
+
+    def test_smiles_column_not_found_is_422(self, client):
+        ds = self._scaffold_ds(client)
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.25, "strategy": "scaffold",
+                  "smiles_column": "nope", "mode": "sync"},
+        )
+        assert r.status_code == 422, r.text
+        assert "not found" in r.json()["detail"]
+
+    def test_kennard_stone_without_numeric_columns_is_422(self, client):
+        buf = io.StringIO()
+        buf.write("smiles,grp,y\n")
+        for i in range(12):
+            buf.write(f"CCO,{'A' if i % 2 else 'B'},{i % 2}\n")
+        ds = _upload(client, data=buf.getvalue().encode(),
+                     name="strings-only.csv", target="y")
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.25, "strategy": "kennard_stone",
+                  "mode": "sync"},
+        )
+        assert r.status_code == 422, r.text
+        assert "numeric feature column" in r.json()["detail"]
+
+    def test_legacy_split_response_shape_unchanged_plus_nulls(self, client):
+        ds = self._scaffold_ds(client)
+        r = client.post(
+            f"/api/v1/datasets/{ds['dataset_id']}/split",
+            headers=auth_headers(),
+            json={"test_size": 0.2, "mode": "sync"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        # the legacy lane answers exactly as before plus explicit nulls
+        assert body["strategy"] is None
+        assert body["group_census"] is None
+        assert body["stratified"] is True
+        assert set(body["sides"]) == {"train", "test"}
+
+
 # ------------------------------------------------------------ ml catalog
 
 
