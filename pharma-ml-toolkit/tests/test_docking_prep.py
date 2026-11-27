@@ -1106,7 +1106,13 @@ class TestLigandStructureGeneration:
         if mol2:
             assert Path(str(mol2)).is_file()
         else:
-            assert "OpenBabel" in frame.iloc[0]["error"]
+            # part20 §"Known Findings A": the backend names the tool with its
+            # official "Open Babel" spelling; accept both it and the legacy
+            # "OpenBabel" form so the assertion checks the semantics (the
+            # skip reason names the missing optional dependency) without
+            # pinning the whitespace.
+            error_text = str(frame.iloc[0]["error"])
+            assert "Open Babel" in error_text or "OpenBabel" in error_text
 
     def test_parameter_guards(self, tmp_path: Path) -> None:
         from pharmaml.docking.ligands import generate_ligand_structures
