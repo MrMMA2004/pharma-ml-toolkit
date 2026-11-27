@@ -160,3 +160,21 @@ Derived live from the running FastAPI application (`create_app().openapi()` at c
 **Coverage summary:** 148 operations across 142 paths; every operation has at least one frontend consumer reference; every operation has a backend test lane (direct literal hits for 138; the 10 parametric routes are exercised through f-string calls in the listed files — see `tests/api/`); zero duplicate operation IDs; zero routes present in the contract but absent at runtime, and zero runtime routes absent from the contract.
 
 **Column semantics:** *Request DTO* is the `application/json` body schema (`—` for no-body GETs); *200-response DTO* is the first 2xx schema (`dict` inline schemas show as their type); validation errors (422) are automatic for every DTO-bearing route; error handling for domain failures raises `HTTPException` with documented status codes per route module (pinned by the API test suite and the 67-test penetration suite).
+
+## Routes without a Studio GUI consumer (Phase 4 cross-check, r368)
+
+Nine registered routes have no frontend page consumer in `frontend/src` (verified by
+path-string search over every service client and page component). Each has an explicit
+documented reason:
+
+| Route | Reason for no GUI consumer |
+|---|---|
+| `GET /api/v1/capabilities`, `GET /api/v1/capabilities/{capability_id}` | Capability-registry contract surface (machine-readable capability inventory); consumed by the registry tooling + API tests; the Studio surfaces capabilities through its own workspace cards, not this generic registry route. |
+| `GET /api/v1/applicability-domain/catalog` | Python/REST contract listing of the AD method set; the Studio's AD card hard-pins the two implemented lanes (kNN-LoO distance + Williams leverage with its `domain-box` geometry) rather than rendering the catalog. |
+| `POST /api/v1/applicability-domain/knn`, `POST /applicability-domain/domain-box` | REST lanes for API/CLI consumers of the AD math; the Studio AD card exercises the combined `analyze` + `leverage-williams` job lanes instead. |
+| `GET /api/v1/model-evaluation/catalog` | Contract catalog for the model-evaluation family (conformal/coverage); no Studio card enumerates it. |
+| `POST /api/v1/model-evaluation/conformal-regression`, `POST …/conformal-classification`, `POST …/coverage-diagnostics` | Python/REST-first scientific lanes (conformal intervals + coverage diagnostics); exercised by `tests/api/test_model_evaluation.py`; no Studio GUI card exists for conformal evaluation yet (a documented GUI-coverage gap, not dead backend functionality). |
+| `GET /api/v1/workflow/runs/{run_id}` | Per-run detail for API consumers; the Studio's Run Lineage card consumes the list route (`GET /workflow/runs`) and renders run records from the list payload. |
+
+No frontend call exists without a matching backend route (verified: every path string in
+`services/**` and every inline `api.post` resolves to a registered route).

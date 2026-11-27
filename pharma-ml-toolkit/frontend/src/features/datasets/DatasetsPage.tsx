@@ -182,9 +182,9 @@ function StageHeader({
         </span>
         <h2 className="text-lg font-semibold text-[var(--color-foreground)]">{title}</h2>
         <span className="text-xs text-[var(--color-muted-foreground)]">{hint}</span>
+        <span aria-hidden className="flex items-center text-[var(--color-muted-foreground)]">{icon}</span>
       </div>
       <div className="mt-3">{children}</div>
-      {icon ? null : null}
     </section>
   );
 }
@@ -474,27 +474,33 @@ export function DatasetsPage() {
   }, [selectedId]);
 
   // stage 5: the chemistry bridge
+  const [columnBusy, setColumnBusy] = useState(false);
   const handlePullColumn = useCallback(async () => {
-    if (selectedId === null || smilesColumn === "") {
+    if (selectedId === null || smilesColumn === "" || columnBusy) {
       return;
     }
+    setColumnBusy(true);
     setColumnError(null);
     try {
       setColumn(await datasetsApi.column(selectedId, smilesColumn));
     } catch (error) {
       setColumn(null);
       setColumnError(describeError(error));
+    } finally {
+      setColumnBusy(false);
     }
-  }, [selectedId, smilesColumn]);
+  }, [selectedId, smilesColumn, columnBusy]);
 
   const smiles = column === null
     ? []
     : column.values.filter((v): v is string => typeof v === "string");
 
+  const [descriptorBusy, setDescriptorBusy] = useState(false);
   const handleDescriptors = useCallback(async () => {
-    if (smiles.length === 0) {
+    if (smiles.length === 0 || descriptorBusy) {
       return;
     }
+    setDescriptorBusy(true);
     setChemError(null);
     setFpMatrix(null);
     try {
@@ -507,13 +513,17 @@ export function DatasetsPage() {
       }
     } catch (error) {
       setChemError(describeError(error));
+    } finally {
+      setDescriptorBusy(false);
     }
-  }, [smiles, descriptorSet]);
+  }, [smiles, descriptorSet, descriptorBusy]);
 
+  const [fingerprintBusy, setFingerprintBusy] = useState(false);
   const handleFingerprints = useCallback(async () => {
-    if (smiles.length === 0) {
+    if (smiles.length === 0 || fingerprintBusy) {
       return;
     }
+    setFingerprintBusy(true);
     setChemError(null);
     setDescriptorFrame(null);
     try {
@@ -530,8 +540,10 @@ export function DatasetsPage() {
       }
     } catch (error) {
       setChemError(describeError(error));
+    } finally {
+      setFingerprintBusy(false);
     }
-  }, [smiles, fpKind, radius, nBits, asCounts, includeChirality]);
+  }, [smiles, fpKind, radius, nBits, asCounts, includeChirality, fingerprintBusy]);
 
   const handleChemResult = useCallback((result: unknown) => {
     const record = result as Record<string, unknown>;
@@ -1049,8 +1061,8 @@ export function DatasetsPage() {
                   ))}
                 </select>
               </label>
-              <Button size="sm" variant="outline" disabled={selectedId === null || smilesColumn === ""} onClick={() => void handlePullColumn()}>
-                Pull the column
+              <Button size="sm" variant="outline" disabled={selectedId === null || smilesColumn === "" || columnBusy} onClick={() => void handlePullColumn()}>
+                {columnBusy ? "Pulling…" : "Pull the column"}
               </Button>
               {column !== null ? (
                 <span className="text-xs text-[var(--color-muted-foreground)]">
@@ -1080,8 +1092,8 @@ export function DatasetsPage() {
                       <option value="mordred">Mordred</option>
                     </select>
                   </label>
-                  <Button size="sm" className="mt-3" onClick={() => void handleDescriptors()}>
-                    Compute descriptors
+                  <Button size="sm" className="mt-3" disabled={descriptorBusy} onClick={() => void handleDescriptors()}>
+                    {descriptorBusy ? "Submitting…" : "Compute descriptors"}
                   </Button>
                   {descriptorFrame !== null ? (
                     <div className="mt-3">
@@ -1191,8 +1203,8 @@ export function DatasetsPage() {
                       setting are not comparable.
                     </p>
                   ) : null}
-                  <Button size="sm" className="mt-3" onClick={() => void handleFingerprints()}>
-                    Generate fingerprints
+                  <Button size="sm" className="mt-3" disabled={fingerprintBusy} onClick={() => void handleFingerprints()}>
+                    {fingerprintBusy ? "Submitting…" : "Generate fingerprints"}
                   </Button>
                   {fpMatrix !== null ? (
                     <div className="mt-3 text-xs text-[var(--color-muted-foreground)]">

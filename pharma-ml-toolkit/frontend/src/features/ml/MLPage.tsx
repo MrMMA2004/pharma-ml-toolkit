@@ -524,9 +524,9 @@ function StageHeader({
         </span>
         <h2 className="text-lg font-semibold text-[var(--color-foreground)]">{title}</h2>
         <span className="text-xs text-[var(--color-muted-foreground)]">{hint}</span>
+        <span aria-hidden className="flex items-center text-[var(--color-muted-foreground)]">{icon}</span>
       </div>
       <div className="mt-3">{children}</div>
-      {icon ? null : null}
     </section>
   );
 }
