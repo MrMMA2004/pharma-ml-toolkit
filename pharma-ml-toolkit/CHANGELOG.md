@@ -1,3 +1,69 @@
+## [1.2.245] — 2026-11-28 — round 372 (the 166th recorded run: MASTER_PROMPT part21 — the previous audit revalidated, the unified ML/DL evaluation visualization implemented as ONE shared component layer over ONE backend contract, and the nine-workspace enhancement roadmap; trace 1a21eced073a8cc9)
+
+- **The previous audit revalidated (part21 §1 — evidence-first, never trust-the-report)**:
+  `docs/QA/ROUND372_PREVIOUS_TASK_REVALIDATION.md` — 12 VERIFIED / 2
+  PARTIALLY VERIFIED over the part20/R368–R371 acceptance rows; the
+  OpenAPI runtime==contract identity re-derived live (142 paths / 149
+  ops, all operationIds equal to `contracts/openapi.json`); the
+  v1.2.244 release chain re-verified (tag → manifest commit → runs);
+  the install-smoke 15/15 re-read; D-15's register row caught stale
+  (the r371 close was never converted — converted this round with the
+  full evidence); the ZAP lane honestly in-limbo (`in_progress`, no
+  conclusion — never counted green; the Monday 2026-11-30 deep-scan
+  slot stands).
+- **The unified ML/DL evaluation visualization (part21 §3 — the critical task)**:
+  the ML workspace's proven §22.5 evaluation charts extracted from
+  `MLPage.tsx` into the shared module `frontend/src/components/
+  evaluation/` (parity + confusion with the raw/normalized toggle +
+  the sample inspector) and EXTENDED with the part21 §3.1 families —
+  the residual histogram, the normal Q–Q plot, the per-class metrics
+  table, the one-vs-rest ROC and PR curves (each class's own
+  prevalence baseline — the imbalance-honest rail), and the binary
+  reliability diagram. **The DL workspace's Evaluate stage adopts the
+  SAME component over its own `POST /api/v1/ml/predict` answers** —
+  previously it rendered prediction tables only and never read the
+  evaluation block it was already receiving. One backend module,
+  `src/pharmaml/api/evaluation_curves.py`, computes every curve
+  server-side from the pass's own aligned rows + probabilities (the
+  scientific-calculations-stay-in-the-backend rail — no sklearn math
+  duplicated in TypeScript); every attachment is conditional on its
+  real data being present (no-proba answers carry no curve fields; a
+  class without positives or negatives carries no curve; multiclass
+  answers carry no calibration block — the honest absences, all
+  tested). The shared training-history chart extracted to
+  `components/training/LossCurveChart.tsx` (renders exactly the
+  signals the telemetry publishes — nothing fabricated). The export
+  lane unified: one builder pair (`buildPredictionExportRows` /
+  `buildEvaluationExportRows`) feeds the existing
+  `/api/v1/visualization/table` artifact + digest-verified download
+  lane for BOTH workspaces; the DL export gained the
+  evaluation-sample source. No duplicate parity/confusion
+  implementation survives anywhere in the frontend.
+- **The nine-workspace enhancement roadmap (part21 §5)**:
+  `docs/QA/WORKFLOW_ENHANCEMENT_ROADMAP.md` — 42 code-grounded
+  recommendations (4–5 per workspace, every field filled, the
+  Immediate/Medium/Long-term grouping, the P0-first sequence; every
+  "zero frontend consumer" claim mechanically grounded by diffing the
+  148 route handlers against the 114 distinct paths the frontend
+  actually calls).
+- **The test battery (part21 §4/§11.1)**: 19 new tests — the backend
+  contract suite 7/7 (regression diagnostics; the honest absences;
+  binary/multiclass curves; the position-alignment premise verified
+  live), the shared-component suite 10/10 (both families, the
+  normalized toggle, the sample-bound note, the §22.5 click-through
+  identity, the explanatory states, non-numeric labels, the export
+  builders), the DLPage integration 2/2 (the full-page
+  train→predict→shared-charts flow). Regressions: vitest 369/369 over
+  43 files; the drift-guard family 202/202; the predict/contract
+  battery 87 green (OpenAPI identity unchanged); tsc 0; the vite
+  production build green; ruff `src/pharmaml` clean; mypy 315 clean.
+- **No release this round (part21 §6's authorization rule)**: no
+  tag published, no installer replaced — v1.2.244 remains the
+  published release; the next owner-gated cycle carries this delta.
+  The v1.2.245 zip ships per the standing housekeeping ritual (the
+  six homes + the offsite mirror, testzip-verified, the notebooks
+  re-executed at 1.2.245, the web pins re-trued measurement-last).
+
 ## [1.2.244] — 2026-11-27 — round 371 (the 163rd recorded run: the owner-directed release cycle, trace 1a21dc027bb026ad — the v1.2.244 NEW-version ship REQUIRED by the r370 D-15 gate: the post-tag delta carried, the new zip across the six homes, and the new EXE/MSI released via the tag-triggered Windows workflow)
 
 - **The release mandate (D-15 closed this cycle)**: the r370

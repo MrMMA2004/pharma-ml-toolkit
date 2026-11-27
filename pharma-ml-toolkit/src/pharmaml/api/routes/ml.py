@@ -76,6 +76,7 @@ from pharmaml.viz._compat import close_figure
 from pharmaml.viz.export import export_figure
 from pharmaml.viz.ml_plots import plot_shap_beeswarm, plot_shap_importance
 
+from ..evaluation_curves import enrich_evaluation_block
 from ..jobs import CancelledJob
 from ..runs import build_ml_train_failed_run, build_ml_train_run
 from ..stores import TrainedModelRecord, json_safe
@@ -589,6 +590,17 @@ def _predict_body(
             "classes": json_safe(list(classes) if classes is not None else []),
             "rows": [[json_safe(v) for v in row] for row in proba],
         }
+    # part21 §3 — the evaluation-sample diagnostics ride the same
+    # pass: regression rows gain the residual histogram/stats/Q–Q,
+    # classification rows gain per-class metrics and (when the pass
+    # carried probabilities) the ROC/PR curves + the binary
+    # reliability diagram. Every attachment is conditional on its
+    # real data being present (never fabricated, never a second
+    # evaluation of the model's authoritative set).
+    if "evaluation" in payload:
+        enrich_evaluation_block(
+            payload["evaluation"], payload.get("probabilities")
+        )
     return payload
 
 

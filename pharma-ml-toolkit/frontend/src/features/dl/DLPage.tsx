@@ -23,6 +23,12 @@ import {
 } from "@/services/artifacts/client";
 import { mlApi, type PredictResponse } from "@/services/ml/client";
 import { getEventStream } from "@/services/websocket/client";
+import { LossCurveChart } from "@/components/training/LossCurveChart";
+import {
+  EvaluationCharts,
+  buildPredictionExportRows,
+  buildEvaluationExportRows,
+} from "@/components/evaluation/EvaluationCharts";
 import {
   PlotlyFigure,
   type PlotTrace,
@@ -271,75 +277,6 @@ function validateHiddenLayers(text: string): number[] | null {
   return parsed as number[];
 }
 
-/**
- * The live loss/validation curve — a real Plotly line chart drawn
- * from the REAL per-epoch telemetry points (no chart fabrication:
- * two lines over the points the backend actually published, the
- * missing points of either series skipped, axes labelled honestly;
- * §22.2's learning-curve form, §22.4's per-point hover without any
- * mouse-following crosshair).
- */
-function LossCurveChart({ points }: { points: readonly TrainingMetricsPoint[] }) {
-  const traces = useMemo<readonly PlotTrace[]>(() => {
-    const series = (key: "train_loss" | "val_loss"): readonly {
-      epoch: number;
-      value: number;
-    }[] =>
-      points
-        .filter((p) => {
-          const value = p[key];
-          return value !== null && Number.isFinite(value);
-        })
-        .map((p) => ({ epoch: p.epoch, value: p[key] as number }));
-    const train = series("train_loss");
-    const val = series("val_loss");
-    return [
-      {
-        type: "scatter",
-        mode: "lines+markers",
-        name: "train loss",
-        x: train.map((p) => p.epoch),
-        y: train.map((p) => p.value),
-        customdata: train.map((p) => [p.epoch]),
-        hovertemplate: "epoch %{customdata[0]} · train %{y:.4g}<extra></extra>",
-        line: { color: "var(--chart-1)", width: 2 },
-        marker: { size: 4 },
-      },
-      {
-        type: "scatter",
-        mode: "lines+markers",
-        name: "validation loss",
-        x: val.map((p) => p.epoch),
-        y: val.map((p) => p.value),
-        customdata: val.map((p) => [p.epoch]),
-        hovertemplate: "epoch %{customdata[0]} · val %{y:.4g}<extra></extra>",
-        line: { color: "var(--chart-3)", width: 2, dash: "dash" },
-        marker: { size: 4 },
-      },
-    ];
-  }, [points]);
-  if (points.length < 2) {
-    return (
-      <p className="text-sm text-[var(--color-muted-foreground)]">
-        Waiting for at least two epochs of telemetry — the backend
-        publishes one `training.metrics` envelope per epoch.
-      </p>
-    );
-  }
-  return (
-    <PlotlyFigure
-      data={traces}
-      layout={{
-        xaxis: { title: { text: "epoch" } },
-        yaxis: { title: { text: "loss" } },
-        margin: { l: 56, r: 12, t: 8, b: 40 },
-      }}
-      height={260}
-      ariaLabel="the live train and validation loss per epoch"
-    />
-  );
-}
-
 /** The model-metadata card — the train job's relayed result view. */
 function DLModelCard({ model }: { model: DLModelView }) {
   return (
@@ -506,6 +443,7 @@ export function DLPage() {
   const [checkpointBusy, setCheckpointBusy] = useState(false);
   const [checkpointDigestStatus, setCheckpointDigestStatus] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<"csv" | "tsv" | "xlsx">("csv");
+  const [exportSource, setExportSource] = useState<"predictions" | "evaluation">("predictions");
   const [exportArtifact, setExportArtifact] = useState<ArtifactView | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
@@ -939,19 +877,25 @@ export function DLPage() {
     setExportArtifact(null);
     setDigestStatus(null);
     try {
-      const built = buildExportRows(predictResult);
+      const built = exportSource === "evaluation"
+        ? buildEvaluationExportRows(predictResult)
+        : buildPredictionExportRows(predictResult);
       if (built.rows.length > TABLE_EXPORT_MAX_ROWS) {
         throw new Error(
-          `the prediction set carries ${built.rows.length} rows; the table export route's own cap is ${TABLE_EXPORT_MAX_ROWS}`,
+          `the export set carries ${built.rows.length} rows; the table export route's own cap is ${TABLE_EXPORT_MAX_ROWS}`,
         );
       }
       if (built.rows.length === 0) {
-        throw new Error("the prediction block carries no rows to export");
+        throw new Error(
+          exportSource === "evaluation"
+            ? "the evaluation block carries no rows to export (dataset-mode answers only)"
+            : "the prediction block carries no rows to export",
+        );
       }
       const request: VisualizationTableRequest = {
         rows: built.rows,
         format: exportFormat,
-        filename: "dl-predictions",
+        filename: exportSource === "evaluation" ? "dl-evaluation-sample" : "dl-predictions",
       };
       const raw = await api.post<Record<string, unknown>>(
         "/api/v1/visualization/table",
@@ -968,7 +912,7 @@ export function DLPage() {
     } finally {
       setExportBusy(false);
     }
-  }, [predictResult, exportFormat]);
+  }, [predictResult, exportFormat, exportSource]);
 
   const handleDownload = useCallback(async () => {
     if (exportArtifact === null) {
@@ -2002,6 +1946,13 @@ export function DLPage() {
                 422 — surfaced verbatim, no invented probabilities.
               </p>
             )}
+            {predictResult !== null ? (
+              <EvaluationCharts
+                result={predictResult}
+                modelId={trainedModel?.model_id ?? ""}
+                datasetId={trainedModel?.dataset_id ?? null}
+              />
+            ) : null}
           </CardContent>
         </Card>
       </StageHeader>
@@ -2121,6 +2072,20 @@ export function DLPage() {
                   Export (the predictions table)
                 </p>
                 <div className="mt-2 flex flex-wrap items-end gap-2">
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    source
+                    <select
+                      aria-label="export source"
+                      value={exportSource}
+                      onChange={(event) =>
+                        setExportSource(event.target.value as typeof exportSource)
+                      }
+                      className="mt-1 w-44 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    >
+                      <option value="predictions">predictions table</option>
+                      <option value="evaluation">evaluation sample</option>
+                    </select>
+                  </label>
                   <label className="text-xs text-[var(--color-muted-foreground)]">
                     format
                     <select
@@ -2976,39 +2941,6 @@ export function DLPage() {
   );
 }
 
-/** The predictions export rows (the prediction + one column per class). */
-function buildExportRows(
-  result: PredictResponse,
-): { rows: Record<string, unknown>[]; columns: string[] } {
-  const columns: string[] = ["prediction"];
-  const probabilities = result.probabilities;
-  if (probabilities !== null) {
-    const used = new Set<string>(columns);
-    for (const cls of probabilities.classes) {
-      let label = `probability_${String(cls)}`;
-      while (used.has(label)) {
-        label += "_";
-      }
-      used.add(label);
-      columns.push(label);
-    }
-  }
-  const probLabels = columns.slice(1);
-  const rows: Record<string, unknown>[] = [];
-  for (const [i, prediction] of result.predictions.entries()) {
-    const row: Record<string, unknown> = { prediction };
-    if (probabilities !== null) {
-      const probRow = probabilities.rows[i];
-      if (probRow !== undefined) {
-        for (const [j, label] of probLabels.entries()) {
-          row[label] = probRow[j] ?? null;
-        }
-      }
-    }
-    rows.push(row);
-  }
-  return { rows, columns };
-}
 /** The sequence-CNN lane's inline JSON gate (validated client-side). */
 function parseCnnInlineSequences(
   text: string,

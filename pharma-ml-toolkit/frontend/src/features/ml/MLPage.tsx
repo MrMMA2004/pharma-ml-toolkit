@@ -48,6 +48,7 @@ import {
   parseArtifactView,
   type ArtifactView,
 } from "@/services/artifacts/client";
+import { EvaluationCharts, formatValue, buildPredictionExportRows } from "@/components/evaluation/EvaluationCharts";
 import {
   AD_MAX_FEATURES,
   ADMET_MAX_SMILES,
@@ -70,7 +71,6 @@ import {
   type DrugResponseAnalyzeResponse,
   type DrugResponseRegistryResponse,
   type ExplainResult,
-  type EvaluationRow,
   type ModelCatalogEntry,
   type MultiobjectiveOptimizeResponse,
   type MultiobjectiveRegistryResponse,
@@ -531,17 +531,7 @@ function StageHeader({
   );
 }
 
-/** One table cell's honest rendering (§17.3: type-aware, bounded). */
-function formatValue(value: unknown): string {
-  if (value === null || value === undefined) {
-    return "—";
-  }
-  return typeof value === "number"
-    ? Number.isInteger(value)
-      ? String(value)
-      : value.toFixed(4)
-    : String(value);
-}
+
 
 /**
  * Validate the hyperparameter overrides BEFORE any request fires
@@ -3004,7 +2994,7 @@ export function MLPage() {
     setExportArtifact(null);
     setDigestStatus(null);
     try {
-      const built = buildExportRows(predictResult);
+      const built = buildPredictionExportRows(predictResult);
       if (built.rows.length > TABLE_EXPORT_MAX_ROWS) {
         throw new Error(
           `the prediction set carries ${built.rows.length} rows; the table export route's own cap is ${TABLE_EXPORT_MAX_ROWS}`,
@@ -3562,7 +3552,7 @@ export function MLPage() {
                   keeps the authoritative prediction set; the Export
                   stage registers the full rows as the table artifact.
                 </p>
-                <EvaluateCharts
+                <EvaluationCharts
                   result={predictResult}
                   modelId={selectedTrainedId ?? predictResult.model_id}
                   datasetId={selectedId}
@@ -7400,291 +7390,6 @@ function TrainedModelCard({ model }: { model: TrainedModelView }) {
 }
 
 /**
- * part11 §22.2/§22.5 — the Evaluate stage's interactive Plotly lanes.
- *
- * Regression answers get the parity scatter (actual vs predicted over
- * the evaluation block's aligned sample, the identity line for
- * reference); classification answers get the confusion-matrix heatmap.
- * Every point carries the row's own metadata (`customdata`); a click
- * opens the sample inspector below the chart — the real row's name,
- * SMILES when the dataset carried structures, actual, predicted, and
- * residual, never a plot position or array index.
- */
-function EvaluateCharts({
-  result,
-  modelId,
-  datasetId,
-}: {
-  result: PredictResponse;
-  modelId: string;
-  datasetId: string | null;
-}) {
-  const evaluation = result.evaluation;
-  const [selected, setSelected] = useState<EvaluationRow | null>(null);
-  const numericRows = useMemo(
-    () =>
-      evaluation === null
-        ? []
-        : evaluation.rows.filter(
-            (row) =>
-              typeof row.actual === "number" && typeof row.predicted === "number",
-          ),
-    [evaluation],
-  );
-
-  if (evaluation === null) {
-    return (
-      <p className="mt-3 text-xs text-[var(--color-muted-foreground)]">
-        No evaluation block in this answer — inline-row predictions carry
-        no aligned actuals to chart (the dataset-mode lane plots them).
-      </p>
-    );
-  }
-
-  const isRegression =
-    evaluation.task === "regression" && numericRows.length >= 2;
-  const hasClasses =
-    evaluation.task === "classification" && evaluation.rows.length > 0;
-
-  return (
-    <div className="mt-4">
-      <p className="mb-2 text-xs font-medium text-[var(--color-foreground)]">
-        Interactive chart (Plotly) — {isRegression
-          ? "parity: actual vs predicted"
-          : "confusion matrix: actual vs predicted class"}
-        {evaluation.n_rows_available !== evaluation.n_rows_evaluated
-          ? ` · ${evaluation.n_rows_evaluated} of ${evaluation.n_rows_available} rows plotted (the route's own sample bound)`
-          : ` · ${evaluation.n_rows_evaluated} rows plotted`}
-      </p>
-      {isRegression ? (
-        <ParityChart rows={numericRows} onRowSelect={setSelected} />
-      ) : hasClasses ? (
-        <ConfusionChart rows={evaluation.rows} />
-      ) : (
-        <p className="rounded-md border border-dashed border-[var(--color-border)] px-3 py-4 text-xs text-[var(--color-muted-foreground)]">
-          No plottable numeric pairs in the evaluation sample — the parity
-          lane needs numeric actual/predicted values.
-        </p>
-      )}
-      <EvalRowInspector
-        row={selected}
-        target={evaluation.target}
-        task={evaluation.task}
-        modelId={modelId}
-        datasetId={datasetId}
-        onClear={() => setSelected(null)}
-      />
-    </div>
-  );
-}
-
-/** The regression parity scatter with the identity reference line. */
-function ParityChart({
-  rows,
-  onRowSelect,
-}: {
-  rows: readonly {
-    readonly name: unknown;
-    readonly actual: unknown;
-    readonly predicted: unknown;
-    readonly residual: number | null;
-    readonly smiles: string | null;
-  }[];
-  onRowSelect: (row: EvaluationRow) => void;
-}) {
-  const traces = useMemo<readonly PlotTrace[]>(() => {
-    const xs = rows.map((row) => row.actual as number);
-    const ys = rows.map((row) => row.predicted as number);
-    const lo = Math.min(...xs, ...ys);
-    const hi = Math.max(...xs, ...ys);
-    const pad = (hi - lo) * 0.05 || 0.5;
-    const x0 = lo - pad;
-    const x1 = hi + pad;
-    return [
-      {
-        type: "scatter",
-        mode: "markers",
-        name: "samples",
-        x: xs,
-        y: ys,
-        customdata: rows.map((row) => [
-          row.name,
-          row.smiles ?? "—",
-          row.actual,
-          row.predicted,
-          row.residual ?? "—",
-        ]),
-        hovertemplate:
-          "row %{customdata[0]}<br>actual %{customdata[2]:.4g}" +
-          "<br>predicted %{customdata[3]:.4g}" +
-          "<br>residual %{customdata[4]:.4g}" +
-          "<br>%{customdata[1]}<extra></extra>",
-        marker: { color: "var(--chart-1)", size: 7, opacity: 0.85 },
-      },
-      {
-        type: "scatter",
-        mode: "lines",
-        name: "y = x",
-        x: [x0, x1],
-        y: [x0, x1],
-        showlegend: false,
-        hoverinfo: "skip",
-        line: { color: "var(--chart-5)", width: 1, dash: "dot" },
-      },
-    ];
-  }, [rows]);
-  const layout = useMemo(
-    () => ({
-      xaxis: { title: { text: "actual" }, scaleanchor: "y", scaleratio: 1 },
-      yaxis: { title: { text: "predicted" } },
-      margin: { l: 56, r: 12, t: 8, b: 40 },
-    }),
-    [],
-  );
-  return (
-    <PlotlyFigure
-      data={traces}
-      layout={layout}
-      height={300}
-      ariaLabel="the actual-versus-predicted parity scatter over the evaluation sample"
-      emptyHint="No numeric actual/predicted pairs to plot."
-      onPointSelect={(point) => {
-        const index = point.pointIndex ?? null;
-        if (index === null || index >= rows.length) return;
-        onRowSelect(rows[index] as EvaluationRow);
-      }}
-    />
-  );
-}
-
-/** The classification confusion-matrix heatmap over the sample rows. */
-function ConfusionChart({ rows }: { rows: readonly EvaluationRow[] }) {
-  const { traces, layout, classes } = useMemo(() => {
-    const classSet = new Set<string>();
-    for (const row of rows) {
-      classSet.add(String(row.actual));
-      classSet.add(String(row.predicted));
-    }
-    const classes = Array.from(classSet).sort();
-    const index = new Map(classes.map((cls, i) => [cls, i]));
-    const z = classes.map(() => classes.map(() => 0));
-    for (const row of rows) {
-      const i = index.get(String(row.actual));
-      const j = index.get(String(row.predicted));
-      if (i === undefined || j === undefined) continue;
-      z[i]![j]! += 1;
-    }
-    const annotations = [];
-    for (let i = 0; i < classes.length; i++) {
-      for (let j = 0; j < classes.length; j++) {
-        annotations.push({
-          x: classes[j],
-          y: classes[i],
-          text: String(z[i]![j]!),
-          showarrow: false,
-          font: { size: 11 },
-        });
-      }
-    }
-    const traces: readonly PlotTrace[] = [
-      {
-        type: "heatmap",
-        z,
-        x: classes,
-        y: classes,
-        hovertemplate:
-          "actual %{y}<br>predicted %{x}<br>count %{z}<extra></extra>",
-        colorscale: [
-          [0, "rgba(47, 125, 95, 0.06)"],
-          [1, "rgba(47, 125, 95, 0.92)"],
-        ],
-        showscale: false,
-      },
-    ];
-    return {
-      traces,
-      layout: {
-        xaxis: { title: { text: "predicted class" }, constrain: "domain" },
-        yaxis: { title: { text: "actual class" }, autorange: "reversed" },
-        annotations,
-        margin: { l: 64, r: 12, t: 8, b: 48 },
-      },
-      classes,
-    };
-  }, [rows]);
-  return (
-    <PlotlyFigure
-      data={traces}
-      layout={layout}
-      height={300}
-      ariaLabel={`the confusion matrix heatmap over ${rows.length} evaluation rows and ${classes.length} classes`}
-      emptyHint="No class pairs to chart."
-    />
-  );
-}
-
-/** §22.5's sample inspector — the clicked row's own metadata. */
-function EvalRowInspector({
-  row,
-  target,
-  task,
-  modelId,
-  datasetId,
-  onClear,
-}: {
-  row: EvaluationRow | null;
-  target: string;
-  task: string;
-  modelId: string;
-  datasetId: string | null;
-  onClear: () => void;
-}) {
-  if (row === null) {
-    return (
-      <p className="mt-2 text-[11px] text-[var(--color-muted-foreground)]">
-        Click a point in the parity chart to inspect that sample&apos;s own
-        metadata (row identity, SMILES when the dataset carried them,
-        actual, predicted, residual).
-      </p>
-    );
-  }
-  const fields: readonly [string, string][] = [
-    ["row", formatValue(row.name)],
-    ["SMILES", row.smiles ?? "—"],
-    [`actual ${target}`, formatValue(row.actual)],
-    ["predicted", formatValue(row.predicted)],
-    ["residual", row.residual === null ? "—" : row.residual.toFixed(4)],
-    ["task", task],
-    ["model", modelId],
-    ["dataset", datasetId ?? "—"],
-  ];
-  return (
-    <div className="mt-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-[var(--color-foreground)]">
-          Selected sample (the point&apos;s own metadata)
-        </p>
-        <Button size="sm" variant="outline" onClick={onClear}>
-          Clear
-        </Button>
-      </div>
-      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
-        {fields.map(([label, value]) => (
-          <div key={label} className="min-w-0">
-            <dt className="text-[10px] uppercase tracking-wide text-[var(--color-muted-foreground)]">
-              {label}
-            </dt>
-            <dd className="truncate text-[11px] font-medium text-[var(--color-foreground)]">
-              {value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
-}
-
-/**
  * §24.2.B — the query-distance scatter: every query compound by its
  * kNN distance (x) against the predicted value (y), in-domain and
  * out-of-domain as distinct categories, with the analysis&apos;s own
@@ -8584,43 +8289,4 @@ function ShapStrip({ result }: { result: ExplainResult }) {
       </p>
     </div>
   );
-}
-
-/**
- * Build the Export stage's rows from the LAST predictions block: one
- * row per prediction, the prediction column plus one probability
- * column per class (duplicated stringified class labels get a
- * disambiguating suffix so no column swallows another).
- */
-function buildExportRows(
-  result: PredictResponse,
-): { rows: Record<string, unknown>[]; columns: string[] } {
-  const columns: string[] = ["prediction"];
-  const probabilities = result.probabilities;
-  if (probabilities !== null) {
-    const used = new Set<string>(columns);
-    for (const cls of probabilities.classes) {
-      let label = `probability_${String(cls)}`;
-      while (used.has(label)) {
-        label += "_";
-      }
-      used.add(label);
-      columns.push(label);
-    }
-  }
-  const probLabels = columns.slice(1);
-  const rows: Record<string, unknown>[] = [];
-  for (const [i, prediction] of result.predictions.entries()) {
-    const row: Record<string, unknown> = { prediction };
-    if (probabilities !== null) {
-      const probRow = probabilities.rows[i];
-      if (probRow !== undefined) {
-        for (const [j, label] of probLabels.entries()) {
-          row[label] = probRow[j] ?? null;
-        }
-      }
-    }
-    rows.push(row);
-  }
-  return { rows, columns };
 }

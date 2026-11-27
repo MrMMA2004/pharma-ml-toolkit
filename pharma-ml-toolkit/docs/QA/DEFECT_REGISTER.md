@@ -21,7 +21,7 @@ a fix. Severity per part14 §3.1's impact classes.
 | D-12 | Medium (P2) — Retry cannot recover a dead backend | `StartupGate.tsx` Retry (lines 86-90/:144-150) re-acquires the stale endpoint over IPC; the Rust child is never respawned (no restart IPC command exists — commands.rs has exactly one, `backend_endpoint`), so after a post-startup backend crash every retry just re-probes the dead port and the only real recovery is an app relaunch | **OPEN (compile-blocked)** | 370 (found) | part20 §6 full-read; recommendation: a respawn-aware retry (restart IPC command or respawn-on-EPIPE inside `backend_endpoint`); same cargo-unavailable constraint as D-11 |
 | D-13 | Low (P3) — dead frontend service methods | Four typed service methods are exported but never called by any page/component/test: `unsupervisedApi.methods` (services/ml/unsupervised.ts:335), `reinforceApi.methods` (:384), `reinforceApi.evaluate` (:417), `generativeApi.priorView` (services/generative/client.ts:271) — part20 §4's "unused frontend functionality" class | **DOCUMENTED (kept)** | 370 | BACKEND_FRONTEND_TRACEABILITY.md §2: decision per part20 §12 minimal-change — kept as typed-surface parity for the API-only lanes (thin wrappers, no runtime consumer, no test consumer); removal buys nothing; revisit if the corresponding GUI lanes are built |
 | D-14 | Low (P3) — traceability-matrix census drift | The ROUND368 matrix reports 148 operations and prose "nine" GUI-unconsumed routes while its own table enumerates 10; the true census is **149 operations / 142 paths** (148 + the uncounted `HEAD /api/v1/artifacts/{artifact_id}/download`, routes/artifacts.py:328) | **FIXED (doc)** | 370 | BACKEND_FRONTEND_TRACEABILITY.md §1 carries the corrected census (re-derived from contracts/openapi.json this round: 54 GET / 89 POST / 4 DELETE / 1 PUT / 1 HEAD); the ROUND368 matrix stands as the historical 148-row artifact |
-| D-15 | Medium (P2) — shipped installers lag main (finding B) | Release v1.2.243 was built from tag 902dd89b while main is now 16 commits / 172 files ahead (38 backend, 3 frontend — the r368 F-1/F-3 UI fixes — plus the r370 test/metadata fixes): the shipped EXE/MSI do not contain those fixes (part20 §7.1's "source changes made after the installer was built") | **OPEN (release-gated)** | 370 (revalidated) | WINDOWS_EXE_MSI_AUDIT.md §2: internally consistent (manifest==tag==VERSION) but stale; the next release cycle must carry the delta; NO release published/overwritten this round (owner authorization rule); fresh build BLOCKED in this sandbox (no Windows infra) |
+| D-15 | Medium (P2) — shipped installers lag main (finding B) | Release v1.2.243 was built from tag 902dd89b while main is now 16 commits / 172 files ahead (38 backend, 3 frontend — the r368 F-1/F-3 UI fixes — plus the r370 test/metadata fixes): the shipped EXE/MSI do not contain those fixes (part20 §7.1's "source changes made after the installer was built") | **CLOSED (r371)** | 370 (revalidated) → 372 (row conversion) | WINDOWS_EXE_MSI_AUDIT.md §2: internally consistent (manifest==tag==VERSION) but stale; the r371 release cycle closed the gap — **v1.2.244 published 2026-11-27T18:23:04Z from the r371 build ladder (attempt 4, run 46043111328, commit 5a48d6cf) with the install-smoke run 46049348450 green (15/15 incl. the 1.2.243→1.2.244 upgrade leg)** — the D-15 CLOSE was triple-recorded in the CHANGELOG/RELEASE_READINESS/TEST_EXECUTION_REPORT of r371 but this standing register row was never converted; the r372 revalidation (ROUND372_PREVIOUS_TASK_REVALIDATION.md, row 14) caught the stale row and this is that conversion |
 
 ## Register conventions
 
@@ -60,3 +60,24 @@ BACKEND_FRONTEND_TRACEABILITY.md); D-15 (part20 Known-Finding B: the
 shipped installers lag main by the post-tag delta) stays OPEN
 release-gated — no release published or asset overwritten without the
 owner's authorization.
+
+Round 372 (the 166th recorded run — MASTER_PROMPT part21): **no new
+defects seeded** — the part21 implementation round closed green on
+every gate (the shared ML/DL evaluation layer, its 19 new tests, the
+full regressions). One register transition + one lane state recorded:
+
+- **D-15 CLOSED (row conversion, evidence above)** — the r371 cycle
+  had closed the defect; the standing row said OPEN (release-gated)
+  until this round's revalidation caught it. The post-v1.2.244 main
+  delta (r372 housekeeping + the part21 work) is the normal
+  between-release drift, NOT a D-15 regression: D-15's finding was
+  the STALE installers vs main at audit time; the next release cycle
+  (the standing owner-gated ladder) carries the delta as before.
+- **The ZAP penetration lane (run 46038496882) is STILL in-limbo**:
+  `in_progress` / no conclusion, last API update 2026-11-27T17:01:51Z
+  (~12h stale at the r372 revalidation's reading; the ephemeral target
+  expired mid-scan). NOT counted green, NOT closed — the local 67-test
+  penetration API suite stays the in-sandbox green lane; the remote
+  ZAP re-run rides the standing Monday 2026-11-30 deep-scan slot.
+- D-11/D-12 unchanged (compile-blocked, cargo absent); signing
+  certificate-gated; clean-machine validation owner-side.
