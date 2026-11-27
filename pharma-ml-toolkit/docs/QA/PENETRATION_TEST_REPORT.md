@@ -117,3 +117,30 @@ the runner (the plan documents why).
   in CI.
 * Windows clean-machine installation / installer signing stay with
   their long-standing BLOCKED_ENVIRONMENT entries.
+
+---
+
+## 6. Round 368 evidence (part19 Phase 7 — 2026-11-27)
+
+**Executed locally this round:** the 67-test API penetration-security suite
+(`tests/api/test_penetration_security.py`) re-run green on the pinned stack
+(authn/authz, token replay, session isolation, IDOR/BOLA, function-level
+authorization, Origin/Host validation, CORS, WebSocket authorization, upload
+validation, path/symlink traversal, ZIP Slip, SQL injection, XSS, response
+headers, resource exhaustion, log leakage, SQLite/FileVault access — the
+coverage matrix above in §1).
+
+**The ZAP campaign status is unchanged and honest:** the scheduled weekly
+Monday 04:30 UTC slot (`penetration-test.yml`, the standing 360-minute deep
+scan per the r364 close-out) did not fire during this round — the round ran
+Friday 2026-11-27; the next slot is Monday 2026-11-30 04:30 UTC. No scan
+results exist to review for this round; per the honesty rule the campaign is
+NOT labelled complete. The synthetic isolated target (`tools/zap_target.py`
++ the Automation-Framework config + the severity gate) remains pinned by the
+ZAP tooling tests (§1) and ready for the slot's next firing. The Web Console
+scan limitation (not practical in CI) stands as documented in the plan.
+
+**Adjacent supply-chain lane (historical, last verified r365):**
+security-scan run 45873026401 green (pip-audit + npm-audit + the
+supply-chain guard) — reported by the round ledger, not re-verified this
+round (no workflow-run reader available in this session).
