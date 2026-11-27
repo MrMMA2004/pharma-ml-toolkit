@@ -463,3 +463,34 @@ The three-state vocabulary (PASS/FAIL/BLOCKED) carries forward.
 | The ship itself | **PASS** | the v1.2.244 zip: 1,356 entries / 28,121,913 B / sha-256 f8a10d68…294ef4, the six homes + the offsite mirror byte-identical, testzip-verified each; the web pins re-trued measurement-last (8,286/442 collected, 1,890 files / 603,227 lines via the offline census replica — the live tree-route walk honestly BLOCKED on the Turbopack SST-persist wedge class, GET / 200 + the zip-size API exact 28,121,913 B @1.2.244 healthy throughout); the notebooks re-executed at 1.2.244; check_github_page green |
 | Remaining blockers | D-11, D-12 (compile-blocked), signing (certificate), clean-machine (owner), the Monday ZAP slot | none P0/P1 |
 | Overall | **PASS — the v1.2.244 release cycle COMPLETE: the zip shipped + the installers PUBLISHED (attempt 4 success) + the functional install-smoke green; D-15 CLOSED** | this section + the worklog R371 entry + the close-out addendum |
+
+## Round 372 (2026-11-28) — MASTER_PROMPT part21: the shared ML/DL evaluation layer; NO release this round (the standing authorization rule honored)
+
+The part21 implementation round (the dedicated branch
+`feat/shared-ml-dl-evaluation-visualizations`): the previous audit
+revalidated (ROUND372_PREVIOUS_TASK_REVALIDATION.md — 12 VERIFIED / 2
+PARTIALLY), the shared evaluation-visualization layer implemented
+(ML_DL_VISUALIZATION_UNIFICATION.md), the nine-workspace roadmap
+written (WORKFLOW_ENHANCEMENT_ROADMAP.md), 19 new tests green, every
+gate green. **No installer released, no asset replaced, no tag
+published — the part21 §6 authorization rule; the next release cycle
+(the standing owner-gated ladder) carries the delta.** The three-state
+vocabulary carries.
+
+| Gate | State | Evidence |
+| --- | --- | --- |
+| Backend correctness | **PASS** | the new evaluation-curves contract suite 7/7; the predict/contract battery 87 green (incl. the OpenAPI identity — the response-payload extension changed no path/op); the drift-guard family 202/202; mypy 313+2 clean; ruff `src/pharmaml` clean |
+| Frontend integration | **PASS** | vitest 369/369 over 43 files (+12 tests, +2 files); tsc 0; the vite production build green (24s) |
+| Nine-workspace coverage | **PASS** (grown) | the shared component consumed by BOTH the ML and the DL workspaces (the first cross-workspace shared UI layer); the roadmap doc carries the 42-recommendation census |
+| API contract integrity | **PASS** | 142 paths / 149 ops unchanged (the evaluation block's new fields ride the generic response dict — no OpenAPI surface change); the contract guard green |
+| Tauri lifecycle | **PASS** (carried) | unchanged sources this round; D-11/D-12 OPEN (compile-blocked) unchanged |
+| Persistence compatibility | **PASS** (carried) | no migrations; the persistence family untouched |
+| EXE / MSI validation | **BLOCKED (by design this round)** | no release authorized by part21 §6; v1.2.244 remains the published installers (their evidence stands in the r371 section); the NEXT cycle carries the part21 delta |
+| Windows 10/11 validation | **BLOCKED** (physical, owner) / **PASS** (carried, r371 runner evidence) | unchanged |
+| Offline functionality | **PASS** (carried) | the shared layer adds zero network deps; the lazy Plotly chunking unchanged |
+| Security | **PASS with the ZAP lane in-limbo** | the local 67-test penetration suite green in the battery; the remote ZAP run 46038496882 STILL `in_progress` with no conclusion (last update 2026-11-27T17:01:51Z — the ephemeral target expired mid-scan; never counted green); the Monday 2026-11-30 deep-scan slot stands; DEFECT_REGISTER carries the lane state |
+| CI status | **PASS at the pre-work HEAD (e8b565f6, runs 46066722216/46066722332)** | the branch's CI rides the post-merge push |
+| Installer signing | **BLOCKED** — certificate-gated | unchanged honest state |
+| The ship itself (the zip ritual) | **PASS** | the v1.2.245 zip per the standing housekeeping ritual (the tree changed — see the round's close-out for the zip's six homes + the offsite mirror) |
+| Remaining blockers | D-11, D-12 (compile-blocked), signing (certificate), clean-machine (owner), the Monday ZAP slot, the in-limbo ZAP re-run | none P0/P1 |
+| Overall | **PASS for the part21 scope — implemented, gate-green, honestly scoped; NO release published this round per the authorization rule** | ML_DL_VISUALIZATION_TEST_REPORT.md + this section |
