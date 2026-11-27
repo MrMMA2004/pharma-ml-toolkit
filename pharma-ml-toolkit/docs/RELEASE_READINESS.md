@@ -438,3 +438,28 @@ release-gate pass precondition.
 | Installer signing | **BLOCKED** — certificate-gated | unchanged honest state; SHA256SUMS/manifest/SBOM preserved |
 | Remaining blockers | D-11, D-12 (compile-blocked), D-15 (release-gated: the next cycle carries the post-tag fixes), clean-machine lane (owner), signing (certificate) | none P0/P1 |
 | Overall | **PASS for v1.2.243 as shipped; the next release cycle is REQUIRED to carry the post-tag delta (D-15)** | FULL_REPOSITORY_AUDIT.md §10 |
+
+## Round 371 (2026-11-27) — the release cycle executed: v1.2.244 shipped, D-15 closed
+
+The owner's standing release directive ("Continue queued items / Release /
+Push", trace 1a21dc027bb026ad) authorized the cycle the r370 gate REQUIRED.
+The three-state vocabulary (PASS/FAIL/BLOCKED) carries forward.
+
+| Gate | State | Evidence |
+| --- | --- | --- |
+| Backend correctness | **PASS** | the 27-file guard battery 515/515 exit 0 on the bumped tree (incl. the penetration API suite 67); mypy 314 clean; ruff canonical clean; the push CI green at the ship commit 1a54153a (run 46035734729 success) |
+| Frontend integration | **PASS** | vitest 357/357 over 41 files; tsc 0; zero placeholder controls (the r370 finding re-checked); the carriers bumped in lockstep |
+| Nine-workspace coverage | **PASS** | BACKEND_FRONTEND_TRACEABILITY.md carried unchanged (the release ships the same surface + docs) |
+| API contract integrity | **PASS** | 142 paths / 149 ops carried; no surface change this cycle |
+| Tauri lifecycle | **PASS** (carried) | the r370 full-read + the r367 install-smoke runtime evidence; D-11/D-12 OPEN (compile-blocked) unchanged |
+| Persistence compatibility | **PASS** (carried) | the r370 persistence family 66+1s; no migrations this cycle |
+| EXE validation | **IN FLIGHT — attempt 2** | build attempt 1 (run 46035752426) FAILED at step 10 (the latent test_export_images assertion break the r369 arena-merge left — the D-9 class, root-caused + fixed at a803508a, the tag re-pinned); build attempt 2 (run 46038529441) fired on the corrected tree — the D-15 staleness gap closes when it lands (the installers built from the post-tag tree) |
+| MSI validation | **IN FLIGHT — attempt 2** | same ladder |
+| Windows 10/11 validation | **BLOCKED** (physical) / PASS (runner) | unchanged; the install-smoke re-fires on the published release |
+| Offline functionality | **PASS** (carried) | unchanged offline guarantees |
+| Security | **PASS** | the 67-test penetration lane green in the battery; penetration-test.yml dispatched on main (run 46038496882); the ZAP deep scan stays on the standing Monday 2026-11-30 slot |
+| CI status | **PASS** | the push CI at the ship commit green; the CI at the fix commit a803508a in flight at this writing |
+| Installer signing | **BLOCKED** — certificate-gated | unchanged honest state; SHA256SUMS/manifest/SBOM generation preserved |
+| The ship itself | **PASS** | the v1.2.244 zip: 1,356 entries / 28,121,913 B / sha-256 f8a10d68…294ef4, the six homes + the offsite mirror byte-identical, testzip-verified each; the web pins re-trued measurement-last (8,286/442 collected, 1,890 files / 603,227 lines via the offline census replica — the live tree-route walk honestly BLOCKED on the Turbopack SST-persist wedge class, GET / 200 + the zip-size API exact 28,121,913 B @1.2.244 healthy throughout); the notebooks re-executed at 1.2.244; check_github_page green |
+| Remaining blockers | D-11, D-12 (compile-blocked), signing (certificate), clean-machine (owner), the Monday ZAP slot | none P0/P1 |
+| Overall | **PASS for v1.2.244 as shipped (the zip) + the installer ladder in flight (attempt 2 on the corrected tree); D-15 closes when attempt 2 lands** | this section + the worklog R371 entry |

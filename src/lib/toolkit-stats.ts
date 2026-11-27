@@ -130,14 +130,16 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 357;
 /*  r371 re-true (the v1.2.244 release ship, measurement-last, the
     offline census replica — the r366 precedent — because the dev
     server's tree route sat wedged on the documented Turbopack
-    SST-persist class this round): the walk re-measured on the
-    shipped tree with the EXACT /api/toolkit/tree semantics — 1,890
-    files / 168 dirs / 734,313,879 B (the +17 files over the r367
-    pin 1,873: the r368..r370 QA deliverable set + the clean-machine
-    suite + test_ml_catalog + the D-9/D-10 fixes + the three r371
-    scratch gate-count txt files + the two new in-tree v1.2.244 zip
-    homes). */
-export const SHIPPED_FILE_COUNT = 1890;
+    SST-persist class this round): the walk re-measured at the
+    close-out fixed point (after ALL in-tree ledger edits — the QA
+    r371 section + the RELEASE_READINESS r371 addendum + the
+    CHANGELOG amendment + the committed collect_default_371.txt):
+    1,891 files / 168 dirs / 734,337,825 B (the +18 files over the
+    r367 pin 1,873: the r368..r370 QA deliverable set + the
+    clean-machine suite + test_ml_catalog + the D-9/D-10 fixes +
+    the r371 scratch gate-count + collection txt files + the two
+    new in-tree v1.2.244 zip homes). */
+export const SHIPPED_FILE_COUNT = 1891;
 
 /*  r366 re-true (measurement-last): the offline census replica
     re-walked the toolkit tree at the r365 terminal AFTER this
@@ -304,11 +306,13 @@ export const SHIPPED_FILE_COUNT = 1890;
     files (the re-walk after the CI-catch row + the fixes + the
     fixed-tree re-ship ledger trues). */
 /*  r371 re-true (the v1.2.244 release ship, measurement-last): the
-    walk re-measured on the shipped tree -- 603,227 lines (the +1,460
-    over the r367 pin 601,767: the r368..r370 QA ledger growth + the
-    CHANGELOG 1.2.244 entry + the re-executed notebook outputs + the
-    carriers + the r371 scratch txt lines). */
-export const SHIPPED_SOURCE_LINES = 603227;
+    walk re-measured at the close-out fixed point -- 603,723 lines
+    (the +1,956 over the r367 pin 601,767: the r368..r370 QA ledger
+    growth + the r371 QA section + the RELEASE_READINESS r371
+    addendum + the CHANGELOG 1.2.244 entry + its build-attempt
+    amendment + the re-executed notebook outputs + the carriers +
+    the committed collection txt). */
+export const SHIPPED_SOURCE_LINES = 603723;
 
 /*  r366-continuation re-true (measurement-last): the firing's
     close-out correction (the drift-guard figure 202 -> 130 and the
