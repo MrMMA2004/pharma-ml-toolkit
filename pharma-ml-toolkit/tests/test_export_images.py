@@ -311,7 +311,11 @@ def test_require_pillow_error_shape(monkeypatch) -> None:
     monkeypatch.setattr(builtins, "__import__", _no_pillow)
     from pharmaml.viz import export as export_module
 
-    with pytest.raises(DependencyError, match="pharmaml\\[reports\\]"):
+    # The hint is the exact source-checkout command the r369
+    # boundary-clarification landed (`pip install -e '.[reports]'`);
+    # the semantic pin is unchanged: the Pillow-free environment gets
+    # the actionable install command, verbatim.
+    with pytest.raises(DependencyError, match=r"pip install -e '\.\[reports\]'"):
         export_module.require_pillow()
 
 

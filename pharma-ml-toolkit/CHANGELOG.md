@@ -69,7 +69,18 @@
   `PharmaML_Studio_v1.2.244.msi`, `RELEASE_MANIFEST.json`, the
   generated SBOM, and SHA256SUMS to the v1.2.244 GitHub release —
   **the installers now carry the post-tag delta (the D-15 gap
-  closed)**; the functional install-smoke lane
+  closed)**; **honestly recorded: build attempt 1 (run
+  46035752426) FAILED at step 10 (the backend unit gate) — the
+  r369 arena-merge (0d317eb7) had re-worded `require_pillow`'s
+  install hint to the source-checkout command
+  `pip install -e '.[reports]'` without re-aiming
+  `tests/test_export_images.py::test_require_pillow_error_shape`
+  (the D-9 class again; the file sits outside the 27-file battery,
+  the backend message left untouched and correct); the assertion
+  re-aimed to the exact new hint, the 29-test file green locally
+  (exit 0), the tag deleted and re-pointed at the assertion-fix
+  commit, and the build attempt 2 fired on the corrected tree**;
+  the functional install-smoke lane
   (`windows-install-smoke.yml`) re-fires on the published release
   (the SHA256SUMS/manifest cross-check, the Defender scans over both
   installers, the MSI silent install + the INSTALLED sidecar's

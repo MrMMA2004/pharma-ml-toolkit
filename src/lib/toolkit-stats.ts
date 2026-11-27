@@ -26,7 +26,13 @@
     default-suite collection re-measured live: 8,274 over 441
     files, 0 errors (the legacy lane: 972 over 74 files, explicit).
     Verified pin = live collection. */
-export const SHIPPED_TEST_COUNT = 8274;
+/*  r371 re-true (the v1.2.244 release ship, measurement-last): the
+    default-suite collection re-measured live on the shipped tree --
+    8,286 collected / 0 errors over 442 files (the +12 over the r367
+    pin 8,274/441: the r368 test_ml_catalog suite (6) + the D-9-era
+    chemistry-lane pins; the shipped zip now carries the working
+    tree, so the pin EQUALS the live collection). */
+export const SHIPPED_TEST_COUNT = 8286;
 
 /*  r366 (the part18 all-phases verification pass, the owner-directed
     firing): the collection re-measured LIVE at the r365 terminal
@@ -121,7 +127,17 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 357;
     + the twelve r367 files (the five DL modules, the five backend
     suites, the two vitest lanes) + the two in-tree v1.2.243 zip homes
     -- 1,873 files. */
-export const SHIPPED_FILE_COUNT = 1873;
+/*  r371 re-true (the v1.2.244 release ship, measurement-last, the
+    offline census replica — the r366 precedent — because the dev
+    server's tree route sat wedged on the documented Turbopack
+    SST-persist class this round): the walk re-measured on the
+    shipped tree with the EXACT /api/toolkit/tree semantics — 1,890
+    files / 168 dirs / 734,313,879 B (the +17 files over the r367
+    pin 1,873: the r368..r370 QA deliverable set + the clean-machine
+    suite + test_ml_catalog + the D-9/D-10 fixes + the three r371
+    scratch gate-count txt files + the two new in-tree v1.2.244 zip
+    homes). */
+export const SHIPPED_FILE_COUNT = 1890;
 
 /*  r366 re-true (measurement-last): the offline census replica
     re-walked the toolkit tree at the r365 terminal AFTER this
@@ -287,7 +303,12 @@ export const SHIPPED_FILE_COUNT = 1873;
     pin edits themselves (the r362 lesson): 601,767 lines at 1,873
     files (the re-walk after the CI-catch row + the fixes + the
     fixed-tree re-ship ledger trues). */
-export const SHIPPED_SOURCE_LINES = 601767;
+/*  r371 re-true (the v1.2.244 release ship, measurement-last): the
+    walk re-measured on the shipped tree -- 603,227 lines (the +1,460
+    over the r367 pin 601,767: the r368..r370 QA ledger growth + the
+    CHANGELOG 1.2.244 entry + the re-executed notebook outputs + the
+    carriers + the r371 scratch txt lines). */
+export const SHIPPED_SOURCE_LINES = 603227;
 
 /*  r366-continuation re-true (measurement-last): the firing's
     close-out correction (the drift-guard figure 202 -> 130 and the
