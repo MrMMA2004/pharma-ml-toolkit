@@ -145,8 +145,15 @@ def test_guarded_qt_import_exit_code(tmp_path: Path) -> None:
         [], extra_env={"PYTHONPATH": str(_shadow_dir(tmp_path))}
     )
     assert proc.returncode == QT_ENV_EXIT_CODE
-    assert "could not load PySide6" in proc.stderr
-    assert "uninstall -y PySide6 PySide6-Addons PySide6-Essentials shiboken6" in proc.stderr
+    # r368 (part19): the guard's retirement-aware contract -- the archived
+    # UI names its failed Qt binding, points at the archival extra (never a
+    # reinstall recipe for the unsupported UI), and stays traceback-free.
+    assert "could not load its Qt binding" in proc.stderr
+    assert "retired PySide6 interface" in proc.stderr
+    # the broken-binding branch: no reinstall recipe for the unsupported UI,
+    # pointers at the supported app + the archival notes instead
+    assert "No PySide6 reinstall recipe is provided" in proc.stderr
+    assert "frontend/README.md" in proc.stderr and "legacy/README.md" in proc.stderr
     assert "Traceback" not in proc.stderr  # the point of the guard
 
 

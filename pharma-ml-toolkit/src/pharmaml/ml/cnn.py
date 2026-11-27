@@ -106,7 +106,10 @@ __all__ = [
 _LOG = get_logger(__name__)
 
 #: pip command embedded in the DependencyError raised when torch is missing.
-_TORCH_HINT = "deep learning models require torch — pip install 'pharmaml[deep]'"
+_TORCH_HINT = (
+    "deep learning models require torch — from the toolkit package root run: "
+    "python -m pip install -e '.[deep]'"
+)
 
 #: Legal ``device`` tokens ('auto' resolves to cuda when available).
 _DEVICES: tuple[str, ...] = ("auto", "cpu", "cuda")

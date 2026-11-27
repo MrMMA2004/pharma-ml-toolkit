@@ -47,8 +47,14 @@ CHUNKS: list[tuple[str, list[str]]] = [
                  "tests/test_pd.py", "tests/test_pk.py",
                  "tests/test_pkpd_engines.py", "tests/test_pose_rmsd.py",
                  "tests/test_pruning.py"]),
-    ("3 (r-z)", ["tests/test_r*.py", "tests/test_s*.py", "tests/test_t*.py",
-                 "tests/test_u*.py", "tests/test_v*.py", "tests/test_w*.py"]),
+    # (r368) the letter-glob audit found two whole families outside the
+    # shard globs -- test_q* (quantization) and test_x* (xai registry) --
+    # plus the ENTIRE tests/api directory (29 files / 753 tests) that the
+    # a-l/m-p/r-z globs never matched.  All three ride chunk 3 now.
+    ("3 (r-z + q + x + the api family)", ["tests/test_q*.py",
+                 "tests/test_r*.py", "tests/test_s*.py", "tests/test_t*.py",
+                 "tests/test_u*.py", "tests/test_v*.py", "tests/test_w*.py",
+                 "tests/test_x*.py", "tests/api"]),
     # (round 225) chunk 4 used to be the whole tests/ui directory in ONE
     # pytest process -- the kernel OOM-killed it at ~163/241 tests (4 GB
     # sandbox, next-server down, nothing else running: the ui pages'

@@ -353,11 +353,22 @@ class TestMetadataDrift:
     """README + pyproject must describe the real project (§4.4)."""
 
     def test_readme_counts_eighteen_pages(self) -> None:
+        # r368 (part19): the retired PySide6 GUI's "eighteen pages"
+        # enumeration left the README with the retirement (the supported
+        # app is the React/Tauri nine-workspace Studio); the §4.4 drift
+        # guard is re-aimed at the CURRENT truth it was always about --
+        # the README describes the real, supported interface and its
+        # workspaces, and a stale seventeen/eighteen-style page count of
+        # the retired UI must not come back.
         text = (TOOLKIT / "README.md").read_text(encoding="utf-8")
         assert "seventeen" not in text.lower()
-        assert "eighteen" in text.lower()
-        # the 18th page rides the documented page list
-        assert "molecular_dynamics" in text
+        assert "eighteen" not in text.lower(), (
+            "the retired PySide6 UI's eighteen-page enumeration does not "
+            "belong in the current README (the React/Tauri nine-workspace "
+            "app is the supported surface)"
+        )
+        # the supported desktop's nine-workspace scope is documented
+        assert "nine workspace" in text.lower()
 
     def test_readme_version_example_not_pinned_to_the_past(self) -> None:
         text = (TOOLKIT / "README.md").read_text(encoding="utf-8")

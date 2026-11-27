@@ -158,7 +158,7 @@ class TestImportSafety:
     ) -> None:
         X_train, _, y_train, _ = binary_data
         _hide_torch(monkeypatch)
-        with pytest.raises(DependencyError, match=r"pharmaml\[deep\]"):
+        with pytest.raises(DependencyError, match=r"-e \'\.\[deep\]\'"):
             fast_classifier().fit(X_train, y_train)
 
     def test_build_model_raises_dependency_error_when_torch_missing(
@@ -167,7 +167,7 @@ class TestImportSafety:
         _hide_torch_spec(monkeypatch)
         with pytest.raises(DependencyError, match="torch"):
             build_model("dnn", "classification")
-        with pytest.raises(DependencyError, match=r"pharmaml\[deep\]"):
+        with pytest.raises(DependencyError, match=r"-e \'\.\[deep\]\'"):
             build_model("dnn_residual", "regression")
 
 

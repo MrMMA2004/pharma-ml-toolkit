@@ -564,9 +564,9 @@ class TestScoringObjectives:
 
     def test_rdkit_absent_raises_dependency_error(self, monkeypatch) -> None:
         _hide_rdkit(monkeypatch)
-        with pytest.raises(DependencyError, match="rdkit"):
+        with pytest.raises(DependencyError, match="RDKit"):
             QedObjective().score("CCO")
-        with pytest.raises(DependencyError, match=r"pharmaml\[chem\]"):
+        with pytest.raises(DependencyError, match=r"-e \'\.\[chem\]\'"):
             SimilarityObjective(ASPIRIN)
 
     def test_scoring_module_imports_without_rdkit(self, monkeypatch) -> None:
@@ -1074,7 +1074,7 @@ class TestTorchAbsentContract:
         _hide_torch(monkeypatch)
         with pytest.raises(DependencyError, match="torch"):
             SmilesRnn().train_prior(["CCO"])
-        with pytest.raises(DependencyError, match=r"pharmaml\[deep\]"):
+        with pytest.raises(DependencyError, match=r"-e '\.\[deep\]'"):
             SmilesRnn().train_prior(["CCO"])
 
     def test_sample_raises_dependency_error_without_torch(self, monkeypatch) -> None:
@@ -1092,7 +1092,7 @@ class TestTorchAbsentContract:
         _hide_torch(monkeypatch)
         with pytest.raises(DependencyError, match="torch"):
             ReinventOptimizer(QedObjective(), iterations=1).optimize()
-        with pytest.raises(DependencyError, match=r"pharmaml\[deep\]"):
+        with pytest.raises(DependencyError, match=r"-e '\.\[deep\]'"):
             ReinventOptimizer(QedObjective(), iterations=1).optimize()
 
 
