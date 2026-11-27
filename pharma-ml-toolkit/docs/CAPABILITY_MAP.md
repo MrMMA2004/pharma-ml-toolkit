@@ -7,12 +7,15 @@ never copied from prose.  This is the Phase-0 deliverable of the
 nine-card-first enhancement architecture: the auditable
 capability→card mapping and the migration plan for Phases 1-6.
 
-> **Historical interface map:** this document's `studio.py`, `ui/`, 18-page,
-> and nine-card references describe the retired PySide6 implementation at its
-> v1.2.183 baseline. They are not current React/Tauri Studio instructions or
-> feature-parity evidence. The supported desktop is React + TypeScript hosted
-> by Tauri 2; the root Next.js console is separate. See
-> [`frontend/README.md`](../frontend/README.md) for current desktop scope.
+> **Historical interface map (r368/part19 Phase 2):** this section
+> and this document's `studio.py`, `ui/`, 18-page and nine-card
+> references describe the RETIRED PySide6 implementation at its
+> v1.2.183 baseline -- quarantined under `legacy/` since v1.2.242,
+> unsupported, and not current React/Tauri Studio instructions or
+> feature-parity evidence. The supported desktop is React +
+> TypeScript hosted by Tauri 2; the root Next.js console is
+> separate. See [`frontend/README.md`](../frontend/README.md) for
+> current desktop scope.
 
 ## 1. Retired PySide6 launch architecture (historical)
 
@@ -61,9 +64,9 @@ coverage via `legacy/tests_ui/test_pages_smoke.py`.
 ## 3. Backend census
 
 - `src/pharmaml/ml/`: **105 modules**,
-83,107 lines.
+83,110 lines.
 - CLI: **62** `add_parser` sites (16 command groups).
-- Library tests: 5407 test functions across
+- Library tests: 5421 test functions across
 196 suites.
 - `src/pharmaml/studio/` (runs + evidence): the §11 real-evidence
   backend already exists — Phase 4 extends, not replaces, it.

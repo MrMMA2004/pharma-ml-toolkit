@@ -1,3 +1,11 @@
+
+; RETIRED PACKAGING LANE (r368 / part19 Phase 2): this Inno-Setup script is the
+; part9-era LEGACY installer for the retired PySide6 GUI app (the payload
+; described below embedded the Qt stack). The supported production installer
+; is the Tauri 2 bundle (NSIS Setup EXE + WiX MSI over the Qt-free frozen
+; FastAPI sidecar) built by .github/workflows/windows-release.yml. This script
+; is kept for archival/reproducibility only and is NOT part of any supported
+; release workflow.
 ; PharmaML Studio — the offline Windows installer (part9 §2/§7/§11).
 ;
 ; Architecture: PyInstaller onedir dist (release\windows\dist\PharmaMLStudio)

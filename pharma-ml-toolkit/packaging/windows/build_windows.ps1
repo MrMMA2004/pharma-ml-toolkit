@@ -1,3 +1,11 @@
+
+# RETIRED PACKAGING LANE (r368 / part19 Phase 2): this Inno-Setup path is the
+# part9-era LEGACY installer builder for the retired PySide6 GUI app (it froze
+# pharmaml.spec -- the legacy GUI spec -- with the Qt stack embedded). The
+# supported production path is .github/workflows/windows-release.yml: the
+# Qt-free pharmaml_backend.spec sidecar + the Tauri 2 host (NSIS Setup EXE +
+# WiX MSI). This script is kept for archival/reproducibility only and is NOT
+# part of any supported release workflow.
 # PharmaML Studio — the one-command Windows installer build (part9 §16).
 #
 #   powershell -ExecutionPolicy Bypass -File packaging\windows\build_windows.ps1

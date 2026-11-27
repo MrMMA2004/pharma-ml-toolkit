@@ -47,7 +47,7 @@ separate clean-machine installation and upgrade ritual.
 | Backend process lifecycle + handshake (Phase Nine) | **BUILT** — port-0 loopback bind, `PHARMAML-READY` handshake, graceful shutdown, and the packaged sidecar's live Windows-runner probe. |
 | Background job architecture (Phase Thirteen) | **BUILT** — JobManager state machine, cooperative cancellation, `n_jobs` passthrough including `-1`, never `0`. |
 | Tauri 2 host and Windows packaging (Phase Four / part11_2) | **PARTIAL** — the v1.2.230 Windows runner generated the EXE/MSI, manifest and checksums and attached them to a draft release; clean-machine install/upgrade and runtime verification remain pending. |
-| PySide6 retirement (Phase Sixteen) | **NOT DONE** — PySide6 remains the production Studio until the remaining migration/release gates pass. |
+| PySide6 retirement (Phase Sixteen) | **NOT DONE (recorded at this ledger's baseline)** — at that time PySide6 remained the production Studio until the migration gates passed. **Historical only:** the retirement was executed at v1.2.242 (part18 §10) — the launcher is quarantined at `legacy/studio.py`, unsupported, and the production sidecar spec excludes the whole Qt stack. |
 
 The remaining BLOCKED items are named explicitly; completed builds and
 workflows below carry their own evidence and are not described as

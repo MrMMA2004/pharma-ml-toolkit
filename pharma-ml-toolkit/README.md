@@ -199,7 +199,7 @@ pharma-ml-toolkit/
 │                            # preloads the committed EGL stub when the box has none); the
 │                            # legacy Tkinter playground.py (declared retired v1.2.141) left the
 │                            # shipped tree in round 304 — 30,047 lines, git history keeps it
-├── ui/                      # retired PySide6 UI implementation used by legacy/studio.py; archival only
+├── legacy/ui/                # retired PySide6 UI implementation used by legacy/studio.py; archival only
 │                            # do not confuse this source with the supported React/Tauri Studio in frontend/.
 ├── VERSION                 # the release version — `cat VERSION` after extracting (kept in
 │                            # sync with pyproject + src/pharmaml/__init__ by the ship ritual)

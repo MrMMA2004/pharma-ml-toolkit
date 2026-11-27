@@ -140,13 +140,30 @@ class TestSupportedSurfacesRemain:
 
     def test_readme_launches_no_root_studio(self) -> None:
         text = (TOOLKIT / "README.md").read_text(encoding="utf-8")
-        # the only sanctioned textual references are the quarantined path
-        root_launch = re.search(r"(?<!legacy/)`?python (legacy/)?studio\.py", text)
-        assert root_launch is not None and root_launch.group(1) == "legacy/", (
-            "README must not present a root-level studio.py launch command"
+        # r368 refinement: check EVERY textual occurrence of the launcher
+        # command (the old first-match-only read could miss a root command
+        # hiding after one sanctioned mention). Each occurrence must be
+        # either the quarantined legacy/studio.py path or sit on a line
+        # that PROHIBITS the command ("Do not use ..." / "must not" /
+        # "never ..."); presenting it as a launch instruction fails.
+        violations: list[str] = []
+        for match in re.finditer(r"`?python (legacy/)?studio\.py", text):
+            line = text[max(0, match.start() - 60) : match.end() + 10]
+            if match.group(1) == "legacy/":
+                continue  # the quarantined archival path, sanctioned
+            lowered = line.lower()
+            if any(phrase in lowered for phrase in ("do not use", "must not", "never ")):
+                continue  # a prohibition, not a presentation
+            violations.append(line.strip())
+        assert violations == [], (
+            "README must not present a root-level studio.py launch command "
+            f"(prohibition lines are fine): {violations}"
         )
         assert "RETIRED" in text
-        assert "React/Tauri 2" in text
+        # r368: accept either phrasing of the supported-surface callout
+        # ("React/Tauri Studio" or the expanded "React + TypeScript ...
+        # Tauri 2" form) -- the substance is the supported-surface pointer
+        assert "React/Tauri" in text or "React + Tauri 2" in text
 
 
 class TestGuiTreeQuarantined:
@@ -246,3 +263,80 @@ class TestGuiTreeQuarantined:
         ).read_text(encoding="utf-8")
         assert "pharma-ml-toolkit/legacy/ui/native/libEGL.so.1" in script
         assert "pharma-ml-toolkit/ui/native" not in script
+
+
+class TestProductionWorkflowFreeOfLegacyPackaging:
+    """r368 (part19 Phase 2) additions: the production Windows release
+    workflow must freeze ONLY the Qt-free sidecar spec, the retired
+    Inno-Setup packaging lane must stay retired and banner-marked, and
+    the CI's legacy-GUI lane must remain an explicitly-listed
+    ``legacy/tests_ui`` lane outside the default testpaths gate -- so
+    neither a rollback nor a careless edit can put the Qt GUI back into
+    the shipped installer or the default test gate."""
+
+    REPO_ROOT = TOOLKIT.parent
+    RELEASE_WF = REPO_ROOT / ".github" / "workflows" / "windows-release.yml"
+    CI_WF = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+
+    def test_release_workflow_freezes_the_qt_free_sidecar(self) -> None:
+        text = self.RELEASE_WF.read_text(encoding="utf-8")
+        assert "pharmaml_backend.spec" in text, (
+            "the production release must freeze the Qt-free sidecar spec"
+        )
+        for banned in (
+            "pharmaml.spec",
+            "installer.iss",
+            "build_windows.ps1",
+            "Inno-Setup",
+        ):
+            assert banned not in text, (
+                f"the production release workflow must not reference the "
+                f"retired legacy packaging lane: {banned}"
+            )
+
+    def test_inno_setup_lane_stays_retired_and_banner_marked(self) -> None:
+        script = TOOLKIT / "packaging" / "windows" / "build_windows.ps1"
+        iss = TOOLKIT / "packaging" / "windows" / "installer.iss"
+        for path in (script, iss):
+            text = path.read_text(encoding="utf-8")
+            assert "RETIRED PACKAGING LANE" in text[:800], (
+                f"{path.name} must open with the retired-lane banner so no "
+                "one mistakes it for the supported installer path"
+            )
+        # the quarantine completion re-aimed the legacy GUI freeze at the
+        # quarantined entry, never a resurrected root launcher
+        iss_text = iss.read_text(encoding="utf-8")
+        assert "legacy" in iss_text.lower()
+
+    def test_ci_legacy_gui_lane_is_explicit(self) -> None:
+        """The CI may run the archival GUI suite only as an explicitly
+        listed legacy/tests_ui lane; the default gate (testpaths) must
+        never readmit it."""
+        text = self.CI_WF.read_text(encoding="utf-8")
+        assert "legacy/tests_ui/" in text, (
+            "the CI's GUI lane must point at the quarantined suite home"
+        )
+        # the CI lane never runs a root-level tests/ui family
+        assert "tests/ui/" not in text, (
+            "the retired root tests/ui family must not re-enter CI"
+        )
+
+    def test_pyproject_testpaths_exclude_legacy(self) -> None:
+        text = (TOOLKIT / "pyproject.toml").read_text(encoding="utf-8")
+        m = re.search(r"testpaths\s*=\s*\[(.*?)\]", text, re.DOTALL)
+        assert m, "pyproject testpaths not found"
+        paths = re.findall(r'"([^"]+)"', m.group(1))
+        assert "legacy" not in paths and "legacy/tests_ui" not in paths, (
+            "the quarantined GUI suite must stay OUT of the default "
+            f"testpaths gate (current: {paths})"
+        )
+
+    def test_legacy_gui_freeze_only_from_the_quarantine(self) -> None:
+        """The legacy pharmaml.spec (the frozen-equivalent test tier) must
+        keep pointing at the quarantined launcher; a root studio.py
+        entry would mean the launcher got resurrected."""
+        spec = (
+            TOOLKIT / "packaging" / "windows" / "pharmaml.spec"
+        ).read_text(encoding="utf-8")
+        assert 'TOOLKIT / "legacy" / "studio.py"' in spec
+        assert 'TOOLKIT / "studio.py"' not in spec

@@ -31,7 +31,7 @@ def module_loc(module: Path) -> int:
 def test_count(pattern: str) -> int:
     n = 0
     base = TK / "legacy" / "tests_ui" if pattern.startswith("legacy/") else TK / "tests"
-    rel = pattern[len("legacy/tests_ui/"):] if pattern.startswith("legacy/tests_ui/") else pattern
+    rel = pattern.removeprefix("legacy/tests_ui/")
     for t in base.glob(rel):
         n += len(re.findall(r"^\s*def test_", t.read_text(encoding="utf-8"), re.MULTILINE))
     return n
@@ -124,7 +124,17 @@ w("never copied from prose.  This is the Phase-0 deliverable of the")
 w("nine-card-first enhancement architecture: the auditable")
 w("capability→card mapping and the migration plan for Phases 1-6.")
 w("")
-w("## 1. What the launch architecture actually is (verified)")
+w("> **Historical interface map (r368/part19 Phase 2):** this section")
+w("> and this document's `studio.py`, `ui/`, 18-page and nine-card")
+w("> references describe the RETIRED PySide6 implementation at its")
+w("> v1.2.183 baseline -- quarantined under `legacy/` since v1.2.242,")
+w("> unsupported, and not current React/Tauri Studio instructions or")
+w("> feature-parity evidence. The supported desktop is React +")
+w("> TypeScript hosted by Tauri 2; the root Next.js console is")
+w("> separate. See [`frontend/README.md`](../frontend/README.md) for")
+w("> current desktop scope.")
+w("")
+w("## 1. Retired PySide6 launch architecture (historical)")
 w("")
 w("```")
 w("studio.py → ui.run() → MainWindow")
