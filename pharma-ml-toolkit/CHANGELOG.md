@@ -1,3 +1,105 @@
+## [1.2.244] — 2026-11-27 — round 371 (the 163rd recorded run: the owner-directed release cycle, trace 1a21dc027bb026ad — the v1.2.244 NEW-version ship REQUIRED by the r370 D-15 gate: the post-tag delta carried, the new zip across the six homes, and the new EXE/MSI released via the tag-triggered Windows workflow)
+
+- **The release mandate (D-15 closed this cycle)**: the r370
+  RELEASE_READINESS three-state gate closed with "no P0/P1 open; the
+  next release cycle is REQUIRED to carry the post-tag delta" — the
+  shipped v1.2.243 installers lagged main by 16 commits / 172 files;
+  the owner's standing release directive authorized the cycle, and
+  the v1.2.244 zip + the rebuilt installers now carry the full
+  r368→r370 delta: **the r368 13-phase repository audit** (the F-1/F-3
+  UI fixes — the Datasets chemistry buttons' in-flight busy guards +
+  the StageHeader dead-icon fix — riding the installers for the FIRST
+  time; the PR #15 port with the three port-induced contract breaks
+  fixed at source; the legacy-retirement verification with the
+  retirement guards grown 21→26; the 148-op runtime==contract
+  traceability matrix; the 219-test reliability set; the reproducible
+  clean-machine PowerShell suite `scripts/windows/
+  validate-clean-machine.ps1` + `WINDOWS_CLEAN_INSTALL_REPORT.md`
+  with the installer size analysis — torch-CPU the largest
+  contributor, Qt excluded by spec+guard), **the r369 recovery + the
+  owner-directed absorption** (the arena/3eb4a9a6 branch real-merged
+  with 14 conflicts resolved toward the r368 supersets; the merged
+  tree byte-identical to the absorbed terminal; the six-home zip
+  parity rebuilt), and **the r370 part20 repository audit** (the D-9
+  chemistry-lane OpenBabel assertion re-aimed — the failing CI run
+  46016289515 healed, CI 19/19 green proven end-to-end at 6b8c0ae3;
+  the D-10 Cargo.toml version-carrier alignment; the six part20 QA
+  deliverables: `FULL_REPOSITORY_AUDIT.md`, `BACKEND_FRONTEND_
+  TRACEABILITY.md` with the corrected 149-operations / 142-paths
+  census + the ten API-only routes, `WINDOWS_EXE_MSI_AUDIT.md`, the
+  DEFECT_REGISTER D-9..D-15 rows, the TEST_EXECUTION_REPORT r370
+  section, the RELEASE_READINESS r370 gate).
+- **The v1.2.244 version bump — the full carrier set, one lockstep
+  commit**: `VERSION`, `pyproject.toml`, `src/pharmaml/__init__.py`
+  (`__version__`), `frontend/package.json` + its lockfile,
+  `frontend/src/lib/version.ts` (`APP_VERSION`), the web
+  `src/lib/toolkit-version.ts` (`SHIPPED_TOOLKIT_VERSION`),
+  `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` (the D-10
+  carrier), the `version_info.txt` quadruple (filevers/prodvers/
+  FileVersion/ProductVersion), the SBOM root component, the README
+  source-version stamps, the `docs/FEATURES.md` freeze stamp, and
+  this CHANGELOG lead.
+- **The eight example notebooks re-executed at pharmaml 1.2.244**
+  (zero error outputs, zero absolute-home-path survivors, the
+  builder-prefix scrub verified) with the seven `_no_output` twins
+  re-stripped — the notebook freshness guard (`test_notebook_variants.py`)
+  green at the new version.
+- **The v1.2.244 zip — the new archive across the six homes**: built
+  by `scratch/build_zip_371.py` (the canonical r303..r367 recipe: the
+  exclusion list, the composition guard, the leak scan, the
+  must-carry gate — now carrying the r368 five QA reports + the
+  clean-machine suite + the six part20 QA deliverables — the
+  in-archive version-carrier check (the VERSION stamp + the
+  version_info quadruple + pyproject/dunder/Cargo/SBOM), the
+  retired-pair gate, the fresh VERSION stamp), seeded byte-identical
+  to the root `download/`, the toolkit `download/`, the toolkit
+  `dist-archive/`, `upload/`, the root `dist-archive/`, and the
+  offsite `~/pharma-ml-toolkit-zips/` mirror (each home
+  testzip-verified; the SHA-256 + the exact byte size recorded in the
+  worklog R371 entry).
+- **The v1.2.244 EXE/MSI release — the tag-triggered Windows
+  workflow**: the tag `v1.2.244` pushed at the ship commit;
+  `.github/workflows/windows-release.yml` rebuilds the NSIS EXE +
+  the WiX MSI on the hosted windows-2022 runner with its own test
+  ladder (the version-carrier validation across every carrier BEFORE
+  anything builds, the frontend typecheck + drift guards, the backend
+  unit + api/database gates, the frozen sidecar's live
+  handshake/health/auth-guard/shutdown probe) and attaches
+  `PharmaML_Studio_Setup_v1.2.244.exe`,
+  `PharmaML_Studio_v1.2.244.msi`, `RELEASE_MANIFEST.json`, the
+  generated SBOM, and SHA256SUMS to the v1.2.244 GitHub release —
+  **the installers now carry the post-tag delta (the D-15 gap
+  closed)**; the functional install-smoke lane
+  (`windows-install-smoke.yml`) re-fires on the published release
+  (the SHA256SUMS/manifest cross-check, the Defender scans over both
+  installers, the MSI silent install + the INSTALLED sidecar's
+  handshake/health/guard/shutdown probe + the lifecycle legs + the
+  uninstall, the NSIS install + lifecycle + uninstall, the UPGRADE
+  1.2.243 → 1.2.244 with the user-data marker retained); the
+  penetration lane (`penetration-test.yml`) re-dispatched on the
+  released tree.
+- **The gates re-run green on the bumped tree (1.2.244)**: the
+  combined 27-file guard battery **515/515 exit 0** (the 16-file
+  drift-guard family 202/202; the seven workspace guards + the
+  windows-pipeline lockstep + the notebook freshness + the retirement
+  guards 246; the penetration API suite 67); the frontend vitest
+  **357/357 over 41 files**; `tsc --noEmit` exit 0; mypy **Success:
+  no issues in 314 source files**; ruff canonical clean
+  (`src/pharmaml`); the root eslint exit 0; `check_github_page.py`
+  green post-ship (the release archive present + the carriers at
+  1.2.244); the ZAP deep scan stays on the standing Monday
+  2026-11-30 slot per the r364 close-out.
+- **The honest unchanged lanes**: signing stays **BLOCKED**
+  (certificate-gated — no certificate fabricated, the
+  SHA256SUMS/manifest/SBOM generation preserved); the clean-machine
+  lane stays **NOT_RUN** until the owner executes the suite on a
+  clean box (the hosted-runner evidence is never conflated with
+  clean-machine evidence); D-11/D-12 (the Tauri compile-blocked
+  findings — the orphan-on-host-crash + the retry-without-respawn)
+  stay OPEN pending compile verification; the fresh-build leg inside
+  this sandbox stays honestly BLOCKED (no Windows infrastructure —
+  the hosted-runner ladder IS the build lane).
+
 ## [1.2.243] — 2026-11-26 — round 367 (the 159th recorded run: the part18 campaign, trace 1a219777c8a0fde9 — the DL ARCHITECTURE EXPANSION with the full §9 chain, and the ui/-pages quarantine COMPLETION)
 
 
