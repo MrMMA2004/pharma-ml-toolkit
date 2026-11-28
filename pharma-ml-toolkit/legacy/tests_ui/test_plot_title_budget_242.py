@@ -16,7 +16,6 @@ only touched when the rendered fit actually changes.
 from __future__ import annotations
 
 import pytest
-
 from ui.widgets.plot_widget import PlotPanel
 
 LONG_TITLE = (

@@ -28,7 +28,6 @@ import numpy as np
 import pytest
 from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QApplication
-
 from ui.widgets.plot_widget import PlotPanel
 
 

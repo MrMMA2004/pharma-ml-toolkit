@@ -1,3 +1,37 @@
+## [1.2.253] — 2026-11-28 — round 381 (the 174th recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — PK-1, the P1 row 8, the registered-dataset bridge over the PK/PD import stage; trace 1a2218b266debe39, item 3 of the second 3-item set — the row that closes it)
+
+- **PK-1 (the roadmap's row 8 — the Import stage's paste-only lane,
+  bridged)**: the PK/PD page's stage 1 gains the "Registered dataset
+  bridge" card — the dataset select + the time/concentration column
+  pair pulled through the SAME bounded `datasetsApi.column()` lane
+  every other workspace rides (`GET /api/v1/datasets/{id}/column/
+  {column}`, capped at the chemistry engine's own 500 rows, no
+  backend change — the roadmap's own "not required" verdict). The
+  paired lines also fill the paste textarea verbatim, so the one
+  series source of truth stays visible and editable; the paste lane
+  itself is unchanged (its parser, import button, samples, and its
+  own labeled error lane all pinned as the regression clause). The
+  honest guards: a `null` cell (`json_safe`'s NaN → null) is a
+  row-labeled error — never `Number(null) === 0` fabricating a
+  concentration the frame never measured; a non-numeric cell carries
+  the same labeled refusal; a truncated pull names its 500-row bound
+  (§17.3 — the bounded view never masquerades as the whole column); a
+  length disagreement between the two columns is the lane's own
+  honest error; the backend's own 422/404 lanes surface verbatim.
+  7 vitests over the full page mount (the roadmap's three acceptance
+  clauses + the null/bound/alignment/empty-state guards) + the
+  10-test drift guard `tests/test_frontend_pkpd_bridge.py`. The
+  second 3-item set closes here (rows 6/7/8 all Implemented; the
+  next row: VIZ-1, the last remaining P1).
+
+- **the r185-class exec-bit sweep, honestly recorded**: the sandbox
+  recycle re-materialized a subset of the tree with execute bits
+  (148 shebangless files, `git` blind to the drift —
+  `core.fileMode=false`); the bits swept clean, plus the three
+  content findings the full-tree run surfaces (two import sorts +
+  one `ClassVar` annotation in `tests/api/test_dl_semi_generative.py`)
+  — ruff now green over the whole tree.
+
 ## [1.2.252] — 2026-11-28 — round 380 (the 173rd recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — DS-3, the P1 row 7, the descriptor/fingerprint frames registered as derived datasets; trace 1a22142edb9b1e19, item 2 of the second 3-item set)
 
 - **DS-3 (the roadmap's row 7 — the Descriptor/Fingerprint stage's

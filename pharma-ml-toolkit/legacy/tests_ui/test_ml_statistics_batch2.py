@@ -53,7 +53,6 @@ def _regression_outcome(analysis) -> None:
     """A real AnalysisOutcome from a real quick regression fit."""
     from sklearn.linear_model import LinearRegression
     from sklearn.model_selection import train_test_split
-
     from ui.pages.model_analysis import AnalysisOutcome
 
     frame = pd.read_csv(_REGRESSION_EXAMPLE)
@@ -369,9 +368,9 @@ def test_coverage_uses_saved_evaluation_rows_and_original_alpha(studio_app, qtbo
 def test_subgroup_uses_actual_stratified_indices(studio_app, qtbot, qapp, monkeypatch):
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import train_test_split
+    from ui.pages.model_analysis import AnalysisOutcome
 
     from pharmaml.ml import subgroups
-    from ui.pages.model_analysis import AnalysisOutcome
 
     page = _fresh_page()
     frame = pd.DataFrame({"f": range(120), "target": [0] * 100 + [1] * 20,

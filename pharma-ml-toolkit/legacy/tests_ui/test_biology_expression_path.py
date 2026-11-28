@@ -9,7 +9,6 @@ the field.
 from __future__ import annotations
 
 import pandas as pd
-
 from ui.pages.biology import _EXPRESSION_PATH, BiologyWorkbenchPage
 
 

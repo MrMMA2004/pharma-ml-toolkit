@@ -5,7 +5,6 @@ import json
 
 import numpy as np
 import pandas as pd
-
 from ui.pages.campaign_wizard import CampaignReviewWizard
 from ui.pages.uncertainty_dialog import UncertaintyDialog
 from ui.workers.job_worker import JobRunner
@@ -139,8 +138,9 @@ def test_classification_uncertainty_dialog(qtbot, studio_app, tmp_path):
 def test_nested_validation_real_and_stop(qtbot, studio_app, tmp_path, monkeypatch):
     import threading
 
-    from pharmaml.exceptions import JobCancelled
     from ui.pages.validation_dialog import ValidationDialog
+
+    from pharmaml.exceptions import JobCancelled
 
     dialog = ValidationDialog(JobRunner())
     qtbot.addWidget(dialog)
@@ -178,9 +178,10 @@ def test_nested_validation_real_and_stop(qtbot, studio_app, tmp_path, monkeypatc
 
 
 def test_reproducibility_dialog_environment_checkpoint_and_drift(qtbot, studio_app, tmp_path, monkeypatch):
+    from ui.pages.reproducibility_dialog import ReproducibilityDialog
+
     from pharmaml.utils.checkpoint_schema import OperationSpec
     from pharmaml.utils.checkpoints import CheckpointManager
-    from ui.pages.reproducibility_dialog import ReproducibilityDialog
 
     dialog = ReproducibilityDialog(JobRunner())
     qtbot.addWidget(dialog)
@@ -363,7 +364,6 @@ def test_reproducibility_compares_training_records(qtbot, studio_app, tmp_path, 
 
 def test_preparation_dialog_review_confirm_and_invalidation(qtbot, studio_app, tmp_path, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
-
     from ui.pages.preparation_dialog import PreparationDialog
 
     output = tmp_path / "new-output"

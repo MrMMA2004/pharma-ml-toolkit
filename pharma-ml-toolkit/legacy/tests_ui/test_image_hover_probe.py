@@ -282,7 +282,6 @@ def _page(studio_app):
 
 def test_every_matrix_tab_carries_a_hover_label(studio_app) -> None:
     from PySide6.QtWidgets import QLabel
-
     from ui.widgets.image_panel import ImagePanel
 
     page = _page(studio_app)

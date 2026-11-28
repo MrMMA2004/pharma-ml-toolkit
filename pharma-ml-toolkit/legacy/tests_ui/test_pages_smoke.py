@@ -49,7 +49,6 @@ def test_data_explorer_loads_real_csv(studio_app, qtbot) -> None:
 
 def test_data_explorer_reads_excel_too(studio_app, qtbot, tmp_path) -> None:
     import pandas as pd
-
     from ui.pages.data_explorer import DataExplorerPage
 
     frame = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})

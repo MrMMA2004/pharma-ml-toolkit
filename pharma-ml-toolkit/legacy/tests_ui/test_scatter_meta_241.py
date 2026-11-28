@@ -17,7 +17,6 @@ import math
 
 import numpy as np
 import pytest
-
 from ui.pages.deep_learning import _embedding_meta
 from ui.pages.deep_learning import _parity_meta as _dl_parity_meta
 from ui.pages.model_analysis import _fold_meta, _parity_meta, _residual_meta

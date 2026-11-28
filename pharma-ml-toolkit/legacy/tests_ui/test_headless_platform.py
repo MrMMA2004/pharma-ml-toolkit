@@ -19,7 +19,6 @@ import os
 import sys
 
 import pytest
-
 from ui import headless
 
 

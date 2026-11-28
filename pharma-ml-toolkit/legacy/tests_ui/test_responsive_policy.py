@@ -35,7 +35,6 @@ from pharmaml.viz.export import sniff_format
 def test_configure_splitter_policy(studio_app) -> None:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QSplitter, QWidget
-
     from ui.widgets.responsive import configure_splitter
 
     splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -59,7 +58,6 @@ def test_configure_splitter_policy(studio_app) -> None:
 def test_configure_splitter_defaults_and_vertical(studio_app) -> None:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QSplitter, QWidget
-
     from ui.widgets.responsive import MIN_CHILD_PX, configure_splitter
 
     splitter = QSplitter(Qt.Orientation.Vertical)
@@ -76,7 +74,6 @@ def test_configure_splitter_defaults_and_vertical(studio_app) -> None:
 def test_configure_splitter_empty_is_noop(studio_app) -> None:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QSplitter
-
     from ui.widgets.responsive import configure_splitter
 
     splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -108,7 +105,6 @@ def test_page_splitters_carry_the_policy(studio_app) -> None:
     """Every QSplitter inside every studio page: non-collapsible children,
     per-child minimum extents, growth on the chart side."""
     from PySide6.QtWidgets import QSplitter
-
     from ui.main_window import MainWindow
 
     window = MainWindow()
@@ -254,7 +250,6 @@ def test_smiles_render_preserves_canvas_aspect(studio_app) -> None:
     the requested size (RDKit letterboxes inside it -- no stretching),
     and the DPR-2 pixmap reports the logical size."""
     from PySide6.QtCore import QSize
-
     from ui.widgets.smiles_preview import MoleculeRenderer
 
     renderer = MoleculeRenderer()
@@ -278,7 +273,6 @@ def test_wrap_in_scroll_policy(studio_app) -> None:
     over as the same instance."""
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QLabel, QScrollArea
-
     from ui.widgets.responsive import SCROLL_MIN_PX, wrap_in_scroll
 
     content = QLabel("form body")
@@ -300,7 +294,6 @@ def test_wrap_in_scroll_geometry_only(studio_app) -> None:
     same order, and mounting never makes the form REQUIRE more space
     (scrollbars must not engage one pixel earlier than before)."""
     from PySide6.QtWidgets import QFormLayout, QWidget
-
     from ui.widgets.responsive import wrap_in_scroll
 
     body = QWidget()
@@ -333,7 +326,6 @@ def test_ml_workbench_tab_bodies_scrolled(main_window) -> None:
     wrapper fails here -- the policy is self-enforcing, not a
     snapshot."""
     from PySide6.QtWidgets import QScrollArea
-
     from ui.pages.ml_workbench import MLWorkbenchPage
 
     pages = main_window.findChildren(MLWorkbenchPage)

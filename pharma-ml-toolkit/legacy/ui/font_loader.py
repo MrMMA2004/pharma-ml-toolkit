@@ -18,6 +18,7 @@ from PySide6.QtGui import QFont, QFontDatabase
 
 from .design_tokens import SCALE, TYPEFACES
 
+
 def _font_dir() -> Path:
     """Locate the bundled fonts directory.
 

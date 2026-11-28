@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/card";
 import { useJob } from "@/hooks/useJobTracking";
 import { jobsApi } from "@/services/jobs/client";
+import { datasetsApi, type DatasetView } from "@/services/datasets/client";
 import { ApiError } from "@/services/api/client";
 import {
   artifactsApi,
@@ -60,7 +61,9 @@ import {
  * service layer (no fabricated data, no disabled pretend buttons).
  * The Import lane parses a pasted concentration-time series (the
  * route's own `validate_concentration_series` remains the authority —
- * a bad series is its honest 422, surfaced verbatim); the Inspect
+ * a bad series is its honest 422, surfaced verbatim) or, since PK-1,
+ * pulls a registered dataset's own time/concentration columns through
+ * the bounded `column()` bridge every other workspace rides — the Inspect
  * stage runs the REAL non-compartmental analysis (`nca_summary` +
  * both trapezoid variants + the `fit_terminal_phase` regression) and,
  * over a 0…τ profile, the interval metrics; the Select Model stage is
@@ -370,6 +373,35 @@ function parseSeries(text: string, label: string): SeriesPoint[] {
 }
 
 /**
+ * One pulled column cell → a finite number (the PK-1 bridge lane's
+ * own honest converter). A `null` cell (the backend's `json_safe`
+ * maps NaN/Inf → null) is a row-labeled error, never
+ * `Number(null) === 0` — the zero would fabricate a concentration
+ * the frame never measured. A non-numeric string cell carries the
+ * same labeled refusal; the backend's own 422 lanes (an unknown
+ * dataset, an unknown column, a bad limit) surface verbatim
+ * through `describeError` instead.
+ */
+function numericCell(
+  value: string | number | null | undefined,
+  row: number,
+  column: string,
+): number {
+  if (value === null || value === undefined) {
+    throw new Error(
+      `row ${row + 1} of column "${column}": a null value (NaN/Inf in the frame) — never silently zero`,
+    );
+  }
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) {
+    throw new Error(
+      `row ${row + 1} of column "${column}": "${String(value)}" is not a finite number`,
+    );
+  }
+  return numeric;
+}
+
+/**
  * The inline curve — a real Plotly line chart drawn ONLY from the
  * points that actually arrived (no interpolation the data does not
  * own, no fabricated axes: the domain/range labels state the real
@@ -480,6 +512,17 @@ export function PKPDPage() {
   const [seriesText, setSeriesText] = useState("");
   const [series, setSeries] = useState<SeriesPoint[] | null>(null);
   const [seriesError, setSeriesError] = useState<string | null>(null);
+
+  // stage 1 (PK-1): the registered-dataset bridge — the same
+  // column() lane every other workspace rides, no retype
+  const [datasets, setDatasets] = useState<readonly DatasetView[]>([]);
+  const [registryError, setRegistryError] = useState<string | null>(null);
+  const [bridgeDataset, setBridgeDataset] = useState<DatasetView | null>(null);
+  const [bridgeTimeColumn, setBridgeTimeColumn] = useState("");
+  const [bridgeConcColumn, setBridgeConcColumn] = useState("");
+  const [bridgeBusy, setBridgeBusy] = useState(false);
+  const [bridgeError, setBridgeError] = useState<string | null>(null);
+  const [bridgeNote, setBridgeNote] = useState<string | null>(null);
 
   // stage 2: NCA + steady state
   const [ncaBusy, setNcaBusy] = useState(false);
@@ -592,6 +635,104 @@ export function PKPDPage() {
     setNcaResult(null);
     setSsResult(null);
   }, []);
+
+  // stage 1 (PK-1): the dataset registry, fetched once on mount — the
+  // bridge lists what the Datasets workspace actually registered
+  useEffect(() => {
+    let cancelled = false;
+    datasetsApi
+      .list()
+      .then((response) => {
+        if (!cancelled) {
+          setDatasets(response.datasets);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setRegistryError(describeError(error));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectBridgeDataset = useCallback(async (datasetId: string) => {
+    setBridgeNote(null);
+    setBridgeError(null);
+    setBridgeTimeColumn("");
+    setBridgeConcColumn("");
+    if (datasetId === "") {
+      setBridgeDataset(null);
+      return;
+    }
+    try {
+      const view = await datasetsApi.view(datasetId);
+      setBridgeDataset(view);
+    } catch (error) {
+      setBridgeDataset(null);
+      setBridgeError(describeError(error));
+    }
+  }, []);
+
+  // stage 1 (PK-1): the bridge import — both columns pulled through
+  // the same bounded column() lane the other workspaces ride, parsed
+  // to the SAME series view the paste lane fills (the textarea stays
+  // the free-form lane; the bridge's paired lines fill it so the one
+  // source of truth stays visible and editable). A truncated pull is
+  // named in the note, never masquerading as the whole column
+  // (§17.3); a length disagreement between the two columns is this
+  // lane's own honest error; every backend 422/404 surfaces verbatim.
+  const handleBridgeImport = useCallback(async () => {
+    if (
+      bridgeDataset === null ||
+      bridgeTimeColumn === "" ||
+      bridgeConcColumn === ""
+    ) {
+      return;
+    }
+    setBridgeBusy(true);
+    setBridgeError(null);
+    setBridgeNote(null);
+    try {
+      const [timesColumn, concColumn] = await Promise.all([
+        datasetsApi.column(bridgeDataset.dataset_id, bridgeTimeColumn),
+        datasetsApi.column(bridgeDataset.dataset_id, bridgeConcColumn),
+      ]);
+      if (timesColumn.returned !== concColumn.returned) {
+        throw new Error(
+          `the columns disagree in length (${bridgeTimeColumn}: ${timesColumn.returned} rows vs ${bridgeConcColumn}: ${concColumn.returned} rows) — the paired series needs row-aligned columns`,
+        );
+      }
+      const points: SeriesPoint[] = [];
+      for (let i = 0; i < timesColumn.returned; i++) {
+        points.push({
+          time: numericCell(timesColumn.values[i], i, bridgeTimeColumn),
+          conc: numericCell(concColumn.values[i], i, bridgeConcColumn),
+        });
+      }
+      if (points.length < 2) {
+        throw new Error(
+          `the bridge parsed ${points.length} points, at least 2 required`,
+        );
+      }
+      setSeries(points);
+      setSeriesText(points.map((p) => `${p.time} ${p.conc}`).join("\n"));
+      setSeriesError(null);
+      setNcaResult(null);
+      setSsResult(null);
+      if (timesColumn.truncated || concColumn.truncated) {
+        const nRows = Math.max(timesColumn.n_rows, concColumn.n_rows);
+        setBridgeNote(
+          `the column bridge is bounded at 500 rows (the chemistry engine's own request cap) — the series carries the first ${timesColumn.returned} of the dataset's ${nRows} rows`,
+        );
+      }
+    } catch (error) {
+      setBridgeError(describeError(error));
+    } finally {
+      setBridgeBusy(false);
+    }
+  }, [bridgeDataset, bridgeTimeColumn, bridgeConcColumn]);
 
   // stage 2: NCA over the imported series
   const handleNca = useCallback(async () => {
@@ -1150,7 +1291,7 @@ export function PKPDPage() {
       <StageHeader
         index={1}
         title="Import Data"
-        hint="the pasted concentration-time series (time conc per line)"
+        hint="the pasted concentration-time series (time conc per line), or a registered dataset's own time/conc columns"
         icon={<Upload className="h-4 w-4 text-[var(--color-muted-foreground)]" />}
       >
         <Card>
@@ -1207,6 +1348,107 @@ export function PKPDPage() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="text-base">Registered dataset bridge</CardTitle>
+            <CardDescription>
+              A registered dataset&apos;s own time/concentration columns —
+              the same bounded column() bridge every other workspace
+              rides (PK-1); the paste lane above stays the free-form
+              lane. A non-numeric column is the backend&apos;s own 422,
+              surfaced verbatim; a null cell is a row-labeled error,
+              never a silent zero.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <select
+              aria-label="the registered dataset"
+              value={bridgeDataset?.dataset_id ?? ""}
+              onChange={(event) => void selectBridgeDataset(event.target.value)}
+              className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm"
+            >
+              <option value="">select a registered dataset…</option>
+              {datasets.map((entry) => (
+                <option key={entry.dataset_id} value={entry.dataset_id}>
+                  {entry.name} · {entry.shape[0]} rows · {entry.columns.length} columns
+                </option>
+              ))}
+            </select>
+            {datasets.length === 0 && registryError === null ? (
+              <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                No datasets registered yet — import one in the Datasets workspace.
+              </p>
+            ) : null}
+            {registryError !== null ? (
+              <div className="mt-2">
+                <ErrorBanner message={registryError} />
+              </div>
+            ) : null}
+            {bridgeDataset !== null ? (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-xs text-[var(--color-muted-foreground)]">
+                  times column
+                  <select
+                    aria-label="the times column"
+                    value={bridgeTimeColumn}
+                    onChange={(event) => setBridgeTimeColumn(event.target.value)}
+                    className="rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm text-[var(--color-foreground)]"
+                  >
+                    <option value="">select the times column…</option>
+                    {bridgeDataset.columns.map((column) => (
+                      <option key={column} value={column}>
+                        {column}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-[var(--color-muted-foreground)]">
+                  concentration column
+                  <select
+                    aria-label="the concentration column"
+                    value={bridgeConcColumn}
+                    onChange={(event) => setBridgeConcColumn(event.target.value)}
+                    className="rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm text-[var(--color-foreground)]"
+                  >
+                    <option value="">select the concentration column…</option>
+                    {bridgeDataset.columns.map((column) => (
+                      <option key={column} value={column}>
+                        {column}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ) : null}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                disabled={
+                  bridgeBusy ||
+                  bridgeDataset === null ||
+                  bridgeTimeColumn === "" ||
+                  bridgeConcColumn === ""
+                }
+                onClick={() => void handleBridgeImport()}
+              >
+                {bridgeBusy ? "Pulling columns…" : "Import from dataset"}
+              </Button>
+              <span className="text-xs text-[var(--color-muted-foreground)]">
+                both columns ride the bounded column bridge (the 500-row
+                cap); the paired lines also fill the textarea above
+              </span>
+            </div>
+            {bridgeNote !== null ? (
+              <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                {bridgeNote}
+              </p>
+            ) : null}
+            {bridgeError !== null ? (
+              <div className="mt-2">
+                <ErrorBanner message={bridgeError} />
               </div>
             ) : null}
           </CardContent>

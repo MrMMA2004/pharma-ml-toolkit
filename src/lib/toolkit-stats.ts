@@ -73,7 +73,11 @@
     entry's claimed 8,366 re-true never rode its commit -- this pin
     carries the LIVE measurement, caught and recorded honestly at
     r380). */
-export const SHIPPED_TEST_COUNT = 8388;
+/*  r381 re-true (the v1.2.253 PK-1 ship, measurement-last): the
+    collection re-measured live on the shipped tree -- 8,398
+    collected / 0 errors over 449 files (the +10 over the r380
+    pin: the PK-1 drift-guard's ten tests). */
+export const SHIPPED_TEST_COUNT = 8398;
 
 /*  r366 (the part18 all-phases verification pass, the owner-directed
     firing): the collection re-measured LIVE at the r365 terminal
@@ -141,7 +145,11 @@ export const SHIPPED_TEST_COUNT = 8388;
     suite re-measured live on the shipped tree -- 412/412 over 50
     files (the +5 over the r378 pin: the r379 DS-2 page pair + the
     r380 DS-3 register-lane trio). */
-export const SHIPPED_COMPONENT_TEST_COUNT = 412;
+/*  r381 re-true (the v1.2.253 PK-1 ship, measurement-last): the
+    suite re-measured live on the shipped tree -- 419/419 over 51
+    files (the +7/+1 over the r380 pin: the PK-1 bridge-lane page
+    suite over the full PK/PD page mount). */
+export const SHIPPED_COMPONENT_TEST_COUNT = 419;
 
 /*  r366 re-true: the vitest suite re-measured live at the r365
     terminal -- 346/346 over 39 files (54.36s). The r361-era pin 337
@@ -268,7 +276,22 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 412;
     toolkit's two in-tree homes -- the first post-build measurement
     read 1,935/1,073,799,196 B before the churn finished; the final
     fixed point re-measured after the last build is the pin). */
-export const SHIPPED_FILE_COUNT = 1931;
+/*  r381 re-true (the v1.2.253 PK-1 ship, measurement-last): the
+    offline census replica re-walked the toolkit tree at the FINAL
+    close-out fixed point -- 1,933 files / 173 dirs / 961,637,766 B
+    (the +2/+1 over the r380 pin: the PK-1 vitest file + the PK-1
+    drift guard + the two v1.2.253 zip homes in the toolkit's
+    download/ + dist-archive/ against the retention-removed 252
+    predecessors -- the net zip churn is +1 file); the r381 census
+    re-walked AFTER the sandbox recycle's resurrection class was
+    swept: the recycle restored six untracked r185-era leftovers
+    into the toolkit tree (the 103/105/106 zips + the 30K-line
+    playground pair + a corrupted truncated .github/workflows/ci.yml
+    -- "branches: ain]") that the r380 fixed point never carried --
+    the first post-sweep reading of 1,939 files / 657,355 lines /
+    1,014,673,554 B was the pollution, the pinned numbers are the
+    post-sweep live truth). */
+export const SHIPPED_FILE_COUNT = 1933;
 
 /*  r366 re-true (measurement-last): the offline census replica
     re-walked the toolkit tree at the r365 terminal AFTER this
@@ -468,7 +491,14 @@ export const SHIPPED_FILE_COUNT = 1931;
     + the r380 DS-3 lane (the route + the drift guards + the page +
     the client + the re-exported contract) + the re-executed
     1.2.251/1.2.252 notebook outputs). */
-export const SHIPPED_SOURCE_LINES = 610717;
+/*  r381 re-true (the v1.2.253 PK-1 ship, measurement-last): the
+    replica walk re-measured at the close-out fixed point --
+    610,958 lines (the +241 over the r380 pin: the PK-1 lane (the
+    page's bridge card + the 7-vitest suite + the 10-test drift
+    guard + the CHANGELOG/roadmap entries) + the re-executed
+    1.2.253 notebook outputs, the notebook output churn itself
+    netting the round down to +241). */
+export const SHIPPED_SOURCE_LINES = 610958;
 
 /*  r366-continuation re-true (measurement-last): the firing's
     close-out correction (the drift-guard figure 202 -> 130 and the

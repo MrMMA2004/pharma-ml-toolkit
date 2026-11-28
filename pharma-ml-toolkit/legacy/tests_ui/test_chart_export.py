@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtWidgets import QPushButton
-
 from ui.widgets.chart_export import attach_chart_export
 from ui.widgets.plot_widget import PlotPanel
 from ui.widgets.responsive import LEGIBILITY_FLOOR

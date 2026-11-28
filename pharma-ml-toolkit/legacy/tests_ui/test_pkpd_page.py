@@ -328,7 +328,6 @@ def test_main_window_integrates_pkpd_page(studio_app) -> None:
 
 def test_plot_panel_vlines_and_fill_survive_clear(studio_app) -> None:
     from pyqtgraph import InfiniteLine
-
     from ui.widgets.plot_widget import PlotPanel
 
     panel = PlotPanel()

@@ -327,9 +327,8 @@ def test_distribute_copies_into_every_subfolder(studio_app, qtbot, tmp_path: Pat
     page._tool_files = [shared]
     page._tool_mode.setCurrentText("distribute files into folders")
     page._tool_dry.setChecked(False)  # real run: the card asks once -- tests answer Yes
-    from PySide6.QtWidgets import QMessageBox
-
     import ui.pages.utilities as utilities_mod
+    from PySide6.QtWidgets import QMessageBox
 
     original = utilities_mod.QMessageBox.question
     utilities_mod.QMessageBox.question = staticmethod(

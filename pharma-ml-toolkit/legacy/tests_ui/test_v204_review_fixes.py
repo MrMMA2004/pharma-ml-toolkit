@@ -19,7 +19,6 @@ import pytest
 
 pytest.importorskip("PySide6")
 from PySide6.QtWidgets import QApplication, QWidget
-
 from ui.widgets.notification_widget import (
     AUTO_MS,
     DANGER_MS,
@@ -51,8 +50,9 @@ class TestDependencyHint:
         assert "ModuleNotFoundError" not in hint
 
     def test_pharmaml_dependency_error_passes_through_actionable(self) -> None:
-        from pharmaml.exceptions import DependencyError
         from ui.workers.job_worker import _dependency_hint
+
+        from pharmaml.exceptions import DependencyError
 
         exc = DependencyError(
             "preparation needs 'meeko'; python -m pip install -e '.[docking]'"
@@ -77,7 +77,6 @@ class TestDependencyHint:
 
     def test_worker_emits_the_hint_as_failure(self, qtbot) -> None:
         from PySide6.QtCore import QThreadPool
-
         from ui.workers.job_worker import JobWorker
 
         def job(_progress):

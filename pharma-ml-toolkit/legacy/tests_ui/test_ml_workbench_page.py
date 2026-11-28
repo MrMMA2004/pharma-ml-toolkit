@@ -96,9 +96,9 @@ def _synth_last_outcome(analysis) -> None:
     """A real AnalysisOutcome from a real quick fit (the interop source)."""
     from sklearn.linear_model import LinearRegression
     from sklearn.model_selection import train_test_split
+    from ui.pages.model_analysis import AnalysisOutcome
 
     from pharmaml.ml import evaluate_model
-    from ui.pages.model_analysis import AnalysisOutcome
 
     frame = pd.read_csv(_REGRESSION_EXAMPLE)
     target = "pIC50"
@@ -175,8 +175,9 @@ def test_page_constructs_with_the_six_tabs(studio_app) -> None:
 
 
 def test_tuner_tokens_mirror_the_playground_and_the_registry() -> None:
-    from pharmaml.ml.tuner import registry_hypermodels
     from ui.pages.ml_workbench import TUNE_PRUNERS, TUNE_SEARCHERS
+
+    from pharmaml.ml.tuner import registry_hypermodels
 
     assert TUNE_SEARCHERS == ("random", "tpe", "hyperband")
     assert TUNE_PRUNERS == ("off", "median")

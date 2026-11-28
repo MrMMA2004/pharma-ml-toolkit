@@ -17,7 +17,6 @@ The directive's mapping table and exact card order live in
 from __future__ import annotations
 
 from PySide6.QtWidgets import QPushButton
-
 from ui.main_window import SECTIONS
 from ui.nine_cards import NINE_CARDS, build_nine_card_grid, live_preview, probe_available
 

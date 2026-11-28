@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from ui.theme_manager import PROVIDERS, ChartPalette, ThemeManager
 
 

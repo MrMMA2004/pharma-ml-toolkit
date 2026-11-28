@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
-
 from ui.widgets.njobs_field import NJobsField
 
 
@@ -53,8 +52,9 @@ class TestNJobsField:
 
 class TestChemistryLabNJobs:
     def test_user_value_reaches_the_backend(self, qtbot, studio_app, monkeypatch) -> None:
-        import pharmaml.chem.features as features_mod
         import ui.pages.chemistry as chem
+
+        import pharmaml.chem.features as features_mod
         from pharmaml.chem.features import FeatureReport
 
         frame = pd.DataFrame({"smiles": ["CCO", "c1ccccc1O", "CCN"]})

@@ -49,6 +49,7 @@ class TestALTabMounted:
 
     def test_strategies_mirror_backend(self, qtbot, studio_app) -> None:
         import ui.pages.ml_workbench as mw
+
         from pharmaml.ml.active_learning import QUERY_STRATEGIES
 
         page = mw.MLWorkbenchPage()

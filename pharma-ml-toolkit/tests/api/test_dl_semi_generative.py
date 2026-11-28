@@ -26,6 +26,7 @@ from __future__ import annotations
 import io
 import json
 import time
+from typing import ClassVar
 
 import pytest
 from fastapi.testclient import TestClient
@@ -619,7 +620,7 @@ class TestGenerativeOperatorModes:
     "uniform"/"splice" and no hopped molecule can exist).
     """
 
-    PARENTS = [
+    PARENTS: ClassVar[list[str]] = [
         "CC(=O)Oc1ccccc1C(=O)O",   # aspirin  (benzene framework)
         "COc1ccccc1",               # anisole  (benzene framework)
         "CN1CCCCC1c2cccnc2",        # nicotine (bicyclic framework)

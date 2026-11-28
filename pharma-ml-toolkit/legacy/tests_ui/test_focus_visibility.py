@@ -32,7 +32,6 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTreeWidget,
 )
-
 from ui.studio_theme import studio_qss
 
 #: The nine workspaces (the nine-card home's destinations).

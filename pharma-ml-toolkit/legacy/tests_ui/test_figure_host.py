@@ -27,8 +27,9 @@ class TestFigureCanvasHost:
         assert host.error() is None
 
     def test_adopts_the_original_backend_figure(self, qtbot) -> None:
-        from pharmaml.viz.ml_plots import plot_cv_scores
         from ui.widgets.figure_canvas_host import FigureCanvasHost
+
+        from pharmaml.viz.ml_plots import plot_cv_scores
 
         figure = plot_cv_scores([0.7, 0.75, 0.8], metric="R2")
         host = FigureCanvasHost()
@@ -54,8 +55,9 @@ class TestFigureCanvasHost:
         assert host.has_figure() is False
 
     def test_replacement_releases_the_old_figure(self, qtbot) -> None:
-        from pharmaml.viz.ml_plots import plot_cv_scores
         from ui.widgets.figure_canvas_host import FigureCanvasHost
+
+        from pharmaml.viz.ml_plots import plot_cv_scores
 
         first = plot_cv_scores([0.7, 0.75, 0.8], metric="R2")
         second = plot_cv_scores([0.6, 0.65], metric="R2")
@@ -72,8 +74,9 @@ class TestFigureCanvasHost:
         assert plt.fignum_exists(second.number)
 
     def test_clear_returns_to_empty(self, qtbot) -> None:
-        from pharmaml.viz.ml_plots import plot_cv_scores
         from ui.widgets.figure_canvas_host import FigureCanvasHost
+
+        from pharmaml.viz.ml_plots import plot_cv_scores
 
         host = FigureCanvasHost()
         qtbot.addWidget(host)
@@ -83,8 +86,9 @@ class TestFigureCanvasHost:
         assert host.has_figure() is False
 
     def test_rebuild_reruns_the_stored_builder(self, qtbot) -> None:
-        from pharmaml.viz.ml_plots import plot_cv_scores
         from ui.widgets.figure_canvas_host import FigureCanvasHost
+
+        from pharmaml.viz.ml_plots import plot_cv_scores
 
         host = FigureCanvasHost()
         qtbot.addWidget(host)
@@ -94,8 +98,9 @@ class TestFigureCanvasHost:
         assert host.state() == "figure"
 
     def test_export_through_the_existing_path(self, qtbot, tmp_path) -> None:
-        from pharmaml.viz.ml_plots import plot_cv_scores
         from ui.widgets.figure_canvas_host import FigureCanvasHost
+
+        from pharmaml.viz.ml_plots import plot_cv_scores
 
         host = FigureCanvasHost()
         qtbot.addWidget(host)
@@ -107,8 +112,9 @@ class TestFigureCanvasHost:
 
     def test_temp_png_display_path(self, qtbot, tmp_path) -> None:
         # statplots closes its figures: render one to a real file first
-        from pharmaml.viz import statplots
         from ui.widgets.figure_canvas_host import FigureCanvasHost
+
+        from pharmaml.viz import statplots
 
         png = tmp_path / "h.png"
         statplots.plot_histogram(pd.Series([1.0, 2.0, 2.5, 3.0, 7.0]), str(png))
@@ -202,7 +208,6 @@ class TestCoverageBrowser:
     @pytest.fixture()
     def loaded_lab(self, qtbot):
         from PySide6.QtCore import QEventLoop, QTimer
-
         from ui.pages.data_explorer import DataExplorerPage
         from ui.pages.image_lab import ImageLabPage
 

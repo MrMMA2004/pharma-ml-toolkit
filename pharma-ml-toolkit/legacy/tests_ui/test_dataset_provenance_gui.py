@@ -49,6 +49,7 @@ class TestGUIWiring:
         """The workbench's ml-evaluation record names the dataset's
         version + sha + column signature when the source is registered."""
         import ui.pages.ml_workbench as mw
+
         from pharmaml.studio import note
         from pharmaml.studio.runs import latest_runs
 
@@ -96,10 +97,10 @@ class TestGUIWiring:
 
     def test_job_center_row_names_the_version(self, workspace_file, runs_dir):
         from PySide6.QtWidgets import QApplication
-
-        from pharmaml.studio import record_run
         from ui.widgets.job_center import JobCenterDialog
         from ui.workers.job_worker import JobRunner
+
+        from pharmaml.studio import record_run
 
         record_run("ml-evaluation", "family benchmark · y", {
             "target": "y", "dataset_version": 3,

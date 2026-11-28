@@ -14,7 +14,6 @@ Pins the Phase-Twelve contract:
 from __future__ import annotations
 
 import pytest
-
 from ui.widgets.workflow_guide import WORKFLOWS, WorkflowGuide
 
 #: The nine §12.1 workspace keys, exact.
@@ -121,7 +120,6 @@ class TestMainWindowMounts:
     ) -> None:
         from PySide6.QtCore import Qt
         from PySide6.QtWidgets import QTabWidget
-
         from ui.main_window import MainWindow
         from ui.nine_cards import NINE_CARDS
 

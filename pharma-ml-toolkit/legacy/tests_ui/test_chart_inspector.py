@@ -15,7 +15,6 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from PySide6.QtCore import QPointF, QRectF
-
 from ui.widgets.plot_widget import PlotPanel
 
 

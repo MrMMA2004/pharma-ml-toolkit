@@ -5,7 +5,6 @@ import json
 import threading
 
 import pytest
-
 from ui.pages.declared_manifest_dialog import DeclaredManifestDialog
 from ui.pages.reproducibility_dialog import ReproducibilityDialog
 from ui.workers.job_worker import JobRunner
@@ -83,9 +82,10 @@ def test_manifest_busy_and_stale_job(qtbot, studio_app, tmp_path, monkeypatch):
 
 
 def test_ga_stop_surfaces_partial_without_checkpoint(qtbot, studio_app, monkeypatch):
+    from ui.pages.generative import GenerativeWorkbenchPage
+
     from pharmaml.exceptions import JobCancelled
     from pharmaml.generative.result import GenerationResult
-    from ui.pages.generative import GenerativeWorkbenchPage
 
     started, proceed = threading.Event(), threading.Event()
     captured = {}
@@ -130,8 +130,9 @@ def test_ga_stop_surfaces_partial_without_checkpoint(qtbot, studio_app, monkeypa
     (True, False, None), (False, False, "corpus"), (False, True, "seed_smiles"),
 ])
 def test_ga_progress_passed_for_each_corpus_mode(qtbot, studio_app, monkeypatch, use_builtin, seeded, expected):
-    from pharmaml.generative.result import GenerationResult
     from ui.pages.generative import GenerativeWorkbenchPage
+
+    from pharmaml.generative.result import GenerationResult
 
     captured = {}
 

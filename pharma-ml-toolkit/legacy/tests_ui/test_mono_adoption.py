@@ -9,7 +9,6 @@ does not apply.
 from __future__ import annotations
 
 from PySide6.QtWidgets import QLabel, QPlainTextEdit
-
 from ui.font_loader import mono_font, set_mono
 from ui.pages.data_explorer import DataExplorerPage
 from ui.pages.docking import DockingWorkbenchPage

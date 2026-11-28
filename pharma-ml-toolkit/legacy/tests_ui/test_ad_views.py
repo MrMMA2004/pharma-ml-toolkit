@@ -22,9 +22,9 @@ def _ad_page(qtbot, n_models: int = 8):
     synthetic regression and hand the result to the view renderer.
     """
     from sklearn.linear_model import Ridge
+    from ui.pages.ml_workbench import MLWorkbenchPage
 
     from pharmaml.ml import applicability_domain
-    from ui.pages.ml_workbench import MLWorkbenchPage
 
     rng = np.random.default_rng(0)
     x = pd.DataFrame({"a": rng.normal(size=120), "b": rng.normal(size=120)})

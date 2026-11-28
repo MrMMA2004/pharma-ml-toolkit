@@ -36,7 +36,6 @@ covered by the shown-panel leg in the §23.6 suite).
 from __future__ import annotations
 
 import numpy as np
-
 from ui.widgets.plot_widget import PlotPanel
 
 

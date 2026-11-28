@@ -81,8 +81,9 @@ def test_builtin_dataset_autodetects_smiles_column(studio_app) -> None:
 
 
 def test_all_families_preset_maps_to_the_canonical_registry(studio_app) -> None:
-    from pharmaml.chem import FEATURE_FAMILIES
     from ui.pages.chemistry import _FAMILY_PRESETS
+
+    from pharmaml.chem import FEATURE_FAMILIES
 
     assert _FAMILY_PRESETS["All families (heavy)"] is None
     assert _FAMILY_PRESETS["descriptors (fast)"] == ("descriptors",)
@@ -258,6 +259,7 @@ def test_feature_stop_surfaces_the_preserved_partial(
     a real stop. The page must surface it, not drop it.
     """
     import ui.pages.chemistry as chem
+
     from pharmaml.chem.features import FeatureReport
     from pharmaml.exceptions import JobCancelled
 
@@ -310,6 +312,7 @@ def test_feature_stop_without_payload_keeps_the_historic_line(
     """A JobCancelled with NO payload (a non-§13-style backend) keeps
     the historical 'Cancelled after Xs' line and binds nothing."""
     import ui.pages.chemistry as chem
+
     from pharmaml.exceptions import JobCancelled
 
     def fake_compute(smiles, families=None, n_jobs=1, progress=None, config=None):

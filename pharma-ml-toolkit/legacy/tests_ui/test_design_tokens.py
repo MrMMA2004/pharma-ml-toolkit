@@ -11,7 +11,6 @@ plus the Spectral/Catalyst alternative directions).  A token regression
 from __future__ import annotations
 
 import pytest
-
 from ui.design_tokens import (
     CATALYST,
     CATALYST_DARK,

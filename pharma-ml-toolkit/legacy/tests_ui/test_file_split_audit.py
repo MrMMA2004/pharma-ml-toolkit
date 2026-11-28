@@ -90,8 +90,9 @@ def test_validation_busy_and_stale_result(qtbot, studio_app, tmp_path, monkeypat
 
 
 def test_compare_declared_manifests(qtbot, studio_app, tmp_path, monkeypatch):
-    from pharmaml.ml.provenance import experiment_manifest
     from ui.pages.reproducibility_dialog import ReproducibilityDialog
+
+    from pharmaml.ml.provenance import experiment_manifest
 
     data = tmp_path / "data.csv"
     data.write_text("id\n001\n", encoding="utf-8")

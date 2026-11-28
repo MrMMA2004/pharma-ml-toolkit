@@ -142,7 +142,6 @@ def test_detail_dialog_invalid_smiles_never_invents(studio_app) -> None:
 
 def _bound_view(studio_app, qtbot):
     import pandas as pd
-
     from ui.widgets.data_table import DataTableView
 
     view = DataTableView()

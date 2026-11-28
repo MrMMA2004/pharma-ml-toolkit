@@ -82,8 +82,9 @@ def test_job_center_offers_compare_with_multiselect(
 
 def test_compare_dialog_renders_groups_and_refusals(
         qtbot, studio_app, seeded) -> None:
-    from pharmaml.studio.comparison import _run_view, latest_runs
     from ui.widgets.experiment_compare import ExperimentCompareDialog
+
+    from pharmaml.studio.comparison import _run_view, latest_runs
 
     records = []
     for family in ("ml-evaluation", "pkpd"):
@@ -107,8 +108,9 @@ def test_compare_dialog_renders_groups_and_refusals(
 
 def test_compare_dialog_two_compatible_runs_rank_cleanly(
         qtbot, studio_app, seeded) -> None:
-    from pharmaml.studio.comparison import _run_view, latest_runs
     from ui.widgets.experiment_compare import ExperimentCompareDialog
+
+    from pharmaml.studio.comparison import _run_view, latest_runs
 
     records = latest_runs("ml-evaluation", limit=5)
     views = [_run_view(r) for r in records]

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from PySide6.QtGui import QFont
-
 from ui.font_loader import (
     _BUNDLED,
     _registered,

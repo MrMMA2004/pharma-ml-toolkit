@@ -143,7 +143,6 @@ def test_image_lab_export_reports_result_card(
 ) -> None:
     """The status line carries the engine's honest report (§17.4)."""
     from PySide6.QtWidgets import QFileDialog
-
     from ui.pages.image_lab import ImageLabPage
 
     page = ImageLabPage()
@@ -173,7 +172,6 @@ def test_image_lab_export_stamps_foreign_extension(
 ) -> None:
     """§17.4: a name with a foreign suffix gets the chosen format's ext."""
     from PySide6.QtWidgets import QFileDialog
-
     from ui.pages.image_lab import ImageLabPage
 
     page = ImageLabPage()
@@ -200,7 +198,6 @@ def test_image_lab_export_failure_is_honest(
 ) -> None:
     """A failing export surfaces the engine's error, not a silent pass."""
     from PySide6.QtWidgets import QFileDialog
-
     from ui.pages.image_lab import ImageLabPage
 
     page = ImageLabPage()

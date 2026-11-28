@@ -53,7 +53,6 @@ def _classification_outcome(analysis) -> None:
     """A real three-class AnalysisOutcome (conformal sets are multi-class)."""
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import train_test_split
-
     from ui.pages.model_analysis import AnalysisOutcome
 
     frame = pd.read_csv(_TK / "examples" / "data" / "qsar_classification.csv")
@@ -92,7 +91,6 @@ def _classification_outcome(analysis) -> None:
 def test_conformal_sets_reject_a_regression_source(studio_app) -> None:
     """The card is classification-only: a regression source refuses."""
     from sklearn.linear_model import LinearRegression
-
     from ui.pages.model_analysis import AnalysisOutcome
 
     page = _fresh_workbench()

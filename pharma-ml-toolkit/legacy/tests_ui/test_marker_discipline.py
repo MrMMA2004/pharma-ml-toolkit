@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-
 from ui.design_tokens import (
     MARKER_DISCIPLINE_DARK,
     MARKER_DISCIPLINE_LIGHT,

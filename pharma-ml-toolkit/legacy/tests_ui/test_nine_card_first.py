@@ -16,7 +16,6 @@ The Phase C restructure contract:
 from __future__ import annotations
 
 from PySide6.QtWidgets import QPushButton
-
 from ui.main_window import SECTIONS
 from ui.nine_cards import NINE_CARDS
 from ui.widgets.workspace_nav import WORKSPACE_ORDER

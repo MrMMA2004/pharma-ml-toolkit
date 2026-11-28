@@ -63,15 +63,15 @@ def test_page_constructs_with_the_cv_controls(studio_app) -> None:
 
 
 def test_cv_strategy_tokens_mirror_the_library() -> None:
-    from pharmaml.ml.cv_results import CV_STRATEGIES
     from ui.pages.model_analysis import _CV_STRATEGIES
+
+    from pharmaml.ml.cv_results import CV_STRATEGIES
 
     assert set(_CV_STRATEGIES) - {"auto"} == set(CV_STRATEGIES)
 
 
 def test_detect_group_column_is_honest_about_what_counts() -> None:
     import pandas as pd
-
     from ui.pages.model_analysis import detect_group_column, detect_smiles_column
 
     frame = pd.DataFrame(
@@ -117,10 +117,10 @@ def test_compare_board_carries_the_formatted_score_and_opens_the_report(
     qtbot, studio_app, monkeypatch
 ) -> None:
     from PySide6.QtWidgets import QTableWidget
+    from ui.pages.model_analysis import CVReportDialog
 
     import pharmaml.ml as ml_module
     from pharmaml.ml import compare_models_cv as real_compare
-    from ui.pages.model_analysis import CVReportDialog
 
     page = _fresh_page()
 

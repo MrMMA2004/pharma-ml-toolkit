@@ -266,7 +266,6 @@ class TestGuiResponsiveness:
         """
         monkeypatch.setenv("PHARML_STUDIO_WORKSPACE", str(tmp_path / "ws.json"))
         from PySide6.QtWidgets import QApplication
-
         from ui.pages.data_explorer import DataExplorerPage
 
         frame = _make_frame(120_000, 10)

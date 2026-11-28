@@ -15,7 +15,6 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QImage
-
 from ui.theme_manager import ThemeManager
 
 # where the grabbed PNGs go (also used by the round report)

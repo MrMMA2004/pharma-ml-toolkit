@@ -40,7 +40,6 @@ def test_display_role_renders_values_and_nan(studio_app) -> None:
 
 def test_sort_reorders_rows(studio_app) -> None:
     from PySide6.QtCore import Qt
-
     from ui.widgets.data_table import PandasTableModel
 
     model = PandasTableModel(_frame())

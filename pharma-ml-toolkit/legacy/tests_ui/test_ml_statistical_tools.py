@@ -47,7 +47,6 @@ def _regression_outcome(analysis) -> None:
     """A real AnalysisOutcome from a real quick regression fit."""
     from sklearn.linear_model import LinearRegression
     from sklearn.model_selection import train_test_split
-
     from ui.pages.model_analysis import AnalysisOutcome
 
     frame = pd.read_csv(_REGRESSION_EXAMPLE)
@@ -83,7 +82,6 @@ def _classification_outcome(analysis) -> None:
     """A real AnalysisOutcome from a real quick classification fit."""
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import train_test_split
-
     from ui.pages.model_analysis import AnalysisOutcome
 
     frame = pd.read_csv(_CLASSIFICATION_EXAMPLE)

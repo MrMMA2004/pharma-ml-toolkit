@@ -41,7 +41,6 @@ the event-driven path end to end.
 from __future__ import annotations
 
 import numpy as np
-
 from ui.widgets.plot_widget import PlotPanel
 
 

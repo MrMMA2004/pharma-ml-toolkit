@@ -11,7 +11,6 @@ rework untouched.
 from __future__ import annotations
 
 import pandas as pd
-
 from ui.nine_cards import NINE_CARDS, build_nine_card_grid, live_preview
 
 

@@ -45,6 +45,7 @@ class TestWorkflowGuideWhereLint:
 
     def test_al_strategies_are_exactly_the_backends(self, qtbot, studio_app) -> None:
         import ui.pages.ml_workbench as mw
+
         from pharmaml.ml.active_learning import QUERY_STRATEGIES
 
         page = mw.MLWorkbenchPage()

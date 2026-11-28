@@ -101,7 +101,6 @@ def test_the_empty_query_is_a_browsable_launch_pad() -> None:
 def test_the_palette_dialog_navigates(studio_app, qtbot) -> None:
     """Ctrl+K's dialog: search, Enter, and the main window routes."""
     from PySide6.QtCore import Qt
-
     from ui.main_window import MainWindow
     from ui.search_palette import SearchPalette
 
@@ -159,7 +158,6 @@ def test_the_job_center_tracks_a_live_job(studio_app, qtbot, monkeypatch,
                                           tmp_path) -> None:
     monkeypatch.setenv("PHARML_STUDIO_RUNS_DIR", str(tmp_path))
     from PySide6.QtCore import QThreadPool
-
     from ui.widgets.job_center import JobCenterDialog
     from ui.workers.job_worker import JobRunner
 

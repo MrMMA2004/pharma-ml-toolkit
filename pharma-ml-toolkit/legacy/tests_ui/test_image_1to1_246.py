@@ -80,7 +80,6 @@ def test_1to1_refused_when_hidden(studio_app) -> None:
 
 def test_1to1_achieves_unity_from_fit(studio_app) -> None:
     from PySide6.QtWidgets import QApplication
-
     from ui.widgets.image_panel import RESOLUTION_TOLERANCE
 
     panel = _shown(studio_app, 400, 400)
@@ -97,7 +96,6 @@ def test_1to1_achieves_unity_from_fit(studio_app) -> None:
 def test_1to1_matches_exact_arithmetic(studio_app) -> None:
     """viewPixelSize() itself lands at ~1.0 per axis (the circular math)."""
     from PySide6.QtWidgets import QApplication
-
     from ui.widgets.image_panel import RESOLUTION_TOLERANCE
 
     panel = _shown(studio_app, 400, 400)
@@ -231,7 +229,6 @@ def test_is_original_resolution_band_edges(studio_app, monkeypatch) -> None:
 
 def _shown_page(studio_app):
     from PySide6.QtWidgets import QApplication
-
     from ui.pages.image_lab import ImageLabPage
 
     page = ImageLabPage()
@@ -244,7 +241,6 @@ def _shown_page(studio_app):
 
 def _show_roi_tab(page) -> None:
     from PySide6.QtWidgets import QApplication
-
     from ui.widgets.image_panel import ImagePanel
 
     for i in range(page._tabs.count()):

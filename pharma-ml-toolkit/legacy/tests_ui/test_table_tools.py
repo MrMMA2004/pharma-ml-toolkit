@@ -16,7 +16,6 @@ import pytest
 pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication
-
 from ui.pages.data_explorer import DataExplorerPage
 from ui.pages.table_tools import TableToolsPage
 from ui.workers.job_worker import JobRunner

@@ -606,7 +606,7 @@ drawn through the house `PlotlyFigure`. The import stage is paste-only.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | PK-1 — Import stage reads a registered dataset's time/conc columns |
-| Current status | Partial (the bounded column bridge exists app-wide; this page never uses it) |
+| Current status | **Implemented (round 381, v1.2.253)** — the stage-1 bridge card served (the dataset select + the time/conc column pair pulled through the same bounded `column()` lane every other workspace rides; the paired lines also fill the paste textarea — the one series source of truth stays visible and editable; the honest guards: a null cell is a row-labeled error never `Number(null) === 0`, a truncated pull names its 500-row bound (§17.3), a length disagreement is the lane's own error, the backend's 422 surfaces verbatim; 7 vitests + the 10-test drift guard `tests/test_frontend_pkpd_bridge.py`) |
 | Problem | `PKPDPage.tsx:1150` stage 1 is a paste textarea ("the pasted concentration-time series (time conc per line)") + two hardcoded samples — while `services/datasets/client.ts:204 column()` is the established bridge the ML/DL/Generative pages use to pull a registered column, and the shipped `examples/data/pk_profile.csv` loads as a dataset through the normal Datasets workflow. A user who imported their PK table as a dataset must retype it into the textarea. |
 | Proposed solution | Add a dataset + column pair picker (times column, concentration column) to stage 1: the page pulls both columns through the existing `column()` bridge, parses to the same series view, and the textarea remains the free-form lane. Sample-data section already covers the file, so the demo path stays one-click. |
 | Scientific value | Removes the retype lane between the toolkit's own dataset store and its pharmacometrics engine — the exact bridge every other workflow already has. |
@@ -1065,6 +1065,30 @@ fourth request; the six contract-count pins trued proactively to
 contract-touching close-out); the contract re-exported at 145 paths /
 100 schemas. The next row is PK-1 (the paste-only PK/PD import vs
 the column bridge every other workflow already has).
+
+— execution log: **row 8 (PK-1) executed in round 381 at v1.2.253** —
+the Import stage's bridge card (the paste-only lane's missing verb,
+and the row that closes the second 3-item set): the page pulls the
+registered dataset's own time/concentration columns through the SAME
+`datasetsApi.column()` bridge every other workspace rides (registry
+`list()` on mount + `view()` for the column inventory + the two
+bounded pulls — no backend change, the roadmap's own "not required"
+verdict); the paired lines also fill the paste textarea verbatim so
+the one series source of truth stays visible and editable; the
+honest guards: a null cell (`json_safe`'s NaN → null) is a
+row-labeled error — never `Number(null) === 0` fabricating a
+concentration the frame never measured; a non-numeric cell carries
+the same labeled refusal; a truncated pull names its 500-row bound
+(§17.3 — the bounded view never masquerades as the whole column); a
+length disagreement between the two columns is the lane's own
+honest error; the backend's own 422/404 lanes surface verbatim; the
+paste lane unchanged (its parser, import button, samples, and its
+own labeled error lane all pinned as the regression clause); 7
+vitests over the full page mount (the roadmap's three acceptance
+clauses + the null/bound/alignment/empty-state guards) + the 10-test
+drift guard `tests/test_frontend_pkpd_bridge.py`. The next row is
+VIZ-1 (the Visualization page's own paste-only lane — the last
+remaining P1 row; the third 3-item set opens with it).
 
 — trued round 372 (part21 / task 2-c): written read-only against the v1.2.244
 tree; every "zero frontend consumer" claim above was verified by diffing all
