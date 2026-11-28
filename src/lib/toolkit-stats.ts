@@ -260,14 +260,15 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 412;
     convention; the +56.6 MB is exactly the two new 28,278,832-byte
     copies)). */
 /*  r380 re-true (the v1.2.252 DS-3 ship, measurement-last): the
-    offline census replica re-walked the toolkit tree at the
-    close-out fixed point -- 1,935 files / 172 dirs / 1,073,799,196 B
-    (the +4 files over the r378 pin: the r379 standardize-action
-    drift-guard file + the two 251 zip homes + the r380 frames-
-    register drift-guard file + the two 252 zip homes, less the two
-    251 predecessors the retention rule removed from the toolkit's
-    two in-tree homes). */
-export const SHIPPED_FILE_COUNT = 1935;
+    offline census replica re-walked the toolkit tree at the FINAL
+    close-out fixed point -- 1,931 files / 172 dirs / 960,704,980 B
+    (the r380 frames-register drift-guard file + the two 252 zip
+    homes, less the predecessor churn: the three-build ship's
+    retention rule removed the 249/250/251 predecessors from the
+    toolkit's two in-tree homes -- the first post-build measurement
+    read 1,935/1,073,799,196 B before the churn finished; the final
+    fixed point re-measured after the last build is the pin). */
+export const SHIPPED_FILE_COUNT = 1931;
 
 /*  r366 re-true (measurement-last): the offline census replica
     re-walked the toolkit tree at the r365 terminal AFTER this
