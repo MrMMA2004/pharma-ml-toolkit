@@ -295,6 +295,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/chemistry/standardize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Standardize
+         * @description DS-2 -- ``POST /api/v1/chemistry/standardize``.
+         *
+         *     Runs the REAL REINVENT-style standardization engine over one
+         *     dataset SMILES column and registers the standardized frame as a
+         *     NEW derived dataset (source untouched -- sha-256-pinned by the API
+         *     tests, scanned by the frontend drift guard).
+         */
+        post: operations["standardize_api_v1_chemistry_standardize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/database": {
         parameters: {
             query?: never;
@@ -4925,6 +4950,51 @@ export interface components {
             /** Val Size */
             val_size?: number | null;
         };
+        /**
+         * StandardizeRequest
+         * @description DS-2 -- the Clean stage's missing verb, over the REAL engine.
+         *
+         *     ``ops`` is the ordered list of standardization passes, each a real
+         *     :mod:`pharmaml.chem.standardize` callable applied in sequence:
+         *
+         *     * ``"canonical_tautomer"`` -- the REINVENT ligprep pipeline's
+         *       TautomerEnumerator pass (keto/enol forms collapse to one);
+         *     * ``"reinvent"`` -- the REINVENT4 ``default`` chain (largest
+         *       fragment -> RemoveHs -> salt removal -> neutralisation -> cleanup
+         *       -> unwanted-pattern/size/element gates).
+         *
+         *     ``neutralize`` toggles the chain's own step-4 pass (the engine's
+         *     documented knob; honoured only when ``"reinvent"`` rides ``ops``).
+         *     The standardized frame registers as a NEW dataset with full
+         *     provenance (``derived`` block: source id + column + ops); the
+         *     source record is never mutated. Rows the engine rejects are NOT
+         *     silently dropped: they leave the derived frame but ride the
+         *     response's ``rejected`` list (row, input, reason).
+         */
+        StandardizeRequest: {
+            /** Column */
+            column?: string | null;
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * Mode
+             * @default job
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /**
+             * Neutralize
+             * @default true
+             */
+            neutralize: boolean;
+            /**
+             * Ops
+             * @default [
+             *       "reinvent"
+             *     ]
+             */
+            ops: ("canonical_tautomer" | "reinvent")[];
+        };
         /** StatRequest */
         StatRequest: {
             /**
@@ -5906,6 +5976,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["FingerprintsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    standardize_api_v1_chemistry_standardize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandardizeRequest"];
             };
         };
         responses: {

@@ -171,7 +171,7 @@ split) + `services/quality/client.ts` (the §15.4 data-quality report) +
 | Field | Entry |
 | --- | --- |
 | ID / Feature | DS-2 — `POST /api/v1/chemistry/standardize` over a dataset SMILES column |
-| Current status | Partial (engine Implemented; route Missing; stage display-only) |
+| Current status | **Implemented (round 379, v1.2.251)** — the `POST /api/v1/chemistry/standardize` route over the real REINVENT-style engine served (the ops vocabulary over the engine's own callables, the derived dataset registered with the provenance block, the source never mutated, the honest rejected-rows accounting); the Clean stage renders the action + the before/after counts
 | Problem | `src/pharmaml/chem/standardize.py` ships `reinvent_standardize_smiles`, `canonicalize_tautomer`, `reinvent_standardize_mol` (the "data.standardize" capability, `test_chem_standardize.py`), but `routes/chemistry.py` serves only `/descriptors` and `/fingerprints` — and the Datasets stage 4 "Clean / Standardize / Select Columns" (`DatasetsPage.tsx:1001`) is read-only: it displays the loader's column policy, it cannot standardize anything. |
 | Proposed solution | Add `POST /api/v1/chemistry/standardize` taking `{dataset_id, column, ops: ["uncharge","canonical_tautomer","strip_salts", …]}` (job/sync modes); the body runs the existing engine and registers the standardized frame as a NEW dataset (provenance meta: source dataset_id + ops), never mutating the source — the §15.4 no-mutation rule preserved. Stage 4 gains the action and shows the before/after counts of changed SMILES. |
 | Scientific value | Tautomer/charge/salt forms are the classic silent QSAR confounder; REINVENT-style standardization before descriptor computation is the field norm. |
@@ -1007,6 +1007,32 @@ the generative-workspace mirror guard extended with the fourth
 request; the contract re-exported at 143 paths / 98 schemas. The next
 row is DS-2 (the Clean/Standardize stage's own route over a dataset
 SMILES column).
+
+— execution log: **row 6 (DS-2) executed in round 379 at v1.2.251** —
+the `POST /api/v1/chemistry/standardize` route over the real
+REINVENT-style engine (`chem/standardize.py`: the
+`canonical_tautomer` pass and the `reinvent` chain — largest
+fragment, RemoveHs, salt removal, neutralisation with its own
+documented toggle, cleanup, the unwanted-pattern/size/element gates —
+applied in request order); the standardized frame registers as a NEW
+derived dataset through the same load-and-register path every upload
+takes, with the provenance block the store now carries on record
+views (`derived`: kind, source dataset_id, column, ops, neutralize) —
+the source record is never mutated (sha-256 pinned over the column
+lane by the API tests; the no-write scan pinned by the new drift
+guard); the non-SMILES column is an honest 422; rejected rows are
+accounted (row, input, reason), never silently dropped; the Datasets
+stage 4's Clean action (the pass checkboxes, the uncharge toggle,
+the report card with the changed/unchanged/rejected counts + the
+rejected table + the derived dataset's select action); 9 API tests +
+2 vitests + the 10-test DS-2 drift guard (the ops vocabulary pinned
+across route / contract / client, the no-write scan, the page +
+parser pins, the provenance-on-the-store pins) + the chemistry
+mirror guard extended with the third request; the six stale
+contract-count pins the r378 round left behind its own 143/98 growth
+caught and trued to 144/99; the contract re-exported at 144 paths /
+99 schemas. The next row is DS-3 (the descriptor/fingerprint frames
+registered as derived datasets).
 
 — trued round 372 (part21 / task 2-c): written read-only against the v1.2.244
 tree; every "zero frontend consumer" claim above was verified by diffing all

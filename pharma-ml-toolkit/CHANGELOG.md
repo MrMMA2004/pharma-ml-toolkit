@@ -1,3 +1,73 @@
+## [1.2.251] — 2026-11-29 — round 379 (the 172nd recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — DS-2, the P1 row 6, the molecular standardization route over chem/standardize's REINVENT-style engine; trace 1a220fd32d3acf31, item 1 of the second 3-item set)
+
+- **DS-2 (the roadmap's row 6 — the Clean stage's missing verb)**:
+  `POST /api/v1/chemistry/standardize` over the REAL REINVENT-style
+  engine (`chem/standardize.py`'s `reinvent_standardize_smiles` +
+  `canonicalize_tautomer` — the "data.standardize" capability that
+  previously existed only in-tree): the Datasets stage 4 "Clean /
+  Standardize" was read-only, it displayed the loader's column
+  policy and could not standardize anything. The request takes
+  `{dataset_id, column | auto-detected, ops, neutralize}`; the ops
+  vocabulary is the engine's own callable passes
+  (`canonical_tautomer` — the ligprep TautomerEnumerator pass;
+  `reinvent` — the REINVENT4 default chain: largest fragment,
+  RemoveHs, salt removal, neutralisation, cleanup, the
+  unwanted-pattern/size/element gates), applied in request order;
+  `neutralize` toggles the chain's own step-4 pass. A non-SMILES
+  column is an honest 422 (the probe names it and the detected
+  column); a blank/garbage/size-gated row is never silently dropped —
+  it leaves the derived frame but rides the response's `rejected`
+  list (row, input, reason: unparseable / blank /
+  rejected-by-standardization-chain).
+- **The derived registration**: the standardized frame registers as
+  a NEW dataset through the same path every upload takes (temp CSV →
+  the REAL `load_dataset` → `DatasetStore.register`, target/task
+  preserved) with a provenance block the store now carries on every
+  record view (`derived`: kind "standardized", source dataset_id,
+  column, ops, neutralize) — the source record is never mutated:
+  the route stages a positional `.copy()`, registers only the
+  derived frame, and the source's bytes stay untouched (sha-256
+  pinned over the observable column lane by the API tests; the
+  no-write scan is pinned by the new drift guard).
+- **The frontend**: stage 4 gains the action — the SMILES column
+  select (pre-guessed like every other stage's), the canonical-
+  tautomer pass checkbox (applied first, ligprep order), the
+  REINVENT-chain checkbox with the uncharge sub-toggle, the
+  "Standardize → derived dataset" run button (job mode, the
+  JobRunCard relay), and the report card: the before/after counts
+  (changed / unchanged / rejected), the rejected-rows table with
+  reasons, the derived dataset's identity + a Select action that
+  continues the workflow on the derived record, and the honest
+  "source is untouched" line. The client's `chemistryApi.standardize`
+  + the strict `parseStandardizeReport` (malformed throws);
+  the wire body mirrors the backend's `StandardizeRequest`
+  field-for-field (the chemistry mirror guard extended with the
+  third request + the route pinned as consumed).
+- **The evidence**: 9 new API tests (the salt-stripped wiring proof —
+  `CC(=O)[O-].[Na+]` → `CC(=O)O` with the exact counts ledger; the
+  source untouched sha-256 pin; the non-SMILES column 422; the
+  unknown column/dataset 422/404; the rejected-rows accounting with
+  the honest reasons; the tautomer-only + neutralize-off lanes — the
+  keto/enol collapse, the salt row untouched without the chain, the
+  charge kept when uncharge is off; the duplicate/unknown/empty ops
+  422s; the job-mode registration with the both-ops order; the
+  all-rejected honest 422), 2 new vitests over the full page mount
+  (the report relay end-to-end — the counts line, the rejected
+  table, the derived select action, the registry refresh; the
+  honest gating — no ops, no request), 10 new drift-guard tests
+  (the ops vocabulary pinned across route / contract / client; the
+  no-write scan; the page + parser pins; the provenance-on-the-store
+  pins), the stale contract-count pins caught and trued (the r378
+  round left four `== 142` / two `== 97` pins behind its own 143 /
+  98 growth — all six trued to 144 / 99 with the dated history
+  comments), the contract re-exported (144 paths / 99 schemas — the
+  new StandardizeRequest DTO + the new path), the full suite
+  409/409 over 50 files, tsc 0, ruff clean, mypy clean on the
+  touched modules.
+- NO release (per the standing authorization rule): no tag, no
+  installer — v1.2.244 stands published; the tracked homes add the
+  251 zip alongside the 246–250 pairs.
+
 ## [1.2.250] — 2026-11-29 — round 378 (the 171st recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — GEN-2, the P1 row 5, the MOSES generation-metrics route over moses_metrics.generation_metrics; trace 1a220a031331016d, item 3 of 3)
 
 - **GEN-2 (the roadmap's row 5 — the MOSES suite reachable from the

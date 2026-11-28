@@ -21,17 +21,29 @@ errors.
 
 from __future__ import annotations
 
+import tempfile
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Annotated, Literal
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 from pharmaml.chem import descriptors as chem_descriptors
+from pharmaml.chem.csv_standardize import detect_smiles_column
+from pharmaml.chem.standardize import (
+    canonicalize_tautomer,
+    reinvent_standardize_smiles,
+    require_rdkit_standardize,
+)
+from pharmaml.data import load_dataset
+from pharmaml.exceptions import DataValidationError
 
 from ..events import EventType
 from ..jobs import CancelledJob, JobManager
+from ..stores import DatasetStore
 
 router = APIRouter(prefix="/chemistry", tags=["chemistry"])
 
@@ -70,6 +82,45 @@ class FingerprintsRequest(BaseModel):
         return v
 
 
+class StandardizeRequest(BaseModel):
+    """DS-2 -- the Clean stage's missing verb, over the REAL engine.
+
+    ``ops`` is the ordered list of standardization passes, each a real
+    :mod:`pharmaml.chem.standardize` callable applied in sequence:
+
+    * ``"canonical_tautomer"`` -- the REINVENT ligprep pipeline's
+      TautomerEnumerator pass (keto/enol forms collapse to one);
+    * ``"reinvent"`` -- the REINVENT4 ``default`` chain (largest
+      fragment -> RemoveHs -> salt removal -> neutralisation -> cleanup
+      -> unwanted-pattern/size/element gates).
+
+    ``neutralize`` toggles the chain's own step-4 pass (the engine's
+    documented knob; honoured only when ``"reinvent"`` rides ``ops``).
+    The standardized frame registers as a NEW dataset with full
+    provenance (``derived`` block: source id + column + ops); the
+    source record is never mutated. Rows the engine rejects are NOT
+    silently dropped: they leave the derived frame but ride the
+    response's ``rejected`` list (row, input, reason).
+    """
+
+    dataset_id: str
+    column: str | None = None  # None = the honest auto-detection
+    ops: list[Literal["canonical_tautomer", "reinvent"]] = Field(
+        default=["reinvent"], min_length=1
+    )
+    neutralize: bool = True
+    mode: Literal["job", "sync"] = "job"
+
+    @field_validator("ops")
+    @classmethod
+    def _unique_nonempty(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("ops must list at least one pass.")
+        if len(set(v)) != len(v):
+            raise ValueError("ops must not repeat a pass.")
+        return v
+
+
 def _frame_to_payload(df: pd.DataFrame) -> dict:
     """JSON-safe projection of the backend's DataFrame result."""
     return {
@@ -90,6 +141,178 @@ def _fp_to_payload(arr: np.ndarray, invalid: list[int]) -> dict:
         "dtype": str(arr.dtype),
         "invalid_indices": invalid,
         "matrix": arr.astype(int).tolist() if arr.size else [],
+    }
+
+
+#: How many values the SMILES-column gate probes before declaring a
+#: column non-molecular (the §15.4 detector's own 100-value window).
+_SMILES_GATE_PROBE = 100
+
+
+def _column_is_smiles_bearing(frame: pd.DataFrame, column: str) -> bool:
+    """The honest non-SMILES-column gate (DS-2's 422 clause).
+
+    Probes up to :data:`_SMILES_GATE_PROBE` non-null values with the
+    engine's own parser; a column where NOTHING parses is not a
+    SMILES column and gets a 422 naming it (never a silent
+    all-rejected run that masquerades as a valid standardization).
+    """
+    Chem = require_rdkit_standardize()
+    seen = 0
+    parsed = 0
+    for value in frame[column].tolist():
+        if not isinstance(value, str) or not value.strip():
+            continue
+        seen += 1
+        try:
+            probe = Chem.MolFromSmiles(value)
+        except Exception:  # noqa: BLE001 - a probe, never a crash
+            probe = None
+        if probe is not None:
+            parsed += 1
+        if seen >= _SMILES_GATE_PROBE:
+            break
+    return parsed > 0
+
+
+def _resolve_std_column(frame: pd.DataFrame, column: str | None) -> str:
+    """Resolve + validate the SMILES column (both 422s are honest)."""
+    if column is None:
+        # the same auto-pick the §15.4 quality card and the scaffold
+        # split lane use; raises naming every column it tried
+        return detect_smiles_column(frame)
+    available = [str(c) for c in frame.columns]
+    if column not in available:
+        raise DataValidationError(
+            f"column {column!r} not found; available: {available[:20]}"
+        )
+    if not _column_is_smiles_bearing(frame, column):
+        detected = "none"
+        try:
+            detected = detect_smiles_column(frame)
+        except DataValidationError:
+            pass
+        raise DataValidationError(
+            f"column {column!r} is not a SMILES column (no probed "
+            f"value parses as a molecule); the frame's detected SMILES "
+            f"column is {detected!r}"
+        )
+    return column
+
+
+def _standardize_one(
+    smiles: str, ops: Sequence[str], neutralize: bool
+) -> tuple[str | None, str]:
+    """One row through the ordered passes -> (output, rejection reason)."""
+    Chem = require_rdkit_standardize()
+    current = smiles
+    for op in ops:
+        if op == "canonical_tautomer":
+            try:
+                current = canonicalize_tautomer(current)
+            except DataValidationError:
+                return None, "unparseable"
+        else:  # "reinvent" -- the REINVENT4 default chain
+            out = reinvent_standardize_smiles(current, neutralize=neutralize)
+            if out is None:
+                parses = (
+                    isinstance(current, str)
+                    and Chem.MolFromSmiles(current) is not None
+                )
+                return (
+                    None,
+                    "rejected-by-standardization-chain"
+                    if parses
+                    else "unparseable",
+                )
+            current = out
+    return current, ""
+
+
+def _standardize_body(
+    frame: pd.DataFrame,
+    dataset_id: str,
+    name: str,
+    target: str,
+    task: str,
+    column: str,
+    ops: Sequence[str],
+    neutralize: bool,
+    store: DatasetStore,
+    cancel_event=None,
+) -> dict:
+    """Job/sync body: the real engine per row + the derived registration.
+
+    Reads ``frame`` (the source record's frame) -- never writes it: the
+    standardized rows are staged into ``out_frame`` (a positional
+    ``.copy()``), serialized through the same temp-CSV path every
+    upload takes, and registered by the REAL ``load_dataset`` +
+    ``DatasetStore.register`` with the DS-2 provenance block.
+    """
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledJob("Cancelled before the standardization stage.")
+    raw_values = frame[column].tolist()
+    outputs: list[str | None] = []
+    reasons: list[str] = []
+    for value in raw_values:
+        if not isinstance(value, str) or not value.strip():
+            outputs.append(None)
+            reasons.append("blank")
+            continue
+        out, reason = _standardize_one(value, ops, neutralize)
+        outputs.append(out)
+        reasons.append(reason)
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledJob("Cancelled after the standardization stage.")
+    keep = [i for i, out in enumerate(outputs) if out is not None]
+    if not keep:
+        raise DataValidationError(
+            "every SMILES row was rejected by the standardization "
+            "chain -- no derived dataset to register"
+        )
+    out_frame = frame.iloc[keep].copy()
+    out_frame[column] = [outputs[i] for i in keep]
+    with tempfile.TemporaryDirectory(prefix="pharmaml-std-") as tmp:
+        path = Path(tmp) / "standardized.csv"
+        out_frame.to_csv(path, index=False)
+        data = path.read_bytes()
+        dataset = load_dataset(path, target=target, task=task)
+    provenance = {
+        "kind": "standardized",
+        "source_dataset_id": dataset_id,
+        "column": column,
+        "ops": list(ops),
+        "neutralize": neutralize,
+    }
+    record = store.register(
+        dataset,
+        name=f"{name} (standardized)",
+        source_bytes=len(data),
+        source_filename=f"{name}-standardized.csv",
+        raw_bytes=data,  # the durable write-through, same as uploads
+        derived=provenance,
+    )
+    rejected = [
+        {"row": i, "input": str(raw_values[i]), "reason": reasons[i]}
+        for i in range(len(raw_values))
+        if outputs[i] is None
+    ]
+    changed = sum(
+        1 for i in keep if outputs[i] != raw_values[i]
+    )
+    return {
+        "source_dataset_id": dataset_id,
+        "column": column,
+        "ops": list(ops),
+        "counts": {
+            "n_rows": len(raw_values),
+            "changed": changed,
+            "unchanged": len(keep) - changed,
+            "rejected": len(rejected),
+        },
+        "rejected": rejected,
+        "provenance": provenance,
+        "dataset": record.view(preview_rows=10),
     }
 
 
@@ -204,3 +427,65 @@ def fingerprints(req: FingerprintsRequest, request: Request) -> dict:
         include_chirality=req.include_chirality,
     )
     return {"mode": "job", "job": record.public()}
+
+
+@router.post("/standardize")
+def standardize(req: StandardizeRequest, request: Request) -> dict:
+    """DS-2 -- ``POST /api/v1/chemistry/standardize``.
+
+    Runs the REAL REINVENT-style standardization engine over one
+    dataset SMILES column and registers the standardized frame as a
+    NEW derived dataset (source untouched -- sha-256-pinned by the API
+    tests, scanned by the frontend drift guard).
+    """
+    store: DatasetStore = request.app.state.dataset_store
+    record = store.get(req.dataset_id)
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown dataset_id {req.dataset_id!r}.",
+        )
+    try:
+        column = _resolve_std_column(record.frame, req.column)
+    except DataValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    manager: JobManager = request.app.state.job_manager
+    if req.mode == "sync":
+        try:
+            return {
+                "mode": "sync",
+                **_standardize_body(
+                    record.frame,
+                    req.dataset_id,
+                    record.name,
+                    record.target,
+                    record.task,
+                    column,
+                    req.ops,
+                    req.neutralize,
+                    store,
+                ),
+            }
+        except DataValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    job = manager.submit(
+        "chemistry.standardize",
+        "datasets",
+        _standardize_body,
+        configuration={
+            "dataset_id": req.dataset_id,
+            "column": column,
+            "ops": req.ops,
+            "neutralize": req.neutralize,
+        },
+        frame=record.frame,
+        dataset_id=req.dataset_id,
+        name=record.name,
+        target=record.target,
+        task=record.task,
+        column=column,
+        ops=req.ops,
+        neutralize=req.neutralize,
+        store=store,
+    )
+    return {"mode": "job", "job": job.public()}

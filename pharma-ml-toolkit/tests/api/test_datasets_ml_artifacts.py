@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import time
 
 import pandas as pd
@@ -1570,3 +1571,270 @@ class TestMLExplain:
                 json={"model_id": trained["model_id"], "max_rows": bad},
             )
             assert r.status_code == 422, bad
+
+
+# ------------------------------------------------------ DS-2 standardize
+
+
+class TestChemistryStandardize:
+    """DS-2 (roadmap row 6): the Clean stage's missing verb.
+
+    ``POST /api/v1/chemistry/standardize`` over the REAL REINVENT-style
+    engine (`chem/standardize.py`): the salt-stripped output differs
+    from the input, the source dataset's bytes stay untouched (sha256
+    pinned over the observable column lane), a non-SMILES column 422s
+    honestly, and rejected rows are accounted, never silently dropped.
+    """
+
+    def _smiles_csv(self) -> bytes:
+        buf = io.StringIO()
+        buf.write("smiles,y\n")
+        for smi, y in [
+            ("CCO", "0"),
+            ("CC(=O)[O-].[Na+]", "1"),
+            ("not-a-smiles", "0"),
+            ("C", "1"),
+            ("CC(O)=CC(C)=O", "0"),
+        ]:
+            buf.write(f"{smi},{y}\n")
+        return buf.getvalue().encode()
+
+    def _upload_smiles(self, client) -> dict:
+        return _upload(
+            client,
+            data=self._smiles_csv(),
+            name="toy.csv", target="y",
+        )
+
+    def test_standardize_strips_salts_and_registers_derived(self, client):
+        ds = self._upload_smiles(client)
+        src = ds["dataset_id"]
+        r = client.post(
+            "/api/v1/chemistry/standardize",
+            headers=auth_headers(),
+            json={"dataset_id": src, "column": "smiles", "mode": "sync"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        # the fail-first wiring proof: the REAL engine ran (salt gone,
+        # acid neutralized) and the honest accounting is exact
+        assert body["counts"] == {
+            "n_rows": 5, "changed": 2, "unchanged": 1, "rejected": 2,
+        }
+        derived = body["dataset"]
+        assert derived["dataset_id"] != src
+        assert derived["name"] == "toy (standardized)"
+        assert derived["derived"] == {
+            "kind": "standardized",
+            "source_dataset_id": src,
+            "column": "smiles",
+            "ops": ["reinvent"],
+            "neutralize": True,
+        }
+        assert body["provenance"] == derived["derived"]
+        # the derived frame: 3 kept rows, salt row -> "CC(=O)O"
+        assert derived["shape"][0] == 3
+        values = client.get(
+            f"/api/v1/datasets/{derived['dataset_id']}/column/smiles",
+            headers=auth_headers(),
+        ).json()["values"]
+        assert values == ["CCO", "CC(=O)O", "CC(=O)C=C(C)O"]
+        # the registry carries the derived record (target preserved)
+        listed = client.get("/api/v1/datasets", headers=auth_headers()).json()
+        ids = {entry["dataset_id"] for entry in listed["datasets"]}
+        assert derived["dataset_id"] in ids
+        derived_view = client.get(
+            f"/api/v1/datasets/{derived['dataset_id']}",
+            headers=auth_headers(),
+        ).json()
+        assert derived_view["target"] == "y"
+
+    def test_source_dataset_bytes_untouched_sha256_pinned(self, client):
+        ds = self._upload_smiles(client)
+        src = ds["dataset_id"]
+        import hashlib
+
+        def _column_digest() -> tuple[str, dict]:
+            payload = client.get(
+                f"/api/v1/datasets/{src}/column/smiles",
+                headers=auth_headers(),
+            ).json()
+            digest = hashlib.sha256(
+                json.dumps(payload["values"]).encode()
+            ).hexdigest()
+            return digest, payload
+
+        before_digest, before = _column_digest()
+        r = client.post(
+            "/api/v1/chemistry/standardize",
+            headers=auth_headers(),
+            json={"dataset_id": src, "column": "smiles", "mode": "sync"},
+        )
+        assert r.status_code == 200, r.text
+        after_digest, after = _column_digest()
+        # the §15.4 no-mutation rule: identical digest + identical view
+        assert after_digest == before_digest
+        assert after == before
+        view = client.get(
+            f"/api/v1/datasets/{src}", headers=auth_headers()
+        ).json()
+        assert view["shape"] == ds["shape"]
+        assert view["size_bytes"] == ds["size_bytes"]
+        assert "derived" not in view  # the source is a plain upload
+
+    def test_non_smiles_column_is_422(self, client):
+        ds = self._upload_smiles(client)
+        r = client.post(
+            "/api/v1/chemistry/standardize",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"],
+                "column": "y",  # the numeric target: not a SMILES column
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 422, r.text
+        detail = r.json()["detail"]
+        assert "not a SMILES column" in detail
+        assert "'smiles'" in detail  # names the detected column
+
+    def test_unknown_column_and_dataset_are_422_404(self, client):
+        ds = self._upload_smiles(client)
+        r = client.post(
+            "/api/v1/chemistry/standardize",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"],
+                "column": "nope",
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 422
+        assert "not found" in r.json()["detail"]
+        r = client.post(
+            "/api/v1/chemistry/standardize",
+            headers=auth_headers(),
+            json={"dataset_id": "ds-unknown", "mode": "sync"},
+        )
+        assert r.status_code == 404
+
+    def test_rejected_rows_accounted_never_silent(self, client):
+        ds = self._upload_smiles(client)
+        r = client.post(
+            "/api/v1/chemistry/standardize",
+            headers=auth_headers(),
+            json={"dataset_id": ds["dataset_id"], "mode": "sync"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert [(row["row"], row["input"], row["reason"])
+                for row in body["rejected"]] == [
+            (2, "not-a-smiles", "unparseable"),
+            (3, "C", "rejected-by-standardization-chain"),
+        ]
+        assert body["counts"]["rejected"] == 2
+
+    def test_tautomer_only_pass_and_neutralize_toggle(self, client):
+        ds = self._upload_smiles(client)
+        # tautomer-only: the enol collapses to the keto form, the salt
+        # row rides through untouched (no chain), the methane passes
+        r = client.post(
+            "/api/v1/chemistry/standardize",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"],
+                "ops": ["canonical_tautomer"],
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["counts"]["changed"] == 1
+        values = client.get(
+            f"/api/v1/datasets/{body['dataset']['dataset_id']}"
+            "/column/smiles",
+            headers=auth_headers(),
+        ).json()["values"]
+        assert "CC(O)=CC(C)=O" not in values
+        assert "CC(=O)CC(C)=O" in values
+        assert "CC(=O)[O-].[Na+]" in values  # untouched without the chain
+        # neutralize off: the chain strips the salt but keeps the charge
+        r = client.post(
+            "/api/v1/chemistry/standardize",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"],
+                "neutralize": False,
+                "mode": "sync",
+            },
+        )
+        body = r.json()
+        values = client.get(
+            f"/api/v1/datasets/{body['dataset']['dataset_id']}"
+            "/column/smiles",
+            headers=auth_headers(),
+        ).json()["values"]
+        assert "CC(=O)[O-]" in values
+
+    def test_bad_ops_and_duplicates_are_422(self, client):
+        ds = self._upload_smiles(client)
+        for bad_ops in (["nope"], [], ["reinvent", "reinvent"]):
+            r = client.post(
+                "/api/v1/chemistry/standardize",
+                headers=auth_headers(),
+                json={
+                    "dataset_id": ds["dataset_id"],
+                    "ops": bad_ops,
+                    "mode": "sync",
+                },
+            )
+            assert r.status_code == 422, bad_ops
+
+    def test_job_mode_registers_the_derived_dataset(self, client):
+        ds = self._upload_smiles(client)
+        src = ds["dataset_id"]
+        r = client.post(
+            "/api/v1/chemistry/standardize",
+            headers=auth_headers(),
+            json={
+                "dataset_id": src,
+                "column": "smiles",
+                "ops": ["canonical_tautomer", "reinvent"],
+                "neutralize": False,
+                "mode": "job",
+            },
+        )
+        assert r.status_code == 200, r.text
+        job = r.json()["job"]
+        final = _wait_job(client, job["job_id"])
+        assert final["state"] == "COMPLETED", final
+        body = client.get(
+            f"/api/v1/jobs/{job['job_id']}/result", headers=auth_headers()
+        ).json()["result"]
+        assert body["counts"]["n_rows"] == 5
+        assert body["ops"] == ["canonical_tautomer", "reinvent"]
+        assert body["dataset"]["derived"]["source_dataset_id"] == src
+        assert body["dataset"]["derived"]["neutralize"] is False
+        values = client.get(
+            f"/api/v1/datasets/{body['dataset']['dataset_id']}"
+            "/column/smiles",
+            headers=auth_headers(),
+        ).json()["values"]
+        assert "CC(=O)[O-]" in values  # tautomer first, chain, charge kept
+
+    def test_all_rejected_rows_is_an_honest_422(self, client):
+        buf = io.StringIO()
+        buf.write("smiles,y\n")
+        for smi, y in [("not-a-smiles", "0"), ("garbage", "1")]:
+            buf.write(f"{smi},{y}\n")
+        ds = _upload(
+            client, data=buf.getvalue().encode(),
+            name="junk.csv", target="y",
+        )
+        r = client.post(
+            "/api/v1/chemistry/standardize",
+            headers=auth_headers(),
+            json={"dataset_id": ds["dataset_id"], "mode": "sync"},
+        )
+        assert r.status_code == 422, r.text
+        assert "no derived dataset" in r.json()["detail"]

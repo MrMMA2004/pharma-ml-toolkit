@@ -226,9 +226,12 @@ def test_the_contract_carries_the_registry_deletion_path() -> None:
     # Surface Methodology lane's OWN seven paths, none of them a
     # registry path (trued with the dated comment)
     # 134 -> 142 by the r367 part18 §5 DL architecture expansion (the
-    # CNN + autoencoder + GAN + diffusion pairs — none a registry path)
-    assert len(paths) == 142, (
-        "the contract must pin 142 paths (the registry's DELETE rides the "
+    # CNN + autoencoder + GAN + diffusion pairs — none a registry path);
+    # 142 -> 143 by the r378 GEN-2 metrics path (the pin left stale at
+    # 142 in that round — caught and trued by the r379 DS-2 round);
+    # 143 -> 144 by the r379 DS-2 standardization path
+    assert len(paths) == 144, (
+        "the contract must pin 144 paths (the registry's DELETE rides the "
         "existing trained-model path — no new path this lane; the r358 "
         "multiresponse quartet and the r359 rsm septet are their own "
         "lanes', not registry paths)"

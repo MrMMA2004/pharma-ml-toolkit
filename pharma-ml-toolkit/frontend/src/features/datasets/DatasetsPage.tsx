@@ -27,6 +27,9 @@ import {
   chemistryApi,
   type DescriptorFrame,
   type FingerprintMatrix,
+  type StandardizeOp,
+  type StandardizeReport,
+  parseStandardizeReport,
 } from "@/services/chemistry/client";
 import {
   datasetsApi,
@@ -266,6 +269,16 @@ export function DatasetsPage() {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileBusy, setProfileBusy] = useState(false);
 
+  // stage 4: the standardization action (DS-2 — the Clean stage's verb)
+  const [stdColumn, setStdColumn] = useState("");
+  const [stdTautomer, setStdTautomer] = useState(false);
+  const [stdChain, setStdChain] = useState(true);
+  const [stdNeutralize, setStdNeutralize] = useState(true);
+  const [stdJobId, setStdJobId] = useState<string | null>(null);
+  const [stdError, setStdError] = useState<string | null>(null);
+  const [stdBusy, setStdBusy] = useState(false);
+  const [stdReport, setStdReport] = useState<StandardizeReport | null>(null);
+
   // stage 5: chemistry
   const [smilesColumn, setSmilesColumn] = useState("");
   const [column, setColumn] = useState<ColumnValues | null>(null);
@@ -331,6 +344,8 @@ export function DatasetsPage() {
     setProfile(null);
     setColumn(null);
     setChemJobId(null);
+    setStdJobId(null);
+    setStdReport(null);
     setDescriptorFrame(null);
     setFpMatrix(null);
     setSplitReport(null);
@@ -348,6 +363,7 @@ export function DatasetsPage() {
       setPreview(frame);
       const guessed = view.columns.find((c) => /^smiles?$/i.test(c)) ?? "";
       setSmilesColumn(guessed);
+      setStdColumn(guessed);
       setVizColumn(
         view.feature_names.find((name) => name !== view.target) ?? "",
       );
@@ -396,6 +412,8 @@ export function DatasetsPage() {
           setProfile(null);
           setColumn(null);
           setChemJobId(null);
+          setStdJobId(null);
+          setStdReport(null);
           setDescriptorFrame(null);
           setFpMatrix(null);
           setSplitReport(null);
@@ -481,6 +499,56 @@ export function DatasetsPage() {
       setProfileBusy(false);
     }
   }, [selectedId]);
+
+  // stage 4: the standardization action (DS-2) — the REAL
+  // REINVENT-style engine through the chemistry client; the derived
+  // dataset registers server-side, the job result relays the report
+  const handleStandardize = useCallback(async () => {
+    if (selectedId === null || stdColumn === "" || stdBusy) {
+      return;
+    }
+    const ops: StandardizeOp[] = [];
+    if (stdTautomer) {
+      ops.push("canonical_tautomer"); // applied first (ligprep order)
+    }
+    if (stdChain) {
+      ops.push("reinvent");
+    }
+    if (ops.length === 0) {
+      return;
+    }
+    setStdBusy(true);
+    setStdError(null);
+    setStdReport(null);
+    try {
+      const response = await chemistryApi.standardize(selectedId, {
+        column: stdColumn,
+        ops,
+        neutralize: stdNeutralize,
+        mode: "job",
+      });
+      if (response.mode === "job") {
+        setStdJobId(response.job.job_id);
+      }
+    } catch (error) {
+      setStdError(describeError(error));
+    } finally {
+      setStdBusy(false);
+    }
+  }, [selectedId, stdColumn, stdTautomer, stdChain, stdNeutralize, stdBusy]);
+
+  const handleStandardizeResult = useCallback(
+    (result: unknown) => {
+      try {
+        setStdReport(parseStandardizeReport(result, "standardize"));
+      } catch (error) {
+        setStdError(describeError(error));
+        return;
+      }
+      void refreshRegistry();
+    },
+    [refreshRegistry],
+  );
 
   // stage 5: the chemistry bridge
   const [columnBusy, setColumnBusy] = useState(false);
@@ -1018,7 +1086,7 @@ export function DatasetsPage() {
       <StageHeader
         index={4}
         title="Clean / Standardize / Select Columns"
-        hint="the loader's own policy, surfaced"
+        hint="the loader's own policy, surfaced — plus the Clean stage's verb (DS-2)"
         icon={<Columns3 aria-hidden className="h-4 w-4" />}
       >
         <Card>
@@ -1026,7 +1094,7 @@ export function DatasetsPage() {
             {selected === null ? (
               <p className="text-sm text-[var(--color-muted-foreground)]">
                 Select a dataset in Inspect to see the loader&apos;s
-                column policy.
+                column policy and arm the standardization action.
               </p>
             ) : (
               <div className="grid gap-4 md:grid-cols-3">
@@ -1052,6 +1120,127 @@ export function DatasetsPage() {
                 </p>
               </div>
             )}
+
+            {selected !== null ? (
+              <div className="mt-4 rounded-lg border border-[var(--color-border)] p-4">
+                <div className="flex items-center gap-2">
+                  <FlaskConical aria-hidden className="h-4 w-4 text-[var(--color-primary)]" />
+                  <span className="text-sm font-medium text-[var(--color-foreground)]">
+                    Standardize — the Clean stage&apos;s verb (the REINVENT-style engine)
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  <label className="text-sm">
+                    <span className="mb-1 block font-medium text-[var(--color-foreground)]">SMILES column</span>
+                    <select
+                      value={stdColumn}
+                      onChange={(event) => setStdColumn(event.target.value)}
+                      className="w-44 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm"
+                    >
+                      <option value="">select…</option>
+                      {selectedColumns.map((name) => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                    <input
+                      type="checkbox"
+                      checked={stdTautomer}
+                      onChange={(event) => setStdTautomer(event.target.checked)}
+                      className="h-4 w-4 rounded border-[var(--color-border)]"
+                    />
+                    canonical tautomer pass (applied first)
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                    <input
+                      type="checkbox"
+                      checked={stdChain}
+                      onChange={(event) => setStdChain(event.target.checked)}
+                      className="h-4 w-4 rounded border-[var(--color-border)]"
+                    />
+                    REINVENT4 chain (fragment → salts → uncharge → cleanup → gates)
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                    <input
+                      type="checkbox"
+                      checked={stdNeutralize}
+                      onChange={(event) => setStdNeutralize(event.target.checked)}
+                      className="h-4 w-4 rounded border-[var(--color-border)]"
+                    />
+                    uncharge (the chain&apos;s step 4)
+                  </label>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={selectedId === null || stdColumn === "" || (!stdChain && !stdTautomer) || stdBusy}
+                    onClick={() => void handleStandardize()}
+                  >
+                    {stdBusy ? "Submitting…" : "Standardize → derived dataset"}
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                  The standardized frame registers as a NEW derived dataset
+                  (provenance — source id, column, ops — carried in its view);
+                  the source dataset is never modified. Rows the engine
+                  rejects are reported below, never silently dropped.
+                </p>
+                {stdError !== null ? <div className="mt-3"><ErrorBanner message={stdError} /></div> : null}
+                {stdJobId !== null ? (
+                  <div className="mt-3">
+                    <JobRunCard jobId={stdJobId} resultLabel="the standardization report" onResult={handleStandardizeResult} />
+                  </div>
+                ) : null}
+
+                {stdReport !== null ? (
+                  <div className="mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
+                    <p className="text-xs text-[var(--color-muted-foreground)]">
+                      {stdReport.counts.n_rows} rows → {stdReport.counts.changed} changed ·{" "}
+                      {stdReport.counts.unchanged} unchanged · {stdReport.counts.rejected} rejected
+                      {" "}(ops: {stdReport.ops.join(", ") || "—"})
+                    </p>
+                    {stdReport.rejected.length > 0 ? (
+                      <div className="mt-2 overflow-hidden rounded-md border border-[var(--color-border)]">
+                        <div className="max-h-48 overflow-auto">
+                          <table className="w-full border-collapse text-[11px]">
+                            <thead className="sticky top-0 bg-[var(--color-muted)]">
+                              <tr>
+                                <th scope="col" className="whitespace-nowrap px-2 py-1 text-left font-semibold">row</th>
+                                <th scope="col" className="whitespace-nowrap px-2 py-1 text-left font-semibold">input</th>
+                                <th scope="col" className="whitespace-nowrap px-2 py-1 text-left font-semibold">reason</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {stdReport.rejected.map((entry) => (
+                                <tr key={entry.row} className="border-t border-[var(--color-border)]">
+                                  <td className="px-2 py-1 text-[var(--color-muted-foreground)]">{entry.row}</td>
+                                  <td className="px-2 py-1 text-[var(--color-muted-foreground)]">{entry.input}</td>
+                                  <td className="px-2 py-1 text-[var(--color-muted-foreground)]">{entry.reason}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <span className="text-xs text-[var(--color-muted-foreground)]">
+                        derived dataset: {stdReport.dataset.name} ({stdReport.dataset.dataset_id}) ·{" "}
+                        {stdReport.dataset.shape[0]} × {stdReport.dataset.shape[1]} · provenance
+                        {" "}kind "standardized" from {stdReport.source_dataset_id} — the source is untouched
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void selectDataset(stdReport.dataset.dataset_id)}
+                      >
+                        Select the derived dataset
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </StageHeader>

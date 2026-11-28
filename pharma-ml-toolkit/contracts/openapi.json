@@ -4999,6 +4999,60 @@
         "title": "SplitRequest",
         "type": "object"
       },
+      "StandardizeRequest": {
+        "description": "DS-2 -- the Clean stage's missing verb, over the REAL engine.\n\n``ops`` is the ordered list of standardization passes, each a real\n:mod:`pharmaml.chem.standardize` callable applied in sequence:\n\n* ``\"canonical_tautomer\"`` -- the REINVENT ligprep pipeline's\n  TautomerEnumerator pass (keto/enol forms collapse to one);\n* ``\"reinvent\"`` -- the REINVENT4 ``default`` chain (largest\n  fragment -> RemoveHs -> salt removal -> neutralisation -> cleanup\n  -> unwanted-pattern/size/element gates).\n\n``neutralize`` toggles the chain's own step-4 pass (the engine's\ndocumented knob; honoured only when ``\"reinvent\"`` rides ``ops``).\nThe standardized frame registers as a NEW dataset with full\nprovenance (``derived`` block: source id + column + ops); the\nsource record is never mutated. Rows the engine rejects are NOT\nsilently dropped: they leave the derived frame but ride the\nresponse's ``rejected`` list (row, input, reason).",
+        "properties": {
+          "column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "mode": {
+            "default": "job",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "neutralize": {
+            "default": true,
+            "title": "Neutralize",
+            "type": "boolean"
+          },
+          "ops": {
+            "default": [
+              "reinvent"
+            ],
+            "items": {
+              "enum": [
+                "canonical_tautomer",
+                "reinvent"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Ops",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dataset_id"
+        ],
+        "title": "StandardizeRequest",
+        "type": "object"
+      },
       "StatRequest": {
         "properties": {
           "bins": {
@@ -6610,6 +6664,50 @@
           }
         },
         "summary": "Fingerprints",
+        "tags": [
+          "chemistry"
+        ]
+      }
+    },
+    "/api/v1/chemistry/standardize": {
+      "post": {
+        "description": "DS-2 -- ``POST /api/v1/chemistry/standardize``.\n\nRuns the REAL REINVENT-style standardization engine over one\ndataset SMILES column and registers the standardized frame as a\nNEW derived dataset (source untouched -- sha-256-pinned by the API\ntests, scanned by the frontend drift guard).",
+        "operationId": "standardize_api_v1_chemistry_standardize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Standardize Api V1 Chemistry Standardize Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Standardize",
         "tags": [
           "chemistry"
         ]

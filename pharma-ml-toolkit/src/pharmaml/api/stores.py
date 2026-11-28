@@ -121,7 +121,13 @@ def frame_payload(frame: pd.DataFrame, max_rows: int = 10) -> dict:
 
 
 class DatasetRecord:
-    """One registered dataset (the parsed upload, in memory)."""
+    """One registered dataset (the parsed upload, in memory).
+
+    ``derived`` (DS-2) is the provenance block of a derived dataset:
+    ``None`` for a user upload, ``{"kind": "standardized", ...}`` for a
+    lane that registered a new frame computed from a source dataset
+    (the source record is never mutated -- the §15.4 no-mutation rule).
+    """
 
     def __init__(
         self,
@@ -130,6 +136,7 @@ class DatasetRecord:
         name: str,
         source_bytes: int,
         source_filename: str,
+        derived: dict | None = None,
     ) -> None:
         self.dataset_id = dataset_id
         self.name = name
@@ -145,6 +152,7 @@ class DatasetRecord:
         self.summary = dataset.summary().as_dict()
         self.source_bytes = source_bytes
         self.source_filename = source_filename
+        self.derived = derived
         self.created_at = _now_iso()
 
     def view(self, preview_rows: int = 0) -> dict:
@@ -166,6 +174,8 @@ class DatasetRecord:
             "summary": json_safe(self.summary),
             "created_at": self.created_at,
         }
+        if self.derived is not None:
+            payload["derived"] = json_safe(self.derived)
         if preview_rows:
             payload["preview"] = frame_payload(self.frame, preview_rows)
         return payload
@@ -190,10 +200,12 @@ class DatasetStore:
         source_bytes: int,
         source_filename: str,
         raw_bytes: bytes | None = None,
+        derived: dict | None = None,
     ) -> DatasetRecord:
         dataset_id = f"ds-{uuid.uuid4().hex[:12]}"
         record = DatasetRecord(
-            dataset_id, dataset, name, source_bytes, source_filename
+            dataset_id, dataset, name, source_bytes, source_filename,
+            derived=derived,
         )
         self._items[dataset_id] = record
         if self._persistence is not None and raw_bytes is not None:

@@ -405,6 +405,7 @@ def test_chemistry_rest_surface_covered() -> None:
     expected = {
         "/api/v1/chemistry/descriptors": {"POST"},
         "/api/v1/chemistry/fingerprints": {"POST"},
+        "/api/v1/chemistry/standardize": {"POST"},  # DS-2 (row 6)
     }
     assert backend == expected, f"the backend chemistry routes moved: {backend}"
 
@@ -422,8 +423,10 @@ def test_chemistry_requests_use_the_generated_contract_types() -> None:
     # §12.2: one DTO source — the request bodies come from api.d.ts
     assert 'from "@/types/api.d"' in client
     assert "DescriptorsRequest" in client and "FingerprintsRequest" in client
+    assert "StandardizeRequest" in client
     assert "interface DescriptorsRequest" not in client
     assert "interface FingerprintsRequest" not in client
+    assert "interface StandardizeRequest" not in client
     # the engine's own cap is mirrored once, beside the route
     assert "CHEMISTRY_MAX_SMILES = 500" in client
 

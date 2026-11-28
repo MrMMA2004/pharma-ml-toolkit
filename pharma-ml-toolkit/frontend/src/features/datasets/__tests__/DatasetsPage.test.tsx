@@ -79,13 +79,22 @@ vi.mock("@/services/datasets/client", () => ({
 const chemistryMocks = vi.hoisted(() => ({
   descriptors: vi.fn(),
   fingerprints: vi.fn(),
+  standardize: vi.fn(),
 }));
-vi.mock("@/services/chemistry/client", () => ({
-  chemistryApi: {
-    descriptors: chemistryMocks.descriptors,
-    fingerprints: chemistryMocks.fingerprints,
-  },
-}));
+vi.mock("@/services/chemistry/client", async (importOriginal) => {
+  // the real module keeps its types + parsers (the page narrows
+  // untrusted payloads through the REAL parseStandardizeReport);
+  // only the networked chemistryApi surface is mocked
+  const actual = await importOriginal<typeof import("@/services/chemistry/client")>();
+  return {
+    ...actual,
+    chemistryApi: {
+      descriptors: chemistryMocks.descriptors,
+      fingerprints: chemistryMocks.fingerprints,
+      standardize: chemistryMocks.standardize,
+    },
+  };
+});
 
 const artifactsMocks = vi.hoisted(() => ({ download: vi.fn() }));
 vi.mock("@/services/artifacts/client", () => ({
@@ -140,6 +149,7 @@ beforeEach(() => {
   datasetsMocks.preview.mockReset();
   datasetsMocks.remove.mockReset();
   jobsMocks.result.mockReset();
+  chemistryMocks.standardize.mockReset();
 });
 
 describe("the Import stage — file selection, submission, validation errors", () => {
@@ -525,10 +535,11 @@ describe("the Split stage's DS-1 strategy lane — scaffold/group-honest splits"
     // the strategy selector: auto → scaffold
     await userEvent.selectOptions(screen.getByLabelText("strategy"), "scaffold");
     // the SMILES column select appears beside the chemistry stage's own
-    // (same label there — assert the pair, then drive the split one)
+    // (and DS-2's stage-4 select — same label there; assert the trio,
+    // then drive the split one, the last of the three)
     const smilesSelects = screen.getAllByLabelText("SMILES column");
-    expect(smilesSelects).toHaveLength(2);
-    expect(smilesSelects[1] ?? null).toHaveValue(""); // the auto-detect default
+    expect(smilesSelects).toHaveLength(3);
+    expect(smilesSelects[2] ?? null).toHaveValue(""); // the auto-detect default
 
     await userEvent.click(screen.getByRole("button", { name: "Run the split" }));
 
@@ -611,5 +622,140 @@ describe("the Split stage's DS-1 strategy lane — scaffold/group-honest splits"
     expect(body.strategy).toBeUndefined();
     // the legacy answer renders without any census line
     expect(screen.queryByText(/shared groups/)).toBeNull();
+  });
+});
+
+describe("the Clean/Standardize stage — DS-2's derived-dataset action", () => {
+  it("runs the standardization job and relays the report end-to-end: the honest counts, the rejected rows, the derived dataset's select action, the registry refresh", async () => {
+    jobState.snapshots["job-std"] = {
+      view: {
+        state: "COMPLETED",
+        operation: "chemistry.standardize",
+        progress: 100,
+        stage: "done",
+        error: null,
+        result_ready: true,
+      },
+    };
+    datasetsMocks.list.mockResolvedValue({ datasets: [DATASET] });
+    datasetsMocks.view.mockResolvedValue(DATASET);
+    datasetsMocks.preview.mockResolvedValue(FRAME);
+    chemistryMocks.standardize.mockResolvedValueOnce({
+      mode: "job",
+      job: { job_id: "job-std" },
+    });
+    jobsMocks.result.mockResolvedValueOnce({
+      result: {
+        source_dataset_id: "ds-1",
+        column: "smiles",
+        ops: ["reinvent"],
+        counts: { n_rows: 5, changed: 2, unchanged: 1, rejected: 2 },
+        rejected: [
+          { row: 2, input: "not-a-smiles", reason: "unparseable" },
+          { row: 3, input: "C", reason: "rejected-by-standardization-chain" },
+        ],
+        provenance: {
+          kind: "standardized",
+          source_dataset_id: "ds-1",
+          column: "smiles",
+          ops: ["reinvent"],
+          neutralize: true,
+        },
+        dataset: {
+          dataset_id: "ds-2-std",
+          name: "solubility.csv (standardized)",
+          shape: [3, 2],
+          columns: ["smiles", "solubility"],
+          target: "solubility",
+        },
+      },
+    });
+
+    render(<DatasetsPage />);
+    await waitFor(() => {
+      expect(datasetsMocks.list).toHaveBeenCalledTimes(1);
+    });
+
+    // select the registered dataset — the guessed SMILES column arms
+    // the stage-4 action (stdColumn prefilled from the view)
+    await userEvent.click(await screen.findByText("solubility.csv"));
+    await waitFor(() => {
+      expect(datasetsMocks.view).toHaveBeenCalledWith("ds-1");
+    });
+
+    const runButton = await screen.findByRole("button", {
+      name: "Standardize → derived dataset",
+    });
+    // the default lanes: the REINVENT chain on, uncharge on, no
+    // tautomer pass — the pre-guessed column keeps it enabled
+    expect(runButton).toBeEnabled();
+    await userEvent.click(runButton);
+
+    await waitFor(() => {
+      expect(chemistryMocks.standardize).toHaveBeenCalledWith("ds-1", {
+        column: "smiles",
+        ops: ["reinvent"],
+        neutralize: true,
+        mode: "job",
+      });
+    });
+
+    // the completed job relayed the report: the counts line, the
+    // honest rejected table, the derived dataset identity, and the
+    // registry refresh (the derived record lands in the list call)
+    await waitFor(() => {
+      expect(jobsMocks.result).toHaveBeenCalledWith("job-std");
+      expect(datasetsMocks.list).toHaveBeenCalledTimes(2);
+    });
+    expect(
+      await screen.findByText(/5 rows → 2 changed · 1 unchanged · 2 rejected/),
+    ).toBeInTheDocument();
+    // the honest rejected table: unparseable garbage and the
+    // chain-rejected methane row, each with its reason
+    expect(screen.getByText(/not-a-smiles/)).toBeInTheDocument();
+    expect(screen.getByText(/rejected-by-standardization-chain/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/solubility\.csv \(standardized\) \(ds-2-std\)/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/the source is untouched/),
+    ).toBeInTheDocument();
+
+    // the derived-dataset select action re-selects through the real lane
+    await userEvent.click(
+      screen.getByRole("button", { name: "Select the derived dataset" }),
+    );
+    await waitFor(() => {
+      expect(datasetsMocks.view).toHaveBeenCalledWith("ds-2-std");
+      expect(datasetsMocks.preview).toHaveBeenCalledWith("ds-2-std", 10);
+    });
+  });
+
+  it("gates the run honestly: no selected dataset, no column, no pass — no request", async () => {
+    datasetsMocks.list.mockResolvedValue({ datasets: [DATASET] });
+    datasetsMocks.view.mockResolvedValue(DATASET);
+    datasetsMocks.preview.mockResolvedValue(FRAME);
+    render(<DatasetsPage />);
+    await waitFor(() => {
+      expect(datasetsMocks.list).toHaveBeenCalled();
+    });
+
+    // before a selection the stage-4 action is inert
+    expect(
+      screen.queryByRole("button", { name: "Standardize → derived dataset" }),
+    ).toBeNull();
+
+    await userEvent.click(await screen.findByText("solubility.csv"));
+    await waitFor(() => {
+      expect(datasetsMocks.view).toHaveBeenCalledWith("ds-1");
+    });
+
+    // both passes off -> no ops -> the button stays disabled
+    await userEvent.click(screen.getByLabelText(/REINVENT4 chain/));
+    const runButton = screen.getByRole("button", {
+      name: "Standardize → derived dataset",
+    });
+    expect(runButton).toBeDisabled();
+    expect(chemistryMocks.standardize).not.toHaveBeenCalled();
   });
 });
