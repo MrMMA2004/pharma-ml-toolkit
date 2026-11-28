@@ -169,9 +169,11 @@ import {
   type ArtifactView,
 } from "@/services/artifacts/client";
 import { type JobView, parseJobView } from "@/services/jobs/types";
+import type { SplitStrategy } from "@/services/datasets/client";
 import type { components } from "@/types/api.d";
 
 type TrainRequest = components["schemas"]["TrainRequest"];
+type TrainSplitSpec = components["schemas"]["TrainSplitSpec"];
 type PredictRequest = components["schemas"]["PredictRequest"];
 type ExplainRequest = components["schemas"]["ExplainRequest"];
 type ADAnalyzeRequest = components["schemas"]["ADAnalyzeRequest"];
@@ -253,10 +255,12 @@ export interface MLJobResponse {
   readonly job: JobView;
 }
 
-/** The sync-mode train answer (`{mode: "sync", model: view}`). */
+/** The sync-mode train answer (`{mode: "sync", model, split}`). */
 export interface TrainSyncResponse {
   readonly mode: "sync";
   readonly model: TrainedModelView;
+  /** ML-3 — null when the request carried no split section. */
+  readonly split: TrainSplitBlock | null;
 }
 
 export type TrainResponse = MLJobResponse | TrainSyncResponse;
@@ -586,6 +590,58 @@ export interface ExplainSyncResponse {
 
 export type ExplainResponse = MLJobResponse | ExplainSyncResponse;
 
+/** The ML-3 split block's strategy literal set (the parser's own guard). */
+const TRAIN_SPLIT_STRATEGY_LITERALS: readonly string[] = [
+  "random",
+  "stratified",
+  "scaffold",
+  "group",
+  "kennard_stone",
+  "temporal",
+];
+
+/** The ML-3 train-lane split section (the frontend-shaped knobs). */
+export interface TrainSplitOptions {
+  readonly strategy: SplitStrategy;
+  /** null = the honest backend auto-detection (scaffold only). */
+  readonly smilesColumn?: string | null;
+  /** required by the group strategy, never guessed. */
+  readonly groupColumn?: string | null;
+  readonly testSize: number;
+}
+
+/** One side of the ML-3 carve (the fit saw the train side only). */
+export interface TrainSplitSide {
+  readonly rows: number;
+}
+
+/** One side's cohort census for the group-carrying strategies. */
+export interface TrainSplitGroupCensusSide {
+  readonly n_groups: number;
+  readonly top_groups: ReadonlyArray<readonly [string, number]>;
+}
+
+/** The ML-3 carve block — sides + the census + the leakage verdict. */
+export interface TrainSplitBlock {
+  readonly strategy: SplitStrategy;
+  readonly smiles_column: string | null;
+  readonly group_column: string | null;
+  readonly test_size: number;
+  readonly random_state: number;
+  readonly n_rows: number;
+  readonly sides: {
+    readonly train: TrainSplitSide;
+    readonly heldout: TrainSplitSide;
+  };
+  readonly group_census: {
+    readonly train: TrainSplitGroupCensusSide;
+    readonly heldout: TrainSplitGroupCensusSide;
+    readonly shared_groups: readonly string[];
+  } | null;
+  /** present only on the §15.2 failed-run record's refused echo. */
+  readonly error?: string | null;
+}
+
 export interface TrainOptions {
   readonly datasetId: string;
   readonly model: string;
@@ -596,6 +652,8 @@ export interface TrainOptions {
   readonly preprocess: boolean;
   readonly randomState: number;
   readonly modelParams: Record<string, unknown> | null;
+  /** ML-3 — the optional strategy-aware held-out carve before the fit. */
+  readonly split?: TrainSplitOptions | null;
   readonly mode?: "job" | "sync";
 }
 
@@ -2162,6 +2220,16 @@ export const mlApi = {
       model_params: options.modelParams,
       mode: options.mode ?? "job",
     };
+    const split = options.split ?? null;
+    if (split !== null) {
+      const section: TrainSplitSpec = {
+        strategy: split.strategy,
+        smiles_column: split.smilesColumn ?? null,
+        group_column: split.groupColumn ?? null,
+        test_size: split.testSize,
+      };
+      request.split = section;
+    }
     const raw = (await api.post("/api/v1/ml/train", request)) as Record<
       string,
       unknown
@@ -2170,6 +2238,7 @@ export const mlApi = {
       return {
         mode: "sync",
         model: parseTrainedModelView(raw["model"], "train(sync)"),
+        split: parseTrainSplitBlock(raw["split"], "train(sync) split"),
       };
     }
     return { mode: "job", job: parseJobView(raw["job"], "train(job)") };
@@ -3317,10 +3386,121 @@ function parseADAnalysis(raw: unknown, what: string): ADAnalysis {
   };
 }
 
-/** Narrow the train job's result payload: `{model: TrainedModelView}`. */
-export function parseTrainResult(raw: unknown, what: string): TrainedModelView {
+/**
+ * Narrow the ML-3 carve block (the train answer's split half, or the
+ * §15.2 record's refused echo): every field surfaced as it arrives, the
+ * strategy validated against the engine's own literal set — an unknown
+ * strategy throws rather than rendering as if it were honest.
+ */
+export function parseTrainSplitBlock(
+  raw: unknown,
+  what: string,
+): TrainSplitBlock | null {
+  if (raw === undefined || raw === null) {
+    return null;
+  }
   const r = expectObject(raw, what);
-  return parseTrainedModelView(r["model"], `${what} model`);
+  const strategy = r["strategy"];
+  if (
+    typeof strategy !== "string" ||
+    !(TRAIN_SPLIT_STRATEGY_LITERALS as readonly string[]).includes(strategy)
+  ) {
+    throw new Error(
+      `${what}: split strategy is not one of the engine's literals`,
+    );
+  }
+  const sidesRaw = r["sides"];
+  const sides = expectObject(sidesRaw, `${what} sides`);
+  const train = expectObject(sides["train"], `${what} train side`);
+  const heldout = expectObject(sides["heldout"], `${what} heldout side`);
+  if (
+    typeof train["rows"] !== "number" ||
+    typeof heldout["rows"] !== "number"
+  ) {
+    throw new Error(`${what}: side rows are not numbers`);
+  }
+  const censusRaw = r["group_census"];
+  let census: TrainSplitBlock["group_census"] = null;
+  if (typeof censusRaw === "object" && censusRaw !== null) {
+    const censusObj = censusRaw as Record<string, unknown>;
+    const trainSide = expectObject(censusObj["train"], `${what} census train`);
+    const heldoutSide = expectObject(
+      censusObj["heldout"],
+      `${what} census heldout`,
+    );
+    const trainGroups = expectObject(
+      trainSide["top_groups"],
+      `${what} census train top_groups`,
+    );
+    const heldoutGroups = expectObject(
+      heldoutSide["top_groups"],
+      `${what} census heldout top_groups`,
+    );
+    census = {
+      train: {
+        n_groups:
+          typeof trainSide["n_groups"] === "number"
+            ? trainSide["n_groups"]
+            : 0,
+        top_groups: (Array.isArray(trainGroups) ? trainGroups : []).map(
+          (entry) =>
+            Array.isArray(entry) &&
+            typeof entry[0] === "string" &&
+            typeof entry[1] === "number"
+              ? ([entry[0], entry[1]] as const)
+              : (["", 0] as const),
+        ),
+      },
+      heldout: {
+        n_groups:
+          typeof heldoutSide["n_groups"] === "number"
+            ? heldoutSide["n_groups"]
+            : 0,
+        top_groups: (Array.isArray(heldoutGroups) ? heldoutGroups : []).map(
+          (entry) =>
+            Array.isArray(entry) &&
+            typeof entry[0] === "string" &&
+            typeof entry[1] === "number"
+              ? ([entry[0], entry[1]] as const)
+              : (["", 0] as const),
+        ),
+      },
+      shared_groups: Array.isArray(censusObj["shared_groups"])
+        ? (censusObj["shared_groups"] as unknown[]).filter(
+            (v): v is string => typeof v === "string",
+          )
+        : [],
+    };
+  }
+  const nRows = r["n_rows"];
+  if (typeof nRows !== "number") {
+    throw new Error(`${what}: n_rows is not a number`);
+  }
+  return {
+    strategy: strategy as SplitStrategy,
+    smiles_column: typeof r["smiles_column"] === "string" ? r["smiles_column"] : null,
+    group_column: typeof r["group_column"] === "string" ? r["group_column"] : null,
+    test_size: typeof r["test_size"] === "number" ? r["test_size"] : 0,
+    random_state: typeof r["random_state"] === "number" ? r["random_state"] : 0,
+    n_rows: nRows,
+    sides: {
+      train: { rows: train["rows"] as number },
+      heldout: { rows: heldout["rows"] as number },
+    },
+    group_census: census,
+    error: typeof r["error"] === "string" ? r["error"] : null,
+  };
+}
+
+export function parseTrainResult(raw: unknown, what: string): {
+  model: TrainedModelView;
+  split: TrainSplitBlock | null;
+} {
+  const r = expectObject(raw, what);
+  return {
+    model: parseTrainedModelView(r["model"], `${what} model`),
+    split: parseTrainSplitBlock(r["split"], `${what} split`),
+  };
 }
 
 /**

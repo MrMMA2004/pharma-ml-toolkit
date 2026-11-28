@@ -9,7 +9,7 @@
 **Open-source Python tools for molecular data, pharmaceutical modeling, and research workflows.**
 
 [![CI on main](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MrMMA2004/pharma-ml-toolkit/actions/workflows/ci.yml)
-[![Source version](https://img.shields.io/badge/source%20version-1.2.245-087f6a)](pharma-ml-toolkit/VERSION)
+[![Source version](https://img.shields.io/badge/source%20version-1.2.247-087f6a)](pharma-ml-toolkit/VERSION)
 [![Python 3.10–3.12](https://img.shields.io/badge/tested%20Python-3.10%E2%80%933.12-3776ab?logo=python&logoColor=white)](pharma-ml-toolkit/pyproject.toml)
 [![MIT License](https://img.shields.io/badge/license-MIT-526b66)](LICENSE)
 
@@ -117,7 +117,7 @@ For supported checkpoint objectives and refusal behavior, see the [genetic check
 
 ## Version and release evidence
 
-**Source version in this checkout:** `v1.2.245` ([`VERSION`](pharma-ml-toolkit/VERSION)). Use [GitHub Releases](https://github.com/MrMMA2004/pharma-ml-toolkit/releases) for the published release record, installer availability, checksums, and software bill of materials. This project is distributed from its source repository and GitHub releases; it is not currently published on PyPI.
+**Source version in this checkout:** `v1.2.247` ([`VERSION`](pharma-ml-toolkit/VERSION)). Use [GitHub Releases](https://github.com/MrMMA2004/pharma-ml-toolkit/releases) for the published release record, installer availability, checksums, and software bill of materials. This project is distributed from its source repository and GitHub releases; it is not currently published on PyPI.
 
 The Windows build and hosted-runner installer-smoke workflows provide useful CI evidence, but they are **not** a substitute for a separate clean-machine offline install and upgrade check; that owner-side check is still not recorded. Installer signing also remains certificate-gated. Read the [changelog](pharma-ml-toolkit/CHANGELOG.md) and the [Windows release workflow](.github/workflows/windows-release.yml) for recorded changes and build scope.
 

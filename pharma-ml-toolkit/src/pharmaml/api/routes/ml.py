@@ -71,6 +71,7 @@ from pharmaml.ml.explain import shap_summary
 from pharmaml.ml.gnn import GraphClassifier
 from pharmaml.ml.models import list_models, resolve_model_name
 from pharmaml.ml.provenance import environment_snapshot
+from pharmaml.ml.splits import scaffold_groups, split_indices
 from pharmaml.ml.training import train_model
 from pharmaml.viz._compat import close_figure
 from pharmaml.viz.export import export_figure
@@ -94,6 +95,30 @@ _MAX_PREVIEW_FEATURES = 50
 _MAX_EVALUATION_ROWS = 500
 
 
+class TrainSplitSpec(BaseModel):
+    """ML-3 -- the Train lane's split section (the roadmap's row 2).
+
+    The same engine vocabulary DS-1 exposed at the Datasets stage
+    (``pharmaml.ml.splits``), now riding ``POST /ml/train``: with
+    ``split`` set, the route carves a held-out side through
+    :func:`pharmaml.ml.splits.split_indices` BEFORE the fit -- the
+    training frame the estimator sees is the carved train side, and the
+    carve itself (the two sides, the per-side group census and the
+    ``shared_groups`` leakage verdict) is reported in the train
+    response and in the §15.2 run record's ``cross_validation.split``
+    block at both exits.  ``smiles_column`` left null = the honest
+    auto-detection (scaffold); ``group_column`` is the group lane's
+    required input, never guessed (the DS-1 prerequisites verbatim).
+    """
+
+    strategy: Literal[
+        "random", "stratified", "scaffold", "group", "kennard_stone", "temporal"
+    ]
+    smiles_column: str | None = None
+    group_column: str | None = None
+    test_size: float = Field(default=0.2, gt=0.0, lt=1.0)
+
+
 class TrainRequest(BaseModel):
     dataset_id: str
     model: str = Field(min_length=1)
@@ -108,6 +133,9 @@ class TrainRequest(BaseModel):
     preprocess: bool = True
     random_state: int = 42
     model_params: dict[str, Any] | None = None
+    # ML-3 -- the optional strategy-aware held-out carve before the fit
+    # (null = the legacy full-frame lane, byte-identical behavior).
+    split: TrainSplitSpec | None = None
     mode: Literal["job", "sync"] = "job"
 
 
@@ -268,6 +296,143 @@ def _resolve_parallelism(
     return clamped, advisory
 
 
+def _train_split_slice(
+    spec: TrainSplitSpec,
+    frame: pd.DataFrame,
+    y_full: pd.Series,
+    target: str | None,
+    random_state: int,
+) -> tuple[np.ndarray, np.ndarray, dict]:
+    """ML-3: one strategy carve of the registered frame before the fit.
+
+    The carve runs over the FULL registered frame (the strategy inputs
+    -- SMILES, group labels -- are columns the loader's own feature
+    matrix legitimately excludes), through the same
+    :func:`pharmaml.ml.splits.split_indices` engine the CLI, the
+    in-backend templates and the Datasets split route ride -- never a
+    second splitter.  The prerequisites are the DS-1 lane's own honest
+    ``DataValidationError`` 422s (the scaffold smiles auto-pick, the
+    never-guessed group column, kennard_stone's numeric matrix with
+    the target column excluded).  Returns the positional train/heldout
+    index arrays plus the response/record block: the two sides' row
+    counts and, for the group-carrying strategies, the per-side group
+    census + the ``shared_groups`` leakage verdict (which the engine's
+    whole-group assignment guarantees is empty -- the census states
+    it, never assumes it).
+    """
+    strategy = spec.strategy
+    smiles_col: str | None = None
+    if strategy == "scaffold":
+        smiles_col = spec.smiles_column
+        if smiles_col is None:
+            # the same auto-pick the §15.4 quality card and DS-1 use;
+            # raises DataValidationError naming every column it tried
+            smiles_col = detect_smiles_column(frame)
+        elif smiles_col not in frame.columns:
+            raise DataValidationError(
+                f"smiles column {smiles_col!r} not found; available: "
+                f"{[str(c) for c in frame.columns][:20]}"
+            )
+    group_col: str | None = None
+    if strategy == "group":
+        group_col = spec.group_column
+        if group_col is None:
+            raise DataValidationError(
+                "the 'group' strategy needs an explicit group_column "
+                "(group labels are never guessed)"
+            )
+        if group_col not in frame.columns:
+            raise DataValidationError(
+                f"group column {group_col!r} not found; available: "
+                f"{[str(c) for c in frame.columns][:20]}"
+            )
+    feature_cols: list[str] = []
+    if strategy == "kennard_stone":
+        feature_cols = [
+            str(c) for c in frame.columns
+            if str(c) != target and pd.api.types.is_numeric_dtype(frame[c])
+        ]
+        if not feature_cols:
+            raise DataValidationError(
+                "kennard_stone needs at least one numeric feature column "
+                "(distances are computed on the numeric matrix)"
+            )
+    X_arg: object = (
+        frame[feature_cols].to_numpy(dtype=float)
+        if strategy == "kennard_stone"
+        else frame
+    )
+    y_arg: object = y_full if strategy == "stratified" else None
+    smiles = (
+        [str(v) for v in frame[smiles_col].tolist()]
+        if strategy == "scaffold"
+        else None
+    )
+    groups = frame[group_col].tolist() if strategy == "group" else None
+    train_idx, heldout_idx = split_indices(
+        X=X_arg,
+        y=y_arg,
+        strategy=strategy,
+        test_size=spec.test_size,
+        random_state=random_state,
+        smiles=smiles,
+        groups=groups,
+    )
+    n = len(frame)
+    block: dict[str, Any] = {
+        "strategy": strategy,
+        "smiles_column": smiles_col if strategy == "scaffold" else None,
+        "group_column": group_col if strategy == "group" else None,
+        "test_size": spec.test_size,
+        "random_state": random_state,
+        "n_rows": n,
+        "sides": {
+            "train": {"rows": len(train_idx)},
+            "heldout": {"rows": len(heldout_idx)},
+        },
+        "group_census": None,
+    }
+    if strategy in ("scaffold", "group"):
+        if strategy == "scaffold":
+            keys = scaffold_groups([str(v) for v in frame[smiles_col].tolist()])
+        else:
+            keys = [str(v) for v in frame[group_col].tolist()]
+        train_keys = [keys[int(i)] for i in train_idx]
+        heldout_keys = [keys[int(i)] for i in heldout_idx]
+
+        def _counts(side_keys: list[str]) -> dict[str, int]:
+            side_counts: dict[str, int] = {}
+            for key in side_keys:
+                side_counts[key] = side_counts.get(key, 0) + 1
+            return side_counts
+
+        train_counts = _counts(train_keys)
+        heldout_counts = _counts(heldout_keys)
+
+        def _top(counts: dict[str, int]) -> list[list[object]]:
+            return [
+                [key, count]
+                for key, count in sorted(
+                    counts.items(), key=lambda kv: (-kv[1], kv[0])
+                )[:8]
+            ]
+
+        block["group_census"] = {
+            "train": {
+                "n_groups": len(train_counts),
+                "top_groups": _top(train_counts),
+            },
+            "heldout": {
+                "n_groups": len(heldout_counts),
+                "top_groups": _top(heldout_counts),
+            },
+            "shared_groups": sorted(
+                set(train_counts) & set(heldout_counts)
+            ),
+        }
+    return train_idx, heldout_idx, block
+
+
 def _now_iso() -> str:
     from datetime import datetime, timezone
 
@@ -290,8 +455,16 @@ def _record_run(
     random_state: int,
     model_params,
     started_at: str,
+    split: dict | None = None,
 ) -> None:
-    """The failure/cancellation exit's run record (§15.2's honest lane)."""
+    """The failure/cancellation exit's run record (§15.2's honest lane).
+
+    ``split`` is the ML-3 carve block as it stood at the failure: the
+    computed block when the carve had already run (the fit itself
+    failed), or the requested echo plus its ``error`` when the carve
+    was refused (a doomed split configuration is traceable "do not
+    re-run this" information, exactly like a doomed model_params).
+    """
     if run_store is None:
         return
     run_store.register(build_ml_train_failed_run(
@@ -306,6 +479,7 @@ def _record_run(
         preprocess=preprocess,
         random_state=random_state,
         model_params=model_params,
+        split=split,
         environment=environment_snapshot(),
         toolkit_version=_toolkit_version,
         started_at=started_at,
@@ -335,6 +509,8 @@ def _train_body(
     cancel_event=None,
     manager=None,
     job_id: str | None = None,
+    split: TrainSplitSpec | None = None,
+    dataset_frame: pd.DataFrame | None = None,
 ) -> dict:
     """Job/sync body: the REAL train_model call + store registration.
 
@@ -344,21 +520,68 @@ def _train_body(
     it is not re-run blind).  The records are built from the very
     objects this body already holds — no second source, no
     re-derivation.
+
+    ML-3: with a ``split`` section the body carves the held-out side
+    through the shared ``ml/splits`` engine BEFORE the fit (the carve
+    itself can fail honestly — its 422 exits record the refused echo,
+    the same lane every other doomed configuration rides), and the
+    carve block rides the response and the §15.2 record's
+    ``cross_validation.split`` at both exits.
     """
     started_at = _now_iso()
+    split_echo: dict[str, Any] | None = None
+    if split is not None:
+        split_echo = {
+            "strategy": split.strategy,
+            "smiles_column": (
+                split.smiles_column if split.strategy == "scaffold" else None
+            ),
+            "group_column": (
+                split.group_column if split.strategy == "group" else None
+            ),
+            "test_size": split.test_size,
+            "random_state": random_state,
+            "n_rows": len(dataset_X),
+            "sides": None,
+            "group_census": None,
+            "error": None,
+        }
     if cancel_event is not None and cancel_event.is_set():
         _record_run(
             run_store, "cancelled", "Cancelled before the fit stage.",
             mode, job_id, dataset_view, model_name, task, tune, cv,
             n_jobs, preprocess, random_state, model_params,
-            started_at,
+            started_at, split=split_echo,
         )
         raise CancelledJob("Cancelled before the fit stage.")
+    split_block: dict[str, Any] | None = split_echo
+    if split is not None:
+        # the strategy inputs (SMILES / group labels) live in the FULL
+        # registered frame, not the loader's numeric feature matrix; the
+        # positional indices the engine returns slice both the same.
+        frame = dataset_frame if dataset_frame is not None else dataset_X
+        try:
+            train_idx, _heldout_idx, split_block = _train_split_slice(
+                split, frame, dataset_y, target, random_state
+            )
+            dataset_X = dataset_X.iloc[train_idx]
+            dataset_y = dataset_y.iloc[train_idx]
+        except DataValidationError as exc:
+            refused = dict(split_echo or {})
+            refused["error"] = str(exc)
+            _record_run(
+                run_store, "failed", f"{type(exc).__name__}: {exc}",
+                mode, job_id, dataset_view, model_name, task, tune, cv,
+                n_jobs, preprocess, random_state, model_params,
+                started_at, split=refused,
+            )
+            raise
     if manager is not None and job_id is not None:
         manager.report_progress(job_id, 10, "preparing features")
     # part16 §5.3 -- resolve the effective parallelism BEFORE the fit
     # (the memory-aware clamp; concurrency may reduce, the science
-    # never does, the decision is always reported).
+    # never does, the decision is always reported).  The estimate runs
+    # over the carved train side -- the frame the fit actually sees.
     effective_n_jobs, parallelism_advisory = _resolve_parallelism(
         n_jobs, dataset_X
     )
@@ -380,7 +603,7 @@ def _train_body(
             run_store, "cancelled", "Cancelled during the fit stage.",
             mode, job_id, dataset_view, model_name, task, tune, cv,
             n_jobs, preprocess, random_state, model_params,
-            started_at,
+            started_at, split=split_block,
         )
         raise
     except Exception as exc:
@@ -388,7 +611,7 @@ def _train_body(
             run_store, "failed", f"{type(exc).__name__}: {exc}",
             mode, job_id, dataset_view, model_name, task, tune, cv,
             n_jobs, preprocess, random_state, model_params,
-            started_at,
+            started_at, split=split_block,
         )
         raise
     record = TrainedModelRecord(
@@ -425,6 +648,7 @@ def _train_body(
             preprocess=preprocess,
             random_state=random_state,
             model_params=model_params,
+            split=split_block,
             training_result=result,
             model_view=record.view(),
             environment=environment_snapshot(),
@@ -432,7 +656,13 @@ def _train_body(
             started_at=started_at,
             completed_at=_now_iso(),
         ))
-    return {"model": record.view(), "parallelism": parallelism_advisory}
+    payload: dict[str, Any] = {
+        "model": record.view(),
+        "parallelism": parallelism_advisory,
+    }
+    if split_block is not None:
+        payload["split"] = split_block
+    return payload
 
 
 @router.post("/train")
@@ -458,6 +688,8 @@ def train_model_route(req: TrainRequest, request: Request) -> dict:
                 dataset_view=dataset.view(),
                 run_store=request.app.state.run_store,
                 mode="sync",
+                split=req.split,
+                dataset_frame=dataset.frame,
             ),
         }
     record = manager.submit(
@@ -473,6 +705,9 @@ def train_model_route(req: TrainRequest, request: Request) -> dict:
             "n_jobs": req.n_jobs,
             "preprocess": req.preprocess,
             "random_state": req.random_state,
+            "split": (
+                req.split.model_dump() if req.split is not None else None
+            ),
         },
         dataset_id=req.dataset_id,
         dataset_X=dataset.X,
@@ -491,6 +726,8 @@ def train_model_route(req: TrainRequest, request: Request) -> dict:
         run_store=request.app.state.run_store,
         mode="job",
         manager=manager,
+        split=req.split,
+        dataset_frame=dataset.frame,
     )
     return {"mode": "job", "job": record.public()}
 

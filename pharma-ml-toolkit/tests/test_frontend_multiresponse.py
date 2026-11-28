@@ -92,7 +92,9 @@ def test_the_contract_carries_the_four_new_paths() -> None:
     # expansion (the CNN + autoencoder + GAN + diffusion pairs' paths
     # and request DTOs)
     assert len(paths) == 142, f"the contract drifted: {len(paths)} paths"
-    assert len(schema["components"]["schemas"]) == 96
+    # 96 -> 97 by the r375 ML-3 train-lane split section (the
+    # TrainSplitSpec request DTO, one schema; no new paths)
+    assert len(schema["components"]["schemas"]) == 97
     for path in (
         "/api/v1/multiresponse/registry",
         "/api/v1/multiresponse/train",

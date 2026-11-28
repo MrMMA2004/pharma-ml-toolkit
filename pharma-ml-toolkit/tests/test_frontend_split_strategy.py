@@ -1,12 +1,14 @@
-"""The DS-1 split-strategy drift guard (the roadmap's first P0 row).
+"""The split-strategy drift guard (DS-1 + ML-3, the roadmap's first rows).
 
 The strategy lane spans three sources that must never drift apart:
 
 * the engine's vocabulary — ``pharmaml.ml.splits.SPLIT_STRATEGIES``;
-* the route's request Literal — ``routes/datasets.py:SplitRequest``;
-* the frontend's two copies — the generated OpenAPI contract the
-  service client types ride, and the page's own selector options /
-  the client parser's ``STRATEGY_LITERALS``.
+* the route's request Literals — ``routes/datasets.py:SplitRequest``
+  (DS-1) and ``routes/ml.py:TrainSplitSpec`` (ML-3, the train lane's
+  ``split`` section);
+* the frontend's copies — the generated OpenAPI contract the service
+  client types ride, and the page's own selector options / the client
+  parser's literal lists.
 
 This guard parses the REAL sources (the house pattern — no fabricated
 fixtures): a strategy added to the engine without the route, the
@@ -22,6 +24,16 @@ Pins (the roadmap's DS-1 acceptance, the drift-guard clause):
 * the client parser's literal list == the engine's set;
 * the census response fields (``group_census`` / ``shared_groups`` /
   ``top_groups``) exist on both ends of the JSON boundary.
+
+ML-3 pins (the train lane's own acceptance, same clause):
+* ``TrainSplitSpec``'s strategy Literal == the engine's set;
+* the contract's TrainRequest.split -> TrainSplitSpec schema carries
+  the same enum (the generated-types lane);
+* the ML page's Configure Split/CV selector offers every engine
+  strategy + the legacy "none" lane + the group-column gate;
+* the ml client parser's ``TRAIN_SPLIT_STRATEGY_LITERALS`` == the
+  engine's set, and the carve block's census fields narrow on both
+  ends of the JSON boundary.
 """
 
 from __future__ import annotations
@@ -34,9 +46,12 @@ from pharmaml.ml.splits import SPLIT_STRATEGIES
 
 REPO = Path(__file__).resolve().parent.parent
 ROUTES = REPO / "src" / "pharmaml" / "api" / "routes" / "datasets.py"
+ML_ROUTES = REPO / "src" / "pharmaml" / "api" / "routes" / "ml.py"
 CONTRACT = REPO / "contracts" / "openapi.json"
 PAGE = REPO / "frontend" / "src" / "features" / "datasets" / "DatasetsPage.tsx"
 CLIENT = REPO / "frontend" / "src" / "services" / "datasets" / "client.ts"
+ML_PAGE = REPO / "frontend" / "src" / "features" / "ml" / "MLPage.tsx"
+ML_CLIENT = REPO / "frontend" / "src" / "services" / "ml" / "client.ts"
 
 
 def _route_strategy_literals() -> set[str]:
@@ -66,6 +81,37 @@ def _page_option_values() -> set[str]:
     return set(re.findall(r'value="([a-z_]+)"', m.group(1)))
 
 
+def _ml_route_strategy_literals() -> set[str]:
+    src = ML_ROUTES.read_text(encoding="utf-8")
+    m = re.search(
+        r"class TrainSplitSpec\(BaseModel\):.*?strategy:\s*Literal\[(.*?)]",
+        src,
+        re.DOTALL,
+    )
+    assert m, "TrainSplitSpec no longer declares the strategy Literal"
+    return set(re.findall(r'"([a-z_]+)"', m.group(1)))
+
+
+def _ml_client_train_literals() -> set[str]:
+    src = ML_CLIENT.read_text(encoding="utf-8")
+    m = re.search(
+        r"const TRAIN_SPLIT_STRATEGY_LITERALS[^=]*=\s*\[(.*?)];",
+        src,
+        re.DOTALL,
+    )
+    assert m, "ml/client.ts no longer declares TRAIN_SPLIT_STRATEGY_LITERALS"
+    return set(re.findall(r'"([a-z_]+)"', m.group(1)))
+
+
+def _ml_page_option_values() -> set[str]:
+    src = ML_PAGE.read_text(encoding="utf-8")
+    m = re.search(
+        r"value=\{splitStrategy\}(.*?)</select>", src, re.DOTALL
+    )
+    assert m, "the ML page's split strategy selector is gone"
+    return set(re.findall(r'value="([a-z_]+)"', m.group(1)))
+
+
 class TestStrategyVocabulary:
     """One engine vocabulary, four carriers — never two sets."""
 
@@ -79,6 +125,21 @@ class TestStrategyVocabulary:
         options = _page_option_values()
         assert set(SPLIT_STRATEGIES) <= options
         assert "auto" in options  # the legacy stratify-toggle lane
+
+
+class TestTrainLaneVocabulary:
+    """ML-3 — the same engine vocabulary on the train lane's carriers."""
+
+    def test_train_route_literal_set_equals_the_engine(self):
+        assert _ml_route_strategy_literals() == set(SPLIT_STRATEGIES)
+
+    def test_train_client_literals_equal_the_engine(self):
+        assert _ml_client_train_literals() == set(SPLIT_STRATEGIES)
+
+    def test_train_page_selector_offers_the_engine_set(self):
+        options = _ml_page_option_values()
+        assert set(SPLIT_STRATEGIES) <= options
+        assert "none" in options  # the legacy full-frame lane
 
 
 class TestContractCarriesTheFields:
@@ -96,6 +157,25 @@ class TestContractCarriesTheFields:
         # Optional[str] rides anyOf(string, null) — both column fields
         assert {"type": "string"} in props["smiles_column"]["anyOf"]
         assert {"type": "string"} in props["group_column"]["anyOf"]
+
+    def test_train_request_split_section_carries_the_enum(self):
+        contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        schemas = contract["components"]["schemas"]
+        split_prop = schemas["TrainRequest"]["properties"]["split"]
+        refs = {
+            part["$ref"]
+            for part in split_prop["anyOf"]
+            if "$ref" in part
+        }
+        assert refs == {"#/components/schemas/TrainSplitSpec"}
+        spec = schemas["TrainSplitSpec"]
+        assert set(spec["properties"]["strategy"]["enum"]) == set(
+            SPLIT_STRATEGIES
+        )
+        assert spec["required"] == ["strategy"]
+        assert "smiles_column" in spec["properties"]
+        assert "group_column" in spec["properties"]
+        assert "test_size" in spec["properties"]
 
 
 class TestPageAndParserContract:
@@ -121,3 +201,28 @@ class TestPageAndParserContract:
         assert "parseGroupCensus" in src
         assert "shared_groups" in src
         assert "top_groups" in src
+
+    def test_ml_page_pins_the_leakage_verdict_and_the_group_gate(self):
+        src = ML_PAGE.read_text(encoding="utf-8")
+        assert "shared groups across the sides" in src  # the verdict line
+        assert "group labels are never guessed" in src  # the gate hint
+        # the train button stays gated without a group column
+        assert (
+            'splitStrategy === "group" && splitGroupColumn === ""' in src
+        )
+        # the carve readout renders the census + per-side group counts
+        assert "group_census" in src and "n_groups" in src
+
+    def test_train_route_response_carries_the_census_fields(self):
+        src = ML_ROUTES.read_text(encoding="utf-8")
+        assert '"group_census"' in src
+        assert '"shared_groups"' in src
+        assert '"top_groups"' in src
+
+    def test_ml_client_parser_narrows_the_carve_block(self):
+        src = ML_CLIENT.read_text(encoding="utf-8")
+        assert "parseTrainSplitBlock" in src
+        assert "shared_groups" in src
+        assert "top_groups" in src
+        # the honest sides readout: the fit saw the train side only
+        assert "n_train_rows" in ML_PAGE.read_text(encoding="utf-8")

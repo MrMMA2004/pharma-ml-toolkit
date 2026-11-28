@@ -5126,6 +5126,7 @@ export interface components {
              * @default 42
              */
             random_state: number;
+            split?: components["schemas"]["TrainSplitSpec"] | null;
             /** Task */
             task?: ("classification" | "regression") | null;
             /**
@@ -5133,6 +5134,38 @@ export interface components {
              * @default true
              */
             tune: boolean;
+        };
+        /**
+         * TrainSplitSpec
+         * @description ML-3 -- the Train lane's split section (the roadmap's row 2).
+         *
+         *     The same engine vocabulary DS-1 exposed at the Datasets stage
+         *     (``pharmaml.ml.splits``), now riding ``POST /ml/train``: with
+         *     ``split`` set, the route carves a held-out side through
+         *     :func:`pharmaml.ml.splits.split_indices` BEFORE the fit -- the
+         *     training frame the estimator sees is the carved train side, and the
+         *     carve itself (the two sides, the per-side group census and the
+         *     ``shared_groups`` leakage verdict) is reported in the train
+         *     response and in the §15.2 run record's ``cross_validation.split``
+         *     block at both exits.  ``smiles_column`` left null = the honest
+         *     auto-detection (scaffold); ``group_column`` is the group lane's
+         *     required input, never guessed (the DS-1 prerequisites verbatim).
+         */
+        TrainSplitSpec: {
+            /** Group Column */
+            group_column?: string | null;
+            /** Smiles Column */
+            smiles_column?: string | null;
+            /**
+             * Strategy
+             * @enum {string}
+             */
+            strategy: "random" | "stratified" | "scaffold" | "group" | "kennard_stone" | "temporal";
+            /**
+             * Test Size
+             * @default 0.2
+             */
+            test_size: number;
         };
         /** ValidationError */
         ValidationError: {

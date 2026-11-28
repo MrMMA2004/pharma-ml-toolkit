@@ -5467,6 +5467,16 @@
             "title": "Random State",
             "type": "integer"
           },
+          "split": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrainSplitSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "task": {
             "anyOf": [
               {
@@ -5493,6 +5503,57 @@
           "model"
         ],
         "title": "TrainRequest",
+        "type": "object"
+      },
+      "TrainSplitSpec": {
+        "description": "ML-3 -- the Train lane's split section (the roadmap's row 2).\n\nThe same engine vocabulary DS-1 exposed at the Datasets stage\n(``pharmaml.ml.splits``), now riding ``POST /ml/train``: with\n``split`` set, the route carves a held-out side through\n:func:`pharmaml.ml.splits.split_indices` BEFORE the fit -- the\ntraining frame the estimator sees is the carved train side, and the\ncarve itself (the two sides, the per-side group census and the\n``shared_groups`` leakage verdict) is reported in the train\nresponse and in the \u00a715.2 run record's ``cross_validation.split``\nblock at both exits.  ``smiles_column`` left null = the honest\nauto-detection (scaffold); ``group_column`` is the group lane's\nrequired input, never guessed (the DS-1 prerequisites verbatim).",
+        "properties": {
+          "group_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Column"
+          },
+          "smiles_column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smiles Column"
+          },
+          "strategy": {
+            "enum": [
+              "random",
+              "stratified",
+              "scaffold",
+              "group",
+              "kennard_stone",
+              "temporal"
+            ],
+            "title": "Strategy",
+            "type": "string"
+          },
+          "test_size": {
+            "default": 0.2,
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Test Size",
+            "type": "number"
+          }
+        },
+        "required": [
+          "strategy"
+        ],
+        "title": "TrainSplitSpec",
         "type": "object"
       },
       "ValidationError": {

@@ -713,6 +713,202 @@ class TestDatasetSplitStrategy:
         assert set(body["sides"]) == {"train", "test"}
 
 
+# ------------------------------------------- ML-3: the train-lane split section
+
+
+class TestTrainSplitStrategy:
+    """ML-3 — the ml/splits engine vocabulary behind POST /ml/train.
+
+    Same fail-first fixture as DS-1 (12 rows, two scaffold families): a
+    carve that ignored the strategy would scatter the 8-row ring family
+    across both sides — the scaffold carve must keep each family whole,
+    and the fit must see the carved train side only.
+    """
+
+    def _train_split(self, client, split: dict, tune: bool = False):
+        ds = _upload(client, data=_scaffold_csv(),
+                     name="scaffold-fixture.csv", target="y")
+        r = client.post(
+            "/api/v1/ml/train",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"],
+                "model": "random_forest",
+                "tune": tune,
+                "n_jobs": 1,
+                "mode": "sync",
+                "split": split,
+            },
+        )
+        return ds, r
+
+    def _latest_train_run(self, client) -> dict:
+        body = client.get(
+            "/api/v1/runs", headers=auth_headers(),
+            params={"family": "ml.train"},
+        ).json()
+        assert body["runs"], "no ml.train run record found"
+        return client.get(
+            f"/api/v1/runs/{body['runs'][0]['run_id']}",
+            headers=auth_headers(),
+        ).json()
+
+    def test_scaffold_split_keeps_family_whole(self, client):
+        # the fail-first fixture: the 8-row ring family must land on ONE
+        # side and the estimator must train on the carved train side
+        _, r = self._train_split(
+            client, {"strategy": "scaffold", "test_size": 0.25})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        split = body["split"]
+        assert split["strategy"] == "scaffold"
+        assert split["smiles_column"] == "smiles"  # the honest auto-pick
+        assert split["group_column"] is None
+        assert split["test_size"] == 0.25
+        assert split["n_rows"] == 12
+        assert split["sides"]["train"]["rows"] == 8
+        assert split["sides"]["heldout"]["rows"] == 4
+        # the leakage verdict: no scaffold key on two sides
+        census = split["group_census"]
+        assert census is not None
+        assert census["shared_groups"] == []
+        # the ring family ('c1ccccc1', 8 rows) lands wholly on ONE side
+        ring_counts = {
+            name: dict(side.get("top_groups", [])).get("c1ccccc1", 0)
+            for name, side in census.items()
+            if isinstance(side, dict)
+        }
+        nonzero = [n for n, count in ring_counts.items() if count > 0]
+        assert nonzero and len(nonzero) == 1
+        assert ring_counts[nonzero[0]] == 8
+        # the carve is real: the fit saw the train side only
+        assert body["model"]["n_train_rows"] == split["sides"]["train"]["rows"]
+
+    def test_split_block_pinned_in_the_run_record(self, client):
+        _, r = self._train_split(
+            client, {"strategy": "scaffold", "test_size": 0.25})
+        assert r.status_code == 200, r.text
+        record = self._latest_train_run(client)
+        assert record["status"] == "completed"
+        split = record["cross_validation"]["split"]
+        assert split["strategy"] == "scaffold"
+        assert split["smiles_column"] == "smiles"
+        assert split["sides"]["train"]["rows"] == 8
+        assert split["sides"]["heldout"]["rows"] == 4
+        assert split["group_census"]["shared_groups"] == []
+        # the model artifact row count IS the carved train side
+        assert record["model_artifact"]["n_train_rows"] == 8
+
+    def test_refused_group_split_records_the_failed_run(self, client):
+        _, r = self._train_split(
+            client, {"strategy": "group", "test_size": 0.25})
+        assert r.status_code == 422, r.text
+        assert "explicit group_column" in r.json()["detail"]
+        # the §15.2 failure exit: the refused echo is traceable
+        record = self._latest_train_run(client)
+        assert record["status"] == "failed"
+        split = record["cross_validation"]["split"]
+        assert split["strategy"] == "group"
+        assert split["group_column"] is None
+        assert split["sides"] is None
+        assert "group_column" in (split["error"] or "")
+
+    def test_group_strategy_with_column_census(self, client):
+        _, r = self._train_split(
+            client,
+            {"strategy": "group", "group_column": "grp", "test_size": 0.25},
+        )
+        assert r.status_code == 200, r.text
+        split = r.json()["split"]
+        assert split["strategy"] == "group"
+        assert split["group_column"] == "grp"
+        assert split["smiles_column"] is None
+        assert split["group_census"]["shared_groups"] == []
+        assert split["sides"]["train"]["rows"] + \
+            split["sides"]["heldout"]["rows"] == 12
+
+    def test_temporal_train_side_is_positional(self, client):
+        _, r = self._train_split(
+            client, {"strategy": "temporal", "test_size": 0.25})
+        assert r.status_code == 200, r.text
+        split = r.json()["split"]
+        # order-as-given: the first 9 rows train, the last 3 hold out
+        assert split["sides"]["train"]["rows"] == 9
+        assert split["sides"]["heldout"]["rows"] == 3
+        assert r.json()["model"]["n_train_rows"] == 9
+
+    def test_no_split_section_is_the_legacy_full_frame(self, client):
+        ds = _upload(client, data=_scaffold_csv(),
+                     name="scaffold-fixture.csv", target="y")
+        r = client.post(
+            "/api/v1/ml/train",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"],
+                "model": "random_forest",
+                "tune": False, "n_jobs": 1, "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        # the legacy lane answers exactly as before: no split key at all
+        assert "split" not in body
+        assert body["model"]["n_train_rows"] == 12
+        record = self._latest_train_run(client)
+        assert record["cross_validation"]["split"] is None
+
+    def test_smiles_column_not_found_is_422(self, client):
+        _, r = self._train_split(
+            client,
+            {"strategy": "scaffold", "smiles_column": "nope",
+             "test_size": 0.25},
+        )
+        assert r.status_code == 422, r.text
+        assert "not found" in r.json()["detail"]
+
+    def test_kennard_stone_without_numeric_is_422(self, client):
+        buf = io.StringIO()
+        buf.write("smiles,grp,y\n")
+        for i in range(12):
+            buf.write(f"CCO,{'A' if i % 2 else 'B'},{i % 2}\n")
+        ds = _upload(client, data=buf.getvalue().encode(),
+                     name="strings-only.csv", target="y")
+        r = client.post(
+            "/api/v1/ml/train",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"], "model": "random_forest",
+                "tune": False, "n_jobs": 1, "mode": "sync",
+                "split": {"strategy": "kennard_stone", "test_size": 0.25},
+            },
+        )
+        assert r.status_code == 422, r.text
+        assert "numeric feature column" in r.json()["detail"]
+
+    def test_train_split_job_mode_relays_the_block(self, client):
+        ds = _upload(client, data=_scaffold_csv(),
+                     name="scaffold-fixture.csv", target="y")
+        r = client.post(
+            "/api/v1/ml/train",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"], "model": "random_forest",
+                "tune": False, "n_jobs": 1, "mode": "job",
+                "split": {"strategy": "scaffold", "test_size": 0.25},
+            },
+        )
+        assert r.status_code == 200, r.text
+        job = r.json()["job"]
+        final = _wait_job(client, job["job_id"])
+        assert final["state"] == "COMPLETED", final
+        result = client.get(
+            f"/api/v1/jobs/{job['job_id']}/result", headers=auth_headers()
+        ).json()["result"]
+        assert result["split"]["strategy"] == "scaffold"
+        assert result["split"]["group_census"]["shared_groups"] == []
+        assert result["model"]["n_train_rows"] == 8
+
+
 # ------------------------------------------------------------ ml catalog
 
 

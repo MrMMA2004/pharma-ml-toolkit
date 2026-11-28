@@ -286,7 +286,7 @@ and the satellite routers is consumed — except two whole families below.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | ML-3 — A `split` section on `TrainRequest` riding `ml/splits.py` |
-| Current status | Partial (engine Implemented; TrainRequest carries `cv: int` only) |
+| Current status | **Implemented (round 375, v1.2.247)** — the carve runs over the full registered frame before the fit, the sides + group census + `shared_groups` verdict ride the response and the §15.2 record at both exits |
 | Problem | `routes/ml.py:96` `TrainRequest` exposes `cv: int` (2–10) and nothing else split-shaped; `_train_body` calls `train_model(... cv=cv ...)` whose validation is the stratified-k-fold inside `ml/preprocessing.py:282 make_train_test_split` (stratify=True default). The `ml/splits.py` vocabulary (scaffold/group/kennard-stone) is therefore unreachable from the GUI's training path, even though the Datasets-side DS-1 fix will produce scaffold-aware held-out frames the train lane cannot itself request. |
 | Proposed solution | Add optional `split: {strategy, smiles_column?, group_column?}` to TrainRequest; `_train_body` slices the training frame with `split_indices` before the fit and reports the strategy + group counts in the train response (and into the §15.2 run record the route already writes at both exits). The Configure Split/CV stage (`MLPage.tsx:3249`) gains the selector. |
 | Scientific value | Cross-validated scores under scaffold-separated folds are the trustworthy headline metric for a QSAR model; today the GUI can only report random-stratified folds. |
@@ -937,6 +937,22 @@ strategy lane through `split_indices`, the two-pass group-honest val carve,
 the `group_census` leakage verdict, the Split-stage selector + the group
 column gate, 13 API tests + 7 drift-guard tests + 7 vitests; the next row is
 ML-3 (the Train lane's `split` section over the same engine wiring).
+
+— execution log: **row 2 (ML-3) executed in round 375 at v1.2.247** — the
+`split` section on `TrainRequest` (`TrainSplitSpec`: strategy +
+`smiles_column` auto-pick + never-guessed `group_column` + `test_size`), the
+carve over the FULL registered frame through the same `split_indices`
+engine before the fit (the estimator sees the carved train side only —
+`n_train_rows` IS the carve), the sides + per-side group census + the
+`shared_groups` leakage verdict in the response and the §15.2 run record's
+`cross_validation.split` at BOTH exits (the refused carve records its echoed
+config + error, the fit failure records the computed carve), the Configure
+Split/CV selector ("none" keeps the legacy full-frame lane request-free) +
+the group-column gate + the carve readout with the honest-cv caveat line; 9
+API tests + 14 drift-guard tests (the guard extended to the train lane) +
+7 parser vitests + 3 page vitests, the contract re-exported (142 paths /
+97 schemas). The next row is ML-1 (the four finished
+`/model-evaluation` routes with zero consumers).
 
 — trued round 372 (part21 / task 2-c): written read-only against the v1.2.244
 tree; every "zero frontend consumer" claim above was verified by diffing all

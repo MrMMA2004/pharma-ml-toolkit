@@ -42,6 +42,7 @@ import { getSettingsStore } from "@/services/settings/store";
 import {
   datasetsApi,
   type DatasetView,
+  type SplitStrategy,
 } from "@/services/datasets/client";
 import {
   artifactsApi,
@@ -94,6 +95,7 @@ import {
   type RepurposingScreenResponse,
   type SemiSupervisedEvaluation,
   type SemiSupervisedView,
+  type TrainSplitBlock,
   type TrainedModelView,
   type WilliamsFrameRow,
   type WilliamsResultPayload,
@@ -779,6 +781,13 @@ export function MLPage() {
   // stage 4: split/cv configuration
   const [cv, setCv] = useState(5);
   const [tune, setTune] = useState(true);
+  // stage 4 (ML-3): the train lane's split section — "none" keeps the
+  // legacy full-frame fit byte-identical; a strategy carves the held-out
+  // side through the same ml/splits engine the Datasets stage rides
+  const [splitStrategy, setSplitStrategy] = useState<"none" | SplitStrategy>("none");
+  const [splitSmilesColumn, setSplitSmilesColumn] = useState("");
+  const [splitGroupColumn, setSplitGroupColumn] = useState("");
+  const [splitTestSize, setSplitTestSize] = useState(0.2);
   // part16 §5.2 -- the conservative default (the API's own default
   // changed with it): -1 (all cores) stays selectable in this field,
   // but the form opens sequential -- the all-cores default is the
@@ -806,6 +815,8 @@ export function MLPage() {
   const [trainError, setTrainError] = useState<string | null>(null);
   const [trainBusy, setTrainBusy] = useState(false);
   const [trainedModel, setTrainedModel] = useState<TrainedModelView | null>(null);
+  // stage 7 (ML-3): the carve block of the last completed train
+  const [trainedSplit, setTrainedSplit] = useState<TrainSplitBlock | null>(null);
 
   // stage 8: evaluate (predict, dataset mode, sync)
   const [trainedModels, setTrainedModels] = useState<readonly TrainedModelView[]>([]);
@@ -1375,6 +1386,7 @@ export function MLPage() {
     setSelectionError(null);
     // dataset-bound stage state resets with the selection
     setTrainedModel(null);
+    setTrainedSplit(null);
     setPredictResult(null);
     setSelectedTrained(null);
     setSelectedTrainedId(null);
@@ -1388,6 +1400,8 @@ export function MLPage() {
     setExportArtifact(null);
     setDigestStatus(null);
     setSelectedModel("");
+    setSplitSmilesColumn("");
+    setSplitGroupColumn("");
     try {
       const view = await datasetsApi.view(datasetId);
       setSelected(view);
@@ -1436,6 +1450,7 @@ export function MLPage() {
     setTrainError(null);
     setTrainJobId(null);
     setTrainedModel(null);
+    setTrainedSplit(null);
     try {
       const response = await mlApi.train({
         datasetId: selectedId,
@@ -1447,6 +1462,23 @@ export function MLPage() {
         preprocess,
         randomState,
         modelParams,
+        // ML-3: the strategy section — null keeps the legacy full-frame
+        // lane (the request carries no split key at all)
+        split:
+          splitStrategy === "none"
+            ? null
+            : {
+                strategy: splitStrategy,
+                smilesColumn:
+                  splitStrategy === "scaffold" && splitSmilesColumn !== ""
+                    ? splitSmilesColumn
+                    : null,
+                groupColumn:
+                  splitStrategy === "group" && splitGroupColumn !== ""
+                    ? splitGroupColumn
+                    : null,
+                testSize: splitTestSize,
+              },
         mode: "job",
       });
       if (response.mode === "job") {
@@ -1467,15 +1499,24 @@ export function MLPage() {
     preprocess,
     randomState,
     modelParamsText,
+    splitStrategy,
+    splitSmilesColumn,
+    splitGroupColumn,
+    splitTestSize,
   ]);
 
-  // the train job's result IS `{model: TrainedModelView}` — the
-  // authoritative REST relay, parsed at runtime
+  // the train job's result IS `{model, split}` — the authoritative REST
+  // relay, parsed at runtime (the ML-3 carve block rides the same
+  // payload; null when the request carried no split section)
   const handleTrainResult = useCallback(
     (result: unknown) => {
       try {
-        const view = parseTrainResult(result, "train result");
+        const { model: view, split } = parseTrainResult(
+          result,
+          "train result",
+        );
         setTrainedModel(view);
+        setTrainedSplit(split);
         setSelectedTrained(view);
         setSelectedTrainedId(view.model_id);
         void refreshTrained();
@@ -3285,13 +3326,87 @@ export function MLPage() {
                   className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
                 />
               </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                split strategy
+                <select
+                  value={splitStrategy}
+                  onChange={(event) =>
+                    setSplitStrategy(event.target.value as "none" | SplitStrategy)}
+                  className="mt-1 w-40 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                >
+                  <option value="none">none (train on the full frame)</option>
+                  <option value="random">random</option>
+                  <option value="stratified">stratified</option>
+                  <option value="scaffold">scaffold</option>
+                  <option value="group">group</option>
+                  <option value="kennard_stone">kennard_stone</option>
+                  <option value="temporal">temporal</option>
+                </select>
+              </label>
+              {splitStrategy === "scaffold" ? (
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  SMILES column
+                  <select
+                    value={splitSmilesColumn}
+                    onChange={(event) => setSplitSmilesColumn(event.target.value)}
+                    className="mt-1 w-40 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  >
+                    <option value="">auto-detect</option>
+                    {(selected?.columns ?? []).map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              {splitStrategy === "group" ? (
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  group column
+                  <select
+                    value={splitGroupColumn}
+                    onChange={(event) => setSplitGroupColumn(event.target.value)}
+                    className="mt-1 w-40 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  >
+                    <option value="">select…</option>
+                    {(selected?.columns ?? []).map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              {splitStrategy !== "none" ? (
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  held-out size
+                  <input
+                    type="number"
+                    step={0.05}
+                    min={0.05}
+                    max={0.9}
+                    value={splitTestSize}
+                    onChange={(event) => setSplitTestSize(Number(event.target.value))}
+                    className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  />
+                </label>
+              ) : null}
             </div>
+            {splitStrategy === "group" && splitGroupColumn === "" ? (
+              <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                The group strategy needs an explicit group column — group labels are never guessed.
+              </p>
+            ) : null}
             <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
               The cv folds (2-10), the hyperparameter search toggle, the
               worker count (-1 = all cores, the backend passes it
               through verbatim) and the seed feed the TrainRequest body
               verbatim — the split itself is the backend&apos;s own
               cross-validation structure over the registered frame.
+              A split strategy beyond "none" additionally carves a
+              strategy-aware held-out side BEFORE the fit (the same
+              ml/splits engine the Datasets workspace&apos;s split stage
+              rides): scaffold holds Bemis–Murcko families whole, group
+              holds labeled cohorts whole, kennard_stone spreads the
+              feature space, and temporal cuts in given order — the
+              carve, its sides and its group census ride the train
+              answer and the run record.
             </p>
           </CardContent>
         </Card>
@@ -3434,6 +3549,9 @@ export function MLPage() {
                 dataset {selectedId ?? "—"} · model {selectedModel || "—"} ·
                 task {selectedTask ?? "inferred"} · cv {cv} · tune{" "}
                 {tune ? "on" : "off"} · n_jobs {nJobs} · seed {randomState}
+                {splitStrategy !== "none"
+                  ? ` · split ${splitStrategy} (held-out ${splitTestSize})`
+                  : " · split full frame"}
               </span>
               <Button
                 size="sm"
@@ -3441,6 +3559,7 @@ export function MLPage() {
                   selectedId === null ||
                   selectedModel === "" ||
                   selectedTask === null ||
+                  (splitStrategy === "group" && splitGroupColumn === "") ||
                   trainBusy
                 }
                 onClick={() => void handleTrain()}
@@ -3465,6 +3584,41 @@ export function MLPage() {
                 authoritative REST result.
               </p>
             )}
+            {trainedSplit !== null ? (
+              <div className="mt-3 rounded-lg border border-[var(--color-border)] p-3">
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  strategy={trainedSplit.strategy} · held-out size{" "}
+                  {trainedSplit.test_size} · seed {trainedSplit.random_state} ·{" "}
+                  train {trainedSplit.sides.train.rows} of {trainedSplit.n_rows}{" "}
+                  rows · held-out {trainedSplit.sides.heldout.rows}
+                  {trainedSplit.group_census !== null
+                    ? ` · ${trainedSplit.group_census.train.n_groups} train groups · ${trainedSplit.group_census.heldout.n_groups} held-out groups`
+                    : ""}
+                </p>
+                {trainedSplit.group_census !== null ? (
+                  trainedSplit.group_census.shared_groups.length === 0 ? (
+                    <p className="mt-1 text-xs font-medium text-[var(--color-foreground)]">
+                      0 shared groups across the sides — the honest carve
+                      {trainedSplit.strategy === "scaffold" &&
+                      trainedSplit.smiles_column !== null
+                        ? ` (Bemis–Murcko families kept whole over “${trainedSplit.smiles_column}”)`
+                        : trainedSplit.strategy === "group" &&
+                            trainedSplit.group_column !== null
+                          ? ` (cohorts kept whole over “${trainedSplit.group_column}”)`
+                          : ""}
+                      . The cv scores below are computed over the carved
+                      train side only.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs font-medium text-destructive">
+                      {trainedSplit.group_census.shared_groups.length} shared
+                      groups across the sides — a leakage verdict, not a
+                      warning.
+                    </p>
+                  )
+                ) : null}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </StageHeader>

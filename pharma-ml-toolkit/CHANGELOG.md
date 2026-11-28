@@ -1,4 +1,80 @@
+## [1.2.247] — 2026-11-29 — round 375 (the 168th recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — ML-3, the P1 row 2, the split-strategy section inside the Train lane; trace 1a220515bfea9fed)
+
+- **ML-3 (the roadmap's row 2 — the GUI's training path gains the
+  strategy vocabulary)**: `TrainRequest` gains the optional `split`
+  section (`TrainSplitSpec`: the `strategy` literal over the same
+  `ml/splits.py` engine set — pinned by the extended drift guard —
+  plus `smiles_column` for scaffold and the never-guessed
+  `group_column` for group, both optional per strategy, and
+  `test_size`). With the section set, `_train_body` carves the
+  held-out side through the SAME `split_indices` engine BEFORE the
+  fit — over the FULL registered frame (the strategy inputs live in
+  columns the loader's numeric feature matrix legitimately excludes),
+  the returned positional indices slicing both the feature matrix
+  and the target — so the estimator sees the carved train side only
+  and `n_train_rows` IS the carve. The train response gains the
+  `split` block (strategy, columns, sizes, the two sides' row
+  counts, and for the group-carrying strategies the per-side group
+  census with the `shared_groups` leakage verdict — empty is the
+  honest carve, a non-empty entry is a verdict, never a warning);
+  `split: null` keeps the legacy full-frame lane byte-identical
+  (no split key on the request, no split block on the answer).
+- **The §15.2 run records at both exits**: the completed run's
+  `cross_validation` slot gains the `split` block (the lineage now
+  states WHICH frame the cv scores were computed over); the
+  failed/cancelled run records the carve as it stood — the computed
+  block when the fit itself failed, the requested echo plus its
+  typed `error` when the carve was refused (a doomed split
+  configuration is traceable "do not re-run this" information,
+  exactly like a doomed `model_params`). The job-mode `configuration`
+  echo carries the split section too.
+- **The honest 422 lanes** (fail-first, all pinned by API tests): the
+  group strategy without a `group_column` (its refused carve is
+  recorded as the failed run); unknown columns; kennard_stone
+  without a numeric feature column; plus the engine's own degenerate
+  guards verbatim.
+- **The frontend**: the Configure Split/CV stage gains the strategy
+  selector (`none (train on the full frame)` keeps the legacy lane),
+  the conditional SMILES/group column picks (the dataset's own
+  columns; auto-detect for scaffold), the held-out size, the
+  group-column gate (the Train button stays disabled until picked),
+  and the train-summary line states the split; the completed train
+  renders the carve readout (strategy, sides, per-side group
+  counts, the leakage verdict, and the honest caveat that the cv
+  scores are computed over the carved train side only). The client's
+  `TrainOptions` gains the `split` knob, the parser
+  `parseTrainSplitBlock` narrows the block field-by-field (unknown
+  strategy throws, non-numeric sides throw), and
+  `parseTrainResult` answers `{model, split}`.
+- **The evidence**: 9 new API tests (the same fail-first DS-1
+  fixture: the 8-row ring family lands wholly on ONE side,
+  `shared_groups == []`, `n_train_rows == sides.train.rows`; the
+  run-record pins at both exits incl. the refused echo; job mode
+  relays the block), the drift guard
+  `tests/test_frontend_split_strategy.py` extended from 7 to 14
+  tests (the train route's Literal, the contract's
+  TrainSplitSpec enum, the ML page selector, the ml client's
+  literal list, the census fields on both ends), 7 new parser
+  vitests, 3 new page vitests (the selector round-trip + the
+  verdict readout, the group gate, the none lane request-free).
+- **Gates**: vitest **386/386 over 46 files** (376 → 386), the
+  drift-guard family green (202+ over the 16-file battery, the
+  split-strategy guard itself 14/14), `tsc` 0, the vite production
+  build 24.10s green, ruff `src/pharmaml` clean (the six findings in
+  the new route code fixed + the 59-file EXE002 exec-bit sweep
+  realigned), mypy 315 files clean, the contract re-exported
+  (**142 paths / 97 schemas** — `TrainSplitSpec`, one new request
+  DTO, no new paths; the two count-pinned guards trued with the
+  dated comment), the version-carrier battery green at 1.2.247
+  lockstep, the GitHub-page checker green (the README stamps trued
+  1.2.245 → 1.2.247 — the D-9 class caught live at the tip this
+  round, fixed first).
+- **The ship (v1.2.247, per the standing tree-changed housekeeping
+  ritual — NO release): no tag, no installer; v1.2.244 stands
+  published.**
+
 ## [1.2.246] — 2026-11-28 — round 373 (the 167th recorded run: WORKFLOW_ENHANCEMENT_ROADMAP execution begins — DS-1, the P0 row, the scaffold/group-aware split lane at the Datasets stage; trace 1a21f4a5974c6959)
+
 
 - **DS-1 (the roadmap's P0 — evaluation correctness, first in the
   P0-first implementation sequence)**: the `ml/splits.py` engine

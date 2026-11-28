@@ -205,6 +205,7 @@ def build_ml_train_run(
     preprocess: bool,
     random_state: int,
     model_params: dict[str, Any] | None,
+    split: dict[str, Any] | None = None,
     training_result: Any,
     model_view: dict[str, Any],
     environment: dict[str, Any],
@@ -212,7 +213,14 @@ def build_ml_train_run(
     started_at: str,
     completed_at: str,
 ) -> ExperimentRunRecord:
-    """The completed-run record, from the objects the route already built."""
+    """The completed-run record, from the objects the route already built.
+
+    ``split`` (ML-3) is the strategy-aware held-out carve block the
+    train route computed before the fit — strategy, the two sides'
+    row counts, the group census and the ``shared_groups`` verdict —
+    riding the checklist's own cross-validation slot so the lineage
+    states WHICH frame the cv scores were computed over.
+    """
     return ExperimentRunRecord(
         run_id=f"run-{uuid_hex12()}",
         family="ml.train",
@@ -246,6 +254,7 @@ def build_ml_train_run(
             "n_jobs_requested": n_jobs_requested,
             "n_jobs_effective": n_jobs_effective,
             "parallelism_advisory": parallelism_advisory,
+            "split": split,
         },
         evaluation={
             "cv_scores": model_view.get("cv_scores"),
@@ -290,6 +299,7 @@ def build_ml_train_failed_run(
     preprocess: bool,
     random_state: int,
     model_params: dict[str, Any] | None,
+    split: dict[str, Any] | None = None,
     environment: dict[str, Any],
     toolkit_version: str,
     started_at: str,
@@ -302,6 +312,9 @@ def build_ml_train_failed_run(
     Everything the §15.2 checklist can state pre-fit is recorded so a
     doomed configuration is traceable and avoidable; the fields only
     knowable after a successful fit stay absent (never invented).
+    ``split`` (ML-3) carries the carve as it stood: the computed block
+    when the carve ran and the fit failed, or the requested echo plus
+    its ``error`` when the carve itself was refused.
     """
     return ExperimentRunRecord(
         run_id=f"run-{uuid_hex12()}",
@@ -336,6 +349,7 @@ def build_ml_train_failed_run(
             "n_jobs_requested": n_jobs_requested,
             "n_jobs_effective": None,
             "parallelism_advisory": None,
+            "split": split,
         },
         evaluation={
             "cv_scores": None,

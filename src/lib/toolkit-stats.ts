@@ -43,7 +43,13 @@
     pin: the DS-1 strategy lane -- 13 split-strategy API tests in
     tests/api/test_datasets_ml_artifacts.py + the 7-test drift guard
     tests/test_frontend_split_strategy.py). */
-export const SHIPPED_TEST_COUNT = 8313;
+/*  r375 re-true (the v1.2.247 ML-3 ship, measurement-last): the
+    collection re-measured live on the shipped tree -- 8,329
+    collected / 0 errors over 444 files (the +16 over the r374 pin:
+    the ML-3 train-lane split section -- 9 train-split API tests in
+    tests/api/test_datasets_ml_artifacts.py + the drift guard
+    extended from 7 to 14 tests). */
+export const SHIPPED_TEST_COUNT = 8329;
 
 /*  r366 (the part18 all-phases verification pass, the owner-directed
     firing): the collection re-measured LIVE at the r365 terminal
@@ -89,7 +95,12 @@ export const SHIPPED_TEST_COUNT = 8313;
     files (the +7/+1 over the r373 pin 369/43: the DS-1 lane -- the
     4-test split-parser suite + the 3-test Split-stage strategy
     suite). */
-export const SHIPPED_COMPONENT_TEST_COUNT = 376;
+/*  r375 re-true (the v1.2.247 ML-3 ship, measurement-last): the
+    suite re-measured live on the shipped tree -- 386/386 over 46
+    files (the +10/+2 over the r374 pin: the ML-3 lane -- the
+    7-test train-split parser suite + the 3-test Configure Split/CV
+    strategy suite). */
+export const SHIPPED_COMPONENT_TEST_COUNT = 386;
 
 /*  r366 re-true: the vitest suite re-measured live at the r365
     terminal -- 346/346 over 39 files (54.36s). The r361-era pin 337
@@ -174,7 +185,15 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 376;
     byte total reflects the v1.2.245 → v1.2.246 zip-home swap —
     both in-tree homes swept by the ship tool — plus the notebook
     re-execution outputs). */
-export const SHIPPED_FILE_COUNT = 1916;
+/*  r375 re-true (the v1.2.247 ML-3 ship, measurement-last): the
+    offline census replica re-walked the toolkit tree at the
+    close-out fixed point -- 1,920 files / 172 dirs / 847,453,727 B
+    (the +4 files over the r374 pin: the two ML-3 vitest files +
+    the two new in-tree v1.2.247 zip homes (the toolkit download/ +
+    the toolkit dist-archive/ — the v1.2.246 pair stays, both homes
+    accumulate per the ship convention; the +56.5 MB is exactly the
+    two new 28,242,985-byte copies)). */
+export const SHIPPED_FILE_COUNT = 1920;
 
 /*  r366 re-true (measurement-last): the offline census replica
     re-walked the toolkit tree at the r365 terminal AFTER this
@@ -360,7 +379,15 @@ export const SHIPPED_FILE_COUNT = 1916;
     selector) + the 20 new tests + the CHANGELOG 1.2.246 entry +
     the RELEASE_READINESS r373 section + the re-executed 1.2.246
     notebook outputs). */
-export const SHIPPED_SOURCE_LINES = 606978;
+/*  r375 re-true (the v1.2.247 ML-3 ship, measurement-last): the
+    replica walk re-measured at the close-out fixed point --
+    607,683 lines (the +705 over the r374 pin: the ML-3 train-lane
+    split section (the TrainSplitSpec route + the carve helper +
+    the runs.py builders + the client parser/types + the MLPage
+    selector/readout) + the 16 new backend tests + the drift-guard
+    extension + the CHANGELOG 1.2.247 entry + the roadmap's row-2
+    execution log + the re-executed 1.2.247 notebook outputs). */
+export const SHIPPED_SOURCE_LINES = 607683;
 
 /*  r366-continuation re-true (measurement-last): the firing's
     close-out correction (the drift-guard figure 202 -> 130 and the
