@@ -268,7 +268,7 @@ and the satellite routers is consumed — except two whole families below.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | ML-2 — Expose `POST /applicability-domain/knn` and `/domain-box` in the AD stage |
-| Current status | Partial (backend Implemented; frontend consumer Missing) |
+| Current status | **Implemented (round 382, v1.2.254)** — the stage-10 distance-only kNN + domain-box sub-lanes over the two client operations (the matrix-only verdict lane + the persisted-box check with the bridged rows) |
 | Problem | `routes/applicability_domain.py` documents four entry points; the ML page's stage 10 consumes `/analyze` and `/leverage-williams` only. `/knn` (StandardScaler + kNN distance AD, three metrics, self-match excluded — usable on raw feature matrices without a trained model) and `/domain-box` (the persisted feature-range box checked against new rows) have zero frontend callers. |
 | Proposed solution | Extend the AD stage with a "distance-only AD" sub-lane (two raw matrices + k/percentile/metric → inside/outside verdicts) and a box-check sub-lane (the trained model's persisted ranges vs pasted/bridged rows), both rendered beside the existing analyze/Williams cards. |
 | Scientific value | The distance-only lane serves the unsupervised case (no trained model yet — is the query set inside the training space at all?); the box check is the cheap per-feature range verdict the full kNN analysis overkills. |
@@ -302,7 +302,7 @@ and the satellite routers is consumed — except two whole families below.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | ML-4 — Extend `/api/v1/unsupervised` beyond DBSCAN/mean-shift/spectral/IsolationForest |
-| Current status | Partial (engines Implemented and tested; route covers 3 clustering + 1 anomaly method) |
+| Current status | **Implemented (round 382, v1.2.254)** — the kmeans/gmm/hierarchical method values + the /unsupervised/pca sibling over pca_reduce, with the engines' own diagnostics riding the responses |
 | Problem | `src/pharmaml/ml/unsupervised.py` implements `pca_reduce`, `kmeans_cluster` (+ silhouette), `gmm_cluster` (+ BIC selection), `kde_fit`, `hierarchical_cluster` (`tests/test_unsupervised.py`); `ml/manifold.py` and `ml/umap.py` add the embedding families. `routes/unsupervised.py` wraps only `ml/clustering.py` (dbscan/meanshift/spectral) + `ml/anomaly.py`; the frontend lane (`UnsupervisedLearningLane.tsx:66` `ClusterMethod = "dbscan"|"meanshift"|"spectral"`) mirrors exactly that. |
 | Proposed solution | Add `method` values `kmeans`/`gmm`/`hierarchical` (+ a `/unsupervised/pca` sibling for `pca_reduce`) to the cluster route, each returning the engine's own diagnostics (inertia/silhouette, BIC table, linkage tree order) with the existing honest-degenerate reporting; extend the lane's method chips and result cards. The umap/manifold engines ride the same route as a follow-on `method: "umap"` projection. |
 | Scientific value | GMM/BIC and k-means/silhouette are the standard chemical-space segmentation tools (series vs scaffold clusters); PCA is the first plot every chemist asks for on a descriptor matrix. |
@@ -804,7 +804,7 @@ bridge and no `PlotlyFigure` usage.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | VIZ-1 — Plot any registered dataset's numeric column without pasting |
-| Current status | Partial (bridge exists app-wide; this page is paste-only) |
+| Current status | **Implemented (round 382, v1.2.254)** — the stage-3 bridge card (the dataset select + the column pick through the SAME bounded `column()` lane, one code path with the paste lane) |
 | Problem | The stat family reads `valuesText` — a textarea seeded with `SAMPLE_VALUES` (`VisualizationPage.tsx:456`) — while the bounded `column()` bridge (`services/datasets/client.ts:204`) is the established pattern in the ML/DL/Generative/Datasets pages, and the Datasets workspace's own Visualize stage (`DatasetsPage.tsx:1344`) already computes this same statplots family from a picked column, its caption promising "the Plotly-interactive rendering lands with the Visualization workspace row". The bridge and the promise both exist; the wiring doesn't. |
 | Proposed solution | Add a dataset + column picker to stage 3 that pulls the column through the existing bridge and feeds the same values array the paste lane produces (one code path, two entry points); the registry/paste lanes stay as-is. |
 | Scientific value | The workspace's stage-1 name becomes true — "Select Dataset/Analysis Result" — instead of select-artifact-or-retype. |
@@ -1089,6 +1089,96 @@ clauses + the null/bound/alignment/empty-state guards) + the 10-test
 drift guard `tests/test_frontend_pkpd_bridge.py`. The next row is
 VIZ-1 (the Visualization page's own paste-only lane — the last
 remaining P1 row; the third 3-item set opens with it).
+
+— execution log: **row 9 (VIZ-1) executed in round 382 at v1.2.254** — the
+stage-3 "Registered dataset column bridge" card (the stat family's
+missing verb, and the row that opens the third 3-item set): the page
+pulls the registered dataset's own numeric column through the SAME
+bounded `datasetsApi.column()` bridge every other workspace rides
+(registry `list()` on mount + `view()` for the column inventory +
+ONE bounded pull — no backend change, the roadmap's own "not
+required" verdict); the pulled values fill the values textarea
+verbatim so the stat request rides the paste lane's own
+`parseNumberList` unchanged (one code path, two entry points); the
+honest guards: a null cell (`json_safe`'s NaN → null) is a
+row-labeled error — never `Number(null) === 0` fabricating a value
+the frame never measured; a non-numeric cell carries the same
+labeled refusal; a truncated pull names its 500-row bound (§17.3 —
+the bounded view never masquerades as the whole column); the
+backend's own 422/404 lanes surface verbatim through
+`describeError`; the paste lane unchanged (its parser, Load &
+validate button, samples, and its own labeled error lane all pinned
+as the regression clause); 6 vitests over the full page mount (the
+roadmap's three acceptance clauses verbatim: the identical-request
+snapshot clause + the 422-verbatim clause + the paste-regression
+clause; plus the null-guard, the truncation-note, and the
+empty-state clauses) + the 11-test drift guard
+`tests/test_frontend_viz_bridge.py`. The next row is ML-2 (the
+`/knn` + `/domain-box` distance-only and box-check AD sub-lanes,
+items 2 of 3 of the third set).
+
+— execution log: **row 10 (ML-2) executed in round 382 at v1.2.254** — the
+stage-10 sub-lane pair, rendered beside the analyze/Williams cards
+and OUTSIDE the trained-model gate (the roadmap's own unsupervised
+case: is the query set inside the training space at all?): the
+`mlApi.knnDomain` client operation over the finished
+`POST /applicability-domain/knn` (two RAW MATRICES — the x_train ≥10
++ x_test textareas, k 1…50, percentile 50…<100, the
+euclidean/manhattan/cosine metric select — the page pre-flight
+mirrors the route's own bounds so a doomed request is refused
+honestly, never fired); the `mlApi.domainBoxCheck` operation over the
+finished `POST /applicability-domain/domain-box` (the persisted
+bundle's metadata JSON — the sidecar save_model writes, its
+`feature_ranges` box inside — vs pasted JSON-line rows OR rows
+bridged from a registered dataset over the SAME bounded `column()`
+lane, the assembled rows filling the rows textarea verbatim so the
+check rides the paste parser unchanged; an unchecked answer renders
+the route's own reason, never an implied verdict); both answers
+narrowed through strict runtime parsers (a frame row that lost its
+verdict pair throws, a report without its boolean throws); every
+backend 422 surfaces verbatim through the house describeError; 6
+client-pair vitests (payload narrowing + malformed-throw + the 422)
++ 6 page vitests (the matrix-only verdict + the 422-verbatim + the
+pre-flight refusal + the box verdict + the unchecked reason + the
+bridge assembly) + the 11-test drift guard
+`tests/test_frontend_ml_ad_lanes.py` + the consumption pin extended
+in `tests/test_ml_workspace.py` (the /knn + /domain-box paths stay
+consumed — the roadmap's own zero-consumer cross-check). The next
+row is ML-4 (the kmeans/gmm/hierarchical methods + the pca sibling
+on the unsupervised route, item 3 of the third set).
+
+— execution log: **row 11 (ML-4) executed in round 382 at v1.2.254** — the
+remaining unsupervised families, the row that closes the third
+3-item set: the route's `_ClusterMethod` extended to six (the
+kmeans/gmm/hierarchical literals over the REAL in-tree engines —
+kmeans_cluster with the elbow+silhouette scan and its k/inertia/
+silhouette table, gmm_cluster with the AIC/BIC sweep and the mixing
+weights + converged + log-likelihood, hierarchical_cluster with the
+k-cut + merge heights + linkage), each answer riding the SAME
+shared diagnostics block via the SAME `_cluster_diagnostics` builder
+the original three call (single-cluster honesty: the similarity
+metrics report None, never a fabricated score — API-tested with the
+gmm n_components=1 degenerate lane); the `POST /api/v1/unsupervised/pca`
+sibling over the real `pca_reduce` (the explained-variance ladder +
+the cumulative run + the loadings preview + the scaled flag + the
+honesty note); the lane's method chips extended to six + the
+per-method controls (k, the covariance/criterion selects, the
+linkage select — the engine's own vocabularies) + the result cards
+(the scan table, the BIC table with the chosen row emphasized, the
+merge-height line) + the PCA card (the variance ladder, the loadings
+preview, the honesty note); the client's ClusterResultView extended
+with the new families + PcaResultView + the strict parsers + the pca
+operation; the methods listing extended (six clustering + the
+dimensionality_reduction family); the contract re-exported 146
+paths / 101 schemas (the r379 lesson applied — both count pins
+trued with dated comments, the frontend types regenerated);
+11 API tests (the kmeans scan + manual k + the BIC table + the
+degenerate single-cluster + the hierarchical cut + the engine default
++ the pca ladder + explicit components + the engine-cap 422 + 404 +
+job mode) + 7 vitests (the six-chip mirror + the three round trips +
+the pca round trip + the degenerate honesty) + the 9-test drift
+guard `tests/test_frontend_unsupervised_methods.py`. The next row is
+ML-5 (the drift lane — the first row of the fourth set).
 
 — trued round 372 (part21 / task 2-c): written read-only against the v1.2.244
 tree; every "zero frontend consumer" claim above was verified by diffing all

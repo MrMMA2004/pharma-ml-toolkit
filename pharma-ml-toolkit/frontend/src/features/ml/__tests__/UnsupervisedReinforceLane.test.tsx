@@ -115,6 +115,24 @@ const CLUSTER_RESULT: ClusterResultView = {
   affinity: null,
   gamma: null,
   n_neighbors: null,
+  // the ML-4 method families stay null on the DBSCAN lane
+  k: null,
+  k_source: null,
+  kmeans_method: null,
+  inertia: null,
+  kmeans_silhouette: null,
+  scan: [],
+  sizes: null,
+  n_components: null,
+  covariance_type: null,
+  chosen_by: null,
+  criterion: null,
+  converged: false,
+  log_likelihood: null,
+  weights: null,
+  bic_table: [],
+  linkage: null,
+  merge_heights: [],
 };
 
 const ANOMALY_RESULT: AnomalyResultView = {

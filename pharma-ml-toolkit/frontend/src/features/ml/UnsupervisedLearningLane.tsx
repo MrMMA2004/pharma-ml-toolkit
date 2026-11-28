@@ -29,6 +29,7 @@ import type { DatasetView } from "@/services/datasets/client";
 import {
   type AnomalyResultView,
   type ClusterResultView,
+  type PcaResultView,
   type ReinforceRunView,
   reinforceApi,
   unsupervisedApi,
@@ -61,9 +62,15 @@ function fmtPercent(value: number | null): string {
 }
 
 // ---------------------------------------------------------------------------
-// the Unsupervised Learning lane (part18 §4.3 + §4.5)
+// the Unsupervised Learning lane (part18 §4.3 + §4.5 + ML-4)
 // ---------------------------------------------------------------------------
-type ClusterMethod = "dbscan" | "meanshift" | "spectral";
+type ClusterMethod =
+  | "dbscan"
+  | "meanshift"
+  | "spectral"
+  | "kmeans"
+  | "gmm"
+  | "hierarchical";
 
 export function UnsupervisedLearningLane({
   selected,
@@ -76,6 +83,16 @@ export function UnsupervisedLearningLane({
   const [bandwidthText, setBandwidthText] = useState("");
   const [nClustersText, setNClustersText] = useState("3");
   const [affinity, setAffinity] = useState<"rbf" | "nearest_neighbors">("rbf");
+  // ML-4: the new methods' own controls
+  const [kText, setKText] = useState("");
+  const [gmmComponentsText, setGmmComponentsText] = useState("");
+  const [covarianceType, setCovarianceType] = useState<
+    "full" | "tied" | "diag" | "spherical"
+  >("full");
+  const [criterion, setCriterion] = useState<"bic" | "aic">("bic");
+  const [linkage, setLinkage] = useState<
+    "ward" | "single" | "complete" | "average"
+  >("ward");
   const [contamination, setContamination] = useState("auto");
   const [clusterResult, setClusterResult] = useState<ClusterResultView | null>(null);
   const [anomalyResult, setAnomalyResult] = useState<AnomalyResultView | null>(null);
@@ -83,6 +100,12 @@ export function UnsupervisedLearningLane({
   const [anomalyError, setAnomalyError] = useState<string | null>(null);
   const [clusterBusy, setClusterBusy] = useState(false);
   const [anomalyBusy, setAnomalyBusy] = useState(false);
+  // ML-4: the PCA sibling lane's own state
+  const [pcaComponentsText, setPcaComponentsText] = useState("");
+  const [pcaScale, setPcaScale] = useState(true);
+  const [pcaResult, setPcaResult] = useState<PcaResultView | null>(null);
+  const [pcaError, setPcaError] = useState<string | null>(null);
+  const [pcaBusy, setPcaBusy] = useState(false);
 
   const datasetId = selected?.dataset_id ?? null;
 
@@ -107,7 +130,7 @@ export function UnsupervisedLearningLane({
       const bandwidth = Number.parseFloat(bandwidthText);
       body["bandwidth"] =
         Number.isFinite(bandwidth) && bandwidthText.trim() !== "" ? bandwidth : null;
-    } else {
+    } else if (method === "spectral") {
       const nClusters = Number.parseInt(nClustersText, 10);
       if (!Number.isFinite(nClusters) || nClusters < 2) {
         setClusterError("spectral clustering needs an explicit n_clusters >= 2");
@@ -116,6 +139,26 @@ export function UnsupervisedLearningLane({
       }
       body["n_clusters"] = nClusters;
       body["affinity"] = affinity;
+    } else if (method === "kmeans") {
+      // blank k = the engine's own silhouette scan (the honest default,
+      // the sweep rides the response's scan table)
+      const k = Number.parseInt(kText, 10);
+      body["k"] = Number.isFinite(k) && kText.trim() !== "" ? k : null;
+    } else if (method === "gmm") {
+      const nComponents = Number.parseInt(gmmComponentsText, 10);
+      body["n_components"] =
+        Number.isFinite(nComponents) && gmmComponentsText.trim() !== ""
+          ? nComponents
+          : null;
+      body["covariance_type"] = covarianceType;
+      body["criterion"] = criterion;
+    } else {
+      // hierarchical: blank n_clusters rides the engine's own default
+      // (3); the linkage select mirrors the engine's own vocabulary
+      const nClusters = Number.parseInt(nClustersText, 10);
+      body["n_clusters"] =
+        Number.isFinite(nClusters) && nClustersText.trim() !== "" ? nClusters : null;
+      body["linkage"] = linkage;
     }
     try {
       const answer = await unsupervisedApi.cluster(body);
@@ -131,7 +174,20 @@ export function UnsupervisedLearningLane({
     } finally {
       setClusterBusy(false);
     }
-  }, [datasetId, method, epsText, minSamples, bandwidthText, nClustersText, affinity]);
+  }, [
+    datasetId,
+    method,
+    epsText,
+    minSamples,
+    bandwidthText,
+    nClustersText,
+    affinity,
+    kText,
+    gmmComponentsText,
+    covarianceType,
+    criterion,
+    linkage,
+  ]);
 
   const runAnomaly = useCallback(async () => {
     if (!datasetId) {
@@ -164,6 +220,43 @@ export function UnsupervisedLearningLane({
     }
   }, [datasetId, contamination]);
 
+  // ML-4: the PCA sibling — blank n_components rides the engine's
+  // own cap (min(10, n_samples, n_features)); the answer carries the
+  // explained-variance ladder + the loadings preview
+  const runPca = useCallback(async () => {
+    if (!datasetId) {
+      setPcaError("select a dataset first (PCA runs on the full numeric matrix)");
+      return;
+    }
+    setPcaBusy(true);
+    setPcaError(null);
+    setPcaResult(null);
+    const nComponents = Number.parseInt(pcaComponentsText, 10);
+    const body: Record<string, unknown> = {
+      dataset_id: datasetId,
+      n_components:
+        Number.isFinite(nComponents) && pcaComponentsText.trim() !== ""
+          ? nComponents
+          : null,
+      scale: pcaScale,
+      mode: "sync",
+    };
+    try {
+      const answer = await unsupervisedApi.pca(body);
+      if (answer.job) {
+        setPcaError(
+          `submitted as job ${answer.job.job_id} — watch the Job Center; sync mode re-runs inline`,
+        );
+      } else if (answer.result) {
+        setPcaResult(answer.result);
+      }
+    } catch (error) {
+      setPcaError(describeError(error));
+    } finally {
+      setPcaBusy(false);
+    }
+  }, [datasetId, pcaComponentsText, pcaScale]);
+
   return (
     <section className="mt-8 space-y-6" aria-labelledby="unsupervised-lane">
       <Card id="unsupervised-lane-header">
@@ -186,7 +279,10 @@ export function UnsupervisedLearningLane({
           <CardDescription>
             DBSCAN (epsilon + min-samples, first-class noise reporting) ·
             Mean Shift (bandwidth-driven modes, no k) · Spectral (affinity +
-            explicit cluster count — the clustering, not the embedding)
+            explicit cluster count — the clustering, not the embedding) ·
+            k-means (elbow AND silhouette, blank k scans the engine's own
+            range) · GMM (AIC/BIC sweep, soft responsibilities) ·
+            hierarchical (agglomerative k-cut, four linkage rules)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -194,6 +290,7 @@ export function UnsupervisedLearningLane({
             <label className="text-sm">
               <span className="mb-1 block font-medium text-[var(--color-foreground)]">Method</span>
               <select
+                aria-label="the clustering method"
                 value={method}
                 onChange={(event) => setMethod(event.target.value as ClusterMethod)}
                 className={SELECT_CLASS}
@@ -201,6 +298,9 @@ export function UnsupervisedLearningLane({
                 <option value="dbscan">DBSCAN</option>
                 <option value="meanshift">Mean Shift</option>
                 <option value="spectral">Spectral</option>
+                <option value="kmeans">k-means</option>
+                <option value="gmm">Gaussian Mixture</option>
+                <option value="hierarchical">Hierarchical</option>
               </select>
             </label>
             {method === "dbscan" ? (
@@ -242,6 +342,98 @@ export function UnsupervisedLearningLane({
                   inputMode="decimal"
                 />
               </label>
+            ) : method === "kmeans" ? (
+              <label className="text-sm">
+                <span className="mb-1 block font-medium text-[var(--color-foreground)]">
+                  k (blank = the silhouette scan)
+                </span>
+                <input
+                  aria-label="the k-means k"
+                  value={kText}
+                  onChange={(event) => setKText(event.target.value)}
+                  placeholder="scan"
+                  className={INPUT_CLASS}
+                  inputMode="numeric"
+                />
+              </label>
+            ) : method === "gmm" ? (
+              <>
+                <label className="text-sm">
+                  <span className="mb-1 block font-medium text-[var(--color-foreground)]">
+                    components (blank = the BIC/AIC sweep)
+                  </span>
+                  <input
+                    aria-label="the GMM components"
+                    value={gmmComponentsText}
+                    onChange={(event) => setGmmComponentsText(event.target.value)}
+                    placeholder="sweep"
+                    className={INPUT_CLASS}
+                    inputMode="numeric"
+                  />
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block font-medium text-[var(--color-foreground)]">covariance</span>
+                  <select
+                    aria-label="the GMM covariance type"
+                    value={covarianceType}
+                    onChange={(event) =>
+                      setCovarianceType(
+                        event.target.value as "full" | "tied" | "diag" | "spherical",
+                      )
+                    }
+                    className={SELECT_CLASS}
+                  >
+                    <option value="full">full</option>
+                    <option value="tied">tied</option>
+                    <option value="diag">diag</option>
+                    <option value="spherical">spherical</option>
+                  </select>
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block font-medium text-[var(--color-foreground)]">criterion</span>
+                  <select
+                    aria-label="the GMM criterion"
+                    value={criterion}
+                    onChange={(event) => setCriterion(event.target.value as "bic" | "aic")}
+                    className={SELECT_CLASS}
+                  >
+                    <option value="bic">bic</option>
+                    <option value="aic">aic</option>
+                  </select>
+                </label>
+              </>
+            ) : method === "hierarchical" ? (
+              <>
+                <label className="text-sm">
+                  <span className="mb-1 block font-medium text-[var(--color-foreground)]">
+                    k (blank = the engine's own 3)
+                  </span>
+                  <input
+                    value={nClustersText}
+                    onChange={(event) => setNClustersText(event.target.value)}
+                    className={INPUT_CLASS}
+                    inputMode="numeric"
+                  />
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block font-medium text-[var(--color-foreground)]">linkage</span>
+                  <select
+                    aria-label="the hierarchical linkage"
+                    value={linkage}
+                    onChange={(event) =>
+                      setLinkage(
+                        event.target.value as "ward" | "single" | "complete" | "average",
+                      )
+                    }
+                    className={SELECT_CLASS}
+                  >
+                    <option value="ward">ward</option>
+                    <option value="single">single</option>
+                    <option value="complete">complete</option>
+                    <option value="average">average</option>
+                  </select>
+                </label>
+              </>
             ) : (
               <>
                 <label className="text-sm">
@@ -307,6 +499,203 @@ export function UnsupervisedLearningLane({
                 Calinski–Harabasz {fmtNumber(clusterResult.diagnostics.calinski_harabasz, 1)} ·
                 noise {clusterResult.diagnostics.noise_count} (
                 {fmtPercent(clusterResult.diagnostics.noise_ratio)})
+              </p>
+              {clusterResult.method === "kmeans" ? (
+                <div className="space-y-1">
+                  <p className="text-xs">
+                    k {clusterResult.k} ({clusterResult.k_source}) · inertia{" "}
+                    {fmtNumber(clusterResult.inertia)} · silhouette{" "}
+                    {fmtNumber(clusterResult.kmeans_silhouette)}
+                  </p>
+                  {clusterResult.scan.length > 0 ? (
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-[var(--color-muted-foreground)]">
+                          <th className="text-left font-medium">k</th>
+                          <th className="text-right font-medium">inertia</th>
+                          <th className="text-right font-medium">silhouette</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {clusterResult.scan.map((row) => (
+                          <tr
+                            key={row.k}
+                            className={
+                              row.k === clusterResult.k
+                                ? "border-t border-[var(--color-border)] font-medium"
+                                : "border-t border-[var(--color-border)]"
+                            }
+                          >
+                            <td className="py-1 text-left">{row.k}</td>
+                            <td className="py-1 text-right">{fmtNumber(row.inertia)}</td>
+                            <td className="py-1 text-right">{fmtNumber(row.silhouette)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : null}
+                </div>
+              ) : null}
+              {clusterResult.method === "gmm" ? (
+                <div className="space-y-1">
+                  <p className="text-xs">
+                    {clusterResult.n_components} components ({clusterResult.chosen_by} ·{" "}
+                    {clusterResult.covariance_type}) · log-likelihood{" "}
+                    {fmtNumber(clusterResult.log_likelihood)} ·{" "}
+                    {clusterResult.converged ? "EM converged" : "EM did not converge"}
+                  </p>
+                  {clusterResult.weights !== null ? (
+                    <p className="text-xs text-[var(--color-muted-foreground)]">
+                      mixing weights:{" "}
+                      {Object.entries(clusterResult.weights)
+                        .map(([name, weight]) => `${name} ${fmtNumber(weight, 2)}`)
+                        .join(" · ")}
+                    </p>
+                  ) : null}
+                  {clusterResult.bic_table.length > 0 ? (
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-[var(--color-muted-foreground)]">
+                          <th className="text-left font-medium">components</th>
+                          <th className="text-right font-medium">aic</th>
+                          <th className="text-right font-medium">bic</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {clusterResult.bic_table.map((row) => (
+                          <tr
+                            key={row.n_components}
+                            className={
+                              row.n_components === clusterResult.n_components
+                                ? "border-t border-[var(--color-border)] font-medium"
+                                : "border-t border-[var(--color-border)]"
+                            }
+                          >
+                            <td className="py-1 text-left">{row.n_components}</td>
+                            <td className="py-1 text-right">{fmtNumber(row.aic, 1)}</td>
+                            <td className="py-1 text-right">{fmtNumber(row.bic, 1)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : null}
+                </div>
+              ) : null}
+              {clusterResult.method === "hierarchical" ? (
+                <p className="text-xs">
+                  k {clusterResult.k} ({clusterResult.k_source}) · linkage{" "}
+                  {clusterResult.linkage} · inertia {fmtNumber(clusterResult.inertia)} ·
+                  merge heights [{clusterResult.merge_heights
+                    .map((height) => fmtNumber(height, 2))
+                    .join(", ")}]
+                </p>
+              ) : null}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">PCA (dimensionality reduction)</CardTitle>
+          <CardDescription>
+            the first plot every chemist asks for on a descriptor matrix —
+            the real pca_reduce engine: the explained-variance ladder, the
+            cumulative share, and the loadings preview (the what-does-PC1-mean
+            table); components are axes of retained variance, not causal
+            directions
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-[var(--color-foreground)]">
+                n_components (blank = min(10, rows, features))
+              </span>
+              <input
+                aria-label="the PCA components"
+                value={pcaComponentsText}
+                onChange={(event) => setPcaComponentsText(event.target.value)}
+                placeholder="auto"
+                className={INPUT_CLASS}
+                inputMode="numeric"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={pcaScale}
+                onChange={(event) => setPcaScale(event.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="text-[var(--color-foreground)]">standardise columns first</span>
+            </label>
+            <Button onClick={() => void runPca()} disabled={pcaBusy}>
+              {pcaBusy ? "reducing…" : "Reduce (PCA)"}
+            </Button>
+          </div>
+          {pcaError && (
+            <p className="text-sm text-[var(--color-destructive)]" role="alert">{pcaError}</p>
+          )}
+          {pcaResult && (
+            <div className="space-y-2 rounded-md border border-[var(--color-border)] p-4 text-sm">
+              <p className="font-mono text-xs leading-relaxed whitespace-pre-wrap">
+                {pcaResult.summary}
+              </p>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[var(--color-muted-foreground)]">
+                    <th className="text-left font-medium">component</th>
+                    <th className="text-right font-medium">explained variance</th>
+                    <th className="text-right font-medium">cumulative</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pcaResult.explained_variance_ratio.map((ratio, index) => (
+                    <tr key={index} className="border-t border-[var(--color-border)]">
+                      <td className="py-1 text-left">PC{index + 1}</td>
+                      <td className="py-1 text-right">{fmtPercent(ratio)}</td>
+                      <td className="py-1 text-right">
+                        {fmtPercent(pcaResult.cumulative_variance[index] ?? null)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {pcaResult.loadings_preview.length > 0 ? (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-[var(--color-muted-foreground)]">
+                      <th className="text-left font-medium">feature</th>
+                      {pcaResult.column_names.slice(0, 6).map((_, index) => (
+                        <th key={index} className="text-right font-medium">
+                          PC{index + 1}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pcaResult.loadings_preview.slice(0, 12).map((row, index) => (
+                      <tr key={index} className="border-t border-[var(--color-border)]">
+                        <td className="py-1 text-left">{String(row[""] ?? row["index"] ?? index)}</td>
+                        {Array.from({ length: Math.min(6, pcaResult.n_components) }).map(
+                          (_, column) => (
+                            <td key={column} className="py-1 text-right">
+                              {fmtNumber(
+                                typeof row[`PC${column + 1}`] === "number"
+                                  ? (row[`PC${column + 1}`] as number)
+                                  : null,
+                              )}
+                            </td>
+                          ),
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : null}
+              <p className="text-xs text-[var(--color-muted-foreground)]">
+                {pcaResult.honesty_note}
               </p>
             </div>
           )}

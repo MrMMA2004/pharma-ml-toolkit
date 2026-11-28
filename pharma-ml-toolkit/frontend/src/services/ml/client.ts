@@ -490,6 +490,58 @@ export interface ADAnalyzeSyncResponse {
 
 export type ADAnalyzeResponse = MLJobResponse | ADAnalyzeSyncResponse;
 
+/**
+ * ML-2 (the roadmap's row 10) — the distance-only half of the AD
+ * family. One row of the kNN frame (`ApplicabilityDomainResult
+ * .to_frame()`): the uncertainty columns carry nulls on this lane
+ * (the bootstrap half is the analyze lane's own verb).
+ */
+export interface KnnDomainFrameRow {
+  readonly name: string;
+  readonly knn_distance: number;
+  readonly inside_ad: boolean;
+}
+
+/** The `POST /applicability-domain/knn` answer (sync by design). */
+export interface KnnDomainResult {
+  readonly k: number;
+  readonly percentile: number;
+  readonly distance_threshold: number;
+  readonly train_knn_mean: number;
+  readonly n_train: number;
+  readonly n_test: number;
+  readonly n_inside: number;
+  readonly frame: readonly KnnDomainFrameRow[];
+}
+
+/** The neighbor metric vocabulary the route's own Literal serves. */
+export type KnnMetric = "euclidean" | "manhattan" | "cosine";
+
+/** The kNN sub-lane's request shape (two raw matrices, no model). */
+export interface KnnDomainOptions {
+  readonly xTrain: readonly (readonly number[])[];
+  readonly xTest: readonly (readonly number[])[];
+  readonly k: number;
+  readonly percentile: number;
+  readonly metric: KnnMetric;
+}
+
+/**
+ * ML-2 — the box-check half: `DomainBox.check`'s report. `checked`
+ * false carries the route's own reason (the metadata block carries
+ * no `feature_ranges` box — bundles that predate box recording).
+ */
+export interface DomainBoxReport {
+  readonly checked: boolean;
+  readonly reason: string | null;
+  readonly n_rows: number;
+  readonly n_out: number | null;
+  readonly fraction_out: number | null;
+  readonly below: Readonly<Record<string, number>> | null;
+  readonly above: Readonly<Record<string, number>> | null;
+  readonly out: readonly boolean[] | null;
+}
+
 /** The confidence summary (self-training only, as it arrives). */
 export interface ConfidenceSummary {
   readonly min: number;
@@ -2360,6 +2412,46 @@ export const mlApi = {
   },
 
   /**
+   * `POST /api/v1/applicability-domain/knn` — ML-2 (the roadmap's
+   * row 10), the distance-only half: StandardScaler + kNN mean
+   * neighbour distance (self-match excluded) over TWO RAW MATRICES,
+   * no trained model needed. Sync by design (the route's own lane).
+   */
+  async knnDomain(options: KnnDomainOptions): Promise<KnnDomainResult> {
+    const request = {
+      x_train: options.xTrain.map((row) => [...row]),
+      x_test: options.xTest.map((row) => [...row]),
+      k: options.k,
+      percentile: options.percentile,
+      metric: options.metric,
+    };
+    const raw = (await api.post(
+      "/api/v1/applicability-domain/knn",
+      request,
+    )) as Record<string, unknown>;
+    return parseKnnDomainResult(raw, "knn-domain");
+  },
+
+  /**
+   * `POST /api/v1/applicability-domain/domain-box` — ML-2's box-check
+   * half: the persisted bundle's feature-range box (the metadata block
+   * `save_model` writes beside every bundle, `feature_ranges` inside)
+   * checked against pasted/bridged rows. Sync by design. `checked:
+   * false` carries the route's own honest reason — a metadata block
+   * without a box never implies a check that ran.
+   */
+  async domainBoxCheck(
+    metadata: Readonly<Record<string, unknown>>,
+    rows: readonly Readonly<Record<string, unknown>>[],
+  ): Promise<DomainBoxReport> {
+    const raw = (await api.post(
+      "/api/v1/applicability-domain/domain-box",
+      { metadata, rows: rows.map((row) => ({ ...row })) },
+    )) as Record<string, unknown>;
+    return parseDomainBoxReport(raw, "domain-box");
+  },
+
+  /**
    * `POST /api/v1/semi-supervised/train` — the REAL
    * train_semi_supervised engine on a registered dataset
    * (classification only; the backend 422s regression datasets).
@@ -3346,6 +3438,129 @@ export function parseADAnalyzeResult(
       typeof r["artifact"] === "object" && r["artifact"] !== null
         ? parseArtifactView(r["artifact"], `${what} artifact`)
         : null,
+  };
+}
+
+/**
+ * ML-2 — narrow the `/knn` answer (the distance-only lane): every
+ * count field is required to be a number, the frame rows carry the
+ * verdict pair (`knn_distance` + `inside_ad`), and a malformed
+ * payload throws rather than rendering as if it were honest.
+ */
+export function parseKnnDomainResult(
+  raw: unknown,
+  what: string,
+): KnnDomainResult {
+  const r = expectObject(raw, what);
+  const k = r["k"];
+  const nTrain = r["n_train"];
+  const nTest = r["n_test"];
+  const nInside = r["n_inside"];
+  if (
+    typeof k !== "number" ||
+    typeof nTrain !== "number" ||
+    typeof nTest !== "number" ||
+    typeof nInside !== "number"
+  ) {
+    throw new Error(`${what}: k/n_train/n_test/n_inside are not numbers`);
+  }
+  const frameRaw = r["frame"];
+  const frame: KnnDomainFrameRow[] = [];
+  if (Array.isArray(frameRaw)) {
+    for (const rowRaw of frameRaw as unknown[]) {
+      const row = expectObject(rowRaw, `${what} frame row`);
+      const distance = asNumber(row["knn_distance"]);
+      const inside = asBoolean(row["inside_ad"]);
+      if (distance === null || inside === null) {
+        throw new Error(
+          `${what}: a frame row lost its knn_distance/inside_ad verdict`,
+        );
+      }
+      frame.push({
+        name: asString(row["name"]) ?? "",
+        knn_distance: distance,
+        inside_ad: inside,
+      });
+    }
+  }
+  const threshold = asNumber(r["distance_threshold"]);
+  const trainMean = asNumber(r["train_knn_mean"]);
+  if (threshold === null || trainMean === null) {
+    throw new Error(
+      `${what}: distance_threshold/train_knn_mean are not numbers`,
+    );
+  }
+  return {
+    k,
+    percentile: asNumber(r["percentile"]) ?? 0,
+    distance_threshold: threshold,
+    train_knn_mean: trainMean,
+    n_train: nTrain,
+    n_test: nTest,
+    n_inside: nInside,
+    frame,
+  };
+}
+
+/**
+ * ML-2 — narrow the `/domain-box` answer: `checked` is required; the
+ * count/dict/mask fields ride the checked half only (an unchecked
+ * block carries the route's own reason and the row count).
+ */
+export function parseDomainBoxReport(
+  raw: unknown,
+  what: string,
+): DomainBoxReport {
+  const r = expectObject(raw, what);
+  if (typeof r["checked"] !== "boolean") {
+    throw new Error(`${what}: checked is not a boolean`);
+  }
+  const checked = r["checked"] === true;
+  if (!checked) {
+    if (typeof r["n_rows"] !== "number") {
+      throw new Error(`${what}: the unchecked report lost n_rows`);
+    }
+    return {
+      checked: false,
+      reason: asString(r["reason"]) ?? "the metadata carries no box",
+      n_rows: r["n_rows"],
+      n_out: null,
+      fraction_out: null,
+      below: null,
+      above: null,
+      out: null,
+    };
+  }
+  const outRaw = r["out"];
+  const out: boolean[] | null = Array.isArray(outRaw)
+    ? (outRaw as unknown[]).map((v) => v === true)
+    : null;
+  const countDict = (
+    key: string,
+  ): Readonly<Record<string, number>> | null => {
+    const dict = r[key];
+    if (typeof dict !== "object" || dict === null) {
+      return null;
+    }
+    const clean: Record<string, number> = {};
+    for (const [name, value] of Object.entries(
+      dict as Record<string, unknown>,
+    )) {
+      if (typeof value === "number") {
+        clean[name] = value;
+      }
+    }
+    return clean;
+  };
+  return {
+    checked: true,
+    reason: null,
+    n_rows: asNumber(r["n_rows"]) ?? 0,
+    n_out: asNumber(r["n_out"]),
+    fraction_out: asNumber(r["fraction_out"]),
+    below: countDict("below"),
+    above: countDict("above"),
+    out,
   };
 }
 

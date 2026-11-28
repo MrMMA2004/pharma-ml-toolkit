@@ -28,6 +28,7 @@ TEST_TOKEN = "test-session-token-0123456789"
 
 CLUSTER_URL = "/api/v1/unsupervised/cluster"
 ANOMALY_URL = "/api/v1/unsupervised/anomaly"
+PCA_URL = "/api/v1/unsupervised/pca"
 UNSUPERVISED_METHODS_URL = "/api/v1/unsupervised/methods"
 RL_TRAIN_URL = "/api/v1/reinforce/train"
 RL_EVALUATE_URL = "/api/v1/reinforce/evaluate"
@@ -82,16 +83,20 @@ def _upload(client, data: bytes, name: str) -> str:
 # the unsupervised methods listing
 # ---------------------------------------------------------------------------
 class TestMethodsListing:
-    def test_lists_the_three_families_plus_anomaly(self, client):
+    def test_lists_the_six_families_plus_anomaly_and_pca(self, client):
         r = client.get(UNSUPERVISED_METHODS_URL, headers=auth_headers())
         assert r.status_code == 200
         body = r.json()
         assert {c["method"] for c in body["clustering"]} == {
-            "dbscan", "meanshift", "spectral"
+            "dbscan", "meanshift", "spectral", "kmeans", "gmm",
+            "hierarchical"
         }
         assert body["anomaly_detection"][0]["method"] == "isolation_forest"
-        for entry in body["clustering"]:
-            assert entry["route"] == CLUSTER_URL
+        # ML-4's PCA sibling rides the same listing
+        assert [d["method"] for d in body["dimensionality_reduction"]] == ["pca"]
+        assert body["dimensionality_reduction"][0]["route"] == PCA_URL
+        for entry in body["clustering"] + body["dimensionality_reduction"]:
+            assert entry["route"] in (CLUSTER_URL, PCA_URL)
             assert entry["python"].startswith("pharmaml.ml.")
 
 
@@ -206,6 +211,215 @@ class TestClusterRoutes:
             "QUEUED", "queued", "RUNNING", "running",
             "DONE", "done", "SUCCEEDED", "succeeded",
         )
+
+
+# ---------------------------------------------------------------------------
+# the ML-4 cluster families (kmeans / gmm / hierarchical — the
+# WORKFLOW_ENHANCEMENT_ROADMAP's row 11)
+# ---------------------------------------------------------------------------
+class TestMl4ClusterRoutes:
+    def test_kmeans_scan_picks_the_blobs(self, client):
+        """k omitted: the engine's own silhouette scan (the known
+        two-blob structure is found, k=2, and the scan table rides
+        the response)."""
+        dataset_id = _upload(client, _blobs_csv(), "blobs.csv")
+        r = client.post(
+            CLUSTER_URL,
+            headers=auth_headers(),
+            json={"dataset_id": dataset_id, "method": "kmeans", "mode": "sync"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()["unsupervised"]
+        assert body["method"] == "kmeans"
+        assert body["k"] == 2
+        assert "silhouette scan" in body["k_source"]
+        assert body["n_samples"] == 160
+        assert body["diagnostics"]["n_clusters"] == 2
+        assert body["diagnostics"]["silhouette"] > 0.5
+        # the elbow + silhouette sweep the engine actually ran
+        scan = body["scan"]
+        assert len(scan) >= 2
+        assert {"k", "inertia", "silhouette"}.issubset(set(scan[0]))
+        best = max(scan, key=lambda row: row["silhouette"] or -1.0)
+        assert best["k"] == body["k"]
+        # cluster sizes carry the two 80-row blobs
+        sizes = body["sizes"]
+        assert sum(sizes.values()) == 160
+
+    def test_kmeans_manual_k_is_manual(self, client):
+        dataset_id = _upload(client, _blobs_csv(), "blobs.csv")
+        r = client.post(
+            CLUSTER_URL,
+            headers=auth_headers(),
+            json={
+                "dataset_id": dataset_id, "method": "kmeans",
+                "k": 3, "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()["unsupervised"]
+        assert body["k"] == 3
+        assert body["k_source"] == "manual"
+        assert body["scan"] == []
+
+    def test_gmm_sweep_carries_the_bic_table(self, client):
+        """n_components omitted: the AIC/BIC sweep rides the response,
+        the criterion minimum is chosen, and the EM verdict is
+        reported as its own boolean."""
+        dataset_id = _upload(client, _blobs_csv(), "blobs.csv")
+        r = client.post(
+            CLUSTER_URL,
+            headers=auth_headers(),
+            json={
+                "dataset_id": dataset_id, "method": "gmm",
+                "covariance_type": "full", "criterion": "bic",
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()["unsupervised"]
+        assert body["method"] == "gmm"
+        assert body["chosen_by"] == "bic"
+        assert body["covariance_type"] == "full"
+        assert body["converged"] is True
+        assert isinstance(body["log_likelihood"], float)
+        # the BIC table: every row carries the sweep's own keys
+        table = body["bic_table"]
+        assert len(table) >= 2
+        assert {"n_components", "aic", "bic"}.issubset(set(table[0]))
+        # the criterion minimum is the picked component count
+        minimum = min(table, key=lambda row: row["bic"])
+        assert minimum["n_components"] == body["n_components"]
+        # the mixing weights sum to 1 (the responsibilities' parent)
+        assert abs(sum(body["weights"].values()) - 1.0) < 1e-6
+
+    def test_gmm_single_component_is_the_honest_degenerate(self, client):
+        """n_components=1 over the two-blob fixture: a single cluster
+        answer whose similarity metrics are None, never fabricated."""
+        dataset_id = _upload(client, _blobs_csv(), "blobs.csv")
+        r = client.post(
+            CLUSTER_URL,
+            headers=auth_headers(),
+            json={
+                "dataset_id": dataset_id, "method": "gmm",
+                "n_components": 1, "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()["unsupervised"]
+        diag = body["diagnostics"]
+        assert diag["n_clusters"] == 1
+        assert diag["silhouette"] is None
+        assert diag["davies_bouldin"] is None
+        assert diag["calinski_harabasz"] is None
+        assert body["labels"]["unique"] == [0]
+
+    def test_hierarchical_cut_carries_merge_heights(self, client):
+        dataset_id = _upload(client, _blobs_csv(), "blobs.csv")
+        r = client.post(
+            CLUSTER_URL,
+            headers=auth_headers(),
+            json={
+                "dataset_id": dataset_id, "method": "hierarchical",
+                "n_clusters": 2, "linkage": "ward", "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()["unsupervised"]
+        assert body["method"] == "hierarchical"
+        assert body["k"] == 2
+        assert body["k_source"] == "manual"
+        assert body["linkage"] == "ward"
+        assert body["diagnostics"]["n_clusters"] == 2
+        assert body["diagnostics"]["silhouette"] > 0.5
+        # the k-1 merge heights of the cut (scipy's Z[:,2] column)
+        assert len(body["merge_heights"]) == body["k"] - 1
+        assert all(height > 0.0 for height in body["merge_heights"])
+
+    def test_hierarchical_default_k_is_the_engines_own(self, client):
+        dataset_id = _upload(client, _blobs_csv(), "blobs.csv")
+        r = client.post(
+            CLUSTER_URL,
+            headers=auth_headers(),
+            json={
+                "dataset_id": dataset_id, "method": "hierarchical",
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()["unsupervised"]
+        assert body["k"] == 3
+        assert body["k_source"] == "the engine's own default (3)"
+
+
+# ---------------------------------------------------------------------------
+# the ML-4 PCA sibling route
+# ---------------------------------------------------------------------------
+class TestPcaRoute:
+    def test_pca_sync_carries_the_variance_ladder_and_loadings(self, client):
+        dataset_id = _upload(client, _blobs_csv(), "blobs.csv")
+        r = client.post(
+            PCA_URL,
+            headers=auth_headers(),
+            json={"dataset_id": dataset_id, "mode": "sync"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()["pca"]
+        assert body["method"] == "pca"
+        assert body["n_components"] >= 1
+        assert body["scaled"] is True
+        assert body["n_features"] == 1
+        # the ladder: per-component shares + the cumulative run
+        assert len(body["explained_variance_ratio"]) == body["n_components"]
+        assert len(body["cumulative_variance"]) == body["n_components"]
+        assert abs(sum(body["explained_variance_ratio"]) - 1.0) < 1e-9
+        assert body["cumulative_variance"][-1] == body["total_variance_explained"]
+        # the loadings preview (the what-does-PC1-mean table)
+        assert len(body["loadings_preview"]) >= 1
+        assert "PC1" in body["loadings_preview"][0]
+        assert "honesty_note" in body
+
+    def test_pca_explicit_components(self, client):
+        dataset_id = _upload(client, _outliers_csv(), "outliers.csv")
+        r = client.post(
+            PCA_URL,
+            headers=auth_headers(),
+            json={"dataset_id": dataset_id, "n_components": 2, "scale": False, "mode": "sync"},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()["pca"]
+        assert body["n_components"] == 2
+        assert body["scaled"] is False
+        assert body["n_features"] == 3
+
+    def test_pca_over_the_engine_cap_is_422(self, client):
+        dataset_id = _upload(client, _outliers_csv(), "outliers.csv")
+        r = client.post(
+            PCA_URL,
+            headers=auth_headers(),
+            json={"dataset_id": dataset_id, "n_components": 9, "mode": "sync"},
+        )
+        assert r.status_code == 422
+
+    def test_pca_unknown_dataset_is_404(self, client):
+        r = client.post(
+            PCA_URL,
+            headers=auth_headers(),
+            json={"dataset_id": "nope", "mode": "sync"},
+        )
+        assert r.status_code == 404
+
+    def test_pca_job_mode(self, client):
+        dataset_id = _upload(client, _outliers_csv(), "outliers.csv")
+        r = client.post(
+            PCA_URL,
+            headers=auth_headers(),
+            json={"dataset_id": dataset_id, "n_components": 2},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["mode"] == "job"
+        assert body["job"]["job_id"]
 
 
 # ---------------------------------------------------------------------------

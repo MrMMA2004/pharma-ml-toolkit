@@ -1,3 +1,68 @@
+## [1.2.254] — 2026-11-28 — round 382 (the 175th recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — the third 3-item set, three rows one after another: VIZ-1 + ML-2 + ML-4, the set closed in one round; trace 1a221c83d00b5cfd)
+
+- **VIZ-1 (the roadmap's row 9 — the Visualization stat family's
+  missing dataset bridge)**: the Visualization page's stage 3 gains the
+  "Registered dataset column bridge" card — the dataset select + the
+  column pick pulled through the SAME bounded `datasetsApi.column()`
+  lane every other workspace rides (ONE bounded pull, no backend
+  change), the pulled values filling the values textarea verbatim so
+  the stat request rides the paste lane's own `parseNumberList`
+  unchanged (one code path, two entry points). The honest guards: a
+  `null` cell is a row-labeled error — never `Number(null) === 0`; a
+  non-numeric cell carries the same labeled refusal; a truncated pull
+  names its 500-row bound (§17.3); the backend's own 422/404 lanes
+  surface verbatim; the paste lane unchanged (the regression clause).
+  The workspace's stage-1 name becomes true — "Select Dataset/
+  Analysis Result". 6 vitests over the full page mount (the identical-
+  request snapshot clause + the 422-verbatim clause + the
+  paste-regression clause + the null/bound/empty-state guards) + the
+  11-test drift guard `tests/test_frontend_viz_bridge.py`.
+
+- **ML-2 (the roadmap's row 10 — the two zero-consumer AD routes,
+  consumed)**: the ML page's stage 10 gains the two sub-lanes rendered
+  beside the analyze/Williams cards and OUTSIDE the trained-model
+  gate: the "Distance-only AD (kNN)" card over
+  `POST /applicability-domain/knn` (two RAW matrices — the x_train ≥10
+  + x_test textareas, k 1…50, percentile 50…<100, the metric select —
+  the page pre-flight mirrors the route's own bounds so a doomed
+  request is refused honestly, never fired) and the "Domain-box check"
+  card over `POST /applicability-domain/domain-box` (the persisted
+  bundle's metadata JSON — the sidecar `save_model` writes, its
+  `feature_ranges` box inside — vs pasted JSON-line rows OR rows
+  bridged from a registered dataset over the SAME bounded `column()`
+  lane; an unchecked answer renders the route's own reason, never an
+  implied verdict). The two new client operations
+  (`mlApi.knnDomain` + `mlApi.domainBoxCheck`) with strict runtime
+  parsers; 6 client-pair vitests (payload narrowing + malformed-throw
+  + the 422) + 6 page vitests + the 11-test drift guard
+  `tests/test_frontend_ml_ad_lanes.py` + the consumption pin extended
+  in `tests/test_ml_workspace.py` (the /knn + /domain-box paths stay
+  consumed — the roadmap's own zero-consumer cross-check).
+
+- **ML-4 (the roadmap's row 11 — the remaining unsupervised
+  families)**: the route's `_ClusterMethod` extended to six —
+  kmeans/gmm/hierarchical over the REAL in-tree engines
+  (`kmeans_cluster` with the elbow+silhouette scan riding the
+  response's scan table, `gmm_cluster` with the AIC/BIC sweep + the
+  mixing weights + the converged boolean, `hierarchical_cluster` with
+  the k-cut + merge heights + linkage), each answer riding the SAME
+  shared diagnostics block via the SAME `_cluster_diagnostics` builder
+  the original three call (single-cluster honesty: the similarity
+  metrics report None, never a fabricated score — API-tested with the
+  gmm `n_components=1` degenerate lane); the `POST /api/v1/
+  unsupervised/pca` sibling over the real `pca_reduce` (the
+  explained-variance ladder + the loadings preview + the honesty
+  note); the lane's method chips extended to six + the per-method
+  controls + the result cards (the scan table, the BIC table with the
+  chosen row emphasized, the merge-height line) + the PCA card (the
+  variance ladder, the loadings preview); the methods listing extended
+  (six clustering + the dimensionality_reduction family); the contract
+  re-exported 146 paths / 101 schemas with both count pins trued
+  (r379's lesson: every count pin rides every contract-touching
+  close-out) and the frontend types regenerated. 11 API tests + 7
+  vitests + the 9-test drift guard
+  `tests/test_frontend_unsupervised_methods.py`.
+
 ## [1.2.253] — 2026-11-28 — round 381 (the 174th recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — PK-1, the P1 row 8, the registered-dataset bridge over the PK/PD import stage; trace 1a2218b266debe39, item 3 of the second 3-item set — the row that closes it)
 
 - **PK-1 (the roadmap's row 8 — the Import stage's paste-only lane,

@@ -77,7 +77,14 @@
     collection re-measured live on the shipped tree -- 8,398
     collected / 0 errors over 449 files (the +10 over the r380
     pin: the PK-1 drift-guard's ten tests). */
-export const SHIPPED_TEST_COUNT = 8398;
+/*  r382 re-true (the v1.2.254 ML-4 ship, measurement-last): the
+    collection re-measured live on the shipped tree -- 8,438
+    collected / 0 errors over 451 files (the +40 over the r381
+    pin: the three roadmap rows' guards and API lane -- the 11
+    VIZ-1 drift-guard tests + the 9 ML-2 drift-guard tests + the
+    9 ML-4 drift-guard tests + the 11 ML-4 API tests in
+    tests/api/test_unsupervised_reinforce.py). */
+export const SHIPPED_TEST_COUNT = 8438;
 
 /*  r366 (the part18 all-phases verification pass, the owner-directed
     firing): the collection re-measured LIVE at the r365 terminal
@@ -149,7 +156,13 @@ export const SHIPPED_TEST_COUNT = 8398;
     suite re-measured live on the shipped tree -- 419/419 over 51
     files (the +7/+1 over the r380 pin: the PK-1 bridge-lane page
     suite over the full PK/PD page mount). */
-export const SHIPPED_COMPONENT_TEST_COUNT = 419;
+/*  r382 re-true (the v1.2.254 ML-4 ship, measurement-last): the
+    suite re-measured live on the shipped tree -- 444/444 over 55
+    files (the +25/+4 over the r381 pin: the three roadmap rows'
+    vitest lanes -- the 6-test VIZ-1 column-bridge page suite + the
+    12-test ML-2 pair (the 6 client-op tests + the 6 AD sub-lane
+    page tests) + the 7-test ML-4 unsupervised-methods lane). */
+export const SHIPPED_COMPONENT_TEST_COUNT = 444;
 
 /*  r366 re-true: the vitest suite re-measured live at the r365
     terminal -- 346/346 over 39 files (54.36s). The r361-era pin 337
@@ -291,7 +304,17 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 419;
     the first post-sweep reading of 1,939 files / 657,355 lines /
     1,014,673,554 B was the pollution, the pinned numbers are the
     post-sweep live truth). */
-export const SHIPPED_FILE_COUNT = 1933;
+/*  r382 re-true (the v1.2.254 ML-4 ship, measurement-last): the
+    census taken over the FINAL close-out fixed point -- the tracked
+    set after this round's commit (1,933 minus the retention-removed
+    two toolkit 253-zip homes, plus this round's two 254-zip homes)
+    plus the seven new test files -- 1,940 files / 961,015,202 B
+    (the method that reproduces the r381 pin exactly: the r381
+    commit re-counted under it reads 1,933 files / 961,637,766 B,
+    byte-identical to the recorded pin; the byte delta is the zip
+    churn -- four 253 homes out, four 254 homes in -- plus the
+    notebook-output churn + the round's own lanes). */
+export const SHIPPED_FILE_COUNT = 1940;
 
 /*  r366 re-true (measurement-last): the offline census replica
     re-walked the toolkit tree at the r365 terminal AFTER this
@@ -498,7 +521,21 @@ export const SHIPPED_FILE_COUNT = 1933;
     guard + the CHANGELOG/roadmap entries) + the re-executed
     1.2.253 notebook outputs, the notebook output churn itself
     netting the round down to +241). */
-export const SHIPPED_SOURCE_LINES = 610958;
+/*  r382 re-true (the v1.2.254 ML-4 ship, measurement-last): the
+    census re-measured live on the FINAL fixed point (after the
+    notebook battery's output churn) under the committed
+    census_210/toolkit-fs countLines semantics -- 612,419 lines
+    (the same reading the committed census_210 replica walk and the
+    live page render take). Honest convention note: the r381 line
+    pin (610,958) carried the r381 session's own line convention;
+    the SAME r381 commit re-counted under the census_210 semantics
+    reads 609,687 lines -- the +1,271 there is the r381
+    convention's extra, never tree growth, and the r382 pin rides
+    the committed semantics from here (the growth over the
+    like-for-like r381 reading is +2,732: the three roadmap rows'
+    lanes + the contract re-export + the re-executed notebook
+    outputs + the ledger carriers). */
+export const SHIPPED_SOURCE_LINES = 612419;
 
 /*  r366-continuation re-true (measurement-last): the firing's
     close-out correction (the drift-guard figure 202 -> 130 and the

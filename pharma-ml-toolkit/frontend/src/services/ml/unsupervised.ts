@@ -82,6 +82,40 @@ export interface ClusterResultView {
   readonly affinity: string | null;
   readonly gamma: number | null;
   readonly n_neighbors: number | null;
+  // k-means (ML-4)
+  readonly k: number | null;
+  readonly k_source: string | null;
+  readonly kmeans_method: string | null;
+  readonly inertia: number | null;
+  readonly kmeans_silhouette: number | null;
+  readonly scan: readonly KmeansScanRow[];
+  readonly sizes: Readonly<Record<string, number>> | null;
+  // GMM (ML-4)
+  readonly n_components: number | null;
+  readonly covariance_type: string | null;
+  readonly chosen_by: string | null;
+  readonly criterion: string | null;
+  readonly converged: boolean;
+  readonly log_likelihood: number | null;
+  readonly weights: Readonly<Record<string, number>> | null;
+  readonly bic_table: readonly GmmBicRow[];
+  // hierarchical (ML-4)
+  readonly linkage: string | null;
+  readonly merge_heights: readonly number[];
+}
+
+/** One k-means scan row (the elbow + silhouette sweep the engine ran). */
+export interface KmeansScanRow {
+  readonly k: number;
+  readonly inertia: number | null;
+  readonly silhouette: number | null;
+}
+
+/** One GMM sweep row (the AIC/BIC model-selection table). */
+export interface GmmBicRow {
+  readonly n_components: number;
+  readonly aic: number | null;
+  readonly bic: number | null;
 }
 
 /** The anomaly answer's `anomaly` view. */
@@ -106,6 +140,28 @@ export interface AnomalyResultView {
     readonly outlier_mean: number | null;
     readonly shift_sigma: number | null;
   }[];
+}
+
+/**
+ * The PCA answer's `pca` view (ML-4's sibling route over the real
+ * `pca_reduce` engine): the explained-variance ladder, the loadings
+ * preview (the "what does PC1 mean" table), and the scores preview.
+ */
+export interface PcaResultView {
+  readonly method: string;
+  readonly dataset_id: string;
+  readonly n_components: number;
+  readonly scaled: boolean;
+  readonly n_samples: number;
+  readonly n_features: number;
+  readonly explained_variance_ratio: readonly number[];
+  readonly cumulative_variance: readonly number[];
+  readonly total_variance_explained: number | null;
+  readonly column_names: readonly string[];
+  readonly loadings_preview: readonly Record<string, unknown>[];
+  readonly scores_preview: readonly Record<string, unknown>[];
+  readonly summary: string;
+  readonly honesty_note: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -192,6 +248,53 @@ function parseClusterResult(raw: unknown, what: string): ClusterResultView {
     throw new Error(`${what}: method/dataset_id/n_samples/summary have wrong shapes`);
   }
   const labelsRaw = expectObject(r["labels"], `${what} labels`);
+  // ML-4: the k-means elbow/silhouette sweep + the GMM AIC/BIC table
+  const scanRaw = r["scan"];
+  const scan: KmeansScanRow[] = [];
+  if (Array.isArray(scanRaw)) {
+    for (const rowRaw of scanRaw) {
+      const row = expectObject(rowRaw, `${what} scan row`);
+      const k = asInt(row["k"]);
+      if (k === null) {
+        continue;
+      }
+      scan.push({
+        k,
+        inertia: asNumber(row["inertia"]),
+        silhouette: asNumber(row["silhouette"]),
+      });
+    }
+  }
+  const bicRaw = r["bic_table"];
+  const bicTable: GmmBicRow[] = [];
+  if (Array.isArray(bicRaw)) {
+    for (const rowRaw of bicRaw) {
+      const row = expectObject(rowRaw, `${what} bic row`);
+      const n = asInt(row["n_components"]);
+      if (n === null) {
+        continue;
+      }
+      bicTable.push({
+        n_components: n,
+        aic: asNumber(row["aic"]),
+        bic: asNumber(row["bic"]),
+      });
+    }
+  }
+  const numberRecord = (key: string): Record<string, number> | null => {
+    const dict = r[key];
+    if (typeof dict !== "object" || dict === null) {
+      return null;
+    }
+    const clean: Record<string, number> = {};
+    for (const [name, value] of Object.entries(dict as Record<string, unknown>)) {
+      const numeric = asNumber(value);
+      if (numeric !== null) {
+        clean[name] = numeric;
+      }
+    }
+    return clean;
+  };
   return {
     method,
     dataset_id: datasetId,
@@ -213,6 +316,63 @@ function parseClusterResult(raw: unknown, what: string): ClusterResultView {
     affinity: asString(r["affinity"]),
     gamma: asNumber(r["gamma"]),
     n_neighbors: asInt(r["n_neighbors"]),
+    k: asInt(r["k"]),
+    k_source: asString(r["k_source"]),
+    kmeans_method: asString(r["kmeans_method"]),
+    inertia: asNumber(r["inertia"]),
+    kmeans_silhouette: asNumber(r["kmeans_silhouette"]),
+    scan,
+    sizes: numberRecord("sizes"),
+    n_components: asInt(r["n_components"]),
+    covariance_type: asString(r["covariance_type"]),
+    chosen_by: asString(r["chosen_by"]),
+    criterion: asString(r["criterion"]),
+    converged: asBoolean(r["converged"]),
+    log_likelihood: asNumber(r["log_likelihood"]),
+    weights: numberRecord("weights"),
+    bic_table: bicTable,
+    linkage: asString(r["linkage"]),
+    merge_heights: numberList(r["merge_heights"]),
+  };
+}
+
+function parsePcaResult(raw: unknown, what: string): PcaResultView {
+  const r = expectObject(raw, `${what} (pca view)`);
+  const method = asString(r["method"]);
+  const datasetId = asString(r["dataset_id"]);
+  const nComponents = asInt(r["n_components"]);
+  if (method === null || datasetId === null || nComponents === null) {
+    throw new Error(`${what}: method/dataset_id/n_components have wrong shapes`);
+  }
+  const rows = (key: string): Record<string, unknown>[] => {
+    const list = r[key];
+    if (!Array.isArray(list)) {
+      return [];
+    }
+    return list.filter(
+      (row): row is Record<string, unknown> =>
+        typeof row === "object" && row !== null && !Array.isArray(row),
+    );
+  };
+  return {
+    method,
+    dataset_id: datasetId,
+    n_components: nComponents,
+    scaled: asBoolean(r["scaled"]),
+    n_samples: asInt(r["n_samples"]) ?? 0,
+    n_features: asInt(r["n_features"]) ?? 0,
+    explained_variance_ratio: numberList(r["explained_variance_ratio"]),
+    cumulative_variance: numberList(r["cumulative_variance"]),
+    total_variance_explained: asNumber(r["total_variance_explained"]),
+    column_names: Array.isArray(r["column_names"])
+      ? (r["column_names"] as unknown[]).filter(
+          (name): name is string => typeof name === "string",
+        )
+      : [],
+    loadings_preview: rows("loadings_preview"),
+    scores_preview: rows("scores_preview"),
+    summary: asString(r["summary"]) ?? "",
+    honesty_note: asString(r["honesty_note"]) ?? "",
   };
 }
 
@@ -376,6 +536,24 @@ export const unsupervisedApi = {
       return { job: parseJobView(raw["job"], "anomaly job") };
     }
     return { result: parseAnomalyResult(raw["anomaly"], "anomaly") };
+  },
+
+  /**
+   * `POST /api/v1/unsupervised/pca` — ML-4's PCA sibling over the
+   * real `pca_reduce` engine (the explained-variance ladder + the
+   * loadings preview).
+   */
+  async pca(
+    body: Record<string, unknown>,
+  ): Promise<{ job?: JobView; result?: PcaResultView }> {
+    const raw = await api.post<Record<string, unknown>>(
+      "/api/v1/unsupervised/pca",
+      body,
+    );
+    if (raw["mode"] === "job") {
+      return { job: parseJobView(raw["job"], "pca job") };
+    }
+    return { result: parsePcaResult(raw["pca"], "pca") };
   },
 };
 

@@ -65,6 +65,9 @@ import {
   parseWilliamsResult,
   type ADAnalyzeResult,
   type ADFrameRow,
+  type DomainBoxReport,
+  type KnnDomainResult,
+  type KnnMetric,
   type ConformalClassificationResult,
   type ConformalRegressionResult,
   type ModelEvaluationCatalog,
@@ -418,6 +421,122 @@ function MoTrialTable({
     </table>
   );
 }
+
+/**
+ * ML-2 — the distance-only lane's own matrix parser: one row per
+ * line, whitespace/comma-separated finite numbers, every malformed
+ * cell a labeled error (the paste lanes' own convention).
+ */
+function parseMatrixLines(text: string, label: string): number[][] {
+  const rows: number[][] = [];
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  lines.forEach((line, i) => {
+    const cells = line.split(/[\s,]+/).filter((cell) => cell !== "");
+    const row: number[] = [];
+    cells.forEach((cell, j) => {
+      const value = Number(cell);
+      if (!Number.isFinite(value)) {
+        throw new Error(
+          `${label} row ${i + 1}, cell ${j + 1}: "${cell}" is not a finite number`,
+        );
+      }
+      row.push(value);
+    });
+    if (row.length < 2) {
+      throw new Error(
+        `${label} row ${i + 1}: a matrix row needs at least 2 feature columns`,
+      );
+    }
+    rows.push(row);
+  });
+  return rows;
+}
+
+/**
+ * ML-2 — the box lane's own JSON parsers: the metadata block is one
+ * JSON object (the persisted bundle's sidecar), the rows are one JSON
+ * object per line; every malformed line is a labeled error.
+ */
+function parseJsonObject(text: string, label: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${label}: ${(error as Error).message}`);
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`${label}: expected a single JSON object`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function parseJsonRowLines(text: string): Record<string, unknown>[] {
+  const rows: Record<string, unknown>[] = [];
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  lines.forEach((line, i) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch (error) {
+      throw new Error(`rows line ${i + 1}: ${(error as Error).message}`);
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error(`rows line ${i + 1}: expected a JSON object row`);
+    }
+    rows.push(parsed as Record<string, unknown>);
+  });
+  return rows;
+}
+
+/**
+ * ML-2 — the distance-only lane's own editable samples (twelve
+ * train rows + three query rows over three descriptor columns, the
+ * honest 10-row minimum the route itself enforces).
+ */
+const KNN_TRAIN_SAMPLE = [
+  "1.2 0.4 38.5", "1.6 0.7 41.2", "2.1 1.1 44.9", "2.8 1.4 47.0",
+  "3.3 1.9 49.8", "3.9 2.2 52.6", "4.4 2.6 55.1", "5.0 3.0 57.4",
+  "5.7 3.4 59.9", "6.2 3.7 62.3", "6.9 4.1 64.8", "7.5 4.5 67.2",
+].join("\n");
+
+const KNN_TEST_SAMPLE = [
+  "1.4 0.5 39.1", "6.8 4.0 64.2", "12.9 9.5 118.6",
+].join("\n");
+
+/**
+ * ML-2 — the box lane's own editable samples: a persisted bundle's
+ * metadata block (the sidecar `save_model` writes, `feature_ranges`
+ * inside) + three query rows (one below the box, one above it, one
+ * inside).
+ */
+const BOX_METADATA_SAMPLE = JSON.stringify(
+  {
+    name: "rf-solubility",
+    task: "regression",
+    features: ["molwt", "logp", "tpsa"],
+    feature_ranges: {
+      molwt: { min: 130.2, max: 614.6 },
+      logp: { min: -2.1, max: 7.4 },
+      tpsa: { min: 0.0, max: 155.9 },
+    },
+  },
+  null,
+  2,
+);
+
+const BOX_ROWS_SAMPLE = [
+  { molwt: 250.3, logp: 2.4, tpsa: 46.5 },
+  { molwt: 720.9, logp: 1.1, tpsa: 88.0 },
+  { molwt: 180.2, logp: -3.5, tpsa: 21.6 },
+]
+  .map((row) => JSON.stringify(row))
+  .join("\n");
 
 function describeError(error: unknown): string {
   if (error instanceof ApiError) {
@@ -861,6 +980,28 @@ export function MLPage() {
   const [williamsError, setWilliamsError] = useState<string | null>(null);
   const [williamsResult, setWilliamsResult] = useState<WilliamsResultPayload | null>(null);
   const [williamsArtifactStatus, setWilliamsArtifactStatus] = useState<string | null>(null);
+
+  // stage 10d (ML-2): the distance-only kNN sub-lane — two raw
+  // matrices, no trained model needed (the unsupervised case)
+  const [knnTrainText, setKnnTrainText] = useState(KNN_TRAIN_SAMPLE);
+  const [knnTestText, setKnnTestText] = useState(KNN_TEST_SAMPLE);
+  const [knnK, setKnnK] = useState(5);
+  const [knnPercentile, setKnnPercentile] = useState(95);
+  const [knnMetric, setKnnMetric] = useState<KnnMetric>("euclidean");
+  const [knnBusy, setKnnBusy] = useState(false);
+  const [knnError, setKnnError] = useState<string | null>(null);
+  const [knnResult, setKnnResult] = useState<KnnDomainResult | null>(null);
+
+  // stage 10e (ML-2): the domain-box check sub-lane — the persisted
+  // bundle's feature_ranges box vs pasted/bridged rows
+  const [boxMetadataText, setBoxMetadataText] = useState(BOX_METADATA_SAMPLE);
+  const [boxRowsText, setBoxRowsText] = useState(BOX_ROWS_SAMPLE);
+  const [boxBridgeDatasetId, setBoxBridgeDatasetId] = useState("");
+  const [boxBridgeBusy, setBoxBridgeBusy] = useState(false);
+  const [boxNote, setBoxNote] = useState<string | null>(null);
+  const [boxBusy, setBoxBusy] = useState(false);
+  const [boxError, setBoxError] = useState<string | null>(null);
+  const [boxResult, setBoxResult] = useState<DomainBoxReport | null>(null);
 
   // stage 10c: the ADMET profile (part13 Phase 5 — the vendored
   // admet_ai registry + the per-molecule physchem panel, dataset-free)
@@ -1739,6 +1880,188 @@ export function MLPage() {
       setWilliamsError(describeError(error));
     }
   }, []);
+
+  // stage 10d (ML-2): the distance-only AD — the matrix-only lane; the
+  // pre-flight mirrors the route's own bounds (the 10-row minimum,
+  // the feature-count match, the 1…50 k, the 50…<100 percentile) so
+  // a doomed request is refused here, honestly, and every backend
+  // 422 surfaces verbatim through describeError
+  const handleKnnDomain = useCallback(async () => {
+    setKnnBusy(true);
+    setKnnError(null);
+    setKnnResult(null);
+    try {
+      const xTrain = parseMatrixLines(knnTrainText, "the x_train matrix");
+      const xTest = parseMatrixLines(knnTestText, "the x_test matrix");
+      if (xTrain.length < 10) {
+        throw new Error(
+          `x_train carries ${xTrain.length} rows; the route's own minimum is 10`,
+        );
+      }
+      const trainFeatures = xTrain[0]?.length ?? 0;
+      const testFeatures = xTest[0]?.length ?? 0;
+      if (trainFeatures !== testFeatures) {
+        throw new Error(
+          `x_train has ${trainFeatures} features; x_test has ${testFeatures} (they must match)`,
+        );
+      }
+      if (trainFeatures > AD_MAX_FEATURES) {
+        throw new Error(
+          `x_train has ${trainFeatures} features; the limit is ${AD_MAX_FEATURES}`,
+        );
+      }
+      if (knnK < 1 || knnK > 50) {
+        throw new Error("k must stay inside the route's own 1…50 bound");
+      }
+      if (knnK > xTrain.length - 1) {
+        throw new Error(
+          `k=${knnK} needs at least ${knnK + 1} training rows to exclude each point's own self-match`,
+        );
+      }
+      if (knnPercentile < 50 || knnPercentile >= 100) {
+        throw new Error(
+          "percentile must stay inside the route's own 50…<100 bound",
+        );
+      }
+      const result = await mlApi.knnDomain({
+        xTrain,
+        xTest,
+        k: knnK,
+        percentile: knnPercentile,
+        metric: knnMetric,
+      });
+      setKnnResult(result);
+    } catch (error) {
+      setKnnError(describeError(error));
+    } finally {
+      setKnnBusy(false);
+    }
+  }, [knnTrainText, knnTestText, knnK, knnPercentile, knnMetric]);
+
+  // stage 10e (ML-2): the box check — the persisted bundle's own
+  // feature_ranges box vs the pasted (or bridged) rows; an unchecked
+  // answer carries the route's own reason, never an implied verdict
+  const handleBoxCheck = useCallback(async () => {
+    setBoxBusy(true);
+    setBoxError(null);
+    setBoxResult(null);
+    try {
+      const metadata = parseJsonObject(
+        boxMetadataText,
+        "the persisted bundle's metadata JSON",
+      );
+      const rows = parseJsonRowLines(boxRowsText);
+      if (rows.length === 0) {
+        throw new Error(
+          "the rows to check are empty — paste JSON lines or bridge them from a registered dataset",
+        );
+      }
+      const report = await mlApi.domainBoxCheck(metadata, rows);
+      setBoxResult(report);
+    } catch (error) {
+      setBoxError(describeError(error));
+    } finally {
+      setBoxBusy(false);
+    }
+  }, [boxMetadataText, boxRowsText]);
+
+  // stage 10e (ML-2): bridge the box features' columns from a
+  // registered dataset — the SAME bounded column() lane the AD stage's
+  // own assembly rides; the assembled rows fill the rows textarea
+  // verbatim (JSON lines, visible + editable) so the check rides the
+  // paste lane's own parser unchanged
+  const handleBoxBridgeRows = useCallback(async () => {
+    if (boxBridgeDatasetId === "") {
+      return;
+    }
+    setBoxBridgeBusy(true);
+    setBoxError(null);
+    setBoxNote(null);
+    try {
+      const metadata = parseJsonObject(
+        boxMetadataText,
+        "the persisted bundle's metadata JSON",
+      );
+      const ranges =
+        typeof metadata["feature_ranges"] === "object" &&
+        metadata["feature_ranges"] !== null
+          ? (metadata["feature_ranges"] as Record<string, unknown>)
+          : null;
+      if (ranges === null || Object.keys(ranges).length === 0) {
+        throw new Error(
+          "the metadata block carries no feature_ranges box — nothing to bridge the columns against",
+        );
+      }
+      const features = Array.isArray(metadata["features"])
+        ? (metadata["features"] as unknown[]).filter(
+            (name): name is string =>
+              typeof name === "string" && name in ranges,
+          )
+        : Object.keys(ranges);
+      if (features.length === 0) {
+        throw new Error(
+          "the metadata block's box carries no feature columns present in the dataset",
+        );
+      }
+      const columns = await Promise.all(
+        features.map((name) => datasetsApi.column(boxBridgeDatasetId, name, 500)),
+      );
+      const returned = Math.min(...columns.map((column) => column.returned));
+      const truncated = columns.some((column) => column.truncated);
+      const rows: Record<string, number>[] = [];
+      let skipped = 0;
+      for (let i = 0; i < returned; i++) {
+        const row: Record<string, number> = {};
+        let numeric = true;
+        for (let f = 0; f < features.length; f++) {
+          const feature = features[f];
+          if (feature === undefined) {
+            numeric = false;
+            break;
+          }
+          const value = columns[f]?.values[i];
+          if (
+            typeof value === "number" &&
+            Number.isFinite(value)
+          ) {
+            row[feature] = value;
+          } else {
+            numeric = false;
+            break;
+          }
+        }
+        if (numeric) {
+          rows.push(row);
+        } else {
+          skipped += 1;
+        }
+      }
+      if (rows.length === 0) {
+        throw new Error(
+          "no fully-numeric rows assembled from the box's feature columns",
+        );
+      }
+      setBoxRowsText(rows.map((row) => JSON.stringify(row)).join("\n"));
+      setBoxResult(null);
+      if (truncated) {
+        setBoxNote(
+          `the column bridge is bounded at 500 rows — the rows textarea carries the first ${returned} of the dataset's ${columns[0]?.n_rows ?? 0} rows`,
+        );
+      } else if (skipped > 0) {
+        setBoxNote(
+          `${rows.length} rows assembled; ${skipped} skipped for non-numeric cells (never fabricated)`,
+        );
+      } else {
+        setBoxNote(
+          `${rows.length} rows assembled from the box's ${features.length} feature columns`,
+        );
+      }
+    } catch (error) {
+      setBoxError(describeError(error));
+    } finally {
+      setBoxBridgeBusy(false);
+    }
+  }, [boxBridgeDatasetId, boxMetadataText]);
 
   // stage 11: the semi-supervised train (classification-only gate)
   const isClassification = selected?.task === "classification";
@@ -4306,6 +4629,254 @@ export function MLPage() {
                 </div>
               </>
             )}
+
+            {/* ML-2 (the roadmap's row 10): the distance-only kNN
+                sub-lane — two raw matrices, no trained model needed
+                (the unsupervised case: is the query set inside the
+                training space at all?) */}
+            <div className="mt-4 rounded-lg border border-[var(--color-border)] p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-[var(--color-foreground)]">
+                  Distance-only AD (kNN)
+                </span>
+                <span className="rounded-md bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+                  no trained model required
+                </span>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  x_train (≥10 rows, one per line)
+                  <textarea
+                    aria-label="the x_train matrix"
+                    value={knnTrainText}
+                    onChange={(event) => setKnnTrainText(event.target.value)}
+                    rows={6}
+                    spellCheck={false}
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-2 font-mono text-xs"
+                  />
+                </label>
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  x_test (the query rows)
+                  <textarea
+                    aria-label="the x_test matrix"
+                    value={knnTestText}
+                    onChange={(event) => setKnnTestText(event.target.value)}
+                    rows={6}
+                    spellCheck={false}
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-2 font-mono text-xs"
+                  />
+                </label>
+              </div>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  k
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={knnK}
+                    onChange={(event) => setKnnK(Number(event.target.value))}
+                    className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  />
+                </label>
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  percentile
+                  <input
+                    type="number"
+                    min={50}
+                    max={99.9}
+                    step={0.5}
+                    value={knnPercentile}
+                    onChange={(event) => setKnnPercentile(Number(event.target.value))}
+                    className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  />
+                </label>
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  metric
+                  <select
+                    aria-label="the kNN metric"
+                    value={knnMetric}
+                    onChange={(event) => setKnnMetric(event.target.value as KnnMetric)}
+                    className="mt-1 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  >
+                    <option value="euclidean">euclidean</option>
+                    <option value="manhattan">manhattan</option>
+                    <option value="cosine">cosine</option>
+                  </select>
+                </label>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={knnBusy}
+                  onClick={() => void handleKnnDomain()}
+                >
+                  {knnBusy ? "Running…" : "Run the distance-only AD"}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                POST /api/v1/applicability-domain/knn — StandardScaler +
+                the kNN mean neighbour distance (each training point&apos;s
+                own self-match excluded), the threshold cut at the
+                percentile of the training rows&apos; own distances; the
+                same lane serves the analyze stage&apos;s distance half
+                without a trained model.
+              </p>
+              {knnError !== null ? <div className="mt-3"><ErrorBanner message={knnError} /></div> : null}
+              {knnResult !== null ? (
+                <div className="mt-3">
+                  <p className="text-xs text-[var(--color-foreground)]">
+                    k {knnResult.k} · percentile {formatValue(knnResult.percentile)} ·
+                    threshold {formatValue(knnResult.distance_threshold)} · train
+                    mean {formatValue(knnResult.train_knn_mean)} · inside{" "}
+                    {knnResult.n_inside}/{knnResult.n_test} of {knnResult.n_train}+{knnResult.n_test} rows
+                  </p>
+                  <div className="mt-2 max-h-48 overflow-auto rounded-md border border-[var(--color-border)]">
+                    <table className="w-full border-collapse text-[11px]">
+                      <thead className="sticky top-0 bg-[var(--color-muted)]">
+                        <tr>
+                          <th className="px-2 py-1 text-left font-medium">name</th>
+                          <th className="px-2 py-1 text-right font-medium">knn_distance</th>
+                          <th className="px-2 py-1 text-left font-medium">inside_ad</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {knnResult.frame.map((row, i) => (
+                          <tr key={i} className="odd:bg-[var(--color-muted)]/40">
+                            <td className="px-2 py-0.5">{row.name}</td>
+                            <td className="px-2 py-0.5 text-right font-mono">{formatValue(row.knn_distance)}</td>
+                            <td className="px-2 py-0.5">{row.inside_ad ? "inside" : "outside"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* ML-2: the domain-box check sub-lane — the persisted
+                bundle's feature_ranges box vs pasted/bridged rows (the
+                cheap per-feature range verdict the full kNN
+                overkills) */}
+            <div className="mt-4 rounded-lg border border-[var(--color-border)] p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-[var(--color-foreground)]">
+                  Domain-box check
+                </span>
+                <span className="rounded-md bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+                  the persisted feature ranges
+                </span>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  the persisted bundle&apos;s metadata JSON (the sidecar save_model writes)
+                  <textarea
+                    aria-label="the persisted bundle's metadata JSON"
+                    value={boxMetadataText}
+                    onChange={(event) => setBoxMetadataText(event.target.value)}
+                    rows={8}
+                    spellCheck={false}
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-2 font-mono text-xs"
+                  />
+                </label>
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  the rows to check (one JSON object per line)
+                  <textarea
+                    aria-label="the rows to check"
+                    value={boxRowsText}
+                    onChange={(event) => setBoxRowsText(event.target.value)}
+                    rows={8}
+                    spellCheck={false}
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-2 font-mono text-xs"
+                  />
+                </label>
+              </div>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  bridge the rows from a registered dataset
+                  <select
+                    aria-label="the box-bridge dataset"
+                    value={boxBridgeDatasetId}
+                    onChange={(event) => setBoxBridgeDatasetId(event.target.value)}
+                    className="mt-1 block w-56 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  >
+                    <option value="">no dataset (paste the rows)</option>
+                    {datasets.map((entry) => (
+                      <option key={entry.dataset_id} value={entry.dataset_id}>
+                        {entry.name} · {entry.shape[0]} rows
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={boxBridgeBusy || boxBridgeDatasetId === ""}
+                  onClick={() => void handleBoxBridgeRows()}
+                >
+                  {boxBridgeBusy ? "Assembling…" : "Assemble rows from dataset"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={boxBusy}
+                  onClick={() => void handleBoxCheck()}
+                >
+                  {boxBusy ? "Checking…" : "Check the domain box"}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                POST /api/v1/applicability-domain/domain-box — the
+                bundle&apos;s own per-feature min/max box (the metadata
+                block every save_model writes, `feature_ranges` inside)
+                checked against the rows: a row is out when any recorded
+                feature falls below its training minimum or above its
+                maximum. A metadata block without a box answers
+                `checked: false` with its own reason — never an implied
+                verdict.
+              </p>
+              {boxNote !== null ? (
+                <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                  {boxNote}
+                </p>
+              ) : null}
+              {boxError !== null ? <div className="mt-3"><ErrorBanner message={boxError} /></div> : null}
+              {boxResult !== null ? (
+                <div className="mt-3">
+                  {!boxResult.checked ? (
+                    <p className="text-xs text-[var(--color-foreground)]">
+                      not checked — {boxResult.reason} ({boxResult.n_rows} rows
+                      submitted)
+                    </p>
+                  ) : (
+                    <div className="text-xs text-[var(--color-foreground)]">
+                      <p>
+                        {boxResult.n_out} of {boxResult.n_rows} rows outside the
+                        box ({formatValue((boxResult.fraction_out ?? 0) * 100)}%)
+                      </p>
+                      {boxResult.below !== null &&
+                      Object.keys(boxResult.below).length > 0 ? (
+                        <p className="mt-1 text-[var(--color-muted-foreground)]">
+                          below the training minimum:{" "}
+                          {Object.entries(boxResult.below)
+                            .map(([name, count]) => `${name} ×${count}`)
+                            .join(" · ")}
+                        </p>
+                      ) : null}
+                      {boxResult.above !== null &&
+                      Object.keys(boxResult.above).length > 0 ? (
+                        <p className="mt-1 text-[var(--color-muted-foreground)]">
+                          above the training maximum:{" "}
+                          {Object.entries(boxResult.above)
+                            .map(([name, count]) => `${name} ×${count}`)
+                            .join(" · ")}
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
       </StageHeader>

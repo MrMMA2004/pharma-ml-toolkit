@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/card";
 import { useJob } from "@/hooks/useJobTracking";
 import { jobsApi } from "@/services/jobs/client";
+import { datasetsApi, type DatasetView } from "@/services/datasets/client";
 import { ApiError } from "@/services/api/client";
 import {
   artifactsApi,
@@ -57,7 +58,11 @@ import {
  * service layer (no fabricated data, no disabled pretend buttons).
  * The Select stage reads the session's artifact registry — the
  * outputs OTHER workspaces registered (figures, tables, reports) —
- * plus the paste lanes for raw series; the Select Visualization
+ * plus the paste lanes for raw series, and VIZ-1's registered-dataset
+ * column bridge (stage 3): the stat family's values ride the same
+ * bounded `datasetsApi.column()` lane every other workspace rides,
+ * one code path with two entry points (the paste textarea and the
+ * bridge both fill `valuesText`); the Select Visualization
  * stage is the backend's own `GET /visualization/catalog` inventory
  * (five families, each row naming the backend functions it wraps —
  * never a client-side guess); Configure edits the family's own
@@ -136,6 +141,34 @@ const SAMPLE_XVG = [
   "900.0   0.3189",
   "1000.0  0.3250",
 ].join("\n");
+
+/**
+ * VIZ-1's honest cell converter — the same guards the PK/PD bridge
+ * rides: a `null` cell (json_safe's NaN → null) is a row-labeled
+ * error, never `Number(null) === 0` fabricating a value the frame
+ * never measured; a non-numeric string cell carries the same
+ * labeled refusal; the backend's own 422 lanes (an unknown dataset,
+ * an unknown column, a non-numeric column) surface verbatim through
+ * `describeError` instead.
+ */
+function numericCell(
+  value: string | number | null | undefined,
+  row: number,
+  column: string,
+): number {
+  if (value === null || value === undefined) {
+    throw new Error(
+      `row ${row + 1} of column "${column}": a null value (NaN/Inf in the frame) — never silently zero`,
+    );
+  }
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) {
+    throw new Error(
+      `row ${row + 1} of column "${column}": "${String(value)}" is not a finite number`,
+    );
+  }
+  return numeric;
+}
 
 function describeError(error: unknown): string {
   if (error instanceof ApiError) {
@@ -461,6 +494,17 @@ export function VisualizationPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadedShape, setLoadedShape] = useState<string | null>(null);
 
+  // stage 3 (VIZ-1): the registered-dataset column bridge — the
+  // dataset registry, fetched once on mount through the SAME
+  // datasetsApi.list() lane the other bridge cards ride
+  const [bridgeDatasets, setBridgeDatasets] = useState<readonly DatasetView[]>([]);
+  const [bridgeRegistryError, setBridgeRegistryError] = useState<string | null>(null);
+  const [bridgeDataset, setBridgeDataset] = useState<DatasetView | null>(null);
+  const [bridgeColumn, setBridgeColumn] = useState("");
+  const [bridgeBusy, setBridgeBusy] = useState(false);
+  const [bridgeError, setBridgeError] = useState<string | null>(null);
+  const [bridgeNote, setBridgeNote] = useState<string | null>(null);
+
   // stage 2: the backend's own catalog + the family selection
   const [catalog, setCatalog] = useState<VizCatalogResponse | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -554,6 +598,90 @@ export function VisualizationPage() {
       cancelled = true;
     };
   }, []);
+
+  // stage 3 (VIZ-1): the dataset registry fetch, once on mount — the
+  // bridge lists what the Datasets workspace actually registered
+  useEffect(() => {
+    let cancelled = false;
+    datasetsApi
+      .list()
+      .then((response) => {
+        if (!cancelled) {
+          setBridgeDatasets(response.datasets);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setBridgeRegistryError(describeError(error));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // stage 3 (VIZ-1): selecting a dataset fetches its view for the
+  // column inventory (the same bounded lane every bridge rides)
+  const selectBridgeDataset = useCallback(async (datasetId: string) => {
+    setBridgeNote(null);
+    setBridgeError(null);
+    setBridgeColumn("");
+    if (datasetId === "") {
+      setBridgeDataset(null);
+      return;
+    }
+    try {
+      const view = await datasetsApi.view(datasetId);
+      setBridgeDataset(view);
+    } catch (error) {
+      setBridgeDataset(null);
+      setBridgeError(describeError(error));
+    }
+  }, []);
+
+  // stage 3 (VIZ-1): the column pull — ONE column through the same
+  // bounded column() lane every other workspace rides, converted to
+  // the SAME newline-joined values text the paste lane parses (one
+  // code path, two entry points — the bridge fills the values
+  // textarea so the stat request rides parseNumberList exactly as
+  // before). A truncated pull names its 500-row bound (§17.3 — the
+  // bounded view never masquerades as the whole column); a null cell
+  // is a row-labeled error, never a silent zero; every backend
+  // 422/404 surfaces verbatim through describeError.
+  const handleBridgeColumn = useCallback(async () => {
+    if (bridgeDataset === null || bridgeColumn === "") {
+      return;
+    }
+    setBridgeBusy(true);
+    setBridgeError(null);
+    setBridgeNote(null);
+    try {
+      const columnPayload = await datasetsApi.column(
+        bridgeDataset.dataset_id,
+        bridgeColumn,
+      );
+      const values = columnPayload.values.map((value, index) =>
+        numericCell(value, index, bridgeColumn),
+      );
+      if (values.length < 4) {
+        throw new Error(
+          `the column carries ${values.length} finite values, at least 4 required by the stat lane`,
+        );
+      }
+      setValuesText(values.map((value) => String(value)).join("\n"));
+      setLoadError(null);
+      setLoadedShape(null);
+      if (columnPayload.truncated) {
+        setBridgeNote(
+          `the column bridge is bounded at 500 rows (the chemistry engine's own request cap) — the values lane carries the first ${columnPayload.returned} of the dataset's ${columnPayload.n_rows} rows`,
+        );
+      }
+    } catch (error) {
+      setBridgeError(describeError(error));
+    } finally {
+      setBridgeBusy(false);
+    }
+  }, [bridgeDataset, bridgeColumn]);
 
   // stage 1: the paste lanes' own validation
   const handleLoad = useCallback(() => {
@@ -1069,7 +1197,7 @@ export function VisualizationPage() {
       <StageHeader
         index={1}
         title="Select Dataset/Analysis Result"
-        hint="the session's artifact registry (the other workspaces' outputs) + the paste lanes"
+        hint="the session's artifact registry (the other workspaces' outputs) + the paste lanes + a registered dataset's own column (the stage-3 bridge, VIZ-1)"
         icon={<Database className="h-4 w-4 text-[var(--color-muted-foreground)]" />}
       >
         <Card>
@@ -1624,6 +1752,94 @@ export function VisualizationPage() {
             )}
           </CardContent>
         </Card>
+        {family === "stat" ? (
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle className="text-base">Registered dataset column bridge</CardTitle>
+              <CardDescription>
+                A registered dataset&apos;s own numeric column — the same
+                bounded column() bridge every other workspace rides
+                (VIZ-1); the pull fills the values textarea verbatim so
+                the stat request rides the paste lane&apos;s own
+                parser (one code path, two entry points). A non-numeric
+                column is the backend&apos;s own 422, surfaced
+                verbatim; a null cell is a row-labeled error, never a
+                silent zero.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <select
+                  aria-label="the registered dataset"
+                  value={bridgeDataset?.dataset_id ?? ""}
+                  onChange={(event) => void selectBridgeDataset(event.target.value)}
+                  className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm"
+                >
+                  <option value="">select a registered dataset…</option>
+                  {bridgeDatasets.map((entry) => (
+                    <option key={entry.dataset_id} value={entry.dataset_id}>
+                      {entry.name} · {entry.shape[0]} rows · {entry.columns.length} columns
+                    </option>
+                  ))}
+                </select>
+                {bridgeDataset !== null ? (
+                  <select
+                    aria-label="the dataset column"
+                    value={bridgeColumn}
+                    onChange={(event) => setBridgeColumn(event.target.value)}
+                    className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm text-[var(--color-foreground)]"
+                  >
+                    <option value="">select the column…</option>
+                    {bridgeDataset.columns.map((column) => (
+                      <option key={column} value={column}>
+                        {column}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span />
+                )}
+              </div>
+              {bridgeDatasets.length === 0 && bridgeRegistryError === null ? (
+                <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                  No datasets registered yet — import one in the Datasets
+                  workspace to plot its columns.
+                </p>
+              ) : null}
+              {bridgeRegistryError !== null ? (
+                <div className="mt-2">
+                  <ErrorBanner message={bridgeRegistryError} />
+                </div>
+              ) : null}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  disabled={
+                    bridgeBusy ||
+                    bridgeDataset === null ||
+                    bridgeColumn === ""
+                  }
+                  onClick={() => void handleBridgeColumn()}
+                >
+                  {bridgeBusy ? "Pulling column…" : "Pull column"}
+                </Button>
+                <span className="text-xs text-[var(--color-muted-foreground)]">
+                  the column rides the bounded bridge (the 500-row cap);
+                  the pulled values fill the values textarea below stage 1
+                </span>
+              </div>
+              {bridgeNote !== null ? (
+                <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                  {bridgeNote}
+                </p>
+              ) : null}
+              {bridgeError !== null ? (
+                <div className="mt-2">
+                  <ErrorBanner message={bridgeError} />
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
       </StageHeader>
 
       {/* stage 4: Generate */}

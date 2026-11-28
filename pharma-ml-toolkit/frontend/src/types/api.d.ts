@@ -2386,6 +2386,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/unsupervised/pca": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pca
+         * @description ML-4's PCA sibling — the first plot every chemist asks for on a
+         *     descriptor matrix, served over the real ``pca_reduce`` engine.
+         */
+        post: operations["pca_api_v1_unsupervised_pca_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/visualization/catalog": {
         parameters: {
             query?: never;
@@ -2852,6 +2873,18 @@ export interface components {
              * @default false
              */
             bin_seeding: boolean;
+            /**
+             * Covariance Type
+             * @default full
+             * @enum {string}
+             */
+            covariance_type: "full" | "tied" | "diag" | "spherical";
+            /**
+             * Criterion
+             * @default bic
+             * @enum {string}
+             */
+            criterion: "bic" | "aic";
             /** Dataset Id */
             dataset_id: string;
             /**
@@ -2865,11 +2898,22 @@ export interface components {
              */
             gamma: number;
             /**
+             * K
+             * @description k-means cluster count; omit to scan k in the engine's own range and keep the best silhouette
+             */
+            k?: number | null;
+            /**
+             * Linkage
+             * @default ward
+             * @enum {string}
+             */
+            linkage: "ward" | "single" | "complete" | "average";
+            /**
              * Method
              * @default dbscan
              * @enum {string}
              */
-            method: "dbscan" | "meanshift" | "spectral";
+            method: "dbscan" | "meanshift" | "spectral" | "kmeans" | "gmm" | "hierarchical";
             /**
              * Metric
              * @default euclidean
@@ -2892,6 +2936,11 @@ export interface components {
              * @description Spectral Clustering cluster count (required for the spectral method)
              */
             n_clusters?: number | null;
+            /**
+             * N Components
+             * @description GMM component count; omit to sweep the engine's own range and keep the criterion minimum
+             */
+            n_components?: number | null;
             /**
              * N Neighbors
              * @default 10
@@ -5495,6 +5544,30 @@ export interface components {
             moving_average_window: number;
             /** Text */
             text: string;
+        };
+        /**
+         * PcaRequest
+         * @description POST /api/v1/unsupervised/pca — the ML-4 PCA sibling.
+         */
+        pharmaml__api__routes__unsupervised__PcaRequest: {
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * Mode
+             * @default job
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /**
+             * N Components
+             * @description component count; omit to keep the engine's own cap min(10, n_samples, n_features)
+             */
+            n_components?: number | null;
+            /**
+             * Scale
+             * @default true
+             */
+            scale: boolean;
         };
     };
     responses: never;
@@ -9932,6 +10005,41 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    pca_api_v1_unsupervised_pca_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["pharmaml__api__routes__unsupervised__PcaRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

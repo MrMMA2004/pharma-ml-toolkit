@@ -152,6 +152,15 @@ def test_ml_rest_surface_covered() -> None:
                  "/api/v1/model-evaluation/coverage-diagnostics"):
         assert path in carried, f"the ml client stopped calling {path}"
         assert path in real, f"routes/model_evaluation.py stopped declaring {path}"
+    # the ML-2 consumption pin (the roadmap's row 10 acceptance): the
+    # two distance/box AD paths -- zero frontend consumers before --
+    # stay consumed by the ml client
+    for path in ("/api/v1/applicability-domain/knn",
+                 "/api/v1/applicability-domain/domain-box"):
+        assert path in carried, f"the ml client stopped calling {path}"
+        assert path in real, (
+            f"routes/applicability_domain.py stopped declaring {path}"
+        )
     # the §8 workflow-builder lane's own calls (the r323 GUI leg over
     # the r322 route family)
     for path in ("/api/v1/workflow/steps", "/api/v1/workflow/templates",

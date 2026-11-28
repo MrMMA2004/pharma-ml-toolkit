@@ -448,6 +448,26 @@
             "title": "Bin Seeding",
             "type": "boolean"
           },
+          "covariance_type": {
+            "default": "full",
+            "enum": [
+              "full",
+              "tied",
+              "diag",
+              "spherical"
+            ],
+            "title": "Covariance Type",
+            "type": "string"
+          },
+          "criterion": {
+            "default": "bic",
+            "enum": [
+              "bic",
+              "aic"
+            ],
+            "title": "Criterion",
+            "type": "string"
+          },
           "dataset_id": {
             "title": "Dataset Id",
             "type": "string"
@@ -471,12 +491,39 @@
             "title": "Gamma",
             "type": "number"
           },
+          "k": {
+            "anyOf": [
+              {
+                "minimum": 2.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "k-means cluster count; omit to scan k in the engine's own range and keep the best silhouette",
+            "title": "K"
+          },
+          "linkage": {
+            "default": "ward",
+            "enum": [
+              "ward",
+              "single",
+              "complete",
+              "average"
+            ],
+            "title": "Linkage",
+            "type": "string"
+          },
           "method": {
             "default": "dbscan",
             "enum": [
               "dbscan",
               "meanshift",
-              "spectral"
+              "spectral",
+              "kmeans",
+              "gmm",
+              "hierarchical"
             ],
             "title": "Method",
             "type": "string"
@@ -519,6 +566,19 @@
             ],
             "description": "Spectral Clustering cluster count (required for the spectral method)",
             "title": "N Clusters"
+          },
+          "n_components": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "GMM component count; omit to sweep the engine's own range and keep the criterion minimum",
+            "title": "N Components"
           },
           "n_neighbors": {
             "default": 10,
@@ -6021,6 +6081,47 @@
           "text"
         ],
         "title": "XvgRequest",
+        "type": "object"
+      },
+      "pharmaml__api__routes__unsupervised__PcaRequest": {
+        "description": "POST /api/v1/unsupervised/pca \u2014 the ML-4 PCA sibling.",
+        "properties": {
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "mode": {
+            "default": "job",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "n_components": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "component count; omit to keep the engine's own cap min(10, n_samples, n_features)",
+            "title": "N Components"
+          },
+          "scale": {
+            "default": true,
+            "title": "Scale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dataset_id"
+        ],
+        "title": "PcaRequest",
         "type": "object"
       }
     }
@@ -11635,6 +11736,50 @@
           }
         },
         "summary": "Methods",
+        "tags": [
+          "unsupervised"
+        ]
+      }
+    },
+    "/api/v1/unsupervised/pca": {
+      "post": {
+        "description": "ML-4's PCA sibling \u2014 the first plot every chemist asks for on a\ndescriptor matrix, served over the real ``pca_reduce`` engine.",
+        "operationId": "pca_api_v1_unsupervised_pca_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/pharmaml__api__routes__unsupervised__PcaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pca Api V1 Unsupervised Pca Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pca",
         "tags": [
           "unsupervised"
         ]
